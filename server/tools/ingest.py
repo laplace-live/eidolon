@@ -121,6 +121,19 @@ def load_streams(
 
             topics = refined.get("topics") or []
             mentions = refined.get("mentions") or []
+            details = str(refined.get("details") or "")
+
+            # Pack the v2-only structured fields into a single JSON blob
+            # rather than adding 5+ columns. archive.py decodes this at
+            # render time. Empty dict for v1 / unrefined chunks so the
+            # column is always populated.
+            extras = {
+                "key_quotes": refined.get("key_quotes") or [],
+                "sc_events": refined.get("sc_events") or [],
+                "songs": refined.get("songs") or [],
+                "events": refined.get("events") or [],
+                "promises": refined.get("promises") or [],
+            }
 
             rows.append(
                 {
@@ -131,9 +144,11 @@ def load_streams(
                     "heading": heading,
                     "text": chunk.text,
                     "summary": summary,
+                    "details": details,
                     "chunk_type": chunk_type,
                     "topics": json.dumps(topics, ensure_ascii=False),
                     "mentions": json.dumps(mentions, ensure_ascii=False),
+                    "extras_json": json.dumps(extras, ensure_ascii=False),
                     "refined": bool(refined),
                     "embed_input": embed_input,
                     "source_path": rel_source,
@@ -172,11 +187,17 @@ def build_arrow_schema() -> pa.Schema:
             pa.field("game", pa.string()),
             pa.field("heading", pa.string()),
             pa.field("text", pa.string()),
-            # Refined fields. Empty strings / "[]" / False if no sidecar.
+            # Refined fields. Empty strings / "[]" / "{}" / False if no
+            # sidecar exists or the chunk is still in v1 format.
             pa.field("summary", pa.string()),
+            pa.field("details", pa.string()),  # v2: long narrative for LLM
             pa.field("chunk_type", pa.string()),
             pa.field("topics", pa.string()),  # JSON-encoded list[str]
             pa.field("mentions", pa.string()),  # JSON-encoded list[str]
+            # JSON blob: {key_quotes, sc_events, songs, events, promises}.
+            # Single column instead of 5 to keep the schema flexible —
+            # archive.py decodes whatever it needs at render time.
+            pa.field("extras_json", pa.string()),
             pa.field("refined", pa.bool_()),
             pa.field("source_path", pa.string()),
             pa.field("vector", pa.list_(pa.float32(), DEFAULT_EMBED_DIM)),

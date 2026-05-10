@@ -74,29 +74,80 @@ async def main_async(args: argparse.Namespace) -> int:
         game = h.get("game", "")
         heading = h.get("heading", "")
         summary = h.get("summary") or ""
+        details = h.get("details") or ""
         text = h.get("text", "")
         chunk_type = h.get("chunk_type") or ""
         dist = h.get("_distance", 0.0)
         is_refined = bool(h.get("refined"))
 
+        # Decode v2 extras blob if present.
+        extras: dict[str, object] = {}
+        extras_raw = h.get("extras_json") or ""
+        if extras_raw:
+            try:
+                extras = json.loads(extras_raw)
+            except json.JSONDecodeError:
+                extras = {}
+
         header = f"[{i}] dist={dist:.3f}  {date}"
         if game:
             header += f"  ({game})"
         if chunk_type:
-            header += f"  [{chunk_type}{'*' if is_refined else ''}]"
+            tag = "v2" if details else ("v1" if is_refined else "raw")
+            header += f"  [{chunk_type} · {tag}]"
         print(header)
         print(f"     {heading}")
 
-        # Show the refined summary first (this is what the bot embeds and
-        # what gets injected into the LLM context). Show the raw text only
-        # when --full is set, so it's clear which is which.
+        # Always show the summary line — it's what gets embedded.
         if summary:
             print(f"     SUMMARY: {summary}")
+
         if args.full:
-            body = text
+            # In --full mode, show everything the bot would see.
+            if details:
+                print()
+                print("     DETAILS:")
+                for line in details.splitlines():
+                    print(f"     {line}")
+
+            sc_events = extras.get("sc_events") or []
+            if sc_events:
+                print()
+                print("     SC EVENTS:")
+                for sc in sc_events:  # type: ignore[union-attr]
+                    if not isinstance(sc, dict):
+                        continue
+                    viewer = sc.get("viewer") or "?"
+                    amount = sc.get("amount_yuan")
+                    suffix = f"（¥{amount}）" if amount else ""
+                    print(f"       • {viewer}{suffix}: {sc.get('content', '')}")
+                    resp = sc.get("response") or ""
+                    if resp:
+                        print(f"         → {resp}")
+
+            songs = extras.get("songs") or []
+            if songs:
+                titles = [
+                    f"《{s.get('title', '?')}》"
+                    if isinstance(s, dict) else f"《{s}》"
+                    for s in songs  # type: ignore[union-attr]
+                ]
+                print(f"     SONGS:    {' '.join(titles)}")
+
+            for label, key in (("EVENTS  ", "events"), ("PROMISES", "promises")):
+                items = extras.get(key) or []
+                if items:
+                    print(f"     {label}: {'; '.join(str(x) for x in items)}")  # type: ignore[union-attr]
+
+            quotes = extras.get("key_quotes") or []
+            if quotes:
+                print("     QUOTES:")
+                for q in quotes:  # type: ignore[union-attr]
+                    print(f"       「{q}」")
+
             print()
-            print("     RAW:")
-            for line in body.splitlines():
+            print("     RAW TRANSCRIPT:")
+            for line in text.splitlines():
                 print(f"     {line}")
         elif not summary:
             preview = text.replace("\n", " ").strip()

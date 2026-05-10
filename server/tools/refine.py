@@ -97,9 +97,15 @@ from tools._streams import (  # noqa: E402
 DEFAULT_MODEL = "google/gemini-2.0-flash-001"
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_CONCURRENCY = 8
-DEFAULT_MAX_TOKENS = 4096
-DEFAULT_TEMPERATURE = 0.3
-SCHEMA_VERSION = 1
+# Pass 1 (extract) outputs short structured arrays. Pass 2 (synthesize)
+# emits the long ``details`` field, so it gets the larger budget.
+DEFAULT_EXTRACT_MAX_TOKENS = 2048
+DEFAULT_SYNTHESIZE_MAX_TOKENS = 4096
+# Extract is faithful (low temp, no invention). Synthesize is narrative
+# (slightly higher temp for smoother prose).
+DEFAULT_EXTRACT_TEMPERATURE = 0.2
+DEFAULT_SYNTHESIZE_TEMPERATURE = 0.4
+SCHEMA_VERSION = 2
 
 VALID_CHUNK_TYPES = {
     "opening",
@@ -120,6 +126,8 @@ PRICING_USD_PER_1M: dict[str, tuple[float, float]] = {
     "google/gemini-flash-1.5": (0.075, 0.30),
     "google/gemini-flash-1.5-8b": (0.0375, 0.15),
     "google/gemini-flash-latest": (0.075, 0.30),
+    # OpenRouter `~` prefix = "always latest" alias; same pricing.
+    "~google/gemini-flash-latest": (0.075, 0.30),
     "google/gemini-2.5-flash-lite": (0.10, 0.40),
     "anthropic/claude-haiku-latest": (0.80, 4.00),
     "anthropic/claude-3-5-haiku-20241022": (0.80, 4.00),
@@ -130,57 +138,104 @@ PRICING_USD_PER_1M: dict[str, tuple[float, float]] = {
     "deepseek/deepseek-chat-v3.1": (0.27, 1.10),
 }
 
-SYSTEM_PROMPT = """\
-You post-process Chinese livestream transcripts for a long-term memory \
-retrieval system. The streamer is **明前奶绿** (奶绿), a Chinese-language \
-Vtuber (VUP). Streams interleave several content streams that the raw transcript \
-does NOT distinguish:
+EXTRACT_SYSTEM_PROMPT = """\
+You are a faithful extractor for a Chinese livestream archive.
 
-- Her own narration / chat / reactions ← THIS is what we capture.
-- Audio from media she watches (anime / movies / games — Japanese, English).
+The streamer is **明前奶绿** (奶绿), a Chinese-language Vtuber (VUP). Each
+chunk's transcript interleaves several streams that are NOT distinguished
+by speaker labels:
+
+- Her own narration / chat / reactions ← capture these.
+- Audio from media she watches (anime, movies, games — Japanese, English).
   These are NOT her words. Drop them.
-- Songs she sings — full lyrics in the transcript. Note song name only.
-- Reading viewer Super Chats (SCs) — patterns like "谢谢XXX的SC...".
-  Compress to brief notes ("回复了几位观众的SC，主要话题：…").
+- Songs she sings (full lyrics appear). Capture the song title only.
+- Reading viewer Super Chats (SCs) in patterns like "谢谢XXX的SC..." —
+  capture EVERY SC verbatim along with her response.
 
-For each chunk, output ONE JSON object with EXACTLY these fields:
+Be FAITHFUL. Do not invent, paraphrase loosely, or compress aggressively.
+If a field doesn't apply, return an empty array. Output JSON ONLY:
 
 {
-  "heading": "<6-30 Chinese-character semantic label. If existing heading is \
-just first-spoken-words / filler ('哈哈', '嗯', '等一下', '変身', 'は'), \
-replace it with something topical.>",
-  "summary": "<1-3 Chinese sentences in 奶绿's first-person POV. Capture \
-what SHE actually said / did / promised / reacted to. DROP all anime/show \
-dialogue. DROP song lyrics. COMPRESS SC reads.>",
-  "chunk_type": "<one of: opening | commentary | sc_session | anime_audio \
-| karaoke | mixed | transition | closing>",
-  "topics": ["<3-5 short Chinese topic tags>"],
-  "mentions": ["<viewer names she addressed, song titles she sang, \
-characters/games she actually named in commentary; EXCLUDE characters \
-from the source media she watched>"]
+  "sc_events": [
+    {
+      "viewer": "<viewer name as transcribed>",
+      "amount_yuan": <integer in yuan if mentioned, else null>,
+      "content": "<what the SC text said, verbatim Chinese, lightly cleaned>",
+      "response": "<奶绿's reply: verbatim if memorable and short, otherwise a tight Chinese paraphrase>"
+    }
+  ],
+  "songs": [
+    {"title": "<song title>", "note": "<context: did she sing it / 切歌 / chat about it>"}
+  ],
+  "events": [
+    "<notable things 奶绿 actually did or said in this window — e.g. '突击开播', '为IKN尼玛尼玛呀唱了生日快乐歌', '差点哭出来'>"
+  ],
+  "promises": [
+    "<things she explicitly committed to — '下次见就是下个月了', '会再见', '答应大家XXX'>"
+  ],
+  "topics": ["<3-7 short Chinese topic tags covering this chunk>"],
+  "mentions": [
+    "<viewer / song / brand / real-person names she actually addressed; EXCLUDE characters from the media she was watching>"
+  ],
+  "key_quotes": [
+    "<1-5 of the most quotable verbatim Chinese lines she said in this chunk; pick lines that are pithy, in-character, or memorable>"
+  ],
+  "is_anime_audio_dominant": <true if >70% of the chunk is transcribed show dialogue with minimal commentary>,
+  "is_karaoke_dominant": <true if >70% of the chunk is song lyrics being sung>
+}
+
+Output JSON only, no markdown, no preamble."""
+
+EXTRACT_USER_TEMPLATE = """\
+Stream context:
+{context}
+
+Chunk timestamp: {timestamp}
+
+Transcript:
+{text}"""
+
+SYNTHESIZE_SYSTEM_PROMPT = """\
+You are an archivist creating a memory record for a Chinese-language Vtuber's
+long-term recall system.
+
+Input is a structured extract from one ~5 minute chunk of 明前奶绿's
+livestream. Use ONLY information from the extract and the existing heading
+hint — do NOT invent details.
+
+Output JSON ONLY:
+
+{
+  "heading": "<6-30 Chinese characters, semantic label. Replace the existing heading if it's just first-spoken-words or filler ('哈哈', '嗯', '等一下', '変身', 'は').>",
+  "summary": "<EXACTLY 1-2 Chinese sentences capturing the chunk's essence in 奶绿's first-person POV. THIS IS WHAT GETS EMBEDDED for retrieval, so keep it focused on the chunk's main subject — don't pile in every detail.>",
+  "details": "<12-20 Chinese sentences in 奶绿's first-person POV. Rich narrative covering: what she did, songs sung, viewer SC interactions (cite specific viewer names from the extract), promises, jokes, opinions. Weave in 1-3 verbatim quotes from key_quotes naturally. THIS gets shown to the persona at recall time so she can answer specifically — make it useful, specific, and grounded only in the extract.>",
+  "chunk_type": "<one of: opening | commentary | sc_session | anime_audio | karaoke | mixed | transition | closing>"
 }
 
 chunk_type guidelines:
 - opening: stream opening, greeting viewers
 - commentary: her own thoughts, opinions, jokes, plans (the gold)
-- sc_session: dominated by reading viewer SCs
-- anime_audio: dominated by transcribed show/movie dialogue with little of her own commentary
-- karaoke: dominated by song lyrics being sung
+- sc_session: 3+ SC events in the extract → use this
+- anime_audio: extract.is_anime_audio_dominant is true
+- karaoke: extract.is_karaoke_dominant is true
 - mixed: significant overlap of two of the above
-- transition: brief setup between sections
+- transition: brief setup between sections (extract is mostly empty)
 - closing: stream ending, farewells
 
-Output JSON only, no markdown, no preamble, no commentary."""
+If sc_session: in details, name AT LEAST 3 of the most notable viewers and what their SCs were about.
+If anime_audio or karaoke: keep summary brief (just note the scene/song); details can be 3-5 sentences instead of 8-15.
 
-USER_PROMPT_TEMPLATE = """\
+Output JSON only, no markdown, no preamble."""
+
+SYNTHESIZE_USER_TEMPLATE = """\
 Stream context:
 {context}
 
 Chunk timestamp: {timestamp}
-Existing heading: {existing_heading}
+Existing heading (replace if it's a placeholder): {existing_heading}
 
-Transcript:
-{text}"""
+Structured extract:
+{extract_json}"""
 
 
 # ---------------------------------------------------------------------------
@@ -312,15 +367,12 @@ def _heading_timestamp(heading: str) -> str:
     return parts[0].strip() if parts else heading[:8]
 
 
-def _validate_refinement(payload: Any) -> dict[str, Any]:
-    """Coerce the model's JSON output into the expected shape; tolerate
-    minor schema drift (extra fields, missing optionals, list-wrapping).
+def _unwrap_list_payload(payload: Any) -> Any:
+    """Defensive unwrap for Gemini's tendency to wrap objects in [...] arrays.
 
-    Some providers (notably Gemini via OpenRouter's JSON mode) like to
-    wrap a single object in a one-element array — unwrap that. Anything
-    deeper than that is genuinely malformed.
-
-    Raises ValueError if the payload is unusable.
+    Single-element list → unwrap. Multi-element list → keep as list (the
+    extract validator merges them; the synthesize validator uses the first).
+    Anything else → return unchanged.
     """
     if isinstance(payload, list):
         if not payload:
@@ -328,60 +380,170 @@ def _validate_refinement(payload: Any) -> dict[str, Any]:
         if not all(isinstance(item, dict) for item in payload):
             raise ValueError("List contained non-dict items")
         if len(payload) == 1:
-            payload = payload[0]
-        else:
-            # Gemini sometimes splits a single chunk into multiple
-            # sub-records. Merge them into one row: keep the first
-            # heading (it covers the chunk's opening, which usually
-            # dominates), join summaries, union topics/mentions.
-            first = payload[0]
-            summaries = [
-                str(item.get("summary", "")).strip()
-                for item in payload
-                if str(item.get("summary", "")).strip()
-            ]
-            topics: list[str] = []
-            mentions: list[str] = []
-            for item in payload:
-                topics.extend(item.get("topics") or [])
-                mentions.extend(item.get("mentions") or [])
-            payload = {
-                "heading": first.get("heading"),
-                "summary": " | ".join(summaries),
-                "chunk_type": first.get("chunk_type", "mixed"),
-                "topics": list(dict.fromkeys(topics)),  # dedupe, keep order
-                "mentions": list(dict.fromkeys(mentions)),
-            }
+            return payload[0]
+    return payload
 
+
+def _validate_extract(payload: Any) -> dict[str, Any]:
+    """Coerce a Pass-1 extract response into the structured-fields shape.
+
+    Returns a dict with all eight keys present (empty arrays / falsy bools
+    where the model didn't provide values). This lets downstream code
+    reason about it without per-field None checks.
+    """
+    payload = _unwrap_list_payload(payload)
+    if isinstance(payload, list):
+        # Multi-element list at extract time means the model split the
+        # chunk into sub-extracts. Merge them: union all arrays.
+        merged: dict[str, list] = {
+            k: [] for k in ("sc_events", "songs", "events", "promises",
+                            "topics", "mentions", "key_quotes")
+        }
+        is_anime = is_karaoke = False
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            for k in merged:
+                v = item.get(k) or []
+                if isinstance(v, list):
+                    merged[k].extend(v)
+            is_anime = is_anime or bool(item.get("is_anime_audio_dominant"))
+            is_karaoke = is_karaoke or bool(item.get("is_karaoke_dominant"))
+        payload = {**merged, "is_anime_audio_dominant": is_anime,
+                   "is_karaoke_dominant": is_karaoke}
+
+    if not isinstance(payload, dict):
+        raise ValueError(f"Expected JSON object, got {type(payload).__name__}")
+
+    def _str_list(key: str, cap: int = 50) -> list[str]:
+        items = payload.get(key) or []
+        if not isinstance(items, list):
+            return []
+        return [str(x).strip() for x in items if str(x).strip()][:cap]
+
+    sc_events_raw = payload.get("sc_events") or []
+    sc_events: list[dict[str, Any]] = []
+    if isinstance(sc_events_raw, list):
+        for sc in sc_events_raw:
+            if not isinstance(sc, dict):
+                continue
+            viewer = str(sc.get("viewer", "")).strip()
+            content = str(sc.get("content", "")).strip()
+            if not viewer and not content:
+                continue
+            amount = sc.get("amount_yuan")
+            try:
+                amount_yuan = int(amount) if amount is not None else None
+            except (TypeError, ValueError):
+                amount_yuan = None
+            sc_events.append({
+                "viewer": viewer or "(unknown)",
+                "amount_yuan": amount_yuan,
+                "content": content,
+                "response": str(sc.get("response", "")).strip(),
+            })
+
+    songs_raw = payload.get("songs") or []
+    songs: list[dict[str, Any]] = []
+    if isinstance(songs_raw, list):
+        for s in songs_raw:
+            if isinstance(s, dict):
+                title = str(s.get("title", "")).strip()
+                if title:
+                    songs.append({
+                        "title": title,
+                        "note": str(s.get("note", "")).strip(),
+                    })
+            elif isinstance(s, str) and s.strip():
+                # Tolerate the model emitting plain string titles.
+                songs.append({"title": s.strip(), "note": ""})
+
+    return {
+        "sc_events": sc_events,
+        "songs": songs,
+        "events": _str_list("events"),
+        "promises": _str_list("promises"),
+        "topics": _str_list("topics", cap=10),
+        "mentions": _str_list("mentions"),
+        "key_quotes": _str_list("key_quotes", cap=10),
+        "is_anime_audio_dominant": bool(payload.get("is_anime_audio_dominant")),
+        "is_karaoke_dominant": bool(payload.get("is_karaoke_dominant")),
+    }
+
+
+def _validate_synthesis(payload: Any) -> dict[str, Any]:
+    """Coerce a Pass-2 synthesis response into heading/summary/details/type."""
+    payload = _unwrap_list_payload(payload)
+    if isinstance(payload, list):
+        # Synthesis should be a single object; if Gemini split it, take the
+        # first item (it has the right heading + summary anyway).
+        payload = payload[0]
     if not isinstance(payload, dict):
         raise ValueError(f"Expected JSON object, got {type(payload).__name__}")
 
     heading = str(payload.get("heading", "")).strip()
     summary = str(payload.get("summary", "")).strip()
+    details = str(payload.get("details", "")).strip()
     if not heading or not summary:
-        raise ValueError("heading and summary are required")
+        raise ValueError("heading and summary are required from synthesis")
 
     chunk_type = str(payload.get("chunk_type", "commentary")).strip().lower()
     if chunk_type not in VALID_CHUNK_TYPES:
         chunk_type = "commentary"
 
-    topics = payload.get("topics") or []
-    if not isinstance(topics, list):
-        topics = []
-    topics = [str(t).strip() for t in topics if str(t).strip()][:5]
-
-    mentions = payload.get("mentions") or []
-    if not isinstance(mentions, list):
-        mentions = []
-    mentions = [str(m).strip() for m in mentions if str(m).strip()][:20]
-
     return {
         "heading": heading,
         "summary": summary,
+        "details": details,
         "chunk_type": chunk_type,
-        "topics": topics,
-        "mentions": mentions,
     }
+
+
+async def _call_llm_json(
+    client: AsyncOpenAI,
+    model: str,
+    *,
+    system: str,
+    user: str,
+    temperature: float,
+    max_tokens: int,
+) -> tuple[Any, Usage]:
+    """One LLM call returning (parsed JSON, usage).
+
+    Returns (None, Usage()) if the call itself fails. Returns
+    (None, usage) if the response was non-JSON (so cost is still
+    accounted for even on parse failures).
+    """
+    try:
+        resp = await client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            response_format={"type": "json_object"},
+            temperature=temperature,
+            max_tokens=max_tokens,
+            # Ask OpenRouter to include usage.cost in the response so we
+            # don't have to estimate. Passed through extra_body because
+            # the OpenAI SDK doesn't model this field.
+            extra_body={"usage": {"include": True}},
+        )
+    except APIError as e:
+        logger.error(f"  API error: {e}")
+        return None, Usage()
+
+    resp_dict = resp.model_dump() if hasattr(resp, "model_dump") else {}
+    usage = _extract_usage(resp_dict, model)
+
+    content = resp.choices[0].message.content if resp.choices else ""
+    if not content:
+        return None, usage
+    try:
+        return json.loads(content), usage
+    except json.JSONDecodeError as e:
+        logger.error(f"  invalid JSON ({e}); first 200 chars: {content[:200]!r}")
+        return None, usage
 
 
 async def _refine_one(
@@ -391,57 +553,90 @@ async def _refine_one(
     chunk: StreamChunk,
     sem: asyncio.Semaphore,
 ) -> tuple[StreamChunk, dict[str, Any] | None, Usage]:
-    """Refine a single chunk. Returns (chunk, refinement-or-None, usage).
+    """Two-pass refine: extract structured data, then synthesize prose.
 
-    A None refinement means the call failed (parse error, API error). The
-    caller logs and continues; the chunk stays unrefined and can be
-    retried on the next run.
+    Returns (chunk, refinement-or-None, summed-usage). A None refinement
+    means at least one of the two passes failed; the chunk stays
+    unrefined and can be retried by re-running the same command. Usage
+    from BOTH passes is always returned so the cost report is honest.
     """
-    user_prompt = USER_PROMPT_TEMPLATE.format(
-        context=_stream_context(parsed),
-        timestamp=_heading_timestamp(chunk.heading),
-        existing_heading=chunk.heading,
-        text=chunk.text,
-    )
+    context = _stream_context(parsed)
+    timestamp = _heading_timestamp(chunk.heading)
+    total_usage = Usage()
 
     async with sem:
-        try:
-            resp = await client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt},
-                ],
-                response_format={"type": "json_object"},
-                temperature=DEFAULT_TEMPERATURE,
-                max_tokens=DEFAULT_MAX_TOKENS,
-                # Ask OpenRouter to include usage.cost in the response so we
-                # don't have to estimate. Passed through extra_body because
-                # the OpenAI SDK doesn't model this field.
-                extra_body={"usage": {"include": True}},
-            )
-        except APIError as e:
-            logger.error(f"  ✗ {chunk.id}: API error: {e}")
-            return chunk, None, Usage()
-
-    resp_dict = resp.model_dump() if hasattr(resp, "model_dump") else {}
-    usage = _extract_usage(resp_dict, model)
-
-    content = resp.choices[0].message.content if resp.choices else ""
-    if not content:
-        logger.error(f"  ✗ {chunk.id}: empty response")
-        return chunk, None, usage
-
-    try:
-        payload = json.loads(content)
-        refinement = _validate_refinement(payload)
-    except (json.JSONDecodeError, ValueError) as e:
-        logger.error(
-            f"  ✗ {chunk.id}: invalid JSON ({e}); first 200 chars: {content[:200]!r}"
+        # Pass 1: extract structured data faithfully.
+        extract_user = EXTRACT_USER_TEMPLATE.format(
+            context=context, timestamp=timestamp, text=chunk.text,
         )
-        return chunk, None, usage
+        extract_raw, usage1 = await _call_llm_json(
+            client, model,
+            system=EXTRACT_SYSTEM_PROMPT,
+            user=extract_user,
+            temperature=DEFAULT_EXTRACT_TEMPERATURE,
+            max_tokens=DEFAULT_EXTRACT_MAX_TOKENS,
+        )
+        total_usage.add(usage1)
+        if extract_raw is None:
+            logger.error(f"  ✗ {chunk.id}: pass 1 (extract) failed")
+            return chunk, None, total_usage
 
-    return chunk, refinement, usage
+        try:
+            extract = _validate_extract(extract_raw)
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.error(f"  ✗ {chunk.id}: extract validation failed: {e}")
+            return chunk, None, total_usage
+
+        # Pass 2: synthesize prose record from the structured extract.
+        synth_user = SYNTHESIZE_USER_TEMPLATE.format(
+            context=context,
+            timestamp=timestamp,
+            existing_heading=chunk.heading,
+            extract_json=json.dumps(extract, ensure_ascii=False),
+        )
+        synth_raw, usage2 = await _call_llm_json(
+            client, model,
+            system=SYNTHESIZE_SYSTEM_PROMPT,
+            user=synth_user,
+            temperature=DEFAULT_SYNTHESIZE_TEMPERATURE,
+            max_tokens=DEFAULT_SYNTHESIZE_MAX_TOKENS,
+        )
+        total_usage.add(usage2)
+        if synth_raw is None:
+            logger.error(f"  ✗ {chunk.id}: pass 2 (synthesize) failed")
+            return chunk, None, total_usage
+
+        try:
+            synthesis = _validate_synthesis(synth_raw)
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.error(f"  ✗ {chunk.id}: synthesis validation failed: {e}")
+            return chunk, None, total_usage
+
+    refinement = {
+        # Synthesis output: prose for the LLM
+        "heading": synthesis["heading"],
+        "summary": synthesis["summary"],
+        "details": synthesis["details"],
+        "chunk_type": synthesis["chunk_type"],
+        # Structured fields from extract: preserved for direct lookup
+        "topics": extract["topics"][:7],  # tighter cap than extract default
+        "mentions": extract["mentions"][:25],
+        "key_quotes": extract["key_quotes"][:5],
+        "sc_events": extract["sc_events"],
+        "songs": extract["songs"],
+        "events": extract["events"][:15],
+        "promises": extract["promises"][:10],
+    }
+    return chunk, refinement, total_usage
+
+
+def _is_v2_refinement(rec: Any) -> bool:
+    """A chunk record is v2 if it carries the new ``details`` field.
+
+    Used to detect v1-format sidecars produced before the schema bump so
+    we can warn the user that ``--force`` is needed to upgrade them.
+    """
+    return isinstance(rec, dict) and "details" in rec and "key_quotes" in rec
 
 
 # ---------------------------------------------------------------------------
@@ -477,6 +672,19 @@ async def refine_stream(
     sidecar = load_sidecar(parsed)
     if force:
         sidecar["chunks"] = {}
+    # Bump schema version stamped on the sidecar even when re-using v1 chunks,
+    # so a future "is_v2" check on the sidecar header is meaningful.
+    sidecar["schema_version"] = SCHEMA_VERSION
+
+    # Detect v1-format records so we can prompt the user to upgrade.
+    v1_chunks = [
+        cid for cid, rec in sidecar["chunks"].items() if not _is_v2_refinement(rec)
+    ]
+    if v1_chunks and not force:
+        logger.warning(
+            f"  {parsed.md_path.name}: {len(v1_chunks)} chunks are still in v1 "
+            f"format (no `details` / `sc_events`). Re-run with --force to upgrade."
+        )
 
     todo = [c for c in parsed.chunks if c.id not in sidecar["chunks"]]
     skipped = len(parsed.chunks) - len(todo)
@@ -664,31 +872,49 @@ def _select_streams(args: CLIArgs) -> list[ParsedStream]:
 def _dry_run_report(streams: list[ParsedStream], model: str) -> None:
     """Estimate refinement cost without spending any tokens.
 
-    Token estimate: char count / 2 for prompt (Chinese is ~1.5 token/char,
-    English ~0.25 token/char; halving char count is a rough cross-language
-    upper bound). System prompt is ~500 tokens. Output we estimate as ~250
-    tokens per chunk (heading + summary + tags). Useful to ballpark a run
-    before authorizing it.
+    Two-pass estimate per chunk:
+
+    - Pass 1 (extract): system prompt ~600 tok + chunk transcript (~chars/2)
+      input; ~600 tok output.
+    - Pass 2 (synthesize): system prompt ~500 tok + structured extract
+      JSON (~600 tok) input; ~800 tok output (the long ``details`` field).
+
+    Char-to-token ratio of 2 is a cross-language upper bound (Chinese is
+    ~1.5/char, English ~0.25/char). Real runs are usually 70-90% of this
+    estimate.
     """
     print()
-    print(f"Dry run — model: {model}")
-    print("(estimates based on char count; actual cost depends on tokenizer)")
+    print(f"Dry run — model: {model}  (two-pass: extract → synthesize)")
+    print("(estimates based on char count; actual cost is usually a bit lower)")
     print()
     pricing = PRICING_USD_PER_1M.get(model, (0.0, 0.0))
 
     total_chunks = total_in = total_out = 0
     for parsed in streams:
         sidecar = load_sidecar(parsed)
-        new = [c for c in parsed.chunks if c.id not in sidecar["chunks"]]
+        # Skip chunks that are already in v2 format. v1 chunks count as
+        # "needs work" only if --force will be used; we don't know that
+        # here, so include them in the estimate to be conservative.
+        new = [
+            c for c in parsed.chunks
+            if c.id not in sidecar["chunks"]
+            or not _is_v2_refinement(sidecar["chunks"][c.id])
+        ]
         if not new:
             print(f"  {parsed.md_path.name}: 0 new chunks")
             continue
         chars = sum(len(c.text) + len(c.heading) for c in new)
-        in_tokens = 500 + chars // 2
-        out_tokens = 250 * len(new)
+        # Pass 1: chunk text in, structured extract out
+        p1_in = 600 * len(new) + chars // 2
+        p1_out = 600 * len(new)
+        # Pass 2: extract JSON in, prose out
+        p2_in = (500 + 600) * len(new)
+        p2_out = 800 * len(new)
+        in_tokens = p1_in + p2_in
+        out_tokens = p1_out + p2_out
         cost = (in_tokens * pricing[0] + out_tokens * pricing[1]) / 1_000_000
         print(
-            f"  {parsed.md_path.name}: {len(new)} chunks, "
+            f"  {parsed.md_path.name}: {len(new)} chunks × 2 passes, "
             f"~{in_tokens:,} in / ~{out_tokens:,} out → ~${cost:.4f}"
         )
         total_chunks += len(new)
@@ -698,7 +924,7 @@ def _dry_run_report(streams: list[ParsedStream], model: str) -> None:
     total_cost = (total_in * pricing[0] + total_out * pricing[1]) / 1_000_000
     print()
     print(
-        f"Estimated total: {total_chunks} chunks, "
+        f"Estimated total: {total_chunks} chunks (2 passes each), "
         f"~{total_in:,} in / ~{total_out:,} out → ~${total_cost:.4f}"
     )
     if pricing == (0.0, 0.0):

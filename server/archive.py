@@ -39,6 +39,7 @@ old vectors won't be comparable to new ones.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from pathlib import Path
 from typing import Any, cast
@@ -313,10 +314,16 @@ class StreamArchiveService(FrameProcessor):
     def _format_chunks(chunks: list[dict[str, Any]], prefix: str) -> str:
         """Render retrieved chunks as a single readable system message.
 
-        Prefers the LLM-refined ``summary`` (clean, first-person, no anime
-        dialogue or song lyrics) over the raw ``text``. Falls back to raw
-        text for chunks that haven't been processed by ``tools/refine.py``
-        yet, so older streams still work.
+        Render priority per chunk (best → fallback):
+
+        1. v2 refined: ``details`` narrative + structured SC list +
+           ``key_quotes`` block. Rich and grounded in source material.
+        2. v1 refined: ``summary`` only.
+        3. Unrefined: raw ``text`` (the noisy original transcript).
+
+        For ``sc_events`` specifically we render a per-viewer list with
+        the SC content + 奶绿's response — that's what lets the persona
+        recall who said what when a viewer asks.
         """
         lines = [prefix]
         for i, chunk in enumerate(chunks, 1):
@@ -324,17 +331,85 @@ class StreamArchiveService(FrameProcessor):
             game = chunk.get("game", "")
             heading = chunk.get("heading", "")
             summary = chunk.get("summary") or ""
+            details = chunk.get("details") or ""
             text = chunk.get("text", "")
-            body = summary if summary else text
+
+            # Decode the v2 extras blob if present.
+            extras_raw = chunk.get("extras_json") or ""
+            extras: dict[str, Any] = {}
+            if extras_raw:
+                try:
+                    extras = json.loads(extras_raw)
+                except json.JSONDecodeError:
+                    extras = {}
+
             header = f"[{i}] {date}"
             if game:
                 header += f" — {game}"
             if heading:
                 header += f" — {heading}"
             lines.append(header)
-            lines.append(body.strip())
+
+            if details:
+                # v2: rich narrative + structured SC + quotes
+                lines.append(details.strip())
+                StreamArchiveService._append_extras(lines, extras)
+            elif summary:
+                # v1: short summary
+                lines.append(summary.strip())
+            else:
+                # Unrefined fallback: the raw transcript
+                lines.append(text.strip())
             lines.append("")
         return "\n".join(lines).rstrip() + "\n"
+
+    @staticmethod
+    def _append_extras(lines: list[str], extras: dict[str, Any]) -> None:
+        """Append the structured v2 fields (SC events, songs, events,
+        quotes) to the rendered chunk in a scannable layout."""
+        sc_events = extras.get("sc_events") or []
+        if sc_events:
+            lines.append("SC回顾:")
+            for sc in sc_events:
+                viewer = sc.get("viewer") or "?"
+                amount = sc.get("amount_yuan")
+                content = (sc.get("content") or "").strip()
+                response = (sc.get("response") or "").strip()
+                head = f"  • {viewer}"
+                if amount:
+                    head += f"（¥{amount}）"
+                if content:
+                    head += f": {content}"
+                lines.append(head)
+                if response:
+                    lines.append(f"    → 我的回复: {response}")
+
+        songs = extras.get("songs") or []
+        if songs:
+            song_titles = []
+            for s in songs:
+                if isinstance(s, dict):
+                    title = (s.get("title") or "").strip()
+                    note = (s.get("note") or "").strip()
+                    song_titles.append(f"《{title}》{f'（{note}）' if note else ''}")
+                elif isinstance(s, str):
+                    song_titles.append(f"《{s}》")
+            if song_titles:
+                lines.append("歌曲: " + "; ".join(song_titles))
+
+        events = extras.get("events") or []
+        if events:
+            lines.append("事件: " + "; ".join(str(e) for e in events))
+
+        promises = extras.get("promises") or []
+        if promises:
+            lines.append("承诺: " + "; ".join(str(p) for p in promises))
+
+        quotes = extras.get("key_quotes") or []
+        if quotes:
+            lines.append("金句:")
+            for q in quotes:
+                lines.append(f"  · 「{q}」")
 
     async def _enhance(self, context, query: str) -> None:
         """Inject retrieved chunks into the LLM context as a system message."""
