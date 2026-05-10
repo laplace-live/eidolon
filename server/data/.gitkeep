@@ -1,0 +1,3 @@
+# Keeps the data/ directory in git so the Dockerfile's `COPY ./data ./data`
+# step works on a fresh checkout, before `tools/ingest.py` has been run.
+# Once the LanceDB index is built, this file sits alongside data/lancedb/.

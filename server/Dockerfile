@@ -15,5 +15,17 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --locked --no-install-project --no-dev
 
-# Copy the application code
+# Copy the application code and data assets.
+# - bot.py / archive.py: runtime
+# - persona.md: system prompt source of truth
+# - streams/: transcripts (small, committed; useful for inspection at runtime
+#   though retrieval reads from the prebuilt LanceDB index)
+# - data/: prebuilt LanceDB index (built locally via `uv run python -m tools.ingest`).
+#   The directory is kept alive in git via data/.gitkeep so this COPY succeeds
+#   even on a fresh checkout where ingest hasn't been run yet — StreamArchive
+#   gracefully no-ops when the lancedb subdir is absent.
 COPY ./bot.py bot.py
+COPY ./archive.py archive.py
+COPY ./persona.md persona.md
+COPY ./streams ./streams
+COPY ./data ./data

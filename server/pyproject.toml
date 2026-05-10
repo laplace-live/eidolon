@@ -6,6 +6,18 @@ requires-python = ">=3.10"
 dependencies = [
     "pipecat-ai[daily,fish,mem0,openrouter,runner,silero,soniox,webrtc]",
     "pipecatcloud",
+    # Stream archive (RAG over past stream transcripts)
+    "lancedb>=0.27.1",
+    "pyarrow>=22",
+    "python-frontmatter>=1.1.0",
+]
+
+[project.optional-dependencies]
+# Tooling for local-only operations (transcription, ingest). Not needed at
+# runtime by the bot. Install with: uv sync --extra tools
+tools = [
+    "faster-whisper>=1.2.0",
+    "soniox>=1.0.0",
 ]
 
 [dependency-groups]

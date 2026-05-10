@@ -1,27 +1,30 @@
-#
-# Copyright (c) 2024–2025, Daily
-#
-# SPDX-License-Identifier: BSD 2-Clause License
-#
+"""laplace-avatar — Pipecat voice bot for a streamer RP persona.
 
-"""pipecat-quickstart - Pipecat Voice Agent
+Pipeline shape (cascade, with optional memory/archive enrichment)::
 
-This bot uses a cascade pipeline: Speech-to-Text → LLM → Text-to-Speech
+    transport.input → STT → user_aggregator
+        → Mem0 (per-viewer memory, optional)
+        → StreamArchive (RAG over past streams, optional)
+        → LLM → TTS → transport.output → assistant_aggregator
 
-Required AI services:
-- Soniox (Speech-to-Text)
-- OpenRouter (LLM, OpenAI-compatible)
-- Fish Audio (Text-to-Speech)
+Three persistent storage tiers feed the LLM:
 
-Optional services:
-- Mem0 (long-term conversational memory) — enabled when MEM0_API_KEY is set
+1. ``persona.md``      — identity, voice, hard rules (always in system prompt)
+2. Stream archive       — verbatim past-stream chunks, retrieved by relevance
+                          (LanceDB index built by ``tools/ingest.py``)
+3. Mem0                 — per-viewer episodic memory, auto-extracted from chat
 
-Run the bot using::
+Required services: Soniox (STT), OpenRouter (LLM), Fish Audio (TTS).
+Optional: Mem0 (set MEM0_API_KEY), StreamArchive (set OPENAI_API_KEY and run
+the ingest script).
+
+Run the bot with::
 
     uv run bot.py
 """
 
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 from loguru import logger
@@ -56,7 +59,43 @@ except Exception as e:
     Mem0MemoryService = None
     logger.debug(f"Mem0 service unavailable: {e}")
 
+# StreamArchive is also optional — disabled if OPENAI_API_KEY (used for
+# embeddings) is missing or the LanceDB index hasn't been built yet.
+try:
+    from archive import StreamArchiveService
+except Exception as e:
+    StreamArchiveService = None
+    logger.debug(f"StreamArchive service unavailable: {e}")
+
 load_dotenv(override=True)
+
+# Resolve persona/data paths relative to this file so the bot works from any
+# CWD (local dev, container, Pipecat Cloud).
+SERVER_DIR = Path(__file__).resolve().parent
+PERSONA_PATH = SERVER_DIR / os.getenv("PERSONA_FILE", "persona.md")
+ARCHIVE_DB_PATH = SERVER_DIR / os.getenv("ARCHIVE_DB_PATH", "data/lancedb")
+
+FALLBACK_PERSONA = (
+    "You are a helpful assistant in a voice conversation. Your responses will "
+    "be spoken aloud, so avoid emojis, bullet points, or other formatting that "
+    "can't be spoken. Always reply in the same language the user just spoke; "
+    "if they switch languages, switch with them. Respond briefly."
+)
+
+
+def load_persona() -> str:
+    """Load persona.md as the LLM system instruction.
+
+    Falls back to a generic voice-assistant prompt if the file is missing —
+    keeps the bot runnable on a fresh checkout before persona.md is authored.
+    """
+    if PERSONA_PATH.exists():
+        text = PERSONA_PATH.read_text(encoding="utf-8").strip()
+        if text:
+            logger.info(f"Loaded persona from {PERSONA_PATH.relative_to(SERVER_DIR)}")
+            return text
+    logger.warning(f"Persona file {PERSONA_PATH} not found; using fallback prompt")
+    return FALLBACK_PERSONA
 
 
 async def run_bot(transport: BaseTransport):
@@ -86,12 +125,13 @@ async def run_bot(transport: BaseTransport):
         ),
     )
 
-    # LLM service
+    # LLM service. Persona/identity/voice rules all live in persona.md so
+    # they can be edited without touching code.
     llm = OpenRouterLLMService(
         api_key=os.getenv("OPENROUTER_API_KEY"),
         settings=OpenRouterLLMService.Settings(
             model=os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-2024-11-20"),
-            system_instruction="你是一个在线陪伴型聊天助手，名字叫明前奶绿，是一个虚拟主播. Your responses will be spoken aloud, so avoid emojis, bullet points, or other formatting that can't be spoken. Always reply in the same language the user just spoke; if they switch languages, switch with them. Respond to what the user said in a creative, helpful, and brief way.",
+            system_instruction=load_persona(),
         ),
     )
 
@@ -123,9 +163,29 @@ async def run_bot(transport: BaseTransport):
     elif mem0_api_key and Mem0MemoryService is None:
         logger.warning("MEM0_API_KEY is set but pipecat-ai[mem0] is not installed; skipping memory")
 
+    # Optional stream archive (RAG over past stream transcripts). Lives at the
+    # same pipeline position as Mem0 — both intercept LLMContextFrame and
+    # inject one system message. Mem0 inserts at position 1, archive at
+    # position 2, so the final message order is:
+    #   [persona system prompt, viewer memory, stream archive, user message].
+    archive = None
+    if StreamArchiveService is not None and ARCHIVE_DB_PATH.exists():
+        try:
+            archive = StreamArchiveService(db_path=ARCHIVE_DB_PATH)
+        except Exception as e:
+            logger.warning(f"StreamArchiveService disabled: {e}")
+    elif StreamArchiveService is not None:
+        logger.info(
+            f"Stream archive disabled: no LanceDB index at "
+            f"{ARCHIVE_DB_PATH.relative_to(SERVER_DIR)}. "
+            "Run `uv run python -m tools.ingest` to build it."
+        )
+
     processors = [transport.input(), stt, user_aggregator]
     if memory is not None:
         processors.append(memory)
+    if archive is not None:
+        processors.append(archive)
     processors.extend([llm, tts, transport.output(), assistant_aggregator])
 
     pipeline = Pipeline(processors)
