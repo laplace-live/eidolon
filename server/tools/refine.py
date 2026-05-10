@@ -348,8 +348,6 @@ def _stream_context(parsed: ParsedStream) -> str:
     parts = []
     if meta.get("stream_date"):
         parts.append(f"date={meta['stream_date']}")
-    if meta.get("game"):
-        parts.append(f"game/topic={meta['game']}")
     if meta.get("language"):
         parts.append(f"language={meta['language']}")
     if meta.get("mood"):

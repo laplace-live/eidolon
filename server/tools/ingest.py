@@ -3,10 +3,15 @@
 Source of truth: ``server/streams/*.md`` (frontmatter + H2-delimited scenes).
 Built artifact: ``server/data/lancedb/stream_chunks.lance/``.
 
-Each H2 section becomes one chunk. Frontmatter (``stream_date``, ``game``,
+Each H2 section becomes one chunk. Frontmatter (``stream_date``, ``language``,
 etc.) propagates onto every chunk as filterable metadata. The whole table
 is dropped and rebuilt on each run; transcripts are small and embeddings
 are cheap, so reproducibility beats incrementalism here.
+
+Topics are per-chunk, not per-stream — produced by ``tools/refine.py`` and
+stored on each row as a JSON-encoded list. A single VOD often spans chat,
+gaming, karaoke, and watchalongs, so a single per-stream label would be
+misleading.
 
 Refinement-aware
 ----------------
@@ -90,7 +95,6 @@ def load_streams(
         refined_map: dict[str, dict[str, Any]] = sidecar.get("chunks", {}) or {}
         meta = parsed.metadata
         stream_date = str(meta.get("stream_date", ""))
-        game = str(meta.get("game", ""))
         rel_source = str(parsed.md_path.relative_to(streams_dir.parent))
 
         kept = 0
@@ -140,7 +144,6 @@ def load_streams(
                     "id": chunk.id,
                     "stream_id": chunk.stream_id,
                     "stream_date": stream_date,
-                    "game": game,
                     "heading": heading,
                     "text": chunk.text,
                     "summary": summary,
@@ -184,7 +187,6 @@ def build_arrow_schema() -> pa.Schema:
             pa.field("id", pa.string()),
             pa.field("stream_id", pa.string()),
             pa.field("stream_date", pa.string()),
-            pa.field("game", pa.string()),
             pa.field("heading", pa.string()),
             pa.field("text", pa.string()),
             # Refined fields. Empty strings / "[]" / "{}" / False if no

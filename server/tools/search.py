@@ -71,7 +71,6 @@ async def main_async(args: argparse.Namespace) -> int:
     print()
     for i, h in enumerate(hits, 1):
         date = h.get("stream_date", "?")
-        game = h.get("game", "")
         heading = h.get("heading", "")
         summary = h.get("summary") or ""
         details = h.get("details") or ""
@@ -89,9 +88,21 @@ async def main_async(args: argparse.Namespace) -> int:
             except json.JSONDecodeError:
                 extras = {}
 
+        # Topics are per-chunk (refine.py emits 3-7 short tags). JSON-decode
+        # defensively — unrefined chunks store "[]" rather than a real list.
+        topics: list[str] = []
+        topics_raw = h.get("topics") or ""
+        if topics_raw:
+            try:
+                decoded = json.loads(topics_raw)
+                if isinstance(decoded, list):
+                    topics = [str(t) for t in decoded]
+            except json.JSONDecodeError:
+                topics = []
+
         header = f"[{i}] dist={dist:.3f}  {date}"
-        if game:
-            header += f"  ({game})"
+        if topics:
+            header += f"  ({', '.join(topics)})"
         if chunk_type:
             tag = "v2" if details else ("v1" if is_refined else "raw")
             header += f"  [{chunk_type} · {tag}]"

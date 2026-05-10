@@ -328,7 +328,6 @@ class StreamArchiveService(FrameProcessor):
         lines = [prefix]
         for i, chunk in enumerate(chunks, 1):
             date = chunk.get("stream_date", "unknown date")
-            game = chunk.get("game", "")
             heading = chunk.get("heading", "")
             summary = chunk.get("summary") or ""
             details = chunk.get("details") or ""
@@ -343,9 +342,21 @@ class StreamArchiveService(FrameProcessor):
                 except json.JSONDecodeError:
                     extras = {}
 
+            # Per-chunk topics from refine.py (JSON-encoded list[str]).
+            # Unrefined chunks store "[]" — decode defensively.
+            topics: list[str] = []
+            topics_raw = chunk.get("topics") or ""
+            if topics_raw:
+                try:
+                    decoded = json.loads(topics_raw)
+                    if isinstance(decoded, list):
+                        topics = [str(t) for t in decoded]
+                except json.JSONDecodeError:
+                    topics = []
+
             header = f"[{i}] {date}"
-            if game:
-                header += f" — {game}"
+            if topics:
+                header += f" — {', '.join(topics)}"
             if heading:
                 header += f" — {heading}"
             lines.append(header)

@@ -17,13 +17,16 @@
 #   - Keep `general` to ≤10 short key/value pairs.
 #   - `terms` works best as distinct words/phrases, not full sentences.
 #
-# Per-stream tweaks:
-#   - `--game "假面骑士ZZZ"` is auto-injected as a `topic` general key,
-#     so you don't have to edit this file every stream.
-#   - For a one-off glossary (different game, etc.) use:
+# Per-run overrides:
+#   - For a one-off glossary (e.g. a brand-new game premiere with proper
+#     nouns this file doesn't know about) use:
 #       --context-file my_other_glossary.toml
 #   - For a clean A/B run with no context at all:
 #       --no-context
+#
+# We deliberately do NOT pass a per-stream "topic" hint. A single VOD often
+# spans chat, gaming, karaoke, and watchalongs, so a single label would be
+# misleading. Per-scene topics live on each chunk after `tools/refine.py`.
 #
 # TOML gotcha: top-level scalars/arrays (`text`, `terms`) MUST appear
 # before any `[[general]]` / `[[translation_terms]]` array-of-tables

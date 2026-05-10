@@ -18,16 +18,21 @@ Workflow::
     uv sync --extra tools             # one-time, installs both backends
 
     # Cloud Soniox (default, better Mandarin; --language defaults to zh):
-    uv run python -m tools.transcribe vods/2026-04-15-zelda.m4a \\
-        --date 2026-04-15 --game "Zelda"
+    uv run python -m tools.transcribe vods/2026-04-15-stream.m4a \\
+        --date 2026-04-15
 
     # Local Whisper (free, offline):
-    uv run python -m tools.transcribe vods/2026-04-15-zelda.m4a \\
-        --date 2026-04-15 --game "Zelda" \\
+    uv run python -m tools.transcribe vods/2026-04-15-stream.m4a \\
+        --date 2026-04-15 \\
         --provider whisper --model medium --compute-type int8
 
     # Auto-detect language (override the zh default):
     uv run python -m tools.transcribe vods/foo.m4a --language ""
+
+    # One-off vocabulary spike (new game/show, unfamiliar proper nouns)?
+    # Override the default glossary for this run only:
+    uv run python -m tools.transcribe vods/foo.m4a \\
+        --context-file path/to/my_glossary.toml
 
     # Then ingest into the LanceDB stream archive:
     uv run python -m tools.ingest
@@ -54,8 +59,12 @@ model toward your domain vocabulary — character names, audience slang,
 recurring topics. For Mandarin streams full of proper nouns and
 code-switching, this is a huge accuracy win. We load it from a TOML file
 (default ``server/soniox_context.toml``) and pass it on every soniox run.
-The ``--game`` value is auto-injected as a ``topic`` general key so each
-stream's specific subject gets through without editing the file.
+
+The context is intentionally **per-project**, not per-stream. A single VOD
+often spans chat, gaming, karaoke, and watchalongs, so a single per-stream
+"topic" hint would be misleading. Per-scene topics live on each chunk
+post-refinement (see ``tools/refine.py``); Soniox just gets the project's
+recurring vocabulary.
 
   --context-file PATH    Use a different TOML file for this run.
   --no-context           Skip context entirely (clean A/B comparison).
@@ -206,7 +215,6 @@ def render_markdown(
     *,
     stream_date: str,
     stream_id: str,
-    game: str,
     duration_min: int,
     scenes: list[dict[str, Any]],
     source_file: str,
@@ -217,10 +225,8 @@ def render_markdown(
         "---",
         f"stream_date: {stream_date}",
         f"stream_id: {stream_id}",
+        f"duration_min: {duration_min}",
     ]
-    if game:
-        fm_lines.append(f"game: {game}")
-    fm_lines.append(f"duration_min: {duration_min}")
     if language:
         fm_lines.append(f"language: {language}")
     fm_lines.append(f"source_file: {source_file}")
@@ -352,7 +358,6 @@ SONIOX_CONTEXT_MAX_CHARS = 10_000
 def _load_soniox_context_dict(
     path: Path | None,
     *,
-    game: str,
     skip: bool,
 ) -> dict[str, Any] | None:
     """Load a TOML glossary file and return it as a Soniox-shaped dict.
@@ -362,10 +367,6 @@ def _load_soniox_context_dict(
     be passed straight into ``StructuredContext(**dict)``. Returns
     ``None`` when context is disabled, the file is missing, or the file
     contains nothing usable.
-
-    The ``game`` value (from ``--game``) is auto-injected as a ``topic``
-    entry under ``general`` if the file doesn't already define one — saves
-    editing the TOML for every new stream.
     """
     if skip:
         return None
@@ -426,13 +427,6 @@ def _load_soniox_context_dict(
                 f"{sorted(extras)}. Each entry must contain ONLY `source` "
                 f"and `target`. (Same TOML-ordering pitfall as above.)"
             )
-
-    # Auto-inject --game as a `topic` general key (only if not set).
-    if game:
-        general = list(raw.get("general") or [])
-        if not any(isinstance(item, dict) and item.get("key") == "topic" for item in general):
-            general.append({"key": "topic", "value": game})
-        raw["general"] = general
 
     # Strip empty / falsy sections so the final payload is minimal.
     raw = {k: v for k, v in raw.items() if v}
@@ -557,7 +551,6 @@ def transcribe_with_soniox(
     # --no-context was passed; the request just goes out without context.
     context_dict = _load_soniox_context_dict(
         args.context_file,
-        game=args.game,
         skip=args.no_context,
     )
     structured_context: StructuredContext | None = None
@@ -736,7 +729,6 @@ def main() -> int:
         default=date.today().isoformat(),
         help="Stream date YYYY-MM-DD (default: today)",
     )
-    parser.add_argument("--game", default="", help="Game / topic label")
     parser.add_argument(
         "--language",
         default="zh",
@@ -871,7 +863,6 @@ def main() -> int:
     md = render_markdown(
         stream_date=args.date,
         stream_id=stream_id,
-        game=args.game,
         duration_min=int(info.duration / 60),
         scenes=scenes,
         source_file=str(args.audio.name),
