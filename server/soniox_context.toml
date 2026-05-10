@@ -1,0 +1,185 @@
+# Soniox transcription context — biases the Soniox STT model toward this
+# project's vocabulary (persona names, audience slang, recurring topics).
+# Loaded automatically by `tools.transcribe --provider soniox`.
+#
+# Schema mirrors Soniox's StructuredContext exactly:
+#   https://soniox.com/docs/stt/concepts/context
+#
+# Sections (all optional):
+#   text               — long-form background paragraph. Use sparingly.
+#   terms              — flat list of strings. The high-impact section.
+#   general            — list of {key, value} dicts. Domain, topic, names.
+#   translation_terms  — list of {source, target}. Only used if you ever
+#                        run Soniox in translation mode (we don't today).
+#
+# Limits enforced by Soniox:
+#   - Max ~8000 tokens (~10,000 characters) total across all sections.
+#   - Keep `general` to ≤10 short key/value pairs.
+#   - `terms` works best as distinct words/phrases, not full sentences.
+#
+# Per-stream tweaks:
+#   - `--game "假面骑士ZZZ"` is auto-injected as a `topic` general key,
+#     so you don't have to edit this file every stream.
+#   - For a one-off glossary (different game, etc.) use:
+#       --context-file my_other_glossary.toml
+#   - For a clean A/B run with no context at all:
+#       --no-context
+#
+# TOML gotcha: top-level scalars/arrays (`text`, `terms`) MUST appear
+# before any `[[general]]` / `[[translation_terms]]` array-of-tables
+# blocks below, or TOML will silently nest them inside the last table.
+#
+# THIS FILE IS A PLACEHOLDER. Replace `terms` and `text` with your real
+# glossary when you have one — that's where the accuracy gains live.
+
+# ─────────────────────────────────────────────────────────────────────────
+# Text — long-form background. Lower influence than `terms`; reserve for
+# setting and lore the model can't easily guess from a glossary.
+# ─────────────────────────────────────────────────────────────────────────
+
+text = """
+明前奶绿是一位自 2023 年起活动的中文 Vtuber（虚拟主播）。直播内容以陪伴向
+闲聊、游戏、偶尔的歌回、以及各类二次元影视作品同步观影为主。她曾养过一只名叫"坚果"的布偶猫，
+后因从窗台坠落而离世。观众群体自称"奶糖花"。她给自己开了个拉普拉斯（LAPLACE）花店，直播间常以
+"花店"代称，是固定的内部梗。常见话题包括感谢 superchat（SC）等直播本身元吐槽。
+"""
+
+# ─────────────────────────────────────────────────────────────────────────
+# Terms — the high-impact section. Domain-specific words, character names,
+# brands, slang. Keep entries short and distinct.
+#
+# THIS LIST IS A PLACEHOLDER — replace with the real glossary once you've
+# compiled it. Things to add:
+#   - Co-streamer / friend Vtuber names that come up regularly.
+#   - Game-specific vocabulary for the games actively being played
+#     (boss names, item names, areas, mechanics).
+#   - Recurring chat memes / inside jokes that Whisper consistently
+#     misrenders.
+# ─────────────────────────────────────────────────────────────────────────
+
+terms = [
+  # Persona / identity
+  "明前奶绿",
+  "奶绿",
+  "奶比",
+  "奶姐",
+  "奶神",
+  "奶妈",
+  "奶黄",
+  "奶糖花",
+  "拉普拉斯",
+  "花店",
+  "坚果",
+
+  # Stream meta vocabulary
+  "SC",
+  "舰长",
+  "切片",
+  "切片man",
+  "超管",
+  "限流",
+  "BW",
+  "Mixup",
+  "维阿",
+  "VirtuaReal",
+  "立牌",
+  "低能",
+
+  # Tokusatsu / Kamen Rider — placeholder; expand for the current arc
+  "假面骑士",
+  "假面骑士ZZZ",
+  "假P",
+  "甲友",
+  "奥特曼",
+
+  # Usernames
+  "スパラノイア",
+  "異分岐のプリエ",
+  "物質幽靈",
+  "Npc2300",
+  "MIDORIガチ",
+  "蜿蜒的火",
+  "被跃离的阿德德",
+  "奶绿味静吱壁",
+  "拉G东西",
+  "二胡Athurne",
+  "吃嘛嘛香_Inc",
+  "逆十字X",
+  "糖炒板栗企鹅",
+  "西塞罗Pf",
+  "来个圣光",
+  "炳胜菠萝包_旗舰店",
+  "太阳之子",
+  "JolyneFr",
+  "无话可嗦OvO",
+  "咕噜咕噜佑",
+  "我也曾热爱这世界",
+  "StunningRose",
+  "斜月沉沉丶",
+  "虚拟JK",
+  "使命-短剑",
+  "里奧梅南",
+  "猫猫g",
+  "IMPLOSION-",
+  "超時空要愛",
+  "Qw8279",
+  "文在靜",
+  "圣特蕾莎的沉沦",
+  "恶食大王offciail",
+  "掌心の羁绊",
+  "勇者JF",
+  "再拿一只fufu",
+  "aaikoeN",
+  "来个三号圣光机",
+  "志喵新八",
+  "力工主播明前奶翠",
+  "宫代泉理",
+  "绯翠色的翡翠",
+  "抽象的丑角",
+  "laplace716",
+  "冰河入夣",
+  "危险近距离",
+  "结晶傻鸟",
+  "中年外卖员阿哔official",
+  "ちゃまろろ",
+  "开香槟好耶",
+]
+
+# ─────────────────────────────────────────────────────────────────────────
+# General — broad baseline. The model uses these to pick the right
+# vocabulary register before it sees any audio. MUST come after the
+# top-level scalars above (TOML ordering rule).
+# ─────────────────────────────────────────────────────────────────────────
+
+[[general]]
+key = "domain"
+value = "Mandarin-language Vtuber livestream (gaming + chat)"
+
+[[general]]
+key = "streamer"
+value = "明前奶绿 — chill, slightly-sleepy female Vtuber, often called 奶绿 or 奶姐"
+
+[[general]]
+key = "audience"
+value = "Self-styled fans called 奶糖花 (nǎitánghuā)"
+
+[[general]]
+key = "agency"
+value = "拉普拉斯 (Laplace), referred to in chat as 花店 ('flower shop')"
+
+[[general]]
+key = "language"
+value = "Mostly Mandarin Chinese with frequent English / Japanese loanwords and code-switching"
+
+[[general]]
+key = "format"
+value = "Long-form chat with super chat (SC) read-alouds, RPG playthroughs, anime/tokusatsu watch-alongs, and karaoke (歌回)"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Translation terms — only used if you ever run Soniox in translation
+# mode. We don't today, so this stays empty.
+# ─────────────────────────────────────────────────────────────────────────
+
+# [[translation_terms]]
+# source = "明前奶绿"
+# target = "明前奶绿"
