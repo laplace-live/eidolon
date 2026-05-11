@@ -87,6 +87,14 @@ terms = [
   "VirtuaReal",
   "立牌",
   "低能",
+  "Staff",
+  "舰长",
+  "提督",
+  "总督",
+  "舰礼",
+  "galgame",
+  "旮旯game",
+  "LAPLACE Chat",
 
   # Tokusatsu / Kamen Rider — placeholder; expand for the current arc
   "假面骑士",
@@ -97,6 +105,7 @@ terms = [
 
   # Usernames
   "スパラノイア",
+  "sparanoia",
   "異分岐のプリエ",
   "物質幽靈",
   "Npc2300",
