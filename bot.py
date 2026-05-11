@@ -47,8 +47,66 @@ from pipecat.services.fish.tts import FishAudioTTSService
 from pipecat.services.openrouter.llm import OpenRouterLLMService
 from pipecat.services.soniox.stt import SonioxSTTService
 from pipecat.transports.base_transport import BaseTransport, TransportParams
-from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection
+from pipecat.transports.smallwebrtc.connection import IceServer, SmallWebRTCConnection
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
+
+# Inject server-side ICE servers from environment variables.
+#
+# Self-hosted SmallWebRTC behind any NAT (Docker bridge, VPS firewall,
+# residential router, …) needs aiortc to:
+#
+#   1. Discover its own public IP via STUN, so the browser receives a
+#      routable srflx candidate instead of just an unrouteable Docker
+#      bridge IP (172.x.y.z).
+#   2. (For symmetric-NAT clients) advertise a TURN relay candidate so
+#      media has a fallback path when peer-to-peer ICE cannot converge.
+#
+# Pipecat's dev runner never wires server-side ICE servers in; it
+# constructs SmallWebRTCRequestHandler() without `ice_servers`, which in
+# turn constructs every SmallWebRTCConnection with `ice_servers=None`.
+# That advertises ONLY host candidates — fine on localhost, broken
+# behind any NAT.
+#
+# We monkey-patch __init__ to default `ice_servers` from env. This
+# mirrors the pattern pipecat itself uses for USERDATA_MAX_LENGTH at
+# pipecat/transports/smallwebrtc/connection.py:62.
+#
+# aiortc supports at most ONE STUN and ONE TURN server per connection
+# (see aiortc.rtcicetransport.connection_kwargs); extra entries are
+# silently dropped. credentialType is fixed to "password". `turn:` URLs
+# accept ?transport=udp|tcp; `turns:` (TLS) requires tcp.
+_ORIGINAL_SWRTC_INIT = SmallWebRTCConnection.__init__
+
+
+def _patched_swrtc_init(self, ice_servers=None, connection_timeout_secs=60):
+    if not ice_servers:
+        defaults: list[IceServer] = []
+        stun_url = os.getenv("WEBRTC_STUN_URL")
+        if stun_url:
+            defaults.append(IceServer(urls=stun_url))
+        turn_url = os.getenv("WEBRTC_TURN_URL")
+        if turn_url:
+            defaults.append(
+                IceServer(
+                    urls=turn_url,
+                    username=os.getenv("WEBRTC_TURN_USERNAME"),
+                    credential=os.getenv("WEBRTC_TURN_CREDENTIAL"),
+                )
+            )
+        if defaults:
+            logger.debug(
+                f"[WebRTC] Server-side ICE: STUN={'yes' if stun_url else 'no'}, "
+                f"TURN={'yes' if turn_url else 'no'}"
+            )
+            ice_servers = defaults
+    _ORIGINAL_SWRTC_INIT(
+        self,
+        ice_servers=ice_servers,
+        connection_timeout_secs=connection_timeout_secs,
+    )
+
+
+SmallWebRTCConnection.__init__ = _patched_swrtc_init
 
 # Mem0 is an optional dependency; only import if available so the bot still
 # runs when the user hasn't installed the `mem0` extra or set MEM0_API_KEY.
