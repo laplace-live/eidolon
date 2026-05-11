@@ -1,0 +1,16 @@
+node_modules
+dist
+dist-ssr
+.vite
+*.local
+
+# Local env (committed example lives in .env.example)
+.env
+.env.*
+!.env.example
+
+# Editor / OS junk
+.DS_Store
+.idea
+.vscode
+*.log
