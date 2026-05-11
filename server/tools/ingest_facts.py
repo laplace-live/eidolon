@@ -49,7 +49,7 @@ from loguru import logger
 # Allow running both as module (``python -m tools.ingest_facts``) and as a script.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from archive import (  # noqa: E402
+from embeddings import (  # noqa: E402
     DEFAULT_DB_PATH,
     DEFAULT_EMBED_DIM,
     EmbeddingUsage,
@@ -183,9 +183,8 @@ def build_arrow_schema() -> pa.Schema:
     """Schema for the persona_facts table.
 
     Vector dim must match ``DEFAULT_EMBED_DIM`` (3072 for Gemini). If you
-    swap embedding models or change ``ARCHIVE_EMBED_DIM``, this schema
-    picks up the new dim on the next ingest because we drop and recreate
-    the table.
+    swap embedding models or change ``EMBED_DIM``, this schema picks up
+    the new dim on the next ingest because we drop and recreate the table.
     """
     return pa.schema(
         [

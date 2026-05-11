@@ -66,7 +66,7 @@ except Exception as e:
 # StreamArchive is also optional — disabled if OPENAI_API_KEY (used for
 # embeddings) is missing or the LanceDB index hasn't been built yet.
 try:
-    from archive import StreamArchiveService
+    from stream_archive import StreamArchiveService
 except Exception as e:
     StreamArchiveService = None
     logger.debug(f"StreamArchive service unavailable: {e}")
@@ -85,7 +85,7 @@ load_dotenv(override=True)
 # CWD (local dev, container, Pipecat Cloud).
 SERVER_DIR = Path(__file__).resolve().parent
 PERSONA_PATH = SERVER_DIR / os.getenv("PERSONA_FILE", "persona.md")
-ARCHIVE_DB_PATH = SERVER_DIR / os.getenv("ARCHIVE_DB_PATH", "data/lancedb")
+LANCEDB_PATH = SERVER_DIR / os.getenv("LANCEDB_PATH", "data/lancedb")
 
 FALLBACK_PERSONA = (
     "You are a helpful assistant in a voice conversation. Your responses will "
@@ -179,15 +179,15 @@ async def run_bot(transport: BaseTransport):
     # in data/*设定集.txt + data/*事件集.txt). Same LanceDB instance as the
     # stream archive, different table.
     facts = None
-    if PersonaFactsService is not None and ARCHIVE_DB_PATH.exists():
+    if PersonaFactsService is not None and LANCEDB_PATH.exists():
         try:
-            facts = PersonaFactsService(db_path=ARCHIVE_DB_PATH)
+            facts = PersonaFactsService(db_path=LANCEDB_PATH)
         except Exception as e:
             logger.warning(f"PersonaFactsService disabled: {e}")
     elif PersonaFactsService is not None:
         logger.info(
             f"Persona facts disabled: no LanceDB index at "
-            f"{ARCHIVE_DB_PATH.relative_to(SERVER_DIR)}. "
+            f"{LANCEDB_PATH.relative_to(SERVER_DIR)}. "
             "Run `uv run python -m tools.ingest_facts` to build it."
         )
 
@@ -198,15 +198,15 @@ async def run_bot(transport: BaseTransport):
     # system_instruction from persona.md is prepended automatically by
     # the LLM service).
     archive = None
-    if StreamArchiveService is not None and ARCHIVE_DB_PATH.exists():
+    if StreamArchiveService is not None and LANCEDB_PATH.exists():
         try:
-            archive = StreamArchiveService(db_path=ARCHIVE_DB_PATH)
+            archive = StreamArchiveService(db_path=LANCEDB_PATH)
         except Exception as e:
             logger.warning(f"StreamArchiveService disabled: {e}")
     elif StreamArchiveService is not None:
         logger.info(
             f"Stream archive disabled: no LanceDB index at "
-            f"{ARCHIVE_DB_PATH.relative_to(SERVER_DIR)}. "
+            f"{LANCEDB_PATH.relative_to(SERVER_DIR)}. "
             "Run `uv run python -m tools.ingest_streams` to build it."
         )
 

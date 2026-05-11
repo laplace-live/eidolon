@@ -29,11 +29,8 @@ from loguru import logger
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from archive import (  # noqa: E402
-    DEFAULT_DB_PATH,
-    DEFAULT_TABLE,
-    StreamArchiveService,
-)
+from embeddings import DEFAULT_DB_PATH  # noqa: E402
+from stream_archive import DEFAULT_TABLE, StreamArchiveService  # noqa: E402
 
 
 async def main_async(args: argparse.Namespace) -> int:

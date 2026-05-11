@@ -6,7 +6,8 @@ Built artifact: ``server/data/lancedb/stream_chunks.lance/``.
 Sister module: ``tools/ingest_facts.py`` writes the ``persona_facts`` table
 into the same LanceDB instance from the line-per-fact ``data/*设定集.txt``
 files. Both are read at runtime by separate FrameProcessors (see
-``archive.py`` and ``persona_facts.py``).
+``stream_archive.py`` and ``persona_facts.py``). Shared embedding +
+LanceDB infra lives in ``embeddings.py``.
 
 Each H2 section becomes one chunk. Frontmatter (``stream_date``, ``language``,
 etc.) propagates onto every chunk as filterable metadata. The whole table
@@ -60,13 +61,13 @@ from loguru import logger
 # Allow running both as module (`python -m tools.ingest_streams`) and as a script.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from archive import (  # noqa: E402
+from embeddings import (  # noqa: E402
     DEFAULT_DB_PATH,
     DEFAULT_EMBED_DIM,
-    DEFAULT_TABLE,
     EmbeddingUsage,
     embed_texts_with_usage,
 )
+from stream_archive import DEFAULT_TABLE  # noqa: E402
 from tools._streams import iter_streams, load_sidecar  # noqa: E402
 
 # chunk_types skipped from the index by default. Set INGEST_SKIP_TYPES (or
@@ -134,7 +135,7 @@ def load_streams(
             details = str(refined.get("details") or "")
 
             # Pack the v2-only structured fields into a single JSON blob
-            # rather than adding 5+ columns. archive.py decodes this at
+            # rather than adding 5+ columns. stream_archive.py decodes this at
             # render time. Empty dict for v1 / unrefined chunks so the
             # column is always populated.
             extras = {
@@ -185,7 +186,7 @@ def build_arrow_schema() -> pa.Schema:
 
     Vector dim is fixed to ``DEFAULT_EMBED_DIM`` (3072 by default, matching
     ``google/gemini-embedding-2-preview``). If you swap embedding models
-    or change ``ARCHIVE_EMBED_DIM``, this schema picks up the new dim on
+    or change ``EMBED_DIM``, this schema picks up the new dim on
     the next ingest run because we drop and recreate the table.
     """
     return pa.schema(
@@ -204,7 +205,7 @@ def build_arrow_schema() -> pa.Schema:
             pa.field("mentions", pa.string()),  # JSON-encoded list[str]
             # JSON blob: {key_quotes, sc_events, songs, events, promises}.
             # Single column instead of 5 to keep the schema flexible —
-            # archive.py decodes whatever it needs at render time.
+            # stream_archive.py decodes whatever it needs at render time.
             pa.field("extras_json", pa.string()),
             pa.field("refined", pa.bool_()),
             pa.field("source_path", pa.string()),

@@ -17,8 +17,9 @@ each independently.
 Schema mirrors what ``tools/ingest_facts.py`` writes:
 ``id, source, date, text, vector``.
 
-Embedding provider config and helpers are shared with ``archive.py``
-via :func:`archive.embed_texts` — same model, same dim, same key.
+Embedding provider config and helpers are shared via ``embeddings.py``
+(:func:`embeddings.embed_texts`) — same model, same dim, same key as
+the stream archive.
 """
 
 from __future__ import annotations
@@ -34,7 +35,7 @@ from pipecat.frames.frames import Frame, LLMContextFrame
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pydantic import BaseModel, Field
 
-from archive import DEFAULT_DB_PATH, embed_texts, open_table
+from embeddings import DEFAULT_DB_PATH, embed_texts, open_table
 
 DEFAULT_TABLE = "persona_facts"
 
@@ -90,7 +91,7 @@ class PersonaFactsService(FrameProcessor):
         """
 
         embed_model: str | None = Field(default=None)
-        """Override the embedding model. Falls back to ``ARCHIVE_EMBED_MODEL``
+        """Override the embedding model. Falls back to ``EMBED_MODEL``
         env var. Must match what was used at ingest time, or vectors won't
         be comparable."""
 
@@ -276,7 +277,7 @@ class PersonaFactsService(FrameProcessor):
 def _latest_user_text(messages: list[Any]) -> str | None:
     """Find the most recent user message with string content.
 
-    Duplicated from ``archive.py`` rather than imported — keeps each
+    Duplicated from ``stream_archive.py`` rather than imported — keeps each
     service module self-contained, and the helper is 8 lines.
     """
     for message in reversed(messages):
