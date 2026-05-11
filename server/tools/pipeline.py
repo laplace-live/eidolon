@@ -251,9 +251,24 @@ def _build_transcribe_cmd(
     return cmd
 
 
-def stage_transcribe(
+@dataclass
+class _TranscribeJob:
+    """One unit of work for the transcribe stage.
+
+    Built in a single planning pass over ``vods/`` (idempotency checks +
+    metadata reads happen there, not in worker threads) so the dispatcher
+    can blast the whole list at the executor without per-job decisions.
+    """
+
+    audio: Path
+    date: str
+    cmd: list[str]
+    label: str  # e.g. "[3/48]" — for log lines
+
+
+def _plan_transcribe_jobs(
+    files: list[Path],
     *,
-    vods_dir: Path,
     streams_dir: Path,
     language: str,
     provider: str,
@@ -261,34 +276,22 @@ def stage_transcribe(
     no_context: bool,
     context_file: Path | None,
     keep_soniox_files: bool,
-    abort_on_error: bool,
     dry_run: bool,
-) -> TranscribeReport:
-    """Transcribe each audio file in ``vods_dir`` whose .md doesn't yet exist.
+    report: TranscribeReport,
+) -> list[_TranscribeJob]:
+    """Single pass over audio files: skip-checks + cmd build.
 
-    Each file runs in its own subprocess so a Soniox upload crash on one
-    multi-hour VOD doesn't take down the rest of the batch. Per-file
-    failures are recorded and we move on (unless ``abort_on_error``).
+    Mutates ``report`` for the skip counters; returns the list of jobs
+    that actually need to run. ``dry_run`` mode logs what *would* run
+    and returns an empty list (so the dispatcher is a no-op).
     """
-    started = time.monotonic()
-    files = _list_audio_files(vods_dir)
-    report = TranscribeReport(audio_total=len(files))
-
-    if not files:
-        logger.warning(
-            f"No audio files in {vods_dir}/ — did the download stage run? "
-            f"(extensions checked: {sorted(_TRANSCRIBABLE_EXTS)})"
-        )
-        report.duration_sec = time.monotonic() - started
-        return report
-
-    streams_dir.mkdir(parents=True, exist_ok=True)
-
+    jobs: list[_TranscribeJob] = []
     for idx, audio in enumerate(files, 1):
+        label = f"[{idx}/{len(files)}]"
         date = _read_upload_date(audio)
         if date is None:
             logger.warning(
-                f"[{idx}/{len(files)}] {audio.name}: no upload_date in "
+                f"{label} {audio.name}: no upload_date in "
                 f"{_info_json_for(audio).name}, skipping. Re-download "
                 f"the URL or transcribe manually with `tools.transcribe "
                 f"{audio} --date YYYY-MM-DD`."
@@ -299,14 +302,14 @@ def stage_transcribe(
         out_md = _stream_md_path(streams_dir, date, audio.stem)
         if out_md.exists():
             logger.info(
-                f"[{idx}/{len(files)}] {audio.name}: already transcribed → {out_md.name}"
+                f"{label} {audio.name}: already transcribed → {out_md.name}"
             )
             report.audio_skipped += 1
             continue
 
         if dry_run:
             logger.info(
-                f"[{idx}/{len(files)}] [dry-run] would transcribe {audio.name} "
+                f"{label} [dry-run] would transcribe {audio.name} "
                 f"(date={date}) → {out_md.name}"
             )
             continue
@@ -322,32 +325,244 @@ def stage_transcribe(
             context_file=context_file,
             keep_soniox_files=keep_soniox_files,
         )
+        jobs.append(_TranscribeJob(audio=audio, date=date, cmd=cmd, label=label))
+    return jobs
+
+
+def _run_transcribes_sequential(
+    jobs: list[_TranscribeJob],
+    report: TranscribeReport,
+    *,
+    abort_on_error: bool,
+    provider: str,
+) -> None:
+    """One subprocess at a time, with live stdout/stderr to the terminal.
+
+    This matches the historical pipeline behavior exactly — Soniox
+    upload heartbeats and polling status flow through to the user as
+    they happen, no buffering, no prefixes.
+    """
+    for job in jobs:
         logger.info(
-            f"[{idx}/{len(files)}] transcribing {audio.name} "
-            f"(date={date}, provider={provider})"
+            f"{job.label} transcribing {job.audio.name} "
+            f"(date={job.date}, provider={provider})"
         )
         try:
-            # No stdout/stderr capture — let transcribe.py's own loguru
-            # progress lines flow live to the user. Multi-hour upload
-            # heartbeats are already designed for foreground display.
-            result = subprocess.run(cmd, check=False)
+            result = subprocess.run(job.cmd, check=False)
         except KeyboardInterrupt:
             raise
         except Exception as e:  # noqa: BLE001 — keep batch alive on any per-file crash
             logger.error(f"  ✗ subprocess error: {e}")
-            report.failed.append((audio, str(e)))
+            report.failed.append((job.audio, str(e)))
             if abort_on_error:
                 break
             continue
 
         if result.returncode != 0:
             logger.error(f"  ✗ transcribe failed (exit={result.returncode})")
-            report.failed.append((audio, f"exit={result.returncode}"))
+            report.failed.append((job.audio, f"exit={result.returncode}"))
             if abort_on_error:
                 break
             continue
 
         report.succeeded += 1
+
+
+def _run_transcribes_parallel(
+    jobs: list[_TranscribeJob],
+    report: TranscribeReport,
+    *,
+    concurrency: int,
+    abort_on_error: bool,
+) -> None:
+    """N transcribe subprocesses in flight at once via a thread pool.
+
+    Each child's stdout/stderr is captured and re-emitted line-by-line
+    with a ``[idx/total stem]`` prefix so the parallel transcribe.py
+    progress lines interleave readably instead of becoming a wall of
+    unattributed text.
+
+    abort_on_error semantics in parallel mode: on first failure we
+    cancel pending (not-yet-started) jobs, but in-flight subprocesses
+    are allowed to finish — they may yet succeed, and forcefully
+    terminating mid-upload to Soniox could leave dangling server-side
+    transcription records that count against your quota.
+
+    KeyboardInterrupt: terminates every running subprocess so Ctrl-C
+    is responsive instead of waiting for 8 multi-hour uploads to
+    finish naturally.
+    """
+    import threading
+    from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
+
+    logger.info(
+        f"Running {len(jobs)} transcribe subprocess(es) in parallel "
+        f"(concurrency={concurrency})"
+    )
+
+    # Track in-flight Popen objects so KeyboardInterrupt can terminate
+    # them. Dict keyed by Popen so removal on completion is O(1).
+    running: dict[subprocess.Popen, _TranscribeJob] = {}
+    running_lock = threading.Lock()
+
+    def run_one(job: _TranscribeJob) -> tuple[_TranscribeJob, int, str | None]:
+        try:
+            proc = subprocess.Popen(
+                job.cmd,
+                stdout=subprocess.PIPE,
+                # Merge stderr into stdout so loguru's stderr output
+                # (which is where transcribe.py writes its progress)
+                # interleaves correctly with any stdout writes.
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,  # line-buffered
+            )
+        except Exception as e:  # noqa: BLE001
+            return job, -1, f"failed to spawn: {e}"
+
+        with running_lock:
+            running[proc] = job
+
+        try:
+            assert proc.stdout is not None
+            for line in proc.stdout:
+                line = line.rstrip()
+                if not line:
+                    continue
+                # Direct print so we don't double-stamp transcribe.py's
+                # own loguru timestamp prefix with another loguru line.
+                # `flush=True` so users see live progress instead of
+                # block-buffered chunks of output.
+                print(f"{job.label} {job.audio.stem}: {line}", flush=True)
+            rc = proc.wait()
+        finally:
+            with running_lock:
+                running.pop(proc, None)
+
+        return job, rc, None
+
+    def terminate_all() -> None:
+        with running_lock:
+            procs = list(running.keys())
+        for proc in procs:
+            try:
+                proc.terminate()
+            except Exception:  # noqa: BLE001
+                pass
+
+    aborted = False
+    try:
+        with ThreadPoolExecutor(max_workers=concurrency) as ex:
+            future_map = {ex.submit(run_one, job): job for job in jobs}
+            for future in as_completed(future_map):
+                # Cancelled futures show up here too; their .result()
+                # raises CancelledError. Cancellation only happens via
+                # the abort_on_error path below.
+                try:
+                    job, rc, err = future.result()
+                except CancelledError:
+                    continue
+
+                if err is not None:
+                    logger.error(f"  ✗ {job.audio.name}: {err}")
+                    report.failed.append((job.audio, err))
+                elif rc != 0:
+                    logger.error(
+                        f"  ✗ {job.audio.name}: transcribe failed (exit={rc})"
+                    )
+                    report.failed.append((job.audio, f"exit={rc}"))
+                else:
+                    report.succeeded += 1
+                    logger.info(f"  ✓ {job.audio.name}")
+
+                if (
+                    (err is not None or rc != 0)
+                    and abort_on_error
+                    and not aborted
+                ):
+                    aborted = True
+                    logger.warning(
+                        "  abort_on_error: cancelling pending transcribes "
+                        "(in-flight ones will finish naturally)"
+                    )
+                    for f in future_map:
+                        f.cancel()
+    except KeyboardInterrupt:
+        logger.warning(
+            "KeyboardInterrupt — terminating in-flight transcribe subprocesses"
+        )
+        terminate_all()
+        raise
+
+
+def stage_transcribe(
+    *,
+    vods_dir: Path,
+    streams_dir: Path,
+    language: str,
+    provider: str,
+    soniox_model: str | None,
+    no_context: bool,
+    context_file: Path | None,
+    keep_soniox_files: bool,
+    transcribe_concurrency: int,
+    abort_on_error: bool,
+    dry_run: bool,
+) -> TranscribeReport:
+    """Transcribe each audio file in ``vods_dir`` whose .md doesn't yet exist.
+
+    Each file runs in its own subprocess so a Soniox upload crash on one
+    multi-hour VOD doesn't take down the rest of the batch. Per-file
+    failures are recorded and we move on (unless ``abort_on_error``).
+
+    ``transcribe_concurrency`` controls how many subprocesses run at
+    once. ``1`` (the default) preserves the historical sequential
+    behavior with live unbuffered output. ``>1`` uses a thread pool +
+    Popen pipes; output is captured and re-emitted with a per-job
+    prefix so progress from N parallel uploads stays readable.
+    """
+    started = time.monotonic()
+    files = _list_audio_files(vods_dir)
+    report = TranscribeReport(audio_total=len(files))
+
+    if not files:
+        logger.warning(
+            f"No audio files in {vods_dir}/ — did the download stage run? "
+            f"(extensions checked: {sorted(_TRANSCRIBABLE_EXTS)})"
+        )
+        report.duration_sec = time.monotonic() - started
+        return report
+
+    streams_dir.mkdir(parents=True, exist_ok=True)
+
+    jobs = _plan_transcribe_jobs(
+        files,
+        streams_dir=streams_dir,
+        language=language,
+        provider=provider,
+        soniox_model=soniox_model,
+        no_context=no_context,
+        context_file=context_file,
+        keep_soniox_files=keep_soniox_files,
+        dry_run=dry_run,
+        report=report,
+    )
+
+    if not jobs:
+        # All files were skipped, no-date-warned, or dry-run-logged.
+        report.duration_sec = time.monotonic() - started
+        return report
+
+    if transcribe_concurrency <= 1:
+        _run_transcribes_sequential(
+            jobs, report, abort_on_error=abort_on_error, provider=provider,
+        )
+    else:
+        _run_transcribes_parallel(
+            jobs, report,
+            concurrency=transcribe_concurrency,
+            abort_on_error=abort_on_error,
+        )
 
     report.duration_sec = time.monotonic() - started
     return report
@@ -635,6 +850,20 @@ def main() -> int:
         action="store_true",
         help="Don't delete the uploaded file + transcription record from Soniox after success.",
     )
+    transcribe_group.add_argument(
+        "--transcribe-concurrency",
+        type=int,
+        default=1,
+        help=(
+            "Max transcribe subprocesses in flight at once (default: 1, "
+            "i.e. sequential with live output). Soniox async accounts cap "
+            "concurrent jobs at 25 — pick a number well below that for "
+            "safety; 4–8 is a good sweet spot for typical home upload "
+            "bandwidth. With concurrency >1, per-job stdout/stderr is "
+            "captured and re-emitted with a [idx/total stem] prefix so "
+            "the parallel progress lines stay readable."
+        ),
+    )
 
     refine_group = parser.add_argument_group("refine stage")
     refine_group.add_argument(
@@ -712,6 +941,7 @@ def main() -> int:
                 no_context=args.no_context,
                 context_file=args.context_file,
                 keep_soniox_files=args.keep_soniox_files,
+                transcribe_concurrency=args.transcribe_concurrency,
                 abort_on_error=args.abort_on_error,
                 dry_run=args.dry_run,
             )
