@@ -32,7 +32,7 @@ account needed. Override per env var:
 - ``ARCHIVE_EMBED_DIM``       default ``3072`` (Gemini supports 128–3072 via MRL)
 
 If you swap to a model with a different dimension, update ``ARCHIVE_EMBED_DIM``
-**and** re-run ``tools/ingest.py`` — the LanceDB schema is fixed-size, and
+**and** re-run ``tools/ingest_streams.py`` — the LanceDB schema is fixed-size, and
 old vectors won't be comparable to new ones.
 """
 
@@ -59,7 +59,7 @@ DEFAULT_EMBED_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_EMBED_MODEL = "google/gemini-embedding-2-preview"
 DEFAULT_EMBED_DIM = int(os.getenv("ARCHIVE_EMBED_DIM", "3072"))
 """Vector dimension. Read at module import so the LanceDB schema in
-``tools/ingest.py`` matches what ``embed_texts()`` will produce. To change,
+``tools/ingest_streams.py`` matches what ``embed_texts()`` will produce. To change,
 set the env var BEFORE importing this module (i.e. in .env) and re-ingest."""
 
 
@@ -203,7 +203,7 @@ def open_table(
     """Open the LanceDB table if it exists. Returns ``None`` otherwise.
 
     The runtime path is read-only — we never create the table here. Use
-    ``tools/ingest.py`` to build it.
+    ``tools/ingest_streams.py`` to build it.
     """
     path = Path(db_path)
     if not path.exists():
@@ -292,7 +292,7 @@ class StreamArchiveService(FrameProcessor):
             logger.warning(
                 f"StreamArchiveService: no LanceDB table at "
                 f"{self._db_path}/{self._table_name}.lance — retrieval will be a no-op. "
-                "Run `uv run python -m tools.ingest` after authoring streams/."
+                "Run `uv run python -m tools.ingest_streams` after authoring streams/."
             )
         else:
             logger.info(
@@ -302,7 +302,7 @@ class StreamArchiveService(FrameProcessor):
     def _reopen_table(self) -> None:
         """Re-open the LanceDB table to pick up files written by a re-ingest.
 
-        ``tools/ingest.py`` drops + recreates the table on every run, which
+        ``tools/ingest_streams.py`` drops + recreates the table on every run, which
         invalidates the filenames our cached ``Table`` handle was holding
         (LanceDB stores per-version data files). We detect that at search
         time (``lance error: Not found``) and re-open once.
@@ -330,7 +330,7 @@ class StreamArchiveService(FrameProcessor):
 
         Logs at INFO level so retrieval activity is visible without flipping
         loguru to DEBUG. Recovers once from the stale-table error you get
-        when ``tools/ingest.py`` runs while the bot is alive.
+        when ``tools/ingest_streams.py`` runs while the bot is alive.
         """
         if self._table is None:
             logger.warning("Archive search skipped: no table loaded")

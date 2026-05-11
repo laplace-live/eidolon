@@ -35,7 +35,7 @@ Workflow::
         --context-file path/to/my_glossary.toml
 
     # Then ingest into the LanceDB stream archive:
-    uv run python -m tools.ingest
+    uv run python -m tools.ingest_streams
 
 Chunking strategy
 -----------------
@@ -886,7 +886,7 @@ def main() -> int:
         )
     logger.info(
         "Next: hand-edit the H2 headings to be more descriptive, then run:\n"
-        "    uv run python -m tools.ingest"
+        "    uv run python -m tools.ingest_streams"
     )
     return 0
 

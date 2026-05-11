@@ -4,19 +4,23 @@ Pipeline shape (cascade, with optional memory/archive enrichment)::
 
     transport.input → STT → user_aggregator
         → Mem0 (per-viewer memory, optional)
+        → PersonaFacts (RAG over hand-compiled streamer facts, optional)
         → StreamArchive (RAG over past streams, optional)
         → LLM → TTS → transport.output → assistant_aggregator
 
-Three persistent storage tiers feed the LLM:
+Four persistent storage tiers feed the LLM:
 
 1. ``persona.md``      — identity, voice, hard rules (always in system prompt)
-2. Stream archive       — verbatim past-stream chunks, retrieved by relevance
-                          (LanceDB index built by ``tools/ingest.py``)
-3. Mem0                 — per-viewer episodic memory, auto-extracted from chat
+2. Persona facts        — atomic fan-compiled "things she said" facts,
+                          retrieved by relevance
+                          (LanceDB index built by ``tools/ingest_facts.py``)
+3. Stream archive       — verbatim past-stream chunks, retrieved by relevance
+                          (LanceDB index built by ``tools/ingest_streams.py``)
+4. Mem0                 — per-viewer episodic memory, auto-extracted from chat
 
 Required services: Soniox (STT), OpenRouter (LLM), Fish Audio (TTS).
-Optional: Mem0 (set MEM0_API_KEY), StreamArchive (set OPENAI_API_KEY and run
-the ingest script).
+Optional: Mem0 (set MEM0_API_KEY), PersonaFacts + StreamArchive (set
+OPENROUTER_API_KEY and run the ingest scripts).
 
 Run the bot with::
 
@@ -66,6 +70,14 @@ try:
 except Exception as e:
     StreamArchiveService = None
     logger.debug(f"StreamArchive service unavailable: {e}")
+
+# PersonaFacts is also optional — same LanceDB instance as StreamArchive,
+# but a separate ``persona_facts`` table built by tools/ingest_facts.py.
+try:
+    from persona_facts import PersonaFactsService
+except Exception as e:
+    PersonaFactsService = None
+    logger.debug(f"PersonaFacts service unavailable: {e}")
 
 load_dotenv(override=True)
 
@@ -163,11 +175,28 @@ async def run_bot(transport: BaseTransport):
     elif mem0_api_key and Mem0MemoryService is None:
         logger.warning("MEM0_API_KEY is set but pipecat-ai[mem0] is not installed; skipping memory")
 
-    # Optional stream archive (RAG over past stream transcripts). Lives at the
-    # same pipeline position as Mem0 — both intercept LLMContextFrame and
-    # inject one system message. Mem0 inserts at position 1, archive at
-    # position 2, so the final message order is:
-    #   [persona system prompt, viewer memory, stream archive, user message].
+    # Optional persona-facts retrieval (RAG over hand-compiled streamer facts
+    # in data/*设定集.txt + data/*事件集.txt). Same LanceDB instance as the
+    # stream archive, different table.
+    facts = None
+    if PersonaFactsService is not None and ARCHIVE_DB_PATH.exists():
+        try:
+            facts = PersonaFactsService(db_path=ARCHIVE_DB_PATH)
+        except Exception as e:
+            logger.warning(f"PersonaFactsService disabled: {e}")
+    elif PersonaFactsService is not None:
+        logger.info(
+            f"Persona facts disabled: no LanceDB index at "
+            f"{ARCHIVE_DB_PATH.relative_to(SERVER_DIR)}. "
+            "Run `uv run python -m tools.ingest_facts` to build it."
+        )
+
+    # Optional stream archive (RAG over past stream transcripts). Mem0,
+    # PersonaFacts, and StreamArchive each intercept LLMContextFrame and
+    # inject one system message per turn. Default positions stack them
+    # roughly as: [user, mem0, persona_facts, stream_archive] (the
+    # system_instruction from persona.md is prepended automatically by
+    # the LLM service).
     archive = None
     if StreamArchiveService is not None and ARCHIVE_DB_PATH.exists():
         try:
@@ -178,12 +207,14 @@ async def run_bot(transport: BaseTransport):
         logger.info(
             f"Stream archive disabled: no LanceDB index at "
             f"{ARCHIVE_DB_PATH.relative_to(SERVER_DIR)}. "
-            "Run `uv run python -m tools.ingest` to build it."
+            "Run `uv run python -m tools.ingest_streams` to build it."
         )
 
     processors = [transport.input(), stt, user_aggregator]
     if memory is not None:
         processors.append(memory)
+    if facts is not None:
+        processors.append(facts)
     if archive is not None:
         processors.append(archive)
     processors.extend([llm, tts, transport.output(), assistant_aggregator])

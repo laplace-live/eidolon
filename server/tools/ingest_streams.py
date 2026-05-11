@@ -3,6 +3,11 @@
 Source of truth: ``server/streams/*.md`` (frontmatter + H2-delimited scenes).
 Built artifact: ``server/data/lancedb/stream_chunks.lance/``.
 
+Sister module: ``tools/ingest_facts.py`` writes the ``persona_facts`` table
+into the same LanceDB instance from the line-per-fact ``data/*设定集.txt``
+files. Both are read at runtime by separate FrameProcessors (see
+``archive.py`` and ``persona_facts.py``).
+
 Each H2 section becomes one chunk. Frontmatter (``stream_date``, ``language``,
 etc.) propagates onto every chunk as filterable metadata. The whole table
 is dropped and rebuilt on each run; transcripts are small and embeddings
@@ -31,10 +36,10 @@ Unrefined chunks fall back to the original behavior (embed the raw text).
 Usage::
 
     cd server
-    uv run python -m tools.ingest                           # rebuild from streams/
-    uv run python -m tools.ingest --streams-dir custom/     # alt source dir
-    uv run python -m tools.ingest --dry-run                 # show what would be written
-    uv run python -m tools.ingest --skip-types ""           # don't filter any chunk_type
+    uv run python -m tools.ingest_streams                           # rebuild from streams/
+    uv run python -m tools.ingest_streams --streams-dir custom/     # alt source dir
+    uv run python -m tools.ingest_streams --dry-run                 # show what would be written
+    uv run python -m tools.ingest_streams --skip-types ""           # don't filter any chunk_type
 """
 
 from __future__ import annotations
@@ -52,7 +57,7 @@ import pyarrow as pa
 from dotenv import load_dotenv
 from loguru import logger
 
-# Allow running both as module (`python -m tools.ingest`) and as a script.
+# Allow running both as module (`python -m tools.ingest_streams`) and as a script.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from archive import (  # noqa: E402

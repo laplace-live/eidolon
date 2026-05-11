@@ -1,5 +1,5 @@
 # Ignore everything in data/ (transcripts, LanceDB index, sample fixtures, etc.)
 # but keep the directory itself tracked so the Dockerfile's `COPY ./data ./data`
-# step works on a fresh checkout, before `tools/ingest.py` has been run.
+# step works on a fresh checkout, before `tools/ingest_streams.py` has been run.
 *
 !.gitignore

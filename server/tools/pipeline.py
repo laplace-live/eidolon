@@ -5,7 +5,7 @@ Glues the four existing tools into one re-runnable command:
     1. download   tools.download      → vods/<id>.m4a + vods/<id>.info.json
     2. transcribe tools.transcribe    → streams/<date>-<id>.md (+ .soniox.json)
     3. refine     tools.refine        → streams/<date>-<id>.refined.json
-    4. ingest     tools.ingest        → data/lancedb/stream_chunks.lance
+    4. ingest     tools.ingest_streams → data/lancedb/stream_chunks.lance
 
 Every stage uses **filesystem-as-state**, so the pipeline is idempotent
 and resumable: re-run after a Ctrl-C (or a flaky network) and it picks
@@ -77,7 +77,7 @@ from pathlib import Path
 from loguru import logger
 
 # Allow running both as module (`python -m tools.pipeline`) and as a
-# script. Mirrors the pattern used in tools/ingest.py and tools/refine.py.
+# script. Mirrors the pattern used in tools/ingest_streams.py and tools/refine.py.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from tools.download import (  # noqa: E402
@@ -609,7 +609,7 @@ def stage_ingest(
 ) -> StageResult:
     started = time.monotonic()
     cmd = [
-        sys.executable, "-m", "tools.ingest",
+        sys.executable, "-m", "tools.ingest_streams",
         "--streams-dir", str(streams_dir),
     ]
     if skip_types is not None:
@@ -783,7 +783,7 @@ def main() -> int:
         action="store_true",
         help=(
             "Don't run any stage; just report what would happen. "
-            "Forwards --dry-run to tools.refine and tools.ingest where "
+            "Forwards --dry-run to tools.refine and tools.ingest_streams where "
             "they support it."
         ),
     )
@@ -888,7 +888,7 @@ def main() -> int:
         "--skip-types",
         default=None,
         help=(
-            "Forwarded to tools.ingest's --skip-types (default: that tool's "
+            "Forwarded to tools.ingest_streams's --skip-types (default: that tool's "
             "default, which excludes anime_audio + karaoke chunks)."
         ),
     )

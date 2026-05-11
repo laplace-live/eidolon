@@ -20,7 +20,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # - persona.md: system prompt source of truth
 # - streams/: transcripts (small, committed; useful for inspection at runtime
 #   though retrieval reads from the prebuilt LanceDB index)
-# - data/: prebuilt LanceDB index (built locally via `uv run python -m tools.ingest`).
+# - data/: prebuilt LanceDB index (built locally via `uv run python -m tools.ingest_streams`).
 #   The directory is kept alive in git via data/.gitkeep so this COPY succeeds
 #   even on a fresh checkout where ingest hasn't been run yet — StreamArchive
 #   gracefully no-ops when the lancedb subdir is absent.

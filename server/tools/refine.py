@@ -10,7 +10,7 @@ patterns instead of what the persona actually said.
 
 This script rewrites every H2 chunk through an LLM into a structured
 memory record (semantic heading + first-person summary + chunk_type +
-topics + mentions). ``tools/ingest.py`` reads the refined sidecar and
+topics + mentions). ``tools/ingest_streams.py`` reads the refined sidecar and
 embeds the *summary* instead of the raw text, dramatically improving
 retrieval distance.
 

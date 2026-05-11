@@ -1,13 +1,13 @@
 """Shared parsing for ``streams/*.md`` files.
 
-Both ``tools/ingest.py`` and ``tools/refine.py`` need to agree on:
+Both ``tools/ingest_streams.py`` and ``tools/refine.py`` need to agree on:
 
 - How an .md file splits into chunks (H2 boundaries)
 - How chunk IDs are generated (``{stream_id}::{idx:03d}``)
 - Where the .refined.json sidecar lives next to its source
 
 Keeping this in one place means refine.py's chunk IDs always match
-ingest.py's, so refined data can be looked up at ingest time without
+ingest_streams.py's, so refined data can be looked up at ingest time without
 re-deriving anything.
 """
 

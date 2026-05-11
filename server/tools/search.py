@@ -3,7 +3,7 @@
 Same retrieval path the bot uses (``StreamArchiveService._search``) — just
 without the pipeline around it. Useful for:
 
-- Sanity-checking the index after ``tools/ingest.py``
+- Sanity-checking the index after ``tools/ingest_streams.py``
 - Debugging "why didn't the bot recall X?" (run the same query here, see
   what comes back and at what distance)
 - A/B-ing query phrasing before changing transcripts or persona
@@ -49,7 +49,7 @@ async def main_async(args: argparse.Namespace) -> int:
     )
     if svc._table is None:
         print(f"No LanceDB table at {args.db_path}/{args.table}.lance", file=sys.stderr)
-        print("Run `uv run python -m tools.ingest` first.", file=sys.stderr)
+        print("Run `uv run python -m tools.ingest_streams` first.", file=sys.stderr)
         return 1
 
     hits = await svc._search(args.query)
