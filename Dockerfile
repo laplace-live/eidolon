@@ -1,4 +1,4 @@
-# Self-hosted laplace-avatar bot.
+# Self-hosted laplace-eidolon.
 #
 # We previously used `dailyco/pipecat-base:latest`, which is the Pipecat
 # Cloud base image. That image has no CMD and expects PCC's session

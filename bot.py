@@ -1,4 +1,4 @@
-"""laplace-avatar — Pipecat voice bot for a streamer RP persona.
+"""laplace-eidolon — Pipecat voice bot for a streamer RP persona.
 
 Pipeline shape (cascade, with optional memory/archive enrichment)::
 
@@ -290,7 +290,7 @@ async def bot(runner_args: RunnerArguments):
     """Main bot entry point.
 
     SmallWebRTC only — Daily/telephony transports were removed because
-    laplace-avatar self-hosts on its own server. If a non-WebRTC
+    laplace-eidolon self-hosts on its own server. If a non-WebRTC
     connection ever shows up here it's a misconfiguration of the runner.
     """
     if not isinstance(runner_args, SmallWebRTCRunnerArguments):

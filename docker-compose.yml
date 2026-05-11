@@ -1,4 +1,4 @@
-# Self-host laplace-avatar in one command:
+# Self-host laplace-eidolon in one command:
 #
 #   docker compose up --build
 #
@@ -17,8 +17,8 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
-    image: laplace-avatar-bot
-    container_name: laplace-avatar-bot
+    image: laplace-eidolon
+    container_name: laplace-eidolon
     restart: unless-stopped
     env_file:
       - ./server/.env

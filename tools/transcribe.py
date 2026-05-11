@@ -564,7 +564,7 @@ def transcribe_with_soniox(
     config = CreateTranscriptionConfig(
         language_hints=language_hints,
         context=structured_context,
-        client_reference_id=f"laplace-avatar:{args.audio.name}",
+        client_reference_id=f"laplace-eidolon:{args.audio.name}",
     )
 
     file_size_mb = args.audio.stat().st_size / (1024 * 1024)

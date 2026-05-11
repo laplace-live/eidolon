@@ -1,4 +1,4 @@
-# laplace-avatar
+# laplace-eidolon
 
 A Pipecat voice bot for a streamer roleplay persona, with optional RAG over
 hand-compiled persona facts and refined past-stream transcripts, and optional
