@@ -41,6 +41,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
@@ -48,10 +49,9 @@ import lancedb
 from lancedb.table import Table
 from loguru import logger
 from openai import AsyncOpenAI
-from pydantic import BaseModel, Field
-
 from pipecat.frames.frames import Frame, LLMContextFrame
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+from pydantic import BaseModel, Field
 
 DEFAULT_DB_PATH = "data/lancedb"
 DEFAULT_TABLE = "stream_chunks"
@@ -87,12 +87,38 @@ def _get_embed_client() -> AsyncOpenAI:
     return _embed_client
 
 
-async def embed_texts(
+@dataclass
+class EmbeddingUsage:
+    """Token + cost accumulator for embedding requests.
+
+    OpenRouter surfaces ``usage.cost`` in USD on every response (1 credit
+    = $1). Other OpenAI-compatible providers may not, in which case
+    ``cost_source`` stays "unknown" and ``cost_usd`` is 0.
+
+    Unlike ``tools.refine.Usage`` we don't carry an "estimate" fallback —
+    embedding pricing isn't in any hardcoded table here, so we either
+    trust OpenRouter's number or report tokens-only.
+    """
+
+    prompt_tokens: int = 0
+    total_tokens: int = 0
+    cost_usd: float = 0.0
+    cost_source: str = "unknown"  # "openrouter" if from response, "unknown" otherwise
+
+    def add(self, other: "EmbeddingUsage") -> None:
+        self.prompt_tokens += other.prompt_tokens
+        self.total_tokens += other.total_tokens
+        self.cost_usd += other.cost_usd
+        if self.cost_source == "unknown":
+            self.cost_source = other.cost_source
+
+
+async def embed_texts_with_usage(
     texts: list[str],
     model: str | None = None,
     dimensions: int | None = None,
-) -> list[list[float]]:
-    """Embed a batch of texts. Used by both ingest and runtime search.
+) -> tuple[list[list[float]], EmbeddingUsage]:
+    """Embed a batch of texts and return the OpenRouter-reported usage.
 
     Args:
         texts: Strings to embed.
@@ -103,10 +129,12 @@ async def embed_texts(
             dim at write vs. read time will fail at search time.
 
     Returns:
-        List of embedding vectors (one per input string).
+        ``(vectors, usage)`` where ``usage`` carries prompt/total token
+        counts and (when the provider supports it, e.g. OpenRouter) the
+        USD cost of this single API call.
     """
     if not texts:
-        return []
+        return [], EmbeddingUsage()
     model = model or os.getenv("ARCHIVE_EMBED_MODEL", DEFAULT_EMBED_MODEL)
     dimensions = dimensions or DEFAULT_EMBED_DIM
     client = _get_embed_client()
@@ -121,8 +149,51 @@ async def embed_texts(
         input=texts,
         dimensions=dimensions,
         encoding_format="float",
+        # OpenRouter now always returns usage.cost, but passing this is
+        # harmless and matches how tools/refine.py opts in for chat.
+        extra_body={"usage": {"include": True}},
     )
-    return [d.embedding for d in resp.data]
+    vectors = [d.embedding for d in resp.data]
+
+    # The OpenAI SDK's typed response doesn't model OpenRouter's ``cost``
+    # extra field. Round-trip through model_dump() so we can read it as a
+    # plain dict, same trick refine.py uses.
+    resp_dict = resp.model_dump() if hasattr(resp, "model_dump") else {}
+    usage_raw = (resp_dict.get("usage") or {}) if isinstance(resp_dict, dict) else {}
+    prompt_tokens = int(usage_raw.get("prompt_tokens", 0) or 0)
+    total_tokens = int(usage_raw.get("total_tokens", prompt_tokens) or prompt_tokens)
+    cost = usage_raw.get("cost")
+    if cost is not None:
+        try:
+            return vectors, EmbeddingUsage(
+                prompt_tokens=prompt_tokens,
+                total_tokens=total_tokens,
+                cost_usd=float(cost),
+                cost_source="openrouter",
+            )
+        except (TypeError, ValueError):
+            pass
+
+    return vectors, EmbeddingUsage(
+        prompt_tokens=prompt_tokens,
+        total_tokens=total_tokens,
+        cost_usd=0.0,
+        cost_source="unknown",
+    )
+
+
+async def embed_texts(
+    texts: list[str],
+    model: str | None = None,
+    dimensions: int | None = None,
+) -> list[list[float]]:
+    """Embed a batch of texts. Used by both ingest and runtime search.
+
+    Discards usage; call :func:`embed_texts_with_usage` if you want
+    token + cost accounting.
+    """
+    vectors, _ = await embed_texts_with_usage(texts, model=model, dimensions=dimensions)
+    return vectors
 
 
 def open_table(

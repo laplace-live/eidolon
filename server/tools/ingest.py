@@ -59,7 +59,8 @@ from archive import (  # noqa: E402
     DEFAULT_DB_PATH,
     DEFAULT_EMBED_DIM,
     DEFAULT_TABLE,
-    embed_texts,
+    EmbeddingUsage,
+    embed_texts_with_usage,
 )
 from tools._streams import iter_streams, load_sidecar  # noqa: E402
 
@@ -207,21 +208,27 @@ def build_arrow_schema() -> pa.Schema:
     )
 
 
-async def embed_in_batches(rows: list[dict[str, Any]], batch_size: int = 64) -> None:
+async def embed_in_batches(rows: list[dict[str, Any]], batch_size: int = 64) -> EmbeddingUsage:
     """Embed each row's ``embed_input`` and stash the vector on the row.
 
     Done in batches to keep request payloads small and parallel
-    progress visible.
+    progress visible. Returns the aggregate token + USD cost reported
+    by OpenRouter so the caller can summarize spend at the end.
     """
+    total = EmbeddingUsage()
     for start in range(0, len(rows), batch_size):
         batch = rows[start : start + batch_size]
         texts = [r["embed_input"] for r in batch]
-        vectors = await embed_texts(texts)
+        vectors, usage = await embed_texts_with_usage(texts)
         for row, vec in zip(batch, vectors):
             row["vector"] = vec
+        total.add(usage)
+        progress = min(start + batch_size, len(rows))
+        cost_str = f", ${usage.cost_usd:.6f}" if usage.cost_source == "openrouter" else ""
         logger.info(
-            f"Embedded {min(start + batch_size, len(rows))}/{len(rows)} chunks"
+            f"Embedded {progress}/{len(rows)} chunks ({usage.total_tokens} tokens{cost_str})"
         )
+    return total
 
 
 def write_table(rows: list[dict[str, Any]], db_path: Path, table_name: str) -> None:
@@ -270,8 +277,18 @@ async def main_async(args: argparse.Namespace) -> int:
         return 0
 
     db_path.mkdir(parents=True, exist_ok=True)
-    await embed_in_batches(rows)
+    usage = await embed_in_batches(rows)
     write_table(rows, db_path, args.table)
+    if usage.cost_source == "openrouter":
+        logger.info(
+            f"Embedding totals: {len(rows)} chunks, "
+            f"{usage.total_tokens} tokens, ${usage.cost_usd:.6f} USD"
+        )
+    else:
+        logger.info(
+            f"Embedding totals: {len(rows)} chunks, {usage.total_tokens} tokens "
+            "(provider did not report cost)"
+        )
     return 0
 
 
