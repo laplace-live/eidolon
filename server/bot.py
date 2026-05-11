@@ -42,16 +42,11 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
 )
-from pipecat.runner.types import (
-    DailyRunnerArguments,
-    RunnerArguments,
-    SmallWebRTCRunnerArguments,
-)
+from pipecat.runner.types import RunnerArguments, SmallWebRTCRunnerArguments
 from pipecat.services.fish.tts import FishAudioTTSService
 from pipecat.services.openrouter.llm import OpenRouterLLMService
 from pipecat.services.soniox.stt import SonioxSTTService
 from pipecat.transports.base_transport import BaseTransport, TransportParams
-from pipecat.transports.daily.transport import DailyParams, DailyTransport
 from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 
@@ -82,7 +77,7 @@ except Exception as e:
 load_dotenv(override=True)
 
 # Resolve persona/data paths relative to this file so the bot works from any
-# CWD (local dev, container, Pipecat Cloud).
+# CWD (local dev, Docker container).
 SERVER_DIR = Path(__file__).resolve().parent
 PERSONA_PATH = SERVER_DIR / os.getenv("PERSONA_FILE", "persona.md")
 LANCEDB_PATH = SERVER_DIR / os.getenv("LANCEDB_PATH", "data/lancedb")
@@ -292,34 +287,24 @@ async def run_bot(transport: BaseTransport):
 
 
 async def bot(runner_args: RunnerArguments):
-    """Main bot entry point."""
+    """Main bot entry point.
 
-    transport = None
+    SmallWebRTC only — Daily/telephony transports were removed because
+    laplace-avatar self-hosts on its own server. If a non-WebRTC
+    connection ever shows up here it's a misconfiguration of the runner.
+    """
+    if not isinstance(runner_args, SmallWebRTCRunnerArguments):
+        logger.error(f"Unsupported runner arguments type: {type(runner_args)}")
+        return
 
-    match runner_args:
-        case DailyRunnerArguments():
-            transport = DailyTransport(
-                runner_args.room_url,
-                runner_args.token,
-                "Pipecat Bot",
-                params=DailyParams(
-                    audio_in_enabled=True,
-                    audio_out_enabled=True,
-                ),
-            )
-        case SmallWebRTCRunnerArguments():
-            webrtc_connection: SmallWebRTCConnection = runner_args.webrtc_connection
-
-            transport = SmallWebRTCTransport(
-                webrtc_connection=webrtc_connection,
-                params=TransportParams(
-                    audio_in_enabled=True,
-                    audio_out_enabled=True,
-                ),
-            )
-        case _:
-            logger.error(f"Unsupported runner arguments type: {type(runner_args)}")
-            return
+    webrtc_connection: SmallWebRTCConnection = runner_args.webrtc_connection
+    transport = SmallWebRTCTransport(
+        webrtc_connection=webrtc_connection,
+        params=TransportParams(
+            audio_in_enabled=True,
+            audio_out_enabled=True,
+        ),
+    )
 
     await run_bot(transport)
 

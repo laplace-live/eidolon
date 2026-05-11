@@ -1,68 +1,127 @@
-# pipecat-quickstart
+# laplace-avatar
 
-A Pipecat AI voice agent built with a cascade pipeline (STT → LLM → TTS).
-
-## Configuration
-
-- **Bot Type**: Web
-- **Transport(s)**: SmallWebRTC, Daily (WebRTC)
-- **Pipeline**: Cascade
-  - **STT**: Deepgram
-  - **LLM**: OpenAI Responses
-  - **TTS**: Cartesia
-
-## Setup
-
-### Server
-
-1. **Navigate to server directory**:
-
-   ```bash
-   cd server
-   ```
-
-2. **Install dependencies**:
-
-   ```bash
-   uv sync
-   ```
-
-3. **Configure environment variables**:
-
-   ```bash
-   cp .env.example .env
-   # Edit .env and add your API keys
-   ```
-
-4. **Run the bot**:
-
-   - SmallWebRTC: `uv run bot.py`
-   - Daily: `uv run bot.py --transport daily`
-
-## Project Structure
+A Pipecat voice bot for a streamer roleplay persona, with optional RAG over
+hand-compiled persona facts and refined past-stream transcripts, and optional
+per-viewer long-term memory via Mem0.
 
 ```
-pipecat-quickstart/
-├── server/              # Python bot server
-│   ├── bot.py           # Main bot implementation
-│   ├── pyproject.toml   # Python dependencies
-│   ├── .env.example     # Environment variables template
-│   ├── .env             # Your API keys (git-ignored)
-│   ├── Dockerfile       # Container image for Pipecat Cloud
-│   └── pcc-deploy.toml  # Pipecat Cloud deployment config
-├── .gitignore           # Git ignore patterns
-└── README.md            # This file
+transport.input → STT → user_aggregator
+    → Mem0 (per-viewer memory, optional)
+    → PersonaFacts (RAG over hand-compiled streamer facts, optional)
+    → StreamArchive (RAG over past streams, optional)
+    → LLM → TTS → transport.output → assistant_aggregator
 ```
 
-## Deploying to Pipecat Cloud
+## Stack
 
-This project is configured for deployment to Pipecat Cloud. You can learn how to deploy to Pipecat Cloud in the [Pipecat Quickstart Guide](https://docs.pipecat.ai/getting-started/quickstart#step-2-deploy-to-production).
+| Layer            | Service                                                                   |
+| ---------------- | ------------------------------------------------------------------------- |
+| STT              | [Soniox](https://console.soniox.com/) (`stt-rt-v4`)                       |
+| LLM              | [OpenRouter](https://openrouter.ai/) (default `openai/gpt-4o-2024-11-20`) |
+| TTS              | [Fish Audio](https://fish.audio/app/) (`s2-pro`, WebSocket)               |
+| Transport        | SmallWebRTC (Pipecat, self-hosted)                                        |
+| Vector store     | LanceDB (local file, embeddings via OpenRouter)                           |
+| Long-term memory | [Mem0](https://app.mem0.ai/) (optional)                                   |
 
-Refer to the [Pipecat Cloud Documentation](https://docs.pipecat.ai/deployment/pipecat-cloud/introduction) to learn more about configuring, deploying, and managing your agents in Pipecat Cloud.
+No Daily, no telephony, no Pipecat Cloud — this repo is wired for self-hosting
+behind your own reverse proxy.
 
-## Learn More
+## Local development
 
-- [Pipecat Documentation](https://docs.pipecat.ai/)
-- [Pipecat GitHub](https://github.com/pipecat-ai/pipecat)
-- [Pipecat Examples](https://github.com/pipecat-ai/pipecat-examples)
-- [Discord Community](https://discord.gg/pipecat)
+```bash
+cd server
+uv sync                 # install runtime deps
+uv sync --extra tools   # add faster-whisper + soniox CLI for ingest
+cp .env.example .env    # fill in SONIOX_API_KEY, OPENROUTER_API_KEY,
+                        # FISH_API_KEY, FISH_VOICE_ID, MEM0_API_KEY...
+uv run bot.py           # boots the dev runner on localhost:7860
+```
+
+Open http://localhost:7860/client for the bundled Pipecat demo UI (good
+for end-to-end testing while the custom `frontend/` is being built).
+
+## Building the RAG indexes (optional)
+
+Both `persona_facts` and `stream_archive` no-op gracefully when their LanceDB
+tables are missing, so the bot is runnable from a fresh checkout without these.
+
+```bash
+cd server
+uv sync --extra tools
+
+# Refine raw stream transcripts → JSON sidecars (uses OPENROUTER_API_KEY).
+uv run python -m tools.refine
+
+# Build the LanceDB indexes.
+uv run python -m tools.ingest_streams   # → data/lancedb/stream_chunks.lance
+uv run python -m tools.ingest_facts     # → data/lancedb/persona_facts.lance
+```
+
+The indexes live under `server/data/lancedb/` and are baked into the Docker
+image at build time. Re-run ingest then `docker compose build` to pick them up.
+
+## Self-host with Docker
+
+```bash
+docker compose up --build
+```
+
+That builds the image from `server/Dockerfile`, copies in `bot.py`, persona,
+streams, and any LanceDB indexes you've built, and runs:
+
+```
+uv run bot.py --host 0.0.0.0 --port 7860
+```
+
+The container exposes port `7860`. Endpoints worth knowing:
+
+| Endpoint                                    | What it does                     |
+| ------------------------------------------- | -------------------------------- |
+| `GET  /`                                    | 302 → `/client/`                 |
+| `GET  /client/*`                            | Bundled Pipecat demo UI (static) |
+| `POST /api/offer`                           | SmallWebRTC SDP offer → answer   |
+| `PATCH /api/offer`                          | Trickle ICE candidates           |
+| `POST /start` and `POST /sessions/{id}/...` | RTVI session shim                |
+
+A custom frontend (any framework) talks to `POST /api/offer` directly, or uses
+[`@pipecat-ai/client-js`](https://www.npmjs.com/package/@pipecat-ai/client-js)
+
+- [`@pipecat-ai/small-webrtc-transport`](https://www.npmjs.com/package/@pipecat-ai/small-webrtc-transport).
+
+### Production checklist
+
+- **HTTPS is required** for `getUserMedia` on anything that isn't `localhost`.
+  Put Caddy / nginx / Traefik in front and terminate TLS there. The proxy must
+  pass `POST /api/offer` and `PATCH /api/offer` through unchanged (no
+  buffering) — these are small JSON requests but the WebRTC handshake
+  hangs if they're delayed or rewritten.
+- **TURN/STUN**: SmallWebRTC defaults to Google's public STUN
+  (`stun:stun.l.google.com:19302`) when the client requests default ICE
+  servers via `POST /start`. For users behind symmetric NAT you'll need
+  your own TURN server (`coturn` is fine); inject ICE servers from the
+  custom frontend.
+- **CORS**: the dev runner ships with `allow_origins=["*"]`, which is
+  permissive but fine for getting started. Lock it down by adding a custom
+  CORS middleware to `pipecat.runner.run.app` before calling `main()` — see
+  `bot.py` for the import surface.
+- **Persistent state**: nothing the bot writes locally needs to survive a
+  restart, but LanceDB indexes do live in the image. To update them
+  without a rebuild, mount `server/data/`, `server/streams/`, and
+  `server/persona.md` as volumes (commented example in
+  `docker-compose.yml`).
+
+## Persona authoring
+
+Edit `server/persona.md` — it's loaded as the LLM `system_instruction` on
+every connection. Restart the bot to pick up changes. For richer detail
+beyond the always-on system prompt, add atomic facts to
+`server/data/*设定集.txt` / `server/data/*事件集.txt` and re-run
+`tools.ingest_facts`.
+
+## References
+
+- [Pipecat docs](https://docs.pipecat.ai/)
+- [Pipecat Development Runner guide](https://docs.pipecat.ai/api-reference/server/utilities/runner/guide)
+- [Pipecat deployment pattern](https://docs.pipecat.ai/pipecat/deployment/pattern)
+- [Pipecat client SDK (JS)](https://docs.pipecat.ai/client/js/introduction)
+- [`small-webrtc-prebuilt` source](https://github.com/pipecat-ai/small-webrtc-prebuilt) — reference UI

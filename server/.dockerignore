@@ -1,0 +1,33 @@
+# Keep the build context small. The Dockerfile uses targeted COPYs so
+# most of these wouldn't end up in the image anyway, but excluding them
+# at the daemon level speeds up `docker build` substantially when
+# directories like .venv/ or vods/ are large.
+
+.venv/
+.ruff_cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Local secrets — never bake into images.
+.env
+.env.*
+!.env.example
+
+# Local-only working dirs (transcription scratch, downloaded VODs, etc.)
+vods/
+tools/__pycache__/
+
+# Tooling extras (faster-whisper etc.) live in optional deps; the
+# runtime image installs only the default deps via `uv sync --no-dev`.
+
+# Editor / OS junk
+.DS_Store
+.cursor/
+.vscode/
+.idea/
+
+# Git
+.git/
+.gitignore

@@ -1,0 +1,32 @@
+# Self-host laplace-avatar in one command:
+#
+#   docker compose up --build
+#
+# Then point a browser at http://localhost:7860/client (the prebuilt
+# Pipecat demo UI ships inside the runner; replace later with the
+# custom UI in ./frontend/ which will signal via POST /api/offer).
+#
+# For production, put this behind a TLS-terminating reverse proxy
+# (Caddy / nginx / Traefik). WebRTC's getUserMedia requires HTTPS on
+# anything that isn't localhost, and Pipecat's SmallWebRTC signaling
+# is plain HTTP under the hood, so the proxy must forward POST /api/offer
+# and PATCH /api/offer end-to-end without buffering.
+
+services:
+  bot:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    image: laplace-avatar-bot
+    container_name: laplace-avatar-bot
+    restart: unless-stopped
+    env_file:
+      - ./server/.env
+    ports:
+      - "7860:7860"
+    # If you want to ingest LanceDB indexes on the host and have them
+    # picked up live (without rebuilding the image), uncomment:
+    # volumes:
+    #   - ./server/data:/app/data:ro
+    #   - ./server/streams:/app/streams:ro
+    #   - ./server/persona.md:/app/persona.md:ro
