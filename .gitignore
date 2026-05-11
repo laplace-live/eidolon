@@ -217,5 +217,31 @@ __marimo__/
 
 # Node.js (client/)
 
-# LanceDB
-server/data/lancedb/
+# server-local ignores (root .gitignore covers Python venv, env files, etc.)
+
+# Raw VOD audio/video files — large, not needed in the repo.
+# Transcripts (streams/*.md) ARE committed; only the source media isn't.
+vods/
+*.mp3
+*.m4a
+*.wav
+*.mp4
+*.mkv
+*.webm
+*.flac
+
+# Whisper model cache (downloaded on first transcribe run).
+.cache/
+~/.cache/huggingface/
+
+# LanceDB write-ahead-log scratch files (the .lance dirs themselves are
+# committed so the container has a prebuilt index).
+data/lancedb/**/*.tmp
+
+# Raw provider transcript payloads (per-token JSON from Soniox/etc.) live
+# next to streams/*.md so you can re-chunk locally without re-paying for
+# transcription. Big (~20MB per 5h stream) and not needed at runtime —
+# only the .md is ingested. Keep them local; commit selectively if you
+# want a permanent archive of any one stream.
+streams/*.soniox.json
+streams/*.whisper.json
