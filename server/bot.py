@@ -129,11 +129,36 @@ async def run_bot(transport: BaseTransport):
     if not fish_api_key:
         raise RuntimeError("FISH_API_KEY environment variable is required")
 
+    # Fish Audio WebSocket TTS (wss://api.fish.audio/v1/tts/live, PCM output).
+    # Pipecat exposes a subset of the Fish API; we pin the knobs that affect
+    # perceived quality:
+    #
+    #   latency="normal"   Fish's best-quality mode. Pipecat's default is
+    #                      "balanced" which shaves ~50-100 ms TTFB at an
+    #                      audible cost. For a streamer persona where the
+    #                      voice IS the product, normal wins.
+    #   normalize=True     Text normalization for EN/ZH numbers, dates, units.
+    #                      On by default; pinned here for documentation.
+    #   temperature=0.7    Server default. Lower (0.5-0.6) = more consistent,
+    #                      higher (0.8-0.9) = more expressive. Tune if delivery
+    #                      feels flat or unstable.
+    #   top_p=0.7          Server default. Pair with temperature for diversity.
+    #
+    # Not exposed by Pipecat (would need a subclass to inject into the start
+    # message): prosody.normalize_loudness (S2-Pro perceived-loudness
+    # normalization, defaults true server-side), chunk_length, repetition_
+    # penalty, condition_on_previous_chunks, min_chunk_length. Revisit if the
+    # voice clips, drifts across turns, or repeats artifacts.
     tts = FishAudioTTSService(
         api_key=fish_api_key,
         settings=FishAudioTTSService.Settings(
             voice=os.getenv("FISH_VOICE_ID"),
             model=os.getenv("FISH_MODEL", "s2-pro"),
+            latency="normal",
+            normalize=True,
+            temperature=0.7,
+            top_p=0.7,
+            # prosody_speed=1.1,
         ),
     )
 
