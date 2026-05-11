@@ -154,10 +154,10 @@ async def run_bot(transport: BaseTransport):
         settings=FishAudioTTSService.Settings(
             voice=os.getenv("FISH_VOICE_ID"),
             model=os.getenv("FISH_MODEL", "s2-pro"),
-            latency="normal",
+            # latency="normal",
             normalize=True,
-            temperature=0.7,
-            top_p=0.7,
+            # temperature=0.7,
+            # top_p=0.7,
             # prosody_speed=1.1,
         ),
     )
