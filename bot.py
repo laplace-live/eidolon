@@ -36,6 +36,13 @@ from typing import Any
 
 import httpx
 from dotenv import load_dotenv
+
+# Load .env BEFORE anything else touches os.getenv — module-level
+# constants below (e.g. CF_TURN_TTL_SEC) are evaluated at import time,
+# so a deferred load_dotenv() would leave them silently pinned to their
+# fallback defaults even when .env sets a different value.
+load_dotenv(override=True)
+
 from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.frames.frames import LLMRunFrame
@@ -95,7 +102,12 @@ from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 # dropped. The frontend, in contrast, can use every URL Cloudflare
 # returns (UDP/TCP/TLS variants) for maximum reachability.
 
-CF_TURN_TTL_SEC = int(os.getenv("CLOUDFLARE_TURN_TTL_SEC", "3600"))
+# `or "3600"` (not `os.getenv(..., "3600")`) so an empty `.env` entry
+# — which is exactly what `cp .env.example .env` produces — falls through
+# to the default instead of crashing with `int("")`. python-dotenv parses
+# `KEY=` as the empty string, not as unset, so getenv's own default never
+# fires for the most common misconfiguration.
+CF_TURN_TTL_SEC = int(os.getenv("CLOUDFLARE_TURN_TTL_SEC") or "3600")
 # Refresh slightly before expiry so an in-flight credential never goes
 # stale mid-call. Floor of 60s in case TTL is set very short for testing.
 CF_REFRESH_MARGIN_SEC = 300
@@ -289,8 +301,6 @@ try:
 except Exception as e:
     PersonaFactsService = None
     logger.debug(f"PersonaFacts service unavailable: {e}")
-
-load_dotenv(override=True)
 
 # Resolve persona/data paths relative to this file so the bot works from any
 # CWD (local dev, Docker container).
