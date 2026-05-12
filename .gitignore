@@ -238,10 +238,5 @@ vods/
 # committed so the container has a prebuilt index).
 data/lancedb/**/*.tmp
 
-# Raw provider transcript payloads (per-token JSON from Soniox/etc.) live
-# next to streams/*.md so you can re-chunk locally without re-paying for
-# transcription. Big (~20MB per 5h stream) and not needed at runtime —
-# only the .md is ingested. Keep them local; commit selectively if you
-# want a permanent archive of any one stream.
-streams/*.soniox.json
-streams/*.whisper.json
+# Raw provider transcript payloads
+streams/

@@ -56,7 +56,6 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY ./pyproject.toml ./uv.lock ./
 COPY ./bot.py ./stream_archive.py ./persona_facts.py ./embeddings.py ./
 COPY ./persona.md ./
-COPY ./streams ./streams
 COPY ./data ./data
 
 EXPOSE 7860
