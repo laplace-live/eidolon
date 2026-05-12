@@ -136,8 +136,7 @@ async def main_async(args: argparse.Namespace) -> int:
             songs = extras.get("songs") or []
             if songs:
                 titles = [
-                    f"《{s.get('title', '?')}》"
-                    if isinstance(s, dict) else f"《{s}》"
+                    f"《{s.get('title', '?')}》" if isinstance(s, dict) else f"《{s}》"
                     for s in songs  # type: ignore[union-attr]
                 ]
                 print(f"     SONGS:    {' '.join(titles)}")

@@ -94,7 +94,7 @@ def _parse_line(line: str) -> tuple[str, str]:
         iso = f"{year:04d}-{month:02d}-{day:02d}"
     except ValueError:
         return "", line
-    return iso, line[m.end():].lstrip()
+    return iso, line[m.end() :].lstrip()
 
 
 def load_facts(
@@ -164,17 +164,12 @@ def load_facts(
             )
             kept += 1
 
-        logger.info(
-            f"Loaded {fp.name}: {kept} facts kept, {skipped} duplicates skipped"
-        )
+        logger.info(f"Loaded {fp.name}: {kept} facts kept, {skipped} duplicates skipped")
 
     if total_skipped_short:
-        logger.info(
-            f"Filtered out {total_skipped_short} lines shorter than {min_chars} chars"
-        )
+        logger.info(f"Filtered out {total_skipped_short} lines shorter than {min_chars} chars")
     logger.info(
-        f"Total: {len(rows)} unique facts from {total_seen} raw lines "
-        f"across {len(files)} file(s)"
+        f"Total: {len(rows)} unique facts from {total_seen} raw lines across {len(files)} file(s)"
     )
     return rows
 
@@ -197,9 +192,7 @@ def build_arrow_schema() -> pa.Schema:
     )
 
 
-async def embed_in_batches(
-    rows: list[dict[str, Any]], batch_size: int = 96
-) -> EmbeddingUsage:
+async def embed_in_batches(rows: list[dict[str, Any]], batch_size: int = 96) -> EmbeddingUsage:
     """Embed each row's ``embed_input`` and stash the vector on the row.
 
     Larger batch_size than the streams ingest (96 vs 64) because facts
@@ -217,8 +210,7 @@ async def embed_in_batches(
         progress = min(start + batch_size, len(rows))
         cost_str = f", ${usage.cost_usd:.6f}" if usage.cost_source == "openrouter" else ""
         logger.info(
-            f"Embedded {progress}/{len(rows)} facts "
-            f"({usage.total_tokens} tokens{cost_str})"
+            f"Embedded {progress}/{len(rows)} facts ({usage.total_tokens} tokens{cost_str})"
         )
     return total
 
@@ -234,9 +226,7 @@ def write_table(rows: list[dict[str, Any]], db_path: Path, table_name: str) -> N
     logger.info(f"Wrote {len(rows)} rows to {db_path}/{table_name}.lance")
 
 
-def _resolve_files(
-    files: list[str] | None, data_dir: Path
-) -> list[Path]:
+def _resolve_files(files: list[str] | None, data_dir: Path) -> list[Path]:
     """Resolve the file list: explicit args, else default patterns under data/."""
     if files:
         return [Path(f).resolve() for f in files]
@@ -275,8 +265,7 @@ async def main_async(args: argparse.Namespace) -> int:
         logger.info(f"Dry run: {len(rows)} facts would be embedded and written.")
         for r in rows[:5]:
             logger.info(
-                f"  - {r['id']} [{r['date'] or 'undated'}, {r['source']}]: "
-                f"{r['text'][:60]}..."
+                f"  - {r['id']} [{r['date'] or 'undated'}, {r['source']}]: {r['text'][:60]}..."
             )
         return 0
 

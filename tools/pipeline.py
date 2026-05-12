@@ -57,9 +57,21 @@ Usage::
     # Fewer surprises if a single bad URL should fail the whole run:
     uv run python -m tools.pipeline data/video-sample.txt --abort-on-error
 
-    # Custom transcribe / refine knobs (pipeline forwards the common ones):
+    # Run several Soniox transcribes in parallel (one subprocess per file).
+    # 4–8 is a good sweet spot for typical home upload bandwidth; Soniox
+    # async accounts cap concurrent jobs at 25 so stay well below that.
+    # With concurrency >1, each child's output is captured and prefixed
+    # with [idx/total stem] so progress lines stay readable:
+    uv run python -m tools.pipeline data/video-sample.txt \\
+        --transcribe-concurrency 6
+
+    # Custom transcribe / refine knobs (pipeline forwards the common ones).
+    # --transcribe-concurrency parallelises transcribe subprocesses;
+    # --refine-concurrency parallelises in-process LLM calls inside refine.
+    # They compose freely:
     uv run python -m tools.pipeline data/video-sample.txt \\
         --language zh --provider soniox \\
+        --transcribe-concurrency 6 \\
         --refine-model openai/gpt-4o-mini --refine-concurrency 16
 """
 
@@ -80,7 +92,7 @@ from loguru import logger
 # script. Mirrors the pattern used in tools/ingest_streams.py and tools/refine.py.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from tools.download import (  # noqa: E402
+from tools.download import (  # noqa: E402, I001
     DEFAULT_BROWSER,
     DEFAULT_FORMAT,
     DEFAULT_VODS_DIR,
@@ -174,10 +186,7 @@ _TRANSCRIBABLE_EXTS = {".m4a", ".mp3", ".wav", ".flac", ".webm", ".opus", ".aac"
 def _list_audio_files(vods_dir: Path) -> list[Path]:
     if not vods_dir.exists():
         return []
-    return sorted(
-        p for p in vods_dir.iterdir()
-        if p.is_file() and p.suffix in _TRANSCRIBABLE_EXTS
-    )
+    return sorted(p for p in vods_dir.iterdir() if p.is_file() and p.suffix in _TRANSCRIBABLE_EXTS)
 
 
 # ---------------------------------------------------------------------------
@@ -198,8 +207,7 @@ def stage_download(
     """Run yt-dlp on each URL. ``dry_run=True`` just reports the URL count."""
     if dry_run:
         logger.info(
-            f"[dry-run] would download {len(urls)} URL(s) → {vods_dir}/ "
-            f"(format={format_spec!r})"
+            f"[dry-run] would download {len(urls)} URL(s) → {vods_dir}/ (format={format_spec!r})"
         )
         return None
     return download_urls(
@@ -231,14 +239,20 @@ def _build_transcribe_cmd(
 ) -> list[str]:
     """Construct the ``python -m tools.transcribe`` command for one audio file."""
     cmd = [
-        sys.executable, "-m", "tools.transcribe",
+        sys.executable,
+        "-m",
+        "tools.transcribe",
         str(audio),
-        "--date", date_iso,
-        "--out-dir", str(streams_dir),
-        "--provider", provider,
+        "--date",
+        date_iso,
+        "--out-dir",
+        str(streams_dir),
+        "--provider",
+        provider,
         # Empty string is the documented "auto-detect" escape hatch in
         # transcribe.py, so we forward it verbatim.
-        "--language", language,
+        "--language",
+        language,
     ]
     if soniox_model:
         cmd += ["--soniox-model", soniox_model]
@@ -301,16 +315,13 @@ def _plan_transcribe_jobs(
 
         out_md = _stream_md_path(streams_dir, date, audio.stem)
         if out_md.exists():
-            logger.info(
-                f"{label} {audio.name}: already transcribed → {out_md.name}"
-            )
+            logger.info(f"{label} {audio.name}: already transcribed → {out_md.name}")
             report.audio_skipped += 1
             continue
 
         if dry_run:
             logger.info(
-                f"{label} [dry-run] would transcribe {audio.name} "
-                f"(date={date}) → {out_md.name}"
+                f"{label} [dry-run] would transcribe {audio.name} (date={date}) → {out_md.name}"
             )
             continue
 
@@ -344,8 +355,7 @@ def _run_transcribes_sequential(
     """
     for job in jobs:
         logger.info(
-            f"{job.label} transcribing {job.audio.name} "
-            f"(date={job.date}, provider={provider})"
+            f"{job.label} transcribing {job.audio.name} (date={job.date}, provider={provider})"
         )
         try:
             result = subprocess.run(job.cmd, check=False)
@@ -396,8 +406,7 @@ def _run_transcribes_parallel(
     from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
 
     logger.info(
-        f"Running {len(jobs)} transcribe subprocess(es) in parallel "
-        f"(concurrency={concurrency})"
+        f"Running {len(jobs)} transcribe subprocess(es) in parallel (concurrency={concurrency})"
     )
 
     # Track in-flight Popen objects so KeyboardInterrupt can terminate
@@ -467,19 +476,13 @@ def _run_transcribes_parallel(
                     logger.error(f"  ✗ {job.audio.name}: {err}")
                     report.failed.append((job.audio, err))
                 elif rc != 0:
-                    logger.error(
-                        f"  ✗ {job.audio.name}: transcribe failed (exit={rc})"
-                    )
+                    logger.error(f"  ✗ {job.audio.name}: transcribe failed (exit={rc})")
                     report.failed.append((job.audio, f"exit={rc}"))
                 else:
                     report.succeeded += 1
                     logger.info(f"  ✓ {job.audio.name}")
 
-                if (
-                    (err is not None or rc != 0)
-                    and abort_on_error
-                    and not aborted
-                ):
+                if (err is not None or rc != 0) and abort_on_error and not aborted:
                     aborted = True
                     logger.warning(
                         "  abort_on_error: cancelling pending transcribes "
@@ -488,9 +491,7 @@ def _run_transcribes_parallel(
                     for f in future_map:
                         f.cancel()
     except KeyboardInterrupt:
-        logger.warning(
-            "KeyboardInterrupt — terminating in-flight transcribe subprocesses"
-        )
+        logger.warning("KeyboardInterrupt — terminating in-flight transcribe subprocesses")
         terminate_all()
         raise
 
@@ -555,11 +556,15 @@ def stage_transcribe(
 
     if transcribe_concurrency <= 1:
         _run_transcribes_sequential(
-            jobs, report, abort_on_error=abort_on_error, provider=provider,
+            jobs,
+            report,
+            abort_on_error=abort_on_error,
+            provider=provider,
         )
     else:
         _run_transcribes_parallel(
-            jobs, report,
+            jobs,
+            report,
             concurrency=transcribe_concurrency,
             abort_on_error=abort_on_error,
         )
@@ -584,8 +589,11 @@ def stage_refine(
 ) -> StageResult:
     started = time.monotonic()
     cmd = [
-        sys.executable, "-m", "tools.refine",
-        "--streams-dir", str(streams_dir),
+        sys.executable,
+        "-m",
+        "tools.refine",
+        "--streams-dir",
+        str(streams_dir),
     ]
     if model:
         cmd += ["--model", model]
@@ -609,8 +617,11 @@ def stage_ingest(
 ) -> StageResult:
     started = time.monotonic()
     cmd = [
-        sys.executable, "-m", "tools.ingest_streams",
-        "--streams-dir", str(streams_dir),
+        sys.executable,
+        "-m",
+        "tools.ingest_streams",
+        "--streams-dir",
+        str(streams_dir),
     ]
     if skip_types is not None:
         cmd += ["--skip-types", skip_types]

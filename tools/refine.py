@@ -394,8 +394,16 @@ def _validate_extract(payload: Any) -> dict[str, Any]:
         # Multi-element list at extract time means the model split the
         # chunk into sub-extracts. Merge them: union all arrays.
         merged: dict[str, list] = {
-            k: [] for k in ("sc_events", "songs", "events", "promises",
-                            "topics", "mentions", "key_quotes")
+            k: []
+            for k in (
+                "sc_events",
+                "songs",
+                "events",
+                "promises",
+                "topics",
+                "mentions",
+                "key_quotes",
+            )
         }
         is_anime = is_karaoke = False
         for item in payload:
@@ -407,8 +415,7 @@ def _validate_extract(payload: Any) -> dict[str, Any]:
                     merged[k].extend(v)
             is_anime = is_anime or bool(item.get("is_anime_audio_dominant"))
             is_karaoke = is_karaoke or bool(item.get("is_karaoke_dominant"))
-        payload = {**merged, "is_anime_audio_dominant": is_anime,
-                   "is_karaoke_dominant": is_karaoke}
+        payload = {**merged, "is_anime_audio_dominant": is_anime, "is_karaoke_dominant": is_karaoke}
 
     if not isinstance(payload, dict):
         raise ValueError(f"Expected JSON object, got {type(payload).__name__}")
@@ -434,12 +441,14 @@ def _validate_extract(payload: Any) -> dict[str, Any]:
                 amount_yuan = int(amount) if amount is not None else None
             except (TypeError, ValueError):
                 amount_yuan = None
-            sc_events.append({
-                "viewer": viewer or "(unknown)",
-                "amount_yuan": amount_yuan,
-                "content": content,
-                "response": str(sc.get("response", "")).strip(),
-            })
+            sc_events.append(
+                {
+                    "viewer": viewer or "(unknown)",
+                    "amount_yuan": amount_yuan,
+                    "content": content,
+                    "response": str(sc.get("response", "")).strip(),
+                }
+            )
 
     songs_raw = payload.get("songs") or []
     songs: list[dict[str, Any]] = []
@@ -448,10 +457,12 @@ def _validate_extract(payload: Any) -> dict[str, Any]:
             if isinstance(s, dict):
                 title = str(s.get("title", "")).strip()
                 if title:
-                    songs.append({
-                        "title": title,
-                        "note": str(s.get("note", "")).strip(),
-                    })
+                    songs.append(
+                        {
+                            "title": title,
+                            "note": str(s.get("note", "")).strip(),
+                        }
+                    )
             elif isinstance(s, str) and s.strip():
                 # Tolerate the model emitting plain string titles.
                 songs.append({"title": s.strip(), "note": ""})
@@ -565,10 +576,13 @@ async def _refine_one(
     async with sem:
         # Pass 1: extract structured data faithfully.
         extract_user = EXTRACT_USER_TEMPLATE.format(
-            context=context, timestamp=timestamp, text=chunk.text,
+            context=context,
+            timestamp=timestamp,
+            text=chunk.text,
         )
         extract_raw, usage1 = await _call_llm_json(
-            client, model,
+            client,
+            model,
             system=EXTRACT_SYSTEM_PROMPT,
             user=extract_user,
             temperature=DEFAULT_EXTRACT_TEMPERATURE,
@@ -593,7 +607,8 @@ async def _refine_one(
             extract_json=json.dumps(extract, ensure_ascii=False),
         )
         synth_raw, usage2 = await _call_llm_json(
-            client, model,
+            client,
+            model,
             system=SYNTHESIZE_SYSTEM_PROMPT,
             user=synth_user,
             temperature=DEFAULT_SYNTHESIZE_TEMPERATURE,
@@ -675,9 +690,7 @@ async def refine_stream(
     sidecar["schema_version"] = SCHEMA_VERSION
 
     # Detect v1-format records so we can prompt the user to upgrade.
-    v1_chunks = [
-        cid for cid, rec in sidecar["chunks"].items() if not _is_v2_refinement(rec)
-    ]
+    v1_chunks = [cid for cid, rec in sidecar["chunks"].items() if not _is_v2_refinement(rec)]
     if v1_chunks and not force:
         logger.warning(
             f"  {parsed.md_path.name}: {len(v1_chunks)} chunks are still in v1 "
@@ -705,10 +718,7 @@ async def refine_stream(
     )
 
     sem = asyncio.Semaphore(concurrency)
-    tasks = [
-        asyncio.create_task(_refine_one(client, model, parsed, chunk, sem))
-        for chunk in todo
-    ]
+    tasks = [asyncio.create_task(_refine_one(client, model, parsed, chunk, sem)) for chunk in todo]
 
     total_usage = Usage()
     succeeded = 0
@@ -736,8 +746,7 @@ async def refine_stream(
             sidecar["refined_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
             save_sidecar(parsed, sidecar)
             logger.info(
-                f"  ... {completed}/{len(todo)} done, "
-                f"running cost: ${total_usage.cost_usd:.4f}"
+                f"  ... {completed}/{len(todo)} done, running cost: ${total_usage.cost_usd:.4f}"
             )
 
     sidecar["model"] = model
@@ -819,8 +828,9 @@ def print_run_summary(results: list[StreamResult], model: str, total_duration: f
         avg_cost = overall.cost_usd / chunks_succeeded if overall.cost_usd else 0
         avg_time = total_duration / chunks_succeeded
         print(
-            f"Per chunk: {avg_time:.2f}s avg, "
-            f"${avg_cost:.6f} avg" if avg_cost else f"Per chunk: {avg_time:.2f}s avg"
+            f"Per chunk: {avg_time:.2f}s avg, ${avg_cost:.6f} avg"
+            if avg_cost
+            else f"Per chunk: {avg_time:.2f}s avg"
         )
     if chunks_failed:
         print(
@@ -894,9 +904,9 @@ def _dry_run_report(streams: list[ParsedStream], model: str) -> None:
         # "needs work" only if --force will be used; we don't know that
         # here, so include them in the estimate to be conservative.
         new = [
-            c for c in parsed.chunks
-            if c.id not in sidecar["chunks"]
-            or not _is_v2_refinement(sidecar["chunks"][c.id])
+            c
+            for c in parsed.chunks
+            if c.id not in sidecar["chunks"] or not _is_v2_refinement(sidecar["chunks"][c.id])
         ]
         if not new:
             print(f"  {parsed.md_path.name}: 0 new chunks")

@@ -128,8 +128,10 @@ def _build_yt_dlp_cmd(
 ) -> list[str]:
     cmd = [
         "yt-dlp",
-        "-f", format_spec,
-        "-o", str(vods_dir / "%(id)s.%(ext)s"),
+        "-f",
+        format_spec,
+        "-o",
+        str(vods_dir / "%(id)s.%(ext)s"),
         # Sidecar metadata is the source of truth for the stream date in
         # the pipeline's transcribe stage, so this flag is non-negotiable.
         "--write-info-json",
@@ -207,9 +209,10 @@ def download_urls(
             continue
 
         if result.returncode != 0:
-            stderr_tail = "\n    ".join(
-                (result.stderr or "").strip().splitlines()[-6:]
-            ) or "(no stderr captured)"
+            stderr_tail = (
+                "\n    ".join((result.stderr or "").strip().splitlines()[-6:])
+                or "(no stderr captured)"
+            )
             logger.error(
                 f"  ✗ yt-dlp failed (exit={result.returncode}). stderr tail:\n    {stderr_tail}"
             )

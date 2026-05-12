@@ -266,8 +266,7 @@ def transcribe_with_whisper(
         from faster_whisper import WhisperModel  # type: ignore[import-not-found]
     except ImportError as e:
         raise RuntimeError(
-            "faster-whisper is not installed. Install the tools extra:\n"
-            "    uv sync --extra tools"
+            "faster-whisper is not installed. Install the tools extra:\n    uv sync --extra tools"
         ) from e
 
     logger.info(f"Loading Whisper model: {args.model} (device={args.device})")
@@ -525,8 +524,7 @@ def transcribe_with_soniox(
         from soniox.types import CreateTranscriptionConfig, StructuredContext
     except ImportError as e:
         raise RuntimeError(
-            "soniox SDK is not installed. Install the tools extra:\n"
-            "    uv sync --extra tools"
+            "soniox SDK is not installed. Install the tools extra:\n    uv sync --extra tools"
         ) from e
 
     if not os.getenv("SONIOX_API_KEY"):
@@ -595,9 +593,7 @@ def transcribe_with_soniox(
             now = time.monotonic()
 
             # Always log on status transitions; otherwise heartbeat every 10s.
-            should_log = (
-                t.status != last_status or now - last_log >= PROGRESS_EVERY_SEC
-            )
+            should_log = t.status != last_status or now - last_log >= PROGRESS_EVERY_SEC
             if should_log:
                 last_log = now
                 last_status = t.status
@@ -606,16 +602,12 @@ def transcribe_with_soniox(
                     if t.audio_duration_ms
                     else ""
                 )
-                logger.info(
-                    f"  status={t.status}  elapsed {_format_dur(elapsed)}{audio_dur}"
-                )
+                logger.info(f"  status={t.status}  elapsed {_format_dur(elapsed)}{audio_dur}")
 
             if t.status == "completed":
                 break
             if t.status == "error":
-                raise RuntimeError(
-                    f"Soniox job failed: {t.error_type}: {t.error_message}"
-                )
+                raise RuntimeError(f"Soniox job failed: {t.error_type}: {t.error_message}")
             time.sleep(5)
 
         transcript = client.stt.get_transcript(transcription_id)
@@ -687,9 +679,12 @@ def _probe_duration_sec(path: Path) -> float | None:
         out = subprocess.run(
             [
                 ffprobe,
-                "-v", "error",
-                "-show_entries", "format=duration",
-                "-of", "default=noprint_wrappers=1:nokey=1",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
                 str(path),
             ],
             capture_output=True,
@@ -854,9 +849,7 @@ def main() -> int:
         return 1
 
     if not segments:
-        logger.error(
-            "No segments returned. Is the audio file empty, silent, or unreadable?"
-        )
+        logger.error("No segments returned. Is the audio file empty, silent, or unreadable?")
         return 1
 
     scenes = group_segments_into_scenes(segments, args.window)

@@ -174,9 +174,7 @@ def load_streams(
         )
 
     if total_skipped:
-        logger.info(
-            f"Filtered out {total_skipped} chunks total (skip_types={sorted(skip_types)})"
-        )
+        logger.info(f"Filtered out {total_skipped} chunks total (skip_types={sorted(skip_types)})")
 
     return rows
 
