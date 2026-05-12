@@ -27,9 +27,14 @@ Run the bot with::
     uv run bot.py
 """
 
+import asyncio
 import os
+import threading
+import time
 from pathlib import Path
+from typing import Any
 
+import httpx
 from dotenv import load_dotenv
 from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
@@ -42,6 +47,7 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
 )
+from pipecat.runner.run import app as pipecat_app
 from pipecat.runner.types import RunnerArguments, SmallWebRTCRunnerArguments
 from pipecat.services.fish.tts import FishAudioTTSService
 from pipecat.services.openrouter.llm import OpenRouterLLMService
@@ -50,7 +56,9 @@ from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.transports.smallwebrtc.connection import IceServer, SmallWebRTCConnection
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 
-# Inject server-side ICE servers from environment variables.
+# ─────────────────────────────────────────────────────────────────────────────
+# WebRTC ICE server configuration
+# ─────────────────────────────────────────────────────────────────────────────
 #
 # Self-hosted SmallWebRTC behind any NAT (Docker bridge, VPS firewall,
 # residential router, …) needs aiortc to:
@@ -65,40 +73,175 @@ from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 # constructs SmallWebRTCRequestHandler() without `ice_servers`, which in
 # turn constructs every SmallWebRTCConnection with `ice_servers=None`.
 # That advertises ONLY host candidates — fine on localhost, broken
-# behind any NAT.
+# behind any NAT. We monkey-patch __init__ to inject ICE servers (same
+# pattern pipecat itself uses for USERDATA_MAX_LENGTH at
+# pipecat/transports/smallwebrtc/connection.py:62).
 #
-# We monkey-patch __init__ to default `ice_servers` from env. This
-# mirrors the pattern pipecat itself uses for USERDATA_MAX_LENGTH at
-# pipecat/transports/smallwebrtc/connection.py:62.
+# Resolution priority:
 #
-# aiortc supports at most ONE STUN and ONE TURN server per connection
-# (see aiortc.rtcicetransport.connection_kwargs); extra entries are
-# silently dropped. credentialType is fixed to "password". `turn:` URLs
-# accept ?transport=udp|tcp; `turns:` (TLS) requires tcp.
+#   1. Cloudflare Realtime TURN (when CLOUDFLARE_TURN_KEY_ID +
+#      CLOUDFLARE_TURN_KEY_API_TOKEN are set). Credentials are minted on
+#      demand from rtc.live.cloudflare.com and cached in-process. Both
+#      the server (aiortc) and the frontend (via GET /api/ice-servers)
+#      read from the same cache so a single mint serves both ends.
+#   2. Static WEBRTC_STUN_URL / WEBRTC_TURN_URL env vars. Useful for
+#      coturn or other providers; bring-your-own-credentials.
+#   3. Empty list → host candidates only. Fine for `uv run bot.py` on
+#      localhost where browser and aiortc both bind to 127.0.0.1.
+#
+# aiortc has its own limitation independent of source: it honors at most
+# ONE STUN and ONE TURN server per connection (see
+# aiortc.rtcicetransport.connection_kwargs) — extras are silently
+# dropped. The frontend, in contrast, can use every URL Cloudflare
+# returns (UDP/TCP/TLS variants) for maximum reachability.
+
+CF_TURN_TTL_SEC = int(os.getenv("CLOUDFLARE_TURN_TTL_SEC", "3600"))
+# Refresh slightly before expiry so an in-flight credential never goes
+# stale mid-call. Floor of 60s in case TTL is set very short for testing.
+CF_REFRESH_MARGIN_SEC = 300
+
+_cf_cache: dict[str, Any] | None = None
+_cf_cache_expiry: float = 0.0
+_cf_lock = threading.Lock()
+
+
+def _fetch_cloudflare_ice() -> dict[str, Any] | None:
+    """Mint a fresh Cloudflare TURN credential set.
+
+    Returns the raw {"iceServers": [...]} payload on success, None on
+    failure or when CF is not configured. Synchronous; blocks for the
+    duration of the HTTP round-trip (~100–300 ms).
+    """
+    key_id = os.getenv("CLOUDFLARE_TURN_KEY_ID")
+    api_token = os.getenv("CLOUDFLARE_TURN_KEY_API_TOKEN")
+    if not key_id or not api_token:
+        return None
+    url = f"https://rtc.live.cloudflare.com/v1/turn/keys/{key_id}/credentials/generate-ice-servers"
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            r = client.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {api_token}",
+                    "Content-Type": "application/json",
+                },
+                json={"ttl": CF_TURN_TTL_SEC},
+            )
+            r.raise_for_status()
+            return r.json()
+    except Exception as e:
+        logger.warning(f"[WebRTC] Cloudflare TURN mint failed: {e}")
+        return None
+
+
+def _get_cloudflare_ice() -> dict[str, Any] | None:
+    """Return cached or freshly-minted Cloudflare ICE config.
+
+    Stale-on-failure: if a refresh fails but we have an old (possibly
+    expired) cache, return it anyway — Cloudflare TURN keeps accepting
+    a credential for ~30s past its expiry, and a stale credential is
+    strictly better than dropping the call.
+    """
+    global _cf_cache, _cf_cache_expiry
+    now = time.time()
+    with _cf_lock:
+        if _cf_cache and now < _cf_cache_expiry:
+            return _cf_cache
+        fresh = _fetch_cloudflare_ice()
+        if fresh is not None:
+            _cf_cache = fresh
+            _cf_cache_expiry = now + max(CF_TURN_TTL_SEC - CF_REFRESH_MARGIN_SEC, 60)
+            logger.info(
+                f"[WebRTC] Minted fresh Cloudflare TURN credentials "
+                f"(TTL {CF_TURN_TTL_SEC}s, refresh in "
+                f"{int(_cf_cache_expiry - now)}s)"
+            )
+            return fresh
+        return _cf_cache
+
+
+def _resolve_ice_response() -> dict[str, Any]:
+    """Build the {iceServers: [...]} JSON payload for the frontend.
+
+    Always returns a valid object — empty `iceServers` list when nothing
+    is configured, which lets local-dev (browser ↔ localhost) work via
+    host candidates.
+    """
+    cf = _get_cloudflare_ice()
+    if cf is not None:
+        return cf
+
+    servers: list[dict[str, Any]] = []
+    stun_url = os.getenv("WEBRTC_STUN_URL")
+    if stun_url:
+        servers.append({"urls": [stun_url]})
+    turn_url = os.getenv("WEBRTC_TURN_URL")
+    if turn_url:
+        servers.append(
+            {
+                "urls": [turn_url],
+                "username": os.getenv("WEBRTC_TURN_USERNAME", ""),
+                "credential": os.getenv("WEBRTC_TURN_CREDENTIAL", ""),
+            }
+        )
+    return {"iceServers": servers}
+
+
+def _resolve_ice_servers_for_aiortc() -> list[IceServer]:
+    """Pick the single STUN + single TURN aiortc will actually use.
+
+    aiortc keeps only the first STUN URL and first TURN URL it sees;
+    this helper does that selection up-front so the log line is
+    accurate and so we don't waste CPU constructing IceServer objects
+    aiortc would discard.
+    """
+    out: list[IceServer] = []
+    have_stun = False
+    have_turn = False
+
+    cf = _get_cloudflare_ice()
+    if cf is not None:
+        for entry in cf.get("iceServers", []):
+            urls = entry.get("urls", [])
+            if isinstance(urls, str):
+                urls = [urls]
+            username = entry.get("username")
+            credential = entry.get("credential")
+            for url in urls:
+                if not have_stun and url.startswith("stun:"):
+                    out.append(IceServer(urls=url))
+                    have_stun = True
+                elif not have_turn and url.startswith(("turn:", "turns:")):
+                    # Cloudflare returns udp first, which is what aiortc
+                    # wants for best perf — picking the first match
+                    # naturally favors udp:3478.
+                    out.append(IceServer(urls=url, username=username, credential=credential))
+                    have_turn = True
+        return out
+
+    stun_url = os.getenv("WEBRTC_STUN_URL")
+    if stun_url:
+        out.append(IceServer(urls=stun_url))
+    turn_url = os.getenv("WEBRTC_TURN_URL")
+    if turn_url:
+        out.append(
+            IceServer(
+                urls=turn_url,
+                username=os.getenv("WEBRTC_TURN_USERNAME"),
+                credential=os.getenv("WEBRTC_TURN_CREDENTIAL"),
+            )
+        )
+    return out
+
+
 _ORIGINAL_SWRTC_INIT = SmallWebRTCConnection.__init__
 
 
 def _patched_swrtc_init(self, ice_servers=None, connection_timeout_secs=60):
     if not ice_servers:
-        defaults: list[IceServer] = []
-        stun_url = os.getenv("WEBRTC_STUN_URL")
-        if stun_url:
-            defaults.append(IceServer(urls=stun_url))
-        turn_url = os.getenv("WEBRTC_TURN_URL")
-        if turn_url:
-            defaults.append(
-                IceServer(
-                    urls=turn_url,
-                    username=os.getenv("WEBRTC_TURN_USERNAME"),
-                    credential=os.getenv("WEBRTC_TURN_CREDENTIAL"),
-                )
-            )
-        if defaults:
-            logger.debug(
-                f"[WebRTC] Server-side ICE: STUN={'yes' if stun_url else 'no'}, "
-                f"TURN={'yes' if turn_url else 'no'}"
-            )
-            ice_servers = defaults
+        resolved = _resolve_ice_servers_for_aiortc()
+        if resolved:
+            ice_servers = resolved
     _ORIGINAL_SWRTC_INIT(
         self,
         ice_servers=ice_servers,
@@ -107,6 +250,21 @@ def _patched_swrtc_init(self, ice_servers=None, connection_timeout_secs=60):
 
 
 SmallWebRTCConnection.__init__ = _patched_swrtc_init
+
+
+@pipecat_app.get("/api/ice-servers")
+async def get_ice_servers():
+    """Serve fresh ICE config to the frontend.
+
+    Frontend should call this immediately before opening the WebRTC
+    connection and pass the returned `iceServers` array into its
+    RTCPeerConnection / SmallWebRTCTransport. Cache lookup is sync
+    (httpx.Client) so we offload to a thread to keep the event loop
+    responsive when a fresh mint is needed (~100–300 ms blocking call).
+    """
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _resolve_ice_response)
+
 
 # Mem0 is an optional dependency; only import if available so the bot still
 # runs when the user hasn't installed the `mem0` extra or set MEM0_API_KEY.
