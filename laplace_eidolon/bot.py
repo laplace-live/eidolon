@@ -305,11 +305,16 @@ except Exception as e:
     PersonaFactsService = None
     logger.debug(f"PersonaFacts service unavailable: {e}")
 
-# Resolve persona/data paths relative to this file so the bot works from any
-# CWD (local dev, Docker container).
-SERVER_DIR = Path(__file__).resolve().parent
-PERSONA_PATH = SERVER_DIR / os.getenv("PERSONA_FILE", "persona.md")
-LANCEDB_PATH = SERVER_DIR / os.getenv("LANCEDB_PATH", "data/lancedb")
+# Resolve persona/data paths relative to this file so the bot works from
+# any CWD (local dev, Docker container). ``__file__`` is
+# ``<repo>/laplace_eidolon/bot.py``, so we walk up TWO parents to reach
+# the repo root where ``persona.md`` and ``data/lancedb`` live. The old
+# ``SERVER_DIR`` only did one ``.parent`` — that pointed at
+# ``laplace_eidolon/`` after the package move and silently demoted the
+# bot to its fallback persona with all RAG retrieval disabled.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PERSONA_PATH = PROJECT_ROOT / os.getenv("PERSONA_FILE", "persona.md")
+LANCEDB_PATH = PROJECT_ROOT / os.getenv("LANCEDB_PATH", "data/lancedb")
 
 FALLBACK_PERSONA = (
     "You are a helpful assistant in a voice conversation. Your responses will "
@@ -328,7 +333,7 @@ def load_persona() -> str:
     if PERSONA_PATH.exists():
         text = PERSONA_PATH.read_text(encoding="utf-8").strip()
         if text:
-            logger.info(f"Loaded persona from {PERSONA_PATH.relative_to(SERVER_DIR)}")
+            logger.info(f"Loaded persona from {PERSONA_PATH.relative_to(PROJECT_ROOT)}")
             return text
     logger.warning(f"Persona file {PERSONA_PATH} not found; using fallback prompt")
     return FALLBACK_PERSONA
@@ -450,7 +455,7 @@ async def run_bot(transport: BaseTransport):
     elif PersonaFactsService is not None:
         logger.info(
             f"Persona facts disabled: no LanceDB index at "
-            f"{LANCEDB_PATH.relative_to(SERVER_DIR)}. "
+            f"{LANCEDB_PATH.relative_to(PROJECT_ROOT)}. "
             "Run `uv run laplace-ingest-facts` to build it."
         )
 
@@ -469,7 +474,7 @@ async def run_bot(transport: BaseTransport):
     elif StreamArchiveService is not None:
         logger.info(
             f"Stream archive disabled: no LanceDB index at "
-            f"{LANCEDB_PATH.relative_to(SERVER_DIR)}. "
+            f"{LANCEDB_PATH.relative_to(PROJECT_ROOT)}. "
             "Run `uv run laplace-ingest-streams` to build it."
         )
 
