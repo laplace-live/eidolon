@@ -81,7 +81,7 @@ from openai import APIError, AsyncOpenAI
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from openrouter import openrouter_headers  # noqa: E402
+from openrouter import extract_cost_usd, openrouter_headers  # noqa: E402
 from tools._streams import (  # noqa: E402
     ParsedStream,
     StreamChunk,
@@ -292,25 +292,24 @@ def _extract_usage(resp_dict: dict[str, Any], model: str) -> Usage:
     """Pull token + cost data out of an OpenAI/OpenRouter response.
 
     OpenRouter returns ``usage.cost`` in USD when the request includes
-    ``usage.include = true``. If that field is missing (some providers
-    don't surface it), fall back to multiplying token counts by the
-    hardcoded price table.
+    ``usage.include = true``. On BYOK requests ``cost`` is 0 and the
+    real upstream charge lives under ``usage.byok_usage_inference`` —
+    ``extract_cost_usd`` handles the fallback. If neither field is
+    present (some non-OpenRouter providers), fall back to multiplying
+    token counts by the hardcoded price table.
     """
     usage_raw = (resp_dict.get("usage") or {}) if isinstance(resp_dict, dict) else {}
     prompt = int(usage_raw.get("prompt_tokens", 0) or 0)
     completion = int(usage_raw.get("completion_tokens", 0) or 0)
 
-    cost = usage_raw.get("cost")
+    cost = extract_cost_usd(usage_raw)
     if cost is not None:
-        try:
-            return Usage(
-                prompt_tokens=prompt,
-                completion_tokens=completion,
-                cost_usd=float(cost),
-                cost_source="openrouter",
-            )
-        except (TypeError, ValueError):
-            pass
+        return Usage(
+            prompt_tokens=prompt,
+            completion_tokens=completion,
+            cost_usd=cost,
+            cost_source="openrouter",
+        )
 
     pricing = PRICING_USD_PER_1M.get(model)
     if pricing is not None:

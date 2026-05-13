@@ -269,7 +269,15 @@ async def embed_in_batches(
             cache.put_many(model, dim, [(r["embed_input"], r["vector"]) for r in batch])
         total.add(usage)
         progress = min(start + batch_size, len(misses))
-        cost_str = f", ${usage.cost_usd:.6f}" if usage.cost_source == "openrouter" else ""
+        # Show cost for any source that produced one — BYOK runs hit the
+        # ``estimate`` path because OpenRouter withholds cost data on
+        # the embeddings endpoint, and hiding the estimate misled users
+        # into thinking ingest was free.
+        if usage.cost_source in ("openrouter", "estimate"):
+            suffix = "" if usage.cost_source == "openrouter" else " est."
+            cost_str = f", ${usage.cost_usd:.6f}{suffix}"
+        else:
+            cost_str = ""
         logger.info(
             f"Embedded {progress}/{len(misses)} chunks ({usage.total_tokens} tokens{cost_str})"
         )
@@ -340,15 +348,22 @@ async def main_async(args: argparse.Namespace) -> int:
         if cache is not None:
             cache.close()
     write_table(rows, db_path, args.table)
-    if usage.cost_source == "openrouter":
+    if usage.cost_source in ("openrouter", "estimate", "mixed"):
+        note = {
+            "openrouter": "",
+            "estimate": " (client-side estimate; BYOK on /v1/embeddings"
+            " — OpenRouter withholds cost data)",
+            "mixed": " (mixed: some batches reported, some estimated)",
+        }[usage.cost_source]
         logger.info(
             f"Embedding totals: {len(rows)} chunks, "
-            f"{usage.total_tokens} tokens, ${usage.cost_usd:.6f} USD"
+            f"{usage.total_tokens} tokens, ${usage.cost_usd:.6f} USD{note}"
         )
     else:
         logger.info(
             f"Embedding totals: {len(rows)} chunks, {usage.total_tokens} tokens "
-            "(provider did not report cost)"
+            "(provider did not report cost and no local price entry — "
+            "add the model to embeddings.EMBED_PRICING_USD_PER_1M to fix)"
         )
     return 0
 

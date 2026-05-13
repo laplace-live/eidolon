@@ -61,7 +61,7 @@ from lancedb.table import Table
 from loguru import logger
 from openai import AsyncOpenAI
 
-from openrouter import openrouter_headers
+from openrouter import extract_cost_usd, openrouter_headers
 
 DEFAULT_DB_PATH = "data/lancedb"
 DEFAULT_EMBED_BASE_URL = "https://openrouter.ai/api/v1"
@@ -71,6 +71,23 @@ DEFAULT_EMBED_DIM = int(os.getenv("EMBED_DIM", "3072"))
 ``tools/ingest_streams.py`` and ``tools/ingest_facts.py`` match what
 ``embed_texts()`` will produce. To change, set the env var BEFORE
 importing this module (i.e. in .env) and re-ingest both tables."""
+
+# Fallback per-model embedding prices, USD per 1M tokens.
+#
+# Why this exists: OpenRouter does NOT surface ``cost_details`` on
+# ``/v1/embeddings`` responses (verified 2026-05). On a BYOK key the
+# response is literally ``{prompt_tokens, total_tokens, cost: 0}`` —
+# real money is being spent upstream (Google AI Studio etc.) but
+# OpenRouter passes back zero. Without a client-side estimate, ingest
+# logs ``$0.000000`` per batch even on a 26k-chunk run. Prices below
+# come from each provider's public pricing page; treat them as
+# best-effort and update when prices change.
+EMBED_PRICING_USD_PER_1M: dict[str, float] = {
+    "google/gemini-embedding-2-preview": 0.15,
+    "~google/gemini-embedding-2-preview": 0.15,
+    "openai/text-embedding-3-small": 0.02,
+    "openai/text-embedding-3-large": 0.13,
+}
 
 # Retries for the "200 OK with no `data` field" case. OpenRouter wraps
 # upstream errors inside a 200 body (``{"error": {...}}``) instead of
@@ -146,26 +163,42 @@ def _get_embed_client() -> AsyncOpenAI:
 class EmbeddingUsage:
     """Token + cost accumulator for embedding requests.
 
-    OpenRouter surfaces ``usage.cost`` in USD on every response (1 credit
-    = $1). Other OpenAI-compatible providers may not, in which case
-    ``cost_source`` stays "unknown" and ``cost_usd`` is 0.
+    OpenRouter surfaces ``usage.cost`` in USD on non-BYOK responses
+    (1 credit = $1). On BYOK the response is ``cost: 0`` with no
+    ``cost_details`` — the embedding endpoint, unlike chat, withholds
+    the upstream cost entirely — so we fall back to multiplying tokens
+    by a hardcoded per-model price (``EMBED_PRICING_USD_PER_1M``).
 
-    Unlike ``tools.refine.Usage`` we don't carry an "estimate" fallback —
-    embedding pricing isn't in any hardcoded table here, so we either
-    trust OpenRouter's number or report tokens-only.
+    ``cost_source`` distinguishes the three paths so callers can label
+    output honestly:
+
+    - ``"openrouter"`` — number came straight from the response. Trust it.
+    - ``"estimate"``   — tokens × ``EMBED_PRICING_USD_PER_1M[model]``.
+                         Best-effort; check the price table is current.
+    - ``"unknown"``    — no token count or no price entry. ``cost_usd``
+                         stays 0; caller should warn the user.
     """
 
     prompt_tokens: int = 0
     total_tokens: int = 0
     cost_usd: float = 0.0
-    cost_source: str = "unknown"  # "openrouter" if from response, "unknown" otherwise
+    cost_source: str = "unknown"
 
     def add(self, other: "EmbeddingUsage") -> None:
         self.prompt_tokens += other.prompt_tokens
         self.total_tokens += other.total_tokens
         self.cost_usd += other.cost_usd
+        # Promote "unknown" → anything else, and openrouter+estimate
+        # mixes degrade to "mixed" so downstream summaries can flag
+        # partial estimation (same pattern as refine.Usage).
         if self.cost_source == "unknown":
             self.cost_source = other.cost_source
+        elif (
+            other.cost_source != "unknown"
+            and other.cost_source != self.cost_source
+            and self.cost_source != "mixed"
+        ):
+            self.cost_source = "mixed"
 
 
 async def embed_texts_with_usage(
@@ -284,17 +317,30 @@ async def embed_texts_with_usage(
     usage_raw = (resp_dict.get("usage") or {}) if isinstance(resp_dict, dict) else {}
     prompt_tokens = int(usage_raw.get("prompt_tokens", 0) or 0)
     total_tokens = int(usage_raw.get("total_tokens", prompt_tokens) or prompt_tokens)
-    cost = usage_raw.get("cost")
-    if cost is not None:
-        try:
-            return vectors, EmbeddingUsage(
-                prompt_tokens=prompt_tokens,
-                total_tokens=total_tokens,
-                cost_usd=float(cost),
-                cost_source="openrouter",
-            )
-        except (TypeError, ValueError):
-            pass
+
+    # Trust OpenRouter when it returns a positive cost (paid traffic or
+    # BYOK on an endpoint that surfaces ``cost_details``).
+    cost = extract_cost_usd(usage_raw)
+    if cost is not None and cost > 0:
+        return vectors, EmbeddingUsage(
+            prompt_tokens=prompt_tokens,
+            total_tokens=total_tokens,
+            cost_usd=cost,
+            cost_source="openrouter",
+        )
+
+    # Fall through: BYOK on the embedding endpoint. OpenRouter returns
+    # ``cost: 0`` and no ``cost_details`` (verified 2026-05) — estimate
+    # client-side from the token count so the ingest summary isn't $0.
+    pricing = EMBED_PRICING_USD_PER_1M.get(model)
+    if pricing is not None and total_tokens > 0:
+        cost_est = total_tokens * pricing / 1_000_000
+        return vectors, EmbeddingUsage(
+            prompt_tokens=prompt_tokens,
+            total_tokens=total_tokens,
+            cost_usd=cost_est,
+            cost_source="estimate",
+        )
 
     return vectors, EmbeddingUsage(
         prompt_tokens=prompt_tokens,

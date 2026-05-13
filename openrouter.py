@@ -29,6 +29,8 @@ Override the project identity per-deployment via env vars:
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
+from typing import Any
 
 PROJECT_NAME = os.getenv("OPENROUTER_APP_NAME", "LAPLACE Live!")
 """App name shown on the OpenRouter dashboard. Read at import time so a
@@ -68,3 +70,63 @@ def openrouter_headers() -> dict[str, str]:
         "X-OpenRouter-Title": PROJECT_NAME,
         "X-OpenRouter-Categories": _CATEGORY,
     }
+
+
+def extract_cost_usd(usage: Mapping[str, Any] | None) -> float | None:
+    """Pick the best USD cost out of an OpenRouter ``usage`` block.
+
+    OpenRouter's response shape (verified live against the production
+    API, 2026-05) carries cost in one of two places:
+
+    - ``usage.cost`` — what OpenRouter billed the account. Always
+      reported as ``0`` for BYOK requests because OpenRouter doesn't
+      take a cut of the inference itself.
+    - ``usage.cost_details.upstream_inference_cost`` — what the upstream
+      provider (Google AI Studio, OpenAI, Anthropic, …) actually
+      charged. Only present on BYOK requests on the chat endpoint.
+
+      .. note::
+         OpenRouter does **not** surface ``cost_details`` on the
+         ``/v1/embeddings`` endpoint as of 2026-05, even on BYOK. The
+         embeddings response is ``{prompt_tokens, total_tokens,
+         cost: 0}`` with nothing else — callers must fall back to
+         client-side token-count estimation when this helper returns
+         ``0.0`` for an embedding response.
+
+    Prefer ``cost`` when it's positive; otherwise fall back to
+    ``cost_details.upstream_inference_cost``; otherwise return whatever
+    ``cost`` parsed to. ``None`` means "no cost data at all" (some
+    non-OpenRouter providers); ``0.0`` means "OpenRouter responded with
+    zero" (genuinely free or BYOK on an endpoint that withholds the
+    upstream amount).
+
+    The historical ``usage.byok_usage_inference`` name is **not** an
+    OpenRouter API field — it doesn't appear in any response and isn't
+    in the docs. Don't add it back.
+    """
+    if not isinstance(usage, Mapping):
+        return None
+
+    def _as_float(value: Any) -> float | None:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    cost = _as_float(usage.get("cost"))
+    if cost is not None and cost > 0:
+        return cost
+
+    # BYOK fallback. OpenRouter packs three sub-fields into
+    # ``cost_details``: upstream_inference_cost (total),
+    # upstream_inference_prompt_cost, upstream_inference_completions_cost.
+    # We want the total.
+    details = usage.get("cost_details")
+    if isinstance(details, Mapping):
+        upstream = _as_float(details.get("upstream_inference_cost"))
+        if upstream is not None:
+            return upstream
+
+    return cost
