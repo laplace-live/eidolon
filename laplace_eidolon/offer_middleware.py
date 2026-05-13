@@ -1,0 +1,281 @@
+"""Rate-limit anonymous WebRTC offers + expose a preflight endpoint +
+normalize the offer body so downstream pipecat sees ``request_data``.
+
+Three pieces of plumbing live here, all attached to the FastAPI app
+Pipecat creates in ``pipecat.runner.run``:
+
+1. A Starlette HTTP middleware on ``POST /api/offer``. Reads the body
+   once, looks for ``requestData.loginSyncToken``, and either lets the
+   request through (logged-in viewer) or consumes one slot from
+   :data:`rate_limit.ANON_QUOTA` (anonymous viewer). If the slot would
+   be the (N+1)th in the window, returns ``429`` with ``Retry-After``
+   without ever spawning the WebRTC pipeline.
+
+2. The same middleware also rewrites the body to copy ``requestData``
+   to ``request_data`` (snake_case) before handing off to pipecat's
+   route. Pipecat's ``SmallWebRTCRequest`` is a stdlib ``@dataclass``
+   with a ``from_dict`` classmethod that handles both spellings, but
+   FastAPI's auto-parsing uses Pydantic's TypeAdapter and ignores that
+   classmethod, leaving ``request_data`` ``None`` whenever the client
+   sends camelCase (which the JS SDK always does). The rewrite makes
+   ``runner_args.body`` actually carry the ``loginSyncToken`` into
+   ``bot()`` — without it the bot can never see the token, even when
+   the middleware-level rate-limit bypass already saw it.
+
+3. A ``POST /api/offer/preflight`` route that performs the same
+   anonymous quota *check* without consuming a slot. The frontend hits
+   this before ``client.connect()`` because the small-webrtc transport
+   silently swallows non-2xx responses from ``/api/offer`` and burns ~6s
+   on internal reconnect retries before surfacing any error — by the
+   time the catch fires on the browser the 429 context is gone. With
+   the preflight, a rate-limited viewer sees the friendly Chinese
+   message instantly.
+
+Why a Starlette ``BaseHTTPMiddleware`` is safe here
+---------------------------------------------------
+Reading the request body in middleware would normally exhaust the ASGI
+``receive`` callable so the downstream Pipecat handler would hang on
+``await request.json()``. Starlette's ``BaseHTTPMiddleware`` (which
+backs ``@app.middleware("http")``) wraps the request in a
+``_CachedRequest`` whose ``wrapped_receive`` re-emits the cached body
+to downstream consumers — the FastAPI route handler that decodes
+``SmallWebRTCRequest`` sees the same JSON we read here. Mutating
+``request._body`` after that cache exists also propagates: the
+``wrapped_receive`` source reads ``self._body`` directly, so a single
+re-assign is enough to swap the downstream payload. See
+``starlette/middleware/base.py`` (``_CachedRequest``).
+
+IP resolution
+-------------
+``request.client.host`` is correct for direct binds but useless behind
+Cloudflare / nginx / a load balancer (it'd be the proxy's IP). Set
+``EIDOLON_REAL_IP_HEADER`` (e.g. ``cf-connecting-ip``,
+``x-forwarded-for``, ``x-real-ip``) to opt into header-based resolution.
+For ``X-Forwarded-For`` we take the first entry (the original client),
+matching what most reverse proxies expect.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+from collections.abc import Awaitable, Callable
+from typing import Any
+
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from loguru import logger
+
+from .rate_limit import ANON_QUOTA, AnonymousIpQuota
+
+# Shared with `bot.py`'s @pipecat_app.get registration so the path lives
+# in exactly one place.
+OFFER_PATH = "/api/offer"
+PREFLIGHT_PATH = "/api/offer/preflight"
+
+
+def _resolve_client_ip(request: Request) -> str:
+    """Pick the most-trusted client IP based on env config.
+
+    Returns the literal string ``"unknown"`` only when the request has
+    no ``client`` (e.g. ASGI test clients without a transport) — that
+    bucket is shared across all callers, which intentionally throttles
+    bot-driven traffic harder than real viewers.
+    """
+    header_name = (os.getenv("EIDOLON_REAL_IP_HEADER") or "").strip().lower()
+    if header_name:
+        raw = request.headers.get(header_name) or ""
+        # X-Forwarded-For convention: "client, proxy1, proxy2". The
+        # left-most entry is the original client; the rest are the hops
+        # we're behind. Single-IP headers like CF-Connecting-IP also
+        # split safely (no comma → returns the whole value).
+        first = raw.split(",")[0].strip()
+        if first:
+            return first
+    if request.client and request.client.host:
+        return request.client.host
+    return "unknown"
+
+
+def _parse_offer_body(body_bytes: bytes) -> dict[str, Any] | None:
+    """Decode the offer JSON body into a dict, or ``None`` on failure.
+
+    The middleware treats ``None`` as "malformed / anonymous viewer",
+    so probes and junk fall under the rate limit by default — a real
+    client never sends junk.
+    """
+    if not body_bytes:
+        return None
+    try:
+        body: Any = json.loads(body_bytes.decode("utf-8", errors="replace"))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(body, dict):
+        return None
+    return body
+
+
+def _extract_login_sync_token(body: dict[str, Any] | None) -> str | None:
+    """Pull ``requestData.loginSyncToken`` (or snake_case fallback) out
+    of a parsed body dict. ``None`` on missing / empty / wrong shape.
+    """
+    if not body:
+        return None
+    # Pipecat's `SmallWebRTCRequest.from_dict` accepts both `requestData`
+    # (camelCase, what the JS transport sends) and `request_data`
+    # (snake_case). Mirror that liberality so an out-of-band caller using
+    # snake_case still gets rate-limit-bypassed when authenticated.
+    nested = body.get("requestData")
+    if not isinstance(nested, dict):
+        nested = body.get("request_data")
+    if not isinstance(nested, dict):
+        return None
+    token = nested.get("loginSyncToken")
+    if isinstance(token, str) and token.strip():
+        return token.strip()
+    return None
+
+
+def _normalize_request_data_alias(request: Request, body: dict[str, Any]) -> bool:
+    """Copy ``requestData`` → ``request_data`` on the cached body bytes.
+
+    Returns True when the request payload was mutated (so callers can
+    log this happened); False when no change was needed. Mutates
+    ``request._body`` directly because Starlette's ``_CachedRequest``
+    keys downstream ``wrapped_receive`` off that attribute — see the
+    module docstring for the citation.
+
+    No-op when the body already has ``request_data`` (somebody else
+    fixed it) or has no ``requestData`` (anonymous viewer, no payload
+    to forward). The empty / mistyped cases collapse to no-op too —
+    the goal is to fix the common JS-SDK shape, not to be a general
+    schema migrator.
+    """
+    nested = body.get("requestData")
+    if not isinstance(nested, dict):
+        return False
+    if "request_data" in body:
+        return False
+    body["request_data"] = nested
+    request._body = json.dumps(body).encode("utf-8")  # type: ignore[attr-defined]
+    return True
+
+
+def install_offer_middleware(
+    app: FastAPI,
+    *,
+    quota: AnonymousIpQuota | None = None,
+) -> None:
+    """Wire offer rate limiting + preflight endpoint onto ``app``.
+
+    Call exactly once per process, ideally as soon as ``app`` is in
+    scope so the middleware wraps every subsequent request — including
+    Pipecat's own ``/api/offer`` route registered later by the runner.
+    Idempotency is the caller's responsibility (calling twice would
+    register two middlewares and double-consume the quota).
+    """
+    quota = quota or ANON_QUOTA
+    logger.info(
+        f"[offer-middleware] Installed on {OFFER_PATH} "
+        f"(anonymous quota: {quota.max_per_window}/{quota.window_seconds}s)"
+    )
+
+    @app.middleware("http")
+    async def offer_rate_limit(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Any]],
+    ) -> Any:
+        # Only gate the actual offer POST. PATCH /api/offer (trickled
+        # ICE candidates) reuses the same path but has no business
+        # being throttled: it only follows a successful POST. The
+        # preflight route below has its own peek-only logic. Everything
+        # else (e.g. /api/ice-servers, /start) passes through untouched.
+        if request.method != "POST" or request.url.path != OFFER_PATH:
+            return await call_next(request)
+
+        # Reading the body here is safe because Starlette's
+        # BaseHTTPMiddleware wraps `request` in a `_CachedRequest` whose
+        # `wrapped_receive` re-emits the cached bytes to the downstream
+        # FastAPI route. See module docstring for citations.
+        body_bytes = await request.body()
+        body = _parse_offer_body(body_bytes)
+        # Normalize requestData → request_data before pipecat's route
+        # parses the body — see module docstring for the parsing-bug
+        # explanation. No-op when there's no requestData payload.
+        rewrote = False
+        if body is not None:
+            rewrote = _normalize_request_data_alias(request, body)
+        token = _extract_login_sync_token(body)
+        if token:
+            # Logged-in viewers bypass the quota entirely. The token
+            # itself is re-validated against Workers inside `bot()` —
+            # we don't need to call out to Workers from middleware just
+            # to decide rate-limit eligibility.
+            logger.info(
+                f"[offer-middleware] Logged-in offer (token present, "
+                f"len={len(token)}, body_rewritten={rewrote}); bypassing rate limit"
+            )
+            return await call_next(request)
+
+        ip = _resolve_client_ip(request)
+        result = await quota.try_consume(ip)
+        if not result.allowed:
+            logger.info(
+                f"[offer-rate-limit] Anonymous quota exhausted for ip={ip}; "
+                f"rejecting offer (retry_after={result.retry_after_seconds}s, "
+                f"window={quota.window_seconds}s, max={quota.max_per_window})"
+            )
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "error": "匿名用户每小时通话次数已达上限，请登录后再试",
+                    "retry_after": result.retry_after_seconds,
+                },
+                headers={"Retry-After": str(result.retry_after_seconds)},
+            )
+        logger.debug(
+            f"[offer-rate-limit] Anonymous offer allowed for ip={ip}; "
+            f"remaining={result.remaining}/{quota.max_per_window}"
+        )
+        return await call_next(request)
+
+    @app.post(PREFLIGHT_PATH)
+    async def offer_preflight(request: Request) -> JSONResponse:
+        """Dry-run rate-limit check the frontend calls before connect.
+
+        Body shape mirrors the real offer body — ``{requestData:
+        {loginSyncToken?: string}}`` — so the frontend can reuse one
+        ``requestData`` object for both calls without rebuilding it.
+
+        Returns ``200`` for both "logged-in viewer" and "anonymous with
+        slots remaining"; ``429`` with ``Retry-After`` when the
+        anonymous quota is exhausted. Crucially, this NEVER consumes a
+        slot — successful preflight + actual offer counts as ONE
+        attempt, not two.
+        """
+        body_bytes = await request.body()
+        body = _parse_offer_body(body_bytes)
+        token = _extract_login_sync_token(body)
+        if token:
+            return JSONResponse(content={"ok": True, "anonymous": False})
+
+        ip = _resolve_client_ip(request)
+        result = await quota.peek(ip)
+        if result.allowed:
+            return JSONResponse(
+                content={
+                    "ok": True,
+                    "anonymous": True,
+                    "remaining": result.remaining,
+                }
+            )
+        return JSONResponse(
+            status_code=429,
+            content={
+                "ok": False,
+                "anonymous": True,
+                "error": "匿名用户每小时通话次数已达上限，请登录后再试",
+                "retry_after": result.retry_after_seconds,
+            },
+            headers={"Retry-After": str(result.retry_after_seconds)},
+        )

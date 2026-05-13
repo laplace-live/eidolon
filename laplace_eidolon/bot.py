@@ -64,7 +64,9 @@ from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.transports.smallwebrtc.connection import IceServer, SmallWebRTCConnection
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 
+from .offer_middleware import install_offer_middleware
 from .openrouter import openrouter_headers
+from .user_context import UserContext, resolve_user_context
 
 # ─────────────────────────────────────────────────────────────────────────────
 # WebRTC ICE server configuration
@@ -281,6 +283,17 @@ async def get_ice_servers():
     return await loop.run_in_executor(None, _resolve_ice_response)
 
 
+# Wire the anonymous rate limit + camelCase body normalisation onto
+# pipecat's FastAPI app before the runner registers /api/offer. Order
+# doesn't matter for middleware registration (Starlette applies it on
+# every request regardless of when it was added) but doing it here at
+# module load keeps all server-side plumbing in one place. See
+# offer_middleware.py for why the body rewrite is necessary — without
+# it, runner_args.body would silently be None even when the JS SDK
+# sent a loginSyncToken.
+install_offer_middleware(pipecat_app)
+
+
 # Mem0 is an optional dependency; only import if available so the bot still
 # runs when the user hasn't installed the `mem0` extra or set MEM0_API_KEY.
 try:
@@ -339,6 +352,26 @@ def load_persona() -> str:
     return FALLBACK_PERSONA
 
 
+def _build_persona_prefix(user: UserContext) -> str:
+    """Short Chinese line prepended to ``persona.md`` for logged-in viewers.
+
+    The prefix tells the LLM who's on the other end so the bot can use
+    the viewer's name naturally without the user having to introduce
+    themselves first. Empty string for anonymous viewers — no inject,
+    no leak of "you're talking to nobody specific" framing.
+
+    Wording fits the existing 奶绿 / 奶糖花 vocabulary in ``persona.md``;
+    the "不要主动念UID" line is load-bearing — without it the bot will
+    occasionally read the UID aloud, which sounds robotic.
+    """
+    if not user.is_logged_in or not user.uname:
+        return ""
+    return (
+        f"今天来花店的奶糖花叫「{user.uname}」（B站UID:{user.mid}）。"
+        "聊天里可以自然地叫她/他的名字，但不要每句都重复，也不要主动念UID。\n\n"
+    )
+
+
 class LaplaceRTVIProcessor(RTVIProcessor):
     """RTVIProcessor that brands the bot-ready ``about`` payload as ours."""
 
@@ -352,9 +385,26 @@ class LaplaceRTVIProcessor(RTVIProcessor):
         await super().set_bot_ready(about=about or self._DEFAULT_ABOUT)
 
 
-async def run_bot(transport: BaseTransport):
-    """Main bot logic."""
+async def run_bot(transport: BaseTransport, login_sync_token: str | None = None):
+    """Main bot logic.
+
+    Args:
+        transport: The pipecat transport for this connection.
+        login_sync_token: The viewer's loginSyncToken from
+            ``requestData.loginSyncToken`` in the WebRTC offer. ``None``
+            for anonymous viewers. Validated via Workers inside this
+            function — the middleware only checked it was present, not
+            that it was real.
+    """
     logger.info("Starting bot")
+
+    # Resolve the viewer's identity first — it gates two pipeline
+    # decisions: whether to spin up Mem0 (only for logged-in viewers,
+    # keyed on their Bilibili UID) and what prefix to prepend to the
+    # persona system prompt (so the LLM can use their name naturally).
+    # Fail-open: if Workers is down, user.is_logged_in == False and we
+    # behave as if the viewer was anonymous.
+    user = await resolve_user_context(login_sync_token)
 
     soniox_api_key = os.getenv("SONIOX_API_KEY")
     if not soniox_api_key:
@@ -405,12 +455,15 @@ async def run_bot(transport: BaseTransport):
     )
 
     # LLM service. Persona/identity/voice rules all live in persona.md so
-    # they can be edited without touching code.
+    # they can be edited without touching code. For logged-in viewers we
+    # prepend a short Chinese line with their name/UID so the bot
+    # greets them by name (see _build_persona_prefix); the prefix is
+    # empty for anonymous viewers, leaving persona.md unchanged.
     llm = OpenRouterLLMService(
         api_key=os.getenv("OPENROUTER_API_KEY"),
         settings=OpenRouterLLMService.Settings(
             model=os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-2024-11-20"),
-            system_instruction=load_persona(),
+            system_instruction=_build_persona_prefix(user) + load_persona(),
         ),
         default_headers=openrouter_headers(),
     )
@@ -423,15 +476,19 @@ async def run_bot(transport: BaseTransport):
         ),
     )
 
-    # Optional long-term memory via Mem0. Sits between the user aggregator and
-    # the LLM so it can intercept LLMContextFrame, search relevant memories,
-    # and inject them into the context before the LLM runs.
+    # Long-term memory via Mem0. Only wired up for logged-in viewers —
+    # ``user_id`` is the viewer's Bilibili UID so each fan gets their
+    # own private memory namespace. Anonymous viewers skip Mem0 entirely
+    # rather than pile into a shared ``default-user`` bucket where their
+    # memories would cross-pollute every other anonymous conversation.
     memory = None
     mem0_api_key = os.getenv("MEM0_API_KEY")
-    if mem0_api_key and Mem0MemoryService is not None:
+    if not user.is_logged_in:
+        logger.info("Mem0 skipped: anonymous viewer (no loginSyncToken / validation failed)")
+    elif mem0_api_key and Mem0MemoryService is not None:
         memory = Mem0MemoryService(
             api_key=mem0_api_key,
-            user_id=os.getenv("MEM0_USER_ID", "default-user"),
+            user_id=str(user.mid),
             agent_id=os.getenv("MEM0_AGENT_ID") or None,
             run_id=os.getenv("MEM0_RUN_ID") or None,
             params=Mem0MemoryService.InputParams(
@@ -439,7 +496,7 @@ async def run_bot(transport: BaseTransport):
                 search_threshold=float(os.getenv("MEM0_SEARCH_THRESHOLD", "0.3")),
             ),
         )
-        logger.info("Mem0 long-term memory enabled")
+        logger.info(f"Mem0 long-term memory enabled for user_id={user.mid} ({user.uname!r})")
     elif mem0_api_key and Mem0MemoryService is None:
         logger.warning("MEM0_API_KEY is set but pipecat-ai[mem0] is not installed; skipping memory")
 
@@ -535,6 +592,23 @@ async def run_bot(transport: BaseTransport):
     await runner.run(task)
 
 
+def _extract_login_sync_token(body: Any) -> str | None:
+    """Pull ``loginSyncToken`` out of the parsed ``requestData`` body.
+
+    ``runner_args.body`` is whatever the SmallWebRTC route placed in
+    ``request_data`` — typically the dict the frontend put under
+    ``requestData`` in the offer JSON. The middleware's body rewrite
+    guarantees this populates correctly for the JS SDK's camelCase
+    payloads; here we just validate the inner shape and trim.
+    """
+    if not isinstance(body, dict):
+        return None
+    token = body.get("loginSyncToken")
+    if isinstance(token, str) and token.strip():
+        return token.strip()
+    return None
+
+
 async def bot(runner_args: RunnerArguments):
     """Main bot entry point.
 
@@ -555,7 +629,24 @@ async def bot(runner_args: RunnerArguments):
         ),
     )
 
-    await run_bot(transport)
+    # The middleware in offer_middleware.py normalises camelCase
+    # ``requestData`` to snake_case ``request_data`` before pipecat's
+    # route parses it, so ``runner_args.body`` is the inner dict here
+    # (not the full envelope). For anonymous viewers it's None.
+    login_sync_token = _extract_login_sync_token(runner_args.body)
+    # Spell out what the bot received so a missing-token surprise is
+    # diagnosable from a single log line — without this the silent
+    # "anonymous-everywhere" failure mode is invisible.
+    if login_sync_token:
+        logger.info(
+            f"[bot] Session start with loginSyncToken (len={len(login_sync_token)})"
+        )
+    else:
+        logger.info(
+            f"[bot] Session start without loginSyncToken; "
+            f"runner_args.body={runner_args.body!r}"
+        )
+    await run_bot(transport, login_sync_token=login_sync_token)
 
 
 if __name__ == "__main__":
