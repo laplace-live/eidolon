@@ -45,6 +45,8 @@ from dotenv import load_dotenv
 # fallback defaults even when .env sets a different value.
 load_dotenv(override=True)
 
+from fastapi import Request
+from fastapi.responses import Response
 from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.frames.frames import LLMRunFrame
@@ -294,6 +296,32 @@ async def get_ice_servers():
 # it, runner_args.body would silently be None even when the JS SDK
 # sent a loginSyncToken.
 install_offer_middleware(pipecat_app)
+
+
+# Hide pipecat's built-in SmallWebRTCPrebuiltUI demo (/, /client,
+# /client/*) outside local dev. The runner mounts it unconditionally
+# at pipecat/runner/run.py:_setup_webrtc_routes (`app.mount("/client",
+# SmallWebRTCPrebuiltUI)` plus a `/ → /client/` redirect, no upstream
+# toggle) — fine for `uv run bot.py` on localhost, embarrassing on a
+# public deploy where the page has no rate limit, no Workers
+# integration, and no persona theming. Starlette HTTP middleware runs
+# before routing, so returning early here means the mounted
+# StaticFiles app never sees the request.
+#
+# Dev/prod signal: EIDOLON_REAL_IP_HEADER. Per .env.example this is
+# "blank for direct binds; e.g. cf-connecting-ip when behind a
+# reverse proxy" — i.e. the codebase's existing marker for "we're in
+# production". Pipecat's own ENV=local would be the obvious choice
+# but is unusable: pipecat/runner/run.py force-sets `os.environ["ENV"]
+# = "local"` at module import time, which fires the moment bot.py
+# imports `pipecat_app`, even on a production server.
+@pipecat_app.middleware("http")
+async def _block_pipecat_demo_in_prod(request: Request, call_next):
+    path = request.url.path
+    is_demo = path == "/" or path == "/client" or path.startswith("/client/")
+    if is_demo and (os.getenv("EIDOLON_REAL_IP_HEADER") or "").strip():
+        return Response(status_code=404)
+    return await call_next(request)
 
 
 # Mem0 is an optional dependency; only import if available so the bot still
