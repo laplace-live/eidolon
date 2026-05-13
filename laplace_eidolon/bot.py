@@ -31,8 +31,10 @@ import asyncio
 import os
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 from dotenv import load_dotenv
@@ -329,6 +331,28 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PERSONA_PATH = PROJECT_ROOT / os.getenv("PERSONA_FILE", "persona.md")
 LANCEDB_PATH = PROJECT_ROOT / os.getenv("LANCEDB_PATH", "data/lancedb")
 
+# Timezone used to inject "现在是 …" into the per-session system prompt
+# prefix (see _build_persona_prefix). Defaults to Asia/Shanghai because
+# the persona is Bilibili-based / 虚拟上海 — overridable via
+# PERSONA_TIMEZONE for forks targeting a different streamer locale.
+# `or "Asia/Shanghai"` (not getenv's default) so an empty .env entry —
+# which is exactly what `cp .env.example .env` produces — falls through
+# to the default instead of crashing ZoneInfo with the empty string.
+# Defensive fallback to UTC so a typo'd or unsupported timezone (slim
+# container without tzdata, Windows without the `tzdata` package) only
+# costs a clearer-than-default clock instead of preventing module
+# import — without this the whole bot fails to start.
+try:
+    PERSONA_TZ = ZoneInfo(os.getenv("PERSONA_TIMEZONE") or "Asia/Shanghai")
+except ZoneInfoNotFoundError as e:
+    logger.warning(
+        f"PERSONA_TIMEZONE invalid or tzdata missing ({e}); falling back to UTC. "
+        "On Windows or slim Docker images, install the `tzdata` package."
+    )
+    PERSONA_TZ = ZoneInfo("UTC")
+
+_WEEKDAY_ZH = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+
 FALLBACK_PERSONA = (
     "You are a helpful assistant in a voice conversation. Your responses will "
     "be spoken aloud, so avoid emojis, bullet points, or other formatting that "
@@ -353,23 +377,41 @@ def load_persona() -> str:
 
 
 def _build_persona_prefix(user: UserContext) -> str:
-    """Short Chinese line prepended to ``persona.md`` for logged-in viewers.
+    """Per-session preamble prepended to ``persona.md``.
 
-    The prefix tells the LLM who's on the other end so the bot can use
-    the viewer's name naturally without the user having to introduce
-    themselves first. Empty string for anonymous viewers — no inject,
-    no leak of "you're talking to nobody specific" framing.
+    Always emits the current local date/time so the LLM can reason
+    about time-sensitive lore in ``persona.md`` (e.g. "坚果 跑路 in
+    early 2026" — the model needs today's date to know how long ago
+    that was). Adds a second line with the viewer's name/UID for
+    logged-in viewers so the bot can use it naturally without the user
+    having to introduce themselves first.
 
-    Wording fits the existing 奶绿 / 奶糖花 vocabulary in ``persona.md``;
-    the "不要主动念UID" line is load-bearing — without it the bot will
-    occasionally read the UID aloud, which sounds robotic.
+    The "不要主动念" lines are load-bearing — without them the model
+    occasionally narrates the current time / reads the UID aloud,
+    which sounds robotic and breaks the persona's "短简、不像 AI 助手"
+    rule. Wording matches the 奶绿 / 奶糖花 vocabulary in
+    ``persona.md``.
     """
-    if not user.is_logged_in or not user.uname:
-        return ""
-    return (
-        f"今天来花店的奶糖花叫「{user.uname}」（B站UID:{user.mid}）。"
-        "聊天里可以自然地叫她/他的名字，但不要每句都重复，也不要主动念UID。\n\n"
+    now = datetime.now(PERSONA_TZ)
+    # Manual int formatting (not %-m / %#m) so the output is portable
+    # across Linux, macOS, and Windows — strftime's non-padding flag
+    # uses different syntax per-platform.
+    date_str = (
+        f"{now.year}年{now.month}月{now.day}日 "
+        f"{_WEEKDAY_ZH[now.weekday()]} "
+        f"{now.hour:02d}:{now.minute:02d}"
     )
+    lines = [
+        f"现在是 {date_str}。"
+        "如果用户问到时间或日期，根据这里的事实回答；"
+        "不要主动念时间，除非话题相关。",
+    ]
+    if user.is_logged_in and user.uname:
+        lines.append(
+            f"今天来花店的奶糖花叫「{user.uname}」（B站UID:{user.mid}）。"
+            "聊天里可以自然地叫她/他的名字，但不要每句都重复，也不要主动念UID。"
+        )
+    return "\n".join(lines) + "\n\n"
 
 
 class LaplaceRTVIProcessor(RTVIProcessor):
@@ -454,11 +496,12 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
         ),
     )
 
-    # LLM service. Persona/identity/voice rules all live in persona.md so
-    # they can be edited without touching code. For logged-in viewers we
-    # prepend a short Chinese line with their name/UID so the bot
-    # greets them by name (see _build_persona_prefix); the prefix is
-    # empty for anonymous viewers, leaving persona.md unchanged.
+    # LLM service. Persona/identity/voice rules all live in persona.md
+    # so they can be edited without touching code. _build_persona_prefix
+    # injects per-session dynamic facts on top: the current date (for
+    # all viewers, so the model can ground time-sensitive lore) and,
+    # for logged-in viewers only, a line with their name/UID so the
+    # bot greets them naturally.
     llm = OpenRouterLLMService(
         api_key=os.getenv("OPENROUTER_API_KEY"),
         settings=OpenRouterLLMService.Settings(
