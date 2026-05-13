@@ -64,6 +64,8 @@ from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.transports.smallwebrtc.connection import IceServer, SmallWebRTCConnection
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 
+from openrouter import openrouter_headers
+
 # ─────────────────────────────────────────────────────────────────────────────
 # WebRTC ICE server configuration
 # ─────────────────────────────────────────────────────────────────────────────
@@ -333,8 +335,7 @@ def load_persona() -> str:
 
 
 class LaplaceRTVIProcessor(RTVIProcessor):
-    """RTVIProcessor that brands the bot-ready ``about`` payload as ours.
-    """
+    """RTVIProcessor that brands the bot-ready ``about`` payload as ours."""
 
     # Keep in sync with pyproject.toml [project].version.
     _DEFAULT_ABOUT = {
@@ -406,6 +407,7 @@ async def run_bot(transport: BaseTransport):
             model=os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-2024-11-20"),
             system_instruction=load_persona(),
         ),
+        default_headers=openrouter_headers(),
     )
 
     context = LLMContext()

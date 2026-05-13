@@ -81,6 +81,7 @@ from openai import APIError, AsyncOpenAI
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from openrouter import openrouter_headers  # noqa: E402
 from tools._streams import (  # noqa: E402
     ParsedStream,
     StreamChunk,
@@ -257,6 +258,7 @@ def _get_client() -> AsyncOpenAI:
         api_key=api_key,
         # Refinement is offline batch work; let it retry on flakes.
         max_retries=4,
+        default_headers=openrouter_headers(),
     )
 
 

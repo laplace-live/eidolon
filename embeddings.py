@@ -12,8 +12,12 @@ queried at runtime). Specifically:
 What lives here:
 
 - ``embed_texts()`` / ``embed_texts_with_usage()`` — call the OpenAI-compatible
-  /v1/embeddings endpoint (default OpenRouter → Gemini)
+  /v1/embeddings endpoint (default OpenRouter → Gemini), with quota-aware
+  retries that handle the OpenRouter "200-with-error-body" quirk.
 - ``EmbeddingUsage`` — token + USD cost accumulator
+- ``EmbedCache`` — persistent disk cache for embedding vectors, used by both
+  ingest scripts so a partial run can be resumed without re-paying for
+  embeddings that already succeeded.
 - ``open_table()`` — read-only LanceDB table opener (returns ``None`` if
   the table doesn't exist yet, so services can boot before ingest has run)
 - ``DEFAULT_*`` config — provider URL, model, dim, DB path
@@ -36,18 +40,28 @@ account needed. Override per env var:
 
 If you swap to a model with a different dimension, update ``EMBED_DIM``
 **and** re-run both ingest scripts — the LanceDB schema is fixed-size,
-and old vectors won't be comparable to new ones.
+and old vectors won't be comparable to new ones. The cache is keyed by
+``(model, dim, text)`` so old entries are auto-invalidated; the file
+just keeps growing until you delete it.
 """
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
 import os
+import random
+import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
 import lancedb
+import numpy as np
 from lancedb.table import Table
+from loguru import logger
 from openai import AsyncOpenAI
+
+from openrouter import openrouter_headers
 
 DEFAULT_DB_PATH = "data/lancedb"
 DEFAULT_EMBED_BASE_URL = "https://openrouter.ai/api/v1"
@@ -57,6 +71,44 @@ DEFAULT_EMBED_DIM = int(os.getenv("EMBED_DIM", "3072"))
 ``tools/ingest_streams.py`` and ``tools/ingest_facts.py`` match what
 ``embed_texts()`` will produce. To change, set the env var BEFORE
 importing this module (i.e. in .env) and re-ingest both tables."""
+
+# Retries for the "200 OK with no `data` field" case. OpenRouter wraps
+# upstream errors inside a 200 body (``{"error": {...}}``) instead of
+# returning a real HTTP status, so the OpenAI SDK's built-in ``max_retries``
+# ignores them. Two budgets, sized for two very different failure modes:
+#
+# - *Data* failures (transient upstream blips, malformed responses): short
+#   exponential backoff, modest retry count. Handled in seconds.
+# - *Quota* failures (HTTP 429 / RESOURCE_EXHAUSTED): fixed long delay
+#   matching the typical 60s Vertex AI quota window, with more attempts
+#   because the OpenRouter pool is shared and a busy minute can take
+#   several windows to clear. Without this distinction, exponential
+#   backoff exhausts in ~30s — never long enough for the quota to reset
+#   — and the run dies on the first quota incident.
+MAX_EMBED_DATA_RETRIES = 5
+EMBED_RETRY_BASE_DELAY = 1.0
+MAX_EMBED_QUOTA_RETRIES = 10
+EMBED_QUOTA_BACKOFF = 60.0
+
+
+def _is_quota_error(err_msg: str) -> bool:
+    """True if ``err_msg`` looks like a rate-limit / quota error.
+
+    OpenRouter forwards Vertex AI's RESOURCE_EXHAUSTED inside a 200 body,
+    so we have to scan the message string rather than checking an HTTP
+    status code. Matches conservatively — only on signals strong enough
+    that fixed 60s backoff is the right response.
+    """
+    if not err_msg:
+        return False
+    msg_lower = err_msg.lower()
+    return (
+        "429" in err_msg
+        or "resource_exhausted" in msg_lower
+        or "quota exceeded" in msg_lower
+        or "rate limit" in msg_lower
+        or "rate-limit" in msg_lower
+    )
 
 
 _embed_client: AsyncOpenAI | None = None
@@ -78,7 +130,15 @@ def _get_embed_client() -> AsyncOpenAI:
                 "Embeddings need an API key. Set OPENROUTER_API_KEY (reused "
                 "from the LLM config) or EMBED_API_KEY for a different provider."
             )
-        _embed_client = AsyncOpenAI(base_url=base_url, api_key=api_key)
+        # max_retries=5 covers the genuine transient failures the SDK knows
+        # about (429, 5xx, connection drops). The 200-with-no-data case is
+        # handled by our own loop in ``embed_texts_with_usage``.
+        _embed_client = AsyncOpenAI(
+            base_url=base_url,
+            api_key=api_key,
+            max_retries=5,
+            default_headers=openrouter_headers(),
+        )
     return _embed_client
 
 
@@ -139,15 +199,82 @@ async def embed_texts_with_usage(
     # that don't honour that exact contract round-trip an empty response and
     # the SDK raises "No embedding data received". Pinning float bypasses
     # the base64 path entirely.
-    resp = await client.embeddings.create(
-        model=model,
-        input=texts,
-        dimensions=dimensions,
-        encoding_format="float",
-        # OpenRouter now always returns usage.cost, but passing this is
-        # harmless and matches how tools/refine.py opts in for chat.
-        extra_body={"usage": {"include": True}},
-    )
+    #
+    # Retry loop: even with the float fix, OpenRouter regularly returns a
+    # 200 OK whose body has no ``data`` field — either a transient upstream
+    # blip or a quota error wrapped in the success envelope. We split the
+    # two cases because they need very different backoff:
+    #   * data error → short exponential (might just be flaky)
+    #   * quota error → fixed 60s wait (must let the quota window reset)
+    resp = None
+    last_err = "unknown"
+    data_failures = 0
+    quota_failures = 0
+    while True:
+        candidate = await client.embeddings.create(
+            model=model,
+            input=texts,
+            dimensions=dimensions,
+            encoding_format="float",
+            # OpenRouter now always returns usage.cost, but passing this is
+            # harmless and matches how tools/refine.py opts in for chat.
+            extra_body={"usage": {"include": True}},
+        )
+        if candidate.data:
+            resp = candidate
+            break
+
+        candidate_dict = candidate.model_dump() if hasattr(candidate, "model_dump") else {}
+        err = candidate_dict.get("error") if isinstance(candidate_dict, dict) else None
+        if isinstance(err, dict) and err.get("message"):
+            last_err = str(err["message"])
+        elif isinstance(err, dict):
+            last_err = str(err)
+        else:
+            last_err = "provider returned no embedding data"
+
+        if _is_quota_error(last_err):
+            quota_failures += 1
+            if quota_failures > MAX_EMBED_QUOTA_RETRIES:
+                break
+            # Fixed long wait + jitter. The jitter spreads concurrent
+            # OpenRouter clients out so we don't all retry at the same
+            # instant the quota window resets.
+            delay = EMBED_QUOTA_BACKOFF + random.uniform(0, 10)
+            attempt_label = f"quota retry {quota_failures}/{MAX_EMBED_QUOTA_RETRIES}"
+        else:
+            data_failures += 1
+            if data_failures > MAX_EMBED_DATA_RETRIES:
+                break
+            # Exponential backoff with jitter: 1, 2, 4, 8, 16s (+0-1s).
+            delay = EMBED_RETRY_BASE_DELAY * (2 ** (data_failures - 1)) + random.uniform(0, 1)
+            attempt_label = f"retry {data_failures}/{MAX_EMBED_DATA_RETRIES}"
+
+        # Collapse multi-line JSON errors so each retry stays on one log line.
+        compact_err = " ".join(last_err.split())[:240]
+        logger.warning(
+            f"Embedding {attempt_label} got no data ({compact_err}). "
+            f"Retrying in {delay:.1f}s..."
+        )
+        await asyncio.sleep(delay)
+
+    if resp is None or not resp.data:
+        suggestions = ""
+        if quota_failures > 0:
+            suggestions = (
+                "\n  Sustained quota error — options:"
+                "\n    - Wait and re-run (cached batches will be skipped)"
+                "\n    - Switch to a less rate-limited model: "
+                "set EMBED_MODEL=openai/text-embedding-3-large (also 3072-dim)"
+                "\n    - Submit a quota increase with the upstream provider"
+            )
+        attempts = data_failures + quota_failures
+        raise RuntimeError(
+            f"Embedding provider returned no data after {attempts} attempts "
+            f"({data_failures} data, {quota_failures} quota). "
+            f"Last error: {last_err}{suggestions}"
+        )
+
     vectors = [d.embedding for d in resp.data]
 
     # The OpenAI SDK's typed response doesn't model OpenRouter's ``cost``
@@ -211,3 +338,125 @@ def open_table(
     if table_name not in db.list_tables().tables:
         return None
     return db.open_table(table_name)
+
+
+DEFAULT_EMBED_CACHE_PATH = "data/embed_cache.db"
+
+
+class EmbedCache:
+    """Persistent disk cache for embedding vectors.
+
+    Why this exists: the ingest scripts churn through tens of thousands of
+    chunks against an OpenRouter→Vertex AI endpoint that periodically 429s
+    (shared upstream quota pool). When that crashes the run, every vector
+    we already paid for is gone. Caching them to disk per batch turns
+    "rerun loses 25 minutes" into "rerun finishes in seconds".
+
+    Storage: SQLite (stdlib, atomic-on-commit, no extra deps) at
+    ``data/embed_cache.db`` by default, sibling to the LanceDB dir.
+    Vectors are float32 LE bytes — ~12KB per row at 3072 dim, ~370MB
+    for 31k rows. Big but proportional, and the next ingest pays it back.
+
+    Cache key is ``sha1(model || dim || text)``. Changing ``EMBED_MODEL``
+    or ``EMBED_DIM`` makes every lookup miss naturally — old entries
+    stay in the file but are never read; delete the file to reclaim the
+    disk if you care.
+
+    Not async-safe across processes (SQLite has its own locking but our
+    single-writer pattern is enough) and not thread-safe by default. The
+    ingest scripts are single-process, single-writer, so this is fine.
+    """
+
+    # SQLite's compiled-in default placeholder limit is 999; chunk well
+    # under it for portability.
+    _LOOKUP_CHUNK = 500
+
+    def __init__(self, path: str | os.PathLike[str]):
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        # check_same_thread=False is safe here because asyncio shifts
+        # callbacks across the event loop's single OS thread; the GIL
+        # plus our serial-write pattern means there's no actual
+        # concurrent access, but the SDK's asyncio plumbing trips the
+        # default same-thread guard anyway.
+        self.conn = sqlite3.connect(str(self.path), check_same_thread=False)
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS embed_cache ("
+            "  key TEXT PRIMARY KEY, "
+            "  vector BLOB NOT NULL"
+            ")"
+        )
+        # WAL mode lets readers continue while we commit. Negligible win
+        # for our serial pattern but harmless and survives Ctrl-C better.
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.commit()
+
+    @staticmethod
+    def _key(model: str, dim: int, text: str) -> str:
+        h = hashlib.sha1()
+        h.update(f"{model}\0{dim}\0".encode("utf-8"))
+        h.update(text.encode("utf-8"))
+        return h.hexdigest()
+
+    def get_many(
+        self,
+        model: str,
+        dim: int,
+        texts: list[str],
+    ) -> dict[int, list[float]]:
+        """Look up vectors for ``texts`` in one shot.
+
+        Returns a dict mapping each text's index (in the input list) to
+        its cached vector. Missing indices = cache misses, which the
+        caller should embed fresh.
+        """
+        if not texts:
+            return {}
+        keys = [self._key(model, dim, t) for t in texts]
+        by_key: dict[str, bytes] = {}
+        for i in range(0, len(keys), self._LOOKUP_CHUNK):
+            chunk = keys[i : i + self._LOOKUP_CHUNK]
+            placeholders = ",".join("?" * len(chunk))
+            query = f"SELECT key, vector FROM embed_cache WHERE key IN ({placeholders})"
+            for k, v in self.conn.execute(query, chunk):
+                by_key[k] = v
+        out: dict[int, list[float]] = {}
+        for i, k in enumerate(keys):
+            blob = by_key.get(k)
+            if blob is not None:
+                out[i] = np.frombuffer(blob, dtype=np.float32).tolist()
+        return out
+
+    def put_many(
+        self,
+        model: str,
+        dim: int,
+        items: list[tuple[str, list[float]]],
+    ) -> None:
+        """Persist a batch of (text, vector) pairs and commit.
+
+        Commits per call so a crash mid-batch only loses the in-flight
+        embedding, never the previous one.
+        """
+        if not items:
+            return
+        rows = [
+            (
+                self._key(model, dim, text),
+                np.asarray(vec, dtype=np.float32).tobytes(),
+            )
+            for text, vec in items
+        ]
+        self.conn.executemany(
+            "INSERT OR REPLACE INTO embed_cache (key, vector) VALUES (?, ?)",
+            rows,
+        )
+        self.conn.commit()
+
+    def count(self) -> int:
+        """Total cached vectors, across all (model, dim) keys."""
+        row = self.conn.execute("SELECT COUNT(*) FROM embed_cache").fetchone()
+        return int(row[0]) if row else 0
+
+    def close(self) -> None:
+        self.conn.close()

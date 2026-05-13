@@ -63,7 +63,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from embeddings import (  # noqa: E402
     DEFAULT_DB_PATH,
+    DEFAULT_EMBED_CACHE_PATH,
     DEFAULT_EMBED_DIM,
+    DEFAULT_EMBED_MODEL,
+    EmbedCache,
     EmbeddingUsage,
     embed_texts_with_usage,
 )
@@ -212,25 +215,63 @@ def build_arrow_schema() -> pa.Schema:
     )
 
 
-async def embed_in_batches(rows: list[dict[str, Any]], batch_size: int = 64) -> EmbeddingUsage:
+async def embed_in_batches(
+    rows: list[dict[str, Any]],
+    *,
+    batch_size: int = 64,
+    cache: EmbedCache | None = None,
+) -> EmbeddingUsage:
     """Embed each row's ``embed_input`` and stash the vector on the row.
 
-    Done in batches to keep request payloads small and parallel
-    progress visible. Returns the aggregate token + USD cost reported
+    Done in batches to keep request payloads small and progress visible.
+    If ``cache`` is provided, vectors already on disk are reused (so a
+    failed/aborted previous run only re-pays for what wasn't completed),
+    and freshly-embedded batches are written through to the cache before
+    the next batch starts. Returns the aggregate token + USD cost reported
     by OpenRouter so the caller can summarize spend at the end.
     """
     total = EmbeddingUsage()
-    for start in range(0, len(rows), batch_size):
-        batch = rows[start : start + batch_size]
+
+    # Cache key has to match what we'll send to the API; resolve once.
+    model = os.getenv("EMBED_MODEL", DEFAULT_EMBED_MODEL)
+    dim = DEFAULT_EMBED_DIM
+
+    # Hit pass: serve as many vectors from disk as we can before any API
+    # call. Done in one shot rather than per-batch so the "loaded N from
+    # cache" log line lands up front and the user knows what's coming.
+    if cache is not None:
+        texts = [r["embed_input"] for r in rows]
+        cached = cache.get_many(model, dim, texts)
+        for i, vec in cached.items():
+            rows[i]["vector"] = vec
+        misses = [r for i, r in enumerate(rows) if i not in cached]
+        if cached:
+            logger.info(
+                f"Cache: {len(cached)}/{len(rows)} embeddings reused, "
+                f"{len(misses)} need fresh embedding"
+            )
+    else:
+        misses = rows
+
+    if not misses:
+        logger.info("All embeddings served from cache; nothing to embed.")
+        return total
+
+    for start in range(0, len(misses), batch_size):
+        batch = misses[start : start + batch_size]
         texts = [r["embed_input"] for r in batch]
-        vectors, usage = await embed_texts_with_usage(texts)
+        vectors, usage = await embed_texts_with_usage(texts, model=model, dimensions=dim)
         for row, vec in zip(batch, vectors):
             row["vector"] = vec
+        # Write through immediately so a crash on the *next* batch doesn't
+        # waste this batch's spend. SQLite commit-per-batch is cheap.
+        if cache is not None:
+            cache.put_many(model, dim, [(r["embed_input"], r["vector"]) for r in batch])
         total.add(usage)
-        progress = min(start + batch_size, len(rows))
+        progress = min(start + batch_size, len(misses))
         cost_str = f", ${usage.cost_usd:.6f}" if usage.cost_source == "openrouter" else ""
         logger.info(
-            f"Embedded {progress}/{len(rows)} chunks ({usage.total_tokens} tokens{cost_str})"
+            f"Embedded {progress}/{len(misses)} chunks ({usage.total_tokens} tokens{cost_str})"
         )
     return total
 
@@ -281,7 +322,23 @@ async def main_async(args: argparse.Namespace) -> int:
         return 0
 
     db_path.mkdir(parents=True, exist_ok=True)
-    usage = await embed_in_batches(rows)
+
+    cache: EmbedCache | None = None
+    if not args.no_cache:
+        cache_path = Path(args.cache_path).resolve()
+        if args.clear_cache and cache_path.exists():
+            cache_path.unlink()
+            logger.info(f"Cleared embedding cache at {cache_path}")
+        cache = EmbedCache(cache_path)
+        logger.info(
+            f"Embedding cache: {cache_path} ({cache.count()} vectors on disk)"
+        )
+
+    try:
+        usage = await embed_in_batches(rows, cache=cache)
+    finally:
+        if cache is not None:
+            cache.close()
     write_table(rows, db_path, args.table)
     if usage.cost_source == "openrouter":
         logger.info(
@@ -327,6 +384,26 @@ def main() -> int:
         "--dry-run",
         action="store_true",
         help="Parse and chunk but skip embedding and writing.",
+    )
+    parser.add_argument(
+        "--cache-path",
+        default=DEFAULT_EMBED_CACHE_PATH,
+        help=(
+            "SQLite file used to cache embedding vectors so a crashed/re-run "
+            f"ingest skips work that already succeeded (default: {DEFAULT_EMBED_CACHE_PATH}). "
+            "Cache key is (model, dim, text); changing EMBED_MODEL or EMBED_DIM "
+            "auto-invalidates entries."
+        ),
+    )
+    parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        help="Skip the embedding cache entirely (always re-embed).",
+    )
+    parser.add_argument(
+        "--clear-cache",
+        action="store_true",
+        help="Delete the embedding cache file before this run.",
     )
     args = parser.parse_args()
     return asyncio.run(main_async(args))
