@@ -6,10 +6,20 @@ Pipecat creates in ``pipecat.runner.run``:
 
 1. A Starlette HTTP middleware on ``POST /api/offer``. Reads the body
    once, looks for ``requestData.loginSyncToken``, and either lets the
-   request through (logged-in viewer) or consumes one slot from
-   :data:`rate_limit.ANON_QUOTA` (anonymous viewer). If the slot would
-   be the (N+1)th in the window, returns ``429`` with ``Retry-After``
+   request through (token *validated* as a logged-in Bilibili viewer)
+   or consumes one slot from :data:`rate_limit.ANON_QUOTA` (anonymous
+   viewer OR token present but didn't validate). If the slot would be
+   the (N+1)th in the window, returns ``429`` with ``Retry-After``
    without ever spawning the WebRTC pipeline.
+
+   The validation is intentional: an earlier trust-on-presence design
+   let an attacker bypass the rate limit by sending any non-empty
+   string as ``loginSyncToken``, spawning a full STT+LLM+TTS pipeline
+   per probe. Validation now happens here against the Workers helper
+   via :func:`user_context.resolve_user_context`, which keys an
+   in-process TTL cache on the token hash — repeat probes with the
+   same bad token cost roughly one Workers hit per cache window and
+   the legit-user path is essentially free (bot() reuses the cache).
 
 2. The same middleware also rewrites the body to copy ``requestData``
    to ``request_data`` (snake_case) before handing off to pipecat's
@@ -29,7 +39,10 @@ Pipecat creates in ``pipecat.runner.run``:
    on internal reconnect retries before surfacing any error — by the
    time the catch fires on the browser the 429 context is gone. With
    the preflight, a rate-limited viewer sees the friendly Chinese
-   message instantly.
+   message instantly. Preflight validates the token too, for the same
+   reason as the main middleware — and the cached validation means
+   preflight + real offer counts as a single Workers hit for legit
+   viewers.
 
 Why a Starlette ``BaseHTTPMiddleware`` is safe here
 ---------------------------------------------------
@@ -67,6 +80,7 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 
 from .rate_limit import ANON_QUOTA, AnonymousIpQuota
+from .user_context import resolve_user_context
 
 # Shared with `bot.py`'s @pipecat_app.get registration so the path lives
 # in exactly one place.
@@ -207,15 +221,32 @@ def install_offer_middleware(
             rewrote = _normalize_request_data_alias(request, body)
         token = _extract_login_sync_token(body)
         if token:
-            # Logged-in viewers bypass the quota entirely. The token
-            # itself is re-validated against Workers inside `bot()` —
-            # we don't need to call out to Workers from middleware just
-            # to decide rate-limit eligibility.
+            # Validate the token before bypassing the quota. Trust-on-
+            # presence would let any non-empty string spawn a full
+            # WebRTC pipeline (STT + LLM + TTS) without consuming a
+            # slot — see module docstring. ``resolve_user_context``
+            # caches both successes and failures for
+            # ``EIDOLON_VALIDATE_TTL_SEC`` so probes from the same bad
+            # token only cost one Workers hit per cache window, and
+            # bot()'s subsequent call hits the same cache.
+            user = await resolve_user_context(token)
+            if user.is_logged_in:
+                logger.info(
+                    f"[offer-middleware] Logged-in offer (validated "
+                    f"mid={user.mid}, len={len(token)}, "
+                    f"body_rewritten={rewrote}); bypassing rate limit"
+                )
+                return await call_next(request)
+            # Token present but didn't validate: revoked, malformed,
+            # or forged. Don't tell the caller specifically — fall
+            # through to the same anonymous quota path a probe with
+            # no token at all would take. The 429 message stays
+            # identical so we don't leak whether a token was a
+            # near-miss.
             logger.info(
-                f"[offer-middleware] Logged-in offer (token present, "
-                f"len={len(token)}, body_rewritten={rewrote}); bypassing rate limit"
+                f"[offer-middleware] Token present but did not validate "
+                f"(len={len(token)}); falling through to anonymous quota"
             )
-            return await call_next(request)
 
         ip = _resolve_client_ip(request)
         result = await quota.try_consume(ip)
@@ -257,7 +288,17 @@ def install_offer_middleware(
         body = _parse_offer_body(body_bytes)
         token = _extract_login_sync_token(body)
         if token:
-            return JSONResponse(content={"ok": True, "anonymous": False})
+            # Match the main middleware: validate before declaring
+            # the viewer logged-in. ``resolve_user_context`` shares
+            # the cache used by the real /api/offer path, so this
+            # preflight + the real offer count as a single Workers
+            # round-trip for legit viewers.
+            user = await resolve_user_context(token)
+            if user.is_logged_in:
+                return JSONResponse(content={"ok": True, "anonymous": False})
+            # Bad token: fall through and report the anonymous quota
+            # state. We deliberately don't differentiate "no token"
+            # from "bad token" in the response shape.
 
         ip = _resolve_client_ip(request)
         result = await quota.peek(ip)
