@@ -42,34 +42,32 @@ streamer broadcast it, not today.
 
 Usage::
 
-    cd server
-
     # Full pipeline on a URL list (this is the common case):
-    uv run python -m tools.pipeline data/video-sample.txt
+    uv run laplace-pipeline data/video-sample.txt
 
     # Skip download (already have the m4a files locally):
-    uv run python -m tools.pipeline data/video-sample.txt \\
+    uv run laplace-pipeline data/video-sample.txt \\
         --stages transcribe,refine,ingest
 
     # See what would happen without doing anything:
-    uv run python -m tools.pipeline data/video-sample.txt --dry-run
+    uv run laplace-pipeline data/video-sample.txt --dry-run
 
     # Fewer surprises if a single bad URL should fail the whole run:
-    uv run python -m tools.pipeline data/video-sample.txt --abort-on-error
+    uv run laplace-pipeline data/video-sample.txt --abort-on-error
 
     # Run several Soniox transcribes in parallel (one subprocess per file).
     # 4–8 is a good sweet spot for typical home upload bandwidth; Soniox
     # async accounts cap concurrent jobs at 25 so stay well below that.
     # With concurrency >1, each child's output is captured and prefixed
     # with [idx/total stem] so progress lines stay readable:
-    uv run python -m tools.pipeline data/video-sample.txt \\
+    uv run laplace-pipeline data/video-sample.txt \\
         --transcribe-concurrency 6
 
     # Custom transcribe / refine knobs (pipeline forwards the common ones).
     # --transcribe-concurrency parallelises transcribe subprocesses;
     # --refine-concurrency parallelises in-process LLM calls inside refine.
     # They compose freely:
-    uv run python -m tools.pipeline data/video-sample.txt \\
+    uv run laplace-pipeline data/video-sample.txt \\
         --language zh --provider soniox \\
         --transcribe-concurrency 6 \\
         --refine-model openai/gpt-4o-mini --refine-concurrency 16
@@ -88,19 +86,15 @@ from pathlib import Path
 
 from loguru import logger
 
-# Allow running both as module (`python -m tools.pipeline`) and as a
-# script. Mirrors the pattern used in tools/ingest_streams.py and tools/refine.py.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from tools.download import (  # noqa: E402, I001
+from .download import (
     DEFAULT_BROWSER,
     DEFAULT_FORMAT,
     DEFAULT_VODS_DIR,
     DownloadReport,
     download_urls,
-    print_summary as print_download_summary,
     read_url_list,
 )
+from .download import print_summary as print_download_summary
 
 ALL_STAGES = ("download", "transcribe", "refine", "ingest")
 DEFAULT_STREAMS_DIR = Path("streams")
@@ -237,11 +231,11 @@ def _build_transcribe_cmd(
     context_file: Path | None,
     keep_soniox_files: bool,
 ) -> list[str]:
-    """Construct the ``python -m tools.transcribe`` command for one audio file."""
+    """Construct the ``python -m laplace_eidolon.tools.transcribe`` command for one audio file."""
     cmd = [
         sys.executable,
         "-m",
-        "tools.transcribe",
+        "laplace_eidolon.tools.transcribe",
         str(audio),
         "--date",
         date_iso,
@@ -591,7 +585,7 @@ def stage_refine(
     cmd = [
         sys.executable,
         "-m",
-        "tools.refine",
+        "laplace_eidolon.tools.refine",
         "--streams-dir",
         str(streams_dir),
     ]
@@ -619,7 +613,7 @@ def stage_ingest(
     cmd = [
         sys.executable,
         "-m",
-        "tools.ingest_streams",
+        "laplace_eidolon.tools.ingest_streams",
         "--streams-dir",
         str(streams_dir),
     ]

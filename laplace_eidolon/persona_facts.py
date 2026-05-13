@@ -35,7 +35,7 @@ from pipecat.frames.frames import Frame, LLMContextFrame
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pydantic import BaseModel, Field
 
-from embeddings import DEFAULT_DB_PATH, embed_texts, open_table
+from .embeddings import DEFAULT_DB_PATH, embed_texts, open_table
 
 DEFAULT_TABLE = "persona_facts"
 
@@ -121,7 +121,7 @@ class PersonaFactsService(FrameProcessor):
             logger.warning(
                 f"PersonaFactsService: no LanceDB table at "
                 f"{self._db_path}/{self._table_name}.lance — retrieval will be a no-op. "
-                "Run `uv run python -m tools.ingest_facts` after authoring data/*设定集.txt."
+                "Run `uv run laplace-ingest-facts` after authoring data/*设定集.txt."
             )
         else:
             logger.info(

@@ -25,10 +25,9 @@ embeddings are cheap, so reproducibility beats incrementalism.
 
 Usage::
 
-    cd server
-    uv run python -m tools.ingest_facts                          # rebuild from data/*设定集.txt + data/*事件集.txt
-    uv run python -m tools.ingest_facts --files data/x.txt       # custom file list
-    uv run python -m tools.ingest_facts --dry-run                # show what would be written
+    uv run laplace-ingest-facts                          # rebuild from data/*设定集.txt + data/*事件集.txt
+    uv run laplace-ingest-facts --files data/x.txt       # custom file list
+    uv run laplace-ingest-facts --dry-run                # show what would be written
 """
 
 from __future__ import annotations
@@ -38,7 +37,6 @@ import asyncio
 import hashlib
 import os
 import re
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -47,10 +45,7 @@ import pyarrow as pa
 from dotenv import load_dotenv
 from loguru import logger
 
-# Allow running both as module (``python -m tools.ingest_facts``) and as a script.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from embeddings import (  # noqa: E402
+from ..embeddings import (
     DEFAULT_DB_PATH,
     DEFAULT_EMBED_CACHE_PATH,
     DEFAULT_EMBED_DIM,
@@ -320,9 +315,7 @@ async def main_async(args: argparse.Namespace) -> int:
             cache_path.unlink()
             logger.info(f"Cleared embedding cache at {cache_path}")
         cache = EmbedCache(cache_path)
-        logger.info(
-            f"Embedding cache: {cache_path} ({cache.count()} vectors on disk)"
-        )
+        logger.info(f"Embedding cache: {cache_path} ({cache.count()} vectors on disk)")
 
     try:
         usage = await embed_in_batches(rows, cache=cache)

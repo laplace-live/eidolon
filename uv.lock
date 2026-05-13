@@ -1644,7 +1644,7 @@ wheels = [
 [[package]]
 name = "laplace-eidolon"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "lancedb" },
     { name = "pipecat-ai", version = "0.0.108", source = { registry = "https://pypi.org/simple" }, extra = ["fish", "mem0", "runner", "soniox", "webrtc"], marker = "python_full_version < '3.11'" },

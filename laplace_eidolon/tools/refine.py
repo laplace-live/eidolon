@@ -41,25 +41,23 @@ Usage
 -----
 ::
 
-    cd server
-
     # Refine all streams that have new/unrefined chunks
-    uv run python -m tools.refine
+    uv run laplace-refine
 
     # Refine specific files
-    uv run python -m tools.refine streams/2026-05-09-zzz.md
+    uv run laplace-refine streams/2026-05-09-zzz.md
 
     # Force re-refine even if a sidecar already exists
-    uv run python -m tools.refine --force
+    uv run laplace-refine --force
 
     # Use a different model
-    uv run python -m tools.refine --model anthropic/claude-haiku-latest
+    uv run laplace-refine --model anthropic/claude-haiku-latest
 
     # Cost preview without spending tokens (token estimate ~ char count / 2)
-    uv run python -m tools.refine --dry-run
+    uv run laplace-refine --dry-run
 
     # Tune concurrency (default 8)
-    uv run python -m tools.refine --concurrency 16
+    uv run laplace-refine --concurrency 16
 """
 
 from __future__ import annotations
@@ -68,7 +66,6 @@ import argparse
 import asyncio
 import json
 import os
-import sys
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -79,10 +76,8 @@ from dotenv import load_dotenv
 from loguru import logger
 from openai import APIError, AsyncOpenAI
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from openrouter import extract_cost_usd, openrouter_headers  # noqa: E402
-from tools._streams import (  # noqa: E402
+from ..openrouter import extract_cost_usd, openrouter_headers
+from ._streams import (
     ParsedStream,
     StreamChunk,
     iter_streams,

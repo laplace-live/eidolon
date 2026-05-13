@@ -10,10 +10,9 @@ without the pipeline around it. Useful for:
 
 Usage::
 
-    cd server
-    uv run python -m tools.search "你5月9号干啥了"
-    uv run python -m tools.search "fire temple" --top-k 5 --full
-    uv run python -m tools.search "茶馆" --json
+    uv run laplace-search "你5月9号干啥了"
+    uv run laplace-search "fire temple" --top-k 5 --full
+    uv run laplace-search "茶馆" --json
 """
 
 from __future__ import annotations
@@ -27,10 +26,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 from loguru import logger
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from embeddings import DEFAULT_DB_PATH  # noqa: E402
-from stream_archive import DEFAULT_TABLE, StreamArchiveService  # noqa: E402
+from ..embeddings import DEFAULT_DB_PATH
+from ..stream_archive import DEFAULT_TABLE, StreamArchiveService
 
 
 async def main_async(args: argparse.Namespace) -> int:
@@ -46,7 +43,7 @@ async def main_async(args: argparse.Namespace) -> int:
     )
     if svc._table is None:
         print(f"No LanceDB table at {args.db_path}/{args.table}.lance", file=sys.stderr)
-        print("Run `uv run python -m tools.ingest_streams` first.", file=sys.stderr)
+        print("Run `uv run laplace-ingest-streams` first.", file=sys.stderr)
         return 1
 
     hits = await svc._search(args.query)

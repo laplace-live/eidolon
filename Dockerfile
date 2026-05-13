@@ -44,25 +44,31 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-install-project --no-dev
 
 # Copy the application code and data assets.
-# - bot.py / stream_archive.py / persona_facts.py / embeddings.py: runtime
-# - openrouter.py: shared OpenRouter request-header + cost-extraction
-#   helpers, imported by bot.py and embeddings.py
-# - persona.md: system prompt source of truth
-# - streams/: transcripts (small, committed; useful for inspection at
-#   runtime though retrieval reads from the prebuilt LanceDB index)
+# - laplace_eidolon/: the package itself (bot, embeddings, openrouter,
+#   persona_facts, stream_archive, and the tools/ subpackage).
+# - persona.md: system prompt source of truth, hot-editable at root.
 # - data/: prebuilt LanceDB indexes — stream_chunks (built via
-#   `uv run python -m tools.ingest_streams`) and persona_facts (built
-#   via `uv run python -m tools.ingest_facts`). Build these locally
-#   before `docker build` if you want RAG enabled in the container;
-#   both services gracefully no-op when their tables are absent.
-COPY ./pyproject.toml ./uv.lock ./
-COPY ./bot.py ./stream_archive.py ./persona_facts.py ./embeddings.py ./openrouter.py ./
+#   `uv run laplace-ingest-streams`) and persona_facts (built via
+#   `uv run laplace-ingest-facts`). Build these locally before
+#   `docker build` if you want RAG enabled in the container; both
+#   services gracefully no-op when their tables are absent.
+# - README.md: hatchling reads it during the project install step.
+COPY ./pyproject.toml ./uv.lock ./README.md ./
+COPY ./laplace_eidolon ./laplace_eidolon
 COPY ./persona.md ./
 COPY ./data ./data
 
+# Install the project itself now that the source is in place — this
+# registers the laplace-* console scripts in /app/.venv/bin/ and makes
+# ``python -m laplace_eidolon.bot`` resolvable from any CWD.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-dev
+
 EXPOSE 7860
 
-# `uv run` resolves the lock and execs `bot.py`, which calls
-# `pipecat.runner.run.main()`. The runner reads --host/--port flags
-# (no native env-var support today), so we expand the env vars here.
-CMD ["sh", "-c", "uv run bot.py --host ${PIPECAT_HOST} --port ${PIPECAT_PORT}"]
+# Pipecat's runner discovers the ``bot()`` function via
+# ``sys.modules["__main__"]``, which a generated console-script
+# launcher doesn't satisfy. We invoke the bot via ``python -m`` so
+# the module IS __main__. The runner reads --host/--port flags (no
+# native env-var support today), so we expand the env vars here.
+CMD ["sh", "-c", "uv run python -m laplace_eidolon.bot --host ${PIPECAT_HOST} --port ${PIPECAT_PORT}"]

@@ -64,7 +64,7 @@ from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.transports.smallwebrtc.connection import IceServer, SmallWebRTCConnection
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 
-from openrouter import openrouter_headers
+from .openrouter import openrouter_headers
 
 # ─────────────────────────────────────────────────────────────────────────────
 # WebRTC ICE server configuration
@@ -292,7 +292,7 @@ except Exception as e:
 # StreamArchive is also optional — disabled if OPENAI_API_KEY (used for
 # embeddings) is missing or the LanceDB index hasn't been built yet.
 try:
-    from stream_archive import StreamArchiveService
+    from .stream_archive import StreamArchiveService
 except Exception as e:
     StreamArchiveService = None
     logger.debug(f"StreamArchive service unavailable: {e}")
@@ -300,7 +300,7 @@ except Exception as e:
 # PersonaFacts is also optional — same LanceDB instance as StreamArchive,
 # but a separate ``persona_facts`` table built by tools/ingest_facts.py.
 try:
-    from persona_facts import PersonaFactsService
+    from .persona_facts import PersonaFactsService
 except Exception as e:
     PersonaFactsService = None
     logger.debug(f"PersonaFacts service unavailable: {e}")
@@ -451,7 +451,7 @@ async def run_bot(transport: BaseTransport):
         logger.info(
             f"Persona facts disabled: no LanceDB index at "
             f"{LANCEDB_PATH.relative_to(SERVER_DIR)}. "
-            "Run `uv run python -m tools.ingest_facts` to build it."
+            "Run `uv run laplace-ingest-facts` to build it."
         )
 
     # Optional stream archive (RAG over past stream transcripts). Mem0,
@@ -470,7 +470,7 @@ async def run_bot(transport: BaseTransport):
         logger.info(
             f"Stream archive disabled: no LanceDB index at "
             f"{LANCEDB_PATH.relative_to(SERVER_DIR)}. "
-            "Run `uv run python -m tools.ingest_streams` to build it."
+            "Run `uv run laplace-ingest-streams` to build it."
         )
 
     processors = [transport.input(), stt, user_aggregator]

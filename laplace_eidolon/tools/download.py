@@ -37,21 +37,20 @@ hit a SQLite lock on the cookie DB; quit Chrome and retry, or use
 
 Usage::
 
-    cd server
-
     # Download every URL in data/video-sample.txt
-    uv run python -m tools.download data/video-sample.txt
+    uv run laplace-download data/video-sample.txt
 
     # Different cookie source
-    uv run python -m tools.download data/video-sample.txt \\
+    uv run laplace-download data/video-sample.txt \\
         --cookies-from-browser firefox
 
     # Pass-through args to yt-dlp as a single shell-quoted string:
-    uv run python -m tools.download data/video-sample.txt \\
+    uv run laplace-download data/video-sample.txt \\
         --yt-dlp-args "--rate-limit 2M --sleep-interval 5"
 
-This is the focused download tool; ``tools/pipeline.py`` calls into the
-same ``download_urls`` helper to run the download stage end-to-end.
+This is the focused download tool; ``laplace_eidolon.tools.pipeline``
+calls into the same ``download_urls`` helper to run the download stage
+end-to-end.
 """
 
 from __future__ import annotations

@@ -31,12 +31,11 @@ lurkers don't crowd out actual chatters.
 
 Workflow::
 
-    cd server
-    uv run python -m tools.extract_users \\
-        ../references/25034104_明前奶绿_danmakus.com_*.json > new_terms.txt
+    uv run laplace-extract-users \\
+        references/25034104_明前奶绿_danmakus.com_*.json > new_terms.txt
 
     # Then hand-paste the names into the `terms = [...]` array in
-    # server/soniox_context.toml.
+    # soniox_context.toml.
 
 Stdout is just the names — one per line, nothing else — so you can pipe
 straight into a file. The summary (totals, date range, type breakdown,

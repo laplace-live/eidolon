@@ -15,18 +15,18 @@
 services:
   bot:
     build:
-      context: ./server
+      context: .
       dockerfile: Dockerfile
     image: laplace-eidolon
     container_name: laplace-eidolon
     restart: unless-stopped
     env_file:
-      - ./server/.env
+      - ./.env
     ports:
       - "7860:7860"
     # If you want to ingest LanceDB indexes on the host and have them
     # picked up live (without rebuilding the image), uncomment:
     # volumes:
-    #   - ./server/data:/app/data:ro
-    #   - ./server/streams:/app/streams:ro
-    #   - ./server/persona.md:/app/persona.md:ro
+    #   - ./data:/app/data:ro
+    #   - ./streams:/app/streams:ro
+    #   - ./persona.md:/app/persona.md:ro

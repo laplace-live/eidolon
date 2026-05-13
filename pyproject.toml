@@ -21,11 +21,40 @@ tools = [
     "soniox>=1.0.0",
 ]
 
+# Console-script entry points. Run any of these without `python -m` after
+# `uv sync` — they resolve to .venv/bin/laplace-<name> shims pointing at
+# the corresponding tool's `main()` function.
+#
+# The bot is intentionally NOT a console script: Pipecat's runner
+# discovers the `bot()` function via `sys.modules["__main__"]`, which a
+# console-script entry doesn't satisfy. Invoke the bot via
+# `uv run python -m laplace_eidolon.bot` instead.
+[project.scripts]
+laplace-refine          = "laplace_eidolon.tools.refine:main"
+laplace-ingest-streams  = "laplace_eidolon.tools.ingest_streams:main"
+laplace-ingest-facts    = "laplace_eidolon.tools.ingest_facts:main"
+laplace-search          = "laplace_eidolon.tools.search:main"
+laplace-pipeline        = "laplace_eidolon.tools.pipeline:main"
+laplace-download        = "laplace_eidolon.tools.download:main"
+laplace-transcribe      = "laplace_eidolon.tools.transcribe:main"
+laplace-extract-users   = "laplace_eidolon.tools.extract_users:main"
+
 [dependency-groups]
 dev = [
     "pyright>=1.1.404,<2",
     "ruff>=0.12.11,<1",
 ]
+
+# Hatchling needs an explicit packages= list because the distribution
+# name (``laplace-eidolon``, hyphen) doesn't match the import name
+# (``laplace_eidolon``, underscore). Without this, auto-discovery fails
+# at install time with "Unable to determine which files to ship".
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["laplace_eidolon"]
 
 [tool.ruff]
 line-length = 100

@@ -14,28 +14,27 @@ pipeline (chunk-into-scenes, render markdown) is provider-agnostic.
 
 Workflow::
 
-    cd server
     uv sync --extra tools             # one-time, installs both backends
 
     # Cloud Soniox (default, better Mandarin; --language defaults to zh):
-    uv run python -m tools.transcribe vods/2026-04-15-stream.m4a \\
+    uv run laplace-transcribe vods/2026-04-15-stream.m4a \\
         --date 2026-04-15
 
     # Local Whisper (free, offline):
-    uv run python -m tools.transcribe vods/2026-04-15-stream.m4a \\
+    uv run laplace-transcribe vods/2026-04-15-stream.m4a \\
         --date 2026-04-15 \\
         --provider whisper --model medium --compute-type int8
 
     # Auto-detect language (override the zh default):
-    uv run python -m tools.transcribe vods/foo.m4a --language ""
+    uv run laplace-transcribe vods/foo.m4a --language ""
 
     # One-off vocabulary spike (new game/show, unfamiliar proper nouns)?
     # Override the default glossary for this run only:
-    uv run python -m tools.transcribe vods/foo.m4a \\
+    uv run laplace-transcribe vods/foo.m4a \\
         --context-file path/to/my_glossary.toml
 
     # Then ingest into the LanceDB stream archive:
-    uv run python -m tools.ingest_streams
+    uv run laplace-ingest-streams
 
 Chunking strategy
 -----------------
@@ -879,7 +878,7 @@ def main() -> int:
         )
     logger.info(
         "Next: hand-edit the H2 headings to be more descriptive, then run:\n"
-        "    uv run python -m tools.ingest_streams"
+        "    uv run laplace-ingest-streams"
     )
     return 0
 

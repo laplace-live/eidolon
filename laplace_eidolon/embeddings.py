@@ -61,7 +61,7 @@ from lancedb.table import Table
 from loguru import logger
 from openai import AsyncOpenAI
 
-from openrouter import extract_cost_usd, openrouter_headers
+from .openrouter import extract_cost_usd, openrouter_headers
 
 DEFAULT_DB_PATH = "data/lancedb"
 DEFAULT_EMBED_BASE_URL = "https://openrouter.ai/api/v1"

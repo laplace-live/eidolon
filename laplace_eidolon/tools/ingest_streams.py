@@ -36,11 +36,10 @@ Unrefined chunks fall back to the original behavior (embed the raw text).
 
 Usage::
 
-    cd server
-    uv run python -m tools.ingest_streams                           # rebuild from streams/
-    uv run python -m tools.ingest_streams --streams-dir custom/     # alt source dir
-    uv run python -m tools.ingest_streams --dry-run                 # show what would be written
-    uv run python -m tools.ingest_streams --skip-types ""           # don't filter any chunk_type
+    uv run laplace-ingest-streams                           # rebuild from streams/
+    uv run laplace-ingest-streams --streams-dir custom/     # alt source dir
+    uv run laplace-ingest-streams --dry-run                 # show what would be written
+    uv run laplace-ingest-streams --skip-types ""           # don't filter any chunk_type
 """
 
 from __future__ import annotations
@@ -49,7 +48,6 @@ import argparse
 import asyncio
 import json
 import os
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -58,10 +56,7 @@ import pyarrow as pa
 from dotenv import load_dotenv
 from loguru import logger
 
-# Allow running both as module (`python -m tools.ingest_streams`) and as a script.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from embeddings import (  # noqa: E402
+from ..embeddings import (
     DEFAULT_DB_PATH,
     DEFAULT_EMBED_CACHE_PATH,
     DEFAULT_EMBED_DIM,
@@ -70,8 +65,8 @@ from embeddings import (  # noqa: E402
     EmbeddingUsage,
     embed_texts_with_usage,
 )
-from stream_archive import DEFAULT_TABLE  # noqa: E402
-from tools._streams import iter_streams, load_sidecar  # noqa: E402
+from ..stream_archive import DEFAULT_TABLE
+from ._streams import iter_streams, load_sidecar
 
 # chunk_types skipped from the index by default. Set INGEST_SKIP_TYPES (or
 # pass --skip-types) to override. Empty string = skip nothing.
