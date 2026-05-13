@@ -45,6 +45,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 # Copy the application code and data assets.
 # - bot.py / stream_archive.py / persona_facts.py / embeddings.py: runtime
+# - openrouter.py: shared OpenRouter request-header + cost-extraction
+#   helpers, imported by bot.py and embeddings.py
 # - persona.md: system prompt source of truth
 # - streams/: transcripts (small, committed; useful for inspection at
 #   runtime though retrieval reads from the prebuilt LanceDB index)
@@ -54,7 +56,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 #   before `docker build` if you want RAG enabled in the container;
 #   both services gracefully no-op when their tables are absent.
 COPY ./pyproject.toml ./uv.lock ./
-COPY ./bot.py ./stream_archive.py ./persona_facts.py ./embeddings.py ./
+COPY ./bot.py ./stream_archive.py ./persona_facts.py ./embeddings.py ./openrouter.py ./
 COPY ./persona.md ./
 COPY ./data ./data
 
