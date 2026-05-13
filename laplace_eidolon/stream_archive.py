@@ -69,8 +69,8 @@ class StreamArchiveService(FrameProcessor):
 
         system_prompt: str = Field(
             default=(
-                "Relevant moments from your past streams (use them to ground "
-                "your reply, but do not read them verbatim):\n\n"
+                "你过去直播里相关的片段"
+                "（用来 ground 你的回复，不要照念，也不要把日期念出来）：\n\n"
             )
         )
         """Prefix prepended to the injected memory block."""

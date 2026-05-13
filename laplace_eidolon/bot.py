@@ -631,17 +631,17 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
     async def on_client_ready(rtvi):
         # Kick off the conversation. If Mem0 is enabled and we have prior
         # memories for this user, hint the LLM so the greeting feels personal.
-        kickoff = "Please introduce yourself."
+        kickoff = "用一两句话简短自然地打个招呼。"
         if memory is not None:
             try:
                 memories = await memory.get_memories()
                 snippets = [m.get("memory", "") for m in (memories or []) if m.get("memory")]
                 if snippets:
                     kickoff = (
-                        "Greet the user warmly and briefly. Things you remember "
-                        "about them from past conversations: "
+                        "用一两句话简短自然地打个招呼。"
+                        "你之前跟ta聊过这些事："
                         + "; ".join(snippets[:3])
-                        + ". Reference one or two naturally if it fits."
+                        + "。如果合适的话自然地提一两件，不要全念出来。"
                     )
             except Exception as e:
                 logger.warning(f"Could not load Mem0 memories for greeting: {e}")
