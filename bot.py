@@ -54,6 +54,7 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
 )
+from pipecat.processors.frameworks.rtvi.processor import RTVIProcessor
 from pipecat.runner.run import app as pipecat_app
 from pipecat.runner.types import RunnerArguments, SmallWebRTCRunnerArguments
 from pipecat.services.fish.tts import FishAudioTTSService
@@ -331,6 +332,20 @@ def load_persona() -> str:
     return FALLBACK_PERSONA
 
 
+class LaplaceRTVIProcessor(RTVIProcessor):
+    """RTVIProcessor that brands the bot-ready ``about`` payload as ours.
+    """
+
+    # Keep in sync with pyproject.toml [project].version.
+    _DEFAULT_ABOUT = {
+        "library": "laplace-eidolon",
+        "library_version": "0.1.0",
+    }
+
+    async def set_bot_ready(self, about=None):
+        await super().set_bot_ready(about=about or self._DEFAULT_ABOUT)
+
+
 async def run_bot(transport: BaseTransport):
     """Main bot logic."""
     logger.info("Starting bot")
@@ -474,6 +489,7 @@ async def run_bot(transport: BaseTransport):
             enable_usage_metrics=True,
         ),
         observers=[],
+        rtvi_processor=LaplaceRTVIProcessor(),
     )
 
     @task.rtvi.event_handler("on_client_ready")
