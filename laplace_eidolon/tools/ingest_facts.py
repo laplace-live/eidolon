@@ -82,82 +82,50 @@ DATE_RE = re.compile(r"^\s*(\d{4})年(\d{1,2})月(\d{1,2})日\s*[/、,，]?\s*")
 # video citations, not facts. Same for bracketed video titles.
 BV_RE = re.compile(r"^\s*BV[0-9A-Za-z]+\s*[/、,，]\s*")
 
-# Strip the persona-name prefix from each fact's ``embed_input`` (NOT
-# ``text`` — display still uses the original wording). Why: ~95% of the
-# fan-compiled facts in 设定集.txt / 事件集.txt start with one of these
-# stems. With every vector dominated by the same opening tokens, the
-# embedding space collapses — facts about cat weight, glasses, dreams,
-# etc. all cluster together and pure-vector retrieval ranks the wrong
-# fact at top-1. Stripping these stems from the embed_input frees the
-# vector to encode what the fact is actually *about*. Verified with
-# eval/queries_persona_facts.toml.
+# Strip the persona-name boilerplate from each fact's ``embed_input``
+# (NOT ``text`` — display still uses the original wording).
 #
-# Order matters — longer first so "明前奶绿强调" doesn't get half-eaten
-# by "明前奶绿" then leave "强调" stranded. Anchored to start-of-string
-# at use site so we only strip when the line literally begins with one.
-_PERSONA_PREFIXES = (
-    "明前奶绿声称",
-    "明前奶绿强调",
-    "明前奶绿认为",
-    "明前奶绿觉得",
-    "明前奶绿说过",
-    "明前奶绿解释",
-    "明前奶绿讨论",
-    "明前奶绿吐槽",
-    "明前奶绿抱怨",
-    "明前奶绿提到",
-    "明前奶绿表示",
-    "明前奶绿回应",
-    "明前奶绿喜欢",
-    "明前奶绿讨厌",
-    "明前奶绿希望",
-    "明前奶绿担心",
-    "明前奶绿模仿",
-    "明前奶绿询问",
-    "明前奶绿评价",
-    "明前奶绿介绍",
-    "明前奶绿分享",
-    "明前奶绿声称是",
-    "明前奶绿声明",
-    "明前奶绿抱着",
-    "明前奶绿说",
-    "明前奶绿多次",
-    "明前奶绿不",
-    "明前奶绿对",
-    "明前奶绿在",
-    "明前奶绿被",
-    "明前奶绿用",
-    "明前奶绿和",
-    "明前奶绿与",
-    "明前奶绿要",
-    "明前奶绿想",
-    "明前奶绿会",
-    "明前奶绿没",
-    "明前奶绿有",
-    "明前奶绿是",
-    "明前奶绿",  # bare-name catch-all — last so longer variants win
+# Why: ~95% of the fan-compiled facts in 设定集.txt / 事件集.txt start
+# with "明前奶绿声称…" / "明前奶绿强调…" / etc. With every vector
+# dominated by the same opening tokens, the embedding space collapses
+# — facts about cat weight, glasses, dreams all cluster together and
+# pure-vector retrieval ranks the wrong fact at top-1. Removing the
+# persona name + the (high-frequency, low-information) reporting verb
+# frees the vector to encode what the fact is actually *about*.
+#
+# Eval-validated with /tmp/bench_prefix_strip.py against the eval set:
+# vector-only MRR jumps 0.833 → 0.925 (+11% relative) with stripping
+# on, rescuing "你梦想是什么" from a total miss. With Cohere reranker
+# on the gap closes to zero — but the strip is essentially free at
+# ingest time and provides defense-in-depth for the no-Cohere
+# fallback path (key rotation, rate-limit, offline dev).
+#
+# Implementation: one regex that matches name + an optional reporting
+# verb at the start of the line, then drops any leftover separator.
+# The verb alternation deliberately omits negations (不/没) and aux
+# verbs (是/在/有/会) so facts like "明前奶绿不喜欢XX" become
+# "不喜欢XX" with the negation preserved — earlier prefix-table
+# versions were too aggressive and stripped semantic content. Longer
+# alternates first ("声称是" before "声称") so leftmost-longest match
+# wins.
+_PERSONA_PREFIX_RE = re.compile(
+    r"^明前奶[绿黑]"  # 奶绿 the persona, 奶黑 the alter ego
+    r"(?:声称是|声称|声明|强调|认为|觉得|说过|说|解释|讨论"
+    r"|吐槽|抱怨|提到|表示|回应|喜欢|讨厌|希望|担心|模仿"
+    r"|询问|评价|介绍|分享|多次)?"
+    r"[，。、,.;；:：\s]*"
 )
 
 
 def _strip_persona_prefix(text: str) -> str:
-    """Remove the leading "明前奶绿XX" boilerplate from a fact line.
+    """Strip the leading "明前奶绿声称…" boilerplate from a fact line.
 
-    Returns the rest of the line if a known prefix matched, else the
-    original. Skips a single trailing punctuation char left dangling
-    after the prefix (most lines have a comma or particle there).
-    Idempotent — calling on an already-stripped line returns it
-    unchanged.
+    Returns the body of the fact, or the original ``text`` if the
+    regex didn't match (so it's safe to call unconditionally on
+    non-奶绿 facts). Idempotent. See ``_PERSONA_PREFIX_RE`` for the
+    rationale.
     """
-    for prefix in _PERSONA_PREFIXES:
-        if text.startswith(prefix):
-            rest = text[len(prefix) :].lstrip()
-            # Drop a single leading particle/punct that's now stranded:
-            # "明前奶绿声称坚果5kg" → strip → "坚果5kg" (clean already)
-            # "明前奶绿，今天..." → strip → "，今天..." → "今天..."
-            if rest and rest[0] in "，。、,.;；:：":
-                rest = rest[1:].lstrip()
-            return rest if rest else text
-    return text
+    return _PERSONA_PREFIX_RE.sub("", text, count=1) or text
 
 
 def _parse_line(line: str) -> tuple[str, str]:
@@ -190,6 +158,7 @@ def load_facts(
     files: list[Path],
     *,
     min_chars: int = 4,
+    strip_prefix: bool = True,
 ) -> list[dict[str, Any]]:
     """Read fact files and return rows ready for embedding.
 
@@ -199,6 +168,13 @@ def load_facts(
 
     Skips lines shorter than ``min_chars`` after cleaning — those are
     almost always parse artefacts (stray punctuation, single chars).
+
+    ``strip_prefix=False`` disables the ``_strip_persona_prefix`` step
+    on ``embed_input``. Used by the A/B benchmark in
+    ``laplace-eval-retrieval --rerank-models`` and ad-hoc comparisons
+    via ``--no-strip-prefix --table persona_facts_unstripped``. Display
+    text and FTS tokens are unaffected either way (they always use the
+    original wording).
     """
     rows: list[dict[str, Any]] = []
     seen_keys: set[str] = set()
@@ -244,7 +220,7 @@ def load_facts(
             #    a date can match. The vector model treats the date as
             #    just another token; the structured ``date`` column is
             #    what makes pre-filtering work.
-            embed_body = _strip_persona_prefix(cleaned)
+            embed_body = _strip_persona_prefix(cleaned) if strip_prefix else cleaned
             if iso_date:
                 embed_input = f"{iso_date}：{embed_body}"
             else:
@@ -417,7 +393,11 @@ async def main_async(args: argparse.Namespace) -> int:
         return 0
 
     logger.info(f"Ingesting from: {[f.name for f in files]}")
-    rows = load_facts(files, min_chars=args.min_chars)
+    rows = load_facts(
+        files,
+        min_chars=args.min_chars,
+        strip_prefix=not args.no_strip_prefix,
+    )
     if not rows:
         logger.warning("No facts to ingest. Files were empty or filtered out.")
         return 0
@@ -502,6 +482,18 @@ def main() -> int:
         type=int,
         default=4,
         help="Drop lines shorter than this after cleaning (default: 4)",
+    )
+    parser.add_argument(
+        "--no-strip-prefix",
+        action="store_true",
+        help=(
+            "Disable persona-prefix stripping for embed_input. The vector "
+            "will then encode '明前奶绿声称…' as part of every fact, which "
+            "tends to compress the embedding space (the prefix repeats on "
+            "~95% of rows). Use with --table persona_facts_unstripped to "
+            "build a parallel index for A/B benchmarking against the "
+            "stripped default."
+        ),
     )
     parser.add_argument(
         "--dry-run",
