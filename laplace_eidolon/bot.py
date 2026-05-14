@@ -37,6 +37,7 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
+from aiortc.codecs.opus import OpusEncoder as _AiortcOpusEncoder
 from dotenv import load_dotenv
 
 # Load .env BEFORE anything else touches os.getenv — module-level
@@ -271,6 +272,41 @@ def _patched_swrtc_init(self, ice_servers=None, connection_timeout_secs=60):
 
 
 SmallWebRTCConnection.__init__ = _patched_swrtc_init
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Opus encoder bitrate
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# aiortc hardcodes its Opus encoder at 96 kbps (aiortc/codecs/opus.py:34
+# `self.codec.bit_rate = 96000`). That's already transparent for speech,
+# but for a voice-first persona where vocal texture matters we bump to
+# 128 kbps — audible on breaths/laughs/sibilants at a ~33% bandwidth cost.
+#
+# Pipecat doesn't expose a knob for this; the only seam is OpusEncoder's
+# __init__. We re-set bit_rate *after* the original constructor runs, which
+# is safe because PyAV's CodecContext lazy-opens on first encode and the
+# bitrate is read from the context at that point. Application mode stays
+# "voip" — better speech timbre than "audio" mode at the same bitrate
+# (speech-tuned pre-emphasis/post-filter) and engages in-band FEC for
+# packet-loss recovery on lossy viewer connections.
+#
+# Override via EIDOLON_OPUS_BITRATE_BPS in .env. Practical range: 64000
+# (toll quality) to 256000 (max useful for voice). The `or "128000"`
+# fallback (not getenv's default) handles the `KEY=` empty-string case
+# that `cp .env.example .env` produces.
+_OPUS_BITRATE_BPS = int(os.getenv("EIDOLON_OPUS_BITRATE_BPS") or "128000")
+
+_ORIGINAL_OPUS_INIT = _AiortcOpusEncoder.__init__
+
+
+def _patched_opus_init(self: _AiortcOpusEncoder) -> None:
+    _ORIGINAL_OPUS_INIT(self)
+    self.codec.bit_rate = _OPUS_BITRATE_BPS
+
+
+_AiortcOpusEncoder.__init__ = _patched_opus_init
+logger.info(f"[WebRTC] Opus encoder bitrate pinned to {_OPUS_BITRATE_BPS // 1000} kbps")
 
 
 @pipecat_app.get("/api/ice-servers")
