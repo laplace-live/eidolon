@@ -308,19 +308,26 @@ install_offer_middleware(pipecat_app)
 # before routing, so returning early here means the mounted
 # StaticFiles app never sees the request.
 #
-# Dev/prod signal: EIDOLON_REAL_IP_HEADER. Per .env.example this is
-# "blank for direct binds; e.g. cf-connecting-ip when behind a
-# reverse proxy" — i.e. the codebase's existing marker for "we're in
-# production". Pipecat's own ENV=local would be the obvious choice
-# but is unusable: pipecat/runner/run.py force-sets `os.environ["ENV"]
-# = "local"` at module import time, which fires the moment bot.py
-# imports `pipecat_app`, even on a production server.
+# Toggle: EIDOLON_PIPECAT_DEMO_ENABLED. Disabled by default — prod is
+# the safe default, so a fresh deploy never accidentally exposes the
+# pipecat-branded demo page. Set to ``true`` / ``1`` / ``yes`` / ``on``
+# in your local ``.env`` to opt in. We can't auto-detect dev via
+# pipecat's own ENV=local because pipecat/runner/run.py force-sets
+# ``os.environ["ENV"] = "local"`` at module import time, which fires
+# the moment bot.py imports ``pipecat_app`` — even on a production
+# server.
+_PIPECAT_DEMO_ENABLED = (
+    os.getenv("EIDOLON_PIPECAT_DEMO_ENABLED", "").strip().lower()
+    in {"true", "1", "yes", "on"}
+)
+
+
 @pipecat_app.middleware("http")
 async def _block_pipecat_demo_in_prod(request: Request, call_next):
-    path = request.url.path
-    is_demo = path == "/" or path == "/client" or path.startswith("/client/")
-    if is_demo and (os.getenv("EIDOLON_REAL_IP_HEADER") or "").strip():
-        return Response(status_code=404)
+    if not _PIPECAT_DEMO_ENABLED:
+        path = request.url.path
+        if path == "/" or path == "/client" or path.startswith("/client/"):
+            return Response(status_code=404)
     return await call_next(request)
 
 
