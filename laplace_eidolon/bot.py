@@ -38,7 +38,7 @@ import asyncio
 import os
 import threading
 import time
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -449,12 +449,114 @@ except ZoneInfoNotFoundError as e:
 
 _WEEKDAY_ZH = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
 
+# How many recent stream dates to inject into the per-session system
+# prompt. Five covers most "你最近播了几场?" / "你这周播了吗?" /
+# "你好久没播了吧" patterns without bloating the prompt. Bump to 7-10
+# if you want a fuller weekly calendar.
+RECENT_STREAM_DATES_N = 5
+
+# Refresh interval for the cached stream-date list. Re-ingest is
+# infrequent so a coarse cache is fine, but we still want the bot to
+# pick up a fresh stream within ~10 minutes without a restart.
+_STREAM_DATES_TTL_SEC = 600
+
+_recent_stream_dates_cache: list[str] | None = None
+_recent_stream_dates_cached_at: float = 0.0
+_recent_stream_dates_lock = threading.Lock()
+
 FALLBACK_PERSONA = (
     "You are a helpful assistant in a voice conversation. Your responses will "
     "be spoken aloud, so avoid emojis, bullet points, or other formatting that "
     "can't be spoken. Always reply in the same language the user just spoke; "
     "if they switch languages, switch with them. Respond briefly."
 )
+
+
+def _get_recent_stream_dates(n: int = RECENT_STREAM_DATES_N) -> list[str]:
+    """Return up to ``n`` most-recent stream dates, newest first.
+
+    Reads from the LanceDB ``stream_chunks`` table (one row per chunk;
+    we deduplicate to one per stream day). Cached for
+    ``_STREAM_DATES_TTL_SEC`` so the per-session system-prompt build
+    doesn't re-scan the table on every call. Stale-on-failure: if the
+    refresh fails, return the previous cache rather than the empty
+    list, since a stale list is strictly better than the LLM being
+    forced to guess a date.
+
+    Why this exists: the embedding model can't answer "你最后一次直播
+    什么时候?" — that's a meta question about table metadata, not a
+    fact in any chunk. Injecting the answer into the system prompt
+    sidesteps RAG entirely for the whole class of recency questions.
+    """
+    global _recent_stream_dates_cache, _recent_stream_dates_cached_at
+
+    with _recent_stream_dates_lock:
+        now = time.time()
+        if (
+            _recent_stream_dates_cache is not None
+            and (now - _recent_stream_dates_cached_at) < _STREAM_DATES_TTL_SEC
+        ):
+            return _recent_stream_dates_cache[:n]
+
+        try:
+            # Local import: lancedb is heavy and only needed when the
+            # archive is actually built. Bot still boots cleanly on a
+            # fresh checkout where data/lancedb doesn't exist yet.
+            import lancedb
+
+            if not LANCEDB_PATH.exists():
+                _recent_stream_dates_cache = []
+                _recent_stream_dates_cached_at = now
+                return []
+            db = lancedb.connect(str(LANCEDB_PATH))
+            if "stream_chunks" not in db.list_tables().tables:
+                _recent_stream_dates_cache = []
+                _recent_stream_dates_cached_at = now
+                return []
+            table = db.open_table("stream_chunks")
+            # Pull just the date column, project then dedupe in Python.
+            # LanceDB has no DISTINCT primitive; columnar scan of one
+            # narrow column over ~30k rows is ~10-30ms and runs once
+            # per TTL window so this is fine.
+            rows = table.search().select(["stream_date"]).limit(200_000).to_list()
+            unique = sorted(
+                {r["stream_date"] for r in rows if r.get("stream_date")},
+                reverse=True,
+            )
+            _recent_stream_dates_cache = unique
+            _recent_stream_dates_cached_at = now
+            return unique[:n]
+        except Exception as e:  # noqa: BLE001
+            logger.warning(
+                f"Could not refresh recent stream dates: {e}; "
+                f"returning cached={_recent_stream_dates_cache is not None}"
+            )
+            return _recent_stream_dates_cache[:n] if _recent_stream_dates_cache else []
+
+
+def _humanize_days_ago(days: int) -> str:
+    """Render a non-negative day-delta into a natural Chinese phrase.
+
+    Used to annotate stream dates in the system prompt so the LLM can
+    answer "上次什么时候播的?" in human terms ("昨天", "三天前", "一周前")
+    without doing date arithmetic itself — LLMs are surprisingly bad
+    at counting days.
+    """
+    if days <= 0:
+        return "今天"
+    if days == 1:
+        return "昨天"
+    if days == 2:
+        return "前天"
+    if days < 7:
+        return f"{days}天前"
+    if days < 30:
+        weeks = days // 7
+        return f"{weeks}周前"
+    if days < 365:
+        months = days // 30
+        return f"{months}个月前"
+    return f"{days // 365}年前"
 
 
 def load_persona() -> str:
@@ -478,9 +580,15 @@ def _build_persona_prefix(user: UserContext) -> str:
     Always emits the current local date/time so the LLM can reason
     about time-sensitive lore in ``persona.md`` (e.g. "坚果 跑路 in
     early 2026" — the model needs today's date to know how long ago
-    that was). Adds a second line with the viewer's name/UID for
-    logged-in viewers so the bot can use it naturally without the user
-    having to introduce themselves first.
+    that was). Adds:
+
+    - The viewer's name/UID for logged-in viewers (so the bot greets
+      them naturally without "what's your name").
+    - The most recent stream dates from the LanceDB archive (so the
+      bot can answer "你最后一次直播什么时候?" / "你上周播了几场?"
+      without RAG — those are meta questions that semantic retrieval
+      can't answer because the date lives in metadata, not in any
+      chunk's text).
 
     The "不要主动念" lines are load-bearing — without them the model
     occasionally narrates the current time / reads the UID aloud,
@@ -489,6 +597,7 @@ def _build_persona_prefix(user: UserContext) -> str:
     ``persona.md``.
     """
     now = datetime.now(PERSONA_TZ)
+    today = now.date()
     # Manual int formatting (not %-m / %#m) so the output is portable
     # across Linux, macOS, and Windows — strftime's non-padding flag
     # uses different syntax per-platform.
@@ -507,6 +616,33 @@ def _build_persona_prefix(user: UserContext) -> str:
             f"今天来花店的奶糖花叫「{user.uname}」（B站UID:{user.mid}）。"
             "聊天里可以自然地叫她/他的名字，但不要每句都重复，也不要主动念UID。"
         )
+
+    # Recent-stream calendar — see ``_get_recent_stream_dates`` for
+    # rationale. Omits the line entirely when no archive is built so
+    # fresh checkouts don't see a stray empty section.
+    recent = _get_recent_stream_dates()
+    if recent:
+        formatted: list[str] = []
+        for iso in recent:
+            try:
+                d = date.fromisoformat(iso)
+            except ValueError:
+                continue
+            ago = _humanize_days_ago((today - d).days)
+            # Drop the year when it matches today's, mirroring the
+            # natural-language phrasing a fan would actually use
+            # ("5月9号" not "2026年5月9号" when both sides know it's 2026).
+            if d.year == today.year:
+                formatted.append(f"{d.month}月{d.day}日（{ago}）")
+            else:
+                formatted.append(f"{d.year}年{d.month}月{d.day}日（{ago}）")
+        if formatted:
+            lines.append(
+                "你最近几次直播：" + "、".join(formatted) + "。"
+                "如果用户问最近 / 上次 / 上一次 / 好久没播 / 这周播了吗 之类的，"
+                "根据这里的日期自然回答；不要凭空编日期。"
+            )
+
     return "\n".join(lines) + "\n\n"
 
 
