@@ -1,12 +1,16 @@
 """Probe the stream archive index from the command line.
 
-Same retrieval path the bot uses (``StreamArchiveService._search``) — just
-without the pipeline around it. Useful for:
+Same retrieval path the bot uses (``StreamArchiveService._search``) —
+hybrid (vector + jieba-tokenized FTS) with optional Cohere rerank.
+Useful for:
 
 - Sanity-checking the index after ``tools/ingest_streams.py``
 - Debugging "why didn't the bot recall X?" (run the same query here, see
-  what comes back and at what distance)
+  what comes back and at what relevance score)
 - A/B-ing query phrasing before changing transcripts or persona
+
+For evaluating retrieval quality across many queries with metrics, use
+``laplace-eval-retrieval`` instead.
 
 Usage::
 
@@ -59,9 +63,18 @@ async def main_async(args: argparse.Namespace) -> int:
         print(f"No hits for {args.query!r}.")
         return 0
 
+    # Hybrid + reranked results carry _relevance_score (HIGHER is
+    # better); the unreranked-vector path carries _distance (LOWER is
+    # better). Show the right hint based on which field is present in
+    # the first hit.
+    score_hint = (
+        "higher relevance = better match"
+        if hits and hits[0].get("_relevance_score") is not None
+        else "lower distance = better match"
+    )
     print(f"Query: {args.query!r}")
     print(f"Index: {svc._table.count_rows()} rows in {args.db_path}/{args.table}.lance")
-    print(f"Hits:  {len(hits)} (lower distance = better match)")
+    print(f"Hits:  {len(hits)} ({score_hint})")
     print()
     for i, h in enumerate(hits, 1):
         date = h.get("stream_date", "?")
@@ -70,7 +83,11 @@ async def main_async(args: argparse.Namespace) -> int:
         details = h.get("details") or ""
         text = h.get("text", "")
         chunk_type = h.get("chunk_type") or ""
-        dist = h.get("_distance", 0.0)
+        # Hybrid + reranked results carry _relevance_score (higher =
+        # better); pure-vector results carry _distance (lower = better).
+        # Show whichever is present so the column header is honest.
+        relevance = h.get("_relevance_score")
+        dist = h.get("_distance", 0.0) if relevance is None else None
         is_refined = bool(h.get("refined"))
 
         # Decode v2 extras blob if present.
@@ -94,7 +111,10 @@ async def main_async(args: argparse.Namespace) -> int:
             except json.JSONDecodeError:
                 topics = []
 
-        header = f"[{i}] dist={dist:.3f}  {date}"
+        if relevance is not None:
+            header = f"[{i}] score={relevance:.3f}  {date}"
+        else:
+            header = f"[{i}] dist={dist:.3f}  {date}"
         if topics:
             header += f"  ({', '.join(topics)})"
         if chunk_type:

@@ -12,15 +12,22 @@ Four persistent storage tiers feed the LLM:
 
 1. ``persona.md``      — identity, voice, hard rules (always in system prompt)
 2. Persona facts        — atomic fan-compiled "things she said" facts,
-                          retrieved by relevance
+                          retrieved via hybrid (vector + jieba-FTS) search
                           (LanceDB index built by ``tools/ingest_facts.py``)
-3. Stream archive       — verbatim past-stream chunks, retrieved by relevance
+3. Stream archive       — refined past-stream chunks, retrieved via hybrid
+                          (vector + jieba-FTS) search
                           (LanceDB index built by ``tools/ingest_streams.py``)
 4. Mem0                 — per-viewer episodic memory, auto-extracted from chat
 
+Tiers 2 and 3 share one retrieval pipeline (see ``retrieval.py``):
+conversation-aware query building, optional date pre-filter, vector +
+BM25 hybrid, optional Cohere cross-encoder rerank. Score how well it
+performs on a query set with ``laplace-eval-retrieval``.
+
 Required services: Soniox (STT), OpenRouter (LLM), Fish Audio (TTS).
 Optional: Mem0 (set MEM0_API_KEY), PersonaFacts + StreamArchive (set
-OPENROUTER_API_KEY and run the ingest scripts).
+OPENROUTER_API_KEY and run the ingest scripts), Cohere reranker (set
+COHERE_API_KEY for best retrieval precision at scale).
 
 Run the bot with::
 

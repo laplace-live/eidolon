@@ -2,14 +2,32 @@
 
 ``StreamArchiveService`` is a Pipecat ``FrameProcessor`` that intercepts
 ``LLMContextFrame``, searches the local LanceDB ``stream_chunks`` table
-for transcript chunks relevant to the latest user message, and injects
-the top matches as a system message before the LLM runs. Mirrors the
+for transcript chunks relevant to the conversation, and injects the
+top matches as a system message before the LLM runs. Mirrors the
 shape of ``pipecat.services.mem0.memory.Mem0MemoryService`` so it slots
 into the pipeline the same way.
 
 Sister service: ``persona_facts.PersonaFactsService`` (same pipeline
 position, different table). Shared embedding + LanceDB infra lives in
-``embeddings.py``.
+``embeddings.py``; hybrid retrieval + reranker live in ``retrieval.py``.
+
+Retrieval pipeline (per turn):
+
+1. Build a search query from recent user turns (rescues short voice
+   utterances). See ``retrieval.build_query_text``.
+2. Embed it once with the same model used at ingest.
+3. If the query references a specific date (``2026年3月24日`` /
+   ``26年3月24`` / ``3月24号``), apply a SQL pre-filter on the
+   ``stream_date`` column. One stream day produces ~10-20 chunks so
+   the candidate pool is still rich enough to rerank, and the filter
+   prevents same-day-different-year chunks from poisoning the top-3.
+4. Run hybrid search (vector + jieba-tokenized BM25/FTS) for
+   ``candidates`` rows (default 15 — chunks are large so we want a
+   modest pool, not 30+).
+5. If ``COHERE_API_KEY`` is set, Cohere ``rerank-v4.0-fast``
+   re-scores down to ``top_k`` (default 3). Without the key, hybrid
+   search uses RRF fusion.
+6. Inject the surviving chunks as a single system message.
 
 Storage layout::
 
@@ -37,6 +55,7 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pydantic import BaseModel, Field
 
 from .embeddings import DEFAULT_DB_PATH, embed_texts, open_table
+from .retrieval import build_query_text, extract_date_filter, hybrid_search
 
 DEFAULT_TABLE = "stream_chunks"
 
@@ -60,12 +79,34 @@ class StreamArchiveService(FrameProcessor):
         """Tunables for stream-archive retrieval."""
 
         top_k: int = Field(default=3, ge=1, le=20)
-        """How many chunks to inject per turn. Each chunk is ~5 minutes of
-        transcript (~500-1500 tokens), so keep this small."""
+        """How many chunks to inject per turn AFTER reranking. Each
+        chunk is ~5 minutes of transcript (~500-1500 tokens) so keep
+        this small or the system prompt balloons."""
+
+        candidates: int = Field(default=15, ge=1, le=100)
+        """Total candidates pulled by hybrid search BEFORE reranking.
+        Lower than persona_facts (15 vs 30) because each chunk is
+        ~50× the size, so the reranker scores ~750× the bytes per
+        query. 15 is the sweet spot at ~30k chunks. Defaults to
+        ``STREAM_ARCHIVE_CANDIDATES`` env var when set."""
 
         min_query_chars: int = Field(default=4, ge=1)
-        """Skip retrieval for short queries like "hi" or "嗯" — they
-        embed poorly and would inject noise."""
+        """Skip retrieval when even the conversation-aware query is
+        too short to be meaningful. ``build_query_text`` rescues short
+        utterances by pulling in prior turns, so this only triggers
+        when the conversation itself is empty/vacant."""
+
+        max_user_turns: int = Field(default=3, ge=1, le=10)
+        """How many recent user turns to concatenate when the latest
+        message is too short on its own. See
+        ``retrieval.build_query_text``."""
+
+        date_prefilter: bool = Field(default=True)
+        """When the query references a specific date (e.g. "26年3月24"),
+        narrow the candidate pool with a SQL pre-filter on the
+        ``stream_date`` column before vector + FTS scoring. One stream
+        day still has ~10-20 chunks so this doesn't starve the reranker.
+        Disable for debugging or if your corpus has unreliable dates."""
 
         system_prompt: str = Field(
             default=(
@@ -110,6 +151,17 @@ class StreamArchiveService(FrameProcessor):
         """
         super().__init__()
         self._params = params or StreamArchiveService.InputParams()
+        env_candidates = os.getenv("STREAM_ARCHIVE_CANDIDATES")
+        if env_candidates:
+            try:
+                self._params = self._params.model_copy(
+                    update={"candidates": int(env_candidates)}
+                )
+            except ValueError:
+                logger.warning(
+                    f"STREAM_ARCHIVE_CANDIDATES={env_candidates!r} not an int; ignoring"
+                )
+
         self._table_name = table_name
         self._db_path = Path(db_path)
         self._table: Table | None = open_table(self._db_path, self._table_name)
@@ -123,7 +175,9 @@ class StreamArchiveService(FrameProcessor):
             )
         else:
             logger.info(
-                f"StreamArchiveService initialized with {self._table.count_rows()} chunks"
+                f"StreamArchiveService initialized with {self._table.count_rows()} chunks "
+                f"(candidates={self._params.candidates}, top_k={self._params.top_k}, "
+                f"date_prefilter={self._params.date_prefilter})"
             )
 
     def _reopen_table(self) -> None:
@@ -153,11 +207,16 @@ class StreamArchiveService(FrameProcessor):
         )
 
     async def _search(self, query: str) -> list[dict[str, Any]]:
-        """Embed the query and pull the top-k matching chunks.
+        """Run hybrid (vector + FTS) + optional rerank against the chunks table.
 
-        Logs at INFO level so retrieval activity is visible without flipping
-        loguru to DEBUG. Recovers once from the stale-table error you get
-        when ``tools/ingest_streams.py`` runs while the bot is alive.
+        Pulls ``candidates`` rows via hybrid search, then (if Cohere is
+        configured) reranks down to ``top_k``. Logs at INFO level so
+        retrieval activity is visible without flipping loguru to DEBUG.
+
+        Recovers once from the stale-table error you get when
+        ``tools/ingest_streams.py`` runs while the bot is alive
+        (LanceDB drops + recreates the table, invalidating the cached
+        Table handle).
         """
         if self._table is None:
             logger.warning("Archive search skipped: no table loaded")
@@ -171,23 +230,42 @@ class StreamArchiveService(FrameProcessor):
         if not vectors:
             return []
 
-        top_k = self._params.top_k
+        # Stream archive uses the ``stream_date`` column (vs persona_facts'
+        # ``date``). When the query mentions a specific day we narrow to
+        # that day's chunks before ranking, which prevents the classic
+        # failure mode of "26年3月24" pulling top hits from 2023-12-24.
+        where = (
+            extract_date_filter(query, column="stream_date")
+            if self._params.date_prefilter
+            else None
+        )
+        if where:
+            logger.info(f"Archive date pre-filter: {where!r}")
+
         for attempt in (1, 2):
             table = self._table
             if table is None:
                 return []
             try:
-                results = await asyncio.to_thread(
-                    lambda: table.search(vectors[0]).limit(top_k).to_list()
+                results = await hybrid_search(
+                    table,
+                    vector=vectors[0],
+                    query_text=query,
+                    candidates=self._params.candidates,
+                    where=where,
+                    final_k=self._params.top_k,
+                    rerank=True,
                 )
                 if results:
-                    best = results[0].get("_distance", float("nan"))
+                    score = results[0].get(
+                        "_relevance_score", results[0].get("_distance", float("nan"))
+                    )
                     dates = sorted({r.get("stream_date", "?") for r in results})
                     refined_n = sum(1 for r in results if r.get("refined"))
                     types = sorted({r.get("chunk_type") or "raw" for r in results})
                     logger.info(
                         f"Archive hit: query={query!r} → {len(results)} chunks "
-                        f"(best_dist={best:.3f}, dates={dates}, "
+                        f"(top_score={score:.3f}, dates={dates}, "
                         f"refined={refined_n}/{len(results)}, types={types})"
                     )
                 else:
@@ -346,19 +424,24 @@ class StreamArchiveService(FrameProcessor):
         )
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
-        """Intercept ``LLMContextFrame`` and enrich it with stream memories."""
+        """Intercept ``LLMContextFrame`` and enrich it with stream memories.
+
+        Uses ``retrieval.build_query_text`` to assemble the search query
+        from recent user turns, which rescues short voice utterances
+        like "嗯", "再说说" that embed badly on their own.
+        """
         await super().process_frame(frame, direction)
 
         if isinstance(frame, LLMContextFrame):
             try:
                 context = frame.context
-                latest_user_msg = _latest_user_text(context.get_messages())
+                query = build_query_text(
+                    [cast(dict[str, Any], m) for m in context.get_messages()],
+                    max_user_turns=self._params.max_user_turns,
+                )
 
-                if (
-                    latest_user_msg
-                    and len(latest_user_msg.strip()) >= self._params.min_query_chars
-                ):
-                    await self._enhance(context, latest_user_msg)
+                if query and len(query.strip()) >= self._params.min_query_chars:
+                    await self._enhance(context, query)
 
                 await self.push_frame(frame)
             except Exception as e:
@@ -368,19 +451,3 @@ class StreamArchiveService(FrameProcessor):
                 await self.push_frame(frame)
         else:
             await self.push_frame(frame, direction)
-
-
-def _latest_user_text(messages: list[Any]) -> str | None:
-    """Find the most recent user message with string content.
-
-    Pipecat's LLMContext returns typed-dict-like messages whose concrete shape
-    varies by provider. At runtime they're plain dicts; this helper does the
-    duck-typed access in one place so the rest of the module stays clean.
-    """
-    for message in reversed(messages):
-        msg = cast(dict[str, Any], message)
-        if msg.get("role") == "user":
-            content = msg.get("content")
-            if isinstance(content, str):
-                return content
-    return None

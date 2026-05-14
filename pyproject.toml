@@ -7,10 +7,20 @@ dependencies = [
     # SmallWebRTC only — no Daily, no telephony. Self-hosted via Docker
     # behind the user's own reverse proxy / TLS termination.
     "pipecat-ai[fish,mem0,openrouter,runner,silero,soniox,webrtc]",
-    # Stream archive (RAG over past stream transcripts)
+    # Stream archive + persona facts (RAG over past stream transcripts
+    # and hand-compiled fan facts). LanceDB hosts both tables.
     "lancedb>=0.27.1",
     "pyarrow>=22",
     "python-frontmatter>=1.1.0",
+    # Hybrid retrieval — Chinese FTS via jieba pre-tokenization (LanceDB
+    # 0.30.x has no native CJK tokenizer; we tokenize at ingest + query
+    # time and store as a whitespace-separated `tokens` column so
+    # Tantivy's `whitespace` base tokenizer indexes it correctly).
+    "jieba>=0.42.1",
+    # Reranker for hybrid (vector + FTS) results. Pulled in at runtime
+    # via lancedb.rerankers.CohereReranker — only used when
+    # COHERE_API_KEY is set; falls back to RRF-only if absent.
+    "cohere>=5.13.0",
 ]
 
 [project.optional-dependencies]
@@ -38,6 +48,7 @@ laplace-pipeline        = "laplace_eidolon.tools.pipeline:main"
 laplace-download        = "laplace_eidolon.tools.download:main"
 laplace-transcribe      = "laplace_eidolon.tools.transcribe:main"
 laplace-extract-users   = "laplace_eidolon.tools.extract_users:main"
+laplace-eval-retrieval  = "laplace_eidolon.tools.eval_retrieval:main"
 
 [dependency-groups]
 dev = [

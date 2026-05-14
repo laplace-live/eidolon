@@ -14,6 +14,18 @@ Date prefix (``YYYY年MM月DD日`` / optional `日`) is parsed and stored as
 metadata on the row so we can filter or surface it. Lines without a parseable
 date keep the full text and an empty date column.
 
+Each row carries three searchable representations:
+
+- ``vector`` — Gemini embedding of the date + persona-prefix-stripped
+  body. We strip "明前奶绿声称…" because every fact starts that way and
+  the prefix dominates the embedding space, collapsing semantic
+  diversity. See ``_PERSONA_PREFIXES``.
+- ``tokens`` — jieba-tokenized full text (prefix kept) for the BM25/FTS
+  half of hybrid retrieval. Catches lexical hits dense vectors miss
+  (homophones like 梦想 vs 梦境).
+- ``text`` — the original cleaned line, what the LLM sees when this fact
+  is rendered into a system message at runtime.
+
 This is the second LanceDB tier in the pipeline:
 
 - ``stream_chunks``  — refined 5-min transcript scenes, retrieved by relevance
@@ -54,6 +66,7 @@ from ..embeddings import (
     EmbeddingUsage,
     embed_texts_with_usage,
 )
+from ..retrieval import build_fts_index, tokenize_zh
 
 DEFAULT_TABLE = "persona_facts"
 
@@ -68,6 +81,83 @@ DATE_RE = re.compile(r"^\s*(\d{4})年(\d{1,2})月(\d{1,2})日\s*[/、,，]?\s*")
 # Strip a leading BV-id reference like "BV1em4y187Nc / ..." — these are
 # video citations, not facts. Same for bracketed video titles.
 BV_RE = re.compile(r"^\s*BV[0-9A-Za-z]+\s*[/、,，]\s*")
+
+# Strip the persona-name prefix from each fact's ``embed_input`` (NOT
+# ``text`` — display still uses the original wording). Why: ~95% of the
+# fan-compiled facts in 设定集.txt / 事件集.txt start with one of these
+# stems. With every vector dominated by the same opening tokens, the
+# embedding space collapses — facts about cat weight, glasses, dreams,
+# etc. all cluster together and pure-vector retrieval ranks the wrong
+# fact at top-1. Stripping these stems from the embed_input frees the
+# vector to encode what the fact is actually *about*. Verified with
+# eval/queries_persona_facts.toml.
+#
+# Order matters — longer first so "明前奶绿强调" doesn't get half-eaten
+# by "明前奶绿" then leave "强调" stranded. Anchored to start-of-string
+# at use site so we only strip when the line literally begins with one.
+_PERSONA_PREFIXES = (
+    "明前奶绿声称",
+    "明前奶绿强调",
+    "明前奶绿认为",
+    "明前奶绿觉得",
+    "明前奶绿说过",
+    "明前奶绿解释",
+    "明前奶绿讨论",
+    "明前奶绿吐槽",
+    "明前奶绿抱怨",
+    "明前奶绿提到",
+    "明前奶绿表示",
+    "明前奶绿回应",
+    "明前奶绿喜欢",
+    "明前奶绿讨厌",
+    "明前奶绿希望",
+    "明前奶绿担心",
+    "明前奶绿模仿",
+    "明前奶绿询问",
+    "明前奶绿评价",
+    "明前奶绿介绍",
+    "明前奶绿分享",
+    "明前奶绿声称是",
+    "明前奶绿声明",
+    "明前奶绿抱着",
+    "明前奶绿说",
+    "明前奶绿多次",
+    "明前奶绿不",
+    "明前奶绿对",
+    "明前奶绿在",
+    "明前奶绿被",
+    "明前奶绿用",
+    "明前奶绿和",
+    "明前奶绿与",
+    "明前奶绿要",
+    "明前奶绿想",
+    "明前奶绿会",
+    "明前奶绿没",
+    "明前奶绿有",
+    "明前奶绿是",
+    "明前奶绿",  # bare-name catch-all — last so longer variants win
+)
+
+
+def _strip_persona_prefix(text: str) -> str:
+    """Remove the leading "明前奶绿XX" boilerplate from a fact line.
+
+    Returns the rest of the line if a known prefix matched, else the
+    original. Skips a single trailing punctuation char left dangling
+    after the prefix (most lines have a comma or particle there).
+    Idempotent — calling on an already-stripped line returns it
+    unchanged.
+    """
+    for prefix in _PERSONA_PREFIXES:
+        if text.startswith(prefix):
+            rest = text[len(prefix) :].lstrip()
+            # Drop a single leading particle/punct that's now stranded:
+            # "明前奶绿声称坚果5kg" → strip → "坚果5kg" (clean already)
+            # "明前奶绿，今天..." → strip → "，今天..." → "今天..."
+            if rest and rest[0] in "，。、,.;；:：":
+                rest = rest[1:].lstrip()
+            return rest if rest else text
+    return text
 
 
 def _parse_line(line: str) -> tuple[str, str]:
@@ -144,13 +234,29 @@ def load_facts(
             # without churning row ids when a file is re-edited.
             row_id = hashlib.sha1(cleaned.encode("utf-8")).hexdigest()[:16]
 
-            # Embed the original-shaped line (date + body) so semantic
-            # queries that mention dates can match. The cleaned_text is
-            # what we render at recall time — it's already self-contained.
+            # Build the embedding input with two adjustments vs ``cleaned``:
+            #
+            # 1. Strip the persona-name prefix (see _PERSONA_PREFIXES
+            #    and _strip_persona_prefix above for why). The DISPLAY
+            #    text keeps the original wording — only the embedding
+            #    sees the stripped version.
+            # 2. Prepend the iso_date so semantic queries that mention
+            #    a date can match. The vector model treats the date as
+            #    just another token; the structured ``date`` column is
+            #    what makes pre-filtering work.
+            embed_body = _strip_persona_prefix(cleaned)
             if iso_date:
-                embed_input = f"{iso_date}：{cleaned}"
+                embed_input = f"{iso_date}：{embed_body}"
             else:
-                embed_input = cleaned
+                embed_input = embed_body
+
+            # Tokens column for FTS hybrid search. We tokenize the
+            # *display* text (cleaned) — not embed_body — because BM25
+            # benefits from the persona name being indexed (a query
+            # like "奶绿对xx说什么" should match). The embedding-side
+            # prefix strip and the FTS-side prefix-keep are intentional;
+            # they each play to their own strength.
+            tokens = tokenize_zh(cleaned)
 
             rows.append(
                 {
@@ -158,6 +264,7 @@ def load_facts(
                     "source": fp.name,
                     "date": iso_date,
                     "text": cleaned,
+                    "tokens": tokens,
                     "embed_input": embed_input,
                 }
             )
@@ -179,6 +286,11 @@ def build_arrow_schema() -> pa.Schema:
     Vector dim must match ``DEFAULT_EMBED_DIM`` (3072 for Gemini). If you
     swap embedding models or change ``EMBED_DIM``, this schema picks up
     the new dim on the next ingest because we drop and recreate the table.
+
+    The ``tokens`` column carries jieba-tokenized text used by the FTS
+    half of hybrid retrieval. See ``retrieval.tokenize_zh`` for the
+    tokenization contract; FTS queries must use the same function or
+    BM25 lookups won't match.
     """
     return pa.schema(
         [
@@ -186,6 +298,7 @@ def build_arrow_schema() -> pa.Schema:
             pa.field("source", pa.string()),
             pa.field("date", pa.string()),  # "YYYY-MM-DD" or ""
             pa.field("text", pa.string()),
+            pa.field("tokens", pa.string()),  # jieba-tokenized for FTS
             pa.field("vector", pa.list_(pa.float32(), DEFAULT_EMBED_DIM)),
         ]
     )
@@ -253,14 +366,25 @@ async def embed_in_batches(
 
 
 def write_table(rows: list[dict[str, Any]], db_path: Path, table_name: str) -> None:
-    """Drop and recreate the LanceDB table with the embedded rows."""
+    """Drop and recreate the LanceDB table, then build the FTS index.
+
+    The FTS index is required by the hybrid retrieval path
+    (``retrieval.hybrid_search``); the table is built fresh on each
+    run so the index is always in sync with the rows.
+    """
     db = lancedb.connect(str(db_path))
     if table_name in db.list_tables().tables:
         db.drop_table(table_name)
     schema = build_arrow_schema()
     projected = [{k: row[k] for k in schema.names} for row in rows]
-    db.create_table(table_name, data=projected, schema=schema)
+    table = db.create_table(table_name, data=projected, schema=schema)
     logger.info(f"Wrote {len(rows)} rows to {db_path}/{table_name}.lance")
+
+    # Build the FTS index AFTER write so it sees every row at once
+    # (faster than incremental). Negligible cost relative to the
+    # embedding spend that already happened.
+    build_fts_index(table, field="tokens")
+    logger.info(f"Built FTS index on 'tokens' for {table_name}")
 
 
 def _resolve_files(files: list[str] | None, data_dir: Path) -> list[Path]:
@@ -300,10 +424,15 @@ async def main_async(args: argparse.Namespace) -> int:
 
     if args.dry_run:
         logger.info(f"Dry run: {len(rows)} facts would be embedded and written.")
+        # Sample 5 rows showing both the original text and what we'll
+        # actually embed — easy way to spot prefix-strip regressions.
         for r in rows[:5]:
             logger.info(
-                f"  - {r['id']} [{r['date'] or 'undated'}, {r['source']}]: {r['text'][:60]}..."
+                f"  - {r['id']} [{r['date'] or 'undated'}, {r['source']}]"
             )
+            logger.info(f"      text:        {r['text'][:80]}")
+            logger.info(f"      embed_input: {r['embed_input'][:80]}")
+            logger.info(f"      tokens:      {r['tokens'][:80]}")
         return 0
 
     db_path.mkdir(parents=True, exist_ok=True)

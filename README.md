@@ -60,18 +60,56 @@ uv run laplace-ingest-streams   # → data/lancedb/stream_chunks.lance
 uv run laplace-ingest-facts     # → data/lancedb/persona_facts.lance
 ```
 
+Both ingest scripts populate a jieba-tokenized `tokens` column and build an
+FTS index on it after embedding, so hybrid search (vector + Chinese BM25)
+works at runtime without an extra build step.
+
 Other offline tools registered as console scripts:
 
-| Command                      | Source module                              | Purpose                                            |
-| ---------------------------- | ------------------------------------------ | -------------------------------------------------- |
-| `uv run laplace-pipeline`    | `laplace_eidolon.tools.pipeline`           | End-to-end download → transcribe → refine → ingest |
-| `uv run laplace-download`    | `laplace_eidolon.tools.download`           | yt-dlp wrapper for batch VOD fetch                 |
-| `uv run laplace-transcribe`  | `laplace_eidolon.tools.transcribe`         | Whisper / Soniox transcription                     |
-| `uv run laplace-search`      | `laplace_eidolon.tools.search`             | REPL-style retrieval against the LanceDB index     |
-| `uv run laplace-extract-users` | `laplace_eidolon.tools.extract_users`    | Mine danmaku JSON for top usernames                |
+| Command                          | Source module                              | Purpose                                            |
+| -------------------------------- | ------------------------------------------ | -------------------------------------------------- |
+| `uv run laplace-pipeline`        | `laplace_eidolon.tools.pipeline`           | End-to-end download → transcribe → refine → ingest |
+| `uv run laplace-download`        | `laplace_eidolon.tools.download`           | yt-dlp wrapper for batch VOD fetch                 |
+| `uv run laplace-transcribe`      | `laplace_eidolon.tools.transcribe`         | Whisper / Soniox transcription                     |
+| `uv run laplace-search`          | `laplace_eidolon.tools.search`             | REPL-style retrieval against the LanceDB index     |
+| `uv run laplace-eval-retrieval`  | `laplace_eidolon.tools.eval_retrieval`     | Score retrieval recall@k / MRR vs known queries    |
+| `uv run laplace-extract-users`   | `laplace_eidolon.tools.extract_users`      | Mine danmaku JSON for top usernames                |
 
 The indexes live under `server/data/lancedb/` and are baked into the Docker
 image at build time. Re-run ingest then `docker compose build` to pick them up.
+
+### Retrieval pipeline
+
+Each runtime turn flows through this when `persona_facts` / `stream_archive`
+are enabled:
+
+1. **Build a query** from the last few user turns
+   ([`retrieval.build_query_text`](laplace_eidolon/retrieval.py)). Short voice
+   utterances ("嗯, 那呢？") get rescued by prior context.
+2. **Embed the query** once with `EMBED_MODEL` (default Gemini, 3072-dim).
+3. **Date pre-filter** (persona_facts only). If the query mentions a date
+   (`2026年5月9日` / `5月9号` / `2024年3月`), narrow the candidate pool with a
+   SQL where-clause on the `date` column before scoring.
+4. **Hybrid search** (vector + jieba-tokenized BM25/FTS) pulls
+   `PERSONA_FACTS_CANDIDATES` (default 30) or `STREAM_ARCHIVE_CANDIDATES`
+   (default 15) candidates. Stopwords are stripped from the FTS query side
+   ("你", "什么", "了") to prevent BM25 score collapse on common tokens.
+5. **Optional cross-encoder rerank**. With `COHERE_API_KEY` set,
+   Cohere `rerank-v4.0-fast` re-scores down to `top_k` (8 for facts,
+   3 for chunks). Without the key, LanceDB's default RRF fusion is used —
+   strongly recommended at ~10k+ rows; ~$1/1000 reranks in production.
+
+To measure how well retrieval is doing on a known set of questions:
+
+```bash
+uv run laplace-eval-retrieval --verbose --save data/eval/baseline.json
+# ... change something, ingest, re-run ...
+uv run laplace-eval-retrieval --compare data/eval/baseline.json
+```
+
+Add new queries to `data/eval/queries.toml` whenever you discover a question
+the bot mishandles — the harness becomes more discriminating with every
+adversarial example you add.
 
 ## Self-host with Docker
 

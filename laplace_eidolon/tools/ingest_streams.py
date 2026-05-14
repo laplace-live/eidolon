@@ -34,6 +34,16 @@ If a stream has a ``streams/<id>.refined.json`` sidecar (produced by
 
 Unrefined chunks fall back to the original behavior (embed the raw text).
 
+Hybrid retrieval columns
+------------------------
+Each row also carries a ``tokens`` column with jieba-tokenized text used
+by the FTS half of hybrid search at query time
+(``retrieval.hybrid_search``). For refined chunks we tokenize
+heading + summary + details + topics + mentions (high signal); for
+unrefined we tokenize heading + raw text. After the table is written,
+a Tantivy-free FTS index is built on the ``tokens`` column. The query
+side uses the same ``tokenize_zh`` to keep BM25 lookups byte-identical.
+
 Usage::
 
     uv run laplace-ingest-streams                           # rebuild from streams/
@@ -65,6 +75,7 @@ from ..embeddings import (
     EmbeddingUsage,
     embed_texts_with_usage,
 )
+from ..retrieval import build_fts_index, tokenize_zh
 from ..stream_archive import DEFAULT_TABLE
 from ._streams import iter_streams, load_sidecar
 
@@ -132,6 +143,35 @@ def load_streams(
             mentions = refined.get("mentions") or []
             details = str(refined.get("details") or "")
 
+            # Tokens column for the FTS half of hybrid retrieval.
+            #
+            # Composition rationale: heading and summary are the
+            # highest-signal text we have (LLM-distilled). Adding the
+            # raw transcript would dominate the BM25 score with low-
+            # signal soniox noise (filler words, mishears) and pull the
+            # ranking toward chunks that happen to mention a search
+            # term in passing. Topics + mentions are short controlled-
+            # vocab tags from refine.py — perfect FTS material. For
+            # unrefined chunks we fall back to heading + raw text
+            # because that's all we have.
+            #
+            # We tokenize the *Chinese* parts; mentions/topics are
+            # mostly already short proper nouns so jieba pass-through
+            # leaves them as-is.
+            if summary or details or topics or mentions:
+                fts_text = " ".join(
+                    [
+                        heading,
+                        summary,
+                        details,
+                        " ".join(str(t) for t in topics),
+                        " ".join(str(m) for m in mentions),
+                    ]
+                )
+            else:
+                fts_text = f"{heading} {chunk.text}"
+            tokens = tokenize_zh(fts_text)
+
             # Pack the v2-only structured fields into a single JSON blob
             # rather than adding 5+ columns. stream_archive.py decodes this at
             # render time. Empty dict for v1 / unrefined chunks so the
@@ -158,6 +198,7 @@ def load_streams(
                     "mentions": json.dumps(mentions, ensure_ascii=False),
                     "extras_json": json.dumps(extras, ensure_ascii=False),
                     "refined": bool(refined),
+                    "tokens": tokens,
                     "embed_input": embed_input,
                     "source_path": rel_source,
                 }
@@ -184,6 +225,10 @@ def build_arrow_schema() -> pa.Schema:
     ``google/gemini-embedding-2-preview``). If you swap embedding models
     or change ``EMBED_DIM``, this schema picks up the new dim on
     the next ingest run because we drop and recreate the table.
+
+    The ``tokens`` column carries jieba-tokenized text used by the FTS
+    half of hybrid retrieval (heading + summary + details + topics +
+    mentions for refined chunks; heading + raw text for unrefined).
     """
     return pa.schema(
         [
@@ -204,6 +249,7 @@ def build_arrow_schema() -> pa.Schema:
             # stream_archive.py decodes whatever it needs at render time.
             pa.field("extras_json", pa.string()),
             pa.field("refined", pa.bool_()),
+            pa.field("tokens", pa.string()),  # jieba-tokenized for FTS
             pa.field("source_path", pa.string()),
             pa.field("vector", pa.list_(pa.float32(), DEFAULT_EMBED_DIM)),
         ]
@@ -280,7 +326,12 @@ async def embed_in_batches(
 
 
 def write_table(rows: list[dict[str, Any]], db_path: Path, table_name: str) -> None:
-    """Drop and recreate the LanceDB table with the embedded rows."""
+    """Drop and recreate the LanceDB table, then build the FTS index.
+
+    The FTS index is required by the hybrid retrieval path
+    (``retrieval.hybrid_search``); the table is built fresh on each
+    run so the index is always in sync with the rows.
+    """
     db = lancedb.connect(str(db_path))
     if table_name in db.list_tables().tables:
         db.drop_table(table_name)
@@ -288,8 +339,14 @@ def write_table(rows: list[dict[str, Any]], db_path: Path, table_name: str) -> N
     # Project only the fields that match the schema (drop ``embed_input``
     # since the vector now carries that information).
     projected = [{k: row[k] for k in schema.names} for row in rows]
-    db.create_table(table_name, data=projected, schema=schema)
+    table = db.create_table(table_name, data=projected, schema=schema)
     logger.info(f"Wrote {len(rows)} rows to {db_path}/{table_name}.lance")
+
+    # Build FTS once at the end — much faster than incremental updates,
+    # and the cost is negligible vs the embedding spend that already
+    # happened. ~30k rows takes a few seconds.
+    build_fts_index(table, field="tokens")
+    logger.info(f"Built FTS index on 'tokens' for {table_name}")
 
 
 def _parse_skip_types(raw: str) -> set[str]:
