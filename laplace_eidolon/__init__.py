@@ -8,6 +8,7 @@ Package layout:
 - :mod:`laplace_eidolon.retrieval`       — hybrid search + zh tokenizer + rerank (read path)
 - :mod:`laplace_eidolon.persona_facts`   — Pipecat processor: RAG over hand-compiled facts
 - :mod:`laplace_eidolon.stream_archive`  — Pipecat processor: RAG over refined transcripts
+- :mod:`laplace_eidolon.audio_quality`   — per-session Opus bitrate from frontend ``audioQuality``
 - :mod:`laplace_eidolon.tools`           — offline batch utilities (ingest, refine, search, …)
 
 The bot itself is intentionally not a console-script entry point: Pipecat's

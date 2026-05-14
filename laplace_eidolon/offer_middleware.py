@@ -1,7 +1,8 @@
 """Rate-limit anonymous WebRTC offers + expose a preflight endpoint +
-normalize the offer body so downstream pipecat sees ``request_data``.
+normalize the offer body so downstream pipecat sees ``request_data`` +
+push the per-session Opus bitrate from ``requestData.audioQuality``.
 
-Three pieces of plumbing live here, all attached to the FastAPI app
+Four pieces of plumbing live here, all attached to the FastAPI app
 Pipecat creates in ``pipecat.runner.run``:
 
 1. A Starlette HTTP middleware on ``POST /api/offer``. Reads the body
@@ -32,7 +33,18 @@ Pipecat creates in ``pipecat.runner.run``:
    ``bot()`` — without it the bot can never see the token, even when
    the middleware-level rate-limit bypass already saw it.
 
-3. A ``POST /api/offer/preflight`` route that performs the same
+3. The same middleware also reads ``requestData.audioQuality`` (one
+   of ``best`` / ``medium`` / ``low`` / ``lowest``) and pushes the
+   matching Opus bitrate onto :data:`audio_quality.session_bitrate_bps`.
+   That contextvar is read by the patched ``OpusEncoder.__init__``
+   (see ``bot.py``) when aiortc lazily constructs the encoder for the
+   outbound audio track. Because anyio's ``start_soon`` (used by
+   ``BaseHTTPMiddleware.call_next`` and by ``asyncio.ensure_future``
+   inside aiortc's connect/send chain) captures ``copy_context`` at
+   task-creation time, a value set in this middleware propagates all
+   the way down to the encoder without explicit threading.
+
+4. A ``POST /api/offer/preflight`` route that performs the same
    anonymous quota *check* without consuming a slot. The frontend hits
    this before ``client.connect()`` because the small-webrtc transport
    silently swallows non-2xx responses from ``/api/offer`` and burns ~6s
@@ -79,6 +91,12 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from loguru import logger
 
+from .audio_quality import (
+    DEFAULT_BITRATE_BPS,
+    quality_choices,
+    resolve_quality_bitrate,
+    session_bitrate_bps,
+)
 from .rate_limit import ANON_QUOTA, AnonymousIpQuota
 from .user_context import resolve_user_context
 
@@ -150,6 +168,69 @@ def _extract_login_sync_token(body: dict[str, Any] | None) -> str | None:
     return None
 
 
+def _extract_audio_quality(body: dict[str, Any] | None) -> Any:
+    """Pull the raw ``requestData.audioQuality`` value (snake_case fallback).
+
+    Mirrors :func:`_extract_login_sync_token` for the
+    ``audioQuality`` knob: tries ``requestData`` first, falls back to
+    ``request_data``. Returns whatever was put under that key — usually
+    a string, but could be anything since the frontend body is
+    user-controlled. Validation happens in
+    :func:`audio_quality.resolve_quality_bitrate`.
+    """
+    if not body:
+        return None
+    nested = body.get("requestData")
+    if not isinstance(nested, dict):
+        nested = body.get("request_data")
+    if not isinstance(nested, dict):
+        return None
+    return nested.get("audioQuality")
+
+
+def _apply_session_audio_quality(body: dict[str, Any] | None) -> None:
+    """Push the per-session Opus bitrate onto :data:`session_bitrate_bps`.
+
+    Called from the offer middleware *before* ``call_next``, so the
+    contextvar is set in the request task's context. ``call_next``
+    spawns the FastAPI route handler in a child task that inherits this
+    context (anyio's ``start_soon`` captures ``copy_context``), and so
+    do all downstream tasks — including aiortc's ``__connect`` →
+    ``RTCRtpSender.send`` → ``_run_rtp`` chain that lazily constructs
+    the ``OpusEncoder``. The patched ``OpusEncoder.__init__`` in
+    ``bot.py`` then reads the contextvar and pins ``codec.bit_rate``
+    to the chosen preset.
+
+    No-op (leaves the contextvar at its default) when:
+
+    * the body has no ``audioQuality`` field — older client, fall
+      through to ``DEFAULT_BITRATE_BPS`` silently
+    * the value is missing/empty — same as above
+    * the value isn't one of the known presets — log a warning so a
+      mistyped frontend constant is diagnosable, then fall through
+
+    We deliberately don't accept arbitrary integer bitrates here. The
+    presets bound the worst case (a malicious client can't pin 1 Mbps
+    per session and saturate uplink) and keep the protocol simple.
+    """
+    raw = _extract_audio_quality(body)
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return
+    bitrate = resolve_quality_bitrate(raw)
+    if bitrate is None:
+        logger.warning(
+            f"[offer-middleware] Unknown audioQuality={raw!r}; "
+            f"valid choices: {quality_choices()}. "
+            f"Falling back to default {DEFAULT_BITRATE_BPS // 1000} kbps."
+        )
+        return
+    session_bitrate_bps.set(bitrate)
+    logger.info(
+        f"[offer-middleware] audioQuality={str(raw).strip().lower()!r} "
+        f"→ Opus bitrate {bitrate // 1000} kbps for this session"
+    )
+
+
 def _normalize_request_data_alias(request: Request, body: dict[str, Any]) -> bool:
     """Copy ``requestData`` → ``request_data`` on the cached body bytes.
 
@@ -219,6 +300,13 @@ def install_offer_middleware(
         rewrote = False
         if body is not None:
             rewrote = _normalize_request_data_alias(request, body)
+        # Pin the per-session Opus bitrate from requestData.audioQuality
+        # *before* call_next so the offer handler (and the aiortc tasks
+        # it spawns to encode outbound audio) all inherit the contextvar.
+        # Done unconditionally — works the same for logged-in viewers
+        # (who bypass the rate limit below) and rate-limited anonymous
+        # ones, and the contextvar is request-scoped so it can't leak.
+        _apply_session_audio_quality(body)
         token = _extract_login_sync_token(body)
         if token:
             # Validate the token before bypassing the quota. Trust-on-

@@ -76,6 +76,11 @@ from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.transports.smallwebrtc.connection import IceServer, SmallWebRTCConnection
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 
+from .audio_quality import (
+    DEFAULT_BITRATE_BPS,
+    QUALITY_PRESETS_BPS,
+    session_bitrate_bps,
+)
 from .offer_middleware import install_offer_middleware
 from .openrouter import openrouter_headers
 from .user_context import UserContext, resolve_user_context
@@ -287,8 +292,11 @@ SmallWebRTCConnection.__init__ = _patched_swrtc_init
 #
 # aiortc hardcodes its Opus encoder at 96 kbps (aiortc/codecs/opus.py:34
 # `self.codec.bit_rate = 96000`). That's already transparent for speech,
-# but for a voice-first persona where vocal texture matters we bump to
-# 128 kbps — audible on breaths/laughs/sibilants at a ~33% bandwidth cost.
+# and we keep it as the default — viewers who want vocal texture
+# (breaths/laughs/sibilants) opt in to ``best`` (192 kbps) on the
+# frontend, viewers on flaky connections opt down to ``low`` / ``lowest``.
+# This way a fresh deployment has zero surprise quality drop relative
+# to vanilla aiortc.
 #
 # Pipecat doesn't expose a knob for this; the only seam is OpusEncoder's
 # __init__. We re-set bit_rate *after* the original constructor runs, which
@@ -298,22 +306,32 @@ SmallWebRTCConnection.__init__ = _patched_swrtc_init
 # (speech-tuned pre-emphasis/post-filter) and engages in-band FEC for
 # packet-loss recovery on lossy viewer connections.
 #
-# Override via EIDOLON_OPUS_BITRATE_BPS in .env. Practical range: 64000
-# (toll quality) to 256000 (max useful for voice). The `or "128000"`
-# fallback (not getenv's default) handles the `KEY=` empty-string case
-# that `cp .env.example .env` produces.
-_OPUS_BITRATE_BPS = int(os.getenv("EIDOLON_OPUS_BITRATE_BPS") or "128000")
-
+# The bitrate is per-session: ``offer_middleware`` reads
+# ``requestData.audioQuality`` (best/medium/low/lowest) from the WebRTC
+# offer and pushes the matching preset onto a ContextVar. aiortc spawns
+# the encoder inside a task tree that inherits that context, so each
+# call gets the bitrate the viewer asked for. When no audioQuality is
+# present (older clients, anonymous probes), the encoder falls back to
+# ``DEFAULT_BITRATE_BPS`` — aligned to the ``medium`` preset (96 kbps)
+# so missing-field and explicit-medium traffic encode identically. Both
+# the fallback and each preset are env-overridable; see
+# ``audio_quality.py`` and ``.env.example`` for the env vars.
 _ORIGINAL_OPUS_INIT = _AiortcOpusEncoder.__init__
 
 
 def _patched_opus_init(self: _AiortcOpusEncoder) -> None:
     _ORIGINAL_OPUS_INIT(self)
-    self.codec.bit_rate = _OPUS_BITRATE_BPS
+    bitrate = session_bitrate_bps.get()
+    self.codec.bit_rate = bitrate
+    logger.debug(f"[WebRTC] Opus encoder constructed at {bitrate // 1000} kbps")
 
 
 _AiortcOpusEncoder.__init__ = _patched_opus_init
-logger.info(f"[WebRTC] Opus encoder bitrate pinned to {_OPUS_BITRATE_BPS // 1000} kbps")
+logger.info(
+    f"[WebRTC] Opus encoder bitrate: default {DEFAULT_BITRATE_BPS // 1000} kbps, "
+    f"presets "
+    + ", ".join(f"{name}={bps // 1000}kbps" for name, bps in QUALITY_PRESETS_BPS.items())
+)
 
 
 @pipecat_app.get("/api/ice-servers")
