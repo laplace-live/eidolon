@@ -1,5 +1,14 @@
-# Ignore everything in data/ (transcripts, LanceDB index, sample fixtures, etc.)
-# but keep the directory itself tracked so the Dockerfile's `COPY ./data ./data`
-# step works on a fresh checkout, before `tools/ingest_streams.py` has been run.
+# Ignore everything in data/ (raw transcripts, embed_cache.db, sample fixtures,
+# etc.) but keep the directory, this file, and the prebuilt LanceDB index
+# tracked. The LanceDB tables (stream_chunks, persona_facts) must be in-tree
+# so the image built in CI — which only sees git-tracked files via
+# `actions/checkout` — ships with RAG enabled. See the Dockerfile's data
+# section and `laplace-ingest-streams` / `laplace-ingest-facts` for how the
+# tables are (re)built.
 *
 !.gitignore
+!lancedb/
+!lancedb/**
+
+# macOS Finder droppings — never commit these, even inside lancedb/.
+.DS_Store
