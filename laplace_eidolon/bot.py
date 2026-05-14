@@ -520,11 +520,13 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
     # voice clips, drifts across turns, or repeats artifacts.
     tts = FishAudioTTSService(
         api_key=fish_api_key,
+        sample_rate=44100,
         settings=FishAudioTTSService.Settings(
             voice=os.getenv("FISH_VOICE_ID"),
             model=os.getenv("FISH_MODEL", "s2-pro"),
             # latency="normal",
-            normalize=True,
+            # Seems worse when reading years
+            normalize=False,
             # temperature=0.7,
             # top_p=0.7,
             # prosody_speed=1.1,
