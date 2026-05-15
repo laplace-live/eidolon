@@ -444,8 +444,15 @@ pipecat_app.add_middleware(BlockPipecatDemoMiddleware, enabled=_PIPECAT_DEMO_ENA
 
 # Mem0 is an optional dependency; only import if available so the bot still
 # runs when the user hasn't installed the `mem0` extra or set MEM0_API_KEY.
+# We use a thin subclass (``LaplaceMem0MemoryService``) that filters out
+# assistant messages without string content — pipecat's universal
+# aggregator emits ``{"role": "assistant", "tool_calls": [...]}`` (no
+# ``content``) for every tool call (e.g. ``change_voice_style``), and
+# Mem0's cloud API rejects that shape with HTTP 400, poisoning every
+# subsequent store call in the session. See ``memory_service.py`` for
+# the full rationale.
 try:
-    from pipecat.services.mem0.memory import Mem0MemoryService
+    from .memory_service import LaplaceMem0MemoryService as Mem0MemoryService
 except Exception as e:
     Mem0MemoryService = None
     logger.debug(f"Mem0 service unavailable: {e}")
