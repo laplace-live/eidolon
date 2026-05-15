@@ -384,10 +384,12 @@ install_offer_middleware(pipecat_app)
 # amplified when stacked with ``offer_middleware.OfferRateLimitMiddleware``
 # and was the root cause of the production 500/422 cascade — see
 # ``offer_middleware`` module docstring + ``repro_no_response.py``.
-_PIPECAT_DEMO_ENABLED = (
-    os.getenv("EIDOLON_PIPECAT_DEMO_ENABLED", "").strip().lower()
-    in {"true", "1", "yes", "on"}
-)
+_PIPECAT_DEMO_ENABLED = os.getenv("EIDOLON_PIPECAT_DEMO_ENABLED", "").strip().lower() in {
+    "true",
+    "1",
+    "yes",
+    "on",
+}
 
 _DEMO_PATHS = {"/", "/client"}
 
@@ -776,6 +778,10 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
         settings=OpenRouterLLMService.Settings(
             model=os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-2024-11-20"),
             system_instruction=_build_persona_prefix(user) + load_persona(),
+            # temperature=0.7,  # Response creativity (0.0-2.0)
+            # max_completion_tokens=150,  # Maximum response length
+            # frequency_penalty=0.5,  # Reduce repetition (0.0-2.0)
+            # presence_penalty=0.5,  # Encourage topic diversity (0.0-2.0)
         ),
         default_headers=openrouter_headers(),
     )
@@ -950,13 +956,10 @@ async def bot(runner_args: RunnerArguments):
     # diagnosable from a single log line — without this the silent
     # "anonymous-everywhere" failure mode is invisible.
     if login_sync_token:
-        logger.info(
-            f"[bot] Session start with loginSyncToken (len={len(login_sync_token)})"
-        )
+        logger.info(f"[bot] Session start with loginSyncToken (len={len(login_sync_token)})")
     else:
         logger.info(
-            f"[bot] Session start without loginSyncToken; "
-            f"runner_args.body={runner_args.body!r}"
+            f"[bot] Session start without loginSyncToken; runner_args.body={runner_args.body!r}"
         )
     await run_bot(transport, login_sync_token=login_sync_token)
 
