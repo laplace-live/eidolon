@@ -61,6 +61,22 @@ mem0ai's sync ``MemoryClient`` issues blocking httpx requests. Wrapping
 in ``to_thread`` matches what ``Mem0MemoryService._store_messages``
 already does for the same reason — keeps the FastAPI event loop
 responsive during the (typically <500ms) round-trip to api.mem0.ai.
+
+API-shape gotcha: ``get_all`` vs ``delete_all``
+-----------------------------------------------
+The two cloud endpoints disagree about how to pass ``user_id`` and the
+mem0ai SDK forwards kwargs into the request without normalizing:
+
+- ``get_all`` POSTs to ``/v2/memories/`` and **requires**
+  ``filters={"user_id": "..."}``. Top-level ``user_id`` returns
+  ``400 "Filters are required and cannot be empty"``.
+- ``delete_all`` DELETEs ``/v1/memories/`` and **requires** top-level
+  ``user_id``. ``filters={...}`` returns ``400 "At least one filter
+  ... is required"``.
+
+Both shapes verified empirically against api.mem0.ai with mem0ai 1.0.11.
+This module uses each call's required shape; do not "normalize" them
+to match each other or the wrong one will silently 502 to the FE.
 """
 
 from __future__ import annotations
@@ -216,7 +232,19 @@ def install_memory_admin(app: FastAPI) -> None:
 
         user_id = str(user.mid)
         try:
-            raw = await asyncio.to_thread(lambda: client.get_all(user_id=user_id))
+            # Mem0 cloud's GET-equivalent endpoint is POST /v2/memories/, which
+            # rejects top-level entity IDs with 400 ("Filters are required and
+            # cannot be empty") — the SDK kwargs are forwarded as-is into the
+            # JSON body without auto-wrapping. Must pass `filters={"user_id":
+            # ...}`. Note this is the OPPOSITE of `delete_all` below, which
+            # POSTs to /v1/memories/ and rejects `filters=...` while accepting
+            # top-level `user_id`. Verified empirically against api.mem0.ai
+            # with mem0ai 1.0.11 (and matches Pipecat's
+            # `Mem0MemoryService.get_memories`, which uses the same shape for
+            # cloud `MemoryClient` instances).
+            raw = await asyncio.to_thread(
+                lambda: client.get_all(filters={"user_id": user_id})
+            )
         except Exception as e:
             logger.error(
                 f"[memory-admin] get_all failed for mid={user_id}: "
@@ -275,6 +303,10 @@ def install_memory_admin(app: FastAPI) -> None:
 
         user_id = str(user.mid)
         try:
+            # delete_all DELETEs /v1/memories/ and requires top-level
+            # entity IDs as query params — passing `filters={...}` here
+            # returns 400. This is the OPPOSITE shape from `list_memories`
+            # above; see the module docstring "API-shape gotcha" section.
             await asyncio.to_thread(lambda: client.delete_all(user_id=user_id))
         except Exception as e:
             logger.error(
