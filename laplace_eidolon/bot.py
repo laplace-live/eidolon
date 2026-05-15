@@ -84,6 +84,11 @@ from .memory_admin import install_memory_admin
 from .offer_middleware import install_offer_middleware
 from .openrouter import openrouter_headers
 from .user_context import UserContext, resolve_user_context
+from .voice_switching import (
+    install_voice_style_tool,
+    load_voice_styles,
+    persona_prefix_hint,
+)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # WebRTC ICE server configuration
@@ -619,7 +624,11 @@ def load_persona() -> str:
     return FALLBACK_PERSONA
 
 
-def _build_persona_prefix(user: UserContext) -> str:
+def _build_persona_prefix(
+    user: UserContext,
+    *,
+    voice_styles: dict[str, str] | None = None,
+) -> str:
     """Per-session preamble prepended to ``persona.md``.
 
     Always emits the current local date/time so the LLM can reason
@@ -634,6 +643,9 @@ def _build_persona_prefix(user: UserContext) -> str:
       without RAG — those are meta questions that semantic retrieval
       can't answer because the date lives in metadata, not in any
       chunk's text).
+    - A one-liner about the ``change_voice_style`` tool when at least
+      one ``FISH_VOICE_ID_<STYLE>`` is configured. Empty otherwise so
+      a vanilla ``.env`` doesn't bloat the prompt.
 
     The "不要主动念" lines are load-bearing — without them the model
     occasionally narrates the current time / reads the UID aloud,
@@ -688,6 +700,11 @@ def _build_persona_prefix(user: UserContext) -> str:
                 "根据这里的日期自然回答；不要凭空编日期。"
             )
 
+    if voice_styles:
+        voice_line = persona_prefix_hint(voice_styles)
+        if voice_line:
+            lines.append(voice_line)
+
     return "\n".join(lines) + "\n\n"
 
 
@@ -740,6 +757,14 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
     if not fish_api_key:
         raise RuntimeError("FISH_API_KEY environment variable is required")
 
+    # Voice styles are read once here so the same dict feeds (a) the
+    # persona prefix hint that tells the LLM the tool exists, and (b)
+    # ``install_voice_style_tool`` that registers the handler. Calling
+    # ``load_voice_styles()`` twice would still be safe but would risk
+    # races with hot-reloaded envs (none today, but cheap to guard
+    # against).
+    voice_styles = load_voice_styles()
+
     # Fish Audio WebSocket TTS (wss://api.fish.audio/v1/tts/live, PCM output).
     # Pipecat exposes a subset of the Fish API; we pin the knobs that affect
     # perceived quality:
@@ -780,12 +805,18 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
     # injects per-session dynamic facts on top: the current date (for
     # all viewers, so the model can ground time-sensitive lore) and,
     # for logged-in viewers only, a line with their name/UID so the
-    # bot greets them naturally.
+    # bot greets them naturally. When alternative ``FISH_VOICE_ID_*``
+    # entries are configured, the prefix also lists the available
+    # ``change_voice_style`` enum values so the model knows what to
+    # request when the viewer asks for a different voice.
     llm = OpenRouterLLMService(
         api_key=os.getenv("OPENROUTER_API_KEY"),
         settings=OpenRouterLLMService.Settings(
             model=os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-2024-11-20"),
-            system_instruction=_build_persona_prefix(user) + load_persona(),
+            system_instruction=(
+                _build_persona_prefix(user, voice_styles=voice_styles)
+                + load_persona()
+            ),
             # temperature=0.7,  # Response creativity (0.0-2.0)
             # max_completion_tokens=150,  # Maximum response length
             # frequency_penalty=0.5,  # Reduce repetition (0.0-2.0)
@@ -794,7 +825,14 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
         default_headers=openrouter_headers(),
     )
 
-    context = LLMContext()
+    # Register the ``change_voice_style`` tool with the LLM service and
+    # wire the same ToolsSchema into the context so the model is told
+    # the tool exists. Returns ``None`` when no alternative voices are
+    # configured — in that case we construct a bare LLMContext, no tool
+    # exposure, no behavior change vs. the pre-feature pipeline.
+    voice_tools = install_voice_style_tool(llm=llm, tts=tts, styles=voice_styles)
+
+    context = LLMContext(tools=voice_tools) if voice_tools else LLMContext()
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(
