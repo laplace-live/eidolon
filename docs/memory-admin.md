@@ -58,10 +58,11 @@ These two endpoints are the surface for that.
 
 ### `GET /api/memories`
 
-List every memory Mem0 has stored under the caller's UID. Returns at most
-~1000 memories (Mem0's server-side default page size); paginate by passing
-`?page=2&page_size=100` query params if you ever expect more (the backend
-forwards them through to the SDK).
+List every memory Mem0 has stored under the caller's UID. Returns up to
+Mem0's server-side default page size (~1000 memories) in a single call. No
+pagination is exposed today — if a viewer ever ends up with more memories
+than that, the backend will need to grow a paging parameter; flag it and
+we'll add one.
 
 **Request**
 
