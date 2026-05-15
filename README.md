@@ -139,6 +139,10 @@ A custom frontend (any framework) talks to `POST /api/offer` directly, or uses
 
 - [`@pipecat-ai/small-webrtc-transport`](https://www.npmjs.com/package/@pipecat-ai/small-webrtc-transport).
 
+See [`docs/frontend-loading-state.md`](docs/frontend-loading-state.md) for how
+to surface backend pipeline state (transcribing / thinking / speaking) in the
+custom client — uses the RTVI events the bot already emits.
+
 ### Production checklist
 
 - **HTTPS is required** for `getUserMedia` on anything that isn't `localhost`.
