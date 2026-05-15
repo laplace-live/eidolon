@@ -126,13 +126,15 @@ uv run python -m laplace_eidolon.bot --host 0.0.0.0 --port 7860
 
 The container exposes port `7860`. Endpoints worth knowing:
 
-| Endpoint                                    | What it does                     |
-| ------------------------------------------- | -------------------------------- |
-| `GET  /`                                    | 302 → `/client/`                 |
-| `GET  /client/*`                            | Bundled Pipecat demo UI (static) |
-| `POST /api/offer`                           | SmallWebRTC SDP offer → answer   |
-| `PATCH /api/offer`                          | Trickle ICE candidates           |
-| `POST /start` and `POST /sessions/{id}/...` | RTVI session shim                |
+| Endpoint                                    | What it does                                |
+| ------------------------------------------- | ------------------------------------------- |
+| `GET  /`                                    | 302 → `/client/`                            |
+| `GET  /client/*`                            | Bundled Pipecat demo UI (static)            |
+| `POST /api/offer`                           | SmallWebRTC SDP offer → answer              |
+| `PATCH /api/offer`                          | Trickle ICE candidates                      |
+| `POST /start` and `POST /sessions/{id}/...` | RTVI session shim                           |
+| `GET  /api/memories`                        | List the caller's Mem0 memories (auth req.) |
+| `POST /api/memories/forget`                 | Wipe the caller's Mem0 memories (auth req.) |
 
 A custom frontend (any framework) talks to `POST /api/offer` directly, or uses
 [`@pipecat-ai/client-js`](https://www.npmjs.com/package/@pipecat-ai/client-js)
@@ -142,6 +144,11 @@ A custom frontend (any framework) talks to `POST /api/offer` directly, or uses
 See [`docs/frontend-loading-state.md`](docs/frontend-loading-state.md) for how
 to surface backend pipeline state (transcribing / thinking / speaking) in the
 custom client — uses the RTVI events the bot already emits.
+
+See [`docs/memory-admin.md`](docs/memory-admin.md) for the per-viewer Mem0
+admin endpoints (`GET /api/memories`, `POST /api/memories/forget`) — both
+authenticated with the same `loginSyncToken` the WebRTC offer carries, both
+scoped to the caller's own Bilibili UID.
 
 ### Production checklist
 

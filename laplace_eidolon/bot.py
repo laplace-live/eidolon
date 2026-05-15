@@ -80,6 +80,7 @@ from .audio_quality import (
     QUALITY_PRESETS_BPS,
     session_bitrate_bps,
 )
+from .memory_admin import install_memory_admin
 from .offer_middleware import install_offer_middleware
 from .openrouter import openrouter_headers
 from .user_context import UserContext, resolve_user_context
@@ -356,6 +357,13 @@ async def get_ice_servers():
 # it, runner_args.body would silently be None even when the JS SDK
 # sent a loginSyncToken.
 install_offer_middleware(pipecat_app)
+
+# Per-viewer Mem0 admin: GET /api/memories (list) + POST /api/memories/forget
+# (bulk delete). Both require an Authorization: Bearer <loginSyncToken>
+# header and reuse the user_context cache, so a logged-in viewer who hits
+# either endpoint right after connecting pays no extra Workers calls.
+# See memory_admin.py for the in-flight-session caveat.
+install_memory_admin(pipecat_app)
 
 
 # Hide pipecat's built-in SmallWebRTCPrebuiltUI demo (/, /client,
