@@ -53,8 +53,6 @@ from dotenv import load_dotenv
 # fallback defaults even when .env sets a different value.
 load_dotenv(override=True)
 
-from fastapi import Request
-from fastapi.responses import Response
 from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.frames.frames import LLMRunFrame
@@ -75,6 +73,7 @@ from pipecat.services.soniox.stt import SonioxSTTService
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.transports.smallwebrtc.connection import IceServer, SmallWebRTCConnection
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from .audio_quality import (
     DEFAULT_BITRATE_BPS,
@@ -365,9 +364,9 @@ install_offer_middleware(pipecat_app)
 # SmallWebRTCPrebuiltUI)` plus a `/ → /client/` redirect, no upstream
 # toggle) — fine for `uv run bot.py` on localhost, embarrassing on a
 # public deploy where the page has no rate limit, no Workers
-# integration, and no persona theming. Starlette HTTP middleware runs
-# before routing, so returning early here means the mounted
-# StaticFiles app never sees the request.
+# integration, and no persona theming. ASGI middleware runs before
+# routing, so a 404 here means the mounted StaticFiles app never sees
+# the request.
 #
 # Toggle: EIDOLON_PIPECAT_DEMO_ENABLED. Disabled by default — prod is
 # the safe default, so a fresh deploy never accidentally exposes the
@@ -377,19 +376,55 @@ install_offer_middleware(pipecat_app)
 # ``os.environ["ENV"] = "local"`` at module import time, which fires
 # the moment bot.py imports ``pipecat_app`` — even on a production
 # server.
+#
+# Implementation note: this is a *pure ASGI* middleware class, not a
+# ``@pipecat_app.middleware("http")`` decorator. The decorator form
+# expands to ``BaseHTTPMiddleware``, which has a known cancellation-
+# swallowing bug (``RuntimeError: No response returned.``) that gets
+# amplified when stacked with ``offer_middleware.OfferRateLimitMiddleware``
+# and was the root cause of the production 500/422 cascade — see
+# ``offer_middleware`` module docstring + ``repro_no_response.py``.
 _PIPECAT_DEMO_ENABLED = (
     os.getenv("EIDOLON_PIPECAT_DEMO_ENABLED", "").strip().lower()
     in {"true", "1", "yes", "on"}
 )
 
+_DEMO_PATHS = {"/", "/client"}
 
-@pipecat_app.middleware("http")
-async def _block_pipecat_demo_in_prod(request: Request, call_next):
-    if not _PIPECAT_DEMO_ENABLED:
-        path = request.url.path
-        if path == "/" or path == "/client" or path.startswith("/client/"):
-            return Response(status_code=404)
-    return await call_next(request)
+
+class BlockPipecatDemoMiddleware:
+    """Pure-ASGI middleware: 404 the pipecat prebuilt demo in prod.
+
+    Looks at ``scope['path']`` for HTTP requests only and returns a
+    bare 404 (no body) for the demo's mount points when
+    ``EIDOLON_PIPECAT_DEMO_ENABLED`` isn't truthy. Everything else
+    passes through unchanged. Non-HTTP scopes (websocket, lifespan)
+    pass through too.
+    """
+
+    def __init__(self, app: ASGIApp, *, enabled: bool) -> None:
+        self.app = app
+        self.enabled = enabled
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or self.enabled:
+            await self.app(scope, receive, send)
+            return
+        path = scope["path"]
+        if path in _DEMO_PATHS or path.startswith("/client/"):
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 404,
+                    "headers": [(b"content-length", b"0")],
+                }
+            )
+            await send({"type": "http.response.body", "body": b"", "more_body": False})
+            return
+        await self.app(scope, receive, send)
+
+
+pipecat_app.add_middleware(BlockPipecatDemoMiddleware, enabled=_PIPECAT_DEMO_ENABLED)
 
 
 # Mem0 is an optional dependency; only import if available so the bot still

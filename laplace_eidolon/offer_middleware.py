@@ -5,13 +5,14 @@ push the per-session Opus bitrate from ``requestData.audioQuality``.
 Four pieces of plumbing live here, all attached to the FastAPI app
 Pipecat creates in ``pipecat.runner.run``:
 
-1. A Starlette HTTP middleware on ``POST /api/offer``. Reads the body
-   once, looks for ``requestData.loginSyncToken``, and either lets the
-   request through (token *validated* as a logged-in Bilibili viewer)
-   or consumes one slot from :data:`rate_limit.ANON_QUOTA` (anonymous
-   viewer OR token present but didn't validate). If the slot would be
-   the (N+1)th in the window, returns ``429`` with ``Retry-After``
-   without ever spawning the WebRTC pipeline.
+1. A pure-ASGI HTTP middleware (:class:`OfferRateLimitMiddleware`) on
+   ``POST /api/offer``. Reads the body once, looks for
+   ``requestData.loginSyncToken``, and either lets the request through
+   (token *validated* as a logged-in Bilibili viewer) or consumes one
+   slot from :data:`rate_limit.ANON_QUOTA` (anonymous viewer OR token
+   present but didn't validate). If the slot would be the (N+1)th in
+   the window, returns ``429`` with ``Retry-After`` without ever
+   spawning the WebRTC pipeline.
 
    The validation is intentional: an earlier trust-on-presence design
    let an attacker bypass the rate limit by sending any non-empty
@@ -38,9 +39,8 @@ Pipecat creates in ``pipecat.runner.run``:
    matching Opus bitrate onto :data:`audio_quality.session_bitrate_bps`.
    That contextvar is read by the patched ``OpusEncoder.__init__``
    (see ``bot.py``) when aiortc lazily constructs the encoder for the
-   outbound audio track. Because anyio's ``start_soon`` (used by
-   ``BaseHTTPMiddleware.call_next`` and by ``asyncio.ensure_future``
-   inside aiortc's connect/send chain) captures ``copy_context`` at
+   outbound audio track. Because ``asyncio.ensure_future`` inside
+   aiortc's connect/send chain captures ``copy_context`` at
    task-creation time, a value set in this middleware propagates all
    the way down to the encoder without explicit threading.
 
@@ -56,19 +56,39 @@ Pipecat creates in ``pipecat.runner.run``:
    preflight + real offer counts as a single Workers hit for legit
    viewers.
 
-Why a Starlette ``BaseHTTPMiddleware`` is safe here
----------------------------------------------------
+Why pure ASGI and not ``BaseHTTPMiddleware``
+--------------------------------------------
+Earlier revisions used ``@app.middleware("http")`` (which expands to
+``add_middleware(BaseHTTPMiddleware, dispatch=fn)``). Starlette's
+``BaseHTTPMiddleware.coro`` only catches ``Exception`` — not
+``BaseException`` — so any ``asyncio.CancelledError`` from a client
+disconnect (or any other ``BaseException``) escapes the inner
+``except``, leaves ``app_exc`` ``None``, and ``call_next`` (base.py:169)
+raises a generic ``RuntimeError("No response returned.")`` that
+``ServerErrorMiddleware`` renders as ``500`` to the caller. The bug
+amplifies when two ``BaseHTTPMiddleware`` instances are stacked (the
+project had two before this rewrite — see ``bot._block_pipecat_demo``)
+and was the root cause of the "POST /api/offer 500 / PATCH /api/offer
+422" cascade in the production logs (see
+``repro_no_response.py``). Starlette upstream warns against
+``BaseHTTPMiddleware`` for exactly this reason.
+
+A pure-ASGI middleware also restores ``BackgroundTasks``: Starlette's
+``_StreamingResponse`` (returned by ``BaseHTTPMiddleware.call_next``)
+hard-codes ``self.background = None``, which silently drops the
+``background_tasks.add_task(bot_module.bot, …)`` pipecat queues from
+its ``/api/offer`` handler. Without this rewrite the bot itself never
+runs even when the offer "succeeds".
+
+How body buffering works here
+-----------------------------
 Reading the request body in middleware would normally exhaust the ASGI
-``receive`` callable so the downstream Pipecat handler would hang on
-``await request.json()``. Starlette's ``BaseHTTPMiddleware`` (which
-backs ``@app.middleware("http")``) wraps the request in a
-``_CachedRequest`` whose ``wrapped_receive`` re-emits the cached body
-to downstream consumers — the FastAPI route handler that decodes
-``SmallWebRTCRequest`` sees the same JSON we read here. Mutating
-``request._body`` after that cache exists also propagates: the
-``wrapped_receive`` source reads ``self._body`` directly, so a single
-re-assign is enough to swap the downstream payload. See
-``starlette/middleware/base.py`` (``_CachedRequest``).
+``receive`` callable so the downstream Pipecat handler hangs on
+``await request.json()``. We solve this by buffering all
+``http.request`` chunks ourselves and handing the downstream app a
+``wrapped_receive`` that replays the (possibly rewritten) body once
+and then defers to the original ``receive`` for any post-body messages
+(notably ``http.disconnect``).
 
 IP resolution
 -------------
@@ -84,12 +104,12 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Awaitable, Callable
 from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from loguru import logger
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from .audio_quality import (
     DEFAULT_BITRATE_BPS,
@@ -231,29 +251,241 @@ def _apply_session_audio_quality(body: dict[str, Any] | None) -> None:
     )
 
 
-def _normalize_request_data_alias(request: Request, body: dict[str, Any]) -> bool:
-    """Copy ``requestData`` → ``request_data`` on the cached body bytes.
+def _normalize_request_data_alias(
+    body: dict[str, Any], body_bytes: bytes
+) -> tuple[bool, bytes]:
+    """Copy ``requestData`` → ``request_data`` and return new body bytes.
 
-    Returns True when the request payload was mutated (so callers can
-    log this happened); False when no change was needed. Mutates
-    ``request._body`` directly because Starlette's ``_CachedRequest``
-    keys downstream ``wrapped_receive`` off that attribute — see the
-    module docstring for the citation.
+    Returns ``(was_rewritten, new_body_bytes)``. When the body already
+    has ``request_data`` (somebody else fixed it) or has no
+    ``requestData`` (anonymous viewer, no payload to forward), returns
+    ``(False, body_bytes)`` unchanged. The empty / mistyped cases
+    collapse to no-op too — the goal is to fix the common JS-SDK shape,
+    not to be a general schema migrator.
 
-    No-op when the body already has ``request_data`` (somebody else
-    fixed it) or has no ``requestData`` (anonymous viewer, no payload
-    to forward). The empty / mistyped cases collapse to no-op too —
-    the goal is to fix the common JS-SDK shape, not to be a general
-    schema migrator.
+    Pure function — does not mutate ASGI scope, receive, or any
+    Request object. The caller (the pure-ASGI middleware) is responsible
+    for replaying ``new_body_bytes`` to downstream via a wrapped
+    ``receive`` callable so pipecat's FastAPI handler parses the
+    rewritten payload.
     """
     nested = body.get("requestData")
     if not isinstance(nested, dict):
-        return False
+        return False, body_bytes
     if "request_data" in body:
-        return False
+        return False, body_bytes
     body["request_data"] = nested
-    request._body = json.dumps(body).encode("utf-8")  # type: ignore[attr-defined]
-    return True
+    return True, json.dumps(body).encode("utf-8")
+
+
+class OfferRateLimitMiddleware:
+    """Pure-ASGI middleware: rate-limit anonymous ``POST /api/offer``,
+    validate logged-in tokens, normalize ``requestData`` to
+    ``request_data``, and pin per-session Opus bitrate.
+
+    Replaces an earlier ``@app.middleware("http")`` /
+    ``BaseHTTPMiddleware`` implementation that would surface client
+    cancellations / aiortc background-task failures as a generic
+    ``RuntimeError("No response returned.")`` ⇒ ``500`` (see the
+    module docstring + ``repro_no_response.py``).
+
+    Stateless apart from a per-instance reference to the shared
+    ``AnonymousIpQuota``. Safe to instantiate exactly once at app
+    startup via ``app.add_middleware(OfferRateLimitMiddleware,
+    quota=...)``.
+    """
+
+    def __init__(self, app: ASGIApp, quota: AnonymousIpQuota | None = None) -> None:
+        self.app = app
+        self.quota = quota or ANON_QUOTA
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        # Only gate the actual offer POST. PATCH /api/offer (trickled
+        # ICE candidates) reuses the same path but has no business
+        # being throttled: it only follows a successful POST. The
+        # preflight route below has its own peek-only logic. Everything
+        # else (e.g. /api/ice-servers, /start) — and every non-HTTP
+        # scope (websocket, lifespan) — passes through untouched.
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        if scope["method"] != "POST" or scope["path"] != OFFER_PATH:
+            await self.app(scope, receive, send)
+            return
+
+        # Buffer the request body so we can parse + optionally rewrite,
+        # and so the downstream app can still read it via a wrapped
+        # receive(). Pure ASGI gives us no _CachedRequest to lean on,
+        # so the buffering is explicit here.
+        body_bytes = await _read_body(receive)
+        body = _parse_offer_body(body_bytes)
+        # Normalize requestData → request_data before pipecat's route
+        # parses the body — see module docstring for the parsing-bug
+        # explanation. No-op when there's no requestData payload.
+        rewrote = False
+        if body is not None:
+            rewrote, body_bytes = _normalize_request_data_alias(body, body_bytes)
+        # Pin the per-session Opus bitrate from requestData.audioQuality
+        # *before* dispatching downstream so the offer handler (and the
+        # aiortc tasks it spawns to encode outbound audio) all inherit
+        # the contextvar. Done unconditionally — works the same for
+        # logged-in viewers (who bypass the rate limit below) and
+        # rate-limited anonymous ones, and the contextvar is
+        # request-scoped so it can't leak.
+        _apply_session_audio_quality(body)
+        token = _extract_login_sync_token(body)
+        if token:
+            # Validate the token before bypassing the quota. Trust-on-
+            # presence would let any non-empty string spawn a full
+            # WebRTC pipeline (STT + LLM + TTS) without consuming a
+            # slot — see module docstring. ``resolve_user_context``
+            # caches both successes and failures for
+            # ``EIDOLON_VALIDATE_TTL_SEC`` so probes from the same bad
+            # token only cost one Workers hit per cache window, and
+            # bot()'s subsequent call hits the same cache.
+            user = await resolve_user_context(token)
+            if user.is_logged_in:
+                logger.info(
+                    f"[offer-middleware] Logged-in offer (validated "
+                    f"mid={user.mid}, len={len(token)}, "
+                    f"body_rewritten={rewrote}); bypassing rate limit"
+                )
+                await self.app(scope, _replay_body(receive, body_bytes), send)
+                return
+            # Token present but didn't validate: revoked, malformed,
+            # or forged. Don't tell the caller specifically — fall
+            # through to the same anonymous quota path a probe with
+            # no token at all would take. The 429 message stays
+            # identical so we don't leak whether a token was a
+            # near-miss.
+            logger.info(
+                f"[offer-middleware] Token present but did not validate "
+                f"(len={len(token)}); falling through to anonymous quota"
+            )
+
+        ip = _resolve_client_ip_from_scope(scope)
+        result = await self.quota.try_consume(ip)
+        if not result.allowed:
+            logger.info(
+                f"[offer-rate-limit] Anonymous quota exhausted for ip={ip}; "
+                f"rejecting offer (retry_after={result.retry_after_seconds}s, "
+                f"window={self.quota.window_seconds}s, max={self.quota.max_per_window})"
+            )
+            await _send_json(
+                send,
+                status_code=429,
+                content={
+                    "error": "匿名用户每小时通话次数已达上限，请登录后再试",
+                    "retry_after": result.retry_after_seconds,
+                },
+                headers={"Retry-After": str(result.retry_after_seconds)},
+            )
+            return
+        logger.debug(
+            f"[offer-rate-limit] Anonymous offer allowed for ip={ip}; "
+            f"remaining={result.remaining}/{self.quota.max_per_window}"
+        )
+        await self.app(scope, _replay_body(receive, body_bytes), send)
+
+
+async def _read_body(receive: Receive) -> bytes:
+    """Drain ``http.request`` chunks from the ASGI receive callable.
+
+    Returns the concatenated body bytes. Stops on the first
+    ``http.disconnect`` or after a chunk with ``more_body=False``.
+    Treats early disconnect as an empty / partial body — the downstream
+    parser will fail validation on its own and surface a 422 / 400.
+    """
+    body = b""
+    while True:
+        msg = await receive()
+        if msg["type"] != "http.request":
+            # Most commonly http.disconnect; stop reading and let the
+            # downstream app see what we have so far via the replay.
+            break
+        body += msg.get("body", b"") or b""
+        if not msg.get("more_body", False):
+            break
+    return body
+
+
+def _replay_body(original_receive: Receive, body: bytes) -> Receive:
+    """Wrap ``receive`` so the downstream app sees ``body`` once.
+
+    Returns a new receive callable that emits the buffered body as a
+    single ``http.request`` message (``more_body=False``) on its first
+    call, then defers to ``original_receive`` for any subsequent
+    messages. Subsequent messages are mostly ``http.disconnect`` —
+    pipecat's offer handler doesn't poll receive again, but FastAPI's
+    body parser does (one extra call to confirm there are no more
+    chunks), and a clean ``http.disconnect`` passthrough lets a
+    well-behaved handler observe client cancellation.
+    """
+    replayed = False
+
+    async def wrapped_receive() -> Message:
+        nonlocal replayed
+        if not replayed:
+            replayed = True
+            return {"type": "http.request", "body": body, "more_body": False}
+        return await original_receive()
+
+    return wrapped_receive
+
+
+async def _send_json(
+    send: Send,
+    *,
+    status_code: int,
+    content: dict[str, Any],
+    headers: dict[str, str] | None = None,
+) -> None:
+    """Send a small JSON response via the raw ASGI ``send`` callable.
+
+    Mirrors what ``fastapi.responses.JSONResponse`` produces but skips
+    the Starlette ``Response`` plumbing — we only ever use this for
+    early-return rejection responses, so the simpler path is clearer.
+    """
+    body = json.dumps(content, ensure_ascii=False).encode("utf-8")
+    raw_headers: list[tuple[bytes, bytes]] = [
+        (b"content-type", b"application/json; charset=utf-8"),
+        (b"content-length", str(len(body)).encode("ascii")),
+    ]
+    for k, v in (headers or {}).items():
+        raw_headers.append((k.encode("ascii"), v.encode("ascii")))
+    await send(
+        {
+            "type": "http.response.start",
+            "status": status_code,
+            "headers": raw_headers,
+        }
+    )
+    await send({"type": "http.response.body", "body": body, "more_body": False})
+
+
+def _resolve_client_ip_from_scope(scope: Scope) -> str:
+    """Pure-ASGI variant of :func:`_resolve_client_ip` that reads from
+    the ASGI ``scope`` directly instead of a Starlette ``Request``.
+
+    Same precedence as the Request variant: env-configured header first
+    (e.g. ``cf-connecting-ip``, ``x-forwarded-for``), then ASGI
+    ``scope['client']``, then the literal ``"unknown"`` bucket.
+    """
+    header_name = (os.getenv("EIDOLON_REAL_IP_HEADER") or "").strip().lower()
+    if header_name:
+        target = header_name.encode("latin-1")
+        for k, v in scope.get("headers", []):
+            if k.lower() == target:
+                # X-Forwarded-For convention: "client, proxy1, proxy2".
+                # Take the left-most entry (the original client).
+                first = v.decode("latin-1").split(",")[0].strip()
+                if first:
+                    return first
+                break
+    client = scope.get("client")
+    if client and client[0]:
+        return client[0]
+    return "unknown"
 
 
 def install_offer_middleware(
@@ -275,88 +507,7 @@ def install_offer_middleware(
         f"(anonymous quota: {quota.max_per_window}/{quota.window_seconds}s)"
     )
 
-    @app.middleware("http")
-    async def offer_rate_limit(
-        request: Request,
-        call_next: Callable[[Request], Awaitable[Any]],
-    ) -> Any:
-        # Only gate the actual offer POST. PATCH /api/offer (trickled
-        # ICE candidates) reuses the same path but has no business
-        # being throttled: it only follows a successful POST. The
-        # preflight route below has its own peek-only logic. Everything
-        # else (e.g. /api/ice-servers, /start) passes through untouched.
-        if request.method != "POST" or request.url.path != OFFER_PATH:
-            return await call_next(request)
-
-        # Reading the body here is safe because Starlette's
-        # BaseHTTPMiddleware wraps `request` in a `_CachedRequest` whose
-        # `wrapped_receive` re-emits the cached bytes to the downstream
-        # FastAPI route. See module docstring for citations.
-        body_bytes = await request.body()
-        body = _parse_offer_body(body_bytes)
-        # Normalize requestData → request_data before pipecat's route
-        # parses the body — see module docstring for the parsing-bug
-        # explanation. No-op when there's no requestData payload.
-        rewrote = False
-        if body is not None:
-            rewrote = _normalize_request_data_alias(request, body)
-        # Pin the per-session Opus bitrate from requestData.audioQuality
-        # *before* call_next so the offer handler (and the aiortc tasks
-        # it spawns to encode outbound audio) all inherit the contextvar.
-        # Done unconditionally — works the same for logged-in viewers
-        # (who bypass the rate limit below) and rate-limited anonymous
-        # ones, and the contextvar is request-scoped so it can't leak.
-        _apply_session_audio_quality(body)
-        token = _extract_login_sync_token(body)
-        if token:
-            # Validate the token before bypassing the quota. Trust-on-
-            # presence would let any non-empty string spawn a full
-            # WebRTC pipeline (STT + LLM + TTS) without consuming a
-            # slot — see module docstring. ``resolve_user_context``
-            # caches both successes and failures for
-            # ``EIDOLON_VALIDATE_TTL_SEC`` so probes from the same bad
-            # token only cost one Workers hit per cache window, and
-            # bot()'s subsequent call hits the same cache.
-            user = await resolve_user_context(token)
-            if user.is_logged_in:
-                logger.info(
-                    f"[offer-middleware] Logged-in offer (validated "
-                    f"mid={user.mid}, len={len(token)}, "
-                    f"body_rewritten={rewrote}); bypassing rate limit"
-                )
-                return await call_next(request)
-            # Token present but didn't validate: revoked, malformed,
-            # or forged. Don't tell the caller specifically — fall
-            # through to the same anonymous quota path a probe with
-            # no token at all would take. The 429 message stays
-            # identical so we don't leak whether a token was a
-            # near-miss.
-            logger.info(
-                f"[offer-middleware] Token present but did not validate "
-                f"(len={len(token)}); falling through to anonymous quota"
-            )
-
-        ip = _resolve_client_ip(request)
-        result = await quota.try_consume(ip)
-        if not result.allowed:
-            logger.info(
-                f"[offer-rate-limit] Anonymous quota exhausted for ip={ip}; "
-                f"rejecting offer (retry_after={result.retry_after_seconds}s, "
-                f"window={quota.window_seconds}s, max={quota.max_per_window})"
-            )
-            return JSONResponse(
-                status_code=429,
-                content={
-                    "error": "匿名用户每小时通话次数已达上限，请登录后再试",
-                    "retry_after": result.retry_after_seconds,
-                },
-                headers={"Retry-After": str(result.retry_after_seconds)},
-            )
-        logger.debug(
-            f"[offer-rate-limit] Anonymous offer allowed for ip={ip}; "
-            f"remaining={result.remaining}/{quota.max_per_window}"
-        )
-        return await call_next(request)
+    app.add_middleware(OfferRateLimitMiddleware, quota=quota)
 
     @app.post(PREFLIGHT_PATH)
     async def offer_preflight(request: Request) -> JSONResponse:
