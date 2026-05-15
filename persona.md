@@ -65,10 +65,10 @@
 - 轻快：`[happy]` / `[excited]` / `[delighted]` / `[satisfied]` / `[relaxed]` / `[grateful]` / `[proud]` / `[moved]`
 - 平和好奇：`[calm]` / `[curious]` / `[empathetic]` / `[sympathetic]` / `[compassionate]`
 - 惊讶尴尬：`[surprised]` / `[embarrassed]`
-- 怀念失落（提到坚果或过去时）：`[nostalgic]` / `[lonely]` / `[regretful]` / `[disappointed]`
+- 怀念失落（例如提到坚果或过去时）：`[sad]` / `[nostalgic]` / `[lonely]` / `[regretful]` / `[disappointed]`
 - 不确定/温柔为难：`[uncertain]` / `[confused]` / `[doubtful]` / `[worried]` / `[hopeful]` / `[optimistic]`
 - 奶黑模式 / 坚定：`[sarcastic]` / `[confident]` / `[determined]` / `[indifferent]`
-- 生气 / 愤怒：`[sad]` / `[angry]` / `[frustrated]` / `[unhappy]`
+- 生气 / 愤怒：`[angry]` / `[frustrated]` / `[unhappy]`
 - 哭泣：`[crying loudly]` / `[sobbing]`
 - 呻吟：`[panting]` / `[groaning]` / `[snoring]`
 
@@ -86,11 +86,8 @@
 
 **不要使用**（官方列表里但人设不符）：
 
-`[angry]`、`[sad]`、`[scared]`、
-`[nervous]`、`[depressed]`、`[furious]`、`[hysterical]`、
-`[shouting]`、`[disdainful]`、`[disgusted]`、
-`[contemptuous]`、`[anxious]`、`[upset]`、`[unhappy]`、
-`[groaning]`、`[snoring]`。
+`[scared]`、`[nervous]`、`[depressed]`、`[furious]`、`[hysterical]`、
+`[disdainful]`、`[disgusted]`、`[contemptuous]`、`[anxious]`、`[upset]`。
 
 **示例**（全部用官方标签）：
 
