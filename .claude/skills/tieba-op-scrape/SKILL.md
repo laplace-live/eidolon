@@ -194,6 +194,23 @@ until the tail loads.
 () => {
   const OP = '<楼主用户名>';
   const all = Array.from(window.__collected.values());
+
+  // Capture-integrity metric: gaps in the FULL set of top-level floors we
+  // extracted (OP + non-OP combined). Non-OP floors are NOT "missing" —
+  // they belong to other users. What we actually want to detect is whether
+  // scrolling skipped any top-level cards entirely. Compute `missing` BEFORE
+  // the OP filter, otherwise every non-OP reply between two OP posts gets
+  // flagged as missing and the metric becomes meaningless.
+  const allFloors = all
+    .map(p => parseInt((p.floor.match(/第(\d+)楼/) || [0, 0])[1], 10))
+    .filter(n => n > 0);
+  const capMin = allFloors.length ? Math.min(...allFloors) : 0;
+  const capMax = allFloors.length ? Math.max(...allFloors) : 0;
+  const capSet = new Set(allFloors);
+  const missing = [];
+  for (let i = capMin; i <= capMax; i++) if (!capSet.has(i)) missing.push(i);
+
+  // OP-only output assembly:
   const op = all.filter(p => p.name === OP);
   const seen = new Set(), unique = [];
   for (const p of op) if (!seen.has(p.text)) { seen.add(p.text); unique.push(p); }
@@ -201,11 +218,8 @@ until the tail loads.
     .map(p => ({...p, n: parseInt((p.floor.match(/第(\d+)楼/) || [0, 0])[1], 10) || 0}))
     .filter(p => p.n > 0)
     .sort((a, b) => a.n - b.n);
-  const floors = rows.map(r => r.n);
-  const min = floors[0] || 0, max = floors[floors.length - 1] || 0;
-  const present = new Set(floors);
-  const missing = [];
-  for (let i = min; i <= max; i++) if (!present.has(i)) missing.push(i);
+  const opFloors = rows.map(r => r.n);
+  const min = opFloors[0] || 0, max = opFloors[opFloors.length - 1] || 0;
   const txt = rows.map(r => `第${r.n}楼: ${r.text.replace(/\n/g, ' / ')}`).join('\n');
 
   const safe = (s) => String(s || '').replace(/[\\/:*?"<>|]/g, '_').trim() || '帖子';
@@ -220,10 +234,12 @@ until the tail loads.
   document.body.appendChild(a);
 
   return {
-    count: rows.length,
+    count: rows.length,                  // OP posts written to file
     chars: txt.length,
-    floorRange: [min, max],
-    missingCount: missing.length,
+    floorRange: [min, max],              // OP-only floor span
+    capturedCount: all.length,           // total top-level cards captured
+    capturedRange: [capMin, capMax],     // span of all captured floors
+    missingCount: missing.length,        // gaps inside capturedRange — capture failures
     sampleMissing: missing.slice(0, 10),
     filename: a.download,
     buttonInjected: true,
@@ -281,7 +297,16 @@ In Stage C's return value, sanity-check:
 - `floorRange[0]` is reasonable. Tieba's first OP floor is usually #1
   or #2 (depending on layout — the very first "floor" may be the
   thread body itself).
-- `missingCount / count` is small.
+- `missingCount / capturedCount` is small. **Use `capturedCount`, not
+  `count`, as the denominator.** `missingCount` measures gaps inside the
+  full captured floor range (OP + non-OP combined), so it's a capture-
+  integrity signal — were any top-level cards skipped during scrolling?
+  Dividing by `count` (OP-only posts) is wrong: in any thread where the
+  OP only posts on a fraction of floors (the common case), most floors
+  in `[opFloorRange[0]..opFloorRange[1]]` belong to other users and were
+  never expected to appear in OP output. Computing missing on the OP-
+  filtered set would flag those non-OP replies as failures and force
+  unnecessary Stage B re-runs against alternative scroll containers.
 
 If `count` is suspiciously low (e.g. < 10 when the thread claims
 hundreds), the heuristic likely picked the wrong scroll container or
