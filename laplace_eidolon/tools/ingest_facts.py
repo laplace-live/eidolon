@@ -82,6 +82,16 @@ DATE_RE = re.compile(r"^\s*(\d{4})年(\d{1,2})月(\d{1,2})日\s*[/、,，]?\s*")
 # video citations, not facts. Same for bracketed video titles.
 BV_RE = re.compile(r"^\s*BV[0-9A-Za-z]+\s*[/、,，]\s*")
 
+# Strip a leading 贴吧-style floor marker like "第2705楼: " / "第2705楼：".
+# These are sticky source-tracking annotations the curator adds to the
+# raw .txt so they can resume scraping from the last processed floor —
+# they're metadata, not part of the fact body. We capture the integer
+# so it can ride along on the row (useful for future filtering /
+# debugging) but it must NOT reach ``text``, ``embed_input``, or
+# ``tokens``: the floor number is high-cardinality noise that would
+# poison both the embedding space and the BM25 index.
+FLOOR_RE = re.compile(r"^\s*第(\d+)楼\s*[:：]\s*")
+
 # Strip the persona-name boilerplate from each fact's ``embed_input``
 # (NOT ``text`` — display still uses the original wording).
 #
@@ -128,30 +138,47 @@ def _strip_persona_prefix(text: str) -> str:
     return _PERSONA_PREFIX_RE.sub("", text, count=1) or text
 
 
-def _parse_line(line: str) -> tuple[str, str]:
-    """Extract (iso_date, cleaned_text) from one raw fact line.
+def _parse_line(line: str) -> tuple[str, int, str]:
+    """Extract (iso_date, floor, cleaned_text) from one raw fact line.
 
-    Returns ``("YYYY-MM-DD", "...")`` if a date prefix is present, else
-    ``("", line)``. The cleaned_text drops the date prefix and any
-    immediately-following ``/`` separator so the body reads naturally.
-    BV-id references are also stripped.
+    Returns ``("YYYY-MM-DD", floor_or_0, "...")``. ``floor`` is the
+    integer captured from a leading ``第NNN楼: `` marker (0 when the
+    line has no floor annotation — most lines don't). The cleaned_text
+    drops the floor marker, the date prefix and any immediately-following
+    ``/`` separator so the body reads naturally. BV-id references are
+    also stripped.
+
+    Strip order matters: floor first (it always wraps the rest), then
+    BV-id, then date. The curator's floor markers sit OUTSIDE every
+    other prefix.
     """
     line = line.strip()
     if not line:
-        return "", ""
+        return "", 0, ""
+
+    # Strip floor marker first — it's the outermost prefix the curator
+    # adds when tracking scrape progress in the source .txt.
+    floor = 0
+    f = FLOOR_RE.match(line)
+    if f:
+        try:
+            floor = int(f.group(1))
+        except ValueError:
+            floor = 0
+        line = line[f.end() :].lstrip()
 
     # Strip BV-id citation prefix if present.
     line = BV_RE.sub("", line, count=1)
 
     m = DATE_RE.match(line)
     if not m:
-        return "", line
+        return "", floor, line
     year, month, day = (int(g) for g in m.groups())
     try:
         iso = f"{year:04d}-{month:02d}-{day:02d}"
     except ValueError:
-        return "", line
-    return iso, line[m.end() :].lstrip()
+        return "", floor, line
+    return iso, floor, line[m.end() :].lstrip()
 
 
 def load_facts(
@@ -190,7 +217,7 @@ def load_facts(
         skipped = 0
         for raw_line in text.splitlines():
             total_seen += 1
-            iso_date, cleaned = _parse_line(raw_line)
+            iso_date, floor, cleaned = _parse_line(raw_line)
             if not cleaned or len(cleaned) < min_chars:
                 if cleaned:
                     total_skipped_short += 1
@@ -239,6 +266,7 @@ def load_facts(
                     "id": row_id,
                     "source": fp.name,
                     "date": iso_date,
+                    "floor": floor,  # 0 when line has no 第NNN楼: marker
                     "text": cleaned,
                     "tokens": tokens,
                     "embed_input": embed_input,
@@ -273,6 +301,7 @@ def build_arrow_schema() -> pa.Schema:
             pa.field("id", pa.string()),
             pa.field("source", pa.string()),
             pa.field("date", pa.string()),  # "YYYY-MM-DD" or ""
+            pa.field("floor", pa.int32()),  # 贴吧 floor number, 0 = unannotated
             pa.field("text", pa.string()),
             pa.field("tokens", pa.string()),  # jieba-tokenized for FTS
             pa.field("vector", pa.list_(pa.float32(), DEFAULT_EMBED_DIM)),
@@ -407,8 +436,9 @@ async def main_async(args: argparse.Namespace) -> int:
         # Sample 5 rows showing both the original text and what we'll
         # actually embed — easy way to spot prefix-strip regressions.
         for r in rows[:5]:
+            floor_str = f"第{r['floor']}楼" if r['floor'] else "no-floor"
             logger.info(
-                f"  - {r['id']} [{r['date'] or 'undated'}, {r['source']}]"
+                f"  - {r['id']} [{r['date'] or 'undated'}, {floor_str}, {r['source']}]"
             )
             logger.info(f"      text:        {r['text'][:80]}")
             logger.info(f"      embed_input: {r['embed_input'][:80]}")
