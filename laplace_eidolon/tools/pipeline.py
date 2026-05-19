@@ -230,6 +230,8 @@ def _build_transcribe_cmd(
     no_context: bool,
     context_file: Path | None,
     keep_soniox_files: bool,
+    auto_slice: bool,
+    slice_max_min: int | None,
 ) -> list[str]:
     """Construct the ``python -m laplace_eidolon.tools.transcribe`` command for one audio file."""
     cmd = [
@@ -256,6 +258,13 @@ def _build_transcribe_cmd(
         cmd += ["--context-file", str(context_file)]
     if keep_soniox_files:
         cmd += ["--keep-soniox-files"]
+    # Batch use case: a 1000-VOD run can't afford to hard-fail on every
+    # 5-hour stream. We default --auto-slice ON in the pipeline (the
+    # standalone transcribe CLI keeps the historical fail-fast default).
+    if auto_slice and provider == "soniox":
+        cmd += ["--auto-slice"]
+        if slice_max_min is not None:
+            cmd += ["--slice-max-min", str(slice_max_min)]
     return cmd
 
 
@@ -284,6 +293,8 @@ def _plan_transcribe_jobs(
     no_context: bool,
     context_file: Path | None,
     keep_soniox_files: bool,
+    auto_slice: bool,
+    slice_max_min: int | None,
     dry_run: bool,
     report: TranscribeReport,
 ) -> list[_TranscribeJob]:
@@ -329,6 +340,8 @@ def _plan_transcribe_jobs(
             no_context=no_context,
             context_file=context_file,
             keep_soniox_files=keep_soniox_files,
+            auto_slice=auto_slice,
+            slice_max_min=slice_max_min,
         )
         jobs.append(_TranscribeJob(audio=audio, date=date, cmd=cmd, label=label))
     return jobs
@@ -500,6 +513,8 @@ def stage_transcribe(
     no_context: bool,
     context_file: Path | None,
     keep_soniox_files: bool,
+    auto_slice: bool,
+    slice_max_min: int | None,
     transcribe_concurrency: int,
     abort_on_error: bool,
     dry_run: bool,
@@ -539,6 +554,8 @@ def stage_transcribe(
         no_context=no_context,
         context_file=context_file,
         keep_soniox_files=keep_soniox_files,
+        auto_slice=auto_slice,
+        slice_max_min=slice_max_min,
         dry_run=dry_run,
         report=report,
     )
@@ -855,6 +872,32 @@ def main() -> int:
         action="store_true",
         help="Don't delete the uploaded file + transcription record from Soniox after success.",
     )
+    # The pipeline is the batch-processing use case where one 5-hour VOD
+    # shouldn't break the whole run, so --auto-slice defaults ON here.
+    # Standalone ``laplace-transcribe`` keeps the historical fail-fast
+    # default. Use --no-auto-slice to opt out of pipeline-side slicing.
+    transcribe_group.add_argument(
+        "--no-auto-slice",
+        dest="auto_slice",
+        action="store_false",
+        default=True,
+        help=(
+            "Disable automatic ffmpeg slicing of audio that exceeds "
+            "Soniox's 300-min per-file cap. With slicing off, oversized "
+            "files fail their transcribe step (and are reported as "
+            "failures in the summary). Default: slicing on."
+        ),
+    )
+    transcribe_group.add_argument(
+        "--slice-max-min",
+        type=int,
+        default=None,
+        help=(
+            "Max minutes per slice when --auto-slice is on (default: "
+            "tools.transcribe's default, which sits well under the "
+            "300-min hard cap to absorb container/encoder drift)."
+        ),
+    )
     transcribe_group.add_argument(
         "--transcribe-concurrency",
         type=int,
@@ -946,6 +989,8 @@ def main() -> int:
                 no_context=args.no_context,
                 context_file=args.context_file,
                 keep_soniox_files=args.keep_soniox_files,
+                auto_slice=args.auto_slice,
+                slice_max_min=args.slice_max_min,
                 transcribe_concurrency=args.transcribe_concurrency,
                 abort_on_error=args.abort_on_error,
                 dry_run=args.dry_run,
