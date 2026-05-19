@@ -74,9 +74,31 @@ DEFAULT_TABLE = "persona_facts"
 # without sweeping in unrelated .txt artefacts (video-full.txt, etc.).
 DEFAULT_FACT_PATTERNS = ("*设定集.txt", "*事件集.txt")
 
-# Parse a leading Chinese date like "2022年10月3日" or "2026年5月9日".
-# The trailing 日 is required so we don't match strings like "2022年圣诞节".
-DATE_RE = re.compile(r"^\s*(\d{4})年(\d{1,2})月(\d{1,2})日\s*[/、,，]?\s*")
+# Parse a leading date in one of two forms:
+#
+#   1. Chinese:  "2022年10月3日" / "2026年5月9日"
+#      The trailing 日 is required so we don't accidentally match
+#      "2022年圣诞节" or other non-date suffixes.
+#
+#   2. ISO:      "2025-12-29" / "2025-12-29 00:15:16"
+#      The optional ``HH:MM[:SS]`` tail is consumed and discarded so
+#      curator timestamps (some lines were copy-pasted with the time
+#      attached) don't leak into the cleaned fact body. The trailing
+#      time is bounded by a non-digit lookahead so we don't eat into
+#      a following number that happens to start with two digits.
+#
+# Both branches capture (year, month, day) at groups (1, 2, 3) so the
+# existing ``m.groups()`` consumer in ``_parse_line`` works unchanged.
+# After the date+optional-time, optional whitespace and an optional
+# separator (`/`、`、`,，`) are consumed so the leftover body reads
+# naturally without leading punctuation.
+DATE_RE = re.compile(
+    r"^\s*(?:"
+    r"(\d{4})年(\d{1,2})月(\d{1,2})日"
+    r"|"
+    r"(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?(?=\D|$)"
+    r")\s*[/、,，]?\s*"
+)
 
 # Strip a leading BV-id reference like "BV1em4y187Nc / ..." — these are
 # video citations, not facts. Same for bracketed video titles.
@@ -173,10 +195,14 @@ def _parse_line(line: str) -> tuple[str, int, str]:
     m = DATE_RE.match(line)
     if not m:
         return "", floor, line
-    year, month, day = (int(g) for g in m.groups())
+    # DATE_RE has two alternatives — CJK form fills groups (1,2,3),
+    # ISO form fills (4,5,6). Exactly one branch matches per line, so
+    # we pick whichever group set is populated.
+    parts = m.group(1, 2, 3) if m.group(1) is not None else m.group(4, 5, 6)
     try:
+        year, month, day = (int(g) for g in parts)
         iso = f"{year:04d}-{month:02d}-{day:02d}"
-    except ValueError:
+    except (TypeError, ValueError):
         return "", floor, line
     return iso, floor, line[m.end() :].lstrip()
 
