@@ -70,11 +70,12 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
 from dotenv import load_dotenv
 from loguru import logger
 from openai import APIError, AsyncOpenAI
+from pydantic import BaseModel, Field
 
 from ..openrouter import extract_cost_usd, openrouter_headers
 from ._streams import (
@@ -95,15 +96,18 @@ DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_CONCURRENCY = 8
 # Pass 1 (extract) outputs short structured arrays. Pass 2 (synthesize)
 # emits the long ``details`` field, so it gets the larger budget.
-DEFAULT_EXTRACT_MAX_TOKENS = 2048
-DEFAULT_SYNTHESIZE_MAX_TOKENS = 4096
+DEFAULT_EXTRACT_MAX_TOKENS = 4096
+DEFAULT_SYNTHESIZE_MAX_TOKENS = 8192
 # Extract is faithful (low temp, no invention). Synthesize is narrative
 # (slightly higher temp for smoother prose).
 DEFAULT_EXTRACT_TEMPERATURE = 0.2
 DEFAULT_SYNTHESIZE_TEMPERATURE = 0.4
 SCHEMA_VERSION = 2
 
-VALID_CHUNK_TYPES = {
+# chunk_type taxonomy. Kept as both a Literal (for the Pydantic schema
+# the LLM is forced into) and a derived set (for runtime fallback in
+# ``_validate_synthesis`` when we get a pre-schema response).
+ChunkType = Literal[
     "opening",
     "commentary",
     "sc_session",
@@ -112,7 +116,111 @@ VALID_CHUNK_TYPES = {
     "mixed",
     "transition",
     "closing",
-}
+]
+VALID_CHUNK_TYPES = set(ChunkType.__args__)
+
+
+# ---------------------------------------------------------------------------
+# Structured-output schemas
+#
+# These Pydantic models drive OpenRouter's ``response_format=json_schema``
+# mode: the LLM is constrained at decode time to produce JSON matching
+# the schema, eliminating the unescaped-newline / trailing-brace /
+# wrong-type failures we used to repair after the fact.
+#
+# We still run ``_validate_extract`` / ``_validate_synthesis`` on the
+# parsed payload — they enforce caps, dedupe, and tolerate the rare
+# provider that doesn't honor the schema (the repair passes in
+# ``_parse_json_lenient`` are the final safety net).
+# ---------------------------------------------------------------------------
+
+
+class _StrictModel(BaseModel):
+    """Base model that emits a strict, OpenAI-compatible JSON Schema.
+
+    OpenRouter/Gemini require ``additionalProperties: false`` and an
+    explicit ``required`` list covering EVERY field for strict mode.
+    Defaulting every field to a sensible empty value and marking the
+    model frozen-ish lets us do that without hand-rolling the schema.
+    """
+
+    model_config = {"extra": "forbid"}
+
+
+class SCEventSchema(_StrictModel):
+    viewer: str = Field(default="", description="Viewer name as transcribed; empty if unknown.")
+    amount_yuan: int | None = Field(default=None, description="SC amount in yuan, if mentioned.")
+    content: str = Field(default="", description="What the SC said, verbatim Chinese.")
+    response: str = Field(default="", description="\u5976\u7eff's reply to this SC.")
+
+
+class SongSchema(_StrictModel):
+    title: str = Field(default="", description="Song title.")
+    note: str = Field(default="", description="Context: sang it / \u5207\u6b4c / just chatted.")
+
+
+class ExtractSchema(_StrictModel):
+    sc_events: list[SCEventSchema] = Field(default_factory=list)
+    songs: list[SongSchema] = Field(default_factory=list)
+    events: list[str] = Field(default_factory=list)
+    promises: list[str] = Field(default_factory=list)
+    topics: list[str] = Field(default_factory=list)
+    mentions: list[str] = Field(default_factory=list)
+    key_quotes: list[str] = Field(default_factory=list)
+    is_anime_audio_dominant: bool = False
+    is_karaoke_dominant: bool = False
+
+
+class SynthesisSchema(_StrictModel):
+    heading: str = Field(description="6-30 Chinese characters, semantic label.")
+    summary: str = Field(description="1-2 Chinese sentences capturing the chunk's essence.")
+    details: str = Field(default="", description="12-20 Chinese sentences, first-person POV.")
+    chunk_type: ChunkType = Field(default="commentary")
+
+
+def _strict_json_schema(model_cls: type[BaseModel], name: str) -> dict[str, Any]:
+    """Convert a Pydantic model to an OpenRouter ``json_schema`` block.
+
+    OpenRouter passes ``schema`` through to providers. Gemini's strict
+    mode rejects schemas missing ``additionalProperties: false`` or with
+    incomplete ``required`` lists, so we patch the Pydantic output to
+    cover both at every nesting level.
+    """
+    schema = model_cls.model_json_schema()
+
+    def _harden(node: Any) -> None:
+        if not isinstance(node, dict):
+            return
+        if node.get("type") == "object":
+            node["additionalProperties"] = False
+            props = node.get("properties") or {}
+            if props:
+                # Strict mode wants every property required.
+                node["required"] = list(props.keys())
+        for value in node.values():
+            if isinstance(value, dict):
+                _harden(value)
+            elif isinstance(value, list):
+                for item in value:
+                    _harden(item)
+
+    # ``$defs`` (nested models) live at the top level; harden them too.
+    for defn in (schema.get("$defs") or {}).values():
+        _harden(defn)
+    _harden(schema)
+
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": name,
+            "strict": True,
+            "schema": schema,
+        },
+    }
+
+
+EXTRACT_RESPONSE_FORMAT = _strict_json_schema(ExtractSchema, "ExtractResult")
+SYNTHESIS_RESPONSE_FORMAT = _strict_json_schema(SynthesisSchema, "SynthesisResult")
 
 # Fallback pricing if OpenRouter doesn't return cost in the response.
 # Format: model -> (USD per 1M input tokens, USD per 1M output tokens).
@@ -145,7 +253,7 @@ by speaker labels:
 - Audio from media she watches (anime, movies, games — Japanese, English).
   These are NOT her words. Drop them.
 - Songs she sings (full lyrics appear). Capture the song title only.
-- Reading viewer Super Chats (SCs) in patterns like "谢谢XXX的SC..." —
+- Reading viewer SuperChats (SCs) in patterns like "感谢XXX的SC...", "谢谢XXX的SC..." —
   capture EVERY SC verbatim along with her response.
 
 Be FAITHFUL. Do not invent, paraphrase loosely, or compress aggressively.
@@ -504,6 +612,108 @@ def _validate_synthesis(payload: Any) -> dict[str, Any]:
     }
 
 
+def _sanitize_json_text(text: str) -> str:
+    """Repair the most common Gemini JSON-mode violations.
+
+    Walk the body once, tracking whether we're inside a string literal
+    (with escape-aware quote detection). Outside strings, raw whitespace
+    is fine and structural newlines stay untouched. Inside strings, any
+    raw control char (LF, CR, tab, etc.) gets replaced with its escaped
+    form so strict ``json.loads`` accepts the result.
+
+    A whole-body regex won't work here: JSON structural syntax also
+    contains plenty of harmless ``\\n`` between tokens (pretty-printed
+    output), and escaping those would just produce the same text back.
+    """
+    out: list[str] = []
+    in_string = False
+    escape = False
+    for ch in text:
+        if in_string:
+            if escape:
+                out.append(ch)
+                escape = False
+                continue
+            if ch == "\\":
+                out.append(ch)
+                escape = True
+                continue
+            if ch == '"':
+                out.append(ch)
+                in_string = False
+                continue
+            cp = ord(ch)
+            if cp < 0x20:
+                if ch == "\n":
+                    out.append("\\n")
+                elif ch == "\r":
+                    out.append("\\r")
+                elif ch == "\t":
+                    out.append("\\t")
+                else:
+                    out.append(f"\\u{cp:04x}")
+                continue
+            out.append(ch)
+        else:
+            out.append(ch)
+            if ch == '"':
+                in_string = True
+    return "".join(out)
+
+
+def _parse_first_json_value(text: str) -> Any:
+    """Parse the first complete JSON value in ``text``, ignoring trailing junk.
+
+    Uses ``JSONDecoder.raw_decode`` so a stray ``}`` or repeated object
+    after the real payload (a Gemini quirk) doesn't kill an otherwise
+    fine response. Raises ``json.JSONDecodeError`` if no valid value
+    starts at the head of the (stripped) text.
+    """
+    decoder = json.JSONDecoder()
+    obj, _end = decoder.raw_decode(text.lstrip())
+    return obj
+
+
+def _parse_json_lenient(content: str) -> tuple[Any, str | None]:
+    """Try strict parse, then a series of repair passes.
+
+    Returns ``(parsed, repair_note)`` on success — ``repair_note`` is
+    ``None`` for a clean strict parse, or a short tag identifying which
+    repair recovered the body. Returns ``(None, error_str)`` if every
+    pass failed; the error string is from the strict pass since that's
+    the one that points at the actual fault.
+
+    Repair passes, in order:
+
+    1. ``"sanitized"`` — escape raw control chars inside string
+       literals (Gemini emits raw ``\\n`` inside Chinese ``content``).
+    2. ``"truncated_trailing"`` — accept the first complete value and
+       drop trailing junk (Gemini sometimes appends an extra ``}``
+       after a valid object).
+    3. ``"sanitized+truncated"`` — both repairs together.
+    """
+    try:
+        return json.loads(content), None
+    except json.JSONDecodeError as strict_err:
+        # Pass 1: sanitize control chars inside strings.
+        sanitized = _sanitize_json_text(content)
+        try:
+            return json.loads(sanitized), "sanitized"
+        except json.JSONDecodeError:
+            pass
+        # Pass 2: strip trailing junk from the original body.
+        try:
+            return _parse_first_json_value(content), "truncated_trailing"
+        except json.JSONDecodeError:
+            pass
+        # Pass 3: both repairs together (raw LF in string AND trailing junk).
+        try:
+            return _parse_first_json_value(sanitized), "sanitized+truncated"
+        except json.JSONDecodeError:
+            pass
+        return None, str(strict_err)
+
+
 async def _call_llm_json(
     client: AsyncOpenAI,
     model: str,
@@ -512,43 +722,117 @@ async def _call_llm_json(
     user: str,
     temperature: float,
     max_tokens: int,
+    response_format: dict[str, Any] | None = None,
 ) -> tuple[Any, Usage]:
     """One LLM call returning (parsed JSON, usage).
 
-    Returns (None, Usage()) if the call itself fails. Returns
-    (None, usage) if the response was non-JSON (so cost is still
-    accounted for even on parse failures).
+    Returns ``(None, Usage())`` if the call itself fails. Returns
+    ``(None, usage)`` if the response was non-JSON even after a repair
+    pass and a one-shot retry (so cost is still accounted for on parse
+    failures).
+
+    ``response_format`` defaults to OpenAI-style loose JSON mode
+    (``{"type": "json_object"}``). Pass a strict ``json_schema`` block
+    (see ``_strict_json_schema``) to enable schema-validated decoding —
+    the model is constrained at sampling time to produce only
+    well-formed JSON matching the schema.
+
+    Recovery strategy (still useful as defense-in-depth even with a
+    strict schema, because providers occasionally ignore it):
+
+    1. Strict ``json.loads`` of the raw body.
+    2. If that fails, re-parse a sanitized copy (raw control chars
+       escaped) — handles Gemini's habit of emitting literal newlines
+       inside string values.
+    3. If the model hit ``finish_reason == "length"``, retry once with a
+       doubled ``max_tokens`` budget.
     """
-    try:
-        resp = await client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-            response_format={"type": "json_object"},
-            temperature=temperature,
-            max_tokens=max_tokens,
-            # Ask OpenRouter to include usage.cost in the response so we
-            # don't have to estimate. Passed through extra_body because
-            # the OpenAI SDK doesn't model this field.
-            extra_body={"usage": {"include": True}},
+    if response_format is None:
+        response_format = {"type": "json_object"}
+    # When we're asking for a strict schema, refuse routes that can't
+    # honor it — silently downgrading to free-form JSON would defeat
+    # the point and reintroduce the malformed-body failures.
+    use_strict = response_format.get("type") == "json_schema"
+    extra_body: dict[str, Any] = {"usage": {"include": True}}
+    if use_strict:
+        extra_body["provider"] = {"require_parameters": True}
+
+    attempt_max_tokens = max_tokens
+    last_usage = Usage()
+
+    for attempt in range(2):  # 1 normal + 1 retry on truncation
+        try:
+            resp = await client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                # Cast: the OpenAI SDK types this as a closed Union of
+                # TypedDicts, but the wire format is a plain JSON object
+                # and OpenRouter accepts ``json_schema`` with the strict
+                # shape we build above. Runtime is identical.
+                response_format=cast(Any, response_format),
+                temperature=temperature,
+                max_tokens=attempt_max_tokens,
+                # ``usage.include`` asks OpenRouter to return cost in USD
+                # so we don't have to estimate. ``provider.require_parameters``
+                # makes OpenRouter skip providers that would silently drop
+                # the schema. Both go through ``extra_body`` because the
+                # OpenAI SDK doesn't model these fields.
+                extra_body=extra_body,
+            )
+        except APIError as e:
+            logger.error(f"  API error: {e}")
+            return None, last_usage
+
+        resp_dict = resp.model_dump() if hasattr(resp, "model_dump") else {}
+        usage = _extract_usage(resp_dict, model)
+        last_usage.add(usage)
+
+        choice = resp.choices[0] if resp.choices else None
+        content = choice.message.content if choice else ""
+        finish_reason = getattr(choice, "finish_reason", None) if choice else None
+
+        if not content:
+            logger.error(
+                f"  empty response (finish_reason={finish_reason!r}, "
+                f"max_tokens={attempt_max_tokens})"
+            )
+            # Empty + length usually means the prompt itself blew the
+            # budget — a bigger max_tokens retry won't help. Bail.
+            return None, last_usage
+
+        parsed, repair_note = _parse_json_lenient(content)
+        if parsed is not None:
+            if repair_note:
+                logger.warning(
+                    f"  recovered malformed JSON via {repair_note} "
+                    f"(finish_reason={finish_reason!r}, body_len={len(content)})"
+                )
+            return parsed, last_usage
+
+        # Parse failed. Decide whether to retry with a bigger budget.
+        if finish_reason == "length" and attempt == 0:
+            new_budget = min(attempt_max_tokens * 2, 16384)
+            logger.warning(
+                f"  truncated response (finish_reason=length, body_len={len(content)}); "
+                f"retrying with max_tokens={new_budget}"
+            )
+            attempt_max_tokens = new_budget
+            continue
+
+        # Out of retries — log enough of the body to diagnose offline.
+        head = content[:600]
+        tail = content[-400:] if len(content) > 1000 else ""
+        logger.error(
+            f"  invalid JSON ({repair_note}); "
+            f"finish_reason={finish_reason!r}, body_len={len(content)}, "
+            f"head={head!r}" + (f", tail={tail!r}" if tail else "")
         )
-    except APIError as e:
-        logger.error(f"  API error: {e}")
-        return None, Usage()
+        return None, last_usage
 
-    resp_dict = resp.model_dump() if hasattr(resp, "model_dump") else {}
-    usage = _extract_usage(resp_dict, model)
-
-    content = resp.choices[0].message.content if resp.choices else ""
-    if not content:
-        return None, usage
-    try:
-        return json.loads(content), usage
-    except json.JSONDecodeError as e:
-        logger.error(f"  invalid JSON ({e}); first 200 chars: {content[:200]!r}")
-        return None, usage
+    return None, last_usage
 
 
 async def _refine_one(
@@ -583,6 +867,7 @@ async def _refine_one(
             user=extract_user,
             temperature=DEFAULT_EXTRACT_TEMPERATURE,
             max_tokens=DEFAULT_EXTRACT_MAX_TOKENS,
+            response_format=EXTRACT_RESPONSE_FORMAT,
         )
         total_usage.add(usage1)
         if extract_raw is None:
@@ -609,6 +894,7 @@ async def _refine_one(
             user=synth_user,
             temperature=DEFAULT_SYNTHESIZE_TEMPERATURE,
             max_tokens=DEFAULT_SYNTHESIZE_MAX_TOKENS,
+            response_format=SYNTHESIS_RESPONSE_FORMAT,
         )
         total_usage.add(usage2)
         if synth_raw is None:
