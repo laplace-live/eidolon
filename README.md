@@ -135,6 +135,7 @@ The container exposes port `7860`. Endpoints worth knowing:
 | `POST /start` and `POST /sessions/{id}/...` | RTVI session shim                           |
 | `GET  /api/memories`                        | List the caller's Mem0 memories (auth req.) |
 | `POST /api/memories/forget`                 | Wipe the caller's Mem0 memories (auth req.) |
+| `POST /mcp/`                                | Public MCP server (Streamable HTTP, read-only) |
 
 A custom frontend (any framework) talks to `POST /api/offer` directly, or uses
 [`@pipecat-ai/client-js`](https://www.npmjs.com/package/@pipecat-ai/client-js)
@@ -149,6 +150,31 @@ See [`docs/memory-admin.md`](docs/memory-admin.md) for the per-viewer Mem0
 admin endpoints (`GET /api/memories`, `POST /api/memories/forget`) — both
 authenticated with the same `loginSyncToken` the WebRTC offer carries, both
 scoped to the caller's own Bilibili UID.
+
+### Public MCP server
+
+The bot also serves a read-only [Model Context Protocol](https://modelcontextprotocol.io)
+endpoint (Streamable HTTP) at `POST /mcp/`, exposing two tools over the same
+RAG indexes the voice pipeline uses:
+
+| Tool                   | What it searches                                  |
+| ---------------------- | ------------------------------------------------- |
+| `search_persona_facts` | Hand-compiled facts about the streamer            |
+| `search_streams`       | Refined transcripts of past streams               |
+
+Point any MCP client at `https://<your-host>/mcp` (the server canonicalizes to
+`/mcp/`; clients that don't follow 307 redirects should use the trailing slash
+directly). Access is anonymous by default and rate-limited per client IP
+(`EIDOLON_MCP_ANON_RATE_LIMIT_PER_HOUR`, default 20/h). Send the same
+`loginSyncToken` the WebRTC client uses as an `Authorization: Bearer <token>`
+header to be rate-limited per Bilibili UID at a higher ceiling
+(`EIDOLON_MCP_AUTH_RATE_LIMIT_PER_HOUR`, default 120/h) — the token raises your
+throughput only; it unlocks no private data. Both tools no-op gracefully (an
+empty result with a `note`) when their LanceDB index hasn't been built.
+
+Behind a reverse proxy, set `EIDOLON_MCP_ALLOWED_HOSTS` to your public
+domain(s) so the SDK's DNS-rebinding Host check accepts requests; the proxy
+must pass `POST /mcp/` through unbuffered, like `/api/offer`.
 
 ### Production checklist
 
