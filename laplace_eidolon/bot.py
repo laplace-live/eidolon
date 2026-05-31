@@ -80,6 +80,7 @@ from .audio_quality import (
     QUALITY_PRESETS_BPS,
     session_bitrate_bps,
 )
+from .mcp_server import install_mcp
 from .memory_admin import install_memory_admin
 from .offer_middleware import install_offer_middleware
 from .openrouter import openrouter_headers
@@ -369,6 +370,14 @@ install_offer_middleware(pipecat_app)
 # either endpoint right after connecting pays no extra Workers calls.
 # See memory_admin.py for the in-flight-session caveat.
 install_memory_admin(pipecat_app)
+
+
+# Public MCP server (Streamable HTTP at /mcp): read-only retrieval tools over
+# the persona-facts + stream-archive indexes. Anonymous callers are rate
+# limited per IP; a valid loginSyncToken raises the ceiling (per UID). Mounted
+# here so it shares resolve_user_context's cache and the single-instance
+# deployment. See mcp_server.py for the combined-lifespan rationale.
+install_mcp(pipecat_app)
 
 
 # Hide pipecat's built-in SmallWebRTCPrebuiltUI demo (/, /client,
