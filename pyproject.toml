@@ -21,6 +21,9 @@ dependencies = [
     # via lancedb.rerankers.CohereReranker — only used when
     # COHERE_API_KEY is set; falls back to RRF-only if absent.
     "cohere>=5.13.0",
+    # Official Model Context Protocol SDK (includes FastMCP). Powers the
+    # public Streamable HTTP retrieval server mounted at /mcp.
+    "mcp>=1.27.2",
 ]
 
 [project.optional-dependencies]
@@ -53,8 +56,12 @@ laplace-eval-retrieval  = "laplace_eidolon.tools.eval_retrieval:main"
 [dependency-groups]
 dev = [
     "pyright>=1.1.404,<2",
+    "pytest>=8.0,<9",
     "ruff>=0.12.11,<1",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 # Hatchling needs an explicit packages= list because the distribution
 # name (``laplace-eidolon``, hyphen) doesn't match the import name
