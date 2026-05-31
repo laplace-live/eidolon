@@ -195,7 +195,7 @@ def _make_handler(
 
 def install_voice_style_tool(
     *,
-    llm: LLMService,
+    llm: LLMService[Any],
     tts: FishAudioTTSService,
     styles: dict[str, str] | None = None,
 ) -> ToolsSchema | None:
