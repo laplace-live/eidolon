@@ -74,11 +74,14 @@ and each index keeps its native result shape; no cross-source score merging.
 
 | Tool | Wraps | Key result fields |
 | --- | --- | --- |
-| `search_persona_facts(query: str, top_k?: int)` | `PersonaFactsService._search` | `date`, text, relevance score |
-| `search_streams(query: str, top_k?: int)` | `StreamArchiveService._search` | `stream_date`, text, relevance score |
+| `search_persona_facts(query: str)` | `PersonaFactsService._search` | `text`, `date`, `score` |
+| `search_streams(query: str)` | `StreamArchiveService._search` | `stream_date`, `content`, `topics`, `score` |
 
-- `top_k` is optional; omitted → the service's existing default (8 for facts,
-  3 for chunks).
+> **As shipped:** per-call `top_k` was deferred (YAGNI — "keep it simple"); each
+> tool uses the service's tuned default (8 facts / 3 chunks). Each tool returns a
+> `{"count", "results", "note"?}` envelope; the `results` are the projected
+> fields above. See the implementation plan's self-review notes.
+
 - Both strip the bulky `vector` field before returning (the CLI already does
   `h.pop("vector", None)`).
 - Results are returned as structured JSON content.
