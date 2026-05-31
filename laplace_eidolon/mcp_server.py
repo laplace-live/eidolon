@@ -215,9 +215,11 @@ def install_mcp(
     """Mount the Streamable HTTP MCP server at /mcp on ``app``.
 
     Call exactly once at startup, alongside ``install_offer_middleware`` and
-    ``install_memory_admin``. The keyword args exist for tests (inject fakes /
-    tiny quotas); production passes none and gets singletons built from the
-    default DB path and env-configured limits.
+    ``install_memory_admin``. Not idempotent: calling twice mounts /mcp twice
+    and wraps the lifespan twice, which invokes ``session_manager.run()`` twice
+    on the same instance and raises at startup. The keyword args exist for tests
+    (inject fakes / tiny quotas); production passes none and gets singletons
+    built from the default DB path and env-configured limits.
 
     The endpoint serves at ``/mcp/`` (``/mcp`` 307-redirects to it).
     """
