@@ -10,14 +10,16 @@ the network.
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
 import laplace_eidolon.mcp_server as mcp_server
 from laplace_eidolon.mcp_server import _project_chunk, _project_fact, install_mcp
+from laplace_eidolon.persona_facts import PersonaFactsService
 from laplace_eidolon.rate_limit import AnonymousIpQuota
+from laplace_eidolon.stream_archive import StreamArchiveService
 from laplace_eidolon.user_context import UserContext
 
 FACT_HIT = {
@@ -78,8 +80,12 @@ def _build_client(*, anon_max=5, auth_max=50, facts=None, streams=None) -> TestC
     app = FastAPI()
     install_mcp(
         app,
-        persona_facts=facts if facts is not None else FakeService([FACT_HIT]),
-        stream_archive=streams if streams is not None else FakeService([CHUNK_HIT]),
+        persona_facts=cast(
+            PersonaFactsService, facts if facts is not None else FakeService([FACT_HIT])
+        ),
+        stream_archive=cast(
+            StreamArchiveService, streams if streams is not None else FakeService([CHUNK_HIT])
+        ),
         anon_quota=AnonymousIpQuota(anon_max, 3600),
         auth_quota=AnonymousIpQuota(auth_max, 3600),
     )
