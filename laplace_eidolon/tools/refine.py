@@ -25,9 +25,11 @@ skipped unless ``--force`` is set.
 LLM provider
 ------------
 Reuses the existing OpenRouter setup (``OPENROUTER_API_KEY``). Default
-model is ``google/gemini-2.0-flash-001`` — cheap (~$0.10/1M input,
-$0.40/1M output), reliable JSON mode, multilingual. Override with
-``REFINE_MODEL`` env var or ``--model``.
+model is ``~google/gemini-pro-latest`` — noticeably better entity
+extraction and grounding than flash (~$0.05/chunk vs ~$0.035 in
+practice), reliable JSON mode, multilingual. Override with
+``REFINE_MODEL`` env var or ``--model``. Cheaper bulk runs:
+``--model "~google/gemini-flash-latest"``.
 
 Cost tracking
 -------------
@@ -91,7 +93,7 @@ from ._streams import (
 # Configuration
 # ---------------------------------------------------------------------------
 
-DEFAULT_MODEL = "google/gemini-2.0-flash-001"
+DEFAULT_MODEL = "~google/gemini-pro-latest"
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_CONCURRENCY = 8
 # Pass 1 (extract) outputs short structured arrays. Pass 2 (synthesize)
@@ -1295,8 +1297,7 @@ def main() -> int:
         default=os.getenv("REFINE_MODEL", DEFAULT_MODEL),
         help=(
             f"OpenRouter model slug (default: $REFINE_MODEL or {DEFAULT_MODEL}). "
-            "Cheap & multilingual options: google/gemini-2.0-flash-001, "
-            "google/gemini-flash-1.5-8b, openai/gpt-4o-mini."
+            "Cheaper bulk option: ~google/gemini-flash-latest."
         ),
     )
     parser.add_argument(
