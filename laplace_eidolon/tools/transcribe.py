@@ -352,6 +352,13 @@ SONIOX_SLICE_MAX_MIN_DEFAULT = 280
 
 # Structured context shape — see https://soniox.com/docs/stt/concepts/context
 SONIOX_CONTEXT_ALLOWED_KEYS = {"general", "text", "terms", "translation_terms"}
+# The SDK's default HTTP timeout is 30s — far too short for multi-hundred-MB
+# uploads on a residential uplink. This applies to connect/read/write alike;
+# job *processing* time is unaffected (that's the 5s poll loop).
+SONIOX_HTTP_TIMEOUT_SEC = 600.0
+# Consecutive poll-GET failures tolerated before aborting a job. At 5s
+# between attempts this rides out ~1 min of network flakiness.
+SONIOX_POLL_MAX_FAILURES = 12
 # Soniox caps context at ~8000 tokens. We approximate as ~10k characters
 # (deliberately conservative — CJK chars are typically 1 token each, English
 # is closer to ~4 chars/token, so this errs on the safe side for mixed
@@ -576,7 +583,7 @@ def transcribe_with_soniox(
             f"Soniox context: {_summarize_soniox_context(context_dict)} (from {args.context_file})"
         )
 
-    client = SonioxClient()
+    client = SonioxClient(timeout_sec=SONIOX_HTTP_TIMEOUT_SEC)
     segments, raw_payload, server_duration_sec = _soniox_transcribe_single(
         client=client,
         audio_path=args.audio,
@@ -617,6 +624,11 @@ def _soniox_transcribe_single(
     exactly like the historical ``.soniox.json`` schema so the on-disk
     format is stable across single-file and sliced runs.
     """
+    # httpx is a hard dependency of the soniox SDK, so it's guaranteed
+    # importable whenever this function is reachable; deferred like the
+    # SDK itself so the whisper-only install stays import-clean.
+    import httpx
+
     language_hints = [language] if language else None
     config = config_cls(
         language_hints=language_hints,
@@ -645,8 +657,30 @@ def _soniox_transcribe_single(
 
         last_status: str | None = None
         last_log = time.monotonic()
+        poll_failures = 0
         while True:
-            t = client.stt.get(transcription_id)
+            # A transient network blip on a single poll GET must not kill
+            # the run — the job keeps processing server-side, and worse,
+            # the `finally` below would destroy it (we've paid for the
+            # transcription at that point). Tolerate a bounded streak of
+            # failures before giving up for real.
+            try:
+                t = client.stt.get(transcription_id)
+                poll_failures = 0
+            except httpx.HTTPError as e:
+                poll_failures += 1
+                if poll_failures >= SONIOX_POLL_MAX_FAILURES:
+                    raise RuntimeError(
+                        f"Polling Soniox job {transcription_id} failed "
+                        f"{poll_failures} times in a row; giving up. "
+                        f"Last error: {type(e).__name__}: {e}"
+                    ) from e
+                logger.warning(
+                    f"  poll error ({poll_failures}/{SONIOX_POLL_MAX_FAILURES}), "
+                    f"retrying: {type(e).__name__}: {e}"
+                )
+                time.sleep(5)
+                continue
             elapsed = time.monotonic() - start_wall
             now = time.monotonic()
 
@@ -668,7 +702,22 @@ def _soniox_transcribe_single(
                 raise RuntimeError(f"Soniox job failed: {t.error_type}: {t.error_message}")
             time.sleep(5)
 
-        transcript = client.stt.get_transcript(transcription_id)
+        # Same transient-error tolerance as the poll loop: the job is
+        # complete and paid for at this point, so don't let one flaky GET
+        # hand it to the destructive `finally`.
+        for attempt in range(SONIOX_POLL_MAX_FAILURES):
+            try:
+                transcript = client.stt.get_transcript(transcription_id)
+                break
+            except httpx.HTTPError as e:
+                if attempt + 1 >= SONIOX_POLL_MAX_FAILURES:
+                    raise
+                logger.warning(
+                    f"  transcript fetch error "
+                    f"({attempt + 1}/{SONIOX_POLL_MAX_FAILURES}), retrying: "
+                    f"{type(e).__name__}: {e}"
+                )
+                time.sleep(5)
         tokens = transcript.tokens or []
         segments = _tokens_to_segments(tokens)
         elapsed = time.monotonic() - start_wall
@@ -831,7 +880,7 @@ def _transcribe_with_soniox_sliced(
             f"Soniox context: {_summarize_soniox_context(context_dict)} (from {args.context_file})"
         )
 
-    client = client_cls()
+    client = client_cls(timeout_sec=SONIOX_HTTP_TIMEOUT_SEC)
     merged_segments: list[Segment] = []
     merged_tokens: list[dict[str, Any]] = []
     merged_text_parts: list[str] = []
