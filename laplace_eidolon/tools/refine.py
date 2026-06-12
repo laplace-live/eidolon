@@ -252,7 +252,12 @@ by speaker labels:
 - Her own narration / chat / reactions ← capture these.
 - Audio from media she watches (anime, movies, games — Japanese, English).
   These are NOT her words. Drop them.
-- Songs she sings (full lyrics appear). Capture the song title only.
+- Songs she sings (full lyrics appear). Capture the song title only —
+  and NEVER name a song unless the title is explicitly spoken in the
+  transcript. Do not identify songs from lyric fragments: transcribed
+  lyrics are unreliable (often misheard across languages) and a confident
+  wrong title poisons the archive. If she sings but no title is spoken,
+  use {"title": "", "note": "<quote the lyric fragment verbatim>"}.
 - Reading viewer SuperChats (SCs) in patterns like "感谢XXX的SC...", "谢谢XXX的SC..." —
   capture EVERY SC verbatim along with her response.
 
@@ -328,6 +333,8 @@ chunk_type guidelines:
 
 If sc_session: in details, name AT LEAST 3 of the most notable viewers and what their SCs were about.
 If anime_audio or karaoke: keep summary brief (just note the scene/song); details can be 3-5 sentences instead of 8-15.
+Never name a song unless its title appears explicitly in the extract — if a
+songs entry has an empty title, describe the singing without naming a song.
 
 Output JSON only, no markdown, no preamble."""
 
