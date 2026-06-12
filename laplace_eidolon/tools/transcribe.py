@@ -1106,8 +1106,8 @@ def main() -> int:
     soniox_group = parser.add_argument_group("soniox provider")
     soniox_group.add_argument(
         "--soniox-model",
-        default="stt-async-v4",
-        help="Soniox async STT model (default: stt-async-v4)",
+        default="stt-async-v5",
+        help="Soniox async STT model (default: stt-async-v5)",
     )
     soniox_group.add_argument(
         "--keep-soniox-files",
