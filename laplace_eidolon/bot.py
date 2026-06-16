@@ -765,7 +765,7 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
     stt = SonioxSTTService(
         api_key=soniox_api_key,
         settings=SonioxSTTService.Settings(
-            model=os.getenv("SONIOX_MODEL", "stt-rt-v4"),
+            model=os.getenv("SONIOX_MODEL", "stt-rt-v5"),
         ),
     )
 

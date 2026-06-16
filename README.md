@@ -16,7 +16,7 @@ transport.input → STT → user_aggregator
 
 | Layer            | Service                                                                   |
 | ---------------- | ------------------------------------------------------------------------- |
-| STT              | [Soniox](https://console.soniox.com/) (`stt-rt-v4`)                       |
+| STT              | [Soniox](https://console.soniox.com/) (`stt-rt-v5`)                       |
 | LLM              | [OpenRouter](https://openrouter.ai/) (default `openai/gpt-4o-2024-11-20`) |
 | TTS              | [Fish Audio](https://fish.audio/app/) (`s2-pro`, WebSocket)               |
 | Transport        | SmallWebRTC (Pipecat, self-hosted)                                        |
