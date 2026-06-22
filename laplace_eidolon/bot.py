@@ -807,7 +807,7 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
         settings=FishAudioTTSService.Settings(
             voice=os.getenv("FISH_VOICE_ID"),
             model=os.getenv("FISH_MODEL", "s2-pro"),
-            # latency="normal",
+            latency="normal",
             # Seems worse when reading years
             normalize=False,
             # temperature=0.7,
