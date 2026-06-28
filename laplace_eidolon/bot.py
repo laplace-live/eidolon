@@ -797,7 +797,7 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
     #   top_p=0.7          Server default. Pair with temperature for diversity.
     #
     # Not exposed by Pipecat (would need a subclass to inject into the start
-    # message): prosody.normalize_loudness (S2-Pro perceived-loudness
+    # message): prosody.normalize_loudness (S2.1-Pro perceived-loudness
     # normalization, defaults true server-side), chunk_length, repetition_
     # penalty, condition_on_previous_chunks, min_chunk_length. Revisit if the
     # voice clips, drifts across turns, or repeats artifacts.
@@ -806,7 +806,7 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
         sample_rate=44100,
         settings=FishAudioTTSService.Settings(
             voice=os.getenv("FISH_VOICE_ID"),
-            model=os.getenv("FISH_MODEL", "s2-pro"),
+            model=os.getenv("FISH_MODEL", "s2.1-pro"),
             latency="normal",
             # Seems worse when reading years
             normalize=False,
