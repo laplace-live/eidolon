@@ -1,14 +1,8 @@
 """Shared parsing for ``streams/*.md`` files.
 
-Both ``tools/ingest_streams.py`` and ``tools/refine.py`` need to agree on:
-
-- How an .md file splits into chunks (H2 boundaries)
-- How chunk IDs are generated (``{stream_id}::{idx:03d}``)
-- Where the .refined.json sidecar lives next to its source
-
-Keeping this in one place means refine.py's chunk IDs always match
-ingest_streams.py's, so refined data can be looked up at ingest time without
-re-deriving anything.
+``tools/refine.py`` and ``tools/ingest_streams.py`` both parse through here,
+so refine's chunk IDs always match ingest's and refined data can be looked
+up at ingest time without re-deriving anything.
 """
 
 from __future__ import annotations
@@ -29,7 +23,6 @@ class StreamChunk:
     """A single H2-delimited chunk from a stream transcript."""
 
     id: str
-    """Stable across runs: ``{stream_id}::{idx:03d}``."""
     stream_id: str
     idx: int
     heading: str
@@ -41,7 +34,6 @@ class ParsedStream:
     """A parsed ``streams/*.md`` file."""
 
     md_path: Path
-    """Path to the source markdown."""
     stream_id: str
     metadata: dict[str, Any]
     """The full YAML frontmatter (whatever was authored)."""
@@ -49,16 +41,14 @@ class ParsedStream:
 
     @property
     def sidecar_path(self) -> Path:
-        """``streams/foo.md`` → ``streams/foo.refined.json``."""
         return self.md_path.with_suffix(".refined.json")
 
 
 def split_into_chunks(body: str) -> list[dict[str, str]]:
-    """Split a markdown body into chunks at H2 boundaries.
+    """Split a markdown body into ``{"heading", "text"}`` dicts at H2 boundaries.
 
-    Returns ``[{"heading": str, "text": str}, ...]``. Content before the
-    first H2 (intro paragraph, if any) is dropped — H2 sections are the
-    unit of retrieval.
+    Content before the first H2 is dropped — H2 sections are the unit of
+    retrieval.
     """
     chunks: list[dict[str, str]] = []
     matches = list(H2_RE.finditer(body))
@@ -106,14 +96,8 @@ def iter_streams(streams_dir: Path) -> list[ParsedStream]:
 def load_sidecar(parsed: ParsedStream) -> dict[str, Any]:
     """Read the .refined.json sidecar for a stream, or an empty stub.
 
-    Empty stub shape::
-
-        {
-          "schema_version": 1,
-          "stream_id": "...",
-          "chunks": {<chunk_id>: {refinement fields}, ...},
-          "stats": {...}  # only present after a successful run
-        }
+    ``chunks`` maps chunk ID to that chunk's refinement fields; ``stats``
+    appears only after a successful refine run.
     """
     if parsed.sidecar_path.exists():
         try:

@@ -1,45 +1,19 @@
 """Extract the top-N most-spoken usernames from a danmakus.com chat export.
 
 danmakus.com archives a streamer's super chats, membership renewals, and
-chat danmaku as JSON. The schema we expect::
+chat danmaku as JSON: a flat list under ``.data.data.danmakus`` whose
+entries carry ``uId``, ``uName``, ``type``, ``price``, and ``sendDate``.
 
-    {
-      "data": {
-        "data": {
-          "danmakus": [
-            {"uId": ..., "uName": "...", "type": ..., "message": "...",
-             "price": ..., "sendDate": ..., "count": ...},
-            ...
-          ]
-        }
-      }
-    }
+Dedupes by ``uId`` (viewers rename themselves between archives), keeps the
+most recent ``uName`` as canonical, and ranks by frequency of paid events —
+those are the ones where the streamer reads a name aloud, so they're the
+names worth hand-pasting into the ``terms`` array in
+``soniox_context.toml``. Types ``{1, 2, 3}`` (super chat, membership
+renewal, low-tier super chat) count by default; system events like room
+entry and bans are excluded so lurkers don't crowd out actual chatters.
 
-We dedupe by ``uId`` (a user can rename themselves between archives), keep
-the most-recent ``uName`` as their canonical display, and rank by frequency
-of paid events — those are exactly the ones where the streamer reads the
-name aloud, so they're the names worth biasing Soniox toward.
-
-By default we count types ``{1, 2, 3}``:
-
-* type=1 — super chat (醒目留言)
-* type=2 — membership / 舰长 / 提督 / 总督 renewal
-* type=3 — paid SC variant (low-tier 醒目留言, ~¥30)
-
-System events (room entry, ban, title update) are excluded by default so
-lurkers don't crowd out actual chatters.
-
-Workflow::
-
-    uv run laplace-extract-users \\
-        references/25034104_明前奶绿_danmakus.com_*.json > new_terms.txt
-
-    # Then hand-paste the names into the `terms = [...]` array in
-    # soniox_context.toml.
-
-Stdout is just the names — one per line, nothing else — so you can pipe
-straight into a file. The summary (totals, date range, type breakdown,
-top spenders for context) goes to stderr where it stays out of the way.
+Stdout is one username per line and nothing else, so it pipes straight into
+a file. The summary goes to stderr, out of the way.
 """
 
 from __future__ import annotations
@@ -52,10 +26,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-# Type values published by danmakus.com. Anything outside CONTENT_TYPES is
-# either a system event (room entry, ban, title update, stream-start
-# marker) or a free chat danmaku that the streamer doesn't read by name —
-# excluding them keeps the ranking focused on names actually spoken.
+# Type values published by danmakus.com.
 TYPE_LABELS: dict[int, str] = {
     0: "free chat",
     1: "SC",
@@ -72,8 +43,7 @@ DEFAULT_INCLUDE_TYPES: set[int] = {1, 2, 3}
 def _parse_types(arg: str) -> set[int] | None:
     """Parse the ``--types`` CLI value into a filter set.
 
-    ``"all"`` returns ``None`` (meaning "no filtering"); a comma-separated
-    list returns the parsed integer set.
+    ``"all"`` returns ``None``, meaning no filtering.
     """
     if arg.strip().lower() == "all":
         return None
@@ -150,8 +120,8 @@ def main() -> int:
         return 1
 
     counts: Counter[int] = Counter()  # uid -> messages-included count
-    # Spend is float (some SC prices are fractional, e.g. ¥5.2 for 情书),
-    # so it can't ride on Counter (whose values are int per typeshed).
+    # Some SC prices are fractional (¥5.2 for 情书), so spend can't ride on
+    # a Counter — typeshed types its values as int.
     spend: defaultdict[int, float] = defaultdict(float)  # uid -> total price
     last_name: dict[int, tuple[int, str]] = {}  # uid -> (latest sendDate, uName)
     type_counts_all: Counter[int] = Counter()
@@ -177,8 +147,8 @@ def main() -> int:
             continue
         uid = int(uid_raw)
 
-        # Always track most-recent name + lifetime spend regardless of
-        # filter — handy for the FYI top-spenders summary.
+        # Tracked regardless of the type filter, so the top-spenders
+        # summary covers lifetime spend rather than just counted events.
         spend[uid] += float(price)
         prev = last_name.get(uid)
         if prev is None or send_date >= prev[0]:
@@ -189,7 +159,6 @@ def main() -> int:
             if latest_ms is None or send_date > latest_ms:
                 latest_ms = int(send_date)
 
-        # Only the included types contribute to the ranking.
         if args.types is not None and msg_type not in args.types:
             continue
         counts[uid] += 1
@@ -219,9 +188,8 @@ def main() -> int:
     if total_spend:
         print(f"  total spend    : ¥{total_spend:,.0f} across all types", file=sys.stderr)
 
-    # Top spenders — informational, not the same as top by frequency.
-    # Useful eyeball test: are the top names familiar? If yes, the file
-    # is the right streamer's archive.
+    # Ranked by spend, not frequency. Eyeball test: if the top names look
+    # familiar, this file really is the right streamer's archive.
     top_spenders = sorted(spend.items(), key=lambda kv: kv[1], reverse=True)[:10]
     if top_spenders:
         print("", file=sys.stderr)
@@ -236,7 +204,6 @@ def main() -> int:
 
     for uid, _count in counts.most_common(args.top):
         name = last_name[uid][1]
-        # stdout line = exactly one username, nothing else. Easy to pipe.
         print(name)
 
     return 0

@@ -1,10 +1,9 @@
 """Tests for the public MCP retrieval server.
 
-Integration tests drive the mounted Streamable HTTP app through Starlette's
-TestClient (synchronous — it runs the ASGI app + lifespan in a background
-portal, so no pytest-asyncio is needed). Fake services + tiny quotas are
-injected via install_mcp's keyword args, so tests need neither LanceDB nor
-the network.
+Starlette's TestClient drives the mounted app synchronously — it runs the
+ASGI app and lifespan in a background portal, so no pytest-asyncio. Fake
+services and tiny quotas go in through install_mcp's keyword args, keeping
+LanceDB and the network out of the tests.
 """
 
 from __future__ import annotations
@@ -65,8 +64,8 @@ ACCEPT = "application/json, text/event-stream"
 
 
 class FakeService:
-    """Stand-in for PersonaFactsService / StreamArchiveService. ``_table``
-    None mimics a missing index; otherwise ``_search`` returns canned hits."""
+    """Stand-in for PersonaFactsService / StreamArchiveService. A ``_table``
+    of None mimics a missing index; otherwise ``_search`` returns canned hits."""
 
     def __init__(self, hits: list[dict[str, Any]], *, has_table: bool = True):
         self._table = object() if has_table else None
@@ -159,7 +158,6 @@ def test_valid_token_uses_higher_authenticated_tier(monkeypatch):
         return UserContext(mid=12345678, uname="奶绿粉丝", is_logged_in=True)
 
     monkeypatch.setattr(mcp_server, "resolve_user_context", fake_resolve)
-    # anon quota is 2, auth quota is 50: five token-bearing calls all succeed.
     with _build_client(anon_max=2, auth_max=50) as client:
         for i in range(5):
             result = _call_tool(

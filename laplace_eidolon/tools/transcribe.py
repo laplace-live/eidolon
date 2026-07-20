@@ -1,74 +1,24 @@
 """Transcribe a VOD audio/video file into a streams/*.md transcript.
 
-Two providers are supported:
+Two backends funnel through one ``Segment`` shape, so the chunker and the
+markdown renderer stay provider-agnostic:
 
-- ``soniox`` (default) — cloud async API, ~$0.10/hour audio, much better on
-  Mandarin, game/character names, and code-switching. Reuses the
-  ``SONIOX_API_KEY`` you already have set for the realtime STT bot.
+- ``soniox`` (default) — cloud async API, ~$0.10/hour of audio, much better
+  on Mandarin, game/character names, and code-switching. Reuses the
+  ``SONIOX_API_KEY`` already set for the realtime STT bot.
 - ``whisper`` — local ``faster-whisper`` (CTranslate2 backend, no PyTorch
-  dependency, runs on Apple Silicon natively). Free, offline, slower, weaker
-  on Mandarin punctuation and proper nouns.
+  dependency, native on Apple Silicon). Free and offline, but slower and
+  weaker on Mandarin punctuation and proper nouns.
 
-Both providers return the same internal ``Segment`` shape; the rest of the
-pipeline (chunk-into-scenes, render markdown) is provider-agnostic.
+Both emit units far too granular for retrieval — Whisper 5-30s segments,
+Soniox sub-word tokens — so segments are regrouped into fixed-time windows.
+Each window becomes one H2 section, and H2 boundaries are what later gets
+indexed.
 
-Workflow::
-
-    uv sync --extra tools             # one-time, installs both backends
-
-    # Cloud Soniox (default, better Mandarin; --language defaults to zh):
-    uv run laplace-transcribe vods/2026-04-15-stream.m4a \\
-        --date 2026-04-15
-
-    # Local Whisper (free, offline):
-    uv run laplace-transcribe vods/2026-04-15-stream.m4a \\
-        --date 2026-04-15 \\
-        --provider whisper --model medium --compute-type int8
-
-    # Auto-detect language (override the zh default):
-    uv run laplace-transcribe vods/foo.m4a --language ""
-
-    # One-off vocabulary spike (new game/show, unfamiliar proper nouns)?
-    # Override the default glossary for this run only:
-    uv run laplace-transcribe vods/foo.m4a \\
-        --context-file path/to/my_glossary.toml
-
-    # Then ingest into the LanceDB stream archive:
-    uv run laplace-ingest-streams
-
-Chunking strategy
------------------
-Both providers emit fine-grained units (Whisper: 5–30s segments, Soniox:
-sub-word tokens). For retrieval purposes that's too granular — every chunk
-would be a few sentences with no context. We group everything into
-fixed-time windows (default 5 minutes) so each H2 section is a coherent
-"scene". You can hand-edit the output afterwards to split or merge
-sections; H2 boundaries drive what gets indexed.
-
-The first sentence of each scene becomes the heading hint. You'll usually
-want to replace it with something more descriptive ("00:15 — Stone Talus
-fight" instead of "00:15 — So I'm heading into Eldin..."). Manual editing
-of these files is a feature, not a chore — your judgment beats the
-transcriber's sentence boundaries every time.
-
-Soniox glossary / structured context
-------------------------------------
-Soniox accepts a "structured context" hint with each job that biases the
-model toward your domain vocabulary — character names, audience slang,
-recurring topics. For Mandarin streams full of proper nouns and
-code-switching, this is a huge accuracy win. We load it from a TOML file
-(default ``server/soniox_context.toml``) and pass it on every soniox run.
-
-The context is intentionally **per-project**, not per-stream. A single VOD
-often spans chat, gaming, karaoke, and watchalongs, so a single per-stream
-"topic" hint would be misleading. Per-scene topics live on each chunk
-post-refinement (see ``tools/refine.py``); Soniox just gets the project's
-recurring vocabulary.
-
-  --context-file PATH    Use a different TOML file for this run.
-  --no-context           Skip context entirely (clean A/B comparison).
-
-Schema and limits: https://soniox.com/docs/stt/concepts/context
+Soniox jobs also carry a glossary of recurring vocabulary, loaded from a
+TOML file. It's deliberately per-project rather than per-stream: one VOD
+spans chat, gaming, karaoke, and watchalongs, so a stream-level topic hint
+would mislead. Per-scene topics come later, from ``tools/refine.py``.
 """
 
 from __future__ import annotations
@@ -86,24 +36,14 @@ from typing import Any
 
 from loguru import logger
 
-# Both backends live in the optional `[tools]` extra; type-checkers running
-# against the runtime extras alone can't see them. Imports are deferred into
-# the dispatcher functions so missing extras yield a friendly error instead
-# of an import-time crash.
-
-
-# ──────────────────────────────────────────────────────────────────────
-# Provider-agnostic shapes — both transcribers funnel through these so the
-# downstream chunker and renderer stay backend-unaware.
-# ──────────────────────────────────────────────────────────────────────
+# Both backends live in the optional `[tools]` extra. Their imports stay
+# deferred inside the dispatcher functions so a runtime-only install fails
+# with a friendly message instead of crashing at import time.
 
 
 @dataclass
 class Segment:
-    """Provider-agnostic segment (matches faster-whisper's Segment surface).
-
-    Times are in **seconds** so the existing chunker works unchanged.
-    """
+    """Provider-agnostic segment; ``start``/``end`` in seconds."""
 
     start: float
     end: float
@@ -114,10 +54,9 @@ class Segment:
 class TranscribeInfo:
     """Audio-level metadata returned alongside segments.
 
-    ``raw`` is an optional provider-specific payload — currently only the
-    Soniox backend populates it (full transcription metadata + per-token
-    timing/confidence). Saved verbatim to a sibling ``.soniox.json`` so
-    you can re-chunk locally without re-paying the transcription bill.
+    ``raw`` holds the provider's own payload (only Soniox populates it today)
+    and is saved verbatim to a sibling ``.soniox.json``, so re-chunking
+    locally doesn't mean re-paying the transcription bill.
     """
 
     duration: float  # seconds; 0 if unknown
@@ -144,8 +83,7 @@ def _short_ts(seconds: float) -> str:
 
 
 def _format_dur(seconds: float) -> str:
-    """Friendly duration: ``42`` → ``"42s"``, ``312`` → ``"5m12s"``,
-    ``5025`` → ``"1h23m"``."""
+    """``42`` → ``"42s"``, ``312`` → ``"5m12s"``, ``5025`` → ``"1h23m"``."""
     s = int(max(0, seconds))
     if s < 60:
         return f"{s}s"
@@ -170,11 +108,7 @@ def group_segments_into_scenes(
     segments: list[Any],
     window_seconds: int,
 ) -> list[dict[str, Any]]:
-    """Bucket Whisper segments into fixed-time scenes.
-
-    Returns a list of scenes with ``start``, ``end``, and ``text`` (joined
-    transcript for that window).
-    """
+    """Bucket segments into fixed-time scenes of ``start`` / ``end`` / ``text``."""
     if not segments:
         return []
     scenes: list[dict[str, Any]] = []
@@ -185,7 +119,6 @@ def group_segments_into_scenes(
     for seg in segments:
         if current_start is None:
             current_start = (seg.start // window_seconds) * window_seconds
-        # If this segment starts in a new window, flush the current scene.
         if seg.start - current_start >= window_seconds:
             scenes.append(
                 {
@@ -246,21 +179,13 @@ def render_markdown(
     return "\n".join(fm_lines + body_lines).rstrip() + "\n"
 
 
-# ──────────────────────────────────────────────────────────────────────
-# Provider: faster-whisper (local)
-# ──────────────────────────────────────────────────────────────────────
-
 PROGRESS_EVERY_SEC = 10.0
 
 
 def transcribe_with_whisper(
     args: argparse.Namespace,
 ) -> tuple[list[Segment], TranscribeInfo]:
-    """Transcribe ``args.audio`` locally with faster-whisper.
-
-    Drains the segment generator with periodic progress + ETA logs so a
-    multi-hour VOD doesn't sit silent for the entire run.
-    """
+    """Transcribe ``args.audio`` locally with faster-whisper."""
     try:
         from faster_whisper import WhisperModel  # type: ignore[import-not-found]
     except ImportError as e:
@@ -278,11 +203,9 @@ def transcribe_with_whisper(
         vad_filter=True,
     )
 
-    # `model.transcribe` returns a generator — segments are produced lazily
-    # as ctranslate2 chews through the audio. Materializing the whole thing
-    # with `list(...)` would block silently for tens of minutes on a long
-    # VOD. Drain it manually and emit a progress line every
-    # PROGRESS_EVERY_SEC of wall time so the user sees an ETA.
+    # `model.transcribe` returns a lazy generator: wrapping it in `list(...)`
+    # blocks silently for tens of minutes on a long VOD. Drain it by hand so
+    # the loop below can report progress and an ETA.
     duration_sec = info.duration
     detected_lang = info.language
     logger.info(
@@ -326,43 +249,31 @@ def transcribe_with_whisper(
     return segments, TranscribeInfo(duration=duration_sec, language=detected_lang)
 
 
-# ──────────────────────────────────────────────────────────────────────
-# Provider: Soniox (cloud async)
-# ──────────────────────────────────────────────────────────────────────
-
-# Soniox returns sub-word tokens with millisecond timestamps. We group
-# consecutive tokens into pseudo-segments roughly comparable to Whisper's
-# 5-30s segments so the downstream chunker behaves identically. A segment
-# closes when EITHER:
-#   - it ends with sentence-final punctuation AND is at least
-#     SONIOX_MIN_SEGMENT_SEC long, OR
-#   - it reaches SONIOX_MAX_SEGMENT_SEC.
+# Soniox returns sub-word tokens; grouping them into pseudo-segments of
+# Whisper-comparable length keeps the downstream chunker behaving identically.
 SONIOX_MIN_SEGMENT_SEC = 3.0
 SONIOX_MAX_SEGMENT_SEC = 30.0
 _SENTENCE_END_RE = re.compile(r"[.!?。！？]\s*$")
-# Soniox's hard limit per file; fail fast rather than discovering this
-# server-side after a full upload.
+# Soniox's hard per-file limit; checked locally so an oversized file fails
+# before the upload rather than after it.
 SONIOX_MAX_DURATION_MIN = 300
-# Default per-part cap when --auto-slice is on. Sits well below the hard
-# 300-min cap so server-side measurement drift, container padding, or the
-# odd extra frame doesn't tip a slice over the line. 280 min leaves a
-# comfortable ~20 min margin and keeps part counts low for typical
-# 300–340 min VODs (2 parts each).
+# Default per-part cap for --auto-slice. 280 leaves ~20 min of headroom for
+# server-side measurement drift and container padding, and still yields only
+# 2 parts for a typical 300-340 min VOD.
 SONIOX_SLICE_MAX_MIN_DEFAULT = 280
 
 # Structured context shape — see https://soniox.com/docs/stt/concepts/context
 SONIOX_CONTEXT_ALLOWED_KEYS = {"general", "text", "terms", "translation_terms"}
-# The SDK's default HTTP timeout is 30s — far too short for multi-hundred-MB
-# uploads on a residential uplink. This applies to connect/read/write alike;
-# job *processing* time is unaffected (that's the 5s poll loop).
+# The SDK defaults to a 30s HTTP timeout, far too short for multi-hundred-MB
+# uploads on a residential uplink. It covers connect/read/write only — job
+# processing time is bounded by the 5s poll loop instead.
 SONIOX_HTTP_TIMEOUT_SEC = 600.0
 # Consecutive poll-GET failures tolerated before aborting a job. At 5s
 # between attempts this rides out ~1 min of network flakiness.
 SONIOX_POLL_MAX_FAILURES = 12
-# Soniox caps context at ~8000 tokens. We approximate as ~10k characters
-# (deliberately conservative — CJK chars are typically 1 token each, English
-# is closer to ~4 chars/token, so this errs on the safe side for mixed
-# Mandarin/English content).
+# Soniox caps context at ~8000 tokens; ~10k chars is a deliberately
+# conservative stand-in, since CJK runs ~1 token/char against English's ~4
+# chars/token and this content mixes both.
 SONIOX_CONTEXT_MAX_CHARS = 10_000
 
 
@@ -373,19 +284,15 @@ def _load_soniox_context_dict(
 ) -> dict[str, Any] | None:
     """Load a TOML glossary file and return it as a Soniox-shaped dict.
 
-    The returned dict matches Soniox's ``StructuredContext`` schema —
-    ``general`` / ``text`` / ``terms`` / ``translation_terms`` — and can
-    be passed straight into ``StructuredContext(**dict)``. Returns
-    ``None`` when context is disabled, the file is missing, or the file
-    contains nothing usable.
+    The result matches Soniox's ``StructuredContext`` schema and can go
+    straight into ``StructuredContext(**dict)``. Returns ``None`` when
+    context is disabled, the file is missing, or nothing usable is in it.
     """
     if skip:
         return None
     if path is None:
         return None
     if not path.exists():
-        # Friendly heads-up rather than a hard error: the user might just
-        # not have created the file yet, and that's fine.
         logger.info(
             f"No Soniox context file at {path} — running without glossary. "
             f"Create one to bias the model toward your vocabulary."
@@ -393,7 +300,7 @@ def _load_soniox_context_dict(
         return None
 
     try:
-        import tomllib  # Python 3.11+ stdlib
+        import tomllib
     except ImportError as e:
         raise RuntimeError(
             "Soniox context loading needs Python 3.11+ (stdlib tomllib). "
@@ -404,7 +311,6 @@ def _load_soniox_context_dict(
     with path.open("rb") as f:
         raw: dict[str, Any] = tomllib.load(f)
 
-    # Warn (don't fail) on unknown top-level keys so typos surface fast.
     unknown = set(raw.keys()) - SONIOX_CONTEXT_ALLOWED_KEYS
     if unknown:
         logger.warning(
@@ -414,11 +320,9 @@ def _load_soniox_context_dict(
         for k in unknown:
             raw.pop(k)
 
-    # Defensive per-entry shape check. The most common TOML mistake is
-    # putting a top-level scalar (`text = "..."` or `terms = [...]`) AFTER
-    # a `[[general]]` array-of-tables block — TOML silently nests it inside
-    # the last general entry instead of at the root. Catch it loudly so
-    # the user fixes the file rather than running with phantom context.
+    # TOML silently nests a top-level scalar (`text = "..."`, `terms = [...]`)
+    # into the last `[[general]]` entry when it's written after that block.
+    # Catch it loudly — otherwise the run goes out with phantom context.
     for i, item in enumerate(raw.get("general") or []):
         extras = set(item.keys()) - {"key", "value"}
         if extras:
@@ -439,13 +343,11 @@ def _load_soniox_context_dict(
                 f"and `target`. (Same TOML-ordering pitfall as above.)"
             )
 
-    # Strip empty / falsy sections so the final payload is minimal.
     raw = {k: v for k, v in raw.items() if v}
 
     if not raw:
         return None
 
-    # Soft size check: warn if approaching the limit, error if over.
     serialized = json.dumps(raw, ensure_ascii=False)
     char_count = len(serialized)
     if char_count > SONIOX_CONTEXT_MAX_CHARS:
@@ -464,7 +366,6 @@ def _load_soniox_context_dict(
 
 
 def _summarize_soniox_context(ctx: dict[str, Any]) -> str:
-    """One-line summary suitable for an info log."""
     parts: list[str] = []
     if "general" in ctx:
         parts.append(f"{len(ctx['general'])} general")
@@ -480,10 +381,9 @@ def _summarize_soniox_context(ctx: dict[str, Any]) -> str:
 def _tokens_to_segments(tokens: list[Any]) -> list[Segment]:
     """Group Soniox tokens into Whisper-shaped segments.
 
-    Tokens carry ``start_ms``, ``end_ms``, and ``text``. Joining is just
-    concatenation — Soniox already includes leading whitespace where the
-    target language requires it (English does, Mandarin doesn't), so naive
-    ``"".join(...)`` produces correct output for both.
+    Joining is bare concatenation on purpose: Soniox already includes leading
+    whitespace where the target language wants it (English does, Mandarin
+    doesn't), so ``" ".join(...)`` would wreck the Mandarin output.
     """
     segments: list[Segment] = []
     cur_start: float | None = None
@@ -502,7 +402,6 @@ def _tokens_to_segments(tokens: list[Any]) -> list[Segment]:
         cur_parts = []
 
     for tok in tokens:
-        # Skip tokens without timing (rare, defensive).
         if tok.start_ms is None or tok.end_ms is None:
             continue
         start = tok.start_ms / 1000.0
@@ -526,14 +425,10 @@ def transcribe_with_soniox(
 ) -> tuple[list[Segment], TranscribeInfo]:
     """Transcribe via Soniox cloud async API.
 
-    For files within the 300-min cap this is a single upload+poll+fetch
-    cycle (delegated to ``_soniox_transcribe_single``). For longer files,
-    if ``--auto-slice`` is set, the audio is split into ≤ ``--slice-max-min``
-    minute parts via ffmpeg, each part is transcribed independently, and
-    the resulting segments / tokens are merged with offset timestamps so
-    the rest of the pipeline (chunker, markdown renderer, ingest) sees
-    one logical transcript. Without ``--auto-slice`` we fail fast with a
-    helpful message rather than silently spending a long upload.
+    Files under the per-file cap are one upload/poll/fetch cycle. Longer ones
+    need ``--auto-slice``, which splits them with ffmpeg and merges the parts
+    back into a single logical transcript; without it, the run fails fast
+    rather than spending a long upload on a job Soniox will reject.
     """
     try:
         from soniox import SonioxClient
@@ -549,9 +444,6 @@ def transcribe_with_soniox(
             "you already use for the realtime STT in the bot)."
         )
 
-    # Soniox enforces a hard 300-minute per-file limit. Probe the duration
-    # via ffprobe (already installed because faster-whisper pulls av) so we
-    # can fail fast instead of after a multi-minute upload.
     duration_sec = _probe_duration_sec(args.audio)
     auto_slice = getattr(args, "auto_slice", False)
     if duration_sec is not None and duration_sec / 60 > SONIOX_MAX_DURATION_MIN:
@@ -569,9 +461,6 @@ def transcribe_with_soniox(
             structured_context_cls=StructuredContext,
         )
 
-    # Structured context (glossary + domain hints) — biases the model
-    # toward project vocabulary. Returns None if the file is missing or
-    # --no-context was passed; the request just goes out without context.
     context_dict = _load_soniox_context_dict(
         args.context_file,
         skip=args.no_context,
@@ -619,14 +508,12 @@ def _soniox_transcribe_single(
 ) -> tuple[list[Segment], dict[str, Any], float]:
     """Upload one file to Soniox, poll, fetch tokens, return (segments, raw, dur).
 
-    Cleanup is unconditional in the ``finally`` so caller doesn't have to
-    track ``transcription_id`` themselves. Returns the raw payload shaped
-    exactly like the historical ``.soniox.json`` schema so the on-disk
-    format is stable across single-file and sliced runs.
+    The raw payload keeps one ``.soniox.json`` shape across single-file and
+    sliced runs, so the on-disk format doesn't reveal which path produced it.
     """
-    # httpx is a hard dependency of the soniox SDK, so it's guaranteed
-    # importable whenever this function is reachable; deferred like the
-    # SDK itself so the whisper-only install stays import-clean.
+    # httpx is a hard dependency of the soniox SDK, so it's importable
+    # wherever this function is reachable; deferred like the SDK itself to
+    # keep the whisper-only install import-clean.
     import httpx
 
     language_hints = [language] if language else None
@@ -659,11 +546,9 @@ def _soniox_transcribe_single(
         last_log = time.monotonic()
         poll_failures = 0
         while True:
-            # A transient network blip on a single poll GET must not kill
-            # the run — the job keeps processing server-side, and worse,
-            # the `finally` below would destroy it (we've paid for the
-            # transcription at that point). Tolerate a bounded streak of
-            # failures before giving up for real.
+            # A blip on one poll GET must not kill the run: the job keeps
+            # processing server-side, and the `finally` below would destroy a
+            # transcription we've already paid for.
             try:
                 t = client.stt.get(transcription_id)
                 poll_failures = 0
@@ -684,7 +569,6 @@ def _soniox_transcribe_single(
             elapsed = time.monotonic() - start_wall
             now = time.monotonic()
 
-            # Always log on status transitions; otherwise heartbeat every 10s.
             should_log = t.status != last_status or now - last_log >= PROGRESS_EVERY_SEC
             if should_log:
                 last_log = now
@@ -702,9 +586,9 @@ def _soniox_transcribe_single(
                 raise RuntimeError(f"Soniox job failed: {t.error_type}: {t.error_message}")
             time.sleep(5)
 
-        # Same transient-error tolerance as the poll loop: the job is
-        # complete and paid for at this point, so don't let one flaky GET
-        # hand it to the destructive `finally`.
+        # Same tolerance as the poll loop — the job is complete and paid for
+        # here, so one flaky GET must not hand it to the destructive
+        # `finally`.
         for attempt in range(SONIOX_POLL_MAX_FAILURES):
             try:
                 transcript = client.stt.get_transcript(transcription_id)
@@ -722,8 +606,8 @@ def _soniox_transcribe_single(
         segments = _tokens_to_segments(tokens)
         elapsed = time.monotonic() - start_wall
 
-        # Prefer the server's measured duration over our ffprobe estimate
-        # since Soniox is the source of truth for what was actually processed.
+        # Soniox is the source of truth for what it actually processed, so its
+        # measurement beats the local ffprobe estimate.
         server_duration_sec = (
             (t.audio_duration_ms or 0) / 1000.0
             if t.audio_duration_ms
@@ -736,12 +620,10 @@ def _soniox_transcribe_single(
                 f"({server_duration_sec / elapsed:.2f}x realtime)"
             )
 
-        # Build the raw payload for sibling ``.soniox.json``. The Soniox SDK
-        # types are Pydantic models, so ``model_dump(mode="json")`` handles
-        # datetimes and any nested types cleanly. We also persist the exact
-        # `context` we sent so future re-runs / refinement passes can audit
-        # what biased the model — and so renaming a glossary entry doesn't
-        # silently invalidate yesterday's transcripts.
+        # The SDK's types are Pydantic models, so ``model_dump(mode="json")``
+        # handles the datetimes and nested types. The exact `context` sent is
+        # persisted too, so editing a glossary entry doesn't silently make
+        # yesterday's transcripts unexplainable.
         raw_payload: dict[str, Any] = {
             "provider": "soniox",
             "transcription_id": transcription_id,
@@ -776,13 +658,11 @@ def _ffmpeg_slice(
 ) -> None:
     """Cut ``[start_sec, start_sec + duration_sec)`` from ``audio`` to ``out_path``.
 
-    Uses ``-c copy`` so the slice is fast and lossless — no re-encoding,
-    no quality drift between parts and the original. Keyframe-bounded
-    cuts can drift by up to a few seconds on either side; for speech
-    that's well below scene-window granularity (5 min) and the
-    timestamps we *reconstruct* are based on the requested start, not
-    where ffmpeg actually landed, so the merged transcript stays
-    monotonic regardless.
+    ``-c copy`` keeps the slice fast and lossless, at the cost of
+    keyframe-bounded cuts that can drift a few seconds either way. That's far
+    below the 5-minute scene window, and merged timestamps are rebuilt from
+    the requested start rather than where ffmpeg landed, so the transcript
+    stays monotonic regardless.
     """
     import shutil
     import subprocess
@@ -808,8 +688,8 @@ def _ffmpeg_slice(
         str(audio),
         "-c",
         "copy",
-        # Drop video streams if present (e.g. mp4 with cover art) — Soniox
-        # only needs audio and a stripped file uploads faster.
+        # Soniox only needs audio, and dropping any video stream (mp4 cover
+        # art, say) makes the upload smaller.
         "-vn",
         "-map_metadata",
         "-1",
@@ -834,17 +714,12 @@ def _transcribe_with_soniox_sliced(
 ) -> tuple[list[Segment], TranscribeInfo]:
     """Split oversized audio with ffmpeg, transcribe each part, merge.
 
-    Each part is independently uploaded to Soniox and cleaned up before
-    the next one starts (sequential, single Soniox job in flight at a
-    time — keeps memory low and respects per-account concurrency caps
-    when the outer pipeline is already parallelising across files).
-
-    Segments and tokens from each part have their timestamps shifted by
-    the part's start offset so the merged transcript is monotonic and
-    looks identical to a single-file transcription downstream.
-
-    Original audio is never modified — all slices live in a
-    ``TemporaryDirectory`` that's wiped on exit (including exceptions).
+    Parts run strictly one at a time, so only one Soniox job is ever in
+    flight — the outer pipeline may already be parallelising across files,
+    and per-account concurrency caps apply. Each part's segments and tokens
+    are shifted by its start offset, leaving downstream code unable to tell
+    the result from a single-file transcription. The source audio is never
+    touched; slices live in a temp dir wiped on exit, exceptions included.
     """
     import math
     import tempfile
@@ -856,9 +731,8 @@ def _transcribe_with_soniox_sliced(
         )
     part_max_sec = slice_max_min * 60.0
     n_parts = math.ceil(duration_sec / part_max_sec)
-    # Even split so part sizes are balanced rather than "N-1 full parts
-    # + one tiny tail". Soniox bills per-second so total cost is the
-    # same; balanced parts just make wall-clock progress more predictable.
+    # An even split costs the same (Soniox bills per second) but makes
+    # wall-clock progress more predictable than N-1 full parts and a tiny tail.
     part_dur_sec = duration_sec / n_parts
 
     logger.info(
@@ -867,8 +741,8 @@ def _transcribe_with_soniox_sliced(
         f"(cap={slice_max_min} min/part)"
     )
 
-    # Build context once and reuse across parts — sending it with every
-    # part keeps Soniox's bias consistent across the merged transcript.
+    # The same context on every part keeps Soniox's bias consistent across the
+    # merged transcript.
     context_dict = _load_soniox_context_dict(
         args.context_file,
         skip=args.no_context,
@@ -892,9 +766,8 @@ def _transcribe_with_soniox_sliced(
         tmp_dir = Path(tmp_str)
         for i in range(n_parts):
             offset_sec = i * part_dur_sec
-            # Last part absorbs any rounding remainder so we always cover
-            # the full source duration without depending on ffmpeg's
-            # exact landing point.
+            # The last part absorbs the rounding remainder so the full source
+            # duration is covered without trusting ffmpeg's landing point.
             this_dur_sec = (
                 duration_sec - offset_sec if i == n_parts - 1 else part_dur_sec
             )
@@ -926,18 +799,16 @@ def _transcribe_with_soniox_sliced(
                 probed_duration_sec=this_dur_sec,
             )
 
-            # Offset segments. ``Segment`` is a dataclass with float
-            # start/end in seconds — shift both by the part's wall-clock
-            # offset so the merged stream reads as if it came from one
+            # Shift into the parent timeline so the merge reads as one
             # continuous transcription.
             for s in part_segments:
                 merged_segments.append(
                     Segment(start=s.start + offset_sec, end=s.end + offset_sec, text=s.text)
                 )
 
-            # Offset raw tokens too so the persisted .soniox.json can be
-            # re-chunked later without losing the global timeline. Tokens
-            # use millisecond ints; missing values stay None.
+            # Same for the raw tokens, so the persisted .soniox.json can be
+            # re-chunked later against the global timeline. These are
+            # millisecond ints, not the seconds ``Segment`` uses.
             offset_ms = int(offset_sec * 1000)
             tokens = part_raw.get("transcript", {}).get("tokens") or []
             for tok in tokens:
@@ -953,8 +824,8 @@ def _transcribe_with_soniox_sliced(
 
             total_server_duration_sec += part_server_dur or this_dur_sec
 
-            # Keep a per-part audit trail (ids, model, etc.) without the
-            # heavy token list — that lives in merged_tokens above.
+            # A per-part audit trail without the heavy token list, which is
+            # already in merged_tokens.
             part_payloads.append(
                 {
                     "part_index": i + 1,
@@ -968,8 +839,6 @@ def _transcribe_with_soniox_sliced(
                     "transcript_id": (part_raw.get("transcript") or {}).get("id"),
                 }
             )
-        # tmp_dir (and all part files) auto-delete here, including on
-        # exceptions thrown above.
 
     final_duration_sec = total_server_duration_sec or duration_sec
     logger.info(
@@ -988,8 +857,8 @@ def _transcribe_with_soniox_sliced(
         "audio_duration_ms": int(final_duration_sec * 1000),
         "parts": part_payloads,
         "transcript": {
-            # No single transcript id for sliced runs — use the first
-            # part's so anything keying on "transcript.id" still works.
+            # A sliced run has no single transcript id; the first part's keeps
+            # anything keying on "transcript.id" working.
             "id": part_payloads[0]["transcript_id"] if part_payloads else None,
             "text": "".join(merged_text_parts),
             "tokens": merged_tokens,
@@ -1004,11 +873,7 @@ def _transcribe_with_soniox_sliced(
 
 
 def _probe_duration_sec(path: Path) -> float | None:
-    """Return audio duration in seconds via ffprobe, or None on failure.
-
-    Used as a pre-flight check for Soniox's 300-minute per-file limit so
-    we don't waste a multi-minute upload just to get rejected server-side.
-    """
+    """Return audio duration in seconds via ffprobe, or None on failure."""
     import shutil
     import subprocess
 
@@ -1036,14 +901,8 @@ def _probe_duration_sec(path: Path) -> float | None:
         return None
 
 
-# ──────────────────────────────────────────────────────────────────────
-# CLI
-# ──────────────────────────────────────────────────────────────────────
-
-
 def main() -> int:
-    # Load .env so SONIOX_API_KEY (and any other env vars) are picked up
-    # regardless of whether the user activated their venv beforehand.
+    # Pick up SONIOX_API_KEY from .env without requiring it to be exported.
     try:
         from dotenv import load_dotenv
 
@@ -1118,8 +977,8 @@ def main() -> int:
             "1000-file quota stays open."
         ),
     )
-    # Default lives next to ``server/`` so the path is invariant under CWD —
-    # someone running from ``server/tools/`` still hits the same file.
+    # Resolved against this file, not the CWD, so the default glossary is the
+    # same one wherever the command is run from.
     _default_context = Path(__file__).resolve().parent.parent / "soniox_context.toml"
     soniox_group.add_argument(
         "--context-file",
@@ -1170,17 +1029,16 @@ def main() -> int:
 
     args = parser.parse_args()
 
-    # Normalize empty `--language ""` (the documented "auto" escape hatch)
-    # to None so faster-whisper's language= kwarg gets a real None rather
-    # than an invalid empty string.
+    # `--language ""` is the documented auto-detect escape hatch, but
+    # faster-whisper's language= kwarg needs a real None, not an empty string.
     if args.language == "":
         args.language = None
 
     if not args.audio.exists():
         logger.error(f"Audio file not found: {args.audio}")
-        # BLREC-style filenames are long and full of CJK + punctuation; a
-        # single missing `!!` or `_1` is hard to spot. Suggest siblings whose
-        # name is a near match so the user can copy-paste the correct one.
+        # BLREC filenames are long and full of CJK plus punctuation, so a
+        # missing `!!` or `_1` is near-invisible. Offer near-matching siblings
+        # to copy-paste instead.
         parent = args.audio.parent
         if parent.exists():
             try:
@@ -1229,9 +1087,9 @@ def main() -> int:
     out_path.write_text(md, encoding="utf-8")
     logger.info(f"Wrote {out_path} ({len(scenes)} scenes via {args.provider})")
 
-    # Persist the raw provider response next to the markdown for future
-    # re-chunking without re-transcribing. Only Soniox populates this today;
-    # `.with_suffix` is single-suffix-only so we build the path manually.
+    # Persist the raw provider response so a later re-chunk doesn't have to
+    # re-transcribe. The path is built by hand because `.with_suffix` replaces
+    # only the last suffix.
     if info.raw is not None:
         raw_path = out_path.parent / f"{out_path.stem}.{args.provider}.json"
         raw_path.write_text(

@@ -1,22 +1,9 @@
 """Probe the stream archive index from the command line.
 
-Same retrieval path the bot uses (``StreamArchiveService._search``) —
-hybrid (vector + jieba-tokenized FTS) with optional Cohere rerank.
-Useful for:
-
-- Sanity-checking the index after ``tools/ingest_streams.py``
-- Debugging "why didn't the bot recall X?" (run the same query here, see
-  what comes back and at what relevance score)
-- A/B-ing query phrasing before changing transcripts or persona
-
-For evaluating retrieval quality across many queries with metrics, use
-``laplace-eval-retrieval`` instead.
-
-Usage::
-
-    uv run laplace-search "你5月9号干啥了"
-    uv run laplace-search "fire temple" --top-k 5 --full
-    uv run laplace-search "茶馆" --json
+Runs the exact retrieval path the bot uses (``StreamArchiveService._search``
+— hybrid vector + jieba-tokenized FTS, optional Cohere rerank), so what
+comes back here is what the bot would have recalled. For scoring retrieval
+quality across many queries, use ``laplace-eval-retrieval`` instead.
 """
 
 from __future__ import annotations
@@ -35,8 +22,8 @@ from ..stream_archive import DEFAULT_TABLE, StreamArchiveService
 
 
 async def main_async(args: argparse.Namespace) -> int:
-    # Quiet the loguru INFO line from StreamArchiveService.__init__ so the
-    # CLI output isn't mixed up with logging noise.
+    # Silence StreamArchiveService.__init__'s INFO line so it doesn't land
+    # in the middle of the CLI's own output.
     logger.remove()
     logger.add(sys.stderr, level="WARNING")
 
@@ -63,10 +50,9 @@ async def main_async(args: argparse.Namespace) -> int:
         print(f"No hits for {args.query!r}.")
         return 0
 
-    # Hybrid + reranked results carry _relevance_score (HIGHER is
-    # better); the unreranked-vector path carries _distance (LOWER is
-    # better). Show the right hint based on which field is present in
-    # the first hit.
+    # Hybrid + reranked results carry _relevance_score (higher is better);
+    # the unreranked-vector path carries _distance (lower is better). Which
+    # field is present decides the hint, and the per-hit header below.
     score_hint = (
         "higher relevance = better match"
         if hits and hits[0].get("_relevance_score") is not None
@@ -83,14 +69,10 @@ async def main_async(args: argparse.Namespace) -> int:
         details = h.get("details") or ""
         text = h.get("text", "")
         chunk_type = h.get("chunk_type") or ""
-        # Hybrid + reranked results carry _relevance_score (higher =
-        # better); pure-vector results carry _distance (lower = better).
-        # Show whichever is present so the column header is honest.
         relevance = h.get("_relevance_score")
         dist = h.get("_distance", 0.0) if relevance is None else None
         is_refined = bool(h.get("refined"))
 
-        # Decode v2 extras blob if present.
         extras: dict[str, object] = {}
         extras_raw = h.get("extras_json") or ""
         if extras_raw:
@@ -99,8 +81,8 @@ async def main_async(args: argparse.Namespace) -> int:
             except json.JSONDecodeError:
                 extras = {}
 
-        # Topics are per-chunk (refine.py emits 3-7 short tags). JSON-decode
-        # defensively — unrefined chunks store "[]" rather than a real list.
+        # refine.py emits 3-7 short per-chunk tags. Decoded defensively:
+        # unrefined chunks store the string "[]" rather than a real list.
         topics: list[str] = []
         topics_raw = h.get("topics") or ""
         if topics_raw:
@@ -128,7 +110,6 @@ async def main_async(args: argparse.Namespace) -> int:
             print(f"     SUMMARY: {summary}")
 
         if args.full:
-            # In --full mode, show everything the bot would see.
             if details:
                 print()
                 print("     DETAILS:")

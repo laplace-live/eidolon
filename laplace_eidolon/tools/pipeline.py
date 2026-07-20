@@ -1,76 +1,16 @@
 """End-to-end pipeline: bilibili URL list → ingested LanceDB rows.
 
-Glues the four existing tools into one re-runnable command:
+Chains download → transcribe → refine → ingest_streams. Every stage uses
+filesystem-as-state, so the run is idempotent and resumable: re-run after a
+Ctrl-C or a flaky network and it picks up where it left off. Transcribe,
+refine, and ingest run as subprocesses, so a Soniox upload that crashes
+mid-flight can't take the rest of the batch with it; per-item failures are
+logged and the run continues unless ``--abort-on-error``.
 
-    1. download   tools.download      → vods/<id>.m4a + vods/<id>.info.json
-    2. transcribe tools.transcribe    → streams/<date>-<id>.md (+ .soniox.json)
-    3. refine     tools.refine        → streams/<date>-<id>.refined.json
-    4. ingest     tools.ingest_streams → data/lancedb/stream_chunks.lance
-
-Every stage uses **filesystem-as-state**, so the pipeline is idempotent
-and resumable: re-run after a Ctrl-C (or a flaky network) and it picks
-up exactly where it left off — already-downloaded files are skipped by
-yt-dlp's ``--no-overwrites``, already-transcribed audio is skipped if a
-matching ``streams/*.md`` exists, and refine + ingest are idempotent by
-construction.
-
-Stage isolation
----------------
-The download stage runs in-process (via ``tools.download.download_urls``).
-Transcribe/refine/ingest run in **subprocesses** (one per audio file for
-transcribe, one global call for refine and ingest each). Subprocess
-isolation matters because Soniox uploads are slow and can crash mid-
-flight; failing one file shouldn't take down the rest of the batch.
-
-Per-item failures are logged and the pipeline continues; the final
-summary reports what was attempted, skipped, and failed. Pass
-``--abort-on-error`` if you'd rather fail fast.
-
-Multi-part bilibili VODs
-------------------------
-A single URL like ``https://www.bilibili.com/video/BV1mLd9BTEBV/`` may
-expand into ``BV1mLd9BTEBV_p1``, ``_p2``, ``_p3`` files (Bilibili splits
-long stream replays into ~2-hour chunks). Each part is treated as its
-own stream — separate ``streams/<date>-<id>_pN.md``, separate scenes,
-separate refinement records. This stays well under Soniox's 5-hour
-per-file limit and keeps retrieval simple. Group by ``stream_date`` at
-query time if you need to span all parts of one broadcast day.
-
-The ``--date`` passed to ``tools.transcribe`` comes from
-``upload_date`` in yt-dlp's per-part info.json — the actual date the
-streamer broadcast it, not today.
-
-Usage::
-
-    # Full pipeline on a URL list (this is the common case):
-    uv run laplace-pipeline data/video-sample.txt
-
-    # Skip download (already have the m4a files locally):
-    uv run laplace-pipeline data/video-sample.txt \\
-        --stages transcribe,refine,ingest
-
-    # See what would happen without doing anything:
-    uv run laplace-pipeline data/video-sample.txt --dry-run
-
-    # Fewer surprises if a single bad URL should fail the whole run:
-    uv run laplace-pipeline data/video-sample.txt --abort-on-error
-
-    # Run several Soniox transcribes in parallel (one subprocess per file).
-    # 4–8 is a good sweet spot for typical home upload bandwidth; Soniox
-    # async accounts cap concurrent jobs at 25 so stay well below that.
-    # With concurrency >1, each child's output is captured and prefixed
-    # with [idx/total stem] so progress lines stay readable:
-    uv run laplace-pipeline data/video-sample.txt \\
-        --transcribe-concurrency 6
-
-    # Custom transcribe / refine knobs (pipeline forwards the common ones).
-    # --transcribe-concurrency parallelises transcribe subprocesses;
-    # --refine-concurrency parallelises in-process LLM calls inside refine.
-    # They compose freely:
-    uv run laplace-pipeline data/video-sample.txt \\
-        --language zh --provider soniox \\
-        --transcribe-concurrency 6 \\
-        --refine-model openai/gpt-4o-mini --refine-concurrency 16
+One bilibili URL can expand into ``_p1``, ``_p2``, ``_p3`` parts — Bilibili
+splits long replays into ~2-hour chunks. Each part becomes its own stream,
+which keeps every file well under Soniox's 5-hour per-file cap; group by
+``stream_date`` at query time to span a whole broadcast day.
 """
 
 from __future__ import annotations
@@ -100,20 +40,14 @@ ALL_STAGES = ("download", "transcribe", "refine", "ingest")
 DEFAULT_STREAMS_DIR = Path("streams")
 
 
-# ---------------------------------------------------------------------------
-# Per-stage reports
-# ---------------------------------------------------------------------------
-
-
 @dataclass
 class TranscribeReport:
     """Per-run accounting for ``stage_transcribe``."""
 
     audio_total: int
     audio_skipped: int = 0
-    """Audio files whose .md already exists — left alone."""
+    """Audio whose .md already exists."""
     audio_skipped_no_date: int = 0
-    """Audio files we couldn't infer a date for; can't safely transcribe."""
     succeeded: int = 0
     failed: list[tuple[Path, str]] = field(default_factory=list)
     duration_sec: float = 0.0
@@ -132,11 +66,6 @@ class StageResult:
         return self.returncode == 0
 
 
-# ---------------------------------------------------------------------------
-# Helpers shared by the transcribe stage
-# ---------------------------------------------------------------------------
-
-
 def _info_json_for(audio_path: Path) -> Path:
     """yt-dlp writes ``<id>.info.json`` next to ``<id>.m4a``."""
     return audio_path.with_suffix(".info.json")
@@ -145,12 +74,10 @@ def _info_json_for(audio_path: Path) -> Path:
 def _read_upload_date(audio_path: Path) -> str | None:
     """Return ISO ``YYYY-MM-DD`` from the audio's info.json, or None.
 
-    yt-dlp's ``upload_date`` is a compact ``YYYYMMDD`` string. We
-    convert to ISO so it can be passed straight to ``tools.transcribe
-    --date``. Returns None if the sidecar is missing, malformed, or has
-    no usable date — in which case the file is skipped (not auto-dated
-    to today) because the transcribe stage's ``stream_id`` becomes
-    permanent and using "today" for an old VOD would be wrong forever.
+    yt-dlp writes ``upload_date`` as a compact ``YYYYMMDD``. A missing or
+    malformed one returns None so the caller skips the file rather than
+    defaulting to today: the date is baked into a permanent ``stream_id``,
+    so "today" on an old VOD would be wrong forever.
     """
     info_path = _info_json_for(audio_path)
     if not info_path.exists():
@@ -171,9 +98,8 @@ def _stream_md_path(streams_dir: Path, date_iso: str, audio_stem: str) -> Path:
     return streams_dir / f"{date_iso}-{audio_stem}.md"
 
 
-# Audio extensions we expect tools.transcribe to handle. Match the set in
-# tools/download.py so a custom --format that produces, say, opus, still
-# flows through correctly.
+# Keep in sync with tools/download.py, or a custom --format that yields
+# (say) opus downloads fine and is then silently never transcribed.
 _TRANSCRIBABLE_EXTS = {".m4a", ".mp3", ".wav", ".flac", ".webm", ".opus", ".aac"}
 
 
@@ -181,11 +107,6 @@ def _list_audio_files(vods_dir: Path) -> list[Path]:
     if not vods_dir.exists():
         return []
     return sorted(p for p in vods_dir.iterdir() if p.is_file() and p.suffix in _TRANSCRIBABLE_EXTS)
-
-
-# ---------------------------------------------------------------------------
-# Stage 1 — download
-# ---------------------------------------------------------------------------
 
 
 def stage_download(
@@ -214,11 +135,6 @@ def stage_download(
     )
 
 
-# ---------------------------------------------------------------------------
-# Stage 2 — transcribe
-# ---------------------------------------------------------------------------
-
-
 def _build_transcribe_cmd(
     audio: Path,
     *,
@@ -245,8 +161,8 @@ def _build_transcribe_cmd(
         str(streams_dir),
         "--provider",
         provider,
-        # Empty string is the documented "auto-detect" escape hatch in
-        # transcribe.py, so we forward it verbatim.
+        # Forwarded verbatim: an empty string is transcribe.py's
+        # documented "auto-detect" escape hatch, not a missing value.
         "--language",
         language,
     ]
@@ -258,9 +174,6 @@ def _build_transcribe_cmd(
         cmd += ["--context-file", str(context_file)]
     if keep_soniox_files:
         cmd += ["--keep-soniox-files"]
-    # Batch use case: a 1000-VOD run can't afford to hard-fail on every
-    # 5-hour stream. We default --auto-slice ON in the pipeline (the
-    # standalone transcribe CLI keeps the historical fail-fast default).
     if auto_slice and provider == "soniox":
         cmd += ["--auto-slice"]
         if slice_max_min is not None:
@@ -272,9 +185,8 @@ def _build_transcribe_cmd(
 class _TranscribeJob:
     """One unit of work for the transcribe stage.
 
-    Built in a single planning pass over ``vods/`` (idempotency checks +
-    metadata reads happen there, not in worker threads) so the dispatcher
-    can blast the whole list at the executor without per-job decisions.
+    Skip checks and metadata reads all happen during planning, so worker
+    threads make no per-job decisions of their own.
     """
 
     audio: Path
@@ -300,9 +212,8 @@ def _plan_transcribe_jobs(
 ) -> list[_TranscribeJob]:
     """Single pass over audio files: skip-checks + cmd build.
 
-    Mutates ``report`` for the skip counters; returns the list of jobs
-    that actually need to run. ``dry_run`` mode logs what *would* run
-    and returns an empty list (so the dispatcher is a no-op).
+    Mutates ``report``'s skip counters. Under ``dry_run`` it logs what
+    would run and returns an empty list, making the dispatcher a no-op.
     """
     jobs: list[_TranscribeJob] = []
     for idx, audio in enumerate(files, 1):
@@ -356,9 +267,8 @@ def _run_transcribes_sequential(
 ) -> None:
     """One subprocess at a time, with live stdout/stderr to the terminal.
 
-    This matches the historical pipeline behavior exactly — Soniox
-    upload heartbeats and polling status flow through to the user as
-    they happen, no buffering, no prefixes.
+    Nothing is captured or prefixed, so Soniox upload heartbeats and poll
+    status reach the user as they happen.
     """
     for job in jobs:
         logger.info(
@@ -394,20 +304,14 @@ def _run_transcribes_parallel(
 ) -> None:
     """N transcribe subprocesses in flight at once via a thread pool.
 
-    Each child's stdout/stderr is captured and re-emitted line-by-line
-    with a ``[idx/total stem]`` prefix so the parallel transcribe.py
-    progress lines interleave readably instead of becoming a wall of
-    unattributed text.
+    Child output is captured and re-emitted with a ``[idx/total stem]``
+    prefix so N interleaved progress streams stay attributable.
 
-    abort_on_error semantics in parallel mode: on first failure we
-    cancel pending (not-yet-started) jobs, but in-flight subprocesses
-    are allowed to finish — they may yet succeed, and forcefully
-    terminating mid-upload to Soniox could leave dangling server-side
-    transcription records that count against your quota.
-
-    KeyboardInterrupt: terminates every running subprocess so Ctrl-C
-    is responsive instead of waiting for 8 multi-hour uploads to
-    finish naturally.
+    ``abort_on_error`` here cancels pending jobs but lets in-flight ones
+    finish: killing a Soniox upload mid-flight can leave a dangling
+    server-side transcription record that still counts against quota.
+    KeyboardInterrupt does terminate them, since waiting out eight
+    multi-hour uploads is not a responsive Ctrl-C.
     """
     import threading
     from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
@@ -416,8 +320,7 @@ def _run_transcribes_parallel(
         f"Running {len(jobs)} transcribe subprocess(es) in parallel (concurrency={concurrency})"
     )
 
-    # Track in-flight Popen objects so KeyboardInterrupt can terminate
-    # them. Dict keyed by Popen so removal on completion is O(1).
+    # Tracked so KeyboardInterrupt has something to terminate.
     running: dict[subprocess.Popen, _TranscribeJob] = {}
     running_lock = threading.Lock()
 
@@ -426,9 +329,8 @@ def _run_transcribes_parallel(
             proc = subprocess.Popen(
                 job.cmd,
                 stdout=subprocess.PIPE,
-                # Merge stderr into stdout so loguru's stderr output
-                # (which is where transcribe.py writes its progress)
-                # interleaves correctly with any stdout writes.
+                # transcribe.py's progress goes to stderr via loguru;
+                # merging keeps it ordered against any stdout writes.
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,  # line-buffered
@@ -445,10 +347,9 @@ def _run_transcribes_parallel(
                 line = line.rstrip()
                 if not line:
                     continue
-                # Direct print so we don't double-stamp transcribe.py's
-                # own loguru timestamp prefix with another loguru line.
-                # `flush=True` so users see live progress instead of
-                # block-buffered chunks of output.
+                # print, not logger: the child's line already carries a
+                # loguru timestamp, and re-logging would stamp it twice.
+                # flush keeps progress live instead of block-buffered.
                 print(f"{job.label} {job.audio.stem}: {line}", flush=True)
             rc = proc.wait()
         finally:
@@ -471,9 +372,8 @@ def _run_transcribes_parallel(
         with ThreadPoolExecutor(max_workers=concurrency) as ex:
             future_map = {ex.submit(run_one, job): job for job in jobs}
             for future in as_completed(future_map):
-                # Cancelled futures show up here too; their .result()
-                # raises CancelledError. Cancellation only happens via
-                # the abort_on_error path below.
+                # Futures cancelled by the abort_on_error path below also
+                # arrive here, raising CancelledError from .result().
                 try:
                     job, rc, err = future.result()
                 except CancelledError:
@@ -521,15 +421,10 @@ def stage_transcribe(
 ) -> TranscribeReport:
     """Transcribe each audio file in ``vods_dir`` whose .md doesn't yet exist.
 
-    Each file runs in its own subprocess so a Soniox upload crash on one
-    multi-hour VOD doesn't take down the rest of the batch. Per-file
-    failures are recorded and we move on (unless ``abort_on_error``).
-
-    ``transcribe_concurrency`` controls how many subprocesses run at
-    once. ``1`` (the default) preserves the historical sequential
-    behavior with live unbuffered output. ``>1`` uses a thread pool +
-    Popen pipes; output is captured and re-emitted with a per-job
-    prefix so progress from N parallel uploads stays readable.
+    Args:
+        transcribe_concurrency: ``1`` runs subprocesses one at a time with
+            live unbuffered output; ``>1`` switches to the thread pool in
+            ``_run_transcribes_parallel``.
     """
     started = time.monotonic()
     files = _list_audio_files(vods_dir)
@@ -584,12 +479,6 @@ def stage_transcribe(
     return report
 
 
-# ---------------------------------------------------------------------------
-# Stages 3 & 4 — refine and ingest (one global call each; both already
-# idempotent on their own)
-# ---------------------------------------------------------------------------
-
-
 def stage_refine(
     *,
     streams_dir: Path,
@@ -642,11 +531,6 @@ def stage_ingest(
     logger.info(f"Ingesting: {' '.join(cmd)}")
     rc = subprocess.run(cmd, check=False).returncode
     return StageResult(name="ingest", returncode=rc, duration_sec=time.monotonic() - started)
-
-
-# ---------------------------------------------------------------------------
-# Final summary
-# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -722,19 +606,12 @@ def print_pipeline_summary(summary: PipelineSummary, vods_dir: Path) -> None:
     print("=" * 64)
 
 
-# ---------------------------------------------------------------------------
-# Stage selection helpers
-# ---------------------------------------------------------------------------
-
-
 def _parse_stages(raw: str) -> list[str]:
     """Validate and normalize ``--stages``.
 
-    Accepts ``"all"`` (run everything), an empty string (also "all" — be
-    forgiving), or a comma-separated subset of ``ALL_STAGES`` in any
-    order. We always **execute** in the canonical order regardless of
-    the order the user typed them in, so passing ``ingest,download``
-    still does download first.
+    Accepts ``"all"``, an empty string (also all), or a comma-separated
+    subset in any order. Execution always follows the canonical order, so
+    ``ingest,download`` still downloads first.
     """
     raw = (raw or "").strip().lower()
     if not raw or raw == "all":
@@ -745,13 +622,7 @@ def _parse_stages(raw: str) -> list[str]:
         raise argparse.ArgumentTypeError(
             f"Unknown stage(s): {sorted(unknown)}. Valid: {list(ALL_STAGES)}."
         )
-    # Preserve canonical execution order.
     return [s for s in ALL_STAGES if s in requested]
-
-
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
 
 
 def main() -> int:
@@ -872,10 +743,8 @@ def main() -> int:
         action="store_true",
         help="Don't delete the uploaded file + transcription record from Soniox after success.",
     )
-    # The pipeline is the batch-processing use case where one 5-hour VOD
-    # shouldn't break the whole run, so --auto-slice defaults ON here.
-    # Standalone ``laplace-transcribe`` keeps the historical fail-fast
-    # default. Use --no-auto-slice to opt out of pipeline-side slicing.
+    # Slicing defaults ON here but OFF in standalone ``laplace-transcribe``:
+    # a batch run can't afford to hard-fail on one oversized VOD.
     transcribe_group.add_argument(
         "--no-auto-slice",
         dest="auto_slice",
@@ -947,8 +816,8 @@ def main() -> int:
     cookies_browser = args.cookies_from_browser or None
     extra_yt_dlp = _split_extra_args(args.yt_dlp_args)
 
-    # Read URLs up front even if download is disabled — empty/bad list
-    # should fail fast, before we, e.g., bill a Soniox transcription.
+    # Read the list even when download is disabled, so a bad path fails
+    # before the run bills a Soniox transcription.
     try:
         urls = read_url_list(args.url_list)
     except FileNotFoundError as e:
@@ -1021,8 +890,7 @@ def main() -> int:
                 summary.aborted = True
                 raise _Abort
     except _Abort:
-        # Abort is just a control-flow signal so we can fall through to
-        # the summary and exit with a non-zero code without stack trace.
+        # Falls through to the summary and a non-zero exit, no traceback.
         pass
 
     summary.total_duration_sec = time.monotonic() - started
@@ -1035,7 +903,7 @@ class _Abort(Exception):
 
 
 def _split_extra_args(raw: str) -> list[str]:
-    """Tokenize --yt-dlp-extra-args via shlex so quoted args round-trip safely."""
+    """Tokenize ``--yt-dlp-args`` via shlex so quoted args round-trip safely."""
     raw = (raw or "").strip()
     if not raw:
         return []

@@ -1,56 +1,18 @@
 """Download bilibili (or any yt-dlp-supported) audio from a URL list.
 
 Reads URLs from a text file (one per line; ``#`` and blank lines ignored)
-and shells out to yt-dlp for each one, writing audio + a sidecar
-``<id>.info.json`` into ``vods/``. The sidecar metadata (specifically
-``upload_date``) is what ``tools/pipeline.py`` reads later to populate
-``--date`` for the transcribe step — so don't strip ``--write-info-json``
-unless you've taught the pipeline another way to discover the stream date.
+and shells out to yt-dlp once per URL, writing audio plus an
+``<id>.info.json`` sidecar into ``vods/``.
 
-Filenames
----------
-Output template is ``%(id)s.%(ext)s``, so a multi-part Bilibili VOD like
-``BV1mLd9BTEBV`` produces three sibling files::
+A multi-part Bilibili VOD lands as one file per part (``BV…_p1``, ``_p2``,
+…), and each part is treated as its own stream downstream — the H2 scene
+clock restarts at ``00:00`` for every part. Parts are continuous slices of
+one broadcast, but Soniox caps a single job at 5 hours, so they're never
+glued back together.
 
-    vods/BV1mLd9BTEBV_p1.m4a   vods/BV1mLd9BTEBV_p1.info.json
-    vods/BV1mLd9BTEBV_p2.m4a   vods/BV1mLd9BTEBV_p2.info.json
-    vods/BV1mLd9BTEBV_p3.m4a   vods/BV1mLd9BTEBV_p3.info.json
-
-Each part is treated as its own stream downstream — the H2 scene clock
-restarts at ``00:00`` for every part, which matches how the audio was
-actually broadcast (parts are continuous slices, not separate sessions,
-but Soniox caps single jobs at 5 hours so we don't try to glue them).
-
-Idempotency
------------
-yt-dlp's ``--no-overwrites`` is on by default, so re-running this on the
-same URL list is cheap — already-downloaded files are skipped server-side
-without re-fetching. To force a re-download, delete the file from
-``vods/`` (or pass ``--extra-args -- --force-overwrites``).
-
-Cookies
--------
-Default is ``--cookies-from-browser chrome`` (matching the manual
-yt-dlp invocation in the project notes). If Chrome is running you'll
-hit a SQLite lock on the cookie DB; quit Chrome and retry, or use
-``--cookies path/to/cookies.txt`` to load a static export instead.
-
-Usage::
-
-    # Download every URL in data/video-sample.txt
-    uv run laplace-download data/video-sample.txt
-
-    # Different cookie source
-    uv run laplace-download data/video-sample.txt \\
-        --cookies-from-browser firefox
-
-    # Pass-through args to yt-dlp as a single shell-quoted string:
-    uv run laplace-download data/video-sample.txt \\
-        --yt-dlp-args "--rate-limit 2M --sleep-interval 5"
-
-This is the focused download tool; ``laplace_eidolon.tools.pipeline``
-calls into the same ``download_urls`` helper to run the download stage
-end-to-end.
+``--cookies-from-browser chrome`` is the default. Chrome has to be quit
+first or the cookie-DB read hits a SQLite lock;
+``--cookies path/to/cookies.txt`` loads a static export instead.
 """
 
 from __future__ import annotations
@@ -81,7 +43,7 @@ class DownloadReport:
     succeeded_urls: int = 0
     """URLs yt-dlp returned 0 for, including ones that hit --no-overwrites."""
     failed_urls: list[tuple[str, str]] = field(default_factory=list)
-    """``[(url, short_error), ...]`` — failures don't abort the batch."""
+    """``[(url, short_error), ...]``."""
     new_files: list[Path] = field(default_factory=list)
     """Audio files that appeared in ``vods/`` during this run.
 
@@ -104,9 +66,8 @@ def read_url_list(path: Path) -> list[str]:
     return urls
 
 
-# Audio extensions we'd plausibly produce. Kept conservative — the default
-# format spec (`bestaudio[ext=m4a]`) only ever yields .m4a, but a user
-# overriding `--format` shouldn't have their files invisible to the diff.
+# The default format spec only ever yields .m4a, but a user overriding
+# `--format` shouldn't have their files invisible to the new-file diff.
 _AUDIO_EXTS = {".m4a", ".mp3", ".wav", ".flac", ".webm", ".opus", ".aac"}
 
 
@@ -131,13 +92,13 @@ def _build_yt_dlp_cmd(
         format_spec,
         "-o",
         str(vods_dir / "%(id)s.%(ext)s"),
-        # Sidecar metadata is the source of truth for the stream date in
-        # the pipeline's transcribe stage, so this flag is non-negotiable.
+        # pipeline.py reads `upload_date` out of this sidecar to fill
+        # `--date` for the transcribe stage, and has no other way to
+        # discover the stream date. Don't drop this flag.
         "--write-info-json",
         "--no-overwrites",
         # Skip the per-VOD playlist info.json (`BVxxx.info.json` without
-        # `_pN`) since we only consume per-part metadata; the playlist
-        # file is just clutter for our use case.
+        # `_pN`) — only per-part metadata is ever consumed.
         "--no-write-playlist-metafiles",
     ]
     if cookies_from_browser:
@@ -161,11 +122,9 @@ def download_urls(
     """Download every URL in ``urls`` to ``vods_dir`` via yt-dlp.
 
     One URL per yt-dlp invocation so a single bad URL (deleted, paywalled,
-    cookies expired) doesn't abort the batch. The DownloadReport records
-    each failure with the tail of stderr for triage.
-
-    Returns *after* every URL was attempted; check
-    ``len(report.failed_urls)`` to know whether anything went wrong.
+    cookies expired) doesn't abort the batch. Returns only after every URL
+    was attempted, never raising on a per-URL failure — check
+    ``report.failed_urls``, which carries the stderr tail for triage.
     """
     if shutil.which("yt-dlp") is None:
         raise RuntimeError(
@@ -190,10 +149,9 @@ def download_urls(
             extra_args=extra_args,
         )
         try:
-            # Don't capture stdout — yt-dlp prints its progress bar there
-            # and surfacing it live is nicer than buffering it. Stderr is
-            # captured so we can include the failure tail in the report
-            # without flooding the parent log on every transient warning.
+            # stdout stays uncaptured so yt-dlp's progress bar renders live;
+            # stderr is captured so the failure tail can go in the report
+            # instead of flooding the log on every transient warning.
             result = subprocess.run(
                 cmd,
                 stderr=subprocess.PIPE,
@@ -227,7 +185,6 @@ def download_urls(
 
 
 def print_summary(report: DownloadReport, vods_dir: Path) -> None:
-    """Single-block summary mirroring the style used by tools/refine.py."""
     print()
     print("=" * 60)
     print("Download Summary")
@@ -247,10 +204,8 @@ def print_summary(report: DownloadReport, vods_dir: Path) -> None:
 
 
 def main() -> int:
-    # dotenv keeps this consistent with the rest of the tools/ scripts;
-    # download.py itself doesn't need any env vars, but a downstream
-    # invocation from pipeline.py might want SONIOX_API_KEY etc. to
-    # already be loaded by the time we hand off.
+    # Nothing here needs env vars, but pipeline.py hands off to later
+    # stages that want SONIOX_API_KEY loaded by then.
     try:
         from dotenv import load_dotenv
 

@@ -1,43 +1,12 @@
 """Persona facts — LanceDB-backed RAG over fan-compiled streamer facts.
 
-This is the "tier 2" persona layer in the bot:
+``PersonaFactsService`` is a Pipecat ``FrameProcessor`` that intercepts
+``LLMContextFrame``, searches the ``persona_facts`` LanceDB table that
+``tools/ingest_facts.py`` builds from ``data/*设定集.txt``, and injects
+the top matches as a system message before the LLM runs.
 
-- ``persona.md``         (tier 1, always-on)  — hand-curated evergreen identity
-- ``persona_facts``      (tier 2, retrieved)  — atomic dated facts from data/*设定集.txt + data/*事件集.txt  ← THIS module
-- ``stream_chunks``      (tier 3, retrieved)  — refined 5-min transcript scenes from streams/*.md
-- Mem0                   (tier 4, retrieved)  — per-viewer episodic memory
-
-Why a separate tier from ``stream_chunks``: persona facts are atomic
-(one line ≈ one fact, ~30 chars) while transcript chunks are 5-minute
-scenes (~500-1500 tokens). Different optimal top_k (8-10 vs 3),
-different framing prefix ("things you've said about yourself" vs
-"past stream context"), different retrieval taste. Easier to tune
-each independently.
-
-Schema mirrors what ``tools/ingest_facts.py`` writes:
-``id, source, date, text, tokens, vector``.
-
-Retrieval pipeline (per turn, when a user message arrives):
-
-1. Build a search query from recent turns (handles voice utterances
-   like "嗯，那个？" by pulling in prior context). See
-   ``retrieval.build_query_text``.
-2. Embed it once with the same model used at ingest.
-3. Detect any date references in the query and apply a SQL pre-filter
-   on the ``date`` column. ``retrieval.extract_date_filter``.
-4. Run hybrid search (vector + jieba-tokenized BM25/FTS) for
-   ``candidates`` rows (default 30 — wide net for the reranker to
-   choose from).
-5. If ``COHERE_API_KEY`` is set, Cohere ``rerank-v4.0-fast``
-   re-scores down to ``top_k`` (default 8). Without the key, hybrid
-   search uses RRF fusion only — still better than pure vector at our
-   scale, but a cross-encoder reranker is strongly recommended above
-   ~10k rows.
-6. Inject the surviving facts as a system message before the LLM call.
-
-Embedding provider config and helpers are shared via ``embeddings.py``;
-hybrid search + reranker live in ``retrieval.py`` so the eval harness
-(``tools/eval_retrieval.py``) and this service share one code path.
+Sister service: ``stream_archive.StreamArchiveService`` — same pipeline
+position, 5-minute transcript scenes instead of one-line facts.
 """
 
 from __future__ import annotations
@@ -66,53 +35,37 @@ DEFAULT_TABLE = "persona_facts"
 class PersonaFactsService(FrameProcessor):
     """RAG over hand-compiled streamer facts, fronted as a Pipecat FrameProcessor.
 
-    Mirrors ``StreamArchiveService``:
-
-    - Intercepts every ``LLMContextFrame`` flowing toward the LLM.
-    - Pulls the latest user message, embeds it, queries the
-      ``persona_facts`` LanceDB table.
-    - Injects the top-k matching facts as a single system message.
-    - Forwards the (now-enriched) frame downstream.
-
-    Place this between the user aggregator and the LLM, alongside
-    ``Mem0MemoryService`` and ``StreamArchiveService``. Each inserts one
-    system message per turn; ordering is controlled by ``InputParams.position``
-    and the order processors appear in the pipeline.
+    Place between the user aggregator and the LLM. Coexists with
+    ``Mem0MemoryService`` and ``StreamArchiveService``; each inserts one
+    system message per turn, in processor order.
     """
 
     class InputParams(BaseModel):
         """Tunables for persona-fact retrieval."""
 
         top_k: int = Field(default=8, ge=1, le=50)
-        """Facts shown to the LLM after reranking. 8 = enough variety
-        without bloating the system prompt. Bumps higher than
-        transcript retrieval (3) because facts are tiny (~30 chars each)
-        so a generous top_k stays cheap in token cost."""
+        """Facts shown to the LLM after reranking. Each is ~30 chars, so a
+        generous top_k stays cheap in prompt tokens."""
 
         candidates: int = Field(default=30, ge=1, le=200)
-        """Total candidates pulled by hybrid search (vector + FTS)
-        BEFORE reranking. The reranker picks ``top_k`` of these.
-        Larger = better recall but more reranker tokens spent. 30 is
-        the sweet spot at ~3k facts; bump if you grow the corpus.
-        Defaults to ``PERSONA_FACTS_CANDIDATES`` env var when set."""
+        """Hybrid-search pool the reranker picks ``top_k`` from. 30 is the
+        sweet spot at ~3k facts; raise it as the corpus grows.
+        ``PERSONA_FACTS_CANDIDATES`` overrides."""
 
         min_query_chars: int = Field(default=4, ge=1)
-        """Skip retrieval for short queries like "hi" or "嗯" alone —
-        they embed poorly and would inject noise. Note that
-        ``build_query_text`` rescues short utterances by pulling in
-        prior turns, so this only triggers for genuinely vacant queries."""
+        """Skip retrieval below this length — such queries embed poorly and
+        inject noise. ``build_query_text`` folds in prior turns first, so
+        this only trips on a genuinely vacant conversation."""
 
         max_user_turns: int = Field(default=3, ge=1, le=10)
-        """How many recent user turns to concatenate when the latest
-        message is too short on its own. Voice users often say "嗯",
-        "再说说", "那呢" — embedding those alone is hopeless. See
-        ``retrieval.build_query_text``."""
+        """Recent user turns concatenated when the latest message is too
+        short alone. Voice users say "嗯" / "再说说", which embed
+        hopelessly on their own."""
 
         date_prefilter: bool = Field(default=True)
-        """When the query references a specific date (e.g. "5月9号"),
-        narrow the candidate pool with a SQL pre-filter on the ``date``
-        column before vector + FTS scoring. Disable for debugging or
-        if your corpus has unreliable date metadata."""
+        """SQL pre-filter on ``date`` when the query names a day ("5月9号"),
+        applied before vector + FTS scoring. Disable if your corpus has
+        unreliable date metadata."""
 
         system_prompt: str = Field(
             default=(
@@ -120,25 +73,17 @@ class PersonaFactsService(FrameProcessor):
                 "（用来 ground 你的回复，不要照念，也不要把日期念出来）：\n\n"
             )
         )
-        """Prefix prepended to the injected facts block. Tells the LLM
-        these are *its own* past statements, framed in third person in
-        the source data."""
+        """Prefix for the injected facts block. The source data is written
+        in third person, so the prompt has to tell the LLM these are its
+        own past statements."""
 
         position: int = Field(default=2, ge=0)
-        """Where to insert the facts message inside ``context.get_messages()``.
-
-        See ``StreamArchiveService.InputParams.position`` for the full
-        explanation. With Mem0 (default 1), PersonaFacts (default 2),
-        and StreamArchive (default 2) all enabled, message ordering
-        depends on processor order in the pipeline; the LLM treats them
-        all as system messages so exact ordering matters less than
-        having all three present.
-        """
+        """Insert index inside ``context.get_messages()``, clamped to its
+        length."""
 
         embed_model: str | None = Field(default=None)
-        """Override the embedding model. Falls back to ``EMBED_MODEL``
-        env var. Must match what was used at ingest time, or vectors won't
-        be comparable."""
+        """Overrides the ``EMBED_MODEL`` env var. Must match what ingest
+        used, or the vectors aren't comparable."""
 
     def __init__(
         self,
@@ -150,15 +95,10 @@ class PersonaFactsService(FrameProcessor):
         """Initialize the persona-facts service.
 
         Args:
-            db_path: Filesystem path to the LanceDB directory (shared
-                with the stream archive — different table inside the same DB).
-            table_name: Table within the LanceDB database.
-            params: Retrieval tunables. See :class:`InputParams`.
+            db_path: LanceDB directory, shared with the stream archive —
+                same database, different table.
         """
         super().__init__()
-        # Resolve params, then let env vars override the candidate pool
-        # so it can be tuned without code changes (matches the .env
-        # variables documented in .env.example).
         self._params = params or PersonaFactsService.InputParams()
         env_candidates = os.getenv("PERSONA_FACTS_CANDIDATES")
         if env_candidates:
@@ -190,12 +130,7 @@ class PersonaFactsService(FrameProcessor):
             )
 
     def _reopen_table(self) -> None:
-        """Re-open the LanceDB table to pick up files written by a re-ingest.
-
-        Same recovery path as ``StreamArchiveService._reopen_table`` —
-        ``tools/ingest_facts.py`` drops + recreates the table on every
-        run, invalidating cached file handles.
-        """
+        """Re-open the table after a re-ingest invalidated the cached handle."""
         try:
             new_table = open_table(self._db_path, self._table_name)
         except Exception as e:
@@ -217,17 +152,9 @@ class PersonaFactsService(FrameProcessor):
     async def _search(self, query: str) -> list[dict[str, Any]]:
         """Run hybrid (vector + FTS) + optional rerank against the facts table.
 
-        Pipeline:
-
-        1. Detect a date pre-filter from the query (when enabled).
-        2. Embed the query once.
-        3. Hybrid search pulls ``candidates`` rows.
-        4. Cohere reranker (if ``COHERE_API_KEY`` is set) trims to ``top_k``.
-
-        Recovers once from the stale-table error you get when
-        ``tools/ingest_facts.py`` runs while the bot is alive
-        (LanceDB drops + recreates the table, invalidating the cached
-        Table handle).
+        Retries once against the stale handle a concurrent
+        ``laplace-ingest-facts`` leaves behind; LanceDB surfaces that as a
+        plain ``Exception`` carrying "Not found", hence the substring match.
         """
         if self._table is None:
             logger.warning("Persona facts search skipped: no table loaded")
@@ -264,9 +191,6 @@ class PersonaFactsService(FrameProcessor):
                     rerank=True,
                 )
                 if results:
-                    # Hybrid results carry _relevance_score; reranked ones
-                    # carry both. Log whichever is present so the units in
-                    # the log line are interpretable.
                     score = results[0].get(
                         "_relevance_score", results[0].get("_distance", float("nan"))
                     )
@@ -297,12 +221,7 @@ class PersonaFactsService(FrameProcessor):
 
     @staticmethod
     def _format_facts(facts: list[dict[str, Any]], prefix: str) -> str:
-        """Render retrieved facts as a single readable system message.
-
-        Format per fact: ``- [date] text`` if dated, else ``- text``.
-        Compact because each fact is already self-contained — no
-        narrative wrapping needed.
-        """
+        """Render retrieved facts as a single system message, one line each."""
         lines = [prefix]
         for fact in facts:
             text = (fact.get("text") or "").strip()
@@ -339,22 +258,12 @@ class PersonaFactsService(FrameProcessor):
         )
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
-        """Intercept ``LLMContextFrame`` and enrich it with persona facts.
-
-        Uses ``retrieval.build_query_text`` to assemble the search query
-        from the last few user turns (not just the latest message),
-        which rescues short voice utterances like "嗯", "再说说" that
-        embed badly on their own.
-        """
+        """Intercept ``LLMContextFrame`` and enrich it with persona facts."""
         await super().process_frame(frame, direction)
 
         if isinstance(frame, LLMContextFrame):
             try:
                 context = frame.context
-                # Build a richer query from recent turns; falls back to
-                # the latest message alone when it's already long enough.
-                # Returns None if the conversation has no user content
-                # yet (e.g. opening kickoff frame).
                 query = build_query_text(
                     [cast(dict[str, Any], m) for m in context.get_messages()],
                     max_user_turns=self._params.max_user_turns,

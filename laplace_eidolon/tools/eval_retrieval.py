@@ -1,36 +1,10 @@
 """Score retrieval quality for both LanceDB tables.
 
-Runs a curated query set through every retrieval mode (vector-only,
-hybrid no-rerank, hybrid+rerank) and reports recall@k + MRR per query
-and aggregated. Pair with ``data/eval/queries.toml`` to extend the
-test set.
-
-Why: the bot's answer quality is bounded by what it retrieves. After
-30k+ chunks, "feels worse" became hard to debug from log inspection
-alone. This harness gives a single number to optimize against and
-makes A/B testing tokenizers, rerankers, and top_k values trivial.
-
-Usage::
-
-    # Run all queries through every mode (default).
-    uv run laplace-eval-retrieval
-
-    # Single mode for fast iteration.
-    uv run laplace-eval-retrieval --modes hybrid_rerank
-
-    # Specific table (e.g. while iterating on facts only).
-    uv run laplace-eval-retrieval --table persona_facts
-
-    # Save baseline to compare against later runs.
-    uv run laplace-eval-retrieval --save data/eval/baseline.json
-
-    # Compare against a saved baseline.
-    uv run laplace-eval-retrieval --compare data/eval/baseline.json
-
-    # Benchmark several Cohere reranker models head-to-head — quality
-    # AND latency. Useful when picking between fast/pro/legacy models.
-    uv run laplace-eval-retrieval --rerank-models \\
-        rerank-multilingual-v3.0 rerank-v4.0-fast rerank-v4.0-pro
+Runs the curated query set in ``data/eval/queries.toml`` through every
+retrieval mode (vector-only, hybrid, hybrid+rerank) and reports recall@k
+and MRR, per query and aggregated. Past 30k chunks "feels worse" stopped
+being debuggable from logs; this gives tokenizer, reranker, and top_k
+changes a single number to move.
 """
 
 from __future__ import annotations
@@ -58,8 +32,8 @@ from ..retrieval import (
     tokenize_zh,
 )
 
-# Use stdlib tomllib (Python 3.11+) — project requires >=3.10 but the
-# eval harness specifically can require 3.11. Fall back gracefully.
+# The project targets 3.10+, but this harness alone requires 3.11 for
+# stdlib tomllib.
 if sys.version_info >= (3, 11):
     import tomllib
 else:  # pragma: no cover — runtime constraint, not test-covered
@@ -68,11 +42,6 @@ else:  # pragma: no cover — runtime constraint, not test-covered
 DEFAULT_QUERIES = "data/eval/queries.toml"
 DEFAULT_K_VALUES = (1, 3, 5, 10)
 ALL_MODES = ("vector_only", "hybrid", "hybrid_rerank")
-
-
-# ---------------------------------------------------------------------------
-# Data shapes
-# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -112,9 +81,8 @@ class ModeReport:
 class RerankerBenchmark:
     """Latency + quality for one reranker model across the query set.
 
-    Built by ``benchmark_reranker_models``. Differs from ``ModeReport``
-    in that it tracks per-query rerank wall-clock latencies — quality
-    alone doesn't tell you whether a model fits in a voice-bot turn.
+    Unlike ``ModeReport`` this tracks per-query wall-clock — quality alone
+    doesn't tell you whether a model fits inside a voice-bot turn.
     """
 
     model: str
@@ -122,9 +90,8 @@ class RerankerBenchmark:
     n_queries: int
     recall_at: dict[int, float]
     mrr: float
-    # Wall-clock latencies for the rerank-only portion of each query,
-    # in milliseconds. Excludes embed + vector/FTS scan so the numbers
-    # isolate the reranker's contribution.
+    # Milliseconds per query, measured around the whole hybrid_search call.
+    # See _evaluate_query_with_reranker for what that does and doesn't cover.
     rerank_ms: list[float] = field(default_factory=list)
 
     @property
@@ -135,8 +102,8 @@ class RerankerBenchmark:
     def p95_ms(self) -> float:
         if not self.rerank_ms:
             return 0.0
-        # Use exclusive interpolation; fine for our small N because
-        # we're comparing models on the same query set, not setting SLOs.
+        # Nearest-rank, no interpolation — crude at our N, but every model
+        # sees the same query set so the comparison still holds.
         sorted_ms = sorted(self.rerank_ms)
         idx = max(0, min(len(sorted_ms) - 1, int(0.95 * len(sorted_ms))))
         return sorted_ms[idx]
@@ -144,11 +111,6 @@ class RerankerBenchmark:
     @property
     def mean_ms(self) -> float:
         return statistics.mean(self.rerank_ms) if self.rerank_ms else 0.0
-
-
-# ---------------------------------------------------------------------------
-# Query loading
-# ---------------------------------------------------------------------------
 
 
 def load_queries(path: Path) -> list[EvalQuery]:
@@ -179,18 +141,11 @@ def load_queries(path: Path) -> list[EvalQuery]:
     return queries
 
 
-# ---------------------------------------------------------------------------
-# Retrieval modes
-# ---------------------------------------------------------------------------
-
-
 def _row_text_for_match(row: dict[str, Any]) -> str:
     """Build the text blob a substring expectation matches against.
 
-    For persona_facts the canonical field is ``text``. For stream_chunks
-    we union heading + summary + details + raw text so a substring can
-    hit anywhere meaningful. Empty fields stringify to ``""`` so this
-    is safe across both schemas without per-table branching.
+    Unions every candidate field across both schemas — missing ones
+    stringify to ``""``, so no per-table branching is needed.
     """
     parts = [
         str(row.get("text") or ""),
@@ -213,7 +168,7 @@ async def run_vector_only(
     k: int,
     where: str | None,
 ) -> list[dict[str, Any]]:
-    """Vector-only search — what the bot did before this work."""
+    """Vector-only search: no FTS half, no reranker."""
     vectors = await embed_texts([query])
     if not vectors:
         return []
@@ -251,11 +206,6 @@ async def run_hybrid(
     )
 
 
-# ---------------------------------------------------------------------------
-# Per-mode evaluation
-# ---------------------------------------------------------------------------
-
-
 async def evaluate_query(
     query: EvalQuery,
     table: Any,
@@ -267,11 +217,9 @@ async def evaluate_query(
 ) -> QueryResult:
     """Run one query in one mode and return its rank + per-k hits.
 
-    Date filter is opt-in per mode — we want to measure its
-    contribution separately from hybrid+rerank. The column name
-    differs by table: persona_facts uses ``date``, stream_chunks uses
-    ``stream_date`` — passing the wrong one fails with a Schema error
-    from LanceDB, so we resolve it from the query's ``table`` field.
+    The date column differs by table — persona_facts uses ``date``,
+    stream_chunks ``stream_date`` — and LanceDB raises a Schema error on
+    the wrong one, so it is resolved from the query's ``table`` field.
     """
     date_column = "stream_date" if query.table == "stream_chunks" else "date"
     where = (
@@ -291,7 +239,6 @@ async def evaluate_query(
     else:
         raise ValueError(f"Unknown mode: {mode!r}")
 
-    # Find the first rank where any expected substring appears.
     rank: int | None = None
     for i, row in enumerate(rows, start=1):
         if _matches(_row_text_for_match(row), query.expect_substrings):
@@ -326,7 +273,7 @@ def aggregate(results: list[QueryResult], table: str) -> ModeReport:
         k: sum(1 for r in results if r.top_k_hits.get(k, False)) / n
         for k in DEFAULT_K_VALUES
     }
-    # MRR: 1/rank when found, 0 when missed. Rank is 1-indexed.
+    # Rank is 1-indexed, so a miss is None rather than 0 and never divides.
     mrr = sum((1.0 / r.rank) if r.rank else 0.0 for r in results) / n
     misses = [r.query.text for r in results if r.rank is None]
     return ModeReport(
@@ -337,11 +284,6 @@ def aggregate(results: list[QueryResult], table: str) -> ModeReport:
         mrr=mrr,
         misses=misses,
     )
-
-
-# ---------------------------------------------------------------------------
-# Reporting
-# ---------------------------------------------------------------------------
 
 
 def _fmt_pct(x: float) -> str:
@@ -371,7 +313,7 @@ def print_table_report(per_mode: dict[str, ModeReport]) -> None:
         print(f"  {mode_key:<22}" + "".join(f" {c:>7}" for c in cells) + f" {r.mrr:7.3f}")
 
     print()
-    # Show miss list for the best mode (most adversarial cases).
+    # Misses from the best mode are the genuinely adversarial queries.
     best = max(per_mode.values(), key=lambda r: r.mrr)
     if best.misses:
         print(f"  Misses (best mode = {best.mode}, {len(best.misses)} of {best.n_queries}):")
@@ -424,17 +366,11 @@ def to_json_blob(per_table: dict[str, dict[str, ModeReport]]) -> dict[str, Any]:
     return out
 
 
-# ---------------------------------------------------------------------------
-# Reranker model benchmark (--rerank-models)
-# ---------------------------------------------------------------------------
-
-
 def _build_named_reranker(model_name: str) -> Any:
     """Build a fresh ``CohereReranker`` for a specific model name.
 
-    Bypasses ``make_reranker``'s singleton cache so each model is
-    measured independently. Raises if Cohere isn't installed or the
-    API key is missing — bench mode requires real reranker calls.
+    Bypasses ``make_reranker``'s singleton cache so each model is measured
+    independently. Raises without a key — bench mode needs real calls.
     """
     api_key = os.getenv("COHERE_API_KEY")
     if not api_key:
@@ -459,12 +395,10 @@ async def _evaluate_query_with_reranker(
 ) -> tuple[QueryResult, float]:
     """Run one query with a specific reranker, return (result, rerank_ms).
 
-    Latency is measured around the *whole* hybrid_search call (embed
-    is shared across models so it's done once outside this function;
-    everything inside is the rerank-affected path: vector + FTS scan +
-    reranker call). For very large candidate pools the vector + FTS
-    portion would dominate, but at our default candidates (15-30) the
-    reranker round-trip is the lion's share so the number is honest.
+    The timer spans the whole hybrid_search call — vector scan, FTS scan,
+    and reranker round-trip. Embedding sits outside it. At the default
+    candidate pools (15-30) the reranker dominates that total, so the
+    number is a fair proxy; a much larger pool would dilute it.
     """
     date_column = "stream_date" if query.table == "stream_chunks" else "date"
     where = (
@@ -521,16 +455,10 @@ async def benchmark_reranker_models(
 ) -> list[RerankerBenchmark]:
     """Run the same queries through each reranker model and compare.
 
-    Order of operations per model:
-
-    1. Build a fresh reranker (no shared singleton state).
-    2. If ``warmup``, fire one throwaway query so the first real
-       measurement isn't dominated by HTTP/2 connection setup, DNS,
-       and Cohere model cold-start. Without this, the first model
-       always looks slower than it is.
-    3. Run every eval query, recording (rank, latency).
-
-    Returns one ``RerankerBenchmark`` per model.
+    Args:
+        warmup: fires one throwaway query per model first. Without it the
+            first model absorbs DNS, HTTP/2 setup, and Cohere cold-start
+            and always looks slower than it is.
     """
     out: list[RerankerBenchmark] = []
     for model in models:
@@ -614,7 +542,6 @@ def print_benchmark_report(benches: list[RerankerBenchmark]) -> None:
     print(header)
     print("  " + "-" * (len(header) - 2))
 
-    # Sort by MRR descending so the eye lands on the quality winner first.
     for b in sorted(benches, key=lambda x: -x.mrr):
         cells = [_fmt_pct(b.recall_at[k]) for k in DEFAULT_K_VALUES]
         print(
@@ -654,11 +581,6 @@ def print_comparison(
             )
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
-
 async def main_async(args: argparse.Namespace) -> int:
     queries = load_queries(Path(args.queries))
     if args.table:
@@ -670,16 +592,13 @@ async def main_async(args: argparse.Namespace) -> int:
     db = lancedb.connect(args.db_path)
     table_names = sorted({q.table for q in queries})
 
-    # candidates per table — facts are small so we can afford a wider net;
-    # stream chunks are big so 15 is the sweet spot.
+    # Facts are short enough to afford a wide net; stream chunks are long,
+    # and 15 is where quality stops improving.
     candidates_for = {
         "persona_facts": args.facts_candidates,
         "stream_chunks": args.stream_candidates,
     }
 
-    # Branch: --rerank-models triggers the head-to-head benchmark mode
-    # (different output shape, no recall@k vs vector_only — just the
-    # named models compared on the same query set).
     if args.rerank_models:
         for table_name in table_names:
             if table_name not in db.list_tables().tables:
@@ -709,18 +628,14 @@ async def main_async(args: argparse.Namespace) -> int:
 
     modes = args.modes or list(ALL_MODES)
 
-    # Sanity: warn if hybrid_rerank is asked for but no Cohere key is set.
-    # The retrieval module falls back to LinearCombinationReranker, so
-    # 'hybrid_rerank' mode still does something useful — but it's NOT
-    # the cross-encoder result the user is presumably after.
     if "hybrid_rerank" in modes and not os.getenv("COHERE_API_KEY"):
         logger.warning(
             "hybrid_rerank requested but COHERE_API_KEY is unset — that mode "
             "will use LinearCombinationReranker (vector-weighted) as fallback. "
             "Set COHERE_API_KEY for the actual cross-encoder eval."
         )
-        # Bake the reranker decision now so the inner search doesn't
-        # repeatedly init.
+        # Resolve the fallback reranker up front so the per-query search
+        # path doesn't re-init it every time.
         make_reranker()
 
     per_table: dict[str, dict[str, ModeReport]] = {}
@@ -755,14 +670,12 @@ async def main_async(args: argparse.Namespace) -> int:
                 all_results.append(r)
             per_table[table_name][mode] = aggregate(results, table_name)
 
-    # Output
     for table_name in table_names:
         if table_name in per_table:
             print_table_report(per_table[table_name])
             if args.verbose:
                 print_per_query_breakdown(all_results, table_name)
 
-    # Save / compare
     if args.save:
         Path(args.save).parent.mkdir(parents=True, exist_ok=True)
         Path(args.save).write_text(
@@ -784,8 +697,7 @@ async def main_async(args: argparse.Namespace) -> int:
 
 def main() -> int:
     load_dotenv(override=True)
-    # Quiet the embedding/index init log noise so the report is the
-    # main signal. Keep WARNING+ so real problems still surface.
+    # Embedding and index init log at INFO; the report is the signal here.
     logger.remove()
     logger.add(sys.stderr, level="WARNING")
 

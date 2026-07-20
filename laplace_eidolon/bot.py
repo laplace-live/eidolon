@@ -1,37 +1,15 @@
 """laplace-eidolon — Pipecat voice bot for a streamer RP persona.
 
-Pipeline shape (cascade, with optional memory/archive enrichment)::
+A cascade pipeline: STT, then optional memory and RAG enrichment, then
+LLM, TTS, and back out over WebRTC. Four storage tiers feed the LLM —
+``persona.md`` for identity and hard rules (always in the system prompt),
+persona facts and the stream archive as LanceDB indexes searched through
+``retrieval.py``, and Mem0 for per-viewer episodic memory.
 
-    transport.input → STT → user_aggregator
-        → Mem0 (per-viewer memory, optional)
-        → PersonaFacts (RAG over hand-compiled streamer facts, optional)
-        → StreamArchive (RAG over past streams, optional)
-        → LLM → TTS → transport.output → assistant_aggregator
-
-Four persistent storage tiers feed the LLM:
-
-1. ``persona.md``      — identity, voice, hard rules (always in system prompt)
-2. Persona facts        — atomic fan-compiled "things she said" facts,
-                          retrieved via hybrid (vector + jieba-FTS) search
-                          (LanceDB index built by ``tools/ingest_facts.py``)
-3. Stream archive       — refined past-stream chunks, retrieved via hybrid
-                          (vector + jieba-FTS) search
-                          (LanceDB index built by ``tools/ingest_streams.py``)
-4. Mem0                 — per-viewer episodic memory, auto-extracted from chat
-
-Tiers 2 and 3 share one retrieval pipeline (see ``retrieval.py``):
-conversation-aware query building, optional date pre-filter, vector +
-BM25 hybrid, optional Cohere cross-encoder rerank. Score how well it
-performs on a query set with ``laplace-eval-retrieval``.
-
-Required services: Soniox (STT), OpenRouter (LLM), Fish Audio (TTS).
-Optional: Mem0 (set MEM0_API_KEY), PersonaFacts + StreamArchive (set
-OPENROUTER_API_KEY and run the ingest scripts), Cohere reranker (set
-COHERE_API_KEY for best retrieval precision at scale).
-
-Run the bot with::
-
-    uv run bot.py
+Soniox (STT), OpenRouter (LLM), and Fish Audio (TTS) are required.
+Everything else degrades quietly when its key is absent: ``MEM0_API_KEY``
+for memory, ``COHERE_API_KEY`` for reranking, and the ingest scripts for
+either RAG tier.
 """
 
 import asyncio
@@ -47,10 +25,9 @@ import httpx
 from aiortc.codecs.opus import OpusEncoder as _AiortcOpusEncoder
 from dotenv import load_dotenv
 
-# Load .env BEFORE anything else touches os.getenv — module-level
-# constants below (e.g. CF_TURN_TTL_SEC) are evaluated at import time,
-# so a deferred load_dotenv() would leave them silently pinned to their
-# fallback defaults even when .env sets a different value.
+# Must precede every other import that reads os.getenv: the module-level
+# constants below are evaluated at import time, so a deferred load would
+# pin them to their fallback defaults even when .env sets a value.
 load_dotenv(override=True)
 
 from loguru import logger
@@ -91,50 +68,23 @@ from .voice_switching import (
     persona_prefix_hint,
 )
 
-# ─────────────────────────────────────────────────────────────────────────────
-# WebRTC ICE server configuration
-# ─────────────────────────────────────────────────────────────────────────────
+# Pipecat's runner never wires server-side ICE servers in — it builds every
+# SmallWebRTCConnection with ice_servers=None, advertising host candidates
+# only, which works on localhost and fails behind any NAT. The monkey-patch
+# below injects them, mirroring how pipecat patches USERDATA_MAX_LENGTH
+# onto the same class.
 #
-# Self-hosted SmallWebRTC behind any NAT (Docker bridge, VPS firewall,
-# residential router, …) needs aiortc to:
+# Sources, in priority order: Cloudflare Realtime TURN (minted on demand and
+# cached in-process, so aiortc and the frontend's GET /api/ice-servers share
+# one mint), then static WEBRTC_STUN_URL / WEBRTC_TURN_URL, then nothing.
 #
-#   1. Discover its own public IP via STUN, so the browser receives a
-#      routable srflx candidate instead of just an unrouteable Docker
-#      bridge IP (172.x.y.z).
-#   2. (For symmetric-NAT clients) advertise a TURN relay candidate so
-#      media has a fallback path when peer-to-peer ICE cannot converge.
-#
-# Pipecat's dev runner never wires server-side ICE servers in; it
-# constructs SmallWebRTCRequestHandler() without `ice_servers`, which in
-# turn constructs every SmallWebRTCConnection with `ice_servers=None`.
-# That advertises ONLY host candidates — fine on localhost, broken
-# behind any NAT. We monkey-patch __init__ to inject ICE servers (same
-# pattern pipecat itself uses for USERDATA_MAX_LENGTH at
-# pipecat/transports/smallwebrtc/connection.py:62).
-#
-# Resolution priority:
-#
-#   1. Cloudflare Realtime TURN (when CLOUDFLARE_TURN_KEY_ID +
-#      CLOUDFLARE_TURN_KEY_API_TOKEN are set). Credentials are minted on
-#      demand from rtc.live.cloudflare.com and cached in-process. Both
-#      the server (aiortc) and the frontend (via GET /api/ice-servers)
-#      read from the same cache so a single mint serves both ends.
-#   2. Static WEBRTC_STUN_URL / WEBRTC_TURN_URL env vars. Useful for
-#      coturn or other providers; bring-your-own-credentials.
-#   3. Empty list → host candidates only. Fine for `uv run bot.py` on
-#      localhost where browser and aiortc both bind to 127.0.0.1.
-#
-# aiortc has its own limitation independent of source: it honors at most
-# ONE STUN and ONE TURN server per connection (see
-# aiortc.rtcicetransport.connection_kwargs) — extras are silently
-# dropped. The frontend, in contrast, can use every URL Cloudflare
-# returns (UDP/TCP/TLS variants) for maximum reachability.
+# aiortc honors at most ONE STUN and ONE TURN server per connection and
+# silently drops the rest, so ordering within each list matters. The
+# frontend has no such limit and uses every URL Cloudflare returns.
 
-# `or "3600"` (not `os.getenv(..., "3600")`) so an empty `.env` entry
-# — which is exactly what `cp .env.example .env` produces — falls through
-# to the default instead of crashing with `int("")`. python-dotenv parses
-# `KEY=` as the empty string, not as unset, so getenv's own default never
-# fires for the most common misconfiguration.
+# `or "3600"` rather than a getenv default: python-dotenv parses `KEY=` as
+# an empty string, not as unset, so `cp .env.example .env` would otherwise
+# crash on int(""). Same idiom throughout this file.
 CF_TURN_TTL_SEC = int(os.getenv("CLOUDFLARE_TURN_TTL_SEC") or "3600")
 # Refresh slightly before expiry so an in-flight credential never goes
 # stale mid-call. Floor of 60s in case TTL is set very short for testing.
@@ -292,36 +242,13 @@ def _patched_swrtc_init(self, ice_servers=None, connection_timeout_secs=60):
 SmallWebRTCConnection.__init__ = _patched_swrtc_init
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Opus encoder bitrate
-# ─────────────────────────────────────────────────────────────────────────────
+# Pipecat exposes no bitrate knob, so OpusEncoder.__init__ is the only seam.
+# Re-setting bit_rate after the original constructor runs is safe because
+# PyAV's CodecContext lazy-opens on first encode and reads the bitrate then.
+# Application mode stays "voip": better speech timbre than "audio" at equal
+# bitrate, and it engages in-band FEC for lossy viewer connections.
 #
-# aiortc hardcodes its Opus encoder at 96 kbps (aiortc/codecs/opus.py:34
-# `self.codec.bit_rate = 96000`). That's already transparent for speech,
-# and we keep it as the default — viewers who want vocal texture
-# (breaths/laughs/sibilants) opt in to ``best`` (192 kbps) on the
-# frontend, viewers on flaky connections opt down to ``low`` / ``lowest``.
-# This way a fresh deployment has zero surprise quality drop relative
-# to vanilla aiortc.
-#
-# Pipecat doesn't expose a knob for this; the only seam is OpusEncoder's
-# __init__. We re-set bit_rate *after* the original constructor runs, which
-# is safe because PyAV's CodecContext lazy-opens on first encode and the
-# bitrate is read from the context at that point. Application mode stays
-# "voip" — better speech timbre than "audio" mode at the same bitrate
-# (speech-tuned pre-emphasis/post-filter) and engages in-band FEC for
-# packet-loss recovery on lossy viewer connections.
-#
-# The bitrate is per-session: ``offer_middleware`` reads
-# ``requestData.audioQuality`` (best/medium/low/lowest) from the WebRTC
-# offer and pushes the matching preset onto a ContextVar. aiortc spawns
-# the encoder inside a task tree that inherits that context, so each
-# call gets the bitrate the viewer asked for. When no audioQuality is
-# present (older clients, anonymous probes), the encoder falls back to
-# ``DEFAULT_BITRATE_BPS`` — aligned to the ``medium`` preset (96 kbps)
-# so missing-field and explicit-medium traffic encode identically. Both
-# the fallback and each preset are env-overridable; see
-# ``audio_quality.py`` and ``.env.example`` for the env vars.
+# See audio_quality.py for where the per-session value comes from.
 _ORIGINAL_OPUS_INIT = _AiortcOpusEncoder.__init__
 
 
@@ -344,68 +271,36 @@ logger.info(
 async def get_ice_servers():
     """Serve fresh ICE config to the frontend.
 
-    Frontend should call this immediately before opening the WebRTC
-    connection and pass the returned `iceServers` array into its
-    RTCPeerConnection / SmallWebRTCTransport. Cache lookup is sync
-    (httpx.Client) so we offload to a thread to keep the event loop
-    responsive when a fresh mint is needed (~100–300 ms blocking call).
+    Offloaded to a thread because the cache lookup is a sync httpx call
+    that blocks ~100-300 ms whenever a fresh mint is needed.
     """
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _resolve_ice_response)
 
 
-# Wire the anonymous rate limit + camelCase body normalisation onto
-# pipecat's FastAPI app before the runner registers /api/offer. Order
-# doesn't matter for middleware registration (Starlette applies it on
-# every request regardless of when it was added) but doing it here at
-# module load keeps all server-side plumbing in one place. See
-# offer_middleware.py for why the body rewrite is necessary — without
-# it, runner_args.body would silently be None even when the JS SDK
-# sent a loginSyncToken.
+# Anonymous rate limit + camelCase body normalisation.
 install_offer_middleware(pipecat_app)
 
-# Per-viewer Mem0 admin: GET /api/memories (list) + POST /api/memories/forget
-# (bulk delete). Both require an Authorization: Bearer <loginSyncToken>
-# header and reuse the user_context cache, so a logged-in viewer who hits
-# either endpoint right after connecting pays no extra Workers calls.
-# See memory_admin.py for the in-flight-session caveat.
+# GET /api/memories + POST /api/memories/forget, both Bearer-authenticated.
 install_memory_admin(pipecat_app)
 
 
-# Public MCP server (Streamable HTTP at /mcp): read-only retrieval tools over
-# the persona-facts + stream-archive indexes. Anonymous callers are rate
-# limited per IP; a valid loginSyncToken raises the ceiling (per UID). Mounted
-# here so it shares resolve_user_context's cache and the single-instance
-# deployment. See mcp_server.py for the combined-lifespan rationale.
+# Read-only retrieval tools over both indexes, Streamable HTTP at /mcp.
+# Mounted here so it shares resolve_user_context's cache.
 install_mcp(pipecat_app)
 
 
-# Hide pipecat's built-in SmallWebRTCPrebuiltUI demo (/, /client,
-# /client/*) outside local dev. The runner mounts it unconditionally
-# at pipecat/runner/run.py:_setup_webrtc_routes (`app.mount("/client",
-# SmallWebRTCPrebuiltUI)` plus a `/ → /client/` redirect, no upstream
-# toggle) — fine for `uv run bot.py` on localhost, embarrassing on a
-# public deploy where the page has no rate limit, no Workers
-# integration, and no persona theming. ASGI middleware runs before
-# routing, so a 404 here means the mounted StaticFiles app never sees
-# the request.
+# Pipecat's runner mounts SmallWebRTCPrebuiltUI at / and /client with no
+# upstream toggle, so hiding it in production takes a middleware. Off by
+# default: the demo page has no rate limit, no Workers integration, and no
+# persona theming. Opt in with EIDOLON_PIPECAT_DEMO_ENABLED.
 #
-# Toggle: EIDOLON_PIPECAT_DEMO_ENABLED. Disabled by default — prod is
-# the safe default, so a fresh deploy never accidentally exposes the
-# pipecat-branded demo page. Set to ``true`` / ``1`` / ``yes`` / ``on``
-# in your local ``.env`` to opt in. We can't auto-detect dev via
-# pipecat's own ENV=local because pipecat/runner/run.py force-sets
-# ``os.environ["ENV"] = "local"`` at module import time, which fires
-# the moment bot.py imports ``pipecat_app`` — even on a production
-# server.
+# Detecting dev via pipecat's own ENV=local does NOT work — its runner
+# force-sets os.environ["ENV"] = "local" at import time, which fires the
+# moment this module imports pipecat_app, production included.
 #
-# Implementation note: this is a *pure ASGI* middleware class, not a
-# ``@pipecat_app.middleware("http")`` decorator. The decorator form
-# expands to ``BaseHTTPMiddleware``, which has a known cancellation-
-# swallowing bug (``RuntimeError: No response returned.``) that gets
-# amplified when stacked with ``offer_middleware.OfferRateLimitMiddleware``
-# and was the root cause of the production 500/422 cascade — see
-# ``offer_middleware`` module docstring + ``repro_no_response.py``.
+# Pure ASGI rather than @pipecat_app.middleware("http") for the reason
+# offer_middleware.py documents: the decorator form is BaseHTTPMiddleware.
 _PIPECAT_DEMO_ENABLED = os.getenv("EIDOLON_PIPECAT_DEMO_ENABLED", "").strip().lower() in {
     "true",
     "1",
@@ -417,14 +312,7 @@ _DEMO_PATHS = {"/", "/client"}
 
 
 class BlockPipecatDemoMiddleware:
-    """Pure-ASGI middleware: 404 the pipecat prebuilt demo in prod.
-
-    Looks at ``scope['path']`` for HTTP requests only and returns a
-    bare 404 (no body) for the demo's mount points when
-    ``EIDOLON_PIPECAT_DEMO_ENABLED`` isn't truthy. Everything else
-    passes through unchanged. Non-HTTP scopes (websocket, lifespan)
-    pass through too.
-    """
+    """Pure-ASGI middleware: 404 the pipecat prebuilt demo in prod."""
 
     def __init__(self, app: ASGIApp, *, enabled: bool) -> None:
         self.app = app
@@ -451,59 +339,39 @@ class BlockPipecatDemoMiddleware:
 pipecat_app.add_middleware(BlockPipecatDemoMiddleware, enabled=_PIPECAT_DEMO_ENABLED)
 
 
-# Mem0 is an optional dependency; only import if available so the bot still
-# runs when the user hasn't installed the `mem0` extra or set MEM0_API_KEY.
-# We use a thin subclass (``LaplaceMem0MemoryService``) that filters out
-# assistant messages without string content — pipecat's universal
-# aggregator emits ``{"role": "assistant", "tool_calls": [...]}`` (no
-# ``content``) for every tool call (e.g. ``change_voice_style``), and
-# Mem0's cloud API rejects that shape with HTTP 400, poisoning every
-# subsequent store call in the session. See ``memory_service.py`` for
-# the full rationale.
+# All three RAG/memory services are optional — the bot runs without the
+# `mem0` extra, without OPENAI_API_KEY for embeddings, and on a fresh
+# checkout where the LanceDB indexes haven't been built.
 try:
     from .memory_service import LaplaceMem0MemoryService as Mem0MemoryService
 except Exception as e:
     Mem0MemoryService = None
     logger.debug(f"Mem0 service unavailable: {e}")
 
-# StreamArchive is also optional — disabled if OPENAI_API_KEY (used for
-# embeddings) is missing or the LanceDB index hasn't been built yet.
 try:
     from .stream_archive import StreamArchiveService
 except Exception as e:
     StreamArchiveService = None
     logger.debug(f"StreamArchive service unavailable: {e}")
 
-# PersonaFacts is also optional — same LanceDB instance as StreamArchive,
-# but a separate ``persona_facts`` table built by tools/ingest_facts.py.
+# Same LanceDB instance as StreamArchive, separate `persona_facts` table.
 try:
     from .persona_facts import PersonaFactsService
 except Exception as e:
     PersonaFactsService = None
     logger.debug(f"PersonaFacts service unavailable: {e}")
 
-# Resolve persona/data paths relative to this file so the bot works from
-# any CWD (local dev, Docker container). ``__file__`` is
-# ``<repo>/laplace_eidolon/bot.py``, so we walk up TWO parents to reach
-# the repo root where ``persona.md`` and ``data/lancedb`` live. The old
-# ``SERVER_DIR`` only did one ``.parent`` — that pointed at
-# ``laplace_eidolon/`` after the package move and silently demoted the
-# bot to its fallback persona with all RAG retrieval disabled.
+# TWO parents: this file is <repo>/laplace_eidolon/bot.py and persona.md
+# lives at the repo root. Walking up only one lands in the package dir,
+# where the bot silently falls back to its stub persona with RAG disabled.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PERSONA_PATH = PROJECT_ROOT / os.getenv("PERSONA_FILE", "persona.md")
 LANCEDB_PATH = PROJECT_ROOT / os.getenv("LANCEDB_PATH", "data/lancedb")
 
-# Timezone used to inject "现在是 …" into the per-session system prompt
-# prefix (see _build_persona_prefix). Defaults to Asia/Shanghai because
-# the persona is Bilibili-based / 虚拟上海 — overridable via
-# PERSONA_TIMEZONE for forks targeting a different streamer locale.
-# `or "Asia/Shanghai"` (not getenv's default) so an empty .env entry —
-# which is exactly what `cp .env.example .env` produces — falls through
-# to the default instead of crashing ZoneInfo with the empty string.
-# Defensive fallback to UTC so a typo'd or unsupported timezone (slim
-# container without tzdata, Windows without the `tzdata` package) only
-# costs a clearer-than-default clock instead of preventing module
-# import — without this the whole bot fails to start.
+# Asia/Shanghai because the persona is 虚拟上海; forks override with
+# PERSONA_TIMEZONE. The UTC fallback keeps a missing tzdata (slim
+# containers, Windows without the `tzdata` package) from failing import
+# outright — a wrong clock beats a bot that won't start.
 try:
     PERSONA_TZ = ZoneInfo(os.getenv("PERSONA_TIMEZONE") or "Asia/Shanghai")
 except ZoneInfoNotFoundError as e:
@@ -515,15 +383,12 @@ except ZoneInfoNotFoundError as e:
 
 _WEEKDAY_ZH = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
 
-# How many recent stream dates to inject into the per-session system
-# prompt. Five covers most "你最近播了几场?" / "你这周播了吗?" /
-# "你好久没播了吧" patterns without bloating the prompt. Bump to 7-10
-# if you want a fuller weekly calendar.
+# Five dates covers the usual "你最近播了几场?" / "你这周播了吗?" questions
+# without bloating the prompt; raise to 7-10 for a full weekly calendar.
 RECENT_STREAM_DATES_N = 5
 
-# Refresh interval for the cached stream-date list. Re-ingest is
-# infrequent so a coarse cache is fine, but we still want the bot to
-# pick up a fresh stream within ~10 minutes without a restart.
+# Coarse, since re-ingest is infrequent — but short enough that a new
+# stream shows up without a restart.
 _STREAM_DATES_TTL_SEC = 600
 
 _recent_stream_dates_cache: list[str] | None = None
@@ -541,18 +406,12 @@ FALLBACK_PERSONA = (
 def _get_recent_stream_dates(n: int = RECENT_STREAM_DATES_N) -> list[str]:
     """Return up to ``n`` most-recent stream dates, newest first.
 
-    Reads from the LanceDB ``stream_chunks`` table (one row per chunk;
-    we deduplicate to one per stream day). Cached for
-    ``_STREAM_DATES_TTL_SEC`` so the per-session system-prompt build
-    doesn't re-scan the table on every call. Stale-on-failure: if the
-    refresh fails, return the previous cache rather than the empty
-    list, since a stale list is strictly better than the LLM being
-    forced to guess a date.
+    Injected into the system prompt because recency questions like
+    "你最后一次直播什么时候?" ask about table metadata, not about any
+    fact inside a chunk — retrieval cannot answer them at all.
 
-    Why this exists: the embedding model can't answer "你最后一次直播
-    什么时候?" — that's a meta question about table metadata, not a
-    fact in any chunk. Injecting the answer into the system prompt
-    sidesteps RAG entirely for the whole class of recency questions.
+    Falls back to the previous cache on refresh failure: a stale date
+    list beats the LLM guessing.
     """
     global _recent_stream_dates_cache, _recent_stream_dates_cached_at
 
@@ -565,9 +424,8 @@ def _get_recent_stream_dates(n: int = RECENT_STREAM_DATES_N) -> list[str]:
             return _recent_stream_dates_cache[:n]
 
         try:
-            # Local import: lancedb is heavy and only needed when the
-            # archive is actually built. Bot still boots cleanly on a
-            # fresh checkout where data/lancedb doesn't exist yet.
+            # Local import: lancedb is heavy, and a fresh checkout with no
+            # data/lancedb should still boot.
             import lancedb
 
             if not LANCEDB_PATH.exists():
@@ -580,10 +438,8 @@ def _get_recent_stream_dates(n: int = RECENT_STREAM_DATES_N) -> list[str]:
                 _recent_stream_dates_cached_at = now
                 return []
             table = db.open_table("stream_chunks")
-            # Pull just the date column, project then dedupe in Python.
-            # LanceDB has no DISTINCT primitive; columnar scan of one
-            # narrow column over ~30k rows is ~10-30ms and runs once
-            # per TTL window so this is fine.
+            # LanceDB has no DISTINCT, so dedupe in Python. A columnar scan
+            # of one narrow column over ~30k rows is 10-30 ms, once per TTL.
             rows = table.search().select(["stream_date"]).limit(200_000).to_list()
             unique = sorted(
                 {r["stream_date"] for r in rows if r.get("stream_date")},
@@ -690,9 +546,8 @@ def _build_persona_prefix(
             "聊天里可以自然地叫她/他的名字，但不要每句都重复，也不要主动念UID。"
         )
 
-    # Recent-stream calendar — see ``_get_recent_stream_dates`` for
-    # rationale. Omits the line entirely when no archive is built so
-    # fresh checkouts don't see a stray empty section.
+    # Omitted entirely when no archive is built, so a fresh checkout
+    # doesn't get a stray empty section.
     recent = _get_recent_stream_dates()
     if recent:
         formatted: list[str] = []
@@ -702,9 +557,8 @@ def _build_persona_prefix(
             except ValueError:
                 continue
             ago = _humanize_days_ago((today - d).days)
-            # Drop the year when it matches today's, mirroring the
-            # natural-language phrasing a fan would actually use
-            # ("5月9号" not "2026年5月9号" when both sides know it's 2026).
+            # "5月9号", not "2026年5月9号" — how a fan would actually say it
+            # when both sides know the year.
             if d.year == today.year:
                 formatted.append(f"{d.month}月{d.day}日（{ago}）")
             else:
@@ -741,21 +595,15 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
     """Main bot logic.
 
     Args:
-        transport: The pipecat transport for this connection.
-        login_sync_token: The viewer's loginSyncToken from
-            ``requestData.loginSyncToken`` in the WebRTC offer. ``None``
-            for anonymous viewers. Validated via Workers inside this
-            function — the middleware only checked it was present, not
-            that it was real.
+        login_sync_token: ``None`` for anonymous viewers. Revalidated here
+            rather than trusted from the middleware, which only checked
+            that a token was present.
     """
     logger.info("Starting bot")
 
-    # Resolve the viewer's identity first — it gates two pipeline
-    # decisions: whether to spin up Mem0 (only for logged-in viewers,
-    # keyed on their Bilibili UID) and what prefix to prepend to the
-    # persona system prompt (so the LLM can use their name naturally).
-    # Fail-open: if Workers is down, user.is_logged_in == False and we
-    # behave as if the viewer was anonymous.
+    # Identity gates two pipeline decisions: whether Mem0 runs at all, and
+    # what prefix goes on the persona prompt. Fail-open — a Workers outage
+    # yields is_logged_in == False and the viewer proceeds anonymously.
     user = await resolve_user_context(login_sync_token)
 
     soniox_api_key = os.getenv("SONIOX_API_KEY")
@@ -773,34 +621,18 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
     if not fish_api_key:
         raise RuntimeError("FISH_API_KEY environment variable is required")
 
-    # Voice styles are read once here so the same dict feeds (a) the
-    # persona prefix hint that tells the LLM the tool exists, and (b)
-    # ``install_voice_style_tool`` that registers the handler. Calling
-    # ``load_voice_styles()`` twice would still be safe but would risk
-    # races with hot-reloaded envs (none today, but cheap to guard
-    # against).
+    # Read once so the prompt hint and the registered handler are built
+    # from the same dict.
     voice_styles = load_voice_styles()
 
-    # Fish Audio WebSocket TTS (wss://api.fish.audio/v1/tts/live, PCM output).
-    # Pipecat exposes a subset of the Fish API; we pin the knobs that affect
-    # perceived quality:
+    # latency="normal" is Fish's best-quality mode. Pipecat defaults to
+    # "balanced", which shaves ~50-100 ms TTFB at an audible cost — the wrong
+    # trade when the voice is the product.
     #
-    #   latency="normal"   Fish's best-quality mode. Pipecat's default is
-    #                      "balanced" which shaves ~50-100 ms TTFB at an
-    #                      audible cost. For a streamer persona where the
-    #                      voice IS the product, normal wins.
-    #   normalize=True     Text normalization for EN/ZH numbers, dates, units.
-    #                      On by default; pinned here for documentation.
-    #   temperature=0.7    Server default. Lower (0.5-0.6) = more consistent,
-    #                      higher (0.8-0.9) = more expressive. Tune if delivery
-    #                      feels flat or unstable.
-    #   top_p=0.7          Server default. Pair with temperature for diversity.
-    #
-    # Not exposed by Pipecat (would need a subclass to inject into the start
-    # message): prosody.normalize_loudness (S2.1-Pro perceived-loudness
-    # normalization, defaults true server-side), chunk_length, repetition_
-    # penalty, condition_on_previous_chunks, min_chunk_length. Revisit if the
-    # voice clips, drifts across turns, or repeats artifacts.
+    # Pipecat can't reach prosody.normalize_loudness, chunk_length,
+    # repetition_penalty, condition_on_previous_chunks, or min_chunk_length
+    # without a subclass that injects them into the start message. Revisit if
+    # the voice clips, drifts across turns, or repeats artifacts.
     tts = FishAudioTTSService(
         api_key=fish_api_key,
         sample_rate=44100,
@@ -808,23 +640,15 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
             voice=os.getenv("FISH_VOICE_ID"),
             model=os.getenv("FISH_MODEL", "s2.1-pro"),
             latency="normal",
-            # Seems worse when reading years
+            # Fish's EN/ZH number normalization is on server-side by default,
+            # but it reads years badly (2026 as a cardinal, not "二零二六").
             normalize=False,
-            # temperature=0.7,
-            # top_p=0.7,
-            # prosody_speed=1.1,
         ),
     )
 
-    # LLM service. Persona/identity/voice rules all live in persona.md
-    # so they can be edited without touching code. _build_persona_prefix
-    # injects per-session dynamic facts on top: the current date (for
-    # all viewers, so the model can ground time-sensitive lore) and,
-    # for logged-in viewers only, a line with their name/UID so the
-    # bot greets them naturally. When alternative ``FISH_VOICE_ID_*``
-    # entries are configured, the prefix also lists the available
-    # ``change_voice_style`` enum values so the model knows what to
-    # request when the viewer asks for a different voice.
+    # Identity and voice rules live in persona.md so they can be edited
+    # without touching code; _build_persona_prefix layers the per-session
+    # dynamic facts (date, viewer name, available voice styles) on top.
     llm = OpenRouterLLMService(
         api_key=os.getenv("OPENROUTER_API_KEY"),
         settings=OpenRouterLLMService.Settings(
@@ -833,19 +657,13 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
                 _build_persona_prefix(user, voice_styles=voice_styles)
                 + load_persona()
             ),
-            # temperature=0.7,  # Response creativity (0.0-2.0)
-            # max_completion_tokens=150,  # Maximum response length
-            # frequency_penalty=0.5,  # Reduce repetition (0.0-2.0)
-            # presence_penalty=0.5,  # Encourage topic diversity (0.0-2.0)
         ),
         default_headers=openrouter_headers(),
     )
 
-    # Register the ``change_voice_style`` tool with the LLM service and
-    # wire the same ToolsSchema into the context so the model is told
-    # the tool exists. Returns ``None`` when no alternative voices are
-    # configured — in that case we construct a bare LLMContext, no tool
-    # exposure, no behavior change vs. the pre-feature pipeline.
+    # The same ToolsSchema must reach both the LLM service and the context,
+    # or the model is never told the tool exists. None when no alternative
+    # voices are configured, in which case the context stays bare.
     voice_tools = install_voice_style_tool(llm=llm, tts=tts, styles=voice_styles)
 
     context = LLMContext(tools=voice_tools) if voice_tools else LLMContext()
@@ -856,11 +674,10 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
         ),
     )
 
-    # Long-term memory via Mem0. Only wired up for logged-in viewers —
-    # ``user_id`` is the viewer's Bilibili UID so each fan gets their
-    # own private memory namespace. Anonymous viewers skip Mem0 entirely
-    # rather than pile into a shared ``default-user`` bucket where their
-    # memories would cross-pollute every other anonymous conversation.
+    # Keyed on Bilibili UID, so each fan gets a private namespace.
+    # Anonymous viewers skip Mem0 rather than share a `default-user`
+    # bucket, where their memories would cross-pollute every other
+    # anonymous conversation.
     memory = None
     mem0_api_key = os.getenv("MEM0_API_KEY")
     if not user.is_logged_in:
@@ -896,12 +713,9 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
             "Run `uv run laplace-ingest-facts` to build it."
         )
 
-    # Optional stream archive (RAG over past stream transcripts). Mem0,
-    # PersonaFacts, and StreamArchive each intercept LLMContextFrame and
-    # inject one system message per turn. Default positions stack them
-    # roughly as: [user, mem0, persona_facts, stream_archive] (the
-    # system_instruction from persona.md is prepended automatically by
-    # the LLM service).
+    # All three enrichers intercept LLMContextFrame and inject one system
+    # message per turn, stacking as [user, mem0, persona_facts,
+    # stream_archive]. persona.md is prepended by the LLM service itself.
     archive = None
     if StreamArchiveService is not None and LANCEDB_PATH.exists():
         try:
@@ -973,14 +787,7 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
 
 
 def _extract_login_sync_token(body: Any) -> str | None:
-    """Pull ``loginSyncToken`` out of the parsed ``requestData`` body.
-
-    ``runner_args.body`` is whatever the SmallWebRTC route placed in
-    ``request_data`` — typically the dict the frontend put under
-    ``requestData`` in the offer JSON. The middleware's body rewrite
-    guarantees this populates correctly for the JS SDK's camelCase
-    payloads; here we just validate the inner shape and trim.
-    """
+    """Pull ``loginSyncToken`` out of the parsed ``requestData`` body."""
     if not isinstance(body, dict):
         return None
     token = body.get("loginSyncToken")
@@ -992,9 +799,8 @@ def _extract_login_sync_token(body: Any) -> str | None:
 async def bot(runner_args: RunnerArguments):
     """Main bot entry point.
 
-    SmallWebRTC only — Daily/telephony transports were removed because
-    laplace-eidolon self-hosts on its own server. If a non-WebRTC
-    connection ever shows up here it's a misconfiguration of the runner.
+    SmallWebRTC only, since this self-hosts. A non-WebRTC connection
+    reaching here means the runner is misconfigured.
     """
     if not isinstance(runner_args, SmallWebRTCRunnerArguments):
         logger.error(f"Unsupported runner arguments type: {type(runner_args)}")
@@ -1009,14 +815,12 @@ async def bot(runner_args: RunnerArguments):
         ),
     )
 
-    # The middleware in offer_middleware.py normalises camelCase
-    # ``requestData`` to snake_case ``request_data`` before pipecat's
-    # route parses it, so ``runner_args.body`` is the inner dict here
-    # (not the full envelope). For anonymous viewers it's None.
+    # runner_args.body is the inner requestData dict, not the full envelope,
+    # because offer_middleware rewrote the key before pipecat's route parsed
+    # it. None for anonymous viewers.
     login_sync_token = _extract_login_sync_token(runner_args.body)
-    # Spell out what the bot received so a missing-token surprise is
-    # diagnosable from a single log line — without this the silent
-    # "anonymous-everywhere" failure mode is invisible.
+    # Logged either way: the "anonymous everywhere" failure mode is
+    # otherwise silent, and this makes it one grep.
     if login_sync_token:
         logger.info(f"[bot] Session start with loginSyncToken (len={len(login_sync_token)})")
     else:

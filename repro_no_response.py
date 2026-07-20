@@ -1,98 +1,20 @@
-"""Reproduce the `RuntimeError: No response returned.` failure observed in
-production logs (eidolon-eidolon_2026-05-15T03_00_54.541Z.txt).
+"""Reproduce ``RuntimeError: No response returned.`` from stacked middleware.
 
-Findings — what the production log shows
-----------------------------------------
+Starlette's ``BaseHTTPMiddleware.coro`` catches ``Exception``, not
+``BaseException``. So when a client disconnect cancels the request task, the
+``CancelledError`` escapes with no response message ever sent, and
+``call_next`` — reading a closed stream while ``app_exc is None`` — raises
+``RuntimeError("No response returned.")``, which ``ServerErrorMiddleware``
+turns into a 500.
 
-The container's access log alternates between two error lines for every
-``/api/offer`` interaction::
-
-    POST  /api/offer 500 Internal Server Error
-    PATCH /api/offer 422 Unprocessable Content
-
-Each 500 is preceded by an ASGI ExceptionGroup whose innermost frame is
-``RuntimeError: No response returned.``, raised at
-``starlette/middleware/base.py:169`` from inside
-``laplace_eidolon.offer_middleware:offer_rate_limit`` (line 327)'s
-``await call_next(request)``.
-
-Root cause (verified by this script)
-------------------------------------
-
-The project stacks **two** ``BaseHTTPMiddleware`` instances on the
-FastAPI app pipecat creates:
-
-* ``offer_rate_limit``           — laplace_eidolon/offer_middleware.py:279
-* ``_block_pipecat_demo_in_prod`` — laplace_eidolon/bot.py:387
-
-Both are registered via ``@pipecat_app.middleware("http")``, which
-expands to ``add_middleware(BaseHTTPMiddleware, dispatch=fn)``.
-
-Starlette's ``BaseHTTPMiddleware.coro()`` (base.py:139–146) only catches
-``Exception``, NOT ``BaseException``::
-
-    async def coro() -> None:
-        nonlocal app_exc
-        with send_stream:
-            try:
-                await self.app(scope, receive_or_disconnect, send_no_error)
-            except Exception as exc:        # ← misses CancelledError,
-                app_exc = exc               #   SystemExit, BaseExceptionGroup
-
-When anything downstream of the inner middleware raises a
-``BaseException`` — most commonly ``asyncio.CancelledError`` (from a
-client disconnect that propagates as cancellation, an aiortc background
-task that's cancelled, an ``asyncio.TimeoutError`` wrapped via
-``asyncio.timeout``, etc.) — the ``send_stream`` is closed without any
-response message having been sent. The next read on ``recv_stream``
-raises ``EndOfStream``; ``call_next`` (base.py:155–169) then raises
-``RuntimeError("No response returned.")`` because ``app_exc is None``.
-Starlette's ``ServerErrorMiddleware`` turns that RuntimeError into a
-500.
-
-The 422 PATCH errors are downstream of the 500 POST: with no successful
-POST the JS client never receives a ``pc_id``, so the trickle-ICE PATCH
-body fails Pydantic validation on
-``SmallWebRTCPatchRequest.pc_id`` (str, required) before any handler
-runs. Fixing the POST eliminates the PATCH errors as a side effect.
-
-Why "long-running container" makes it worse
--------------------------------------------
-
-* aiortc allocates UDP sockets, DTLS contexts, and ICE controllers per
-  ``RTCPeerConnection``. Long-running processes accumulate these,
-  pushing setRemoteDescription / ICE setup latency from ~150ms to
-  many seconds.
-* The pipecat ``handle_web_request`` callback also schedules
-  ``background_tasks.add_task(bot_module.bot, ...)``. Background tasks
-  added through ``BaseHTTPMiddleware`` are silently dropped (Starlette
-  ``_StreamingResponse`` always sets ``self.background = None``), so
-  failed sessions also leak resources.
-* Slower request handling = bigger window where the client gives up,
-  cancellation propagates, and the stacked-BaseHTTPMiddleware bug
-  fires.
-
-Fix shape (not applied here, ask before changing prod)
-------------------------------------------------------
-
-* Rewrite both middlewares as **pure ASGI middlewares** instead of
-  ``BaseHTTPMiddleware``.  Pure ASGI middleware doesn't suffer from
-  the cancellation-swallow / BackgroundTasks-loss class of bugs the
-  Starlette docs explicitly warn about.
-* OR collapse them into a single dispatch + keep the work cancellable
-  by handling ``BaseException`` (not just ``Exception``) in the body
-  of the dispatch function.
-* OR pin to ``starlette<0.40`` where BaseHTTPMiddleware was even
-  worse but at least different — definitely not what you want.
-
-Run::
+Three handlers model that trigger (a direct ``CancelledError``, external
+cancellation mid-await, a background task raising ``SystemExit``). Each runs
+against the old stacked-``BaseHTTPMiddleware`` topology and against the
+pure-ASGI middleware that replaced it, imported from the real modules so a
+regression there fails here too. ``offer_middleware.py`` owns the
+production-side explanation.
 
     uv run python repro_no_response.py
-
-Expected output: each scenario produces the same
-``RuntimeError: No response returned.`` ExceptionGroup-wrapped
-traceback shape that ``eidolon-eidolon_2026-05-15T03_00_54.541Z.txt``
-shows for ``laplace_eidolon.offer_middleware:offer_rate_limit:327``.
 """
 
 from __future__ import annotations
@@ -113,43 +35,29 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-# ─────────────────────────────────────────────────────────────────────────────
-# App factories — "before" reproduces the bug, "after" validates the fix
-# ─────────────────────────────────────────────────────────────────────────────
-
 
 def _build_buggy_app(handler) -> FastAPI:
-    """The pre-fix middleware topology that triggers the bug.
+    """The pre-fix topology: CORS → two stacked ``BaseHTTPMiddleware``.
 
-    CORS → outer BaseHTTPMiddleware → inner BaseHTTPMiddleware → route.
-
-    Order of registration matches the original bot.py +
-    offer_middleware.py before the fix:
-
-    1. ``install_offer_middleware`` registered ``offer_rate_limit``
-       first via ``@app.middleware("http")``
-       (innermost user middleware after Starlette's ExceptionMiddleware).
-    2. ``@pipecat_app.middleware("http")`` registered
-       ``_block_pipecat_demo_in_prod`` second.
-    3. Pipecat's runner adds CORS at startup (outermost user middleware).
-
-    Both ``@app.middleware("http")`` calls expand to
-    ``add_middleware(BaseHTTPMiddleware, dispatch=fn)`` — that's the
-    code path the Starlette bug lives in.
+    ``@app.middleware("http")`` expands to
+    ``add_middleware(BaseHTTPMiddleware, dispatch=fn)``, which is where the
+    Starlette bug lives. Registration order mirrors the original bot: the
+    rate limiter innermost, the demo block next, CORS outermost (Pipecat's
+    runner adds CORS at startup).
     """
     app = FastAPI()
 
     @app.middleware("http")
     async def inner_offer_rate_limit(request: Request, call_next):
-        # offer_middleware.offer_rate_limit also reads the body before
-        # call_next; the read engages Starlette's _CachedRequest path.
+        # The real rate limiter also read the body before call_next, which
+        # is what engages Starlette's _CachedRequest path.
         if request.method == "POST" and request.url.path == "/api/offer":
             await request.body()
         return await call_next(request)
 
     @app.middleware("http")
     async def middle_block_demo(request: Request, call_next):
-        # bot._block_pipecat_demo_in_prod is body-less.
+        # Body-less, matching the demo blocker it stands in for.
         return await call_next(request)
 
     app.add_middleware(
@@ -165,24 +73,17 @@ def _build_buggy_app(handler) -> FastAPI:
 
 
 def _build_fixed_app(handler) -> FastAPI:
-    """The post-fix topology: pure-ASGI middleware classes.
-
-    Imports the actual ``OfferRateLimitMiddleware`` and
-    ``BlockPipecatDemoMiddleware`` we shipped, so a regression in the
-    real middleware shows up here.
-    """
-    # Local import so the buggy app can still be tested even if the
-    # fixed middleware is broken.
+    """The post-fix topology, built from the shipped pure-ASGI classes."""
+    # Local import so the buggy app still runs even when the fixed
+    # middleware is broken.
     from laplace_eidolon.bot import BlockPipecatDemoMiddleware
     from laplace_eidolon.offer_middleware import OfferRateLimitMiddleware
     from laplace_eidolon.rate_limit import ANON_QUOTA
 
     app = FastAPI()
-    # add_middleware INSERTS at the head, then build_middleware_stack
-    # reverses, so registration order here matches the production bot:
-    # OfferRateLimitMiddleware (added first, innermost user middleware) →
-    # BlockPipecatDemoMiddleware (middle) → CORS (outermost, like
-    # pipecat.runner.run adds it).
+    # add_middleware inserts at the head and build_middleware_stack then
+    # reverses, so first-added ends up innermost: rate limit → demo block
+    # → CORS, matching the production bot.
     app.add_middleware(OfferRateLimitMiddleware, quota=ANON_QUOTA)
     app.add_middleware(BlockPipecatDemoMiddleware, enabled=True)
     app.add_middleware(
@@ -196,32 +97,21 @@ def _build_fixed_app(handler) -> FastAPI:
     return app
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Failure-mode handlers — each models a real way pipecat's offer handler
-# can fail in production
-# ─────────────────────────────────────────────────────────────────────────────
-
-
 async def _handler_cancelled_error(request: Request) -> JSONResponse:
-    """The route handler hits a CancelledError directly.
+    """The route handler hits a ``CancelledError`` directly.
 
-    Models: an ``asyncio.timeout`` inside ``setRemoteDescription`` /
-    ICE setup that fires before completion, or any ``await`` that gets
-    cancelled by a parent scope (e.g. the client closes the TCP
-    connection and the server cancels the request task).
-
-    CancelledError is a ``BaseException``, NOT ``Exception``, so
-    Starlette's ``BaseHTTPMiddleware.coro`` ``except Exception`` misses
-    it — exactly the trigger.
+    Models an ``asyncio.timeout`` firing partway through
+    ``setRemoteDescription`` / ICE setup, or the client closing its TCP
+    connection and the server cancelling the request task.
     """
     raise asyncio.CancelledError("simulated cancel from inside the handler")
 
 
 async def _handler_self_cancel(request: Request) -> JSONResponse:
-    """Handler is cancelled mid-await by an external task.
+    """The handler is cancelled mid-await by an external task.
 
-    Models: the request task is cancelled while ``setRemoteDescription``
-    or ``createAnswer`` is awaiting socket / DTLS work.
+    Models the request task being cancelled while ``setRemoteDescription``
+    or ``createAnswer`` awaits socket / DTLS work.
     """
     current = asyncio.current_task()
     assert current is not None
@@ -236,17 +126,17 @@ async def _handler_self_cancel(request: Request) -> JSONResponse:
 
 
 async def _handler_bg_task_crash(request: Request) -> JSONResponse:
-    """Handler awaits a background task that crashes with a BaseException.
+    """The handler awaits a background task that dies with a BaseException.
 
-    Models: ``aiortc.RTCPeerConnection.setLocalDescription`` schedules
-    ``asyncio.ensure_future(self.__connect())`` (rtcpeerconnection.py:853).
-    If anything that ``__connect`` awaits raises a non-``Exception``
-    error or the task is killed, the failure path looks like this.
+    Models ``aiortc.RTCPeerConnection.setLocalDescription``, which schedules
+    ``asyncio.ensure_future(self.__connect())``. If that task is killed, or
+    anything it awaits raises a non-``Exception`` error, the failure takes
+    this path.
     """
     async def bg():
         await asyncio.sleep(0.01)
-        # SystemExit is BaseException — same category as CancelledError
-        # for the `except Exception` filter.
+        # SystemExit is a BaseException, so `except Exception` misses it
+        # for the same reason it misses CancelledError.
         raise SystemExit("simulated background failure")
 
     task = asyncio.create_task(bg())
@@ -258,17 +148,12 @@ async def _handler_bg_task_crash(request: Request) -> JSONResponse:
     return JSONResponse({"sdp": "...", "type": "answer", "pc_id": "abc"})
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Test harness
-# ─────────────────────────────────────────────────────────────────────────────
-
-
 class _StderrCapture(io.TextIOBase):
-    """Tee writes to the real stderr AND to an in-memory buffer.
+    """Tee writes to the real stderr and to an in-memory buffer.
 
-    uvicorn emits the ``Exception in ASGI application`` traceback via
-    ``logging`` to stderr; we want to scan it after the run to count
-    occurrences, without losing the user-visible output.
+    uvicorn logs its ``Exception in ASGI application`` traceback to stderr,
+    which the run scans afterwards to count occurrences — the tee keeps that
+    output visible to the user meanwhile.
     """
 
     def __init__(self, real) -> None:
@@ -342,8 +227,8 @@ async def _run_scenario(label: str, app: FastAPI) -> tuple[int, int, list[str]]:
         base = f"http://127.0.0.1:{port}"
         with _run_server(app, port):
             results = await asyncio.gather(*(_send_one(base) for _ in range(3)))
-            # uvicorn logs the ERROR + traceback after the inner app
-            # finishes; give it a beat to flush.
+            # uvicorn logs the ERROR + traceback only after the inner app
+            # finishes, so give it a beat to flush.
             await asyncio.sleep(0.5)
         text = capture.text()
     finally:

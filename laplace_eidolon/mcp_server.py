@@ -4,14 +4,10 @@ Mounts a FastMCP Streamable HTTP app at /mcp on the bot's FastAPI app,
 exposing two read-only tools — ``search_persona_facts`` and
 ``search_streams`` — over the same LanceDB indexes the voice pipeline uses.
 
-Anonymous callers are rate-limited per client IP. A caller presenting a valid
-``Authorization: Bearer <loginSyncToken>`` is rate-limited per Bilibili UID at
-a higher ceiling. The token grants throughput only — both tiers see identical
-tools over identical public data (no Mem0, no per-user content).
-
-Why mounted (not a standalone process): reuses ``resolve_user_context``'s warm
-TTL cache, the offer middleware's IP extraction, and the single-instance
-deployment posture. ``install_mcp(app)`` mirrors ``install_memory_admin(app)``.
+Anonymous callers are rate-limited per client IP; a valid ``Authorization:
+Bearer <loginSyncToken>`` raises the ceiling and keys the quota by Bilibili
+UID instead. The token buys throughput only — both tiers see identical tools
+over identical public data (no Mem0, no per-user content).
 """
 
 from __future__ import annotations
@@ -30,9 +26,6 @@ from mcp.server.fastmcp.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.types import Receive, Scope, Send
 
-# These underscore-prefixed helpers are reused as the single source of truth
-# for IP extraction, bearer parsing, and env-int parsing — duplicating them
-# would risk drift. All live in the same package.
 from .embeddings import DEFAULT_DB_PATH
 from .memory_admin import _extract_bearer_token
 from .offer_middleware import _resolve_client_ip_from_scope
@@ -43,9 +36,8 @@ from .user_context import resolve_user_context
 
 MOUNT_PATH = "/mcp"
 
-# Rate-limit defaults (per hour). Each search costs one embedding + an optional
-# Cohere rerank, so these cap spend; tune via env in production. Authenticated
-# callers get a higher ceiling but are still bounded (unlike the WebRTC path).
+# Per-hour defaults. Every search costs one embedding plus an optional Cohere
+# rerank, so these cap spend; both tiers stay bounded. Tune via env.
 _ANON_DEFAULT_PER_HOUR = 20
 _AUTH_DEFAULT_PER_HOUR = 120
 _DEFAULT_WINDOW_SEC = 3600
@@ -55,8 +47,8 @@ def _score_of(hit: dict[str, Any]) -> float | None:
     """Relevance score regardless of which retrieval path produced the hit.
 
     Reranked/hybrid hits carry ``_relevance_score`` (higher = better); the
-    unreranked vector path carries ``_distance`` (lower = better). Returns
-    ``None`` when neither is present.
+    unreranked vector path carries ``_distance`` (lower = better), so the
+    returned number is only comparable within one result set.
     """
     if hit.get("_relevance_score") is not None:
         return float(hit["_relevance_score"])
@@ -76,9 +68,9 @@ def _project_fact(hit: dict[str, Any]) -> dict[str, Any]:
 
 
 def _project_chunk(hit: dict[str, Any]) -> dict[str, Any]:
-    """Project a stream-archive row. Content prefers the refined narrative
-    (``details``) over the v1 ``summary`` over the raw ``text`` — the same
-    priority ``StreamArchiveService._format_chunks`` renders for the bot."""
+    """Project a stream-archive row, preferring the refined ``details`` over
+    the v1 ``summary`` over the raw ``text`` — the same priority
+    ``StreamArchiveService._format_chunks`` renders for the bot."""
     content = (hit.get("details") or hit.get("summary") or hit.get("text") or "").strip()
     topics: list[str] = []
     topics_raw = hit.get("topics") or ""
@@ -99,15 +91,14 @@ def _project_chunk(hit: dict[str, Any]) -> dict[str, Any]:
 
 @dataclass(frozen=True)
 class _CallerTier:
-    """Which quota + key applies to the current request. Set by the
-    middleware, read by the rate-limit guard inside each tool."""
+    """Which quota + key applies to the current request."""
 
     quota: AnonymousIpQuota
     key: str
     name: str  # "anonymous" | "authenticated" — used in the over-limit message
 
 
-# Resolved once per HTTP request by _TierMiddleware; read inside the tools.
+# Set once per HTTP request by _TierMiddleware; read inside the tools.
 _caller: ContextVar[_CallerTier | None] = ContextVar("mcp_caller", default=None)
 
 
@@ -121,11 +112,10 @@ def _build_quota(per_hour_env: str, default_per_hour: int) -> AnonymousIpQuota:
 def _transport_security_from_env() -> TransportSecuritySettings:
     """Configure DNS-rebinding / Host-header protection.
 
-    FastMCP enables it by default with an empty allowlist (rejects every
-    Host). Behind a TLS-terminating reverse proxy the Host is the public
-    domain, so set ``EIDOLON_MCP_ALLOWED_HOSTS=host1,host2`` to allow them.
-    Unset → protection disabled (rely on the proxy), which keeps a fresh
-    checkout runnable on localhost.
+    FastMCP enables it by default with an empty allowlist, which rejects
+    every Host. Set ``EIDOLON_MCP_ALLOWED_HOSTS=host1,host2`` to the public
+    domains a reverse proxy forwards; unset disables the check and leaves it
+    to the proxy, keeping a fresh checkout runnable on localhost.
     """
     raw = (os.getenv("EIDOLON_MCP_ALLOWED_HOSTS") or "").strip()
     if not raw:
@@ -149,12 +139,11 @@ def _authorization_from_scope(scope: Scope) -> str | None:
 
 async def _guard_rate_limit() -> None:
     """Consume one token from the caller's tier quota; raise ToolError when
-    the window is exhausted. Called at the top of every search tool, before
-    any embedding spend."""
+    the window is exhausted. Runs at the top of every search tool, before any
+    embedding spend."""
     tier = _caller.get()
     if tier is None:
-        # The middleware sets this for every HTTP request before the tool
-        # runs. If it is somehow unset, fail closed rather than serve unmetered.
+        # Unreachable via the middleware; fail closed rather than unmetered.
         raise ToolError("Internal error: request tier was not resolved.")
     result = await tier.quota.try_consume(tier.key)
     if not result.allowed:
@@ -165,14 +154,12 @@ async def _guard_rate_limit() -> None:
 
 
 class _TierMiddleware:
-    """Pure-ASGI wrapper around the mounted MCP app. Resolves the rate-limit
-    tier (anonymous-by-IP vs authenticated-by-UID) once per HTTP request and
-    stashes it in the ``_caller`` contextvar for the tool handler.
+    """Pure-ASGI wrapper that resolves the rate-limit tier (anonymous-by-IP
+    vs authenticated-by-UID) once per request, into the ``_caller`` contextvar.
 
-    A missing/blank/invalid/expired token is silently anonymous — never an
-    error. ``resolve_user_context`` is only called when a token is actually
-    present (mirrors ``memory_admin._resolve_caller``), so the handshake and
-    anonymous calls cost zero Workers round-trips.
+    A missing, blank, invalid, or expired token is silently anonymous, never
+    an error. ``resolve_user_context`` runs only when a token is present, so
+    the handshake and anonymous calls cost zero Workers round-trips.
     """
 
     def __init__(
@@ -198,8 +185,8 @@ class _TierMiddleware:
                 tier = _CallerTier(self._auth, str(user.mid), "authenticated")
             else:
                 tier = self._anon_tier(scope)
-        # Each ASGI request runs in its own task with a fresh copied context,
-        # so this set does not leak across requests.
+        # Safe without a reset: each ASGI request runs in its own task with a
+        # freshly copied context, so the set cannot leak to another caller.
         _caller.set(tier)
         await self.app(scope, receive, send)
 
@@ -212,16 +199,12 @@ def install_mcp(
     anon_quota: AnonymousIpQuota | None = None,
     auth_quota: AnonymousIpQuota | None = None,
 ) -> None:
-    """Mount the Streamable HTTP MCP server at /mcp on ``app``.
+    """Mount the Streamable HTTP MCP server at ``/mcp/`` on ``app``.
 
     Call exactly once at startup, alongside ``install_offer_middleware`` and
-    ``install_memory_admin``. Not idempotent: calling twice mounts /mcp twice
-    and wraps the lifespan twice, which invokes ``session_manager.run()`` twice
-    on the same instance and raises at startup. The keyword args exist for tests
-    (inject fakes / tiny quotas); production passes none and gets singletons
-    built from the default DB path and env-configured limits.
-
-    The endpoint serves at ``/mcp/`` (``/mcp`` 307-redirects to it).
+    ``install_memory_admin``. Not idempotent: a second call wraps the lifespan
+    again and ``session_manager.run()`` raises at startup on the second entry.
+    The keyword args are test seams; production passes none.
     """
     facts = persona_facts or PersonaFactsService(db_path=DEFAULT_DB_PATH)
     streams = stream_archive or StreamArchiveService(db_path=DEFAULT_DB_PATH)
@@ -269,10 +252,8 @@ def install_mcp(
     app.mount(MOUNT_PATH, _TierMiddleware(inner, anon_quota=anon, auth_quota=auth))
 
     # FastMCP runs its session manager in the sub-app's OWN lifespan, which a
-    # Mount does not execute. Fold it into the parent app's lifespan so the
-    # session manager's task group is running when requests arrive. Pipecat's
-    # runner combines lifespans the same way (_add_lifespan_to_app), so this
-    # composes cleanly with the WebRTC lifespan added later.
+    # Mount never executes. Folding it into the parent's lifespan is what gets
+    # the session manager's task group running before requests arrive.
     original_lifespan = app.router.lifespan_context
 
     @contextlib.asynccontextmanager

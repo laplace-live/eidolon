@@ -1,55 +1,16 @@
 """Ingest streams/*.md into a local LanceDB index.
 
-Source of truth: ``server/streams/*.md`` (frontmatter + H2-delimited scenes).
-Built artifact: ``server/data/lancedb/stream_chunks.lance/``.
+Parses ``streams/*.md`` (frontmatter + H2-delimited scenes) into the
+``stream_chunks`` table, one row per H2 section, with frontmatter carried
+onto every row as filterable metadata. Sister module to
+``ingest_facts.py``, which fills ``persona_facts`` in the same LanceDB
+instance. The table is dropped and rebuilt on each run.
 
-Sister module: ``tools/ingest_facts.py`` writes the ``persona_facts`` table
-into the same LanceDB instance from the line-per-fact ``data/*设定集.txt``
-files. Both are read at runtime by separate FrameProcessors (see
-``stream_archive.py`` and ``persona_facts.py``). Shared embedding +
-LanceDB infra lives in ``embeddings.py``.
-
-Each H2 section becomes one chunk. Frontmatter (``stream_date``, ``language``,
-etc.) propagates onto every chunk as filterable metadata. The whole table
-is dropped and rebuilt on each run; transcripts are small and embeddings
-are cheap, so reproducibility beats incrementalism here.
-
-Topics are per-chunk, not per-stream — produced by ``tools/refine.py`` and
-stored on each row as a JSON-encoded list. A single VOD often spans chat,
-gaming, karaoke, and watchalongs, so a single per-stream label would be
-misleading.
-
-Refinement-aware
-----------------
-If a stream has a ``streams/<id>.refined.json`` sidecar (produced by
-``tools/refine.py``), each refined chunk is upgraded:
-
-- The LLM-written ``summary`` is embedded instead of the raw transcript,
-  which dramatically reduces noise from anime audio / song lyrics / SC
-  reads polluting the embedding.
-- The refined ``heading`` overrides the original placeholder.
-- ``chunk_type`` is stored alongside; chunks tagged ``anime_audio`` or
-  ``karaoke`` are skipped from the index by default (configurable via
-  ``--skip-types`` or ``INGEST_SKIP_TYPES``).
-
-Unrefined chunks fall back to the original behavior (embed the raw text).
-
-Hybrid retrieval columns
-------------------------
-Each row also carries a ``tokens`` column with jieba-tokenized text used
-by the FTS half of hybrid search at query time
-(``retrieval.hybrid_search``). For refined chunks we tokenize
-heading + summary + details + topics + mentions (high signal); for
-unrefined we tokenize heading + raw text. After the table is written,
-a Tantivy-free FTS index is built on the ``tokens`` column. The query
-side uses the same ``tokenize_zh`` to keep BM25 lookups byte-identical.
-
-Usage::
-
-    uv run laplace-ingest-streams                           # rebuild from streams/
-    uv run laplace-ingest-streams --streams-dir custom/     # alt source dir
-    uv run laplace-ingest-streams --dry-run                 # show what would be written
-    uv run laplace-ingest-streams --skip-types ""           # don't filter any chunk_type
+Where a ``streams/<id>.refined.json`` sidecar exists (written by
+``tools/refine.py``), the LLM-written summary is embedded instead of the
+raw transcript — anime audio, song lyrics, and SC reads otherwise dominate
+the vector — and chunks tagged ``anime_audio`` or ``karaoke`` are dropped
+from the index (see ``--skip-types``). Unrefined chunks embed raw text.
 """
 
 from __future__ import annotations
@@ -79,8 +40,7 @@ from ..retrieval import build_fts_index, tokenize_zh
 from ..stream_archive import DEFAULT_TABLE
 from ._streams import iter_streams, load_sidecar
 
-# chunk_types skipped from the index by default. Set INGEST_SKIP_TYPES (or
-# pass --skip-types) to override. Empty string = skip nothing.
+# Overridable via INGEST_SKIP_TYPES or --skip-types; empty string skips nothing.
 DEFAULT_SKIP_TYPES = "anime_audio,karaoke"
 
 
@@ -91,12 +51,12 @@ def load_streams(
 ) -> list[dict[str, Any]]:
     """Parse all ``streams/*.md`` files into rows ready for embedding.
 
-    Each row is one chunk; rows are returned in deterministic order. If a
-    sidecar refinement exists for a chunk, the refined fields are merged
-    onto the row and the embedded text becomes the LLM-written summary.
+    One row per chunk, in deterministic order.
 
-    ``skip_types`` filters out refined chunks whose ``chunk_type`` matches.
-    Unrefined chunks are always kept (we have no signal to filter on).
+    Args:
+        skip_types: matched against ``chunk_type``, which only refined
+            chunks carry — unrefined chunks are always kept because there
+            is no signal to filter them on.
     """
     streams = iter_streams(streams_dir)
     if not streams:
@@ -124,15 +84,12 @@ def load_streams(
                 skipped += 1
                 continue
 
-            # Prefer refined heading + summary if present; the summary is
-            # what we want to retrieve on, since the raw text is noisy.
             heading = str(refined.get("heading") or chunk.heading)
             summary = str(refined.get("summary") or "")
 
-            # The embedded text. Including the heading helps semantic
-            # match for queries like "fire temple boss". Including the
-            # date textually helps "what did you stream last week" surface
-            # via embedding alone, not just metadata filtering.
+            # Heading and date go into the embedded text so "fire temple
+            # boss" and "what did you stream last week" can both land on a
+            # vector hit, without needing a metadata filter.
             base = summary if summary else chunk.text
             if stream_date:
                 embed_input = f"On {stream_date}, {heading}.\n{base}"
@@ -143,21 +100,10 @@ def load_streams(
             mentions = refined.get("mentions") or []
             details = str(refined.get("details") or "")
 
-            # Tokens column for the FTS half of hybrid retrieval.
-            #
-            # Composition rationale: heading and summary are the
-            # highest-signal text we have (LLM-distilled). Adding the
-            # raw transcript would dominate the BM25 score with low-
-            # signal soniox noise (filler words, mishears) and pull the
-            # ranking toward chunks that happen to mention a search
-            # term in passing. Topics + mentions are short controlled-
-            # vocab tags from refine.py — perfect FTS material. For
-            # unrefined chunks we fall back to heading + raw text
-            # because that's all we have.
-            #
-            # We tokenize the *Chinese* parts; mentions/topics are
-            # mostly already short proper nouns so jieba pass-through
-            # leaves them as-is.
+            # The raw transcript is deliberately excluded from the FTS
+            # text: Soniox filler words and mishears would dominate BM25
+            # and pull ranking toward chunks that mention a term in
+            # passing. Unrefined chunks have nothing better to fall back on.
             if summary or details or topics or mentions:
                 fts_text = " ".join(
                     [
@@ -172,10 +118,6 @@ def load_streams(
                 fts_text = f"{heading} {chunk.text}"
             tokens = tokenize_zh(fts_text)
 
-            # Pack the v2-only structured fields into a single JSON blob
-            # rather than adding 5+ columns. stream_archive.py decodes this at
-            # render time. Empty dict for v1 / unrefined chunks so the
-            # column is always populated.
             extras = {
                 "key_quotes": refined.get("key_quotes") or [],
                 "sc_events": refined.get("sc_events") or [],
@@ -221,14 +163,11 @@ def load_streams(
 def build_arrow_schema() -> pa.Schema:
     """Schema for the stream_chunks table.
 
-    Vector dim is fixed to ``DEFAULT_EMBED_DIM`` (3072 by default, matching
-    ``google/gemini-embedding-2-preview``). If you swap embedding models
-    or change ``EMBED_DIM``, this schema picks up the new dim on
-    the next ingest run because we drop and recreate the table.
-
-    The ``tokens`` column carries jieba-tokenized text used by the FTS
-    half of hybrid retrieval (heading + summary + details + topics +
-    mentions for refined chunks; heading + raw text for unrefined).
+    ``tokens`` holds jieba-tokenized text for the FTS half of hybrid
+    retrieval; query-side code must run through the same
+    ``retrieval.tokenize_zh`` or BM25 lookups won't match. Vector dim
+    follows ``DEFAULT_EMBED_DIM`` and picks up a model swap on the next
+    run, since the table is dropped and recreated.
     """
     return pa.schema(
         [
@@ -237,16 +176,15 @@ def build_arrow_schema() -> pa.Schema:
             pa.field("stream_date", pa.string()),
             pa.field("heading", pa.string()),
             pa.field("text", pa.string()),
-            # Refined fields. Empty strings / "[]" / "{}" / False if no
-            # sidecar exists or the chunk is still in v1 format.
+            # Refined fields. Empty strings / "[]" / "{}" / False when no
+            # sidecar exists, so every column is always populated.
             pa.field("summary", pa.string()),
             pa.field("details", pa.string()),  # v2: long narrative for LLM
             pa.field("chunk_type", pa.string()),
             pa.field("topics", pa.string()),  # JSON-encoded list[str]
             pa.field("mentions", pa.string()),  # JSON-encoded list[str]
-            # JSON blob: {key_quotes, sc_events, songs, events, promises}.
-            # Single column instead of 5 to keep the schema flexible —
-            # stream_archive.py decodes whatever it needs at render time.
+            # {key_quotes, sc_events, songs, events, promises} in one column
+            # rather than five; stream_archive.py decodes it at render time.
             pa.field("extras_json", pa.string()),
             pa.field("refined", pa.bool_()),
             pa.field("tokens", pa.string()),  # jieba-tokenized for FTS
@@ -264,22 +202,15 @@ async def embed_in_batches(
 ) -> EmbeddingUsage:
     """Embed each row's ``embed_input`` and stash the vector on the row.
 
-    Done in batches to keep request payloads small and progress visible.
-    If ``cache`` is provided, vectors already on disk are reused (so a
-    failed/aborted previous run only re-pays for what wasn't completed),
-    and freshly-embedded batches are written through to the cache before
-    the next batch starts. Returns the aggregate token + USD cost reported
-    by OpenRouter so the caller can summarize spend at the end.
+    A ``cache`` makes an aborted run only re-pay for what it didn't
+    finish. Returns aggregate tokens + USD so the caller can report spend.
     """
     total = EmbeddingUsage()
 
-    # Cache key has to match what we'll send to the API; resolve once.
+    # Resolve once: the cache key has to match what goes to the API.
     model = os.getenv("EMBED_MODEL", DEFAULT_EMBED_MODEL)
     dim = DEFAULT_EMBED_DIM
 
-    # Hit pass: serve as many vectors from disk as we can before any API
-    # call. Done in one shot rather than per-batch so the "loaded N from
-    # cache" log line lands up front and the user knows what's coming.
     if cache is not None:
         texts = [r["embed_input"] for r in rows]
         cached = cache.get_many(model, dim, texts)
@@ -304,16 +235,15 @@ async def embed_in_batches(
         vectors, usage = await embed_texts_with_usage(texts, model=model, dimensions=dim)
         for row, vec in zip(batch, vectors):
             row["vector"] = vec
-        # Write through immediately so a crash on the *next* batch doesn't
-        # waste this batch's spend. SQLite commit-per-batch is cheap.
+        # Write through per batch so a crash on the next one doesn't waste
+        # this one's spend. SQLite commit-per-batch is cheap.
         if cache is not None:
             cache.put_many(model, dim, [(r["embed_input"], r["vector"]) for r in batch])
         total.add(usage)
         progress = min(start + batch_size, len(misses))
-        # Show cost for any source that produced one — BYOK runs hit the
-        # ``estimate`` path because OpenRouter withholds cost data on
-        # the embeddings endpoint, and hiding the estimate misled users
-        # into thinking ingest was free.
+        # BYOK runs land in the ``estimate`` path because OpenRouter
+        # withholds cost data on /v1/embeddings; showing the estimate is
+        # the only signal a user gets that ingest isn't free.
         if usage.cost_source in ("openrouter", "estimate"):
             suffix = "" if usage.cost_source == "openrouter" else " est."
             cost_str = f", ${usage.cost_usd:.6f}{suffix}"
@@ -328,23 +258,21 @@ async def embed_in_batches(
 def write_table(rows: list[dict[str, Any]], db_path: Path, table_name: str) -> None:
     """Drop and recreate the LanceDB table, then build the FTS index.
 
-    The FTS index is required by the hybrid retrieval path
-    (``retrieval.hybrid_search``); the table is built fresh on each
-    run so the index is always in sync with the rows.
+    ``retrieval.hybrid_search`` needs the FTS index; rebuilding the whole
+    table each run keeps the two in sync.
     """
     db = lancedb.connect(str(db_path))
     if table_name in db.list_tables().tables:
         db.drop_table(table_name)
     schema = build_arrow_schema()
-    # Project only the fields that match the schema (drop ``embed_input``
-    # since the vector now carries that information).
+    # Projecting to schema.names drops ``embed_input`` — the vector
+    # already carries it.
     projected = [{k: row[k] for k in schema.names} for row in rows]
     table = db.create_table(table_name, data=projected, schema=schema)
     logger.info(f"Wrote {len(rows)} rows to {db_path}/{table_name}.lance")
 
-    # Build FTS once at the end — much faster than incremental updates,
-    # and the cost is negligible vs the embedding spend that already
-    # happened. ~30k rows takes a few seconds.
+    # Indexing once at the end beats incremental updates: ~30k rows takes
+    # a few seconds, negligible next to the embedding spend.
     build_fts_index(table, field="tokens")
     logger.info(f"Built FTS index on 'tokens' for {table_name}")
 

@@ -1,45 +1,11 @@
 """Ingest persona-fact .txt files into a local LanceDB index.
 
-Source of truth: ``server/data/*设定集.txt`` and ``server/data/*事件集.txt`` —
-fan-compiled atomic facts about the streamer (one fact per line, optional
-date prefix). Built artifact: ``server/data/lancedb/persona_facts.lance/``.
-
-Each non-empty line becomes one chunk. Lines look like::
-
-    2022年10月3日 / 明前奶绿声称坚果排斥戴墨镜，会甩掉
-    2023年8月10日 / 明前奶绿声称坚果5.6kg
-    花店的地下室里是坚果的敌人：狗
-
-Date prefix (``YYYY年MM月DD日`` / optional `日`) is parsed and stored as
-metadata on the row so we can filter or surface it. Lines without a parseable
-date keep the full text and an empty date column.
-
-Each row carries three searchable representations:
-
-- ``vector`` — Gemini embedding of the date + persona-prefix-stripped
-  body. We strip "明前奶绿声称…" because every fact starts that way and
-  the prefix dominates the embedding space, collapsing semantic
-  diversity. See ``_PERSONA_PREFIXES``.
-- ``tokens`` — jieba-tokenized full text (prefix kept) for the BM25/FTS
-  half of hybrid retrieval. Catches lexical hits dense vectors miss
-  (homophones like 梦想 vs 梦境).
-- ``text`` — the original cleaned line, what the LLM sees when this fact
-  is rendered into a system message at runtime.
-
-This is the second LanceDB tier in the pipeline:
-
-- ``stream_chunks``  — refined 5-min transcript scenes, retrieved by relevance
-- ``persona_facts``  — atomic dated facts about the streamer (THIS module)
-- ``persona.md``     — hand-curated evergreen identity (always in system prompt)
-
-The whole table is dropped and rebuilt on every run; facts are small and
+Reads fan-compiled atomic facts (one per line, optional date prefix) from
+``data/*设定集.txt`` / ``data/*事件集.txt`` into the ``persona_facts`` table.
+Sister module to ``ingest_streams.py``, which fills ``stream_chunks`` in the
+same LanceDB instance; both are read at runtime by their own FrameProcessor.
+The table is dropped and rebuilt on every run — facts are small and
 embeddings are cheap, so reproducibility beats incrementalism.
-
-Usage::
-
-    uv run laplace-ingest-facts                          # rebuild from data/*设定集.txt + data/*事件集.txt
-    uv run laplace-ingest-facts --files data/x.txt       # custom file list
-    uv run laplace-ingest-facts --dry-run                # show what would be written
 """
 
 from __future__ import annotations
@@ -70,28 +36,15 @@ from ..retrieval import build_fts_index, tokenize_zh
 
 DEFAULT_TABLE = "persona_facts"
 
-# Default file patterns under ``data/``. Picks up the streamer-fact files
-# without sweeping in unrelated .txt artefacts (video-full.txt, etc.).
+# Narrow on purpose: a broader glob sweeps in unrelated .txt artefacts
+# (video-full.txt, etc.).
 DEFAULT_FACT_PATTERNS = ("*设定集.txt", "*事件集.txt")
 
-# Parse a leading date in one of two forms:
-#
-#   1. Chinese:  "2022年10月3日" / "2026年5月9日"
-#      The trailing 日 is required so we don't accidentally match
-#      "2022年圣诞节" or other non-date suffixes.
-#
-#   2. ISO:      "2025-12-29" / "2025-12-29 00:15:16"
-#      The optional ``HH:MM[:SS]`` tail is consumed and discarded so
-#      curator timestamps (some lines were copy-pasted with the time
-#      attached) don't leak into the cleaned fact body. The trailing
-#      time is bounded by a non-digit lookahead so we don't eat into
-#      a following number that happens to start with two digits.
-#
-# Both branches capture (year, month, day) at groups (1, 2, 3) so the
-# existing ``m.groups()`` consumer in ``_parse_line`` works unchanged.
-# After the date+optional-time, optional whitespace and an optional
-# separator (`/`、`、`,，`) are consumed so the leftover body reads
-# naturally without leading punctuation.
+# Two date forms: "2022年10月3日" and "2025-12-29" with an optional
+# " HH:MM[:SS]" tail. The trailing 日 is required so "2022年圣诞节" doesn't
+# match; the non-digit lookahead stops the ISO time from eating into a
+# following number. Curator timestamps and the separator that follows the
+# date are both consumed so they never reach the fact body.
 DATE_RE = re.compile(
     r"^\s*(?:"
     r"(\d{4})年(\d{1,2})月(\d{1,2})日"
@@ -100,46 +53,28 @@ DATE_RE = re.compile(
     r")\s*[/、,，]?\s*"
 )
 
-# Strip a leading BV-id reference like "BV1em4y187Nc / ..." — these are
-# video citations, not facts. Same for bracketed video titles.
+# A leading "BV1em4y187Nc / " is a video citation, not part of the fact.
 BV_RE = re.compile(r"^\s*BV[0-9A-Za-z]+\s*[/、,，]\s*")
 
-# Strip a leading 贴吧-style floor marker like "第2705楼: " / "第2705楼：".
-# These are sticky source-tracking annotations the curator adds to the
-# raw .txt so they can resume scraping from the last processed floor —
-# they're metadata, not part of the fact body. We capture the integer
-# so it can ride along on the row (useful for future filtering /
-# debugging) but it must NOT reach ``text``, ``embed_input``, or
-# ``tokens``: the floor number is high-cardinality noise that would
-# poison both the embedding space and the BM25 index.
+# 贴吧 floor markers ("第2705楼: ") are the curator's scrape-resume
+# annotations. The captured integer rides along on the row, but must never
+# reach ``text``, ``embed_input``, or ``tokens`` — it is high-cardinality
+# noise that would poison both the embedding space and the BM25 index.
 FLOOR_RE = re.compile(r"^\s*第(\d+)楼\s*[:：]\s*")
 
-# Strip the persona-name boilerplate from each fact's ``embed_input``
-# (NOT ``text`` — display still uses the original wording).
+# ~95% of the fan-compiled facts open with "明前奶绿声称…" / "明前奶绿强调…",
+# and that shared prefix dominates every vector — facts about cat weight,
+# glasses, and dreams all collapse into one cluster, so pure-vector
+# retrieval ranks the wrong fact at top-1. Stripping the name and the
+# reporting verb from ``embed_input`` (never from ``text``, which is what
+# gets displayed) lifts vector-only MRR 0.833 → 0.925 (+11% relative) on
+# the eval set, rescuing "你梦想是什么" from a total miss. With the Cohere
+# reranker on the gap closes to zero, so this mainly buys defense-in-depth
+# for the no-Cohere fallback path (key rotation, rate limits, offline dev).
 #
-# Why: ~95% of the fan-compiled facts in 设定集.txt / 事件集.txt start
-# with "明前奶绿声称…" / "明前奶绿强调…" / etc. With every vector
-# dominated by the same opening tokens, the embedding space collapses
-# — facts about cat weight, glasses, dreams all cluster together and
-# pure-vector retrieval ranks the wrong fact at top-1. Removing the
-# persona name + the (high-frequency, low-information) reporting verb
-# frees the vector to encode what the fact is actually *about*.
-#
-# Eval-validated with /tmp/bench_prefix_strip.py against the eval set:
-# vector-only MRR jumps 0.833 → 0.925 (+11% relative) with stripping
-# on, rescuing "你梦想是什么" from a total miss. With Cohere reranker
-# on the gap closes to zero — but the strip is essentially free at
-# ingest time and provides defense-in-depth for the no-Cohere
-# fallback path (key rotation, rate-limit, offline dev).
-#
-# Implementation: one regex that matches name + an optional reporting
-# verb at the start of the line, then drops any leftover separator.
-# The verb alternation deliberately omits negations (不/没) and aux
-# verbs (是/在/有/会) so facts like "明前奶绿不喜欢XX" become
-# "不喜欢XX" with the negation preserved — earlier prefix-table
-# versions were too aggressive and stripped semantic content. Longer
-# alternates first ("声称是" before "声称") so leftmost-longest match
-# wins.
+# The verb alternation omits negations (不/没) and aux verbs (是/在/有/会) so
+# "明前奶绿不喜欢XX" keeps its negation. Longer alternates come first
+# ("声称是" before "声称") so leftmost-longest matching picks the right one.
 _PERSONA_PREFIX_RE = re.compile(
     r"^明前奶[绿黑]"  # 奶绿 the persona, 奶黑 the alter ego
     r"(?:声称是|声称|声明|强调|认为|觉得|说过|说|解释|讨论"
@@ -152,10 +87,8 @@ _PERSONA_PREFIX_RE = re.compile(
 def _strip_persona_prefix(text: str) -> str:
     """Strip the leading "明前奶绿声称…" boilerplate from a fact line.
 
-    Returns the body of the fact, or the original ``text`` if the
-    regex didn't match (so it's safe to call unconditionally on
-    non-奶绿 facts). Idempotent. See ``_PERSONA_PREFIX_RE`` for the
-    rationale.
+    Idempotent, and a no-op on lines that don't match, so it is safe to
+    call unconditionally. See ``_PERSONA_PREFIX_RE`` for why.
     """
     return _PERSONA_PREFIX_RE.sub("", text, count=1) or text
 
@@ -163,23 +96,15 @@ def _strip_persona_prefix(text: str) -> str:
 def _parse_line(line: str) -> tuple[str, int, str]:
     """Extract (iso_date, floor, cleaned_text) from one raw fact line.
 
-    Returns ``("YYYY-MM-DD", floor_or_0, "...")``. ``floor`` is the
-    integer captured from a leading ``第NNN楼: `` marker (0 when the
-    line has no floor annotation — most lines don't). The cleaned_text
-    drops the floor marker, the date prefix and any immediately-following
-    ``/`` separator so the body reads naturally. BV-id references are
-    also stripped.
-
-    Strip order matters: floor first (it always wraps the rest), then
-    BV-id, then date. The curator's floor markers sit OUTSIDE every
-    other prefix.
+    ``floor`` is 0 when the line carries no ``第NNN楼: `` marker, which
+    most don't. Strip order matters: the curator's floor markers sit
+    outside every other prefix, so they go first, then the BV-id
+    citation, then the date.
     """
     line = line.strip()
     if not line:
         return "", 0, ""
 
-    # Strip floor marker first — it's the outermost prefix the curator
-    # adds when tracking scrape progress in the source .txt.
     floor = 0
     f = FLOOR_RE.match(line)
     if f:
@@ -189,15 +114,13 @@ def _parse_line(line: str) -> tuple[str, int, str]:
             floor = 0
         line = line[f.end() :].lstrip()
 
-    # Strip BV-id citation prefix if present.
     line = BV_RE.sub("", line, count=1)
 
     m = DATE_RE.match(line)
     if not m:
         return "", floor, line
-    # DATE_RE has two alternatives — CJK form fills groups (1,2,3),
-    # ISO form fills (4,5,6). Exactly one branch matches per line, so
-    # we pick whichever group set is populated.
+    # The CJK branch of DATE_RE fills groups (1,2,3), the ISO branch
+    # (4,5,6); exactly one of the two matches.
     parts = m.group(1, 2, 3) if m.group(1) is not None else m.group(4, 5, 6)
     try:
         year, month, day = (int(g) for g in parts)
@@ -213,21 +136,17 @@ def load_facts(
     min_chars: int = 4,
     strip_prefix: bool = True,
 ) -> list[dict[str, Any]]:
-    """Read fact files and return rows ready for embedding.
+    """Read fact files and return one row per non-empty line.
 
-    Each non-empty line in each file becomes one row. Duplicates (same
-    cleaned text across files) are collapsed — the 设定集 and 事件集
-    files overlap heavily on cat lines.
+    Duplicate cleaned lines collapse to their first occurrence, which
+    keeps the earliest reported date for facts that evolve (cat weight).
+    Lines shorter than ``min_chars`` after cleaning are dropped as parse
+    artefacts.
 
-    Skips lines shorter than ``min_chars`` after cleaning — those are
-    almost always parse artefacts (stray punctuation, single chars).
-
-    ``strip_prefix=False`` disables the ``_strip_persona_prefix`` step
-    on ``embed_input``. Used by the A/B benchmark in
-    ``laplace-eval-retrieval --rerank-models`` and ad-hoc comparisons
-    via ``--no-strip-prefix --table persona_facts_unstripped``. Display
-    text and FTS tokens are unaffected either way (they always use the
-    original wording).
+    Args:
+        strip_prefix: applies to ``embed_input`` only. ``False`` builds a
+            parallel unstripped index for A/B benchmarking; display text
+            and FTS tokens keep the original wording either way.
     """
     rows: list[dict[str, Any]] = []
     seen_keys: set[str] = set()
@@ -249,42 +168,27 @@ def load_facts(
                     total_skipped_short += 1
                 continue
 
-            # Dedup key: the cleaned line. We keep the *first* occurrence,
-            # which preserves the earliest reported date for evolving facts
-            # (e.g. cat weight). For genuinely repeated lines (the file has
-            # 3 copies of the same toilet incident) this drops the dupes.
             key = cleaned
             if key in seen_keys:
                 skipped += 1
                 continue
             seen_keys.add(key)
 
-            # Stable id: hash of cleaned text. Lets us be re-runnable
-            # without churning row ids when a file is re-edited.
+            # Hash of the cleaned text, so re-editing a file doesn't churn
+            # the ids of rows it didn't touch.
             row_id = hashlib.sha1(cleaned.encode("utf-8")).hexdigest()[:16]
 
-            # Build the embedding input with two adjustments vs ``cleaned``:
-            #
-            # 1. Strip the persona-name prefix (see _PERSONA_PREFIXES
-            #    and _strip_persona_prefix above for why). The DISPLAY
-            #    text keeps the original wording — only the embedding
-            #    sees the stripped version.
-            # 2. Prepend the iso_date so semantic queries that mention
-            #    a date can match. The vector model treats the date as
-            #    just another token; the structured ``date`` column is
-            #    what makes pre-filtering work.
+            # The date is prepended so a query that mentions one can match
+            # semantically; the structured ``date`` column does filtering.
             embed_body = _strip_persona_prefix(cleaned) if strip_prefix else cleaned
             if iso_date:
                 embed_input = f"{iso_date}：{embed_body}"
             else:
                 embed_input = embed_body
 
-            # Tokens column for FTS hybrid search. We tokenize the
-            # *display* text (cleaned) — not embed_body — because BM25
-            # benefits from the persona name being indexed (a query
-            # like "奶绿对xx说什么" should match). The embedding-side
-            # prefix strip and the FTS-side prefix-keep are intentional;
-            # they each play to their own strength.
+            # Tokenize the display text, not embed_body: BM25 wants the
+            # persona name indexed so "奶绿对xx说什么" matches lexically.
+            # The embedding-side strip and FTS-side keep are both deliberate.
             tokens = tokenize_zh(cleaned)
 
             rows.append(
@@ -313,14 +217,11 @@ def load_facts(
 def build_arrow_schema() -> pa.Schema:
     """Schema for the persona_facts table.
 
-    Vector dim must match ``DEFAULT_EMBED_DIM`` (3072 for Gemini). If you
-    swap embedding models or change ``EMBED_DIM``, this schema picks up
-    the new dim on the next ingest because we drop and recreate the table.
-
-    The ``tokens`` column carries jieba-tokenized text used by the FTS
-    half of hybrid retrieval. See ``retrieval.tokenize_zh`` for the
-    tokenization contract; FTS queries must use the same function or
-    BM25 lookups won't match.
+    ``tokens`` holds jieba-tokenized text for the FTS half of hybrid
+    retrieval; query-side code must run through the same
+    ``retrieval.tokenize_zh`` or BM25 lookups won't match. Vector dim
+    follows ``DEFAULT_EMBED_DIM`` and picks up a model swap on the next
+    run, since the table is dropped and recreated.
     """
     return pa.schema(
         [
@@ -343,13 +244,9 @@ async def embed_in_batches(
 ) -> EmbeddingUsage:
     """Embed each row's ``embed_input`` and stash the vector on the row.
 
-    Larger batch_size than the streams ingest (96 vs 64) because facts
-    are tiny — average ~30 chars, so we can pack more per request without
-    blowing the embedding-API payload limit.
-
-    Caching mirrors the streams ingest exactly — see that module's docstring.
-    The two ingest scripts share the same on-disk cache file by default
-    (different rows produce different keys, so they never collide).
+    Batches are larger than the streams ingest (96 vs 64) because facts
+    average ~30 chars. Cache behavior matches ingest_streams; the two
+    scripts share one on-disk cache keyed by (model, dim, text).
     """
     total = EmbeddingUsage()
 
@@ -384,7 +281,6 @@ async def embed_in_batches(
             cache.put_many(model, dim, [(r["embed_input"], r["vector"]) for r in batch])
         total.add(usage)
         progress = min(start + batch_size, len(misses))
-        # See ingest_streams.py for why we now show ``estimate`` costs.
         if usage.cost_source in ("openrouter", "estimate"):
             suffix = "" if usage.cost_source == "openrouter" else " est."
             cost_str = f", ${usage.cost_usd:.6f}{suffix}"
@@ -399,9 +295,8 @@ async def embed_in_batches(
 def write_table(rows: list[dict[str, Any]], db_path: Path, table_name: str) -> None:
     """Drop and recreate the LanceDB table, then build the FTS index.
 
-    The FTS index is required by the hybrid retrieval path
-    (``retrieval.hybrid_search``); the table is built fresh on each
-    run so the index is always in sync with the rows.
+    ``retrieval.hybrid_search`` needs the FTS index; rebuilding the whole
+    table each run keeps the two in sync.
     """
     db = lancedb.connect(str(db_path))
     if table_name in db.list_tables().tables:
@@ -411,9 +306,8 @@ def write_table(rows: list[dict[str, Any]], db_path: Path, table_name: str) -> N
     table = db.create_table(table_name, data=projected, schema=schema)
     logger.info(f"Wrote {len(rows)} rows to {db_path}/{table_name}.lance")
 
-    # Build the FTS index AFTER write so it sees every row at once
-    # (faster than incremental). Negligible cost relative to the
-    # embedding spend that already happened.
+    # Indexing after the write sees every row at once — much faster than
+    # incremental, and negligible next to the embedding spend.
     build_fts_index(table, field="tokens")
     logger.info(f"Built FTS index on 'tokens' for {table_name}")
 
@@ -425,7 +319,6 @@ def _resolve_files(files: list[str] | None, data_dir: Path) -> list[Path]:
     matches: list[Path] = []
     for pattern in DEFAULT_FACT_PATTERNS:
         matches.extend(sorted(data_dir.glob(pattern)))
-    # Dedupe while preserving order.
     seen: set[Path] = set()
     unique: list[Path] = []
     for p in matches:
@@ -459,8 +352,8 @@ async def main_async(args: argparse.Namespace) -> int:
 
     if args.dry_run:
         logger.info(f"Dry run: {len(rows)} facts would be embedded and written.")
-        # Sample 5 rows showing both the original text and what we'll
-        # actually embed — easy way to spot prefix-strip regressions.
+        # text vs embed_input side by side is the fastest way to spot a
+        # prefix-strip regression.
         for r in rows[:5]:
             floor_str = f"第{r['floor']}楼" if r['floor'] else "no-floor"
             logger.info(

@@ -1,48 +1,20 @@
-"""Shared embedding + LanceDB infra.
+"""Shared embedding client and LanceDB table access.
 
-Used by every retrieval tier so they all embed with the same model + dim
-(otherwise vectors written at ingest time wouldn't be comparable to vectors
-queried at runtime). Specifically:
+Both runtime services (``persona_facts``, ``stream_archive``) and both
+offline ingest scripts embed through here, so ingest-time and query-time
+vectors stay comparable.
 
-- ``stream_archive.StreamArchiveService``  (runtime RAG over transcripts)
-- ``persona_facts.PersonaFactsService``    (runtime RAG over fan-compiled facts)
-- ``tools.ingest_streams``                 (offline write of stream_chunks table)
-- ``tools.ingest_facts``                   (offline write of persona_facts table)
+Any OpenAI-compatible ``/v1/embeddings`` endpoint works. The default is
+OpenRouter → ``google/gemini-embedding-2-preview`` at 3072-dim, reusing the
+``OPENROUTER_API_KEY`` already set for the LLM; ``EMBED_BASE_URL``,
+``EMBED_API_KEY``, ``EMBED_MODEL``, and ``EMBED_DIM`` override each piece
+(Gemini supports 128–3072 via MRL).
 
-What lives here:
-
-- ``embed_texts()`` / ``embed_texts_with_usage()`` — call the OpenAI-compatible
-  /v1/embeddings endpoint (default OpenRouter → Gemini), with quota-aware
-  retries that handle the OpenRouter "200-with-error-body" quirk.
-- ``EmbeddingUsage`` — token + USD cost accumulator
-- ``EmbedCache`` — persistent disk cache for embedding vectors, used by both
-  ingest scripts so a partial run can be resumed without re-paying for
-  embeddings that already succeeded.
-- ``open_table()`` — read-only LanceDB table opener (returns ``None`` if
-  the table doesn't exist yet, so services can boot before ingest has run)
-- ``DEFAULT_*`` config — provider URL, model, dim, DB path
-
-What does *not* live here:
-
-- Per-table schema / ingest logic (see ``tools/ingest_*.py``)
-- Service-specific table names (``stream_chunks``, ``persona_facts``) —
-  those live with their respective services.
-
-Embedding provider: **OpenRouter** (OpenAI-compatible /v1/embeddings endpoint),
-defaulting to ``google/gemini-embedding-2-preview`` at 3072-dim. We reuse the
-``OPENROUTER_API_KEY`` you already set for the LLM — no separate OpenAI
-account needed. Override per env var:
-
-- ``EMBED_BASE_URL``  default ``https://openrouter.ai/api/v1``
-- ``EMBED_API_KEY``   default falls back to ``OPENROUTER_API_KEY``
-- ``EMBED_MODEL``     default ``google/gemini-embedding-2-preview``
-- ``EMBED_DIM``       default ``3072`` (Gemini supports 128–3072 via MRL)
-
-If you swap to a model with a different dimension, update ``EMBED_DIM``
-**and** re-run both ingest scripts — the LanceDB schema is fixed-size,
-and old vectors won't be comparable to new ones. The cache is keyed by
-``(model, dim, text)`` so old entries are auto-invalidated; the file
-just keeps growing until you delete it.
+Moving to a model of a different dimension means changing ``EMBED_DIM``
+**and** re-running both ingest scripts: the LanceDB schema is fixed-size and
+old vectors aren't comparable to new ones. Cache entries key on
+``(model, dim, text)`` so stale ones miss rather than mislead, but the file
+grows until deleted.
 """
 
 from __future__ import annotations
@@ -67,21 +39,17 @@ DEFAULT_DB_PATH = "data/lancedb"
 DEFAULT_EMBED_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_EMBED_MODEL = "google/gemini-embedding-2-preview"
 DEFAULT_EMBED_DIM = int(os.getenv("EMBED_DIM", "3072"))
-"""Vector dimension. Read at module import so the LanceDB schemas in
-``tools/ingest_streams.py`` and ``tools/ingest_facts.py`` match what
-``embed_texts()`` will produce. To change, set the env var BEFORE
-importing this module (i.e. in .env) and re-ingest both tables."""
+"""Vector dimension, read once at import — both ingest scripts build their
+LanceDB schemas from it, so set ``EMBED_DIM`` in .env, never after import."""
 
 # Fallback per-model embedding prices, USD per 1M tokens.
 #
-# Why this exists: OpenRouter does NOT surface ``cost_details`` on
-# ``/v1/embeddings`` responses (verified 2026-05). On a BYOK key the
-# response is literally ``{prompt_tokens, total_tokens, cost: 0}`` —
-# real money is being spent upstream (Google AI Studio etc.) but
-# OpenRouter passes back zero. Without a client-side estimate, ingest
-# logs ``$0.000000`` per batch even on a 26k-chunk run. Prices below
-# come from each provider's public pricing page; treat them as
-# best-effort and update when prices change.
+# OpenRouter doesn't surface ``cost_details`` on ``/v1/embeddings``. On a BYOK
+# key the response is literally ``{prompt_tokens, total_tokens, cost: 0}`` —
+# real money is spent upstream (Google AI Studio etc.) and reported as zero,
+# so without a client-side estimate a 26k-chunk ingest logs ``$0.000000`` per
+# batch. Prices come from each provider's public pricing page; best-effort,
+# update them when they move.
 EMBED_PRICING_USD_PER_1M: dict[str, float] = {
     "google/gemini-embedding-2-preview": 0.15,
     "~google/gemini-embedding-2-preview": 0.15,
@@ -89,19 +57,15 @@ EMBED_PRICING_USD_PER_1M: dict[str, float] = {
     "openai/text-embedding-3-large": 0.13,
 }
 
-# Retries for the "200 OK with no `data` field" case. OpenRouter wraps
-# upstream errors inside a 200 body (``{"error": {...}}``) instead of
-# returning a real HTTP status, so the OpenAI SDK's built-in ``max_retries``
-# ignores them. Two budgets, sized for two very different failure modes:
-#
-# - *Data* failures (transient upstream blips, malformed responses): short
-#   exponential backoff, modest retry count. Handled in seconds.
-# - *Quota* failures (HTTP 429 / RESOURCE_EXHAUSTED): fixed long delay
-#   matching the typical 60s Vertex AI quota window, with more attempts
-#   because the OpenRouter pool is shared and a busy minute can take
-#   several windows to clear. Without this distinction, exponential
-#   backoff exhausts in ~30s — never long enough for the quota to reset
-#   — and the run dies on the first quota incident.
+# Retries for the "200 OK with no `data` field" case: OpenRouter wraps
+# upstream errors inside a 200 body (``{"error": {...}}``) rather than
+# returning a real status, so the OpenAI SDK's ``max_retries`` never sees
+# them. Two budgets, because the failure modes need opposite backoff. Data
+# failures (transient blips, malformed responses) clear in seconds under
+# short exponential backoff. Quota failures (429 / RESOURCE_EXHAUSTED) need
+# the ~60s Vertex AI quota window to reset, and often several of them since
+# the OpenRouter pool is shared — exponential backoff alone exhausts in ~30s
+# and kills the run on the first quota incident.
 MAX_EMBED_DATA_RETRIES = 5
 EMBED_RETRY_BASE_DELAY = 1.0
 MAX_EMBED_QUOTA_RETRIES = 10
@@ -111,10 +75,8 @@ EMBED_QUOTA_BACKOFF = 60.0
 def _is_quota_error(err_msg: str) -> bool:
     """True if ``err_msg`` looks like a rate-limit / quota error.
 
-    OpenRouter forwards Vertex AI's RESOURCE_EXHAUSTED inside a 200 body,
-    so we have to scan the message string rather than checking an HTTP
-    status code. Matches conservatively — only on signals strong enough
-    that fixed 60s backoff is the right response.
+    String-matched because the status code is always 200. Conservative — a
+    hit commits the caller to a fixed 60s wait.
     """
     if not err_msg:
         return False
@@ -132,12 +94,7 @@ _embed_client: AsyncOpenAI | None = None
 
 
 def _get_embed_client() -> AsyncOpenAI:
-    """Lazy singleton OpenAI-SDK client pointed at the embedding provider.
-
-    Default provider is OpenRouter. The OpenAI Python SDK works against any
-    OpenAI-compatible /v1/embeddings endpoint, so swapping providers is just
-    a base_url change.
-    """
+    """Lazy singleton OpenAI-SDK client pointed at the embedding provider."""
     global _embed_client
     if _embed_client is None:
         base_url = os.getenv("EMBED_BASE_URL", DEFAULT_EMBED_BASE_URL)
@@ -147,9 +104,9 @@ def _get_embed_client() -> AsyncOpenAI:
                 "Embeddings need an API key. Set OPENROUTER_API_KEY (reused "
                 "from the LLM config) or EMBED_API_KEY for a different provider."
             )
-        # max_retries=5 covers the genuine transient failures the SDK knows
-        # about (429, 5xx, connection drops). The 200-with-no-data case is
-        # handled by our own loop in ``embed_texts_with_usage``.
+        # Covers the transient failures the SDK recognises (429, 5xx, dropped
+        # connections); the 200-with-no-data case needs our own loop in
+        # ``embed_texts_with_usage``.
         _embed_client = AsyncOpenAI(
             base_url=base_url,
             api_key=api_key,
@@ -163,20 +120,13 @@ def _get_embed_client() -> AsyncOpenAI:
 class EmbeddingUsage:
     """Token + cost accumulator for embedding requests.
 
-    OpenRouter surfaces ``usage.cost`` in USD on non-BYOK responses
-    (1 credit = $1). On BYOK the response is ``cost: 0`` with no
-    ``cost_details`` — the embedding endpoint, unlike chat, withholds
-    the upstream cost entirely — so we fall back to multiplying tokens
-    by a hardcoded per-model price (``EMBED_PRICING_USD_PER_1M``).
-
-    ``cost_source`` distinguishes the three paths so callers can label
-    output honestly:
-
-    - ``"openrouter"`` — number came straight from the response. Trust it.
-    - ``"estimate"``   — tokens × ``EMBED_PRICING_USD_PER_1M[model]``.
-                         Best-effort; check the price table is current.
-    - ``"unknown"``    — no token count or no price entry. ``cost_usd``
-                         stays 0; caller should warn the user.
+    OpenRouter reports ``usage.cost`` in USD on non-BYOK responses (1 credit
+    = $1); on BYOK the embeddings endpoint, unlike chat, withholds it
+    entirely, so cost falls back to an estimate. ``cost_source`` keeps the
+    two apart so callers can label output honestly: ``"openrouter"`` came
+    from the response, ``"estimate"`` is tokens × ``EMBED_PRICING_USD_PER_1M``,
+    and ``"unknown"`` means ``cost_usd`` is 0 for lack of tokens or a price
+    entry — worth warning the user about.
     """
 
     prompt_tokens: int = 0
@@ -188,9 +138,8 @@ class EmbeddingUsage:
         self.prompt_tokens += other.prompt_tokens
         self.total_tokens += other.total_tokens
         self.cost_usd += other.cost_usd
-        # Promote "unknown" → anything else, and openrouter+estimate
-        # mixes degrade to "mixed" so downstream summaries can flag
-        # partial estimation (same pattern as refine.Usage).
+        # "unknown" promotes to anything; a genuine openrouter+estimate mix
+        # degrades to "mixed" so summaries can flag partial estimation.
         if self.cost_source == "unknown":
             self.cost_source = other.cost_source
         elif (
@@ -206,20 +155,16 @@ async def embed_texts_with_usage(
     model: str | None = None,
     dimensions: int | None = None,
 ) -> tuple[list[list[float]], EmbeddingUsage]:
-    """Embed a batch of texts and return the OpenRouter-reported usage.
+    """Embed a batch of texts and return the provider-reported usage.
 
     Args:
-        texts: Strings to embed.
-        model: Override embedding model. Defaults to ``EMBED_MODEL``
-            env var, then ``google/gemini-embedding-2-preview``.
-        dimensions: Output vector dim. Defaults to ``DEFAULT_EMBED_DIM``
-            (3072 for Gemini). Must match the LanceDB schema; mismatched
-            dim at write vs. read time will fail at search time.
+        dimensions: Output vector dim, defaulting to ``DEFAULT_EMBED_DIM``.
+            Must match the LanceDB schema — a write/read mismatch fails at
+            search time.
 
     Returns:
-        ``(vectors, usage)`` where ``usage`` carries prompt/total token
-        counts and (when the provider supports it, e.g. OpenRouter) the
-        USD cost of this single API call.
+        ``(vectors, usage)``, where ``usage`` carries token counts and, when
+        the provider reports it, the USD cost of this one call.
     """
     if not texts:
         return [], EmbeddingUsage()
@@ -227,18 +172,10 @@ async def embed_texts_with_usage(
     dimensions = dimensions or DEFAULT_EMBED_DIM
     client = _get_embed_client()
     # encoding_format="float" is *required* for non-OpenAI providers (e.g.
-    # OpenRouter → Gemini). The OpenAI SDK silently defaults to "base64" for
-    # wire efficiency and then base64-decodes the strings on parse; providers
-    # that don't honour that exact contract round-trip an empty response and
-    # the SDK raises "No embedding data received". Pinning float bypasses
-    # the base64 path entirely.
-    #
-    # Retry loop: even with the float fix, OpenRouter regularly returns a
-    # 200 OK whose body has no ``data`` field — either a transient upstream
-    # blip or a quota error wrapped in the success envelope. We split the
-    # two cases because they need very different backoff:
-    #   * data error → short exponential (might just be flaky)
-    #   * quota error → fixed 60s wait (must let the quota window reset)
+    # OpenRouter → Gemini): the SDK silently defaults to "base64" for wire
+    # efficiency and base64-decodes on parse, and providers that don't honour
+    # that exact contract round-trip an empty response, surfacing as the SDK's
+    # "No embedding data received". Pinning float skips the base64 path.
     resp = None
     last_err = "unknown"
     data_failures = 0
@@ -249,8 +186,8 @@ async def embed_texts_with_usage(
             input=texts,
             dimensions=dimensions,
             encoding_format="float",
-            # OpenRouter now always returns usage.cost, but passing this is
-            # harmless and matches how tools/refine.py opts in for chat.
+            # Redundant now that OpenRouter always returns usage.cost, but
+            # harmless, and it matches how refine.py opts in for chat.
             extra_body={"usage": {"include": True}},
         )
         if candidate.data:
@@ -270,9 +207,8 @@ async def embed_texts_with_usage(
             quota_failures += 1
             if quota_failures > MAX_EMBED_QUOTA_RETRIES:
                 break
-            # Fixed long wait + jitter. The jitter spreads concurrent
-            # OpenRouter clients out so we don't all retry at the same
-            # instant the quota window resets.
+            # Jitter spreads concurrent clients out so they don't all retry
+            # the instant the quota window resets.
             delay = EMBED_QUOTA_BACKOFF + random.uniform(0, 10)
             attempt_label = f"quota retry {quota_failures}/{MAX_EMBED_QUOTA_RETRIES}"
         else:
@@ -310,16 +246,15 @@ async def embed_texts_with_usage(
 
     vectors = [d.embedding for d in resp.data]
 
-    # The OpenAI SDK's typed response doesn't model OpenRouter's ``cost``
-    # extra field. Round-trip through model_dump() so we can read it as a
-    # plain dict, same trick refine.py uses.
+    # The SDK's typed response doesn't model OpenRouter's ``cost`` extra
+    # field, so read it off a model_dump() dict — same trick as refine.py.
     resp_dict = resp.model_dump() if hasattr(resp, "model_dump") else {}
     usage_raw = (resp_dict.get("usage") or {}) if isinstance(resp_dict, dict) else {}
     prompt_tokens = int(usage_raw.get("prompt_tokens", 0) or 0)
     total_tokens = int(usage_raw.get("total_tokens", prompt_tokens) or prompt_tokens)
 
-    # Trust OpenRouter when it returns a positive cost (paid traffic or
-    # BYOK on an endpoint that surfaces ``cost_details``).
+    # A positive cost means paid traffic, or BYOK on an endpoint that does
+    # surface ``cost_details`` — trust it.
     cost = extract_cost_usd(usage_raw)
     if cost is not None and cost > 0:
         return vectors, EmbeddingUsage(
@@ -329,9 +264,8 @@ async def embed_texts_with_usage(
             cost_source="openrouter",
         )
 
-    # Fall through: BYOK on the embedding endpoint. OpenRouter returns
-    # ``cost: 0`` and no ``cost_details`` (verified 2026-05) — estimate
-    # client-side from the token count so the ingest summary isn't $0.
+    # BYOK: cost comes back 0, so estimate from tokens rather than report an
+    # ingest summary of $0.
     pricing = EMBED_PRICING_USD_PER_1M.get(model)
     if pricing is not None and total_tokens > 0:
         cost_est = total_tokens * pricing / 1_000_000
@@ -357,8 +291,8 @@ async def embed_texts(
 ) -> list[list[float]]:
     """Embed a batch of texts. Used by both ingest and runtime search.
 
-    Discards usage; call :func:`embed_texts_with_usage` if you want
-    token + cost accounting.
+    Discards usage; call ``embed_texts_with_usage`` for token + cost
+    accounting.
     """
     vectors, _ = await embed_texts_with_usage(texts, model=model, dimensions=dimensions)
     return vectors
@@ -368,14 +302,10 @@ def open_table(
     db_path: str | os.PathLike[str],
     table_name: str,
 ) -> Table | None:
-    """Open a LanceDB table by name. Returns ``None`` if the path or
-    table doesn't exist yet (i.e. before the matching ingest has run).
+    """Open a LanceDB table by name, or ``None`` if the path or table doesn't
+    exist yet — services boot before their ingest has ever run.
 
-    Read-only — callers should never create tables here. Use the
-    appropriate ``tools/ingest_*.py`` script for that. Both args are
-    required (no service-default) because this helper is shared across
-    the stream archive and persona facts tables and there's no sensible
-    default to bake in.
+    Read-only. Tables are created by the matching ``tools/ingest_*.py``.
     """
     path = Path(db_path)
     if not path.exists():
@@ -392,39 +322,26 @@ DEFAULT_EMBED_CACHE_PATH = "data/embed_cache.db"
 class EmbedCache:
     """Persistent disk cache for embedding vectors.
 
-    Why this exists: the ingest scripts churn through tens of thousands of
-    chunks against an OpenRouter→Vertex AI endpoint that periodically 429s
-    (shared upstream quota pool). When that crashes the run, every vector
-    we already paid for is gone. Caching them to disk per batch turns
-    "rerun loses 25 minutes" into "rerun finishes in seconds".
+    Ingest churns tens of thousands of chunks against an OpenRouter → Vertex
+    AI endpoint that periodically 429s on a shared quota pool, and a crash
+    without this loses every vector already paid for — the difference between
+    a rerun costing 25 minutes and one costing seconds.
 
-    Storage: SQLite (stdlib, atomic-on-commit, no extra deps) at
-    ``data/embed_cache.db`` by default, sibling to the LanceDB dir.
-    Vectors are float32 LE bytes — ~12KB per row at 3072 dim, ~370MB
-    for 31k rows. Big but proportional, and the next ingest pays it back.
+    SQLite at ``data/embed_cache.db``, sibling to the LanceDB dir, holding
+    float32 LE bytes: ~12KB per row at 3072 dim, ~370MB for 31k rows. Keyed
+    by ``sha1(model || dim || text)``, so changing ``EMBED_MODEL`` or
+    ``EMBED_DIM`` misses naturally instead of returning stale vectors; the
+    old entries linger in the file until it's deleted.
 
-    Cache key is ``sha1(model || dim || text)``. Changing ``EMBED_MODEL``
-    or ``EMBED_DIM`` makes every lookup miss naturally — old entries
-    stay in the file but are never read; delete the file to reclaim the
-    disk if you care.
-
-    Not async-safe across processes (SQLite has its own locking but our
-    single-writer pattern is enough) and not thread-safe by default. The
-    ingest scripts are single-process, single-writer, so this is fine.
+    Assumes the ingest scripts' single-process, single-writer pattern.
     """
 
-    # SQLite's compiled-in default placeholder limit is 999; chunk well
-    # under it for portability.
+    # SQLite's compiled-in default placeholder limit is 999.
     _LOOKUP_CHUNK = 500
 
     def __init__(self, path: str | os.PathLike[str]):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        # check_same_thread=False is safe here because asyncio shifts
-        # callbacks across the event loop's single OS thread; the GIL
-        # plus our serial-write pattern means there's no actual
-        # concurrent access, but the SDK's asyncio plumbing trips the
-        # default same-thread guard anyway.
         self.conn = sqlite3.connect(str(self.path), check_same_thread=False)
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS embed_cache ("
@@ -432,8 +349,6 @@ class EmbedCache:
             "  vector BLOB NOT NULL"
             ")"
         )
-        # WAL mode lets readers continue while we commit. Negligible win
-        # for our serial pattern but harmless and survives Ctrl-C better.
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.commit()
 
@@ -452,9 +367,8 @@ class EmbedCache:
     ) -> dict[int, list[float]]:
         """Look up vectors for ``texts`` in one shot.
 
-        Returns a dict mapping each text's index (in the input list) to
-        its cached vector. Missing indices = cache misses, which the
-        caller should embed fresh.
+        Keys of the returned dict are indices into ``texts``; an absent index
+        is a cache miss the caller should embed fresh.
         """
         if not texts:
             return {}
@@ -481,8 +395,7 @@ class EmbedCache:
     ) -> None:
         """Persist a batch of (text, vector) pairs and commit.
 
-        Commits per call so a crash mid-batch only loses the in-flight
-        embedding, never the previous one.
+        Commits per call, so a crash mid-run only loses the in-flight batch.
         """
         if not items:
             return

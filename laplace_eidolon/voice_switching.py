@@ -1,46 +1,13 @@
 """Runtime voice-style switching for Fish Audio TTS.
 
-When the viewer asks the bot to talk in a different style — "温柔一点",
-"换个活泼的声音", "换回原来的" — an LLM tool call routes that intent
-through here. Each named style maps to a Fish Audio ``reference_id``
-configured via env; the handler pushes a :class:`TTSUpdateSettingsFrame`
-so the next response is spoken in the new voice without dropping the
-WebRTC session.
+When the viewer asks for a different style — "温柔一点", "换个活泼的声音",
+"换回原来的" — the LLM calls ``change_voice_style``. The handler maps the
+named style to a Fish Audio ``reference_id`` from env and pushes a
+``TTSUpdateSettingsFrame``, so the next response is spoken in the new
+voice without dropping the WebRTC session.
 
-Why function-calling and not STT keyword matching
--------------------------------------------------
-Open-ended intents ("声音温柔一点", "换个温柔点的声音", "可以柔一点吗",
-"换回原来那个声音") share the same goal but no shared substring. A regex
-list would need constant tending and still miss the long tail. The LLM
-already does this classification for free: it reads the user message,
-emits ``change_voice_style(style="gentle")`` when appropriate, and
-generates a natural follow-up acknowledgment in the new voice.
-
-Configuration
--------------
-Voices come from env vars::
-
-    FISH_VOICE_ID=...               # default voice (the one in persona.md)
-    FISH_VOICE_ID_GENTLE=...        # picked when user asks for 温柔/轻柔
-    FISH_VOICE_ID_LIVELY=...        # picked when user asks for 活泼/精神/营业声线
-
-The suffix is lowercased into the style name. ``default`` is reserved
-for ``FISH_VOICE_ID`` itself — the LLM uses it to switch back. The tool
-no-ops (and isn't registered with the LLM at all) when no alternative
-``FISH_VOICE_ID_*`` is configured, so a fresh ``.env`` with only the
-required ``FISH_VOICE_ID`` behaves bit-for-bit like before this feature.
-
-Frame ordering
---------------
-The handler runs inside the LLM service's tool-dispatch task. It calls
-``params.llm.push_frame(TTSUpdateSettingsFrame(...))`` and *then*
-``params.result_callback(...)``. Both pushes go through the LLM
-service's downstream queue: the settings frame is queued first, the
-follow-up ``LLMTextFrame`` (generated after the result is fed back to
-the model) is queued second. So the FIFO guarantee means TTS reconnects
-with the new voice *before* it sees the first text token of the
-acknowledgment. Targeting via ``service=tts`` is defensive against a
-future pipeline that fans out to multiple TTS services.
+Nothing is registered with the LLM unless at least one alternative
+``FISH_VOICE_ID_<STYLE>`` is configured.
 """
 
 from __future__ import annotations
@@ -56,24 +23,21 @@ from pipecat.frames.frames import TTSUpdateSettingsFrame
 from pipecat.services.fish.tts import FishAudioTTSService
 from pipecat.services.llm_service import FunctionCallParams, LLMService
 
-# Style name reserved for ``FISH_VOICE_ID`` (the persona's "real" voice).
-# The LLM uses this value to swap back when asked ("换回原来的声音").
+# Reserved for ``FISH_VOICE_ID``, the persona's "real" voice. The LLM
+# passes this value to swap back ("换回原来的声音").
 DEFAULT_STYLE = "default"
 
-# Env prefix for alternative voices. ``FISH_VOICE_ID_GENTLE`` becomes
-# style ``gentle``; ``FISH_VOICE_ID_NAI_HEI`` becomes ``nai_hei``.
+# ``FISH_VOICE_ID_GENTLE`` becomes style ``gentle``; ``FISH_VOICE_ID_NAI_HEI``
+# becomes ``nai_hei``.
 _PREFIX = "FISH_VOICE_ID_"
 
-# Tool name that the LLM will see and call. Keep it stable — changing it
-# would require simultaneous edits to persona prompts that hardcode the
-# name.
+# Keep stable — persona prompts hardcode this name, so a rename has to
+# land in both places at once.
 _TOOL_NAME = "change_voice_style"
 
-# Human-readable trigger phrases for each style. Used to enrich the JSON
-# schema parameter description so the LLM picks the right enum value
-# from a Chinese voice utterance. Add an entry when you add a new
-# ``FISH_VOICE_ID_<STYLE>`` env var; styles without an entry still work
-# (the LLM falls back to inferring from the bare style name).
+# Chinese trigger phrases, injected into the schema's parameter
+# description so the LLM can map an utterance to an enum value. A style
+# with no entry here still works; the LLM infers from the bare name.
 _STYLE_HINTS: dict[str, str] = {
     "default": "默认/原来的/正常的声音",
     "gentle": "温柔/温和/轻柔/温暖/柔一点",
@@ -87,12 +51,8 @@ _STYLE_HINTS: dict[str, str] = {
 def load_voice_styles() -> dict[str, str]:
     """Return ``{style_name: reference_id}`` for every configured voice.
 
-    Always includes ``default`` when ``FISH_VOICE_ID`` is set (which the
-    bot already requires to boot, so this is effectively always
-    populated). Each ``FISH_VOICE_ID_<STYLE>`` adds another entry keyed
-    on the lowercased suffix. Empty env values are skipped — a blank
-    ``FISH_VOICE_ID_GENTLE=`` in ``.env`` is treated as "not configured"
-    rather than as a literal empty voice id.
+    A blank ``FISH_VOICE_ID_GENTLE=`` counts as "not configured" rather
+    than as an empty voice id.
     """
     styles: dict[str, str] = {}
     default = (os.getenv("FISH_VOICE_ID") or "").strip()
@@ -119,11 +79,8 @@ def alternative_style_names(styles: dict[str, str]) -> list[str]:
 def _build_schema(styles: dict[str, str]) -> FunctionSchema:
     """Build the OpenAI-compatible FunctionSchema visible to the LLM.
 
-    The ``style`` parameter is constrained to the actually-configured
-    styles via the ``enum`` field, so the model can't request a voice
-    that isn't wired up. The description embeds Chinese trigger
-    phrases for each style so the LLM has a clean mapping from natural
-    utterance ("温柔一点") to schema value ("gentle").
+    ``enum`` is restricted to configured styles, so the model can't ask
+    for a voice that isn't wired up.
     """
     enum_values = sorted(styles.keys())
     hint_parts = [f"`{s}` ({_STYLE_HINTS.get(s, s)})" for s in enum_values]
@@ -173,11 +130,11 @@ def _make_handler(
             )
             return
 
-        # Push downstream from the LLM service so the frame reaches TTS
-        # before the LLM's follow-up text. ``service=tts`` is defensive:
-        # if a future pipeline ever fans out to multiple TTS services
-        # (e.g. a recorder branch), the targeting prevents the recorder
-        # from reconnecting alongside the live voice.
+        # Must be queued before result_callback: both go through the LLM
+        # service's downstream queue, so FIFO gets the new voice to TTS
+        # ahead of the first text token of its acknowledgment.
+        # ``service=tts`` guards a future pipeline that fans out to more
+        # than one TTS service.
         logger.info(
             f"[voice] Switching style → {style!r} "
             f"(reference_id={voice_id[:8]}…)"
@@ -202,12 +159,10 @@ def install_voice_style_tool(
     """Register the voice-switching tool and return its ToolsSchema.
 
     The caller must pass the returned schema into ``LLMContext(tools=...)``
-    (or ``context.set_tools(...)``) so the LLM is actually told the tool
-    exists. Returns ``None`` when only ``default`` (or nothing) is
-    configured — in that case nothing is registered and the bot behaves
-    as if this feature didn't exist. That's deliberate: telling the
-    model about a tool with only one valid value would waste tokens and
-    occasionally trigger spurious no-op calls.
+    or ``context.set_tools(...)``; registering the handler alone never
+    tells the model the tool exists. ``None`` when only ``default`` is
+    configured — a one-value enum wastes tokens and draws spurious no-op
+    calls, so nothing is registered at all.
     """
     styles = styles if styles is not None else load_voice_styles()
     alts = alternative_style_names(styles)
@@ -231,10 +186,8 @@ def install_voice_style_tool(
 def persona_prefix_hint(styles: dict[str, str]) -> str:
     """One-line system-prompt hint about the voice-switching tool.
 
-    Returned empty when no alternatives are configured, so the prefix
-    builder can unconditionally call this without growing the prompt on
-    a bare ``.env``. Mentions ``default`` as a valid value so the LLM
-    knows how to switch back when asked.
+    Empty when no alternatives are configured, so the prefix builder can
+    call this unconditionally without growing the prompt.
     """
     alts = alternative_style_names(styles)
     if not alts:
@@ -248,8 +201,6 @@ def persona_prefix_hint(styles: dict[str, str]) -> str:
     )
 
 
-# Public re-export for callers that want to inspect the tool name (e.g.
-# tests or future telemetry). Keep this stable.
 TOOL_NAME = _TOOL_NAME
 
 

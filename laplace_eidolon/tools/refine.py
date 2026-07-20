@@ -1,65 +1,19 @@
 """LLM post-process raw stream transcripts into clean memory records.
 
-Why this exists
----------------
-Raw Whisper output of a watching/chatting stream interleaves three streams
-into one transcript: the streamer's own commentary, audio from media she's
-watching, and viewer SC reads / song lyrics. Retrieval over the raw text
-returns noisy chunks dominated by anime dialogue and "谢谢XXX的SC..."
-patterns instead of what the persona actually said.
+Raw Whisper output of a watching/chatting stream interleaves the streamer's
+own commentary, audio from the media she's watching, and viewer SC reads into
+one undifferentiated transcript, so retrieval over it returns anime dialogue
+and "谢谢XXX的SC..." rather than anything the persona said. Every H2 chunk is
+rewritten through an LLM into a structured record; ``tools/ingest_streams.py``
+then embeds the *summary* instead of the raw text.
 
-This script rewrites every H2 chunk through an LLM into a structured
-memory record (semantic heading + first-person summary + chunk_type +
-topics + mentions). ``tools/ingest_streams.py`` reads the refined sidecar and
-embeds the *summary* instead of the raw text, dramatically improving
-retrieval distance.
+The source ``streams/<id>.md`` is never overwritten — output goes to a
+``streams/<id>.refined.json`` sidecar, and re-runs skip chunks already in it
+unless ``--force`` is passed.
 
-Storage model
--------------
-Source of truth stays in ``streams/<id>.md`` (you author it; refine never
-overwrites it). Refinement output is written to a sidecar
-``streams/<id>.refined.json`` keyed by chunk id. Both files are committed
-to git. Re-running is incremental — chunks already in the sidecar are
-skipped unless ``--force`` is set.
-
-LLM provider
-------------
-Reuses the existing OpenRouter setup (``OPENROUTER_API_KEY``). Default
-model is ``~google/gemini-pro-latest`` — noticeably better entity
-extraction and grounding than flash (~$0.05/chunk vs ~$0.035 in
-practice), reliable JSON mode, multilingual. Override with
-``REFINE_MODEL`` env var or ``--model``. Cheaper bulk runs:
-``--model "~google/gemini-flash-latest"``.
-
-Cost tracking
--------------
-OpenRouter returns token usage and per-call USD cost in the response
-when ``usage.include`` is set. We accumulate it across the run and print
-a summary at the end. If a model isn't priced via OpenRouter we fall
-back to a small hardcoded price table; if that fails too we report
-tokens only and warn.
-
-Usage
------
-::
-
-    # Refine all streams that have new/unrefined chunks
-    uv run laplace-refine
-
-    # Refine specific files
-    uv run laplace-refine streams/2026-05-09-zzz.md
-
-    # Force re-refine even if a sidecar already exists
-    uv run laplace-refine --force
-
-    # Use a different model
-    uv run laplace-refine --model anthropic/claude-haiku-latest
-
-    # Cost preview without spending tokens (token estimate ~ char count / 2)
-    uv run laplace-refine --dry-run
-
-    # Tune concurrency (default 8)
-    uv run laplace-refine --concurrency 16
+Default model is ``~google/gemini-pro-latest``: noticeably better entity
+extraction and grounding than flash, at ~$0.05/chunk vs ~$0.035 in practice.
+Override with ``REFINE_MODEL`` or ``--model``.
 """
 
 from __future__ import annotations
@@ -89,26 +43,19 @@ from ._streams import (
     save_sidecar,
 )
 
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-
 DEFAULT_MODEL = "~google/gemini-pro-latest"
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_CONCURRENCY = 8
-# Pass 1 (extract) outputs short structured arrays. Pass 2 (synthesize)
-# emits the long ``details`` field, so it gets the larger budget.
+# Synthesize emits the long ``details`` field; extract only short arrays.
 DEFAULT_EXTRACT_MAX_TOKENS = 4096
 DEFAULT_SYNTHESIZE_MAX_TOKENS = 8192
-# Extract is faithful (low temp, no invention). Synthesize is narrative
-# (slightly higher temp for smoother prose).
+# Extract must be faithful; synthesize is narrative prose.
 DEFAULT_EXTRACT_TEMPERATURE = 0.2
 DEFAULT_SYNTHESIZE_TEMPERATURE = 0.4
 SCHEMA_VERSION = 2
 
-# chunk_type taxonomy. Kept as both a Literal (for the Pydantic schema
-# the LLM is forced into) and a derived set (for runtime fallback in
-# ``_validate_synthesis`` when we get a pre-schema response).
+# The Literal drives the Pydantic schema the LLM is decoded into; the set is
+# the runtime fallback in ``_validate_synthesis``.
 ChunkType = Literal[
     "opening",
     "commentary",
@@ -122,29 +69,14 @@ ChunkType = Literal[
 VALID_CHUNK_TYPES = set(ChunkType.__args__)
 
 
-# ---------------------------------------------------------------------------
-# Structured-output schemas
-#
-# These Pydantic models drive OpenRouter's ``response_format=json_schema``
-# mode: the LLM is constrained at decode time to produce JSON matching
-# the schema, eliminating the unescaped-newline / trailing-brace /
-# wrong-type failures we used to repair after the fact.
-#
-# We still run ``_validate_extract`` / ``_validate_synthesis`` on the
-# parsed payload — they enforce caps, dedupe, and tolerate the rare
-# provider that doesn't honor the schema (the repair passes in
-# ``_parse_json_lenient`` are the final safety net).
-# ---------------------------------------------------------------------------
+# These models constrain the LLM at decode time via
+# ``response_format=json_schema``, but providers occasionally ignore that, so
+# ``_validate_extract`` / ``_validate_synthesis`` still run on the parsed
+# payload and ``_parse_json_lenient`` is the last resort.
 
 
 class _StrictModel(BaseModel):
-    """Base model that emits a strict, OpenAI-compatible JSON Schema.
-
-    OpenRouter/Gemini require ``additionalProperties: false`` and an
-    explicit ``required`` list covering EVERY field for strict mode.
-    Defaulting every field to a sensible empty value and marking the
-    model frozen-ish lets us do that without hand-rolling the schema.
-    """
+    """Base model that emits a strict, OpenAI-compatible JSON Schema."""
 
     model_config = {"extra": "forbid"}
 
@@ -183,10 +115,9 @@ class SynthesisSchema(_StrictModel):
 def _strict_json_schema(model_cls: type[BaseModel], name: str) -> dict[str, Any]:
     """Convert a Pydantic model to an OpenRouter ``json_schema`` block.
 
-    OpenRouter passes ``schema`` through to providers. Gemini's strict
-    mode rejects schemas missing ``additionalProperties: false`` or with
-    incomplete ``required`` lists, so we patch the Pydantic output to
-    cover both at every nesting level.
+    OpenRouter passes ``schema`` straight through, and Gemini's strict mode
+    rejects any schema missing ``additionalProperties: false`` or with an
+    incomplete ``required`` list — so patch both at every nesting level.
     """
     schema = model_cls.model_json_schema()
 
@@ -206,7 +137,7 @@ def _strict_json_schema(model_cls: type[BaseModel], name: str) -> dict[str, Any]
                 for item in value:
                     _harden(item)
 
-    # ``$defs`` (nested models) live at the top level; harden them too.
+    # Nested models land in ``$defs`` at the top level; harden those too.
     for defn in (schema.get("$defs") or {}).values():
         _harden(defn)
     _harden(schema)
@@ -224,9 +155,8 @@ def _strict_json_schema(model_cls: type[BaseModel], name: str) -> dict[str, Any]
 EXTRACT_RESPONSE_FORMAT = _strict_json_schema(ExtractSchema, "ExtractResult")
 SYNTHESIS_RESPONSE_FORMAT = _strict_json_schema(SynthesisSchema, "SynthesisResult")
 
-# Fallback pricing if OpenRouter doesn't return cost in the response.
-# Format: model -> (USD per 1M input tokens, USD per 1M output tokens).
-# Update sparingly — OpenRouter is the source of truth at request time.
+# Fallback for when OpenRouter doesn't return cost, as model -> (USD per 1M
+# input tokens, USD per 1M output tokens). OpenRouter is the source of truth.
 PRICING_USD_PER_1M: dict[str, tuple[float, float]] = {
     "google/gemini-2.0-flash-001": (0.10, 0.40),
     "google/gemini-flash-1.5": (0.075, 0.30),
@@ -351,11 +281,6 @@ Structured extract:
 {extract_json}"""
 
 
-# ---------------------------------------------------------------------------
-# LLM client
-# ---------------------------------------------------------------------------
-
-
 def _get_client() -> AsyncOpenAI:
     """OpenAI-SDK client pointed at OpenRouter (or whatever REFINE_BASE_URL)."""
     base_url = os.getenv("REFINE_BASE_URL", DEFAULT_BASE_URL)
@@ -374,11 +299,6 @@ def _get_client() -> AsyncOpenAI:
     )
 
 
-# ---------------------------------------------------------------------------
-# Cost accounting
-# ---------------------------------------------------------------------------
-
-
 @dataclass
 class Usage:
     """Token + cost accumulator for a refinement run."""
@@ -386,14 +306,14 @@ class Usage:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     cost_usd: float = 0.0
-    cost_source: str = "unknown"  # "openrouter" if from response, "estimate" otherwise
+    cost_source: str = "unknown"  # "openrouter" | "estimate" | "mixed" | "unknown"
 
     def add(self, other: "Usage") -> None:
         self.prompt_tokens += other.prompt_tokens
         self.completion_tokens += other.completion_tokens
         self.cost_usd += other.cost_usd
-        # Once any call falls back to estimation, mark the whole run as
-        # partially estimated so the user knows the number isn't audit-quality.
+        # One estimated call marks the whole run, so the printed total is never
+        # mistaken for audit-quality.
         if other.cost_source == "estimate" and self.cost_source == "openrouter":
             self.cost_source = "mixed"
         elif self.cost_source == "unknown":
@@ -403,12 +323,10 @@ class Usage:
 def _extract_usage(resp_dict: dict[str, Any], model: str) -> Usage:
     """Pull token + cost data out of an OpenAI/OpenRouter response.
 
-    OpenRouter returns ``usage.cost`` in USD when the request includes
-    ``usage.include = true``. On BYOK requests ``cost`` is 0 and the
-    real upstream charge lives under ``usage.byok_usage_inference`` —
-    ``extract_cost_usd`` handles the fallback. If neither field is
-    present (some non-OpenRouter providers), fall back to multiplying
-    token counts by the hardcoded price table.
+    OpenRouter returns ``usage.cost`` in USD when the request sets
+    ``usage.include``; on BYOK requests that field is 0 and the real charge
+    lives under ``usage.byok_usage_inference``, which ``extract_cost_usd``
+    handles. Providers that return neither fall back to the price table.
     """
     usage_raw = (resp_dict.get("usage") or {}) if isinstance(resp_dict, dict) else {}
     prompt = int(usage_raw.get("prompt_tokens", 0) or 0)
@@ -446,17 +364,12 @@ def _extract_usage(resp_dict: dict[str, Any], model: str) -> Usage:
     )
 
 
-# ---------------------------------------------------------------------------
-# Prompt assembly + LLM call
-# ---------------------------------------------------------------------------
-
-
 def _stream_context(parsed: ParsedStream) -> str:
-    """One-shot context line passed with every chunk so the LLM doesn't
-    re-derive the stream's overall theme from scratch each time.
+    """Context line prefixed to every chunk prompt for one stream.
 
-    Built deterministically from frontmatter so the prompt is stable
-    across runs (better caching, reproducible cost)."""
+    Built deterministically from frontmatter so the prompt is byte-stable
+    across runs — better prompt caching, reproducible cost.
+    """
     meta = parsed.metadata
     parts = []
     if meta.get("stream_date"):
@@ -479,11 +392,10 @@ def _heading_timestamp(heading: str) -> str:
 
 
 def _unwrap_list_payload(payload: Any) -> Any:
-    """Defensive unwrap for Gemini's tendency to wrap objects in [...] arrays.
+    """Unwrap the ``[...]`` array Gemini sometimes wraps a lone object in.
 
-    Single-element list → unwrap. Multi-element list → keep as list (the
-    extract validator merges them; the synthesize validator uses the first).
-    Anything else → return unchanged.
+    Multi-element lists pass through untouched — the extract validator merges
+    them, the synthesis validator takes the first.
     """
     if isinstance(payload, list):
         if not payload:
@@ -498,14 +410,13 @@ def _unwrap_list_payload(payload: Any) -> Any:
 def _validate_extract(payload: Any) -> dict[str, Any]:
     """Coerce a Pass-1 extract response into the structured-fields shape.
 
-    Returns a dict with all eight keys present (empty arrays / falsy bools
-    where the model didn't provide values). This lets downstream code
-    reason about it without per-field None checks.
+    Every key is always present, empty rather than missing, so callers need no
+    per-field None checks.
     """
     payload = _unwrap_list_payload(payload)
     if isinstance(payload, list):
-        # Multi-element list at extract time means the model split the
-        # chunk into sub-extracts. Merge them: union all arrays.
+        # A multi-element list means the model split the chunk into
+        # sub-extracts; union their arrays back together.
         merged: dict[str, list] = {
             k: []
             for k in (
@@ -597,8 +508,8 @@ def _validate_synthesis(payload: Any) -> dict[str, Any]:
     """Coerce a Pass-2 synthesis response into heading/summary/details/type."""
     payload = _unwrap_list_payload(payload)
     if isinstance(payload, list):
-        # Synthesis should be a single object; if Gemini split it, take the
-        # first item (it has the right heading + summary anyway).
+        # A split synthesis still carries the right heading + summary in its
+        # first item.
         payload = payload[0]
     if not isinstance(payload, dict):
         raise ValueError(f"Expected JSON object, got {type(payload).__name__}")
@@ -622,17 +533,12 @@ def _validate_synthesis(payload: Any) -> dict[str, Any]:
 
 
 def _sanitize_json_text(text: str) -> str:
-    """Repair the most common Gemini JSON-mode violations.
+    """Escape raw control chars inside JSON string literals.
 
-    Walk the body once, tracking whether we're inside a string literal
-    (with escape-aware quote detection). Outside strings, raw whitespace
-    is fine and structural newlines stay untouched. Inside strings, any
-    raw control char (LF, CR, tab, etc.) gets replaced with its escaped
-    form so strict ``json.loads`` accepts the result.
-
-    A whole-body regex won't work here: JSON structural syntax also
-    contains plenty of harmless ``\\n`` between tokens (pretty-printed
-    output), and escaping those would just produce the same text back.
+    Gemini's JSON mode emits literal newlines inside string values, which
+    strict ``json.loads`` rejects. Only in-string chars are rewritten: a
+    whole-body regex would also hit the harmless newlines that pretty-printed
+    JSON puts between structural tokens.
     """
     out: list[str] = []
     in_string = False
@@ -673,10 +579,9 @@ def _sanitize_json_text(text: str) -> str:
 def _parse_first_json_value(text: str) -> Any:
     """Parse the first complete JSON value in ``text``, ignoring trailing junk.
 
-    Uses ``JSONDecoder.raw_decode`` so a stray ``}`` or repeated object
-    after the real payload (a Gemini quirk) doesn't kill an otherwise
-    fine response. Raises ``json.JSONDecodeError`` if no valid value
-    starts at the head of the (stripped) text.
+    Gemini sometimes appends a stray ``}`` or a repeat of the object after an
+    otherwise fine payload. Raises ``json.JSONDecodeError`` if no valid value
+    starts at the head of the stripped text.
     """
     decoder = json.JSONDecoder()
     obj, _end = decoder.raw_decode(text.lstrip())
@@ -684,38 +589,25 @@ def _parse_first_json_value(text: str) -> Any:
 
 
 def _parse_json_lenient(content: str) -> tuple[Any, str | None]:
-    """Try strict parse, then a series of repair passes.
+    """Try a strict parse, then each repair pass in turn.
 
-    Returns ``(parsed, repair_note)`` on success — ``repair_note`` is
-    ``None`` for a clean strict parse, or a short tag identifying which
-    repair recovered the body. Returns ``(None, error_str)`` if every
-    pass failed; the error string is from the strict pass since that's
-    the one that points at the actual fault.
-
-    Repair passes, in order:
-
-    1. ``"sanitized"`` — escape raw control chars inside string
-       literals (Gemini emits raw ``\\n`` inside Chinese ``content``).
-    2. ``"truncated_trailing"`` — accept the first complete value and
-       drop trailing junk (Gemini sometimes appends an extra ``}``
-       after a valid object).
-    3. ``"sanitized+truncated"`` — both repairs together.
+    Returns ``(parsed, repair_note)``, where ``repair_note`` is ``None`` for a
+    clean strict parse and otherwise names the repair that worked. Returns
+    ``(None, error_str)`` if every pass failed — the error comes from the
+    strict pass, which is the one that points at the actual fault.
     """
     try:
         return json.loads(content), None
     except json.JSONDecodeError as strict_err:
-        # Pass 1: sanitize control chars inside strings.
         sanitized = _sanitize_json_text(content)
         try:
             return json.loads(sanitized), "sanitized"
         except json.JSONDecodeError:
             pass
-        # Pass 2: strip trailing junk from the original body.
         try:
             return _parse_first_json_value(content), "truncated_trailing"
         except json.JSONDecodeError:
             pass
-        # Pass 3: both repairs together (raw LF in string AND trailing junk).
         try:
             return _parse_first_json_value(sanitized), "sanitized+truncated"
         except json.JSONDecodeError:
@@ -735,32 +627,16 @@ async def _call_llm_json(
 ) -> tuple[Any, Usage]:
     """One LLM call returning (parsed JSON, usage).
 
-    Returns ``(None, Usage())`` if the call itself fails. Returns
-    ``(None, usage)`` if the response was non-JSON even after a repair
-    pass and a one-shot retry (so cost is still accounted for on parse
-    failures).
+    Returns ``(None, Usage())`` when the call itself fails, or
+    ``(None, usage)`` when the body wouldn't parse — cost is still accounted
+    for on parse failures. A ``finish_reason`` of ``"length"`` buys one retry
+    at double the token budget.
 
-    ``response_format`` defaults to OpenAI-style loose JSON mode
-    (``{"type": "json_object"}``). Pass a strict ``json_schema`` block
-    (see ``_strict_json_schema``) to enable schema-validated decoding —
-    the model is constrained at sampling time to produce only
-    well-formed JSON matching the schema.
-
-    Recovery strategy (still useful as defense-in-depth even with a
-    strict schema, because providers occasionally ignore it):
-
-    1. Strict ``json.loads`` of the raw body.
-    2. If that fails, re-parse a sanitized copy (raw control chars
-       escaped) — handles Gemini's habit of emitting literal newlines
-       inside string values.
-    3. If the model hit ``finish_reason == "length"``, retry once with a
-       doubled ``max_tokens`` budget.
+    ``response_format`` defaults to loose ``{"type": "json_object"}``; pass a
+    block from ``_strict_json_schema`` for schema-validated decoding.
     """
     if response_format is None:
         response_format = {"type": "json_object"}
-    # When we're asking for a strict schema, refuse routes that can't
-    # honor it — silently downgrading to free-form JSON would defeat
-    # the point and reintroduce the malformed-body failures.
     use_strict = response_format.get("type") == "json_schema"
     extra_body: dict[str, Any] = {"usage": {"include": True}}
     if use_strict:
@@ -777,18 +653,16 @@ async def _call_llm_json(
                     {"role": "system", "content": system},
                     {"role": "user", "content": user},
                 ],
-                # Cast: the OpenAI SDK types this as a closed Union of
-                # TypedDicts, but the wire format is a plain JSON object
-                # and OpenRouter accepts ``json_schema`` with the strict
-                # shape we build above. Runtime is identical.
+                # The SDK types this as a closed Union of TypedDicts, but the
+                # wire format is plain JSON and OpenRouter accepts the
+                # ``json_schema`` shape built above. Runtime is identical.
                 response_format=cast(Any, response_format),
                 temperature=temperature,
                 max_tokens=attempt_max_tokens,
-                # ``usage.include`` asks OpenRouter to return cost in USD
-                # so we don't have to estimate. ``provider.require_parameters``
-                # makes OpenRouter skip providers that would silently drop
-                # the schema. Both go through ``extra_body`` because the
-                # OpenAI SDK doesn't model these fields.
+                # ``usage.include`` makes OpenRouter return cost in USD;
+                # ``provider.require_parameters`` makes it skip providers that
+                # would silently drop the schema and hand back free-form JSON.
+                # Neither field is modelled by the OpenAI SDK.
                 extra_body=extra_body,
             )
         except APIError as e:
@@ -808,8 +682,8 @@ async def _call_llm_json(
                 f"  empty response (finish_reason={finish_reason!r}, "
                 f"max_tokens={attempt_max_tokens})"
             )
-            # Empty + length usually means the prompt itself blew the
-            # budget — a bigger max_tokens retry won't help. Bail.
+            # Empty + length means the prompt itself blew the budget, so a
+            # bigger max_tokens retry won't help.
             return None, last_usage
 
         parsed, repair_note = _parse_json_lenient(content)
@@ -821,7 +695,6 @@ async def _call_llm_json(
                 )
             return parsed, last_usage
 
-        # Parse failed. Decide whether to retry with a bigger budget.
         if finish_reason == "length" and attempt == 0:
             new_budget = min(attempt_max_tokens * 2, 16384)
             logger.warning(
@@ -853,17 +726,15 @@ async def _refine_one(
 ) -> tuple[StreamChunk, dict[str, Any] | None, Usage]:
     """Two-pass refine: extract structured data, then synthesize prose.
 
-    Returns (chunk, refinement-or-None, summed-usage). A None refinement
-    means at least one of the two passes failed; the chunk stays
-    unrefined and can be retried by re-running the same command. Usage
-    from BOTH passes is always returned so the cost report is honest.
+    A ``None`` refinement means one of the passes failed; the chunk stays
+    unrefined and re-running the command retries it. Usage from both passes is
+    returned either way, so a failed run still reports what it cost.
     """
     context = _stream_context(parsed)
     timestamp = _heading_timestamp(chunk.heading)
     total_usage = Usage()
 
     async with sem:
-        # Pass 1: extract structured data faithfully.
         extract_user = EXTRACT_USER_TEMPLATE.format(
             context=context,
             timestamp=timestamp,
@@ -889,7 +760,6 @@ async def _refine_one(
             logger.error(f"  ✗ {chunk.id}: extract validation failed: {e}")
             return chunk, None, total_usage
 
-        # Pass 2: synthesize prose record from the structured extract.
         synth_user = SYNTHESIZE_USER_TEMPLATE.format(
             context=context,
             timestamp=timestamp,
@@ -917,13 +787,11 @@ async def _refine_one(
             return chunk, None, total_usage
 
     refinement = {
-        # Synthesis output: prose for the LLM
         "heading": synthesis["heading"],
         "summary": synthesis["summary"],
         "details": synthesis["details"],
         "chunk_type": synthesis["chunk_type"],
-        # Structured fields from extract: preserved for direct lookup
-        "topics": extract["topics"][:7],  # tighter cap than extract default
+        "topics": extract["topics"][:7],
         "mentions": extract["mentions"][:25],
         "key_quotes": extract["key_quotes"][:5],
         "sc_events": extract["sc_events"],
@@ -935,17 +803,7 @@ async def _refine_one(
 
 
 def _is_v2_refinement(rec: Any) -> bool:
-    """A chunk record is v2 if it carries the new ``details`` field.
-
-    Used to detect v1-format sidecars produced before the schema bump so
-    we can warn the user that ``--force`` is needed to upgrade them.
-    """
     return isinstance(rec, dict) and "details" in rec and "key_quotes" in rec
-
-
-# ---------------------------------------------------------------------------
-# Per-stream and overall driver
-# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -976,11 +834,8 @@ async def refine_stream(
     sidecar = load_sidecar(parsed)
     if force:
         sidecar["chunks"] = {}
-    # Bump schema version stamped on the sidecar even when re-using v1 chunks,
-    # so a future "is_v2" check on the sidecar header is meaningful.
     sidecar["schema_version"] = SCHEMA_VERSION
 
-    # Detect v1-format records so we can prompt the user to upgrade.
     v1_chunks = [cid for cid, rec in sidecar["chunks"].items() if not _is_v2_refinement(rec)]
     if v1_chunks and not force:
         logger.warning(
@@ -1065,11 +920,6 @@ async def refine_stream(
     )
 
 
-# ---------------------------------------------------------------------------
-# Reporting
-# ---------------------------------------------------------------------------
-
-
 def _fmt_cost(usage: Usage) -> str:
     if usage.cost_source == "unknown":
         return "(not priced)"
@@ -1078,7 +928,7 @@ def _fmt_cost(usage: Usage) -> str:
 
 
 def print_run_summary(results: list[StreamResult], model: str, total_duration: float) -> None:
-    """Per-file table + overall totals. The user explicitly asked for this."""
+    """Per-file table + overall totals."""
     overall = Usage()
     chunks_total = chunks_succeeded = chunks_failed = chunks_skipped = 0
 
@@ -1141,11 +991,6 @@ def print_run_summary(results: list[StreamResult], model: str, total_duration: f
     print()
 
 
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
-
-
 @dataclass
 class CLIArgs:
     paths: list[Path] = field(default_factory=list)
@@ -1171,16 +1016,9 @@ def _select_streams(args: CLIArgs) -> list[ParsedStream]:
 def _dry_run_report(streams: list[ParsedStream], model: str) -> None:
     """Estimate refinement cost without spending any tokens.
 
-    Two-pass estimate per chunk:
-
-    - Pass 1 (extract): system prompt ~600 tok + chunk transcript (~chars/2)
-      input; ~600 tok output.
-    - Pass 2 (synthesize): system prompt ~500 tok + structured extract
-      JSON (~600 tok) input; ~800 tok output (the long ``details`` field).
-
-    Char-to-token ratio of 2 is a cross-language upper bound (Chinese is
-    ~1.5/char, English ~0.25/char). Real runs are usually 70-90% of this
-    estimate.
+    The char-to-token ratio of 2 is a cross-language upper bound — Chinese
+    runs ~1.5 tokens/char, English ~0.25 — so real runs land at 70-90% of
+    what this prints.
     """
     print()
     print(f"Dry run — model: {model}  (two-pass: extract → synthesize)")
@@ -1191,9 +1029,8 @@ def _dry_run_report(streams: list[ParsedStream], model: str) -> None:
     total_chunks = total_in = total_out = 0
     for parsed in streams:
         sidecar = load_sidecar(parsed)
-        # Skip chunks that are already in v2 format. v1 chunks count as
-        # "needs work" only if --force will be used; we don't know that
-        # here, so include them in the estimate to be conservative.
+        # v1 chunks only get re-done under --force, which isn't visible from
+        # here, so count them in and over-estimate rather than under.
         new = [
             c
             for c in parsed.chunks
@@ -1203,10 +1040,8 @@ def _dry_run_report(streams: list[ParsedStream], model: str) -> None:
             print(f"  {parsed.md_path.name}: 0 new chunks")
             continue
         chars = sum(len(c.text) + len(c.heading) for c in new)
-        # Pass 1: chunk text in, structured extract out
         p1_in = 600 * len(new) + chars // 2
         p1_out = 600 * len(new)
-        # Pass 2: extract JSON in, prose out
         p2_in = (500 + 600) * len(new)
         p2_out = 800 * len(new)
         in_tokens = p1_in + p2_in
