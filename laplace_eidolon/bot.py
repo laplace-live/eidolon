@@ -68,11 +68,14 @@ from .voice_switching import (
     persona_prefix_hint,
 )
 
-# Pipecat's runner never wires server-side ICE servers in — it builds every
-# SmallWebRTCConnection with ice_servers=None, advertising host candidates
-# only, which works on localhost and fails behind any NAT. The monkey-patch
-# below injects them, mirroring how pipecat patches USERDATA_MAX_LENGTH
-# onto the same class.
+# Pipecat's runner accepts only a static ICE list (--ice-servers /
+# PIPECAT_ICE_SERVERS), which SmallWebRTCRequestHandler hands to every
+# SmallWebRTCConnection; left unset it passes None, advertising host
+# candidates only, which works on localhost and fails behind any NAT.
+# Cloudflare TURN credentials carry a TTL and so must be minted per
+# connection rather than fixed at startup — hence the monkey-patch below,
+# which fills ice_servers in only when the runner left it empty. It mirrors
+# how pipecat patches USERDATA_MAX_LENGTH onto the same class.
 #
 # Sources, in priority order: Cloudflare Realtime TURN (minted on demand and
 # cached in-process, so aiortc and the frontend's GET /api/ice-servers share
@@ -290,10 +293,11 @@ install_memory_admin(pipecat_app)
 install_mcp(pipecat_app)
 
 
-# Pipecat's runner mounts SmallWebRTCPrebuiltUI at / and /client with no
-# upstream toggle, so hiding it in production takes a middleware. Off by
-# default: the demo page has no rate limit, no Workers integration, and no
-# persona theming. Opt in with EIDOLON_PIPECAT_DEMO_ENABLED.
+# Pipecat's runner mounts PipecatPrebuiltUI at /client and redirects / to
+# it, with no upstream toggle, so hiding it in production takes a
+# middleware. Off by default: the demo page has no rate limit, no Workers
+# integration, and no persona theming. Opt in with
+# EIDOLON_PIPECAT_DEMO_ENABLED.
 #
 # Detecting dev via pipecat's own ENV=local does NOT work — its runner
 # force-sets os.environ["ENV"] = "local" at import time, which fires the

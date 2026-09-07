@@ -20,21 +20,11 @@ ENV UV_COMPILE_BYTECODE=1 \
 
 WORKDIR /app
 
-# Native libraries required by `opencv-python` (pulled in transitively by
-# `pipecat-ai[webrtc]` → `SmallWebRTCTransport` → `cv2`). The slim base
-# image ships no X11/GL runtime, so without these the bot fails to import
-# `cv2` with `libxcb.so.1` / `libGL.so.1` / `libgthread-2.0.so.0` errors.
-# We use the GUI build (not opencv-python-headless) because that's what
-# the pipecat lockfile pins; switching would mean fighting the lock.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        libgl1 \
-        libglib2.0-0 \
-        libxcb1 \
-        libsm6 \
-        libxext6 \
-        libxrender1 \
-    && rm -rf /var/lib/apt/lists/*
+# No X11/GL runtime is installed on purpose: `pipecat-ai[webrtc]` pulls
+# `opencv-python-headless`, and this bot is audio-only so it never imports
+# `cv2` at all. Adding the `webrtc-video` extra reintroduces the GUI build
+# and with it `libGL.so.1` / `libxcb.so.1` / `libgthread-2.0.so.0` import
+# errors on this slim base — install those libs in the same commit.
 
 # Install dependencies first (separate layer = better cache hits when
 # only application code changes).

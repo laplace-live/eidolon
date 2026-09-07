@@ -11,16 +11,15 @@ batch that filters down to nothing skips the call entirely.
 
 from __future__ import annotations
 
-from typing import Any
-
 from loguru import logger
+from pipecat.processors.aggregators.llm_context import LLMStandardMessage
 from pipecat.services.mem0.memory import Mem0MemoryService
 
 
 class LaplaceMem0MemoryService(Mem0MemoryService):
     """Mem0 memory service that filters out non-string-content messages."""
 
-    async def _store_messages(self, messages: list[dict[str, Any]]) -> None:
+    async def _store_messages(self, messages: list[LLMStandardMessage]) -> None:
         """Filter messages, then delegate to the parent.
 
         Pipecat already filters by role one layer up in ``process_frame``;
@@ -31,8 +30,8 @@ class LaplaceMem0MemoryService(Mem0MemoryService):
             m
             for m in messages
             if m.get("role") in ("user", "assistant")
-            and isinstance(m.get("content"), str)
-            and m["content"].strip()
+            and isinstance(content := m.get("content"), str)
+            and content.strip()
         ]
         dropped = len(messages) - len(sanitized)
 
