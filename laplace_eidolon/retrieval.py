@@ -151,6 +151,15 @@ DEFAULT_RERANK_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_RERANK_MODEL = "cohere/rerank-4-fast"
 _RERANK_TIMEOUT_SEC = 10.0
 
+# OpenRouter's rerank route 429s on roughly half its calls whatever the
+# pacing: 3/8 from a cold minute on 2026-09-07, where the same Cohere key
+# called directly went 8/8. Outcomes are independent rather than a rate
+# window — successes and failures interleave one call apart — so an
+# immediate retry is worth more than a backoff, and three attempts take
+# ~50% up to ~90%. Rejections come back in ~400ms (vs ~450ms for a success),
+# which is what bounds the worst case here.
+_RERANK_MAX_ATTEMPTS = 3
+
 
 class OpenRouterReranker(CohereReranker):
     """Cohere's rerank models reached through OpenRouter's ``/rerank`` route.
@@ -206,6 +215,11 @@ class OpenRouterReranker(CohereReranker):
         headers = openrouter_headers()
         headers["Authorization"] = f"Bearer {self.api_key}"
         response = self._client.post("/rerank", headers=headers, json=payload)
+        for attempt in range(1, _RERANK_MAX_ATTEMPTS):
+            if response.status_code != 429:
+                break
+            logger.debug(f"Rerank 429 on attempt {attempt}; retrying immediately")
+            response = self._client.post("/rerank", headers=headers, json=payload)
         response.raise_for_status()
         results = response.json()["results"]
 
