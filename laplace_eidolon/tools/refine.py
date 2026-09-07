@@ -43,7 +43,7 @@ from ._streams import (
     save_sidecar,
 )
 
-DEFAULT_MODEL = "~google/gemini-pro-latest"
+DEFAULT_MODEL = "~google/gemini-flash-latest"
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_CONCURRENCY = 8
 # Synthesize emits the long ``details`` field; extract only short arrays.
