@@ -647,7 +647,7 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
     llm = OpenRouterLLMService(
         api_key=os.getenv("OPENROUTER_API_KEY"),
         settings=OpenRouterLLMService.Settings(
-            model=os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-2024-11-20"),
+            model=os.getenv("OPENROUTER_MODEL") or "~google/gemini-flash-latest",
             system_instruction=system_instruction,
         ),
         default_headers=openrouter_headers(),

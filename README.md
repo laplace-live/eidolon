@@ -17,11 +17,15 @@ transport.input → STT → user_aggregator
 | Layer            | Service                                                                   |
 | ---------------- | ------------------------------------------------------------------------- |
 | STT              | [Soniox](https://console.soniox.com/) (`stt-rt-v5`)                       |
-| LLM              | [OpenRouter](https://openrouter.ai/) (default `openai/gpt-4o-2024-11-20`) |
-| TTS              | [Fish Audio](https://fish.audio/app/) (`s2-pro`, WebSocket)               |
+| LLM              | [OpenRouter](https://openrouter.ai/) (default `~google/gemini-flash-latest`) |
+| TTS              | [Fish Audio](https://fish.audio/app/) (`s2.1-pro`, WebSocket)             |
 | Transport        | SmallWebRTC (Pipecat, self-hosted)                                        |
 | Vector store     | LanceDB (local file, embeddings via OpenRouter)                           |
 | Long-term memory | [Mem0](https://app.mem0.ai/) (optional)                                   |
+
+Model IDs above are defaults. Every model the project runs — these three plus
+the embedding, reranker, and offline refinement models — is declared in one
+block at the top of [`.env.example`](.env.example); override any of them there.
 
 No Daily, no telephony, no Pipecat Cloud — this repo is wired for self-hosting
 behind your own reverse proxy.
