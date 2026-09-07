@@ -98,10 +98,10 @@ are enabled:
    `PERSONA_FACTS_CANDIDATES` (default 30) or `STREAM_ARCHIVE_CANDIDATES`
    (default 15) candidates. Stopwords are stripped from the FTS query side
    ("你", "什么", "了") to prevent BM25 score collapse on common tokens.
-5. **Optional cross-encoder rerank**. With `COHERE_API_KEY` set,
-   Cohere `rerank-v4.0-fast` re-scores down to `top_k` (8 for facts,
-   3 for chunks). Without the key, LanceDB's default RRF fusion is used —
-   strongly recommended at ~10k+ rows; ~$1/1000 reranks in production.
+5. **Cross-encoder rerank**. `cohere/rerank-4-fast` via OpenRouter
+   re-scores down to `top_k` (8 for facts, 3 for chunks), on the same key
+   the LLM uses. Set `RERANK_ENABLED=false` to fall back to LanceDB's
+   default RRF fusion — worth keeping on at ~10k+ rows, at $0.002/search.
 
 To measure how well retrieval is doing on a known set of questions:
 

@@ -27,6 +27,8 @@ from loguru import logger
 
 from ..embeddings import DEFAULT_DB_PATH, embed_texts
 from ..retrieval import (
+    DEFAULT_RERANK_BASE_URL,
+    OpenRouterReranker,
     extract_date_filter,
     hybrid_search,
     make_reranker,
@@ -360,21 +362,23 @@ def to_json_blob(per_table: dict[str, dict[str, ModeReport]]) -> dict[str, Any]:
 
 
 def _build_named_reranker(model_name: str) -> Any:
-    """Build a fresh ``CohereReranker`` for a specific model name.
+    """Build a fresh reranker for a specific model name.
 
     Bypasses ``make_reranker``'s singleton cache so each model is measured
     independently. Raises without a key — bench mode needs real calls.
     """
-    api_key = os.getenv("COHERE_API_KEY")
+    api_key = os.getenv("RERANK_API_KEY") or os.getenv("OPENROUTER_API_KEY")
     if not api_key:
         raise RuntimeError(
-            "--rerank-models requires COHERE_API_KEY in .env "
-            "(no key = nothing to benchmark, since the fallback path is "
-            "the same RRF for every 'model')."
+            "--rerank-models requires RERANK_API_KEY or OPENROUTER_API_KEY "
+            "in .env (no key = nothing to benchmark, since the fallback path "
+            "is the same RRF for every 'model')."
         )
-    from lancedb.rerankers import CohereReranker
-
-    return CohereReranker(api_key=api_key, model_name=model_name)
+    return OpenRouterReranker(
+        model_name=model_name,
+        api_key=api_key,
+        base_url=os.getenv("RERANK_BASE_URL") or DEFAULT_RERANK_BASE_URL,
+    )
 
 
 async def _evaluate_query_with_reranker(
@@ -621,15 +625,13 @@ async def main_async(args: argparse.Namespace) -> int:
 
     modes = args.modes or list(ALL_MODES)
 
-    if "hybrid_rerank" in modes and not os.getenv("COHERE_API_KEY"):
+    if "hybrid_rerank" in modes and not make_reranker():
         logger.warning(
-            "hybrid_rerank requested but COHERE_API_KEY is unset — that mode "
+            "hybrid_rerank requested but no reranker is configured — that mode "
             "will use LinearCombinationReranker (vector-weighted) as fallback. "
-            "Set COHERE_API_KEY for the actual cross-encoder eval."
+            "Set OPENROUTER_API_KEY (and leave RERANK_ENABLED on) for the "
+            "actual cross-encoder eval."
         )
-        # Resolve the fallback reranker up front so the per-query search
-        # path doesn't re-init it every time.
-        make_reranker()
 
     per_table: dict[str, dict[str, ModeReport]] = {}
     all_results: list[QueryResult] = []

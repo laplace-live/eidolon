@@ -15,8 +15,8 @@ transport.input → STT → user_aggregator
 ```
 
 Soniox (STT), OpenRouter (LLM), and Fish Audio (TTS) are required. Everything
-else — Mem0, the Cohere reranker, both RAG indexes — degrades quietly when its
-key or table is missing, so a fresh checkout runs.
+else — Mem0, the reranker, both RAG indexes — degrades quietly when its key or
+table is missing, so a fresh checkout runs.
 
 ## Repository layout
 

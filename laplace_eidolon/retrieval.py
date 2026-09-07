@@ -11,10 +11,16 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+from functools import cached_property
 from typing import Any
 
+import httpx
 import jieba
+import pyarrow as pa
+from lancedb.rerankers import CohereReranker
 from loguru import logger
+
+from .openrouter import openrouter_headers
 
 # jieba's first cut() pays a one-shot ~260ms prefix-dict load. On the event
 # loop that stalls all audio, so `warm_tokenizer` gets it done at startup.
@@ -141,14 +147,83 @@ def build_fts_index(table: Any, field: str = "tokens") -> None:
     )
 
 
-# One client for the whole process — the Cohere SDK owns an httpx client
-# internally, so sharing it across both services is correct.
+DEFAULT_RERANK_BASE_URL = "https://openrouter.ai/api/v1"
+DEFAULT_RERANK_MODEL = "cohere/rerank-4-fast"
+_RERANK_TIMEOUT_SEC = 10.0
+
+
+class OpenRouterReranker(CohereReranker):
+    """Cohere's rerank models reached through OpenRouter's ``/rerank`` route.
+
+    OpenRouter mirrors Cohere's rerank request and response bodies, so only
+    the transport differs from the parent: merging the vector and FTS legs
+    and attaching ``_relevance_score`` is inherited untouched. Replacing
+    ``_rerank`` outright is what that costs — ``CohereReranker`` builds
+    ``cohere.Client`` with no ``base_url`` seam, and reads ``COHERE_API_KEY``
+    from the environment ahead of its own ``api_key`` argument.
+    """
+
+    def __init__(
+        self,
+        model_name: str = DEFAULT_RERANK_MODEL,
+        column: str = "text",
+        top_n: int | None = None,
+        return_score: str = "relevance",
+        api_key: str | None = None,
+        base_url: str = DEFAULT_RERANK_BASE_URL,
+    ) -> None:
+        super().__init__(
+            model_name=model_name,
+            column=column,
+            top_n=top_n,
+            return_score=return_score,
+            api_key=api_key,
+        )
+        self.base_url = base_url.rstrip("/")
+
+    @cached_property
+    def _client(self) -> httpx.Client:
+        """Connection-pooled client shadowing the parent's ``cohere.Client``.
+
+        Reranking runs inside ``to_list()``, which ``hybrid_search`` already
+        pushes to a worker thread, so the sync client is the right one.
+        """
+        return httpx.Client(base_url=self.base_url, timeout=_RERANK_TIMEOUT_SEC)
+
+    def _rerank(self, result_set: pa.Table, query: str) -> pa.Table:
+        result_set = self._handle_empty_results(result_set)
+        if len(result_set) == 0:
+            return result_set
+
+        payload: dict[str, Any] = {
+            "model": self.model_name,
+            "query": query,
+            "documents": result_set[self.column].to_pylist(),
+        }
+        if self.top_n is not None:
+            payload["top_n"] = self.top_n
+
+        headers = openrouter_headers()
+        headers["Authorization"] = f"Bearer {self.api_key}"
+        response = self._client.post("/rerank", headers=headers, json=payload)
+        response.raise_for_status()
+        results = response.json()["results"]
+
+        # Sorted descending by score, and every index refers back to the
+        # documents array we just sent, so take() restores that order.
+        result_set = result_set.take([item["index"] for item in results])
+        return result_set.append_column(
+            "_relevance_score",
+            pa.array([item["relevance_score"] for item in results], type=pa.float32()),
+        )
+
+
 _reranker_cache: Any = None
 _reranker_inited: bool = False
 
 
 def make_reranker(model: str | None = None) -> Any:
-    """Return a Cohere reranker if ``COHERE_API_KEY`` is set, else None.
+    """Return the cross-encoder reranker, or None when it is switched off.
 
     Cached — the first call fixes which reranker the process uses.
 
@@ -158,36 +233,40 @@ def make_reranker(model: str | None = None) -> Any:
     facts and ~30k chunks: its score normalisation ties the top results and
     randomises their order.
 
-    ``rerank-v4.0-fast`` is a cross-encoder — it reads query and candidate
-    together, so it catches intent that pure score combiners can't. Trial
-    tier covers light prod use, ~$1/1000 reranks beyond it.
+    ``cohere/rerank-4-fast`` is a cross-encoder — it reads query and
+    candidate together, so it catches intent that pure score combiners
+    can't. $0.002 per search unit, billed to the same OpenRouter account as
+    the LLM and the embeddings.
     """
     global _reranker_cache, _reranker_inited
     if _reranker_inited:
         return _reranker_cache
     _reranker_inited = True
 
-    api_key = os.getenv("COHERE_API_KEY")
+    if os.getenv("RERANK_ENABLED", "").strip().lower() in {"false", "0", "no", "off"}:
+        logger.info("RERANK_ENABLED is off — hybrid retrieval will use RRF fusion")
+        return None
+
+    api_key = os.getenv("RERANK_API_KEY") or os.getenv("OPENROUTER_API_KEY")
     if not api_key:
         logger.info(
-            "COHERE_API_KEY not set — hybrid retrieval will use "
-            "LanceDB's default RRF fusion (no cross-encoder rerank). "
-            "For best precision at the current data scale, set "
-            "COHERE_API_KEY in .env."
+            "Neither RERANK_API_KEY nor OPENROUTER_API_KEY is set — hybrid "
+            "retrieval will use LanceDB's default RRF fusion (no "
+            "cross-encoder rerank). For best precision at the current data "
+            "scale, set OPENROUTER_API_KEY in .env."
         )
         return None
 
     try:
-        from lancedb.rerankers import CohereReranker
-
-        model_name = (
-            model or os.getenv("COHERE_RERANK_MODEL") or "rerank-v4.0-fast"
+        model_name = model or os.getenv("RERANK_MODEL") or DEFAULT_RERANK_MODEL
+        base_url = os.getenv("RERANK_BASE_URL") or DEFAULT_RERANK_BASE_URL
+        _reranker_cache = OpenRouterReranker(
+            model_name=model_name, api_key=api_key, base_url=base_url
         )
-        _reranker_cache = CohereReranker(api_key=api_key, model_name=model_name)
-        logger.info(f"Cohere reranker enabled: model={model_name!r}")
+        logger.info(f"Reranker enabled: model={model_name!r} via {base_url}")
     except Exception as e:  # noqa: BLE001 — keep retrieval alive on a bad key
         logger.warning(
-            f"Cohere reranker init failed ({e}); falling back to "
+            f"Reranker init failed ({e}); falling back to "
             f"LanceDB default RRF fusion"
         )
         _reranker_cache = None

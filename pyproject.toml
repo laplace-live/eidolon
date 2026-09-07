@@ -21,9 +21,10 @@ dependencies = [
     # a whitespace-separated `tokens` column so the native FTS
     # `whitespace` base tokenizer indexes it correctly).
     "jieba>=0.42.1",
-    # Reranker for hybrid (vector + FTS) results. Pulled in at runtime
-    # via lancedb.rerankers.CohereReranker — only used when
-    # COHERE_API_KEY is set; falls back to RRF-only if absent.
+    # Unused: retrieval.OpenRouterReranker subclasses
+    # lancedb.rerankers.CohereReranker for its merge logic but replaces the
+    # transport with httpx, and the SDK is imported only by the `_client`
+    # it overrides. Safe to drop.
     "cohere>=5.13.0",
     # Official Model Context Protocol SDK. Powers the public Streamable
     # HTTP retrieval server mounted at /mcp.
