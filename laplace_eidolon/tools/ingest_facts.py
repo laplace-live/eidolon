@@ -439,7 +439,7 @@ def main() -> int:
             "Disable persona-prefix stripping for embed_input. The vector "
             "will then encode '明前奶绿声称…' as part of every fact, which "
             "tends to compress the embedding space (the prefix repeats on "
-            "~95% of rows). Use with --table persona_facts_unstripped to "
+            "~95%% of rows). Use with --table persona_facts_unstripped to "
             "build a parallel index for A/B benchmarking against the "
             "stripped default."
         ),

@@ -11,9 +11,7 @@ The source ``streams/<id>.md`` is never overwritten — output goes to a
 ``streams/<id>.refined.json`` sidecar, and re-runs skip chunks already in it
 unless ``--force`` is passed.
 
-Default model is ``~google/gemini-pro-latest``: noticeably better entity
-extraction and grounding than flash, at ~$0.05/chunk vs ~$0.035 in practice.
-Override with ``REFINE_MODEL`` or ``--model``.
+Override the default model with ``REFINE_MODEL`` or ``--model``.
 """
 
 from __future__ import annotations
@@ -33,6 +31,7 @@ from loguru import logger
 from openai import APIError, AsyncOpenAI
 from pydantic import BaseModel, Field
 
+from ..env import env_int
 from ..openrouter import extract_cost_usd, openrouter_headers
 from ._streams import (
     ParsedStream,
@@ -324,9 +323,8 @@ def _extract_usage(resp_dict: dict[str, Any], model: str) -> Usage:
     """Pull token + cost data out of an OpenAI/OpenRouter response.
 
     OpenRouter returns ``usage.cost`` in USD when the request sets
-    ``usage.include``; on BYOK requests that field is 0 and the real charge
-    lives under ``usage.byok_usage_inference``, which ``extract_cost_usd``
-    handles. Providers that return neither fall back to the price table.
+    ``usage.include``; ``extract_cost_usd`` owns the BYOK fallback.
+    Providers that return neither fall back to the price table.
     """
     usage_raw = (resp_dict.get("usage") or {}) if isinstance(resp_dict, dict) else {}
     prompt = int(usage_raw.get("prompt_tokens", 0) or 0)
@@ -1138,7 +1136,7 @@ def main() -> int:
     parser.add_argument(
         "--concurrency",
         type=int,
-        default=int(os.getenv("REFINE_CONCURRENCY", str(DEFAULT_CONCURRENCY))),
+        default=env_int("REFINE_CONCURRENCY", DEFAULT_CONCURRENCY),
         help=f"Max concurrent LLM calls (default: {DEFAULT_CONCURRENCY})",
     )
     parser.add_argument(

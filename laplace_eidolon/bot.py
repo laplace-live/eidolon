@@ -57,10 +57,13 @@ from .audio_quality import (
     QUALITY_PRESETS_BPS,
     session_bitrate_bps,
 )
+from .embeddings import resolve_db_path
+from .env import env_float, env_int
 from .mcp_server import install_mcp
 from .memory_admin import install_memory_admin
 from .offer_middleware import install_offer_middleware
 from .openrouter import openrouter_headers
+from .retrieval import warm_tokenizer
 from .user_context import UserContext, resolve_user_context
 from .voice_switching import (
     install_voice_style_tool,
@@ -68,27 +71,15 @@ from .voice_switching import (
     persona_prefix_hint,
 )
 
-# Pipecat's runner accepts only a static ICE list (--ice-servers /
-# PIPECAT_ICE_SERVERS), which SmallWebRTCRequestHandler hands to every
-# SmallWebRTCConnection; left unset it passes None, advertising host
-# candidates only, which works on localhost and fails behind any NAT.
-# Cloudflare TURN credentials carry a TTL and so must be minted per
-# connection rather than fixed at startup — hence the monkey-patch below,
-# which fills ice_servers in only when the runner left it empty. It mirrors
-# how pipecat patches USERDATA_MAX_LENGTH onto the same class.
-#
-# Sources, in priority order: Cloudflare Realtime TURN (minted on demand and
-# cached in-process, so aiortc and the frontend's GET /api/ice-servers share
-# one mint), then static WEBRTC_STUN_URL / WEBRTC_TURN_URL, then nothing.
+# Pipecat's runner accepts only a static ICE list, fixed at startup, but
+# Cloudflare TURN credentials carry a TTL and must be minted per connection
+# — hence the monkey-patch below.
 #
 # aiortc honors at most ONE STUN and ONE TURN server per connection and
 # silently drops the rest, so ordering within each list matters. The
 # frontend has no such limit and uses every URL Cloudflare returns.
 
-# `or "3600"` rather than a getenv default: python-dotenv parses `KEY=` as
-# an empty string, not as unset, so `cp .env.example .env` would otherwise
-# crash on int(""). Same idiom throughout this file.
-CF_TURN_TTL_SEC = int(os.getenv("CLOUDFLARE_TURN_TTL_SEC") or "3600")
+CF_TURN_TTL_SEC = env_int("CLOUDFLARE_TURN_TTL_SEC", 3600)
 # Refresh slightly before expiry so an in-flight credential never goes
 # stale mid-call. Floor of 60s in case TTL is set very short for testing.
 CF_REFRESH_MARGIN_SEC = 300
@@ -281,16 +272,16 @@ async def get_ice_servers():
     return await loop.run_in_executor(None, _resolve_ice_response)
 
 
-# Anonymous rate limit + camelCase body normalisation.
 install_offer_middleware(pipecat_app)
-
-# GET /api/memories + POST /api/memories/forget, both Bearer-authenticated.
 install_memory_admin(pipecat_app)
 
-
-# Read-only retrieval tools over both indexes, Streamable HTTP at /mcp.
 # Mounted here so it shares resolve_user_context's cache.
 install_mcp(pipecat_app)
+
+# Daemon thread: jieba's dict load is ~260ms of pure CPU, and on the event
+# loop it stalls every in-progress call's audio. The greeting turn queries
+# RAG, so warming lazily is too late.
+threading.Thread(target=warm_tokenizer, name="jieba-warm", daemon=True).start()
 
 
 # Pipecat's runner mounts PipecatPrebuiltUI at /client and redirects / to
@@ -358,7 +349,6 @@ except Exception as e:
     StreamArchiveService = None
     logger.debug(f"StreamArchive service unavailable: {e}")
 
-# Same LanceDB instance as StreamArchive, separate `persona_facts` table.
 try:
     from .persona_facts import PersonaFactsService
 except Exception as e:
@@ -370,7 +360,24 @@ except Exception as e:
 # where the bot silently falls back to its stub persona with RAG disabled.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PERSONA_PATH = PROJECT_ROOT / os.getenv("PERSONA_FILE", "persona.md")
-LANCEDB_PATH = PROJECT_ROOT / os.getenv("LANCEDB_PATH", "data/lancedb")
+LANCEDB_PATH = resolve_db_path()
+
+
+def _optional_rag(service_cls, label: str, ingest_cmd: str):
+    """Build a RAG FrameProcessor, or None when its index isn't there."""
+    if service_cls is None:
+        return None
+    if not LANCEDB_PATH.exists():
+        logger.info(
+            f"{label} disabled: no LanceDB index at {LANCEDB_PATH}. "
+            f"Run `uv run {ingest_cmd}` to build it."
+        )
+        return None
+    try:
+        return service_cls(db_path=LANCEDB_PATH)
+    except Exception as e:
+        logger.warning(f"{label} disabled: {e}")
+        return None
 
 # Asia/Shanghai because the persona is 虚拟上海; forks override with
 # PERSONA_TIMEZONE. The UTC fallback keeps a missing tzdata (slim
@@ -430,18 +437,14 @@ def _get_recent_stream_dates(n: int = RECENT_STREAM_DATES_N) -> list[str]:
         try:
             # Local import: lancedb is heavy, and a fresh checkout with no
             # data/lancedb should still boot.
-            import lancedb
+            from .embeddings import open_table
+            from .stream_archive import DEFAULT_TABLE as STREAM_TABLE
 
-            if not LANCEDB_PATH.exists():
+            table = open_table(LANCEDB_PATH, STREAM_TABLE)
+            if table is None:
                 _recent_stream_dates_cache = []
                 _recent_stream_dates_cached_at = now
                 return []
-            db = lancedb.connect(str(LANCEDB_PATH))
-            if "stream_chunks" not in db.list_tables().tables:
-                _recent_stream_dates_cache = []
-                _recent_stream_dates_cached_at = now
-                return []
-            table = db.open_table("stream_chunks")
             # LanceDB has no DISTINCT, so dedupe in Python. A columnar scan
             # of one narrow column over ~30k rows is 10-30 ms, once per TTL.
             rows = table.search().select(["stream_date"]).limit(200_000).to_list()
@@ -505,23 +508,8 @@ def _build_persona_prefix(
     *,
     voice_styles: dict[str, str] | None = None,
 ) -> str:
-    """Per-session preamble prepended to ``persona.md``.
-
-    Always emits the current local date/time so the LLM can reason
-    about time-sensitive lore in ``persona.md`` (e.g. "坚果 跑路 in
-    early 2026" — the model needs today's date to know how long ago
-    that was). Adds:
-
-    - The viewer's name/UID for logged-in viewers (so the bot greets
-      them naturally without "what's your name").
-    - The most recent stream dates from the LanceDB archive (so the
-      bot can answer "你最后一次直播什么时候?" / "你上周播了几场?"
-      without RAG — those are meta questions that semantic retrieval
-      can't answer because the date lives in metadata, not in any
-      chunk's text).
-    - A one-liner about the ``change_voice_style`` tool when at least
-      one ``FISH_VOICE_ID_<STYLE>`` is configured. Empty otherwise so
-      a vanilla ``.env`` doesn't bloat the prompt.
+    """Per-session preamble prepended to ``persona.md``: current date/time,
+    viewer name, recent stream dates, available voice styles.
 
     The "不要主动念" lines are load-bearing — without them the model
     occasionally narrates the current time / reads the UID aloud,
@@ -588,7 +576,7 @@ class LaplaceRTVIProcessor(RTVIProcessor):
     # Keep in sync with pyproject.toml [project].version.
     _DEFAULT_ABOUT = {
         "library": "laplace-eidolon",
-        "library_version": "0.1.0",
+        "library_version": "0.2.0",
     }
 
     async def set_bot_ready(self, about=None):
@@ -650,17 +638,17 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
         ),
     )
 
-    # Identity and voice rules live in persona.md so they can be edited
-    # without touching code; _build_persona_prefix layers the per-session
-    # dynamic facts (date, viewer name, available voice styles) on top.
+    # Off-loop: on a TTL miss this scans stream_date across every chunk row
+    # (~65ms cold) and reads persona.md, both of which would otherwise stall
+    # audio for every other in-progress call.
+    system_instruction = await asyncio.to_thread(
+        lambda: _build_persona_prefix(user, voice_styles=voice_styles) + load_persona()
+    )
     llm = OpenRouterLLMService(
         api_key=os.getenv("OPENROUTER_API_KEY"),
         settings=OpenRouterLLMService.Settings(
             model=os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-2024-11-20"),
-            system_instruction=(
-                _build_persona_prefix(user, voice_styles=voice_styles)
-                + load_persona()
-            ),
+            system_instruction=system_instruction,
         ),
         default_headers=openrouter_headers(),
     )
@@ -678,10 +666,9 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
         ),
     )
 
-    # Keyed on Bilibili UID, so each fan gets a private namespace.
-    # Anonymous viewers skip Mem0 rather than share a `default-user`
-    # bucket, where their memories would cross-pollute every other
-    # anonymous conversation.
+    # Keyed on Bilibili UID. Anonymous viewers skip Mem0 rather than share a
+    # `default-user` bucket, where their memories would cross-pollute every
+    # other anonymous conversation.
     memory = None
     mem0_api_key = os.getenv("MEM0_API_KEY")
     if not user.is_logged_in:
@@ -693,54 +680,32 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
             agent_id=os.getenv("MEM0_AGENT_ID") or None,
             run_id=os.getenv("MEM0_RUN_ID") or None,
             params=Mem0MemoryService.InputParams(
-                search_limit=int(os.getenv("MEM0_SEARCH_LIMIT", "10")),
-                search_threshold=float(os.getenv("MEM0_SEARCH_THRESHOLD", "0.3")),
+                search_limit=env_int("MEM0_SEARCH_LIMIT", 10),
+                search_threshold=env_float("MEM0_SEARCH_THRESHOLD", 0.3),
             ),
         )
         logger.info(f"Mem0 long-term memory enabled for user_id={user.mid} ({user.uname!r})")
     elif mem0_api_key and Mem0MemoryService is None:
         logger.warning("MEM0_API_KEY is set but pipecat-ai[mem0] is not installed; skipping memory")
 
-    # Optional persona-facts retrieval (RAG over hand-compiled streamer facts
-    # in data/*设定集.txt + data/*事件集.txt). Same LanceDB instance as the
-    # stream archive, different table.
-    facts = None
-    if PersonaFactsService is not None and LANCEDB_PATH.exists():
-        try:
-            facts = PersonaFactsService(db_path=LANCEDB_PATH)
-        except Exception as e:
-            logger.warning(f"PersonaFactsService disabled: {e}")
-    elif PersonaFactsService is not None:
-        logger.info(
-            f"Persona facts disabled: no LanceDB index at "
-            f"{LANCEDB_PATH.relative_to(PROJECT_ROOT)}. "
-            "Run `uv run laplace-ingest-facts` to build it."
-        )
+    facts = _optional_rag(PersonaFactsService, "Persona facts", "laplace-ingest-facts")
+    archive = _optional_rag(
+        StreamArchiveService, "Stream archive", "laplace-ingest-streams"
+    )
 
-    # All three enrichers intercept LLMContextFrame and inject one system
-    # message per turn, stacking as [user, mem0, persona_facts,
-    # stream_archive]. persona.md is prepended by the LLM service itself.
-    archive = None
-    if StreamArchiveService is not None and LANCEDB_PATH.exists():
-        try:
-            archive = StreamArchiveService(db_path=LANCEDB_PATH)
-        except Exception as e:
-            logger.warning(f"StreamArchiveService disabled: {e}")
-    elif StreamArchiveService is not None:
-        logger.info(
-            f"Stream archive disabled: no LanceDB index at "
-            f"{LANCEDB_PATH.relative_to(PROJECT_ROOT)}. "
-            "Run `uv run laplace-ingest-streams` to build it."
-        )
-
-    processors = [transport.input(), stt, user_aggregator]
-    if memory is not None:
-        processors.append(memory)
-    if facts is not None:
-        processors.append(facts)
-    if archive is not None:
-        processors.append(archive)
-    processors.extend([llm, tts, transport.output(), assistant_aggregator])
+    # Each enricher intercepts LLMContextFrame and injects one system message
+    # per turn, stacking as [user, mem0, persona_facts, stream_archive].
+    # persona.md is prepended by the LLM service itself.
+    processors = [
+        transport.input(),
+        stt,
+        user_aggregator,
+        *(p for p in (memory, facts, archive) if p is not None),
+        llm,
+        tts,
+        transport.output(),
+        assistant_aggregator,
+    ]
 
     pipeline = Pipeline(processors)
 

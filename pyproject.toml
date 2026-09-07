@@ -1,6 +1,6 @@
 [project]
 name = "laplace-eidolon"
-version = "0.1.0"
+version = "0.2.0"
 description = "Voice AI bot built with Pipecat"
 requires-python = ">=3.11"
 dependencies = [
@@ -88,4 +88,6 @@ packages = ["laplace_eidolon"]
 [tool.ruff]
 line-length = 100
 [tool.ruff.lint]
-select = ["I"]
+# I = import sorting, F = pyflakes (dead imports, unused locals). Pyflakes
+# carries no style opinions, so it adds no formatting rules to argue with.
+select = ["I", "F"]

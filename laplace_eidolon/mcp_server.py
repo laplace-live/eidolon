@@ -13,7 +13,6 @@ over identical public data (no Mem0, no per-user content).
 from __future__ import annotations
 
 import contextlib
-import json
 import os
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -26,12 +25,15 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.types import Receive, Scope, Send
 
-from .embeddings import DEFAULT_DB_PATH
+from . import persona_facts, stream_archive
+from .embeddings import resolve_db_path
+from .env import env_int
 from .memory_admin import _extract_bearer_token
 from .offer_middleware import _resolve_client_ip_from_scope
-from .persona_facts import PersonaFactsService
-from .rate_limit import AnonymousIpQuota, _env_int
-from .stream_archive import StreamArchiveService
+from .rate_limit import AnonymousIpQuota
+from .retrieval import score_of
+from .retriever import LanceRetriever
+from .stream_archive import decode_topics
 from .user_context import resolve_user_context
 
 MOUNT_PATH = "/mcp"
@@ -43,27 +45,13 @@ _AUTH_DEFAULT_PER_HOUR = 120
 _DEFAULT_WINDOW_SEC = 3600
 
 
-def _score_of(hit: dict[str, Any]) -> float | None:
-    """Relevance score regardless of which retrieval path produced the hit.
-
-    Reranked/hybrid hits carry ``_relevance_score`` (higher = better); the
-    unreranked vector path carries ``_distance`` (lower = better), so the
-    returned number is only comparable within one result set.
-    """
-    if hit.get("_relevance_score") is not None:
-        return float(hit["_relevance_score"])
-    if hit.get("_distance") is not None:
-        return float(hit["_distance"])
-    return None
-
-
 def _project_fact(hit: dict[str, Any]) -> dict[str, Any]:
     """Project a persona-facts row to the LLM-facing fields, dropping the
     embedding vector and internal bookkeeping."""
     return {
         "text": (hit.get("text") or "").strip(),
         "date": hit.get("date") or None,
-        "score": _score_of(hit),
+        "score": score_of(hit),
     }
 
 
@@ -72,20 +60,11 @@ def _project_chunk(hit: dict[str, Any]) -> dict[str, Any]:
     the v1 ``summary`` over the raw ``text`` — the same priority
     ``StreamArchiveService._format_chunks`` renders for the bot."""
     content = (hit.get("details") or hit.get("summary") or hit.get("text") or "").strip()
-    topics: list[str] = []
-    topics_raw = hit.get("topics") or ""
-    if topics_raw:
-        try:
-            decoded = json.loads(topics_raw)
-            if isinstance(decoded, list):
-                topics = [str(t) for t in decoded]
-        except json.JSONDecodeError:
-            topics = []
     return {
         "stream_date": hit.get("stream_date") or None,
         "content": content,
-        "topics": topics,
-        "score": _score_of(hit),
+        "topics": decode_topics(hit),
+        "score": score_of(hit),
     }
 
 
@@ -104,8 +83,8 @@ _caller: ContextVar[_CallerTier | None] = ContextVar("mcp_caller", default=None)
 
 def _build_quota(per_hour_env: str, default_per_hour: int) -> AnonymousIpQuota:
     return AnonymousIpQuota(
-        max_per_window=_env_int(per_hour_env, default_per_hour),
-        window_seconds=_env_int("EIDOLON_MCP_RATE_LIMIT_WINDOW_SEC", _DEFAULT_WINDOW_SEC),
+        max_per_window=env_int(per_hour_env, default_per_hour),
+        window_seconds=env_int("EIDOLON_MCP_RATE_LIMIT_WINDOW_SEC", _DEFAULT_WINDOW_SEC),
     )
 
 
@@ -199,8 +178,9 @@ class _TierMiddleware:
 def install_mcp(
     app: FastAPI,
     *,
-    persona_facts: PersonaFactsService | None = None,
-    stream_archive: StreamArchiveService | None = None,
+    db_path: str | os.PathLike[str] | None = None,
+    persona_facts_retriever: LanceRetriever | None = None,
+    stream_archive_retriever: LanceRetriever | None = None,
     anon_quota: AnonymousIpQuota | None = None,
     auth_quota: AnonymousIpQuota | None = None,
 ) -> None:
@@ -209,10 +189,13 @@ def install_mcp(
     Call exactly once at startup, alongside ``install_offer_middleware`` and
     ``install_memory_admin``. Not idempotent: a second call wraps the lifespan
     again and ``session_manager.run()`` raises at startup on the second entry.
-    The keyword args are test seams; production passes none.
+    The retriever and quota args are test seams; production passes ``db_path``.
     """
-    facts = persona_facts or PersonaFactsService(db_path=DEFAULT_DB_PATH)
-    streams = stream_archive or StreamArchiveService(db_path=DEFAULT_DB_PATH)
+    path = db_path if db_path is not None else resolve_db_path()
+    facts = persona_facts_retriever or persona_facts.build_retriever(path)
+    streams = stream_archive_retriever or stream_archive.build_retriever(path)
+    fact_params = persona_facts.PersonaFactsService.InputParams()
+    chunk_params = stream_archive.StreamArchiveService.InputParams()
     anon = anon_quota or _build_quota("EIDOLON_MCP_ANON_RATE_LIMIT_PER_HOUR", _ANON_DEFAULT_PER_HOUR)
     auth = auth_quota or _build_quota("EIDOLON_MCP_AUTH_RATE_LIMIT_PER_HOUR", _AUTH_DEFAULT_PER_HOUR)
 
@@ -231,9 +214,11 @@ def install_mcp(
         relevant facts with their source dates. Use for stable facts about who
         she is, not for recalling specific stream moments."""
         await _guard_rate_limit()
-        if facts._table is None:
+        if facts.table is None:
             return {"count": 0, "results": [], "note": "Persona-facts index is not built on this server."}
-        hits = await facts._search(query)
+        hits = await facts.search(
+            query, candidates=fact_params.candidates, top_k=fact_params.top_k
+        )
         results = [_project_fact(h) for h in hits]
         return {"count": len(results), "results": results}
 
@@ -243,9 +228,11 @@ def install_mcp(
         relevant ~5-minute stream segments with their broadcast dates and
         topics. Use to recall what she said or did on a stream."""
         await _guard_rate_limit()
-        if streams._table is None:
+        if streams.table is None:
             return {"count": 0, "results": [], "note": "Stream-archive index is not built on this server."}
-        hits = await streams._search(query)
+        hits = await streams.search(
+            query, candidates=chunk_params.candidates, top_k=chunk_params.top_k
+        )
         results = [_project_chunk(h) for h in hits]
         return {"count": len(results), "results": results}
 

@@ -28,10 +28,14 @@ laplace_eidolon/      the runtime package
   audio_quality.py      per-session Opus bitrate from the offer's audioQuality
   persona_facts.py      RAG FrameProcessor over hand-compiled fan facts
   stream_archive.py     RAG FrameProcessor over refined stream transcripts
+  retriever.py          one LanceDB table: handle, stale-reopen, search
   retrieval.py          hybrid search — vector + jieba FTS + optional rerank
   embeddings.py         embedding client, LanceDB table access, disk cache
+  voice_switching.py    the change_voice_style LLM tool and its styles
   mcp_server.py         public read-only MCP server mounted at /mcp
   memory_service.py     Mem0 subclass · memory_admin.py serves /api/memories
+  rate_limit.py         per-IP sliding-window quota · env.py numeric env vars
+  openrouter.py         attribution headers + usage-cost extraction
   tools/                the offline chain, one console script per stage
 persona.md            the system prompt — identity and hard rules, no code
 data/                 fact .txt sources, lancedb/ (Git LFS), eval/, embed_cache.db
@@ -114,8 +118,9 @@ module that owns it.
   load pins them to their fallbacks. This is why `bot.py` has imports below
   statements, and why it is exempt from `from __future__ import annotations`.
 - **An empty env var is not unset.** python-dotenv parses `KEY=` as `""`, so
-  `int(os.getenv("X", "60"))` crashes on a plain `.env.example` copy. Use
-  `os.getenv("X") or "60"`, or the `_env_int` helper.
+  `int(os.getenv("X", "60"))` crashes on a plain `.env.example` copy. Every
+  numeric env read goes through `env.env_int` / `env.env_float`; for strings
+  use `os.getenv("X") or "default"`.
 - **Pure ASGI middleware, never `BaseHTTPMiddleware`.** Starlette's version
   doesn't catch `BaseException`, so a client disconnect surfaces as a 500, and
   its response hard-codes `background = None`, silently dropping the background
@@ -156,7 +161,9 @@ module that owns it.
   an empty index, and a checkout without `lfs: true` ships pointer stubs.
 - **`retrieval.py` is the one search path.** The bot, the MCP server, and
   `laplace-eval-retrieval` all go through it, so what the eval scores is what
-  the bot runs. Keep it that way.
+  the bot runs. Keep it that way. The first two reach it via
+  `retriever.LanceRetriever`, which adds only the table handle and the
+  stale-reopen retry — never scoring.
 
 ### The persona
 
@@ -166,8 +173,9 @@ module that owns it.
 - **The Chinese prompt text is load-bearing.** The 不要主动念 lines are what stop
   the model narrating the clock and reading UIDs aloud, and the wording tracks
   `persona.md`'s vocabulary. Don't paraphrase it in passing.
-- **`change_voice_style` is named inside `persona.md`.** Renaming the tool means
-  editing both in one commit.
+- **`change_voice_style` is named once, as `_TOOL_NAME` in
+  `voice_switching.py`.** It reaches the prompt through `persona_prefix_hint`,
+  not through `persona.md` — rename it in that one place.
 
 ### Shipping a change
 
@@ -187,8 +195,8 @@ module that owns it.
   exceptions are `bot.py` and the two `__init__.py` files.
 - PEP 604/585 syntax: `str | None`, `dict[str, Any]`, `list[float]`.
 - Type hints on everything. They carry the load that docstrings otherwise would.
-- Line length 100. Ruff enforces import sorting (`select = ["I"]`) and nothing
-  else, so the rest is on you.
+- Line length 100. Ruff enforces import sorting and pyflakes
+  (`select = ["I", "F"]`) and nothing else, so the rest is on you.
 
 ## Comments
 

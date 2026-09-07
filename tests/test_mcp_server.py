@@ -16,9 +16,8 @@ from starlette.testclient import TestClient
 
 import laplace_eidolon.mcp_server as mcp_server
 from laplace_eidolon.mcp_server import _project_chunk, _project_fact, install_mcp
-from laplace_eidolon.persona_facts import PersonaFactsService
 from laplace_eidolon.rate_limit import AnonymousIpQuota
-from laplace_eidolon.stream_archive import StreamArchiveService
+from laplace_eidolon.retriever import LanceRetriever
 from laplace_eidolon.user_context import UserContext
 
 FACT_HIT = {
@@ -63,15 +62,15 @@ def test_project_chunk_falls_back_to_summary_then_text():
 ACCEPT = "application/json, text/event-stream"
 
 
-class FakeService:
-    """Stand-in for PersonaFactsService / StreamArchiveService. A ``_table``
-    of None mimics a missing index; otherwise ``_search`` returns canned hits."""
+class FakeRetriever:
+    """Stand-in for LanceRetriever. A ``table`` of None mimics a missing
+    index; otherwise ``search`` returns canned hits."""
 
     def __init__(self, hits: list[dict[str, Any]], *, has_table: bool = True):
-        self._table = object() if has_table else None
+        self.table = object() if has_table else None
         self._hits = hits
 
-    async def _search(self, query: str) -> list[dict[str, Any]]:
+    async def search(self, query: str, **kwargs: Any) -> list[dict[str, Any]]:
         return self._hits
 
 
@@ -79,11 +78,11 @@ def _build_client(*, anon_max=5, auth_max=50, facts=None, streams=None) -> TestC
     app = FastAPI()
     install_mcp(
         app,
-        persona_facts=cast(
-            PersonaFactsService, facts if facts is not None else FakeService([FACT_HIT])
+        persona_facts_retriever=cast(
+            LanceRetriever, facts if facts is not None else FakeRetriever([FACT_HIT])
         ),
-        stream_archive=cast(
-            StreamArchiveService, streams if streams is not None else FakeService([CHUNK_HIT])
+        stream_archive_retriever=cast(
+            LanceRetriever, streams if streams is not None else FakeRetriever([CHUNK_HIT])
         ),
         anon_quota=AnonymousIpQuota(anon_max, 3600),
         auth_quota=AnonymousIpQuota(auth_max, 3600),
@@ -137,7 +136,7 @@ def test_search_streams_returns_projected_chunks():
 
 
 def test_missing_index_returns_note_not_error():
-    with _build_client(facts=FakeService([], has_table=False)) as client:
+    with _build_client(facts=FakeRetriever([], has_table=False)) as client:
         result = _call_tool(client, "search_persona_facts", {"query": "x"}).json()["result"]
         assert result["isError"] is False
         assert result["structuredContent"]["count"] == 0

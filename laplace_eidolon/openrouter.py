@@ -40,17 +40,13 @@ def extract_cost_usd(usage: Mapping[str, Any] | None) -> float | None:
     ``usage.cost`` is what OpenRouter billed, and is always ``0`` on BYOK
     requests since OpenRouter takes no cut of the inference.
     ``usage.cost_details.upstream_inference_cost`` carries what the
-    provider actually charged, but only on BYOK chat requests — as of
-    2026-05 the ``/v1/embeddings`` endpoint returns
-    ``{prompt_tokens, total_tokens, cost: 0}`` and nothing else, so
-    embedding callers must fall back to client-side token estimation when
-    this returns ``0.0``.
+    provider actually charged, but only on BYOK chat requests — the
+    embeddings endpoint reports ``cost: 0`` and nothing else, so embedding
+    callers must fall back to client-side token estimation when this
+    returns ``0.0``.
 
     ``None`` means no cost data at all, which some non-OpenRouter
     providers return.
-
-    ``usage.byok_usage_inference`` is not an OpenRouter field — it's in no
-    response and no doc. Don't add it back.
     """
     if not isinstance(usage, Mapping):
         return None

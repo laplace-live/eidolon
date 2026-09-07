@@ -1,9 +1,9 @@
 """Validate ``loginSyncToken`` against the Workers helper API.
 
-``resolve_user_context`` POSTs the token to
-``{WORKERS_BASE_URL}/bilibili/validate-login-sync-v2`` and parses the
-Bilibili nav response into a ``UserContext``, which ``bot()`` turns into a
-per-UID Mem0 namespace and a name prefixed onto the system prompt.
+``resolve_user_context`` POSTs the token to ``WORKERS_BASE_URL`` +
+``_VALIDATE_PATH`` and parses the Bilibili nav response into a
+``UserContext``, which ``bot()`` turns into a per-UID Mem0 namespace and a
+name prefixed onto the system prompt.
 
 Results are cached for ``EIDOLON_VALIDATE_TTL_SEC`` (default 60s) keyed on
 ``sha256(token)`` — short enough to honor a Bilibili-side sign-out, long
@@ -27,6 +27,8 @@ from typing import Any
 import httpx
 from loguru import logger
 
+from .env import env_int
+
 
 @dataclass(frozen=True)
 class UserContext:
@@ -42,25 +44,10 @@ class UserContext:
     is_logged_in: bool = False
 
 
-# Shared instance for every "no token / can't validate / not logged in"
-# case, so callers can identity-check it (`ctx is ANONYMOUS`).
+# Shared instance for every "no token / can't validate / not logged in" case.
 ANONYMOUS = UserContext()
 
-
-def _env_int(name: str, default: int) -> int:
-    raw = os.getenv(name)
-    if not raw:
-        return default
-    try:
-        return int(raw)
-    except ValueError:
-        logger.warning(
-            f"[user-context] {name}={raw!r} is not a valid int; using default {default}"
-        )
-        return default
-
-
-_CACHE_TTL_SEC = _env_int("EIDOLON_VALIDATE_TTL_SEC", 60)
+_CACHE_TTL_SEC = env_int("EIDOLON_VALIDATE_TTL_SEC", 60)
 _HTTP_TIMEOUT_SEC = 10.0
 _VALIDATE_PATH = "/bilibili/validate-login-sync-v2"
 

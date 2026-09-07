@@ -57,31 +57,8 @@ from .audio_quality import (
 from .rate_limit import ANON_QUOTA, AnonymousIpQuota
 from .user_context import resolve_user_context
 
-# Shared with `bot.py`'s @pipecat_app.get registration so the path lives
-# in exactly one place.
 OFFER_PATH = "/api/offer"
 PREFLIGHT_PATH = "/api/offer/preflight"
-
-
-def _resolve_client_ip(request: Request) -> str:
-    """Pick the most-trusted client IP based on env config.
-
-    Returns the literal string ``"unknown"`` only when the request has
-    no ``client`` (e.g. ASGI test clients without a transport) — that
-    bucket is shared across all callers, which intentionally throttles
-    bot-driven traffic harder than real viewers.
-    """
-    header_name = (os.getenv("EIDOLON_REAL_IP_HEADER") or "").strip().lower()
-    if header_name:
-        raw = request.headers.get(header_name) or ""
-        # "client, proxy1, proxy2" — left-most is the original client.
-        # Single-IP headers like CF-Connecting-IP split safely too.
-        first = raw.split(",")[0].strip()
-        if first:
-            return first
-    if request.client and request.client.host:
-        return request.client.host
-    return "unknown"
 
 
 def _parse_offer_body(body_bytes: bytes) -> dict[str, Any] | None:
@@ -102,18 +79,26 @@ def _parse_offer_body(body_bytes: bytes) -> dict[str, Any] | None:
     return body
 
 
-def _extract_login_sync_token(body: dict[str, Any] | None) -> str | None:
-    """Pull ``requestData.loginSyncToken`` (or snake_case fallback) out
-    of a parsed body dict. ``None`` on missing / empty / wrong shape.
+def _request_data(body: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The offer's ``requestData`` block, accepting both spellings.
+
+    Pipecat's ``SmallWebRTCRequest.from_dict`` takes either, so an
+    out-of-band snake_case caller still authenticates.
     """
     if not body:
         return None
-    # Accept both spellings, as Pipecat's SmallWebRTCRequest.from_dict does,
-    # so an out-of-band snake_case caller still authenticates.
     nested = body.get("requestData")
     if not isinstance(nested, dict):
         nested = body.get("request_data")
-    if not isinstance(nested, dict):
+    return nested if isinstance(nested, dict) else None
+
+
+def _extract_login_sync_token(body: dict[str, Any] | None) -> str | None:
+    """Pull ``requestData.loginSyncToken`` out of a parsed body dict.
+    ``None`` on missing / empty / wrong shape.
+    """
+    nested = _request_data(body)
+    if nested is None:
         return None
     token = nested.get("loginSyncToken")
     if isinstance(token, str) and token.strip():
@@ -122,19 +107,13 @@ def _extract_login_sync_token(body: dict[str, Any] | None) -> str | None:
 
 
 def _extract_audio_quality(body: dict[str, Any] | None) -> Any:
-    """Pull the raw ``requestData.audioQuality`` value (snake_case fallback).
+    """Pull the raw ``requestData.audioQuality`` value.
 
     Returns the value unvalidated — the body is user-controlled, so
     ``audio_quality.resolve_quality_bitrate`` does the checking.
     """
-    if not body:
-        return None
-    nested = body.get("requestData")
-    if not isinstance(nested, dict):
-        nested = body.get("request_data")
-    if not isinstance(nested, dict):
-        return None
-    return nested.get("audioQuality")
+    nested = _request_data(body)
+    return nested.get("audioQuality") if nested is not None else None
 
 
 def _apply_session_audio_quality(body: dict[str, Any] | None) -> None:
@@ -332,10 +311,12 @@ async def _send_json(
 
 
 def _resolve_client_ip_from_scope(scope: Scope) -> str:
-    """Pure-ASGI variant of ``_resolve_client_ip``, reading the raw scope.
+    """Pick the most-trusted client IP: env-configured header, then
+    ``scope['client']``, then the shared ``"unknown"`` bucket.
 
-    Same precedence: env-configured header, then ``scope['client']``, then
-    the shared ``"unknown"`` bucket.
+    That bucket catches requests with no transport (ASGI test clients),
+    and is shared across all such callers — which throttles bot-driven
+    traffic harder than real viewers.
     """
     header_name = (os.getenv("EIDOLON_REAL_IP_HEADER") or "").strip().lower()
     if header_name:
@@ -392,7 +373,7 @@ def install_offer_middleware(
             # Bad token reports the plain anonymous quota state — the
             # response shape never distinguishes it from "no token".
 
-        ip = _resolve_client_ip(request)
+        ip = _resolve_client_ip_from_scope(request.scope)
         result = await quota.peek(ip)
         if result.allowed:
             return JSONResponse(

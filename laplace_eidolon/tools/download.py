@@ -26,6 +26,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from dotenv import load_dotenv
 from loguru import logger
 
 # Defaults are exposed as module-level constants because pipeline.py
@@ -206,12 +207,7 @@ def print_summary(report: DownloadReport, vods_dir: Path) -> None:
 def main() -> int:
     # Nothing here needs env vars, but pipeline.py hands off to later
     # stages that want SONIOX_API_KEY loaded by then.
-    try:
-        from dotenv import load_dotenv
-
-        load_dotenv(override=True)
-    except ImportError:
-        pass
+    load_dotenv(override=True)
 
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.add_argument(

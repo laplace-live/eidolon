@@ -13,12 +13,11 @@ IPs seen and are reclaimed only by a process restart.
 from __future__ import annotations
 
 import asyncio
-import os
 import time
 from collections import deque
 from dataclasses import dataclass
 
-from loguru import logger
+from .env import env_int
 
 
 @dataclass(frozen=True)
@@ -36,20 +35,6 @@ class RateLimitResult:
     allowed: bool
     remaining: int
     retry_after_seconds: int
-
-
-def _env_int(name: str, default: int) -> int:
-    """Parse an int env var, treating an empty value as unset."""
-    raw = os.getenv(name)
-    if not raw:
-        return default
-    try:
-        return int(raw)
-    except ValueError:
-        logger.warning(
-            f"[rate-limit] {name}={raw!r} is not a valid int; using default {default}"
-        )
-        return default
 
 
 class AnonymousIpQuota:
@@ -140,6 +125,6 @@ class AnonymousIpQuota:
 
 # Built at import, so changing the env vars needs a restart.
 ANON_QUOTA = AnonymousIpQuota(
-    max_per_window=_env_int("EIDOLON_ANON_RATE_LIMIT_PER_HOUR", 5),
-    window_seconds=_env_int("EIDOLON_ANON_RATE_LIMIT_WINDOW_SEC", 3600),
+    max_per_window=env_int("EIDOLON_ANON_RATE_LIMIT_PER_HOUR", 5),
+    window_seconds=env_int("EIDOLON_ANON_RATE_LIMIT_WINDOW_SEC", 3600),
 )

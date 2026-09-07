@@ -11,25 +11,47 @@ position, 5-minute transcript scenes instead of one-line facts.
 
 from __future__ import annotations
 
-import asyncio
 import os
-from pathlib import Path
 from typing import Any, cast
 
-from lancedb.table import Table
 from loguru import logger
 from pipecat.frames.frames import Frame, LLMContextFrame
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pydantic import BaseModel, Field
 
-from .embeddings import DEFAULT_DB_PATH, embed_texts, open_table
-from .retrieval import (
-    build_query_text,
-    extract_date_filter,
-    hybrid_search,
-)
+from .embeddings import DEFAULT_DB_PATH
+from .env import env_int
+from .retrieval import build_query_text
+from .retriever import LanceRetriever
 
 DEFAULT_TABLE = "persona_facts"
+LABEL = "Persona facts"
+INGEST_HINT = "uv run laplace-ingest-facts"
+
+
+def summarize_hits(results: list[dict[str, Any]]) -> str:
+    """Per-table detail for the hit log line."""
+    sources = sorted({r.get("source", "?") for r in results})
+    dated_n = sum(1 for r in results if r.get("date"))
+    return f"sources={sources}, dated={dated_n}/{len(results)}"
+
+
+def build_retriever(
+    db_path: str | os.PathLike[str] = DEFAULT_DB_PATH,
+    table_name: str = DEFAULT_TABLE,
+    *,
+    embed_model: str | None = None,
+) -> LanceRetriever:
+    """A retriever over the persona-facts table, configured as the bot uses it."""
+    return LanceRetriever(
+        db_path,
+        table_name,
+        date_column="date",
+        label=LABEL,
+        summarize=summarize_hits,
+        ingest_hint=INGEST_HINT,
+        embed_model=embed_model,
+    )
 
 
 class PersonaFactsService(FrameProcessor):
@@ -47,7 +69,11 @@ class PersonaFactsService(FrameProcessor):
         """Facts shown to the LLM after reranking. Each is ~30 chars, so a
         generous top_k stays cheap in prompt tokens."""
 
-        candidates: int = Field(default=30, ge=1, le=200)
+        candidates: int = Field(
+            default_factory=lambda: env_int("PERSONA_FACTS_CANDIDATES", 30),
+            ge=1,
+            le=200,
+        )
         """Hybrid-search pool the reranker picks ``top_k`` from. 30 is the
         sweet spot at ~3k facts; raise it as the corpus grows.
         ``PERSONA_FACTS_CANDIDATES`` overrides."""
@@ -100,124 +126,26 @@ class PersonaFactsService(FrameProcessor):
         """
         super().__init__()
         self._params = params or PersonaFactsService.InputParams()
-        env_candidates = os.getenv("PERSONA_FACTS_CANDIDATES")
-        if env_candidates:
-            try:
-                self._params = self._params.model_copy(
-                    update={"candidates": int(env_candidates)}
-                )
-            except ValueError:
-                logger.warning(
-                    f"PERSONA_FACTS_CANDIDATES={env_candidates!r} not an int; ignoring"
-                )
-
-        self._table_name = table_name
-        self._db_path = Path(db_path)
-        self._table: Table | None = open_table(self._db_path, self._table_name)
+        self._retriever = build_retriever(
+            db_path, table_name, embed_model=self._params.embed_model
+        )
         self._last_query: str | None = None
 
-        if self._table is None:
-            logger.warning(
-                f"PersonaFactsService: no LanceDB table at "
-                f"{self._db_path}/{self._table_name}.lance — retrieval will be a no-op. "
-                "Run `uv run laplace-ingest-facts` after authoring data/*设定集.txt."
-            )
-        else:
+        if self._retriever.table is not None:
             logger.info(
-                f"PersonaFactsService initialized with {self._table.count_rows()} facts "
+                f"PersonaFactsService initialized with "
+                f"{self._retriever.row_count()} facts "
                 f"(candidates={self._params.candidates}, top_k={self._params.top_k}, "
                 f"date_prefilter={self._params.date_prefilter})"
             )
 
-    def _reopen_table(self) -> None:
-        """Re-open the table after a re-ingest invalidated the cached handle."""
-        try:
-            new_table = open_table(self._db_path, self._table_name)
-        except Exception as e:
-            logger.error(f"PersonaFactsService re-open failed: {e}")
-            self._table = None
-            return
-        if new_table is None:
-            logger.warning(
-                f"PersonaFactsService re-open: no table at "
-                f"{self._db_path}/{self._table_name}.lance"
-            )
-            self._table = None
-            return
-        self._table = new_table
-        logger.info(
-            f"PersonaFactsService re-opened table ({new_table.count_rows()} facts)"
-        )
-
     async def _search(self, query: str) -> list[dict[str, Any]]:
-        """Run hybrid (vector + FTS) + optional rerank against the facts table.
-
-        Retries once against the stale handle a concurrent
-        ``laplace-ingest-facts`` leaves behind; LanceDB surfaces that as a
-        plain ``Exception`` carrying "Not found", hence the substring match.
-        """
-        if self._table is None:
-            logger.warning("Persona facts search skipped: no table loaded")
-            return []
-
-        try:
-            vectors = await embed_texts([query], model=self._params.embed_model)
-        except Exception as e:
-            logger.error(f"Persona facts embed failed for query={query!r}: {e}")
-            return []
-        if not vectors:
-            return []
-
-        where = (
-            extract_date_filter(query, column="date")
-            if self._params.date_prefilter
-            else None
+        return await self._retriever.search(
+            query,
+            candidates=self._params.candidates,
+            top_k=self._params.top_k,
+            date_prefilter=self._params.date_prefilter,
         )
-        if where:
-            logger.info(f"Persona facts date pre-filter: {where!r}")
-
-        for attempt in (1, 2):
-            table = self._table
-            if table is None:
-                return []
-            try:
-                results = await hybrid_search(
-                    table,
-                    vector=vectors[0],
-                    query_text=query,
-                    candidates=self._params.candidates,
-                    where=where,
-                    final_k=self._params.top_k,
-                    rerank=True,
-                )
-                if results:
-                    score = results[0].get(
-                        "_relevance_score", results[0].get("_distance", float("nan"))
-                    )
-                    sources = sorted({r.get("source", "?") for r in results})
-                    dated_n = sum(1 for r in results if r.get("date"))
-                    logger.info(
-                        f"Persona facts hit: query={query!r} → {len(results)} facts "
-                        f"(top_score={score:.3f}, sources={sources}, "
-                        f"dated={dated_n}/{len(results)})"
-                    )
-                else:
-                    logger.info(
-                        f"Persona facts miss: query={query!r} returned 0 facts"
-                    )
-                return results
-            except Exception as e:
-                err = str(e)
-                if attempt == 1 and "Not found" in err:
-                    logger.warning(
-                        "Persona facts hit stale table (likely re-ingested while "
-                        "bot was running); re-opening and retrying once."
-                    )
-                    self._reopen_table()
-                    continue
-                logger.error(f"Persona facts search failed for query={query!r}: {e}")
-                return []
-        return []
 
     @staticmethod
     def _format_facts(facts: list[dict[str, Any]], prefix: str) -> str:

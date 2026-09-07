@@ -14,25 +14,27 @@ A renegotiated ``SmallWebRTCConnection`` reuses its encoder, so changing
 from __future__ import annotations
 
 import contextvars
-import os
 from typing import Any, Final
+
+from .env import env_int
 
 # Presets in decreasing order of bandwidth. ``lowest`` sits under Opus's
 # ~16 kbps wideband floor: still intelligible, but the persona's timbre
 # audibly degrades. It's for connections where the alternative is a
 # dropped call.
 QUALITY_PRESETS_BPS: Final[dict[str, int]] = {
-    "best": int(os.getenv("EIDOLON_OPUS_BITRATE_BEST_BPS") or "192000"),
-    "medium": int(os.getenv("EIDOLON_OPUS_BITRATE_MEDIUM_BPS") or "96000"),
-    "low": int(os.getenv("EIDOLON_OPUS_BITRATE_LOW_BPS") or "64000"),
-    "lowest": int(os.getenv("EIDOLON_OPUS_BITRATE_LOWEST_BPS") or "8000"),
+    "best": env_int("EIDOLON_OPUS_BITRATE_BEST_BPS", 192000),
+    "medium": env_int("EIDOLON_OPUS_BITRATE_MEDIUM_BPS", 96000),
+    "low": env_int("EIDOLON_OPUS_BITRATE_LOW_BPS", 64000),
+    "lowest": env_int("EIDOLON_OPUS_BITRATE_LOWEST_BPS", 8000),
 }
 
-# Fallback when the offer body has no usable ``audioQuality``. Pinned to
-# the ``medium`` preset so a client that omits the field encodes
-# identically to one that asks for ``medium``. Practical override range
-# is 32000–256000.
-DEFAULT_BITRATE_BPS: Final[int] = int(os.getenv("EIDOLON_OPUS_BITRATE_BPS") or "96000")
+# Fallback when the offer body has no usable ``audioQuality``. Defaults to
+# the ``medium`` preset — including any override of it — so a client that
+# omits the field encodes identically to one that asks for ``medium``.
+DEFAULT_BITRATE_BPS: Final[int] = env_int(
+    "EIDOLON_OPUS_BITRATE_BPS", QUALITY_PRESETS_BPS["medium"]
+)
 
 # Defaulted so an encoder built outside any request context still gets a
 # sane bitrate rather than zero.

@@ -34,6 +34,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from dotenv import load_dotenv
 from loguru import logger
 
 # Both backends live in the optional `[tools]` extra. Their imports stay
@@ -299,14 +300,7 @@ def _load_soniox_context_dict(
         )
         return None
 
-    try:
-        import tomllib
-    except ImportError as e:
-        raise RuntimeError(
-            "Soniox context loading needs Python 3.11+ (stdlib tomllib). "
-            f"You're on {sys.version_info.major}.{sys.version_info.minor}. "
-            "Either upgrade Python or pass --no-context."
-        ) from e
+    import tomllib
 
     with path.open("rb") as f:
         raw: dict[str, Any] = tomllib.load(f)
@@ -905,12 +899,7 @@ def _probe_duration_sec(path: Path) -> float | None:
 
 def main() -> int:
     # Pick up SONIOX_API_KEY from .env without requiring it to be exported.
-    try:
-        from dotenv import load_dotenv
-
-        load_dotenv(override=True)
-    except ImportError:
-        pass  # dotenv missing is fine; env may already be exported.
+    load_dotenv(override=True)
 
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.add_argument("audio", type=Path, help="VOD file (mp3, m4a, mp4, wav, ...)")

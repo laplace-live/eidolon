@@ -16,7 +16,8 @@ import os
 import statistics
 import sys
 import time
-from dataclasses import asdict, dataclass, field
+import tomllib
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -29,15 +30,7 @@ from ..retrieval import (
     extract_date_filter,
     hybrid_search,
     make_reranker,
-    tokenize_zh,
 )
-
-# The project targets 3.10+, but this harness alone requires 3.11 for
-# stdlib tomllib.
-if sys.version_info >= (3, 11):
-    import tomllib
-else:  # pragma: no cover — runtime constraint, not test-covered
-    raise RuntimeError("eval_retrieval requires Python 3.11+ for tomllib")
 
 DEFAULT_QUERIES = "data/eval/queries.toml"
 DEFAULT_K_VALUES = (1, 3, 5, 10)

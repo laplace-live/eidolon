@@ -16,8 +16,8 @@ from typing import Any
 import jieba
 from loguru import logger
 
-# jieba's first cut() pays a one-shot ~200ms prefix-dict load; keep it off
-# the first runtime query.
+# jieba's first cut() pays a one-shot ~260ms prefix-dict load. On the event
+# loop that stalls all audio, so `warm_tokenizer` gets it done at startup.
 _JIEBA_INITED = False
 
 
@@ -27,6 +27,15 @@ def _init_jieba() -> None:
         return
     list(jieba.cut("init"))
     _JIEBA_INITED = True
+
+
+def warm_tokenizer() -> None:
+    """Load jieba's prefix dict now, off the first query's critical path.
+
+    Call once at startup, ideally from a thread — it is pure CPU and
+    idempotent.
+    """
+    _init_jieba()
 
 
 # LanceDB 0.30.x ships no CJK tokenizer; pre-tokenizing at both ingest and
@@ -113,14 +122,10 @@ def build_fts_index(table: Any, field: str = "tokens") -> None:
     no stemming, so LanceDB honors jieba's boundaries instead of re-segmenting
     them. ``lower_case=False`` keeps BV-IDs and proper nouns case-distinct.
 
-    ``config=FTS(...)`` selects native FTS, the only path this form builds.
-    Tantivy's whitespace tokenizer in LanceDB 0.30.x ignored several of these
-    knobs; native is also the supported path and 3-8x faster on long queries
-    as of the 0.30 perf work.
+    ``config=FTS(...)`` selects native FTS, the only path this form builds —
+    Tantivy's whitespace tokenizer ignored several of these knobs.
     """
-    # create_fts_index() has been deprecated since LanceDB 0.25 and warns on
-    # every call. Imported here because this module never imports lancedb at
-    # module level.
+    # create_fts_index() is deprecated and warns on every call.
     from lancedb.index import FTS
 
     table.create_index(
@@ -140,7 +145,6 @@ def build_fts_index(table: Any, field: str = "tokens") -> None:
 # internally, so sharing it across both services is correct.
 _reranker_cache: Any = None
 _reranker_inited: bool = False
-_reranker_warned: bool = False
 
 
 def make_reranker(model: str | None = None) -> Any:
@@ -158,21 +162,19 @@ def make_reranker(model: str | None = None) -> Any:
     together, so it catches intent that pure score combiners can't. Trial
     tier covers light prod use, ~$1/1000 reranks beyond it.
     """
-    global _reranker_cache, _reranker_inited, _reranker_warned
+    global _reranker_cache, _reranker_inited
     if _reranker_inited:
         return _reranker_cache
     _reranker_inited = True
 
     api_key = os.getenv("COHERE_API_KEY")
     if not api_key:
-        if not _reranker_warned:
-            logger.info(
-                "COHERE_API_KEY not set — hybrid retrieval will use "
-                "LanceDB's default RRF fusion (no cross-encoder rerank). "
-                "For best precision at the current data scale, set "
-                "COHERE_API_KEY in .env."
-            )
-            _reranker_warned = True
+        logger.info(
+            "COHERE_API_KEY not set — hybrid retrieval will use "
+            "LanceDB's default RRF fusion (no cross-encoder rerank). "
+            "For best precision at the current data scale, set "
+            "COHERE_API_KEY in .env."
+        )
         return None
 
     try:
@@ -393,3 +395,17 @@ async def hybrid_search(
         return rows[:final_k]
 
     return await asyncio.to_thread(_run)
+
+
+def score_of(hit: dict[str, Any]) -> float | None:
+    """Relevance score regardless of which retrieval path produced the hit.
+
+    Reranked/hybrid hits carry ``_relevance_score`` (higher = better); the
+    unreranked vector path carries ``_distance`` (lower = better), so the
+    returned number is only comparable within one result set.
+    """
+    if hit.get("_relevance_score") is not None:
+        return float(hit["_relevance_score"])
+    if hit.get("_distance") is not None:
+        return float(hit["_distance"])
+    return None

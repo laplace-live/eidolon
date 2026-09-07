@@ -20,12 +20,7 @@ class LaplaceMem0MemoryService(Mem0MemoryService):
     """Mem0 memory service that filters out non-string-content messages."""
 
     async def _store_messages(self, messages: list[LLMStandardMessage]) -> None:
-        """Filter messages, then delegate to the parent.
-
-        Pipecat already filters by role one layer up in ``process_frame``;
-        repeating it here keeps the payload Mem0-safe for direct callers
-        and survives a future refactor that drops the upstream filter.
-        """
+        """Filter messages, then delegate to the parent."""
         sanitized = [
             m
             for m in messages

@@ -9,12 +9,9 @@ turns into a 500.
 
 Three handlers model that trigger (a direct ``CancelledError``, external
 cancellation mid-await, a background task raising ``SystemExit``). Each runs
-against the old stacked-``BaseHTTPMiddleware`` topology and against the
-pure-ASGI middleware that replaced it, imported from the real modules so a
-regression there fails here too. ``offer_middleware.py`` owns the
-production-side explanation.
-
-    uv run python repro_no_response.py
+against both a stacked-``BaseHTTPMiddleware`` topology and the pure-ASGI
+middleware, imported from the real modules so a regression there fails here
+too. ``offer_middleware.py`` owns the production-side explanation.
 """
 
 from __future__ import annotations
@@ -211,8 +208,8 @@ async def _send_one(base: str) -> str:
         try:
             r = await c.post(f"{base}/api/offer", json=body)
             return f"completed-{r.status_code}"
-        except httpx.RemoteProtocolError as e:
-            return f"remote-disconnect"
+        except httpx.RemoteProtocolError:
+            return "remote-disconnect"
         except httpx.ReadTimeout:
             return "timeout"
 

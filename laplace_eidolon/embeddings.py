@@ -33,12 +33,13 @@ from lancedb.table import Table
 from loguru import logger
 from openai import AsyncOpenAI
 
+from .env import env_int
 from .openrouter import extract_cost_usd, openrouter_headers
 
 DEFAULT_DB_PATH = "data/lancedb"
 DEFAULT_EMBED_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_EMBED_MODEL = "google/gemini-embedding-2-preview"
-DEFAULT_EMBED_DIM = int(os.getenv("EMBED_DIM", "3072"))
+DEFAULT_EMBED_DIM = env_int("EMBED_DIM", 3072)
 """Vector dimension, read once at import — both ingest scripts build their
 LanceDB schemas from it, so set ``EMBED_DIM`` in .env, never after import."""
 
@@ -186,8 +187,6 @@ async def embed_texts_with_usage(
             input=texts,
             dimensions=dimensions,
             encoding_format="float",
-            # Redundant now that OpenRouter always returns usage.cost, but
-            # harmless, and it matches how refine.py opts in for chat.
             extra_body={"usage": {"include": True}},
         )
         if candidate.data:
@@ -215,7 +214,6 @@ async def embed_texts_with_usage(
             data_failures += 1
             if data_failures > MAX_EMBED_DATA_RETRIES:
                 break
-            # Exponential backoff with jitter: 1, 2, 4, 8, 16s (+0-1s).
             delay = EMBED_RETRY_BASE_DELAY * (2 ** (data_failures - 1)) + random.uniform(0, 1)
             attempt_label = f"retry {data_failures}/{MAX_EMBED_DATA_RETRIES}"
 
@@ -247,9 +245,8 @@ async def embed_texts_with_usage(
     vectors = [d.embedding for d in resp.data]
 
     # The SDK's typed response doesn't model OpenRouter's ``cost`` extra
-    # field, so read it off a model_dump() dict — same trick as refine.py.
-    resp_dict = resp.model_dump() if hasattr(resp, "model_dump") else {}
-    usage_raw = (resp_dict.get("usage") or {}) if isinstance(resp_dict, dict) else {}
+    # field, so read it off a model_dump() dict.
+    usage_raw = resp.model_dump().get("usage") or {}
     prompt_tokens = int(usage_raw.get("prompt_tokens", 0) or 0)
     total_tokens = int(usage_raw.get("total_tokens", prompt_tokens) or prompt_tokens)
 
@@ -296,6 +293,18 @@ async def embed_texts(
     """
     vectors, _ = await embed_texts_with_usage(texts, model=model, dimensions=dimensions)
     return vectors
+
+
+def resolve_db_path() -> Path:
+    """Absolute LanceDB directory, from ``LANCEDB_PATH`` or the default.
+
+    Resolved against the repo root, not the working directory, so the bot
+    and ``/mcp`` open the same indexes under any launcher. An absolute
+    ``LANCEDB_PATH`` is used as-is.
+    """
+    return Path(__file__).resolve().parent.parent / (
+        os.getenv("LANCEDB_PATH") or DEFAULT_DB_PATH
+    )
 
 
 def open_table(

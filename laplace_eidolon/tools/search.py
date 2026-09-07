@@ -1,9 +1,9 @@
 """Probe the stream archive index from the command line.
 
-Runs the exact retrieval path the bot uses (``StreamArchiveService._search``
-— hybrid vector + jieba-tokenized FTS, optional Cohere rerank), so what
-comes back here is what the bot would have recalled. For scoring retrieval
-quality across many queries, use ``laplace-eval-retrieval`` instead.
+Runs the exact retrieval path the bot uses (``LanceRetriever.search`` —
+hybrid vector + jieba-tokenized FTS, optional Cohere rerank), so what comes
+back here is what the bot would have recalled. For scoring retrieval quality
+across many queries, use ``laplace-eval-retrieval`` instead.
 """
 
 from __future__ import annotations
@@ -12,32 +12,36 @@ import argparse
 import asyncio
 import json
 import sys
-from pathlib import Path
 
 from dotenv import load_dotenv
 from loguru import logger
 
 from ..embeddings import DEFAULT_DB_PATH
-from ..stream_archive import DEFAULT_TABLE, StreamArchiveService
+from ..stream_archive import (
+    DEFAULT_TABLE,
+    StreamArchiveService,
+    build_retriever,
+    decode_topics,
+)
 
 
 async def main_async(args: argparse.Namespace) -> int:
-    # Silence StreamArchiveService.__init__'s INFO line so it doesn't land
-    # in the middle of the CLI's own output.
+    # Silence the retriever's own log lines so they don't land in the middle
+    # of the CLI's output.
     logger.remove()
     logger.add(sys.stderr, level="WARNING")
 
-    svc = StreamArchiveService(
-        db_path=args.db_path,
-        table_name=args.table,
-        params=StreamArchiveService.InputParams(top_k=args.top_k),
-    )
-    if svc._table is None:
+    retriever = build_retriever(args.db_path, args.table)
+    if retriever.table is None:
         print(f"No LanceDB table at {args.db_path}/{args.table}.lance", file=sys.stderr)
         print("Run `uv run laplace-ingest-streams` first.", file=sys.stderr)
         return 1
 
-    hits = await svc._search(args.query)
+    hits = await retriever.search(
+        args.query,
+        candidates=StreamArchiveService.InputParams().candidates,
+        top_k=args.top_k,
+    )
 
     if args.json:
         # Drop the (huge) vector field from JSON output.
@@ -59,7 +63,7 @@ async def main_async(args: argparse.Namespace) -> int:
         else "lower distance = better match"
     )
     print(f"Query: {args.query!r}")
-    print(f"Index: {svc._table.count_rows()} rows in {args.db_path}/{args.table}.lance")
+    print(f"Index: {retriever.row_count()} rows in {args.db_path}/{args.table}.lance")
     print(f"Hits:  {len(hits)} ({score_hint})")
     print()
     for i, h in enumerate(hits, 1):
@@ -70,7 +74,6 @@ async def main_async(args: argparse.Namespace) -> int:
         text = h.get("text", "")
         chunk_type = h.get("chunk_type") or ""
         relevance = h.get("_relevance_score")
-        dist = h.get("_distance", 0.0) if relevance is None else None
         is_refined = bool(h.get("refined"))
 
         extras: dict[str, object] = {}
@@ -81,22 +84,12 @@ async def main_async(args: argparse.Namespace) -> int:
             except json.JSONDecodeError:
                 extras = {}
 
-        # refine.py emits 3-7 short per-chunk tags. Decoded defensively:
-        # unrefined chunks store the string "[]" rather than a real list.
-        topics: list[str] = []
-        topics_raw = h.get("topics") or ""
-        if topics_raw:
-            try:
-                decoded = json.loads(topics_raw)
-                if isinstance(decoded, list):
-                    topics = [str(t) for t in decoded]
-            except json.JSONDecodeError:
-                topics = []
+        topics = decode_topics(h)
 
         if relevance is not None:
             header = f"[{i}] score={relevance:.3f}  {date}"
         else:
-            header = f"[{i}] dist={dist:.3f}  {date}"
+            header = f"[{i}] dist={h.get('_distance', 0.0):.3f}  {date}"
         if topics:
             header += f"  ({', '.join(topics)})"
         if chunk_type:
