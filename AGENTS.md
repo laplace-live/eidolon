@@ -1,186 +1,222 @@
-# laplace-eidolon
+# AGENTS.md
 
-Pipecat voice bot for a streamer RP persona. Self-hosted SmallWebRTC, no
-Daily, no telephony.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What this is
+
+`laplace-eidolon` is a Pipecat voice bot for a streamer RP persona, self-hosted
+over SmallWebRTC — no Daily, no telephony, no Pipecat Cloud. Two halves share
+one LanceDB instance: a runtime pipeline that answers viewers over WebRTC, and
+an offline batch chain that builds the indexes it reads.
+
+```text
+transport.input → STT → user_aggregator
+    → Mem0 → PersonaFacts → StreamArchive → LLM → TTS → transport.output
+```
+
+Soniox (STT), OpenRouter (LLM), and Fish Audio (TTS) are required. Everything
+else — Mem0, the Cohere reranker, both RAG indexes — degrades quietly when its
+key or table is missing, so a fresh checkout runs.
+
+## Repository layout
+
+```text
+laplace_eidolon/      the runtime package
+  bot.py                pipeline + Starlette app; the process entry point
+  offer_middleware.py   rate limit, body normalization, preflight for /api/offer
+  user_context.py       loginSyncToken → UserContext via the Workers helper API
+  audio_quality.py      per-session Opus bitrate from the offer's audioQuality
+  persona_facts.py      RAG FrameProcessor over hand-compiled fan facts
+  stream_archive.py     RAG FrameProcessor over refined stream transcripts
+  retrieval.py          hybrid search — vector + jieba FTS + optional rerank
+  embeddings.py         embedding client, LanceDB table access, disk cache
+  mcp_server.py         public read-only MCP server mounted at /mcp
+  memory_service.py     Mem0 subclass · memory_admin.py serves /api/memories
+  tools/                the offline chain, one console script per stage
+persona.md            the system prompt — identity and hard rules, no code
+data/                 fact .txt sources, lancedb/ (Git LFS), eval/, embed_cache.db
+streams/              transcripts <id>.md + <id>.refined.json sidecars (untracked)
+vods/                 downloaded audio + .info.json sidecars (untracked)
+docs/                 the topics too large to inline here
+tests/                pytest — no network, no LanceDB
+```
+
+## Where to look
+
+Read the row for what you are about to touch. **Adding a subsystem means adding
+a row here and writing the prose there — not a new section in this file.**
+
+| You're touching | Read first |
+| --- | --- |
+| a comment or a docstring, anywhere | [comments.md](docs/comments.md) |
+| `/api/memories`, or wiping a viewer's memories | [memory-admin.md](docs/memory-admin.md) |
+| RTVI events the web client listens for | [frontend-loading-state.md](docs/frontend-loading-state.md) |
+| per-viewer affection / XP tiers (design only, unbuilt) | [affection-system.md](docs/affection-system.md) |
+| the persona's identity, voice, or hard rules | `persona.md` |
+| any env var — all 50-odd are documented there | `.env.example` |
+| Soniox's per-project vocabulary glossary | `laplace_eidolon/soniox_context.toml` |
 
 ## Commands
 
 ```bash
-uv sync                                  # runtime deps
-uv sync --extra tools                    # + faster-whisper, soniox (offline only)
-uv run python -m laplace_eidolon.bot     # run the bot (NOT a console script — see below)
+uv sync                                # runtime deps
+uv sync --extra tools                  # + faster-whisper, soniox (offline only)
+uv run python -m laplace_eidolon.bot   # run the bot on :7860 — NOT a console script
 
-uv run ruff check .                      # lint (line-length 100, import sorting only)
-uv run pyright                           # types
-uv run pytest                            # tests
+uv run ruff check .                    # lint — import sorting only, line length 100
+uv run pyright                         # types
+uv run pytest                          # tests
+docker compose up --build              # self-host; ships data/lancedb/ into the image
 ```
 
 The bot is deliberately not a `laplace-*` console script: Pipecat's runner
-discovers `bot()` through `sys.modules["__main__"]`, which a generated
-launcher doesn't satisfy. The offline tools are console scripts —
-`laplace-refine`, `laplace-ingest-streams`, `laplace-ingest-facts`,
-`laplace-search`, `laplace-pipeline`, `laplace-download`,
-`laplace-transcribe`, `laplace-extract-users`, `laplace-eval-retrieval`.
+discovers `bot()` through `sys.modules["__main__"]`, which a generated launcher
+doesn't satisfy. Everything under `tools/` is a console script:
 
-## Architecture
+```bash
+uv run laplace-pipeline          # download → transcribe → refine → ingest, resumable
+uv run laplace-download          # yt-dlp batch fetch → vods/
+uv run laplace-transcribe        # soniox (default) or local whisper → streams/*.md
+uv run laplace-refine            # LLM cleanup → streams/*.refined.json
+uv run laplace-ingest-streams    # → stream_chunks.lance
+uv run laplace-ingest-facts      # → persona_facts.lance
+uv run laplace-search            # probe the archive on the bot's exact retrieval path
+uv run laplace-eval-retrieval    # recall@k / MRR against data/eval/queries.toml
+uv run laplace-extract-users     # mine danmaku JSON for soniox_context.toml terms
+```
 
-Runtime path: `bot.py` builds the Pipecat pipeline and mounts the Starlette
-app. `offer_middleware.py` rate-limits anonymous `/api/offer` calls;
-`user_context.py` validates login tokens; `audio_quality.py` picks a
-per-session Opus bitrate. Two Pipecat processors inject RAG context —
-`persona_facts.py` (hand-compiled fan facts) and `stream_archive.py` (refined
-stream transcripts). Both search through `retrieval.py`; both store through
-`embeddings.py`. `mcp_server.py` exposes the same indexes publicly at `/mcp`.
+### Which checks to run
 
-Offline path: `tools/` is a batch chain — `download` → `transcribe` →
-`refine` → `ingest_streams` / `ingest_facts`, with `pipeline` running it
-end-to-end and `eval_retrieval` scoring the result. LanceDB holds both
-tables.
+Match the gate to the surface you touched; don't reflexively run everything.
 
-## Style
+| You changed | Run |
+| --- | --- |
+| any source file | `uv run ruff check .` and `uv run pyright` |
+| `mcp_server.py`, `rate_limit.py`, or `user_context.py` | `uv run pytest` — the suite covers the MCP mount and its quotas, nothing else |
+| retrieval, tokenization, chunking, `top_k`, or `candidates` | `uv run laplace-eval-retrieval` against `data/eval/baseline.json`. A quality claim without a number is not a claim |
+| an ingest script, `EMBED_MODEL`, or `EMBED_DIM` | re-run **both** ingests, then commit the regenerated `data/lancedb/` |
+| the pipeline, the transport, or a monkey-patch | boot the bot and hold a real call — none of this is unit-testable |
+| an env var | document it in `.env.example` in the same commit |
+
+## Rules
+
+Things you would break without being told. How any of it *works* is in the
+module that owns it.
+
+### Runtime
+
+- **Optional dependencies fail open, never loud.** Mem0, both RAG services, the
+  reranker, and the LanceDB tables are each wrapped in a try/except that logs
+  and continues. A new optional tier follows that shape or it breaks fresh
+  checkouts.
+- **`load_dotenv(override=True)` runs before any other import that reads
+  `os.getenv`.** Module-level constants evaluate at import time, so a deferred
+  load pins them to their fallbacks. This is why `bot.py` has imports below
+  statements, and why it is exempt from `from __future__ import annotations`.
+- **An empty env var is not unset.** python-dotenv parses `KEY=` as `""`, so
+  `int(os.getenv("X", "60"))` crashes on a plain `.env.example` copy. Use
+  `os.getenv("X") or "60"`, or the `_env_int` helper.
+- **Pure ASGI middleware, never `BaseHTTPMiddleware`.** Starlette's version
+  doesn't catch `BaseException`, so a client disconnect surfaces as a 500, and
+  its response hard-codes `background = None`, silently dropping the background
+  task that actually starts the bot. `repro_no_response.py` reproduces both.
+- **Pipecat exposes no seam for ICE servers or Opus bitrate**, so `bot.py`
+  monkey-patches `SmallWebRTCConnection.__init__` and `OpusEncoder.__init__` at
+  import. Both are load-bearing; the per-session bitrate reaches the encoder
+  through a `ContextVar` set in the offer middleware.
+- **`install_mcp` is not idempotent** — it wraps the app lifespan, and a second
+  call makes `session_manager.run()` raise at startup. Same for
+  `install_offer_middleware` and `install_memory_admin`: once each, at startup.
+
+### Identity and quotas
+
+- **Never trust token presence — always `resolve_user_context`.** An
+  unvalidated string would let anyone skip the anonymous quota and spawn a full
+  STT+LLM+TTS pipeline per probe. Validation fails open to anonymous, and every
+  caller shares one 60s TTL cache.
+- **Branch on `UserContext.is_logged_in`, never on field truthiness.** `face` is
+  legitimately absent for some logged-in viewers.
+- **Anonymous viewers skip Mem0 entirely** rather than sharing a `default-user`
+  bucket, where their memories would cross-pollute every other conversation.
+- **Behind a proxy, set `EIDOLON_REAL_IP_HEADER`** or every caller rate-limits
+  as the proxy's single IP.
+
+### Retrieval
+
+- **Ingest-time and query-time vectors must come from the same model and
+  dimension.** Changing `EMBED_MODEL` or `EMBED_DIM` means re-running both
+  ingest scripts; the LanceDB schema is fixed-size and old vectors are not
+  comparable to new ones.
+- **FTS runs over the jieba-tokenized `tokens` column, never raw text.** LanceDB
+  ships no CJK tokenizer, so both ingest scripts populate `tokens` and every
+  query goes through `retrieval.tokenize_zh_query`. Stopwords are stripped from
+  queries only — stripping them from the index collapses BM25.
+- **`data/lancedb/` is committed, and its `*.lance` files live in Git LFS.** CI
+  builds the image from `actions/checkout`, so an un-committed re-ingest ships
+  an empty index, and a checkout without `lfs: true` ships pointer stubs.
+- **`retrieval.py` is the one search path.** The bot, the MCP server, and
+  `laplace-eval-retrieval` all go through it, so what the eval scores is what
+  the bot runs. Keep it that way.
+
+### The persona
+
+- **Persona edits go in `persona.md`, not in code.** `_build_persona_prefix`
+  layers only per-session facts on top — current date, viewer name, recent
+  stream dates, available voice styles.
+- **The Chinese prompt text is load-bearing.** The 不要主动念 lines are what stop
+  the model narrating the clock and reading UIDs aloud, and the wording tracks
+  `persona.md`'s vocabulary. Don't paraphrase it in passing.
+- **`change_voice_style` is named inside `persona.md`.** Renaming the tool means
+  editing both in one commit.
+
+### Shipping a change
+
+- **Fix defects you can trigger; don't harden against ones you can't.** Before
+  adding a guard — including for a review finding — name the input or sequence
+  that produces the failure against the code as it stands. No trigger means
+  you're shipping the guard, not a fix. Same for indirection and config knobs:
+  no second caller, no abstraction.
+- **Upstream-dependency bugs get a citation comment, not a silent workaround.**
+- **`@mcp.tool()` docstrings and `Field(description=...)` strings are live API
+  surface** — FastMCP ships them to the model. Editing one changes runtime
+  behavior. See [comments.md](docs/comments.md).
+
+### Style
 
 - `from __future__ import annotations` at the top of every module. The
   exceptions are `bot.py` and the two `__init__.py` files.
 - PEP 604/585 syntax: `str | None`, `dict[str, Any]`, `list[float]`.
-- Type hints on everything. They carry the load that docstrings otherwise
-  would.
-- Line length 100. Ruff enforces import sorting (`select = ["I"]`) and
-  nothing else, so the rest of this file is on you.
+- Type hints on everything. They carry the load that docstrings otherwise would.
+- Line length 100. Ruff enforces import sorting (`select = ["I"]`) and nothing
+  else, so the rest is on you.
 
 ## Comments
 
-This codebase previously carried ~34% prose by line, most of it explaining
-its own structure back to itself. That prose is expensive twice: it rots
-silently, and it buries the handful of comments that genuinely matter.
+Sparse and terse — a long comment is worse than no comment. Full policy, with
+worked keep/delete examples, in [comments.md](docs/comments.md).
 
-**Write the comment only if it survives this test.** One of:
+- **Write one only if it is** external behavior (an upstream bug or SDK
+  contract — link it), a measured number nobody can re-derive from the code, a
+  trap where tidying the line causes a bug, or one or two sentences of
+  orientation at module top. Explain *why*, never *what*.
+- **The dividing line:** a comment about something outside this repo can be a
+  paragraph; one about this repo's own structure gets a sentence, or nothing.
+- **Banned:** banner dividers, `What lives here:` indexes, `Why X and not Y`
+  sections, changelog narration (`we used to`, `the old X`), `Usage::`
+  transcripts, commented-out code, pinned upstream versions and endpoint paths,
+  tutorial comments on stdlib behavior.
+- **Never touch** `# type: ignore`, `# noqa`, `TODO`/`FIXME`, or license
+  headers. When cleaning comments, change only comments.
 
-1. **External behavior** — an upstream bug, version quirk, or SDK contract.
-   Link the issue or name the version.
-2. **A measured number** — something nobody can re-derive by reading the
-   code.
-3. **A trap** — a gotcha where deleting the line, or "tidying" it, causes a
-   bug.
-4. **Orientation** — one or two sentences at module top: what this is, who
-   calls it.
+## Editing these instructions
 
-The dividing line: **a comment about something outside this repo can be a
-paragraph. A comment about this repo's own structure gets one sentence, or
-nothing.** Every keeper in this codebase cites LanceDB, the OpenAI SDK, mem0,
-python-dotenv, or a benchmark. Every deleted essay explained our own module
-boundaries to ourselves.
+`CLAUDE.md` is a symlink to `AGENTS.md` — **edit the real file.**
 
-Assume the reader knows Python and can read the code beneath the comment.
-Explain *why*, never *what*.
-
-### Docstrings
-
-One-line summary. Add `Args:`/`Returns:` only for a parameter whose contract
-isn't obvious from its name and type. Self-evident functions get no docstring
-at all — `sidecar_path()` returning `self.md_path.with_suffix(".refined.json")`
-does not need prose.
-
-Plain prose, Google-style sections. Double-backtick literals are fine.
-
-**One exception, and it matters:** the docstrings on `@mcp.tool()`-decorated
-functions in `mcp_server.py` are not prose. FastMCP ships them to the model
-as the tool's `description` field, so they are live API surface — editing one
-changes runtime behavior. Same for the `Field(description=...)` strings.
-Leave them alone unless you intend to change what the model sees.
-
-Pydantic *attribute* docstrings (a bare string under a field) are the
-opposite: `use_attribute_docstrings` is off, so they never reach the JSON
-schema and are inert. Trim them like any other comment.
-
-```python
-def hybrid_search(table, query, ...) -> list[dict]:
-    """Run a vector + FTS hybrid query, optionally reranked.
-
-    Args:
-        prefilter: forced ``True`` — post-filtering silently returns fewer
-            than top-k at our scale.
-    """
-```
-
-### Banned
-
-- **Banner dividers.** No `# ─────` or `# -----` blocks. Especially not
-  `# Main` above `def main()`.
-- **RST section headers** (`Why this exists` + `-----` underline) and Sphinx
-  roles (`:func:`, `:mod:`, `:class:`). Nothing here builds Sphinx docs.
-- **`What lives here:` indexes.** The `def` statements are the index, and
-  they don't go stale.
-- **`Why X and not Y` sections.** Especially arguing against an alternative
-  nobody proposed.
-- **Changelog narration** — `we used to`, `earlier revisions`, `the old X`,
-  `(verified 2026-05)`. Git owns this.
-- **`Usage::` shell transcripts** in module docstrings. That's `--help` and
-  README territory.
-- **Commented-out code.** Delete it.
-- **Upstream line numbers, versions, and endpoint paths** —
-  `aiortc/codecs/opus.py:34`, `mem0ai 1.0.11`, `POST /v2/memories/`. These
-  rot on the next bump, and a stale one is worse than nothing: the mem0
-  comments here pinned both a version and a path, and by the time anyone
-  looked, the SDK was on 2.0.12 POSTing to `/v3/`. State the durable
-  behavior — "takes the id only inside `filters`" — and name the symbol.
-- **Repeating yourself across files.** Explain it once, at the place that
-  owns the behavior.
-- **Tutorial comments** on stdlib or well-known framework behavior.
-
-### Worked examples
-
-Keep — cites an external system, with a link:
-
-```python
-# LanceDB 0.30.x ships no CJK tokenizer; pre-tokenizing at both ingest
-# and query time is the official workaround.
-# https://github.com/lancedb/lancedb/issues/2168
-```
-
-Keep — a trap, where removing the argument breaks everything quietly:
-
-```python
-# encoding_format="float" is required for non-OpenAI providers: the SDK
-# defaults to base64, and providers that don't honour that contract
-# round-trip an empty response ("No embedding data received").
-```
-
-Keep — a measured number, unrecoverable from the code:
-
-```python
-# Stripping the 贴吧 floor prefix lifts vector-only MRR 0.833 → 0.925,
-# rescuing 你梦想是什么 from a total miss. With the Cohere reranker on,
-# the gap closes to zero.
-```
-
-Delete — this repo narrating its own layout:
-
-```python
-# Why this exists separately from ``embeddings.py``: that module owns the
-# embedding HTTP client (write path). This one composes search-side
-# operations (read path). Keeping them split mirrors the
-# write-vectors / read-and-rank divide.
-```
-
-Compress — 67 lines of root-cause narration become the 4 that act:
-
-```python
-"""Mem0 wrapper that drops messages without string content.
-
-Pipecat's aggregator emits ``{"role": "assistant", "tool_calls": [...]}``
-with no ``content``. Mem0's API 400s on it, then rejects every later turn
-in the session — silently ending long-term memory.
-"""
-```
-
-### Verifying a comment-only sweep
-
-Editing prose across many files at once is easy to get subtly wrong. Prove
-you didn't: parse each file before and after, strip every bare string-literal
-statement, and compare `ast.dump()`. Comments never enter the AST, so an
-identical tree means only prose moved. Do this instead of re-reading the diff
-and hoping.
-
-Two things that check will not catch, because they are real API surface:
-the `@mcp.tool()` docstrings noted above, and a stale claim that was already
-wrong before you touched it. Both showed up in the last sweep.
+**This file is a router, not an encyclopedia.** It carries rules — the things
+you'd break without being told — plus the table that says where everything else
+lives. How a subsystem *works* belongs in [docs/](docs/) or in the module that
+owns it, because that content grows with the project and otherwise every task
+pays to load it. So: a new subsystem adds a **row**, not a section; a rule that
+needs a paragraph to justify itself keeps its one-line form here and puts the
+paragraph in its doc. Each rule must stand alone — a reader who never follows
+the link should still not break anything.
