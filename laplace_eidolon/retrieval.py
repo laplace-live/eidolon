@@ -380,7 +380,7 @@ async def hybrid_search(
     else:
         active_reranker = None
 
-    def _run() -> list[dict[str, Any]]:
+    def _query(use_reranker: bool) -> list[dict[str, Any]]:
         q = (
             table.search(query_type="hybrid")
             .vector(vector)
@@ -389,10 +389,22 @@ async def hybrid_search(
         )
         if where:
             q = q.where(where, prefilter=True)
-        if active_reranker is not None:
+        if use_reranker:
             q = q.rerank(reranker=active_reranker)
-        rows = q.to_list()
-        return rows[:final_k]
+        return q.to_list()[:final_k]
+
+    def _run() -> list[dict[str, Any]]:
+        if active_reranker is None:
+            return _query(False)
+        # The reranker is an optional tier, so a Cohere outage or a rejected
+        # key must not take retrieval down with it: fall back to the same RRF
+        # fusion we'd run with no COHERE_API_KEY at all. Reranking happens
+        # inside to_list(), so this is the only place that failure surfaces.
+        try:
+            return _query(True)
+        except Exception as e:
+            logger.warning(f"Rerank failed ({e}); falling back to RRF fusion")
+            return _query(False)
 
     return await asyncio.to_thread(_run)
 
