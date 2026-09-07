@@ -6,24 +6,33 @@ requires-python = ">=3.11"
 dependencies = [
     # SmallWebRTC only — no Daily, no telephony. Self-hosted via Docker
     # behind the user's own reverse proxy / TLS termination.
-    "pipecat-ai[fish,mem0,openrouter,runner,silero,soniox,webrtc]",
+    "pipecat-ai[fish,mem0,openrouter,runner,silero,soniox,webrtc]>=1.8.1",
     # Stream archive + persona facts (RAG over past stream transcripts
     # and hand-compiled fan facts). LanceDB hosts both tables.
-    "lancedb>=0.27.1",
+    #
+    # >=0.34: `retrieval.build_fts_index` calls
+    # `create_index(column, config=FTS(...))`, which replaced the deprecated
+    # `create_fts_index()`. Earlier releases raise TypeError on `config=`.
+    "lancedb>=0.34.0",
     "pyarrow>=22",
     "python-frontmatter>=1.1.0",
     # Hybrid retrieval — Chinese FTS via jieba pre-tokenization (LanceDB
-    # 0.30.x has no native CJK tokenizer; we tokenize at ingest + query
-    # time and store as a whitespace-separated `tokens` column so
-    # Tantivy's `whitespace` base tokenizer indexes it correctly).
+    # ships no CJK tokenizer; we tokenize at ingest + query time and store
+    # a whitespace-separated `tokens` column so the native FTS
+    # `whitespace` base tokenizer indexes it correctly).
     "jieba>=0.42.1",
     # Reranker for hybrid (vector + FTS) results. Pulled in at runtime
     # via lancedb.rerankers.CohereReranker — only used when
     # COHERE_API_KEY is set; falls back to RRF-only if absent.
     "cohere>=5.13.0",
-    # Official Model Context Protocol SDK (includes FastMCP). Powers the
-    # public Streamable HTTP retrieval server mounted at /mcp.
-    "mcp>=1.27.2",
+    # Official Model Context Protocol SDK. Powers the public Streamable
+    # HTTP retrieval server mounted at /mcp.
+    #
+    # >=2.0: 2.0 renamed `FastMCP` to `MCPServer`, deleted the
+    # `mcp.server.fastmcp` package, and moved transport configuration off
+    # the constructor onto `streamable_http_app()`. `mcp_server.py` imports
+    # `mcp.server.mcpserver`, which 1.x does not ship.
+    "mcp>=2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -31,7 +40,9 @@ dependencies = [
 # runtime by the bot. Install with: uv sync --extra tools
 tools = [
     "faster-whisper>=1.2.0",
-    "soniox>=1.0.0",
+    # >=2.1: `SonioxClient.stt` arrived in 2.x and only gained the
+    # `client_reference_id` argument on `transcribe()` in 2.1.
+    "soniox>=2.1.0",
 ]
 
 # Console-script entry points. Run any of these without `python -m` after
@@ -56,7 +67,7 @@ laplace-eval-retrieval  = "laplace_eidolon.tools.eval_retrieval:main"
 [dependency-groups]
 dev = [
     "pyright>=1.1.404,<2",
-    "pytest>=8.0,<9",
+    "pytest>=9.0.3,<10",
     "ruff>=0.12.11,<1",
 ]
 

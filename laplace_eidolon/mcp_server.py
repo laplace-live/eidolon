@@ -1,6 +1,6 @@
 """Public, anonymously-accessible MCP server over the retrieval indexes.
 
-Mounts a FastMCP Streamable HTTP app at /mcp on the bot's FastAPI app,
+Mounts an ``MCPServer`` Streamable HTTP app at /mcp on the bot's FastAPI app,
 exposing two read-only tools — ``search_persona_facts`` and
 ``search_streams`` — over the same LanceDB indexes the voice pipeline uses.
 
@@ -21,8 +21,8 @@ from typing import Any
 
 from fastapi import FastAPI
 from loguru import logger
-from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.exceptions import ToolError
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.types import Receive, Scope, Send
 
@@ -112,10 +112,15 @@ def _build_quota(per_hour_env: str, default_per_hour: int) -> AnonymousIpQuota:
 def _transport_security_from_env() -> TransportSecuritySettings:
     """Configure DNS-rebinding / Host-header protection.
 
-    FastMCP enables it by default with an empty allowlist, which rejects
-    every Host. Set ``EIDOLON_MCP_ALLOWED_HOSTS=host1,host2`` to the public
-    domains a reverse proxy forwards; unset disables the check and leaves it
-    to the proxy, keeping a fresh checkout runnable on localhost.
+    ``TransportSecuritySettings()`` defaults to protection on with an empty
+    allowlist, which rejects every Host. Set
+    ``EIDOLON_MCP_ALLOWED_HOSTS=host1,host2`` to the public domains a reverse
+    proxy forwards; unset disables the check and leaves it to the proxy,
+    keeping a fresh checkout runnable on localhost.
+
+    Passing this explicitly also pins the behavior: ``streamable_http_app()``
+    arms DNS-rebinding protection on its own when ``transport_security`` is
+    ``None``.
     """
     raw = (os.getenv("EIDOLON_MCP_ALLOWED_HOSTS") or "").strip()
     if not raw:
@@ -211,16 +216,12 @@ def install_mcp(
     anon = anon_quota or _build_quota("EIDOLON_MCP_ANON_RATE_LIMIT_PER_HOUR", _ANON_DEFAULT_PER_HOUR)
     auth = auth_quota or _build_quota("EIDOLON_MCP_AUTH_RATE_LIMIT_PER_HOUR", _AUTH_DEFAULT_PER_HOUR)
 
-    mcp = FastMCP(
+    mcp = MCPServer(
         name="laplace-eidolon",
         instructions=(
             "Retrieval over the streamer 明前奶绿's hand-compiled persona facts "
             "and past live-stream transcripts. Read-only."
         ),
-        stateless_http=True,
-        json_response=True,
-        streamable_http_path="/",
-        transport_security=_transport_security_from_env(),
     )
 
     @mcp.tool()
@@ -248,11 +249,17 @@ def install_mcp(
         results = [_project_chunk(h) for h in hits]
         return {"count": len(results), "results": results}
 
-    inner = mcp.streamable_http_app()
+    # MCP 2.0 moved transport configuration off the constructor onto here.
+    inner = mcp.streamable_http_app(
+        streamable_http_path="/",
+        json_response=True,
+        stateless_http=True,
+        transport_security=_transport_security_from_env(),
+    )
     app.mount(MOUNT_PATH, _TierMiddleware(inner, anon_quota=anon, auth_quota=auth))
 
-    # FastMCP runs its session manager in the sub-app's OWN lifespan, which a
-    # Mount never executes. Folding it into the parent's lifespan is what gets
+    # The session manager runs in the sub-app's OWN lifespan, which a Mount
+    # never executes. Folding it into the parent's lifespan is what gets
     # the session manager's task group running before requests arrive.
     original_lifespan = app.router.lifespan_context
 

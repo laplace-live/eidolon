@@ -113,19 +113,26 @@ def build_fts_index(table: Any, field: str = "tokens") -> None:
     no stemming, so LanceDB honors jieba's boundaries instead of re-segmenting
     them. ``lower_case=False`` keeps BV-IDs and proper nouns case-distinct.
 
-    Native FTS (``use_tantivy=False``) because Tantivy's whitespace tokenizer
-    in LanceDB 0.30.x ignores several of those knobs; native is also the
-    supported path and 3-8x faster on long queries as of the 0.30 perf work.
+    ``config=FTS(...)`` selects native FTS, the only path this form builds.
+    Tantivy's whitespace tokenizer in LanceDB 0.30.x ignored several of these
+    knobs; native is also the supported path and 3-8x faster on long queries
+    as of the 0.30 perf work.
     """
-    table.create_fts_index(
+    # create_fts_index() has been deprecated since LanceDB 0.25 and warns on
+    # every call. Imported here because this module never imports lancedb at
+    # module level.
+    from lancedb.index import FTS
+
+    table.create_index(
         field,
-        use_tantivy=False,
         replace=True,
-        base_tokenizer="whitespace",
-        stem=False,
-        remove_stop_words=False,
-        lower_case=False,
-        with_position=False,
+        config=FTS(
+            base_tokenizer="whitespace",
+            stem=False,
+            remove_stop_words=False,
+            lower_case=False,
+            with_position=False,
+        ),
     )
 
 

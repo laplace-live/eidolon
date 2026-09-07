@@ -517,10 +517,11 @@ def _soniox_transcribe_single(
     import httpx
 
     language_hints = [language] if language else None
+    # ``client_reference_id`` goes on the create call, not the config: the SDK
+    # deprecated the config field and drops it in the next major.
     config = config_cls(
         language_hints=language_hints,
         context=structured_context,
-        client_reference_id=client_reference_id,
     )
 
     file_size_mb = audio_path.stat().st_size / (1024 * 1024)
@@ -534,6 +535,7 @@ def _soniox_transcribe_single(
         transcription = client.stt.transcribe(
             model=soniox_model,
             file=audio_path,
+            client_reference_id=client_reference_id,
             config=config,
         )
         transcription_id = transcription.id
