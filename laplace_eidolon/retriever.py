@@ -17,8 +17,11 @@ from typing import Any
 from lancedb.table import Table
 from loguru import logger
 
-from .embeddings import embed_texts, open_table
+from .embeddings import DEFAULT_EMBED_DIM, DEFAULT_EMBED_MODEL, embed_texts, open_table
 from .retrieval import extract_date_filter, hybrid_search, score_of
+
+QUERY_EMBEDDING_CACHE_KEY = "laplace_eidolon.query_embeddings"
+QueryEmbeddingCache = dict[tuple[str, str, int], list[float]]
 
 
 class LanceRetriever:
@@ -85,25 +88,41 @@ class LanceRetriever:
         logger.info(f"{self._label} re-opened table ({new_table.count_rows()} rows)")
 
     async def search(
-        self, query: str, *, candidates: int, top_k: int, date_prefilter: bool = True
+        self,
+        query: str,
+        *,
+        candidates: int,
+        top_k: int,
+        date_prefilter: bool = True,
+        embedding_cache: QueryEmbeddingCache | None = None,
     ) -> list[dict[str, Any]]:
         """Run hybrid (vector + FTS) + optional rerank against the table.
 
         Retries once against the stale handle a concurrent re-ingest leaves
         behind; lance-namespace exposes no typed errors, so a stranded data
         file arrives as a bare ``Exception`` carrying "Not found".
+
+        Args:
+            embedding_cache: Successful query vectors shared only within one request.
         """
         if self._table is None:
             logger.warning(f"{self._label} search skipped: no table loaded")
             return []
 
-        try:
-            vectors = await embed_texts([query], model=self._embed_model)
-        except Exception as e:
-            logger.error(f"{self._label} embed failed for query={query!r}: {e}")
-            return []
-        if not vectors:
-            return []
+        model = self._embed_model or os.getenv("EMBED_MODEL", DEFAULT_EMBED_MODEL)
+        key = (query, model, DEFAULT_EMBED_DIM)
+        vector = embedding_cache.get(key) if embedding_cache is not None else None
+        if vector is None:
+            try:
+                vectors = await embed_texts([query], model=self._embed_model)
+            except Exception as e:
+                logger.error(f"{self._label} embed failed for query={query!r}: {e}")
+                return []
+            if not vectors:
+                return []
+            vector = vectors[0]
+            if embedding_cache is not None and vector:
+                embedding_cache[key] = vector
 
         where = (
             extract_date_filter(query, column=self._date_column)
@@ -120,7 +139,7 @@ class LanceRetriever:
             try:
                 results = await hybrid_search(
                     table,
-                    vector=vectors[0],
+                    vector=vector,
                     query_text=query,
                     candidates=candidates,
                     where=where,

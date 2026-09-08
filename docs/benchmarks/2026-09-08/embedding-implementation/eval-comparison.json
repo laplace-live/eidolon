@@ -1,0 +1,26 @@
+{
+  "persona_facts": {
+    "queries": 12,
+    "mrr_before": 0.7777777777777778,
+    "mrr_after": 0.7777777777777778,
+    "recall_at": {
+      "1": 0.5833333333333334,
+      "3": 1.0,
+      "5": 1.0,
+      "10": 1.0
+    },
+    "unchanged": true
+  },
+  "stream_chunks": {
+    "queries": 5,
+    "mrr_before": 1.0,
+    "mrr_after": 1.0,
+    "recall_at": {
+      "1": 1.0,
+      "3": 1.0,
+      "5": 1.0,
+      "10": 1.0
+    },
+    "unchanged": true
+  }
+}

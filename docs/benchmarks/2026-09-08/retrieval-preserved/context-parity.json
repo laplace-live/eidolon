@@ -1,0 +1,1368 @@
+{
+  "boundary": "Offline scheduling prototype using the real _enhance methods and recorded live result rows. _search is substituted; this verifies queries, skips, error isolation, and exact context assembly. Live retrieval parity is measured separately.",
+  "cases": [
+    {
+      "name": "ordinary_and_followups",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": null,
+          "exact_context_match": true,
+          "context_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "errors": [],
+          "queries": [
+            [],
+            []
+          ]
+        },
+        {
+          "turn": 1,
+          "utterance": "嗯",
+          "exact_context_match": true,
+          "context_sha256": "c94b565805f88ab997a8184e5ee4e7d8f234b2ac871e66c303ae12292c605c1e",
+          "errors": [],
+          "queries": [
+            [],
+            []
+          ]
+        },
+        {
+          "turn": 2,
+          "utterance": "你梦想是什么",
+          "exact_context_match": true,
+          "context_sha256": "52695c44358fb1a1284dc37e30077b9525f7f555fcac295f13bb061ae12b5861",
+          "errors": [],
+          "queries": [
+            [
+              "嗯 你梦想是什么"
+            ],
+            [
+              "嗯 你梦想是什么"
+            ]
+          ]
+        },
+        {
+          "turn": 3,
+          "utterance": "你梦想是什么",
+          "exact_context_match": true,
+          "context_sha256": "22d6622cb8dbd1926309bf12d6d6d73759de308dc082a756db8466348fcf42b2",
+          "errors": [],
+          "queries": [
+            [
+              "嗯 你梦想是什么 你梦想是什么"
+            ],
+            [
+              "嗯 你梦想是什么 你梦想是什么"
+            ]
+          ]
+        },
+        {
+          "turn": 4,
+          "utterance": "再说说",
+          "exact_context_match": true,
+          "context_sha256": "a6579402b3b6121795141c50128cdc617621ce83a41cd68e47e8a0bfd1b2d736",
+          "errors": [],
+          "queries": [
+            [
+              "你梦想是什么 你梦想是什么 再说说"
+            ],
+            [
+              "你梦想是什么 你梦想是什么 再说说"
+            ]
+          ]
+        },
+        {
+          "turn": 5,
+          "utterance": "你拔过智齿吗",
+          "exact_context_match": true,
+          "context_sha256": "f3db39c8527648cffaec6625135eeec236d27821449272fb91012a9bda424bd7",
+          "errors": [],
+          "queries": [
+            [
+              "你梦想是什么 再说说 你拔过智齿吗"
+            ],
+            [
+              "你梦想是什么 再说说 你拔过智齿吗"
+            ]
+          ]
+        },
+        {
+          "turn": 6,
+          "utterance": "26年3月24直播内容",
+          "exact_context_match": true,
+          "context_sha256": "09a94b7879eb5751b154cce97e835db5d4f5b5bbbe47fd5d7d261df9c0776cd0",
+          "errors": [],
+          "queries": [
+            [
+              "26年3月24直播内容"
+            ],
+            [
+              "26年3月24直播内容"
+            ]
+          ]
+        },
+        {
+          "turn": 7,
+          "utterance": "26年3月24直播内容",
+          "exact_context_match": true,
+          "context_sha256": "341f69ca0a8dcda561b6959bdb91d7b7aa9c4a03768cbc96a9ac3ff1e98a6fa5",
+          "errors": [],
+          "queries": [
+            [],
+            []
+          ]
+        },
+        {
+          "turn": 8,
+          "utterance": "那呢",
+          "exact_context_match": true,
+          "context_sha256": "167ef5c3ef491e403aaeea5541c043e17fd108ba1c3efc57843ff5c5ab7255ef",
+          "errors": [],
+          "queries": [
+            [
+              "26年3月24直播内容 26年3月24直播内容 那呢"
+            ],
+            [
+              "26年3月24直播内容 26年3月24直播内容 那呢"
+            ]
+          ]
+        },
+        {
+          "turn": 9,
+          "utterance": "",
+          "exact_context_match": true,
+          "context_sha256": "e7016e101577e4a1dda69ca3f1cc98f0c0670dc4e00ada191c0af33cf0f07c8e",
+          "errors": [],
+          "queries": [
+            [],
+            []
+          ]
+        },
+        {
+          "turn": 10,
+          "utterance": "你梦想是什么",
+          "exact_context_match": true,
+          "context_sha256": "18df684702c8e287e9042c6564b7ea1d3e0f72a87cd7f9ec9e20dbadf8e44492",
+          "errors": [],
+          "queries": [
+            [
+              "26年3月24直播内容 那呢 你梦想是什么"
+            ],
+            [
+              "26年3月24直播内容 那呢 你梦想是什么"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "different_query_history_limits",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": null,
+          "exact_context_match": true,
+          "context_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "errors": [],
+          "queries": [
+            [],
+            []
+          ]
+        },
+        {
+          "turn": 1,
+          "utterance": "嗯",
+          "exact_context_match": true,
+          "context_sha256": "c94b565805f88ab997a8184e5ee4e7d8f234b2ac871e66c303ae12292c605c1e",
+          "errors": [],
+          "queries": [
+            [],
+            []
+          ]
+        },
+        {
+          "turn": 2,
+          "utterance": "你梦想是什么",
+          "exact_context_match": true,
+          "context_sha256": "52695c44358fb1a1284dc37e30077b9525f7f555fcac295f13bb061ae12b5861",
+          "errors": [],
+          "queries": [
+            [
+              "你梦想是什么"
+            ],
+            [
+              "嗯 你梦想是什么"
+            ]
+          ]
+        },
+        {
+          "turn": 3,
+          "utterance": "你梦想是什么",
+          "exact_context_match": true,
+          "context_sha256": "725c4b23dcea5e4045cf53991da7161d4579b1bd51ea19c3442043ca913b90f2",
+          "errors": [],
+          "queries": [
+            [],
+            [
+              "嗯 你梦想是什么 你梦想是什么"
+            ]
+          ]
+        },
+        {
+          "turn": 4,
+          "utterance": "再说说",
+          "exact_context_match": true,
+          "context_sha256": "69154c81a4f9dbe7164cafe7f9d9c29fc3d2b243b028122c3911006e18aadc81",
+          "errors": [],
+          "queries": [
+            [],
+            [
+              "你梦想是什么 你梦想是什么 再说说"
+            ]
+          ]
+        },
+        {
+          "turn": 5,
+          "utterance": "你拔过智齿吗",
+          "exact_context_match": true,
+          "context_sha256": "721b99d2c83bd91a0d07926704a4bd0cba34f127d052dae69562cc69ebb36432",
+          "errors": [],
+          "queries": [
+            [
+              "你拔过智齿吗"
+            ],
+            [
+              "你梦想是什么 再说说 你拔过智齿吗"
+            ]
+          ]
+        },
+        {
+          "turn": 6,
+          "utterance": "26年3月24直播内容",
+          "exact_context_match": true,
+          "context_sha256": "cc8bd3a8921ebada24e7493848e2d7553cac9fb65e71a54fffcd3860a89a2142",
+          "errors": [],
+          "queries": [
+            [
+              "26年3月24直播内容"
+            ],
+            [
+              "26年3月24直播内容"
+            ]
+          ]
+        },
+        {
+          "turn": 7,
+          "utterance": "26年3月24直播内容",
+          "exact_context_match": true,
+          "context_sha256": "82664f7667dbeb05103b58b5c592be3a31ae9fddc8c7634f9edaff8b05428eee",
+          "errors": [],
+          "queries": [
+            [],
+            []
+          ]
+        },
+        {
+          "turn": 8,
+          "utterance": "那呢",
+          "exact_context_match": true,
+          "context_sha256": "6e9a44fc0169bbdb858e092b2ccf10d3cfe87919062ceecd1942450cb2ead4ee",
+          "errors": [],
+          "queries": [
+            [],
+            [
+              "26年3月24直播内容 26年3月24直播内容 那呢"
+            ]
+          ]
+        },
+        {
+          "turn": 9,
+          "utterance": "",
+          "exact_context_match": true,
+          "context_sha256": "eb80bf3c2b87edf4d5408d418ae3f9702ac01b1c400888b4804d58ab4c219323",
+          "errors": [],
+          "queries": [
+            [],
+            []
+          ]
+        },
+        {
+          "turn": 10,
+          "utterance": "你梦想是什么",
+          "exact_context_match": true,
+          "context_sha256": "cbe85128a570d525f4199517943c3bae55da2b5f39e2931f660dbe7a52c8609e",
+          "errors": [],
+          "queries": [
+            [
+              "你梦想是什么"
+            ],
+            [
+              "26年3月24直播内容 那呢 你梦想是什么"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "facts_empty",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": null,
+          "exact_context_match": true,
+          "context_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "errors": [],
+          "queries": [
+            [],
+            []
+          ]
+        },
+        {
+          "turn": 1,
+          "utterance": "嗯",
+          "exact_context_match": true,
+          "context_sha256": "c94b565805f88ab997a8184e5ee4e7d8f234b2ac871e66c303ae12292c605c1e",
+          "errors": [],
+          "queries": [
+            [],
+            []
+          ]
+        },
+        {
+          "turn": 2,
+          "utterance": "你梦想是什么",
+          "exact_context_match": true,
+          "context_sha256": "fa11122fd6c2e114a4cbf6d3f445a8171c694300b1a723bd89645a9f2d48377b",
+          "errors": [],
+          "queries": [
+            [
+              "嗯 你梦想是什么"
+            ],
+            [
+              "嗯 你梦想是什么"
+            ]
+          ]
+        },
+        {
+          "turn": 3,
+          "utterance": "你梦想是什么",
+          "exact_context_match": true,
+          "context_sha256": "5890a4386c51741dc984b2cc3e5306af09915a8c76279f1f5fb3b0ff314e8467",
+          "errors": [],
+          "queries": [
+            [
+              "嗯 你梦想是什么 你梦想是什么"
+            ],
+            [
+              "嗯 你梦想是什么 你梦想是什么"
+            ]
+          ]
+        },
+        {
+          "turn": 4,
+          "utterance": "再说说",
+          "exact_context_match": true,
+          "context_sha256": "8008ce2a1986a0093cc4ab69efcdfab8a50d23becbea09a17c6c5ad60994682d",
+          "errors": [],
+          "queries": [
+            [
+              "你梦想是什么 你梦想是什么 再说说"
+            ],
+            [
+              "你梦想是什么 你梦想是什么 再说说"
+            ]
+          ]
+        },
+        {
+          "turn": 5,
+          "utterance": "你拔过智齿吗",
+          "exact_context_match": true,
+          "context_sha256": "2b8f6455a6cbcdd8216dd88429cfaed8d041489e6424ec5ebcdca41231061cca",
+          "errors": [],
+          "queries": [
+            [
+              "你梦想是什么 再说说 你拔过智齿吗"
+            ],
+            [
+              "你梦想是什么 再说说 你拔过智齿吗"
+            ]
+          ]
+        },
+        {
+          "turn": 6,
+          "utterance": "26年3月24直播内容",
+          "exact_context_match": true,
+          "context_sha256": "a90e8aeb94031f2507ead28f698c90efc6747b87fe584abd5907fbb1185867df",
+          "errors": [],
+          "queries": [
+            [
+              "26年3月24直播内容"
+            ],
+            [
+              "26年3月24直播内容"
+            ]
+          ]
+        },
+        {
+          "turn": 7,
+          "utterance": "26年3月24直播内容",
+          "exact_context_match": true,
+          "context_sha256": "3cb7976d02abf3bd284c825745ce7d4e1208aea66cd376187c9027de4ffe98d5",
+          "errors": [],
+          "queries": [
+            [],
+            []
+          ]
+        },
+        {
+          "turn": 8,
+          "utterance": "那呢",
+          "exact_context_match": true,
+          "context_sha256": "78943731c771fe4bfd27d04da4f4bab020b2b70cb07d652dcd634e33e2e5dda6",
+          "errors": [],
+          "queries": [
+            [
+              "26年3月24直播内容 26年3月24直播内容 那呢"
+            ],
+            [
+              "26年3月24直播内容 26年3月24直播内容 那呢"
+            ]
+          ]
+        },
+        {
+          "turn": 9,
+          "utterance": "",
+          "exact_context_match": true,
+          "context_sha256": "54ffd08aafb14226b2c403342d423a38d29991f67dea2c5421a6732755ff0bb8",
+          "errors": [],
+          "queries": [
+            [],
+            []
+          ]
+        },
+        {
+          "turn": 10,
+          "utterance": "你梦想是什么",
+          "exact_context_match": true,
+          "context_sha256": "6a3091cd31c3bf35c85e0e78b16a89cc501793a9d9e8dff3fbd1b7aed60d6de2",
+          "errors": [],
+          "queries": [
+            [
+              "26年3月24直播内容 那呢 你梦想是什么"
+            ],
+            [
+              "26年3月24直播内容 那呢 你梦想是什么"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "archive_empty",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": null,
+          "exact_context_match": true,
+          "context_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "errors": [],
+          "queries": [
+            [],
+            []
+          ]
+        },
+        {
+          "turn": 1,
+          "utterance": "嗯",
+          "exact_context_match": true,
+          "context_sha256": "c94b565805f88ab997a8184e5ee4e7d8f234b2ac871e66c303ae12292c605c1e",
+          "errors": [],
+          "queries": [
+            [],
+            []
+          ]
+        },
+        {
+          "turn": 2,
+          "utterance": "你梦想是什么",
+          "exact_context_match": true,
+          "context_sha256": "8a9b932724b10a76dcac956a69bf8c332603d73cbd8d08550820e3104edc9137",
+          "errors": [],
+          "queries": [
+            [
+              "嗯 你梦想是什么"
+            ],
+            [
+              "嗯 你梦想是什么"
+            ]
+          ]
+        },
+        {
+          "turn": 3,
+          "utterance": "你梦想是什么",
+          "exact_context_match": true,
+          "context_sha256": "61a370a9234ad7f61a053b0890ea4a1aab0b0777a1e45899b4147ef0db862051",
+          "errors": [],
+          "queries": [
+            [
+              "嗯 你梦想是什么 你梦想是什么"
+            ],
+            [
+              "嗯 你梦想是什么 你梦想是什么"
+            ]
+          ]
+        },
+        {
+          "turn": 4,
+          "utterance": "再说说",
+          "exact_context_match": true,
+          "context_sha256": "8daee47964fc24e0a0f62e462ee4708abdbbacf0e694d4e130e649dec0ede231",
+          "errors": [],
+          "queries": [
+            [
+              "你梦想是什么 你梦想是什么 再说说"
+            ],
+            [
+              "你梦想是什么 你梦想是什么 再说说"
+            ]
+          ]
+        },
+        {
+          "turn": 5,
+          "utterance": "你拔过智齿吗",
+          "exact_context_match": true,
+          "context_sha256": "c1ceb5bcd54f608f523ec01a0c5694775913c6233913a302c608739d1b9e4f6b",
+          "errors": [],
+          "queries": [
+            [
+              "你梦想是什么 再说说 你拔过智齿吗"
+            ],
+            [
+              "你梦想是什么 再说说 你拔过智齿吗"
+            ]
+          ]
+        },
+        {
+          "turn": 6,
+          "utterance": "26年3月24直播内容",
+          "exact_context_match": true,
+          "context_sha256": "662a939b6cd52dda4fb373617025bbf1c2ef8553d7b0c00e4c1a5fc5a93c94cd",
+          "errors": [],
+          "queries": [
+            [
+              "26年3月24直播内容"
+            ],
+            [
+              "26年3月24直播内容"
+            ]
+          ]
+        },
+        {
+          "turn": 7,
+          "utterance": "26年3月24直播内容",
+          "exact_context_match": true,
+          "context_sha256": "16d8ede9fcc1e4ee676d19f9f09d2882f3dd536ccfe80dc84333a9ec8d4c0a9d",
+          "errors": [],
+          "queries": [
+            [],
+            []
+          ]
+        },
+        {
+          "turn": 8,
+          "utterance": "那呢",
+          "exact_context_match": true,
+          "context_sha256": "ef90ec41ea457d3f3e03ba835596ff62d6c3ab36a37ecf0a76b6084b86399b62",
+          "errors": [],
+          "queries": [
+            [
+              "26年3月24直播内容 26年3月24直播内容 那呢"
+            ],
+            [
+              "26年3月24直播内容 26年3月24直播内容 那呢"
+            ]
+          ]
+        },
+        {
+          "turn": 9,
+          "utterance": "",
+          "exact_context_match": true,
+          "context_sha256": "a876173860eaff56c5b9462c8d54c66bc450be460e09ad49d3a03db664e3fdf7",
+          "errors": [],
+          "queries": [
+            [],
+            []
+          ]
+        },
+        {
+          "turn": 10,
+          "utterance": "你梦想是什么",
+          "exact_context_match": true,
+          "context_sha256": "f309b1b93ee9e22b6957a207a2b7a6f195beaf23c72532da0363405c93cbf603",
+          "errors": [],
+          "queries": [
+            [
+              "26年3月24直播内容 那呢 你梦想是什么"
+            ],
+            [
+              "26年3月24直播内容 那呢 你梦想是什么"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "both_empty",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": null,
+          "exact_context_match": true,
+          "context_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "errors": [],
+          "queries": [
+            [],
+            []
+          ]
+        },
+        {
+          "turn": 1,
+          "utterance": "嗯",
+          "exact_context_match": true,
+          "context_sha256": "c94b565805f88ab997a8184e5ee4e7d8f234b2ac871e66c303ae12292c605c1e",
+          "errors": [],
+          "queries": [
+            [],
+            []
+          ]
+        },
+        {
+          "turn": 2,
+          "utterance": "你梦想是什么",
+          "exact_context_match": true,
+          "context_sha256": "b758bb8db6982a636e8967c21fbff8b784d9bc9eed633160f6925b1fef63d971",
+          "errors": [],
+          "queries": [
+            [
+              "嗯 你梦想是什么"
+            ],
+            [
+              "嗯 你梦想是什么"
+            ]
+          ]
+        },
+        {
+          "turn": 3,
+          "utterance": "你梦想是什么",
+          "exact_context_match": true,
+          "context_sha256": "2397494d8f3b2e22248ab912154b1e71c4a54cd48af4d409714dd8a53ddc1116",
+          "errors": [],
+          "queries": [
+            [
+              "嗯 你梦想是什么 你梦想是什么"
+            ],
+            [
+              "嗯 你梦想是什么 你梦想是什么"
+            ]
+          ]
+        },
+        {
+          "turn": 4,
+          "utterance": "再说说",
+          "exact_context_match": true,
+          "context_sha256": "6b64c0fbce4cca2167dd81b632595d44dee6455b1c31a472b11b08d2dd23fc08",
+          "errors": [],
+          "queries": [
+            [
+              "你梦想是什么 你梦想是什么 再说说"
+            ],
+            [
+              "你梦想是什么 你梦想是什么 再说说"
+            ]
+          ]
+        },
+        {
+          "turn": 5,
+          "utterance": "你拔过智齿吗",
+          "exact_context_match": true,
+          "context_sha256": "fdbf1a42e3ffc47a3a865375f62f99336d762f7460f560c0e1d91ab2e5821b66",
+          "errors": [],
+          "queries": [
+            [
+              "你梦想是什么 再说说 你拔过智齿吗"
+            ],
+            [
+              "你梦想是什么 再说说 你拔过智齿吗"
+            ]
+          ]
+        },
+        {
+          "turn": 6,
+          "utterance": "26年3月24直播内容",
+          "exact_context_match": true,
+          "context_sha256": "f2bad091b226822c7c494d178ee58c39fb03f6e05fe1ab5ffcb5511b1b546181",
+          "errors": [],
+          "queries": [
+            [
+              "26年3月24直播内容"
+            ],
+            [
+              "26年3月24直播内容"
+            ]
+          ]
+        },
+        {
+          "turn": 7,
+          "utterance": "26年3月24直播内容",
+          "exact_context_match": true,
+          "context_sha256": "4e976b71073439e0f95a1f60c06d27fa30ec4013805c13120d954ada2492a6d4",
+          "errors": [],
+          "queries": [
+            [],
+            []
+          ]
+        },
+        {
+          "turn": 8,
+          "utterance": "那呢",
+          "exact_context_match": true,
+          "context_sha256": "fdc11877fb4b84229af94f2b38659be35fa6adc2a62a713be33e01e582146131",
+          "errors": [],
+          "queries": [
+            [
+              "26年3月24直播内容 26年3月24直播内容 那呢"
+            ],
+            [
+              "26年3月24直播内容 26年3月24直播内容 那呢"
+            ]
+          ]
+        },
+        {
+          "turn": 9,
+          "utterance": "",
+          "exact_context_match": true,
+          "context_sha256": "3da711957e15f26ae81a2cc8bb36fcfe5ead5c7a9ebcccec22e43f442aa0f946",
+          "errors": [],
+          "queries": [
+            [],
+            []
+          ]
+        },
+        {
+          "turn": 10,
+          "utterance": "你梦想是什么",
+          "exact_context_match": true,
+          "context_sha256": "b9a7294b0b036d7f3c9140d3249e313218380ceee367db7c2b484ef72dbff8d5",
+          "errors": [],
+          "queries": [
+            [
+              "26年3月24直播内容 那呢 你梦想是什么"
+            ],
+            [
+              "26年3月24直播内容 那呢 你梦想是什么"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "facts_search_exception",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": null,
+          "exact_context_match": true,
+          "context_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "errors": [],
+          "queries": [
+            [],
+            []
+          ]
+        },
+        {
+          "turn": 1,
+          "utterance": "嗯",
+          "exact_context_match": true,
+          "context_sha256": "c94b565805f88ab997a8184e5ee4e7d8f234b2ac871e66c303ae12292c605c1e",
+          "errors": [],
+          "queries": [
+            [],
+            []
+          ]
+        },
+        {
+          "turn": 2,
+          "utterance": "你梦想是什么",
+          "exact_context_match": true,
+          "context_sha256": "fa11122fd6c2e114a4cbf6d3f445a8171c694300b1a723bd89645a9f2d48377b",
+          "errors": [
+            "RuntimeError"
+          ],
+          "queries": [
+            [
+              "嗯 你梦想是什么"
+            ],
+            [
+              "嗯 你梦想是什么"
+            ]
+          ]
+        },
+        {
+          "turn": 3,
+          "utterance": "你梦想是什么",
+          "exact_context_match": true,
+          "context_sha256": "5890a4386c51741dc984b2cc3e5306af09915a8c76279f1f5fb3b0ff314e8467",
+          "errors": [
+            "RuntimeError"
+          ],
+          "queries": [
+            [
+              "嗯 你梦想是什么 你梦想是什么"
+            ],
+            [
+              "嗯 你梦想是什么 你梦想是什么"
+            ]
+          ]
+        },
+        {
+          "turn": 4,
+          "utterance": "再说说",
+          "exact_context_match": true,
+          "context_sha256": "8008ce2a1986a0093cc4ab69efcdfab8a50d23becbea09a17c6c5ad60994682d",
+          "errors": [
+            "RuntimeError"
+          ],
+          "queries": [
+            [
+              "你梦想是什么 你梦想是什么 再说说"
+            ],
+            [
+              "你梦想是什么 你梦想是什么 再说说"
+            ]
+          ]
+        },
+        {
+          "turn": 5,
+          "utterance": "你拔过智齿吗",
+          "exact_context_match": true,
+          "context_sha256": "2b8f6455a6cbcdd8216dd88429cfaed8d041489e6424ec5ebcdca41231061cca",
+          "errors": [
+            "RuntimeError"
+          ],
+          "queries": [
+            [
+              "你梦想是什么 再说说 你拔过智齿吗"
+            ],
+            [
+              "你梦想是什么 再说说 你拔过智齿吗"
+            ]
+          ]
+        },
+        {
+          "turn": 6,
+          "utterance": "26年3月24直播内容",
+          "exact_context_match": true,
+          "context_sha256": "a90e8aeb94031f2507ead28f698c90efc6747b87fe584abd5907fbb1185867df",
+          "errors": [
+            "RuntimeError"
+          ],
+          "queries": [
+            [
+              "26年3月24直播内容"
+            ],
+            [
+              "26年3月24直播内容"
+            ]
+          ]
+        },
+        {
+          "turn": 7,
+          "utterance": "26年3月24直播内容",
+          "exact_context_match": true,
+          "context_sha256": "3cb7976d02abf3bd284c825745ce7d4e1208aea66cd376187c9027de4ffe98d5",
+          "errors": [],
+          "queries": [
+            [],
+            []
+          ]
+        },
+        {
+          "turn": 8,
+          "utterance": "那呢",
+          "exact_context_match": true,
+          "context_sha256": "78943731c771fe4bfd27d04da4f4bab020b2b70cb07d652dcd634e33e2e5dda6",
+          "errors": [
+            "RuntimeError"
+          ],
+          "queries": [
+            [
+              "26年3月24直播内容 26年3月24直播内容 那呢"
+            ],
+            [
+              "26年3月24直播内容 26年3月24直播内容 那呢"
+            ]
+          ]
+        },
+        {
+          "turn": 9,
+          "utterance": "",
+          "exact_context_match": true,
+          "context_sha256": "54ffd08aafb14226b2c403342d423a38d29991f67dea2c5421a6732755ff0bb8",
+          "errors": [],
+          "queries": [
+            [],
+            []
+          ]
+        },
+        {
+          "turn": 10,
+          "utterance": "你梦想是什么",
+          "exact_context_match": true,
+          "context_sha256": "6a3091cd31c3bf35c85e0e78b16a89cc501793a9d9e8dff3fbd1b7aed60d6de2",
+          "errors": [
+            "RuntimeError"
+          ],
+          "queries": [
+            [
+              "26年3月24直播内容 那呢 你梦想是什么"
+            ],
+            [
+              "26年3月24直播内容 那呢 你梦想是什么"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "archive_search_exception",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": null,
+          "exact_context_match": true,
+          "context_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "errors": [],
+          "queries": [
+            [],
+            []
+          ]
+        },
+        {
+          "turn": 1,
+          "utterance": "嗯",
+          "exact_context_match": true,
+          "context_sha256": "c94b565805f88ab997a8184e5ee4e7d8f234b2ac871e66c303ae12292c605c1e",
+          "errors": [],
+          "queries": [
+            [],
+            []
+          ]
+        },
+        {
+          "turn": 2,
+          "utterance": "你梦想是什么",
+          "exact_context_match": true,
+          "context_sha256": "8a9b932724b10a76dcac956a69bf8c332603d73cbd8d08550820e3104edc9137",
+          "errors": [
+            "RuntimeError"
+          ],
+          "queries": [
+            [
+              "嗯 你梦想是什么"
+            ],
+            [
+              "嗯 你梦想是什么"
+            ]
+          ]
+        },
+        {
+          "turn": 3,
+          "utterance": "你梦想是什么",
+          "exact_context_match": true,
+          "context_sha256": "61a370a9234ad7f61a053b0890ea4a1aab0b0777a1e45899b4147ef0db862051",
+          "errors": [
+            "RuntimeError"
+          ],
+          "queries": [
+            [
+              "嗯 你梦想是什么 你梦想是什么"
+            ],
+            [
+              "嗯 你梦想是什么 你梦想是什么"
+            ]
+          ]
+        },
+        {
+          "turn": 4,
+          "utterance": "再说说",
+          "exact_context_match": true,
+          "context_sha256": "8daee47964fc24e0a0f62e462ee4708abdbbacf0e694d4e130e649dec0ede231",
+          "errors": [
+            "RuntimeError"
+          ],
+          "queries": [
+            [
+              "你梦想是什么 你梦想是什么 再说说"
+            ],
+            [
+              "你梦想是什么 你梦想是什么 再说说"
+            ]
+          ]
+        },
+        {
+          "turn": 5,
+          "utterance": "你拔过智齿吗",
+          "exact_context_match": true,
+          "context_sha256": "c1ceb5bcd54f608f523ec01a0c5694775913c6233913a302c608739d1b9e4f6b",
+          "errors": [
+            "RuntimeError"
+          ],
+          "queries": [
+            [
+              "你梦想是什么 再说说 你拔过智齿吗"
+            ],
+            [
+              "你梦想是什么 再说说 你拔过智齿吗"
+            ]
+          ]
+        },
+        {
+          "turn": 6,
+          "utterance": "26年3月24直播内容",
+          "exact_context_match": true,
+          "context_sha256": "662a939b6cd52dda4fb373617025bbf1c2ef8553d7b0c00e4c1a5fc5a93c94cd",
+          "errors": [
+            "RuntimeError"
+          ],
+          "queries": [
+            [
+              "26年3月24直播内容"
+            ],
+            [
+              "26年3月24直播内容"
+            ]
+          ]
+        },
+        {
+          "turn": 7,
+          "utterance": "26年3月24直播内容",
+          "exact_context_match": true,
+          "context_sha256": "16d8ede9fcc1e4ee676d19f9f09d2882f3dd536ccfe80dc84333a9ec8d4c0a9d",
+          "errors": [],
+          "queries": [
+            [],
+            []
+          ]
+        },
+        {
+          "turn": 8,
+          "utterance": "那呢",
+          "exact_context_match": true,
+          "context_sha256": "ef90ec41ea457d3f3e03ba835596ff62d6c3ab36a37ecf0a76b6084b86399b62",
+          "errors": [
+            "RuntimeError"
+          ],
+          "queries": [
+            [
+              "26年3月24直播内容 26年3月24直播内容 那呢"
+            ],
+            [
+              "26年3月24直播内容 26年3月24直播内容 那呢"
+            ]
+          ]
+        },
+        {
+          "turn": 9,
+          "utterance": "",
+          "exact_context_match": true,
+          "context_sha256": "a876173860eaff56c5b9462c8d54c66bc450be460e09ad49d3a03db664e3fdf7",
+          "errors": [],
+          "queries": [
+            [],
+            []
+          ]
+        },
+        {
+          "turn": 10,
+          "utterance": "你梦想是什么",
+          "exact_context_match": true,
+          "context_sha256": "f309b1b93ee9e22b6957a207a2b7a6f195beaf23c72532da0363405c93cbf603",
+          "errors": [
+            "RuntimeError"
+          ],
+          "queries": [
+            [
+              "26年3月24直播内容 那呢 你梦想是什么"
+            ],
+            [
+              "26年3月24直播内容 那呢 你梦想是什么"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "facts_service_absent",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": null,
+          "exact_context_match": true,
+          "context_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "errors": [],
+          "queries": [
+            []
+          ]
+        },
+        {
+          "turn": 1,
+          "utterance": "嗯",
+          "exact_context_match": true,
+          "context_sha256": "c94b565805f88ab997a8184e5ee4e7d8f234b2ac871e66c303ae12292c605c1e",
+          "errors": [],
+          "queries": [
+            []
+          ]
+        },
+        {
+          "turn": 2,
+          "utterance": "你梦想是什么",
+          "exact_context_match": true,
+          "context_sha256": "fa11122fd6c2e114a4cbf6d3f445a8171c694300b1a723bd89645a9f2d48377b",
+          "errors": [],
+          "queries": [
+            [
+              "嗯 你梦想是什么"
+            ]
+          ]
+        },
+        {
+          "turn": 3,
+          "utterance": "你梦想是什么",
+          "exact_context_match": true,
+          "context_sha256": "5890a4386c51741dc984b2cc3e5306af09915a8c76279f1f5fb3b0ff314e8467",
+          "errors": [],
+          "queries": [
+            [
+              "嗯 你梦想是什么 你梦想是什么"
+            ]
+          ]
+        },
+        {
+          "turn": 4,
+          "utterance": "再说说",
+          "exact_context_match": true,
+          "context_sha256": "8008ce2a1986a0093cc4ab69efcdfab8a50d23becbea09a17c6c5ad60994682d",
+          "errors": [],
+          "queries": [
+            [
+              "你梦想是什么 你梦想是什么 再说说"
+            ]
+          ]
+        },
+        {
+          "turn": 5,
+          "utterance": "你拔过智齿吗",
+          "exact_context_match": true,
+          "context_sha256": "2b8f6455a6cbcdd8216dd88429cfaed8d041489e6424ec5ebcdca41231061cca",
+          "errors": [],
+          "queries": [
+            [
+              "你梦想是什么 再说说 你拔过智齿吗"
+            ]
+          ]
+        },
+        {
+          "turn": 6,
+          "utterance": "26年3月24直播内容",
+          "exact_context_match": true,
+          "context_sha256": "a90e8aeb94031f2507ead28f698c90efc6747b87fe584abd5907fbb1185867df",
+          "errors": [],
+          "queries": [
+            [
+              "26年3月24直播内容"
+            ]
+          ]
+        },
+        {
+          "turn": 7,
+          "utterance": "26年3月24直播内容",
+          "exact_context_match": true,
+          "context_sha256": "3cb7976d02abf3bd284c825745ce7d4e1208aea66cd376187c9027de4ffe98d5",
+          "errors": [],
+          "queries": [
+            []
+          ]
+        },
+        {
+          "turn": 8,
+          "utterance": "那呢",
+          "exact_context_match": true,
+          "context_sha256": "78943731c771fe4bfd27d04da4f4bab020b2b70cb07d652dcd634e33e2e5dda6",
+          "errors": [],
+          "queries": [
+            [
+              "26年3月24直播内容 26年3月24直播内容 那呢"
+            ]
+          ]
+        },
+        {
+          "turn": 9,
+          "utterance": "",
+          "exact_context_match": true,
+          "context_sha256": "54ffd08aafb14226b2c403342d423a38d29991f67dea2c5421a6732755ff0bb8",
+          "errors": [],
+          "queries": [
+            []
+          ]
+        },
+        {
+          "turn": 10,
+          "utterance": "你梦想是什么",
+          "exact_context_match": true,
+          "context_sha256": "6a3091cd31c3bf35c85e0e78b16a89cc501793a9d9e8dff3fbd1b7aed60d6de2",
+          "errors": [],
+          "queries": [
+            [
+              "26年3月24直播内容 那呢 你梦想是什么"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "archive_service_absent",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": null,
+          "exact_context_match": true,
+          "context_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "errors": [],
+          "queries": [
+            []
+          ]
+        },
+        {
+          "turn": 1,
+          "utterance": "嗯",
+          "exact_context_match": true,
+          "context_sha256": "c94b565805f88ab997a8184e5ee4e7d8f234b2ac871e66c303ae12292c605c1e",
+          "errors": [],
+          "queries": [
+            []
+          ]
+        },
+        {
+          "turn": 2,
+          "utterance": "你梦想是什么",
+          "exact_context_match": true,
+          "context_sha256": "8a9b932724b10a76dcac956a69bf8c332603d73cbd8d08550820e3104edc9137",
+          "errors": [],
+          "queries": [
+            [
+              "嗯 你梦想是什么"
+            ]
+          ]
+        },
+        {
+          "turn": 3,
+          "utterance": "你梦想是什么",
+          "exact_context_match": true,
+          "context_sha256": "61a370a9234ad7f61a053b0890ea4a1aab0b0777a1e45899b4147ef0db862051",
+          "errors": [],
+          "queries": [
+            [
+              "嗯 你梦想是什么 你梦想是什么"
+            ]
+          ]
+        },
+        {
+          "turn": 4,
+          "utterance": "再说说",
+          "exact_context_match": true,
+          "context_sha256": "8daee47964fc24e0a0f62e462ee4708abdbbacf0e694d4e130e649dec0ede231",
+          "errors": [],
+          "queries": [
+            [
+              "你梦想是什么 你梦想是什么 再说说"
+            ]
+          ]
+        },
+        {
+          "turn": 5,
+          "utterance": "你拔过智齿吗",
+          "exact_context_match": true,
+          "context_sha256": "c1ceb5bcd54f608f523ec01a0c5694775913c6233913a302c608739d1b9e4f6b",
+          "errors": [],
+          "queries": [
+            [
+              "你梦想是什么 再说说 你拔过智齿吗"
+            ]
+          ]
+        },
+        {
+          "turn": 6,
+          "utterance": "26年3月24直播内容",
+          "exact_context_match": true,
+          "context_sha256": "662a939b6cd52dda4fb373617025bbf1c2ef8553d7b0c00e4c1a5fc5a93c94cd",
+          "errors": [],
+          "queries": [
+            [
+              "26年3月24直播内容"
+            ]
+          ]
+        },
+        {
+          "turn": 7,
+          "utterance": "26年3月24直播内容",
+          "exact_context_match": true,
+          "context_sha256": "16d8ede9fcc1e4ee676d19f9f09d2882f3dd536ccfe80dc84333a9ec8d4c0a9d",
+          "errors": [],
+          "queries": [
+            []
+          ]
+        },
+        {
+          "turn": 8,
+          "utterance": "那呢",
+          "exact_context_match": true,
+          "context_sha256": "ef90ec41ea457d3f3e03ba835596ff62d6c3ab36a37ecf0a76b6084b86399b62",
+          "errors": [],
+          "queries": [
+            [
+              "26年3月24直播内容 26年3月24直播内容 那呢"
+            ]
+          ]
+        },
+        {
+          "turn": 9,
+          "utterance": "",
+          "exact_context_match": true,
+          "context_sha256": "a876173860eaff56c5b9462c8d54c66bc450be460e09ad49d3a03db664e3fdf7",
+          "errors": [],
+          "queries": [
+            []
+          ]
+        },
+        {
+          "turn": 10,
+          "utterance": "你梦想是什么",
+          "exact_context_match": true,
+          "context_sha256": "f309b1b93ee9e22b6957a207a2b7a6f195beaf23c72532da0363405c93cbf603",
+          "errors": [],
+          "queries": [
+            [
+              "26年3月24直播内容 那呢 你梦想是什么"
+            ]
+          ]
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "cases": 9,
+    "turn_comparisons": 99,
+    "exact_context_matches": 99
+  }
+}

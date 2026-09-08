@@ -1,0 +1,1177 @@
+{
+  "started_at": "2026-09-08T10:57:48.159390+00:00",
+  "method": "No external API calls. Replay stored vectors from real corpus rows selected by query FTS; run unchanged hybrid_search(rerank=False) against both actual tables. Queries are the 17 curated evaluation texts, with query-specific existing row vectors substituted because external embedding/rerank requests were blocked by automatic approval review. These are local search latency and context-size measurements only, not query embedding or retrieval quality measurements. Three serial passes, tokenizer warmed. Index files never mutated.",
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "tokenizer_startup_ms": 262.395,
+  "source_query_file": "data/eval/queries.toml",
+  "samples": [
+    {
+      "query": "你梦想是什么",
+      "table": "persona_facts",
+      "pass": 1,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "f79666d3079127e7",
+      "elapsed_ms": 23.369,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "你梦想是什么",
+      "table": "stream_chunks",
+      "pass": 1,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "f79666d3079127e7",
+      "elapsed_ms": 157.087,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "坚果体重多少斤",
+      "table": "persona_facts",
+      "pass": 1,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "fc77946c9f91bbff",
+      "elapsed_ms": 6.627,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "坚果体重多少斤",
+      "table": "stream_chunks",
+      "pass": 1,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "fc77946c9f91bbff",
+      "elapsed_ms": 36.12,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "你为什么戴眼镜",
+      "table": "persona_facts",
+      "pass": 1,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "777c8f44e88751b8",
+      "elapsed_ms": 6.238,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "你为什么戴眼镜",
+      "table": "stream_chunks",
+      "pass": 1,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "777c8f44e88751b8",
+      "elapsed_ms": 30.692,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "你智商多少",
+      "table": "persona_facts",
+      "pass": 1,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "3f44605e1d41b46f",
+      "elapsed_ms": 6.077,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "你智商多少",
+      "table": "stream_chunks",
+      "pass": 1,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "3f44605e1d41b46f",
+      "elapsed_ms": 29.545,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "你最喜欢的数字",
+      "table": "persona_facts",
+      "pass": 1,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "a3a617e2361fcf19",
+      "elapsed_ms": 6.482,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "你最喜欢的数字",
+      "table": "stream_chunks",
+      "pass": 1,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "a3a617e2361fcf19",
+      "elapsed_ms": 31.636,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "你体重多少kg",
+      "table": "persona_facts",
+      "pass": 1,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "fc77946c9f91bbff",
+      "elapsed_ms": 5.96,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "你体重多少kg",
+      "table": "stream_chunks",
+      "pass": 1,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "fc77946c9f91bbff",
+      "elapsed_ms": 31.099,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "奶糖花是什么",
+      "table": "persona_facts",
+      "pass": 1,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "bedf6752d2a3d184",
+      "elapsed_ms": 6.817,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "奶糖花是什么",
+      "table": "stream_chunks",
+      "pass": 1,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "bedf6752d2a3d184",
+      "elapsed_ms": 29.357,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "你2026年5月9号说了什么",
+      "table": "persona_facts",
+      "pass": 1,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "a3f09955b4a4f724",
+      "elapsed_ms": 14.892,
+      "where": "date = '2026-05-09'",
+      "returned_rows": 6
+    },
+    {
+      "query": "你2026年5月9号说了什么",
+      "table": "stream_chunks",
+      "pass": 1,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "a3f09955b4a4f724",
+      "elapsed_ms": 26.649,
+      "where": "stream_date = '2026-05-09'",
+      "returned_rows": 3
+    },
+    {
+      "query": "梦境之花多久一次",
+      "table": "persona_facts",
+      "pass": 1,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "67fc348ae268b2bd",
+      "elapsed_ms": 5.901,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "梦境之花多久一次",
+      "table": "stream_chunks",
+      "pass": 1,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "67fc348ae268b2bd",
+      "elapsed_ms": 28.715,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "坚果什么时候来你家的",
+      "table": "persona_facts",
+      "pass": 1,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "0829f4d688d832da",
+      "elapsed_ms": 5.893,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "坚果什么时候来你家的",
+      "table": "stream_chunks",
+      "pass": 1,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "0829f4d688d832da",
+      "elapsed_ms": 29.783,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "永雏塔菲是谁",
+      "table": "persona_facts",
+      "pass": 1,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "366c9692c7290336",
+      "elapsed_ms": 6.101,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "永雏塔菲是谁",
+      "table": "stream_chunks",
+      "pass": 1,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "366c9692c7290336",
+      "elapsed_ms": 29.386,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "你怕什么",
+      "table": "persona_facts",
+      "pass": 1,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "5517fb71ad7944dc",
+      "elapsed_ms": 5.874,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "你怕什么",
+      "table": "stream_chunks",
+      "pass": 1,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "5517fb71ad7944dc",
+      "elapsed_ms": 29.484,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "你拔过智齿吗",
+      "table": "persona_facts",
+      "pass": 1,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2023-09-30-BV1SN4y1Z7ks::039",
+      "elapsed_ms": 8.06,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "你拔过智齿吗",
+      "table": "stream_chunks",
+      "pass": 1,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2023-09-30-BV1SN4y1Z7ks::039",
+      "elapsed_ms": 27.891,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "你玩塞尔达打火神殿了吗",
+      "table": "persona_facts",
+      "pass": 1,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2023-05-29-BV15L411q7HT::026",
+      "elapsed_ms": 6.396,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "你玩塞尔达打火神殿了吗",
+      "table": "stream_chunks",
+      "pass": 1,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2023-05-29-BV15L411q7HT::026",
+      "elapsed_ms": 29.267,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "你家坚果剃毛之后什么样",
+      "table": "persona_facts",
+      "pass": 1,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2025-03-08-BV1ovRxYjEfx_p2::016",
+      "elapsed_ms": 5.718,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "你家坚果剃毛之后什么样",
+      "table": "stream_chunks",
+      "pass": 1,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2025-03-08-BV1ovRxYjEfx_p2::016",
+      "elapsed_ms": 33.441,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "店长坚果是什么品种",
+      "table": "persona_facts",
+      "pass": 1,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2023-09-25-BV1HF411m7UW::028",
+      "elapsed_ms": 6.076,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "店长坚果是什么品种",
+      "table": "stream_chunks",
+      "pass": 1,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2023-09-25-BV1HF411m7UW::028",
+      "elapsed_ms": 29.211,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "26年3月24直播内容",
+      "table": "persona_facts",
+      "pass": 1,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2024-09-19-BV1q9t9eCESH_p1::004",
+      "elapsed_ms": 5.535,
+      "where": "date = '2026-03-24'",
+      "returned_rows": 8
+    },
+    {
+      "query": "26年3月24直播内容",
+      "table": "stream_chunks",
+      "pass": 1,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2024-09-19-BV1q9t9eCESH_p1::004",
+      "elapsed_ms": 29.612,
+      "where": "stream_date = '2026-03-24'",
+      "returned_rows": 3
+    },
+    {
+      "query": "你梦想是什么",
+      "table": "persona_facts",
+      "pass": 2,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "f79666d3079127e7",
+      "elapsed_ms": 6.306,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "你梦想是什么",
+      "table": "stream_chunks",
+      "pass": 2,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "f79666d3079127e7",
+      "elapsed_ms": 30.673,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "坚果体重多少斤",
+      "table": "persona_facts",
+      "pass": 2,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "fc77946c9f91bbff",
+      "elapsed_ms": 6.145,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "坚果体重多少斤",
+      "table": "stream_chunks",
+      "pass": 2,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "fc77946c9f91bbff",
+      "elapsed_ms": 31.469,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "你为什么戴眼镜",
+      "table": "persona_facts",
+      "pass": 2,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "777c8f44e88751b8",
+      "elapsed_ms": 6.004,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "你为什么戴眼镜",
+      "table": "stream_chunks",
+      "pass": 2,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "777c8f44e88751b8",
+      "elapsed_ms": 27.797,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "你智商多少",
+      "table": "persona_facts",
+      "pass": 2,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "3f44605e1d41b46f",
+      "elapsed_ms": 5.82,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "你智商多少",
+      "table": "stream_chunks",
+      "pass": 2,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "3f44605e1d41b46f",
+      "elapsed_ms": 32.374,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "你最喜欢的数字",
+      "table": "persona_facts",
+      "pass": 2,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "a3a617e2361fcf19",
+      "elapsed_ms": 6.253,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "你最喜欢的数字",
+      "table": "stream_chunks",
+      "pass": 2,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "a3a617e2361fcf19",
+      "elapsed_ms": 29.152,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "你体重多少kg",
+      "table": "persona_facts",
+      "pass": 2,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "fc77946c9f91bbff",
+      "elapsed_ms": 6.438,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "你体重多少kg",
+      "table": "stream_chunks",
+      "pass": 2,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "fc77946c9f91bbff",
+      "elapsed_ms": 28.518,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "奶糖花是什么",
+      "table": "persona_facts",
+      "pass": 2,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "bedf6752d2a3d184",
+      "elapsed_ms": 6.719,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "奶糖花是什么",
+      "table": "stream_chunks",
+      "pass": 2,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "bedf6752d2a3d184",
+      "elapsed_ms": 29.821,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "你2026年5月9号说了什么",
+      "table": "persona_facts",
+      "pass": 2,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "a3f09955b4a4f724",
+      "elapsed_ms": 5.793,
+      "where": "date = '2026-05-09'",
+      "returned_rows": 6
+    },
+    {
+      "query": "你2026年5月9号说了什么",
+      "table": "stream_chunks",
+      "pass": 2,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "a3f09955b4a4f724",
+      "elapsed_ms": 28.328,
+      "where": "stream_date = '2026-05-09'",
+      "returned_rows": 3
+    },
+    {
+      "query": "梦境之花多久一次",
+      "table": "persona_facts",
+      "pass": 2,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "67fc348ae268b2bd",
+      "elapsed_ms": 7.781,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "梦境之花多久一次",
+      "table": "stream_chunks",
+      "pass": 2,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "67fc348ae268b2bd",
+      "elapsed_ms": 29.908,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "坚果什么时候来你家的",
+      "table": "persona_facts",
+      "pass": 2,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "0829f4d688d832da",
+      "elapsed_ms": 6.55,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "坚果什么时候来你家的",
+      "table": "stream_chunks",
+      "pass": 2,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "0829f4d688d832da",
+      "elapsed_ms": 29.26,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "永雏塔菲是谁",
+      "table": "persona_facts",
+      "pass": 2,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "366c9692c7290336",
+      "elapsed_ms": 6.769,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "永雏塔菲是谁",
+      "table": "stream_chunks",
+      "pass": 2,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "366c9692c7290336",
+      "elapsed_ms": 28.672,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "你怕什么",
+      "table": "persona_facts",
+      "pass": 2,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "5517fb71ad7944dc",
+      "elapsed_ms": 6.47,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "你怕什么",
+      "table": "stream_chunks",
+      "pass": 2,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "5517fb71ad7944dc",
+      "elapsed_ms": 29.098,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "你拔过智齿吗",
+      "table": "persona_facts",
+      "pass": 2,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2023-09-30-BV1SN4y1Z7ks::039",
+      "elapsed_ms": 7.119,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "你拔过智齿吗",
+      "table": "stream_chunks",
+      "pass": 2,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2023-09-30-BV1SN4y1Z7ks::039",
+      "elapsed_ms": 28.679,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "你玩塞尔达打火神殿了吗",
+      "table": "persona_facts",
+      "pass": 2,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2023-05-29-BV15L411q7HT::026",
+      "elapsed_ms": 9.891,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "你玩塞尔达打火神殿了吗",
+      "table": "stream_chunks",
+      "pass": 2,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2023-05-29-BV15L411q7HT::026",
+      "elapsed_ms": 30.738,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "你家坚果剃毛之后什么样",
+      "table": "persona_facts",
+      "pass": 2,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2025-03-08-BV1ovRxYjEfx_p2::016",
+      "elapsed_ms": 6.562,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "你家坚果剃毛之后什么样",
+      "table": "stream_chunks",
+      "pass": 2,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2025-03-08-BV1ovRxYjEfx_p2::016",
+      "elapsed_ms": 30.637,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "店长坚果是什么品种",
+      "table": "persona_facts",
+      "pass": 2,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2023-09-25-BV1HF411m7UW::028",
+      "elapsed_ms": 6.278,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "店长坚果是什么品种",
+      "table": "stream_chunks",
+      "pass": 2,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2023-09-25-BV1HF411m7UW::028",
+      "elapsed_ms": 29.511,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "26年3月24直播内容",
+      "table": "persona_facts",
+      "pass": 2,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2024-09-19-BV1q9t9eCESH_p1::004",
+      "elapsed_ms": 5.764,
+      "where": "date = '2026-03-24'",
+      "returned_rows": 8
+    },
+    {
+      "query": "26年3月24直播内容",
+      "table": "stream_chunks",
+      "pass": 2,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2024-09-19-BV1q9t9eCESH_p1::004",
+      "elapsed_ms": 34.307,
+      "where": "stream_date = '2026-03-24'",
+      "returned_rows": 3
+    },
+    {
+      "query": "你梦想是什么",
+      "table": "persona_facts",
+      "pass": 3,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "f79666d3079127e7",
+      "elapsed_ms": 7.078,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "你梦想是什么",
+      "table": "stream_chunks",
+      "pass": 3,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "f79666d3079127e7",
+      "elapsed_ms": 32.482,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "坚果体重多少斤",
+      "table": "persona_facts",
+      "pass": 3,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "fc77946c9f91bbff",
+      "elapsed_ms": 6.41,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "坚果体重多少斤",
+      "table": "stream_chunks",
+      "pass": 3,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "fc77946c9f91bbff",
+      "elapsed_ms": 30.313,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "你为什么戴眼镜",
+      "table": "persona_facts",
+      "pass": 3,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "777c8f44e88751b8",
+      "elapsed_ms": 6.26,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "你为什么戴眼镜",
+      "table": "stream_chunks",
+      "pass": 3,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "777c8f44e88751b8",
+      "elapsed_ms": 29.834,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "你智商多少",
+      "table": "persona_facts",
+      "pass": 3,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "3f44605e1d41b46f",
+      "elapsed_ms": 7.275,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "你智商多少",
+      "table": "stream_chunks",
+      "pass": 3,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "3f44605e1d41b46f",
+      "elapsed_ms": 28.985,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "你最喜欢的数字",
+      "table": "persona_facts",
+      "pass": 3,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "a3a617e2361fcf19",
+      "elapsed_ms": 6.421,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "你最喜欢的数字",
+      "table": "stream_chunks",
+      "pass": 3,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "a3a617e2361fcf19",
+      "elapsed_ms": 29.422,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "你体重多少kg",
+      "table": "persona_facts",
+      "pass": 3,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "fc77946c9f91bbff",
+      "elapsed_ms": 6.479,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "你体重多少kg",
+      "table": "stream_chunks",
+      "pass": 3,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "fc77946c9f91bbff",
+      "elapsed_ms": 28.909,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "奶糖花是什么",
+      "table": "persona_facts",
+      "pass": 3,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "bedf6752d2a3d184",
+      "elapsed_ms": 6.457,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "奶糖花是什么",
+      "table": "stream_chunks",
+      "pass": 3,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "bedf6752d2a3d184",
+      "elapsed_ms": 31.995,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "你2026年5月9号说了什么",
+      "table": "persona_facts",
+      "pass": 3,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "a3f09955b4a4f724",
+      "elapsed_ms": 5.887,
+      "where": "date = '2026-05-09'",
+      "returned_rows": 6
+    },
+    {
+      "query": "你2026年5月9号说了什么",
+      "table": "stream_chunks",
+      "pass": 3,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "a3f09955b4a4f724",
+      "elapsed_ms": 29.488,
+      "where": "stream_date = '2026-05-09'",
+      "returned_rows": 3
+    },
+    {
+      "query": "梦境之花多久一次",
+      "table": "persona_facts",
+      "pass": 3,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "67fc348ae268b2bd",
+      "elapsed_ms": 7.035,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "梦境之花多久一次",
+      "table": "stream_chunks",
+      "pass": 3,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "67fc348ae268b2bd",
+      "elapsed_ms": 29.31,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "坚果什么时候来你家的",
+      "table": "persona_facts",
+      "pass": 3,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "0829f4d688d832da",
+      "elapsed_ms": 9.039,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "坚果什么时候来你家的",
+      "table": "stream_chunks",
+      "pass": 3,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "0829f4d688d832da",
+      "elapsed_ms": 29.144,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "永雏塔菲是谁",
+      "table": "persona_facts",
+      "pass": 3,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "366c9692c7290336",
+      "elapsed_ms": 6.092,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "永雏塔菲是谁",
+      "table": "stream_chunks",
+      "pass": 3,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "366c9692c7290336",
+      "elapsed_ms": 29.211,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "你怕什么",
+      "table": "persona_facts",
+      "pass": 3,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "5517fb71ad7944dc",
+      "elapsed_ms": 6.159,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "你怕什么",
+      "table": "stream_chunks",
+      "pass": 3,
+      "seed_vector_source_table": "persona_facts",
+      "seed_vector_source_id": "5517fb71ad7944dc",
+      "elapsed_ms": 28.956,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "你拔过智齿吗",
+      "table": "persona_facts",
+      "pass": 3,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2023-09-30-BV1SN4y1Z7ks::039",
+      "elapsed_ms": 6.924,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "你拔过智齿吗",
+      "table": "stream_chunks",
+      "pass": 3,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2023-09-30-BV1SN4y1Z7ks::039",
+      "elapsed_ms": 28.9,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "你玩塞尔达打火神殿了吗",
+      "table": "persona_facts",
+      "pass": 3,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2023-05-29-BV15L411q7HT::026",
+      "elapsed_ms": 6.257,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "你玩塞尔达打火神殿了吗",
+      "table": "stream_chunks",
+      "pass": 3,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2023-05-29-BV15L411q7HT::026",
+      "elapsed_ms": 28.626,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "你家坚果剃毛之后什么样",
+      "table": "persona_facts",
+      "pass": 3,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2025-03-08-BV1ovRxYjEfx_p2::016",
+      "elapsed_ms": 6.306,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "你家坚果剃毛之后什么样",
+      "table": "stream_chunks",
+      "pass": 3,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2025-03-08-BV1ovRxYjEfx_p2::016",
+      "elapsed_ms": 33.256,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "店长坚果是什么品种",
+      "table": "persona_facts",
+      "pass": 3,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2023-09-25-BV1HF411m7UW::028",
+      "elapsed_ms": 6.058,
+      "where": null,
+      "returned_rows": 8
+    },
+    {
+      "query": "店长坚果是什么品种",
+      "table": "stream_chunks",
+      "pass": 3,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2023-09-25-BV1HF411m7UW::028",
+      "elapsed_ms": 28.629,
+      "where": null,
+      "returned_rows": 3
+    },
+    {
+      "query": "26年3月24直播内容",
+      "table": "persona_facts",
+      "pass": 3,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2024-09-19-BV1q9t9eCESH_p1::004",
+      "elapsed_ms": 5.697,
+      "where": "date = '2026-03-24'",
+      "returned_rows": 8
+    },
+    {
+      "query": "26年3月24直播内容",
+      "table": "stream_chunks",
+      "pass": 3,
+      "seed_vector_source_table": "stream_chunks",
+      "seed_vector_source_id": "2024-09-19-BV1q9t9eCESH_p1::004",
+      "elapsed_ms": 29.494,
+      "where": "stream_date = '2026-03-24'",
+      "returned_rows": 3
+    }
+  ],
+  "config": {
+    "embed_model": "google/gemini-embedding-2-preview",
+    "embed_dim": 3072,
+    "candidates": {
+      "persona_facts": 30,
+      "stream_chunks": 15
+    },
+    "top_k": {
+      "persona_facts": 8,
+      "stream_chunks": 3
+    }
+  },
+  "corpus": {
+    "persona_facts": {
+      "rows": 3398,
+      "version": 3,
+      "indices": [
+        "IndexConfig(name=\"tokens_idx\", index_type=\"FTS\", columns=[\"tokens\"], index_uuid=\"0d561b91-e849-4fdb-9f2d-963068188552\", type_url=\"/lance.table.InvertedIndexDetails\", created_at=datetime.datetime(2026, 5, 31, 16, 51, 23, 287000, tzinfo=datetime.timezone.utc), num_indexed_rows=3_398, num_unindexed_rows=0, size_bytes=631_175, num_segments=1, index_version=1, index_details={'lance_tokenizer': 'text', 'base_tokenizer': 'whitespace', 'language': 'English', 'with_position': False, 'max_token_length': 40, 'lower_case': False, 'stem': False, 'remove_stop_words': False, 'custom_stop_words': None, 'ascii_folding': True, 'min_ngram_length': 3, 'max_ngram_length': 3, 'prefix_only': False, 'block_size': 128, 'split_identifiers': False, 'split_on_numerics': False, 'preserve_original': False, 'index_operators': False})"
+      ]
+    },
+    "stream_chunks": {
+      "rows": 41367,
+      "version": 2,
+      "indices": [
+        "IndexConfig(name=\"tokens_idx\", index_type=\"FTS\", columns=[\"tokens\"], index_uuid=\"7556614c-2349-4467-90b7-af552338d099\", type_url=\"/lance.table.InvertedIndexDetails\", created_at=datetime.datetime(2026, 6, 22, 10, 41, 50, 945000, tzinfo=datetime.timezone.utc), num_indexed_rows=41_367, num_unindexed_rows=0, size_bytes=25_614_630, num_segments=1, index_version=1, index_details={'lance_tokenizer': 'text', 'base_tokenizer': 'whitespace', 'language': 'English', 'with_position': False, 'max_token_length': 40, 'lower_case': False, 'stem': False, 'remove_stop_words': False, 'custom_stop_words': None, 'ascii_folding': True, 'min_ngram_length': 3, 'max_ngram_length': 3, 'prefix_only': False, 'block_size': 128, 'split_identifiers': False, 'split_on_numerics': False, 'preserve_original': False, 'index_operators': False})"
+      ]
+    }
+  },
+  "summary": {
+    "persona_facts": {
+      "n": 51,
+      "median_ms": 6.306,
+      "mean_ms": 6.99,
+      "p95_ms": 9.891,
+      "min_ms": 5.535,
+      "max_ms": 23.369
+    },
+    "stream_chunks": {
+      "n": 51,
+      "median_ms": 29.484,
+      "mean_ms": 32.448,
+      "p95_ms": 34.307,
+      "min_ms": 26.649,
+      "max_ms": 157.087
+    },
+    "sequential_two_table_sum": {
+      "n": 51,
+      "median_ms": 35.843,
+      "mean_ms": 39.439,
+      "p95_ms": 41.541,
+      "min_ms": 33.801,
+      "max_ms": 180.456
+    }
+  },
+  "context_sizes": [
+    {
+      "query": "你梦想是什么",
+      "facts_chars": 351,
+      "archive_chars": 2661
+    },
+    {
+      "query": "坚果体重多少斤",
+      "facts_chars": 358,
+      "archive_chars": 2203
+    },
+    {
+      "query": "你为什么戴眼镜",
+      "facts_chars": 327,
+      "archive_chars": 4404
+    },
+    {
+      "query": "你智商多少",
+      "facts_chars": 320,
+      "archive_chars": 2266
+    },
+    {
+      "query": "你最喜欢的数字",
+      "facts_chars": 337,
+      "archive_chars": 3294
+    },
+    {
+      "query": "你体重多少kg",
+      "facts_chars": 376,
+      "archive_chars": 2788
+    },
+    {
+      "query": "奶糖花是什么",
+      "facts_chars": 303,
+      "archive_chars": 4066
+    },
+    {
+      "query": "你2026年5月9号说了什么",
+      "facts_chars": 321,
+      "archive_chars": 2384
+    },
+    {
+      "query": "梦境之花多久一次",
+      "facts_chars": 393,
+      "archive_chars": 2542
+    },
+    {
+      "query": "坚果什么时候来你家的",
+      "facts_chars": 315,
+      "archive_chars": 2295
+    },
+    {
+      "query": "永雏塔菲是谁",
+      "facts_chars": 394,
+      "archive_chars": 2500
+    },
+    {
+      "query": "你怕什么",
+      "facts_chars": 356,
+      "archive_chars": 2803
+    },
+    {
+      "query": "你拔过智齿吗",
+      "facts_chars": 335,
+      "archive_chars": 2285
+    },
+    {
+      "query": "你玩塞尔达打火神殿了吗",
+      "facts_chars": 309,
+      "archive_chars": 1988
+    },
+    {
+      "query": "你家坚果剃毛之后什么样",
+      "facts_chars": 424,
+      "archive_chars": 2568
+    },
+    {
+      "query": "店长坚果是什么品种",
+      "facts_chars": 346,
+      "archive_chars": 2389
+    },
+    {
+      "query": "26年3月24直播内容",
+      "facts_chars": 373,
+      "archive_chars": 4513
+    }
+  ],
+  "embedding_cache": {
+    "rows": 52865,
+    "curated_query_hits": 0,
+    "curated_query_count": 17,
+    "used_by_runtime": false
+  },
+  "finished_at": "2026-09-08T10:57:50.342742+00:00"
+}

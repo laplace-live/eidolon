@@ -1,0 +1,510 @@
+{
+  "boundary": "One actual local HTTP /api/offer and aiortc RTP/Opus call through unmodified bot() and SmallWebRTCTransport. In-process harness forces empty ICE-server resolution only, so host candidates connect on the same machine; excludes TURN/WAN/browser/device latency. Anonymous/no Mem0. RTVI client-ready omitted to avoid an additional greeting API turn. Existing synthetic audio question only.",
+  "source": "docs/benchmarks/2026-09-08/call-question.wav",
+  "events": [
+    {
+      "t": 0.956632,
+      "kind": "http_server_started"
+    },
+    {
+      "t": 1.488963,
+      "kind": "offer_response",
+      "status": 200
+    },
+    {
+      "t": 1.499488,
+      "kind": "peer_remote_track",
+      "media_kind": "audio"
+    },
+    {
+      "t": 1.506761,
+      "kind": "peer_connection_state",
+      "value": "connecting"
+    },
+    {
+      "t": 1.550778,
+      "kind": "peer_connection_state",
+      "value": "connected"
+    },
+    {
+      "t": 1.929133,
+      "kind": "runtime_warning",
+      "module": "pipecat.transports.smallwebrtc.connection",
+      "level": "WARNING"
+    },
+    {
+      "t": 1.929207,
+      "kind": "runtime_warning",
+      "module": "pipecat.transports.smallwebrtc.connection",
+      "level": "WARNING"
+    },
+    {
+      "t": 1.934401,
+      "kind": "runtime_warning",
+      "module": "pipecat.transports.smallwebrtc.connection",
+      "level": "WARNING"
+    },
+    {
+      "t": 1.934492,
+      "kind": "runtime_warning",
+      "module": "pipecat.transports.smallwebrtc.connection",
+      "level": "WARNING"
+    },
+    {
+      "t": 2.044224,
+      "kind": "peer_first_audio_packet",
+      "sample_rate": 48000,
+      "channels": 2
+    },
+    {
+      "t": 2.919136,
+      "kind": "pipeline_started"
+    },
+    {
+      "t": 3.931588,
+      "kind": "replay_start",
+      "duration_seconds": 2.8486875
+    },
+    {
+      "t": 4.42109,
+      "kind": "UserStartedSpeakingFrame",
+      "frame_id": 141,
+      "source": "LLMUserAggregator#0"
+    },
+    {
+      "t": 4.4211,
+      "kind": "UserStartedSpeakingFrame",
+      "frame_id": 142,
+      "source": "LLMUserAggregator#0"
+    },
+    {
+      "t": 4.660273,
+      "kind": "VADUserStoppedSpeakingFrame",
+      "frame_id": 186,
+      "source": "LLMUserAggregator#0"
+    },
+    {
+      "t": 4.660281,
+      "kind": "VADUserStoppedSpeakingFrame",
+      "frame_id": 185,
+      "source": "LLMUserAggregator#0"
+    },
+    {
+      "t": 4.944974,
+      "kind": "TranscriptionFrame",
+      "frame_id": 208,
+      "source": "SonioxSTTService#0",
+      "text": "耐力。"
+    },
+    {
+      "t": 6.791576,
+      "kind": "replay_end"
+    },
+    {
+      "t": 7.074447,
+      "kind": "VADUserStoppedSpeakingFrame",
+      "frame_id": 547,
+      "source": "LLMUserAggregator#0"
+    },
+    {
+      "t": 7.074453,
+      "kind": "VADUserStoppedSpeakingFrame",
+      "frame_id": 546,
+      "source": "LLMUserAggregator#0"
+    },
+    {
+      "t": 7.225526,
+      "kind": "LLMContextFrame",
+      "frame_id": 559,
+      "source": "LLMUserAggregator#0",
+      "destination": "PersonaFactsService#0",
+      "message_count": 1
+    },
+    {
+      "t": 7.225534,
+      "kind": "UserStoppedSpeakingFrame",
+      "frame_id": 560,
+      "source": "LLMUserAggregator#0"
+    },
+    {
+      "t": 7.225536,
+      "kind": "UserStoppedSpeakingFrame",
+      "frame_id": 561,
+      "source": "LLMUserAggregator#0"
+    },
+    {
+      "t": 7.226059,
+      "kind": "LLMContextFrame",
+      "frame_id": 559,
+      "source": "PersonaFactsService#0",
+      "destination": "StreamArchiveService#0",
+      "message_count": 1
+    },
+    {
+      "t": 7.226338,
+      "kind": "LLMContextFrame",
+      "frame_id": 559,
+      "source": "StreamArchiveService#0",
+      "destination": "OpenRouterLLMService#0",
+      "message_count": 1
+    },
+    {
+      "t": 7.547864,
+      "kind": "LLMFullResponseStartFrame",
+      "frame_id": 565,
+      "source": "OpenRouterLLMService#0"
+    },
+    {
+      "t": 7.566934,
+      "kind": "TranscriptionFrame",
+      "frame_id": 568,
+      "source": "SonioxSTTService#0",
+      "text": " 你平时最喜欢吃什么呀？"
+    },
+    {
+      "t": 7.57863,
+      "kind": "UserStartedSpeakingFrame",
+      "frame_id": 573,
+      "source": "LLMUserAggregator#0"
+    },
+    {
+      "t": 7.57865,
+      "kind": "UserStartedSpeakingFrame",
+      "frame_id": 574,
+      "source": "LLMUserAggregator#0"
+    },
+    {
+      "t": 7.587828,
+      "kind": "api_start",
+      "target": "completions"
+    },
+    {
+      "t": 7.592218,
+      "kind": "LLMFullResponseEndFrame",
+      "frame_id": 583,
+      "source": "OpenRouterLLMService#0"
+    },
+    {
+      "t": 7.731655,
+      "kind": "LLMContextFrame",
+      "frame_id": 611,
+      "source": "LLMUserAggregator#0",
+      "destination": "PersonaFactsService#0",
+      "message_count": 2
+    },
+    {
+      "t": 7.731667,
+      "kind": "UserStoppedSpeakingFrame",
+      "frame_id": 612,
+      "source": "LLMUserAggregator#0"
+    },
+    {
+      "t": 7.731669,
+      "kind": "UserStoppedSpeakingFrame",
+      "frame_id": 613,
+      "source": "LLMUserAggregator#0"
+    },
+    {
+      "t": 7.73221,
+      "kind": "search_start",
+      "table": "persona_facts",
+      "query": "你平时最喜欢吃什么呀？"
+    },
+    {
+      "t": 7.732246,
+      "kind": "embed_start",
+      "texts": [
+        "你平时最喜欢吃什么呀？"
+      ],
+      "model": null
+    },
+    {
+      "t": 7.750308,
+      "kind": "api_start",
+      "target": "embeddings"
+    },
+    {
+      "t": 9.87674,
+      "kind": "api_response",
+      "target": "embeddings",
+      "status": 200
+    },
+    {
+      "t": 9.88278,
+      "kind": "embed_end",
+      "count": 1,
+      "dimension": 3072
+    },
+    {
+      "t": 9.882893,
+      "kind": "hybrid_start",
+      "table": "persona_facts",
+      "query": "你平时最喜欢吃什么呀？",
+      "vector_sha256": "49b0194060b84f4d6c6dfb2b6eb8800a83e726607270c41de61e90e356229c79",
+      "candidates": 30,
+      "top_k": 8,
+      "rerank": true,
+      "where": null
+    },
+    {
+      "t": 9.927429,
+      "kind": "api_start",
+      "target": "rerank"
+    },
+    {
+      "t": 11.450498,
+      "kind": "api_response",
+      "target": "rerank",
+      "status": 200
+    },
+    {
+      "t": 11.453313,
+      "kind": "hybrid_end",
+      "table": "persona_facts",
+      "count": 8,
+      "ids": [
+        "e70be1c3cdf36643",
+        "127762f40926f0e1",
+        "887e1e2922cf363e",
+        "412a211a15d69850",
+        "7eee940ec026d96a",
+        "82759246d4cf1f4e",
+        "1f58184dcc30262c",
+        "a7d6e29b45b17dd7"
+      ],
+      "scores": [
+        0.62890625,
+        0.625,
+        0.60546875,
+        0.55859375,
+        0.54296875,
+        0.5390625,
+        0.53125,
+        0.52734375
+      ]
+    },
+    {
+      "t": 11.453369,
+      "kind": "search_end",
+      "table": "persona_facts",
+      "count": 8
+    },
+    {
+      "t": 11.453712,
+      "kind": "LLMContextFrame",
+      "frame_id": 611,
+      "source": "PersonaFactsService#0",
+      "destination": "StreamArchiveService#0",
+      "message_count": 3
+    },
+    {
+      "t": 11.453816,
+      "kind": "search_start",
+      "table": "stream_chunks",
+      "query": "你平时最喜欢吃什么呀？"
+    },
+    {
+      "t": 11.453916,
+      "kind": "hybrid_start",
+      "table": "stream_chunks",
+      "query": "你平时最喜欢吃什么呀？",
+      "vector_sha256": "49b0194060b84f4d6c6dfb2b6eb8800a83e726607270c41de61e90e356229c79",
+      "candidates": 15,
+      "top_k": 3,
+      "rerank": true,
+      "where": null
+    },
+    {
+      "t": 11.631311,
+      "kind": "api_start",
+      "target": "rerank"
+    },
+    {
+      "t": 13.253674,
+      "kind": "api_response",
+      "target": "rerank",
+      "status": 200
+    },
+    {
+      "t": 13.260229,
+      "kind": "hybrid_end",
+      "table": "stream_chunks",
+      "count": 3,
+      "ids": [
+        "2023-02-19-BV1FM411H757::045",
+        "2024-04-28-BV1Kb421e7KA::008",
+        "2024-09-14-BV1ta4fegEDE_p1::010"
+      ],
+      "scores": [
+        0.5703125,
+        0.52734375,
+        0.51171875
+      ]
+    },
+    {
+      "t": 13.260298,
+      "kind": "search_end",
+      "table": "stream_chunks",
+      "count": 3
+    },
+    {
+      "t": 13.260784,
+      "kind": "LLMContextFrame",
+      "frame_id": 611,
+      "source": "StreamArchiveService#0",
+      "destination": "OpenRouterLLMService#0",
+      "message_count": 4
+    },
+    {
+      "t": 13.262451,
+      "kind": "api_start",
+      "target": "completions"
+    },
+    {
+      "t": 13.262584,
+      "kind": "LLMFullResponseStartFrame",
+      "frame_id": 894,
+      "source": "OpenRouterLLMService#0"
+    },
+    {
+      "t": 17.109558,
+      "kind": "api_response",
+      "target": "completions",
+      "status": 200
+    },
+    {
+      "t": 18.91412,
+      "kind": "LLMTextFrame",
+      "frame_id": 1183,
+      "source": "OpenRouterLLMService#0",
+      "text": "[satisfied] 我平时挺喜欢吃东南亚菜和粤菜的，"
+    },
+    {
+      "t": 19.060447,
+      "kind": "LLMTextFrame",
+      "frame_id": 1193,
+      "source": "OpenRouterLLMService#0",
+      "text": "像芒果糯米饭还有五花肉都超爱，但绝对不吃葱姜蒜跟青椒肉丝"
+    },
+    {
+      "t": 19.07751,
+      "kind": "LLMTextFrame",
+      "frame_id": 1196,
+      "source": "OpenRouterLLMService#0",
+      "text": "，嗯。"
+    },
+    {
+      "t": 19.103421,
+      "kind": "LLMFullResponseEndFrame",
+      "frame_id": 1201,
+      "source": "OpenRouterLLMService#0"
+    },
+    {
+      "t": 19.107133,
+      "kind": "TTSStartedFrame",
+      "frame_id": 1207,
+      "source": "FishAudioTTSService#0"
+    },
+    {
+      "t": 21.576257,
+      "kind": "BotStartedSpeakingFrame",
+      "frame_id": 1565,
+      "source": "SmallWebRTCOutputTransport#0"
+    },
+    {
+      "t": 21.576263,
+      "kind": "BotStartedSpeakingFrame",
+      "frame_id": 1566,
+      "source": "SmallWebRTCOutputTransport#0"
+    },
+    {
+      "t": 21.680865,
+      "kind": "peer_first_audible_audio",
+      "rms": 124.4654989009672
+    },
+    {
+      "t": 24.567734,
+      "kind": "TTSStoppedFrame",
+      "frame_id": 1749,
+      "source": "FishAudioTTSService#0"
+    },
+    {
+      "t": 30.526305,
+      "kind": "BotStoppedSpeakingFrame",
+      "frame_id": 2104,
+      "source": "SmallWebRTCOutputTransport#0"
+    },
+    {
+      "t": 30.526328,
+      "kind": "BotStoppedSpeakingFrame",
+      "frame_id": 2105,
+      "source": "SmallWebRTCOutputTransport#0"
+    },
+    {
+      "t": 30.529878,
+      "kind": "LLMContextFrame",
+      "frame_id": 2107,
+      "source": "LLMAssistantAggregator#0",
+      "destination": "Pipeline#0::Sink",
+      "message_count": 5
+    },
+    {
+      "t": 30.529888,
+      "kind": "LLMContextFrame",
+      "frame_id": 2107,
+      "source": "Pipeline#0",
+      "destination": "InstrumentedTask#0::Sink",
+      "message_count": 5
+    },
+    {
+      "t": 30.944324,
+      "kind": "peer_connection_state",
+      "value": "closed"
+    },
+    {
+      "t": 30.945299,
+      "kind": "runtime_warning",
+      "module": "pipecat.transports.smallwebrtc.transport",
+      "level": "WARNING"
+    }
+  ],
+  "completed": true,
+  "received_sample_rate": 48000,
+  "received_channels": 2,
+  "rtp_stats": [
+    {
+      "type": "remote-inbound-rtp",
+      "kind": "audio",
+      "packetsReceived": 1394,
+      "packetsLost": 63
+    },
+    {
+      "type": "outbound-rtp",
+      "kind": "audio",
+      "packetsSent": 1468,
+      "bytesSent": 38527
+    },
+    {
+      "type": "remote-outbound-rtp",
+      "kind": "audio",
+      "packetsSent": 1404,
+      "bytesSent": 88587
+    },
+    {
+      "type": "inbound-rtp",
+      "kind": "audio",
+      "packetsReceived": 1449,
+      "packetsLost": 0
+    }
+  ],
+  "received_bytes": 5548800,
+  "summary": {
+    "embed_function_calls": 1,
+    "embedding_http_requests": 1,
+    "rerank_http_requests": 2,
+    "searches": [
+      "persona_facts",
+      "stream_chunks"
+    ]
+  }
+}

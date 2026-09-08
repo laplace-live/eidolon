@@ -1,0 +1,47 @@
+{
+  "scope": "read-only local Mem0 and Qdrant investigation",
+  "versions": {
+    "python": "3.13.4",
+    "pipecat-ai": "1.8.1",
+    "mem0ai": "2.0.20",
+    "openai": "2.54.0",
+    "qdrant-client": "1.19.0",
+    "spacy": "not installed",
+    "fastembed": "not installed"
+  },
+  "qdrant_probe": {
+    "configured": true,
+    "destination_kind": "loopback",
+    "port": 6333,
+    "operation": "GET collection metadata",
+    "sandbox_attempt": {
+      "elapsed_ms": 27.38,
+      "error_type": "ConnectError",
+      "error": "[Errno 1] Operation not permitted"
+    },
+    "approved_network_attempt": {
+      "elapsed_ms": 26.92,
+      "error_type": "ConnectError",
+      "error": "[Errno 61] Connection refused"
+    },
+    "metadata_obtained": false,
+    "memory_search_measured": false
+  },
+  "isolated_context_reproduction": {
+    "method": "installed Mem0MemoryService._enhance_context_with_memories",
+    "method_source": ".venv/lib/python3.13/site-packages/pipecat/services/mem0/memory.py",
+    "execution": "Exact method AST compiled in isolation with a fake context and async synthetic retrieval result",
+    "input": "Three distinct synthetic queries; same one-memory result per query",
+    "injected_memory_system_messages_after_each_turn": [1, 2, 3],
+    "network_requests": 0,
+    "vector_store_writes": 0,
+    "latency_effect_measured": false
+  },
+  "boundaries": {
+    "docker_started": false,
+    "memory_engine_constructed": false,
+    "viewer_contents_read": false,
+    "provider_requests": 0,
+    "vector_store_writes": 0
+  }
+}

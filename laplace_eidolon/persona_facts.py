@@ -16,13 +16,14 @@ from typing import Any, cast
 
 from loguru import logger
 from pipecat.frames.frames import Frame, LLMContextFrame
+from pipecat.processors.aggregators.llm_context import LLMContext, LLMStandardMessage
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pydantic import BaseModel, Field
 
 from .embeddings import DEFAULT_DB_PATH
 from .env import env_int
 from .retrieval import build_query_text
-from .retriever import LanceRetriever
+from .retriever import QUERY_EMBEDDING_CACHE_KEY, LanceRetriever, QueryEmbeddingCache
 
 DEFAULT_TABLE = "persona_facts"
 LABEL = "Persona facts"
@@ -139,12 +140,15 @@ class PersonaFactsService(FrameProcessor):
                 f"date_prefilter={self._params.date_prefilter})"
             )
 
-    async def _search(self, query: str) -> list[dict[str, Any]]:
+    async def _search(
+        self, query: str, *, embedding_cache: QueryEmbeddingCache | None = None
+    ) -> list[dict[str, Any]]:
         return await self._retriever.search(
             query,
             candidates=self._params.candidates,
             top_k=self._params.top_k,
             date_prefilter=self._params.date_prefilter,
+            embedding_cache=embedding_cache,
         )
 
     @staticmethod
@@ -162,19 +166,26 @@ class PersonaFactsService(FrameProcessor):
                 lines.append(f"- {text}")
         return "\n".join(lines).rstrip() + "\n"
 
-    async def _enhance(self, context, query: str) -> None:
+    async def _enhance(
+        self,
+        context: LLMContext,
+        query: str,
+        *,
+        embedding_cache: QueryEmbeddingCache | None = None,
+    ) -> None:
         """Inject retrieved facts into the LLM context as a system message."""
         if self._last_query == query:
             return
         self._last_query = query
 
-        facts = await self._search(query)
+        facts = await self._search(query, embedding_cache=embedding_cache)
         if not facts:
             return
 
-        memory_msg = {
+        content = self._format_facts(facts, self._params.system_prompt)
+        memory_msg: LLMStandardMessage = {
             "role": "system",
-            "content": self._format_facts(facts, self._params.system_prompt),
+            "content": content,
         }
         messages = context.get_messages()
         position = max(0, min(self._params.position, len(messages)))
@@ -182,7 +193,7 @@ class PersonaFactsService(FrameProcessor):
         context.set_messages(messages)
         logger.info(
             f"Persona facts injected {len(facts)} facts at position {position} "
-            f"({len(memory_msg['content'])} chars)"
+            f"({len(content)} chars)"
         )
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
@@ -198,7 +209,11 @@ class PersonaFactsService(FrameProcessor):
                 )
 
                 if query and len(query.strip()) >= self._params.min_query_chars:
-                    await self._enhance(context, query)
+                    await self._enhance(
+                        context,
+                        query,
+                        embedding_cache=frame.metadata.setdefault(QUERY_EMBEDDING_CACHE_KEY, {}),
+                    )
 
                 await self.push_frame(frame)
             except Exception as e:
