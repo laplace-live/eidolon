@@ -20,13 +20,37 @@ services:
     image: laplace-eidolon
     container_name: laplace-eidolon
     restart: unless-stopped
+    depends_on:
+      - qdrant
     env_file:
       - ./.env
     ports:
       - "7860:7860"
+    volumes:
+      # Mem0's change log. Everything else under data/ ships in the image.
+      - mem0-history:/app/data/mem0
     # If you want to ingest LanceDB indexes on the host and have them
     # picked up live (without rebuilding the image), uncomment:
-    # volumes:
     #   - ./data:/app/data:ro
     #   - ./streams:/app/streams:ro
     #   - ./persona.md:/app/persona.md:ro
+
+  # Long-term memory vectors. Mem0 itself is a library inside the bot —
+  # this is the only piece that runs as its own process. Set
+  # MEM0_QDRANT_HOST in .env to enable memory (`qdrant` from the bot
+  # container, `localhost` when debugging the bot on the host); leave it
+  # blank and the bot runs without memory.
+  qdrant:
+    image: qdrant/qdrant:v1.19.1
+    restart: unless-stopped
+    # Loopback only — Qdrant ships with no authentication. The port is
+    # published at all so `docker compose up -d qdrant` backs a bot run
+    # from the host with `python -m laplace_eidolon.bot`.
+    ports:
+      - "127.0.0.1:6333:6333"
+    volumes:
+      - qdrant-storage:/qdrant/storage
+
+volumes:
+  qdrant-storage:
+  mem0-history:

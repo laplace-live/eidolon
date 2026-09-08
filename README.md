@@ -21,7 +21,7 @@ transport.input → STT → user_aggregator
 | TTS              | [Fish Audio](https://fish.audio/app/) (`s2.1-pro`, WebSocket)             |
 | Transport        | SmallWebRTC (Pipecat, self-hosted)                                        |
 | Vector store     | LanceDB (local file, embeddings via OpenRouter)                           |
-| Long-term memory | [Mem0](https://app.mem0.ai/) (optional)                                   |
+| Long-term memory | [Mem0](https://docs.mem0.ai/open-source) self-hosted, over Qdrant (optional) |
 
 Model IDs above are defaults. Every model the project runs — these three plus
 the embedding, reranker, and offline refinement models — is declared in one
@@ -36,9 +36,15 @@ behind your own reverse proxy.
 uv sync                                # install runtime deps + laplace_eidolon package
 uv sync --extra tools                  # add faster-whisper + soniox CLI for ingest
 cp .env.example .env                   # fill in SONIOX_API_KEY, OPENROUTER_API_KEY,
-                                       # FISH_API_KEY, FISH_VOICE_ID, MEM0_API_KEY...
+                                       # FISH_API_KEY, FISH_VOICE_ID...
+docker compose up -d qdrant            # optional: backs long-term memory
 uv run python -m laplace_eidolon.bot   # boots the dev runner on localhost:7860
 ```
+
+Mem0 is a library inside the bot process, not a service — the only thing
+it needs running is Qdrant, and only if you want long-term memory. Set
+`MEM0_QDRANT_HOST=localhost` in `.env` to point the bot at the container
+above; leave it blank and the bot boots normally with memory switched off.
 
 The bot uses `python -m` rather than a `laplace-bot` console script because
 Pipecat's runner discovers the `bot()` function via `sys.modules["__main__"]`,
@@ -78,6 +84,7 @@ Other offline tools registered as console scripts:
 | `uv run laplace-search`          | `laplace_eidolon.tools.search`             | REPL-style retrieval against the LanceDB index     |
 | `uv run laplace-eval-retrieval`  | `laplace_eidolon.tools.eval_retrieval`     | Score retrieval recall@k / MRR vs known queries    |
 | `uv run laplace-extract-users`   | `laplace_eidolon.tools.extract_users`      | Mine danmaku JSON for top usernames                |
+| `uv run laplace-export-mem0`     | `laplace_eidolon.tools.export_mem0`        | Dump a pre-migration Mem0 cloud account to JSON    |
 
 The indexes live under `server/data/lancedb/` and are baked into the Docker
 image at build time. Re-run ingest then `docker compose build` to pick them up.
@@ -196,10 +203,11 @@ must pass `POST /mcp/` through unbuffered, like `/api/offer`.
   permissive but fine for getting started. Lock it down by adding a custom
   CORS middleware to `pipecat.runner.run.app` before calling `main()` — see
   `laplace_eidolon/bot.py` for the import surface.
-- **Persistent state**: nothing the bot writes locally needs to survive a
-  restart, but LanceDB indexes do live in the image. To update them
-  without a rebuild, mount `data/`, `streams/`, and `persona.md` as
-  volumes (commented example in `docker-compose.yml`).
+- **Persistent state**: viewers' long-term memories live in Qdrant, so its
+  storage volume is the one thing a restart must not lose; `data/mem0/`
+  holds Mem0's change log alongside it. LanceDB indexes ship inside the
+  image — to update them without a rebuild, mount `data/`, `streams/`, and
+  `persona.md` as volumes (commented example in `docker-compose.yml`).
 
 ## Persona authoring
 

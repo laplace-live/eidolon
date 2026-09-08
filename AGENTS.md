@@ -15,8 +15,8 @@ transport.input → STT → user_aggregator
 ```
 
 Soniox (STT), OpenRouter (LLM), and Fish Audio (TTS) are required. Everything
-else — Mem0, the reranker, both RAG indexes — degrades quietly when its key or
-table is missing, so a fresh checkout runs.
+else — Mem0, the reranker, both RAG indexes — degrades quietly when its key,
+table, or vector store is missing, so a fresh checkout runs.
 
 ## Repository layout
 
@@ -33,6 +33,7 @@ laplace_eidolon/      the runtime package
   embeddings.py         embedding client, LanceDB table access, disk cache
   voice_switching.py    the change_voice_style LLM tool and its styles
   mcp_server.py         public read-only MCP server mounted at /mcp
+  mem0_local.py         self-hosted Mem0 config — embedded engine over Qdrant
   memory_service.py     Mem0 subclass · memory_admin.py serves /api/memories
   rate_limit.py         per-IP sliding-window quota · env.py numeric env vars
   openrouter.py         attribution headers + usage-cost extraction
@@ -87,6 +88,7 @@ uv run laplace-ingest-facts      # → persona_facts.lance
 uv run laplace-search            # probe the archive on the bot's exact retrieval path
 uv run laplace-eval-retrieval    # recall@k / MRR against data/eval/queries.toml
 uv run laplace-extract-users     # mine danmaku JSON for soniox_context.toml terms
+uv run laplace-export-mem0       # dump a pre-migration Mem0 cloud account to JSON
 ```
 
 ### Which checks to run
@@ -100,6 +102,7 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | retrieval, tokenization, chunking, `top_k`, or `candidates` | `uv run laplace-eval-retrieval` against `data/eval/baseline.json`. A quality claim without a number is not a claim |
 | an ingest script, `EMBED_MODEL`, or `EMBED_DIM` | re-run **both** ingests, then commit the regenerated `data/lancedb/` |
 | the pipeline, the transport, or a monkey-patch | boot the bot and hold a real call — none of this is unit-testable |
+| `mem0_local.py`, `memory_service.py`, or `memory_admin.py` | `docker compose up qdrant`, then round-trip a real store → search → delete. No test covers Mem0; it needs a live vector store and an embedding key |
 | an env var | document it in `.env.example` in the same commit |
 
 ## Rules
@@ -143,6 +146,11 @@ module that owns it.
   legitimately absent for some logged-in viewers.
 - **Anonymous viewers skip Mem0 entirely** rather than sharing a `default-user`
   bucket, where their memories would cross-pollute every other conversation.
+- **Mem0 is self-hosted and runs embedded, not as a service.** `MemoryClient`
+  cannot reach it: it demands a cloud key and validates it against a
+  `/v1/ping/` only the platform serves. Every caller — the pipeline and
+  `/api/memories` alike — builds its engine from
+  `mem0_local.build_local_config()`, so a new one does too.
 - **Behind a proxy, set `EIDOLON_REAL_IP_HEADER`** or every caller rate-limits
   as the proxy's single IP.
 
@@ -151,7 +159,9 @@ module that owns it.
 - **Ingest-time and query-time vectors must come from the same model and
   dimension.** Changing `EMBED_MODEL` or `EMBED_DIM` means re-running both
   ingest scripts; the LanceDB schema is fixed-size and old vectors are not
-  comparable to new ones.
+  comparable to new ones. Mem0's Qdrant collection reads the same two vars
+  and pins its dimension at creation, so it also needs a new
+  `MEM0_QDRANT_COLLECTION` — and viewers' memories do not survive that.
 - **FTS runs over the jieba-tokenized `tokens` column, never raw text.** LanceDB
   ships no CJK tokenizer, so both ingest scripts populate `tokens` and every
   query goes through `retrieval.tokenize_zh_query`. Stopwords are stripped from

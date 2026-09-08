@@ -334,6 +334,8 @@ class BlockPipecatDemoMiddleware:
 pipecat_app.add_middleware(BlockPipecatDemoMiddleware, enabled=_PIPECAT_DEMO_ENABLED)
 
 
+from . import mem0_local
+
 # All three RAG/memory services are optional — the bot runs without the
 # `mem0` extra, without OPENAI_API_KEY for embeddings, and on a fresh
 # checkout where the LanceDB indexes haven't been built.
@@ -670,23 +672,32 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
     # `default-user` bucket, where their memories would cross-pollute every
     # other anonymous conversation.
     memory = None
-    mem0_api_key = os.getenv("MEM0_API_KEY")
+    mem0_enabled = mem0_local.is_configured()
     if not user.is_logged_in:
         logger.info("Mem0 skipped: anonymous viewer (no loginSyncToken / validation failed)")
-    elif mem0_api_key and Mem0MemoryService is not None:
-        memory = Mem0MemoryService(
-            api_key=mem0_api_key,
-            user_id=str(user.mid),
-            agent_id=os.getenv("MEM0_AGENT_ID") or None,
-            run_id=os.getenv("MEM0_RUN_ID") or None,
-            params=Mem0MemoryService.InputParams(
-                search_limit=env_int("MEM0_SEARCH_LIMIT", 10),
-                search_threshold=env_float("MEM0_SEARCH_THRESHOLD", 0.3),
-            ),
+    elif mem0_enabled and Mem0MemoryService is not None:
+        try:
+            memory = Mem0MemoryService(
+                local_config=mem0_local.build_local_config(),
+                user_id=str(user.mid),
+                agent_id=os.getenv("MEM0_AGENT_ID") or None,
+                run_id=os.getenv("MEM0_RUN_ID") or None,
+                params=Mem0MemoryService.InputParams(
+                    search_limit=env_int("MEM0_SEARCH_LIMIT", 10),
+                    search_threshold=env_float("MEM0_SEARCH_THRESHOLD", 0.3),
+                ),
+            )
+            logger.info(f"Mem0 long-term memory enabled for user_id={user.mid} ({user.uname!r})")
+        except Exception as e:
+            # Constructing the engine reaches Qdrant to create the collection,
+            # so an unreachable vector store surfaces here rather than at boot.
+            logger.warning(f"Mem0 unavailable, continuing without memory: {e}")
+    elif mem0_enabled and Mem0MemoryService is None:
+        logger.warning(
+            "MEM0_QDRANT_HOST is set but pipecat-ai[mem0] is not installed; skipping memory"
         )
-        logger.info(f"Mem0 long-term memory enabled for user_id={user.mid} ({user.uname!r})")
-    elif mem0_api_key and Mem0MemoryService is None:
-        logger.warning("MEM0_API_KEY is set but pipecat-ai[mem0] is not installed; skipping memory")
+    else:
+        logger.info("Mem0 skipped: MEM0_QDRANT_HOST is unset, so there is no vector store")
 
     facts = _optional_rag(PersonaFactsService, "Persona facts", "laplace-ingest-facts")
     archive = _optional_rag(

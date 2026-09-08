@@ -5,7 +5,7 @@ UID; ``POST /api/memories/forget`` bulk-deletes it. Both authenticate with
 ``Authorization: Bearer <loginSyncToken>`` — the same token the JS client
 nests in ``requestData.loginSyncToken`` — through ``resolve_user_context``,
 which shares its TTL cache with the offer middleware. Anonymous callers get
-``401`` even when ``MEM0_API_KEY`` is unset, so a misconfigured deployment
+``401`` even when Mem0 is unconfigured, so a misconfigured deployment
 cannot leak the existence of anyone's memories.
 
 Forgetting mid-call only wipes what was already stored: the live pipeline's
@@ -17,46 +17,56 @@ backend deliberately does not force-disconnect.
 from __future__ import annotations
 
 import asyncio
-import os
 from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI, Header
 from fastapi.responses import JSONResponse
 from loguru import logger
 
+from . import mem0_local
 from .user_context import UserContext, resolve_user_context
 
 if TYPE_CHECKING:
-    from mem0 import MemoryClient as _MemoryClientType
+    from mem0 import Memory as _MemoryType
 
 try:
-    from mem0 import MemoryClient
+    from mem0 import Memory
 except Exception as e:  # pragma: no cover — optional dep, mirrors bot.py
-    MemoryClient = None  # type: ignore[assignment,misc]
-    logger.debug(f"mem0 client unavailable for memory_admin: {e}")
+    Memory = None  # type: ignore[assignment,misc]
+    logger.debug(f"mem0 engine unavailable for memory_admin: {e}")
 
 
 LIST_PATH = "/api/memories"
 FORGET_PATH = "/api/memories/forget"
 
+# The embedded engine's ``get_all`` defaults to ``top_k=20`` where the cloud
+# client paginated; without an explicit cap this endpoint would silently
+# claim a chatty viewer owns 20 memories.
+LIST_LIMIT = 1000
 
-_client: "_MemoryClientType | None" = None
+
+_client: "_MemoryType | None" = None
 
 
-def _get_mem0_client() -> "_MemoryClientType | None":
-    """Return a process-wide ``MemoryClient``, lazy-constructing on first call.
+def _get_mem0_client() -> "_MemoryType | None":
+    """Return a process-wide ``Memory``, lazy-constructing on first call.
 
-    Returns ``None`` when ``MEM0_API_KEY`` is unset or ``mem0`` failed to
-    import; handlers turn that into a ``503``. Construction races benignly —
-    the loser's client is just discarded.
+    Returns ``None`` when Mem0 is unconfigured, ``mem0`` failed to import,
+    or Qdrant is unreachable; handlers turn that into a ``503``. Unlike the
+    pipeline's per-session engine this one is cached for the life of the
+    process, because ``Memory`` re-runs its history-table migration on every
+    construction. Construction races benignly — the loser is discarded.
     """
     global _client
     if _client is not None:
         return _client
-    api_key = os.getenv("MEM0_API_KEY")
-    if not api_key or MemoryClient is None:
+    if not mem0_local.is_configured() or Memory is None:
         return None
-    _client = MemoryClient(api_key=api_key)
+    try:
+        _client = Memory.from_config(mem0_local.build_local_config())
+    except Exception as e:
+        logger.error(f"[memory-admin] Could not reach the Mem0 vector store: {e}")
+        return None
     return _client
 
 
@@ -145,7 +155,7 @@ def install_memory_admin(app: FastAPI) -> None:
             # top-level raises ValueError. delete_all below wants the exact
             # opposite. Don't normalize the two call shapes to match.
             raw = await asyncio.to_thread(
-                lambda: client.get_all(filters={"user_id": user_id})
+                lambda: client.get_all(filters={"user_id": user_id}, top_k=LIST_LIMIT)
             )
         except Exception as e:
             logger.error(
@@ -157,7 +167,7 @@ def install_memory_admin(app: FastAPI) -> None:
                 content={"error": "Failed to load memories"},
             )
 
-        # Mem0's cloud client wraps rows in {"results": [...]} in v1.1 format.
+        # Mem0 wraps rows in {"results": [...]} in v1.1 format.
         results = raw.get("results", []) if isinstance(raw, dict) else (raw or [])
         memories = [_memory_summary(m) for m in results if isinstance(m, dict)]
 

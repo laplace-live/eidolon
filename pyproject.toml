@@ -64,6 +64,7 @@ laplace-download        = "laplace_eidolon.tools.download:main"
 laplace-transcribe      = "laplace_eidolon.tools.transcribe:main"
 laplace-extract-users   = "laplace_eidolon.tools.extract_users:main"
 laplace-eval-retrieval  = "laplace_eidolon.tools.eval_retrieval:main"
+laplace-export-mem0     = "laplace_eidolon.tools.export_mem0:main"
 
 [dependency-groups]
 dev = [

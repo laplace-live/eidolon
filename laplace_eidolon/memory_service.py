@@ -2,11 +2,11 @@
 
 Pipecat's universal aggregator emits ``{"role": "assistant",
 "tool_calls": [...]}`` with no ``content`` field on every tool call.
-That's OpenAI-spec-correct, but Mem0's cloud API 400s the whole
-``messages`` array over it — and since the poisoned message stays in the
-cumulative context, every later turn in the session 400s too, silently
-ending long-term memory. Mem0 rejects empty arrays the same way, so a
-batch that filters down to nothing skips the call entirely.
+That's OpenAI-spec-correct, but Mem0 rejects the whole ``messages``
+array over it — and since the poisoned message stays in the cumulative
+context, every later turn in the session fails too, silently ending
+long-term memory. Empty arrays are rejected the same way, so a batch
+that filters down to nothing skips the call entirely.
 """
 
 from __future__ import annotations

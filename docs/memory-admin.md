@@ -44,6 +44,11 @@ keyed on `user_id = str(user.mid)` (the Bilibili UID from the validated
 service auto-extracts memories from chat (e.g. "the user mentioned they're
 allergic to seafood") and surfaces them in future conversations.
 
+Mem0 is self-hosted: the engine runs in-process and stores its vectors in
+Qdrant, so these endpoints reach the same store the pipeline writes to
+rather than a hosted API. [`../laplace_eidolon/mem0_local.py`](../laplace_eidolon/mem0_local.py)
+holds the configuration both paths share.
+
 Some viewers will eventually want to:
 
 - See what's stored about them (transparency / debugging an awkward
@@ -59,10 +64,10 @@ These two endpoints are the surface for that.
 ### `GET /api/memories`
 
 List every memory Mem0 has stored under the caller's UID. Returns up to
-Mem0's server-side default page size (~1000 memories) in a single call. No
-pagination is exposed today — if a viewer ever ends up with more memories
-than that, the backend will need to grow a paging parameter; flag it and
-we'll add one.
+`memory_admin.LIST_LIMIT` (1000) memories in a single call. No pagination
+is exposed today — if a viewer ever ends up with more memories than that,
+the backend will need to grow a paging parameter; flag it and we'll add
+one.
 
 **Request**
 
@@ -132,8 +137,8 @@ should map to its own copy).
 | ------ | ----------------------------------------------- | ------------------------------------------------- |
 | 401    | Missing / malformed / non-Bearer `Authorization`| `{ "error": "需要登录后才能查看记忆" }` (list)    |
 | 401    | Token didn't validate as a logged-in viewer     | `{ "error": "需要登录后才能管理记忆" }` (forget)  |
-| 502    | Mem0 API call failed (network, 5xx upstream)    | `{ "error": "Failed to load memories" }` etc.     |
-| 503    | `MEM0_API_KEY` not configured on the bot        | `{ "error": "Mem0 service unavailable" }`         |
+| 502    | The Mem0 call itself failed (Qdrant, embeddings)| `{ "error": "Failed to load memories" }` etc.     |
+| 503    | Mem0 not configured, or Qdrant unreachable      | `{ "error": "Mem0 service unavailable" }`         |
 
 The `401` body differs by endpoint (list says "查看记忆", forget says
 "管理记忆") — keeps the message scoped to the action the user was
