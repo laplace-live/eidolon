@@ -13,6 +13,7 @@ either RAG tier.
 """
 
 import asyncio
+import ipaddress
 import os
 import threading
 import time
@@ -22,6 +23,7 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
+from aioice.ice import Connection as IceConnection
 from aioice.ice import TransportPolicy
 from aiortc import rtcicetransport
 from aiortc.codecs.opus import OpusEncoder as _AiortcOpusEncoder
@@ -244,6 +246,47 @@ def _patched_connection_kwargs(servers: list[Any]) -> dict[str, Any]:
 
 
 rtcicetransport.connection_kwargs = _patched_connection_kwargs
+
+
+# Browsers advertise their LAN, CGNAT, Tailscale and mDNS addresses alongside
+# the routable ones. A relay-only connection asks the TURN server for a
+# permission per remote candidate, and Cloudflare refuses the unroutable ones
+# with a bare 401 — no NONCE, no REALM. aioice only re-authenticates when
+# those attributes are present (turn.py, "update long-term credentials"), so
+# it raises instead, and every later request on that allocation fails too:
+# one junk candidate takes down the pair that would have worked. Measured on
+# a viewer who never connected: 68 checks in progress, 0 succeeded.
+#
+# A relay cannot reach these addresses under any policy, so dropping them
+# costs nothing and keeps the allocation healthy.
+_ORIGINAL_ADD_REMOTE_CANDIDATE = IceConnection.add_remote_candidate
+
+
+def _relay_can_reach(host: str) -> bool:
+    """Whether a TURN relay could plausibly send to ``host``.
+
+    ``False`` for anything not globally routable, and for mDNS names, which
+    resolve only on the peer's own LAN.
+    """
+    try:
+        return ipaddress.ip_address(host).is_global
+    except ValueError:
+        return False
+
+
+async def _patched_add_remote_candidate(self: Any, remote_candidate: Any) -> None:
+    # `None` is the end-of-candidates signal and must always pass through.
+    if (
+        remote_candidate is not None
+        and self._transport_policy == TransportPolicy.RELAY
+        and not _relay_can_reach(remote_candidate.host)
+    ):
+        logger.debug(f"[WebRTC] Dropping unroutable remote candidate: {remote_candidate.host}")
+        return
+    await _ORIGINAL_ADD_REMOTE_CANDIDATE(self, remote_candidate)
+
+
+IceConnection.add_remote_candidate = _patched_add_remote_candidate
 
 
 _ORIGINAL_SWRTC_INIT = SmallWebRTCConnection.__init__
