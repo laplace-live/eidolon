@@ -1,0 +1,4 @@
+interface:
+  display_name: "Stream Archive Embed"
+  short_description: "Sync Bilibili replays into local LanceDB"
+  default_prompt: "Use $stream-archive-embed to collect new stream replays and update the local LanceDB archive."
