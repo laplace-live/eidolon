@@ -22,6 +22,8 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
+from aioice.ice import TransportPolicy
+from aiortc import rtcicetransport
 from aiortc.codecs.opus import OpusEncoder as _AiortcOpusEncoder
 from dotenv import load_dotenv
 
@@ -216,6 +218,32 @@ def _resolve_ice_servers_for_aiortc() -> list[IceServer]:
             )
         )
     return out
+
+
+# Media never traverses Cloudflare's HTTP proxy, so the origin is only
+# hidden if every candidate we advertise is a TURN relay. aiortc exposes no
+# `iceTransportPolicy`, but aioice takes `transport_policy`, and
+# `connection_kwargs` is the one function building its kwargs.
+#
+# RELAY alone is not enough: aioice gates only the host candidate on the
+# policy (ice.py, "add host candidate") and appends the server-reflexive one
+# regardless — and srflx is precisely the candidate carrying our public IP.
+# Dropping the STUN server is what stops it being gathered at all.
+_ORIGINAL_CONNECTION_KWARGS = rtcicetransport.connection_kwargs
+
+
+def _patched_connection_kwargs(servers: list[Any]) -> dict[str, Any]:
+    kwargs = _ORIGINAL_CONNECTION_KWARGS(servers)
+    # No TURN means relay-only would gather nothing at all, so leave those
+    # connections alone: a local dev run with no TURN still works on host
+    # candidates, and a TURN outage degrades to exposed rather than dead.
+    if "turn_server" in kwargs:
+        kwargs["transport_policy"] = TransportPolicy.RELAY
+        kwargs.pop("stun_server", None)
+    return kwargs
+
+
+rtcicetransport.connection_kwargs = _patched_connection_kwargs
 
 
 _ORIGINAL_SWRTC_INIT = SmallWebRTCConnection.__init__

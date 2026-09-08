@@ -133,6 +133,12 @@ module that owns it.
   monkey-patches `SmallWebRTCConnection.__init__` and `OpusEncoder.__init__` at
   import. Both are load-bearing; the per-session bitrate reaches the encoder
   through a `ContextVar` set in the offer middleware.
+- **With TURN configured, the server gathers relay candidates only** — a third
+  monkey-patch, on `aiortc.rtcicetransport.connection_kwargs`. It keeps the
+  origin's IP out of every SDP, which the Cloudflare proxy cannot do because
+  media never traverses it. `TransportPolicy.RELAY` suppresses only the host
+  candidate, so the patch also drops the STUN server; restoring it re-exposes
+  the origin through a server-reflexive candidate.
 - **`install_mcp` is not idempotent** — it wraps the app lifespan, and a second
   call makes `session_manager.run()` raise at startup. Same for
   `install_offer_middleware` and `install_memory_admin`: once each, at startup.
