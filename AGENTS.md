@@ -89,6 +89,7 @@ uv run laplace-search            # probe the archive on the bot's exact retrieva
 uv run laplace-eval-retrieval    # recall@k / MRR against data/eval/queries.toml
 uv run laplace-extract-users     # mine danmaku JSON for soniox_context.toml terms
 uv run laplace-export-mem0       # dump a pre-migration Mem0 cloud account to JSON
+uv run laplace-import-mem0       # load that dump into a Qdrant; idempotent, resumable
 ```
 
 ### Which checks to run

@@ -85,6 +85,7 @@ Other offline tools registered as console scripts:
 | `uv run laplace-eval-retrieval`  | `laplace_eidolon.tools.eval_retrieval`     | Score retrieval recall@k / MRR vs known queries    |
 | `uv run laplace-extract-users`   | `laplace_eidolon.tools.extract_users`      | Mine danmaku JSON for top usernames                |
 | `uv run laplace-export-mem0`     | `laplace_eidolon.tools.export_mem0`        | Dump a pre-migration Mem0 cloud account to JSON    |
+| `uv run laplace-import-mem0`     | `laplace_eidolon.tools.import_mem0`        | Load that dump into a Qdrant (idempotent, resumable) |
 
 The indexes live under `server/data/lancedb/` and are baked into the Docker
 image at build time. Re-run ingest then `docker compose build` to pick them up.
