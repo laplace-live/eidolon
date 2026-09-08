@@ -175,6 +175,20 @@ def _resolve_ice_response() -> dict[str, Any]:
     return {"iceServers": servers}
 
 
+def _prefer_turn_url(candidate: str, current: str) -> bool:
+    """Whether ``candidate`` is a better TURN URL for us than ``current``.
+
+    TCP wins over UDP, which is not the usual advice — UDP is the better
+    media transport. It is about what Cloudflare will relay: measured
+    between this host and a client on a UDP-blocked network, a TCP
+    allocation delivers to a UDP one, but a UDP allocation never receives
+    from a TCP one. Since the restricted clients are exactly the ones who
+    need a relay, allocating over TCP is what lets their checks arrive.
+    Both legs still run over Cloudflare's backbone.
+    """
+    return "transport=tcp" in candidate and "transport=tcp" not in current
+
+
 def _resolve_ice_servers_for_aiortc() -> list[IceServer]:
     """Pick the single STUN + single TURN aiortc will actually use.
 
@@ -185,10 +199,10 @@ def _resolve_ice_servers_for_aiortc() -> list[IceServer]:
     """
     out: list[IceServer] = []
     have_stun = False
-    have_turn = False
 
     cf = _get_cloudflare_ice()
     if cf is not None:
+        turn_entry: tuple[str, str | None, str | None] | None = None
         for entry in cf.get("iceServers", []):
             urls = entry.get("urls", [])
             if isinstance(urls, str):
@@ -199,12 +213,12 @@ def _resolve_ice_servers_for_aiortc() -> list[IceServer]:
                 if not have_stun and url.startswith("stun:"):
                     out.append(IceServer(urls=url))
                     have_stun = True
-                elif not have_turn and url.startswith(("turn:", "turns:")):
-                    # Cloudflare returns udp first, which is what aiortc
-                    # wants for best perf — picking the first match
-                    # naturally favors udp:3478.
-                    out.append(IceServer(urls=url, username=username, credential=credential))
-                    have_turn = True
+                elif url.startswith(("turn:", "turns:")):
+                    if turn_entry is None or _prefer_turn_url(url, turn_entry[0]):
+                        turn_entry = (url, username, credential)
+        if turn_entry is not None:
+            url, username, credential = turn_entry
+            out.append(IceServer(urls=url, username=username, credential=credential))
         return out
 
     stun_url = os.getenv("WEBRTC_STUN_URL")
