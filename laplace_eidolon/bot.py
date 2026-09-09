@@ -715,6 +715,9 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
     tts = FishAudioTTSService(
         api_key=fish_api_key,
         sample_rate=44100,
+        # Allow slow first audio; Pipecat also uses this timeout for trailing audio idle.
+        # https://github.com/pipecat-ai/pipecat/blob/main/src/pipecat/services/tts_service.py
+        stop_frame_timeout_s=15.0,
         settings=FishAudioTTSService.Settings(
             voice=os.getenv("FISH_VOICE_ID"),
             model=os.getenv("FISH_MODEL", "s2.1-pro"),
