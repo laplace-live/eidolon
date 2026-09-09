@@ -1,0 +1,142 @@
+{
+  "boundary": "Offline real catalog/date selection plus overview formatting only. Fake retriever raises on search; socket connections blocked during recall. No generated answer, live provider, or full voice latency measurement.",
+  "today": "2026-09-09",
+  "timezone": "Asia/Shanghai",
+  "catalog_broadcast_count": 918,
+  "cold_catalog_load_ms": 176.64116597734392,
+  "last_week_indexed_chunks": 236,
+  "last_week_catalog_scenes": 310,
+  "last_week_scene_types": {
+    "opening": 2,
+    "commentary": 148,
+    "mixed": 1,
+    "sc_session": 80,
+    "anime_audio": 74,
+    "transition": 1,
+    "closing": 4
+  },
+  "search_attempts": 0,
+  "network_attempts": 0,
+  "cases": [
+    {
+      "name": "latest",
+      "query": "你上次直播播了什么？",
+      "broadcast_ids": [
+        "2026-09-08-BV1c3YJ6VETN"
+      ],
+      "dates": [
+        "2026-09-08"
+      ],
+      "parts": 2,
+      "source_scenes": 42,
+      "rendered_characters": 1315,
+      "all_broadcast_ids_in_rendered_context": true,
+      "warm_resolve_lookup_render_ms": {
+        "n": 20,
+        "median": 0.31400000443682075,
+        "min": 0.27658301405608654,
+        "max": 1.1768749682232738
+      }
+    },
+    {
+      "name": "last_week",
+      "query": "你上周直播都播了什么？",
+      "broadcast_ids": [
+        "2026-09-06-BV1Lrbx6GEMo",
+        "2026-09-05-BV1r9b76cEDM",
+        "2026-09-04-BV1TYtz6wEbz",
+        "2026-09-03-BV1kEtf6GEWE",
+        "2026-09-02-BV1CPtE6hEpo",
+        "2026-09-01-BV1uAtL6eEUr"
+      ],
+      "dates": [
+        "2026-09-06",
+        "2026-09-05",
+        "2026-09-04",
+        "2026-09-03",
+        "2026-09-02",
+        "2026-09-01"
+      ],
+      "parts": 14,
+      "source_scenes": 310,
+      "rendered_characters": 6952,
+      "all_broadcast_ids_in_rendered_context": true,
+      "warm_resolve_lookup_render_ms": {
+        "n": 20,
+        "median": 0.5065000150352716,
+        "min": 0.4192920168861747,
+        "max": 0.9393749060109258
+      }
+    },
+    {
+      "name": "explicit_zh",
+      "query": "2026年9月8日直播播了什么？",
+      "broadcast_ids": [
+        "2026-09-08-BV1c3YJ6VETN"
+      ],
+      "dates": [
+        "2026-09-08"
+      ],
+      "parts": 2,
+      "source_scenes": 42,
+      "rendered_characters": 1315,
+      "all_broadcast_ids_in_rendered_context": true,
+      "warm_resolve_lookup_render_ms": {
+        "n": 20,
+        "median": 0.3185000387020409,
+        "min": 0.26116694789379835,
+        "max": 0.7709589553996921
+      }
+    },
+    {
+      "name": "explicit_en",
+      "query": "What did you stream on September 8, 2026?",
+      "broadcast_ids": [
+        "2026-09-08-BV1c3YJ6VETN"
+      ],
+      "dates": [
+        "2026-09-08"
+      ],
+      "parts": 2,
+      "source_scenes": 42,
+      "rendered_characters": 1315,
+      "all_broadcast_ids_in_rendered_context": true,
+      "warm_resolve_lookup_render_ms": {
+        "n": 20,
+        "median": 0.3029374638572335,
+        "min": 0.2792500890791416,
+        "max": 0.4679159028455615
+      }
+    },
+    {
+      "name": "same_week_followup",
+      "query": "那周播了什么？",
+      "broadcast_ids": [
+        "2026-09-06-BV1Lrbx6GEMo",
+        "2026-09-05-BV1r9b76cEDM",
+        "2026-09-04-BV1TYtz6wEbz",
+        "2026-09-03-BV1kEtf6GEWE",
+        "2026-09-02-BV1CPtE6hEpo",
+        "2026-09-01-BV1uAtL6eEUr"
+      ],
+      "dates": [
+        "2026-09-06",
+        "2026-09-05",
+        "2026-09-04",
+        "2026-09-03",
+        "2026-09-02",
+        "2026-09-01"
+      ],
+      "parts": 14,
+      "source_scenes": 310,
+      "rendered_characters": 6952,
+      "all_broadcast_ids_in_rendered_context": true,
+      "warm_resolve_lookup_render_ms": {
+        "n": 20,
+        "median": 0.5062710260972381,
+        "min": 0.4432919668033719,
+        "max": 0.6881660083308816
+      }
+    }
+  ]
+}

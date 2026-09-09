@@ -743,12 +743,14 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
         default_headers=openrouter_headers(),
     )
 
-    # The same ToolsSchema must reach both the LLM service and the context,
-    # or the model is never told the tool exists. None when no alternative
-    # voices are configured, in which case the context stays bare.
-    voice_tools = install_voice_style_tool(llm=llm, tts=tts, styles=voice_styles)
+    tools = install_voice_style_tool(llm=llm, tts=tts, styles=voice_styles)
+    archive = _optional_rag(
+        StreamArchiveService, "Stream archive", "laplace-ingest-streams"
+    )
+    if archive is not None:
+        tools = archive.install_tool(llm, tools)
 
-    context = LLMContext(tools=voice_tools) if voice_tools else LLMContext()
+    context = LLMContext(tools=tools) if tools else LLMContext()
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(
@@ -788,18 +790,13 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
         logger.info("Mem0 skipped: MEM0_QDRANT_HOST is unset, so there is no vector store")
 
     facts = _optional_rag(PersonaFactsService, "Persona facts", "laplace-ingest-facts")
-    archive = _optional_rag(
-        StreamArchiveService, "Stream archive", "laplace-ingest-streams"
-    )
 
-    # Each enricher intercepts LLMContextFrame and injects one system message
-    # per turn, stacking as [user, mem0, persona_facts, stream_archive].
-    # persona.md is prepended by the LLM service itself.
+    # Archive recaps bypass persona-fact retrieval through frame metadata.
     processors = [
         transport.input(),
         stt,
         user_aggregator,
-        *(p for p in (memory, facts, archive) if p is not None),
+        *(p for p in (memory, archive, facts) if p is not None),
         llm,
         tts,
         transport.output(),

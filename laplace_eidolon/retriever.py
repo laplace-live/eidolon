@@ -85,7 +85,13 @@ class LanceRetriever:
         logger.info(f"{self._label} re-opened table ({new_table.count_rows()} rows)")
 
     async def search(
-        self, query: str, *, candidates: int, top_k: int, date_prefilter: bool = True
+        self,
+        query: str,
+        *,
+        candidates: int,
+        top_k: int,
+        date_prefilter: bool = True,
+        where: str | None = None,
     ) -> list[dict[str, Any]]:
         """Run hybrid (vector + FTS) + optional rerank against the table.
 
@@ -105,11 +111,8 @@ class LanceRetriever:
         if not vectors:
             return []
 
-        where = (
-            extract_date_filter(query, column=self._date_column)
-            if date_prefilter
-            else None
-        )
+        if where is None and date_prefilter:
+            where = extract_date_filter(query, column=self._date_column)
         if where:
             logger.info(f"{self._label} date pre-filter: {where!r}")
 

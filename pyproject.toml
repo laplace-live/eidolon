@@ -58,6 +58,7 @@ tools = [
 laplace-refine          = "laplace_eidolon.tools.refine:main"
 laplace-ingest-streams  = "laplace_eidolon.tools.ingest_streams:main"
 laplace-ingest-facts    = "laplace_eidolon.tools.ingest_facts:main"
+laplace-build-stream-catalog = "laplace_eidolon.tools.build_stream_catalog:main"
 laplace-search          = "laplace_eidolon.tools.search:main"
 laplace-pipeline        = "laplace_eidolon.tools.pipeline:main"
 laplace-download        = "laplace_eidolon.tools.download:main"

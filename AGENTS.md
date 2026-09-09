@@ -11,7 +11,7 @@ an offline batch chain that builds the indexes it reads.
 
 ```text
 transport.input → STT → user_aggregator
-    → Mem0 → PersonaFacts → StreamArchive → LLM → TTS → transport.output
+    → Mem0 → StreamArchive → PersonaFacts → LLM → TTS → transport.output
 ```
 
 Soniox (STT), OpenRouter (LLM), and Fish Audio (TTS) are required. Everything
@@ -60,6 +60,7 @@ a row here and writing the prose there — not a new section in this file.**
 | the persona's identity, voice, or hard rules | `persona.md` |
 | any env var — all 50-odd are documented there | `.env.example` |
 | Soniox's per-project vocabulary glossary | `laplace_eidolon/soniox_context.toml` |
+| broadcast overviews, date-scoped recall, or the archive lookup tool | [stream-recall.md](docs/stream-recall.md) |
 
 ## Commands
 

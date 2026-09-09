@@ -1,0 +1,15 @@
+{
+  "boundary": "Current bot import, actual ASGI/MCP/WebRTC request-handler lifespan startup and shutdown, in-process HTTP /status only; no listening socket, no offer or provider pipeline call.",
+  "status_code": 200,
+  "response": {
+    "status": "ready",
+    "transports": [
+      "webrtc"
+    ]
+  },
+  "health_route": "/health is not implemented; current runner readiness endpoint is /status",
+  "external_connection_attempts": 0,
+  "optional_archive_imported": true,
+  "optional_persona_facts_imported": true,
+  "shutdown_completed": true
+}

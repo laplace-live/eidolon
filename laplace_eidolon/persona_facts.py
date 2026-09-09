@@ -23,6 +23,7 @@ from .embeddings import DEFAULT_DB_PATH
 from .env import env_int
 from .retrieval import build_query_text
 from .retriever import LanceRetriever
+from .stream_recall import OVERVIEW_FRAME_KEY
 
 DEFAULT_TABLE = "persona_facts"
 LABEL = "Persona facts"
@@ -190,6 +191,13 @@ class PersonaFactsService(FrameProcessor):
         await super().process_frame(frame, direction)
 
         if isinstance(frame, LLMContextFrame):
+            if frame.metadata.get(OVERVIEW_FRAME_KEY):
+                self._last_query = build_query_text(
+                    [cast(dict[str, Any], m) for m in frame.context.get_messages()],
+                    max_user_turns=self._params.max_user_turns,
+                )
+                await self.push_frame(frame)
+                return
             try:
                 context = frame.context
                 query = build_query_text(

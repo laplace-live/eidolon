@@ -1,0 +1,11 @@
+{
+  "boundary": "Rebuild from current local transcripts with socket connections blocked; compare all catalog content except build timestamp and exact searchable scene IDs against LanceDB.",
+  "catalog_matches_current_sources": true,
+  "broadcasts": 918,
+  "source_parts": 1674,
+  "source_scenes": 51381,
+  "searchable_scene_ids_match_lancedb_exactly": true,
+  "searchable_scenes": 43912,
+  "overview_only_scenes": 7469,
+  "provider_requests": 0
+}

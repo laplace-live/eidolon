@@ -27,6 +27,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from loguru import logger
 
+from ..embeddings import DEFAULT_DB_PATH
 from .download import (
     DEFAULT_BROWSER,
     DEFAULT_FORMAT,
@@ -531,6 +532,12 @@ def stage_ingest(
 
     logger.info(f"Ingesting: {' '.join(cmd)}")
     rc = subprocess.run(cmd, check=False).returncode
+    if rc == 0 and not dry_run:
+        rc = subprocess.run(
+            [sys.executable, "-m", "laplace_eidolon.tools.build_stream_catalog",
+             "--streams-dir", str(streams_dir), "--db-path", DEFAULT_DB_PATH],
+            check=False,
+        ).returncode
     return StageResult(name="ingest", returncode=rc, duration_sec=time.monotonic() - started)
 
 

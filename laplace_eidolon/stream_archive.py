@@ -11,23 +11,59 @@ position, one-line facts instead of transcript scenes.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
-from typing import Any, cast
+from datetime import date, timedelta
+from pathlib import Path
+from typing import Any, Literal, cast
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from loguru import logger
+from pipecat.adapters.schemas.function_schema import FunctionSchema
+from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.frames.frames import Frame, LLMContextFrame
+from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+from pipecat.services.llm_service import FunctionCallParams, LLMService
 from pydantic import BaseModel, Field
 
 from .embeddings import DEFAULT_DB_PATH
 from .env import env_int
 from .retrieval import build_query_text
 from .retriever import LanceRetriever
+from .stream_catalog import StreamCatalog, format_broadcasts
+from .stream_recall import OVERVIEW_FRAME_KEY, RecallResult, StreamRecall
+from .stream_time import (
+    StreamScope,
+    has_stream_time_reference,
+    is_stream_elaboration,
+    is_stream_followup,
+    is_stream_overview,
+    is_stream_query,
+)
 
 DEFAULT_TABLE = "stream_chunks"
 LABEL = "Archive"
 INGEST_HINT = "uv run laplace-ingest-streams"
+RECALL_TOOL_NAME = "recall_streams"
+_RECENT_PREFIX = "最近已归档的直播概览：\n"
+_RECALL_PREFIX = "本次直播回忆查询：\n"
+
+
+class RecallRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    query: str = Field(min_length=1, max_length=2000)
+    mode: Literal["overview", "details"]
+    period: Literal[
+        "latest", "previous", "this_week", "last_week", "this_month", "last_month",
+        "past_days", "date_range", "selected", "broadcasts", "all",
+    ]
+    start_date: date | None = None
+    end_date: date | None = None
+    days: int = Field(default=7, ge=1, le=366)
+    broadcast_ids: list[str] = Field(default_factory=list, max_length=20)
 
 
 def decode_topics(row: dict[str, Any]) -> list[str]:
@@ -144,7 +180,21 @@ class StreamArchiveService(FrameProcessor):
         self._retriever = build_retriever(
             db_path, table_name, embed_model=self._params.embed_model
         )
-        self._last_query: str | None = None
+        try:
+            timezone = ZoneInfo(os.getenv("PERSONA_TIMEZONE") or "Asia/Shanghai")
+        except ZoneInfoNotFoundError:
+            timezone = ZoneInfo("UTC")
+        self.recall = StreamRecall(
+            self._retriever,
+            StreamCatalog(Path(db_path)),
+            timezone=timezone,
+            candidates=self._params.candidates,
+            top_k=self._params.top_k,
+        )
+        self._turn_key: tuple[int, str] | None = None
+        self._tools: ToolsSchema | None = None
+        self._tool_calls = 0
+        self._last_was_archive = False
 
         if self._retriever.table is not None:
             logger.info(
@@ -252,28 +302,212 @@ class StreamArchiveService(FrameProcessor):
             for q in quotes:
                 lines.append(f"  · 「{q}」")
 
-    async def _enhance(self, context, query: str) -> None:
-        """Inject retrieved chunks into the LLM context as a system message."""
-        if self._last_query == query:
-            return
-        self._last_query = query
+    def _begin_turn(self, context: LLMContext) -> bool:
+        users = [
+            m for m in context.get_messages() if isinstance(m, dict) and m.get("role") == "user"
+        ]
+        key = (len(users), str(users[-1].get("content", "")) if users else "")
+        if key == self._turn_key:
+            return False
+        self._turn_key = key
+        self._tool_calls = 0
+        if self._tools is not None:
+            context.set_tools(self._tools)
+        return True
+
+    def _set_block(self, context: LLMContext, prefix: str, text: str) -> None:
+        messages = [
+            message for message in context.get_messages()
+            if not (
+                isinstance(message, dict) and message.get("role") == "system"
+                and isinstance(message.get("content"), str)
+                and str(message.get("content")).startswith(prefix)
+            )
+        ]
+        if text:
+            position = min(self._params.position, len(messages))
+            messages.insert(position, {"role": "system", "content": prefix + text})
+        context.set_messages(messages)
+
+    def _render_result(self, result: RecallResult) -> str:
+        lines = [
+            "以下是已归档直播的记录，用来 ground 回复，不要照念，也不要主动念日期。"
+        ]
+        if result.scope:
+            lines.append(f"查询范围：{result.scope.label or '指定场次'}")
+        if result.broadcasts:
+            lines.append(result.overview_text(max_chars=10000 if result.overview else 3000))
+        if result.chunks:
+            lines.append(self._format_chunks(result.chunks, self._params.system_prompt))
+        if result.note:
+            lines.append(result.note)
+        return "\n".join(lines)
+
+    async def _enhance(self, context: LLMContext, query: str) -> bool:
+        recent = await asyncio.to_thread(self.recall.catalog.recent, 3)
+        self._set_block(
+            context, _RECENT_PREFIX, format_broadcasts(recent, max_chars=3600) if recent else ""
+        )
+        latest = next((
+            str(message.get("content")) for message in reversed(context.get_messages())
+            if isinstance(message, dict) and message.get("role") == "user"
+            and isinstance(message.get("content"), str)
+        ), query)
+        scope = (
+            self.recall.resolve(latest)
+            if not is_stream_elaboration(latest) or self._last_was_archive else None
+        )
+        self._last_was_archive = False
+        archive_query = (
+            is_stream_query(latest) or is_stream_overview(latest)
+            or (is_stream_followup(latest) and not is_stream_elaboration(latest))
+        )
+        if scope is not None and (archive_query or is_stream_followup(latest)):
+            result = await self.recall.lookup(
+                query, scope=scope, overview=is_stream_overview(latest)
+            )
+            self._last_was_archive = True
+            self._set_block(context, _RECALL_PREFIX, self._render_result(result))
+            logger.info(
+                f"Archive recall: overview={result.overview}, broadcasts={len(result.broadcasts)}, "
+                f"chunks={len(result.chunks)}, scope={scope.label!r}"
+            )
+            return result.overview
+
+        if (
+            archive_query and self._tools is not None
+            and (is_stream_overview(latest) or has_stream_time_reference(latest))
+        ):
+            self._last_was_archive = True
+            self._set_block(
+                context, _RECALL_PREFIX,
+                f"当前问题需要直播回忆。概览不足时调用 {RECALL_TOOL_NAME} 确定场次并查找记录；"
+                "不要把不同时期的直播混在一起，也不要还没查询就说记不清。",
+            )
+            return is_stream_overview(latest)
 
         chunks = await self._search(query)
-        if not chunks:
-            return
-
-        memory_msg = {
-            "role": "system",
-            "content": self._format_chunks(chunks, self._params.system_prompt),
-        }
-        messages = context.get_messages()
-        position = max(0, min(self._params.position, len(messages)))
-        messages.insert(position, memory_msg)
-        context.set_messages(messages)
-        logger.info(
-            f"Archive injected {len(chunks)} chunks at position {position} "
-            f"({len(memory_msg['content'])} chars)"
+        if chunks and archive_query:
+            self._last_was_archive = True
+            scope = StreamScope(
+                stream_ids=tuple(dict.fromkeys(str(chunk["stream_id"]) for chunk in chunks)),
+                label="刚才查到的直播片段",
+            )
+            broadcasts = await asyncio.to_thread(self.recall.select, scope)
+            self.recall.remember(RecallResult(scope=scope, overview=False, broadcasts=broadcasts))
+        self._set_block(
+            context, _RECALL_PREFIX,
+            self._format_chunks(chunks, self._params.system_prompt) if chunks else "",
         )
+        return False
+
+    def install_tool(
+        self, llm: LLMService[Any], tools: ToolsSchema | None
+    ) -> ToolsSchema | None:
+        if self._retriever.table is None and not self.recall.catalog.path.exists():
+            return tools
+        schema = FunctionSchema(
+            name=RECALL_TOOL_NAME,
+            description=(
+                "查询自己的已归档直播。当前概览足够回答时直接回答；"
+                "需要其他场次、复杂时间指代或更具体的内容时调用。"
+                "结合对话解析用户指代，把问题改写成独立查询。"
+                "每个用户回合最多两次；查不到不能说没有直播，也不要编造。"
+            ),
+            properties={
+                "query": {"type": "string", "description": "独立、具体的直播问题或话题"},
+                "mode": {"type": "string", "enum": ["overview", "details"],
+                         "description": "整场/一段时间回顾用 overview，具体言论或事件用 details"},
+                "period": {"type": "string", "enum": [
+                    "latest", "previous", "this_week", "last_week", "this_month",
+                    "last_month", "past_days", "date_range", "selected", "broadcasts", "all",
+                ], "description": (
+                    "latest 最近一场；previous 倒数第二场；week 为周一到周日；"
+                    "selected 沿用刚才已查询的场次/时间段；all 跨全部归档找话题。"
+                    "broadcasts 选择概览里已提供的 broadcast_ids，例如其中第二场。"
+                    "昨天或明确日期用 date_range，不要猜测未经查询的场次 ID。"
+                )},
+                "start_date": {"type": "string", "description": "date_range 起始日 YYYY-MM-DD"},
+                "end_date": {"type": "string", "description": (
+                    "date_range 结束日 YYYY-MM-DD，不包含该日；只查一天时省略"
+                )},
+                "days": {"type": "integer", "minimum": 1, "maximum": 366,
+                         "description": "past_days 天数，包含今天，默认 7"},
+                "broadcast_ids": {"type": "array", "items": {"type": "string"},
+                                  "description": "仅填写概览已经给出的场次 ID，不要编造"},
+            },
+            required=["query", "mode", "period"],
+        )
+        llm.register_function(RECALL_TOOL_NAME, self._handle_tool, cancel_on_interruption=True)
+        self._tools = ToolsSchema(
+            standard_tools=[*(tools.standard_tools if tools else []), schema],
+            custom_tools=tools.custom_tools if tools else None,
+        )
+        return self._tools
+
+    def _tool_scope(self, request: RecallRequest) -> StreamScope:
+        period = request.period
+        if period in ("latest", "previous"):
+            return StreamScope(latest=1 if period == "latest" else 2, label=period)
+        if period == "selected":
+            if self.recall.selected_scope is None:
+                raise ValueError("还没有已选定的场次，请给出日期范围或使用 latest")
+            return self.recall.selected_scope
+        if period == "broadcasts":
+            if not request.broadcast_ids:
+                raise ValueError("broadcasts 需要已知场次 ID")
+            known = {broadcast.id for broadcast in self.recall.catalog.broadcasts()}
+            if not set(request.broadcast_ids) <= known:
+                raise ValueError("场次 ID 不在归档中，请使用日期范围查找")
+            return StreamScope(stream_ids=tuple(request.broadcast_ids), label="选定的归档直播")
+        if period == "date_range":
+            if request.start_date is None:
+                raise ValueError("date_range 需要 start_date")
+            end = request.end_date or request.start_date + timedelta(days=1)
+            if end <= request.start_date:
+                raise ValueError("end_date 必须晚于 start_date，且不包含该日")
+            return StreamScope(
+                start_date=request.start_date, end_date=end,
+                label=f"{request.start_date} 至 {end}（不含结束日）",
+            )
+        if period == "all":
+            return StreamScope(label="全部已归档直播")
+        query = (
+            f"past {request.days} days" if period == "past_days" else period.replace("_", " ")
+        )
+        scope = self.recall.resolve(query)
+        if scope is None:
+            raise ValueError("无法确定查询时间段")
+        return scope
+
+    async def _handle_tool(self, params: FunctionCallParams) -> None:
+        self._begin_turn(params.context)
+        if self._tool_calls >= 2:
+            await params.result_callback({"error": "本回合查询次数已用完，请根据已有记录回答。"})
+            return
+        self._tool_calls += 1
+        if self._tool_calls == 2 and self._tools is not None:
+            params.context.set_tools(ToolsSchema(
+                standard_tools=[
+                    s for s in self._tools.standard_tools if s.name != RECALL_TOOL_NAME
+                ],
+                custom_tools=self._tools.custom_tools,
+            ))
+        try:
+            request = RecallRequest.model_validate(dict(params.arguments))
+            scope = await asyncio.to_thread(self._tool_scope, request)
+            result = await self.recall.lookup(
+                request.query, scope=scope, overview=request.mode == "overview"
+            )
+            self._last_was_archive = True
+            await params.result_callback({
+                "content": self._render_result(result),
+                "broadcast_ids": [broadcast.id for broadcast in result.broadcasts],
+                "chunk_ids": [chunk.get("id") for chunk in result.chunks],
+            })
+        except Exception as e:
+            logger.warning(f"Archive recall tool unavailable: {e}")
+            await params.result_callback({"error": "直播查询未完成", "reason": str(e)})
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         """Intercept ``LLMContextFrame`` and enrich it with stream memories."""
@@ -287,8 +521,9 @@ class StreamArchiveService(FrameProcessor):
                     max_user_turns=self._params.max_user_turns,
                 )
 
-                if query and len(query.strip()) >= self._params.min_query_chars:
-                    await self._enhance(context, query)
+                if self._begin_turn(context) and query:
+                    if len(query.strip()) >= self._params.min_query_chars:
+                        frame.metadata[OVERVIEW_FRAME_KEY] = await self._enhance(context, query)
 
                 await self.push_frame(frame)
             except Exception as e:

@@ -11,18 +11,77 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
+from datetime import date
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dotenv import load_dotenv
 from loguru import logger
 
 from ..embeddings import DEFAULT_DB_PATH
+from ..retriever import LanceRetriever
 from ..stream_archive import (
     DEFAULT_TABLE,
     StreamArchiveService,
     build_retriever,
     decode_topics,
 )
+from ..stream_catalog import StreamCatalog
+from ..stream_recall import RecallResult, StreamRecall
+from ..stream_time import has_stream_time_reference, is_stream_overview
+
+
+async def _recall(args: argparse.Namespace, retriever: LanceRetriever) -> int:
+    try:
+        timezone = ZoneInfo(os.getenv("PERSONA_TIMEZONE") or "Asia/Shanghai")
+    except ZoneInfoNotFoundError:
+        timezone = ZoneInfo("UTC")
+    recall = StreamRecall(
+        retriever,
+        StreamCatalog(args.db_path),
+        timezone=timezone,
+        candidates=StreamArchiveService.InputParams().candidates,
+        top_k=args.top_k,
+        today=(lambda: args.today) if args.today is not None else None,
+    )
+    scope = recall.resolve(args.query)
+    if scope is None and has_stream_time_reference(args.query):
+        result = RecallResult(
+            scope=None, overview=is_stream_overview(args.query),
+            note="无法直接确定这个时间范围；请给出明确日期。对话中的直播查询工具可解析复杂指代。",
+        )
+    else:
+        result = await recall.lookup(args.query, scope=scope)
+    overview = result.overview_text() if result.broadcasts else ""
+    if args.json:
+        period = None if scope is None else {
+            "start_date": scope.start_date.isoformat() if scope.start_date else None,
+            "end_date": scope.end_date.isoformat() if scope.end_date else None,
+            "latest": scope.latest,
+            "stream_ids": list(scope.stream_ids),
+            "label": scope.label,
+        }
+        print(json.dumps({
+            "mode": "overview" if result.overview else "details",
+            "period": period,
+            "broadcast_ids": [broadcast.id for broadcast in result.broadcasts],
+            "chunks": [{k: v for k, v in chunk.items() if k != "vector"}
+                       for chunk in result.chunks],
+            "overview": overview,
+            "note": result.note,
+        }, ensure_ascii=False, indent=2))
+        return 0
+    print(f"Query: {args.query!r}")
+    if scope:
+        print(f"Period: {scope.label}")
+    if overview:
+        print(overview)
+    if result.chunks:
+        print(StreamArchiveService._format_chunks(result.chunks, "直播详细片段：\n"))
+    if result.note:
+        print(result.note)
+    return 0
 
 
 async def main_async(args: argparse.Namespace) -> int:
@@ -32,6 +91,8 @@ async def main_async(args: argparse.Namespace) -> int:
     logger.add(sys.stderr, level="WARNING")
 
     retriever = build_retriever(args.db_path, args.table)
+    if args.recall:
+        return await _recall(args, retriever)
     if retriever.table is None:
         print(f"No LanceDB table at {args.db_path}/{args.table}.lance", file=sys.stderr)
         print("Run `uv run laplace-ingest-streams` first.", file=sys.stderr)
@@ -175,7 +236,17 @@ def main() -> int:
     parser.add_argument(
         "--json", action="store_true", help="Emit raw JSON (drops vector field for readability)"
     )
+    parser.add_argument(
+        "--recall", action="store_true",
+        help="Use broadcast recaps or details within a resolved period (JSON emits an envelope)",
+    )
+    parser.add_argument(
+        "--today", type=date.fromisoformat, metavar="YYYY-MM-DD",
+        help="Persona-local reference date for --recall (default: today in PERSONA_TIMEZONE)",
+    )
     args = parser.parse_args()
+    if args.today is not None and not args.recall:
+        parser.error("--today requires --recall")
     return asyncio.run(main_async(args))
 
 
