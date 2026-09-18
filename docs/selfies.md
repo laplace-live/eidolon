@@ -4,12 +4,11 @@ The `take_selfie` tool: the viewer asks to see a photo, the bot redraws its
 reference image through OpenRouter's image route and the picture appears on
 their screen mid-call.
 
-On by default. The references are whatever images sit in
-`data/selfie-references/`, which the Dockerfile ships along with the rest of
-`data/`, so a deployment needs no configuration — drop a file in to give the
-model another view of the character, empty the directory and the tool stops
-being registered. `SELFIE_REFERENCE_IMAGES` overrides the set; every env var
-it reads is documented in `.env.example`.
+On by default. The references live in `data/selfie-references/`, which the
+Dockerfile ships along with the rest of `data/`, so a deployment needs no
+configuration — drop an outfit in `outfits/` and it becomes selectable, empty
+the directory and the tool stops being registered. `SELFIE_REFERENCE_IMAGES`
+overrides the set; every env var it reads is documented in `.env.example`.
 
 ## The shape of it
 
@@ -103,13 +102,55 @@ by `fill_time()` from the persona's timezone (`PERSONA_TIMEZONE`), so a selfie
 taken at 23:00 is lit by a lamp against a dark window. Substitution is
 `str.replace`, not `str.format`, so a brace in an edited prompt can't raise.
 
+## Outfits are mutually exclusive
+
+Two directories, two rules:
+
+```text
+data/selfie-references/
+  outfits/   one character, different outfits — exactly one per render
+    day.png
+    night.png
+  friends/   one image per person — all of them, all at once
+    七海Nana7mi.png
+```
+
+`outfits/day.png` and `outfits/night.png` are the same character dressed
+differently, not two views of one outfit, and the model cannot tell the
+difference: given both, it reads the second as a second person. A group selfie
+with one friend came back with three people in frame, the extra one wearing the
+other outfit.
+
+So `select_outfit` lets exactly one through, and `reference_sources` is the only
+way to reach it — the bot and `laplace-generate-image` both go through there, so
+neither can put her in frame twice. The hour picks which: `night.png` during the
+hours `_AMBIENCE` calls `night` and `late night` (21:00–05:00), `day.png`
+otherwise, so the outfit and the light the prompt asks for agree. Selection
+happens per render, not at startup, or a bot booted in daylight would still be
+wearing the day outfit at 03:00.
+
+Adding a third outfit needs no code — it's selectable immediately, and `night`
+in the file name is the whole convention. Loose images sitting directly in
+`selfie-references/` are read as outfits too, which is the layout from before
+`outfits/` existed; a deployment mounting its own `data/` keeps working.
+
+None of these names reach a model. References travel as base64 `data:` URLs,
+so the file names are for the code and for whoever reads this — only
+`friends/` stems become model-visible, as the `with_friends` enum.
+
+To force one, name it explicitly — that path bypasses the clock:
+
+```bash
+uv run laplace-generate-image -i data/selfie-references/outfits/night.png
+```
+
 ## Friends
 
 `data/selfie-references/friends/` holds one image per person the persona can
 be photographed with, **named after them** — `七海Nana7mi.png` becomes the
 enum value `七海Nana7mi`. Adding someone is dropping a file in; nothing else
-knows their name. The directory is skipped by `reference_sources()` (it only
-takes files), so friends never leak into a solo shot.
+knows their name. `reference_sources()` reads `outfits/` and never this
+directory, so friends can't leak into a solo shot.
 
 The tool takes a `with_friends` array whose enum is exactly those names, and
 the model is told to fill it only when it actually knows — from memory or the

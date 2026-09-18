@@ -64,7 +64,8 @@ def main() -> int:
         metavar="PATH_OR_URL",
         help=(
             f"Reference image, local path or URL; repeat for up to {MAX_REFERENCES}. "
-            "Defaults to the bundled ones the bot uses."
+            "Defaults to the outfit the bot would use at this hour; naming one "
+            "here bypasses that choice."
         ),
     )
     parser.add_argument(

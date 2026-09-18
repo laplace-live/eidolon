@@ -41,8 +41,9 @@ laplace_eidolon/      the runtime package
   tools/                the offline chain, one console script per stage
 persona.md            the system prompt — identity and hard rules, no code
 data/                 fact .txt sources, lancedb/ (Git LFS), eval/, embed_cache.db,
-                      selfie-references/ (the bundled images take_selfie redraws,
-                      plus friends/ — one per person, named after them)
+                      selfie-references/ (what take_selfie redraws: outfits/ —
+                      one per look, one used per render — and friends/ — one
+                      per person, named after them)
 streams/              transcripts <id>.md + <id>.refined.json sidecars (untracked)
 vods/                 downloaded audio + .info.json sidecars (untracked)
 docs/                 the topics too large to inline here
@@ -156,6 +157,11 @@ module that owns it.
   `Pipeline([...])` bills an image per sentence spoken. The `take_selfie`
   handler calls `run_image_gen` directly instead. See
   [selfies.md](docs/selfies.md).
+- **The persona's reference images are mutually exclusive outfits — exactly
+  one reaches a render.** Hand the model two and it draws two of her: a group
+  selfie with one friend came back with three people in frame. `select_outfit`
+  picks one by the hour, behind `reference_sources`, the choke point the bot
+  and `laplace-generate-image` share.
 
 ### Identity and quotas
 

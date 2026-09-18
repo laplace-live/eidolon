@@ -68,6 +68,11 @@ SELFIE_PATH = "/api/selfie"
 # so what ships in here is what a deployment uses.
 BUNDLED_REFERENCES = Path(__file__).resolve().parent.parent / "data" / "selfie-references"
 
+# Two directories, two rules: one of ``outfits/`` is the persona, and every
+# ``friends/`` image is a different person.
+OUTFITS = BUNDLED_REFERENCES / "outfits"
+FRIENDS = BUNDLED_REFERENCES / "friends"
+
 SELFIE_PROMPT = """\
 Turn the reference character into a casual selfie, drawn in classic 2D anime
 style.
@@ -154,25 +159,70 @@ class Generation:
     cost_usd: float | None
 
 
+def _local_now() -> datetime:
+    """Now in the persona's timezone, falling back to UTC for an unknown zone."""
+    try:
+        timezone = ZoneInfo(os.getenv("PERSONA_TIMEZONE") or "Asia/Shanghai")
+    except ZoneInfoNotFoundError:
+        timezone = ZoneInfo("UTC")
+    return datetime.now(timezone)
+
+
+def _ambience(hour: int) -> tuple[str, str, str]:
+    """``(label, indoor light, outdoor light)`` for ``hour``."""
+    label, indoor, outdoor = _AMBIENCE[-1][1:]
+    for start, name, inside, outside in _AMBIENCE:
+        if hour >= start:
+            label, indoor, outdoor = name, inside, outside
+    return label, indoor, outdoor
+
+
 def fill_time(template: str, *, outdoors: bool = False) -> str:
     """``template``'s {time} and {light} slots, resolved against the persona's clock.
 
     The bot answers viewers live, so its selfie should match the hour they
     are actually watching at — in the persona's timezone, not the machine's.
     """
-    try:
-        timezone = ZoneInfo(os.getenv("PERSONA_TIMEZONE") or "Asia/Shanghai")
-    except ZoneInfoNotFoundError:
-        timezone = ZoneInfo("UTC")
-    now = datetime.now(timezone)
-
-    label, indoor, outdoor = _AMBIENCE[-1][1:]
-    for start, name, inside, outside in _AMBIENCE:
-        if now.hour >= start:
-            label, indoor, outdoor = name, inside, outside
-
+    now = _local_now()
+    label, indoor, outdoor = _ambience(now.hour)
     filled = template.replace("{time}", f"{label}, about {now:%H:%M} local time")
     return filled.replace("{light}", outdoor if outdoors else indoor)
+
+
+# The hours _AMBIENCE draws without daylight, which is also when the persona
+# wears her night outfit.
+_AFTER_DARK = frozenset({"night", "late night"})
+
+
+def select_outfit(sources: list[str]) -> list[str]:
+    """``sources`` narrowed to the one outfit this hour calls for.
+
+    ``outfits/`` holds one character in different outfits — ``day.png`` and
+    ``night.png`` — not different views of one outfit. Hand the model two and
+    it reads the second as a second person: a group selfie with one friend
+    came back with three people in frame. So exactly one of them ever reaches
+    ``input_references``, and the hour picks which, matching the light the
+    prompt asks for. ``night`` in the file name is the whole convention.
+    Friends are unaffected: they contribute one image each, from ``friends/``.
+    """
+    if len(sources) <= 1:
+        return sources
+    after_dark = _ambience(_local_now().hour)[0] in _AFTER_DARK
+    for source in sources:
+        if ("night" in Path(source).stem.lower()) is after_dark:
+            return [source]
+    return sources[:1]
+
+
+def _images_in(directory: Path) -> list[str]:
+    """Every image file sitting directly in ``directory``, sorted by name."""
+    if not directory.is_dir():
+        return []
+    return [
+        str(path)
+        for path in sorted(directory.iterdir())
+        if path.is_file() and (mimetypes.guess_type(path.name)[0] or "").startswith("image/")
+    ]
 
 
 def friend_sources() -> dict[str, str]:
@@ -181,14 +231,7 @@ def friend_sources() -> dict[str, str]:
     The file name is the name the LLM asks for, so adding a friend is
     dropping ``<their name>.png`` in that directory — nothing else.
     """
-    directory = BUNDLED_REFERENCES / "friends"
-    if not directory.is_dir():
-        return {}
-    return {
-        path.stem: str(path)
-        for path in sorted(directory.iterdir())
-        if path.is_file() and (mimetypes.guess_type(path.name)[0] or "").startswith("image/")
-    }
+    return {Path(path).stem: path for path in _images_in(FRIENDS)}
 
 
 def build_selfie_prompt(friends: list[str]) -> str:
@@ -202,15 +245,22 @@ def build_selfie_prompt(friends: list[str]) -> str:
         company = (
             "\nAlso in frame: "
             + ", ".join(friends)
-            + ". The extra reference images are those friends, in the order"
-            " listed — match each one's face, hair, and outfit as closely as"
-            " the main character's. It's a group selfie taken while out"
-            " together: everyone leaning into one phone camera, the main"
-            " character nearest the lens holding it.\n"
+            + f". Exactly {len(friends) + 1} people are in the picture — one"
+            " per reference image, and nobody else. The references map in"
+            " order: the first is the main character, each one after it is the"
+            " next friend named above. Draw one character per reference image;"
+            " never turn a single reference into two characters. Match each"
+            " friend's face, hair, and outfit as closely as the main"
+            " character's. It's a group selfie taken while out together:"
+            " everyone leaning into one phone camera, the main character"
+            " nearest the lens holding it.\n"
         )
         setting = _OUTDOORS
     else:
-        company = ""
+        company = (
+            "\nExactly one person is in the picture: the character in the"
+            " single reference image. No second version of her, no one else.\n"
+        )
         setting = _INDOORS
 
     filled = SELFIE_PROMPT.replace("{company}", company).replace("{setting}", setting)
@@ -341,7 +391,6 @@ class OpenRouterImageGenService(ImageGenService):
         self,
         *,
         api_key: str,
-        references: list[dict[str, Any]],
         model: str = DEFAULT_MODEL,
         aspect_ratio: str = "auto",
         quality: str = "auto",
@@ -349,7 +398,6 @@ class OpenRouterImageGenService(ImageGenService):
     ):
         super().__init__(settings=ImageGenSettings(model=model))
         self._api_key = api_key
-        self._references = references
         self._aspect_ratio = aspect_ratio
         self._quality = quality
         self._ttl_seconds = ttl_seconds
@@ -359,11 +407,18 @@ class OpenRouterImageGenService(ImageGenService):
     ) -> AsyncGenerator[Frame, None]:
         """Generate, publish, and yield each image as a frame carrying its URL.
 
+        The persona's reference is resolved per call, not held from startup:
+        ``select_outfit`` reads the clock, and a bot that boots in daylight
+        runs into the night.
+
         ``extra_references`` are appended after the persona's own, which is the
         order ``build_selfie_prompt`` tells the model to expect.
         """
-        references = [*self._references, *(extra_references or [])][:MAX_REFERENCES]
         try:
+            references = [
+                *(load_reference(source) for source in reference_sources()),
+                *(extra_references or []),
+            ][:MAX_REFERENCES]
             result = await generate(
                 api_key=self._api_key,
                 prompt=prompt,
@@ -477,35 +532,32 @@ def _make_handler(
 
 
 def reference_sources() -> list[str]:
-    """Reference paths: ``SELFIE_REFERENCE_IMAGES`` if set, else what's bundled.
+    """The persona's reference image for right now — one outfit, never two.
 
-    The bundled directory is the whole configuration for a normal deployment
-    — drop an image in, it becomes a reference; take them all out and the tool
-    stops being offered.
+    ``SELFIE_REFERENCE_IMAGES`` if set, else what's bundled. The bundled
+    directory is the whole configuration for a normal deployment — drop an
+    outfit in, it becomes selectable; take them all out and the tool stops
+    being offered. Everything here goes through ``select_outfit``, so no
+    caller can put the same character in frame twice.
     """
     raw = os.getenv("SELFIE_REFERENCE_IMAGES") or ""
     configured = [part.strip() for part in raw.split(",") if part.strip()]
     if configured:
-        return configured
-    if not BUNDLED_REFERENCES.is_dir():
-        return []
-    return [
-        str(path)
-        for path in sorted(BUNDLED_REFERENCES.iterdir())
-        if path.is_file() and (mimetypes.guess_type(path.name)[0] or "").startswith("image/")
-    ]
+        return select_outfit(configured)
+    # Loose files directly under selfie-references/ are the layout from before
+    # outfits/ existed, so a deployment mounting its own data/ still works.
+    return select_outfit(_images_in(OUTFITS) or _images_in(BUNDLED_REFERENCES))
 
 
 def load_references() -> list[dict[str, Any]]:
-    """Every reference image, encoded for ``input_references``.
+    """The persona's current outfit, encoded for ``input_references``.
 
     Raises ``ImageGenError`` for a configured path that doesn't resolve —
     silently generating a selfie of nobody is worse than not offering one.
+    ``MAX_REFERENCES`` is enforced where friends are added and can push the
+    total past it; this side is always one image.
     """
-    sources = reference_sources()
-    if len(sources) > MAX_REFERENCES:
-        raise ImageGenError(f"{len(sources)} references configured; the cap is {MAX_REFERENCES}")
-    return [load_reference(source) for source in sources]
+    return [load_reference(source) for source in reference_sources()]
 
 
 def is_configured() -> bool:
@@ -536,18 +588,20 @@ def install_selfie_tool(
     if not api_key:
         logger.info("[selfie] Disabled: OPENROUTER_API_KEY is unset.")
         return tools
+    sources = reference_sources()
+    if not sources:
+        logger.info(f"[selfie] Disabled: no reference images in {BUNDLED_REFERENCES}.")
+        return tools
+    # Encode once here and throw it away: a path that can't be read should
+    # leave the tool unregistered rather than fail inside a viewer's call.
     try:
-        references = load_references()
+        load_references()
     except ImageGenError as e:
         logger.warning(f"[selfie] Disabled: {e}")
-        return tools
-    if not references:
-        logger.info(f"[selfie] Disabled: no reference images in {BUNDLED_REFERENCES}.")
         return tools
 
     service = OpenRouterImageGenService(
         api_key=api_key,
-        references=references,
         model=os.getenv("SELFIE_MODEL") or DEFAULT_MODEL,
         aspect_ratio=os.getenv("SELFIE_ASPECT_RATIO") or "3:4",
         quality=os.getenv("SELFIE_QUALITY") or "auto",
@@ -562,7 +616,10 @@ def install_selfie_tool(
         cancel_on_interruption=False,
         timeout_secs=float(env_int("SELFIE_TIMEOUT_SECONDS", 120)),
     )
-    logger.info(f"[selfie] Enabled with {len(references)} reference image(s).")
+    logger.info(
+        f"[selfie] Enabled. Outfit for this hour: {Path(sources[0]).name}"
+        " (re-picked per render)."
+    )
     friends = sorted(friend_sources())
     if friends:
         logger.info(f"[selfie] Friend references available: {friends}")
@@ -601,6 +658,8 @@ __all__ = [
     "MAX_REFERENCES",
     "QUALITIES",
     "BUNDLED_REFERENCES",
+    "FRIENDS",
+    "OUTFITS",
     "SELFIE_PROMPT",
     "TOOL_NAME",
     "GeneratedImage",
@@ -617,4 +676,5 @@ __all__ = [
     "load_reference",
     "persona_prefix_hint",
     "reference_sources",
+    "select_outfit",
 ]
