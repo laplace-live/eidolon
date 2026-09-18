@@ -19,6 +19,14 @@ __pycache__/
 vods/
 tools/__pycache__/
 
+# Offline ingest artifacts: ~685MB of cached embedding vectors, plus a one-off
+# Mem0 migration dump. `COPY ./data ./data` is not a targeted copy, so these
+# ship unless excluded here; nothing reads them at runtime — the bot embeds
+# each query fresh, and Mem0 reads Qdrant. CI images never had them (both are
+# gitignored, so `actions/checkout` never fetches them).
+data/embed_cache.db
+data/mem0-cloud-export.json
+
 # Tooling extras (faster-whisper etc.) live in optional deps; the
 # runtime image installs only the default deps via `uv sync --no-dev`.
 
