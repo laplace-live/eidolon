@@ -1,14 +1,17 @@
 # Ignore everything in data/ (raw transcripts, embed_cache.db, sample fixtures,
-# etc.) but keep the directory, this file, and the prebuilt LanceDB index
-# tracked. The LanceDB tables (stream_chunks, persona_facts) must be in-tree
-# so the image built in CI — which only sees git-tracked files via
-# `actions/checkout` — ships with RAG enabled. See the Dockerfile's data
-# section and `laplace-ingest-streams` / `laplace-ingest-facts` for how the
-# tables are (re)built.
+# etc.) but keep the directory, this file, the prebuilt LanceDB index, and the
+# selfie references tracked. Those must be in-tree so the image built in CI —
+# which only sees git-tracked files via `actions/checkout` — ships with RAG and
+# take_selfie enabled; both features disable themselves when their files are
+# missing, so an untracked one fails silently in production. See the
+# Dockerfile's data section, `laplace-ingest-streams` / `laplace-ingest-facts`
+# for how the tables are (re)built, and docs/selfies.md for the references.
 *
 !.gitignore
 !lancedb/
 !lancedb/**
+!selfie-references/
+!selfie-references/**
 
 # macOS Finder droppings — never commit these, even inside lancedb/.
 .DS_Store

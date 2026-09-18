@@ -56,6 +56,7 @@ from pipecat.transports.smallwebrtc.connection import IceServer, SmallWebRTCConn
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from . import image_generation
 from .audio_quality import (
     DEFAULT_BITRATE_BPS,
     QUALITY_PRESETS_BPS,
@@ -359,6 +360,7 @@ async def get_ice_servers():
 
 install_offer_middleware(pipecat_app)
 install_memory_admin(pipecat_app)
+image_generation.install_selfie_route(pipecat_app)
 
 # Mounted here so it shares resolve_user_context's cache.
 install_mcp(pipecat_app)
@@ -594,6 +596,7 @@ def _build_persona_prefix(
     user: UserContext,
     *,
     voice_styles: dict[str, str] | None = None,
+    selfie: bool = False,
 ) -> str:
     """Per-session preamble prepended to ``persona.md``: current date/time,
     viewer name, recent stream dates, available voice styles.
@@ -653,6 +656,9 @@ def _build_persona_prefix(
         voice_line = persona_prefix_hint(voice_styles)
         if voice_line:
             lines.append(voice_line)
+
+    if selfie:
+        lines.append(image_generation.persona_prefix_hint())
 
     return "\n".join(lines) + "\n\n"
 
@@ -731,8 +737,10 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
     # Off-loop: on a TTL miss this scans stream_date across every chunk row
     # (~65ms cold) and reads persona.md, both of which would otherwise stall
     # audio for every other in-progress call.
+    selfie_enabled = image_generation.is_configured()
     system_instruction = await asyncio.to_thread(
-        lambda: _build_persona_prefix(user, voice_styles=voice_styles) + load_persona()
+        lambda: _build_persona_prefix(user, voice_styles=voice_styles, selfie=selfie_enabled)
+        + load_persona()
     )
     llm = OpenRouterLLMService(
         api_key=os.getenv("OPENROUTER_API_KEY"),
@@ -744,6 +752,10 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
     )
 
     tools = install_voice_style_tool(llm=llm, tts=tts, styles=voice_styles)
+    # Before the archive: its install_tool snapshots the schema list, and on a
+    # second recall in one turn it resets the context to that snapshot. A tool
+    # registered after it would be dropped for the rest of the session.
+    tools = image_generation.install_selfie_tool(llm=llm, tools=tools)
     archive = _optional_rag(
         StreamArchiveService, "Stream archive", "laplace-ingest-streams"
     )

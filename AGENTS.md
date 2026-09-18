@@ -32,6 +32,7 @@ laplace_eidolon/      the runtime package
   retrieval.py          hybrid search — vector + jieba FTS + optional rerank
   embeddings.py         embedding client, LanceDB table access, disk cache
   voice_switching.py    the change_voice_style LLM tool and its styles
+  image_generation.py   the take_selfie LLM tool, its prompt, and /api/selfie
   mcp_server.py         public read-only MCP server mounted at /mcp
   mem0_local.py         self-hosted Mem0 config — embedded engine over Qdrant
   memory_service.py     Mem0 subclass · memory_admin.py serves /api/memories
@@ -39,7 +40,9 @@ laplace_eidolon/      the runtime package
   openrouter.py         attribution headers + usage-cost extraction
   tools/                the offline chain, one console script per stage
 persona.md            the system prompt — identity and hard rules, no code
-data/                 fact .txt sources, lancedb/ (Git LFS), eval/, embed_cache.db
+data/                 fact .txt sources, lancedb/ (Git LFS), eval/, embed_cache.db,
+                      selfie-references/ (the bundled images take_selfie redraws,
+                      plus friends/ — one per person, named after them)
 streams/              transcripts <id>.md + <id>.refined.json sidecars (untracked)
 vods/                 downloaded audio + .info.json sidecars (untracked)
 docs/                 the topics too large to inline here
@@ -61,6 +64,7 @@ a row here and writing the prose there — not a new section in this file.**
 | any env var — all 50-odd are documented there | `.env.example` |
 | Soniox's per-project vocabulary glossary | `laplace_eidolon/soniox_context.toml` |
 | broadcast overviews, date-scoped recall, or the archive lookup tool | [stream-recall.md](docs/stream-recall.md) |
+| the `take_selfie` tool, image generation, or `/api/selfie` | [selfies.md](docs/selfies.md) |
 
 ## Commands
 
@@ -105,6 +109,7 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | retrieval, tokenization, chunking, `top_k`, or `candidates` | `uv run laplace-eval-retrieval` against `data/eval/baseline.json`. A quality claim without a number is not a claim |
 | an ingest script, `EMBED_MODEL`, or `EMBED_DIM` | re-run **both** ingests, then commit the regenerated `data/lancedb/` |
 | the pipeline, the transport, or a monkey-patch | boot the bot and hold a real call — none of this is unit-testable |
+| `image_generation.py` | `uv run laplace-generate-image` against a real reference — it shares `generate()` with the bot, so a successful render is the check. Billed per image |
 | `mem0_local.py`, `memory_service.py`, or `memory_admin.py` | `docker compose up qdrant`, then round-trip a real store → search → delete. No test covers Mem0; it needs a live vector store and an embedding key |
 | an env var | document it in `.env.example` in the same commit |
 
@@ -143,7 +148,14 @@ module that owns it.
   the origin through a server-reflexive candidate.
 - **`install_mcp` is not idempotent** — it wraps the app lifespan, and a second
   call makes `session_manager.run()` raise at startup. Same for
-  `install_offer_middleware` and `install_memory_admin`: once each, at startup.
+  `install_offer_middleware`, `install_memory_admin`, and
+  `install_selfie_route`: once each, at startup.
+- **`OpenRouterImageGenService` must never go in the pipeline.** The
+  `ImageGenService` base it inherits generates an image from every `TextFrame`
+  it sees, and this pipeline streams one per sentence into TTS — adding it to
+  `Pipeline([...])` bills an image per sentence spoken. The `take_selfie`
+  handler calls `run_image_gen` directly instead. See
+  [selfies.md](docs/selfies.md).
 
 ### Identity and quotas
 
