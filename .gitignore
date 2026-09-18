@@ -229,6 +229,9 @@ __marimo__/
 *.webm
 *.flac
 
+# Default output of laplace-generate-image.
+data/generated/
+
 # Whisper model cache (downloaded on first transcribe run).
 .cache/
 ~/.cache/huggingface/
