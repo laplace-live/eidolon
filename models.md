@@ -1,0 +1,172 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.fish.audio/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Models Overview
+
+> Explore Fish Audio's speech generation and transcription models and their capabilities
+
+## Available Models
+
+Fish Audio offers text-to-speech models for voice generation and ASR models for audio transcription.
+
+### Recommended Model
+
+<Card title="s2.1-pro" icon="star">
+  **Fish Audio S2.1-Pro** - Our recommended production TTS model and an improved version of S2-Pro
+
+  * Natural language control with `[bracket]` syntax, not limited to a fixed set (e.g., `[whispers sweetly]`, `[laughing nervously]`)
+  * Multi-speaker dialogue support
+  * 83 languages
+  * Improved quality, latency, and throughput over S2-Pro
+  * Production option for workloads that need TTFA and DPA guarantees
+</Card>
+
+### Free Development Model
+
+<Card title="s2.1-pro-free" icon="flask">
+  **Fish Audio S2.1-Pro Free** - The same model as S2.1-Pro, available at \$0 for development and testing
+
+  * Use the `s2.1-pro-free` model string with the same TTS API endpoint
+  * Same model quality and language coverage as `s2.1-pro`
+  * Free to use under fair-use limits
+  * No TTFA or DPA guarantees
+  * Best for testing, prototyping, development, and smaller businesses
+</Card>
+
+### Previous S2 Model
+
+<Card title="s2-pro" icon="microchip">
+  **Fish Audio S2-Pro** - Previous-generation S2 TTS model
+
+  * Natural language control with `[bracket]` syntax, not limited to a fixed set (e.g., `[whispers sweetly]`, `[laughing nervously]`)
+  * Multi-speaker dialogue support
+  * 80+ languages
+  * 100ms time-to-first-audio
+  * Full SGLang-based serving stack
+  * Open-source
+</Card>
+
+<Note>
+  We recommend using `s2.1-pro` for production projects. Use `s2.1-pro-free` when you want the same model for evaluation, prototyping, development, and smaller businesses without TTFA or DPA guarantees. S1 remains available for existing integrations.
+</Note>
+
+### Previous Model
+
+<Card title="s1" icon="microchip">
+  **Fish Audio S1** - High-quality voice generation
+
+  * 4 billion parameters
+  * 0.008 WER (0.8% word error rate)
+  * Full emotional control capabilities with `(parenthesis)` syntax
+</Card>
+
+## Speech-to-Text Models
+
+Both ASR models use `POST /v1/asr`. Select one with the `model` HTTP header.
+
+| Model              | Capabilities                                                                                                                                              |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `transcribe-1`     | General transcription with optional timestamps. Default when the `model` header is omitted.                                                               |
+| `transcribe-1-pro` | Multi-speaker conversation transcription, with inline emotion and vocal-event cues such as `[高兴]` (happy) and `[laughter]`. Supports optional timestamps. |
+
+Pro returns speaker turns as inline `<|speaker:N|>` markers in `text`, alongside emotion cues. Repeated labels identify the same speaker within a recording. Timestamped `segments` contain spoken words without these markers and do not expose per-segment speaker IDs. See the [multi-speaker response example](/features/speech-to-text#multi-speaker-conversations) and [ASR pricing](/developer-guide/models-pricing/pricing-and-rate-limits#automatic-speech-recognition-asr-models).
+
+## Model Specifications
+
+### Fish Audio S1 Performance Metrics
+
+* **Word Error Rate (WER)**: 0.008 (0.8%)
+* **Character Error Rate (CER)**: 0.004 (0.4%)
+* **Real-time Factor**: \~1:7 on standard hardware
+* **TTS-Arena2 Ranking**: #1 worldwide
+
+## Supported Languages
+
+### S2.1-Pro and S2-Pro
+
+S2.1-Pro supports 83 languages, while S2-Pro supports 80+ languages. Both use automatic language detection and support inline emotion and paralinguistic cues.
+
+<Info>
+  Language detection is automatic - simply provide text in your target language.
+</Info>
+
+### S1
+
+S1 supports text-to-speech generation in 13 languages with full emotional expression capabilities.
+
+```
+English, Chinese, Japanese, German,
+French, Spanish, Korean, Arabic,
+Russian, Dutch, Italian, Polish, Portuguese
+```
+
+## Voice Styles and Emotions
+
+Fish Audio models support emotional expressions and voice styles that can be controlled through text markers in your input.
+
+### S2.1-Pro and S2-Pro Natural Language Control
+
+S2.1-Pro and S2-Pro treat `[bracket]` tags as standard text rather than dedicated control tokens. Through training on massive datasets, the models learned implicit mappings between natural language descriptions and acoustic variations. You can use any descriptive expression and the model will interpret it, such as `[whispers sweetly]` or `[laughing nervously]`.
+
+Common examples include:
+
+```
+[whisper] [laugh] [emphasis] [sigh] [gasp] [pause]
+[angry] [excited] [sad] [surprised] [inhale] [exhale]
+```
+
+<Tip>
+  S2 cues can be placed anywhere in your text to control emotion at specific positions. For example: `"I can't believe it [gasp] you actually did it [laugh]"`
+</Tip>
+
+### S1 Voice Styles and Emotions
+
+S1 supports 64+ emotional expressions using `(parenthesis)` syntax.
+
+### Basic Emotions (24 expressions)
+
+```
+(angry) (sad) (excited) (surprised) (satisfied) (delighted)
+(scared) (worried) (upset) (nervous) (frustrated) (depressed)
+(empathetic) (embarrassed) (disgusted) (moved) (proud) (relaxed)
+(grateful) (confident) (interested) (curious) (confused) (joyful)
+```
+
+### Advanced Emotions (25 expressions)
+
+```
+(disdainful) (unhappy) (anxious) (hysterical) (indifferent)
+(impatient) (guilty) (scornful) (panicked) (furious) (reluctant)
+(keen) (disapproving) (negative) (denying) (astonished) (serious)
+(sarcastic) (conciliative) (comforting) (sincere) (sneering)
+(hesitating) (yielding) (painful) (awkward) (amused)
+```
+
+### Tone Markers (5 expressions)
+
+```
+(in a hurry tone) (shouting) (screaming) (whispering) (soft tone)
+```
+
+### Audio Effects (10 expressions)
+
+```
+(laughing) (chuckling) (sobbing) (crying loudly) (sighing)
+(panting) (groaning) (crowd laughing) (background laughter) (audience laughing)
+```
+
+<Tip>
+  You can also use natural expressions like "Ha,ha,ha" for laughter. Experiment with combinations to achieve the perfect emotional tone for your application.
+</Tip>
+
+## Support
+
+Need help? Check out these resources:
+
+* [API Reference](/api-reference/introduction) - Complete API documentation
+* [Create a Voice Clone](/api-reference/endpoint/model/create-model) - Create a voice clone model
+* [Generate Speech](/api-reference/endpoint/openapi-v1/text-to-speech) - Generate realistic speech
+* [Real-time Streaming](/features/realtime-streaming) - WebSocket for real-time streaming
+* [Discord Community](https://discord.com/invite/dF9Db2Tt3Y) - Get help from the community
+* [Support Email](mailto:support@fish.audio) - Contact our support team

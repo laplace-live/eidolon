@@ -1,0 +1,461 @@
+{
+ "voice": "41da6f76…",
+ "variants": [
+  {
+   "variant": "a-s2pro",
+   "take": 0,
+   "note": "s2-pro, one leading cue — the .env this session started with",
+   "model": "s2-pro",
+   "chunks": [
+    "[nostalgic] 他其实是一只黑色的布偶猫。",
+    "虽然性格看着一点都不像布偶，反而像个高冷的理工猫，嗯。"
+   ],
+   "first_audio_ms": 1918,
+   "wav": "a-s2pro.wav",
+   "seconds": 7.16,
+   "loudness_std_db": 6.77,
+   "loudness_range_db": 36.93,
+   "pitch_std_semitones": 2.89,
+   "peak_dbfs": -4.39
+  },
+  {
+   "variant": "a-s2pro",
+   "take": 1,
+   "note": "s2-pro, one leading cue — the .env this session started with",
+   "model": "s2-pro",
+   "chunks": [
+    "[nostalgic] 他其实是一只黑色的布偶猫。",
+    "虽然性格看着一点都不像布偶，反而像个高冷的理工猫，嗯。"
+   ],
+   "first_audio_ms": 1850,
+   "wav": "a-s2pro-1.wav",
+   "seconds": 7.22,
+   "loudness_std_db": 6.51,
+   "loudness_range_db": 35.35,
+   "pitch_std_semitones": 5.18,
+   "peak_dbfs": -7.85
+  },
+  {
+   "variant": "a-s2pro",
+   "take": 2,
+   "note": "s2-pro, one leading cue — the .env this session started with",
+   "model": "s2-pro",
+   "chunks": [
+    "[nostalgic] 他其实是一只黑色的布偶猫。",
+    "虽然性格看着一点都不像布偶，反而像个高冷的理工猫，嗯。"
+   ],
+   "first_audio_ms": 1833,
+   "wav": "a-s2pro-2.wav",
+   "seconds": 7.44,
+   "loudness_std_db": 7.65,
+   "loudness_range_db": 37.75,
+   "pitch_std_semitones": 3.88,
+   "peak_dbfs": -3.85
+  },
+  {
+   "variant": "b-s21pro",
+   "take": 0,
+   "note": "s2.1-pro, everything else equal",
+   "model": "s2.1-pro",
+   "chunks": [
+    "[nostalgic] 他其实是一只黑色的布偶猫。",
+    "虽然性格看着一点都不像布偶，反而像个高冷的理工猫，嗯。"
+   ],
+   "first_audio_ms": 1998,
+   "wav": "b-s21pro.wav",
+   "seconds": 6.69,
+   "loudness_std_db": 9.18,
+   "loudness_range_db": 42.55,
+   "pitch_std_semitones": 4.39,
+   "peak_dbfs": -0.33
+  },
+  {
+   "variant": "b-s21pro",
+   "take": 1,
+   "note": "s2.1-pro, everything else equal",
+   "model": "s2.1-pro",
+   "chunks": [
+    "[nostalgic] 他其实是一只黑色的布偶猫。",
+    "虽然性格看着一点都不像布偶，反而像个高冷的理工猫，嗯。"
+   ],
+   "first_audio_ms": 1801,
+   "wav": "b-s21pro-1.wav",
+   "seconds": 6.11,
+   "loudness_std_db": 6.58,
+   "loudness_range_db": 30.08,
+   "pitch_std_semitones": 4.4,
+   "peak_dbfs": -0.46
+  },
+  {
+   "variant": "b-s21pro",
+   "take": 2,
+   "note": "s2.1-pro, everything else equal",
+   "model": "s2.1-pro",
+   "chunks": [
+    "[nostalgic] 他其实是一只黑色的布偶猫。",
+    "虽然性格看着一点都不像布偶，反而像个高冷的理工猫，嗯。"
+   ],
+   "first_audio_ms": 1837,
+   "wav": "b-s21pro-2.wav",
+   "seconds": 6.96,
+   "loudness_std_db": 8.17,
+   "loudness_range_db": 40.58,
+   "pitch_std_semitones": 5.12,
+   "peak_dbfs": -0.43
+  },
+  {
+   "variant": "c-temperature",
+   "take": 0,
+   "note": "b + temperature 0.9, top_p 0.9",
+   "model": "s2.1-pro",
+   "chunks": [
+    "[nostalgic] 他其实是一只黑色的布偶猫。",
+    "虽然性格看着一点都不像布偶，反而像个高冷的理工猫，嗯。"
+   ],
+   "first_audio_ms": 1918,
+   "wav": "c-temperature.wav",
+   "seconds": 7.4,
+   "loudness_std_db": 7.68,
+   "loudness_range_db": 39.98,
+   "pitch_std_semitones": 3.41,
+   "peak_dbfs": -0.46
+  },
+  {
+   "variant": "c-temperature",
+   "take": 1,
+   "note": "b + temperature 0.9, top_p 0.9",
+   "model": "s2.1-pro",
+   "chunks": [
+    "[nostalgic] 他其实是一只黑色的布偶猫。",
+    "虽然性格看着一点都不像布偶，反而像个高冷的理工猫，嗯。"
+   ],
+   "first_audio_ms": 1856,
+   "wav": "c-temperature-1.wav",
+   "seconds": 6.66,
+   "loudness_std_db": 7.29,
+   "loudness_range_db": 42.12,
+   "pitch_std_semitones": 4.93,
+   "peak_dbfs": -0.56
+  },
+  {
+   "variant": "c-temperature",
+   "take": 2,
+   "note": "b + temperature 0.9, top_p 0.9",
+   "model": "s2.1-pro",
+   "chunks": [
+    "[nostalgic] 他其实是一只黑色的布偶猫。",
+    "虽然性格看着一点都不像布偶，反而像个高冷的理工猫，嗯。"
+   ],
+   "first_audio_ms": 1854,
+   "wav": "c-temperature-2.wav",
+   "seconds": 7.19,
+   "loudness_std_db": 8.76,
+   "loudness_range_db": 43.91,
+   "pitch_std_semitones": 4.55,
+   "peak_dbfs": -0.45
+  },
+  {
+   "variant": "d-no-loudness-norm",
+   "take": 0,
+   "note": "b + prosody.normalize_loudness false",
+   "model": "s2.1-pro",
+   "chunks": [
+    "[nostalgic] 他其实是一只黑色的布偶猫。",
+    "虽然性格看着一点都不像布偶，反而像个高冷的理工猫，嗯。"
+   ],
+   "first_audio_ms": 1833,
+   "wav": "d-no-loudness-norm.wav",
+   "seconds": 6.39,
+   "loudness_std_db": 7.73,
+   "loudness_range_db": 37.41,
+   "pitch_std_semitones": 3.37,
+   "peak_dbfs": -0.48
+  },
+  {
+   "variant": "d-no-loudness-norm",
+   "take": 1,
+   "note": "b + prosody.normalize_loudness false",
+   "model": "s2.1-pro",
+   "chunks": [
+    "[nostalgic] 他其实是一只黑色的布偶猫。",
+    "虽然性格看着一点都不像布偶，反而像个高冷的理工猫，嗯。"
+   ],
+   "first_audio_ms": 2039,
+   "wav": "d-no-loudness-norm-1.wav",
+   "seconds": 6.61,
+   "loudness_std_db": 8.44,
+   "loudness_range_db": 43.45,
+   "pitch_std_semitones": 3.92,
+   "peak_dbfs": -0.36
+  },
+  {
+   "variant": "d-no-loudness-norm",
+   "take": 2,
+   "note": "b + prosody.normalize_loudness false",
+   "model": "s2.1-pro",
+   "chunks": [
+    "[nostalgic] 他其实是一只黑色的布偶猫。",
+    "虽然性格看着一点都不像布偶，反而像个高冷的理工猫，嗯。"
+   ],
+   "first_audio_ms": 1841,
+   "wav": "d-no-loudness-norm-2.wav",
+   "seconds": 6.39,
+   "loudness_std_db": 7.53,
+   "loudness_range_db": 40.17,
+   "pitch_std_semitones": 4.69,
+   "peak_dbfs": -0.52
+  },
+  {
+   "variant": "e-whole-reply",
+   "take": 0,
+   "note": "b + one generation for the whole reply",
+   "model": "s2.1-pro",
+   "chunks": [
+    "[nostalgic] 他其实是一只黑色的布偶猫。虽然性格看着一点都不像布偶，反而像个高冷的理工猫，嗯。"
+   ],
+   "first_audio_ms": 3098,
+   "wav": "e-whole-reply.wav",
+   "seconds": 7.01,
+   "loudness_std_db": 7.57,
+   "loudness_range_db": 44.83,
+   "pitch_std_semitones": 4.03,
+   "peak_dbfs": -0.62
+  },
+  {
+   "variant": "e-whole-reply",
+   "take": 1,
+   "note": "b + one generation for the whole reply",
+   "model": "s2.1-pro",
+   "chunks": [
+    "[nostalgic] 他其实是一只黑色的布偶猫。虽然性格看着一点都不像布偶，反而像个高冷的理工猫，嗯。"
+   ],
+   "first_audio_ms": 3195,
+   "wav": "e-whole-reply-1.wav",
+   "seconds": 6.78,
+   "loudness_std_db": 8.54,
+   "loudness_range_db": 42.01,
+   "pitch_std_semitones": 4.18,
+   "peak_dbfs": -0.44
+  },
+  {
+   "variant": "e-whole-reply",
+   "take": 2,
+   "note": "b + one generation for the whole reply",
+   "model": "s2.1-pro",
+   "chunks": [
+    "[nostalgic] 他其实是一只黑色的布偶猫。虽然性格看着一点都不像布偶，反而像个高冷的理工猫，嗯。"
+   ],
+   "first_audio_ms": 3389,
+   "wav": "e-whole-reply-2.wav",
+   "seconds": 6.5,
+   "loudness_std_db": 7.13,
+   "loudness_range_db": 41.37,
+   "pitch_std_semitones": 3.55,
+   "peak_dbfs": -0.36
+  },
+  {
+   "variant": "f-cue-per-sentence",
+   "take": 0,
+   "note": "b + a cue opening every sentence",
+   "model": "s2.1-pro",
+   "chunks": [
+    "[nostalgic] 他其实是一只黑色的布偶猫。",
+    "[chuckling] 嘿嘿，虽然性格看着一点都不像布偶，[relaxed] 反而像个高冷的理工猫，嗯。"
+   ],
+   "first_audio_ms": 1980,
+   "wav": "f-cue-per-sentence.wav",
+   "seconds": 8.12,
+   "loudness_std_db": 8.8,
+   "loudness_range_db": 42.46,
+   "pitch_std_semitones": 3.89,
+   "peak_dbfs": -0.41
+  },
+  {
+   "variant": "f-cue-per-sentence",
+   "take": 1,
+   "note": "b + a cue opening every sentence",
+   "model": "s2.1-pro",
+   "chunks": [
+    "[nostalgic] 他其实是一只黑色的布偶猫。",
+    "[chuckling] 嘿嘿，虽然性格看着一点都不像布偶，[relaxed] 反而像个高冷的理工猫，嗯。"
+   ],
+   "first_audio_ms": 1866,
+   "wav": "f-cue-per-sentence-1.wav",
+   "seconds": 7.9,
+   "loudness_std_db": 10.1,
+   "loudness_range_db": 43.6,
+   "pitch_std_semitones": 3.92,
+   "peak_dbfs": -0.42
+  },
+  {
+   "variant": "f-cue-per-sentence",
+   "take": 2,
+   "note": "b + a cue opening every sentence",
+   "model": "s2.1-pro",
+   "chunks": [
+    "[nostalgic] 他其实是一只黑色的布偶猫。",
+    "[chuckling] 嘿嘿，虽然性格看着一点都不像布偶，[relaxed] 反而像个高冷的理工猫，嗯。"
+   ],
+   "first_audio_ms": 1908,
+   "wav": "f-cue-per-sentence-2.wav",
+   "seconds": 8.44,
+   "loudness_std_db": 10.86,
+   "loudness_range_db": 44.84,
+   "pitch_std_semitones": 4.43,
+   "peak_dbfs": -0.39
+  },
+  {
+   "variant": "g-all",
+   "take": 0,
+   "note": "f + temperature 0.9 + no loudness norm",
+   "model": "s2.1-pro",
+   "chunks": [
+    "[nostalgic] 他其实是一只黑色的布偶猫。",
+    "[chuckling] 嘿嘿，虽然性格看着一点都不像布偶，[relaxed] 反而像个高冷的理工猫，嗯。"
+   ],
+   "first_audio_ms": 1856,
+   "wav": "g-all.wav",
+   "seconds": 8.09,
+   "loudness_std_db": 9.4,
+   "loudness_range_db": 39.54,
+   "pitch_std_semitones": 3.72,
+   "peak_dbfs": -0.49
+  },
+  {
+   "variant": "g-all",
+   "take": 1,
+   "note": "f + temperature 0.9 + no loudness norm",
+   "model": "s2.1-pro",
+   "chunks": [
+    "[nostalgic] 他其实是一只黑色的布偶猫。",
+    "[chuckling] 嘿嘿，虽然性格看着一点都不像布偶，[relaxed] 反而像个高冷的理工猫，嗯。"
+   ],
+   "first_audio_ms": 1859,
+   "wav": "g-all-1.wav",
+   "seconds": 8.35,
+   "loudness_std_db": 11.35,
+   "loudness_range_db": 43.3,
+   "pitch_std_semitones": 4.64,
+   "peak_dbfs": -0.48
+  },
+  {
+   "variant": "g-all",
+   "take": 2,
+   "note": "f + temperature 0.9 + no loudness norm",
+   "model": "s2.1-pro",
+   "chunks": [
+    "[nostalgic] 他其实是一只黑色的布偶猫。",
+    "[chuckling] 嘿嘿，虽然性格看着一点都不像布偶，[relaxed] 反而像个高冷的理工猫，嗯。"
+   ],
+   "first_audio_ms": 2043,
+   "wav": "g-all-2.wav",
+   "seconds": 4.79,
+   "loudness_std_db": 9.43,
+   "loudness_range_db": 41.75,
+   "pitch_std_semitones": 5.05,
+   "peak_dbfs": -0.59
+  },
+  {
+   "variant": "h-freeform",
+   "take": 0,
+   "note": "b + free-form cues per sentence, which persona.md forbids",
+   "model": "s2.1-pro",
+   "chunks": [
+    "[a little nostalgic, fondly] 他其实是一只黑色的布偶猫。",
+    "[chuckling softly] 嘿嘿，虽然性格看着一点都不像布偶，[amused and warm] 反而像个高冷的理工猫，嗯。"
+   ],
+   "first_audio_ms": 1950,
+   "wav": "h-freeform.wav",
+   "seconds": 8.86,
+   "loudness_std_db": 9.78,
+   "loudness_range_db": 41.8,
+   "pitch_std_semitones": 4.04,
+   "peak_dbfs": -0.22
+  },
+  {
+   "variant": "h-freeform",
+   "take": 1,
+   "note": "b + free-form cues per sentence, which persona.md forbids",
+   "model": "s2.1-pro",
+   "chunks": [
+    "[a little nostalgic, fondly] 他其实是一只黑色的布偶猫。",
+    "[chuckling softly] 嘿嘿，虽然性格看着一点都不像布偶，[amused and warm] 反而像个高冷的理工猫，嗯。"
+   ],
+   "first_audio_ms": 1852,
+   "wav": "h-freeform-1.wav",
+   "seconds": 8.56,
+   "loudness_std_db": 10.01,
+   "loudness_range_db": 41.87,
+   "pitch_std_semitones": 4.22,
+   "peak_dbfs": -0.47
+  },
+  {
+   "variant": "h-freeform",
+   "take": 2,
+   "note": "b + free-form cues per sentence, which persona.md forbids",
+   "model": "s2.1-pro",
+   "chunks": [
+    "[a little nostalgic, fondly] 他其实是一只黑色的布偶猫。",
+    "[chuckling softly] 嘿嘿，虽然性格看着一点都不像布偶，[amused and warm] 反而像个高冷的理工猫，嗯。"
+   ],
+   "first_audio_ms": 2065,
+   "wav": "h-freeform-2.wav",
+   "seconds": 9.16,
+   "loudness_std_db": 9.43,
+   "loudness_range_db": 42.58,
+   "pitch_std_semitones": 3.37,
+   "peak_dbfs": -0.41
+  },
+  {
+   "variant": "i-emotion-per-sentence",
+   "take": 0,
+   "note": "b + an emotion cue per sentence, no added words",
+   "model": "s2.1-pro",
+   "chunks": [
+    "[nostalgic] 他其实是一只黑色的布偶猫。",
+    "[amused] 虽然性格看着一点都不像布偶，[relaxed] 反而像个高冷的理工猫，嗯。"
+   ],
+   "first_audio_ms": 1931,
+   "wav": "i-emotion-per-sentence.wav",
+   "seconds": 7.58,
+   "loudness_std_db": 8.34,
+   "loudness_range_db": 44.19,
+   "pitch_std_semitones": 3.91,
+   "peak_dbfs": -0.57
+  },
+  {
+   "variant": "i-emotion-per-sentence",
+   "take": 1,
+   "note": "b + an emotion cue per sentence, no added words",
+   "model": "s2.1-pro",
+   "chunks": [
+    "[nostalgic] 他其实是一只黑色的布偶猫。",
+    "[amused] 虽然性格看着一点都不像布偶，[relaxed] 反而像个高冷的理工猫，嗯。"
+   ],
+   "first_audio_ms": 1949,
+   "wav": "i-emotion-per-sentence-1.wav",
+   "seconds": 6.85,
+   "loudness_std_db": 8.12,
+   "loudness_range_db": 40.17,
+   "pitch_std_semitones": 5.87,
+   "peak_dbfs": -0.47
+  },
+  {
+   "variant": "i-emotion-per-sentence",
+   "take": 2,
+   "note": "b + an emotion cue per sentence, no added words",
+   "model": "s2.1-pro",
+   "chunks": [
+    "[nostalgic] 他其实是一只黑色的布偶猫。",
+    "[amused] 虽然性格看着一点都不像布偶，[relaxed] 反而像个高冷的理工猫，嗯。"
+   ],
+   "first_audio_ms": 2051,
+   "wav": "i-emotion-per-sentence-2.wav",
+   "seconds": 6.66,
+   "loudness_std_db": 9.01,
+   "loudness_range_db": 44.3,
+   "pitch_std_semitones": 4.07,
+   "peak_dbfs": -0.48
+  }
+ ]
+}

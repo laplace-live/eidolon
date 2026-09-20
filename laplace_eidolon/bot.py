@@ -698,7 +698,7 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
     stt = SonioxSTTService(
         api_key=soniox_api_key,
         settings=SonioxSTTService.Settings(
-            model=os.getenv("SONIOX_MODEL", "stt-rt-v5"),
+            model=os.getenv("SONIOX_MODEL") or "stt-rt-v5",
         ),
     )
 
@@ -726,7 +726,7 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
         stop_frame_timeout_s=15.0,
         settings=FishAudioTTSService.Settings(
             voice=os.getenv("FISH_VOICE_ID"),
-            model=os.getenv("FISH_MODEL", "s2.1-pro"),
+            model=os.getenv("FISH_MODEL") or "s2.1-pro",
             latency="normal",
             # Fish's EN/ZH number normalization is on server-side by default,
             # but it reads years badly (2026 as a cardinal, not "二零二六").
