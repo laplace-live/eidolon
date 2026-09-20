@@ -31,6 +31,7 @@ from pydantic import BaseModel, Field
 from .embeddings import DEFAULT_DB_PATH
 from .env import env_int
 from .retrieval import build_query_text
+from .retrieval_gate import GATE_FRAME_KEY, unless_skipped
 from .retriever import LanceRetriever
 from .stream_catalog import StreamCatalog, format_broadcasts
 from .stream_recall import OVERVIEW_FRAME_KEY, RecallResult, StreamRecall
@@ -343,7 +344,9 @@ class StreamArchiveService(FrameProcessor):
             lines.append(result.note)
         return "\n".join(lines)
 
-    async def _enhance(self, context: LLMContext, query: str) -> bool:
+    async def _enhance(
+        self, context: LLMContext, query: str, decision: asyncio.Future[bool] | None = None
+    ) -> bool:
         recent = await asyncio.to_thread(self.recall.catalog.recent, 3)
         self._set_block(
             context, _RECENT_PREFIX, format_broadcasts(recent, max_chars=3600) if recent else ""
@@ -386,7 +389,7 @@ class StreamArchiveService(FrameProcessor):
             )
             return is_stream_overview(latest)
 
-        chunks = await self._search(query)
+        chunks = await unless_skipped(decision, lambda: self._search(query))
         if chunks and archive_query:
             self._last_was_archive = True
             scope = StreamScope(
@@ -523,7 +526,9 @@ class StreamArchiveService(FrameProcessor):
 
                 if self._begin_turn(context) and query:
                     if len(query.strip()) >= self._params.min_query_chars:
-                        frame.metadata[OVERVIEW_FRAME_KEY] = await self._enhance(context, query)
+                        frame.metadata[OVERVIEW_FRAME_KEY] = await self._enhance(
+                            context, query, frame.metadata.get(GATE_FRAME_KEY)
+                        )
 
                 await self.push_frame(frame)
             except Exception as e:

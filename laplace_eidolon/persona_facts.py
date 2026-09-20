@@ -11,6 +11,7 @@ position, 5-minute transcript scenes instead of one-line facts.
 
 from __future__ import annotations
 
+import asyncio
 import os
 from typing import Any, cast
 
@@ -22,6 +23,7 @@ from pydantic import BaseModel, Field
 from .embeddings import DEFAULT_DB_PATH
 from .env import env_int
 from .retrieval import build_query_text
+from .retrieval_gate import GATE_FRAME_KEY, unless_skipped
 from .retriever import LanceRetriever
 from .stream_recall import OVERVIEW_FRAME_KEY
 
@@ -163,13 +165,15 @@ class PersonaFactsService(FrameProcessor):
                 lines.append(f"- {text}")
         return "\n".join(lines).rstrip() + "\n"
 
-    async def _enhance(self, context, query: str) -> None:
+    async def _enhance(
+        self, context, query: str, decision: asyncio.Future[bool] | None = None
+    ) -> None:
         """Inject retrieved facts into the LLM context as a system message."""
         if self._last_query == query:
             return
         self._last_query = query
 
-        facts = await self._search(query)
+        facts = await unless_skipped(decision, lambda: self._search(query))
         if not facts:
             return
 
@@ -206,7 +210,7 @@ class PersonaFactsService(FrameProcessor):
                 )
 
                 if query and len(query.strip()) >= self._params.min_query_chars:
-                    await self._enhance(context, query)
+                    await self._enhance(context, query, frame.metadata.get(GATE_FRAME_KEY))
 
                 await self.push_frame(frame)
             except Exception as e:

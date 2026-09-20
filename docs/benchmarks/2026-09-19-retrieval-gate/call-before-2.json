@@ -1,0 +1,180 @@
+{
+ "label": "before-2",
+ "turns": [
+  {
+   "line": "(greeting)",
+   "heard": "",
+   "turn_detection_ms": 2,
+   "retrieval_stage_ms": 4957,
+   "llm_first_text_ms": 8058,
+   "tts_first_audio_ms": 1214,
+   "first_audible_ms": 14231,
+   "requests_ms": {
+    "decisions": [],
+    "embeddings": [
+     1638,
+     636
+    ],
+    "rerank": [
+     1677,
+     514
+    ]
+   },
+   "logs": [
+    "Archive hit: query='用一两句话简短自然地打个招呼。' → 3 rows (top_score=0.496, dates=['2023-02-20', '2023-03-10', '2025-06-29'], refined=3/3, types=['opening', 'sc_session'])",
+    "Persona facts hit: query='用一两句话简短自然地打个招呼。' → 8 rows (top_score=0.404, sources=['明前奶绿事件集.txt'], dated=8/8)"
+   ],
+   "reply": "[relaxed][soft tone] 哈喽哈喽，你来啦？今天过得怎么样呀，嗯。"
+  },
+  {
+   "line": "我今天加班好累啊。",
+   "heard": "我今天加班好累啊。",
+   "turn_detection_ms": 735,
+   "retrieval_stage_ms": 4607,
+   "llm_first_text_ms": 5662,
+   "tts_first_audio_ms": 619,
+   "first_audible_ms": 11622,
+   "requests_ms": {
+    "decisions": [],
+    "embeddings": [
+     1670,
+     615
+    ],
+    "rerank": [
+     1764,
+     394
+    ]
+   },
+   "logs": [
+    "Archive hit: query='我今天加班好累啊。' → 3 rows (top_score=0.633, dates=['2023-08-21', '2024-11-09', '2025-07-20'], refined=3/3, types=['commentary'])",
+    "Persona facts hit: query='我今天加班好累啊。' → 8 rows (top_score=0.520, sources=['明前奶绿事件集.txt'], dated=8/8)"
+   ],
+   "reply": "[sympathetic][soft tone] 唉，辛苦啦……班是上不完的，命可是自己的，回去赶紧洗个热水澡躺平，别硬撑着，嗯。"
+  },
+  {
+   "line": "你喜欢吃纳豆吗？",
+   "heard": " 你喜欢吃纳豆吗？",
+   "turn_detection_ms": 735,
+   "retrieval_stage_ms": 4926,
+   "llm_first_text_ms": 6017,
+   "tts_first_audio_ms": 1184,
+   "first_audible_ms": 12862,
+   "requests_ms": {
+    "decisions": [],
+    "embeddings": [
+     1555,
+     524
+    ],
+    "rerank": [
+     2261,
+     509
+    ]
+   },
+   "logs": [
+    "Archive hit: query='你喜欢吃纳豆吗？' → 3 rows (top_score=0.703, dates=['2024-02-11', '2025-04-11', '2026-01-31'], refined=3/3, types=['commentary'])",
+    "Persona facts hit: query='你喜欢吃纳豆吗？' → 8 rows (top_score=0.793, sources=['店长坚果设定集.txt', '明前奶绿事件集.txt'], dated=8/8)"
+   ],
+   "reply": "[groaning] 完全不行！[break] 以前试过搅得全是白丝，又粘又苦的，甚至还作死空口吃过一整盒，简直是惨痛回忆，我是真吃不惯那个，嗯。"
+  },
+  {
+   "line": "哈哈哈，好吧。",
+   "heard": " 哈哈哈。 好吧。",
+   "turn_detection_ms": 472,
+   "retrieval_stage_ms": 4874,
+   "llm_first_text_ms": 3616,
+   "tts_first_audio_ms": 1239,
+   "first_audible_ms": 10202,
+   "requests_ms": {
+    "decisions": [],
+    "embeddings": [
+     1403,
+     577
+    ],
+    "rerank": [
+     1991,
+     480
+    ]
+   },
+   "logs": [
+    "Archive hit: query='你喜欢吃纳豆吗？ 哈哈哈。 好吧。' → 3 rows (top_score=0.711, dates=['2023-07-06', '2024-02-11', '2026-01-31'], refined=3/3, types=['commentary'])",
+    "Persona facts hit: query='你喜欢吃纳豆吗？ 哈哈哈。 好吧。' → 8 rows (top_score=0.727, sources=['店长坚果设定集.txt', '明前奶绿事件集.txt', '明前奶绿设定集.txt'], dated=8/8)"
+   ],
+   "reply": "[chuckling] 嘿嘿，[soft tone]你吃晚饭了没啊？要是加班饿了就赶紧吃点好吃的垫垫肚子，可别学我挑奇怪的东西挑战自我，嗯。"
+  },
+  {
+   "line": "坚果是什么品种的猫？",
+   "heard": " 坚果是什么品种的猫？",
+   "turn_detection_ms": 3282,
+   "retrieval_stage_ms": 4826,
+   "llm_first_text_ms": 3754,
+   "tts_first_audio_ms": 2620,
+   "first_audible_ms": 14482,
+   "requests_ms": {
+    "decisions": [],
+    "embeddings": [
+     1518,
+     634
+    ],
+    "rerank": [
+     2069,
+     492
+    ]
+   },
+   "logs": [
+    "Archive hit: query='坚果是什么品种的猫？' → 3 rows (top_score=0.684, dates=['2024-10-19', '2024-10-31', '2025-02-11'], refined=3/3, types=['commentary'])",
+    "Persona facts hit: query='坚果是什么品种的猫？' → 8 rows (top_score=0.527, sources=['店长坚果设定集.txt', '明前奶绿事件集.txt'], dated=6/8)"
+   ],
+   "reply": "[calm] 坚果是黑色的布偶猫呀，[break] 不过他以前老是一副高冷理工猫的样子，吃饭还老漏嘴，一点都不像大家印象里那种软萌布偶，嗯。"
+  },
+  {
+   "line": "你是不是说过你不敢去网吧？",
+   "heard": " 你是不是说过你不敢去网吧？",
+   "turn_detection_ms": 637,
+   "retrieval_stage_ms": 4525,
+   "llm_first_text_ms": 6617,
+   "tts_first_audio_ms": 1924,
+   "first_audible_ms": 13703,
+   "requests_ms": {
+    "decisions": [],
+    "embeddings": [
+     1394,
+     721
+    ],
+    "rerank": [
+     1848,
+     431
+    ]
+   },
+   "logs": [
+    "Archive hit: query='你是不是说过你不敢去网吧？' → 3 rows (top_score=0.738, dates=['2022-10-30', '2023-08-18', '2024-05-27'], refined=3/3, types=['commentary'])",
+    "Persona facts hit: query='你是不是说过你不敢去网吧？' → 8 rows (top_score=0.734, sources=['明前奶绿事件集.txt'], dated=8/8)"
+   ],
+   "reply": "[gasping] 对啊！[uncertain] 那边烟味又重，还有机箱热气蒸腾的怪味，而且我以前还亲眼见过有人在里面扯头发打架，吓得我弱小可怜又无助。反正在家玩自己的电脑多安心，我可是很惜命的，嗯。"
+  },
+  {
+   "line": "好的，我先去吃饭了，一会儿回来。",
+   "heard": " 好的。 我先去吃饭了。 一会儿回来。",
+   "turn_detection_ms": -2268,
+   "retrieval_stage_ms": 7593,
+   "llm_first_text_ms": 4743,
+   "tts_first_audio_ms": 1335,
+   "first_audible_ms": 11402,
+   "requests_ms": {
+    "decisions": [],
+    "embeddings": [
+     1518,
+     529
+    ],
+    "rerank": [
+     1774,
+     570
+    ]
+   },
+   "logs": [
+    "Archive hit: query='好的。 我先去吃饭了。 一会儿回来。' → 3 rows (top_score=0.574, dates=['2024-05-15', '2026-01-23', '2026-07-03'], refined=3/3, types=['closing', 'commentary', 'opening'])",
+    "Persona facts hit: query='好的。 我先去吃饭了。 一会儿回来。' → 8 rows (top_score=0.424, sources=['明前奶绿事件集.txt'], dated=8/8)"
+   ],
+   "reply": "[relaxed][soft tone] 好，快去快去，多吃点热乎的好吃的，一会儿见啦，嗯。"
+  }
+ ]
+}

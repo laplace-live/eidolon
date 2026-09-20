@@ -1,0 +1,826 @@
+# Labeled viewer turns for the retrieval gate; decisions.py scores them.
+#
+# recall = true  — a good reply needs facts about the streamer or her past
+#                  streams that persona.md does not carry.
+# recall = false — greetings, reactions, the viewer's own news, tool requests,
+#                  general questions: persona.md alone answers them.
+# No label       — borderline; reported, never scored.
+#
+# set = "dev"     — used to choose the questions and the threshold.
+#       "heldout" — written before either was fixed, scored once.
+#       "fresh"   — written after heldout exposed flower-shop lore as the
+#                   weak spot, to check the one edit made in response.
+#
+# `before` holds earlier turns, alternating viewer / streamer, oldest first.
+
+# The 17 queries in data/eval/queries.toml, each with a verified answer in the corpus.
+[[turn]]
+set = "dev"
+text = "你梦想是什么"
+recall = true
+[[turn]]
+set = "dev"
+text = "坚果体重多少斤"
+recall = true
+[[turn]]
+set = "dev"
+text = "你为什么戴眼镜"
+recall = true
+[[turn]]
+set = "dev"
+text = "你智商多少"
+recall = true
+[[turn]]
+set = "dev"
+text = "你最喜欢的数字"
+recall = true
+[[turn]]
+set = "dev"
+text = "你体重多少kg"
+recall = true
+[[turn]]
+set = "dev"
+text = "奶糖花是什么"
+recall = true
+[[turn]]
+set = "dev"
+text = "你2026年5月9号说了什么"
+recall = true
+[[turn]]
+set = "dev"
+text = "梦境之花多久一次"
+recall = true
+[[turn]]
+set = "dev"
+text = "坚果什么时候来你家的"
+recall = true
+[[turn]]
+set = "dev"
+text = "永雏塔菲是谁"
+recall = true
+[[turn]]
+set = "dev"
+text = "你怕什么"
+recall = true
+[[turn]]
+set = "dev"
+text = "你拔过智齿吗"
+recall = true
+[[turn]]
+set = "dev"
+text = "你玩塞尔达打火神殿了吗"
+recall = true
+[[turn]]
+set = "dev"
+text = "你家坚果剃毛之后什么样"
+recall = true
+[[turn]]
+set = "dev"
+text = "店长坚果是什么品种"
+recall = true
+[[turn]]
+set = "dev"
+text = "26年3月24直播内容"
+recall = true
+
+# More questions about her life, lore, and past streams.
+[[turn]]
+set = "dev"
+text = "你喜欢吃纳豆吗？"
+recall = true
+[[turn]]
+set = "dev"
+text = "你最喜欢吃什么呀？"
+recall = true
+[[turn]]
+set = "dev"
+text = "你讨厌吃什么菜？"
+recall = true
+[[turn]]
+set = "dev"
+text = "你是哪里人呀？"
+recall = true
+[[turn]]
+set = "dev"
+text = "你对东北印象怎么样？"
+recall = true
+[[turn]]
+set = "dev"
+text = "你小时候写过稿子吗？"
+recall = true
+[[turn]]
+set = "dev"
+text = "你什么时候开始直播的？"
+recall = true
+[[turn]]
+set = "dev"
+text = "你前世是谁啊？"
+recall = true
+[[turn]]
+set = "dev"
+text = "花店的地下室里有什么？"
+recall = true
+[[turn]]
+set = "dev"
+text = "拉普拉斯花店是干嘛的？"
+recall = true
+[[turn]]
+set = "dev"
+text = "你有男朋友吗？"
+recall = true
+[[turn]]
+set = "dev"
+text = "你玩过VR吗？"
+recall = true
+[[turn]]
+set = "dev"
+text = "你最近在玩什么游戏？"
+recall = true
+[[turn]]
+set = "dev"
+text = "你上次直播玩了什么？"
+recall = true
+[[turn]]
+set = "dev"
+text = "昨天直播聊了什么？"
+recall = true
+[[turn]]
+set = "dev"
+text = "你唱过孤勇者吗？"
+recall = true
+[[turn]]
+set = "dev"
+text = "你是不是说过你不敢去网吧？"
+recall = true
+[[turn]]
+set = "dev"
+text = "坚果平时喜欢躲在哪里？"
+recall = true
+[[turn]]
+set = "dev"
+text = "坚果会咬电线吗？"
+recall = true
+[[turn]]
+set = "dev"
+text = "你生日是几号？"
+recall = true
+[[turn]]
+set = "dev"
+text = "你养过狗吗？"
+recall = true
+[[turn]]
+set = "dev"
+text = "你会说狗语吗？"
+recall = true
+[[turn]]
+set = "dev"
+text = "你喜欢吃玉米馅的饺子吗？"
+recall = true
+[[turn]]
+set = "dev"
+text = "你之前说每天喝蓝莓奶昔，还在坚持吗？"
+recall = true
+[[turn]]
+set = "dev"
+text = "弹幕机老头是谁？"
+recall = true
+[[turn]]
+set = "dev"
+text = "你平时几点起床？"
+recall = true
+[[turn]]
+set = "dev"
+text = "你去过哪些地方旅游？"
+recall = true
+[[turn]]
+set = "dev"
+text = "What's your cat's name?"
+recall = true
+[[turn]]
+set = "dev"
+text = "What did you play on your last stream?"
+recall = true
+
+# Follow-ups whose latest line is short or referential.
+[[turn]]
+set = "dev"
+before = ["你家有宠物吗？", "有呀，我家有只猫叫坚果，是花店的店长。"]
+text = "它几岁了？"
+recall = true
+[[turn]]
+set = "dev"
+before = ["你喜欢吃什么？", "我喜欢吃纳豆，嗯。"]
+text = "为什么呀？"
+recall = true
+[[turn]]
+set = "dev"
+before = ["你上次直播玩了什么？", "玩了一个恐怖游戏，吓死我了。"]
+text = "叫什么名字？"
+recall = true
+[[turn]]
+set = "dev"
+before = ["你知道永雏塔菲吗？", "当然知道呀。"]
+text = "你们关系怎么样？"
+recall = true
+[[turn]]
+set = "dev"
+before = ["坚果最近怎么样？", "挺好的，就是有点胖了。"]
+text = "它现在多重啊？"
+recall = true
+
+# Greetings and goodbyes.
+[[turn]]
+set = "dev"
+text = "你好呀"
+recall = false
+[[turn]]
+set = "dev"
+text = "晚上好奶绿"
+recall = false
+[[turn]]
+set = "dev"
+text = "我来啦！"
+recall = false
+[[turn]]
+set = "dev"
+text = "晚安"
+recall = false
+[[turn]]
+set = "dev"
+text = "拜拜，下次再聊。"
+recall = false
+[[turn]]
+set = "dev"
+text = "我先去吃饭了，一会儿回来。"
+recall = false
+[[turn]]
+set = "dev"
+text = "早上好。"
+recall = false
+[[turn]]
+set = "dev"
+text = "Hi there!"
+recall = false
+
+# Reactions.
+[[turn]]
+set = "dev"
+text = "哈哈哈哈哈"
+recall = false
+[[turn]]
+set = "dev"
+text = "真的假的？"
+recall = false
+[[turn]]
+set = "dev"
+text = "好的。"
+recall = false
+[[turn]]
+set = "dev"
+text = "嗯嗯"
+recall = false
+[[turn]]
+set = "dev"
+text = "对对对"
+recall = false
+[[turn]]
+set = "dev"
+text = "笑死我了"
+recall = false
+[[turn]]
+set = "dev"
+text = "啊？"
+recall = false
+[[turn]]
+set = "dev"
+text = "好可爱"
+recall = false
+[[turn]]
+set = "dev"
+text = "haha that's funny"
+recall = false
+
+# The viewer's own news.
+[[turn]]
+set = "dev"
+text = "我今天加班好累啊。"
+recall = false
+[[turn]]
+set = "dev"
+text = "我考试考砸了。"
+recall = false
+[[turn]]
+set = "dev"
+text = "我刚吃完火锅，好撑。"
+recall = false
+[[turn]]
+set = "dev"
+text = "外面下大雨了。"
+recall = false
+[[turn]]
+set = "dev"
+text = "我明天要去面试，有点紧张。"
+recall = false
+[[turn]]
+set = "dev"
+text = "我家楼下新开了一家奶茶店。"
+recall = false
+
+# Asking for company, comfort, or a joke.
+[[turn]]
+set = "dev"
+text = "安慰我一下嘛。"
+recall = false
+[[turn]]
+set = "dev"
+text = "夸夸我。"
+recall = false
+[[turn]]
+set = "dev"
+text = "陪我聊聊天好不好？"
+recall = false
+[[turn]]
+set = "dev"
+text = "给我讲个笑话。"
+recall = false
+[[turn]]
+set = "dev"
+text = "我睡不着。"
+recall = false
+
+# Tool requests — voice switching and selfies.
+[[turn]]
+set = "dev"
+text = "换个温柔一点的声音。"
+recall = false
+[[turn]]
+set = "dev"
+text = "用活泼一点的声音跟我说话。"
+recall = false
+[[turn]]
+set = "dev"
+text = "拍张自拍给我看看。"
+recall = false
+[[turn]]
+set = "dev"
+text = "让我看看你现在在干嘛。"
+recall = false
+
+# General questions and tasks.
+[[turn]]
+set = "dev"
+text = "一加一等于几？"
+recall = false
+[[turn]]
+set = "dev"
+text = "今天星期几？"
+recall = false
+[[turn]]
+set = "dev"
+text = "帮我想想晚饭吃什么。"
+recall = false
+[[turn]]
+set = "dev"
+text = "hello用中文怎么说？"
+recall = false
+
+# About the conversation itself, compliments, and her current state.
+[[turn]]
+set = "dev"
+text = "你能听到我说话吗？"
+recall = false
+[[turn]]
+set = "dev"
+text = "刚才你说什么？"
+recall = false
+[[turn]]
+set = "dev"
+text = "你说慢一点。"
+recall = false
+[[turn]]
+set = "dev"
+text = "你声音好好听。"
+recall = false
+[[turn]]
+set = "dev"
+text = "你是AI吗？"
+recall = false
+[[turn]]
+set = "dev"
+text = "奶绿你好可爱。"
+recall = false
+[[turn]]
+set = "dev"
+text = "我好喜欢你。"
+recall = false
+[[turn]]
+set = "dev"
+text = "你在干嘛呢？"
+recall = false
+[[turn]]
+set = "dev"
+text = "你吃饭了吗？"
+recall = false
+[[turn]]
+set = "dev"
+text = "你今天心情怎么样？"
+recall = false
+
+# The synthetic kickoff turn bot.py sends before the first reply.
+[[turn]]
+set = "dev"
+text = "用一两句话简短自然地打个招呼。"
+recall = false
+
+# Short reactions after a recall turn.
+[[turn]]
+set = "dev"
+before = ["你喜欢吃什么？", "我喜欢吃纳豆，嗯。"]
+text = "哈哈哈好吧。"
+recall = false
+[[turn]]
+set = "dev"
+before = ["我今天好累。", "辛苦啦，早点休息。"]
+text = "嗯嗯谢谢。"
+recall = false
+[[turn]]
+set = "dev"
+before = ["你上次直播玩了什么？", "玩了一个恐怖游戏，吓死我了。"]
+text = "好厉害。"
+recall = false
+[[turn]]
+set = "dev"
+before = ["给我讲个笑话。", "有一天小明走在路上，突然被一根香蕉皮绊倒了。"]
+text = "再来一个。"
+recall = false
+[[turn]]
+set = "dev"
+before = ["换个温柔的声音。", "好呀，这样可以吗？"]
+text = "嗯，这样好听多了。"
+recall = false
+
+# Borderline — no label.
+[[turn]]
+set = "dev"
+text = "推荐一部好看的电影。"
+[[turn]]
+set = "dev"
+text = "你喜欢我吗？"
+[[turn]]
+set = "dev"
+text = "唱首歌吧。"
+[[turn]]
+set = "dev"
+text = "你最近怎么样？"
+[[turn]]
+set = "dev"
+text = "你还记得我吗？"
+[[turn]]
+set = "dev"
+text = "你觉得我该不该辞职？"
+
+# Held-out turns.
+[[turn]]
+set = "heldout"
+text = "那个，奶绿，我想问一下，你平时喜欢看什么动漫啊？"
+recall = true
+[[turn]]
+set = "heldout"
+text = "你喝咖啡吗？"
+recall = true
+[[turn]]
+set = "heldout"
+text = "你有兄弟姐妹吗？"
+recall = true
+[[turn]]
+set = "heldout"
+text = "你以前做过什么工作？"
+recall = true
+[[turn]]
+set = "heldout"
+text = "你最喜欢什么颜色？"
+recall = true
+[[turn]]
+set = "heldout"
+text = "你家坚果掉毛严重吗？"
+recall = true
+[[turn]]
+set = "heldout"
+text = "坚果喜欢吃什么猫粮？"
+recall = true
+[[turn]]
+set = "heldout"
+text = "你会做饭吗？"
+recall = true
+[[turn]]
+set = "heldout"
+text = "你酒量怎么样？"
+recall = true
+[[turn]]
+set = "heldout"
+text = "你恐高吗？"
+recall = true
+[[turn]]
+set = "heldout"
+text = "你第一次直播是什么时候？"
+recall = true
+[[turn]]
+set = "heldout"
+text = "上周的歌回你唱了几首？"
+recall = true
+[[turn]]
+set = "heldout"
+text = "你之前玩的那个恐怖游戏通关了吗？"
+recall = true
+[[turn]]
+set = "heldout"
+text = "你还记得那个给你刷了很多SC的人吗？"
+recall = true
+[[turn]]
+set = "heldout"
+text = "你是不是在直播里哭过？"
+recall = true
+[[turn]]
+set = "heldout"
+text = "你和东雪莲熟吗？"
+recall = true
+[[turn]]
+set = "heldout"
+text = "你觉得香菜好吃吗？"
+recall = true
+[[turn]]
+set = "heldout"
+text = "你小时候的梦想是什么？"
+recall = true
+[[turn]]
+set = "heldout"
+text = "你睡觉打呼噜吗？"
+recall = true
+[[turn]]
+set = "heldout"
+text = "你为什么叫明前奶绿？"
+recall = true
+[[turn]]
+set = "heldout"
+text = "Do you like spicy food?"
+recall = true
+[[turn]]
+set = "heldout"
+text = "Have you ever been to Japan?"
+recall = true
+[[turn]]
+set = "heldout"
+before = ["你玩过原神吗？", "玩过呀，之前直播玩了挺久的。"]
+text = "你最喜欢哪个角色？"
+recall = true
+[[turn]]
+set = "heldout"
+before = ["你有什么爱好？", "我喜欢唱歌，还喜欢打游戏。"]
+text = "你最拿手的歌是哪首？"
+recall = true
+[[turn]]
+set = "heldout"
+before = ["坚果是公的还是母的？", "是个小公猫哦。"]
+text = "那它绝育了吗？"
+recall = true
+[[turn]]
+set = "heldout"
+before = ["你上个月直播了几次？", "嗯，好像挺多的。"]
+text = "有没有哪次特别好玩的？"
+recall = true
+[[turn]]
+set = "heldout"
+text = "你住在哪个城市？"
+recall = true
+[[turn]]
+set = "heldout"
+text = "你的花店卖什么花？"
+recall = true
+[[turn]]
+set = "heldout"
+text = "你讨厌什么样的人？"
+recall = true
+[[turn]]
+set = "heldout"
+text = "你平时怎么减肥的？"
+recall = true
+
+[[turn]]
+set = "heldout"
+text = "我回来啦，刚刚去洗了个澡。"
+recall = false
+[[turn]]
+set = "heldout"
+text = "哇塞"
+recall = false
+[[turn]]
+set = "heldout"
+text = "我今天被老板骂了，好难过。"
+recall = false
+[[turn]]
+set = "heldout"
+text = "我养了一只仓鼠。"
+recall = false
+[[turn]]
+set = "heldout"
+text = "明天就周末了，好开心。"
+recall = false
+[[turn]]
+set = "heldout"
+text = "你讲话好好笑。"
+recall = false
+[[turn]]
+set = "heldout"
+text = "我要去上班了，拜拜。"
+recall = false
+[[turn]]
+set = "heldout"
+text = "可以跟我说晚安吗？"
+recall = false
+[[turn]]
+set = "heldout"
+text = "帮我算一下十二乘以十二。"
+recall = false
+[[turn]]
+set = "heldout"
+text = "北京现在几点了？"
+recall = false
+[[turn]]
+set = "heldout"
+text = "给我起个网名吧。"
+recall = false
+[[turn]]
+set = "heldout"
+text = "我想听你笑一下。"
+recall = false
+[[turn]]
+set = "heldout"
+text = "用温柔的声音哄我睡觉。"
+recall = false
+[[turn]]
+set = "heldout"
+text = "发张照片给我嘛。"
+recall = false
+[[turn]]
+set = "heldout"
+text = "你刚刚那句话我没听清。"
+recall = false
+[[turn]]
+set = "heldout"
+text = "喂喂，有声音吗？"
+recall = false
+[[turn]]
+set = "heldout"
+text = "好耶！"
+recall = false
+[[turn]]
+set = "heldout"
+text = "呜呜呜"
+recall = false
+[[turn]]
+set = "heldout"
+text = "确实。"
+recall = false
+[[turn]]
+set = "heldout"
+text = "我最近在学吉他。"
+recall = false
+[[turn]]
+set = "heldout"
+text = "我们这边今天好热啊。"
+recall = false
+[[turn]]
+set = "heldout"
+text = "Good night!"
+recall = false
+[[turn]]
+set = "heldout"
+text = "Can you speak a bit slower?"
+recall = false
+[[turn]]
+set = "heldout"
+before = ["我今天去面试了。", "哇，面得怎么样？"]
+text = "感觉还行吧，等通知。"
+recall = false
+[[turn]]
+set = "heldout"
+before = ["你喜欢什么颜色？", "我喜欢绿色，嗯。"]
+text = "我也喜欢绿色！"
+recall = false
+[[turn]]
+set = "heldout"
+before = ["给我唱首歌吧。", "啦啦啦，小星星。"]
+text = "好听好听。"
+recall = false
+[[turn]]
+set = "heldout"
+before = ["拍张自拍给我看看。", "好呀，拍好啦。"]
+text = "哇，好好看。"
+recall = false
+[[turn]]
+set = "heldout"
+text = "你觉得我穿红色好看还是蓝色好看？"
+recall = false
+[[turn]]
+set = "heldout"
+text = "我好无聊啊。"
+recall = false
+[[turn]]
+set = "heldout"
+text = "今天是我生日。"
+recall = false
+
+# Fresh turns, weighted toward her lore.
+[[turn]]
+set = "fresh"
+text = "花店现在还营业吗？"
+recall = true
+[[turn]]
+set = "fresh"
+text = "花店里最贵的花是什么？"
+recall = true
+[[turn]]
+set = "fresh"
+text = "花店的员工都有谁？"
+recall = true
+[[turn]]
+set = "fresh"
+text = "你店里的花盆里种的是什么？"
+recall = true
+[[turn]]
+set = "fresh"
+text = "坚果当店长称职吗？"
+recall = true
+[[turn]]
+set = "fresh"
+text = "奶糖花为什么要叫奶糖花？"
+recall = true
+[[turn]]
+set = "fresh"
+text = "你以前的粉丝名叫什么？"
+recall = true
+[[turn]]
+set = "fresh"
+text = "你平时用什么洗发水？"
+recall = true
+[[turn]]
+set = "fresh"
+text = "你最怕哪种虫子？"
+recall = true
+[[turn]]
+set = "fresh"
+text = "你上周三直播干嘛了？"
+recall = true
+[[turn]]
+set = "fresh"
+before = ["你店里有地下室吗？", "有呀，不过一般不让人进。"]
+text = "里面藏着什么？"
+recall = true
+[[turn]]
+set = "fresh"
+before = ["你玩过双人成行吗？", "玩过，跟朋友一起玩的。"]
+text = "跟谁一起玩的？"
+recall = true
+
+[[turn]]
+set = "fresh"
+text = "我也想开一家花店。"
+recall = false
+[[turn]]
+set = "fresh"
+text = "我今天买了一束花送给妈妈。"
+recall = false
+[[turn]]
+set = "fresh"
+text = "玫瑰花代表什么意思？"
+recall = false
+[[turn]]
+set = "fresh"
+text = "我家的猫又把杯子打碎了。"
+recall = false
+[[turn]]
+set = "fresh"
+text = "嘿嘿"
+recall = false
+[[turn]]
+set = "fresh"
+text = "我要睡觉了，你也早点休息。"
+recall = false
+[[turn]]
+set = "fresh"
+text = "你再说一遍好不好？"
+recall = false
+[[turn]]
+set = "fresh"
+text = "能不能换回原来的声音？"
+recall = false
+[[turn]]
+set = "fresh"
+before = ["坚果最近乖吗？", "还行，就是老咬线。"]
+text = "哈哈哈太可爱了"
+recall = false
+[[turn]]
+set = "fresh"
+before = ["你店里有地下室吗？", "有呀，不过一般不让人进。"]
+text = "好吧好吧。"
+recall = false

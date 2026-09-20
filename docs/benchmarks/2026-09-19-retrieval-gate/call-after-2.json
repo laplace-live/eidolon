@@ -1,0 +1,175 @@
+{
+ "label": "after-2",
+ "turns": [
+  {
+   "line": "(greeting)",
+   "heard": "",
+   "turn_detection_ms": 2,
+   "retrieval_stage_ms": 1333,
+   "llm_first_text_ms": 4197,
+   "tts_first_audio_ms": 1081,
+   "first_audible_ms": 6612,
+   "requests_ms": {
+    "decisions": [
+     1322
+    ],
+    "embeddings": [],
+    "rerank": []
+   },
+   "logs": [
+    "Retrieval gate: skip query='用一两句话简短自然地打个招呼。' (score=0.05, 1332 ms)"
+   ],
+   "reply": "[soft tone] 哎，你来啦。今天过得怎么样呀，嗯。"
+  },
+  {
+   "line": "我今天加班好累啊。",
+   "heard": "我今天加班好累啊。",
+   "turn_detection_ms": 605,
+   "retrieval_stage_ms": 509,
+   "llm_first_text_ms": 5236,
+   "tts_first_audio_ms": 533,
+   "first_audible_ms": 6883,
+   "requests_ms": {
+    "decisions": [
+     507
+    ],
+    "embeddings": [],
+    "rerank": []
+   },
+   "logs": [
+    "Retrieval gate: skip query='我今天加班好累啊。' (score=0.03, 508 ms)"
+   ],
+   "reply": "[sympathetic][soft tone] 辛苦啦……[break] 加班到现在真的很不容易，赶紧洗把脸去躺着歇会儿，别硬撑着，嗯。"
+  },
+  {
+   "line": "你喜欢吃纳豆吗？",
+   "heard": " 你喜欢吃纳豆吗？",
+   "turn_detection_ms": 3301,
+   "retrieval_stage_ms": 5327,
+   "llm_first_text_ms": 4251,
+   "tts_first_audio_ms": 904,
+   "first_audible_ms": 13783,
+   "requests_ms": {
+    "decisions": [
+     488
+    ],
+    "embeddings": [
+     1377,
+     569
+    ],
+    "rerank": [
+     2121,
+     456
+    ]
+   },
+   "logs": [
+    "Retrieval gate: retrieve query='你喜欢吃纳豆吗？' (score=0.94, 488 ms)",
+    "Archive hit: query='你喜欢吃纳豆吗？' → 3 rows (top_score=0.703, dates=['2024-02-11', '2025-04-11', '2026-01-31'], refined=3/3, types=['commentary'])",
+    "Persona facts hit: query='你喜欢吃纳豆吗？' → 8 rows (top_score=0.793, sources=['店长坚果设定集.txt', '明前奶绿事件集.txt'], dated=8/8)"
+   ],
+   "reply": "[uncertain] 纳豆啊……不太行，之前空口吃过一整盒，搅得全是白丝，又粘又苦的，真有点受不了，嗯。"
+  },
+  {
+   "line": "哈哈哈，好吧。",
+   "heard": " 哈哈哈。 好吧。",
+   "turn_detection_ms": 433,
+   "retrieval_stage_ms": 1602,
+   "llm_first_text_ms": 4546,
+   "tts_first_audio_ms": 1102,
+   "first_audible_ms": 7683,
+   "requests_ms": {
+    "decisions": [
+     494,
+     1276
+    ],
+    "embeddings": [],
+    "rerank": []
+   },
+   "logs": [
+    "Retrieval gate: skip query='哈哈哈。' (score=0.07, 494 ms)",
+    "Retrieval gate: skip query='好吧。' (score=0.09, 1277 ms)"
+   ],
+   "reply": "[chuckling] 呵呵，我挑食的事你又不是不知道。好啦，累了就早点去歇着，嗯。"
+  },
+  {
+   "line": "坚果是什么品种的猫？",
+   "heard": " 坚果是什么品种的猫？",
+   "turn_detection_ms": 3282,
+   "retrieval_stage_ms": 5183,
+   "llm_first_text_ms": 5010,
+   "tts_first_audio_ms": 747,
+   "first_audible_ms": 14222,
+   "requests_ms": {
+    "decisions": [
+     381
+    ],
+    "embeddings": [
+     1426,
+     529
+    ],
+    "rerank": [
+     2623,
+     489
+    ]
+   },
+   "logs": [
+    "Retrieval gate: retrieve query='坚果是什么品种的猫？' (score=0.94, 381 ms)",
+    "Archive hit: query='坚果是什么品种的猫？' → 3 rows (top_score=0.684, dates=['2024-10-19', '2024-10-31', '2025-02-11'], refined=3/3, types=['commentary'])",
+    "Persona facts hit: query='坚果是什么品种的猫？' → 8 rows (top_score=0.527, sources=['店长坚果设定集.txt', '明前奶绿事件集.txt'], dated=6/8)"
+   ],
+   "reply": "[calm] 他是黑色的布偶猫呀。 [break] 不过他平时呆头呆脑又老爱漏嘴，感觉布偶的基因真是一点都没继承到，嗯。"
+  },
+  {
+   "line": "你是不是说过你不敢去网吧？",
+   "heard": " 你是不是说过你不敢去网吧？",
+   "turn_detection_ms": 556,
+   "retrieval_stage_ms": 4434,
+   "llm_first_text_ms": 7964,
+   "tts_first_audio_ms": 1129,
+   "first_audible_ms": 14083,
+   "requests_ms": {
+    "decisions": [
+     418
+    ],
+    "embeddings": [
+     1485,
+     500
+    ],
+    "rerank": [
+     1887,
+     432
+    ]
+   },
+   "logs": [
+    "Retrieval gate: retrieve query='你是不是说过你不敢去网吧？' (score=0.96, 418 ms)",
+    "Archive hit: query='你是不是说过你不敢去网吧？' → 3 rows (top_score=0.738, dates=['2022-10-30', '2023-08-18', '2024-05-27'], refined=3/3, types=['commentary'])",
+    "Persona facts hit: query='你是不是说过你不敢去网吧？' → 8 rows (top_score=0.734, sources=['明前奶绿事件集.txt'], dated=8/8)"
+   ],
+   "reply": "对啊，我是真的很害怕那种地方。[sighing] 唉… 里面全是烟味机箱味，以前还亲眼见过有人扯头发打架，吓得我更不敢去了，还是老实窝在家里惜命要紧，嗯。"
+  },
+  {
+   "line": "好的，我先去吃饭了，一会儿回来。",
+   "heard": " 好的。 我先去吃饭了。 一会儿回来。",
+   "turn_detection_ms": -767,
+   "retrieval_stage_ms": 2063,
+   "llm_first_text_ms": 21332,
+   "tts_first_audio_ms": 1174,
+   "first_audible_ms": 23802,
+   "requests_ms": {
+    "decisions": [
+     606,
+     501,
+     475
+    ],
+    "embeddings": [],
+    "rerank": []
+   },
+   "logs": [
+    "Retrieval gate: skip query='好的。' (score=0.10, 606 ms)",
+    "Retrieval gate: skip query='我先去吃饭了。' (score=0.03, 501 ms)",
+    "Retrieval gate: skip query='一会儿回来。' (score=0.03, 475 ms)"
+   ],
+   "reply": "[relaxed][soft tone] 嗯好，快去吃点热乎的填填肚子。 [break] 一会儿等你回来，嗯。"
+  }
+ ]
+}

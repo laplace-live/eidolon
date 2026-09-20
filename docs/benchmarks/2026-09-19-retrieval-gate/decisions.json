@@ -1,0 +1,2140 @@
+{
+ "model": [
+  "typesafe/jev-1.13-20260917"
+ ],
+ "threshold": 0.3,
+ "latency_ms": {
+  "p50": 460,
+  "p90": 527.6,
+  "max": 783
+ },
+ "sets": {
+  "dev": {
+   "recall_kept": "51/51",
+   "chit_chat_skipped": "40/52",
+   "lowest_recall_score": 0.58,
+   "highest_chit_chat_score": 0.9
+  },
+  "heldout": {
+   "recall_kept": "30/30",
+   "chit_chat_skipped": "25/30",
+   "lowest_recall_score": 0.7,
+   "highest_chit_chat_score": 0.83
+  },
+  "fresh": {
+   "recall_kept": "12/12",
+   "chit_chat_skipped": "7/10",
+   "lowest_recall_score": 0.88,
+   "highest_chit_chat_score": 0.71
+  },
+  "all": {
+   "recall_kept": "93/93",
+   "chit_chat_skipped": "72/92",
+   "lowest_recall_score": 0.58,
+   "highest_chit_chat_score": 0.9
+  }
+ },
+ "turns": [
+  {
+   "set": "dev",
+   "text": "你梦想是什么",
+   "recall": true,
+   "score": 0.89,
+   "nouls": {
+    "about_her": 0.89,
+    "her_past": 0.07,
+    "named_thing": 0.06
+   }
+  },
+  {
+   "set": "dev",
+   "text": "坚果体重多少斤",
+   "recall": true,
+   "score": 0.85,
+   "nouls": {
+    "about_her": 0.85,
+    "her_past": 0.21,
+    "named_thing": 0.65
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你为什么戴眼镜",
+   "recall": true,
+   "score": 0.94,
+   "nouls": {
+    "about_her": 0.94,
+    "her_past": 0.22,
+    "named_thing": 0.09
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你智商多少",
+   "recall": true,
+   "score": 0.87,
+   "nouls": {
+    "about_her": 0.87,
+    "her_past": 0.05,
+    "named_thing": 0.07
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你最喜欢的数字",
+   "recall": true,
+   "score": 0.95,
+   "nouls": {
+    "about_her": 0.95,
+    "her_past": 0.22,
+    "named_thing": 0.06
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你体重多少kg",
+   "recall": true,
+   "score": 0.95,
+   "nouls": {
+    "about_her": 0.95,
+    "her_past": 0.06,
+    "named_thing": 0.06
+   }
+  },
+  {
+   "set": "dev",
+   "text": "奶糖花是什么",
+   "recall": true,
+   "score": 0.98,
+   "nouls": {
+    "about_her": 0.23,
+    "her_past": 0.57,
+    "named_thing": 0.98
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你2026年5月9号说了什么",
+   "recall": true,
+   "score": 0.97,
+   "nouls": {
+    "about_her": 0.34,
+    "her_past": 0.97,
+    "named_thing": 0.17
+   }
+  },
+  {
+   "set": "dev",
+   "text": "梦境之花多久一次",
+   "recall": true,
+   "score": 0.74,
+   "nouls": {
+    "about_her": 0.74,
+    "her_past": 0.61,
+    "named_thing": 0.53
+   }
+  },
+  {
+   "set": "dev",
+   "text": "坚果什么时候来你家的",
+   "recall": true,
+   "score": 0.91,
+   "nouls": {
+    "about_her": 0.91,
+    "her_past": 0.85,
+    "named_thing": 0.39
+   }
+  },
+  {
+   "set": "dev",
+   "text": "永雏塔菲是谁",
+   "recall": true,
+   "score": 0.98,
+   "nouls": {
+    "about_her": 0.07,
+    "her_past": 0.11,
+    "named_thing": 0.98
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你怕什么",
+   "recall": true,
+   "score": 0.66,
+   "nouls": {
+    "about_her": 0.66,
+    "her_past": 0.4,
+    "named_thing": 0.04
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你拔过智齿吗",
+   "recall": true,
+   "score": 0.9,
+   "nouls": {
+    "about_her": 0.9,
+    "her_past": 0.78,
+    "named_thing": 0.05
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你玩塞尔达打火神殿了吗",
+   "recall": true,
+   "score": 0.78,
+   "nouls": {
+    "about_her": 0.78,
+    "her_past": 0.7,
+    "named_thing": 0.48
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你家坚果剃毛之后什么样",
+   "recall": true,
+   "score": 0.9,
+   "nouls": {
+    "about_her": 0.9,
+    "her_past": 0.78,
+    "named_thing": 0.61
+   }
+  },
+  {
+   "set": "dev",
+   "text": "店长坚果是什么品种",
+   "recall": true,
+   "score": 0.92,
+   "nouls": {
+    "about_her": 0.83,
+    "her_past": 0.47,
+    "named_thing": 0.92
+   }
+  },
+  {
+   "set": "dev",
+   "text": "26年3月24直播内容",
+   "recall": true,
+   "score": 0.74,
+   "nouls": {
+    "about_her": 0.2,
+    "her_past": 0.74,
+    "named_thing": 0.24
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你喜欢吃纳豆吗？",
+   "recall": true,
+   "score": 0.94,
+   "nouls": {
+    "about_her": 0.94,
+    "her_past": 0.13,
+    "named_thing": 0.25
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你最喜欢吃什么呀？",
+   "recall": true,
+   "score": 0.93,
+   "nouls": {
+    "about_her": 0.93,
+    "her_past": 0.14,
+    "named_thing": 0.05
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你讨厌吃什么菜？",
+   "recall": true,
+   "score": 0.93,
+   "nouls": {
+    "about_her": 0.93,
+    "her_past": 0.18,
+    "named_thing": 0.05
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你是哪里人呀？",
+   "recall": true,
+   "score": 0.83,
+   "nouls": {
+    "about_her": 0.83,
+    "her_past": 0.36,
+    "named_thing": 0.2
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你对东北印象怎么样？",
+   "recall": true,
+   "score": 0.58,
+   "nouls": {
+    "about_her": 0.58,
+    "her_past": 0.36,
+    "named_thing": 0.34
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你小时候写过稿子吗？",
+   "recall": true,
+   "score": 0.94,
+   "nouls": {
+    "about_her": 0.94,
+    "her_past": 0.92,
+    "named_thing": 0.08
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你什么时候开始直播的？",
+   "recall": true,
+   "score": 0.94,
+   "nouls": {
+    "about_her": 0.73,
+    "her_past": 0.94,
+    "named_thing": 0.07
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你前世是谁啊？",
+   "recall": true,
+   "score": 0.92,
+   "nouls": {
+    "about_her": 0.92,
+    "her_past": 0.56,
+    "named_thing": 0.25
+   }
+  },
+  {
+   "set": "dev",
+   "text": "花店的地下室里有什么？",
+   "recall": true,
+   "score": 0.94,
+   "nouls": {
+    "about_her": 0.94,
+    "her_past": 0.16,
+    "named_thing": 0.38
+   }
+  },
+  {
+   "set": "dev",
+   "text": "拉普拉斯花店是干嘛的？",
+   "recall": true,
+   "score": 0.97,
+   "nouls": {
+    "about_her": 0.97,
+    "her_past": 0.32,
+    "named_thing": 0.97
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你有男朋友吗？",
+   "recall": true,
+   "score": 0.96,
+   "nouls": {
+    "about_her": 0.96,
+    "her_past": 0.18,
+    "named_thing": 0.07
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你玩过VR吗？",
+   "recall": true,
+   "score": 0.87,
+   "nouls": {
+    "about_her": 0.87,
+    "her_past": 0.55,
+    "named_thing": 0.07
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你最近在玩什么游戏？",
+   "recall": true,
+   "score": 0.86,
+   "nouls": {
+    "about_her": 0.86,
+    "her_past": 0.73,
+    "named_thing": 0.07
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你上次直播玩了什么？",
+   "recall": true,
+   "score": 0.98,
+   "nouls": {
+    "about_her": 0.61,
+    "her_past": 0.98,
+    "named_thing": 0.09
+   }
+  },
+  {
+   "set": "dev",
+   "text": "昨天直播聊了什么？",
+   "recall": true,
+   "score": 0.98,
+   "nouls": {
+    "about_her": 0.27,
+    "her_past": 0.98,
+    "named_thing": 0.07
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你唱过孤勇者吗？",
+   "recall": true,
+   "score": 0.92,
+   "nouls": {
+    "about_her": 0.92,
+    "her_past": 0.92,
+    "named_thing": 0.65
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你是不是说过你不敢去网吧？",
+   "recall": true,
+   "score": 0.96,
+   "nouls": {
+    "about_her": 0.94,
+    "her_past": 0.96,
+    "named_thing": 0.12
+   }
+  },
+  {
+   "set": "dev",
+   "text": "坚果平时喜欢躲在哪里？",
+   "recall": true,
+   "score": 0.89,
+   "nouls": {
+    "about_her": 0.89,
+    "her_past": 0.56,
+    "named_thing": 0.66
+   }
+  },
+  {
+   "set": "dev",
+   "text": "坚果会咬电线吗？",
+   "recall": true,
+   "score": 0.86,
+   "nouls": {
+    "about_her": 0.86,
+    "her_past": 0.15,
+    "named_thing": 0.49
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你生日是几号？",
+   "recall": true,
+   "score": 0.88,
+   "nouls": {
+    "about_her": 0.88,
+    "her_past": 0.45,
+    "named_thing": 0.09
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你养过狗吗？",
+   "recall": true,
+   "score": 0.95,
+   "nouls": {
+    "about_her": 0.95,
+    "her_past": 0.77,
+    "named_thing": 0.07
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你会说狗语吗？",
+   "recall": true,
+   "score": 0.91,
+   "nouls": {
+    "about_her": 0.91,
+    "her_past": 0.08,
+    "named_thing": 0.1
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你喜欢吃玉米馅的饺子吗？",
+   "recall": true,
+   "score": 0.94,
+   "nouls": {
+    "about_her": 0.94,
+    "her_past": 0.13,
+    "named_thing": 0.09
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你之前说每天喝蓝莓奶昔，还在坚持吗？",
+   "recall": true,
+   "score": 0.97,
+   "nouls": {
+    "about_her": 0.96,
+    "her_past": 0.97,
+    "named_thing": 0.19
+   }
+  },
+  {
+   "set": "dev",
+   "text": "弹幕机老头是谁？",
+   "recall": true,
+   "score": 0.94,
+   "nouls": {
+    "about_her": 0.19,
+    "her_past": 0.54,
+    "named_thing": 0.94
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你平时几点起床？",
+   "recall": true,
+   "score": 0.96,
+   "nouls": {
+    "about_her": 0.96,
+    "her_past": 0.52,
+    "named_thing": 0.06
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你去过哪些地方旅游？",
+   "recall": true,
+   "score": 0.9,
+   "nouls": {
+    "about_her": 0.85,
+    "her_past": 0.9,
+    "named_thing": 0.05
+   }
+  },
+  {
+   "set": "dev",
+   "text": "What's your cat's name?",
+   "recall": true,
+   "score": 0.9,
+   "nouls": {
+    "about_her": 0.9,
+    "her_past": 0.48,
+    "named_thing": 0.51
+   }
+  },
+  {
+   "set": "dev",
+   "text": "What did you play on your last stream?",
+   "recall": true,
+   "score": 0.98,
+   "nouls": {
+    "about_her": 0.66,
+    "her_past": 0.98,
+    "named_thing": 0.1
+   }
+  },
+  {
+   "set": "dev",
+   "text": "…它几岁了？",
+   "recall": true,
+   "score": 0.85,
+   "nouls": {
+    "about_her": 0.85,
+    "her_past": 0.82,
+    "named_thing": 0.5
+   }
+  },
+  {
+   "set": "dev",
+   "text": "…为什么呀？",
+   "recall": true,
+   "score": 0.92,
+   "nouls": {
+    "about_her": 0.92,
+    "her_past": 0.88,
+    "named_thing": 0.07
+   }
+  },
+  {
+   "set": "dev",
+   "text": "…叫什么名字？",
+   "recall": true,
+   "score": 0.96,
+   "nouls": {
+    "about_her": 0.13,
+    "her_past": 0.96,
+    "named_thing": 0.63
+   }
+  },
+  {
+   "set": "dev",
+   "text": "…你们关系怎么样？",
+   "recall": true,
+   "score": 0.88,
+   "nouls": {
+    "about_her": 0.88,
+    "her_past": 0.38,
+    "named_thing": 0.32
+   }
+  },
+  {
+   "set": "dev",
+   "text": "…它现在多重啊？",
+   "recall": true,
+   "score": 0.8,
+   "nouls": {
+    "about_her": 0.8,
+    "her_past": 0.55,
+    "named_thing": 0.33
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你好呀",
+   "recall": false,
+   "score": 0.05,
+   "nouls": {
+    "about_her": 0.05,
+    "her_past": 0.02,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "text": "晚上好奶绿",
+   "recall": false,
+   "score": 0.04,
+   "nouls": {
+    "about_her": 0.04,
+    "her_past": 0.02,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "dev",
+   "text": "我来啦！",
+   "recall": false,
+   "score": 0.04,
+   "nouls": {
+    "about_her": 0.04,
+    "her_past": 0.02,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "text": "晚安",
+   "recall": false,
+   "score": 0.03,
+   "nouls": {
+    "about_her": 0.03,
+    "her_past": 0.02,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "text": "拜拜，下次再聊。",
+   "recall": false,
+   "score": 0.02,
+   "nouls": {
+    "about_her": 0.02,
+    "her_past": 0.02,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "text": "我先去吃饭了，一会儿回来。",
+   "recall": false,
+   "score": 0.02,
+   "nouls": {
+    "about_her": 0.02,
+    "her_past": 0.02,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "text": "早上好。",
+   "recall": false,
+   "score": 0.03,
+   "nouls": {
+    "about_her": 0.03,
+    "her_past": 0.02,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "text": "Hi there!",
+   "recall": false,
+   "score": 0.05,
+   "nouls": {
+    "about_her": 0.05,
+    "her_past": 0.02,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "text": "哈哈哈哈哈",
+   "recall": false,
+   "score": 0.05,
+   "nouls": {
+    "about_her": 0.05,
+    "her_past": 0.03,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "text": "真的假的？",
+   "recall": false,
+   "score": 0.55,
+   "nouls": {
+    "about_her": 0.54,
+    "her_past": 0.55,
+    "named_thing": 0.09
+   }
+  },
+  {
+   "set": "dev",
+   "text": "好的。",
+   "recall": false,
+   "score": 0.05,
+   "nouls": {
+    "about_her": 0.05,
+    "her_past": 0.04,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "text": "嗯嗯",
+   "recall": false,
+   "score": 0.06,
+   "nouls": {
+    "about_her": 0.06,
+    "her_past": 0.04,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "dev",
+   "text": "对对对",
+   "recall": false,
+   "score": 0.08,
+   "nouls": {
+    "about_her": 0.08,
+    "her_past": 0.06,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "dev",
+   "text": "笑死我了",
+   "recall": false,
+   "score": 0.05,
+   "nouls": {
+    "about_her": 0.05,
+    "her_past": 0.04,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "text": "啊？",
+   "recall": false,
+   "score": 0.29,
+   "nouls": {
+    "about_her": 0.29,
+    "her_past": 0.25,
+    "named_thing": 0.11
+   }
+  },
+  {
+   "set": "dev",
+   "text": "好可爱",
+   "recall": false,
+   "score": 0.07,
+   "nouls": {
+    "about_her": 0.07,
+    "her_past": 0.03,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "text": "haha that's funny",
+   "recall": false,
+   "score": 0.06,
+   "nouls": {
+    "about_her": 0.06,
+    "her_past": 0.04,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "text": "我今天加班好累啊。",
+   "recall": false,
+   "score": 0.04,
+   "nouls": {
+    "about_her": 0.04,
+    "her_past": 0.03,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "text": "我考试考砸了。",
+   "recall": false,
+   "score": 0.04,
+   "nouls": {
+    "about_her": 0.04,
+    "her_past": 0.03,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "text": "我刚吃完火锅，好撑。",
+   "recall": false,
+   "score": 0.04,
+   "nouls": {
+    "about_her": 0.04,
+    "her_past": 0.03,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "text": "外面下大雨了。",
+   "recall": false,
+   "score": 0.06,
+   "nouls": {
+    "about_her": 0.06,
+    "her_past": 0.02,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "text": "我明天要去面试，有点紧张。",
+   "recall": false,
+   "score": 0.04,
+   "nouls": {
+    "about_her": 0.04,
+    "her_past": 0.03,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "text": "我家楼下新开了一家奶茶店。",
+   "recall": false,
+   "score": 0.09,
+   "nouls": {
+    "about_her": 0.09,
+    "her_past": 0.03,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "dev",
+   "text": "安慰我一下嘛。",
+   "recall": false,
+   "score": 0.06,
+   "nouls": {
+    "about_her": 0.06,
+    "her_past": 0.04,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "text": "夸夸我。",
+   "recall": false,
+   "score": 0.09,
+   "nouls": {
+    "about_her": 0.09,
+    "her_past": 0.03,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "dev",
+   "text": "陪我聊聊天好不好？",
+   "recall": false,
+   "score": 0.09,
+   "nouls": {
+    "about_her": 0.09,
+    "her_past": 0.03,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "dev",
+   "text": "给我讲个笑话。",
+   "recall": false,
+   "score": 0.07,
+   "nouls": {
+    "about_her": 0.07,
+    "her_past": 0.03,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "text": "我睡不着。",
+   "recall": false,
+   "score": 0.06,
+   "nouls": {
+    "about_her": 0.06,
+    "her_past": 0.02,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "text": "换个温柔一点的声音。",
+   "recall": false,
+   "score": 0.53,
+   "nouls": {
+    "about_her": 0.53,
+    "her_past": 0.04,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "dev",
+   "text": "用活泼一点的声音跟我说话。",
+   "recall": false,
+   "score": 0.25,
+   "nouls": {
+    "about_her": 0.25,
+    "her_past": 0.02,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "dev",
+   "text": "拍张自拍给我看看。",
+   "recall": false,
+   "score": 0.67,
+   "nouls": {
+    "about_her": 0.67,
+    "her_past": 0.04,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "dev",
+   "text": "让我看看你现在在干嘛。",
+   "recall": false,
+   "score": 0.49,
+   "nouls": {
+    "about_her": 0.49,
+    "her_past": 0.13,
+    "named_thing": 0.05
+   }
+  },
+  {
+   "set": "dev",
+   "text": "一加一等于几？",
+   "recall": false,
+   "score": 0.04,
+   "nouls": {
+    "about_her": 0.02,
+    "her_past": 0.03,
+    "named_thing": 0.04
+   }
+  },
+  {
+   "set": "dev",
+   "text": "今天星期几？",
+   "recall": false,
+   "score": 0.04,
+   "nouls": {
+    "about_her": 0.03,
+    "her_past": 0.04,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "dev",
+   "text": "帮我想想晚饭吃什么。",
+   "recall": false,
+   "score": 0.29,
+   "nouls": {
+    "about_her": 0.29,
+    "her_past": 0.03,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "dev",
+   "text": "hello用中文怎么说？",
+   "recall": false,
+   "score": 0.35,
+   "nouls": {
+    "about_her": 0.03,
+    "her_past": 0.03,
+    "named_thing": 0.35
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你能听到我说话吗？",
+   "recall": false,
+   "score": 0.48,
+   "nouls": {
+    "about_her": 0.48,
+    "her_past": 0.06,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "dev",
+   "text": "刚才你说什么？",
+   "recall": false,
+   "score": 0.9,
+   "nouls": {
+    "about_her": 0.13,
+    "her_past": 0.9,
+    "named_thing": 0.06
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你说慢一点。",
+   "recall": false,
+   "score": 0.16,
+   "nouls": {
+    "about_her": 0.16,
+    "her_past": 0.12,
+    "named_thing": 0.04
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你声音好好听。",
+   "recall": false,
+   "score": 0.59,
+   "nouls": {
+    "about_her": 0.59,
+    "her_past": 0.03,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你是AI吗？",
+   "recall": false,
+   "score": 0.67,
+   "nouls": {
+    "about_her": 0.67,
+    "her_past": 0.08,
+    "named_thing": 0.24
+   }
+  },
+  {
+   "set": "dev",
+   "text": "奶绿你好可爱。",
+   "recall": false,
+   "score": 0.14,
+   "nouls": {
+    "about_her": 0.14,
+    "her_past": 0.02,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "dev",
+   "text": "我好喜欢你。",
+   "recall": false,
+   "score": 0.05,
+   "nouls": {
+    "about_her": 0.05,
+    "her_past": 0.02,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你在干嘛呢？",
+   "recall": false,
+   "score": 0.62,
+   "nouls": {
+    "about_her": 0.62,
+    "her_past": 0.17,
+    "named_thing": 0.04
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你吃饭了吗？",
+   "recall": false,
+   "score": 0.75,
+   "nouls": {
+    "about_her": 0.75,
+    "her_past": 0.5,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你今天心情怎么样？",
+   "recall": false,
+   "score": 0.8,
+   "nouls": {
+    "about_her": 0.8,
+    "her_past": 0.2,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "dev",
+   "text": "用一两句话简短自然地打个招呼。",
+   "recall": false,
+   "score": 0.06,
+   "nouls": {
+    "about_her": 0.06,
+    "her_past": 0.02,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "dev",
+   "text": "…哈哈哈好吧。",
+   "recall": false,
+   "score": 0.07,
+   "nouls": {
+    "about_her": 0.07,
+    "her_past": 0.06,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "text": "…嗯嗯谢谢。",
+   "recall": false,
+   "score": 0.02,
+   "nouls": {
+    "about_her": 0.02,
+    "her_past": 0.02,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "text": "…好厉害。",
+   "recall": false,
+   "score": 0.15,
+   "nouls": {
+    "about_her": 0.15,
+    "her_past": 0.09,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "dev",
+   "text": "…再来一个。",
+   "recall": false,
+   "score": 0.09,
+   "nouls": {
+    "about_her": 0.04,
+    "her_past": 0.09,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "text": "…嗯，这样好听多了。",
+   "recall": false,
+   "score": 0.12,
+   "nouls": {
+    "about_her": 0.12,
+    "her_past": 0.06,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "text": "推荐一部好看的电影。",
+   "recall": null,
+   "score": 0.52,
+   "nouls": {
+    "about_her": 0.52,
+    "her_past": 0.04,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你喜欢我吗？",
+   "recall": null,
+   "score": 0.85,
+   "nouls": {
+    "about_her": 0.85,
+    "her_past": 0.06,
+    "named_thing": 0.05
+   }
+  },
+  {
+   "set": "dev",
+   "text": "唱首歌吧。",
+   "recall": null,
+   "score": 0.37,
+   "nouls": {
+    "about_her": 0.37,
+    "her_past": 0.03,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你最近怎么样？",
+   "recall": null,
+   "score": 0.72,
+   "nouls": {
+    "about_her": 0.72,
+    "her_past": 0.51,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你还记得我吗？",
+   "recall": null,
+   "score": 0.73,
+   "nouls": {
+    "about_her": 0.28,
+    "her_past": 0.73,
+    "named_thing": 0.05
+   }
+  },
+  {
+   "set": "dev",
+   "text": "你觉得我该不该辞职？",
+   "recall": null,
+   "score": 0.18,
+   "nouls": {
+    "about_her": 0.18,
+    "her_past": 0.05,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "那个，奶绿，我想问一下，你平时喜欢看什么动漫啊？",
+   "recall": true,
+   "score": 0.97,
+   "nouls": {
+    "about_her": 0.97,
+    "her_past": 0.6,
+    "named_thing": 0.16
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "你喝咖啡吗？",
+   "recall": true,
+   "score": 0.92,
+   "nouls": {
+    "about_her": 0.92,
+    "her_past": 0.16,
+    "named_thing": 0.06
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "你有兄弟姐妹吗？",
+   "recall": true,
+   "score": 0.97,
+   "nouls": {
+    "about_her": 0.97,
+    "her_past": 0.49,
+    "named_thing": 0.09
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "你以前做过什么工作？",
+   "recall": true,
+   "score": 0.95,
+   "nouls": {
+    "about_her": 0.92,
+    "her_past": 0.95,
+    "named_thing": 0.1
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "你最喜欢什么颜色？",
+   "recall": true,
+   "score": 0.94,
+   "nouls": {
+    "about_her": 0.94,
+    "her_past": 0.07,
+    "named_thing": 0.05
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "你家坚果掉毛严重吗？",
+   "recall": true,
+   "score": 0.91,
+   "nouls": {
+    "about_her": 0.91,
+    "her_past": 0.29,
+    "named_thing": 0.56
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "坚果喜欢吃什么猫粮？",
+   "recall": true,
+   "score": 0.82,
+   "nouls": {
+    "about_her": 0.82,
+    "her_past": 0.31,
+    "named_thing": 0.68
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "你会做饭吗？",
+   "recall": true,
+   "score": 0.94,
+   "nouls": {
+    "about_her": 0.94,
+    "her_past": 0.17,
+    "named_thing": 0.04
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "你酒量怎么样？",
+   "recall": true,
+   "score": 0.93,
+   "nouls": {
+    "about_her": 0.93,
+    "her_past": 0.29,
+    "named_thing": 0.06
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "你恐高吗？",
+   "recall": true,
+   "score": 0.92,
+   "nouls": {
+    "about_her": 0.92,
+    "her_past": 0.19,
+    "named_thing": 0.06
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "你第一次直播是什么时候？",
+   "recall": true,
+   "score": 0.98,
+   "nouls": {
+    "about_her": 0.85,
+    "her_past": 0.98,
+    "named_thing": 0.09
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "上周的歌回你唱了几首？",
+   "recall": true,
+   "score": 0.97,
+   "nouls": {
+    "about_her": 0.82,
+    "her_past": 0.97,
+    "named_thing": 0.14
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "你之前玩的那个恐怖游戏通关了吗？",
+   "recall": true,
+   "score": 0.96,
+   "nouls": {
+    "about_her": 0.64,
+    "her_past": 0.96,
+    "named_thing": 0.19
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "你还记得那个给你刷了很多SC的人吗？",
+   "recall": true,
+   "score": 0.94,
+   "nouls": {
+    "about_her": 0.73,
+    "her_past": 0.94,
+    "named_thing": 0.18
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "你是不是在直播里哭过？",
+   "recall": true,
+   "score": 0.97,
+   "nouls": {
+    "about_her": 0.9,
+    "her_past": 0.97,
+    "named_thing": 0.12
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "你和东雪莲熟吗？",
+   "recall": true,
+   "score": 0.84,
+   "nouls": {
+    "about_her": 0.84,
+    "her_past": 0.43,
+    "named_thing": 0.73
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "你觉得香菜好吃吗？",
+   "recall": true,
+   "score": 0.89,
+   "nouls": {
+    "about_her": 0.89,
+    "her_past": 0.07,
+    "named_thing": 0.23
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "你小时候的梦想是什么？",
+   "recall": true,
+   "score": 0.95,
+   "nouls": {
+    "about_her": 0.95,
+    "her_past": 0.9,
+    "named_thing": 0.05
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "你睡觉打呼噜吗？",
+   "recall": true,
+   "score": 0.94,
+   "nouls": {
+    "about_her": 0.94,
+    "her_past": 0.3,
+    "named_thing": 0.07
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "你为什么叫明前奶绿？",
+   "recall": true,
+   "score": 0.87,
+   "nouls": {
+    "about_her": 0.81,
+    "her_past": 0.45,
+    "named_thing": 0.87
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "Do you like spicy food?",
+   "recall": true,
+   "score": 0.95,
+   "nouls": {
+    "about_her": 0.95,
+    "her_past": 0.12,
+    "named_thing": 0.05
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "Have you ever been to Japan?",
+   "recall": true,
+   "score": 0.9,
+   "nouls": {
+    "about_her": 0.86,
+    "her_past": 0.9,
+    "named_thing": 0.1
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "…你最喜欢哪个角色？",
+   "recall": true,
+   "score": 0.83,
+   "nouls": {
+    "about_her": 0.83,
+    "her_past": 0.78,
+    "named_thing": 0.15
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "…你最拿手的歌是哪首？",
+   "recall": true,
+   "score": 0.97,
+   "nouls": {
+    "about_her": 0.97,
+    "her_past": 0.64,
+    "named_thing": 0.11
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "…那它绝育了吗？",
+   "recall": true,
+   "score": 0.8,
+   "nouls": {
+    "about_her": 0.8,
+    "her_past": 0.44,
+    "named_thing": 0.27
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "…有没有哪次特别好玩的？",
+   "recall": true,
+   "score": 0.97,
+   "nouls": {
+    "about_her": 0.76,
+    "her_past": 0.97,
+    "named_thing": 0.04
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "你住在哪个城市？",
+   "recall": true,
+   "score": 0.7,
+   "nouls": {
+    "about_her": 0.7,
+    "her_past": 0.12,
+    "named_thing": 0.07
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "你的花店卖什么花？",
+   "recall": true,
+   "score": 0.97,
+   "nouls": {
+    "about_her": 0.97,
+    "her_past": 0.15,
+    "named_thing": 0.34
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "你讨厌什么样的人？",
+   "recall": true,
+   "score": 0.89,
+   "nouls": {
+    "about_her": 0.89,
+    "her_past": 0.08,
+    "named_thing": 0.05
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "你平时怎么减肥的？",
+   "recall": true,
+   "score": 0.95,
+   "nouls": {
+    "about_her": 0.95,
+    "her_past": 0.64,
+    "named_thing": 0.05
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "我回来啦，刚刚去洗了个澡。",
+   "recall": false,
+   "score": 0.05,
+   "nouls": {
+    "about_her": 0.05,
+    "her_past": 0.03,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "哇塞",
+   "recall": false,
+   "score": 0.07,
+   "nouls": {
+    "about_her": 0.07,
+    "her_past": 0.03,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "我今天被老板骂了，好难过。",
+   "recall": false,
+   "score": 0.05,
+   "nouls": {
+    "about_her": 0.05,
+    "her_past": 0.03,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "我养了一只仓鼠。",
+   "recall": false,
+   "score": 0.07,
+   "nouls": {
+    "about_her": 0.07,
+    "her_past": 0.03,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "明天就周末了，好开心。",
+   "recall": false,
+   "score": 0.04,
+   "nouls": {
+    "about_her": 0.04,
+    "her_past": 0.02,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "你讲话好好笑。",
+   "recall": false,
+   "score": 0.25,
+   "nouls": {
+    "about_her": 0.25,
+    "her_past": 0.08,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "我要去上班了，拜拜。",
+   "recall": false,
+   "score": 0.02,
+   "nouls": {
+    "about_her": 0.02,
+    "her_past": 0.02,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "可以跟我说晚安吗？",
+   "recall": false,
+   "score": 0.12,
+   "nouls": {
+    "about_her": 0.12,
+    "her_past": 0.04,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "帮我算一下十二乘以十二。",
+   "recall": false,
+   "score": 0.03,
+   "nouls": {
+    "about_her": 0.03,
+    "her_past": 0.02,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "北京现在几点了？",
+   "recall": false,
+   "score": 0.09,
+   "nouls": {
+    "about_her": 0.03,
+    "her_past": 0.03,
+    "named_thing": 0.09
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "给我起个网名吧。",
+   "recall": false,
+   "score": 0.12,
+   "nouls": {
+    "about_her": 0.12,
+    "her_past": 0.03,
+    "named_thing": 0.04
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "我想听你笑一下。",
+   "recall": false,
+   "score": 0.39,
+   "nouls": {
+    "about_her": 0.39,
+    "her_past": 0.04,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "用温柔的声音哄我睡觉。",
+   "recall": false,
+   "score": 0.21,
+   "nouls": {
+    "about_her": 0.21,
+    "her_past": 0.03,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "发张照片给我嘛。",
+   "recall": false,
+   "score": 0.47,
+   "nouls": {
+    "about_her": 0.47,
+    "her_past": 0.04,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "你刚刚那句话我没听清。",
+   "recall": false,
+   "score": 0.83,
+   "nouls": {
+    "about_her": 0.07,
+    "her_past": 0.83,
+    "named_thing": 0.04
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "喂喂，有声音吗？",
+   "recall": false,
+   "score": 0.07,
+   "nouls": {
+    "about_her": 0.07,
+    "her_past": 0.05,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "好耶！",
+   "recall": false,
+   "score": 0.04,
+   "nouls": {
+    "about_her": 0.04,
+    "her_past": 0.03,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "呜呜呜",
+   "recall": false,
+   "score": 0.1,
+   "nouls": {
+    "about_her": 0.1,
+    "her_past": 0.05,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "确实。",
+   "recall": false,
+   "score": 0.1,
+   "nouls": {
+    "about_her": 0.1,
+    "her_past": 0.07,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "我最近在学吉他。",
+   "recall": false,
+   "score": 0.06,
+   "nouls": {
+    "about_her": 0.06,
+    "her_past": 0.03,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "我们这边今天好热啊。",
+   "recall": false,
+   "score": 0.06,
+   "nouls": {
+    "about_her": 0.06,
+    "her_past": 0.02,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "Good night!",
+   "recall": false,
+   "score": 0.03,
+   "nouls": {
+    "about_her": 0.03,
+    "her_past": 0.02,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "Can you speak a bit slower?",
+   "recall": false,
+   "score": 0.48,
+   "nouls": {
+    "about_her": 0.48,
+    "her_past": 0.06,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "…感觉还行吧，等通知。",
+   "recall": false,
+   "score": 0.04,
+   "nouls": {
+    "about_her": 0.03,
+    "her_past": 0.04,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "…我也喜欢绿色！",
+   "recall": false,
+   "score": 0.1,
+   "nouls": {
+    "about_her": 0.1,
+    "her_past": 0.07,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "…好听好听。",
+   "recall": false,
+   "score": 0.04,
+   "nouls": {
+    "about_her": 0.04,
+    "her_past": 0.04,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "…哇，好好看。",
+   "recall": false,
+   "score": 0.11,
+   "nouls": {
+    "about_her": 0.11,
+    "her_past": 0.05,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "你觉得我穿红色好看还是蓝色好看？",
+   "recall": false,
+   "score": 0.35,
+   "nouls": {
+    "about_her": 0.35,
+    "her_past": 0.04,
+    "named_thing": 0.04
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "我好无聊啊。",
+   "recall": false,
+   "score": 0.05,
+   "nouls": {
+    "about_her": 0.05,
+    "her_past": 0.02,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "heldout",
+   "text": "今天是我生日。",
+   "recall": false,
+   "score": 0.03,
+   "nouls": {
+    "about_her": 0.03,
+    "her_past": 0.03,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "fresh",
+   "text": "花店现在还营业吗？",
+   "recall": true,
+   "score": 0.96,
+   "nouls": {
+    "about_her": 0.96,
+    "her_past": 0.19,
+    "named_thing": 0.3
+   }
+  },
+  {
+   "set": "fresh",
+   "text": "花店里最贵的花是什么？",
+   "recall": true,
+   "score": 0.96,
+   "nouls": {
+    "about_her": 0.96,
+    "her_past": 0.16,
+    "named_thing": 0.22
+   }
+  },
+  {
+   "set": "fresh",
+   "text": "花店的员工都有谁？",
+   "recall": true,
+   "score": 0.95,
+   "nouls": {
+    "about_her": 0.95,
+    "her_past": 0.24,
+    "named_thing": 0.47
+   }
+  },
+  {
+   "set": "fresh",
+   "text": "你店里的花盆里种的是什么？",
+   "recall": true,
+   "score": 0.95,
+   "nouls": {
+    "about_her": 0.95,
+    "her_past": 0.17,
+    "named_thing": 0.22
+   }
+  },
+  {
+   "set": "fresh",
+   "text": "坚果当店长称职吗？",
+   "recall": true,
+   "score": 0.89,
+   "nouls": {
+    "about_her": 0.89,
+    "her_past": 0.47,
+    "named_thing": 0.58
+   }
+  },
+  {
+   "set": "fresh",
+   "text": "奶糖花为什么要叫奶糖花？",
+   "recall": true,
+   "score": 0.89,
+   "nouls": {
+    "about_her": 0.63,
+    "her_past": 0.48,
+    "named_thing": 0.89
+   }
+  },
+  {
+   "set": "fresh",
+   "text": "你以前的粉丝名叫什么？",
+   "recall": true,
+   "score": 0.92,
+   "nouls": {
+    "about_her": 0.8,
+    "her_past": 0.92,
+    "named_thing": 0.43
+   }
+  },
+  {
+   "set": "fresh",
+   "text": "你平时用什么洗发水？",
+   "recall": true,
+   "score": 0.94,
+   "nouls": {
+    "about_her": 0.94,
+    "her_past": 0.61,
+    "named_thing": 0.08
+   }
+  },
+  {
+   "set": "fresh",
+   "text": "你最怕哪种虫子？",
+   "recall": true,
+   "score": 0.94,
+   "nouls": {
+    "about_her": 0.94,
+    "her_past": 0.2,
+    "named_thing": 0.07
+   }
+  },
+  {
+   "set": "fresh",
+   "text": "你上周三直播干嘛了？",
+   "recall": true,
+   "score": 0.98,
+   "nouls": {
+    "about_her": 0.62,
+    "her_past": 0.98,
+    "named_thing": 0.1
+   }
+  },
+  {
+   "set": "fresh",
+   "text": "…里面藏着什么？",
+   "recall": true,
+   "score": 0.88,
+   "nouls": {
+    "about_her": 0.88,
+    "her_past": 0.57,
+    "named_thing": 0.09
+   }
+  },
+  {
+   "set": "fresh",
+   "text": "…跟谁一起玩的？",
+   "recall": true,
+   "score": 0.95,
+   "nouls": {
+    "about_her": 0.84,
+    "her_past": 0.95,
+    "named_thing": 0.26
+   }
+  },
+  {
+   "set": "fresh",
+   "text": "我也想开一家花店。",
+   "recall": false,
+   "score": 0.17,
+   "nouls": {
+    "about_her": 0.17,
+    "her_past": 0.07,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "fresh",
+   "text": "我今天买了一束花送给妈妈。",
+   "recall": false,
+   "score": 0.07,
+   "nouls": {
+    "about_her": 0.07,
+    "her_past": 0.03,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "fresh",
+   "text": "玫瑰花代表什么意思？",
+   "recall": false,
+   "score": 0.64,
+   "nouls": {
+    "about_her": 0.14,
+    "her_past": 0.06,
+    "named_thing": 0.64
+   }
+  },
+  {
+   "set": "fresh",
+   "text": "我家的猫又把杯子打碎了。",
+   "recall": false,
+   "score": 0.14,
+   "nouls": {
+    "about_her": 0.14,
+    "her_past": 0.04,
+    "named_thing": 0.03
+   }
+  },
+  {
+   "set": "fresh",
+   "text": "嘿嘿",
+   "recall": false,
+   "score": 0.06,
+   "nouls": {
+    "about_her": 0.06,
+    "her_past": 0.03,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "fresh",
+   "text": "我要睡觉了，你也早点休息。",
+   "recall": false,
+   "score": 0.15,
+   "nouls": {
+    "about_her": 0.15,
+    "her_past": 0.02,
+    "named_thing": 0.02
+   }
+  },
+  {
+   "set": "fresh",
+   "text": "你再说一遍好不好？",
+   "recall": false,
+   "score": 0.61,
+   "nouls": {
+    "about_her": 0.19,
+    "her_past": 0.61,
+    "named_thing": 0.08
+   }
+  },
+  {
+   "set": "fresh",
+   "text": "能不能换回原来的声音？",
+   "recall": false,
+   "score": 0.71,
+   "nouls": {
+    "about_her": 0.56,
+    "her_past": 0.71,
+    "named_thing": 0.05
+   }
+  },
+  {
+   "set": "fresh",
+   "text": "…哈哈哈太可爱了",
+   "recall": false,
+   "score": 0.15,
+   "nouls": {
+    "about_her": 0.15,
+    "her_past": 0.12,
+    "named_thing": 0.04
+   }
+  },
+  {
+   "set": "fresh",
+   "text": "…好吧好吧。",
+   "recall": false,
+   "score": 0.1,
+   "nouls": {
+    "about_her": 0.1,
+    "her_past": 0.07,
+    "named_thing": 0.03
+   }
+  }
+ ]
+}

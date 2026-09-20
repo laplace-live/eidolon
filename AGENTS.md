@@ -10,13 +10,14 @@ one LanceDB instance: a runtime pipeline that answers viewers over WebRTC, and
 an offline batch chain that builds the indexes it reads.
 
 ```text
-transport.input → STT → user_aggregator
+transport.input → STT → user_aggregator → RetrievalGate
     → Mem0 → StreamArchive → PersonaFacts → LLM → TTS → transport.output
 ```
 
 Soniox (STT), OpenRouter (LLM), and Fish Audio (TTS) are required. Everything
-else — Mem0, the reranker, both RAG indexes — degrades quietly when its key,
-table, or vector store is missing, so a fresh checkout runs.
+else — Mem0, the reranker, the retrieval gate, both RAG indexes — degrades
+quietly when its key, table, or vector store is missing, so a fresh checkout
+runs.
 
 ## Repository layout
 
@@ -30,6 +31,7 @@ laplace_eidolon/      the runtime package
   stream_archive.py     RAG FrameProcessor over refined stream transcripts
   retriever.py          one LanceDB table: handle, stale-reopen, search
   retrieval.py          hybrid search — vector + jieba FTS + optional rerank
+  retrieval_gate.py     Jev decides per turn whether both RAG services search
   embeddings.py         embedding client, LanceDB table access, disk cache
   voice_switching.py    the change_voice_style LLM tool and its styles
   image_generation.py   the take_selfie LLM tool, its prompt, and /api/selfie
@@ -66,6 +68,7 @@ a row here and writing the prose there — not a new section in this file.**
 | Soniox's per-project vocabulary glossary | `laplace_eidolon/soniox_context.toml` |
 | broadcast overviews, date-scoped recall, or the archive lookup tool | [stream-recall.md](docs/stream-recall.md) |
 | the `take_selfie` tool, image generation, or `/api/selfie` | [selfies.md](docs/selfies.md) |
+| the retrieval gate, or why a turn skipped LanceDB | [retrieval-gate.md](docs/retrieval-gate.md) |
 
 ## Commands
 
@@ -111,6 +114,7 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | an ingest script, `EMBED_MODEL`, or `EMBED_DIM` | re-run **both** ingests, then commit the regenerated `data/lancedb/` |
 | the pipeline, the transport, or a monkey-patch | boot the bot and hold a real call — none of this is unit-testable |
 | `image_generation.py` | `uv run laplace-generate-image` against a real reference — it shares `generate()` with the bot, so a successful render is the check. Billed per image |
+| `retrieval_gate.py`'s questions, state, or threshold, or `RETRIEVAL_GATE_MODEL` | `uv run python docs/benchmarks/2026-09-19-retrieval-gate/decisions.py` — exits non-zero if any labeled turn that needs recall would be skipped |
 | `mem0_local.py`, `memory_service.py`, or `memory_admin.py` | `docker compose up qdrant`, then round-trip a real store → search → delete. No test covers Mem0; it needs a live vector store and an embedding key |
 | an env var | document it in `.env.example` in the same commit |
 
@@ -122,9 +126,13 @@ module that owns it.
 ### Runtime
 
 - **Optional dependencies fail open, never loud.** Mem0, both RAG services, the
-  reranker, and the LanceDB tables are each wrapped in a try/except that logs
-  and continues. A new optional tier follows that shape or it breaks fresh
-  checkouts.
+  reranker, the retrieval gate, and the LanceDB tables are each wrapped in a
+  try/except that logs and continues. A new optional tier follows that shape
+  or it breaks fresh checkouts.
+- **The retrieval gate may cancel a search, never delay one.**
+  `unless_skipped` starts the search at once and drops it only if Jev answers
+  "skip" first. Awaiting the gate before searching would add its ~0.5 s to
+  every recall turn, and its whole timeout to every turn while Jev is down.
 - **`load_dotenv(override=True)` runs before any other import that reads
   `os.getenv`.** Module-level constants evaluate at import time, so a deferred
   load pins them to their fallbacks. This is why `bot.py` has imports below

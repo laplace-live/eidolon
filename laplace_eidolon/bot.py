@@ -56,7 +56,7 @@ from pipecat.transports.smallwebrtc.connection import IceServer, SmallWebRTCConn
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from . import image_generation
+from . import image_generation, retrieval_gate
 from .audio_quality import (
     DEFAULT_BITRATE_BPS,
     QUALITY_PRESETS_BPS,
@@ -802,13 +802,15 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
         logger.info("Mem0 skipped: MEM0_QDRANT_HOST is unset, so there is no vector store")
 
     facts = _optional_rag(PersonaFactsService, "Persona facts", "laplace-ingest-facts")
+    gate = retrieval_gate.from_env() if archive is not None or facts is not None else None
 
-    # Archive recaps bypass persona-fact retrieval through frame metadata.
+    # The gate's decision and archive recaps reach the RAG services through
+    # frame metadata; the gate goes first so its call overlaps Mem0's search.
     processors = [
         transport.input(),
         stt,
         user_aggregator,
-        *(p for p in (memory, archive, facts) if p is not None),
+        *(p for p in (gate, memory, archive, facts) if p is not None),
         llm,
         tts,
         transport.output(),
