@@ -23,7 +23,7 @@ from loguru import logger
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
-from starlette.types import Receive, Scope, Send
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from . import persona_facts, stream_archive
 from .embeddings import resolve_db_path
@@ -175,6 +175,24 @@ class _TierMiddleware:
         await self.app(scope, receive, send)
 
 
+class _BareMountPath:
+    """Pure-ASGI rewrite of ``/mcp`` to ``/mcp/`` ahead of routing.
+
+    A ``Mount`` never matches its bare path, so Starlette would 307 it, building
+    the Location from the scheme uvicorn sees. Behind a TLS proxy uvicorn doesn't
+    trust — the default inside Docker — that is ``http://``, a downgrade the MCP
+    SDK's client refuses to follow.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and scope["path"] == MOUNT_PATH:
+            scope = {**scope, "path": f"{MOUNT_PATH}/"}
+        await self.app(scope, receive, send)
+
+
 def install_mcp(
     app: FastAPI,
     *,
@@ -184,7 +202,7 @@ def install_mcp(
     anon_quota: AnonymousIpQuota | None = None,
     auth_quota: AnonymousIpQuota | None = None,
 ) -> None:
-    """Mount the Streamable HTTP MCP server at ``/mcp/`` on ``app``.
+    """Serve the Streamable HTTP MCP server at ``/mcp`` and ``/mcp/`` on ``app``.
 
     Call exactly once at startup, alongside ``install_offer_middleware`` and
     ``install_memory_admin``. Not idempotent: a second call wraps the lifespan
@@ -244,6 +262,7 @@ def install_mcp(
         transport_security=_transport_security_from_env(),
     )
     app.mount(MOUNT_PATH, _TierMiddleware(inner, anon_quota=anon, auth_quota=auth))
+    app.add_middleware(_BareMountPath)
 
     # The session manager runs in the sub-app's OWN lifespan, which a Mount
     # never executes. Folding it into the parent's lifespan is what gets

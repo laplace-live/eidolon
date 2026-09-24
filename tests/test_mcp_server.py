@@ -90,7 +90,7 @@ def _build_client(*, anon_max=5, auth_max=50, facts=None, streams=None) -> TestC
     return TestClient(app)
 
 
-def _rpc(client, method, params=None, _id=1, token=None):
+def _rpc(client, method, params=None, _id=1, token=None, path="/mcp/"):
     headers = {"Content-Type": "application/json", "Accept": ACCEPT}
     if token:
         headers["Authorization"] = f"Bearer {token}"
@@ -99,15 +99,12 @@ def _rpc(client, method, params=None, _id=1, token=None):
         body["params"] = params
     if _id is not None:
         body["id"] = _id
-    # Mount is at /mcp with streamable_http_path="/", so the clean 200 path
-    # is "/mcp/" ("/mcp" 307-redirects to it).
-    return client.post("/mcp/", json=body, headers=headers)
+    return client.post(path, json=body, headers=headers, follow_redirects=False)
 
 
-def _call_tool(client, name, arguments=None, *, token=None, _id=1):
-    return _rpc(
-        client, "tools/call", {"name": name, "arguments": arguments or {}}, _id=_id, token=token
-    )
+def _call_tool(client, name, arguments=None, *, token=None, _id=1, path="/mcp/"):
+    params = {"name": name, "arguments": arguments or {}}
+    return _rpc(client, "tools/call", params, _id=_id, token=token, path=path)
 
 
 def test_tools_list_exposes_both_search_tools():
@@ -115,6 +112,13 @@ def test_tools_list_exposes_both_search_tools():
         r = _rpc(client, "tools/list", {})
         names = {t["name"] for t in r.json()["result"]["tools"]}
         assert names == {"search_persona_facts", "search_streams"}
+
+
+def test_bare_path_answers_without_redirect():
+    with _build_client() as client:
+        r = _call_tool(client, "search_streams", {"query": "游戏"}, path="/mcp")
+        assert r.status_code == 200
+        assert r.json()["result"]["structuredContent"]["count"] == 1
 
 
 def test_search_persona_facts_returns_projected_results():
