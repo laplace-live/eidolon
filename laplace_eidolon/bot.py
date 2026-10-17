@@ -677,6 +677,20 @@ class LaplaceRTVIProcessor(RTVIProcessor):
         await super().set_bot_ready(about=about or self._DEFAULT_ABOUT)
 
 
+class LaplaceFishTTSService(FishAudioTTSService):
+    """FishAudioTTSService whose socket accepts a long sentence's audio."""
+
+    # With latency="normal" Fish returns each flushed sentence's PCM as one
+    # message, and Pipecat opens the socket with websockets' default 1 MiB
+    # max_size — about 12 s of 44.1 kHz audio. A longer sentence closes the
+    # socket with 1009 (message too big) and is never heard. Pipecat raised
+    # ElevenLabs and Rime to 16 MiB for the same failure, but not Fish:
+    # https://github.com/pipecat-ai/pipecat/pull/1107
+    async def _websocket_connect(self, uri: str, **kwargs: Any):
+        kwargs.setdefault("max_size", 16 * 1024 * 1024)
+        return await super()._websocket_connect(uri, **kwargs)
+
+
 async def run_bot(transport: BaseTransport, login_sync_token: str | None = None):
     """Main bot logic.
 
@@ -719,7 +733,7 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
     # repetition_penalty, condition_on_previous_chunks, or min_chunk_length
     # without a subclass that injects them into the start message. Revisit if
     # the voice clips, drifts across turns, or repeats artifacts.
-    tts = FishAudioTTSService(
+    tts = LaplaceFishTTSService(
         api_key=fish_api_key,
         sample_rate=44100,
         # Allow slow first audio; Pipecat also uses this timeout for trailing audio idle.
