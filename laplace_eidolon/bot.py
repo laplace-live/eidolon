@@ -680,12 +680,11 @@ class LaplaceRTVIProcessor(RTVIProcessor):
 class LaplaceFishTTSService(FishAudioTTSService):
     """FishAudioTTSService whose socket accepts a long sentence's audio."""
 
-    # With latency="normal" Fish returns each flushed sentence's PCM as one
-    # message, and Pipecat opens the socket with websockets' default 1 MiB
-    # max_size — about 12 s of 44.1 kHz audio. A longer sentence closes the
-    # socket with 1009 (message too big) and is never heard. Pipecat raised
-    # ElevenLabs and Rime to 16 MiB for the same failure, but not Fish:
-    # https://github.com/pipecat-ai/pipecat/pull/1107
+    # With latency="normal" Fish returns a long sentence's audio as a few large
+    # messages, and Pipecat opens the socket with websockets' default 1 MiB
+    # max_size — about 12 s of 44.1 kHz audio. A bigger message closes the
+    # socket with 1009 (message too big) and its sentence is never heard.
+    # Drop this once https://github.com/pipecat-ai/pipecat/pull/6217 ships.
     async def _websocket_connect(self, uri: str, **kwargs: Any):
         kwargs.setdefault("max_size", 16 * 1024 * 1024)
         return await super()._websocket_connect(uri, **kwargs)
