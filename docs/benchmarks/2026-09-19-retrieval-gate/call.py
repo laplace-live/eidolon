@@ -42,7 +42,7 @@ from pipecat.frames.frames import (
     TranscriptionFrame,
 )
 from pipecat.observers.base_observer import BaseObserver, FramePushed
-from pipecat.pipeline.task import PipelineTask
+from pipecat.pipeline.worker import PipelineWorker
 from pipecat.processors.aggregators.llm_response_universal import LLMUserAggregator
 from pipecat.runner import run as pipecat_run
 from pipecat.services.llm_service import LLMService
@@ -142,13 +142,13 @@ class Observer(BaseObserver):
             record("bot_stopped_speaking")
 
 
-class ObservedTask(PipelineTask):
+class ObservedWorker(PipelineWorker):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         kwargs["observers"] = [Observer()]
         super().__init__(*args, **kwargs)
 
 
-bot_module.PipelineTask = ObservedTask
+bot_module.PipelineWorker = ObservedWorker
 bot_module._resolve_ice_servers_for_aiortc = lambda: []
 
 

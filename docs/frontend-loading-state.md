@@ -43,7 +43,7 @@ Without UI feedback the silence after the user stops talking looks broken. The f
 
 ## How the backend signals state
 
-Pipecat ships a standard protocol called **RTVI** (Real-Time Voice Interaction) that translates internal pipeline frames into typed JSON messages over the WebRTC data channel. Our bot already enables this — `bot.py` constructs the pipeline with `rtvi_processor=LaplaceRTVIProcessor()`, and the matching `RTVIObserver` (auto-attached by `PipelineTask`) emits every event listed below by default. **You don't need to touch any backend code.**
+Pipecat ships a standard protocol called **RTVI** (Real-Time Voice Interaction) that translates internal pipeline frames into typed JSON messages over the WebRTC data channel. Our bot already enables this — `bot.py` constructs the pipeline with `rtvi_processor=LaplaceRTVIProcessor()`, and the matching `RTVIObserver` (auto-attached by `PipelineWorker`) emits every event listed below by default. **You don't need to touch any backend code.**
 
 Where the events come from (for reference only):
 

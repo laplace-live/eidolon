@@ -38,8 +38,7 @@ from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.frames.frames import LLMRunFrame
 from pipecat.pipeline.pipeline import Pipeline
-from pipecat.pipeline.runner import PipelineRunner
-from pipecat.pipeline.task import PipelineParams, PipelineTask
+from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
@@ -54,6 +53,7 @@ from pipecat.services.soniox.stt import SonioxSTTService
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.transports.smallwebrtc.connection import IceServer, SmallWebRTCConnection
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
+from pipecat.workers.runner import WorkerRunner
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from . import image_generation, retrieval_gate
@@ -819,7 +819,7 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
 
     pipeline = Pipeline(processors)
 
-    task = PipelineTask(
+    worker = PipelineWorker(
         pipeline,
         params=PipelineParams(
             enable_metrics=True,
@@ -829,7 +829,7 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
         rtvi_processor=LaplaceRTVIProcessor(),
     )
 
-    @task.rtvi.event_handler("on_client_ready")
+    @worker.rtvi.event_handler("on_client_ready")
     async def on_client_ready(rtvi):
         # Kick off the conversation. If Mem0 is enabled and we have prior
         # memories for this user, hint the LLM so the greeting feels personal.
@@ -849,7 +849,7 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
                 logger.warning(f"Could not load Mem0 memories for greeting: {e}")
 
         context.add_message({"role": "user", "content": kickoff})
-        await task.queue_frames([LLMRunFrame()])
+        await worker.queue_frames([LLMRunFrame()])
 
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
@@ -858,11 +858,11 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
         logger.info("Client disconnected")
-        await task.cancel()
+        await worker.cancel()
 
-    runner = PipelineRunner(handle_sigint=False)
-
-    await runner.run(task)
+    runner = WorkerRunner(handle_sigint=False)
+    await runner.add_workers(worker)
+    await runner.run()
 
 
 def _extract_login_sync_token(body: Any) -> str | None:
