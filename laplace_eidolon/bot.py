@@ -53,6 +53,7 @@ from pipecat.services.soniox.stt import SonioxSTTService
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.transports.smallwebrtc.connection import IceServer, SmallWebRTCConnection
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
+from pipecat.turns.empty_user_turn import EmptyUserTurnConfig
 from pipecat.workers.runner import WorkerRunner
 from starlette.types import ASGIApp, Receive, Scope, Send
 
@@ -767,6 +768,16 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
         context,
         user_params=LLMUserAggregatorParams(
             vad_analyzer=SileroVADAnalyzer(),
+            # Sent when a turn that cut the bot off ends with no transcript (a cough,
+            # noise, speech Soniox couldn't make out). Pipecat's own wording is English.
+            empty_user_turn=EmptyUserTurnConfig(
+                interrupted_prompt=(
+                    "你刚才说话的时候，好像说了句什么，但没听清。"
+                    "你的话在那儿被打断了，对话里只留下ta听到的部分，也可能一句都没听到。"
+                    "用一句话自然地请ta再说一遍；"
+                    "如果你刚才问了问题，ta可能没听到，就顺带再问一次。"
+                ),
+            ),
         ),
     )
 
