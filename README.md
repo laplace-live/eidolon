@@ -18,7 +18,7 @@ transport.input → STT → user_aggregator
 | ---------------- | ------------------------------------------------------------------------- |
 | STT              | [Soniox](https://console.soniox.com/) (`stt-rt-v5`)                       |
 | LLM              | [OpenRouter](https://openrouter.ai/) (default `~google/gemini-flash-latest`) |
-| TTS              | [Fish Audio](https://fish.audio/app/) (`s2.1-pro`, WebSocket)             |
+| TTS              | [Fish Audio](https://fish.audio/app/) (`drama-3`, WebSocket)              |
 | Transport        | SmallWebRTC (Pipecat, self-hosted)                                        |
 | Vector store     | LanceDB (local file, embeddings via OpenRouter)                           |
 | Long-term memory | [Mem0](https://docs.mem0.ai/open-source) self-hosted, over Qdrant (optional) |

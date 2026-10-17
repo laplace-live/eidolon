@@ -727,7 +727,7 @@ async def run_bot(transport: BaseTransport, login_sync_token: str | None = None)
         stop_frame_timeout_s=15.0,
         settings=FishAudioTTSService.Settings(
             voice=os.getenv("FISH_VOICE_ID"),
-            model=os.getenv("FISH_MODEL") or "s2.1-pro",
+            model=os.getenv("FISH_MODEL") or "drama-3",
             latency="normal",
             # Fish's EN/ZH number normalization is on server-side by default,
             # but it reads years badly (2026 as a cardinal, not "二零二六").
