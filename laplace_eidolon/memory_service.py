@@ -7,17 +7,48 @@ array over it — and since the poisoned message stays in the cumulative
 context, every later turn in the session fails too, silently ending
 long-term memory. Empty arrays are rejected the same way, so a batch
 that filters down to nothing skips the call entirely.
+
+Pipecat's ``get_memories`` returns the engine's default 20 in Qdrant
+scroll order, which is by point id — a random UUID. The greeting quotes
+the head of that list, so it would open every session with the same few
+memories however many are stored since.
 """
 
 from __future__ import annotations
+
+import asyncio
+from datetime import datetime
+from typing import Any
 
 from loguru import logger
 from pipecat.processors.aggregators.llm_context import LLMStandardMessage
 from pipecat.services.mem0.memory import Mem0MemoryService
 
+from .memory_admin import LIST_LIMIT
+
 
 class LaplaceMem0MemoryService(Mem0MemoryService):
-    """Mem0 memory service that filters out non-string-content messages."""
+    """Mem0 memory service that drops content-less messages and lists newest first."""
+
+    async def get_memories(self) -> list[dict[str, Any]]:
+        """Return every memory in this service's scope, newest first."""
+        filters = {
+            name: value
+            for name, value in (
+                ("user_id", self.user_id),
+                ("agent_id", self.agent_id),
+                ("run_id", self.run_id),
+            )
+            if value is not None
+        }
+        result = await asyncio.to_thread(
+            lambda: self.memory_client.get_all(filters=filters, top_k=LIST_LIMIT)
+        )
+        memories = result.get("results", [])
+        # Cloud-imported memories carry -07:00 offsets, local writes +00:00,
+        # so sorting the raw strings would misorder them.
+        memories.sort(key=lambda m: datetime.fromisoformat(m["created_at"]), reverse=True)
+        return memories
 
     async def _store_messages(self, messages: list[LLMStandardMessage]) -> None:
         """Filter messages, then delegate to the parent."""
