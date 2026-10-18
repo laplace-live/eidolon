@@ -1,0 +1,508 @@
+{
+ "model": "s2.1-pro",
+ "voice": "41da6f76…",
+ "variants": [
+  {
+   "variant": "c-whisper-each",
+   "take": 0,
+   "note": "the same direction on every sentence",
+   "wav": "s2.1-pro-c-whisper-each.wav",
+   "flushes": [
+    {
+     "flush": 1,
+     "text": "[压低声音，像在说悄悄话] 小时候上美术课老高兴了，老师会发美术本子，给出主题，画完交作业。",
+     "first_audio_ms": 2046,
+     "seconds": 4.55,
+     "speech_seconds": 4.45,
+     "trailing_silence_s": 0.1,
+     "loudness_db": -18.5,
+     "voiced_ratio": 0.75,
+     "chars_per_second": 6.29,
+     "asr": "小时候上美术课老高兴了，老师会发美术本子，给出主题，画完交作业。",
+     "asr_cues": [],
+     "leaked": []
+    },
+    {
+     "flush": 2,
+     "text": "[压低声音，像在说悄悄话] 我一般都能得A，就觉得挺好的。",
+     "first_audio_ms": 812,
+     "seconds": 2.4,
+     "speech_seconds": 1.9,
+     "trailing_silence_s": 0.15,
+     "loudness_db": -19.3,
+     "voiced_ratio": 0.84,
+     "chars_per_second": 6.84,
+     "asr": "我一般都能得A，就觉得挺好的。",
+     "asr_cues": [],
+     "leaked": []
+    },
+    {
+     "flush": 3,
+     "text": "[压低声音，像在说悄悄话] 这种校园生活真的让人很开心。",
+     "first_audio_ms": 895,
+     "seconds": 2.48,
+     "speech_seconds": 2.05,
+     "trailing_silence_s": 0.1,
+     "loudness_db": -17.8,
+     "voiced_ratio": 0.88,
+     "chars_per_second": 6.34,
+     "asr": "这种校园生活真的让人很开心。",
+     "asr_cues": [],
+     "leaked": []
+    }
+   ]
+  },
+  {
+   "variant": "c-whisper-each",
+   "take": 1,
+   "note": "the same direction on every sentence",
+   "wav": "s2.1-pro-c-whisper-each-1.wav",
+   "flushes": [
+    {
+     "flush": 1,
+     "text": "[压低声音，像在说悄悄话] 小时候上美术课老高兴了，老师会发美术本子，给出主题，画完交作业。",
+     "first_audio_ms": 2309,
+     "seconds": 5.62,
+     "speech_seconds": 5.5,
+     "trailing_silence_s": 0.1,
+     "loudness_db": -17.2,
+     "voiced_ratio": 0.77,
+     "chars_per_second": 5.09,
+     "asr": "小时候上美术课老高兴了，老师会发美术本子，给出主题，画完交作业。",
+     "asr_cues": [],
+     "leaked": []
+    },
+    {
+     "flush": 2,
+     "text": "[压低声音，像在说悄悄话] 我一般都能得A，就觉得挺好的。",
+     "first_audio_ms": 847,
+     "seconds": 2.42,
+     "speech_seconds": 2.05,
+     "trailing_silence_s": 0.1,
+     "loudness_db": -18.9,
+     "voiced_ratio": 0.68,
+     "chars_per_second": 6.34,
+     "asr": "我一般都能得诶，就觉得挺好的。",
+     "asr_cues": [],
+     "leaked": []
+    },
+    {
+     "flush": 3,
+     "text": "[压低声音，像在说悄悄话] 这种校园生活真的让人很开心。",
+     "first_audio_ms": 897,
+     "seconds": 2.35,
+     "speech_seconds": 2.0,
+     "trailing_silence_s": 0.05,
+     "loudness_db": -18.4,
+     "voiced_ratio": 0.85,
+     "chars_per_second": 6.5,
+     "asr": "这种校园生活真的让人很开心。",
+     "asr_cues": [],
+     "leaked": []
+    }
+   ]
+  },
+  {
+   "variant": "f-user-example",
+   "take": 0,
+   "note": "a Chinese direction, <emphasis> and bare sound cues together",
+   "wav": "s2.1-pro-f-user-example.wav",
+   "flushes": [
+    {
+     "flush": 1,
+     "text": "[语气温暖，带着怀念，直播杂谈] 小时候上美术课<emphasis>老高兴了</emphasis>，老师会发美术本子，给出主题，画完交作业。",
+     "first_audio_ms": 2148,
+     "seconds": 5.15,
+     "speech_seconds": 5.05,
+     "trailing_silence_s": 0.1,
+     "loudness_db": -19.2,
+     "voiced_ratio": 0.7,
+     "chars_per_second": 5.54,
+     "asr": "小时候上美术课老高兴了，[语气加重]老师会发美术本子，给出主题，画完交作业。",
+     "asr_cues": [
+      "语气加重"
+     ],
+     "leaked": []
+    },
+    {
+     "flush": 2,
+     "text": "[laughing]我一般都能得A，就觉得挺好的。",
+     "first_audio_ms": 972,
+     "seconds": 3.16,
+     "speech_seconds": 2.7,
+     "trailing_silence_s": 0.1,
+     "loudness_db": -20.2,
+     "voiced_ratio": 0.72,
+     "chars_per_second": 4.81,
+     "asr": "<|speaker:0> [轻笑]我一般都能得A就觉得挺好的。",
+     "asr_cues": [
+      "轻笑"
+     ],
+     "leaked": []
+    },
+    {
+     "flush": 3,
+     "text": "[轻笑] 这种校园生活真的让人很开心。",
+     "first_audio_ms": 1304,
+     "seconds": 4.04,
+     "speech_seconds": 3.6,
+     "trailing_silence_s": 0.1,
+     "loudness_db": -22.8,
+     "voiced_ratio": 0.76,
+     "chars_per_second": 3.61,
+     "asr": "[轻笑]呵呵，[吸气声]这种校园生活真的让人很开心。",
+     "asr_cues": [
+      "轻笑",
+      "吸气声"
+     ],
+     "leaked": []
+    }
+   ]
+  },
+  {
+   "variant": "f-user-example",
+   "take": 1,
+   "note": "a Chinese direction, <emphasis> and bare sound cues together",
+   "wav": "s2.1-pro-f-user-example-1.wav",
+   "flushes": [
+    {
+     "flush": 1,
+     "text": "[语气温暖，带着怀念，直播杂谈] 小时候上美术课<emphasis>老高兴了</emphasis>，老师会发美术本子，给出主题，画完交作业。",
+     "first_audio_ms": 2347,
+     "seconds": 5.34,
+     "speech_seconds": 5.2,
+     "trailing_silence_s": 0.05,
+     "loudness_db": -17.4,
+     "voiced_ratio": 0.8,
+     "chars_per_second": 5.38,
+     "asr": "小时候上美术课老高兴了，老师会发美术本子，给出主题，画完交作业。",
+     "asr_cues": [],
+     "leaked": []
+    },
+    {
+     "flush": 2,
+     "text": "[laughing]我一般都能得A，就觉得挺好的。",
+     "first_audio_ms": 883,
+     "seconds": 2.66,
+     "speech_seconds": 2.2,
+     "trailing_silence_s": 0.15,
+     "loudness_db": -16.3,
+     "voiced_ratio": 0.77,
+     "chars_per_second": 5.91,
+     "asr": "我一般都能得A，就觉得挺好的。",
+     "asr_cues": [],
+     "leaked": []
+    },
+    {
+     "flush": 3,
+     "text": "[轻笑] 这种校园生活真的让人很开心。",
+     "first_audio_ms": 931,
+     "seconds": 2.8,
+     "speech_seconds": 2.45,
+     "trailing_silence_s": 0.1,
+     "loudness_db": -18.3,
+     "voiced_ratio": 0.8,
+     "chars_per_second": 5.31,
+     "asr": "[轻笑]呵，这种校园生活真的让人很开心。",
+     "asr_cues": [
+      "轻笑"
+     ],
+     "leaked": []
+    }
+   ]
+  },
+  {
+   "variant": "g-paired-whisper",
+   "take": 0,
+   "note": "<whisper> around most of the first sentence",
+   "wav": "s2.1-pro-g-paired-whisper.wav",
+   "flushes": [
+    {
+     "flush": 1,
+     "text": "<whisper>小时候上美术课老高兴了，老师会发美术本子</whisper>，给出主题，画完交作业。",
+     "first_audio_ms": 2594,
+     "seconds": 7.06,
+     "speech_seconds": 6.9,
+     "trailing_silence_s": 0.15,
+     "loudness_db": -20.4,
+     "voiced_ratio": 0.7,
+     "chars_per_second": 4.06,
+     "asr": "[轻笑]呵呵~[吸气声]小时候上美术课老高兴了，老师会发美术本子，给出主题，画完交作业。",
+     "asr_cues": [
+      "轻笑",
+      "吸气声"
+     ],
+     "leaked": []
+    },
+    {
+     "flush": 2,
+     "text": "我一般都能得A，就觉得挺好的。",
+     "first_audio_ms": 884,
+     "seconds": 2.82,
+     "speech_seconds": 2.3,
+     "trailing_silence_s": 0.15,
+     "loudness_db": -18.3,
+     "voiced_ratio": 0.78,
+     "chars_per_second": 5.65,
+     "asr": "我一般都能得A，就觉得挺好的。",
+     "asr_cues": [],
+     "leaked": []
+    },
+    {
+     "flush": 3,
+     "text": "这种校园生活真的让人很开心。",
+     "first_audio_ms": 753,
+     "seconds": 2.14,
+     "speech_seconds": 2.0,
+     "trailing_silence_s": 0.1,
+     "loudness_db": -19.1,
+     "voiced_ratio": 0.9,
+     "chars_per_second": 6.5,
+     "asr": "这种校园生活真的让人很开心。",
+     "asr_cues": [],
+     "leaked": []
+    }
+   ]
+  },
+  {
+   "variant": "g-paired-whisper",
+   "take": 1,
+   "note": "<whisper> around most of the first sentence",
+   "wav": "s2.1-pro-g-paired-whisper-1.wav",
+   "flushes": [
+    {
+     "flush": 1,
+     "text": "<whisper>小时候上美术课老高兴了，老师会发美术本子</whisper>，给出主题，画完交作业。",
+     "first_audio_ms": 2336,
+     "seconds": 5.57,
+     "speech_seconds": 5.45,
+     "trailing_silence_s": 0.1,
+     "loudness_db": -17.6,
+     "voiced_ratio": 0.8,
+     "chars_per_second": 5.14,
+     "asr": "小时候上美术课老高兴了，老师会发美术本子，给出主题，画完交作业。",
+     "asr_cues": [],
+     "leaked": []
+    },
+    {
+     "flush": 2,
+     "text": "我一般都能得A，就觉得挺好的。",
+     "first_audio_ms": 947,
+     "seconds": 2.86,
+     "speech_seconds": 2.45,
+     "trailing_silence_s": 0.15,
+     "loudness_db": -20.5,
+     "voiced_ratio": 0.76,
+     "chars_per_second": 5.31,
+     "asr": "我一般都能得欸，就觉得挺好的。",
+     "asr_cues": [],
+     "leaked": []
+    },
+    {
+     "flush": 3,
+     "text": "这种校园生活真的让人很开心。",
+     "first_audio_ms": 867,
+     "seconds": 2.28,
+     "speech_seconds": 2.15,
+     "trailing_silence_s": 0.1,
+     "loudness_db": -18.0,
+     "voiced_ratio": 0.88,
+     "chars_per_second": 6.05,
+     "asr": "这种校园生活真的让人很开心。",
+     "asr_cues": [],
+     "leaked": []
+    }
+   ]
+  },
+  {
+   "variant": "q-whisper-tail",
+   "take": 0,
+   "note": "<whisper> around the end of a sentence",
+   "wav": "s2.1-pro-q-whisper-tail.wav",
+   "flushes": [
+    {
+     "flush": 1,
+     "text": "我一般都能得A，<whisper>就觉得挺好的</whisper>。",
+     "first_audio_ms": 1981,
+     "seconds": 3.62,
+     "speech_seconds": 3.5,
+     "trailing_silence_s": 0.1,
+     "loudness_db": -22.7,
+     "voiced_ratio": 0.81,
+     "chars_per_second": 3.71,
+     "asr": "我一般都能得A，就觉得挺好的。",
+     "asr_cues": [],
+     "leaked": [],
+     "span_found": true,
+     "span_db": -3.9,
+     "span_semitones": -6.8,
+     "span_stretch": 0.39,
+     "span_voiced": 0.87,
+     "rest_voiced": 0.91
+    },
+    {
+     "flush": 2,
+     "text": "这种校园生活真的让人很开心。",
+     "first_audio_ms": 839,
+     "seconds": 2.32,
+     "speech_seconds": 1.95,
+     "trailing_silence_s": 0.1,
+     "loudness_db": -19.9,
+     "voiced_ratio": 0.85,
+     "chars_per_second": 6.67,
+     "asr": "这种校园生活真的让人很开心。",
+     "asr_cues": [],
+     "leaked": []
+    }
+   ]
+  },
+  {
+   "variant": "q-whisper-tail",
+   "take": 1,
+   "note": "<whisper> around the end of a sentence",
+   "wav": "s2.1-pro-q-whisper-tail-1.wav",
+   "flushes": [
+    {
+     "flush": 1,
+     "text": "我一般都能得A，<whisper>就觉得挺好的</whisper>。",
+     "first_audio_ms": 1611,
+     "seconds": 2.93,
+     "speech_seconds": 2.7,
+     "trailing_silence_s": 0.1,
+     "loudness_db": -17.7,
+     "voiced_ratio": 0.79,
+     "chars_per_second": 4.81,
+     "asr": "我一般都能得A，就觉得挺好的。",
+     "asr_cues": [],
+     "leaked": [],
+     "span_found": true,
+     "span_db": -6.3,
+     "span_semitones": -3.5,
+     "span_stretch": 0.86,
+     "span_voiced": 0.68,
+     "rest_voiced": 0.87
+    },
+    {
+     "flush": 2,
+     "text": "这种校园生活真的让人很开心。",
+     "first_audio_ms": 870,
+     "seconds": 2.51,
+     "speech_seconds": 2.05,
+     "trailing_silence_s": 0.1,
+     "loudness_db": -18.3,
+     "voiced_ratio": 0.83,
+     "chars_per_second": 6.34,
+     "asr": "这种校园生活真的让人很开心。",
+     "asr_cues": [],
+     "leaked": []
+    }
+   ]
+  },
+  {
+   "variant": "r-emphasis",
+   "take": 0,
+   "note": "<emphasis> around 老高兴了, no direction",
+   "wav": "s2.1-pro-r-emphasis.wav",
+   "flushes": [
+    {
+     "flush": 1,
+     "text": "小时候上美术课<emphasis>老高兴了</emphasis>，老师会发美术本子，给出主题，画完交作业。",
+     "first_audio_ms": 2354,
+     "seconds": 5.2,
+     "speech_seconds": 5.05,
+     "trailing_silence_s": 0.15,
+     "loudness_db": -20.4,
+     "voiced_ratio": 0.71,
+     "chars_per_second": 5.54,
+     "asr": "小时候上美术课老高兴了，老师会发美术本子，给出主题，画完交作业。",
+     "asr_cues": [],
+     "leaked": [],
+     "span_found": true,
+     "span_db": 0.1,
+     "span_semitones": -1.8,
+     "span_stretch": 0.89,
+     "span_voiced": 0.46,
+     "rest_voiced": 0.74
+    }
+   ]
+  },
+  {
+   "variant": "r-emphasis",
+   "take": 1,
+   "note": "<emphasis> around 老高兴了, no direction",
+   "wav": "s2.1-pro-r-emphasis-1.wav",
+   "flushes": [
+    {
+     "flush": 1,
+     "text": "小时候上美术课<emphasis>老高兴了</emphasis>，老师会发美术本子，给出主题，画完交作业。",
+     "first_audio_ms": 2020,
+     "seconds": 4.69,
+     "speech_seconds": 4.55,
+     "trailing_silence_s": 0.1,
+     "loudness_db": -17.8,
+     "voiced_ratio": 0.71,
+     "chars_per_second": 6.15,
+     "asr": "小时候上美术课老高兴了，老师会发美术本子，给出主题，画完交作业。",
+     "asr_cues": [],
+     "leaked": [],
+     "span_found": true,
+     "span_db": 0.6,
+     "span_semitones": -2.5,
+     "span_stretch": 1.02,
+     "span_voiced": 0.62,
+     "rest_voiced": 0.73
+    }
+   ]
+  },
+  {
+   "variant": "t-chuckling-text",
+   "take": 0,
+   "note": "[chuckling] followed by 嘿嘿",
+   "wav": "s2.1-pro-t-chuckling-text.wav",
+   "flushes": [
+    {
+     "flush": 1,
+     "text": "[chuckling] 嘿嘿，我一般都能得A，就觉得挺好的。",
+     "first_audio_ms": 1749,
+     "seconds": 3.58,
+     "speech_seconds": 3.45,
+     "trailing_silence_s": 0.1,
+     "loudness_db": -23.0,
+     "voiced_ratio": 0.58,
+     "chars_per_second": 4.35,
+     "asr": "[轻笑]呵呵，[吸气声]我一般都能得A，就觉得挺好的。",
+     "asr_cues": [
+      "轻笑",
+      "吸气声"
+     ],
+     "leaked": []
+    }
+   ]
+  },
+  {
+   "variant": "t-chuckling-text",
+   "take": 1,
+   "note": "[chuckling] followed by 嘿嘿",
+   "wav": "s2.1-pro-t-chuckling-text-1.wav",
+   "flushes": [
+    {
+     "flush": 1,
+     "text": "[chuckling] 嘿嘿，我一般都能得A，就觉得挺好的。",
+     "first_audio_ms": 1702,
+     "seconds": 3.39,
+     "speech_seconds": 3.3,
+     "trailing_silence_s": 0.05,
+     "loudness_db": -21.0,
+     "voiced_ratio": 0.75,
+     "chars_per_second": 4.55,
+     "asr": "[轻笑]呵~[吸气声]我一般都能得A，就觉得挺好的。",
+     "asr_cues": [
+      "轻笑",
+      "吸气声"
+     ],
+     "leaked": []
+    }
+   ]
+  }
+ ]
+}

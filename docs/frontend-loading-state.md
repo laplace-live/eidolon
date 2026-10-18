@@ -170,7 +170,7 @@ pcClient.on(RTVIEvent.BotLlmStopped, () => {
 });
 ```
 
-Note that the bot speaks Chinese — emotion tags like `[happy]` appear inline in the text stream; you may want to strip them with a regex before rendering.
+Note that the bot speaks Chinese, and its delivery cues for the TTS appear inline in the text stream: bracketed directions and sounds like `[懒洋洋的，带点笑意]` and `[chuckling]`, and the tag pairs `<emphasis>…</emphasis>` and `<whisper>…</whisper>`. Strip both kinds before rendering.
 
 ---
 
