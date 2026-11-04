@@ -5,12 +5,38 @@ on:
     branches:
       - "master"
     # laplace-eidolon@<version>, pushed by release.yml (changesets) with the
-    # release bot's token, so this trigger fires.
+    # release bot's token, so this trigger fires. Tag pushes ignore the path
+    # filter, so every release builds.
     tags:
       - "laplace-eidolon@*"
+    # Every edge image is deployed by Watchtower, which restarts the bot and
+    # drops live calls; a change no image runs shouldn't. Not `**.md`:
+    # persona.md is the system prompt.
+    paths-ignore:
+      - "docs/**"
+      - "tests/**"
+      - "apps/*/test/**"
+      - "packages/*/test/**"
+      - ".changeset/**"
+      - "README.md"
+      - "AGENTS.md"
+      - "CLAUDE.md"
+      - ".github/workflows/ts.yml"
+      - ".github/workflows/release.yml"
   pull_request:
     branches:
       - "master"
+    paths-ignore:
+      - "docs/**"
+      - "tests/**"
+      - "apps/*/test/**"
+      - "packages/*/test/**"
+      - ".changeset/**"
+      - "README.md"
+      - "AGENTS.md"
+      - "CLAUDE.md"
+      - ".github/workflows/ts.yml"
+      - ".github/workflows/release.yml"
   repository_dispatch:
     types:
       - webhook

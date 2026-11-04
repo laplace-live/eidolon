@@ -60,7 +60,9 @@ jobs:
           # version locally, and the action pushes the tag and creates its
           # GitHub Release through the API.
           publish-script: bun run release
-          commit-message: "chore: version packages [skip ci]"
+          # No [skip ci]: the version PR runs the full CI, so a bump that breaks a
+          # test is caught before it merges.
+          commit-message: "chore: version packages"
           pr-title: "chore: version packages"
           # v2 reads the token only from this input, not from the
           # `GITHUB_TOKEN` env var.
