@@ -1,0 +1,4788 @@
+{
+  "add": [
+    {
+      "name": "basic",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": null,
+        "run_id": null,
+        "responses": [
+          "{\"memory\": [{\"id\": \"0\", \"text\": \"用户养了一只叫坚果的猫\", \"attributed_to\": \"user\", \"linked_memory_ids\": []}, {\"id\": \"1\", \"text\": \"用户的猫叫坚果，三岁\"}, {\"id\": \"2\", \"text\": \"User greeted the assistant\", \"attributed_to\": \"assistant\"}, {\"id\": \"3\", \"text\": \"用户养了一只叫坚果的猫\", \"attributed_to\": \"user\"}, {\"id\": \"4\", \"text\": \"\"}, {\"id\": \"5\", \"attributed_to\": \"user\"}]}"
+        ],
+        "existing": {
+          "00000000-0000-4000-8000-000000000aaa": {
+            "platform": "pipecat",
+            "user_id": "12345678",
+            "data": "User has a cat named 坚果",
+            "text_lemmatized": "User has a cat named 坚果",
+            "hash": "929366913ccd2419add5096a8cfc2b73",
+            "created_at": "2026-11-01T00:00:00+00:00",
+            "updated_at": "2026-11-01T00:00:00+00:00"
+          },
+          "00000000-0000-4000-8000-000000000bbb": {
+            "platform": "pipecat",
+            "created_at": "2025-12-01T03:04:05-07:00",
+            "categories": ["misc"],
+            "user_id": "12345678",
+            "role": "user",
+            "data": "User likes tea",
+            "hash": "h2",
+            "updated_at": "2025-12-01T03:04:05-07:00",
+            "text_lemmatized": "User likes tea"
+          },
+          "00000000-0000-4000-8000-000000000ccc": {
+            "platform": "pipecat",
+            "user_id": "99999999",
+            "data": "other viewer",
+            "hash": "h3"
+          }
+        },
+        "scores": {
+          "00000000-0000-4000-8000-000000000aaa": 0.9,
+          "00000000-0000-4000-8000-000000000bbb": 0.2
+        },
+        "embed_plan": [],
+        "fail": {},
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": null,
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": true,
+      "value": [
+        {
+          "id": "00000000-0000-0000-0000-000000000001",
+          "memory": "用户养了一只叫坚果的猫",
+          "event": "ADD"
+        },
+        {
+          "id": "00000000-0000-0000-0000-000000000002",
+          "memory": "User greeted the assistant",
+          "event": "ADD"
+        }
+      ],
+      "logs": [],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 10
+          }
+        ],
+        [
+          "upsert",
+          [
+            {
+              "id": "00000000-0000-0000-0000-000000000001",
+              "vector": { "": [11.0, 1.0, 0.0, 0.0] },
+              "payload": {
+                "platform": "pipecat",
+                "user_id": "12345678",
+                "data": "用户养了一只叫坚果的猫",
+                "text_lemmatized": "用户养了一只叫坚果的猫",
+                "hash": "f2229f94e2712779052642c9eb732898",
+                "created_at": "2026-11-03T04:05:07.123457+00:00",
+                "updated_at": "2026-11-03T04:05:07.123457+00:00",
+                "attributed_to": "user"
+              }
+            },
+            {
+              "id": "00000000-0000-0000-0000-000000000002",
+              "vector": { "": [26.0, 1.0, 0.0, 0.0] },
+              "payload": {
+                "platform": "pipecat",
+                "user_id": "12345678",
+                "data": "User greeted the assistant",
+                "text_lemmatized": "User greeted the assistant",
+                "hash": "d0d517e3429f2b4e6ac4190d94f27f38",
+                "created_at": "2026-11-03T04:05:08.123458+00:00",
+                "updated_at": "2026-11-03T04:05:08.123458+00:00",
+                "attributed_to": "assistant"
+              }
+            }
+          ]
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        },
+        {
+          "input": [
+            "用户养了一只叫坚果的猫",
+            "用户的猫叫坚果，三岁",
+            "User greeted the assistant",
+            "用户养了一只叫坚果的猫"
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[{\"id\": \"0\", \"text\": \"User has a cat named 坚果\"}, {\"id\": \"1\", \"text\": \"User likes tea\"}]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "~google/gemini-flash-latest",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": {
+        "history": [
+          [
+            "00000000-0000-0000-0000-000000000003",
+            "00000000-0000-0000-0000-000000000001",
+            null,
+            "用户养了一只叫坚果的猫",
+            "ADD",
+            "2026-11-03T04:05:07.123457+00:00",
+            null,
+            0,
+            null,
+            null
+          ],
+          [
+            "00000000-0000-0000-0000-000000000004",
+            "00000000-0000-0000-0000-000000000002",
+            null,
+            "User greeted the assistant",
+            "ADD",
+            "2026-11-03T04:05:08.123458+00:00",
+            null,
+            0,
+            null,
+            null
+          ]
+        ],
+        "messages": [
+          [
+            "00000000-0000-0000-0000-000000000005",
+            "user_id=12345678",
+            "user",
+            "用一两句话简短自然地打个招呼。",
+            null,
+            "2026-11-03T04:05:09.123459+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000006",
+            "user_id=12345678",
+            "assistant",
+            "嗨！今天想聊点什么？",
+            null,
+            "2026-11-03T04:05:09.123459+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000007",
+            "user_id=12345678",
+            "user",
+            "我养了一只猫叫坚果\n它三岁了",
+            null,
+            "2026-11-03T04:05:09.123459+00:00"
+          ]
+        ]
+      },
+      "clock_reads": 4,
+      "uuids": 7
+    },
+    {
+      "name": "attributed",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": null,
+        "run_id": null,
+        "responses": [
+          "{\"memory\": [{\"text\": \"a1\", \"attributed_to\": \"\"}, {\"text\": \"a2\", \"attributed_to\": []}, {\"text\": \"a3\", \"attributed_to\": {}}, {\"text\": \"a4\", \"attributed_to\": 0}, {\"text\": \"a5\", \"attributed_to\": [\"x\"]}, {\"text\": \"a6\", \"attributed_to\": true}, {\"text\": \"a7\", \"attributed_to\": null}, {\"text\": \"a8\", \"attributed_to\": {\"k\": 1}}, {\"text\": \"a9\", \"attributed_to\": 2.5}]}"
+        ],
+        "existing": {},
+        "scores": {},
+        "embed_plan": [],
+        "fail": {},
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": null,
+        "base": 1793678706000000,
+        "step": 1000000
+      },
+      "ok": true,
+      "value": [
+        { "id": "00000000-0000-0000-0000-000000000001", "memory": "a1", "event": "ADD" },
+        { "id": "00000000-0000-0000-0000-000000000002", "memory": "a2", "event": "ADD" },
+        { "id": "00000000-0000-0000-0000-000000000003", "memory": "a3", "event": "ADD" },
+        { "id": "00000000-0000-0000-0000-000000000004", "memory": "a4", "event": "ADD" },
+        { "id": "00000000-0000-0000-0000-000000000005", "memory": "a5", "event": "ADD" },
+        { "id": "00000000-0000-0000-0000-000000000006", "memory": "a6", "event": "ADD" },
+        { "id": "00000000-0000-0000-0000-000000000007", "memory": "a7", "event": "ADD" },
+        { "id": "00000000-0000-0000-0000-000000000008", "memory": "a8", "event": "ADD" },
+        { "id": "00000000-0000-0000-0000-000000000009", "memory": "a9", "event": "ADD" }
+      ],
+      "logs": [],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 10
+          }
+        ],
+        [
+          "upsert",
+          [
+            {
+              "id": "00000000-0000-0000-0000-000000000001",
+              "vector": { "": [2.0, 1.0, 0.0, 0.0] },
+              "payload": {
+                "platform": "pipecat",
+                "user_id": "12345678",
+                "data": "a1",
+                "text_lemmatized": "a1",
+                "hash": "8a8bb7cd343aa2ad99b7d762030857a2",
+                "created_at": "2026-11-03T04:05:07+00:00",
+                "updated_at": "2026-11-03T04:05:07+00:00"
+              }
+            },
+            {
+              "id": "00000000-0000-0000-0000-000000000002",
+              "vector": { "": [2.0, 1.0, 0.0, 0.0] },
+              "payload": {
+                "platform": "pipecat",
+                "user_id": "12345678",
+                "data": "a2",
+                "text_lemmatized": "a2",
+                "hash": "693a9fdd4c2fd0700968fba0d07ff3c0",
+                "created_at": "2026-11-03T04:05:08+00:00",
+                "updated_at": "2026-11-03T04:05:08+00:00"
+              }
+            },
+            {
+              "id": "00000000-0000-0000-0000-000000000003",
+              "vector": { "": [2.0, 1.0, 0.0, 0.0] },
+              "payload": {
+                "platform": "pipecat",
+                "user_id": "12345678",
+                "data": "a3",
+                "text_lemmatized": "a3",
+                "hash": "9d607a663f3e9b0a90c3c8d4426640dc",
+                "created_at": "2026-11-03T04:05:09+00:00",
+                "updated_at": "2026-11-03T04:05:09+00:00"
+              }
+            },
+            {
+              "id": "00000000-0000-0000-0000-000000000004",
+              "vector": { "": [2.0, 1.0, 0.0, 0.0] },
+              "payload": {
+                "platform": "pipecat",
+                "user_id": "12345678",
+                "data": "a4",
+                "text_lemmatized": "a4",
+                "hash": "894f782a148b33af1e39a0efed952d69",
+                "created_at": "2026-11-03T04:05:10+00:00",
+                "updated_at": "2026-11-03T04:05:10+00:00"
+              }
+            },
+            {
+              "id": "00000000-0000-0000-0000-000000000005",
+              "vector": { "": [2.0, 1.0, 0.0, 0.0] },
+              "payload": {
+                "platform": "pipecat",
+                "user_id": "12345678",
+                "data": "a5",
+                "text_lemmatized": "a5",
+                "hash": "32cfe6c19200b67afb7c3d0e1c43eadb",
+                "created_at": "2026-11-03T04:05:11+00:00",
+                "updated_at": "2026-11-03T04:05:11+00:00",
+                "attributed_to": ["x"]
+              }
+            },
+            {
+              "id": "00000000-0000-0000-0000-000000000006",
+              "vector": { "": [2.0, 1.0, 0.0, 0.0] },
+              "payload": {
+                "platform": "pipecat",
+                "user_id": "12345678",
+                "data": "a6",
+                "text_lemmatized": "a6",
+                "hash": "f74dd50cfec0f8549406fee6191d2f8d",
+                "created_at": "2026-11-03T04:05:12+00:00",
+                "updated_at": "2026-11-03T04:05:12+00:00",
+                "attributed_to": true
+              }
+            },
+            {
+              "id": "00000000-0000-0000-0000-000000000007",
+              "vector": { "": [2.0, 1.0, 0.0, 0.0] },
+              "payload": {
+                "platform": "pipecat",
+                "user_id": "12345678",
+                "data": "a7",
+                "text_lemmatized": "a7",
+                "hash": "c692562238d8c12c32434c50b96d56ae",
+                "created_at": "2026-11-03T04:05:13+00:00",
+                "updated_at": "2026-11-03T04:05:13+00:00"
+              }
+            },
+            {
+              "id": "00000000-0000-0000-0000-000000000008",
+              "vector": { "": [2.0, 1.0, 0.0, 0.0] },
+              "payload": {
+                "platform": "pipecat",
+                "user_id": "12345678",
+                "data": "a8",
+                "text_lemmatized": "a8",
+                "hash": "68c42382c8b93fc29c2fcb6a444aeda5",
+                "created_at": "2026-11-03T04:05:14+00:00",
+                "updated_at": "2026-11-03T04:05:14+00:00",
+                "attributed_to": { "k": 1 }
+              }
+            },
+            {
+              "id": "00000000-0000-0000-0000-000000000009",
+              "vector": { "": [2.0, 1.0, 0.0, 0.0] },
+              "payload": {
+                "platform": "pipecat",
+                "user_id": "12345678",
+                "data": "a9",
+                "text_lemmatized": "a9",
+                "hash": "3d1e97d18e692ca5484d1abfe617b6c1",
+                "created_at": "2026-11-03T04:05:15+00:00",
+                "updated_at": "2026-11-03T04:05:15+00:00",
+                "attributed_to": 2.5
+              }
+            }
+          ]
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        },
+        {
+          "input": ["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9"],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "~google/gemini-flash-latest",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": {
+        "history": [
+          [
+            "00000000-0000-0000-0000-00000000000a",
+            "00000000-0000-0000-0000-000000000001",
+            null,
+            "a1",
+            "ADD",
+            "2026-11-03T04:05:07+00:00",
+            null,
+            0,
+            null,
+            null
+          ],
+          [
+            "00000000-0000-0000-0000-00000000000b",
+            "00000000-0000-0000-0000-000000000002",
+            null,
+            "a2",
+            "ADD",
+            "2026-11-03T04:05:08+00:00",
+            null,
+            0,
+            null,
+            null
+          ],
+          [
+            "00000000-0000-0000-0000-00000000000c",
+            "00000000-0000-0000-0000-000000000003",
+            null,
+            "a3",
+            "ADD",
+            "2026-11-03T04:05:09+00:00",
+            null,
+            0,
+            null,
+            null
+          ],
+          [
+            "00000000-0000-0000-0000-00000000000d",
+            "00000000-0000-0000-0000-000000000004",
+            null,
+            "a4",
+            "ADD",
+            "2026-11-03T04:05:10+00:00",
+            null,
+            0,
+            null,
+            null
+          ],
+          [
+            "00000000-0000-0000-0000-00000000000e",
+            "00000000-0000-0000-0000-000000000005",
+            null,
+            "a5",
+            "ADD",
+            "2026-11-03T04:05:11+00:00",
+            null,
+            0,
+            null,
+            null
+          ],
+          [
+            "00000000-0000-0000-0000-00000000000f",
+            "00000000-0000-0000-0000-000000000006",
+            null,
+            "a6",
+            "ADD",
+            "2026-11-03T04:05:12+00:00",
+            null,
+            0,
+            null,
+            null
+          ],
+          [
+            "00000000-0000-0000-0000-000000000010",
+            "00000000-0000-0000-0000-000000000007",
+            null,
+            "a7",
+            "ADD",
+            "2026-11-03T04:05:13+00:00",
+            null,
+            0,
+            null,
+            null
+          ],
+          [
+            "00000000-0000-0000-0000-000000000011",
+            "00000000-0000-0000-0000-000000000008",
+            null,
+            "a8",
+            "ADD",
+            "2026-11-03T04:05:14+00:00",
+            null,
+            0,
+            null,
+            null
+          ],
+          [
+            "00000000-0000-0000-0000-000000000012",
+            "00000000-0000-0000-0000-000000000009",
+            null,
+            "a9",
+            "ADD",
+            "2026-11-03T04:05:15+00:00",
+            null,
+            0,
+            null,
+            null
+          ]
+        ],
+        "messages": [
+          [
+            "00000000-0000-0000-0000-000000000013",
+            "user_id=12345678",
+            "user",
+            "用一两句话简短自然地打个招呼。",
+            null,
+            "2026-11-03T04:05:16+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000014",
+            "user_id=12345678",
+            "assistant",
+            "嗨！今天想聊点什么？",
+            null,
+            "2026-11-03T04:05:16+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000015",
+            "user_id=12345678",
+            "user",
+            "我养了一只猫叫坚果\n它三岁了",
+            null,
+            "2026-11-03T04:05:16+00:00"
+          ]
+        ]
+      },
+      "clock_reads": 11,
+      "uuids": 21
+    },
+    {
+      "name": "empty",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": null,
+        "run_id": null,
+        "responses": ["{\"memory\": []}"],
+        "existing": {},
+        "scores": {},
+        "embed_plan": [],
+        "fail": {},
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": null,
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": true,
+      "value": [],
+      "logs": [],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 10
+          }
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "~google/gemini-flash-latest",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": {
+        "history": [],
+        "messages": [
+          [
+            "00000000-0000-0000-0000-000000000001",
+            "user_id=12345678",
+            "user",
+            "用一两句话简短自然地打个招呼。",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000002",
+            "user_id=12345678",
+            "assistant",
+            "嗨！今天想聊点什么？",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000003",
+            "user_id=12345678",
+            "user",
+            "我养了一只猫叫坚果\n它三岁了",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ]
+        ]
+      },
+      "clock_reads": 2,
+      "uuids": 3
+    },
+    {
+      "name": "null_memory",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": null,
+        "run_id": null,
+        "responses": ["{\"memory\": null}"],
+        "existing": {},
+        "scores": {},
+        "embed_plan": [],
+        "fail": {},
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": null,
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": true,
+      "value": [],
+      "logs": [],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 10
+          }
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "~google/gemini-flash-latest",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": {
+        "history": [],
+        "messages": [
+          [
+            "00000000-0000-0000-0000-000000000001",
+            "user_id=12345678",
+            "user",
+            "用一两句话简短自然地打个招呼。",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000002",
+            "user_id=12345678",
+            "assistant",
+            "嗨！今天想聊点什么？",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000003",
+            "user_id=12345678",
+            "user",
+            "我养了一只猫叫坚果\n它三岁了",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ]
+        ]
+      },
+      "clock_reads": 2,
+      "uuids": 3
+    },
+    {
+      "name": "facts_key",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": null,
+        "run_id": null,
+        "responses": ["{\"facts\": [\"x\"]}"],
+        "existing": {},
+        "scores": {},
+        "embed_plan": [],
+        "fail": {},
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": null,
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": true,
+      "value": [],
+      "logs": [],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 10
+          }
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "~google/gemini-flash-latest",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": {
+        "history": [],
+        "messages": [
+          [
+            "00000000-0000-0000-0000-000000000001",
+            "user_id=12345678",
+            "user",
+            "用一两句话简短自然地打个招呼。",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000002",
+            "user_id=12345678",
+            "assistant",
+            "嗨！今天想聊点什么？",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000003",
+            "user_id=12345678",
+            "user",
+            "我养了一只猫叫坚果\n它三岁了",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ]
+        ]
+      },
+      "clock_reads": 2,
+      "uuids": 3
+    },
+    {
+      "name": "top_array",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": null,
+        "run_id": null,
+        "responses": ["[{\"text\": \"x\"}]"],
+        "existing": {},
+        "scores": {},
+        "embed_plan": [],
+        "fail": {},
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": null,
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": true,
+      "value": [],
+      "logs": [
+        ["ERROR", "Error parsing extraction response: 'list' object has no attribute 'get'"]
+      ],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 10
+          }
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "~google/gemini-flash-latest",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": {
+        "history": [],
+        "messages": [
+          [
+            "00000000-0000-0000-0000-000000000001",
+            "user_id=12345678",
+            "user",
+            "用一两句话简短自然地打个招呼。",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000002",
+            "user_id=12345678",
+            "assistant",
+            "嗨！今天想聊点什么？",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000003",
+            "user_id=12345678",
+            "user",
+            "我养了一只猫叫坚果\n它三岁了",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ]
+        ]
+      },
+      "clock_reads": 2,
+      "uuids": 3
+    },
+    {
+      "name": "garbage",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": null,
+        "run_id": null,
+        "responses": ["I could not find anything"],
+        "existing": {},
+        "scores": {},
+        "embed_plan": [],
+        "fail": {},
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": null,
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": true,
+      "value": [],
+      "logs": [
+        ["ERROR", "Error parsing extraction response: Expecting value: line 1 column 1 (char 0)"]
+      ],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 10
+          }
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "~google/gemini-flash-latest",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": {
+        "history": [],
+        "messages": [
+          [
+            "00000000-0000-0000-0000-000000000001",
+            "user_id=12345678",
+            "user",
+            "用一两句话简短自然地打个招呼。",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000002",
+            "user_id=12345678",
+            "assistant",
+            "嗨！今天想聊点什么？",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000003",
+            "user_id=12345678",
+            "user",
+            "我养了一只猫叫坚果\n它三岁了",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ]
+        ]
+      },
+      "clock_reads": 2,
+      "uuids": 3
+    },
+    {
+      "name": "fenced",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": null,
+        "run_id": null,
+        "responses": [
+          "```json\n{\"memory\": [{\"text\": \"fenced fact\", \"attributed_to\": \"user\"}]}\n```"
+        ],
+        "existing": {},
+        "scores": {},
+        "embed_plan": [],
+        "fail": {},
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": null,
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": true,
+      "value": [
+        { "id": "00000000-0000-0000-0000-000000000001", "memory": "fenced fact", "event": "ADD" }
+      ],
+      "logs": [],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 10
+          }
+        ],
+        [
+          "upsert",
+          [
+            {
+              "id": "00000000-0000-0000-0000-000000000001",
+              "vector": { "": [11.0, 1.0, 0.0, 0.0] },
+              "payload": {
+                "platform": "pipecat",
+                "user_id": "12345678",
+                "data": "fenced fact",
+                "text_lemmatized": "fenced fact",
+                "hash": "caa0c68d1d0cb40c02f0fd98b54e8d50",
+                "created_at": "2026-11-03T04:05:07.123457+00:00",
+                "updated_at": "2026-11-03T04:05:07.123457+00:00",
+                "attributed_to": "user"
+              }
+            }
+          ]
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        },
+        {
+          "input": ["fenced fact"],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "~google/gemini-flash-latest",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": {
+        "history": [
+          [
+            "00000000-0000-0000-0000-000000000002",
+            "00000000-0000-0000-0000-000000000001",
+            null,
+            "fenced fact",
+            "ADD",
+            "2026-11-03T04:05:07.123457+00:00",
+            null,
+            0,
+            null,
+            null
+          ]
+        ],
+        "messages": [
+          [
+            "00000000-0000-0000-0000-000000000003",
+            "user_id=12345678",
+            "user",
+            "用一两句话简短自然地打个招呼。",
+            null,
+            "2026-11-03T04:05:08.123458+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000004",
+            "user_id=12345678",
+            "assistant",
+            "嗨！今天想聊点什么？",
+            null,
+            "2026-11-03T04:05:08.123458+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000005",
+            "user_id=12345678",
+            "user",
+            "我养了一只猫叫坚果\n它三岁了",
+            null,
+            "2026-11-03T04:05:08.123458+00:00"
+          ]
+        ]
+      },
+      "clock_reads": 3,
+      "uuids": 5
+    },
+    {
+      "name": "think_prose",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": null,
+        "run_id": null,
+        "responses": ["<think>hmm</think>\nSure! {\"memory\": [{\"text\": \"prose fact\"}]} done"],
+        "existing": {},
+        "scores": {},
+        "embed_plan": [],
+        "fail": {},
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": null,
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": true,
+      "value": [
+        { "id": "00000000-0000-0000-0000-000000000001", "memory": "prose fact", "event": "ADD" }
+      ],
+      "logs": [],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 10
+          }
+        ],
+        [
+          "upsert",
+          [
+            {
+              "id": "00000000-0000-0000-0000-000000000001",
+              "vector": { "": [10.0, 1.0, 0.0, 0.0] },
+              "payload": {
+                "platform": "pipecat",
+                "user_id": "12345678",
+                "data": "prose fact",
+                "text_lemmatized": "prose fact",
+                "hash": "72d2a2c4706737f421a9d8fa4a1776b4",
+                "created_at": "2026-11-03T04:05:07.123457+00:00",
+                "updated_at": "2026-11-03T04:05:07.123457+00:00"
+              }
+            }
+          ]
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        },
+        {
+          "input": ["prose fact"],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "~google/gemini-flash-latest",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": {
+        "history": [
+          [
+            "00000000-0000-0000-0000-000000000002",
+            "00000000-0000-0000-0000-000000000001",
+            null,
+            "prose fact",
+            "ADD",
+            "2026-11-03T04:05:07.123457+00:00",
+            null,
+            0,
+            null,
+            null
+          ]
+        ],
+        "messages": [
+          [
+            "00000000-0000-0000-0000-000000000003",
+            "user_id=12345678",
+            "user",
+            "用一两句话简短自然地打个招呼。",
+            null,
+            "2026-11-03T04:05:08.123458+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000004",
+            "user_id=12345678",
+            "assistant",
+            "嗨！今天想聊点什么？",
+            null,
+            "2026-11-03T04:05:08.123458+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000005",
+            "user_id=12345678",
+            "user",
+            "我养了一只猫叫坚果\n它三岁了",
+            null,
+            "2026-11-03T04:05:08.123458+00:00"
+          ]
+        ]
+      },
+      "clock_reads": 3,
+      "uuids": 5
+    },
+    {
+      "name": "raw_newline",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": null,
+        "run_id": null,
+        "responses": ["{\"memory\": [{\"text\": \"line1\nline2\"}]}"],
+        "existing": {},
+        "scores": {},
+        "embed_plan": [],
+        "fail": {},
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": null,
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": true,
+      "value": [
+        { "id": "00000000-0000-0000-0000-000000000001", "memory": "line1\nline2", "event": "ADD" }
+      ],
+      "logs": [],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 10
+          }
+        ],
+        [
+          "upsert",
+          [
+            {
+              "id": "00000000-0000-0000-0000-000000000001",
+              "vector": { "": [11.0, 1.0, 0.0, 0.0] },
+              "payload": {
+                "platform": "pipecat",
+                "user_id": "12345678",
+                "data": "line1\nline2",
+                "text_lemmatized": "line1\nline2",
+                "hash": "ee5a58024a155466b43bc559d953e018",
+                "created_at": "2026-11-03T04:05:07.123457+00:00",
+                "updated_at": "2026-11-03T04:05:07.123457+00:00"
+              }
+            }
+          ]
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        },
+        {
+          "input": ["line1 line2"],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "~google/gemini-flash-latest",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": {
+        "history": [
+          [
+            "00000000-0000-0000-0000-000000000002",
+            "00000000-0000-0000-0000-000000000001",
+            null,
+            "line1\nline2",
+            "ADD",
+            "2026-11-03T04:05:07.123457+00:00",
+            null,
+            0,
+            null,
+            null
+          ]
+        ],
+        "messages": [
+          [
+            "00000000-0000-0000-0000-000000000003",
+            "user_id=12345678",
+            "user",
+            "用一两句话简短自然地打个招呼。",
+            null,
+            "2026-11-03T04:05:08.123458+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000004",
+            "user_id=12345678",
+            "assistant",
+            "嗨！今天想聊点什么？",
+            null,
+            "2026-11-03T04:05:08.123458+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000005",
+            "user_id=12345678",
+            "user",
+            "我养了一只猫叫坚果\n它三岁了",
+            null,
+            "2026-11-03T04:05:08.123458+00:00"
+          ]
+        ]
+      },
+      "clock_reads": 3,
+      "uuids": 5
+    },
+    {
+      "name": "none_content",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": null,
+        "run_id": null,
+        "responses": [null],
+        "existing": {},
+        "scores": {},
+        "embed_plan": [],
+        "fail": {},
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": null,
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": true,
+      "value": [],
+      "logs": [],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 10
+          }
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "~google/gemini-flash-latest",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": {
+        "history": [],
+        "messages": [
+          [
+            "00000000-0000-0000-0000-000000000001",
+            "user_id=12345678",
+            "user",
+            "用一两句话简短自然地打个招呼。",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000002",
+            "user_id=12345678",
+            "assistant",
+            "嗨！今天想聊点什么？",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000003",
+            "user_id=12345678",
+            "user",
+            "我养了一只猫叫坚果\n它三岁了",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ]
+        ]
+      },
+      "clock_reads": 2,
+      "uuids": 3
+    },
+    {
+      "name": "whitespace_content",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": null,
+        "run_id": null,
+        "responses": ["  \n "],
+        "existing": {},
+        "scores": {},
+        "embed_plan": [],
+        "fail": {},
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": null,
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": true,
+      "value": [],
+      "logs": [],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 10
+          }
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "~google/gemini-flash-latest",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": {
+        "history": [],
+        "messages": [
+          [
+            "00000000-0000-0000-0000-000000000001",
+            "user_id=12345678",
+            "user",
+            "用一两句话简短自然地打个招呼。",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000002",
+            "user_id=12345678",
+            "assistant",
+            "嗨！今天想聊点什么？",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000003",
+            "user_id=12345678",
+            "user",
+            "我养了一只猫叫坚果\n它三岁了",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ]
+        ]
+      },
+      "clock_reads": 2,
+      "uuids": 3
+    },
+    {
+      "name": "llm_error",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": null,
+        "run_id": null,
+        "responses": [
+          { "raise": "Error code: 429 - {'error': {'message': 'Rate limit exceeded'}}" }
+        ],
+        "existing": {},
+        "scores": {},
+        "embed_plan": [],
+        "fail": {},
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": null,
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": false,
+      "error": [
+        "LLMError",
+        "LLM extraction failed: Error code: 429 - {'error': {'message': 'Rate limit exceeded'}}"
+      ],
+      "logs": [
+        [
+          "ERROR",
+          "LLM extraction failed: Error code: 429 - {'error': {'message': 'Rate limit exceeded'}}"
+        ]
+      ],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 10
+          }
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "~google/gemini-flash-latest",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": { "history": [], "messages": [] },
+      "clock_reads": 1,
+      "uuids": 0
+    },
+    {
+      "name": "strings_items",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": null,
+        "run_id": null,
+        "responses": ["{\"memory\": [\"fact one\"]}"],
+        "existing": {},
+        "scores": {},
+        "embed_plan": [],
+        "fail": {},
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": null,
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": false,
+      "error": ["AttributeError", "'str' object has no attribute 'get'"],
+      "logs": [],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 10
+          }
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "~google/gemini-flash-latest",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": { "history": [], "messages": [] },
+      "clock_reads": 1,
+      "uuids": 0
+    },
+    {
+      "name": "int_items",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": null,
+        "run_id": null,
+        "responses": ["{\"memory\": [1]}"],
+        "existing": {},
+        "scores": {},
+        "embed_plan": [],
+        "fail": {},
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": null,
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": false,
+      "error": ["AttributeError", "'int' object has no attribute 'get'"],
+      "logs": [],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 10
+          }
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "~google/gemini-flash-latest",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": { "history": [], "messages": [] },
+      "clock_reads": 1,
+      "uuids": 0
+    },
+    {
+      "name": "str_memory",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": null,
+        "run_id": null,
+        "responses": ["{\"memory\": \"abc\"}"],
+        "existing": {},
+        "scores": {},
+        "embed_plan": [],
+        "fail": {},
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": null,
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": false,
+      "error": ["AttributeError", "'str' object has no attribute 'get'"],
+      "logs": [],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 10
+          }
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "~google/gemini-flash-latest",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": { "history": [], "messages": [] },
+      "clock_reads": 1,
+      "uuids": 0
+    },
+    {
+      "name": "int_memory",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": null,
+        "run_id": null,
+        "responses": ["{\"memory\": 5}"],
+        "existing": {},
+        "scores": {},
+        "embed_plan": [],
+        "fail": {},
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": null,
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": false,
+      "error": ["TypeError", "'int' object is not iterable"],
+      "logs": [],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 10
+          }
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "~google/gemini-flash-latest",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": { "history": [], "messages": [] },
+      "clock_reads": 1,
+      "uuids": 0
+    },
+    {
+      "name": "dict_memory",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": null,
+        "run_id": null,
+        "responses": ["{\"memory\": {\"text\": \"x\"}}"],
+        "existing": {},
+        "scores": {},
+        "embed_plan": [],
+        "fail": {},
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": null,
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": false,
+      "error": ["AttributeError", "'str' object has no attribute 'get'"],
+      "logs": [],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 10
+          }
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "~google/gemini-flash-latest",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": { "history": [], "messages": [] },
+      "clock_reads": 1,
+      "uuids": 0
+    },
+    {
+      "name": "true_memory",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": null,
+        "run_id": null,
+        "responses": ["{\"memory\": true}"],
+        "existing": {},
+        "scores": {},
+        "embed_plan": [],
+        "fail": {},
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": null,
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": false,
+      "error": ["TypeError", "'bool' object is not iterable"],
+      "logs": [],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 10
+          }
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "~google/gemini-flash-latest",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": { "history": [], "messages": [] },
+      "clock_reads": 1,
+      "uuids": 0
+    },
+    {
+      "name": "num_text",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": null,
+        "run_id": null,
+        "responses": ["{\"memory\": [{\"text\": 123}, {\"text\": \"ok text\"}]}"],
+        "existing": {},
+        "scores": {},
+        "embed_plan": [],
+        "fail": {},
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": null,
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": true,
+      "value": [
+        { "id": "00000000-0000-0000-0000-000000000001", "memory": "ok text", "event": "ADD" }
+      ],
+      "logs": [["WARNING", "Failed to embed memory text: 'int' object has no attribute 'replace'"]],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 10
+          }
+        ],
+        [
+          "upsert",
+          [
+            {
+              "id": "00000000-0000-0000-0000-000000000001",
+              "vector": { "": [7.0, 1.0, 0.0, 0.0] },
+              "payload": {
+                "platform": "pipecat",
+                "user_id": "12345678",
+                "data": "ok text",
+                "text_lemmatized": "ok text",
+                "hash": "98e944cd8ba0cbd01e20bda3fcfdb015",
+                "created_at": "2026-11-03T04:05:07.123457+00:00",
+                "updated_at": "2026-11-03T04:05:07.123457+00:00"
+              }
+            }
+          ]
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        },
+        {
+          "input": ["ok text"],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "~google/gemini-flash-latest",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": {
+        "history": [
+          [
+            "00000000-0000-0000-0000-000000000002",
+            "00000000-0000-0000-0000-000000000001",
+            null,
+            "ok text",
+            "ADD",
+            "2026-11-03T04:05:07.123457+00:00",
+            null,
+            0,
+            null,
+            null
+          ]
+        ],
+        "messages": [
+          [
+            "00000000-0000-0000-0000-000000000003",
+            "user_id=12345678",
+            "user",
+            "用一两句话简短自然地打个招呼。",
+            null,
+            "2026-11-03T04:05:08.123458+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000004",
+            "user_id=12345678",
+            "assistant",
+            "嗨！今天想聊点什么？",
+            null,
+            "2026-11-03T04:05:08.123458+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000005",
+            "user_id=12345678",
+            "user",
+            "我养了一只猫叫坚果\n它三岁了",
+            null,
+            "2026-11-03T04:05:08.123458+00:00"
+          ]
+        ]
+      },
+      "clock_reads": 3,
+      "uuids": 5
+    },
+    {
+      "name": "list_text",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": null,
+        "run_id": null,
+        "responses": ["{\"memory\": [{\"text\": \"ok text\"}, {\"text\": [\"a\"]}]}"],
+        "existing": {},
+        "scores": {},
+        "embed_plan": [],
+        "fail": {},
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": null,
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": false,
+      "error": ["TypeError", "unhashable type: 'list'"],
+      "logs": [
+        ["WARNING", "Failed to embed memory text: 'list' object has no attribute 'replace'"]
+      ],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 10
+          }
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        },
+        {
+          "input": ["ok text"],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "~google/gemini-flash-latest",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": { "history": [], "messages": [] },
+      "clock_reads": 2,
+      "uuids": 1
+    },
+    {
+      "name": "batch_short",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": null,
+        "run_id": null,
+        "responses": ["{\"memory\": [{\"text\": \"t1\"}, {\"text\": \"t2\"}]}"],
+        "existing": {},
+        "scores": {},
+        "embed_plan": ["ok", "short", "ok", "fail"],
+        "fail": {},
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": null,
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": true,
+      "value": [{ "id": "00000000-0000-0000-0000-000000000001", "memory": "t1", "event": "ADD" }],
+      "logs": [["WARNING", "Failed to embed memory text: embedding request failed"]],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 10
+          }
+        ],
+        [
+          "upsert",
+          [
+            {
+              "id": "00000000-0000-0000-0000-000000000001",
+              "vector": { "": [2.0, 1.0, 0.0, 0.0] },
+              "payload": {
+                "platform": "pipecat",
+                "user_id": "12345678",
+                "data": "t1",
+                "text_lemmatized": "t1",
+                "hash": "83f1535f99ab0bf4e9d02dfd85d3e3f7",
+                "created_at": "2026-11-03T04:05:07.123457+00:00",
+                "updated_at": "2026-11-03T04:05:07.123457+00:00"
+              }
+            }
+          ]
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        },
+        {
+          "input": ["t1", "t2"],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        },
+        {
+          "input": ["t1"],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        },
+        {
+          "input": ["t2"],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "~google/gemini-flash-latest",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": {
+        "history": [
+          [
+            "00000000-0000-0000-0000-000000000002",
+            "00000000-0000-0000-0000-000000000001",
+            null,
+            "t1",
+            "ADD",
+            "2026-11-03T04:05:07.123457+00:00",
+            null,
+            0,
+            null,
+            null
+          ]
+        ],
+        "messages": [
+          [
+            "00000000-0000-0000-0000-000000000003",
+            "user_id=12345678",
+            "user",
+            "用一两句话简短自然地打个招呼。",
+            null,
+            "2026-11-03T04:05:08.123458+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000004",
+            "user_id=12345678",
+            "assistant",
+            "嗨！今天想聊点什么？",
+            null,
+            "2026-11-03T04:05:08.123458+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000005",
+            "user_id=12345678",
+            "user",
+            "我养了一只猫叫坚果\n它三岁了",
+            null,
+            "2026-11-03T04:05:08.123458+00:00"
+          ]
+        ]
+      },
+      "clock_reads": 3,
+      "uuids": 5
+    },
+    {
+      "name": "batch_reversed",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": null,
+        "run_id": null,
+        "responses": ["{\"memory\": [{\"text\": \"t1\"}, {\"text\": \"t22\"}]}"],
+        "existing": {},
+        "scores": {},
+        "embed_plan": ["ok", "reversed"],
+        "fail": {},
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": null,
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": true,
+      "value": [
+        { "id": "00000000-0000-0000-0000-000000000001", "memory": "t1", "event": "ADD" },
+        { "id": "00000000-0000-0000-0000-000000000002", "memory": "t22", "event": "ADD" }
+      ],
+      "logs": [],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 10
+          }
+        ],
+        [
+          "upsert",
+          [
+            {
+              "id": "00000000-0000-0000-0000-000000000001",
+              "vector": { "": [2.0, 1.0, 0.0, 0.0] },
+              "payload": {
+                "platform": "pipecat",
+                "user_id": "12345678",
+                "data": "t1",
+                "text_lemmatized": "t1",
+                "hash": "83f1535f99ab0bf4e9d02dfd85d3e3f7",
+                "created_at": "2026-11-03T04:05:07.123457+00:00",
+                "updated_at": "2026-11-03T04:05:07.123457+00:00"
+              }
+            },
+            {
+              "id": "00000000-0000-0000-0000-000000000002",
+              "vector": { "": [3.0, 1.0, 0.0, 0.0] },
+              "payload": {
+                "platform": "pipecat",
+                "user_id": "12345678",
+                "data": "t22",
+                "text_lemmatized": "t22",
+                "hash": "20d768d19213b8c2ee28b2bddfc41468",
+                "created_at": "2026-11-03T04:05:08.123458+00:00",
+                "updated_at": "2026-11-03T04:05:08.123458+00:00"
+              }
+            }
+          ]
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        },
+        {
+          "input": ["t1", "t22"],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "~google/gemini-flash-latest",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": {
+        "history": [
+          [
+            "00000000-0000-0000-0000-000000000003",
+            "00000000-0000-0000-0000-000000000001",
+            null,
+            "t1",
+            "ADD",
+            "2026-11-03T04:05:07.123457+00:00",
+            null,
+            0,
+            null,
+            null
+          ],
+          [
+            "00000000-0000-0000-0000-000000000004",
+            "00000000-0000-0000-0000-000000000002",
+            null,
+            "t22",
+            "ADD",
+            "2026-11-03T04:05:08.123458+00:00",
+            null,
+            0,
+            null,
+            null
+          ]
+        ],
+        "messages": [
+          [
+            "00000000-0000-0000-0000-000000000005",
+            "user_id=12345678",
+            "user",
+            "用一两句话简短自然地打个招呼。",
+            null,
+            "2026-11-03T04:05:09.123459+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000006",
+            "user_id=12345678",
+            "assistant",
+            "嗨！今天想聊点什么？",
+            null,
+            "2026-11-03T04:05:09.123459+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000007",
+            "user_id=12345678",
+            "user",
+            "我养了一只猫叫坚果\n它三岁了",
+            null,
+            "2026-11-03T04:05:09.123459+00:00"
+          ]
+        ]
+      },
+      "clock_reads": 4,
+      "uuids": 7
+    },
+    {
+      "name": "upsert_fail",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": null,
+        "run_id": null,
+        "responses": ["{\"memory\": [{\"text\": \"t1\"}, {\"text\": \"t2\"}]}"],
+        "existing": {},
+        "scores": {},
+        "embed_plan": [],
+        "fail": { "upsert": 1, "upsert_ids": ["00000000-0000-0000-0000-000000000002"] },
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": null,
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": true,
+      "value": [
+        { "id": "00000000-0000-0000-0000-000000000001", "memory": "t1", "event": "ADD" },
+        { "id": "00000000-0000-0000-0000-000000000002", "memory": "t2", "event": "ADD" }
+      ],
+      "logs": [
+        ["ERROR", "Failed to insert memory 00000000-0000-0000-0000-000000000001: upsert failed"],
+        [
+          "ERROR",
+          "Failed to insert memory 00000000-0000-0000-0000-000000000002: upsert rejected 00000000-0000-0000-0000-000000000002"
+        ]
+      ],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 10
+          }
+        ],
+        [
+          "upsert",
+          [
+            {
+              "id": "00000000-0000-0000-0000-000000000001",
+              "vector": { "": [2.0, 1.0, 0.0, 0.0] },
+              "payload": {
+                "platform": "pipecat",
+                "user_id": "12345678",
+                "data": "t1",
+                "text_lemmatized": "t1",
+                "hash": "83f1535f99ab0bf4e9d02dfd85d3e3f7",
+                "created_at": "2026-11-03T04:05:07.123457+00:00",
+                "updated_at": "2026-11-03T04:05:07.123457+00:00"
+              }
+            },
+            {
+              "id": "00000000-0000-0000-0000-000000000002",
+              "vector": { "": [2.0, 1.0, 0.0, 0.0] },
+              "payload": {
+                "platform": "pipecat",
+                "user_id": "12345678",
+                "data": "t2",
+                "text_lemmatized": "t2",
+                "hash": "0f826a89cf68c399c5f4cf320c1a5842",
+                "created_at": "2026-11-03T04:05:08.123458+00:00",
+                "updated_at": "2026-11-03T04:05:08.123458+00:00"
+              }
+            }
+          ]
+        ],
+        [
+          "upsert",
+          [
+            {
+              "id": "00000000-0000-0000-0000-000000000001",
+              "vector": { "": [2.0, 1.0, 0.0, 0.0] },
+              "payload": {
+                "platform": "pipecat",
+                "user_id": "12345678",
+                "data": "t1",
+                "text_lemmatized": "t1",
+                "hash": "83f1535f99ab0bf4e9d02dfd85d3e3f7",
+                "created_at": "2026-11-03T04:05:07.123457+00:00",
+                "updated_at": "2026-11-03T04:05:07.123457+00:00"
+              }
+            }
+          ]
+        ],
+        [
+          "upsert",
+          [
+            {
+              "id": "00000000-0000-0000-0000-000000000002",
+              "vector": { "": [2.0, 1.0, 0.0, 0.0] },
+              "payload": {
+                "platform": "pipecat",
+                "user_id": "12345678",
+                "data": "t2",
+                "text_lemmatized": "t2",
+                "hash": "0f826a89cf68c399c5f4cf320c1a5842",
+                "created_at": "2026-11-03T04:05:08.123458+00:00",
+                "updated_at": "2026-11-03T04:05:08.123458+00:00"
+              }
+            }
+          ]
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        },
+        {
+          "input": ["t1", "t2"],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "~google/gemini-flash-latest",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": {
+        "history": [
+          [
+            "00000000-0000-0000-0000-000000000003",
+            "00000000-0000-0000-0000-000000000001",
+            null,
+            "t1",
+            "ADD",
+            "2026-11-03T04:05:07.123457+00:00",
+            null,
+            0,
+            null,
+            null
+          ],
+          [
+            "00000000-0000-0000-0000-000000000004",
+            "00000000-0000-0000-0000-000000000002",
+            null,
+            "t2",
+            "ADD",
+            "2026-11-03T04:05:08.123458+00:00",
+            null,
+            0,
+            null,
+            null
+          ]
+        ],
+        "messages": [
+          [
+            "00000000-0000-0000-0000-000000000005",
+            "user_id=12345678",
+            "user",
+            "用一两句话简短自然地打个招呼。",
+            null,
+            "2026-11-03T04:05:09.123459+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000006",
+            "user_id=12345678",
+            "assistant",
+            "嗨！今天想聊点什么？",
+            null,
+            "2026-11-03T04:05:09.123459+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000007",
+            "user_id=12345678",
+            "user",
+            "我养了一只猫叫坚果\n它三岁了",
+            null,
+            "2026-11-03T04:05:09.123459+00:00"
+          ]
+        ]
+      },
+      "clock_reads": 4,
+      "uuids": 7
+    },
+    {
+      "name": "reasoning_model",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": null,
+        "run_id": null,
+        "responses": ["{\"memory\": []}"],
+        "existing": {},
+        "scores": {},
+        "embed_plan": [],
+        "fail": {},
+        "model": "openai/o3-mini",
+        "prior_messages": null,
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": true,
+      "value": [],
+      "logs": [],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 10
+          }
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "openai/o3-mini",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": {
+        "history": [],
+        "messages": [
+          [
+            "00000000-0000-0000-0000-000000000001",
+            "user_id=12345678",
+            "user",
+            "用一两句话简短自然地打个招呼。",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000002",
+            "user_id=12345678",
+            "assistant",
+            "嗨！今天想聊点什么？",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000003",
+            "user_id=12345678",
+            "user",
+            "我养了一只猫叫坚果\n它三岁了",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ]
+        ]
+      },
+      "clock_reads": 2,
+      "uuids": 3
+    },
+    {
+      "name": "gpt5_model",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": null,
+        "run_id": null,
+        "responses": ["{\"memory\": []}"],
+        "existing": {},
+        "scores": {},
+        "embed_plan": [],
+        "fail": {},
+        "model": "openai/gpt-5.4-mini",
+        "prior_messages": null,
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": true,
+      "value": [],
+      "logs": [],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 10
+          }
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_completion_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "openai/gpt-5.4-mini",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": {
+        "history": [],
+        "messages": [
+          [
+            "00000000-0000-0000-0000-000000000001",
+            "user_id=12345678",
+            "user",
+            "用一两句话简短自然地打个招呼。",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000002",
+            "user_id=12345678",
+            "assistant",
+            "嗨！今天想聊点什么？",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000003",
+            "user_id=12345678",
+            "user",
+            "我养了一只猫叫坚果\n它三岁了",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ]
+        ]
+      },
+      "clock_reads": 2,
+      "uuids": 3
+    },
+    {
+      "name": "agent_run",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": " agent-1 ",
+        "run_id": "run&1",
+        "responses": ["{\"memory\": [{\"text\": \"x\"}]}"],
+        "existing": {},
+        "scores": {},
+        "embed_plan": [],
+        "fail": {},
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": null,
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": true,
+      "value": [{ "id": "00000000-0000-0000-0000-000000000001", "memory": "x", "event": "ADD" }],
+      "logs": [],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": {
+              "must": [
+                { "key": "user_id", "match": { "value": "12345678" } },
+                { "key": "agent_id", "match": { "value": "agent-1" } },
+                { "key": "run_id", "match": { "value": "run&1" } }
+              ]
+            },
+            "limit": 10
+          }
+        ],
+        [
+          "upsert",
+          [
+            {
+              "id": "00000000-0000-0000-0000-000000000001",
+              "vector": { "": [1.0, 1.0, 0.0, 0.0] },
+              "payload": {
+                "platform": "pipecat",
+                "user_id": "12345678",
+                "agent_id": "agent-1",
+                "run_id": "run&1",
+                "data": "x",
+                "text_lemmatized": "x",
+                "hash": "9dd4e461268c8034f5c8564e155c67a6",
+                "created_at": "2026-11-03T04:05:07.123457+00:00",
+                "updated_at": "2026-11-03T04:05:07.123457+00:00"
+              }
+            }
+          ]
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        },
+        {
+          "input": ["x"],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "~google/gemini-flash-latest",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": {
+        "history": [
+          [
+            "00000000-0000-0000-0000-000000000002",
+            "00000000-0000-0000-0000-000000000001",
+            null,
+            "x",
+            "ADD",
+            "2026-11-03T04:05:07.123457+00:00",
+            null,
+            0,
+            null,
+            null
+          ]
+        ],
+        "messages": [
+          [
+            "00000000-0000-0000-0000-000000000003",
+            "agent_id=agent-1&run_id=run%261&user_id=12345678",
+            "user",
+            "用一两句话简短自然地打个招呼。",
+            null,
+            "2026-11-03T04:05:08.123458+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000004",
+            "agent_id=agent-1&run_id=run%261&user_id=12345678",
+            "assistant",
+            "嗨！今天想聊点什么？",
+            null,
+            "2026-11-03T04:05:08.123458+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000005",
+            "agent_id=agent-1&run_id=run%261&user_id=12345678",
+            "user",
+            "我养了一只猫叫坚果\n它三岁了",
+            null,
+            "2026-11-03T04:05:08.123458+00:00"
+          ]
+        ]
+      },
+      "clock_reads": 3,
+      "uuids": 5
+    },
+    {
+      "name": "agent_only",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": null,
+        "agent_id": "agent-1",
+        "run_id": null,
+        "responses": ["{\"memory\": []}"],
+        "existing": {},
+        "scores": {},
+        "embed_plan": [],
+        "fail": {},
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": null,
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": true,
+      "value": [],
+      "logs": [],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "agent_id", "match": { "value": "agent-1" } }] },
+            "limit": 10
+          }
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT+AGENT_CONTEXT_SUFFIX>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "~google/gemini-flash-latest",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": {
+        "history": [],
+        "messages": [
+          [
+            "00000000-0000-0000-0000-000000000001",
+            "agent_id=agent-1",
+            "user",
+            "用一两句话简短自然地打个招呼。",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000002",
+            "agent_id=agent-1",
+            "assistant",
+            "嗨！今天想聊点什么？",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000003",
+            "agent_id=agent-1",
+            "user",
+            "我养了一只猫叫坚果\n它三岁了",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ]
+        ]
+      },
+      "clock_reads": 2,
+      "uuids": 3
+    },
+    {
+      "name": "bad_agent",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": "has space",
+        "run_id": null,
+        "responses": ["{\"memory\": []}"],
+        "existing": {},
+        "scores": {},
+        "embed_plan": [],
+        "fail": {},
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": null,
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": false,
+      "error": [
+        "ValueError",
+        "Invalid agent_id: cannot contain whitespace. Provide a valid identifier without spaces."
+      ],
+      "logs": [],
+      "qdrant": [],
+      "embed": [],
+      "chat": [],
+      "db": { "history": [], "messages": [] },
+      "clock_reads": 0,
+      "uuids": 0
+    },
+    {
+      "name": "history_k",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": null,
+        "run_id": null,
+        "responses": ["{\"memory\": []}"],
+        "existing": {},
+        "scores": {},
+        "embed_plan": [],
+        "fail": {},
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": [
+          [
+            { "role": "user", "content": "旧消息 0" },
+            { "role": "user", "content": "旧消息 1" },
+            { "role": "user", "content": "旧消息 2" },
+            { "role": "user", "content": "旧消息 3" },
+            { "role": "user", "content": "旧消息 4" },
+            { "role": "user", "content": "旧消息 5" },
+            { "role": "user", "content": "旧消息 6" },
+            { "role": "user", "content": "旧消息 7" },
+            { "role": "user", "content": "旧消息 8" },
+            { "role": "user", "content": "旧消息 9" },
+            { "role": "user", "content": "旧消息 10" },
+            { "role": "user", "content": "旧消息 11" }
+          ],
+          "user_id=12345678"
+        ],
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": true,
+      "value": [],
+      "logs": [],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 10
+          }
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\nuser: 旧消息 0\nuser: 旧消息 1\nuser: 旧消息 2\nuser: 旧消息 3\nuser: 旧消息 4\nuser: 旧消息 5\nuser: 旧消息 6\nuser: 旧消息 7\nuser: 旧消息 8\nuser: 旧消息 9\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "~google/gemini-flash-latest",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": {
+        "history": [],
+        "messages": [
+          [
+            "00000000-0000-0000-0000-000000000001",
+            "user_id=12345678",
+            "user",
+            "旧消息 0",
+            null,
+            "2026-11-03T04:05:06.123456+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000002",
+            "user_id=12345678",
+            "user",
+            "旧消息 1",
+            null,
+            "2026-11-03T04:05:06.123456+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000003",
+            "user_id=12345678",
+            "user",
+            "旧消息 2",
+            null,
+            "2026-11-03T04:05:06.123456+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000004",
+            "user_id=12345678",
+            "user",
+            "旧消息 3",
+            null,
+            "2026-11-03T04:05:06.123456+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000005",
+            "user_id=12345678",
+            "user",
+            "旧消息 4",
+            null,
+            "2026-11-03T04:05:06.123456+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000006",
+            "user_id=12345678",
+            "user",
+            "旧消息 5",
+            null,
+            "2026-11-03T04:05:06.123456+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000007",
+            "user_id=12345678",
+            "user",
+            "旧消息 6",
+            null,
+            "2026-11-03T04:05:06.123456+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-00000000000d",
+            "user_id=12345678",
+            "user",
+            "用一两句话简短自然地打个招呼。",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-00000000000e",
+            "user_id=12345678",
+            "assistant",
+            "嗨！今天想聊点什么？",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-00000000000f",
+            "user_id=12345678",
+            "user",
+            "我养了一只猫叫坚果\n它三岁了",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ]
+        ]
+      },
+      "clock_reads": 2,
+      "uuids": 15
+    },
+    {
+      "name": "long_history",
+      "input": {
+        "messages": [
+          { "role": "user", "content": "用一两句话简短自然地打个招呼。" },
+          { "role": "assistant", "content": "嗨！今天想聊点什么？" },
+          { "role": "user", "content": "我养了一只猫叫坚果\n它三岁了" }
+        ],
+        "user_id": "12345678",
+        "agent_id": null,
+        "run_id": null,
+        "responses": ["{\"memory\": []}"],
+        "existing": {},
+        "scores": {},
+        "embed_plan": [],
+        "fail": {},
+        "model": "~google/gemini-flash-latest",
+        "prior_messages": [
+          [
+            {
+              "role": "assistant",
+              "content": "猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫"
+            }
+          ],
+          "user_id=12345678"
+        ],
+        "base": 1793678706123456,
+        "step": 1000001
+      },
+      "ok": true,
+      "value": [],
+      "logs": [],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [65.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 10
+          }
+        ]
+      ],
+      "embed": [
+        {
+          "input": [
+            "user: 用一两句话简短自然地打个招呼。 assistant: 嗨！今天想聊点什么？ user: 我养了一只猫叫坚果 它三岁了 "
+          ],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "chat": [
+        {
+          "temperature": 0.1,
+          "top_p": 0.1,
+          "max_tokens": 2000,
+          "messages": [
+            { "role": "system", "content": "<ADDITIVE_EXTRACTION_PROMPT>" },
+            {
+              "role": "user",
+              "content": "## Summary\n\n\n## Last k Messages\nassistant: 猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫...\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: 用一两句话简短自然地打个招呼。\nassistant: 嗨！今天想聊点什么？\nuser: 我养了一只猫叫坚果\n它三岁了\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:"
+            }
+          ],
+          "model": "~google/gemini-flash-latest",
+          "response_format": { "type": "json_object" }
+        }
+      ],
+      "db": {
+        "history": [],
+        "messages": [
+          [
+            "00000000-0000-0000-0000-000000000001",
+            "user_id=12345678",
+            "assistant",
+            "猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫",
+            null,
+            "2026-11-03T04:05:06.123456+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000002",
+            "user_id=12345678",
+            "user",
+            "用一两句话简短自然地打个招呼。",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000003",
+            "user_id=12345678",
+            "assistant",
+            "嗨！今天想聊点什么？",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000004",
+            "user_id=12345678",
+            "user",
+            "我养了一只猫叫坚果\n它三岁了",
+            null,
+            "2026-11-03T04:05:07.123457+00:00"
+          ]
+        ]
+      },
+      "clock_reads": 2,
+      "uuids": 4
+    }
+  ],
+  "search": [
+    {
+      "name": "default",
+      "input": {
+        "query": "  我的猫  ",
+        "top_k": 10,
+        "threshold": 0.3,
+        "filters": { "user_id": "12345678" }
+      },
+      "ok": true,
+      "value": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "memory": "A fact",
+          "hash": "ha",
+          "metadata": { "platform": "pipecat" },
+          "score": 1.0,
+          "created_at": "2026-11-03T04:05:06.123456+00:00",
+          "updated_at": "2026-11-03T04:05:06.123456+00:00",
+          "user_id": "12345678",
+          "attributed_to": "user"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "memory": "B cloud",
+          "hash": "hb",
+          "metadata": { "platform": "pipecat", "categories": ["user_preferences"] },
+          "score": 0.8,
+          "created_at": "2025-12-01T03:04:05-07:00",
+          "updated_at": "2025-12-01T03:04:05-07:00",
+          "user_id": "12345678",
+          "role": "user"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000006",
+          "memory": "F future",
+          "hash": null,
+          "metadata": null,
+          "score": 0.6,
+          "created_at": null,
+          "updated_at": null,
+          "user_id": "12345678",
+          "agent_id": "ag",
+          "run_id": "rn",
+          "expiration_date": "2099-01-01"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000008",
+          "memory": "H bad expiry",
+          "hash": null,
+          "metadata": null,
+          "score": 0.5,
+          "created_at": null,
+          "updated_at": null,
+          "user_id": "12345678",
+          "expiration_date": "soon"
+        }
+      ],
+      "logs": [],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [3.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 60
+          }
+        ]
+      ],
+      "embed": [
+        {
+          "input": ["我的猫"],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "clock_reads": 2
+    },
+    {
+      "name": "top2",
+      "input": { "query": "q", "top_k": 2, "threshold": 0.3, "filters": { "user_id": "12345678" } },
+      "ok": true,
+      "value": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "memory": "A fact",
+          "hash": "ha",
+          "metadata": { "platform": "pipecat" },
+          "score": 1.0,
+          "created_at": "2026-11-03T04:05:06.123456+00:00",
+          "updated_at": "2026-11-03T04:05:06.123456+00:00",
+          "user_id": "12345678",
+          "attributed_to": "user"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "memory": "B cloud",
+          "hash": "hb",
+          "metadata": { "platform": "pipecat", "categories": ["user_preferences"] },
+          "score": 0.8,
+          "created_at": "2025-12-01T03:04:05-07:00",
+          "updated_at": "2025-12-01T03:04:05-07:00",
+          "user_id": "12345678",
+          "role": "user"
+        }
+      ],
+      "logs": [],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [1.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 60
+          }
+        ]
+      ],
+      "embed": [
+        {
+          "input": ["q"],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "clock_reads": 2
+    },
+    {
+      "name": "top3",
+      "input": { "query": "q", "top_k": 3, "threshold": 0.3, "filters": { "user_id": "12345678" } },
+      "ok": true,
+      "value": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "memory": "A fact",
+          "hash": "ha",
+          "metadata": { "platform": "pipecat" },
+          "score": 1.0,
+          "created_at": "2026-11-03T04:05:06.123456+00:00",
+          "updated_at": "2026-11-03T04:05:06.123456+00:00",
+          "user_id": "12345678",
+          "attributed_to": "user"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "memory": "B cloud",
+          "hash": "hb",
+          "metadata": { "platform": "pipecat", "categories": ["user_preferences"] },
+          "score": 0.8,
+          "created_at": "2025-12-01T03:04:05-07:00",
+          "updated_at": "2025-12-01T03:04:05-07:00",
+          "user_id": "12345678",
+          "role": "user"
+        }
+      ],
+      "logs": [],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [1.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 60
+          }
+        ]
+      ],
+      "embed": [
+        {
+          "input": ["q"],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "clock_reads": 2
+    },
+    {
+      "name": "zero_threshold",
+      "input": {
+        "query": "q",
+        "top_k": 10,
+        "threshold": 0.0,
+        "filters": { "user_id": "12345678" }
+      },
+      "ok": true,
+      "value": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "memory": "A fact",
+          "hash": "ha",
+          "metadata": { "platform": "pipecat" },
+          "score": 1.0,
+          "created_at": "2026-11-03T04:05:06.123456+00:00",
+          "updated_at": "2026-11-03T04:05:06.123456+00:00",
+          "user_id": "12345678",
+          "attributed_to": "user"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "memory": "B cloud",
+          "hash": "hb",
+          "metadata": { "platform": "pipecat", "categories": ["user_preferences"] },
+          "score": 0.8,
+          "created_at": "2025-12-01T03:04:05-07:00",
+          "updated_at": "2025-12-01T03:04:05-07:00",
+          "user_id": "12345678",
+          "role": "user"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000006",
+          "memory": "F future",
+          "hash": null,
+          "metadata": null,
+          "score": 0.6,
+          "created_at": null,
+          "updated_at": null,
+          "user_id": "12345678",
+          "agent_id": "ag",
+          "run_id": "rn",
+          "expiration_date": "2099-01-01"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000008",
+          "memory": "H bad expiry",
+          "hash": null,
+          "metadata": null,
+          "score": 0.5,
+          "created_at": null,
+          "updated_at": null,
+          "user_id": "12345678",
+          "expiration_date": "soon"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000005",
+          "memory": "E low",
+          "hash": null,
+          "metadata": { "platform": "pipecat", "extra": { "a": 1 } },
+          "score": 0.29,
+          "created_at": "2026-01-02T00:00:00+00:00",
+          "updated_at": null,
+          "user_id": "12345678",
+          "actor_id": "nick"
+        }
+      ],
+      "logs": [],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [1.0, 1.0, 0.0, 0.0],
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 60
+          }
+        ]
+      ],
+      "embed": [
+        {
+          "input": ["q"],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "clock_reads": 2
+    },
+    {
+      "name": "whitespace",
+      "input": {
+        "query": "   ",
+        "top_k": 10,
+        "threshold": 0.3,
+        "filters": { "user_id": "12345678" }
+      },
+      "ok": false,
+      "error": ["ValueError", "Invalid query: cannot be empty or whitespace-only."],
+      "logs": [],
+      "qdrant": [],
+      "embed": [],
+      "clock_reads": 0
+    },
+    {
+      "name": "no_ids",
+      "input": { "query": "q", "top_k": 10, "threshold": 0.3, "filters": {} },
+      "ok": false,
+      "error": [
+        "ValueError",
+        "filters must contain at least one of: user_id, agent_id, run_id. Example: filters={'user_id': 'u1'}"
+      ],
+      "logs": [],
+      "qdrant": [],
+      "embed": [],
+      "clock_reads": 0
+    },
+    {
+      "name": "agent_scope",
+      "input": {
+        "query": "q",
+        "top_k": 10,
+        "threshold": 0.3,
+        "filters": { "user_id": "12345678", "agent_id": "ag", "run_id": "rn" }
+      },
+      "ok": true,
+      "value": [
+        {
+          "id": "00000000-0000-4000-8000-000000000006",
+          "memory": "F future",
+          "hash": null,
+          "metadata": null,
+          "score": 0.6,
+          "created_at": null,
+          "updated_at": null,
+          "user_id": "12345678",
+          "agent_id": "ag",
+          "run_id": "rn",
+          "expiration_date": "2099-01-01"
+        }
+      ],
+      "logs": [],
+      "qdrant": [
+        [
+          "query",
+          {
+            "query": [1.0, 1.0, 0.0, 0.0],
+            "filter": {
+              "must": [
+                { "key": "user_id", "match": { "value": "12345678" } },
+                { "key": "agent_id", "match": { "value": "ag" } },
+                { "key": "run_id", "match": { "value": "rn" } }
+              ]
+            },
+            "limit": 60
+          }
+        ]
+      ],
+      "embed": [
+        {
+          "input": ["q"],
+          "model": "google/gemini-embedding-2-preview",
+          "encoding_format": "float",
+          "dimensions": 4
+        }
+      ],
+      "clock_reads": 1
+    },
+    {
+      "name": "bad_threshold",
+      "input": {
+        "query": "q",
+        "top_k": 10,
+        "threshold": 1.5,
+        "filters": { "user_id": "12345678" }
+      },
+      "ok": false,
+      "error": ["ValueError", "Invalid threshold: 1.5. Must be between 0 and 1 (inclusive)."],
+      "logs": [],
+      "qdrant": [],
+      "embed": [],
+      "clock_reads": 0
+    },
+    {
+      "name": "bad_topk",
+      "input": {
+        "query": "q",
+        "top_k": -1,
+        "threshold": 0.3,
+        "filters": { "user_id": "12345678" }
+      },
+      "ok": false,
+      "error": ["ValueError", "Invalid top_k: -1. Must be a non-negative integer."],
+      "logs": [],
+      "qdrant": [],
+      "embed": [],
+      "clock_reads": 0
+    },
+    {
+      "name": "trim_ids",
+      "input": {
+        "query": "q",
+        "top_k": 10,
+        "threshold": 0.3,
+        "filters": { "user_id": " 12345678 ", "agent_id": null }
+      },
+      "ok": false,
+      "error": ["AttributeError", "'NoneType' object has no attribute 'encode'"],
+      "logs": [],
+      "qdrant": [],
+      "embed": [],
+      "clock_reads": 0
+    }
+  ],
+  "get_all": [
+    {
+      "name": "1000",
+      "input": { "top_k": 1000, "filters": { "user_id": "12345678" } },
+      "ok": true,
+      "value": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "memory": "A fact",
+          "hash": "ha",
+          "metadata": { "platform": "pipecat" },
+          "created_at": "2026-11-03T04:05:06.123456+00:00",
+          "updated_at": "2026-11-03T04:05:06.123456+00:00",
+          "user_id": "12345678",
+          "attributed_to": "user"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "memory": "B cloud",
+          "hash": "hb",
+          "metadata": { "platform": "pipecat", "categories": ["user_preferences"] },
+          "created_at": "2025-12-01T03:04:05-07:00",
+          "updated_at": "2025-12-01T03:04:05-07:00",
+          "user_id": "12345678",
+          "role": "user"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "memory": "",
+          "hash": "hc",
+          "metadata": { "platform": "pipecat" },
+          "created_at": "2026-01-01T00:00:00+00:00",
+          "updated_at": null,
+          "user_id": "12345678"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000005",
+          "memory": "E low",
+          "hash": null,
+          "metadata": { "platform": "pipecat", "extra": { "a": 1 } },
+          "created_at": "2026-01-02T00:00:00+00:00",
+          "updated_at": null,
+          "user_id": "12345678",
+          "actor_id": "nick"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000006",
+          "memory": "F future",
+          "hash": null,
+          "metadata": null,
+          "created_at": null,
+          "updated_at": null,
+          "user_id": "12345678",
+          "agent_id": "ag",
+          "run_id": "rn",
+          "expiration_date": "2099-01-01"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000008",
+          "memory": "H bad expiry",
+          "hash": null,
+          "metadata": null,
+          "created_at": null,
+          "updated_at": null,
+          "user_id": "12345678",
+          "expiration_date": "soon"
+        }
+      ],
+      "logs": [],
+      "qdrant": [
+        [
+          "scroll",
+          {
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 4000
+          }
+        ]
+      ],
+      "clock_reads": 2
+    },
+    {
+      "name": "2",
+      "input": { "top_k": 2, "filters": { "user_id": "12345678" } },
+      "ok": true,
+      "value": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "memory": "A fact",
+          "hash": "ha",
+          "metadata": { "platform": "pipecat" },
+          "created_at": "2026-11-03T04:05:06.123456+00:00",
+          "updated_at": "2026-11-03T04:05:06.123456+00:00",
+          "user_id": "12345678",
+          "attributed_to": "user"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "memory": "B cloud",
+          "hash": "hb",
+          "metadata": { "platform": "pipecat", "categories": ["user_preferences"] },
+          "created_at": "2025-12-01T03:04:05-07:00",
+          "updated_at": "2025-12-01T03:04:05-07:00",
+          "user_id": "12345678",
+          "role": "user"
+        }
+      ],
+      "logs": [],
+      "qdrant": [
+        [
+          "scroll",
+          {
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 60
+          }
+        ]
+      ],
+      "clock_reads": 0
+    },
+    {
+      "name": "0",
+      "input": { "top_k": 0, "filters": { "user_id": "12345678" } },
+      "ok": true,
+      "value": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "memory": "A fact",
+          "hash": "ha",
+          "metadata": { "platform": "pipecat" },
+          "created_at": "2026-11-03T04:05:06.123456+00:00",
+          "updated_at": "2026-11-03T04:05:06.123456+00:00",
+          "user_id": "12345678",
+          "attributed_to": "user"
+        }
+      ],
+      "logs": [],
+      "qdrant": [
+        [
+          "scroll",
+          {
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 60
+          }
+        ]
+      ],
+      "clock_reads": 0
+    },
+    {
+      "name": "no_ids",
+      "input": { "top_k": 10, "filters": { "run_id": "  " } },
+      "ok": false,
+      "error": [
+        "ValueError",
+        "Invalid run_id: cannot be empty or whitespace-only. Provide a valid identifier."
+      ],
+      "logs": [],
+      "qdrant": [],
+      "clock_reads": 0
+    },
+    {
+      "name": "empty_filters",
+      "input": { "top_k": 10, "filters": {} },
+      "ok": false,
+      "error": [
+        "ValueError",
+        "filters must contain at least one of: user_id, agent_id, run_id. Example: filters={'user_id': 'u1'}"
+      ],
+      "logs": [],
+      "qdrant": [],
+      "clock_reads": 0
+    }
+  ],
+  "delete": [
+    {
+      "name": "basic",
+      "input": {
+        "user_id": "12345678",
+        "noop": false,
+        "missing": [],
+        "points": {
+          "00000000-0000-4000-8000-000000000001": {
+            "platform": "pipecat",
+            "user_id": "12345678",
+            "data": "A fact",
+            "text_lemmatized": "A fact",
+            "hash": "ha",
+            "created_at": "2026-11-03T04:05:06.123456+00:00",
+            "updated_at": "2026-11-03T04:05:06.123456+00:00",
+            "attributed_to": "user"
+          },
+          "00000000-0000-4000-8000-000000000002": {
+            "platform": "pipecat",
+            "created_at": "2025-12-01T03:04:05-07:00",
+            "categories": ["user_preferences"],
+            "user_id": "12345678",
+            "role": "user",
+            "data": "B cloud",
+            "hash": "hb",
+            "updated_at": "2025-12-01T03:04:05-07:00",
+            "text_lemmatized": "B cloud"
+          },
+          "00000000-0000-4000-8000-000000000003": {
+            "platform": "pipecat",
+            "user_id": "12345678",
+            "hash": "hc",
+            "created_at": "2026-01-01T00:00:00+00:00"
+          },
+          "00000000-0000-4000-8000-000000000004": {
+            "platform": "pipecat",
+            "user_id": "12345678",
+            "data": "D expired",
+            "expiration_date": "2026-01-01",
+            "created_at": "2026-01-01T00:00:00+00:00"
+          },
+          "00000000-0000-4000-8000-000000000005": {
+            "platform": "pipecat",
+            "user_id": "12345678",
+            "data": "E low",
+            "actor_id": "nick",
+            "extra": { "a": 1 },
+            "created_at": "2026-01-02T00:00:00+00:00"
+          },
+          "00000000-0000-4000-8000-000000000006": {
+            "user_id": "12345678",
+            "data": "F future",
+            "expiration_date": "2099-01-01",
+            "agent_id": "ag",
+            "run_id": "rn"
+          },
+          "00000000-0000-4000-8000-000000000007": { "user_id": "77777777", "data": "G other" },
+          "00000000-0000-4000-8000-000000000008": {
+            "user_id": "12345678",
+            "data": "H bad expiry",
+            "expiration_date": "soon"
+          }
+        }
+      },
+      "ok": true,
+      "value": { "message": "Memories deleted successfully!" },
+      "logs": [],
+      "qdrant": [
+        [
+          "scroll",
+          {
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 1000
+          }
+        ],
+        ["retrieve", ["00000000-0000-4000-8000-000000000001"]],
+        ["delete", ["00000000-0000-4000-8000-000000000001"]],
+        ["retrieve", ["00000000-0000-4000-8000-000000000002"]],
+        ["delete", ["00000000-0000-4000-8000-000000000002"]],
+        ["retrieve", ["00000000-0000-4000-8000-000000000003"]],
+        ["delete", ["00000000-0000-4000-8000-000000000003"]],
+        ["retrieve", ["00000000-0000-4000-8000-000000000004"]],
+        ["delete", ["00000000-0000-4000-8000-000000000004"]],
+        ["retrieve", ["00000000-0000-4000-8000-000000000005"]],
+        ["delete", ["00000000-0000-4000-8000-000000000005"]],
+        ["retrieve", ["00000000-0000-4000-8000-000000000006"]],
+        ["delete", ["00000000-0000-4000-8000-000000000006"]],
+        ["retrieve", ["00000000-0000-4000-8000-000000000008"]],
+        ["delete", ["00000000-0000-4000-8000-000000000008"]],
+        [
+          "scroll",
+          {
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 1000
+          }
+        ]
+      ],
+      "db": {
+        "history": [
+          [
+            "00000000-0000-0000-0000-000000000001",
+            "00000000-0000-4000-8000-000000000001",
+            "A fact",
+            null,
+            "DELETE",
+            "2026-11-03T04:05:06.123456+00:00",
+            "2026-11-03T04:05:06.123456+00:00",
+            1,
+            null,
+            null
+          ],
+          [
+            "00000000-0000-0000-0000-000000000002",
+            "00000000-0000-4000-8000-000000000002",
+            "B cloud",
+            null,
+            "DELETE",
+            "2025-12-01T10:04:05+00:00",
+            "2026-11-03T04:05:07.123457+00:00",
+            1,
+            null,
+            "user"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000003",
+            "00000000-0000-4000-8000-000000000003",
+            "",
+            null,
+            "DELETE",
+            "2026-01-01T00:00:00+00:00",
+            "2026-11-03T04:05:08.123458+00:00",
+            1,
+            null,
+            null
+          ],
+          [
+            "00000000-0000-0000-0000-000000000004",
+            "00000000-0000-4000-8000-000000000004",
+            "D expired",
+            null,
+            "DELETE",
+            "2026-01-01T00:00:00+00:00",
+            "2026-11-03T04:05:09.123459+00:00",
+            1,
+            null,
+            null
+          ],
+          [
+            "00000000-0000-0000-0000-000000000005",
+            "00000000-0000-4000-8000-000000000005",
+            "E low",
+            null,
+            "DELETE",
+            "2026-01-02T00:00:00+00:00",
+            "2026-11-03T04:05:10.123460+00:00",
+            1,
+            "nick",
+            null
+          ],
+          [
+            "00000000-0000-0000-0000-000000000006",
+            "00000000-0000-4000-8000-000000000006",
+            "F future",
+            null,
+            "DELETE",
+            null,
+            "2026-11-03T04:05:11.123461+00:00",
+            1,
+            null,
+            null
+          ],
+          [
+            "00000000-0000-0000-0000-000000000007",
+            "00000000-0000-4000-8000-000000000008",
+            "H bad expiry",
+            null,
+            "DELETE",
+            null,
+            "2026-11-03T04:05:12.123462+00:00",
+            1,
+            null,
+            null
+          ]
+        ],
+        "messages": []
+      },
+      "remaining": ["00000000-0000-4000-8000-000000000007"],
+      "clock_reads": 7
+    },
+    {
+      "name": "repeated",
+      "input": {
+        "user_id": "12345678",
+        "noop": true,
+        "missing": [],
+        "points": {
+          "00000000-0000-4000-8000-000000000001": {
+            "platform": "pipecat",
+            "user_id": "12345678",
+            "data": "A fact",
+            "text_lemmatized": "A fact",
+            "hash": "ha",
+            "created_at": "2026-11-03T04:05:06.123456+00:00",
+            "updated_at": "2026-11-03T04:05:06.123456+00:00",
+            "attributed_to": "user"
+          },
+          "00000000-0000-4000-8000-000000000002": {
+            "platform": "pipecat",
+            "created_at": "2025-12-01T03:04:05-07:00",
+            "categories": ["user_preferences"],
+            "user_id": "12345678",
+            "role": "user",
+            "data": "B cloud",
+            "hash": "hb",
+            "updated_at": "2025-12-01T03:04:05-07:00",
+            "text_lemmatized": "B cloud"
+          },
+          "00000000-0000-4000-8000-000000000003": {
+            "platform": "pipecat",
+            "user_id": "12345678",
+            "hash": "hc",
+            "created_at": "2026-01-01T00:00:00+00:00"
+          },
+          "00000000-0000-4000-8000-000000000004": {
+            "platform": "pipecat",
+            "user_id": "12345678",
+            "data": "D expired",
+            "expiration_date": "2026-01-01",
+            "created_at": "2026-01-01T00:00:00+00:00"
+          },
+          "00000000-0000-4000-8000-000000000005": {
+            "platform": "pipecat",
+            "user_id": "12345678",
+            "data": "E low",
+            "actor_id": "nick",
+            "extra": { "a": 1 },
+            "created_at": "2026-01-02T00:00:00+00:00"
+          },
+          "00000000-0000-4000-8000-000000000006": {
+            "user_id": "12345678",
+            "data": "F future",
+            "expiration_date": "2099-01-01",
+            "agent_id": "ag",
+            "run_id": "rn"
+          },
+          "00000000-0000-4000-8000-000000000007": { "user_id": "77777777", "data": "G other" },
+          "00000000-0000-4000-8000-000000000008": {
+            "user_id": "12345678",
+            "data": "H bad expiry",
+            "expiration_date": "soon"
+          }
+        }
+      },
+      "ok": true,
+      "value": { "message": "Memories deleted successfully!" },
+      "logs": [["WARNING", "Stopping delete_all after a repeated memory batch"]],
+      "qdrant": [
+        [
+          "scroll",
+          {
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 1000
+          }
+        ],
+        ["retrieve", ["00000000-0000-4000-8000-000000000001"]],
+        ["delete", ["00000000-0000-4000-8000-000000000001"]],
+        ["retrieve", ["00000000-0000-4000-8000-000000000002"]],
+        ["delete", ["00000000-0000-4000-8000-000000000002"]],
+        ["retrieve", ["00000000-0000-4000-8000-000000000003"]],
+        ["delete", ["00000000-0000-4000-8000-000000000003"]],
+        ["retrieve", ["00000000-0000-4000-8000-000000000004"]],
+        ["delete", ["00000000-0000-4000-8000-000000000004"]],
+        ["retrieve", ["00000000-0000-4000-8000-000000000005"]],
+        ["delete", ["00000000-0000-4000-8000-000000000005"]],
+        ["retrieve", ["00000000-0000-4000-8000-000000000006"]],
+        ["delete", ["00000000-0000-4000-8000-000000000006"]],
+        ["retrieve", ["00000000-0000-4000-8000-000000000008"]],
+        ["delete", ["00000000-0000-4000-8000-000000000008"]],
+        [
+          "scroll",
+          {
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 1000
+          }
+        ]
+      ],
+      "db": {
+        "history": [
+          [
+            "00000000-0000-0000-0000-000000000001",
+            "00000000-0000-4000-8000-000000000001",
+            "A fact",
+            null,
+            "DELETE",
+            "2026-11-03T04:05:06.123456+00:00",
+            "2026-11-03T04:05:06.123456+00:00",
+            1,
+            null,
+            null
+          ],
+          [
+            "00000000-0000-0000-0000-000000000002",
+            "00000000-0000-4000-8000-000000000002",
+            "B cloud",
+            null,
+            "DELETE",
+            "2025-12-01T10:04:05+00:00",
+            "2026-11-03T04:05:07.123457+00:00",
+            1,
+            null,
+            "user"
+          ],
+          [
+            "00000000-0000-0000-0000-000000000003",
+            "00000000-0000-4000-8000-000000000003",
+            "",
+            null,
+            "DELETE",
+            "2026-01-01T00:00:00+00:00",
+            "2026-11-03T04:05:08.123458+00:00",
+            1,
+            null,
+            null
+          ],
+          [
+            "00000000-0000-0000-0000-000000000004",
+            "00000000-0000-4000-8000-000000000004",
+            "D expired",
+            null,
+            "DELETE",
+            "2026-01-01T00:00:00+00:00",
+            "2026-11-03T04:05:09.123459+00:00",
+            1,
+            null,
+            null
+          ],
+          [
+            "00000000-0000-0000-0000-000000000005",
+            "00000000-0000-4000-8000-000000000005",
+            "E low",
+            null,
+            "DELETE",
+            "2026-01-02T00:00:00+00:00",
+            "2026-11-03T04:05:10.123460+00:00",
+            1,
+            "nick",
+            null
+          ],
+          [
+            "00000000-0000-0000-0000-000000000006",
+            "00000000-0000-4000-8000-000000000006",
+            "F future",
+            null,
+            "DELETE",
+            null,
+            "2026-11-03T04:05:11.123461+00:00",
+            1,
+            null,
+            null
+          ],
+          [
+            "00000000-0000-0000-0000-000000000007",
+            "00000000-0000-4000-8000-000000000008",
+            "H bad expiry",
+            null,
+            "DELETE",
+            null,
+            "2026-11-03T04:05:12.123462+00:00",
+            1,
+            null,
+            null
+          ]
+        ],
+        "messages": []
+      },
+      "remaining": [
+        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-4000-8000-000000000002",
+        "00000000-0000-4000-8000-000000000003",
+        "00000000-0000-4000-8000-000000000004",
+        "00000000-0000-4000-8000-000000000005",
+        "00000000-0000-4000-8000-000000000006",
+        "00000000-0000-4000-8000-000000000007",
+        "00000000-0000-4000-8000-000000000008"
+      ],
+      "clock_reads": 7
+    },
+    {
+      "name": "missing",
+      "input": {
+        "user_id": "12345678",
+        "noop": false,
+        "missing": ["00000000-0000-4000-8000-000000000003"],
+        "points": {
+          "00000000-0000-4000-8000-000000000001": {
+            "platform": "pipecat",
+            "user_id": "12345678",
+            "data": "A fact",
+            "text_lemmatized": "A fact",
+            "hash": "ha",
+            "created_at": "2026-11-03T04:05:06.123456+00:00",
+            "updated_at": "2026-11-03T04:05:06.123456+00:00",
+            "attributed_to": "user"
+          },
+          "00000000-0000-4000-8000-000000000002": {
+            "platform": "pipecat",
+            "created_at": "2025-12-01T03:04:05-07:00",
+            "categories": ["user_preferences"],
+            "user_id": "12345678",
+            "role": "user",
+            "data": "B cloud",
+            "hash": "hb",
+            "updated_at": "2025-12-01T03:04:05-07:00",
+            "text_lemmatized": "B cloud"
+          },
+          "00000000-0000-4000-8000-000000000003": {
+            "platform": "pipecat",
+            "user_id": "12345678",
+            "hash": "hc",
+            "created_at": "2026-01-01T00:00:00+00:00"
+          },
+          "00000000-0000-4000-8000-000000000004": {
+            "platform": "pipecat",
+            "user_id": "12345678",
+            "data": "D expired",
+            "expiration_date": "2026-01-01",
+            "created_at": "2026-01-01T00:00:00+00:00"
+          },
+          "00000000-0000-4000-8000-000000000005": {
+            "platform": "pipecat",
+            "user_id": "12345678",
+            "data": "E low",
+            "actor_id": "nick",
+            "extra": { "a": 1 },
+            "created_at": "2026-01-02T00:00:00+00:00"
+          },
+          "00000000-0000-4000-8000-000000000006": {
+            "user_id": "12345678",
+            "data": "F future",
+            "expiration_date": "2099-01-01",
+            "agent_id": "ag",
+            "run_id": "rn"
+          },
+          "00000000-0000-4000-8000-000000000007": { "user_id": "77777777", "data": "G other" },
+          "00000000-0000-4000-8000-000000000008": {
+            "user_id": "12345678",
+            "data": "H bad expiry",
+            "expiration_date": "soon"
+          }
+        }
+      },
+      "ok": false,
+      "error": [
+        "ValueError",
+        "Memory with id 00000000-0000-4000-8000-000000000003 not found. Please provide a valid 'memory_id'"
+      ],
+      "logs": [],
+      "qdrant": [
+        [
+          "scroll",
+          {
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 1000
+          }
+        ],
+        ["retrieve", ["00000000-0000-4000-8000-000000000001"]],
+        ["delete", ["00000000-0000-4000-8000-000000000001"]],
+        ["retrieve", ["00000000-0000-4000-8000-000000000002"]],
+        ["delete", ["00000000-0000-4000-8000-000000000002"]],
+        ["retrieve", ["00000000-0000-4000-8000-000000000003"]]
+      ],
+      "db": {
+        "history": [
+          [
+            "00000000-0000-0000-0000-000000000001",
+            "00000000-0000-4000-8000-000000000001",
+            "A fact",
+            null,
+            "DELETE",
+            "2026-11-03T04:05:06.123456+00:00",
+            "2026-11-03T04:05:06.123456+00:00",
+            1,
+            null,
+            null
+          ],
+          [
+            "00000000-0000-0000-0000-000000000002",
+            "00000000-0000-4000-8000-000000000002",
+            "B cloud",
+            null,
+            "DELETE",
+            "2025-12-01T10:04:05+00:00",
+            "2026-11-03T04:05:07.123457+00:00",
+            1,
+            null,
+            "user"
+          ]
+        ],
+        "messages": []
+      },
+      "remaining": [
+        "00000000-0000-4000-8000-000000000003",
+        "00000000-0000-4000-8000-000000000004",
+        "00000000-0000-4000-8000-000000000005",
+        "00000000-0000-4000-8000-000000000006",
+        "00000000-0000-4000-8000-000000000007",
+        "00000000-0000-4000-8000-000000000008"
+      ],
+      "clock_reads": 2
+    },
+    {
+      "name": "empty",
+      "input": { "user_id": "12345678", "noop": false, "missing": [], "points": {} },
+      "ok": true,
+      "value": { "message": "Memories deleted successfully!" },
+      "logs": [],
+      "qdrant": [
+        [
+          "scroll",
+          {
+            "filter": { "must": [{ "key": "user_id", "match": { "value": "12345678" } }] },
+            "limit": 1000
+          }
+        ]
+      ],
+      "db": { "history": [], "messages": [] },
+      "remaining": [],
+      "clock_reads": 0
+    },
+    {
+      "name": "no_ids",
+      "input": {
+        "user_id": "  ",
+        "noop": false,
+        "missing": [],
+        "points": {
+          "00000000-0000-4000-8000-000000000001": {
+            "platform": "pipecat",
+            "user_id": "12345678",
+            "data": "A fact",
+            "text_lemmatized": "A fact",
+            "hash": "ha",
+            "created_at": "2026-11-03T04:05:06.123456+00:00",
+            "updated_at": "2026-11-03T04:05:06.123456+00:00",
+            "attributed_to": "user"
+          },
+          "00000000-0000-4000-8000-000000000002": {
+            "platform": "pipecat",
+            "created_at": "2025-12-01T03:04:05-07:00",
+            "categories": ["user_preferences"],
+            "user_id": "12345678",
+            "role": "user",
+            "data": "B cloud",
+            "hash": "hb",
+            "updated_at": "2025-12-01T03:04:05-07:00",
+            "text_lemmatized": "B cloud"
+          },
+          "00000000-0000-4000-8000-000000000003": {
+            "platform": "pipecat",
+            "user_id": "12345678",
+            "hash": "hc",
+            "created_at": "2026-01-01T00:00:00+00:00"
+          },
+          "00000000-0000-4000-8000-000000000004": {
+            "platform": "pipecat",
+            "user_id": "12345678",
+            "data": "D expired",
+            "expiration_date": "2026-01-01",
+            "created_at": "2026-01-01T00:00:00+00:00"
+          },
+          "00000000-0000-4000-8000-000000000005": {
+            "platform": "pipecat",
+            "user_id": "12345678",
+            "data": "E low",
+            "actor_id": "nick",
+            "extra": { "a": 1 },
+            "created_at": "2026-01-02T00:00:00+00:00"
+          },
+          "00000000-0000-4000-8000-000000000006": {
+            "user_id": "12345678",
+            "data": "F future",
+            "expiration_date": "2099-01-01",
+            "agent_id": "ag",
+            "run_id": "rn"
+          },
+          "00000000-0000-4000-8000-000000000007": { "user_id": "77777777", "data": "G other" },
+          "00000000-0000-4000-8000-000000000008": {
+            "user_id": "12345678",
+            "data": "H bad expiry",
+            "expiration_date": "soon"
+          }
+        }
+      },
+      "ok": false,
+      "error": [
+        "ValueError",
+        "Invalid user_id: cannot be empty or whitespace-only. Provide a valid identifier."
+      ],
+      "logs": [],
+      "qdrant": [],
+      "db": { "history": [], "messages": [] },
+      "remaining": [
+        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-4000-8000-000000000002",
+        "00000000-0000-4000-8000-000000000003",
+        "00000000-0000-4000-8000-000000000004",
+        "00000000-0000-4000-8000-000000000005",
+        "00000000-0000-4000-8000-000000000006",
+        "00000000-0000-4000-8000-000000000007",
+        "00000000-0000-4000-8000-000000000008"
+      ],
+      "clock_reads": 0
+    }
+  ],
+  "create_col": [
+    {
+      "name": "new",
+      "input": { "collections": [], "sparse": null, "fail": {} },
+      "logs": [],
+      "qdrant": [
+        ["getCollections"],
+        [
+          "createCollection",
+          {
+            "vectors": { "size": 3072, "distance": "Cosine", "on_disk": true },
+            "sparse_vectors": { "bm25": { "modifier": "idf" } }
+          }
+        ],
+        ["createPayloadIndex", "user_id", "keyword"],
+        ["createPayloadIndex", "agent_id", "keyword"],
+        ["createPayloadIndex", "run_id", "keyword"],
+        ["createPayloadIndex", "actor_id", "keyword"]
+      ]
+    },
+    {
+      "name": "existing_bm25",
+      "input": {
+        "collections": ["other", "eidolon_memories"],
+        "sparse": { "bm25": {} },
+        "fail": {}
+      },
+      "logs": [],
+      "qdrant": [
+        ["getCollections"],
+        ["getCollection", "eidolon_memories"],
+        ["createPayloadIndex", "user_id", "keyword"],
+        ["createPayloadIndex", "agent_id", "keyword"],
+        ["createPayloadIndex", "run_id", "keyword"],
+        ["createPayloadIndex", "actor_id", "keyword"]
+      ]
+    },
+    {
+      "name": "existing_old",
+      "input": { "collections": ["eidolon_memories"], "sparse": null, "fail": {} },
+      "logs": [
+        [
+          "WARNING",
+          "Collection 'eidolon_memories' predates v3 hybrid search (no 'bm25' sparse slot). BM25 keyword scoring will be disabled for this collection; semantic search works normally. To enable hybrid search, use a fresh collection."
+        ]
+      ],
+      "qdrant": [
+        ["getCollections"],
+        ["getCollection", "eidolon_memories"],
+        ["createPayloadIndex", "user_id", "keyword"],
+        ["createPayloadIndex", "agent_id", "keyword"],
+        ["createPayloadIndex", "run_id", "keyword"],
+        ["createPayloadIndex", "actor_id", "keyword"]
+      ]
+    },
+    {
+      "name": "index_fail",
+      "input": {
+        "collections": ["eidolon_memories"],
+        "sparse": { "bm25": {} },
+        "fail": { "create_payload_index": 2 }
+      },
+      "logs": [],
+      "qdrant": [
+        ["getCollections"],
+        ["getCollection", "eidolon_memories"],
+        ["createPayloadIndex", "user_id", "keyword"],
+        ["createPayloadIndex", "agent_id", "keyword"],
+        ["createPayloadIndex", "run_id", "keyword"],
+        ["createPayloadIndex", "actor_id", "keyword"]
+      ]
+    }
+  ],
+  "search_points": {
+    "00000000-0000-4000-8000-000000000001": {
+      "platform": "pipecat",
+      "user_id": "12345678",
+      "data": "A fact",
+      "text_lemmatized": "A fact",
+      "hash": "ha",
+      "created_at": "2026-11-03T04:05:06.123456+00:00",
+      "updated_at": "2026-11-03T04:05:06.123456+00:00",
+      "attributed_to": "user"
+    },
+    "00000000-0000-4000-8000-000000000002": {
+      "platform": "pipecat",
+      "created_at": "2025-12-01T03:04:05-07:00",
+      "categories": ["user_preferences"],
+      "user_id": "12345678",
+      "role": "user",
+      "data": "B cloud",
+      "hash": "hb",
+      "updated_at": "2025-12-01T03:04:05-07:00",
+      "text_lemmatized": "B cloud"
+    },
+    "00000000-0000-4000-8000-000000000003": {
+      "platform": "pipecat",
+      "user_id": "12345678",
+      "hash": "hc",
+      "created_at": "2026-01-01T00:00:00+00:00"
+    },
+    "00000000-0000-4000-8000-000000000004": {
+      "platform": "pipecat",
+      "user_id": "12345678",
+      "data": "D expired",
+      "expiration_date": "2026-01-01",
+      "created_at": "2026-01-01T00:00:00+00:00"
+    },
+    "00000000-0000-4000-8000-000000000005": {
+      "platform": "pipecat",
+      "user_id": "12345678",
+      "data": "E low",
+      "actor_id": "nick",
+      "extra": { "a": 1 },
+      "created_at": "2026-01-02T00:00:00+00:00"
+    },
+    "00000000-0000-4000-8000-000000000006": {
+      "user_id": "12345678",
+      "data": "F future",
+      "expiration_date": "2099-01-01",
+      "agent_id": "ag",
+      "run_id": "rn"
+    },
+    "00000000-0000-4000-8000-000000000007": { "user_id": "77777777", "data": "G other" },
+    "00000000-0000-4000-8000-000000000008": {
+      "user_id": "12345678",
+      "data": "H bad expiry",
+      "expiration_date": "soon"
+    }
+  },
+  "search_scores": {
+    "00000000-0000-4000-8000-000000000001": 1.0000002,
+    "00000000-0000-4000-8000-000000000002": 0.8,
+    "00000000-0000-4000-8000-000000000003": 0.75,
+    "00000000-0000-4000-8000-000000000004": 0.7,
+    "00000000-0000-4000-8000-000000000005": 0.29,
+    "00000000-0000-4000-8000-000000000006": 0.6,
+    "00000000-0000-4000-8000-000000000007": 0.99,
+    "00000000-0000-4000-8000-000000000008": 0.5
+  }
+}

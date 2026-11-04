@@ -1,0 +1,412 @@
+{
+  "rows": {
+    "persona_facts|你梦想是什么|vector": [
+      {
+        "id": "r11",
+        "text": "我的梦想是做个快乐的人",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      },
+      {
+        "id": "r8",
+        "text": "梦想是成为包租婆",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      }
+    ],
+    "persona_facts|你梦想是什么|rrf": [
+      {
+        "id": "r8",
+        "text": "梦想是成为包租婆",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      },
+      {
+        "id": "r2",
+        "text": "别的",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      }
+    ],
+    "persona_facts|你梦想是什么|rerank:fake-rerank": [
+      {
+        "id": "r11",
+        "text": "击碎花店外的大boss",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      }
+    ],
+    "persona_facts|你梦想是什么|rerank:m1": [
+      {
+        "id": "r11",
+        "text": "击碎花店外的大boss",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      }
+    ],
+    "persona_facts|你梦想是什么|rerank:m2": [
+      {
+        "id": "r1",
+        "text": "a",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      },
+      {
+        "id": "r1",
+        "text": "b",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      },
+      {
+        "id": "r3",
+        "text": "包租婆",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      }
+    ],
+    "persona_facts|你梦想是什么|rerank:bad": [
+      {
+        "id": "r3",
+        "text": "包租婆",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      }
+    ],
+    "persona_facts|坚果体重多少斤|vector": [
+      {
+        "id": "r10",
+        "text": "坚果出生于2021年",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      },
+      {
+        "id": "r5",
+        "text": "坚果是布偶",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      },
+      {
+        "id": "r4",
+        "text": "店长坚果",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      },
+      {
+        "id": "r9",
+        "text": "坚果5.5kg左右",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      }
+    ],
+    "persona_facts|坚果体重多少斤|rrf": [
+      {
+        "id": "r5",
+        "text": "坚果15斤",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      }
+    ],
+    "persona_facts|坚果体重多少斤|rerank:fake-rerank": [
+      {
+        "id": "r1",
+        "text": "x",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      },
+      {
+        "id": "r5",
+        "text": "坚果15斤",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      }
+    ],
+    "persona_facts|坚果体重多少斤|rerank:m1": [
+      {
+        "id": "r5",
+        "text": "坚果15斤",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      }
+    ],
+    "persona_facts|坚果体重多少斤|rerank:m2": [
+      {
+        "id": "r5",
+        "text": "坚果15斤",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      }
+    ],
+    "persona_facts|你2026年5月9号说了什么|vector": [
+      {
+        "id": "r2",
+        "text": "无关",
+        "summary": "我在公放",
+        "details": "",
+        "heading": ""
+      }
+    ],
+    "persona_facts|你2026年5月9号说了什么|rrf": [
+      {
+        "id": "r2",
+        "text": "无关",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      },
+      {
+        "id": "r0",
+        "text": "",
+        "summary": "",
+        "details": "和妈妈打电话",
+        "heading": null
+      }
+    ],
+    "persona_facts|你2026年5月9号说了什么|rerank:fake-rerank": [
+      {
+        "id": "r2",
+        "text": "无关",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      },
+      {
+        "id": "r3",
+        "text": "无关2",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      },
+      {
+        "id": "r2",
+        "text": "妈妈",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      }
+    ],
+    "persona_facts|你2026年5月9号说了什么|rerank:m1": [
+      {
+        "id": "r2",
+        "text": "妈妈",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      }
+    ],
+    "persona_facts|你2026年5月9号说了什么|rerank:m2": [],
+    "persona_facts|这条永远找不到|vector": [
+      {
+        "id": "r170",
+        "text": "这一行很长很长，这一行很长很长，这一行很长很长，这一行很长很长，这一行很长很长，这一行很长很长，这一行很长很长，这一行很长很长，这一行很长很长，这一行很长很长，这一行很长很长，这一行很长很长，这一行很长很长，这一行很长很长，这一行很长很长，这一行很长很长，这一行很长很长，这一行很长很长，这一行很长很长，这一行很长很长，😀 emoji 结尾",
+        "summary": null,
+        "details": 0,
+        "heading": "标题"
+      }
+    ],
+    "persona_facts|这条永远找不到|rrf": [
+      {
+        "id": "r2",
+        "text": "没有",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      },
+      {
+        "id": "r3",
+        "text": "也没有",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      }
+    ],
+    "persona_facts|这条永远找不到|rerank:fake-rerank": [],
+    "persona_facts|这条永远找不到|rerank:m1": [
+      {
+        "id": "r4",
+        "text": "nope",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      }
+    ],
+    "persona_facts|这条永远找不到|rerank:m2": [
+      {
+        "id": "r4",
+        "text": "nope",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      }
+    ],
+    "stream_chunks|26年3月24直播内容|vector": [
+      {
+        "id": "r2",
+        "text": "转录",
+        "summary": "",
+        "details": "",
+        "heading": "直播间吐槽"
+      }
+    ],
+    "stream_chunks|26年3月24直播内容|rrf": [
+      {
+        "id": "r2",
+        "text": "转录",
+        "summary": "弹幕很多",
+        "details": "",
+        "heading": ""
+      }
+    ],
+    "stream_chunks|26年3月24直播内容|rerank:fake-rerank": [
+      {
+        "id": "r1",
+        "text": "x",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      },
+      {
+        "id": "r2",
+        "text": "弹幕",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      }
+    ],
+    "stream_chunks|你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗|vector": [
+      {
+        "id": "r3",
+        "text": "无关0",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      },
+      {
+        "id": "r3",
+        "text": "无关1",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      },
+      {
+        "id": "r3",
+        "text": "无关2",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      },
+      {
+        "id": "r3",
+        "text": "无关3",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      },
+      {
+        "id": "r3",
+        "text": "无关4",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      },
+      {
+        "id": "r3",
+        "text": "无关5",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      },
+      {
+        "id": "r3",
+        "text": "无关6",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      },
+      {
+        "id": "r3",
+        "text": "无关7",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      },
+      {
+        "id": "r3",
+        "text": "无关8",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      },
+      {
+        "id": "r3",
+        "text": "拔智齿",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      }
+    ],
+    "stream_chunks|你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗|rrf": [
+      {
+        "id": "r3",
+        "text": "拔智齿",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      }
+    ],
+    "stream_chunks|你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗|rerank:fake-rerank": [
+      {
+        "id": "r3",
+        "text": "拔智齿",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      }
+    ],
+    "stream_chunks|你梦想是什么|vector": [
+      {
+        "id": "r2",
+        "text": "梦想",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      }
+    ],
+    "stream_chunks|你梦想是什么|rrf": [
+      {
+        "id": "r2",
+        "text": "无关",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      }
+    ],
+    "stream_chunks|你梦想是什么|rerank:fake-rerank": [
+      {
+        "id": "r2",
+        "text": "梦想",
+        "summary": "",
+        "details": "",
+        "heading": ""
+      }
+    ]
+  }
+}

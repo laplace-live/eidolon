@@ -235,3 +235,7 @@ data/generated/
 # Whisper model cache (downloaded on first transcribe run).
 .cache/
 ~/.cache/huggingface/
+
+# TypeScript workspace
+node_modules/
+*.tsbuildinfo

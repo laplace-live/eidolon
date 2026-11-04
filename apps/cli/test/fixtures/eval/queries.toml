@@ -1,0 +1,49 @@
+# Eval fixture: both tables, a table missing from the db, a duplicated text, a date query,
+# a query whose embedding comes back empty, and a miss in every mode.
+
+[[query]]
+table = "persona_facts"
+text = "你梦想是什么"
+expect_substrings = ["包租婆", "击碎花店外的大boss"]
+notes = "homophone"
+
+[[query]]
+table = "persona_facts"
+text = "坚果体重多少斤"
+expect_substrings = ["5.5kg", "15斤"]
+
+[[query]]
+table = "persona_facts"
+text = "你2026年5月9号说了什么"
+expect_substrings = ["妈妈", "公放"]
+notes = 3
+
+[[query]]
+table = "persona_facts"
+text = "这条永远找不到"
+expect_substrings = ["不存在的内容"]
+
+[[query]]
+table = "persona_facts"
+text = "embedding 返回空"
+expect_substrings = ["x"]
+
+[[query]]
+table = "stream_chunks"
+text = "26年3月24直播内容"
+expect_substrings = ["直播间", "弹幕"]
+
+[[query]]
+table = "stream_chunks"
+text = "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗"
+expect_substrings = ["智齿"]
+
+[[query]]
+table = "stream_chunks"
+text = "你梦想是什么"
+expect_substrings = ["梦想"]
+
+[[query]]
+table = "ghost_table"
+text = "不存在的表"
+expect_substrings = ["x"]

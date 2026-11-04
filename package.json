@@ -1,0 +1,26 @@
+{
+  "name": "laplace-eidolon",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "bun --watch apps/bot/src/main.ts",
+    "start": "bun apps/bot/src/main.ts",
+    "laplace-search": "bun apps/cli/src/main.ts search",
+    "laplace-eval-retrieval": "bun apps/cli/src/main.ts eval-retrieval",
+    "laplace-generate-image": "bun apps/cli/src/main.ts generate-image",
+    "gate-decisions": "bun apps/cli/src/main.ts gate-decisions",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "test": "bun test --no-env-file"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@types/bun": "1.4.4",
+    "typescript": "7.0.2"
+  }
+}

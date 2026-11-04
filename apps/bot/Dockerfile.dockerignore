@@ -1,0 +1,20 @@
+# Replaces the root .dockerignore for apps/bot/Dockerfile builds; the two are not merged.
+#
+# Every workspace package has its own node_modules of symlinks into the root one.
+# A bare `node_modules/` matches only the root, so the host's nested ones would
+# overwrite the image's own through `COPY packages`.
+**/node_modules/
+**/*.tsbuildinfo
+
+# Local secrets: never in the build context. findDotenv walks up from apps/bot/src, so a nested
+# one would load too.
+**/.env
+**/.env.*
+
+# Large local-only trees the image never copies.
+.git/
+.venv/
+streams/
+vods/
+data/embed_cache.db
+data/mem0-cloud-export.json

@@ -1,0 +1,13 @@
+{
+  "name": "@eidolon/memory",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@eidolon/config": "workspace:*",
+    "@eidolon/core": "workspace:*",
+    "@qdrant/js-client-rest": "1.19.0"
+  }
+}

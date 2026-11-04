@@ -1,0 +1,3 @@
+[[query]]
+table = "persona_facts"
+expect_substrings = ["x"]

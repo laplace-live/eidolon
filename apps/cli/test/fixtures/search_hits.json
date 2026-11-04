@@ -1,0 +1,107 @@
+{
+  "hits": [
+    {
+      "id": "2026-09-16-BV1GVeK6tEG9_p1::003",
+      "stream_id": "2026-09-16-BV1GVeK6tEG9_p1",
+      "stream_date": "2026-09-16",
+      "heading": "00:15:00 唱歌环节",
+      "text": "第一行转录\n第二行转录\r\n第三行 with emoji 😀\n",
+      "summary": "她唱了几首歌。",
+      "details": "细节一\n细节二\r\n\n细节三细节四\n",
+      "chunk_type": "karaoke",
+      "topics": "[\"唱歌\", \"SC\"]",
+      "mentions": "[\"七海\"]",
+      "extras_json": "{\"key_quotes\": [\"好耶\", \"再来一首\"], \"sc_events\": [{\"viewer\": \"甲\", \"amount_yuan\": 30, \"content\": \"唱首歌吧\", \"response\": \"好的\"}, {\"viewer\": \"\", \"amount_yuan\": null, \"content\": \"无名SC\", \"response\": \"\"}, {\"viewer\": \"乙\", \"amount_yuan\": 0, \"content\": null, \"response\": null}, {\"viewer\": \"丙\"}], \"songs\": [{\"title\": \"小幸运\", \"note\": \"清唱\"}, {\"note\": \"无题\"}, {\"title\": null}, \"裸歌\", 7], \"events\": [\"事件一\", 2, null], \"promises\": [\"下周唱新歌\"]}",
+      "refined": true,
+      "tokens": "唱歌 环节",
+      "source_path": "streams/2026-09-16-BV1GVeK6tEG9_p1.md",
+      "_relevance_score": 0.016393441706895828
+    },
+    {
+      "id": "b::001",
+      "stream_id": "b",
+      "stream_date": "2026-09-15",
+      "heading": "杂谈",
+      "text": "v1 text",
+      "summary": "  v1 摘要  ",
+      "details": "",
+      "chunk_type": "commentary",
+      "topics": "[]",
+      "mentions": "[]",
+      "extras_json": "{bad json",
+      "refined": true,
+      "tokens": "",
+      "source_path": "streams/b.md",
+      "_relevance_score": 1.0
+    },
+    {
+      "id": "c::000",
+      "stream_id": "c",
+      "stream_date": "2026-09-13",
+      "heading": "",
+      "text": "第一句很长的转录内容，第一句很长的转录内容，第一句很长的转录内容，第一句很长的转录内容，第一句很长的转录内容，第一句很长的转录内容，第一句很长的转录内容，第一句很长的转录内容，第一句很长的转录内容，第一句很长的转录内容，第一句很长的转录内容，第一句很长的转录内容，\nemoji 😀 尾巴 emoji 😀 尾巴 emoji 😀 尾巴 emoji 😀 尾巴 emoji 😀 尾巴 emoji 😀 尾巴 emoji 😀 尾巴 emoji 😀 尾巴 emoji 😀 尾巴 emoji 😀 尾巴 \n结尾",
+      "summary": "",
+      "details": "",
+      "chunk_type": "",
+      "topics": "not json",
+      "mentions": "[]",
+      "extras_json": "",
+      "refined": false,
+      "tokens": "",
+      "source_path": "streams/c.md",
+      "_relevance_score": 0.5
+    },
+    {
+      "id": "d::000",
+      "heading": null,
+      "summary": null,
+      "details": null,
+      "text": "short text\nline2",
+      "chunk_type": null,
+      "refined": null,
+      "topics": null,
+      "extras_json": null,
+      "_relevance_score": null,
+      "_distance": 0.25
+    },
+    {
+      "id": "e",
+      "source": "明前奶绿设定集.txt",
+      "date": "2026-05-09",
+      "floor": 12,
+      "text": "  persona fact text  ",
+      "tokens": "persona",
+      "_relevance_score": 3.0517578125e-5
+    },
+    {
+      "stream_date": "2026-01-01",
+      "text": ""
+    },
+    {
+      "id": "g",
+      "stream_date": "2026-09-16",
+      "heading": "全量",
+      "text": "原文\n第二行",
+      "summary": "",
+      "details": "D",
+      "chunk_type": "mixed",
+      "topics": "[\"x\"]",
+      "refined": false,
+      "extras_json": "{\"sc_events\": [], \"songs\": \"\", \"events\": [], \"key_quotes\": \"ab\"}",
+      "_relevance_score": 0.0625
+    },
+    {
+      "id": "h::000",
+      "stream_date": "2026-09-14",
+      "heading": "非字典SC",
+      "text": "t",
+      "summary": "s",
+      "details": "x",
+      "chunk_type": "sc_session",
+      "topics": "[]",
+      "refined": true,
+      "extras_json": "{\"sc_events\": [\"not-a-dict\", {\"viewer\": \"丁\", \"amount_yuan\": 50, \"content\": \"c\", \"response\": \"r\"}]}",
+      "_relevance_score": 0.25
+    }
+  ]
+}

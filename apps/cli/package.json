@@ -1,0 +1,14 @@
+{
+  "name": "@eidolon/cli",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@eidolon/config": "workspace:*",
+    "@eidolon/context": "workspace:*",
+    "@eidolon/imagegen": "workspace:*",
+    "@eidolon/retrieval": "workspace:*"
+  }
+}

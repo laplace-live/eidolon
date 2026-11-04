@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "built_at": "2026-11-03T23:28:37.837625+00:00",
+  "source_parts": 2,
+  "broadcasts": [
+    {
+      "id": "2026-09-09-BV1abc",
+      "stream_date": "2026-09-09",
+      "stream_ids": ["2026-09-09-BV1abc_p1"],
+      "overview": "活动：杂谈/解说(1段)。主题：commentary、Topic 0。代表片段：Heading 0：Summary of commentary 0",
+      "source_chunk_ids": ["2026-09-09-BV1abc_p1::000"],
+      "scenes": [
+        {
+          "id": "2026-09-09-BV1abc_p1::000",
+          "stream_id": "2026-09-09-BV1abc_p1",
+          "heading": "Heading 0",
+          "summary": "Summary of commentary 0",
+          "topics": ["commentary", "Topic 0"],
+          "chunk_type": "commentary",
+          "refined": true,
+          "timestamp": "00:00"
+        }
+      ],
+      "source_paths": ["streams/2026-09-09-BV1abc_p1.md"],
+      "unrefined_count": 0,
+      "overview_compressed": true
+    },
+    {
+      "id": "2026-09-08-BV1abc",
+      "stream_date": "2026-09-08",
+      "stream_ids": ["2026-09-08-BV1abc_p1"],
+      "overview": "活动：杂谈/解说(1段)。主题：commentary、Topic 0。代表片段：Heading 0：Summary of commentary 0",
+      "source_chunk_ids": ["2026-09-08-BV1abc_p1::000"],
+      "scenes": [
+        {
+          "id": "2026-09-08-BV1abc_p1::000",
+          "stream_id": "2026-09-08-BV1abc_p1",
+          "heading": "Heading 0",
+          "summary": "Summary of commentary 0",
+          "topics": ["commentary", "Topic 0"],
+          "chunk_type": "commentary",
+          "refined": true,
+          "timestamp": "00:00"
+        }
+      ],
+      "source_paths": ["streams/2026-09-08-BV1abc_p1.md"],
+      "unrefined_count": 0,
+      "overview_compressed": true
+    }
+  ]
+}

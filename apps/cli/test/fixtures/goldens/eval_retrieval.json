@@ -1,0 +1,930 @@
+[
+  {
+    "argv": ["--queries", "<FIX>/eval/queries.toml"],
+    "reranker": null,
+    "env": {},
+    "code": 0,
+    "crash": null,
+    "stdout": "\n==============================================================================\n  Table: persona_facts  (5 queries)\n==============================================================================\n  mode                       R@1     R@3     R@5    R@10     MRR\n  --------------------------------------------------------------\n  vector_only              20.0%   40.0%   60.0%   60.0%   0.350\n  hybrid                   40.0%   60.0%   60.0%   60.0%   0.500\n  hybrid_rerank            40.0%   60.0%   60.0%   60.0%   0.500\n\n  Misses (best mode = hybrid, 2 of 5):\n    · 这条永远找不到\n    · embedding 返回空\n\n==============================================================================\n  Table: stream_chunks  (3 queries)\n==============================================================================\n  mode                       R@1     R@3     R@5    R@10     MRR\n  --------------------------------------------------------------\n  vector_only              66.7%   66.7%   66.7%  100.0%   0.700\n  hybrid                   66.7%   66.7%   66.7%   66.7%   0.667\n  hybrid_rerank            66.7%   66.7%   66.7%   66.7%   0.667\n\n",
+    "stderr": "",
+    "logs": [
+      [
+        "WARNING",
+        "hybrid_rerank requested but no reranker is configured — that mode will use LinearCombinationReranker (vector-weighted) as fallback. Set OPENROUTER_API_KEY (and leave RERANK_ENABLED on) for the actual cross-encoder eval."
+      ],
+      ["WARNING", "Table ghost_table not found in data/lancedb; skipping."],
+      ["INFO", "Evaluating persona_facts — 5 queries × 3 modes (candidates=30, k≤10)"],
+      ["INFO", "Evaluating stream_chunks — 3 queries × 3 modes (candidates=15, k≤10)"]
+    ],
+    "calls": [
+      ["vector", "persona_facts", "你梦想是什么", 10, null],
+      ["vector", "persona_facts", "坚果体重多少斤", 10, null],
+      ["vector", "persona_facts", "你2026年5月9号说了什么", 10, "date = '2026-05-09'"],
+      ["vector", "persona_facts", "这条永远找不到", 10, null],
+      ["hybrid", "persona_facts", "你梦想是什么", 30, null, 10, null],
+      ["hybrid", "persona_facts", "坚果体重多少斤", 30, null, 10, null],
+      ["hybrid", "persona_facts", "你2026年5月9号说了什么", 30, "date = '2026-05-09'", 10, null],
+      ["hybrid", "persona_facts", "这条永远找不到", 30, null, 10, null],
+      ["hybrid", "persona_facts", "你梦想是什么", 30, null, 10, null],
+      ["hybrid", "persona_facts", "坚果体重多少斤", 30, null, 10, null],
+      ["hybrid", "persona_facts", "你2026年5月9号说了什么", 30, "date = '2026-05-09'", 10, null],
+      ["hybrid", "persona_facts", "这条永远找不到", 30, null, 10, null],
+      ["vector", "stream_chunks", "26年3月24直播内容", 10, "stream_date = '2026-03-24'"],
+      [
+        "vector",
+        "stream_chunks",
+        "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+        10,
+        null
+      ],
+      ["vector", "stream_chunks", "你梦想是什么", 10, null],
+      ["hybrid", "stream_chunks", "26年3月24直播内容", 15, "stream_date = '2026-03-24'", 10, null],
+      [
+        "hybrid",
+        "stream_chunks",
+        "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+        15,
+        null,
+        10,
+        null
+      ],
+      ["hybrid", "stream_chunks", "你梦想是什么", 15, null, 10, null],
+      ["hybrid", "stream_chunks", "26年3月24直播内容", 15, "stream_date = '2026-03-24'", 10, null],
+      [
+        "hybrid",
+        "stream_chunks",
+        "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+        15,
+        null,
+        10,
+        null
+      ],
+      ["hybrid", "stream_chunks", "你梦想是什么", 15, null, 10, null]
+    ],
+    "embeds": [
+      "你梦想是什么",
+      "坚果体重多少斤",
+      "你2026年5月9号说了什么",
+      "这条永远找不到",
+      "embedding 返回空",
+      "你梦想是什么",
+      "坚果体重多少斤",
+      "你2026年5月9号说了什么",
+      "这条永远找不到",
+      "embedding 返回空",
+      "你梦想是什么",
+      "坚果体重多少斤",
+      "你2026年5月9号说了什么",
+      "这条永远找不到",
+      "embedding 返回空",
+      "26年3月24直播内容",
+      "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+      "你梦想是什么",
+      "26年3月24直播内容",
+      "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+      "你梦想是什么",
+      "26年3月24直播内容",
+      "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+      "你梦想是什么"
+    ],
+    "opened": ["persona_facts", "stream_chunks"],
+    "saved": null
+  },
+  {
+    "argv": ["--queries", "<FIX>/eval/queries.toml", "--verbose"],
+    "reranker": null,
+    "env": {},
+    "code": 0,
+    "crash": null,
+    "stdout": "\n==============================================================================\n  Table: persona_facts  (5 queries)\n==============================================================================\n  mode                       R@1     R@3     R@5    R@10     MRR\n  --------------------------------------------------------------\n  vector_only              20.0%   40.0%   60.0%   60.0%   0.350\n  hybrid                   40.0%   60.0%   60.0%   60.0%   0.500\n  hybrid_rerank            40.0%   60.0%   60.0%   60.0%   0.500\n\n  Misses (best mode = hybrid, 2 of 5):\n    · 这条永远找不到\n    · embedding 返回空\n\n  ────────────────────────────────────────────────────────────────────────────\n  Per-query ranks for persona_facts (lower = better, ✗ = miss):\n  ────────────────────────────────────────────────────────────────────────────\n  query                                       vector_only         hybrid  hybrid_rerank\n  你梦想是什么                                               #2             #1             #1\n  坚果体重多少斤                                              #4             #1             #1\n  你2026年5月9号说了什么                                       #1             #2             #2\n  这条永远找不到                                               ✗              ✗              ✗\n  embedding 返回空                                         ✗              ✗              ✗\n\n==============================================================================\n  Table: stream_chunks  (3 queries)\n==============================================================================\n  mode                       R@1     R@3     R@5    R@10     MRR\n  --------------------------------------------------------------\n  vector_only              66.7%   66.7%   66.7%  100.0%   0.700\n  hybrid                   66.7%   66.7%   66.7%   66.7%   0.667\n  hybrid_rerank            66.7%   66.7%   66.7%   66.7%   0.667\n\n\n  ────────────────────────────────────────────────────────────────────────────\n  Per-query ranks for stream_chunks (lower = better, ✗ = miss):\n  ────────────────────────────────────────────────────────────────────────────\n  query                                       vector_only         hybrid  hybrid_rerank\n  26年3月24直播内容                                          #1             #1             #1\n  你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗                #10             #1             #1\n  你梦想是什么                                               #2             #1             #1\n",
+    "stderr": "",
+    "logs": [
+      [
+        "WARNING",
+        "hybrid_rerank requested but no reranker is configured — that mode will use LinearCombinationReranker (vector-weighted) as fallback. Set OPENROUTER_API_KEY (and leave RERANK_ENABLED on) for the actual cross-encoder eval."
+      ],
+      ["WARNING", "Table ghost_table not found in data/lancedb; skipping."],
+      ["INFO", "Evaluating persona_facts — 5 queries × 3 modes (candidates=30, k≤10)"],
+      ["INFO", "Evaluating stream_chunks — 3 queries × 3 modes (candidates=15, k≤10)"]
+    ],
+    "calls": [
+      ["vector", "persona_facts", "你梦想是什么", 10, null],
+      ["vector", "persona_facts", "坚果体重多少斤", 10, null],
+      ["vector", "persona_facts", "你2026年5月9号说了什么", 10, "date = '2026-05-09'"],
+      ["vector", "persona_facts", "这条永远找不到", 10, null],
+      ["hybrid", "persona_facts", "你梦想是什么", 30, null, 10, null],
+      ["hybrid", "persona_facts", "坚果体重多少斤", 30, null, 10, null],
+      ["hybrid", "persona_facts", "你2026年5月9号说了什么", 30, "date = '2026-05-09'", 10, null],
+      ["hybrid", "persona_facts", "这条永远找不到", 30, null, 10, null],
+      ["hybrid", "persona_facts", "你梦想是什么", 30, null, 10, null],
+      ["hybrid", "persona_facts", "坚果体重多少斤", 30, null, 10, null],
+      ["hybrid", "persona_facts", "你2026年5月9号说了什么", 30, "date = '2026-05-09'", 10, null],
+      ["hybrid", "persona_facts", "这条永远找不到", 30, null, 10, null],
+      ["vector", "stream_chunks", "26年3月24直播内容", 10, "stream_date = '2026-03-24'"],
+      [
+        "vector",
+        "stream_chunks",
+        "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+        10,
+        null
+      ],
+      ["vector", "stream_chunks", "你梦想是什么", 10, null],
+      ["hybrid", "stream_chunks", "26年3月24直播内容", 15, "stream_date = '2026-03-24'", 10, null],
+      [
+        "hybrid",
+        "stream_chunks",
+        "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+        15,
+        null,
+        10,
+        null
+      ],
+      ["hybrid", "stream_chunks", "你梦想是什么", 15, null, 10, null],
+      ["hybrid", "stream_chunks", "26年3月24直播内容", 15, "stream_date = '2026-03-24'", 10, null],
+      [
+        "hybrid",
+        "stream_chunks",
+        "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+        15,
+        null,
+        10,
+        null
+      ],
+      ["hybrid", "stream_chunks", "你梦想是什么", 15, null, 10, null]
+    ],
+    "embeds": [
+      "你梦想是什么",
+      "坚果体重多少斤",
+      "你2026年5月9号说了什么",
+      "这条永远找不到",
+      "embedding 返回空",
+      "你梦想是什么",
+      "坚果体重多少斤",
+      "你2026年5月9号说了什么",
+      "这条永远找不到",
+      "embedding 返回空",
+      "你梦想是什么",
+      "坚果体重多少斤",
+      "你2026年5月9号说了什么",
+      "这条永远找不到",
+      "embedding 返回空",
+      "26年3月24直播内容",
+      "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+      "你梦想是什么",
+      "26年3月24直播内容",
+      "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+      "你梦想是什么",
+      "26年3月24直播内容",
+      "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+      "你梦想是什么"
+    ],
+    "opened": ["persona_facts", "stream_chunks"],
+    "saved": null
+  },
+  {
+    "argv": [
+      "--queries",
+      "<FIX>/eval/queries.toml",
+      "--modes",
+      "hybrid",
+      "vector_only",
+      "hybrid",
+      "--verbose"
+    ],
+    "reranker": null,
+    "env": {},
+    "code": 0,
+    "crash": null,
+    "stdout": "\n==============================================================================\n  Table: persona_facts  (5 queries)\n==============================================================================\n  mode                       R@1     R@3     R@5    R@10     MRR\n  --------------------------------------------------------------\n  vector_only              20.0%   40.0%   60.0%   60.0%   0.350\n  hybrid                   40.0%   60.0%   60.0%   60.0%   0.500\n\n  Misses (best mode = hybrid, 2 of 5):\n    · 这条永远找不到\n    · embedding 返回空\n\n  ────────────────────────────────────────────────────────────────────────────\n  Per-query ranks for persona_facts (lower = better, ✗ = miss):\n  ────────────────────────────────────────────────────────────────────────────\n  query                                       vector_only         hybrid  hybrid_rerank\n  你梦想是什么                                               #2             #1              —\n  坚果体重多少斤                                              #4             #1              —\n  你2026年5月9号说了什么                                       #1             #2              —\n  这条永远找不到                                               ✗              ✗              —\n  embedding 返回空                                         ✗              ✗              —\n\n==============================================================================\n  Table: stream_chunks  (3 queries)\n==============================================================================\n  mode                       R@1     R@3     R@5    R@10     MRR\n  --------------------------------------------------------------\n  vector_only              66.7%   66.7%   66.7%  100.0%   0.700\n  hybrid                   66.7%   66.7%   66.7%   66.7%   0.667\n\n\n  ────────────────────────────────────────────────────────────────────────────\n  Per-query ranks for stream_chunks (lower = better, ✗ = miss):\n  ────────────────────────────────────────────────────────────────────────────\n  query                                       vector_only         hybrid  hybrid_rerank\n  26年3月24直播内容                                          #1             #1              —\n  你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗                #10             #1              —\n  你梦想是什么                                               #2             #1              —\n",
+    "stderr": "",
+    "logs": [
+      ["WARNING", "Table ghost_table not found in data/lancedb; skipping."],
+      ["INFO", "Evaluating persona_facts — 5 queries × 3 modes (candidates=30, k≤10)"],
+      ["INFO", "Evaluating stream_chunks — 3 queries × 3 modes (candidates=15, k≤10)"]
+    ],
+    "calls": [
+      ["hybrid", "persona_facts", "你梦想是什么", 30, null, 10, null],
+      ["hybrid", "persona_facts", "坚果体重多少斤", 30, null, 10, null],
+      ["hybrid", "persona_facts", "你2026年5月9号说了什么", 30, "date = '2026-05-09'", 10, null],
+      ["hybrid", "persona_facts", "这条永远找不到", 30, null, 10, null],
+      ["vector", "persona_facts", "你梦想是什么", 10, null],
+      ["vector", "persona_facts", "坚果体重多少斤", 10, null],
+      ["vector", "persona_facts", "你2026年5月9号说了什么", 10, "date = '2026-05-09'"],
+      ["vector", "persona_facts", "这条永远找不到", 10, null],
+      ["hybrid", "persona_facts", "你梦想是什么", 30, null, 10, null],
+      ["hybrid", "persona_facts", "坚果体重多少斤", 30, null, 10, null],
+      ["hybrid", "persona_facts", "你2026年5月9号说了什么", 30, "date = '2026-05-09'", 10, null],
+      ["hybrid", "persona_facts", "这条永远找不到", 30, null, 10, null],
+      ["hybrid", "stream_chunks", "26年3月24直播内容", 15, "stream_date = '2026-03-24'", 10, null],
+      [
+        "hybrid",
+        "stream_chunks",
+        "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+        15,
+        null,
+        10,
+        null
+      ],
+      ["hybrid", "stream_chunks", "你梦想是什么", 15, null, 10, null],
+      ["vector", "stream_chunks", "26年3月24直播内容", 10, "stream_date = '2026-03-24'"],
+      [
+        "vector",
+        "stream_chunks",
+        "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+        10,
+        null
+      ],
+      ["vector", "stream_chunks", "你梦想是什么", 10, null],
+      ["hybrid", "stream_chunks", "26年3月24直播内容", 15, "stream_date = '2026-03-24'", 10, null],
+      [
+        "hybrid",
+        "stream_chunks",
+        "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+        15,
+        null,
+        10,
+        null
+      ],
+      ["hybrid", "stream_chunks", "你梦想是什么", 15, null, 10, null]
+    ],
+    "embeds": [
+      "你梦想是什么",
+      "坚果体重多少斤",
+      "你2026年5月9号说了什么",
+      "这条永远找不到",
+      "embedding 返回空",
+      "你梦想是什么",
+      "坚果体重多少斤",
+      "你2026年5月9号说了什么",
+      "这条永远找不到",
+      "embedding 返回空",
+      "你梦想是什么",
+      "坚果体重多少斤",
+      "你2026年5月9号说了什么",
+      "这条永远找不到",
+      "embedding 返回空",
+      "26年3月24直播内容",
+      "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+      "你梦想是什么",
+      "26年3月24直播内容",
+      "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+      "你梦想是什么",
+      "26年3月24直播内容",
+      "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+      "你梦想是什么"
+    ],
+    "opened": ["persona_facts", "stream_chunks"],
+    "saved": null
+  },
+  {
+    "argv": [
+      "--queries",
+      "<FIX>/eval/queries.toml",
+      "--table",
+      "stream_chunks",
+      "--no-date-filter",
+      "--verbose"
+    ],
+    "reranker": null,
+    "env": {},
+    "code": 0,
+    "crash": null,
+    "stdout": "\n==============================================================================\n  Table: stream_chunks  (3 queries)\n==============================================================================\n  mode                       R@1     R@3     R@5    R@10     MRR\n  --------------------------------------------------------------\n  vector_only              66.7%   66.7%   66.7%  100.0%   0.700\n  hybrid                   66.7%   66.7%   66.7%   66.7%   0.667\n  hybrid_rerank            66.7%   66.7%   66.7%   66.7%   0.667\n\n\n  ────────────────────────────────────────────────────────────────────────────\n  Per-query ranks for stream_chunks (lower = better, ✗ = miss):\n  ────────────────────────────────────────────────────────────────────────────\n  query                                       vector_only         hybrid  hybrid_rerank\n  26年3月24直播内容                                          #1             #1             #1\n  你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗                #10             #1             #1\n  你梦想是什么                                               #1              ✗              ✗\n",
+    "stderr": "",
+    "logs": [
+      [
+        "WARNING",
+        "hybrid_rerank requested but no reranker is configured — that mode will use LinearCombinationReranker (vector-weighted) as fallback. Set OPENROUTER_API_KEY (and leave RERANK_ENABLED on) for the actual cross-encoder eval."
+      ],
+      ["INFO", "Evaluating stream_chunks — 3 queries × 3 modes (candidates=15, k≤10)"]
+    ],
+    "calls": [
+      ["vector", "stream_chunks", "26年3月24直播内容", 10, null],
+      [
+        "vector",
+        "stream_chunks",
+        "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+        10,
+        null
+      ],
+      ["vector", "stream_chunks", "你梦想是什么", 10, null],
+      ["hybrid", "stream_chunks", "26年3月24直播内容", 15, null, 10, null],
+      [
+        "hybrid",
+        "stream_chunks",
+        "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+        15,
+        null,
+        10,
+        null
+      ],
+      ["hybrid", "stream_chunks", "你梦想是什么", 15, null, 10, null],
+      ["hybrid", "stream_chunks", "26年3月24直播内容", 15, null, 10, null],
+      [
+        "hybrid",
+        "stream_chunks",
+        "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+        15,
+        null,
+        10,
+        null
+      ],
+      ["hybrid", "stream_chunks", "你梦想是什么", 15, null, 10, null]
+    ],
+    "embeds": [
+      "26年3月24直播内容",
+      "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+      "你梦想是什么",
+      "26年3月24直播内容",
+      "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+      "你梦想是什么",
+      "26年3月24直播内容",
+      "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+      "你梦想是什么"
+    ],
+    "opened": ["stream_chunks"],
+    "saved": null
+  },
+  {
+    "argv": [
+      "--queries",
+      "<FIX>/eval/queries.toml",
+      "--save",
+      "<OUT>/sub/metrics.json",
+      "--compare",
+      "<FIX>/eval/baseline.json"
+    ],
+    "reranker": "fake-rerank",
+    "env": {},
+    "code": 0,
+    "crash": null,
+    "stdout": "\n==============================================================================\n  Table: persona_facts  (5 queries)\n==============================================================================\n  mode                       R@1     R@3     R@5    R@10     MRR\n  --------------------------------------------------------------\n  vector_only              20.0%   40.0%   60.0%   60.0%   0.350\n  hybrid                   40.0%   60.0%   60.0%   60.0%   0.500\n  hybrid_rerank            20.0%   60.0%   60.0%   60.0%   0.367\n\n  Misses (best mode = hybrid, 2 of 5):\n    · 这条永远找不到\n    · embedding 返回空\n\n==============================================================================\n  Table: stream_chunks  (3 queries)\n==============================================================================\n  mode                       R@1     R@3     R@5    R@10     MRR\n  --------------------------------------------------------------\n  vector_only              66.7%   66.7%   66.7%  100.0%   0.700\n  hybrid                   66.7%   66.7%   66.7%   66.7%   0.667\n  hybrid_rerank            66.7%  100.0%  100.0%  100.0%   0.833\n\n\n==============================================================================\n  Comparison vs baseline\n==============================================================================\n\n  persona_facts:\n    vector_only           MRR 0.600 → 0.350  ↓0.250\n    hybrid                MRR 0.600 → 0.500  ↓0.100\n\n  stream_chunks:\n    hybrid                MRR 1.000 → 0.667  ↓0.333\n",
+    "stderr": "",
+    "logs": [
+      ["WARNING", "Table ghost_table not found in data/lancedb; skipping."],
+      ["INFO", "Evaluating persona_facts — 5 queries × 3 modes (candidates=30, k≤10)"],
+      ["INFO", "Evaluating stream_chunks — 3 queries × 3 modes (candidates=15, k≤10)"],
+      ["INFO", "Saved metrics to <OUT>/sub/metrics.json"]
+    ],
+    "calls": [
+      ["vector", "persona_facts", "你梦想是什么", 10, null],
+      ["vector", "persona_facts", "坚果体重多少斤", 10, null],
+      ["vector", "persona_facts", "你2026年5月9号说了什么", 10, "date = '2026-05-09'"],
+      ["vector", "persona_facts", "这条永远找不到", 10, null],
+      ["hybrid", "persona_facts", "你梦想是什么", 30, null, 10, null],
+      ["hybrid", "persona_facts", "坚果体重多少斤", 30, null, 10, null],
+      ["hybrid", "persona_facts", "你2026年5月9号说了什么", 30, "date = '2026-05-09'", 10, null],
+      ["hybrid", "persona_facts", "这条永远找不到", 30, null, 10, null],
+      ["hybrid", "persona_facts", "你梦想是什么", 30, null, 10, "fake-rerank"],
+      ["hybrid", "persona_facts", "坚果体重多少斤", 30, null, 10, "fake-rerank"],
+      [
+        "hybrid",
+        "persona_facts",
+        "你2026年5月9号说了什么",
+        30,
+        "date = '2026-05-09'",
+        10,
+        "fake-rerank"
+      ],
+      ["hybrid", "persona_facts", "这条永远找不到", 30, null, 10, "fake-rerank"],
+      ["vector", "stream_chunks", "26年3月24直播内容", 10, "stream_date = '2026-03-24'"],
+      [
+        "vector",
+        "stream_chunks",
+        "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+        10,
+        null
+      ],
+      ["vector", "stream_chunks", "你梦想是什么", 10, null],
+      ["hybrid", "stream_chunks", "26年3月24直播内容", 15, "stream_date = '2026-03-24'", 10, null],
+      [
+        "hybrid",
+        "stream_chunks",
+        "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+        15,
+        null,
+        10,
+        null
+      ],
+      ["hybrid", "stream_chunks", "你梦想是什么", 15, null, 10, null],
+      [
+        "hybrid",
+        "stream_chunks",
+        "26年3月24直播内容",
+        15,
+        "stream_date = '2026-03-24'",
+        10,
+        "fake-rerank"
+      ],
+      [
+        "hybrid",
+        "stream_chunks",
+        "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+        15,
+        null,
+        10,
+        "fake-rerank"
+      ],
+      ["hybrid", "stream_chunks", "你梦想是什么", 15, null, 10, "fake-rerank"]
+    ],
+    "embeds": [
+      "你梦想是什么",
+      "坚果体重多少斤",
+      "你2026年5月9号说了什么",
+      "这条永远找不到",
+      "embedding 返回空",
+      "你梦想是什么",
+      "坚果体重多少斤",
+      "你2026年5月9号说了什么",
+      "这条永远找不到",
+      "embedding 返回空",
+      "你梦想是什么",
+      "坚果体重多少斤",
+      "你2026年5月9号说了什么",
+      "这条永远找不到",
+      "embedding 返回空",
+      "26年3月24直播内容",
+      "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+      "你梦想是什么",
+      "26年3月24直播内容",
+      "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+      "你梦想是什么",
+      "26年3月24直播内容",
+      "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+      "你梦想是什么"
+    ],
+    "opened": ["persona_facts", "stream_chunks"],
+    "saved": "{\n  \"persona_facts\": {\n    \"vector_only\": {\n      \"recall_at\": {\n        \"1\": 0.2,\n        \"3\": 0.4,\n        \"5\": 0.6,\n        \"10\": 0.6\n      },\n      \"mrr\": 0.35,\n      \"n_queries\": 5,\n      \"miss_count\": 2\n    },\n    \"hybrid\": {\n      \"recall_at\": {\n        \"1\": 0.4,\n        \"3\": 0.6,\n        \"5\": 0.6,\n        \"10\": 0.6\n      },\n      \"mrr\": 0.5,\n      \"n_queries\": 5,\n      \"miss_count\": 2\n    },\n    \"hybrid_rerank\": {\n      \"recall_at\": {\n        \"1\": 0.2,\n        \"3\": 0.6,\n        \"5\": 0.6,\n        \"10\": 0.6\n      },\n      \"mrr\": 0.36666666666666664,\n      \"n_queries\": 5,\n      \"miss_count\": 2\n    }\n  },\n  \"stream_chunks\": {\n    \"vector_only\": {\n      \"recall_at\": {\n        \"1\": 0.6666666666666666,\n        \"3\": 0.6666666666666666,\n        \"5\": 0.6666666666666666,\n        \"10\": 1.0\n      },\n      \"mrr\": 0.7000000000000001,\n      \"n_queries\": 3,\n      \"miss_count\": 0\n    },\n    \"hybrid\": {\n      \"recall_at\": {\n        \"1\": 0.6666666666666666,\n        \"3\": 0.6666666666666666,\n        \"5\": 0.6666666666666666,\n        \"10\": 0.6666666666666666\n      },\n      \"mrr\": 0.6666666666666666,\n      \"n_queries\": 3,\n      \"miss_count\": 1\n    },\n    \"hybrid_rerank\": {\n      \"recall_at\": {\n        \"1\": 0.6666666666666666,\n        \"3\": 1.0,\n        \"5\": 1.0,\n        \"10\": 1.0\n      },\n      \"mrr\": 0.8333333333333334,\n      \"n_queries\": 3,\n      \"miss_count\": 0\n    }\n  }\n}"
+  },
+  {
+    "argv": [
+      "--queries",
+      "<FIX>/eval/queries.toml",
+      "--modes",
+      "vector_only",
+      "--compare",
+      "<OUT>/missing_baseline.json"
+    ],
+    "reranker": null,
+    "env": {},
+    "code": 1,
+    "crash": null,
+    "stdout": "\n==============================================================================\n  Table: persona_facts  (5 queries)\n==============================================================================\n  mode                       R@1     R@3     R@5    R@10     MRR\n  --------------------------------------------------------------\n  vector_only              20.0%   40.0%   60.0%   60.0%   0.350\n\n  Misses (best mode = vector_only, 2 of 5):\n    · 这条永远找不到\n    · embedding 返回空\n\n==============================================================================\n  Table: stream_chunks  (3 queries)\n==============================================================================\n  mode                       R@1     R@3     R@5    R@10     MRR\n  --------------------------------------------------------------\n  vector_only              66.7%   66.7%   66.7%  100.0%   0.700\n\n",
+    "stderr": "",
+    "logs": [
+      ["WARNING", "Table ghost_table not found in data/lancedb; skipping."],
+      ["INFO", "Evaluating persona_facts — 5 queries × 1 modes (candidates=30, k≤10)"],
+      ["INFO", "Evaluating stream_chunks — 3 queries × 1 modes (candidates=15, k≤10)"],
+      ["ERROR", "Baseline file not found: <OUT>/missing_baseline.json"]
+    ],
+    "calls": [
+      ["vector", "persona_facts", "你梦想是什么", 10, null],
+      ["vector", "persona_facts", "坚果体重多少斤", 10, null],
+      ["vector", "persona_facts", "你2026年5月9号说了什么", 10, "date = '2026-05-09'"],
+      ["vector", "persona_facts", "这条永远找不到", 10, null],
+      ["vector", "stream_chunks", "26年3月24直播内容", 10, "stream_date = '2026-03-24'"],
+      [
+        "vector",
+        "stream_chunks",
+        "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+        10,
+        null
+      ],
+      ["vector", "stream_chunks", "你梦想是什么", 10, null]
+    ],
+    "embeds": [
+      "你梦想是什么",
+      "坚果体重多少斤",
+      "你2026年5月9号说了什么",
+      "这条永远找不到",
+      "embedding 返回空",
+      "26年3月24直播内容",
+      "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+      "你梦想是什么"
+    ],
+    "opened": ["persona_facts", "stream_chunks"],
+    "saved": null
+  },
+  {
+    "argv": ["--queries", "<FIX>/eval/missing.toml"],
+    "reranker": null,
+    "env": {},
+    "code": 1,
+    "crash": ["FileNotFoundError", "Queries file not found: <FIX>/eval/missing.toml"],
+    "stdout": "",
+    "stderr": "",
+    "logs": [],
+    "calls": [],
+    "embeds": [],
+    "opened": [],
+    "saved": null
+  },
+  {
+    "argv": ["--queries", "<FIX>/eval/empty.toml"],
+    "reranker": null,
+    "env": {},
+    "code": 1,
+    "crash": ["ValueError", "No [[query]] entries in <FIX>/eval/empty.toml"],
+    "stdout": "",
+    "stderr": "",
+    "logs": [],
+    "calls": [],
+    "embeds": [],
+    "opened": [],
+    "saved": null
+  },
+  {
+    "argv": ["--queries", "<FIX>/eval/missing_field.toml"],
+    "reranker": null,
+    "env": {},
+    "code": 1,
+    "crash": [
+      "ValueError",
+      "Query #0 in <FIX>/eval/missing_field.toml missing required field 'text'"
+    ],
+    "stdout": "",
+    "stderr": "",
+    "logs": [],
+    "calls": [],
+    "embeds": [],
+    "opened": [],
+    "saved": null
+  },
+  {
+    "argv": ["--queries", "<FIX>/eval/facts_only.toml", "--table", "stream_chunks"],
+    "reranker": null,
+    "env": {},
+    "code": 1,
+    "crash": null,
+    "stdout": "",
+    "stderr": "",
+    "logs": [["ERROR", "No queries to evaluate (post-filter)."]],
+    "calls": [],
+    "embeds": [],
+    "opened": [],
+    "saved": null
+  },
+  {
+    "argv": ["--queries", "<FIX>/eval/queries.toml", "--rerank-models", "m1", "dead", "m2", "bad"],
+    "reranker": null,
+    "env": {
+      "OPENROUTER_API_KEY": "k"
+    },
+    "code": 0,
+    "crash": null,
+    "stdout": "\n========================================================================================\n  Reranker model benchmark — persona_facts  (5 queries)\n========================================================================================\n  model                           R@1    R@3    R@5   R@10    MRR    mean     p50     p95\n  ---------------------------------------------------------------------------------------\n  m1                            60.0%  60.0%  60.0%  60.0%  0.600    338m    125m   1000m\n  m2                            20.0%  40.0%  40.0%  40.0%  0.267    338m    125m   1000m\n  bad                           25.0%  25.0%  25.0%  25.0%  0.250     94m     62m    250m\n  dead                           0.0%   0.0%   0.0%   0.0%  0.000      0m      0m      0m\n  (latency is end-to-end hybrid_search wall-clock in ms; lower is better)\n\n========================================================================================\n  Reranker model benchmark — stream_chunks  (3 queries)\n========================================================================================\n  model                           R@1    R@3    R@5   R@10    MRR    mean     p50     p95\n  ---------------------------------------------------------------------------------------\n  m1                             0.0%   0.0%   0.0%   0.0%  0.000    583m    500m   1000m\n  m2                             0.0%   0.0%   0.0%   0.0%  0.000    438m    250m   1000m\n  bad                            0.0%   0.0%   0.0%   0.0%  0.000    583m    500m   1000m\n  (latency is end-to-end hybrid_search wall-clock in ms; lower is better)\n",
+    "stderr": "",
+    "logs": [
+      ["WARNING", "Table ghost_table not found in data/lancedb; skipping."],
+      [
+        "INFO",
+        "Benchmarking 4 reranker(s) on persona_facts — 5 queries × 4 models (candidates=30)"
+      ],
+      ["WARNING", "Warmup failed for dead (model gone); proceeding"],
+      ["ERROR", "dead failed on query '你梦想是什么': model gone"],
+      ["ERROR", "dead failed on query '坚果体重多少斤': model gone"],
+      ["ERROR", "dead failed on query '你2026年5月9号说了什么': model gone"],
+      ["ERROR", "dead failed on query '这条永远找不到': model gone"],
+      ["ERROR", "bad failed on query '坚果体重多少斤': upstream 500"],
+      [
+        "INFO",
+        "Benchmarking 4 reranker(s) on stream_chunks — 3 queries × 4 models (candidates=15)"
+      ],
+      ["WARNING", "Warmup failed for dead (model gone); proceeding"],
+      ["ERROR", "dead failed on query '26年3月24直播内容': model gone"],
+      [
+        "ERROR",
+        "dead failed on query '你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗': model gone"
+      ],
+      ["ERROR", "dead failed on query '你梦想是什么': model gone"]
+    ],
+    "calls": [
+      ["hybrid", "persona_facts", "你梦想是什么", 30, null, 10, "m1"],
+      ["hybrid", "persona_facts", "你梦想是什么", 30, null, 10, "m1"],
+      ["hybrid", "persona_facts", "坚果体重多少斤", 30, null, 10, "m1"],
+      ["hybrid", "persona_facts", "你2026年5月9号说了什么", 30, "date = '2026-05-09'", 10, "m1"],
+      ["hybrid", "persona_facts", "这条永远找不到", 30, null, 10, "m1"],
+      ["hybrid", "persona_facts", "你梦想是什么", 30, null, 10, "dead"],
+      ["hybrid", "persona_facts", "你梦想是什么", 30, null, 10, "dead"],
+      ["hybrid", "persona_facts", "坚果体重多少斤", 30, null, 10, "dead"],
+      ["hybrid", "persona_facts", "你2026年5月9号说了什么", 30, "date = '2026-05-09'", 10, "dead"],
+      ["hybrid", "persona_facts", "这条永远找不到", 30, null, 10, "dead"],
+      ["hybrid", "persona_facts", "你梦想是什么", 30, null, 10, "m2"],
+      ["hybrid", "persona_facts", "你梦想是什么", 30, null, 10, "m2"],
+      ["hybrid", "persona_facts", "坚果体重多少斤", 30, null, 10, "m2"],
+      ["hybrid", "persona_facts", "你2026年5月9号说了什么", 30, "date = '2026-05-09'", 10, "m2"],
+      ["hybrid", "persona_facts", "这条永远找不到", 30, null, 10, "m2"],
+      ["hybrid", "persona_facts", "你梦想是什么", 30, null, 10, "bad"],
+      ["hybrid", "persona_facts", "你梦想是什么", 30, null, 10, "bad"],
+      ["hybrid", "persona_facts", "坚果体重多少斤", 30, null, 10, "bad"],
+      ["hybrid", "persona_facts", "你2026年5月9号说了什么", 30, "date = '2026-05-09'", 10, "bad"],
+      ["hybrid", "persona_facts", "这条永远找不到", 30, null, 10, "bad"],
+      ["hybrid", "stream_chunks", "26年3月24直播内容", 15, "stream_date = '2026-03-24'", 10, "m1"],
+      ["hybrid", "stream_chunks", "26年3月24直播内容", 15, "stream_date = '2026-03-24'", 10, "m1"],
+      [
+        "hybrid",
+        "stream_chunks",
+        "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+        15,
+        null,
+        10,
+        "m1"
+      ],
+      ["hybrid", "stream_chunks", "你梦想是什么", 15, null, 10, "m1"],
+      [
+        "hybrid",
+        "stream_chunks",
+        "26年3月24直播内容",
+        15,
+        "stream_date = '2026-03-24'",
+        10,
+        "dead"
+      ],
+      [
+        "hybrid",
+        "stream_chunks",
+        "26年3月24直播内容",
+        15,
+        "stream_date = '2026-03-24'",
+        10,
+        "dead"
+      ],
+      [
+        "hybrid",
+        "stream_chunks",
+        "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+        15,
+        null,
+        10,
+        "dead"
+      ],
+      ["hybrid", "stream_chunks", "你梦想是什么", 15, null, 10, "dead"],
+      ["hybrid", "stream_chunks", "26年3月24直播内容", 15, "stream_date = '2026-03-24'", 10, "m2"],
+      ["hybrid", "stream_chunks", "26年3月24直播内容", 15, "stream_date = '2026-03-24'", 10, "m2"],
+      [
+        "hybrid",
+        "stream_chunks",
+        "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+        15,
+        null,
+        10,
+        "m2"
+      ],
+      ["hybrid", "stream_chunks", "你梦想是什么", 15, null, 10, "m2"],
+      ["hybrid", "stream_chunks", "26年3月24直播内容", 15, "stream_date = '2026-03-24'", 10, "bad"],
+      ["hybrid", "stream_chunks", "26年3月24直播内容", 15, "stream_date = '2026-03-24'", 10, "bad"],
+      [
+        "hybrid",
+        "stream_chunks",
+        "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+        15,
+        null,
+        10,
+        "bad"
+      ],
+      ["hybrid", "stream_chunks", "你梦想是什么", 15, null, 10, "bad"]
+    ],
+    "embeds": [
+      "你梦想是什么",
+      "你梦想是什么",
+      "坚果体重多少斤",
+      "你2026年5月9号说了什么",
+      "这条永远找不到",
+      "embedding 返回空",
+      "你梦想是什么",
+      "你梦想是什么",
+      "坚果体重多少斤",
+      "你2026年5月9号说了什么",
+      "这条永远找不到",
+      "embedding 返回空",
+      "你梦想是什么",
+      "你梦想是什么",
+      "坚果体重多少斤",
+      "你2026年5月9号说了什么",
+      "这条永远找不到",
+      "embedding 返回空",
+      "你梦想是什么",
+      "你梦想是什么",
+      "坚果体重多少斤",
+      "你2026年5月9号说了什么",
+      "这条永远找不到",
+      "embedding 返回空",
+      "26年3月24直播内容",
+      "26年3月24直播内容",
+      "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+      "你梦想是什么",
+      "26年3月24直播内容",
+      "26年3月24直播内容",
+      "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+      "你梦想是什么",
+      "26年3月24直播内容",
+      "26年3月24直播内容",
+      "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+      "你梦想是什么",
+      "26年3月24直播内容",
+      "26年3月24直播内容",
+      "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+      "你梦想是什么"
+    ],
+    "opened": ["persona_facts", "stream_chunks"],
+    "saved": null
+  },
+  {
+    "argv": ["--queries", "<FIX>/eval/queries.toml", "--rerank-models", "m1"],
+    "reranker": null,
+    "env": {},
+    "code": 0,
+    "crash": null,
+    "stdout": "",
+    "stderr": "",
+    "logs": [
+      ["WARNING", "Table ghost_table not found in data/lancedb; skipping."],
+      [
+        "INFO",
+        "Benchmarking 1 reranker(s) on persona_facts — 5 queries × 1 models (candidates=30)"
+      ],
+      [
+        "ERROR",
+        "Skipping m1: --rerank-models requires RERANK_API_KEY or OPENROUTER_API_KEY in .env (no key = nothing to benchmark, since the fallback path is the same RRF for every 'model')."
+      ],
+      [
+        "INFO",
+        "Benchmarking 1 reranker(s) on stream_chunks — 3 queries × 1 models (candidates=15)"
+      ],
+      [
+        "ERROR",
+        "Skipping m1: --rerank-models requires RERANK_API_KEY or OPENROUTER_API_KEY in .env (no key = nothing to benchmark, since the fallback path is the same RRF for every 'model')."
+      ]
+    ],
+    "calls": [],
+    "embeds": [],
+    "opened": ["persona_facts", "stream_chunks"],
+    "saved": null
+  },
+  {
+    "argv": [
+      "--queries",
+      "<FIX>/eval/queries.toml",
+      "--db-path",
+      "elsewhere",
+      "--save",
+      "<OUT>/empty.json"
+    ],
+    "reranker": null,
+    "env": {},
+    "code": 0,
+    "crash": null,
+    "stdout": "",
+    "stderr": "",
+    "logs": [
+      [
+        "WARNING",
+        "hybrid_rerank requested but no reranker is configured — that mode will use LinearCombinationReranker (vector-weighted) as fallback. Set OPENROUTER_API_KEY (and leave RERANK_ENABLED on) for the actual cross-encoder eval."
+      ],
+      ["WARNING", "Table ghost_table not found in elsewhere; skipping."],
+      ["WARNING", "Table persona_facts not found in elsewhere; skipping."],
+      ["WARNING", "Table stream_chunks not found in elsewhere; skipping."],
+      ["INFO", "Saved metrics to <OUT>/empty.json"]
+    ],
+    "calls": [],
+    "embeds": [],
+    "opened": [],
+    "saved": "{}"
+  },
+  {
+    "argv": [
+      "--queries",
+      "<FIX>/eval/queries.toml",
+      "--facts-candidates",
+      "7",
+      "--stream-candidates",
+      "3",
+      "--modes",
+      "hybrid_rerank"
+    ],
+    "reranker": null,
+    "env": {},
+    "code": 0,
+    "crash": null,
+    "stdout": "\n==============================================================================\n  Table: persona_facts  (5 queries)\n==============================================================================\n  mode                       R@1     R@3     R@5    R@10     MRR\n  --------------------------------------------------------------\n  hybrid_rerank            40.0%   60.0%   60.0%   60.0%   0.500\n\n  Misses (best mode = hybrid_rerank, 2 of 5):\n    · 这条永远找不到\n    · embedding 返回空\n\n==============================================================================\n  Table: stream_chunks  (3 queries)\n==============================================================================\n  mode                       R@1     R@3     R@5    R@10     MRR\n  --------------------------------------------------------------\n  hybrid_rerank            66.7%   66.7%   66.7%   66.7%   0.667\n\n  Misses (best mode = hybrid_rerank, 1 of 3):\n    · 你梦想是什么\n",
+    "stderr": "",
+    "logs": [
+      [
+        "WARNING",
+        "hybrid_rerank requested but no reranker is configured — that mode will use LinearCombinationReranker (vector-weighted) as fallback. Set OPENROUTER_API_KEY (and leave RERANK_ENABLED on) for the actual cross-encoder eval."
+      ],
+      ["WARNING", "Table ghost_table not found in data/lancedb; skipping."],
+      ["INFO", "Evaluating persona_facts — 5 queries × 1 modes (candidates=7, k≤10)"],
+      ["INFO", "Evaluating stream_chunks — 3 queries × 1 modes (candidates=3, k≤10)"]
+    ],
+    "calls": [
+      ["hybrid", "persona_facts", "你梦想是什么", 7, null, 10, null],
+      ["hybrid", "persona_facts", "坚果体重多少斤", 7, null, 10, null],
+      ["hybrid", "persona_facts", "你2026年5月9号说了什么", 7, "date = '2026-05-09'", 10, null],
+      ["hybrid", "persona_facts", "这条永远找不到", 7, null, 10, null],
+      ["hybrid", "stream_chunks", "26年3月24直播内容", 3, "stream_date = '2026-03-24'", 10, null],
+      [
+        "hybrid",
+        "stream_chunks",
+        "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+        3,
+        null,
+        10,
+        null
+      ],
+      ["hybrid", "stream_chunks", "你梦想是什么", 3, null, 10, null]
+    ],
+    "embeds": [
+      "你梦想是什么",
+      "坚果体重多少斤",
+      "你2026年5月9号说了什么",
+      "这条永远找不到",
+      "embedding 返回空",
+      "26年3月24直播内容",
+      "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+      "你梦想是什么"
+    ],
+    "opened": ["persona_facts", "stream_chunks"],
+    "saved": null
+  },
+  {
+    "argv": ["--queries", "<FIX>/eval/queries.toml", "--modes", "hybrid_rerank", "vector_only"],
+    "reranker": "fake-rerank",
+    "env": {},
+    "code": 0,
+    "crash": null,
+    "stdout": "\n==============================================================================\n  Table: persona_facts  (5 queries)\n==============================================================================\n  mode                       R@1     R@3     R@5    R@10     MRR\n  --------------------------------------------------------------\n  vector_only              20.0%   40.0%   60.0%   60.0%   0.350\n  hybrid_rerank            20.0%   60.0%   60.0%   60.0%   0.367\n\n  Misses (best mode = hybrid_rerank, 2 of 5):\n    · 这条永远找不到\n    · embedding 返回空\n\n==============================================================================\n  Table: stream_chunks  (3 queries)\n==============================================================================\n  mode                       R@1     R@3     R@5    R@10     MRR\n  --------------------------------------------------------------\n  vector_only              66.7%   66.7%   66.7%  100.0%   0.700\n  hybrid_rerank            66.7%  100.0%  100.0%  100.0%   0.833\n\n",
+    "stderr": "",
+    "logs": [
+      ["WARNING", "Table ghost_table not found in data/lancedb; skipping."],
+      ["INFO", "Evaluating persona_facts — 5 queries × 2 modes (candidates=30, k≤10)"],
+      ["INFO", "Evaluating stream_chunks — 3 queries × 2 modes (candidates=15, k≤10)"]
+    ],
+    "calls": [
+      ["hybrid", "persona_facts", "你梦想是什么", 30, null, 10, "fake-rerank"],
+      ["hybrid", "persona_facts", "坚果体重多少斤", 30, null, 10, "fake-rerank"],
+      [
+        "hybrid",
+        "persona_facts",
+        "你2026年5月9号说了什么",
+        30,
+        "date = '2026-05-09'",
+        10,
+        "fake-rerank"
+      ],
+      ["hybrid", "persona_facts", "这条永远找不到", 30, null, 10, "fake-rerank"],
+      ["vector", "persona_facts", "你梦想是什么", 10, null],
+      ["vector", "persona_facts", "坚果体重多少斤", 10, null],
+      ["vector", "persona_facts", "你2026年5月9号说了什么", 10, "date = '2026-05-09'"],
+      ["vector", "persona_facts", "这条永远找不到", 10, null],
+      [
+        "hybrid",
+        "stream_chunks",
+        "26年3月24直播内容",
+        15,
+        "stream_date = '2026-03-24'",
+        10,
+        "fake-rerank"
+      ],
+      [
+        "hybrid",
+        "stream_chunks",
+        "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+        15,
+        null,
+        10,
+        "fake-rerank"
+      ],
+      ["hybrid", "stream_chunks", "你梦想是什么", 15, null, 10, "fake-rerank"],
+      ["vector", "stream_chunks", "26年3月24直播内容", 10, "stream_date = '2026-03-24'"],
+      [
+        "vector",
+        "stream_chunks",
+        "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+        10,
+        null
+      ],
+      ["vector", "stream_chunks", "你梦想是什么", 10, null]
+    ],
+    "embeds": [
+      "你梦想是什么",
+      "坚果体重多少斤",
+      "你2026年5月9号说了什么",
+      "这条永远找不到",
+      "embedding 返回空",
+      "你梦想是什么",
+      "坚果体重多少斤",
+      "你2026年5月9号说了什么",
+      "这条永远找不到",
+      "embedding 返回空",
+      "26年3月24直播内容",
+      "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+      "你梦想是什么",
+      "26年3月24直播内容",
+      "你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗你拔过智齿吗",
+      "你梦想是什么"
+    ],
+    "opened": ["persona_facts", "stream_chunks"],
+    "saved": null
+  }
+]

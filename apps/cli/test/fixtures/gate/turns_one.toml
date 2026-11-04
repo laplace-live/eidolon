@@ -1,0 +1,4 @@
+[[turn]]
+set = "dev"
+text = "你梦想是什么"
+recall = true

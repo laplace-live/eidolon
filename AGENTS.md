@@ -19,6 +19,10 @@ else — Mem0, the reranker, the retrieval gate, both RAG indexes — degrades
 quietly when its key, table, or vector store is missing, so a fresh checkout
 runs.
 
+A TypeScript/Bun port of the runtime half lives beside it in `apps/` and
+`packages/`, built on pipedog. The Python bot stays in production until cutover;
+both read the same LanceDB and Qdrant collection.
+
 ## Repository layout
 
 ```text
@@ -50,6 +54,8 @@ streams/              transcripts <id>.md + <id>.refined.json sidecars (untracke
 vods/                 downloaded audio + .info.json sidecars (untracked)
 docs/                 the topics too large to inline here
 tests/                pytest — no network, no LanceDB
+packages/             the TypeScript port, one Bun workspace package per subsystem
+apps/bot/             its HTTP server, routes, MCP and entry point; apps/cli/ its CLIs
 ```
 
 ## Where to look
@@ -69,6 +75,7 @@ a row here and writing the prose there — not a new section in this file.**
 | broadcast overviews, date-scoped recall, or the archive lookup tool | [stream-recall.md](docs/stream-recall.md) |
 | the `take_selfie` tool, image generation, or `/api/selfie` | [selfies.md](docs/selfies.md) |
 | the retrieval gate, or why a turn skipped LanceDB | [retrieval-gate.md](docs/retrieval-gate.md) |
+| anything under `apps/` or `packages/` (the TypeScript port) | [typescript.md](docs/typescript.md) |
 
 ## Commands
 
@@ -102,6 +109,16 @@ uv run laplace-import-mem0       # load that dump into a Qdrant; idempotent, res
 uv run laplace-generate-image    # prompt + reference images → a PNG, via OpenRouter's image API
 ```
 
+The TypeScript port:
+
+```bash
+bun install
+bun run dev --port 7861                # watch mode, beside the Python bot; `start` without watch
+bun run typecheck && bun run lint && bun run test
+bun run laplace-search / laplace-eval-retrieval / laplace-generate-image / gate-decisions
+docker compose --profile ts up --build # bot-ts on :7861
+```
+
 ### Which checks to run
 
 Match the gate to the surface you touched; don't reflexively run everything.
@@ -118,6 +135,7 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | `persona.md`'s 表演提示 markup, or `FISH_MODEL` | `uv run python docs/benchmarks/2026-10-17-drama-3-markup/render.py` (add `--model` for another model) — any `leaked` entry in its results means markup is read aloud. Billed per character |
 | `mem0_local.py`, `memory_service.py`, or `memory_admin.py` | `docker compose up qdrant`, then round-trip a real store → search → delete. No test covers Mem0; it needs a live vector store and an embedding key |
 | an env var | document it in `.env.example` in the same commit |
+| anything under `apps/` or `packages/` | `bun run typecheck`, `bun run lint`, `bun run test`; for retrieval, the gate or the pipeline, the TypeScript CLI or call that matches the Python row above |
 
 ## Rules
 
@@ -171,6 +189,18 @@ module that owns it.
   selfie with one friend came back with three people in frame. `select_outfit`
   picks one by the hour, behind `reference_sources`, the choke point the bot
   and `laplace-generate-image` share.
+
+### TypeScript port
+
+- **Only `packages/runtime` imports `@pipedog/*`.** Biome enforces it; every
+  other package must stay usable without a pipeline.
+- **`load-env.ts` is the only `.env` reader.** `bunfig.toml` sets `env = false`
+  and tests pass `--no-env-file`; no module reads env at import.
+- **The werift patches in `packages/runtime/src/webrtc/handler.ts` are
+  load-bearing** — no default STUN server, disconnect on DTLS close, relay-only,
+  the `raddr` scrub. Each one's failure mode is in [typescript.md](docs/typescript.md).
+- **Python is the behavioral spec until cutover.** A golden fixture that fails
+  means the port drifted; fix the port, not the fixture.
 
 ### Identity and quotas
 
