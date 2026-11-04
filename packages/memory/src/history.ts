@@ -109,11 +109,17 @@ export class HistoryStore {
     this.#newId = options.newId ?? (() => crypto.randomUUID());
     this.#clock = options.clock ?? wallClockMicros;
     this.#db = new Database(path);
-    // Python's sqlite3 waits 5 s on a locked database by default; bun:sqlite does not wait.
-    this.#db.exec("PRAGMA busy_timeout = 5000");
-    this.#transaction("History table migration failed", () => this.#migrate());
-    this.#transaction("Failed to create history table", () => this.#db.run(CREATE_HISTORY));
-    this.#transaction("Failed to create messages table", () => this.#db.run(CREATE_MESSAGES));
+    try {
+      // Python's sqlite3 waits 5 s on a locked database by default; bun:sqlite does not wait.
+      this.#db.exec("PRAGMA busy_timeout = 5000");
+      this.#transaction("History table migration failed", () => this.#migrate());
+      this.#transaction("Failed to create history table", () => this.#db.run(CREATE_HISTORY));
+      this.#transaction("Failed to create messages table", () => this.#db.run(CREATE_MESSAGES));
+    } catch (error) {
+      // SharedEngine retries a failed open per session, so each failure would leak a handle.
+      this.#db.close();
+      throw error;
+    }
   }
 
   /** mem0's `_migrate_history_table`: rebuild a `history` table whose columns predate its schema. */

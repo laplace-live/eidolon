@@ -21,7 +21,7 @@ runs.
 
 A TypeScript/Bun port of the runtime half lives beside it in `apps/` and
 `packages/`, built on pipedog. The Python bot stays in production until cutover;
-both read the same LanceDB, Qdrant collection and Mem0 history.
+both read the same LanceDB and Qdrant collection.
 
 ## Repository layout
 

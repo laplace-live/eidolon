@@ -72,7 +72,7 @@ export class OpenAIClient implements JsonPoster {
     for (let retriesTaken = 0; ; retriesTaken++) {
       const remaining = this.#maxRetries - retriesTaken;
       let response: Response;
-      let text: string | null = null;
+      let text: string;
       try {
         response = await this.#fetch(url, {
           method: "POST",
@@ -85,7 +85,7 @@ export class OpenAIClient implements JsonPoster {
           signal: AbortSignal.timeout(this.#timeoutMs),
         });
         // httpx reads a non-streamed body inside send(), so openai-python retries a reset mid-body.
-        if (response.ok) text = await response.text();
+        text = await response.text();
       } catch (error) {
         const timedOut = error instanceof Error && error.name === "TimeoutError";
         if (remaining > 0) {
@@ -96,13 +96,12 @@ export class OpenAIClient implements JsonPoster {
           ? pyError("APITimeoutError", "Request timed out.")
           : pyError("APIConnectionError", "Connection error.");
       }
-      if (text !== null) return JSON.parse(text);
+      if (response.ok) return JSON.parse(text);
       if (remaining > 0 && shouldRetry(response.status, response.headers)) {
-        await response.body?.cancel();
         await this.#sleep(retryDelaySeconds(retriesTaken, response.headers, this.#random) * 1000);
         continue;
       }
-      throw statusError(response.status, await response.text());
+      throw statusError(response.status, text);
     }
   }
 }

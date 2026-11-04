@@ -213,6 +213,17 @@ describe("the SDK's retry policy", () => {
     const { http, seen } = client([reset, json({ ok: true })]);
     expect(await http.post("x", {})).toEqual({ ok: true });
     expect(seen).toHaveLength(2);
+    const errorReset = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.error(new TypeError("socket reset"));
+        },
+      }),
+      { status: 400 },
+    );
+    const second = client([errorReset, json({ ok: 2 })]);
+    expect(await second.http.post("x", {})).toEqual({ ok: 2 });
+    expect(second.seen).toHaveLength(2);
   });
 
   test("connection errors and timeouts retry twice, then raise the SDK's errors", async () => {

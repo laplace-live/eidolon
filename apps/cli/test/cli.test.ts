@@ -34,6 +34,10 @@ test("no command, or an unknown one, is a usage error", async () => {
       ["serach"],
       "argument command: invalid choice: 'serach' (choose from search, eval-retrieval, generate-image, gate-decisions)",
     ],
+    [
+      ["toString"],
+      "argument command: invalid choice: 'toString' (choose from search, eval-retrieval, generate-image, gate-decisions)",
+    ],
   ] as const) {
     const io = captureIo();
     expect(await runCli(argv, io.io)).toBe(2);

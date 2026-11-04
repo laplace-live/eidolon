@@ -43,7 +43,7 @@ export async function runCli(argv: readonly string[], deps: Partial<CliIo> = {})
     io.stdout(CLI_HELP);
     return 0;
   }
-  const command = name === undefined ? undefined : COMMANDS[name];
+  const command = name === undefined || !Object.hasOwn(COMMANDS, name) ? undefined : COMMANDS[name];
   if (command === undefined) {
     const message =
       name === undefined

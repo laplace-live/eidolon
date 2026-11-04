@@ -30,7 +30,8 @@ touches pipedog: `packages/runtime` adapts both. Clients (the `/ai` page today; 
 later) talk to `apps/bot` over the same HTTP and RTVI contract the Python bot serves.
 
 The offline chain (download, transcribe, refine, ingest) stays Python. Both runtimes read the
-same `data/lancedb`, the same Qdrant collection and the same Mem0 `history.db`.
+same `data/lancedb` and the same Qdrant collection. Mem0's `history.db` has the same schema, but
+the compose `bot-ts` service keeps its own volume, so each runtime's change log records only its own events.
 
 ## Commands
 

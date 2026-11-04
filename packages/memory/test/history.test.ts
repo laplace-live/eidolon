@@ -1,10 +1,22 @@
 import { Database } from "bun:sqlite";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { HistoryStore } from "../src/history.ts";
 import fixtures from "./fixtures/text.json";
 import { pinned, tempPath } from "./support.ts";
 
 describe("HistoryStore", () => {
+  test("a failed open closes the handle it opened", async () => {
+    const path = tempPath("history.db");
+    await Bun.write(path, "not a database, just text that is long enough to be read as a header");
+    const close = spyOn(Database.prototype, "close");
+    try {
+      expect(() => new HistoryStore(path)).toThrow();
+      expect(close).toHaveBeenCalledTimes(1);
+    } finally {
+      close.mockRestore();
+    }
+  });
+
   test("a fresh file gets mem0's two tables", () => {
     const path = tempPath("history.db");
     new HistoryStore(path).close();
