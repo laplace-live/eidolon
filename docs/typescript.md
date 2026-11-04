@@ -1,9 +1,9 @@
 # The TypeScript port
 
 A Bun/TypeScript rewrite of the bot, built on [pipedog](https://github.com/polvallverdu/pipedog) (a
-TypeScript port of Pipecat) and living beside the Python runtime in this repo. The Python bot is
-still the one in production; the TypeScript bot runs next to it on its own port until cutover.
-Its behavioral spec is the Python code: where the two disagree and no decision below says
+TypeScript port of Pipecat) and living beside the Python runtime in this repo. It has been the
+production bot since 2026-11-04; the Python bot is kept, as `ghcr.io/laplace-live/eidolon-python`,
+until it is retired. Its behavioral spec is the Python code: where the two disagree and no decision below says
 otherwise, Python is right.
 
 ## Layout
@@ -109,9 +109,12 @@ On 2026-11-03, against the Python bot on the same machine and the same day:
 - **Relay-only.** Against a real TURN server (coturn), the answer carries only `typ relay`
   candidates with `raddr 0.0.0.0 rport 0`.
 
+In production on 2026-11-04, a text call to eidolon.vrp.moe over Cloudflare TURN passed the same
+checks, relay-only (the browser's 12 LAN, CGNAT, Tailscale and ULA candidates dropped), with
+offer→connected at 2.8 s.
+
 Still open:
 
-- A call over real Cloudflare TURN (needs the Cloudflare TURN key).
 - A logged-in call from the production host, which also confirms that Workers validation
   accepts Bun's User-Agent.
 - 2 of 13 local audio calls took about 4 s longer to connect. The browser's ICE connected at

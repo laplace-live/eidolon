@@ -20,8 +20,9 @@ quietly when its key, table, or vector store is missing, so a fresh checkout
 runs.
 
 A TypeScript/Bun port of the runtime half lives beside it in `apps/` and
-`packages/`, built on pipedog. The Python bot stays in production until cutover;
-both read the same LanceDB and Qdrant collection.
+`packages/`, built on pipedog. Production has run it (`ghcr.io/laplace-live/eidolon`)
+since 2026-11-04; the Python runtime (`eidolon-python`) stays until it is retired.
+Both read the same LanceDB and Qdrant collection.
 
 ## Repository layout
 
@@ -199,7 +200,7 @@ module that owns it.
 - **The werift patches in `packages/runtime/src/webrtc/handler.ts` are
   load-bearing** — no default STUN server, disconnect on DTLS close, relay-only,
   the `raddr` scrub. Each one's failure mode is in [typescript.md](docs/typescript.md).
-- **Python is the behavioral spec until cutover.** A golden fixture that fails
+- **Python is the behavioral spec until it is retired.** A golden fixture that fails
   means the port drifted; fix the port, not the fixture.
 
 ### Identity and quotas
