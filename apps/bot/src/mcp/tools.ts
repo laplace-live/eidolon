@@ -1,9 +1,15 @@
 // The two search tools: what tools/list advertises and what a tools/call runs.
 import type { SlidingWindowQuota } from "@eidolon/access";
-import { logger, pyStrip, pyStrRepr } from "@eidolon/config";
+import {
+  logger,
+  type PydanticLineError,
+  pyStrip,
+  pyStrRepr,
+  validationErrorText,
+} from "@eidolon/config";
 import { decodeTopics, type Retriever, type SearchRow, scoreOf } from "@eidolon/retrieval";
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
-import { envelopeText, type LineError, validationErrorText } from "./pydantic.ts";
+import { envelopeText } from "./pydantic.ts";
 
 export const SEARCH_PERSONA_FACTS = "search_persona_facts";
 export const SEARCH_STREAMS = "search_streams";
@@ -106,14 +112,14 @@ function failed(name: string, message: string): CallToolResult {
 
 /** pydantic's error for the `<name>Arguments` model of a tool whose one field is `query: str`. */
 function argumentsError(name: string, args: Readonly<Record<string, unknown>>): string {
-  const error: LineError = Object.hasOwn(args, "query")
+  const error: PydanticLineError = Object.hasOwn(args, "query")
     ? {
-        loc: "query",
+        loc: ["query"],
         type: "string_type",
-        message: "Input should be a valid string",
+        msg: "Input should be a valid string",
         input: args.query,
       }
-    : { loc: "query", type: "missing", message: "Field required", input: args };
+    : { loc: ["query"], type: "missing", msg: "Field required", input: args };
   return validationErrorText(`${name}Arguments`, [error]);
 }
 

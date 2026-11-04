@@ -1,6 +1,7 @@
 // Goldens from pydantic-core under the Python venv (to_json and str(ValidationError)).
 import { expect, test } from "bun:test";
-import { envelopeText, pydanticFloat, validationErrorText } from "../../src/mcp/pydantic.ts";
+import { validationErrorText } from "@eidolon/config";
+import { envelopeText, pydanticFloat } from "../../src/mcp/pydantic.ts";
 
 test("floats print as pydantic_core.to_json does", () => {
   const cases: [number, string][] = [
@@ -43,7 +44,7 @@ test("the envelope text keeps counts as ints and scores as floats", () => {
 
 test("input_value truncates past 50 UTF-8 bytes on character boundaries", () => {
   const shown = (input: unknown) =>
-    validationErrorText("M", [{ loc: "query", type: "string_type", message: "m", input }])
+    validationErrorText("M", [{ loc: ["query"], type: "string_type", msg: "m", input }])
       .split("input_value=")[1]
       ?.split(", input_type")[0];
   expect(shown(["a".repeat(46)])).toBe(`['${"a".repeat(46)}']`);
@@ -62,7 +63,7 @@ test("input_value truncates past 50 UTF-8 bytes on character boundaries", () => 
 });
 
 test("the error count is pluralized as pydantic does", () => {
-  const error = { loc: "x", type: "missing", message: "Field required", input: {} };
+  const error = { loc: ["x"], type: "missing", msg: "Field required", input: {} };
   expect(validationErrorText("M", [error])).toStartWith("1 validation error for M\nx\n");
   expect(validationErrorText("M", [error, error])).toStartWith("2 validation errors for M\nx\n");
 });

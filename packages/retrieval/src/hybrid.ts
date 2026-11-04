@@ -2,9 +2,8 @@
 // LanceDB TS's native hybrid RRF ranks from 0 and breaks ties differently from the Python
 // RRFReranker the index was tuned with, so the legs run separately and fuse here. Omitting
 // _distance/_score from select() makes lance log a deprecation WARN per query.
-import { logger } from "@eidolon/config";
+import { errorText, logger, raceAbort } from "@eidolon/config";
 import type { Table } from "@lancedb/lancedb";
-import { errorText } from "./py.ts";
 import { makeReranker, type Reranker } from "./rerank.ts";
 import { tokenizeZhQuery } from "./tokenize.ts";
 
@@ -48,29 +47,6 @@ function rowColumns(table: Table): Promise<string[]> {
 
 function plainRows(rows: readonly unknown[]): SearchRow[] {
   return rows.map((row) => ({ ...(row as SearchRow) }));
-}
-
-/** Rejects with `signal.reason` on abort; LanceDB can't cancel, so the query runs on unread. */
-function raceAbort<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {
-  if (!signal) return work;
-  if (signal.aborted) {
-    work.catch(() => {});
-    return Promise.reject(signal.reason);
-  }
-  return new Promise<T>((resolveWork, reject) => {
-    const onAbort = () => reject(signal.reason);
-    signal.addEventListener("abort", onAbort, { once: true });
-    work.then(
-      (value) => {
-        signal.removeEventListener("abort", onAbort);
-        resolveWork(value);
-      },
-      (error: unknown) => {
-        signal.removeEventListener("abort", onAbort);
-        reject(error);
-      },
-    );
-  });
 }
 
 // Python LanceDB treats limit <= 0 as unset, which leaves each leg at its default of 10 rows.

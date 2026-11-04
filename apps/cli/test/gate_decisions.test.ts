@@ -2,12 +2,12 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PyFloat } from "@eidolon/config";
 import {
   ask,
   type GateRow,
   gateDecisionsMain,
   median,
-  PyFloat,
   quantilesExclusive,
   runGateDecisions,
   summarize,

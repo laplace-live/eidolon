@@ -1,6 +1,6 @@
 // Date-scoped broadcast overviews and the detailed archive search they bound. The selected scope
 // is per session, so follow-ups like "那周呢？" resolve against what the last recall picked.
-import { zonedClock } from "@eidolon/config";
+import { raceAbort, zonedClock } from "@eidolon/config";
 import {
   addDays,
   type Broadcast,
@@ -14,7 +14,6 @@ import {
   type StreamScope,
   streamScope,
 } from "@eidolon/retrieval";
-import { raceAbort, throwIfAborted } from "./abort.ts";
 
 export const OVERVIEW_FRAME_KEY = "stream_archive_overview";
 
@@ -164,7 +163,7 @@ export class StreamRecall {
     const signal = options.signal;
     const overview = options.overview ?? isStreamOverview(query);
     const broadcasts = scope === null ? [] : await raceAbort(this.select(scope), signal);
-    throwIfAborted(signal);
+    signal?.throwIfAborted();
     const result = recallResult({ scope, overview, broadcasts });
     if (scope !== null && scope.latest !== null && broadcasts.length > 1) {
       result.note = RECALL_NOTES.sameDay;
@@ -191,7 +190,7 @@ export class StreamRecall {
       }),
       signal,
     );
-    throwIfAborted(signal);
+    signal?.throwIfAborted();
     if (result.chunks.length === 0) result.note += RECALL_NOTES.noChunks;
     this.remember(result);
     return result;

@@ -1,4 +1,12 @@
-import { envOptional, envRaw, logger, openrouterHeaders, pyRepr, pyStrip } from "@eidolon/config";
+import {
+  envOptional,
+  envRaw,
+  httpxStatusMessage,
+  logger,
+  openrouterHeaders,
+  pyRepr,
+  pyStrip,
+} from "@eidolon/config";
 
 export const DEFAULT_RERANK_BASE_URL = "https://openrouter.ai/api/v1";
 export const DEFAULT_RERANK_MODEL = "cohere/rerank-4-fast";
@@ -42,30 +50,11 @@ export interface OpenRouterRerankerOptions {
   fetch?: typeof fetch;
 }
 
-const ERROR_KINDS: Record<number, string> = {
-  1: "Informational response",
-  3: "Redirect response",
-  4: "Client error",
-  5: "Server error",
-};
-
 interface Reply {
   readonly status: number;
   readonly statusText: string;
   readonly headers: Headers;
   readonly body: ArrayBuffer;
-}
-
-/** httpx's `raise_for_status` message. */
-function statusError(response: Reply, url: string): Error {
-  const kind = ERROR_KINDS[Math.floor(response.status / 100)] ?? "Invalid status code";
-  const status = `${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
-  const location = response.headers.get("location");
-  return new Error(
-    `${kind} '${status}' for url '${url}'\n` +
-      (location ? `Redirect location: '${location}'\n` : "") +
-      `For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/${response.status}`,
-  );
 }
 
 function parseResults(payload: unknown, count: number): RerankResult[] {
@@ -148,7 +137,9 @@ export class OpenRouterReranker implements Reranker {
       logger.debug(`Rerank 429 on attempt ${attempt}; retrying immediately`);
       response = await post();
     }
-    if (response.status < 200 || response.status >= 300) throw statusError(response, url);
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(httpxStatusMessage(response, url, { anyLocation: true }));
+    }
     return parseResults(JSON.parse(new TextDecoder().decode(response.body)), documents.length);
   }
 }

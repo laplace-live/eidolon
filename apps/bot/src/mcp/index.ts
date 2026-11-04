@@ -4,13 +4,13 @@
 // directly: a redirect built behind a TLS-terminating proxy points at http://, a downgrade MCP SDK
 // clients refuse to follow.
 import {
-  extractBearerToken,
   quotaFromEnv,
+  resolveBearerCaller,
   resolveUserContext,
   type SlidingWindowQuota,
   type UserContext,
 } from "@eidolon/access";
-import { envOptional, logger } from "@eidolon/config";
+import { envOptional, isJsonObject, logger } from "@eidolon/config";
 import {
   openPersonaFactsRetriever,
   openStreamArchiveRetriever,
@@ -103,10 +103,6 @@ interface Deps {
 
 type JsonObject = Record<string, unknown>;
 
-function isJsonObject(value: unknown): value is JsonObject {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 /** Answered verbatim; McpError would prefix its message with "MCP error <code>: ". */
 class JsonRpcError extends Error {
   readonly code: number;
@@ -125,13 +121,8 @@ async function resolveCallerTier(
   clientIp: string,
   deps: Deps,
 ): Promise<CallerTier> {
-  const token = extractBearerToken(authorization);
-  if (token !== null) {
-    const user = await deps.resolveUser(token);
-    if (user.isLoggedIn && user.mid !== null) {
-      return { quota: deps.authQuota, key: String(user.mid), name: "authenticated" };
-    }
-  }
+  const user = await resolveBearerCaller(authorization, deps.resolveUser);
+  if (user !== null) return { quota: deps.authQuota, key: String(user.mid), name: "authenticated" };
   return { quota: deps.anonQuota, key: clientIp, name: "anonymous" };
 }
 

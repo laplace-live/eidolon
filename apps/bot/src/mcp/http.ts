@@ -1,7 +1,6 @@
 // The Python server's HTTP-level checks, with its response bodies: TransportSecurityMiddleware,
 // RequestBodyLimitMiddleware and the streamable-HTTP transport's own gates.
-import { logger, pyStrip } from "@eidolon/config";
-import { validationErrorText } from "./pydantic.ts";
+import { logger, pyStrip, validationErrorText } from "@eidolon/config";
 
 /** RequestBodyLimitMiddleware's default. */
 const MAX_BODY_BYTES = 4 * 1024 * 1024;
@@ -122,9 +121,9 @@ export function bodyTooLargeResponse(): Response {
 /** A body that is JSON but not an object, a batch array included: pydantic's union error. */
 export function notAMessageResponse(value: unknown): Response {
   const errors = MESSAGE_MODELS.map((model) => ({
-    loc: model,
+    loc: [model],
     type: "model_type",
-    message: `Input should be a valid dictionary or instance of ${model}`,
+    msg: `Input should be a valid dictionary or instance of ${model}`,
     input: value,
   }));
   const text = validationErrorText(`union[${MESSAGE_MODELS.join(",")}]`, errors);

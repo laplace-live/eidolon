@@ -1,10 +1,9 @@
 // One LanceDB table searched the way the bot searches it: embed, date pre-filter, hybrid search,
 // and one retry against the stale handle a concurrent re-ingest leaves behind.
-import { logger, pyFixed, pyRepr } from "@eidolon/config";
+import { errorText, logger, pyFixed, pyRepr } from "@eidolon/config";
 import type { Table } from "@lancedb/lancedb";
 import { type EmbedOptions, embedTexts } from "./embeddings.ts";
 import { type HybridSearchOptions, hybridSearch, type SearchRow, scoreOf } from "./hybrid.ts";
-import { errorText } from "./py.ts";
 import { extractDateFilter } from "./query.ts";
 import {
   openTable,
@@ -42,7 +41,6 @@ export interface LanceRetrieverOptions {
   label: string;
   summarize?: ((hits: readonly SearchRow[]) => string) | null;
   ingestHint?: string;
-  embedModel?: string | null;
   /** Test seams; default openTable, embedTexts and hybridSearch. */
   open?: (dbPath: string, tableName: string) => Promise<Table | null>;
   embed?: (texts: string[], options: EmbedOptions) => Promise<number[][]>;
@@ -85,7 +83,7 @@ export class LanceRetriever implements Retriever {
   }
 
   async search(query: string, options: SearchOptions): Promise<SearchRow[]> {
-    const { label, dateColumn, embedModel = null } = this.#options;
+    const { label, dateColumn } = this.#options;
     const { signal } = options;
     if (this.#table === null) {
       logger.warning(`${label} search skipped: no table loaded`);
@@ -94,7 +92,7 @@ export class LanceRetriever implements Retriever {
     let vectors: number[][];
     try {
       const embed = this.#options.embed ?? embedTexts;
-      vectors = await embed([query], { model: embedModel, ...(signal ? { signal } : {}) });
+      vectors = await embed([query], { model: null, ...(signal ? { signal } : {}) });
     } catch (error) {
       if (signal?.aborted) throw signal.reason;
       logger.error(`${label} embed failed for query=${pyRepr(query)}: ${errorText(error)}`);
@@ -190,8 +188,6 @@ export class LanceRetriever implements Retriever {
 export interface RetrieverOpenOptions {
   /** Overrides the preset's table name. */
   tableName?: string;
-  /** Overrides EMBED_MODEL; must match what ingest used. */
-  embedModel?: string | null;
 }
 
 function openPreset(
@@ -206,7 +202,6 @@ function openPreset(
     label: preset.label,
     summarize: preset.summarize,
     ingestHint: preset.ingestHint,
-    embedModel: options.embedModel ?? null,
   });
 }
 

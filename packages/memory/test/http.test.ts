@@ -5,7 +5,7 @@ import {
   OpenAICompatibleChat,
   OpenAICompatibleEmbedder,
 } from "../src/openai.ts";
-import { OpenAIClient, parseRetryAfter, retryDelayMs, shouldRetry } from "../src/openai-http.ts";
+import { OpenAIClient } from "../src/openai-http.ts";
 
 interface Seen {
   url: string;
@@ -218,22 +218,6 @@ describe("the SDK's retry policy", () => {
       "APITimeoutError",
       "Request timed out.",
     ]);
-  });
-
-  test("the policy functions", () => {
-    expect(shouldRetry(408, new Headers())).toBe(true);
-    expect(shouldRetry(409, new Headers())).toBe(true);
-    expect(shouldRetry(422, new Headers())).toBe(false);
-    expect(parseRetryAfter(new Headers({ "retry-after": "1e999" }))).toBe(121);
-    expect(parseRetryAfter(new Headers({ "retry-after": " 2_0 " }))).toBe(20);
-    expect(parseRetryAfter(new Headers({ "retry-after": "inf" }))).toBe(Number.POSITIVE_INFINITY);
-    expect(parseRetryAfter(new Headers({ "retry-after-ms": "soon", "retry-after": "3" }))).toBe(3);
-    const now = Date.parse("Wed, 21 Oct 2015 07:28:00 GMT");
-    expect(
-      parseRetryAfter(new Headers({ "retry-after": "Wed, 21 Oct 2015 07:28:30 GMT" }), now),
-    ).toBe(30);
-    expect(retryDelayMs(5, null, () => 0)).toBe(8000);
-    expect(retryDelayMs(0, new Headers({ "retry-after": "0" }), () => 0)).toBe(500);
   });
 });
 

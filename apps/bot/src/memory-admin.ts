@@ -1,7 +1,7 @@
 // GET /api/memories and POST /api/memories/forget. Anonymous callers get 401 even when Mem0 is
 // unconfigured, so a misconfigured deployment cannot leak the existence of anyone's memories.
 import type { LoggedInUser } from "@eidolon/access";
-import { logger, pyRepr } from "@eidolon/config";
+import { errorText, logger, pyRepr } from "@eidolon/config";
 import type { AdminOutcome, MemoryAdmin } from "@eidolon/memory";
 import { jsonResponse } from "./responses.ts";
 
@@ -17,11 +17,6 @@ export interface MemoryRouteParts {
 }
 
 type AdminFailure = Extract<AdminOutcome<unknown>, { ok: false }>;
-
-/** Python `str(e)`. */
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 /** Python `type(e).__name__`: @eidolon/memory names its errors after mem0's exception classes. */
 function errorType(error: unknown): string {

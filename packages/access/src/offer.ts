@@ -2,13 +2,13 @@
 // per-IP quota, everything else is charged one slot before any WebRTC pipeline spawns. Token
 // presence alone is never enough: an unvalidated string would let anyone skip the quota and spawn
 // a full STT+LLM+TTS pipeline per probe.
-import { cpLen, logger, pyJsonDumps, pyStr, pyStrip } from "@eidolon/config";
+import { cpLen, isJsonObject, logger, pyJsonDumps, pyStr, pyStrip } from "@eidolon/config";
 import {
   type AudioQualitySettings,
   audioQualitySettings,
   sessionBitrateFor,
 } from "./audio-quality.ts";
-import { isJsonObject, type JsonObject } from "./json.ts";
+import type { JsonObject } from "./json.ts";
 import { anonOfferQuota, type RateLimitResult, type SlidingWindowQuota } from "./rate-limit.ts";
 import { ANONYMOUS, resolveUserContext, type UserContext } from "./user-context.ts";
 

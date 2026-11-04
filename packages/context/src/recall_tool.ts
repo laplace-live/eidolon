@@ -1,10 +1,15 @@
 // The recall_streams wire contract. Arguments are validated as Python's pydantic RecallRequest
 // (lax mode, extra keys forbidden); the LLM reads `reason` when a call is rejected, so the error
 // text keeps pydantic's layout, and dates coerce the way pydantic-core's speedate parser does.
-import { cpLen, pyRepr, pyStrip } from "@eidolon/config";
+import {
+  cpLen,
+  type PydanticLineError,
+  pyRepr,
+  pyStrip,
+  validationErrorText,
+} from "@eidolon/config";
 import type { ToolSchema } from "@eidolon/core";
 import type { IsoDate } from "@eidolon/retrieval";
-import { pyTypeName } from "./compat.ts";
 import { isMessage } from "./messages.ts";
 
 export const RECALL_TOOL_NAME = "recall_streams";
@@ -88,28 +93,21 @@ export interface RecallRequest {
   readonly broadcastIds: readonly string[];
 }
 
-interface LineError {
-  readonly loc: readonly (string | number)[];
-  readonly type: string;
-  readonly msg: string;
-  readonly input: unknown;
-}
-
 /** pydantic's ValidationError; `message` is its `str()`. */
 export class RecallRequestError extends Error {
-  readonly errors: readonly LineError[];
+  readonly errors: readonly PydanticLineError[];
 
-  constructor(errors: readonly LineError[]) {
-    super(renderErrors(errors));
+  constructor(errors: readonly PydanticLineError[]) {
+    super(validationErrorText("RecallRequest", errors));
     this.name = "ValidationError";
     this.errors = errors;
   }
 }
 
 class Invalid {
-  readonly errors: readonly LineError[];
+  readonly errors: readonly PydanticLineError[];
 
-  constructor(errors: readonly LineError[]) {
+  constructor(errors: readonly PydanticLineError[]) {
     this.errors = errors;
   }
 }
@@ -140,7 +138,7 @@ export function parseRecallRequest(args: unknown): RecallRequest {
       },
     ]);
   }
-  const errors: LineError[] = [];
+  const errors: PydanticLineError[] = [];
   const optional = <T>(name: string, validate: (input: unknown) => T): T | undefined => {
     const input = args[name];
     if (input === undefined) return undefined;
@@ -248,7 +246,7 @@ function stringListOf(input: unknown, maxItems: number): string[] {
       input,
     );
   }
-  const errors: LineError[] = [];
+  const errors: PydanticLineError[] = [];
   input.forEach((item, index) => {
     if (typeof item !== "string") {
       errors.push({
@@ -267,34 +265,7 @@ function plural(n: number): string {
   return n === 1 ? "" : "s";
 }
 
-function renderErrors(errors: readonly LineError[]): string {
-  const lines = [`${errors.length} validation error${plural(errors.length)} for RecallRequest`];
-  for (const error of errors) {
-    if (error.loc.length > 0) lines.push(error.loc.join("."));
-    lines.push(
-      `  ${error.msg} [type=${error.type}, input_value=${truncateRepr(pyRepr(error.input))}, ` +
-        `input_type=${pyTypeName(error.input)}]`,
-      `    For further information visit https://errors.pydantic.dev/2.13/v/${error.type}`,
-    );
-  }
-  return lines.join("\n");
-}
-
 const encoder = new TextEncoder();
-const decoder = new TextDecoder();
-
-// pydantic-core cuts a repr over 50 UTF-8 bytes to its first 25 and last 24 bytes, moving each
-// cut off a continuation byte (the start back, the end forward).
-function truncateRepr(repr: string): string {
-  const bytes = encoder.encode(repr);
-  if (bytes.length <= 50) return repr;
-  const continuation = (i: number): boolean => ((bytes[i] as number) & 0xc0) === 0x80;
-  let start = 25;
-  while (start > 0 && continuation(start)) start--;
-  let end = bytes.length - 24;
-  while (end < bytes.length && continuation(end)) end++;
-  return `${decoder.decode(bytes.subarray(0, start))}...${decoder.decode(bytes.subarray(end))}`;
-}
 
 const DATE_PARSING = "Input should be a valid date or datetime, ";
 const YEAR_ZERO = "Input should be a valid date in the format YYYY-MM-DD, year 0 is out of range";

@@ -2,9 +2,9 @@
 // copy per (path, mtime, size) is shared process-wide, so per-session instances never reparse.
 import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
-import { cpLen, logger, pyRepr, pyStr } from "@eidolon/config";
+import { cpLen, errorText, logger, pyCompare, pyRepr, pyStr } from "@eidolon/config";
 import type { IsoDate } from "./civil_date.ts";
-import { clip, errorText, pyCompare } from "./py.ts";
+import { clip } from "./py.ts";
 
 export const CATALOG_FILENAME = "stream_catalog.json";
 export const CATALOG_VERSION = 1;

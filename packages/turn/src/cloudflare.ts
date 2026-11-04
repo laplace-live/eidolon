@@ -1,4 +1,11 @@
-import { envInt, envOptional, logger, pyTruthy } from "@eidolon/config";
+import {
+  envInt,
+  envOptional,
+  httpxStatusMessage,
+  isJsonObject,
+  logger,
+  pyTruthy,
+} from "@eidolon/config";
 
 export const CLOUDFLARE_TURN_API = "https://rtc.live.cloudflare.com/v1/turn/keys";
 export const DEFAULT_CF_TURN_TTL_SEC = 3600;
@@ -31,26 +38,6 @@ export function cloudflareGenerateIceServersUrl(keyId: string): string {
   return `${CLOUDFLARE_TURN_API}/${keyId}/credentials/generate-ice-servers`;
 }
 
-const STATUS_CLASSES: Readonly<Record<number, string>> = {
-  1: "Informational response",
-  3: "Redirect response",
-  4: "Client error",
-  5: "Server error",
-};
-const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
-
-// httpx's raise_for_status wording, so a failed mint greps the same as in the Python bot's log.
-function statusError(response: Response, url: string): string {
-  const { status } = response;
-  const kind = STATUS_CLASSES[Math.floor(status / 100)] ?? "Invalid status code";
-  const location = REDIRECT_STATUSES.has(status) ? response.headers.get("location") : null;
-  return (
-    `${kind} '${status} ${response.statusText}' for url '${url}'\n` +
-    (location === null ? "" : `Redirect location: '${location}'\n`) +
-    `For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/${status}`
-  );
-}
-
 function jsonKind(value: unknown): string {
   if (value === null) return "null";
   return Array.isArray(value) ? "array" : typeof value;
@@ -80,12 +67,10 @@ export async function mintCloudflareIce(
     });
     if (response.ok) {
       const body: unknown = await response.json();
-      if (typeof body === "object" && body !== null && !Array.isArray(body)) {
-        return body as IcePayload;
-      }
+      if (isJsonObject(body)) return body;
       failure = `expected a JSON object, got ${jsonKind(body)}`;
     } else {
-      failure = statusError(response, url);
+      failure = httpxStatusMessage(response, url, { spaceBeforeEmptyReason: true });
     }
   } catch (e) {
     failure = String(e);

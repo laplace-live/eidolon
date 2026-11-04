@@ -1,8 +1,17 @@
 // mem0's text plumbing around the extraction call: the transcript it embeds and sends, and how
 // it digs JSON out of the model's reply.
 import { createHash } from "node:crypto";
-import { logger, pyStr, pyStrip } from "@eidolon/config";
-import { errorText, isPlainObject, pyError, pyGet, pyTypeName } from "./errors.ts";
+import {
+  errorText,
+  isPlainObject,
+  logger,
+  PY_SPACE_CLASS,
+  pyError,
+  pyGet,
+  pyStr,
+  pyStrip,
+  pyTypeName,
+} from "@eidolon/config";
 import { pyJsonLoads } from "./py-json.ts";
 
 /** mem0 `parse_messages`: one `role: content` line per system/user/assistant message. */
@@ -22,8 +31,7 @@ export function parseMessages(messages: readonly Readonly<Record<string, unknown
 const FENCED = /^```[a-zA-Z0-9]*\n([\s\S]*?)\n```$/;
 const THINK = /<think>[\s\S]*?<\/think>/g;
 // Python's `\s`: str.isspace(), which differs from JS `\s` on U+001C–U+001F, U+0085 and U+FEFF.
-const PY_SPACE =
-  "[\\t\\n\\v\\f\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]";
+const PY_SPACE = `[${PY_SPACE_CLASS}]`;
 const JSON_FENCE = new RegExp(`\`\`\`(?:json)?${PY_SPACE}*([\\s\\S]*?)${PY_SPACE}*\`\`\``);
 
 /** mem0 `remove_code_blocks`: unwrap one enclosing code fence and drop `<think>` blocks. */

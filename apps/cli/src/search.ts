@@ -3,8 +3,12 @@
 import {
   cpLen,
   cpSlice,
+  isPlainObject,
+  PyFloat,
   personaTimeZone,
   pyFixed,
+  pyGet,
+  pyJsonDumps,
   pyRepr,
   pyStr,
   pyStrip,
@@ -41,7 +45,7 @@ import {
   parserError,
 } from "./argparse.ts";
 import { type CliIo, printer, reportExit, resolveIo } from "./io.ts";
-import { dumpsPy, isDict, itemsOr, PyFloat, splitlines } from "./py.ts";
+import { itemsOr, splitlines } from "./py.ts";
 
 const USAGE = `usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]
                       [--full] [--json] [--recall] [--today YYYY-MM-DD]
@@ -181,7 +185,7 @@ async function recallMain(
       overview,
       note: result.note,
     };
-    print(dumpsPy(envelope, { indent: 2 }));
+    print(pyJsonDumps(envelope, { ensureAscii: false, indent: 2 }));
     return 0;
   }
   print(`Query: ${pyRepr(args.query)}`);
@@ -197,16 +201,11 @@ function textOr(value: unknown): string {
   return pyTruthy(value) ? pyStr(value) : "";
 }
 
-/** `dict.get(key, fallback)`. */
-function get(row: Record<string, unknown>, key: string, fallback: unknown): unknown {
-  return key in row ? row[key] : fallback;
-}
-
 function printHit(print: (line?: string) => void, i: number, hit: SearchRow, full: boolean): void {
-  const date = pyStr(get(hit, "stream_date", "?"));
+  const date = pyStr(pyGet(hit, "stream_date", "?"));
   const summary = textOr(hit.summary);
   const details = textOr(hit.details);
-  const text = pyStr(get(hit, "text", ""));
+  const text = pyStr(pyGet(hit, "text", ""));
   const chunkType = textOr(hit.chunk_type);
   const relevance = hit._relevance_score;
 
@@ -224,14 +223,14 @@ function printHit(print: (line?: string) => void, i: number, hit: SearchRow, ful
   let header =
     relevance !== null && relevance !== undefined
       ? `[${i}] score=${pyFixed(Number(relevance), 3)}  ${date}`
-      : `[${i}] dist=${pyFixed(Number(get(hit, "_distance", 0)), 3)}  ${date}`;
+      : `[${i}] dist=${pyFixed(Number(pyGet(hit, "_distance", 0)), 3)}  ${date}`;
   if (topics.length > 0) header += `  (${topics.join(", ")})`;
   if (chunkType) {
     const tag = details ? "v2" : pyTruthy(hit.refined) ? "v1" : "raw";
     header += `  [${chunkType} · ${tag}]`;
   }
   print(header);
-  print(`     ${pyStr(get(hit, "heading", ""))}`);
+  print(`     ${pyStr(pyGet(hit, "heading", ""))}`);
   if (summary) print(`     SUMMARY: ${summary}`);
 
   if (full) {
@@ -246,10 +245,10 @@ function printHit(print: (line?: string) => void, i: number, hit: SearchRow, ful
       print();
       print("     SC EVENTS:");
       for (const sc of scEvents) {
-        if (!isDict(sc)) continue;
+        if (!isPlainObject(sc)) continue;
         const viewer = textOr(sc.viewer) || "?";
         const suffix = pyTruthy(sc.amount_yuan) ? `（¥${pyStr(sc.amount_yuan)}）` : "";
-        print(`       • ${viewer}${suffix}: ${pyStr(get(sc, "content", ""))}`);
+        print(`       • ${viewer}${suffix}: ${pyStr(pyGet(sc, "content", ""))}`);
         const response = textOr(sc.response);
         if (response) print(`         → ${response}`);
       }
@@ -258,7 +257,7 @@ function printHit(print: (line?: string) => void, i: number, hit: SearchRow, ful
     const songs = itemsOr(extras.songs);
     if (songs.length > 0) {
       const titles = songs.map((song) =>
-        isDict(song) ? `《${pyStr(get(song, "title", "?"))}》` : `《${pyStr(song)}》`,
+        isPlainObject(song) ? `《${pyStr(pyGet(song, "title", "?"))}》` : `《${pyStr(song)}》`,
       );
       print(`     SONGS:    ${titles.join(" ")}`);
     }
@@ -319,7 +318,7 @@ export async function searchMain(argv: readonly string[], deps: SearchDeps = {})
 
   const print = printer(io.stdout);
   if (args.json) {
-    print(dumpsPy(hits.map(jsonRow), { indent: 2 }));
+    print(pyJsonDumps(hits.map(jsonRow), { ensureAscii: false, indent: 2 }));
     return 0;
   }
   const first = hits[0];

@@ -1,27 +1,12 @@
 // Python semantics the CLI output depends on that @eidolon/config doesn't cover: `str.splitlines`,
-// `textwrap.indent`, `round`, `statistics`, format-spec padding by code point, and floats Python
-// holds as float even when integral ("1.0" where JS prints "1").
-import { cpLen, isPySpace, pyFloatRepr, pyRepr, pyTruthy } from "@eidolon/config";
-
-/** A value Python holds as a float, so it prints as "1.0" where a JS number would print "1". */
-export class PyFloat {
-  readonly value: number;
-  constructor(value: number) {
-    this.value = value;
-  }
-}
+// `textwrap.indent`, `round`, `statistics`, format-spec padding by code point, and a `json.loads`
+// that keeps floats apart from ints.
+import { cpLen, isPySpace, PyFloat, pyError, pyIter, pyTruthy } from "@eidolon/config";
 
 export type PyNumber = number | PyFloat;
 
 export function numOf(x: PyNumber): number {
   return x instanceof PyFloat ? x.value : x;
-}
-
-/** An Error whose `name` is the Python exception class, so a crash reads as Python's last line. */
-export function pyError(name: string, message: string): Error {
-  const error = new Error(message);
-  error.name = name;
-  return error;
 }
 
 // biome-ignore lint/suspicious/noControlCharactersInRegex: str.splitlines() also splits on U+001C–U+001E.
@@ -66,21 +51,9 @@ export function rjust(text: string, width: number): string {
   return " ".repeat(Math.max(0, width - cpLen(text))) + text;
 }
 
-/** What `for x in value` visits for a JSON value: list items, string characters, dict keys. */
-export function iterPy(value: unknown): unknown[] {
-  if (Array.isArray(value)) return value;
-  if (typeof value === "string") return [...value];
-  if (isDict(value)) return Object.keys(value);
-  if (value === null || value === undefined) {
-    throw pyError("TypeError", "'NoneType' object is not iterable");
-  }
-  const type = typeof value === "boolean" ? "bool" : Number.isInteger(value) ? "int" : "float";
-  throw pyError("TypeError", `'${type}' object is not iterable`);
-}
-
 /** `value or []`, iterated. */
 export function itemsOr(value: unknown): unknown[] {
-  return pyTruthy(value) ? iterPy(value) : [];
+  return pyTruthy(value) ? pyIter(value) : [];
 }
 
 /** `str.partition(sep)`. */
@@ -133,69 +106,6 @@ export function quantilesExclusive(data: readonly number[], n: number): number[]
 export function mean(data: readonly number[]): number {
   if (data.length === 0) throw pyError("StatisticsError", "mean requires at least one data point");
   return data.reduce((sum, x) => sum + x, 0) / data.length;
-}
-
-/** A JSON object, which Python would hold as a dict. */
-export function isDict(value: unknown): value is Record<string, unknown> {
-  if (typeof value !== "object" || value === null) return false;
-  const proto = Object.getPrototypeOf(value);
-  return proto === Object.prototype || proto === null;
-}
-
-/** Python `repr()` of a JSON-shaped value that may hold PyFloats. */
-export function reprPy(value: unknown): string {
-  if (value instanceof PyFloat) return pyFloatRepr(value.value);
-  if (Array.isArray(value)) return `[${value.map(reprPy).join(", ")}]`;
-  if (isDict(value)) {
-    const entries = Object.entries(value).filter(([, v]) => v !== undefined);
-    return `{${entries.map(([k, v]) => `${pyRepr(k)}: ${reprPy(v)}`).join(", ")}}`;
-  }
-  return pyRepr(value);
-}
-
-function jsonNumber(value: number, float: boolean): string {
-  if (Number.isNaN(value)) return "NaN";
-  if (value === Number.POSITIVE_INFINITY) return "Infinity";
-  if (value === Number.NEGATIVE_INFINITY) return "-Infinity";
-  return !float && Number.isSafeInteger(value) ? String(value) : pyFloatRepr(value);
-}
-
-/** `json.dumps(value, ensure_ascii=False, indent=indent)` for values that may hold PyFloats. */
-export function dumpsPy(value: unknown, options: { indent?: number } = {}): string {
-  const { indent } = options;
-  const encode = (v: unknown, depth: number): string => {
-    if (v instanceof PyFloat) return jsonNumber(v.value, true);
-    if (v === null || v === undefined) return "null";
-    switch (typeof v) {
-      case "boolean":
-        return v ? "true" : "false";
-      case "number":
-        return jsonNumber(v, false);
-      case "bigint":
-        return v.toString();
-      case "string":
-        return JSON.stringify(v);
-    }
-    let items: string[];
-    let brackets: [string, string];
-    if (Array.isArray(v)) {
-      items = v.map((x) => encode(x, depth + 1));
-      brackets = ["[", "]"];
-    } else if (isDict(v)) {
-      items = Object.entries(v)
-        .filter(([, x]) => x !== undefined)
-        .map(([k, x]) => `${JSON.stringify(k)}: ${encode(x, depth + 1)}`);
-      brackets = ["{", "}"];
-    } else {
-      throw new TypeError(`Object of type ${typeof v} is not JSON serializable`);
-    }
-    const [open, close] = brackets;
-    if (items.length === 0) return open + close;
-    if (indent === undefined) return `${open}${items.join(", ")}${close}`;
-    const pad = " ".repeat(indent * (depth + 1));
-    return `${open}\n${pad}${items.join(`,\n${pad}`)}\n${" ".repeat(indent * depth)}${close}`;
-  };
-  return encode(value, 0);
 }
 
 /**

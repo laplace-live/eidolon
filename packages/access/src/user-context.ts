@@ -5,6 +5,9 @@ import { createHash } from "node:crypto";
 import {
   envInt,
   envOptional,
+  errorText,
+  httpxStatusMessage,
+  isJsonObject,
   logger,
   pyParseInt,
   pyRepr,
@@ -12,7 +15,6 @@ import {
   pyStrip,
   pyTruthy,
 } from "@eidolon/config";
-import { isJsonObject } from "./json.ts";
 import { type MonotonicClock, monotonicSeconds } from "./rate-limit.ts";
 
 export interface UserContext {
@@ -110,20 +112,6 @@ interface WorkersReply {
 // Fatal, so invalid UTF-8 is a non-JSON reply rather than U+FFFD inside a uname.
 const STRICT_UTF8 = new TextDecoder("utf-8", { fatal: true });
 
-const STATUS_CLASSES: Record<number, string> = {
-  1: "Informational response",
-  3: "Redirect response",
-  4: "Client error",
-  5: "Server error",
-};
-
-/** httpx's raise_for_status wording, minus its documentation link. */
-function statusMessage(reply: WorkersReply, url: string): string {
-  const kind = STATUS_CLASSES[Math.floor(reply.status / 100)] ?? "Invalid status code";
-  const reason = reply.statusText ? ` ${reply.statusText}` : "";
-  return `HTTPStatusError: ${kind} '${reply.status}${reason}' for url '${url}'`;
-}
-
 function describeError(error: unknown): string {
   if (error instanceof Error || error instanceof DOMException) {
     return `${error.name}: ${error.message}`;
@@ -195,15 +183,17 @@ export class UserContextResolver {
     } catch (error) {
       return this.#failOpen(describeError(error), cached);
     }
-    if (!reply.ok) return this.#failOpen(statusMessage(reply, url), cached);
+    if (!reply.ok) {
+      const message = httpxStatusMessage(reply, url, { statusLineOnly: true });
+      return this.#failOpen(`HTTPStatusError: ${message}`, cached);
+    }
 
     let payload: unknown;
     try {
       payload = JSON.parse(STRICT_UTF8.decode(reply.body));
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
       logger.warning(
-        `[user-context] Workers returned non-JSON (${reason}); treating viewer as anonymous`,
+        `[user-context] Workers returned non-JSON (${errorText(error)}); treating viewer as anonymous`,
       );
       return ANONYMOUS;
     }

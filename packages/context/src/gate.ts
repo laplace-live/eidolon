@@ -4,16 +4,20 @@
 import {
   envFlag,
   envOptional,
+  httpxStatusMessage,
   logger,
   openrouterHeaders,
+  pyError,
   pyFixed,
+  pyParseFloat,
   pyRepr,
   pyStrip,
   pyStrRepr,
+  pyTypeName,
+  raceAbort,
 } from "@eidolon/config";
 import type { FrameMetadata } from "@eidolon/core";
-import { raceAbort, throwIfAborted } from "./abort.ts";
-import { errorRepr, pyError, pyTypeName } from "./compat.ts";
+import { errorRepr } from "./compat.ts";
 import { isMessage, sameTurn, type TurnKey, turnKeyOf } from "./messages.ts";
 
 export const GATE_FRAME_KEY = "retrieval_gate";
@@ -189,7 +193,12 @@ export class RetrievalGate {
         redirect: "manual",
         signal: AbortSignal.timeout(this.#timeoutSec * 1000),
       });
-      if (!response.ok) throw statusError(response, this.#url);
+      if (!response.ok) {
+        throw pyError(
+          "HTTPStatusError",
+          httpxStatusMessage(response, this.#url, { statusLineOnly: true }),
+        );
+      }
       score = scoreOf(await response.json());
     } catch (error) {
       logger.warning(`Retrieval gate failed open: ${errorRepr(error)}`);
@@ -253,7 +262,7 @@ export async function unlessSkipped<T>(
   signal?: AbortSignal,
 ): Promise<T[]> {
   if (decision?.saidSkip) return [];
-  throwIfAborted(signal);
+  signal?.throwIfAborted();
   const controller = new AbortController();
   const task = search(controller.signal);
   let finished = false;
@@ -276,22 +285,13 @@ export async function unlessSkipped<T>(
   }
 }
 
-const FLOAT =
-  /^[+-]?(?:\d+(?:_\d+)*(?:\.(?:\d+(?:_\d+)*)?)?|\.\d+(?:_\d+)*)(?:[eE][+-]?\d+(?:_\d+)*)?$/;
-const SPECIAL_FLOAT = /^([+-]?)(inf|infinity|nan)$/i;
-
 // Python float(): a malformed noul must fail open, and Number(null) === 0 would read as a skip.
 function pyFloat(value: unknown): number {
   if (typeof value === "number") return value;
   if (typeof value === "boolean") return value ? 1 : 0;
   if (typeof value === "string") {
-    const text = pyStrip(value);
-    if (FLOAT.test(text)) return Number(text.replaceAll("_", ""));
-    const special = SPECIAL_FLOAT.exec(text);
-    if (special) {
-      if (special[2]?.toLowerCase() === "nan") return Number.NaN;
-      return special[1] === "-" ? -Infinity : Infinity;
-    }
+    const parsed = pyParseFloat(value);
+    if (parsed !== null) return parsed;
     throw pyError("ValueError", `could not convert string to float: ${pyStrRepr(value)}`);
   }
   throw pyError(
@@ -317,18 +317,4 @@ function scoreOf(body: unknown): number {
     if (score === undefined || noul > score) score = noul;
   }
   return score as number;
-}
-
-function statusError(response: Response, url: string): Error {
-  const status = response.status;
-  const kind =
-    status < 200
-      ? "Informational response"
-      : status < 400
-        ? "Redirect response"
-        : status < 500
-          ? "Client error"
-          : "Server error";
-  const reason = response.statusText ? ` ${response.statusText}` : "";
-  return pyError("HTTPStatusError", `${kind} '${status}${reason}' for url '${url}'`);
 }

@@ -4,6 +4,7 @@ import { readFile, stat } from "node:fs/promises";
 import { isAbsolute, join, relative } from "node:path";
 import {
   envStr,
+  errorText,
   logger,
   PROJECT_ROOT,
   personaTimeZone,
@@ -14,7 +15,6 @@ import {
   zonedClock,
 } from "@eidolon/config";
 import { diffDays, isValidIsoDate, resolveDbPath, scanStreamDates } from "@eidolon/retrieval";
-import { errorText } from "./compat.ts";
 
 export const FALLBACK_PERSONA =
   "You are a helpful assistant in a voice conversation. Your responses will " +

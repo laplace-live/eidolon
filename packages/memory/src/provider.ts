@@ -3,7 +3,16 @@
 // user message, inserts the hits as a `developer` message at position 1, and stores the
 // conversation in the background.
 
-import { envOptional, logger, pyRepr, pyStr, pyStrip } from "@eidolon/config";
+import {
+  envOptional,
+  errorText,
+  isPlainObject,
+  logger,
+  pyRepr,
+  pyStr,
+  pyStrip,
+  raceAbort,
+} from "@eidolon/config";
 import type { ContextTurn } from "@eidolon/core";
 import {
   buildMemoryConfig,
@@ -17,7 +26,6 @@ import {
   type SharedEngine,
   sortNewestFirst,
 } from "./engine.ts";
-import { errorText, isPlainObject } from "./errors.ts";
 import type { MemoryScope } from "./scope.ts";
 import type { MemoryItem, MemoryProvider } from "./types.ts";
 
@@ -34,25 +42,6 @@ function latestUserText(messages: readonly unknown[]): string | null {
     }
   }
   return null;
-}
-
-/** Settles with `promise`, or rejects with the signal's reason as soon as it aborts. */
-function raceAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
-  if (signal.aborted) return Promise.reject(signal.reason);
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = () => reject(signal.reason);
-    signal.addEventListener("abort", onAbort, { once: true });
-    promise.then(
-      (value) => {
-        signal.removeEventListener("abort", onAbort);
-        resolve(value);
-      },
-      (error: unknown) => {
-        signal.removeEventListener("abort", onAbort);
-        reject(error);
-      },
-    );
-  });
 }
 
 export class Mem0MemoryProvider implements MemoryProvider {

@@ -2,8 +2,15 @@
 // by `datetime.fromisoformat`, so both are reproduced here: microsecond resolution (records built
 // in one add get distinct, increasing stamps, which decides the greeting's order) and CPython's C
 // parser, which is laxer than its pure-Python twin (it skips a stray character before an offset).
-import { pyStrRepr, pyTruthy } from "@eidolon/config";
-import { pyError } from "./errors.ts";
+import {
+  daysInMonth,
+  isLeap,
+  ordinalToYmd,
+  pyError,
+  pyStrRepr,
+  pyTruthy,
+  ymdToOrdinal,
+} from "@eidolon/config";
 
 /** Microseconds since the Unix epoch. */
 export type Clock = () => number;
@@ -25,53 +32,6 @@ export const wallClockMicros: Clock = () => {
 
 const MICROS_PER_DAY = 86_400_000_000n;
 const EPOCH_ORDINAL = 719_163; // date(1970, 1, 1).toordinal()
-const DAYS_IN_MONTH = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-const DAYS_BEFORE_MONTH = [0, 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
-
-function isLeap(year: number): boolean {
-  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-}
-
-function daysInMonth(year: number, month: number): number {
-  return (DAYS_IN_MONTH[month] as number) + (month === 2 && isLeap(year) ? 1 : 0);
-}
-
-/** `date.toordinal()`: 0001-01-01 is day 1. */
-function ordinal(year: number, month: number, day: number): number {
-  const y = year - 1;
-  const leapDay = month > 2 && isLeap(year) ? 1 : 0;
-  return (
-    y * 365 +
-    Math.floor(y / 4) -
-    Math.floor(y / 100) +
-    Math.floor(y / 400) +
-    (DAYS_BEFORE_MONTH[month] as number) +
-    leapDay +
-    day
-  );
-}
-
-/** `date.fromordinal(n)` as `[year, month, day]`, for n >= 1. */
-function fromOrdinal(n: number): [number, number, number] {
-  let rest = n - 1;
-  const n400 = Math.floor(rest / 146_097);
-  rest %= 146_097;
-  const n100 = Math.floor(rest / 36_524);
-  rest %= 36_524;
-  const n4 = Math.floor(rest / 1461);
-  rest %= 1461;
-  const n1 = Math.floor(rest / 365);
-  rest %= 365;
-  const year = n400 * 400 + 1 + n100 * 100 + n4 * 4 + n1;
-  if (n1 === 4 || n100 === 4) return [year - 1, 12, 31];
-  let month = (rest + 50) >> 5;
-  let preceding = (DAYS_BEFORE_MONTH[month] as number) + (month > 2 && isLeap(year) ? 1 : 0);
-  if (preceding > rest) {
-    month -= 1;
-    preceding -= daysInMonth(year, month);
-  }
-  return [year, month, rest - preceding + 1];
-}
 
 interface Parts {
   year: number;
@@ -90,7 +50,7 @@ function partsFromMicros(epochMicros: bigint): Parts {
     rest += MICROS_PER_DAY;
     days -= 1n;
   }
-  const [year, month, day] = fromOrdinal(Number(days) + EPOCH_ORDINAL);
+  const [year, month, day] = ordinalToYmd(Number(days) + EPOCH_ORDINAL);
   const micros = Number(rest);
   return {
     year,
@@ -195,14 +155,14 @@ function isoWeekToDate(
 ): [number, number, number] | null {
   if (year < 1 || year > 9999) return null;
   if (week <= 0 || week >= 53) {
-    const first = (ordinal(year, 1, 1) + 6) % 7;
+    const first = (ymdToOrdinal(year, 1, 1) + 6) % 7;
     if (!(week === 53 && (first === 3 || (first === 2 && isLeap(year))))) return null;
   }
   if (weekday <= 0 || weekday >= 8) return null;
-  const jan1 = ordinal(year, 1, 1);
+  const jan1 = ymdToOrdinal(year, 1, 1);
   const jan1Weekday = (jan1 + 6) % 7;
   const week1Monday = jan1 - jan1Weekday + (jan1Weekday > 3 ? 7 : 0);
-  return fromOrdinal(week1Monday + (week - 1) * 7 + weekday - 1);
+  return ordinalToYmd(week1Monday + (week - 1) * 7 + weekday - 1);
 }
 
 /** C `parse_isoformat_date`: null on a parse failure; field ranges are checked later. */
@@ -365,7 +325,7 @@ export function parseIsoDatetime(value: unknown): PyDatetime {
   if (minute > 59) throw pyError("ValueError", "minute must be in 0..59");
   if (second > 59) throw pyError("ValueError", "second must be in 0..59");
   const wall =
-    BigInt(ordinal(year, month, day) - EPOCH_ORDINAL) * MICROS_PER_DAY +
+    BigInt(ymdToOrdinal(year, month, day) - EPOCH_ORDINAL) * MICROS_PER_DAY +
     BigInt(((hour * 60 + minute) * 60 + second) * 1_000_000 + micro);
   return offset === null ? { micros: wall, aware: false } : { micros: wall - offset, aware: true };
 }
@@ -382,7 +342,7 @@ export function parseIsoDate(value: string): [number, number, number] {
 }
 
 const MIN_MICROS = BigInt(1 - EPOCH_ORDINAL) * MICROS_PER_DAY;
-const MAX_MICROS = BigInt(ordinal(9999, 12, 31) + 1 - EPOCH_ORDINAL) * MICROS_PER_DAY;
+const MAX_MICROS = BigInt(ymdToOrdinal(9999, 12, 31) + 1 - EPOCH_ORDINAL) * MICROS_PER_DAY;
 
 /**
  * mem0's `_normalize_iso_timestamp_to_utc`: an aware stamp becomes its `+00:00` isoformat; falsy,

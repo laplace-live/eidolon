@@ -65,6 +65,7 @@ describe("parseBotArgs", () => {
     expect(parseBotArgs(["--port", " 7861 "]).port).toBe(7861);
     expect(parseBotArgs(["--port", "+7"]).port).toBe(7);
     expect(parseBotArgs(["--port", "7_861"]).port).toBe(7861);
+    expect(parseBotArgs(["--port", "７８６０"]).port).toBe(7860);
     expect(parseBotArgs(["--port", "-5"]).port).toBe(-5);
     expect(parseBotArgs(["--port", "1", "--port", "2"]).port).toBe(2);
     expect(parseBotArgs(["--host", "-"]).host).toBe("-");

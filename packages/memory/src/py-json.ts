@@ -2,7 +2,7 @@
 // characters (newlines included) inside strings, plus NaN/Infinity; JSON.parse rejects all three,
 // which would silently drop extractions on the TS side only. This follows CPython's C scanner,
 // including its error messages and code-point positions, since they reach the logs.
-import { pyError } from "./errors.ts";
+import { pyError } from "@eidolon/config";
 
 class StopIteration {
   readonly index: number;

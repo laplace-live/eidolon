@@ -67,18 +67,14 @@ export {
 } from "./generate_image.ts";
 export { type CliIo, printer, resolveIo } from "./io.ts";
 export {
-  dumpsPy,
-  iterPy,
   ljust,
   loadsPy,
   mean,
   median,
   numOf,
-  PyFloat,
   type PyNumber,
   pyRound,
   quantilesExclusive,
-  reprPy,
   rjust,
   splitlines,
   textwrapIndent,

@@ -1,6 +1,14 @@
 // OpenRouter's image route is not chat completions and has no OpenAI SDK binding: references go in
 // `input_references`, results come back as raw base64 in `data[].b64_json`, not as data URLs.
-import { extractCostUsd, openrouterHeaders, pyStr, pyStrip, pyTruthy } from "@eidolon/config";
+import {
+  errorText,
+  extractCostUsd,
+  isJsonObject,
+  openrouterHeaders,
+  pyStr,
+  pyStrip,
+  pyTruthy,
+} from "@eidolon/config";
 import { ImageGenError } from "./errors.ts";
 import type { ReferenceImage } from "./references.ts";
 
@@ -51,10 +59,6 @@ export interface GenerateOptions {
   readonly fetch?: typeof fetch;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 /** OpenRouter's `{"error": {"message": ...}}`, falling back to the raw body. */
 function errorMessage(text: string): string {
   let body: unknown;
@@ -63,8 +67,8 @@ function errorMessage(text: string): string {
   } catch {
     return pyStrip(text);
   }
-  const error = isRecord(body) ? body.error : undefined;
-  if (isRecord(error)) return pyStr(pyTruthy(error.message) ? error.message : error);
+  const error = isJsonObject(body) ? body.error : undefined;
+  if (isJsonObject(error)) return pyStr(pyTruthy(error.message) ? error.message : error);
   return pyStr(pyTruthy(error) ? error : body);
 }
 
@@ -122,15 +126,15 @@ export async function generate(options: GenerateOptions): Promise<Generation> {
     // A cancelled call aborts the fetch with the task's CancelledError; rethrow that reason untouched
     // so the framework settles the call as cancelled rather than as a failed render.
     if (signal?.aborted) throw signal.reason;
-    throw new ImageGenError(`request failed: ${e instanceof Error ? e.message : String(e)}`);
+    throw new ImageGenError(`request failed: ${errorText(e)}`);
   }
   if (status !== 200) throw new ImageGenError(`${status}: ${errorMessage(text)}`);
 
   const parsed: unknown = JSON.parse(text);
-  const data = isRecord(parsed) && pyTruthy(parsed.data) ? parsed.data : [];
+  const data = isJsonObject(parsed) && pyTruthy(parsed.data) ? parsed.data : [];
   const images: GeneratedImage[] = [];
   for (const row of rowsOf(data)) {
-    if (!isRecord(row) || !pyTruthy(row.b64_json)) continue;
+    if (!isJsonObject(row) || !pyTruthy(row.b64_json)) continue;
     const mediaType = row.media_type;
     images.push({
       // A non-string b64_json throws TypeError here, as b64decode does.
@@ -139,5 +143,5 @@ export async function generate(options: GenerateOptions): Promise<Generation> {
     });
   }
   if (images.length === 0) throw new ImageGenError("the response carried no image");
-  return { images, costUsd: extractCostUsd(isRecord(parsed) ? parsed.usage : undefined) };
+  return { images, costUsd: extractCostUsd(isJsonObject(parsed) ? parsed.usage : undefined) };
 }

@@ -2,9 +2,8 @@
 // differs on each: `\d` is any Nd digit, `\s` is `str.isspace()` (JS also matches U+FEFF but not
 // U+001C–U+001F or U+0085), `\w`/`\b` use Unicode word characters (CJK included), `.` excludes
 // only "\n", and `$` also matches before a trailing newline.
-import { cpLen, cpSlice, pyDigitValue, pyRepr } from "@eidolon/config";
+import { cpLen, cpSlice, PY_SPACE_CLASS, pyDigitValue, pyRepr } from "@eidolon/config";
 
-const S_CLASS = String.raw`\t\n\v\f\r\x1c-\x20\x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000`;
 const W_CLASS = String.raw`\p{L}\p{N}_`;
 const BOUNDARY = `(?:(?<=[${W_CLASS}])(?![${W_CLASS}])|(?<![${W_CLASS}])(?=[${W_CLASS}]))`;
 const NOT_BOUNDARY = `(?:(?<=[${W_CLASS}])(?=[${W_CLASS}])|(?<![${W_CLASS}])(?![${W_CLASS}]))`;
@@ -18,9 +17,9 @@ function escapeOutside(c: string): string {
     case "D":
       return String.raw`\P{Nd}`;
     case "s":
-      return `[${S_CLASS}]`;
+      return `[${PY_SPACE_CLASS}]`;
     case "S":
-      return `[^${S_CLASS}]`;
+      return `[^${PY_SPACE_CLASS}]`;
     case "w":
       return `[${W_CLASS}]`;
     case "W":
@@ -41,7 +40,7 @@ function escapeInside(c: string, pattern: string): string {
     case "D":
       return String.raw`\P{Nd}`;
     case "s":
-      return S_CLASS;
+      return PY_SPACE_CLASS;
     case "w":
       return W_CLASS;
     case "S":
@@ -141,30 +140,9 @@ export function pyInt(digits: string): number {
   return n;
 }
 
-/** Python string ordering: by code point, where JS `<` compares UTF-16 units. */
-export function pyCompare(a: string, b: string): number {
-  if (a === b) return 0;
-  const ia = a[Symbol.iterator]();
-  const ib = b[Symbol.iterator]();
-  for (;;) {
-    const x = ia.next();
-    const y = ib.next();
-    if (x.done) return y.done ? 0 : -1;
-    if (y.done) return 1;
-    const cx = (x.value as string).codePointAt(0) as number;
-    const cy = (y.value as string).codePointAt(0) as number;
-    if (cx !== cy) return cx < cy ? -1 : 1;
-  }
-}
-
 /** `_clip`: at most `maxChars` code points, ending in "…" when cut. */
 export function clip(text: string, maxChars: number): string {
   if (maxChars <= 0) return "";
   if (cpLen(text) <= maxChars) return text;
   return `${cpSlice(text, 0, maxChars - 1)}…`;
-}
-
-/** Python `str(e)` for a caught error: the message alone. */
-export function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

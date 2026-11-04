@@ -6,8 +6,15 @@ import { dirname } from "node:path";
 import {
   cpSlice,
   envOptional,
+  errorText,
+  isPlainObject,
   logger,
+  PyFloat,
+  pyError,
   pyFixed,
+  pyGet,
+  pyIter,
+  pyJsonDumps,
   pyRepr,
   pyStr,
   pyTruthy,
@@ -33,7 +40,7 @@ import {
 } from "@eidolon/retrieval";
 import { ArgparseExit, INT, type ParserSpec, parseArgs } from "./argparse.ts";
 import { type CliIo, printer, reportExit, resolveIo } from "./io.ts";
-import { dumpsPy, isDict, iterPy, ljust, mean, median, PyFloat, pyError, rjust } from "./py.ts";
+import { ljust, mean, median, rjust } from "./py.ts";
 
 export const DEFAULT_QUERIES = "data/eval/queries.toml";
 export const K_VALUES = [1, 3, 5, 10] as const;
@@ -220,9 +227,10 @@ export function loadQueries(path: string): EvalQuery[] {
   const data = Bun.TOML.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
   const rawQueries = "query" in data ? data.query : [];
   if (!pyTruthy(rawQueries)) throw pyError("ValueError", `No [[query]] entries in ${shown}`);
-  return iterPy(rawQueries).map((q, i) => {
+  return pyIter(rawQueries).map((q, i) => {
     const field = (key: string): unknown => {
-      if (!isDict(q)) throw pyError("TypeError", "string indices must be integers, not 'str'");
+      if (!isPlainObject(q))
+        throw pyError("TypeError", "string indices must be integers, not 'str'");
       if (!(key in q)) {
         throw pyError(
           "ValueError",
@@ -233,8 +241,8 @@ export function loadQueries(path: string): EvalQuery[] {
     };
     const table = pyStr(field("table"));
     const text = pyStr(field("text"));
-    const expectSubstrings = iterPy(field("expect_substrings")).map(pyStr);
-    const notes = pyStr(isDict(q) && "notes" in q ? q.notes : "");
+    const expectSubstrings = pyIter(field("expect_substrings")).map(pyStr);
+    const notes = pyStr(isPlainObject(q) && "notes" in q ? q.notes : "");
     return { table, text, expectSubstrings, notes };
   });
 }
@@ -482,14 +490,6 @@ export function toJsonBlob(
   return out;
 }
 
-/** `dict.get(key, fallback)` on a JSON value Python would call `.get` on. */
-function dictGet(container: unknown, key: string, fallback: unknown): unknown {
-  if (!isDict(container)) {
-    throw pyError("AttributeError", `object has no attribute 'get'`);
-  }
-  return key in container ? container[key] : fallback;
-}
-
 /** The current run's MRR against a saved baseline, per mode present in both. */
 export function printComparison(
   print: Print,
@@ -500,13 +500,13 @@ export function printComparison(
   print("  Comparison vs baseline");
   print("=".repeat(78));
   for (const [tableName, modes] of current) {
-    const baseModes = dictGet(baseline, tableName, {});
+    const baseModes = pyGet(baseline, tableName, {});
     if (!pyTruthy(baseModes)) continue;
     print(`\n  ${tableName}:`);
     for (const [modeKey, rep] of modes) {
-      const base = dictGet(baseModes, modeKey, null);
+      const base = pyGet(baseModes, modeKey, null);
       if (!pyTruthy(base)) continue;
-      const baseMrr = Number(dictGet(base, "mrr", 0));
+      const baseMrr = Number(pyGet(base, "mrr", 0));
       const delta = rep.mrr - baseMrr;
       const arrow = delta > 0 ? "↑" : delta < 0 ? "↓" : "·";
       print(
@@ -631,10 +631,6 @@ export function printBenchmarkReport(print: Print, benches: readonly RerankerBen
   print("  (latency is end-to-end hybrid_search wall-clock in ms; lower is better)");
 }
 
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 /** The `laplace-eval-retrieval` command; resolves to its exit code. */
 export async function evalRetrievalMain(
   argv: readonly string[],
@@ -746,7 +742,11 @@ export async function evalRetrievalMain(
   if (args.save) {
     const target = pyPath(args.save);
     mkdirSync(dirname(target), { recursive: true });
-    writeFileSync(target, dumpsPy(toJsonBlob(perTable), { indent: 2 }), "utf8");
+    writeFileSync(
+      target,
+      pyJsonDumps(toJsonBlob(perTable), { ensureAscii: false, indent: 2 }),
+      "utf8",
+    );
     logger.info(`Saved metrics to ${args.save}`);
   }
 

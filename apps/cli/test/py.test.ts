@@ -1,17 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import {
-  dumpsPy,
-  iterPy,
-  ljust,
-  loadsPy,
-  mean,
-  PyFloat,
-  pyRound,
-  reprPy,
-  rjust,
-  splitlines,
-  textwrapIndent,
-} from "../src/index.ts";
+import { PyFloat, pyJsonDumps } from "@eidolon/config";
+import { ljust, loadsPy, mean, pyRound, rjust, splitlines, textwrapIndent } from "../src/index.ts";
 
 describe("str.splitlines", () => {
   test("splits on every Python line boundary and drops a trailing empty line", () => {
@@ -53,34 +42,9 @@ test("statistics.mean", () => {
   expect(() => mean([])).toThrow("mean requires at least one data point");
 });
 
-describe("floats Python holds as float", () => {
-  test("loadsPy keeps 1.0 apart from 1", () => {
-    const value = loadsPy('{"a": 1.0, "b": 1, "c": [2e-05, 0.5, -0]}') as Record<string, unknown>;
-    expect(value.a).toEqual(new PyFloat(1));
-    expect(value.b).toBe(1);
-    expect(dumpsPy(value)).toBe('{"a": 1.0, "b": 1, "c": [2e-05, 0.5, 0]}');
-  });
-
-  test("dumpsPy matches json.dumps(ensure_ascii=False, indent=n)", () => {
-    const value = { 名: "七海\n", list: [], dict: {}, n: null, t: true, f: new PyFloat(1e16) };
-    expect(dumpsPy(value, { indent: 1 })).toBe(
-      '{\n "名": "七海\\n",\n "list": [],\n "dict": {},\n "n": null,\n "t": true,\n "f": 1e+16\n}',
-    );
-  });
-
-  test("reprPy matches repr()", () => {
-    expect(reprPy({ p50: new PyFloat(527), p90: 2083.8, max: 1500, m: ["it's"], x: null })).toBe(
-      "{'p50': 527.0, 'p90': 2083.8, 'max': 1500, 'm': [\"it's\"], 'x': None}",
-    );
-  });
-});
-
-describe("for x in value", () => {
-  test("lists, string characters and dict keys; scalars raise TypeError", () => {
-    expect(iterPy([1, 2])).toEqual([1, 2]);
-    expect(iterPy("a😀")).toEqual(["a", "😀"]);
-    expect(iterPy({ k: 1, j: 2 })).toEqual(["k", "j"]);
-    expect(() => iterPy(3)).toThrow("'int' object is not iterable");
-    expect(() => iterPy(true)).toThrow("'bool' object is not iterable");
-  });
+test("loadsPy keeps 1.0 apart from 1", () => {
+  const value = loadsPy('{"a": 1.0, "b": 1, "c": [2e-05, 0.5, -0]}') as Record<string, unknown>;
+  expect(value.a).toEqual(new PyFloat(1));
+  expect(value.b).toBe(1);
+  expect(pyJsonDumps(value)).toBe('{"a": 1.0, "b": 1, "c": [2e-05, 0.5, 0]}');
 });

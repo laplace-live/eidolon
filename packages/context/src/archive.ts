@@ -2,7 +2,17 @@
 // routes the latest user line: a date- or period-scoped recall, a hint to call recall_streams, or
 // a topical search the retrieval gate may skip. The archive also owns the recall_streams tool,
 // whose per-turn budget shares this turn key.
-import { cpLen, logger, personaTimeZone, pyRepr, pyStr, pyStrip, pyTruthy } from "@eidolon/config";
+import {
+  cpLen,
+  errorText,
+  logger,
+  personaTimeZone,
+  pyRepr,
+  pyStr,
+  pyStrip,
+  pyTruthy,
+  raceAbort,
+} from "@eidolon/config";
 import type {
   ContextProvider,
   ContextTurn,
@@ -30,8 +40,7 @@ import {
   streamArchiveSearchParams,
   streamScope,
 } from "@eidolon/retrieval";
-import { raceAbort, throwIfAborted } from "./abort.ts";
-import { errorText, pyRstrip } from "./compat.ts";
+import { pyRstrip } from "./compat.ts";
 import { decisionOf, type GateDecision, unlessSkipped } from "./gate.ts";
 import { latestUserText, sameTurn, setBlock, type TurnKey, turnKeyOf } from "./messages.ts";
 import {
@@ -82,9 +91,7 @@ export interface StreamArchiveParams {
   readonly position: number;
 }
 
-export function streamArchiveParams(
-  overrides: Partial<StreamArchiveParams> = {},
-): StreamArchiveParams {
+export function streamArchiveParams(): StreamArchiveParams {
   return {
     ...streamArchiveSearchParams(),
     minQueryChars: 4,
@@ -93,7 +100,6 @@ export function streamArchiveParams(
     systemPrompt:
       "你过去直播里相关的片段（用来 ground 你的回复，不要照念，也不要把日期念出来）：\n\n",
     position: 2,
-    ...overrides,
   };
 }
 
@@ -216,7 +222,6 @@ export interface ArchiveCatalog extends RecallCatalog {
 export interface StreamArchiveOptions {
   readonly retriever: Retriever;
   readonly catalog: ArchiveCatalog;
-  readonly params?: Partial<StreamArchiveParams>;
   /** Defaults to config's personaTimeZone(). */
   readonly timeZone?: string;
   readonly today?: () => IsoDate;
@@ -253,7 +258,7 @@ export class StreamArchive implements ContextProvider {
   #tool: LlmTool | null = null;
 
   constructor(options: StreamArchiveOptions) {
-    this.params = streamArchiveParams(options.params);
+    this.params = streamArchiveParams();
     this.#retriever = options.retriever;
     this.#catalog = options.catalog;
     this.recall = new StreamRecall({
@@ -307,7 +312,7 @@ export class StreamArchive implements ContextProvider {
   ): Promise<boolean> {
     const { position } = this.params;
     const recent = await raceAbort(this.#catalog.recent(3), signal);
-    throwIfAborted(signal);
+    signal?.throwIfAborted();
     setBlock(
       context,
       RECENT_PREFIX,
@@ -326,7 +331,7 @@ export class StreamArchive implements ContextProvider {
 
     if (scope !== null && (archiveQuery || followup)) {
       const result = await this.recall.lookup(query, { scope, overview, signal });
-      throwIfAborted(signal);
+      signal?.throwIfAborted();
       this.lastWasArchive = true;
       setBlock(context, RECALL_PREFIX, this.renderResult(result), position);
       logger.info(
@@ -350,7 +355,7 @@ export class StreamArchive implements ContextProvider {
         this.#retriever.search(query, { candidates, topK, datePrefilter, signal: search }),
       signal,
     );
-    throwIfAborted(signal);
+    signal?.throwIfAborted();
     if (chunks.length > 0 && archiveQuery) {
       this.lastWasArchive = true;
       const parts = streamScope({
@@ -358,7 +363,7 @@ export class StreamArchive implements ContextProvider {
         label: CHUNK_SCOPE_LABEL,
       });
       const broadcasts = await raceAbort(this.recall.select(parts), signal);
-      throwIfAborted(signal);
+      signal?.throwIfAborted();
       this.recall.remember(recallResult({ scope: parts, overview: false, broadcasts }));
     }
     setBlock(
@@ -395,13 +400,13 @@ export class StreamArchive implements ContextProvider {
     try {
       const request = parseRecallRequest(call.arguments);
       const scope = await this.#toolScope(request, signal);
-      throwIfAborted(signal);
+      signal.throwIfAborted();
       const result = await this.recall.lookup(request.query, {
         scope,
         overview: request.mode === "overview",
         signal,
       });
-      throwIfAborted(signal);
+      signal.throwIfAborted();
       this.lastWasArchive = true;
       return {
         content: this.renderResult(result),

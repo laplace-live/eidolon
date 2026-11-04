@@ -8,6 +8,7 @@ import {
   envOptional,
   envStr,
   extractCostUsd,
+  isJsonObject,
   logger,
   openrouterHeaders,
   pyFixed,
@@ -16,6 +17,9 @@ import {
   pyStr,
   pyStrip,
   pyTruthy,
+  raceAbort,
+  retryDelaySeconds,
+  shouldRetry,
 } from "@eidolon/config";
 
 // Fallback per-model embedding prices, USD per 1M tokens.
@@ -51,9 +55,6 @@ export const EMBED_QUOTA_BACKOFF = 60.0;
 // errors, timeouts, 408, 409, 429 and 5xx, a 600 s timeout, and Retry-After honoured up to 120 s.
 export const EMBED_HTTP_MAX_RETRIES = 5;
 export const EMBED_HTTP_TIMEOUT_SEC = 600;
-const INITIAL_RETRY_DELAY = 0.5;
-const MAX_RETRY_DELAY = 8.0;
-const MAX_RETRY_AFTER = 120;
 
 const QUOTA_SUGGESTIONS =
   "\n  Sustained quota error — options:" +
@@ -129,61 +130,6 @@ export interface EmbeddingClientOptions {
   timeoutSec?: number;
 }
 
-type JsonObject = Record<string, unknown>;
-
-function isObject(value: unknown): value is JsonObject {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-const FLOAT =
-  /^[+-]?(?:\d(?:_?\d)*(?:\.(?:\d(?:_?\d)*)?)?|\.\d(?:_?\d)*)(?:[eE][+-]?\d(?:_?\d)*)?$/;
-const SPECIAL_FLOAT = /^([+-]?)(inf|infinity|nan)$/i;
-
-/** Python `float(text)`, or null where it raises ValueError. */
-function pyFloat(text: string): number | null {
-  const t = pyStrip(text);
-  if (FLOAT.test(t)) return Number(t.replaceAll("_", ""));
-  const special = SPECIAL_FLOAT.exec(t);
-  if (!special) return null;
-  if ((special[2] as string).toLowerCase() === "nan") return Number.NaN;
-  return special[1] === "-" ? -Infinity : Infinity;
-}
-
-/** Seconds a response asks us to wait: retry-after-ms, then retry-after (seconds or a date). */
-function retryAfter(headers: Headers): number | null {
-  for (const [name, divisor] of [
-    ["retry-after-ms", 1000],
-    ["retry-after", 1],
-  ] as const) {
-    const value = headers.get(name);
-    if (value === null) continue;
-    const delay = pyFloat(value);
-    if (delay === null) continue;
-    if (
-      delay === Infinity &&
-      !["inf", "+inf", "infinity", "+infinity"].includes(value.trim().toLowerCase())
-    ) {
-      // A numeric overflow is an excessive server delay, which refuses the retry.
-      return MAX_RETRY_AFTER + 1;
-    }
-    return delay / divisor;
-  }
-  const value = headers.get("retry-after");
-  if (value === null) return null;
-  const date = Date.parse(value);
-  return Number.isNaN(date) ? null : (date - Date.now()) / 1000;
-}
-
-function shouldRetry(response: Response): boolean {
-  const wait = retryAfter(response.headers);
-  if (wait !== null && Number.isFinite(wait) && wait > MAX_RETRY_AFTER) return false;
-  const header = response.headers.get("x-should-retry");
-  if (header === "true") return true;
-  if (header === "false") return false;
-  const { status } = response;
-  return status === 408 || status === 409 || status === 429 || status >= 500;
-}
-
 /** The SDK's APIStatusError text: `Error code: 401 - {'error': ...}`. */
 async function statusError(response: Response): Promise<Error> {
   const text = pyStrip(await response.text());
@@ -192,29 +138,6 @@ async function statusError(response: Response): Promise<Error> {
   } catch {
     return new Error(text || `Error code: ${response.status}`);
   }
-}
-
-function abortableSleep(
-  sleep: (seconds: number) => Promise<void>,
-  seconds: number,
-  signal?: AbortSignal,
-): Promise<void> {
-  if (!signal) return sleep(seconds);
-  signal.throwIfAborted();
-  return new Promise((resolveSleep, reject) => {
-    const onAbort = () => reject(signal.reason);
-    signal.addEventListener("abort", onAbort, { once: true });
-    sleep(seconds).then(
-      () => {
-        signal.removeEventListener("abort", onAbort);
-        resolveSleep();
-      },
-      (error: unknown) => {
-        signal.removeEventListener("abort", onAbort);
-        reject(error);
-      },
-    );
-  });
 }
 
 function toInt(value: unknown): number {
@@ -258,19 +181,19 @@ export class EmbeddingClient {
       encoding_format: "float",
       usage: { include: true },
     };
-    let body: JsonObject | null = null;
+    let body: Record<string, unknown> | null = null;
     let lastError = "unknown";
     let dataFailures = 0;
     let quotaFailures = 0;
     for (;;) {
       const candidate = await this.#post(payload, signal);
-      if (isObject(candidate) && pyTruthy(candidate.data)) {
+      if (isJsonObject(candidate) && pyTruthy(candidate.data)) {
         body = candidate;
         break;
       }
-      const error = isObject(candidate) ? candidate.error : undefined;
-      if (isObject(error) && pyTruthy(error.message)) lastError = pyStr(error.message);
-      else if (isObject(error)) lastError = pyRepr(error);
+      const error = isJsonObject(candidate) ? candidate.error : undefined;
+      if (isJsonObject(error) && pyTruthy(error.message)) lastError = pyStr(error.message);
+      else if (isJsonObject(error)) lastError = pyRepr(error);
       else lastError = "provider returned no embedding data";
 
       let delay: number;
@@ -292,7 +215,7 @@ export class EmbeddingClient {
       logger.warning(
         `Embedding ${label} got no data (${compact}). Retrying in ${pyFixed(delay, 1)}s...`,
       );
-      await abortableSleep(this.#sleep, delay, signal);
+      await this.#abortableSleep(delay, signal);
     }
     if (body === null) {
       throw new Error(
@@ -305,7 +228,7 @@ export class EmbeddingClient {
     if (!Array.isArray(data)) throw new TypeError("embedding data is not a list");
     const vectors = data.map((d: unknown) => (d as { embedding: number[] }).embedding);
 
-    const usage = isObject(body.usage) && pyTruthy(body.usage) ? body.usage : {};
+    const usage = isJsonObject(body.usage) && pyTruthy(body.usage) ? body.usage : {};
     const promptTokens = toInt(usage.prompt_tokens || 0);
     const totalTokens = toInt(
       ("total_tokens" in usage ? usage.total_tokens : promptTokens) || promptTokens,
@@ -353,28 +276,26 @@ export class EmbeddingClient {
         if (signal?.aborted) throw signal.reason;
         if (error instanceof SyntaxError) throw error;
         if (remaining > 0) {
-          await abortableSleep(this.#sleep, this.#retryDelay(retriesTaken, null), signal);
+          await this.#abortableSleep(retryDelaySeconds(retriesTaken, null, this.#random), signal);
           continue;
         }
         throw new Error(timeout.aborted ? "Request timed out." : "Connection error.");
       }
-      if (remaining > 0 && shouldRetry(response)) {
+      if (remaining > 0 && shouldRetry(response.status, response.headers)) {
         await response.body?.cancel();
-        await abortableSleep(this.#sleep, this.#retryDelay(retriesTaken, response.headers), signal);
+        await this.#abortableSleep(
+          retryDelaySeconds(retriesTaken, response.headers, this.#random),
+          signal,
+        );
         continue;
       }
       throw await statusError(response);
     }
   }
 
-  #retryDelay(retriesTaken: number, headers: Headers | null): number {
-    const wait = headers ? retryAfter(headers) : null;
-    if (wait !== null && Number.isFinite(wait) && wait > 0 && wait <= MAX_RETRY_AFTER) return wait;
-    const backoff = Math.min(
-      INITIAL_RETRY_DELAY * 2 ** Math.min(retriesTaken, 1000),
-      MAX_RETRY_DELAY,
-    );
-    return Math.max(0, backoff * (1 - 0.25 * this.#random()));
+  #abortableSleep(seconds: number, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
+    return raceAbort(this.#sleep(seconds), signal);
   }
 }
 

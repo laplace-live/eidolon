@@ -5,9 +5,8 @@
 // `createPayloadIndex` don't wait, `query` omits payloads, and requests time out after 300 s
 // instead of 5 s. Every call below states the Python behavior explicitly; `deleteAll` relies on
 // waited deletes, or its next scroll returns the batch it just deleted.
-import { logger } from "@eidolon/config";
+import { errorText, logger } from "@eidolon/config";
 import { QdrantClient } from "@qdrant/js-client-rest";
-import { errorText } from "./errors.ts";
 
 export type QdrantApi = Pick<
   QdrantClient,

@@ -1,6 +1,6 @@
 // RAG over hand-compiled fan facts about the streamer, one line each. Unlike the archive's blocks,
 // a facts block is never replaced: one accumulates per enhanced turn, as in Python.
-import { cpLen, logger, pyRepr, pyStr, pyStrip, pyTruthy } from "@eidolon/config";
+import { cpLen, errorText, logger, pyRepr, pyStr, pyStrip, pyTruthy } from "@eidolon/config";
 import type { ContextProvider, ContextTurn, ConversationContext } from "@eidolon/core";
 import {
   buildQueryText,
@@ -9,8 +9,7 @@ import {
   type Retriever,
   type SearchRow,
 } from "@eidolon/retrieval";
-import { throwIfAborted } from "./abort.ts";
-import { errorText, pyRstrip } from "./compat.ts";
+import { pyRstrip } from "./compat.ts";
 import { decisionOf, type GateDecision, unlessSkipped } from "./gate.ts";
 import { OVERVIEW_FRAME_KEY } from "./recall.ts";
 
@@ -28,9 +27,7 @@ export interface PersonaFactsParams {
   readonly position: number;
 }
 
-export function personaFactsParams(
-  overrides: Partial<PersonaFactsParams> = {},
-): PersonaFactsParams {
+export function personaFactsParams(): PersonaFactsParams {
   return {
     ...personaFactsSearchParams(),
     minQueryChars: 4,
@@ -39,7 +36,6 @@ export function personaFactsParams(
     systemPrompt:
       "你过去在直播里说过 / 设定过的相关事实（用来 ground 你的回复，不要照念，也不要把日期念出来）：\n\n",
     position: 2,
-    ...overrides,
   };
 }
 
@@ -56,7 +52,6 @@ export function formatFacts(facts: readonly SearchRow[], prefix: string): string
 
 export interface PersonaFactsOptions {
   readonly retriever: Retriever;
-  readonly params?: Partial<PersonaFactsParams>;
 }
 
 /** The persona-facts RAG provider. */
@@ -81,7 +76,7 @@ export class PersonaFacts implements ContextProvider {
   readonly #retriever: Retriever;
 
   constructor(options: PersonaFactsOptions) {
-    this.params = personaFactsParams(options.params);
+    this.params = personaFactsParams();
     this.#retriever = options.retriever;
   }
 
@@ -120,7 +115,7 @@ export class PersonaFacts implements ContextProvider {
         this.#retriever.search(query, { candidates, topK, datePrefilter, signal: search }),
       signal,
     );
-    throwIfAborted(signal);
+    signal?.throwIfAborted();
     if (facts.length === 0) return;
     const content = formatFacts(facts, this.params.systemPrompt);
     const messages = [...context.getMessages()];

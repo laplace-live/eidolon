@@ -1,5 +1,5 @@
 import type { AllowedOffer, UserContext } from "@eidolon/access";
-import { cpLen, logger, pyRepr } from "@eidolon/config";
+import { cpLen, errorText, logger, pyRepr } from "@eidolon/config";
 import type { ContextProvider, LlmTool } from "@eidolon/core";
 import type { VoiceStyles } from "@eidolon/tools";
 import { rethrowIfCancelled } from "@pipedog/asyncio";
@@ -65,11 +65,6 @@ export interface SessionDeps {
   audioBackend(): Promise<OnnxBackend>;
 }
 
-/** Python's `{e}`: the message alone. */
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 export interface PipelineParts {
   readonly input: FrameProcessor;
   readonly stt: FrameProcessor;
@@ -119,7 +114,7 @@ async function optionalProvider<T>(
     return await open(dbPath);
   } catch (e) {
     rethrowIfCancelled(e);
-    logger.warning(`${label} disabled: ${messageOf(e)}`);
+    logger.warning(`${label} disabled: ${errorText(e)}`);
     return null;
   }
 }
@@ -147,7 +142,7 @@ async function sessionMemory(
     rethrowIfCancelled(e);
     // Constructing the engine reaches Qdrant to create the collection,
     // so an unreachable vector store surfaces here rather than at boot.
-    logger.warning(`Mem0 unavailable, continuing without memory: ${messageOf(e)}`);
+    logger.warning(`Mem0 unavailable, continuing without memory: ${errorText(e)}`);
     return null;
   }
 }
@@ -256,7 +251,7 @@ export function installGreeting(
         memories = await memory.newestFirst();
       } catch (e) {
         rethrowIfCancelled(e);
-        logger.warning(`Could not load Mem0 memories for greeting: ${messageOf(e)}`);
+        logger.warning(`Could not load Mem0 memories for greeting: ${errorText(e)}`);
       }
     }
     context.addMessage({ role: "user", content: buildKickoff(memories) });
@@ -315,7 +310,7 @@ export async function runSessionSafely(
   try {
     await runSession(connection, admission, deps);
   } catch (e) {
-    logger.error(`Bot session failed: ${messageOf(e)}`, e);
+    logger.error(`Bot session failed: ${errorText(e)}`, e);
     // The client already has its answer: left open, the call would connect to no bot.
     await connection.disconnect();
   }

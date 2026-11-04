@@ -1,8 +1,8 @@
 // Python 3.13 argparse's parsing rules for the flags these CLIs declare, so a command line parses,
 // or fails with the same message and exit code, as it does under the Python CLI. Usage and help
 // are Python's own text at 80 columns.
-import { cpLen, pyRepr, pyStr, pyStrip } from "@eidolon/config";
-import { addDays, type IsoDate, isoDate, pyInt, weekday } from "@eidolon/retrieval";
+import { cpLen, isLeap, pyParseInt, pyRepr, pyStr } from "@eidolon/config";
+import { addDays, type IsoDate, isoDate, weekday } from "@eidolon/retrieval";
 import { partition } from "./py.ts";
 
 /** An argparse `type=`: `parse` throws on a value the Python callable rejects. */
@@ -58,22 +58,17 @@ export function parserError(spec: ParserSpec, message: string): ArgparseExit {
 /** The namespace, keyed by `dest`. */
 export type Namespace = Record<string, unknown>;
 
-const INT_TEXT = /^([+-]?)(\p{Nd}+(?:_\p{Nd}+)*)$/u;
-
 /** `int(text)`: surrounding whitespace, a sign, digit underscores and any Unicode decimal digit. */
 export const INT: ArgType<number> = {
   name: "int",
   parse(text: string): number {
-    const match = INT_TEXT.exec(pyStrip(text));
-    if (!match) throw new RangeError(`invalid literal for int() with base 10: ${pyRepr(text)}`);
-    const value = pyInt((match[2] as string).replaceAll("_", ""));
-    return match[1] === "-" ? -value : value;
+    const value = pyParseInt(text);
+    if (value === null) {
+      throw new RangeError(`invalid literal for int() with base 10: ${pyRepr(text)}`);
+    }
+    return value;
   },
 };
-
-function isLeap(year: number): boolean {
-  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-}
 
 /**
  * `date.fromisoformat`, as CPython's C parser reads it: 7, 8 or 10 UTF-8 bytes of `YYYY-MM-DD`,

@@ -2,7 +2,14 @@
 // HEAD rule, idle-timeout opt-out, logged 500, CORS), and everything else gets the Python bot's
 // 404 and 405 bodies.
 import { STATUS_CODES } from "node:http";
-import type { CorsPolicy, LoggedInUser, OfferAdmission, OfferInput } from "@eidolon/access";
+import {
+  type CorsPolicy,
+  type LoggedInUser,
+  OFFER_PATH,
+  type OfferAdmission,
+  type OfferInput,
+  PREFLIGHT_PATH,
+} from "@eidolon/access";
 import { logger } from "@eidolon/config";
 import { SELFIE_PATH } from "@eidolon/imagegen";
 import type { MemoryAdmin } from "@eidolon/memory";
@@ -60,8 +67,6 @@ export interface BotApp {
   /** For `Bun.serve({ error })`, a last resort only: Bun passes no request, so no CORS. */
   readonly onError: (error: Error) => Response;
 }
-
-export const OFFER_PATH = "/api/offer";
 
 /** Pipecat's prebuilt demo UI paths, which the bot never serves. */
 export function isDemoPath(pathname: string): boolean {
@@ -153,7 +158,7 @@ export function createBotApp(parts: BotAppParts): BotApp {
       PATCH: async (request) =>
         signallingResponse(await parts.signalling.patch(await request.text())),
     },
-    "/api/offer/preflight": {
+    [PREFLIGHT_PATH]: {
       POST: async (request, server) =>
         access.preflightOffer({
           bodyText: await request.text(),

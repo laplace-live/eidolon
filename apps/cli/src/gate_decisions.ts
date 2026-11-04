@@ -2,7 +2,19 @@
 // state builder, questions, model and threshold, into decisions.json. About $0.002 of Jev calls.
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { envOptional, openrouterHeaders, PROJECT_ROOT, pyFixed, sortedPy } from "@eidolon/config";
+import {
+  envOptional,
+  httpxStatusMessage,
+  isPlainObject,
+  openrouterHeaders,
+  PROJECT_ROOT,
+  PyFloat,
+  pyError,
+  pyFixed,
+  pyJsonDumps,
+  pyRepr,
+  sortedPy,
+} from "@eidolon/config";
 import {
   DEFAULT_GATE_MODEL,
   GATE_QUESTIONS,
@@ -11,20 +23,7 @@ import {
   gateState,
 } from "@eidolon/context";
 import { type CliIo, printer, resolveIo } from "./io.ts";
-import {
-  dumpsPy,
-  isDict,
-  ljust,
-  loadsPy,
-  median,
-  numOf,
-  PyFloat,
-  type PyNumber,
-  pyError,
-  pyRound,
-  quantilesExclusive,
-  reprPy,
-} from "./py.ts";
+import { ljust, loadsPy, median, numOf, type PyNumber, pyRound, quantilesExclusive } from "./py.ts";
 
 export const BENCHMARK_DIR = join(PROJECT_ROOT, "docs/benchmarks/2026-09-19-retrieval-gate");
 const TIMEOUT_MS = 20_000;
@@ -108,37 +107,14 @@ function p90Py(data: readonly number[]): PyNumber {
 }
 
 function subscript(container: unknown, key: string): unknown {
-  if (!isDict(container)) throw pyError("TypeError", "object is not subscriptable");
+  if (!isPlainObject(container)) throw pyError("TypeError", "object is not subscriptable");
   if (!(key in container)) throw pyError("KeyError", `'${key}'`);
   return container[key];
 }
 
 function asNumber(value: unknown): PyNumber {
   if (typeof value === "number" || value instanceof PyFloat) return value;
-  throw pyError("TypeError", `noul is not a number: ${reprPy(value)}`);
-}
-
-const REDIRECTS = new Set([301, 302, 303, 307, 308]);
-
-/** httpx's `raise_for_status`: anything but a 2xx raises; redirects are not followed. */
-function statusError(response: Response): Error {
-  const status = response.status;
-  const kind =
-    status < 200
-      ? "Informational response"
-      : status < 400
-        ? "Redirect response"
-        : status < 500
-          ? "Client error"
-          : "Server error";
-  const reason = response.statusText ? ` ${response.statusText}` : "";
-  const location = REDIRECTS.has(status) ? response.headers.get("location") : null;
-  return pyError(
-    "HTTPStatusError",
-    `${kind} '${status}${reason}' for url '${GATE_URL}'\n` +
-      (location === null ? "" : `Redirect location: '${location}'\n`) +
-      `For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/${status}`,
-  );
+  throw pyError("TypeError", `noul is not a number: ${pyRepr(value)}`);
 }
 
 interface AskOptions {
@@ -167,10 +143,12 @@ export async function ask(turn: GateTurnSpec, options: AskOptions): Promise<Gate
   });
   const text = await response.text();
   const ms = options.now() - started;
-  if (!response.ok) throw statusError(response);
+  if (!response.ok) {
+    throw pyError("HTTPStatusError", httpxStatusMessage(response, GATE_URL));
+  }
   const body = loadsPy(text);
   const answers = subscript(body, "answers");
-  if (!isDict(answers)) throw pyError("AttributeError", "object has no attribute 'items'");
+  if (!isPlainObject(answers)) throw pyError("AttributeError", "object has no attribute 'items'");
   const nouls: Record<string, PyNumber> = {};
   for (const [name, answer] of Object.entries(answers)) {
     nouls[name] = asNumber(subscript(answer, "noul"));
@@ -242,21 +220,21 @@ export async function runGateDecisions(options: GateDecisionsOptions = {}): Prom
   for (const turn of turns) rows.push(await askTurn(turn));
 
   const result = decisionsResult(rows);
-  writeFileSync(outPath, `${dumpsPy(result, { indent: 1 })}\n`, "utf8");
+  writeFileSync(outPath, `${pyJsonDumps(result, { ensureAscii: false, indent: 1 })}\n`, "utf8");
 
   print(
-    `model ${reprPy(result.model)}, threshold ${reprPy(result.threshold)}, ` +
-      `latency ${reprPy(result.latency_ms)}`,
+    `model ${pyRepr(result.model)}, threshold ${pyRepr(result.threshold)}, ` +
+      `latency ${pyRepr(result.latency_ms)}`,
   );
   for (const [name, summary] of Object.entries(result.sets as Record<string, GateSummary>)) {
-    print(`${ljust(name, 8)} ${reprPy(summary)}`);
+    print(`${ljust(name, 8)} ${pyRepr(summary)}`);
   }
   for (const r of rows) {
     if (r.recall === null) print(`borderline ${pyFixed(numOf(r.score), 2)} ${r.text}`);
   }
   const missed = rows.filter((r) => r.recall === true && numOf(r.score) < GATE_THRESHOLD);
   for (const r of missed) {
-    print(`MISSED ${pyFixed(numOf(r.score), 2)} ${r.text} ${reprPy(r.nouls)}`);
+    print(`MISSED ${pyFixed(numOf(r.score), 2)} ${r.text} ${pyRepr(r.nouls)}`);
   }
   return missed.length > 0 ? 1 : 0;
 }

@@ -1,13 +1,18 @@
 // Boot and shutdown. The packages come in as their module namespaces (main.ts) or as fakes (tests).
 import { lookup } from "node:dns/promises";
-import type { AudioQualitySettings, CorsPolicy, SlidingWindowQuota } from "@eidolon/access";
+import {
+  type AudioQualitySettings,
+  type CorsPolicy,
+  OFFER_PATH,
+  type SlidingWindowQuota,
+} from "@eidolon/access";
 import { type LogLevel, logger } from "@eidolon/config";
 import { SELFIE_PATH } from "@eidolon/imagegen";
 import type { MemoryAdmin } from "@eidolon/memory";
 import type { SignallingServer } from "@eidolon/runtime";
 import type { IceService } from "@eidolon/turn";
 import type { Server } from "bun";
-import { type BotAccess, createBotApp, OFFER_PATH } from "./app.ts";
+import { type BotAccess, createBotApp } from "./app.ts";
 import type { BotArgs } from "./args.ts";
 import type { McpHandler } from "./mcp/index.ts";
 import { FORGET_MEMORIES_PATH, LIST_MEMORIES_PATH } from "./memory-admin.ts";

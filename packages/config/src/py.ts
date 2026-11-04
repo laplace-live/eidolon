@@ -5,12 +5,15 @@
 // exact binary ties up where Python rounds them to even.
 //
 // JS has one number type, so an integral number always prints as a Python int ("2", never "2.0").
-// Use pyFloatRepr where the Python value is a float.
+// Where the Python value is a float, use pyFloatRepr, or wrap it in a PyFloat inside a structure.
 
 const PY_WHITESPACE =
   "\t\n\v\f\r\x1c\x1d\x1e\x1f \x85\xa0\u1680\u2000\u2001\u2002\u2003\u2004\u2005" +
   "\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000";
 const PY_WHITESPACE_SET = new Set(PY_WHITESPACE);
+
+/** `str.isspace()` as a regex character-class body: `new RegExp(`[${PY_SPACE_CLASS}]`)`. */
+export const PY_SPACE_CLASS = String.raw`\t\n\v\f\r\x1c-\x20\x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000`;
 
 /** Python `str.isspace()` for one code point. */
 export function isPySpace(ch: string): boolean {
@@ -118,7 +121,9 @@ export function cpSlice(s: string, start?: number, end?: number): string {
   return points.slice(clamp(start, 0), clamp(end, len)).join("");
 }
 
-function compareCodePoints(a: string, b: string): number {
+/** Python string ordering: by code point, where JS `<` compares UTF-16 units. */
+export function pyCompare(a: string, b: string): number {
+  if (a === b) return 0;
   const ia = a[Symbol.iterator]();
   const ib = b[Symbol.iterator]();
   for (;;) {
@@ -128,13 +133,13 @@ function compareCodePoints(a: string, b: string): number {
     if (y.done) return 1;
     const cx = (x.value as string).codePointAt(0) as number;
     const cy = (y.value as string).codePointAt(0) as number;
-    if (cx !== cy) return cx - cy;
+    if (cx !== cy) return cx < cy ? -1 : 1;
   }
 }
 
 /** Python `sorted()` of strings: code-point order. */
 export function sortedPy(strings: Iterable<string>): string[] {
-  return [...strings].sort(compareCodePoints);
+  return [...strings].sort(pyCompare);
 }
 
 /** Python `bool(value)` for JSON-shaped values. */
@@ -150,10 +155,69 @@ export function pyTruthy(value: unknown): boolean {
   return true;
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
+/** A Python dict as JS builds one: an object literal or a null-prototype object. */
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (typeof value !== "object" || value === null) return false;
   const proto = Object.getPrototypeOf(value);
   return proto === Object.prototype || proto === null;
+}
+
+/** Python `isinstance(value, dict)` for a `JSON.parse` result. */
+export function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** A value Python holds as a float, so it prints as "1.0" where a JS number would print "1". */
+export class PyFloat {
+  readonly value: number;
+  constructor(value: number) {
+    this.value = value;
+  }
+}
+
+/** Python `type(value).__name__` for a JSON value; any integral number is an int. */
+export function pyTypeName(value: unknown): string {
+  if (value === null || value === undefined) return "NoneType";
+  switch (typeof value) {
+    case "boolean":
+      return "bool";
+    case "number":
+      return Number.isInteger(value) ? "int" : "float";
+    case "bigint":
+      return "int";
+    case "string":
+      return "str";
+  }
+  if (value instanceof PyFloat) return "float";
+  return Array.isArray(value) ? "list" : "dict";
+}
+
+/** An Error whose `name` is the Python exception class, as `{type(e).__name__}: {e}` prints it. */
+export function pyError(name: string, message: string): Error {
+  const error = new Error(message);
+  error.name = name;
+  return error;
+}
+
+/** Python `str(e)` for a caught error: the message alone. */
+export function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** `value.get(key, fallback)`, raising Python's AttributeError when `value` is not a dict. */
+export function pyGet(value: unknown, key: string, fallback: unknown = null): unknown {
+  if (!isPlainObject(value)) {
+    throw pyError("AttributeError", `'${pyTypeName(value)}' object has no attribute 'get'`);
+  }
+  return Object.hasOwn(value, key) ? value[key] : fallback;
+}
+
+/** `for item in value` over a JSON value: lists yield items, strings code points, dicts keys. */
+export function pyIter(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") return Array.from(value);
+  if (isPlainObject(value)) return Object.keys(value);
+  throw pyError("TypeError", `'${pyTypeName(value)}' object is not iterable`);
 }
 
 /** `float.__repr__`. */
@@ -229,6 +293,7 @@ export function pyRepr(value: unknown): string {
     case "string":
       return pyStrRepr(value);
   }
+  if (value instanceof PyFloat) return pyFloatRepr(value.value);
   if (Array.isArray(value)) return `[${value.map(pyRepr).join(", ")}]`;
   if (value instanceof Map) {
     return `{${[...value].map(([k, v]) => `${pyRepr(k)}: ${pyRepr(v)}`).join(", ")}}`;
@@ -284,11 +349,11 @@ function jsonString(s: string, ensureAscii: boolean): string {
   return json.replace(/[\u007f-\uffff]/g, (c) => `\\u${hex(c.charCodeAt(0), 4)}`);
 }
 
-function jsonNumber(value: number): string {
+function jsonNumber(value: number, float: boolean): string {
   if (Number.isNaN(value)) return "NaN";
   if (value === Number.POSITIVE_INFINITY) return "Infinity";
   if (value === Number.NEGATIVE_INFINITY) return "-Infinity";
-  return pyNumberRepr(value);
+  return float ? pyFloatRepr(value) : pyNumberRepr(value);
 }
 
 /** `json.dumps(value, ensure_ascii=..., indent=...)` with Python's default separators. */
@@ -299,12 +364,13 @@ export function pyJsonDumps(
   const ensureAscii = options.ensureAscii ?? true;
   const indent = options.indent;
   const encode = (v: unknown, depth: number): string => {
+    if (v instanceof PyFloat) return jsonNumber(v.value, true);
     if (v === null || v === undefined) return "null";
     switch (typeof v) {
       case "boolean":
         return v ? "true" : "false";
       case "number":
-        return jsonNumber(v);
+        return jsonNumber(v, false);
       case "bigint":
         return v.toString();
       case "string":

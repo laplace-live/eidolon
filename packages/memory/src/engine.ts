@@ -2,9 +2,21 @@
 // image, mem0's entity linking and BM25 never run: `text_lemmatized` is a copy of `data`, no
 // sparse vector is written, and search is dense cosine similarity behind a threshold. Writing
 // anything else would desync the points the two bots share.
-import { logger, pyFloatRepr, pyStr, pyStrip, pyTruthy, sortedPy } from "@eidolon/config";
+import {
+  errorText,
+  isPlainObject,
+  logger,
+  pyError,
+  pyFloatRepr,
+  pyGet,
+  pyIter,
+  pyStr,
+  pyStrip,
+  pyTruthy,
+  pyTypeName,
+  sortedPy,
+} from "@eidolon/config";
 import { type MemoryConfig, requireLlmKey } from "./config.ts";
-import { errorText, isPlainObject, pyError, pyGet, pyIter, pyTypeName } from "./errors.ts";
 import { ADDITIVE_EXTRACTION_PROMPT, AGENT_CONTEXT_SUFFIX } from "./extraction-prompt.ts";
 import { type HistoryEntry, HistoryStore } from "./history.ts";
 import {

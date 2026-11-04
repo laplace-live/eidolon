@@ -1,5 +1,5 @@
 // argparse parity for the three runner flags the bot keeps; the Docker CMD passes --host/--port.
-import { pyRepr } from "@eidolon/config";
+import { pyParseInt, pyRepr } from "@eidolon/config";
 
 export interface BotArgs {
   readonly host: string;
@@ -20,8 +20,6 @@ options:
   -v, --verbose  Increase logging verbosity
 `;
 
-// Python int(): surrounding whitespace, a sign and digit underscores.
-const INT = /^[+-]?\d+(?:_\d+)*$/;
 const NEGATIVE_NUMBER = /^-\d+$|^-\d*\.\d+$/;
 
 /** argparse `_parse_optional`: a dash-led word is a flag unless it is `-`, a negative number or has a space. */
@@ -65,8 +63,9 @@ export function parseBotArgs(argv: readonly string[]): BotArgs {
       host = value();
     } else if (flag === "--port") {
       const raw = value();
-      if (!INT.test(raw.trim())) usageError(`argument --port: invalid int value: ${pyRepr(raw)}`);
-      port = Number(raw.trim().replaceAll("_", ""));
+      const parsed = pyParseInt(raw);
+      if (parsed === null) usageError(`argument --port: invalid int value: ${pyRepr(raw)}`);
+      port = parsed;
     } else if (flag === "--verbose") {
       if (inline !== undefined) {
         usageError(`argument -v/--verbose: ignored explicit argument ${pyRepr(inline)}`);

@@ -1,12 +1,7 @@
-// asyncio delivers cancellation at the awaited call, so nothing after an interrupted await runs.
-// A promise keeps running after its caller stops waiting, so every provider re-checks its signal
-// after each await, before it touches the shared context.
-
-export function throwIfAborted(signal?: AbortSignal): void {
-  signal?.throwIfAborted();
-}
-
-/** Settles with `promise`, or rejects with `signal.reason` as soon as `signal` aborts. */
+/**
+ * Settles with `promise`, or rejects with `signal.reason` as soon as `signal` aborts. The promise
+ * runs on unread after an abort, so it is always subscribed to and a late rejection stays handled.
+ */
 export function raceAbort<T>(promise: PromiseLike<T>, signal?: AbortSignal): Promise<T> {
   if (signal === undefined) return Promise.resolve(promise);
   return new Promise<T>((resolve, reject) => {
