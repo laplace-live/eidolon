@@ -4,7 +4,7 @@ import { RTVIProcessor } from "@pipedog/core/processors/frameworks/rtvi/processo
 // Written by apps/bot/scripts/sync-version.ts on each release.
 export const BOT_ABOUT = Object.freeze({
   library: "laplace-eidolon",
-  library_version: "0.3.0",
+  library_version: "0.3.1",
 } as const);
 
 /** RTVIProcessor that brands the bot-ready `about` payload as ours. */
