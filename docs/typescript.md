@@ -47,6 +47,10 @@ bun run gate-decisions                # billed; rewrites decisions.json like dec
 docker compose --profile ts up --build   # bot-ts on :7861, beside bot and qdrant
 ```
 
+CI publishes this image as `ghcr.io/laplace-live/eidolon`, and the Python bot's as
+`ghcr.io/laplace-live/eidolon-python`, with the same tags (`edge`, `sha-…`, and `X.Y.Z`, `X.Y`, `X`
+per release).
+
 `bun apps/bot/scripts/e2e-call.ts --text` (or `--audio`) holds a real call through headless
 Chrome and reports latency per stage; `--base-url` points it at either bot. On a Mac where
 headless Chrome is killed after about 30 s, add `--headful`.

@@ -16,12 +16,21 @@ on:
       - webhook
   workflow_dispatch:
 
-env:
-  GHCR_SLUG: ghcr.io/laplace-live/eidolon
-
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    # One image per runtime, both tagged alike, until the cutover retires Python.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ts
+            image: ghcr.io/laplace-live/eidolon
+            dockerfile: apps/bot/Dockerfile
+          - name: python
+            image: ghcr.io/laplace-live/eidolon-python
+            dockerfile: Dockerfile
 
     permissions:
       contents: read
@@ -64,7 +73,7 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: |
-            ${{ env.GHCR_SLUG }}
+            ${{ matrix.image }}
           tags: |
             type=edge
             type=schedule
@@ -85,5 +94,6 @@ jobs:
           targets: build-all
           push: ${{ github.event_name != 'pull_request' }}
           set: |
-            *.cache-from=type=gha
-            *.cache-to=type=gha,mode=max
+            *.dockerfile=${{ matrix.dockerfile }}
+            *.cache-from=type=gha,scope=${{ matrix.name }}
+            *.cache-to=type=gha,mode=max,scope=${{ matrix.name }}
