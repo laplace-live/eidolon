@@ -100,8 +100,9 @@ export {
   streamScope,
 } from "./stream_time.ts";
 export {
-  DEFAULT_DB_PATH,
+  dbPathArgument,
   decodeTopics,
+  INDEX_DIR,
   listTableNames,
   openTable,
   PERSONA_FACTS,

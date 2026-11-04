@@ -1,6 +1,8 @@
 import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { dataHome } from "@eidolon/config";
 import type { LlmTool, ToolEffects } from "@eidolon/core";
 import { isSelfieConfigured, type ReferenceImage, SelfieStore } from "@eidolon/imagegen";
 import {
@@ -350,7 +352,17 @@ describe("take_selfie", () => {
 });
 
 describe("selfiePromptHint", () => {
-  test("names the bundled friend exactly as Python does", () => {
+  // The template ships outfits only; the friend lives in the user's data home.
+  const personas = () => join(dataHome(), "personas");
+  afterEach(() => rmSync(personas(), { recursive: true, force: true }));
+  function privateFriend(): void {
+    const dir = join(personas(), "milky-green", "references", "friends");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "七海Nana7mi.png"), bytesOf("nana"));
+  }
+
+  test("names the user's friend exactly as Python named the bundled one", () => {
+    privateFriend();
     expect(selfiePromptHint()).toBe(SELFIE_HINT_FRIEND);
   });
 

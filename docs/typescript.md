@@ -30,7 +30,7 @@ touches pipedog: `packages/runtime` adapts both. Clients (the `/ai` page today; 
 later) talk to `apps/bot` over the same HTTP and RTVI contract the Python bot serves.
 
 The offline chain (download, transcribe, refine, ingest) stays Python. Both runtimes read the
-same `data/lancedb` and the same Qdrant collection. Mem0's `history.db` has the same schema, but
+same persona index in the data home ([personas.md](personas.md)) and the same Qdrant collection. Mem0's `history.db` has the same schema, but
 the compose `bot-ts` service keeps its own volume, so each runtime's change log records only its own events.
 
 ## Commands
@@ -94,6 +94,8 @@ Deliberate, and not worth matching:
   than 1.12: a finished `take_selfie` result may be delivered on its own once everything the
   viewer said has been answered.
 - Every response, 500s included, carries CORS headers.
+- The CLIs' `--db-path` defaults to `LANCEDB_PATH`, else the persona's index, where Python's
+  defaulted to `data/lancedb`; the tests apply this to Python's recorded output.
 - Mem0's extraction may reply with up to 8192 tokens, where mem0 allows 2000. A thinking model's
   reasoning counts toward that cap, and under mem0's cut about 1 in 12 Gemini Flash extractions
   ended mid-JSON, losing that turn's memories. Lowering the thinking effort instead also fixed it,

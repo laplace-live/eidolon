@@ -13,6 +13,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from loguru import logger
 
+from ..embeddings import default_db_path
 from ..stream_catalog import (
     CATALOG_FILENAME,
     CATALOG_VERSION,
@@ -108,7 +109,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.add_argument("--streams-dir", type=Path, default=Path("streams"))
     parser.add_argument(
-        "--db-path", type=Path, default=Path(os.getenv("LANCEDB_PATH") or "data/lancedb")
+        "--db-path", type=Path, default=Path(os.getenv("LANCEDB_PATH") or default_db_path())
     )
     args = parser.parse_args()
     try:

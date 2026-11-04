@@ -1,12 +1,8 @@
 import { afterEach, beforeEach, type Mock, spyOn } from "bun:test";
+import { join } from "node:path";
 import { consoleSink, type LogRecord, logger } from "@eidolon/config";
 import * as lancedb from "@lancedb/lancedb";
-import {
-  openTable,
-  resetEmbeddingClient,
-  resetRerankerCache,
-  resolveDbPath,
-} from "../src/index.ts";
+import { openTable, resetEmbeddingClient, resetRerankerCache } from "../src/index.ts";
 
 /** Routes the logger into the returned array for each test, and back to the console after. */
 export function captureLogs(): LogRecord[] {
@@ -143,9 +139,17 @@ export async function memoryTable(rows: readonly FactRow[] = FACT_ROWS, name = "
 }
 
 /** A table from the committed data/lancedb, or null when absent or only LFS pointer stubs. */
+/** 奶绿's real index, where the developer's data home holds one; the parity tests skip without it. */
+export const REAL_INDEX = join(
+  process.env.EIDOLON_REAL_HOME ?? "",
+  "personas",
+  "milky-green",
+  "index",
+);
+
 export async function realTable(name: string): Promise<lancedb.Table | null> {
   try {
-    const table = await openTable(resolveDbPath(), name);
+    const table = await openTable(REAL_INDEX, name);
     if (table === null) return null;
     // Row counts come from the manifest, which isn't in LFS; only reading a row hits a stub.
     await table.query().limit(1).toArray();

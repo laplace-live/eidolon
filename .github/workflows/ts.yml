@@ -7,6 +7,7 @@ on:
     paths:
       - "apps/**"
       - "packages/**"
+      - "personas/**"
       - "package.json"
       - "bun.lock"
       - "bunfig.toml"
@@ -19,6 +20,7 @@ on:
     paths:
       - "apps/**"
       - "packages/**"
+      - "personas/**"
       - "package.json"
       - "bun.lock"
       - "bunfig.toml"
@@ -38,7 +40,7 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     steps:
-      # No LFS: the tests that read data/lancedb skip themselves on pointer stubs.
+      # The parity tests that read a real persona index skip themselves: CI has no data home.
       - uses: actions/checkout@v7
         with:
           persist-credentials: false

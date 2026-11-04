@@ -31,7 +31,6 @@ export {
 } from "./prompt.ts";
 export { pyPath, pyPathName, pyPathStem, pyPathSuffix, pyPathWithName } from "./pypath.ts";
 export {
-  BUNDLED_REFERENCES,
   FRIENDS,
   friendSources,
   imagesIn,
@@ -42,6 +41,7 @@ export {
   OUTFITS,
   type ReferenceImage,
   type ReferenceOptions,
+  referenceRoots,
   referenceSources,
   selectOutfit,
 } from "./references.ts";

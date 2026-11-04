@@ -2,6 +2,7 @@
 // their search against that decision through unlessSkipped, so it may cancel a search but never
 // delays one.
 import {
+  activePersona,
   envFlag,
   envOptional,
   httpxStatusMessage,
@@ -30,21 +31,22 @@ export const GATE_TIMEOUT_SEC = 10;
 // docs/benchmarks/2026-09-19-retrieval-gate
 export const GATE_THRESHOLD = 0.3;
 
-// Dropping this line cost 2 of 93 recall turns; dropping it and "her flower
-// shop" below cost 5, every one a question about her cat or her shop.
-export const GATE_STREAMER =
-  "明前奶绿, a Chinese VTuber who streams on Bilibili, runs a fictional flower shop " +
-  "(拉普拉斯花店) whose manager is her cat 坚果, and calls her fans 奶糖花";
+// The persona's identity.summary, which Jev reads as who "the streamer" is. Dropping 奶绿's cost 2
+// of 93 recall turns; dropping it with her pack's "her flower shop" question cost 5, every one a
+// question about her cat or her shop.
+export function gateStreamer(): string {
+  return activePersona().identity.summary;
+}
 
 // Jev reads each question literally, so each asks one thing and any one
-// clearing the threshold means retrieve.
+// clearing the threshold means retrieve. A persona's knowledge.gate.questions replace these texts.
 export const GATE_QUESTIONS = {
   about_her: {
     type: "noul",
     instructions:
       "Is the viewer's latest message asking about the streamer herself — her " +
       "preferences, opinions, habits, abilities, body, family, pets, friends, " +
-      "relationships, backstory, or her flower shop?",
+      "relationships, or backstory?",
   },
   her_past: {
     type: "noul",
@@ -59,6 +61,22 @@ export const GATE_QUESTIONS = {
       "character, place, group, game, song, or term is, or ask about one by name?",
   },
 } as const;
+
+export type GateQuestions = Record<
+  keyof typeof GATE_QUESTIONS,
+  { type: "noul"; instructions: string }
+>;
+
+/** GATE_QUESTIONS with the active persona's texts in place; keys and order never change. */
+export function gateQuestions(): GateQuestions {
+  const overrides = activePersona().gateQuestions;
+  const questions = {} as GateQuestions;
+  for (const [key, question] of Object.entries(GATE_QUESTIONS)) {
+    const text = Object.hasOwn(overrides, key) ? overrides[key] : question.instructions;
+    questions[key as keyof GateQuestions] = { type: question.type, instructions: text as string };
+  }
+  return questions;
+}
 
 // The previous user line and the reply to it, so "它几岁了？" keeps its subject.
 const EARLIER_TURNS = 2;
@@ -86,7 +104,7 @@ export function gateState(messages: readonly unknown[]): GateState | null {
   const latest = turns.findLastIndex((turn) => turn.role === "user");
   if (latest < 0) return null;
   return {
-    streamer: GATE_STREAMER,
+    streamer: gateStreamer(),
     earlier_turns: turns.slice(Math.max(0, latest - EARLIER_TURNS), latest).map((turn) => ({
       speaker: turn.role === "user" ? "viewer" : "streamer",
       text: turn.text,
@@ -188,7 +206,7 @@ export class RetrievalGate {
       const response = await post(this.#url, {
         method: "POST",
         headers: this.#headers,
-        body: JSON.stringify({ model: this.model, state, questions: GATE_QUESTIONS }),
+        body: JSON.stringify({ model: this.model, state, questions: gateQuestions() }),
         // httpx follows no redirects, so a 3xx failed open there too.
         redirect: "manual",
         signal: AbortSignal.timeout(this.#timeoutSec * 1000),

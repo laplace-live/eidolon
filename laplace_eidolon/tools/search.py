@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from dotenv import load_dotenv
 from loguru import logger
 
-from ..embeddings import DEFAULT_DB_PATH
+from ..embeddings import default_db_path
 from ..retriever import LanceRetriever
 from ..stream_archive import (
     DEFAULT_TABLE,
@@ -225,7 +225,7 @@ def main() -> int:
         "--top-k", type=int, default=5, help="Number of results to return (default: 5)"
     )
     parser.add_argument(
-        "--db-path", default=DEFAULT_DB_PATH, help=f"LanceDB dir (default: {DEFAULT_DB_PATH})"
+        "--db-path", default=default_db_path(), help=f"LanceDB dir (default: {default_db_path()})"
     )
     parser.add_argument(
         "--table", default=DEFAULT_TABLE, help=f"Table name (default: {DEFAULT_TABLE})"

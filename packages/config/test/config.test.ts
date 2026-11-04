@@ -204,7 +204,7 @@ describe("flags, raw values and paths", () => {
   });
 
   test("project paths join like pathlib", () => {
-    expect(existsSync(join(PROJECT_ROOT, "persona.md"))).toBe(true);
+    expect(existsSync(join(PROJECT_ROOT, "personas", "milky-green", "prompt.md"))).toBe(true);
     expect(resolveProjectPath("data/lancedb")).toBe(join(PROJECT_ROOT, "data/lancedb"));
     expect(resolveProjectPath("/abs/x")).toBe("/abs/x");
   });

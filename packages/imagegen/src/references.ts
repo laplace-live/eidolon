@@ -1,18 +1,20 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { envOptional, expandUser, PROJECT_ROOT, pyStrip, sortedPy } from "@eidolon/config";
+import { envOptional, expandUser, personaFolders, pyStrip, sortedPy } from "@eidolon/config";
 import { ImageGenError } from "./errors.ts";
 import { imageMediaType } from "./mime.ts";
 import { AFTER_DARK, ambience, type PersonaClock, personaClock } from "./prompt.ts";
 import { pyPath, pyPathName, pyPathStem } from "./pypath.ts";
 
-// Resolved against the repo root rather than the working directory, like the LanceDB path, so any
-// launcher finds it.
-export const BUNDLED_REFERENCES = join(PROJECT_ROOT, "data", "selfie-references");
 // Two directories, two rules: one of outfits/ is the persona, and every friends/ image is a
 // different person.
-export const OUTFITS = join(BUNDLED_REFERENCES, "outfits");
-export const FRIENDS = join(BUNDLED_REFERENCES, "friends");
+export const OUTFITS = "outfits";
+export const FRIENDS = "friends";
+
+/** The persona's references/ folders, the user's first: the template ships outfits, friends stay private. */
+export function referenceRoots(): string[] {
+  return personaFolders("references");
+}
 
 /** One `input_references` entry. */
 export interface ReferenceImage {
@@ -21,7 +23,7 @@ export interface ReferenceImage {
 }
 
 export interface ReferenceOptions {
-  /** The selfie-references directory; BUNDLED_REFERENCES by default. */
+  /** One references directory; the persona's referenceRoots() by default. */
   readonly root?: string;
   /** Picks the outfit; the persona clock now by default. */
   readonly clock?: PersonaClock;
@@ -56,10 +58,26 @@ export function imagesIn(directory: string): string[] {
     .filter((path) => isFile(path) && imageMediaType(pyPathName(path)) !== null);
 }
 
+/** Every image in `sub` across `roots`, sorted by name; the first root's file wins a shared name. */
+function imagesUnder(roots: readonly string[], sub: string): string[] {
+  const byName = new Map<string, string>();
+  for (const root of roots) {
+    for (const path of imagesIn(sub ? join(root, sub) : root)) {
+      const name = pyPathName(path);
+      if (!byName.has(name)) byName.set(name, path);
+    }
+  }
+  return sortedPy(byName.keys()).map((name) => byName.get(name) as string);
+}
+
+function rootsOf(options: Pick<ReferenceOptions, "root">): string[] {
+  return options.root === undefined ? referenceRoots() : [options.root];
+}
+
 /** `name → path` for every image in `friends/`. The file name is the name the LLM asks for. */
 export function friendSources(options: Pick<ReferenceOptions, "root"> = {}): Map<string, string> {
   const friends = new Map<string, string>();
-  for (const path of imagesIn(join(options.root ?? BUNDLED_REFERENCES, "friends"))) {
+  for (const path of imagesUnder(rootsOf(options), FRIENDS)) {
     friends.set(pyPathStem(path), path);
   }
   return friends;
@@ -87,11 +105,10 @@ export function referenceSources(options: ReferenceOptions = {}): string[] {
     .map((part) => pyStrip(part))
     .filter((part) => part !== "");
   if (configured.length > 0) return selectOutfit(configured, options.clock);
-  const root = options.root ?? BUNDLED_REFERENCES;
-  // Loose images directly under selfie-references/ also count as outfits, so a deployment
-  // mounting its own older data/ keeps working.
-  const outfits = imagesIn(join(root, "outfits"));
-  return selectOutfit(outfits.length > 0 ? outfits : imagesIn(root), options.clock);
+  const roots = rootsOf(options);
+  // Loose images directly under references/ also count as outfits.
+  const outfits = imagesUnder(roots, OUTFITS);
+  return selectOutfit(outfits.length > 0 ? outfits : imagesUnder(roots, ""), options.clock);
 }
 
 /**

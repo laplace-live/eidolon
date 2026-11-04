@@ -1,9 +1,17 @@
 // take_selfie: the persona redraws her reference image through OpenRouter's image route, and the
 // picture reaches the viewer's screen as an RTVI server message carrying its URL.
-import { envInt, envOptional, envStr, logger, pyRepr, pyStr, sortedPy } from "@eidolon/config";
+import {
+  activePersona,
+  envInt,
+  envOptional,
+  envStr,
+  logger,
+  pyRepr,
+  pyStr,
+  sortedPy,
+} from "@eidolon/config";
 import type { LlmTool, ToolResult, ToolSchema } from "@eidolon/core";
 import {
-  BUNDLED_REFERENCES,
   buildSelfiePrompt,
   DEFAULT_IMAGE_MODEL,
   friendSources,
@@ -14,6 +22,7 @@ import {
   personaClock,
   pyPathName,
   type ReferenceImage,
+  referenceRoots,
   referenceSources,
   renderSelfie,
   type SelfieStore,
@@ -21,9 +30,9 @@ import {
 
 export const SELFIE_TOOL_NAME = "take_selfie";
 
-const DESCRIPTION =
-  "给奶糖花拍一张自拍照，直接发到她屏幕上。" +
-  "奶糖花要看照片、要自拍、说想看看你的时候就调用 —— " +
+const description = (fans: string): string =>
+  `给${fans}拍一张自拍照，直接发到她屏幕上。` +
+  `${fans}要看照片、要自拍、说想看看你的时候就调用 —— ` +
   "例如『发张自拍』『拍张照片』『让我看看你』。" +
   "**这是唯一能把照片发出去的方式，被要求了就不要拒绝，" +
   "也不要说自己拍不了、走不开、没相机。**" +
@@ -51,11 +60,16 @@ export function selfieToolSchema(friends: readonly string[]): ToolSchema {
       description: WITH_FRIENDS_DESCRIPTION,
     };
   }
-  return { name: SELFIE_TOOL_NAME, description: DESCRIPTION, properties, required: [] };
+  return {
+    name: SELFIE_TOOL_NAME,
+    description: description(activePersona().identity.fans),
+    properties,
+    required: [],
+  };
 }
 
 export interface SelfieToolOptions {
-  /** The selfie-references directory; BUNDLED_REFERENCES by default. */
+  /** One references directory; the persona's referenceRoots() by default. */
   readonly root?: string;
   readonly store?: SelfieStore;
   readonly fetch?: typeof fetch;
@@ -73,11 +87,12 @@ export function createSelfieTool(options: SelfieToolOptions = {}): LlmTool | nul
     logger.info("[selfie] Disabled: OPENROUTER_API_KEY is unset.");
     return null;
   }
-  const root = options.root ?? BUNDLED_REFERENCES;
+  const root = options.root;
   const clock = personaClock(options.now?.());
   const sources = referenceSources({ root, clock });
   if (sources.length === 0) {
-    logger.info(`[selfie] Disabled: no reference images in ${root}.`);
+    const where = root ?? (referenceRoots().join(", ") || "the persona's references/");
+    logger.info(`[selfie] Disabled: no reference images in ${where}.`);
     return null;
   }
   // Encode once here and throw it away: a path that can't be read should leave the tool
@@ -163,8 +178,9 @@ export function createSelfieTool(options: SelfieToolOptions = {}): LlmTool | nul
  */
 export function selfiePromptHint(options: { readonly root?: string } = {}): string {
   if (!isSelfieConfigured({ root: options.root })) return "";
+  const { fans } = activePersona().identity;
   const lines = [
-    "奶糖花要看照片 / 要自拍 / 说想看看你（『发张自拍』『让我看看你』『来张照片』之类），" +
+    `${fans}要看照片 / 要自拍 / 说想看看你（『发张自拍』『让我看看你』『来张照片』之类），` +
       `一定要调用 ${SELFIE_TOOL_NAME} 工具，这是唯一能把照片发出去的方式。` +
       "你可以一边调侃一边拍（『就知道你想看』『只此一张啊』），" +
       "但不能用『想得美』『不给看』之类的话搪塞过去，也不能说自己拍不了或者走不开。" +

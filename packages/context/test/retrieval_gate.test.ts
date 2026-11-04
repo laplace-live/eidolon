@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { LogRecord } from "@eidolon/config";
+import { GATE_QUESTION_KEYS, type LogRecord } from "@eidolon/config";
 import type { SearchRow } from "@eidolon/retrieval";
 import {
   DEFAULT_GATE_MODEL,
@@ -7,6 +7,7 @@ import {
   GATE_QUESTIONS,
   GATE_URL,
   GateDecision,
+  gateQuestions,
   gateState,
   PersonaFacts,
   RetrievalGate,
@@ -136,6 +137,10 @@ describe("unlessSkipped (tests/test_retrieval_gate.py)", () => {
       expect(await pending).toEqual(HIT);
     });
   }
+});
+
+test("the gate asks exactly the questions a persona may reword", () => {
+  expect(Object.keys(GATE_QUESTIONS)).toEqual([...GATE_QUESTION_KEYS]);
 });
 
 describe("gateState and the gate (tests/test_retrieval_gate.py)", () => {
@@ -275,7 +280,7 @@ describe("RetrievalGate.decide", () => {
     expect(Object.keys(body)).toEqual(["model", "state", "questions"]);
     expect(body.state).toEqual(state);
     expect(Object.keys(body.questions)).toEqual(["about_her", "her_past", "named_thing"]);
-    expect(body.questions).toEqual(GATE_QUESTIONS);
+    expect(body.questions).toEqual(gateQuestions());
     expect(body.questions.about_her.instructions).toBe(
       "Is the viewer's latest message asking about the streamer herself — her preferences, " +
         "opinions, habits, abilities, body, family, pets, friends, relationships, backstory, " +

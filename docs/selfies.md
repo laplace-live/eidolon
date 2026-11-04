@@ -4,11 +4,13 @@ The `take_selfie` tool: the viewer asks to see a photo, the bot redraws its
 reference image through OpenRouter's image route and the picture appears on
 their screen mid-call.
 
-On by default. The references live in `data/selfie-references/`, which the
-Dockerfile ships along with the rest of `data/`, so a deployment needs no
+On by default. The references live in the persona's `references/` folder: her
+template ships `outfits/`, and `friends/` lives in the data home's copy of her
+folder, never in the repository (see [personas.md](personas.md)). The two
+merge by file name, the data home's copy winning, so a deployment needs no
 configuration — drop an outfit in `outfits/` and it becomes selectable, empty
-the directory and the tool stops being registered. `SELFIE_REFERENCE_IMAGES`
-overrides the set; every env var it reads is documented in `.env.example`.
+both and the tool stops being registered. `SELFIE_REFERENCE_IMAGES` overrides
+the set; every env var it reads is documented in `.env.example`.
 
 ## The shape of it
 
@@ -107,11 +109,11 @@ taken at 23:00 is lit by a lamp against a dark window. Substitution is
 Two directories, two rules:
 
 ```text
-data/selfie-references/
+personas/milky-green/references/
   outfits/   one character, different outfits — exactly one per render
     day.png
     night.png
-  friends/   one image per person — all of them, all at once
+  friends/   one image per person — all of them, all at once (data home only)
     七海Nana7mi.png
 ```
 
@@ -131,8 +133,8 @@ wearing the day outfit at 03:00.
 
 Adding a third outfit needs no code — it's selectable immediately, and `night`
 in the file name is the whole convention. Loose images sitting directly in
-`selfie-references/` are read as outfits too, which is the layout from before
-`outfits/` existed; a deployment mounting its own `data/` keeps working.
+`references/` are read as outfits too, which is the layout from before
+`outfits/` existed.
 
 None of these names reach a model. References travel as base64 `data:` URLs,
 so the file names are for the code and for whoever reads this — only
@@ -141,12 +143,12 @@ so the file names are for the code and for whoever reads this — only
 To force one, name it explicitly — that path bypasses the clock:
 
 ```bash
-uv run laplace-generate-image -i data/selfie-references/outfits/night.png
+uv run laplace-generate-image -i personas/milky-green/references/outfits/night.png
 ```
 
 ## Friends
 
-`data/selfie-references/friends/` holds one image per person the persona can
+`references/friends/` holds one image per person the persona can
 be photographed with, **named after them** — `七海Nana7mi.png` becomes the
 enum value `七海Nana7mi`. Adding someone is dropping a file in; nothing else
 knows their name. `reference_sources()` reads `outfits/` and never this

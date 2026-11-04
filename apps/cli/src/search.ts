@@ -24,7 +24,7 @@ import {
   StreamRecall,
 } from "@eidolon/context";
 import {
-  DEFAULT_DB_PATH,
+  dbPathArgument,
   decodeTopics,
   hasStreamTimeReference,
   type IsoDate,
@@ -64,7 +64,7 @@ positional arguments:
 options:
   -h, --help          show this help message and exit
   --top-k TOP_K       Number of results to return (default: 5)
-  --db-path DB_PATH   LanceDB dir (default: data/lancedb)
+  --db-path DB_PATH   LanceDB dir (default: the persona's index/)
   --table TABLE       Table name (default: stream_chunks)
   --full              Print full chunk text instead of a 200-char preview
   --json              Emit raw JSON (drops vector field for readability)
@@ -76,7 +76,7 @@ options:
   actions: [
     { dest: "query", flags: [], kind: "store" },
     { dest: "top_k", flags: ["--top-k"], kind: "store", type: INT, default: 5 },
-    { dest: "db_path", flags: ["--db-path"], kind: "store", default: DEFAULT_DB_PATH },
+    { dest: "db_path", flags: ["--db-path"], kind: "store", default: null },
     { dest: "table", flags: ["--table"], kind: "store", default: STREAM_CHUNKS_TABLE },
     { dest: "full", flags: ["--full"], kind: "store_true" },
     { dest: "json", flags: ["--json"], kind: "store_true" },
@@ -102,7 +102,7 @@ export function parseSearchArgs(argv: readonly string[]): SearchArgs {
   const args: SearchArgs = {
     query: ns.query as string,
     topK: ns.top_k as number,
-    dbPath: ns.db_path as string,
+    dbPath: (ns.db_path as string | null) ?? dbPathArgument(),
     table: ns.table as string,
     full: ns.full as boolean,
     json: ns.json as boolean,

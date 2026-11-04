@@ -20,7 +20,7 @@ from pipecat.frames.frames import Frame, LLMContextFrame
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pydantic import BaseModel, Field
 
-from .embeddings import DEFAULT_DB_PATH
+from .embeddings import resolve_db_path
 from .env import env_int
 from .retrieval import build_query_text
 from .retrieval_gate import GATE_FRAME_KEY, unless_skipped
@@ -40,14 +40,14 @@ def summarize_hits(results: list[dict[str, Any]]) -> str:
 
 
 def build_retriever(
-    db_path: str | os.PathLike[str] = DEFAULT_DB_PATH,
+    db_path: str | os.PathLike[str] | None = None,
     table_name: str = DEFAULT_TABLE,
     *,
     embed_model: str | None = None,
 ) -> LanceRetriever:
     """A retriever over the persona-facts table, configured as the bot uses it."""
     return LanceRetriever(
-        db_path,
+        resolve_db_path() if db_path is None else db_path,
         table_name,
         date_column="date",
         label=LABEL,
@@ -117,7 +117,7 @@ class PersonaFactsService(FrameProcessor):
     def __init__(
         self,
         *,
-        db_path: str | os.PathLike[str] = DEFAULT_DB_PATH,
+        db_path: str | os.PathLike[str] | None = None,
         table_name: str = DEFAULT_TABLE,
         params: InputParams | None = None,
     ):

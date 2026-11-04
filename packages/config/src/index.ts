@@ -3,7 +3,17 @@ export { daysInMonth, isLeap, ordinalToYmd, ymdToOrdinal } from "./calendar.ts";
 export { personaTimeZone, type ZonedClock, zonedClock } from "./clock.ts";
 export { type DotenvEntry, findDotenv, loadDotenv, parseDotenv } from "./dotenv.ts";
 export { DEFAULT_EMBED_BASE_URL, DEFAULT_EMBED_MODEL, embedDim } from "./embed.ts";
-export { envFlag, envFloat, envInt, envOptional, envRaw, envStr } from "./env.ts";
+export { envEntries, envFlag, envFloat, envInt, envOptional, envRaw, envStr } from "./env.ts";
+export {
+  DEFAULT_PERSONA,
+  dataHome,
+  personaDirs,
+  personaHomeDir,
+  personaIds,
+  personaTemplateDir,
+  resolvePersonaPath,
+  templatesDir,
+} from "./home.ts";
 export { type HttpStatusReply, type HttpxStatusOptions, httpxStatusMessage } from "./httpx.ts";
 export {
   consoleSink,
@@ -53,3 +63,23 @@ export {
   sortedPy,
 } from "./py.ts";
 export { type PydanticLineError, validationErrorText } from "./pydantic.ts";
+export {
+  activePersona,
+  CREDENTIALS,
+  fillPersonaText,
+  GATE_QUESTION_KEYS,
+  IDENTITY_DEFAULTS,
+  installSettings,
+  type LoadedSettings,
+  loadSettings,
+  type PersonaIdentity,
+  type PersonaSettings,
+  personaFolders,
+  personaPath,
+  resetSettings,
+  SETTINGS,
+  type SettingField,
+  type SettingKind,
+  type SettingScope,
+  type SettingsFiles,
+} from "./settings.ts";

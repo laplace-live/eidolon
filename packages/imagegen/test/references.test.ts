@@ -1,10 +1,9 @@
 import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { dataHome, PROJECT_ROOT } from "@eidolon/config";
 import {
-  BUNDLED_REFERENCES,
-  FRIENDS,
   friendSources,
   ImageGenError,
   imageMediaType,
@@ -13,7 +12,7 @@ import {
   isSelfieConfigured,
   loadReference,
   loadReferences,
-  OUTFITS,
+  referenceRoots,
   referenceSources,
   selectOutfit,
 } from "../src/index.ts";
@@ -28,6 +27,31 @@ import {
   tempDir,
   tempTree,
 } from "./helpers.ts";
+
+// The template ships the outfits; the friend image lives only in the user's data home.
+const TEMPLATE_REFS = join(PROJECT_ROOT, "personas", "milky-green", "references");
+const OUTFITS = join(TEMPLATE_REFS, "outfits");
+const HOME_REFS = () => join(dataHome(), "personas", "milky-green", "references");
+
+function privateFriend(): string {
+  const dir = join(HOME_REFS(), "friends");
+  mkdirSync(dir, { recursive: true });
+  const path = join(dir, "七海Nana7mi.png");
+  writeFileSync(path, bytesOf("nana"));
+  return path;
+}
+
+afterEach(() => rmSync(join(dataHome(), "personas"), { recursive: true, force: true }));
+
+// The real image, for the encoding Python produced; present only on a machine holding the data.
+const REAL_FRIEND = join(
+  process.env.EIDOLON_REAL_HOME ?? "",
+  "personas",
+  "milky-green",
+  "references",
+  "friends",
+  "七海Nana7mi.png",
+);
 
 const NOON = { hour: 12, minute: 0 };
 const NIGHT = { hour: 22, minute: 0 };
@@ -140,9 +164,21 @@ describe("friendSources", () => {
     ]);
   });
 
-  test("the bundled friend", () => {
-    expect([...friendSources()]).toEqual([["七海Nana7mi", join(FRIENDS, "七海Nana7mi.png")]]);
-    expect(FRIENDS).toBe(join(BUNDLED_REFERENCES, "friends"));
+  test("the template ships no friend; one in the user's folder joins its outfits", () => {
+    expect([...friendSources()]).toEqual([]);
+    expect(referenceRoots()).toEqual([TEMPLATE_REFS]);
+    const friend = privateFriend();
+    expect([...friendSources()]).toEqual([["七海Nana7mi", friend]]);
+    expect(referenceRoots()).toEqual([HOME_REFS(), TEMPLATE_REFS]);
+    expect(referenceSources({ clock: NOON })).toEqual([join(OUTFITS, "day.png")]);
+  });
+
+  test("the user's copy of an outfit wins over the template's", () => {
+    const own = join(HOME_REFS(), "outfits", "day.png");
+    mkdirSync(join(HOME_REFS(), "outfits"), { recursive: true });
+    writeFileSync(own, bytesOf("own-day"));
+    expect(referenceSources({ clock: NOON })).toEqual([own]);
+    expect(referenceSources({ clock: NIGHT })).toEqual([join(OUTFITS, "night.png")]);
   });
 });
 
@@ -243,8 +279,8 @@ describe("loadReference", () => {
     expect(loadReference(join(root, "y.JPG")).image_url.url).toBe(dataUrl("image/jpeg", bytes));
   });
 
-  test("encodes the bundled friend exactly as Python does", () => {
-    const url = loadReference(join(FRIENDS, "七海Nana7mi.png")).image_url.url;
+  test.skipIf(!existsSync(REAL_FRIEND))("encodes the private friend exactly as Python does", () => {
+    const url = loadReference(REAL_FRIEND).image_url.url;
     expect(url.length).toBe(FRIEND_REFERENCE.length);
     expect(url.slice(0, 60)).toBe(FRIEND_REFERENCE.head);
     expect(url.slice(-20)).toBe(FRIEND_REFERENCE.tail);

@@ -3,15 +3,41 @@
 import { logger } from "./logger.ts";
 import { pyParseFloat, pyParseInt, pyRepr } from "./py.ts";
 
-/** Exactly `os.getenv(name)`: `""` stays `""`. Only for variables where blank means something. */
+// What settings.yaml, persona.yaml and credentials.json set, keyed by the variable each setting
+// maps to. A non-empty environment variable always wins, so a deployment's env stays authoritative.
+let fileLayer: ReadonlyMap<string, string> = new Map();
+
+/** Replaces the values the settings files supply; settings.ts is the only caller. */
+export function setFileLayer(values: ReadonlyMap<string, string>): void {
+  fileLayer = values;
+}
+
+/**
+ * Exactly `os.getenv(name)`, `""` included, unless a settings file supplies the value. Only for
+ * variables where blank means something.
+ */
 export function envRaw(name: string): string | undefined {
-  return process.env[name];
+  const raw = process.env[name];
+  return raw ? raw : (fileLayer.get(name) ?? raw);
 }
 
 /** The value, or `undefined` when the variable is unset or empty. */
 export function envOptional(name: string): string | undefined {
-  const raw = process.env[name];
+  const raw = envRaw(name);
   return raw ? raw : undefined;
+}
+
+/** Every variable that has a value, environment order first, then names only the files set. */
+export function envEntries(): [string, string][] {
+  const entries: [string, string][] = [];
+  for (const [key, value] of Object.entries(process.env)) {
+    const resolved = envRaw(key);
+    if (value !== undefined && resolved !== undefined) entries.push([key, resolved]);
+  }
+  for (const [key, value] of fileLayer) {
+    if (!(key in process.env)) entries.push([key, value]);
+  }
+  return entries;
 }
 
 const FLAG_OFF = new Set(["false", "0", "no", "off"]);

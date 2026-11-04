@@ -63,15 +63,32 @@ _TOOL_NAME = "take_selfie"
 
 SELFIE_PATH = "/api/selfie"
 
-# Resolved against the repo root rather than the working directory, like
-# resolve_db_path, so any launcher finds it. The Dockerfile COPYs data/ whole,
-# so what ships in here is what a deployment uses.
-BUNDLED_REFERENCES = Path(__file__).resolve().parent.parent / "data" / "selfie-references"
-
 # Two directories, two rules: one of ``outfits/`` is the persona, and every
 # ``friends/`` image is a different person.
-OUTFITS = BUNDLED_REFERENCES / "outfits"
-FRIENDS = BUNDLED_REFERENCES / "friends"
+OUTFITS = "outfits"
+FRIENDS = "friends"
+
+
+def reference_roots() -> list[Path]:
+    """The persona's ``references/`` folders that exist, the data home's first.
+
+    The template ships the outfits and the data home holds the friends
+    (docs/personas.md). Read when called, so a ``.env`` loaded first applies.
+    """
+    persona = os.getenv("EIDOLON_PERSONA") or "milky-green"
+    home = Path(os.getenv("EIDOLON_HOME") or "~/.laplace/eidolon").expanduser()
+    template = Path(__file__).resolve().parent.parent / "personas"
+    roots = [home / "personas" / persona / "references", template / persona / "references"]
+    return [root for root in roots if root.is_dir()]
+
+
+def _images_under(sub: str) -> list[str]:
+    """Every image in ``sub`` across the roots, sorted by name; the first root's file wins a name."""
+    by_name: dict[str, str] = {}
+    for root in reference_roots():
+        for path in _images_in(root / sub if sub else root):
+            by_name.setdefault(Path(path).name, path)
+    return [by_name[name] for name in sorted(by_name)]
 
 SELFIE_PROMPT = """\
 Turn the reference character into a casual selfie, drawn in classic 2D anime
@@ -226,12 +243,12 @@ def _images_in(directory: Path) -> list[str]:
 
 
 def friend_sources() -> dict[str, str]:
-    """``{name: path}`` for every image in ``selfie-references/friends``.
+    """``{name: path}`` for every image in ``references/friends``.
 
     The file name is the name the LLM asks for, so adding a friend is
     dropping ``<their name>.png`` in that directory — nothing else.
     """
-    return {Path(path).stem: path for path in _images_in(FRIENDS)}
+    return {Path(path).stem: path for path in _images_under(FRIENDS)}
 
 
 def build_selfie_prompt(friends: list[str]) -> str:
@@ -544,9 +561,8 @@ def reference_sources() -> list[str]:
     configured = [part.strip() for part in raw.split(",") if part.strip()]
     if configured:
         return select_outfit(configured)
-    # Loose files directly under selfie-references/ are the layout from before
-    # outfits/ existed, so a deployment mounting its own data/ still works.
-    return select_outfit(_images_in(OUTFITS) or _images_in(BUNDLED_REFERENCES))
+    # Loose files directly under references/ are the layout from before outfits/ existed.
+    return select_outfit(_images_under(OUTFITS) or _images_under(""))
 
 
 def load_references() -> list[dict[str, Any]]:
@@ -590,7 +606,8 @@ def install_selfie_tool(
         return tools
     sources = reference_sources()
     if not sources:
-        logger.info(f"[selfie] Disabled: no reference images in {BUNDLED_REFERENCES}.")
+        roots = ", ".join(str(root) for root in reference_roots()) or "the persona's references/"
+        logger.info(f"[selfie] Disabled: no reference images in {roots}.")
         return tools
     # Encode once here and throw it away: a path that can't be read should
     # leave the tool unregistered rather than fail inside a viewer's call.
@@ -657,9 +674,9 @@ __all__ = [
     "MAX_IMAGES",
     "MAX_REFERENCES",
     "QUALITIES",
-    "BUNDLED_REFERENCES",
     "FRIENDS",
     "OUTFITS",
+    "reference_roots",
     "SELFIE_PROMPT",
     "TOOL_NAME",
     "GeneratedImage",

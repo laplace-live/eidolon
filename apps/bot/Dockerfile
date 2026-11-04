@@ -49,16 +49,11 @@ RUN bun install --frozen-lockfile --production \
            "$ORT/darwin" "$ORT/win32" \
            "$ORT/linux/$(if [ "$TARGETARCH" = arm64 ]; then echo x64; else echo arm64; fi)"
 
-# The *.lance files are Git LFS objects. A checkout without LFS copies pointer
-# stubs, and both RAG tiers then switch themselves off at runtime.
-COPY data/lancedb ./data/lancedb
-RUN for f in $(find data/lancedb -type f -name '*.lance' -size -2k); do \
-      if head -c 40 "$f" | grep -q '^version https://git-lfs'; then \
-        echo "$f is a Git LFS pointer; check out with LFS" >&2; exit 1; \
-      fi; \
-    done
-COPY data/selfie-references ./data/selfie-references
-COPY persona.md tsconfig.json ./
+# The persona templates ship in the image; a persona's index, private references and Mem0's
+# history live in the data home, a volume mounted at /data (docs/personas.md).
+ENV EIDOLON_HOME=/data
+COPY personas ./personas
+COPY tsconfig.json ./
 COPY packages ./packages
 COPY apps/bot ./apps/bot
 

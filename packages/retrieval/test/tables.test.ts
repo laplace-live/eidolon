@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PROJECT_ROOT } from "@eidolon/config";
+import { dataHome, PROJECT_ROOT } from "@eidolon/config";
 import * as lancedb from "@lancedb/lancedb";
 import {
   decodeTopics,
@@ -55,10 +55,12 @@ describe("openTable / listTableNames", () => {
   });
 });
 
-test("resolveDbPath: repo-root relative, absolute as is, blank is the default", () => {
-  expect(resolveDbPath()).toBe(join(PROJECT_ROOT, "data/lancedb"));
+test("resolveDbPath: the persona's index by default, else repo-root relative or absolute", () => {
+  // No index in the empty test data home, so the user's folder is where one would be built.
+  const personaIndex = join(dataHome(), "personas", "milky-green", "index");
+  expect(resolveDbPath()).toBe(personaIndex);
   process.env.LANCEDB_PATH = "";
-  expect(resolveDbPath()).toBe(join(PROJECT_ROOT, "data/lancedb"));
+  expect(resolveDbPath()).toBe(personaIndex);
   process.env.LANCEDB_PATH = "elsewhere/db";
   expect(resolveDbPath()).toBe(join(PROJECT_ROOT, "elsewhere/db"));
   process.env.LANCEDB_PATH = "/srv/lancedb";

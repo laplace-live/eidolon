@@ -4,10 +4,11 @@
 // Qdrant pins the collection's dimension at creation, so changing EMBED_DIM means dropping
 // MEM0_QDRANT_COLLECTION and letting viewers re-accumulate: old vectors are not comparable.
 import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import {
   DEFAULT_EMBED_BASE_URL,
   DEFAULT_EMBED_MODEL,
+  dataHome,
   embedDim,
   envFloat,
   envInt,
@@ -20,7 +21,8 @@ import type { QdrantSettings } from "./qdrant.ts";
 
 export const DEFAULT_QDRANT_PORT = 6333;
 export const DEFAULT_COLLECTION = "eidolon_memories";
-export const DEFAULT_HISTORY_DB_PATH = "data/mem0/history.db";
+/** Mem0's change log, under the data home: memories are per install, not per persona. */
+export const historyDbDefault = (): string => join(dataHome(), "mem0", "history.db");
 export const DEFAULT_LLM_MODEL = "~google/gemini-flash-latest";
 export const DEFAULT_SEARCH_LIMIT = 10;
 export const DEFAULT_SEARCH_THRESHOLD = 0.3;
@@ -86,7 +88,7 @@ export function buildMemoryConfig(): MemoryConfig {
   if (!embedApiKey) throw new Error(EMBED_KEY_MISSING);
   // bun:sqlite, like sqlite3, raises rather than create missing parents, and the history DB
   // lands under a mounted volume that starts empty.
-  const historyDbPath = envOptional("MEM0_HISTORY_DB_PATH") ?? DEFAULT_HISTORY_DB_PATH;
+  const historyDbPath = envOptional("MEM0_HISTORY_DB_PATH") ?? historyDbDefault();
   mkdirSync(dirname(historyDbPath), { recursive: true });
   const port = envInt("MEM0_QDRANT_PORT", DEFAULT_QDRANT_PORT);
   // mem0 swaps a zero port for an embedded on-disk store; the JS client has none and would

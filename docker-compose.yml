@@ -24,16 +24,16 @@ services:
       - qdrant
     env_file:
       - ./.env
+    environment:
+      # Fixed here: a blank or host-side EIDOLON_HOME in .env would point it away from the mount.
+      EIDOLON_HOME: /data
     ports:
       - "7860:7860"
     volumes:
-      # Mem0's change log. Everything else under data/ ships in the image.
+      # Mem0's change log.
       - mem0-history:/app/data/mem0
-    # If you want to ingest LanceDB indexes on the host and have them
-    # picked up live (without rebuilding the image), uncomment:
-    #   - ./data:/app/data:ro
-    #   - ./streams:/app/streams:ro
-    #   - ./persona.md:/app/persona.md:ro
+      # The data home: each persona's index and private references (docs/personas.md).
+      - ${EIDOLON_HOME:-${HOME}/.laplace/eidolon}:/data:ro
 
   # The TypeScript bot, beside the Python one: same .env, same Qdrant collection, its own
   # port and Mem0 history volume. Opt-in, so `docker compose up --build` still builds and
@@ -54,8 +54,14 @@ services:
       - ./.env
     ports:
       - "7861:7860"
+    environment:
+      # Fixed here: a blank or host-side EIDOLON_HOME in .env would point it away from the mount.
+      EIDOLON_HOME: /data
+      # Its own change log, beside the read-only data home: the two bots never share one.
+      MEM0_HISTORY_DB_PATH: /var/lib/eidolon/mem0/history.db
     volumes:
-      - mem0-history-ts:/app/data/mem0
+      - mem0-history-ts:/var/lib/eidolon/mem0
+      - ${EIDOLON_HOME:-${HOME}/.laplace/eidolon}:/data:ro
 
   # Long-term memory vectors. Mem0 itself is a library inside the bot —
   # this is the only piece that runs as its own process. Set
