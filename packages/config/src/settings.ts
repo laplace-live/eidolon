@@ -149,7 +149,6 @@ export const SETTINGS: readonly SettingField[] = [
   field("app", "embeddings.dim", "EMBED_DIM", "int", "Embedding dimension"),
   field("app", "embeddings.baseUrl", "EMBED_BASE_URL", "string", "Embedding API base"),
   field("app", "rerank.baseUrl", "RERANK_BASE_URL", "string", "Reranker API base"),
-  field("app", "refine.baseUrl", "REFINE_BASE_URL", "string", "Refine API base"),
 
   field("persona", "prompt", "PERSONA_FILE", "path", "System prompt file"),
   field("persona", "identity.timezone", "PERSONA_TIMEZONE", "string", "Time zone"),
@@ -199,9 +198,6 @@ export const SETTINGS: readonly SettingField[] = [
   field("persona", "selfie.ttlSeconds", "SELFIE_TTL_SECONDS", "int", "Selfie lifetime"),
   field("persona", "selfie.timeoutSeconds", "SELFIE_TIMEOUT_SECONDS", "int", "Selfie timeout"),
   field("persona", "selfie.references", "SELFIE_REFERENCE_IMAGES", "paths", "Selfie references"),
-  field("persona", "sources.refine.model", "REFINE_MODEL", "string", "Transcript refine model"),
-  field("persona", "sources.refine.concurrency", "REFINE_CONCURRENCY", "int", "Refine concurrency"),
-  field("persona", "sources.skipTypes", "INGEST_SKIP_TYPES", "list", "Segment types to skip"),
 ];
 
 /** `voice.styles.<name>` sets `FISH_VOICE_ID_<NAME>`. */
@@ -215,7 +211,6 @@ export const CREDENTIALS: readonly string[] = [
   "FISH_API_KEY",
   "RERANK_API_KEY",
   "EMBED_API_KEY",
-  "REFINE_API_KEY",
   "OPENAI_API_KEY",
   "CLOUDFLARE_TURN_KEY_API_TOKEN",
   "WEBRTC_TURN_CREDENTIAL",
@@ -241,6 +236,10 @@ export interface PersonaSettings {
 }
 
 const IDENTITY_KEYS = ["name", "fans", "summary", "viewerLine"] as const;
+// identity.timezone is a setting (PERSONA_TIMEZONE), read with the others.
+const IDENTITY_FIELDS = new Set<string>([...IDENTITY_KEYS, "timezone"]);
+/** The retrieval gate's questions, which knowledge.gate.questions may reword. */
+export const GATE_QUESTION_KEYS = ["about_her", "her_past", "named_thing"] as const;
 const GATE_QUESTIONS_PATH = "knowledge.gate.questions";
 // Not settings themselves: identity is read by personaSettings, the gate questions likewise.
 const PERSONA_STRUCTURE = new Set(["identity", "knowledge.gate.questions", VOICE_STYLES_PATH]);
@@ -342,13 +341,19 @@ export const IDENTITY_DEFAULTS: Omit<PersonaIdentity, "name"> = {
   viewerLine: "正在和你聊天的{fans}叫「{viewer}」（UID:{uid}）。",
 };
 
-function readIdentity(persona: Tree, id: string): PersonaIdentity {
+function readIdentity(persona: Tree, id: string, label: string): PersonaIdentity {
   const raw = lookup(persona, "identity");
+  if (raw !== undefined && raw !== null && !isPlainObject(raw)) {
+    logger.warning(`Ignoring ${label} identity: expected a mapping`);
+  }
   const tree = isPlainObject(raw) ? raw : {};
+  for (const key of Object.keys(tree)) {
+    if (!IDENTITY_FIELDS.has(key)) logger.warning(`Unknown setting identity.${key} in ${label}`);
+  }
   const value = (key: (typeof IDENTITY_KEYS)[number], fallback: string): string => {
     const v = tree[key];
     if (typeof v === "string") return v;
-    if (v !== undefined) logger.warning(`Ignoring persona ${id} identity.${key}: expected string`);
+    if (v !== undefined) logger.warning(`Ignoring ${label} identity.${key}: expected string`);
     return fallback;
   };
   return {
@@ -359,17 +364,22 @@ function readIdentity(persona: Tree, id: string): PersonaIdentity {
   };
 }
 
-function readGateQuestions(persona: Tree, id: string): Record<string, string> {
+function readGateQuestions(persona: Tree, label: string): Record<string, string> {
   const raw = lookup(persona, GATE_QUESTIONS_PATH);
-  if (raw === undefined) return {};
+  if (raw === undefined || raw === null) return {};
   if (!isPlainObject(raw)) {
-    logger.warning(`Ignoring persona ${id} ${GATE_QUESTIONS_PATH}: expected a mapping`);
+    logger.warning(`Ignoring ${label} ${GATE_QUESTIONS_PATH}: expected a mapping`);
     return {};
   }
   const questions: Record<string, string> = {};
   for (const [key, text] of Object.entries(raw)) {
-    if (typeof text === "string") questions[key] = text;
-    else logger.warning(`Ignoring persona ${id} ${GATE_QUESTIONS_PATH}.${key}: expected string`);
+    if (!(GATE_QUESTION_KEYS as readonly string[]).includes(key)) {
+      logger.warning(`Unknown setting ${GATE_QUESTIONS_PATH}.${key} in ${label}`);
+    } else if (typeof text === "string") {
+      questions[key] = text;
+    } else {
+      logger.warning(`Ignoring ${label} ${GATE_QUESTIONS_PATH}.${key}: expected string`);
+    }
   }
   return questions;
 }
@@ -427,6 +437,9 @@ export function loadSettings(): LoadedSettings {
     if (env !== null) values.set(setting.env, env);
   }
   const styles = lookup(persona, VOICE_STYLES_PATH);
+  if (styles !== undefined && styles !== null && !isPlainObject(styles)) {
+    logger.warning(`Ignoring ${personaPath} ${VOICE_STYLES_PATH}: expected a mapping`);
+  }
   if (isPlainObject(styles)) {
     for (const [name, voiceId] of Object.entries(styles)) {
       if (typeof voiceId === "string" && voiceId) {
@@ -445,21 +458,24 @@ export function loadSettings(): LoadedSettings {
     }
   }
 
+  // Before parsing: a file that fails to parse can still hold real keys.
+  warnIfShared(credentialsPath);
   const credentials = readTree(credentialsPath, credentialsPath);
-  if (Object.keys(credentials).length > 0) warnIfShared(credentialsPath);
   for (const [name, secret] of Object.entries(credentials)) {
     if (!CREDENTIALS.includes(name)) {
       logger.warning(`Ignoring ${name} in ${credentialsPath}: not a credential`);
     } else if (typeof secret === "string" && secret) {
       values.set(name, secret);
+    } else if (secret !== "") {
+      logger.warning(`Ignoring ${name} in ${credentialsPath}: expected a non-empty string`);
     }
   }
 
   return {
     persona: {
       id,
-      identity: readIdentity(persona, id),
-      gateQuestions: readGateQuestions(persona, id),
+      identity: readIdentity(persona, id, personaPath),
+      gateQuestions: readGateQuestions(persona, personaPath),
     },
     values,
     files: {

@@ -67,7 +67,10 @@ SELFIE_PATH = "/api/selfie"
 # resolve_db_path, so any launcher finds it. Only the template's outfits ship;
 # friend images live in the persona's data-home folder, which this bot never reads.
 BUNDLED_REFERENCES = (
-    Path(__file__).resolve().parent.parent / "personas" / "milky-green" / "references"
+    Path(__file__).resolve().parent.parent
+    / "personas"
+    / (os.getenv("EIDOLON_PERSONA") or "milky-green")
+    / "references"
 )
 
 # Two directories, two rules: one of ``outfits/`` is the persona, and every

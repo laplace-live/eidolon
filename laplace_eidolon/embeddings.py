@@ -36,13 +36,16 @@ from openai import AsyncOpenAI
 from .env import env_int
 from .openrouter import extract_cost_usd, openrouter_headers
 
-# The persona's index in the data home, where the TypeScript bot looks too (docs/personas.md).
-DEFAULT_DB_PATH = str(
-    Path(os.getenv("EIDOLON_HOME") or "~/.laplace/eidolon").expanduser()
-    / "personas"
-    / "milky-green"
-    / "index"
-)
+
+def default_db_path() -> str:
+    """The active persona's index in the data home, where the TypeScript bot looks too.
+
+    Read when called, so a ``.env`` loaded first applies. Only ``EIDOLON_PERSONA``
+    picks the persona here; ``settings.yaml`` is the TypeScript bot's (docs/personas.md).
+    """
+    home = Path(os.getenv("EIDOLON_HOME") or "~/.laplace/eidolon").expanduser()
+    persona = os.getenv("EIDOLON_PERSONA") or "milky-green"
+    return str(home / "personas" / persona / "index")
 DEFAULT_EMBED_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_EMBED_MODEL = "google/gemini-embedding-2-preview"
 DEFAULT_EMBED_DIM = env_int("EMBED_DIM", 3072)
@@ -309,7 +312,7 @@ def resolve_db_path() -> Path:
     ``LANCEDB_PATH`` is used as-is.
     """
     return Path(__file__).resolve().parent.parent / (
-        os.getenv("LANCEDB_PATH") or DEFAULT_DB_PATH
+        os.getenv("LANCEDB_PATH") or default_db_path()
     )
 
 

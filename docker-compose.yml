@@ -24,6 +24,9 @@ services:
       - qdrant
     env_file:
       - ./.env
+    environment:
+      # Fixed here: a blank or host-side EIDOLON_HOME in .env would point it away from the mount.
+      EIDOLON_HOME: /data
     ports:
       - "7860:7860"
     volumes:
@@ -52,6 +55,8 @@ services:
     ports:
       - "7861:7860"
     environment:
+      # Fixed here: a blank or host-side EIDOLON_HOME in .env would point it away from the mount.
+      EIDOLON_HOME: /data
       # Its own change log, beside the read-only data home: the two bots never share one.
       MEM0_HISTORY_DB_PATH: /var/lib/eidolon/mem0/history.db
     volumes:

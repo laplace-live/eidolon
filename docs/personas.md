@@ -54,11 +54,13 @@ environment:
 ```
 
 The names it accepts: `SONIOX_API_KEY`, `OPENROUTER_API_KEY`, `FISH_API_KEY`, `RERANK_API_KEY`,
-`EMBED_API_KEY`, `REFINE_API_KEY`, `OPENAI_API_KEY`, `CLOUDFLARE_TURN_KEY_API_TOKEN`,
-`WEBRTC_TURN_CREDENTIAL`, `CF_WAF_BYPASS_TOKEN`.
+`EMBED_API_KEY`, `OPENAI_API_KEY`, `CLOUDFLARE_TURN_KEY_API_TOKEN`, `WEBRTC_TURN_CREDENTIAL`,
+`CF_WAF_BYPASS_TOKEN`.
 
-A misspelled key, a value of the wrong type, malformed YAML and a credentials file other users can
-read each log a warning; the bad value is ignored.
+The Python offline tools read none of these files; they still take the environment only.
+
+A misspelled key (`identity` and the gate questions included), a value of the wrong type, malformed
+YAML and a credentials file other users can read each log a warning; the bad value is ignored.
 
 ## persona.yaml
 
@@ -116,9 +118,6 @@ first.
 | `selfie.ttlSeconds` | `SELFIE_TTL_SECONDS` | int | Selfie lifetime |
 | `selfie.timeoutSeconds` | `SELFIE_TIMEOUT_SECONDS` | int | Selfie timeout |
 | `selfie.references` | `SELFIE_REFERENCE_IMAGES` | paths | Selfie references |
-| `sources.refine.model` | `REFINE_MODEL` | string | Transcript refine model |
-| `sources.refine.concurrency` | `REFINE_CONCURRENCY` | int | Refine concurrency |
-| `sources.skipTypes` | `INGEST_SKIP_TYPES` | list | Segment types to skip |
 
 ## settings.yaml
 
@@ -159,10 +158,15 @@ The install's settings, for every persona. Paths resolve in the data home.
 | `embeddings.dim` | `EMBED_DIM` | int | Embedding dimension |
 | `embeddings.baseUrl` | `EMBED_BASE_URL` | string | Embedding API base |
 | `rerank.baseUrl` | `RERANK_BASE_URL` | string | Reranker API base |
-| `refine.baseUrl` | `REFINE_BASE_URL` | string | Refine API base |
 
 ## Deploying a persona
 
 Mount a data home holding `personas/<id>/index/` (and any private references) at `/data`, and
 configure the rest through the environment as before. Copying a persona's private folder to a
 server is a plain `rsync -a <data home>/personas/<id>/ <host>:<mounted path>/personas/<id>/`.
+
+Mem0 writes its change log to `<data home>/mem0/history.db`, so mount the data home writable, or
+mount it read-only and point `MEM0_HISTORY_DB_PATH` at a writable volume; a read-only home without
+that runs every call without memory. Set `EIDOLON_HOME: /data` in the service's `environment`
+too: an `env_file` copied from `.env.example` carries a blank `EIDOLON_HOME=`, which would replace
+the image's value.

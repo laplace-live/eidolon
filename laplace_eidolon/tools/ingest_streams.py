@@ -28,12 +28,12 @@ from dotenv import load_dotenv
 from loguru import logger
 
 from ..embeddings import (
-    DEFAULT_DB_PATH,
     DEFAULT_EMBED_CACHE_PATH,
     DEFAULT_EMBED_DIM,
     DEFAULT_EMBED_MODEL,
     EmbedCache,
     EmbeddingUsage,
+    default_db_path,
     embed_texts_with_usage,
 )
 from ..retrieval import build_fts_index, tokenize_zh
@@ -358,8 +358,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--db-path",
-        default=DEFAULT_DB_PATH,
-        help=f"LanceDB directory (default: {DEFAULT_DB_PATH})",
+        default=default_db_path(),
+        help=f"LanceDB directory (default: {default_db_path()})",
     )
     parser.add_argument(
         "--table",

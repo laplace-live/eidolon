@@ -28,7 +28,7 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.services.llm_service import FunctionCallParams, LLMService
 from pydantic import BaseModel, Field
 
-from .embeddings import DEFAULT_DB_PATH
+from .embeddings import resolve_db_path
 from .env import env_int
 from .retrieval import build_query_text
 from .retrieval_gate import GATE_FRAME_KEY, unless_skipped
@@ -89,14 +89,14 @@ def summarize_hits(results: list[dict[str, Any]]) -> str:
 
 
 def build_retriever(
-    db_path: str | os.PathLike[str] = DEFAULT_DB_PATH,
+    db_path: str | os.PathLike[str] | None = None,
     table_name: str = DEFAULT_TABLE,
     *,
     embed_model: str | None = None,
 ) -> LanceRetriever:
     """A retriever over the stream-archive table, configured as the bot uses it."""
     return LanceRetriever(
-        db_path,
+        resolve_db_path() if db_path is None else db_path,
         table_name,
         date_column="stream_date",
         label=LABEL,
@@ -171,12 +171,13 @@ class StreamArchiveService(FrameProcessor):
     def __init__(
         self,
         *,
-        db_path: str | os.PathLike[str] = DEFAULT_DB_PATH,
+        db_path: str | os.PathLike[str] | None = None,
         table_name: str = DEFAULT_TABLE,
         params: InputParams | None = None,
     ):
         """Initialize the stream-archive service."""
         super().__init__()
+        db_path = resolve_db_path() if db_path is None else db_path
         self._params = params or StreamArchiveService.InputParams()
         self._retriever = build_retriever(
             db_path, table_name, embed_model=self._params.embed_model

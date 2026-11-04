@@ -67,6 +67,7 @@ export {
   activePersona,
   CREDENTIALS,
   fillPersonaText,
+  GATE_QUESTION_KEYS,
   IDENTITY_DEFAULTS,
   installSettings,
   type LoadedSettings,

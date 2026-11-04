@@ -208,6 +208,47 @@ describe("mistakes", () => {
     ]);
   });
 
+  test("typos and wrong shapes inside identity, gate questions and voice styles warn", () => {
+    const path = write(
+      "personas/milky-green/persona.yaml",
+      [
+        "identity:",
+        "  nmae: 小绿",
+        "knowledge:",
+        "  gate:",
+        "    questions:",
+        "      about_he: x",
+        "      her_past: [x]",
+        "voice:",
+        "  styles: gentle",
+      ].join("\n"),
+    );
+    const { persona } = loadSettings();
+    expect(persona.identity.name).toBe("milky-green");
+    expect(persona.gateQuestions).toEqual({});
+    expect(warnings).toEqual([
+      `Ignoring ${path} voice.styles: expected a mapping`,
+      `Unknown setting identity.nmae in ${path}`,
+      `Unknown setting knowledge.gate.questions.about_he in ${path}`,
+      `Ignoring ${path} knowledge.gate.questions.her_past: expected string`,
+    ]);
+  });
+
+  test("a non-string credential warns without its value; a blank one is quietly unset", () => {
+    const path = write("credentials.json", '{"SONIOX_API_KEY": 123456, "FISH_API_KEY": ""}');
+    chmodSync(path, 0o600);
+    expect(loadSettings().values.has("SONIOX_API_KEY")).toBe(false);
+    expect(warnings).toEqual([`Ignoring SONIOX_API_KEY in ${path}: expected a non-empty string`]);
+  });
+
+  test("a shared credentials file is flagged even when it fails to parse", () => {
+    const path = write("credentials.json", '{"OPENROUTER_API_KEY": "sk-');
+    chmodSync(path, 0o644);
+    loadSettings();
+    expect(warnings[0]).toBe(`${path} is readable by other users; run \`chmod 600 ${path}\``);
+    expect(warnings[1]).toStartWith(`Ignoring ${path}: `);
+  });
+
   test("malformed YAML counts as empty", () => {
     const path = write("settings.yaml", "access: [unclosed\n");
     expect([...loadSettings().values].filter(([k]) => k !== "PERSONA_TIMEZONE")).toEqual([]);

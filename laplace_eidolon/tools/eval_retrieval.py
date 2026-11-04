@@ -25,7 +25,7 @@ import lancedb
 from dotenv import load_dotenv
 from loguru import logger
 
-from ..embeddings import DEFAULT_DB_PATH, embed_texts
+from ..embeddings import default_db_path, embed_texts
 from ..retrieval import (
     DEFAULT_RERANK_BASE_URL,
     OpenRouterReranker,
@@ -704,8 +704,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--db-path",
-        default=DEFAULT_DB_PATH,
-        help=f"LanceDB directory (default: {DEFAULT_DB_PATH})",
+        default=default_db_path(),
+        help=f"LanceDB directory (default: {default_db_path()})",
     )
     parser.add_argument(
         "--table",

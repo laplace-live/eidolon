@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { LogRecord } from "@eidolon/config";
+import { GATE_QUESTION_KEYS, type LogRecord } from "@eidolon/config";
 import type { SearchRow } from "@eidolon/retrieval";
 import {
   DEFAULT_GATE_MODEL,
@@ -137,6 +137,10 @@ describe("unlessSkipped (tests/test_retrieval_gate.py)", () => {
       expect(await pending).toEqual(HIT);
     });
   }
+});
+
+test("the gate asks exactly the questions a persona may reword", () => {
+  expect(Object.keys(GATE_QUESTIONS)).toEqual([...GATE_QUESTION_KEYS]);
 });
 
 describe("gateState and the gate (tests/test_retrieval_gate.py)", () => {

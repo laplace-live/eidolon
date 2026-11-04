@@ -449,9 +449,8 @@ except Exception as e:
 # pack lives at the repo root. Walking up only one lands in the package dir,
 # where the bot silently falls back to its stub persona with RAG disabled.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-PERSONA_PATH = PROJECT_ROOT / (
-    os.getenv("PERSONA_FILE") or "personas/milky-green/prompt.md"
-)
+PERSONA_ID = os.getenv("EIDOLON_PERSONA") or "milky-green"
+PERSONA_PATH = PROJECT_ROOT / (os.getenv("PERSONA_FILE") or f"personas/{PERSONA_ID}/prompt.md")
 LANCEDB_PATH = resolve_db_path()
 
 
