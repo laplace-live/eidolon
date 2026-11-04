@@ -1,0 +1,139 @@
+{
+  "parse_messages": "user: 你好\nassistant: 嗨\n你好\nsystem: sys\n",
+  "remove_code_blocks": [
+    ["```json\n{\"memory\": []}\n```", "{\"memory\": []}"],
+    ["<think>plan</think>\n{\"memory\": [1]}", "{\"memory\": [1]}"],
+    ["```\n{\"a\":1}\n```   ", "{\"a\":1}"],
+    ["Here you go: {\"memory\": []} thanks", "Here you go: {\"memory\": []} thanks"],
+    [null, ""],
+    [[{ "type": "text", "text": "{}" }], "{}"],
+    [["{\"a\"", ": 1}"], "{\"a\": 1}"],
+    [[{ "type": "image" }, "x", 5], "x"],
+    [5, ""],
+    ["  \n  ", ""],
+    ["```json\n{\"a\": 1}\n```\n<think>x\ny</think>", "```json\n{\"a\": 1}\n```"],
+    ["<think>a</think>b<think>c</think>", "b"],
+    ["```py3\nbody\n```", "body"],
+    ["```json {\"inline\": true}```", "```json {\"inline\": true}```"],
+    ["\u001c{\"a\": 1}\u001c", "{\"a\": 1}"],
+    ["﻿{\"a\": 1}", "﻿{\"a\": 1}"]
+  ],
+  "extract_json": [
+    ["no json", "no json"],
+    ["prefix {\"a\": {\"b\": 1}} suffix", "{\"a\": {\"b\": 1}}"],
+    ["```json\n {\"x\": 2} \n``` tail", "{\"x\": 2}"],
+    ["```\n[1,2]\n```", "[1,2]"],
+    ["} backwards {", "} backwards {"],
+    ["  {\"a\": 1}  ", "{\"a\": 1}"],
+    ["text ```json\n{\"a\":1}``` and ```{\"b\":2}```", "{\"a\":1}"]
+  ],
+  "json_loads": [
+    [
+      "{\"memory\": [{\"text\": \"line1\nline2\"}]}",
+      true,
+      "{\"memory\": [{\"text\": \"line1\\nline2\"}]}"
+    ],
+    [
+      "{\"a\": NaN, \"b\": Infinity, \"c\": -Infinity}",
+      true,
+      "{\"a\": NaN, \"b\": Infinity, \"c\": -Infinity}"
+    ],
+    ["[1, 2]", true, "[1, 2]"],
+    ["", false, "Expecting value: line 1 column 1 (char 0)"],
+    ["{\"a\": 1} x", false, "Extra data: line 1 column 10 (char 9)"],
+    ["{\"a\" 1}", false, "Expecting ':' delimiter: line 1 column 6 (char 5)"],
+    [
+      "{'a': 1}",
+      false,
+      "Expecting property name enclosed in double quotes: line 1 column 2 (char 1)"
+    ],
+    ["{\"a\": [1 2]}", false, "Expecting ',' delimiter: line 1 column 10 (char 9)"],
+    ["{\"a\": \"\\q\"}", false, "Invalid \\escape: line 1 column 8 (char 7)"],
+    ["{\"a\": \"abc", false, "Unterminated string starting at: line 1 column 7 (char 6)"],
+    ["{\"a\": \"\\ud83d\\ude00\"}", true, "{\"a\": \"\\ud83d\\ude00\"}"],
+    ["{\"a\": \"\\u12\"}", false, "Invalid \\uXXXX escape: line 1 column 9 (char 8)"],
+    [
+      "{\n  \"memory\": [\n    {\"text\": \"x\",}\n  ]\n}",
+      false,
+      "Illegal trailing comma before end of object: line 3 column 17 (char 32)"
+    ],
+    ["  {\"a\": 1}  ", true, "{\"a\": 1}"],
+    ["{\"a\": 1, \"a\": 2}", true, "{\"a\": 2}"],
+    ["{\"a\": tru}", false, "Expecting value: line 1 column 7 (char 6)"],
+    [
+      "{\"a\": 1.5e3, \"b\": -0, \"c\": 10000000000000000000000}",
+      true,
+      "{\"a\": 1500.0, \"b\": 0, \"c\": 10000000000000000000000}"
+    ],
+    ["猫{\"a\": 1}", false, "Expecting value: line 1 column 1 (char 0)"],
+    [
+      "{\"猫\": \"狗\" ,}",
+      false,
+      "Illegal trailing comma before end of object: line 1 column 11 (char 10)"
+    ],
+    ["\t\r\n{}", true, "{}"],
+    ["{\"a\":\"\t\"}", true, "{\"a\": \"\\t\"}"],
+    ["{\"a\": 01}", false, "Expecting ',' delimiter: line 1 column 8 (char 7)"],
+    ["{\"a\": .5}", false, "Expecting value: line 1 column 7 (char 6)"],
+    ["{\"a\": -}", false, "Expecting value: line 1 column 7 (char 6)"],
+    ["{\"a\": 1.}", false, "Expecting ',' delimiter: line 1 column 8 (char 7)"],
+    ["{\"a\": 1e}", false, "Expecting ',' delimiter: line 1 column 8 (char 7)"]
+  ],
+  "validate_entity_id": [
+    ["12345678", true, "12345678"],
+    ["  12345678  ", true, "12345678"],
+    ["", false, "Invalid user_id: cannot be empty or whitespace-only. Provide a valid identifier."],
+    [
+      "   ",
+      false,
+      "Invalid user_id: cannot be empty or whitespace-only. Provide a valid identifier."
+    ],
+    [
+      "a b",
+      false,
+      "Invalid user_id: cannot contain whitespace. Provide a valid identifier without spaces."
+    ],
+    [
+      "a　b",
+      false,
+      "Invalid user_id: cannot contain whitespace. Provide a valid identifier without spaces."
+    ],
+    [" 12 ", true, "12"],
+    [
+      "ab",
+      false,
+      "Invalid user_id: cannot contain whitespace. Provide a valid identifier without spaces."
+    ],
+    ["﻿x", true, "﻿x"],
+    ["x​y", true, "x​y"],
+    [123, true, "123"],
+    [null, true, null]
+  ],
+  "session_scope": [
+    [{ "user_id": "12345678" }, "user_id=12345678"],
+    [
+      { "user_id": "1", "agent_id": "a&b=c%", "run_id": "r" },
+      "agent_id=a%26b%3Dc%25&run_id=r&user_id=1"
+    ],
+    [{ "user_id": "u", "run_id": "" }, "user_id=u"]
+  ],
+  "prompt_golden_1": "## Summary\n\n\n## Last k Messages\nuser: 早上好\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[{\"id\": \"0\", \"text\": \"用户喜欢\\\"猫\\\"\"}, {\"id\": \"1\", \"text\": \"User likes tea\"}]\n\n## New Messages\nuser: 我养了一只猫\nassistant: 好可爱\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:",
+  "prompt_golden_2": "## Summary\n\n\n## Last k Messages\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[]\n\n## New Messages\nuser: hi\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:",
+  "prompt_truncation": "## Summary\n\n\n## Last k Messages\nuser: 猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫...\nassistant: 😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀...\nuser: 猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫猫\n\n\n## Recently Extracted Memories\n[]\n\n## Existing Memories\n[{\"id\": \"0\", \"text\": \"a\\nb \\t\\\\\\u0001é😀\"}, {\"id\": \"1\", \"text\": null}, {\"id\": \"2\", \"text\": 5}]\n\n## New Messages\nuser: x\n\n\n## Observation Date\n2026-11-03\n\n## Current Date\n2026-11-03\n\n# Output:",
+  "eviction": {
+    "first": ["m00", "m01", "m02", "m03", "m04", "m05", "m06", "m07", "m08", "m09"],
+    "second": ["m00", "m01", "m02", "m03", "m04", "m05", "m06", "n00", "n01", "n02"],
+    "rows": [
+      ["m00", "2026-11-03T04:05:06.123456+00:00"],
+      ["m01", "2026-11-03T04:05:06.123456+00:00"],
+      ["m02", "2026-11-03T04:05:06.123456+00:00"],
+      ["m03", "2026-11-03T04:05:06.123456+00:00"],
+      ["m04", "2026-11-03T04:05:06.123456+00:00"],
+      ["m05", "2026-11-03T04:05:06.123456+00:00"],
+      ["m06", "2026-11-03T04:05:06.123456+00:00"],
+      ["n00", "2026-11-03T04:05:07.123457+00:00"],
+      ["n01", "2026-11-03T04:05:07.123457+00:00"],
+      ["n02", "2026-11-03T04:05:07.123457+00:00"]
+    ]
+  }
+}

@@ -1,0 +1,4 @@
+[[query]]
+table = "persona_facts"
+text = "只有事实表"
+expect_substrings = ["x"]

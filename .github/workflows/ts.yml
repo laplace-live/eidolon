@@ -1,0 +1,54 @@
+name: TypeScript
+
+on:
+  push:
+    branches:
+      - "master"
+    paths:
+      - "apps/**"
+      - "packages/**"
+      - "package.json"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "tsconfig.json"
+      - "biome.json"
+      - ".github/workflows/ts.yml"
+  pull_request:
+    branches:
+      - "master"
+    paths:
+      - "apps/**"
+      - "packages/**"
+      - "package.json"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "tsconfig.json"
+      - "biome.json"
+      - ".github/workflows/ts.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ts-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      # No LFS: the tests that read data/lancedb skip themselves on pointer stubs.
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+
+      - run: bun install --frozen-lockfile
+
+      - run: bun run typecheck
+
+      - run: bun run lint
+
+      - run: bun run test

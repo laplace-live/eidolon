@@ -1,0 +1,26 @@
+{
+  "persona_facts": {
+    "vector_only": {
+      "recall_at": { "1": 0.5, "3": 0.75, "5": 0.75, "10": 0.75 },
+      "mrr": 0.6,
+      "n_queries": 5,
+      "miss_count": 1
+    },
+    "hybrid": {
+      "recall_at": { "1": 0.6, "3": 0.6, "5": 0.6, "10": 0.6 },
+      "mrr": 0.6,
+      "n_queries": 5,
+      "miss_count": 2
+    },
+    "hybrid_rerank": {}
+  },
+  "stream_chunks": {
+    "hybrid": {
+      "recall_at": { "1": 1.0, "3": 1.0, "5": 1.0, "10": 1.0 },
+      "mrr": 1,
+      "n_queries": 3,
+      "miss_count": 0
+    }
+  },
+  "ghost_table": { "hybrid": { "mrr": 0.1 } }
+}

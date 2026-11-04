@@ -1,0 +1,62 @@
+{
+  "schema": {
+    "name": "recall_streams",
+    "description": "查询自己的已归档直播。当前概览足够回答时直接回答；需要其他场次、复杂时间指代或更具体的内容时调用。结合对话解析用户指代，把问题改写成独立查询。每个用户回合最多两次；查不到不能说没有直播，也不要编造。",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "独立、具体的直播问题或话题"
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["overview", "details"],
+          "description": "整场/一段时间回顾用 overview，具体言论或事件用 details"
+        },
+        "period": {
+          "type": "string",
+          "enum": [
+            "latest",
+            "previous",
+            "this_week",
+            "last_week",
+            "this_month",
+            "last_month",
+            "past_days",
+            "date_range",
+            "selected",
+            "broadcasts",
+            "all"
+          ],
+          "description": "latest 最近一场；previous 倒数第二场；week 为周一到周日；selected 沿用刚才已查询的场次/时间段；all 跨全部归档找话题。broadcasts 选择概览里已提供的 broadcast_ids，例如其中第二场。昨天或明确日期用 date_range，不要猜测未经查询的场次 ID。"
+        },
+        "start_date": {
+          "type": "string",
+          "description": "date_range 起始日 YYYY-MM-DD"
+        },
+        "end_date": {
+          "type": "string",
+          "description": "date_range 结束日 YYYY-MM-DD，不包含该日；只查一天时省略"
+        },
+        "days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 366,
+          "description": "past_days 天数，包含今天，默认 7"
+        },
+        "broadcast_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "仅填写概览已经给出的场次 ID，不要编造"
+        }
+      },
+      "required": ["query", "mode", "period"]
+    }
+  },
+  "register_kwargs": {
+    "cancel_on_interruption": true
+  }
+}

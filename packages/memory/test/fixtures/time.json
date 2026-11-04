@@ -1,0 +1,1637 @@
+{
+  "curated_datetime": [
+    [
+      "2025-12-01T03:04:05-07:00",
+      true,
+      "1764583445000000",
+      true,
+      "2025-12-01T10:04:05+00:00",
+      "2025-12-01T03:04:05-07:00"
+    ],
+    [
+      "2025-12-01T09:00:00+00:00",
+      true,
+      "1764579600000000",
+      true,
+      "2025-12-01T09:00:00+00:00",
+      "2025-12-01T09:00:00+00:00"
+    ],
+    [
+      "2026-11-03T04:05:06.123456+00:00",
+      true,
+      "1793678706123456",
+      true,
+      "2026-11-03T04:05:06.123456+00:00",
+      "2026-11-03T04:05:06.123456+00:00"
+    ],
+    [
+      "2026-04-12T08:30:11Z",
+      true,
+      "1775982611000000",
+      true,
+      "2026-04-12T08:30:11+00:00",
+      "2026-04-12T08:30:11+00:00"
+    ],
+    ["2026-04-12 08:30:11", true, "1775982611000000", false, null, "2026-04-12T08:30:11"],
+    ["2026-04-12T08:30:11", true, "1775982611000000", false, null, "2026-04-12T08:30:11"],
+    ["2026-04-12", true, "1775952000000000", false, null, "2026-04-12T00:00:00"],
+    ["20260412", true, "1775952000000000", false, null, "2026-04-12T00:00:00"],
+    ["2026-04-12T08:30", true, "1775982600000000", false, null, "2026-04-12T08:30:00"],
+    ["2026-04-12T08", true, "1775980800000000", false, null, "2026-04-12T08:00:00"],
+    [
+      "2026-04-12T08:30:11.5+05:30",
+      true,
+      "1775962811500000",
+      true,
+      "2026-04-12T03:00:11.500000+00:00",
+      "2026-04-12T08:30:11.500000+05:30"
+    ],
+    [
+      "2026-04-12T08:30:11.1234567+00:00",
+      true,
+      "1775982611123456",
+      true,
+      "2026-04-12T08:30:11.123456+00:00",
+      "2026-04-12T08:30:11.123456+00:00"
+    ],
+    [
+      "2026-04-12T08:30:11,25+00:00",
+      true,
+      "1775982611250000",
+      true,
+      "2026-04-12T08:30:11.250000+00:00",
+      "2026-04-12T08:30:11.250000+00:00"
+    ],
+    [
+      "2026-04-12T08:30:11+0530",
+      true,
+      "1775962811000000",
+      true,
+      "2026-04-12T03:00:11+00:00",
+      "2026-04-12T08:30:11+05:30"
+    ],
+    [
+      "2026-04-12T08:30:11+05",
+      true,
+      "1775964611000000",
+      true,
+      "2026-04-12T03:30:11+00:00",
+      "2026-04-12T08:30:11+05:00"
+    ],
+    ["2026-04-12T083011", true, "1775982611000000", false, null, "2026-04-12T08:30:11"],
+    [
+      "2026-04-12T08:30:11.123+00:00:30",
+      true,
+      "1775982581123000",
+      true,
+      "2026-04-12T08:29:41.123000+00:00",
+      "2026-04-12T08:30:11.123000+00:00:30"
+    ],
+    ["2026-04-12T24:00:00", false, "ValueError", "hour must be in 0..23"],
+    ["2026-02-30T00:00:00", false, "ValueError", "day is out of range for month"],
+    [
+      "2024-02-29T00:00:00+14:00",
+      true,
+      "1709114400000000",
+      true,
+      "2024-02-28T10:00:00+00:00",
+      "2024-02-29T00:00:00+14:00"
+    ],
+    [
+      "0001-01-01T00:00:00+00:00",
+      true,
+      "-62135596800000000",
+      true,
+      "0001-01-01T00:00:00+00:00",
+      "0001-01-01T00:00:00+00:00"
+    ],
+    ["bogus", false, "ValueError", "Invalid isoformat string: 'bogus'"],
+    ["", false, "ValueError", "Invalid isoformat string: ''"],
+    [
+      "2026-04-12T08:30:11 +00:00",
+      true,
+      "1775982611000000",
+      true,
+      "2026-04-12T08:30:11+00:00",
+      "2026-04-12T08:30:11+00:00"
+    ],
+    ["2026-04-12x08:30:11", true, "1775982611000000", false, null, "2026-04-12T08:30:11"],
+    [
+      "2026-04-12T08:30:11.+00:00",
+      true,
+      "1775982611000000",
+      true,
+      "2026-04-12T08:30:11+00:00",
+      "2026-04-12T08:30:11+00:00"
+    ],
+    ["2026-W15-1", true, "1775433600000000", false, null, "2026-04-06T00:00:00"],
+    [
+      "2026-04-12T08:30:11-07:00 ",
+      false,
+      "ValueError",
+      "Invalid isoformat string: '2026-04-12T08:30:11-07:00 '"
+    ],
+    ["2026-04-12T08:30:60", false, "ValueError", "second must be in 0..59"],
+    ["2026-13-01", false, "ValueError", "month must be in 1..12"],
+    [
+      "2026-04-12T08:30:11.000000+00:00",
+      true,
+      "1775982611000000",
+      true,
+      "2026-04-12T08:30:11+00:00",
+      "2026-04-12T08:30:11+00:00"
+    ],
+    [
+      "2026-04-12T08:30:11+24:00",
+      false,
+      "ValueError",
+      "offset must be a timedelta strictly between -timedelta(hours=24) and timedelta(hours=24), not datetime.timedelta(days=1)."
+    ],
+    [
+      "2026-04-12T08:30:11-23:59",
+      true,
+      "1776068951000000",
+      true,
+      "2026-04-13T08:29:11+00:00",
+      "2026-04-12T08:30:11-23:59"
+    ],
+    [
+      "2026-04-12T08:30:11.999999999Z",
+      true,
+      "1775982611999999",
+      true,
+      "2026-04-12T08:30:11.999999+00:00",
+      "2026-04-12T08:30:11.999999+00:00"
+    ],
+    [
+      "2026-04-12T08:30:11Z05:00",
+      false,
+      "ValueError",
+      "Invalid isoformat string: '2026-04-12T08:30:11Z05:00'"
+    ],
+    [
+      "2026-04-12t08:30:11z",
+      false,
+      "ValueError",
+      "Invalid isoformat string: '2026-04-12t08:30:11z'"
+    ],
+    [
+      "2026-04-12T08:30:11.12Z",
+      true,
+      "1775982611120000",
+      true,
+      "2026-04-12T08:30:11.120000+00:00",
+      "2026-04-12T08:30:11.120000+00:00"
+    ],
+    ["2026-04-12T0830", true, "1775982600000000", false, null, "2026-04-12T08:30:00"],
+    ["2026-04-12T08:3011", false, "ValueError", "Invalid isoformat string: '2026-04-12T08:3011'"],
+    ["+2026-04-12", false, "ValueError", "Invalid isoformat string: '+2026-04-12'"]
+  ],
+  "normalize": [
+    ["2025-12-01T03:04:05-07:00", "2025-12-01T10:04:05+00:00"],
+    ["2026-04-12T08:30:11Z", "2026-04-12T08:30:11+00:00"],
+    ["2026-04-12T08:30:11", "2026-04-12T08:30:11"],
+    ["bogus", "bogus"],
+    ["", ""],
+    [null, null],
+    ["2026-11-03T04:05:06.123456+00:00", "2026-11-03T04:05:06.123456+00:00"],
+    ["2026-11-03T04:05:06.123456+08:00", "2026-11-02T20:05:06.123456+00:00"],
+    ["2026-11-03T00:30:00.5+01:00", "2026-11-02T23:30:00.500000+00:00"]
+  ],
+  "isoformat": [
+    ["1793678706123456", "2026-11-03T04:05:06.123456+00:00", "2026-11-03"],
+    ["1793678706000000", "2026-11-03T04:05:06+00:00", "2026-11-03"],
+    ["1793678706000001", "2026-11-03T04:05:06.000001+00:00", "2026-11-03"],
+    ["1793678706100000", "2026-11-03T04:05:06.100000+00:00", "2026-11-03"],
+    ["0", "1970-01-01T00:00:00+00:00", "1970-01-01"],
+    ["253402300799999999", "9999-12-31T23:59:59.999999+00:00", "9999-12-31"]
+  ],
+  "date": [
+    ["2026-11-03", true, "2026-11-03"],
+    ["20261103", true, "2026-11-03"],
+    ["2026-W45-2", true, "2026-11-03"],
+    ["2026-11-3", false, "Invalid isoformat string: '2026-11-3'"],
+    ["2026-11-03T00:00", false, "Invalid isoformat string: '2026-11-03T00:00'"],
+    ["bogus", false, "Invalid isoformat string: 'bogus'"],
+    ["20261103 ", false, "Invalid isoformat string: '20261103 '"],
+    ["2026-02-29", false, "day is out of range for month"]
+  ],
+  "greeting_sort": [
+    [
+      [
+        "2025-12-01T03:04:05-07:00",
+        "2025-12-01T09:00:00+00:00",
+        "2025-12-01T10:04:05+00:00",
+        "2026-11-03T04:05:06.123456+00:00"
+      ],
+      [true, ["3", "0", "2", "1"]]
+    ],
+    [
+      ["2026-01-01T00:00:00+00:00", "2026-01-01T08:00:00+08:00", "2025-12-31T17:00:00-07:00"],
+      [true, ["0", "1", "2"]]
+    ],
+    [
+      ["2026-01-01T00:00:00+00:00", null],
+      [false, "TypeError", "fromisoformat: argument must be str"]
+    ],
+    [[null], [false, "TypeError", "fromisoformat: argument must be str"]],
+    [["2026-01-01T00:00:00"], [true, ["0"]]],
+    [
+      ["2026-01-01T00:00:00", "2026-01-01T00:00:00+00:00"],
+      [false, "TypeError", "can't compare offset-naive and offset-aware datetimes"]
+    ],
+    [
+      ["2026-01-01T00:00:00+00:00", "bogus"],
+      [false, "ValueError", "Invalid isoformat string: 'bogus'"]
+    ],
+    [[], [true, []]]
+  ],
+  "battery_datetime": [
+    [
+      " 026-11-03T04:05:06.123456+00.00",
+      [false, "ValueError", "Invalid isoformat string: ' 026-11-03T04:05:06.123456+00.00'"]
+    ],
+    [
+      "0000-01-01\t08:30:11..5+23:59:59.999999",
+      [false, "ValueError", "Invalid isoformat string: '0000-01-01\\t08:30:11..5+23:59:59.999999'"]
+    ],
+    [
+      "0000-01-01 08:30:11.+05:3x",
+      [false, "ValueError", "Invalid isoformat string: '0000-01-01 08:30:11.+05:3x'"]
+    ],
+    ["0000-01-01-08:30-14:00", [false, "ValueError", "year 0 is out of range"]],
+    [
+      "0000-01-0108:30:11,123-14:00",
+      [false, "ValueError", "Invalid isoformat string: '0000-01-0108:30:11,123-14:00'"]
+    ],
+    [
+      "0000-01-01108:3011+12:00",
+      [false, "ValueError", "Invalid isoformat string: '0000-01-01108:3011+12:00'"]
+    ],
+    [
+      "0000-01-01T08:3-07:00",
+      [false, "ValueError", "Invalid isoformat string: '0000-01-01T08:3-07:00'"]
+    ],
+    [
+      "0000-01-01W08:3+05:30 ",
+      [false, "ValueError", "Invalid isoformat string: '0000-01-01W08:3+05:30 '"]
+    ],
+    [
+      "0000-01-01Z08:3-24:00",
+      [false, "ValueError", "Invalid isoformat string: '0000-01-01Z08:3-24:00'"]
+    ],
+    ["0000-01-01x08:30:11.+00:00", [false, "ValueError", "year 0 is out of range"]],
+    [
+      "0000-01-01\u732b08:30z",
+      [false, "ValueError", "Invalid isoformat string: '0000-01-01\u732b08:30z'"]
+    ],
+    [
+      "0000-01-01\ud800Z05",
+      [false, "ValueError", "Invalid isoformat string: '0000-01-01\\ud800Z05'"]
+    ],
+    ["0001-01-01\t24:00+05:30:15.1234567", [false, "ValueError", "hour must be in 0..23"]],
+    ["0001-01-01 24:00z", [false, "ValueError", "Invalid isoformat string: '0001-01-01 24:00z'"]],
+    ["0001-01-010-00:00", [false, "ValueError", "Invalid isoformat string: '0001-01-010-00:00'"]],
+    [
+      "0001-01-01108:3011+00:00:00.5",
+      [false, "ValueError", "Invalid isoformat string: '0001-01-01108:3011+00:00:00.5'"]
+    ],
+    [
+      "0001-01-01T08:3+053",
+      [false, "ValueError", "Invalid isoformat string: '0001-01-01T08:3+053'"]
+    ],
+    ["0001-01-01W0830+0530.5", [true, "-62135586000500000", true]],
+    ["0001-01-01Z0830+12:00", [true, "-62135609400000000", true]],
+    ["0001-01-01x08:30:11 +00:00", [true, "-62135566189000000", true]],
+    [
+      "0001-01-01\u732b08:30:11 +24:00",
+      [
+        false,
+        "ValueError",
+        "offset must be a timedelta strictly between -timedelta(hours=24) and timedelta(hours=24), not datetime.timedelta(days=1)."
+      ]
+    ],
+    [
+      "0001-01-01\ud80008:30:11..5+24:00",
+      [false, "ValueError", "Invalid isoformat string: '0001-01-01\\ud80008:30:11..5+24:00'"]
+    ],
+    [
+      "026-11-03T04:05:06.123456+000",
+      [false, "ValueError", "Invalid isoformat string: '026-11-03T04:05:06.123456+000'"]
+    ],
+    ["1970-01-01\t08:30:11.12345+0530", [true, "10811123450", true]],
+    ["1970-01-01 08:30:11.-07:00", [true, "55811000000", true]],
+    [
+      "1970-01-01-08:30:11:5+24:00",
+      [
+        false,
+        "ValueError",
+        "offset must be a timedelta strictly between -timedelta(hours=24) and timedelta(hours=24), not datetime.timedelta(days=1)."
+      ]
+    ],
+    [
+      "1970-01-0110+05:30:15",
+      [false, "ValueError", "Invalid isoformat string: '1970-01-0110+05:30:15'"]
+    ],
+    ["1970-01-0124:00z", [false, "ValueError", "Invalid isoformat string: '1970-01-0124:00z'"]],
+    ["1970-01-01W0-24:00", [false, "ValueError", "Invalid isoformat string: '1970-01-01W0-24:00'"]],
+    [
+      "1970-01-01Z00:00:00.000000+05:3x",
+      [false, "ValueError", "Invalid isoformat string: '1970-01-01Z00:00:00.000000+05:3x'"]
+    ],
+    ["1970-01-01x083011+05:99", [true, "6671000000", true]],
+    ["1970-01-01\u732b0830+0530", [true, "10800000000", true]],
+    [
+      "1970-01-01\ud80008:3011+00:00",
+      [false, "ValueError", "Invalid isoformat string: '1970-01-01\\ud80008:3011+00:00'"]
+    ],
+    [
+      "2-026-11-03T04:05:06.123456+00:00",
+      [false, "ValueError", "Invalid isoformat string: '2-026-11-03T04:05:06.123456+00:00'"]
+    ],
+    [
+      "202,-04-172 08:30:1,",
+      [false, "ValueError", "Invalid isoformat string: '202,-04-172 08:30:1,'"]
+    ],
+    [
+      "2020-W53-7\t08:3011-07:00",
+      [false, "ValueError", "Invalid isoformat string: '2020-W53-7\\t08:3011-07:00'"]
+    ],
+    ["2020-W53-7 08:30:11.1234567+05:30:15.1234567", [true, "1609642796000000", true]],
+    ["2020-W53-7-08:30:11.1234567+00:00", [true, "1609662611123456", true]],
+    [
+      "2020-W53-708:30:11.5Z",
+      [false, "ValueError", "Invalid isoformat string: '2020-W53-708:30:11.5Z'"]
+    ],
+    [
+      "2020-W53-7123:59:60+05:3x",
+      [false, "ValueError", "Invalid isoformat string: '2020-W53-7123:59:60+05:3x'"]
+    ],
+    [
+      "2020-W53-7T08:30:11..5+0530",
+      [false, "ValueError", "Invalid isoformat string: '2020-W53-7T08:30:11..5+0530'"]
+    ],
+    ["2020-W53-7W08:30:11,123Z", [true, "1609662611123000", true]],
+    [
+      "2020-W53-7Z08:30:11 z",
+      [false, "ValueError", "Invalid isoformat string: '2020-W53-7Z08:30:11 z'"]
+    ],
+    [
+      "2020-W53-7x08:3011-24:00",
+      [false, "ValueError", "Invalid isoformat string: '2020-W53-7x08:3011-24:00'"]
+    ],
+    ["2020-W53-7\u732b08:30:11,123+05:30:15.5", [true, "1609642795623000", true]],
+    ["2020-W53-7\ud80008:30:11.5+05", [true, "1609644611500000", true]],
+    [
+      "2024-02-29\t08+24:00",
+      [
+        false,
+        "ValueError",
+        "offset must be a timedelta strictly between -timedelta(hours=24) and timedelta(hours=24), not datetime.timedelta(days=1)."
+      ]
+    ],
+    ["2024-02-29 0830115Z", [true, "1709195411000000", true]],
+    ["2024-02-29-08:30-00:00", [true, "1709195400000000", true]],
+    [
+      "2024-02-2908:30-00:00",
+      [false, "ValueError", "Invalid isoformat string: '2024-02-2908:30-00:00'"]
+    ],
+    ["2024-02-29123:59:59.999999+12:00", [true, "1709207999999999", true]],
+    [
+      "2024-02-29T8:30+05:30 ",
+      [false, "ValueError", "Invalid isoformat string: '2024-02-29T8:30+05:30 '"]
+    ],
+    ["2024-02-29Z083011Z", [true, "1709195411000000", true]],
+    ["2024-02-29x00:00:00.000000+23:59:59.999999", [true, "1709078400000001", true]],
+    ["2024-02-29x23:59:60+05:30:15", [false, "ValueError", "second must be in 0..59"]],
+    [
+      "2024-02-29\u732b23:59:59.999999+05:30 ",
+      [false, "ValueError", "Invalid isoformat string: '2024-02-29\u732b23:59:59.999999+05:30 '"]
+    ],
+    [
+      "2024-02-29\ud80023:59:59.999999+5",
+      [false, "ValueError", "Invalid isoformat string: '2024-02-29\\ud80023:59:59.999999+5'"]
+    ],
+    [
+      "2025-12--1T03:04:05-07:00",
+      [false, "ValueError", "Invalid isoformat string: '2025-12--1T03:04:05-07:00'"]
+    ],
+    [
+      "2025-12-01T03:04605-070:00",
+      [false, "ValueError", "Invalid isoformat string: '2025-12-01T03:04605-070:00'"]
+    ],
+    [
+      "2025-12-01T03:04:05-0Z:09",
+      [false, "ValueError", "Invalid isoformat string: '2025-12-01T03:04:05-0Z:09'"]
+    ],
+    [
+      "2025-12-01T0z:04:05-07:00",
+      [false, "ValueError", "Invalid isoformat string: '2025-12-01T0z:04:05-07:00'"]
+    ],
+    [
+      "2025-1201T03:04:05-07:07",
+      [false, "ValueError", "Invalid isoformat string: '2025-1201T03:04:05-07:07'"]
+    ],
+    [
+      "20256-04-12 08:30:1",
+      [false, "ValueError", "Invalid isoformat string: '20256-04-12 08:30:1'"]
+    ],
+    ["2026-02-29\t00:00:00.000000+05:99", [false, "ValueError", "day is out of range for month"]],
+    ["2026-02-29 08+5", [false, "ValueError", "Invalid isoformat string: '2026-02-29 08+5'"]],
+    ["2026-02-29--07:00", [false, "ValueError", "Invalid isoformat string: '2026-02-29--07:00'"]],
+    [
+      "2026-02-2908:30:11.",
+      [false, "ValueError", "Invalid isoformat string: '2026-02-2908:30:11.'"]
+    ],
+    ["2026-02-29108:30:11X-14:00", [false, "ValueError", "day is out of range for month"]],
+    ["2026-02-29T08:30:11,123+12:00", [false, "ValueError", "day is out of range for month"]],
+    ["2026-02-29W08:30:11X-14:00", [false, "ValueError", "day is out of range for month"]],
+    ["2026-02-29Z08:60+00:00:00.5", [false, "ValueError", "day is out of range for month"]],
+    [
+      "2026-02-29x08:30:11..5+05:99",
+      [false, "ValueError", "Invalid isoformat string: '2026-02-29x08:30:11..5+05:99'"]
+    ],
+    [
+      "2026-02-29\u732b08:30:11.1234567-07:00",
+      [false, "ValueError", "day is out of range for month"]
+    ],
+    [
+      "2026-02-29\ud80008:30:11:5+05:3x",
+      [false, "ValueError", "Invalid isoformat string: '2026-02-29\\ud80008:30:11:5+05:3x'"]
+    ],
+    [
+      "2026-04-1\t083011+05:99",
+      [false, "ValueError", "Invalid isoformat string: '2026-04-1\\t083011+05:99'"]
+    ],
+    [
+      "2026-04-1 08:30:.17",
+      [false, "ValueError", "Invalid isoformat string: '2026-04-1 08:30:.17'"]
+    ],
+    [
+      "2026-04-1+2 08:30:11",
+      [false, "ValueError", "Invalid isoformat string: '2026-04-1+2 08:30:11'"]
+    ],
+    ["2026-04-1083011+00:00", [false, "ValueError", "hour must be in 0..23"]],
+    [
+      "2026-04-1108:3+00:00:00.5",
+      [false, "ValueError", "Invalid isoformat string: '2026-04-1108:3+00:00:00.5'"]
+    ],
+    [
+      "2026-04-12\t08:30:11X+05:30 ",
+      [false, "ValueError", "Invalid isoformat string: '2026-04-12\\t08:30:11X+05:30 '"]
+    ],
+    [
+      "2026-04-12 08:30:+1",
+      [false, "ValueError", "Invalid isoformat string: '2026-04-12 08:30:+1'"]
+    ],
+    ["2026-04-12 08:32:11", [true, "1775982731000000", false]],
+    ["2026-04-12-00:00:00.000000+23:59:59.999999", [true, "1775865600000001", true]],
+    ["2026-04-120+0530", [false, "ValueError", "Invalid isoformat string: '2026-04-120+0530'"]],
+    ["2026-04-1210830-14:00", [true, "1776033000000000", true]],
+    [
+      "2026-04-12123:59:60+5",
+      [false, "ValueError", "Invalid isoformat string: '2026-04-12123:59:60+5'"]
+    ],
+    ["2026-04-12T-24:00", [false, "ValueError", "Invalid isoformat string: '2026-04-12T-24:00'"]],
+    ["2026-04-12T00:00:00.000000-00:00", [true, "1775952000000000", true]],
+    ["2026-04-12T0830+05:30:15.5", [true, "1775962784500000", true]],
+    ["2026-04-12T0830115+0530.5", [true, "1775962810500000", true]],
+    [
+      "2026-04-12T08:3+24:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-04-12T08:3+24:00'"]
+    ],
+    [
+      "2026-04-12T08:3011+05:3x",
+      [false, "ValueError", "Invalid isoformat string: '2026-04-12T08:3011+05:3x'"]
+    ],
+    ["2026-04-12T08:30:11+00:00", [true, "1775982611000000", true]],
+    [
+      "2026-04-12T08:30:11,123z",
+      [false, "ValueError", "Invalid isoformat string: '2026-04-12T08:30:11,123z'"]
+    ],
+    [
+      "2026-04-12T08:30:11..5+05:99",
+      [false, "ValueError", "Invalid isoformat string: '2026-04-12T08:30:11..5+05:99'"]
+    ],
+    ["2026-04-12T08:30:11.1234567+0530", [true, "1775962811123456", true]],
+    ["2026-04-12T08:30:11.5-00:00", [true, "1775982611500000", true]],
+    [
+      "2026-04-12T08:30:11X+053",
+      [false, "ValueError", "Invalid isoformat string: '2026-04-12T08:30:11X+053'"]
+    ],
+    ["2026-04-12T08:60+05:30:15.1234567", [false, "ValueError", "minute must be in 0..59"]],
+    ["2026-04-12T23:59:59.999999-00:00", [true, "1776038399999999", true]],
+    [
+      "2026-04-12T24:00+05:30 ",
+      [false, "ValueError", "Invalid isoformat string: '2026-04-12T24:00+05:30 '"]
+    ],
+    ["2026-04-12T8:30Z", [false, "ValueError", "Invalid isoformat string: '2026-04-12T8:30Z'"]],
+    [
+      "2026-04-12W08:30:11:5+24:00",
+      [
+        false,
+        "ValueError",
+        "offset must be a timedelta strictly between -timedelta(hours=24) and timedelta(hours=24), not datetime.timedelta(days=1)."
+      ]
+    ],
+    ["2026-04-12Z23:59:60", [false, "ValueError", "second must be in 0..59"]],
+    ["2026-04-12x08:30:11X-14:00", [true, "1776033011000000", true]],
+    [
+      "2026-04-12\u732b08:30:11:5-24:00",
+      [
+        false,
+        "ValueError",
+        "offset must be a timedelta strictly between -timedelta(hours=24) and timedelta(hours=24), not datetime.timedelta(days=-1)."
+      ]
+    ],
+    ["2026-04-12\ud80008:60+0530.5", [false, "ValueError", "minute must be in 0..59"]],
+    [
+      "2026-04-1T08:30:11.5+05",
+      [false, "ValueError", "Invalid isoformat string: '2026-04-1T08:30:11.5+05'"]
+    ],
+    [
+      "2026-04-1W08:30:11X+05:30:15",
+      [false, "ValueError", "Invalid isoformat string: '2026-04-1W08:30:11X+05:30:15'"]
+    ],
+    [
+      "2026-04-1Z23:59:59.999999-14:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-04-1Z23:59:59.999999-14:00'"]
+    ],
+    [
+      "2026-04-1\u732b083011+05:30:15.5",
+      [false, "ValueError", "Invalid isoformat string: '2026-04-1\u732b083011+05:30:15.5'"]
+    ],
+    [
+      "2026-04-1\ud80008:30:11",
+      [false, "ValueError", "Invalid isoformat string: '2026-04-1\\ud80008:30:11'"]
+    ],
+    ["2026-0412\t0+05", [false, "ValueError", "Invalid isoformat string: '2026-0412\\t0+05'"]],
+    [
+      "2026-0412 08:30+12:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-0412 08:30+12:00'"]
+    ],
+    [
+      "2026-0412-00:00:00.000000+12:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-0412-00:00:00.000000+12:00'"]
+    ],
+    ["2026-0412083011", [false, "ValueError", "Invalid isoformat string: '2026-0412083011'"]],
+    [
+      "2026-0412108:30:11 +05:30:15.5",
+      [false, "ValueError", "Invalid isoformat string: '2026-0412108:30:11 +05:30:15.5'"]
+    ],
+    [
+      "2026-0412T08:30:11..5+24:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-0412T08:30:11..5+24:00'"]
+    ],
+    [
+      "2026-0412W08:60-23:59",
+      [false, "ValueError", "Invalid isoformat string: '2026-0412W08:60-23:59'"]
+    ],
+    [
+      "2026-0412Z8:30+00:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-0412Z8:30+00:00'"]
+    ],
+    [
+      "2026-0412\u732b00:00:00.000000+12:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-0412\u732b00:00:00.000000+12:00'"]
+    ],
+    [
+      "2026-0412\u732b08:30:11z",
+      [false, "ValueError", "Invalid isoformat string: '2026-0412\u732b08:30:11z'"]
+    ],
+    [
+      "2026-0412\ud80008:30:11.1234567+24:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-0412\\ud80008:30:11.1234567+24:00'"]
+    ],
+    [
+      "2026-11+-036T04:05:06.123456+00:003",
+      [false, "ValueError", "Invalid isoformat string: '2026-11+-036T04:05:06.123456+00:003'"]
+    ],
+    [
+      "2026-11-03T04:0,:06.123456+00:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-11-03T04:0,:06.123456+00:00'"]
+    ],
+    ["2026-11-03T04:05:06.123456+0000", [true, "1793678706123456", true]],
+    [
+      "2026-11-03T04:05:06123456+00:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-11-03T04:05:06123456+00:00'"]
+    ],
+    [
+      "2026-11-03T0\u732b:05:06.123456+00:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-11-03T0\u732b:05:06.123456+00:00'"]
+    ],
+    [
+      "2026-1103T04:05:06.123 56+00:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-1103T04:05:06.123 56+00:00'"]
+    ],
+    ["2026-12-32\t08:30:11.5+00:00:00.5", [false, "ValueError", "day is out of range for month"]],
+    ["2026-12-32 08:30:11.1234567+0530.5", [false, "ValueError", "day is out of range for month"]],
+    [
+      "2026-12-32-08:30:11.12345-24:00",
+      [
+        false,
+        "ValueError",
+        "offset must be a timedelta strictly between -timedelta(hours=24) and timedelta(hours=24), not datetime.timedelta(days=-1)."
+      ]
+    ],
+    [
+      "2026-12-3208:30:11:5+0530.5",
+      [false, "ValueError", "Invalid isoformat string: '2026-12-3208:30:11:5+0530.5'"]
+    ],
+    ["2026-12-32108:30:11.5-14:00", [false, "ValueError", "day is out of range for month"]],
+    ["2026-12-32W-24:00", [false, "ValueError", "Invalid isoformat string: '2026-12-32W-24:00'"]],
+    ["2026-12-32W8:30", [false, "ValueError", "Invalid isoformat string: '2026-12-32W8:30'"]],
+    [
+      "2026-12-32Z23:59:60+24:00",
+      [
+        false,
+        "ValueError",
+        "offset must be a timedelta strictly between -timedelta(hours=24) and timedelta(hours=24), not datetime.timedelta(days=1)."
+      ]
+    ],
+    [
+      "2026-12-32\u732b08+05:3x",
+      [false, "ValueError", "Invalid isoformat string: '2026-12-32\u732b08+05:3x'"]
+    ],
+    [
+      "2026-12-32\ud80008:3+05:99",
+      [false, "ValueError", "Invalid isoformat string: '2026-12-32\\ud80008:3+05:99'"]
+    ],
+    [
+      "2026-13-01\t08:3011+05:99",
+      [false, "ValueError", "Invalid isoformat string: '2026-13-01\\t08:3011+05:99'"]
+    ],
+    [
+      "2026-13-01 08:30:11 Z05",
+      [false, "ValueError", "Invalid isoformat string: '2026-13-01 08:30:11 Z05'"]
+    ],
+    [
+      "2026-13-01-08:3011+05:30:15",
+      [false, "ValueError", "Invalid isoformat string: '2026-13-01-08:3011+05:30:15'"]
+    ],
+    ["2026-13-010830z", [false, "ValueError", "Invalid isoformat string: '2026-13-010830z'"]],
+    ["2026-13-01108:3011", [false, "ValueError", "Invalid isoformat string: '2026-13-01108:3011'"]],
+    [
+      "2026-13-01T08:3+05:3x",
+      [false, "ValueError", "Invalid isoformat string: '2026-13-01T08:3+05:3x'"]
+    ],
+    [
+      "2026-13-01W08:30:11+05:30 ",
+      [false, "ValueError", "Invalid isoformat string: '2026-13-01W08:30:11+05:30 '"]
+    ],
+    ["2026-13-01Z0830115", [false, "ValueError", "Invalid isoformat string: '2026-13-01Z0830115'"]],
+    ["2026-13-01x00:00:00.000000+05:30:15.5", [false, "ValueError", "month must be in 1..12"]],
+    [
+      "2026-13-01\u732b0+05:30 ",
+      [false, "ValueError", "Invalid isoformat string: '2026-13-01\u732b0+05:30 '"]
+    ],
+    ["2026-13-01\ud8000830+12:00", [false, "ValueError", "month must be in 1..12"]],
+    [
+      "2026-4-12\t08:30+5",
+      [false, "ValueError", "Invalid isoformat string: '2026-4-12\\t08:30+5'"]
+    ],
+    [
+      "2026-4-12 0830115-07:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-4-12 0830115-07:00'"]
+    ],
+    [
+      "2026-4-12-08:3+12:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-4-12-08:3+12:00'"]
+    ],
+    ["2026-4-12083011z", [false, "ValueError", "Invalid isoformat string: '2026-4-12083011z'"]],
+    [
+      "2026-4-12108:30:11..5+05",
+      [false, "ValueError", "Invalid isoformat string: '2026-4-12108:30:11..5+05'"]
+    ],
+    [
+      "2026-4-12T08:3-24:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-4-12T08:3-24:00'"]
+    ],
+    [
+      "2026-4-12W08:3+05:30 ",
+      [false, "ValueError", "Invalid isoformat string: '2026-4-12W08:3+05:30 '"]
+    ],
+    [
+      "2026-4-12Z08:3-07:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-4-12Z08:3-07:00'"]
+    ],
+    [
+      "2026-4-12x08:30:11,123+05:30:15.1234567",
+      [false, "ValueError", "Invalid isoformat string: '2026-4-12x08:30:11,123+05:30:15.1234567'"]
+    ],
+    [
+      "2026-4-12\u732b08:30:11.+053",
+      [false, "ValueError", "Invalid isoformat string: '2026-4-12\u732b08:30:11.+053'"]
+    ],
+    [
+      "2026-4-12\ud80008:30:11..5+05:30:15.1234567",
+      [
+        false,
+        "ValueError",
+        "Invalid isoformat string: '2026-4-12\\ud80008:30:11..5+05:30:15.1234567'"
+      ]
+    ],
+    [
+      "2026-W00-1\t083011-00:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-W00-1\\t083011-00:00'"]
+    ],
+    [
+      "2026-W00-1 08+05:99",
+      [false, "ValueError", "Invalid isoformat string: '2026-W00-1 08+05:99'"]
+    ],
+    [
+      "2026-W00-1 08:60+05:3x",
+      [false, "ValueError", "Invalid isoformat string: '2026-W00-1 08:60+05:3x'"]
+    ],
+    [
+      "2026-W00-1-23:59:59.999999+24:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-W00-1-23:59:59.999999+24:00'"]
+    ],
+    [
+      "2026-W00-108:60-23:59",
+      [false, "ValueError", "Invalid isoformat string: '2026-W00-108:60-23:59'"]
+    ],
+    [
+      "2026-W00-118:30-07:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-W00-118:30-07:00'"]
+    ],
+    [
+      "2026-W00-1T08:30:11Z",
+      [false, "ValueError", "Invalid isoformat string: '2026-W00-1T08:30:11Z'"]
+    ],
+    [
+      "2026-W00-1W08:30:11X+05:30:15.5",
+      [false, "ValueError", "Invalid isoformat string: '2026-W00-1W08:30:11X+05:30:15.5'"]
+    ],
+    [
+      "2026-W00-1Z08:30:11.12345Z05",
+      [false, "ValueError", "Invalid isoformat string: '2026-W00-1Z08:30:11.12345Z05'"]
+    ],
+    [
+      "2026-W00-1x08:30:11.5Z05",
+      [false, "ValueError", "Invalid isoformat string: '2026-W00-1x08:30:11.5Z05'"]
+    ],
+    [
+      "2026-W00-1\u732b08:30:11:5+053",
+      [false, "ValueError", "Invalid isoformat string: '2026-W00-1\u732b08:30:11:5+053'"]
+    ],
+    [
+      "2026-W1\t0+00:00:00.5",
+      [false, "ValueError", "Invalid isoformat string: '2026-W1\\t0+00:00:00.5'"]
+    ],
+    ["2026-W1 +05:3x", [false, "ValueError", "Invalid isoformat string: '2026-W1 +05:3x'"]],
+    [
+      "2026-W1 24:00+00:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-W1 24:00+00:00'"]
+    ],
+    [
+      "2026-W1-24:00+23:59:59.999999",
+      [false, "ValueError", "Invalid isoformat string: '2026-W1-24:00+23:59:59.999999'"]
+    ],
+    [
+      "2026-W108:30:11X-00:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-W108:30:11X-00:00'"]
+    ],
+    [
+      "2026-W1108:30:11:5+12:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-W1108:30:11:5+12:00'"]
+    ],
+    ["2026-W15\t08:30:11.+05", [true, "1775446211000000", true]],
+    [
+      "2026-W15 08:30:11..5-23:59",
+      [false, "ValueError", "Invalid isoformat string: '2026-W15 08:30:11..5-23:59'"]
+    ],
+    [
+      "2026-W15-08:3011+05:3x",
+      [false, "ValueError", "Invalid isoformat string: '2026-W15-08:3011+05:3x'"]
+    ],
+    ["2026-W15-1\t08:30:11+05:99", [true, "1775440271000000", true]],
+    ["2026-W15-1 08:30:11+00:00", [true, "1775464211000000", true]],
+    [
+      "2026-W15-1-08:3011Z05",
+      [false, "ValueError", "Invalid isoformat string: '2026-W15-1-08:3011Z05'"]
+    ],
+    [
+      "2026-W15-108:30:11+00:00:00.5",
+      [false, "ValueError", "Invalid isoformat string: '2026-W15-108:30:11+00:00:00.5'"]
+    ],
+    [
+      "2026-W15-1108:30:11.5+24:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-W15-1108:30:11.5+24:00'"]
+    ],
+    [
+      "2026-W15-1T08:30:11 +053",
+      [false, "ValueError", "Invalid isoformat string: '2026-W15-1T08:30:11 +053'"]
+    ],
+    ["2026-W15-1T23:59:60+23:59:59.999999", [false, "ValueError", "second must be in 0..59"]],
+    ["2026-W15-1W8:30", [false, "ValueError", "Invalid isoformat string: '2026-W15-1W8:30'"]],
+    [
+      "2026-W15-1x0830+05:30 ",
+      [false, "ValueError", "Invalid isoformat string: '2026-W15-1x0830+05:30 '"]
+    ],
+    ["2026-W15-1\u732b08:30-00:00", [true, "1775464200000000", true]],
+    [
+      "2026-W15-1\ud80008:3-23:59",
+      [false, "ValueError", "Invalid isoformat string: '2026-W15-1\\ud80008:3-23:59'"]
+    ],
+    [
+      "2026-W15-8\t0+0530",
+      [false, "ValueError", "Invalid isoformat string: '2026-W15-8\\t0+0530'"]
+    ],
+    [
+      "2026-W15-8\t23:59:59.999999+24:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-W15-8\\t23:59:59.999999+24:00'"]
+    ],
+    [
+      "2026-W15-8 23:59:59.999999+05",
+      [false, "ValueError", "Invalid isoformat string: '2026-W15-8 23:59:59.999999+05'"]
+    ],
+    [
+      "2026-W15-8-24:00+05:30:15.1234567",
+      [false, "ValueError", "Invalid isoformat string: '2026-W15-8-24:00+05:30:15.1234567'"]
+    ],
+    ["2026-W15-810830-07:00", [false, "ValueError", "hour must be in 0..23"]],
+    ["2026-W15-8T0+12:00", [false, "ValueError", "Invalid isoformat string: '2026-W15-8T0+12:00'"]],
+    [
+      "2026-W15-8W0+05:30 ",
+      [false, "ValueError", "Invalid isoformat string: '2026-W15-8W0+05:30 '"]
+    ],
+    [
+      "2026-W15-8Z00:00:00.000000-24:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-W15-8Z00:00:00.000000-24:00'"]
+    ],
+    [
+      "2026-W15-8x08:30+0530",
+      [false, "ValueError", "Invalid isoformat string: '2026-W15-8x08:30+0530'"]
+    ],
+    [
+      "2026-W15-8\u732b0+00:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-W15-8\u732b0+00:00'"]
+    ],
+    [
+      "2026-W15-8\u732b08:60+05",
+      [false, "ValueError", "Invalid isoformat string: '2026-W15-8\u732b08:60+05'"]
+    ],
+    ["2026-W1508:3+24:00", [false, "ValueError", "Invalid isoformat string: '2026-W1508:3+24:00'"]],
+    [
+      "2026-W151\t08:3011+24:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-W151\\t08:3011+24:00'"]
+    ],
+    [
+      "2026-W151 08+00:00:00.5",
+      [false, "ValueError", "Invalid isoformat string: '2026-W151 08+00:00:00.5'"]
+    ],
+    [
+      "2026-W151-00:00:00.000000-24:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-W151-00:00:00.000000-24:00'"]
+    ],
+    ["2026-W15100:00:00.000000-07:00", [true, "1775458800000000", true]],
+    [
+      "2026-W15108:30:11:5+24:00",
+      [
+        false,
+        "ValueError",
+        "offset must be a timedelta strictly between -timedelta(hours=24) and timedelta(hours=24), not datetime.timedelta(days=1)."
+      ]
+    ],
+    [
+      "2026-W151108:30:11.12345-23:59",
+      [false, "ValueError", "Invalid isoformat string: '2026-W151108:30:11.12345-23:59'"]
+    ],
+    [
+      "2026-W151T08:30:11+05:30:15.1234567",
+      [false, "ValueError", "Invalid isoformat string: '2026-W151T08:30:11+05:30:15.1234567'"]
+    ],
+    [
+      "2026-W151W08:30:11+12:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-W151W08:30:11+12:00'"]
+    ],
+    [
+      "2026-W151Z08:3011+23:59:59.999999",
+      [false, "ValueError", "Invalid isoformat string: '2026-W151Z08:3011+23:59:59.999999'"]
+    ],
+    [
+      "2026-W151x00:00:00.000000+05:30 ",
+      [false, "ValueError", "Invalid isoformat string: '2026-W151x00:00:00.000000+05:30 '"]
+    ],
+    [
+      "2026-W151x8:30+0530",
+      [false, "ValueError", "Invalid isoformat string: '2026-W151x8:30+0530'"]
+    ],
+    [
+      "2026-W151\ud8000830+0530.5",
+      [false, "ValueError", "Invalid isoformat string: '2026-W151\\ud8000830+0530.5'"]
+    ],
+    ["2026-W15T08+05:30:15.5", [true, "1775442584500000", true]],
+    ["2026-W15W08:30:11+23:59:59.999999", [true, "1775377811000001", true]],
+    ["2026-W15Z08:30:11.1234567+12:00", [true, "1775421011123456", true]],
+    ["2026-W15x08:30:11-23:59", [true, "1775550551000000", true]],
+    [
+      "2026-W15\u732b08:30:11X-24:00",
+      [
+        false,
+        "ValueError",
+        "offset must be a timedelta strictly between -timedelta(hours=24) and timedelta(hours=24), not datetime.timedelta(days=-1)."
+      ]
+    ],
+    [
+      "2026-W1T083011-00:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-W1T083011-00:00'"]
+    ],
+    [
+      "2026-W1W08:30:11 +0530.5",
+      [false, "ValueError", "Invalid isoformat string: '2026-W1W08:30:11 +0530.5'"]
+    ],
+    [
+      "2026-W1Z08:30:11 -23:59",
+      [false, "ValueError", "Invalid isoformat string: '2026-W1Z08:30:11 -23:59'"]
+    ],
+    [
+      "2026-W1x08:30:11..5-24:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-W1x08:30:11..5-24:00'"]
+    ],
+    [
+      "2026-W1\u732b08:30:11.+05:99",
+      [false, "ValueError", "Invalid isoformat string: '2026-W1\u732b08:30:11.+05:99'"]
+    ],
+    [
+      "2026-W1\ud80008:60-14:00",
+      [false, "ValueError", "Invalid isoformat string: '2026-W1\\ud80008:60-14:00'"]
+    ],
+    ["2026-W53\t23:59:59.999999+05:30:15.5", [true, "1798482584499999", true]],
+    ["2026-W53-+00:00", [false, "ValueError", "Invalid isoformat string: '2026-W53-+00:00'"]],
+    ["2026-W5308:3+05", [false, "ValueError", "Invalid isoformat string: '2026-W5308:3+05'"]],
+    [
+      "2026-W53108:30:11,123z",
+      [false, "ValueError", "Invalid isoformat string: '2026-W53108:30:11,123z'"]
+    ],
+    ["2026-W53T08:30+5", [false, "ValueError", "Invalid isoformat string: '2026-W53T08:30+5'"]],
+    ["2026-W53W083011+0530", [true, "1798426811000000", true]],
+    ["2026-W53Z+05:30:15", [false, "ValueError", "Invalid isoformat string: '2026-W53Z+05:30:15'"]],
+    [
+      "2026-W53x08:3+05:30:15",
+      [false, "ValueError", "Invalid isoformat string: '2026-W53x08:3+05:30:15'"]
+    ],
+    ["2026-W53\u732b08:30:11.5+23:59:59.999999", [true, "1798360211500001", true]],
+    ["2026-W53\ud80008:60+00:00", [false, "ValueError", "minute must be in 0..59"]],
+    [
+      "2026/04/12\t08:30:11.5-24:00",
+      [false, "ValueError", "Invalid isoformat string: '2026/04/12\\t08:30:11.5-24:00'"]
+    ],
+    [
+      "2026/04/12 08:30:11.1234567+05",
+      [false, "ValueError", "Invalid isoformat string: '2026/04/12 08:30:11.1234567+05'"]
+    ],
+    [
+      "2026/04/12-08:30:11..5+05:30:15.1234567",
+      [false, "ValueError", "Invalid isoformat string: '2026/04/12-08:30:11..5+05:30:15.1234567'"]
+    ],
+    [
+      "2026/04/1208:30:11..5+12:00",
+      [false, "ValueError", "Invalid isoformat string: '2026/04/1208:30:11..5+12:00'"]
+    ],
+    [
+      "2026/04/12108:30:11X+24:00",
+      [false, "ValueError", "Invalid isoformat string: '2026/04/12108:30:11X+24:00'"]
+    ],
+    [
+      "2026/04/12T08:30:11 +05:30:15",
+      [false, "ValueError", "Invalid isoformat string: '2026/04/12T08:30:11 +05:30:15'"]
+    ],
+    [
+      "2026/04/12W08:30:11",
+      [false, "ValueError", "Invalid isoformat string: '2026/04/12W08:30:11'"]
+    ],
+    [
+      "2026/04/12Z08:30:11X+24:00",
+      [false, "ValueError", "Invalid isoformat string: '2026/04/12Z08:30:11X+24:00'"]
+    ],
+    ["2026/04/12x24:00Z", [false, "ValueError", "Invalid isoformat string: '2026/04/12x24:00Z'"]],
+    [
+      "2026/04/12\ud8000+05:30:15",
+      [false, "ValueError", "Invalid isoformat string: '2026/04/12\\ud8000+05:30:15'"]
+    ],
+    [
+      "202604-12\t08+23:59:59.999999",
+      [false, "ValueError", "Invalid isoformat string: '202604-12\\t08+23:59:59.999999'"]
+    ],
+    ["202604-12 08-00:00", [false, "ValueError", "Invalid isoformat string: '202604-12 08-00:00'"]],
+    [
+      "202604-12 8:30+00:00",
+      [false, "ValueError", "Invalid isoformat string: '202604-12 8:30+00:00'"]
+    ],
+    [
+      "202604-12-8:30-07:00",
+      [false, "ValueError", "Invalid isoformat string: '202604-12-8:30-07:00'"]
+    ],
+    [
+      "202604-12108:30-00:00",
+      [false, "ValueError", "Invalid isoformat string: '202604-12108:30-00:00'"]
+    ],
+    [
+      "202604-12T0830115+23:59:59.999999",
+      [false, "ValueError", "Invalid isoformat string: '202604-12T0830115+23:59:59.999999'"]
+    ],
+    [
+      "202604-12W083011-07:00",
+      [false, "ValueError", "Invalid isoformat string: '202604-12W083011-07:00'"]
+    ],
+    [
+      "202604-12Z08:30:11+00:00",
+      [false, "ValueError", "Invalid isoformat string: '202604-12Z08:30:11+00:00'"]
+    ],
+    [
+      "202604-12x08:30:11:5-00:00",
+      [false, "ValueError", "Invalid isoformat string: '202604-12x08:30:11:5-00:00'"]
+    ],
+    [
+      "202604-12\u732b08:60-14:00",
+      [false, "ValueError", "Invalid isoformat string: '202604-12\u732b08:60-14:00'"]
+    ],
+    [
+      "20260412\t00:00:00.000000+5",
+      [false, "ValueError", "Invalid isoformat string: '20260412\\t00:00:00.000000+5'"]
+    ],
+    [
+      "20260412 08:30:11 +053",
+      [false, "ValueError", "Invalid isoformat string: '20260412 08:30:11 +053'"]
+    ],
+    ["20260412-08:30:11", [true, "1775982611000000", false]],
+    [
+      "2026041208:30:11.12345+0530.5",
+      [false, "ValueError", "Invalid isoformat string: '2026041208:30:11.12345+0530.5'"]
+    ],
+    [
+      "20260412123:59:60Z05",
+      [false, "ValueError", "Invalid isoformat string: '20260412123:59:60Z05'"]
+    ],
+    ["20260412T08:30:11-00:00", [true, "1775982611000000", true]],
+    ["20260412W0830115+00:00", [true, "1775982611000000", true]],
+    ["20260412Z08:30:11.5+0530", [true, "1775962811500000", true]],
+    ["20260412x08:30:11,123+00:00:00.5", [true, "1775982611123000", true]],
+    ["20260412\u732b23:59:59.999999+00:00", [true, "1776038399999999", true]],
+    [
+      "20260412\ud8000Z05",
+      [false, "ValueError", "Invalid isoformat string: '20260412\\ud8000Z05'"]
+    ],
+    [
+      "20261103.04050\u732b6Z",
+      [false, "ValueError", "Invalid isoformat string: '20261103.04050\u732b6Z'"]
+    ],
+    ["20261103T0405062", [false, "ValueError", "Invalid isoformat string: '20261103T0405062'"]],
+    ["20261103T0640506ZZ", [false, "ValueError", "Invalid isoformat string: '20261103T0640506ZZ'"]],
+    ["202611103T040506Z", [false, "ValueError", "Invalid isoformat string: '202611103T040506Z'"]],
+    ["2026203T040506Z", [false, "ValueError", "Invalid isoformat string: '2026203T040506Z'"]],
+    ["2026W15\t083011+23:59:59.999999", [true, "1775377811000001", true]],
+    ["2026W15 083011+00:00:00.5", [true, "1775464211000000", true]],
+    ["2026W15-+12:00", [false, "ValueError", "Invalid isoformat string: '2026W15-+12:00'"]],
+    [
+      "2026W15-1\t083011-23:59",
+      [false, "ValueError", "Invalid isoformat string: '2026W15-1\\t083011-23:59'"]
+    ],
+    [
+      "2026W15-1 08:3011+0530",
+      [false, "ValueError", "Invalid isoformat string: '2026W15-1 08:3011+0530'"]
+    ],
+    [
+      "2026W15-1-08:30:11..5+05:3x",
+      [false, "ValueError", "Invalid isoformat string: '2026W15-1-08:30:11..5+05:3x'"]
+    ],
+    [
+      "2026W15-108:60+12:00",
+      [false, "ValueError", "Invalid isoformat string: '2026W15-108:60+12:00'"]
+    ],
+    [
+      "2026W15-1123:59:59.999999z",
+      [false, "ValueError", "Invalid isoformat string: '2026W15-1123:59:59.999999z'"]
+    ],
+    [
+      "2026W15-1T08:60+0530",
+      [false, "ValueError", "Invalid isoformat string: '2026W15-1T08:60+0530'"]
+    ],
+    ["2026W15-1Z+5", [false, "ValueError", "Invalid isoformat string: '2026W15-1Z+5'"]],
+    [
+      "2026W15-1x+05:30:15",
+      [false, "ValueError", "Invalid isoformat string: '2026W15-1x+05:30:15'"]
+    ],
+    [
+      "2026W15-1\u732b083011+05:30:15.5",
+      [false, "ValueError", "Invalid isoformat string: '2026W15-1\u732b083011+05:30:15.5'"]
+    ],
+    [
+      "2026W15-1\ud800083011+05:3x",
+      [false, "ValueError", "Invalid isoformat string: '2026W15-1\\ud800083011+05:3x'"]
+    ],
+    ["2026W1508:30", [false, "ValueError", "Invalid isoformat string: '2026W1508:30'"]],
+    ["2026W151\t08:30:11,123+05:30:15.5", [true, "1775444395623000", true]],
+    ["2026W151 08:30:11.5+00:00:00.5", [true, "1775464211500000", true]],
+    ["2026W151-08:30:11.5+05:99", [true, "1775440271500000", true]],
+    ["2026W15108:30:11 +05:30:15.5", [true, "1775444395500000", true]],
+    ["2026W151108:30:11 +05:30:15.5", [true, "1775444395500000", true]],
+    [
+      "2026W151T+05:30:15.1234567",
+      [false, "ValueError", "Invalid isoformat string: '2026W151T+05:30:15.1234567'"]
+    ],
+    ["2026W151T23:59:59.999999-14:00", [true, "1775570399999999", true]],
+    ["2026W151W08:30:11X+23:59:59.999999", [true, "1775377811000001", true]],
+    ["2026W151Z23:59:60z", [false, "ValueError", "Invalid isoformat string: '2026W151Z23:59:60z'"]],
+    [
+      "2026W151\u732b0830115",
+      [false, "ValueError", "Invalid isoformat string: '2026W151\u732b0830115'"]
+    ],
+    [
+      "2026W151\ud8000830z",
+      [false, "ValueError", "Invalid isoformat string: '2026W151\\ud8000830z'"]
+    ],
+    ["2026W15T083011-23:59", [true, "1775550551000000", true]],
+    [
+      "2026W15W00:00:00.000000+05:30 ",
+      [false, "ValueError", "Invalid isoformat string: '2026W15W00:00:00.000000+05:30 '"]
+    ],
+    ["2026W15Z0830+05:99", [true, "1775440260000000", true]],
+    ["2026W15x0+0530.5", [false, "ValueError", "Invalid isoformat string: '2026W15x0+0530.5'"]],
+    ["2026W15x8:30+05:3x", [false, "ValueError", "Invalid isoformat string: '2026W15x8:30+05:3x'"]],
+    [
+      "2026W15\u732b8:30-00:00",
+      [false, "ValueError", "Invalid isoformat string: '2026W15\u732b8:30-00:00'"]
+    ],
+    [
+      "2026W15\ud80024:00+5",
+      [false, "ValueError", "Invalid isoformat string: '2026W15\\ud80024:00+5'"]
+    ],
+    [
+      "202x611503T0430506Z",
+      [false, "ValueError", "Invalid isoformat string: '202x611503T0430506Z'"]
+    ],
+    ["2061103T04T506Z", [false, "ValueError", "Invalid isoformat string: '2061103T04T506Z'"]],
+    [
+      "20\u732b6-11-03T04:05:06.12456+00:00",
+      [false, "ValueError", "Invalid isoformat string: '20\u732b6-11-03T04:05:06.12456+00:00'"]
+    ],
+    [
+      "226-11-03T04:05:06.T123456+00:00",
+      [false, "ValueError", "Invalid isoformat string: '226-11-03T04:05:06.T123456+00:00'"]
+    ],
+    ["292.1103T040506Z", [false, "ValueError", "Invalid isoformat string: '292.1103T040506Z'"]],
+    [
+      "6026-11-03T04:05:06.23456+600:00",
+      [false, "ValueError", "Invalid isoformat string: '6026-11-03T04:05:06.23456+600:00'"]
+    ],
+    [
+      "9999-12-31\t08:30:11.12345z",
+      [false, "ValueError", "Invalid isoformat string: '9999-12-31\\t08:30:11.12345z'"]
+    ],
+    [
+      "9999-12-31 08:30:11XZ05",
+      [false, "ValueError", "Invalid isoformat string: '9999-12-31 08:30:11XZ05'"]
+    ],
+    [
+      "9999-12-31-23:59:60+05:30 ",
+      [false, "ValueError", "Invalid isoformat string: '9999-12-31-23:59:60+05:30 '"]
+    ],
+    ["9999-12-31108:30+05:99", [true, "253402221060000000", true]],
+    ["9999-12-31T0830115+00:00:00.5", [true, "253402245011000000", true]],
+    ["9999-12-31W08:3+05", [false, "ValueError", "Invalid isoformat string: '9999-12-31W08:3+05'"]],
+    [
+      "9999-12-31Z08:30:11Xz",
+      [false, "ValueError", "Invalid isoformat string: '9999-12-31Z08:30:11Xz'"]
+    ],
+    ["9999-12-31x08:30:11.12345+23:59:59.999999", [true, "253402158611123451", true]],
+    ["9999-12-31\u732b08:30:11.+23:59:59.999999", [true, "253402158611000001", true]],
+    [
+      "9999-12-31\ud80008:3Z05",
+      [false, "ValueError", "Invalid isoformat string: '9999-12-31\\ud80008:3Z05'"]
+    ]
+  ],
+  "battery_date": [
+    [" 026-11", [false, "ValueError", "Invalid isoformat string: ' 026-11'"]],
+    ["+025-12-", [false, "ValueError", "Invalid isoformat string: '+025-12-'"]],
+    ["+2025-12-0", [false, "ValueError", "Invalid isoformat string: '+2025-12-0'"]],
+    [",202x5-", [false, "ValueError", "Invalid isoformat string: ',202x5-'"]],
+    [".2026-11", [false, "ValueError", "Invalid isoformat string: '.2026-11'"]],
+    ["0025-12-01", [true, "0025-12-01"]],
+    ["025-12-", [false, "ValueError", "Invalid isoformat string: '025-12-'"]],
+    ["025.12-01T", [false, "ValueError", "Invalid isoformat string: '025.12-01T'"]],
+    ["026-04-12-", [false, "ValueError", "Invalid isoformat string: '026-04-12-'"]],
+    ["02611,3", [false, "ValueError", "Invalid isoformat string: '02611,3'"]],
+    ["0261183T04", [false, "ValueError", "Invalid isoformat string: '0261183T04'"]],
+    ["120261103T", [false, "ValueError", "month must be in 1..12"]],
+    ["2 026-1", [false, "ValueError", "Invalid isoformat string: '2 026-1'"]],
+    ["2+26-04-", [false, "ValueError", "Invalid isoformat string: '2+26-04-'"]],
+    ["2,0261103T", [false, "ValueError", "Invalid isoformat string: '2,0261103T'"]],
+    ["2,26-4-1", [false, "ValueError", "Invalid isoformat string: '2,26-4-1'"]],
+    ["2-026-11-0", [false, "ValueError", "Invalid isoformat string: '2-026-11-0'"]],
+    ["2-26110", [false, "ValueError", "Invalid isoformat string: '2-26110'"]],
+    ["2.25-12-01", [false, "ValueError", "Invalid isoformat string: '2.25-12-01'"]],
+    ["20 25-12-0", [false, "ValueError", "Invalid isoformat string: '20 25-12-0'"]],
+    ["20+5-12", [false, "ValueError", "Invalid isoformat string: '20+5-12'"]],
+    ["20,6110", [false, "ValueError", "Invalid isoformat string: '20,6110'"]],
+    ["20-604-1", [false, "ValueError", "Invalid isoformat string: '20-604-1'"]],
+    ["20021103T4", [true, "2002-11-03"]],
+    ["200261Z", [false, "ValueError", "Invalid isoformat string: '200261Z'"]],
+    ["202 -12-", [false, "ValueError", "Invalid isoformat string: '202 -12-'"]],
+    ["202+-04-12", [false, "ValueError", "Invalid isoformat string: '202+-04-12'"]],
+    ["202-0-1", [false, "ValueError", "Invalid isoformat string: '202-0-1'"]],
+    ["202-04-1 0", [false, "ValueError", "Invalid isoformat string: '202-04-1 0'"]],
+    ["202-12-01T", [false, "ValueError", "Invalid isoformat string: '202-12-01T'"]],
+    ["202-32-0", [false, "ValueError", "Invalid isoformat string: '202-32-0'"]],
+    ["202.103T04", [false, "ValueError", "Invalid isoformat string: '202.103T04'"]],
+    ["2020-12", [false, "ValueError", "Invalid isoformat string: '2020-12'"]],
+    ["20206x-0", [false, "ValueError", "Invalid isoformat string: '20206x-0'"]],
+    ["202110.3T0", [false, "ValueError", "Invalid isoformat string: '202110.3T0'"]],
+    ["2021611", [false, "ValueError", "Invalid isoformat string: '2021611'"]],
+    ["2022-11-", [false, "ValueError", "Invalid isoformat string: '2022-11-'"]],
+    ["2023-04-12", [true, "2023-04-12"]],
+    ["2024-02", [false, "ValueError", "Invalid isoformat string: '2024-02'"]],
+    ["20246-04", [false, "ValueError", "Invalid isoformat string: '20246-04'"]],
+    ["2025+-12-0", [false, "ValueError", "Invalid isoformat string: '2025+-12-0'"]],
+    ["2025-+1", [false, "ValueError", "Invalid isoformat string: '2025-+1'"]],
+    ["2025-1 -", [false, "ValueError", "Invalid isoformat string: '2025-1 -'"]],
+    ["2025-1-", [false, "ValueError", "Invalid isoformat string: '2025-1-'"]],
+    ["2025-102-0", [false, "ValueError", "Invalid isoformat string: '2025-102-0'"]],
+    ["2025-12--1", [false, "ValueError", "Invalid isoformat string: '2025-12--1'"]],
+    ["2025-12-0z", [false, "ValueError", "Invalid isoformat string: '2025-12-0z'"]],
+    ["2025-1208T", [false, "ValueError", "Invalid isoformat string: '2025-1208T'"]],
+    ["2025-12:-0", [false, "ValueError", "Invalid isoformat string: '2025-12:-0'"]],
+    ["2025-15-01", [false, "ValueError", "month must be in 1..12"]],
+    ["2025-1z-", [false, "ValueError", "Invalid isoformat string: '2025-1z-'"]],
+    ["2025-312-2", [false, "ValueError", "Invalid isoformat string: '2025-312-2'"]],
+    ["2025-W1", [false, "ValueError", "Invalid isoformat string: '2025-W1'"]],
+    ["2025-z2-", [false, "ValueError", "Invalid isoformat string: '2025-z2-'"]],
+    ["202512-01T", [false, "ValueError", "Invalid isoformat string: '202512-01T'"]],
+    ["20256-04-1", [false, "ValueError", "Invalid isoformat string: '20256-04-1'"]],
+    ["2025712", [false, "ValueError", "Invalid isoformat string: '2025712'"]],
+    ["2025912-", [false, "ValueError", "Invalid isoformat string: '2025912-'"]],
+    ["2025T12-0T", [false, "ValueError", "Invalid isoformat string: '2025T12-0T'"]],
+    ["2026  0", [false, "ValueError", "Invalid isoformat string: '2026  0'"]],
+    ["2026 110", [false, "ValueError", "Invalid isoformat string: '2026 110'"]],
+    ["2026+103T0", [false, "ValueError", "Invalid isoformat string: '2026+103T0'"]],
+    ["2026-+1", [false, "ValueError", "Invalid isoformat string: '2026-+1'"]],
+    ["2026-,11-0", [false, "ValueError", "Invalid isoformat string: '2026-,11-0'"]],
+    ["2026-01", [false, "ValueError", "Invalid isoformat string: '2026-01'"]],
+    ["2026-034-1", [false, "ValueError", "Invalid isoformat string: '2026-034-1'"]],
+    ["2026-04- 2", [false, "ValueError", "Invalid isoformat string: '2026-04- 2'"]],
+    ["2026-04-1\t", [false, "ValueError", "Invalid isoformat string: '2026-04-1\\t'"]],
+    ["2026-04-17", [true, "2026-04-17"]],
+    ["2026-04-31", [false, "ValueError", "day is out of range for month"]],
+    ["2026-0412\t", [false, "ValueError", "Invalid isoformat string: '2026-0412\\t'"]],
+    ["2026-0412x", [false, "ValueError", "Invalid isoformat string: '2026-0412x'"]],
+    ["2026-049-1", [false, "ValueError", "Invalid isoformat string: '2026-049-1'"]],
+    ["2026-06", [false, "ValueError", "Invalid isoformat string: '2026-06'"]],
+    ["2026-0T-", [false, "ValueError", "Invalid isoformat string: '2026-0T-'"]],
+    ["2026-0x-12", [false, "ValueError", "Invalid isoformat string: '2026-0x-12'"]],
+    ["2026-1,-", [false, "ValueError", "Invalid isoformat string: '2026-1,-'"]],
+    ["2026-11,03", [false, "ValueError", "Invalid isoformat string: '2026-11,03'"]],
+    ["2026-11-06", [true, "2026-11-06"]],
+    ["2026-11-73", [false, "ValueError", "day is out of range for month"]],
+    ["2026-114-0", [false, "ValueError", "Invalid isoformat string: '2026-114-0'"]],
+    ["2026-11Z03", [false, "ValueError", "Invalid isoformat string: '2026-11Z03'"]],
+    ["2026-13-03", [false, "ValueError", "month must be in 1..12"]],
+    ["2026-1z", [false, "ValueError", "Invalid isoformat string: '2026-1z'"]],
+    ["2026-31110", [false, "ValueError", "Invalid isoformat string: '2026-31110'"]],
+    ["2026-4-128", [false, "ValueError", "Invalid isoformat string: '2026-4-128'"]],
+    ["2026-511", [false, "ValueError", "Invalid isoformat string: '2026-511'"]],
+    ["2026-704-1", [false, "ValueError", "Invalid isoformat string: '2026-704-1'"]],
+    ["2026-9\u732b", [false, "ValueError", "Invalid isoformat string: '2026-9\u732b'"]],
+    ["2026-:412 ", [false, "ValueError", "Invalid isoformat string: '2026-:412 '"]],
+    ["2026-W1\t", [false, "ValueError", "Invalid isoformat string: '2026-W1\\t'"]],
+    ["2026-W1 08", [false, "ValueError", "Invalid isoformat string: '2026-W1 08'"]],
+    ["2026-W1-08", [false, "ValueError", "Invalid isoformat string: '2026-W1-08'"]],
+    ["2026-W1083", [false, "ValueError", "Invalid isoformat string: '2026-W1083'"]],
+    ["2026-W12", [true, "2026-03-16"]],
+    ["2026-W15 0", [false, "ValueError", "Invalid isoformat string: '2026-W15 0'"]],
+    ["2026-W1500", [false, "ValueError", "Invalid isoformat string: '2026-W1500'"]],
+    ["2026-W151T", [false, "ValueError", "Invalid isoformat string: '2026-W151T'"]],
+    ["2026-W15T2", [false, "ValueError", "Invalid isoformat string: '2026-W15T2'"]],
+    ["2026-W15x-", [false, "ValueError", "Invalid isoformat string: '2026-W15x-'"]],
+    ["2026-W15\ud8000", [false, "ValueError", "Invalid isoformat string: '2026-W15\\ud8000'"]],
+    ["2026-W1T8:", [false, "ValueError", "Invalid isoformat string: '2026-W1T8:'"]],
+    ["2026-W1Z00", [false, "ValueError", "Invalid isoformat string: '2026-W1Z00'"]],
+    ["2026-W1x23", [false, "ValueError", "Invalid isoformat string: '2026-W1x23'"]],
+    ["2026-W1\ud800-0", [false, "ValueError", "Invalid isoformat string: '2026-W1\\ud800-0'"]],
+    ["2026-W53", [true, "2026-12-28"]],
+    ["2026-W53 z", [false, "ValueError", "Invalid isoformat string: '2026-W53 z'"]],
+    ["2026-W531", [false, "ValueError", "Invalid isoformat string: '2026-W531'"]],
+    ["2026-W53T0", [false, "ValueError", "Invalid isoformat string: '2026-W53T0'"]],
+    ["2026-W53Z0", [false, "ValueError", "Invalid isoformat string: '2026-W53Z0'"]],
+    ["2026-W53\ud800+", [false, "ValueError", "Invalid isoformat string: '2026-W53\\ud800+'"]],
+    ["2026-x0", [false, "ValueError", "Invalid isoformat string: '2026-x0'"]],
+    ["2026.-04", [false, "ValueError", "Invalid isoformat string: '2026.-04'"]],
+    ["2026/04/12", [false, "ValueError", "Invalid isoformat string: '2026/04/12'"]],
+    ["202604-", [false, "ValueError", "Invalid isoformat string: '202604-'"]],
+    ["202604-121", [false, "ValueError", "Invalid isoformat string: '202604-121'"]],
+    ["2026041", [false, "ValueError", "Invalid isoformat string: '2026041'"]],
+    ["20260412-+", [true, "2026-04-12"]],
+    ["2026041223", [true, "2026-04-12"]],
+    ["20260412W2", [true, "2026-04-12"]],
+    ["20260412\u732b0", [false, "ValueError", "Invalid isoformat string: '20260412\u732b0'"]],
+    ["20261 0,", [false, "ValueError", "Invalid isoformat string: '20261 0,'"]],
+    ["20261.03T0", [false, "ValueError", "Invalid isoformat string: '20261.03T0'"]],
+    ["2026108", [false, "ValueError", "Invalid isoformat string: '2026108'"]],
+    ["202611,0", [false, "ValueError", "Invalid isoformat string: '202611,0'"]],
+    ["2026110-3T", [false, "ValueError", "Invalid isoformat string: '2026110-3T'"]],
+    ["202611030T", [true, "2026-11-03"]],
+    ["20261103TT", [true, "2026-11-03"]],
+    ["20261104T0", [true, "2026-11-04"]],
+    ["2026110T", [false, "ValueError", "Invalid isoformat string: '2026110T'"]],
+    ["2026110Z3T", [false, "ValueError", "Invalid isoformat string: '2026110Z3T'"]],
+    ["2026113", [false, "ValueError", "Invalid isoformat string: '2026113'"]],
+    ["2026114", [false, "ValueError", "Invalid isoformat string: '2026114'"]],
+    ["2026116", [false, "ValueError", "Invalid isoformat string: '2026116'"]],
+    ["202611Z3", [false, "ValueError", "Invalid isoformat string: '202611Z3'"]],
+    ["20261310", [false, "ValueError", "month must be in 1..12"]],
+    ["202614W07T", [false, "ValueError", "Invalid isoformat string: '202614W07T'"]],
+    ["2026180", [false, "ValueError", "Invalid isoformat string: '2026180'"]],
+    ["20261T63", [false, "ValueError", "Invalid isoformat string: '20261T63'"]],
+    ["20261\u732b1", [false, "ValueError", "Invalid isoformat string: '20261\u732b1'"]],
+    ["20262103", [false, "ValueError", "month must be in 1..12"]],
+    ["20263103T0", [false, "ValueError", "month must be in 1..12"]],
+    ["2026510", [false, "ValueError", "Invalid isoformat string: '2026510'"]],
+    ["20266110", [false, "ValueError", "month must be in 1..12"]],
+    ["202681103T", [false, "ValueError", "month must be in 1..12"]],
+    ["2026:10", [false, "ValueError", "Invalid isoformat string: '2026:10'"]],
+    ["2026T-04-1", [false, "ValueError", "Invalid isoformat string: '2026T-04-1'"]],
+    ["2026T11", [false, "ValueError", "Invalid isoformat string: '2026T11'"]],
+    ["2026W15\t0+", [false, "ValueError", "Invalid isoformat string: '2026W15\\t0+'"]],
+    ["2026W15 08", [false, "ValueError", "Invalid isoformat string: '2026W15 08'"]],
+    ["2026W15-08", [false, "ValueError", "Invalid isoformat string: '2026W15-08'"]],
+    ["2026W15-1W", [false, "ValueError", "Invalid isoformat string: '2026W15-1W'"]],
+    ["2026W150+5", [false, "ValueError", "Invalid isoformat string: '2026W150+5'"]],
+    ["2026W151 0", [true, "2026-04-06"]],
+    ["2026W1510-", [true, "2026-04-06"]],
+    ["2026W151T0", [true, "2026-04-06"]],
+    ["2026W151Z0", [true, "2026-04-06"]],
+    ["2026W151\u732b2", [false, "ValueError", "Invalid isoformat string: '2026W151\u732b2'"]],
+    ["2026W158:3", [false, "ValueError", "Invalid isoformat string: '2026W158:3'"]],
+    ["2026W15W+0", [false, "ValueError", "Invalid isoformat string: '2026W15W+0'"]],
+    ["2026W15Z0+", [false, "ValueError", "Invalid isoformat string: '2026W15Z0+'"]],
+    ["2026W15x08", [false, "ValueError", "Invalid isoformat string: '2026W15x08'"]],
+    ["2026W15\u732b8:", [false, "ValueError", "Invalid isoformat string: '2026W15\u732b8:'"]],
+    ["2026Z-04", [false, "ValueError", "Invalid isoformat string: '2026Z-04'"]],
+    ["2026Z04-12", [false, "ValueError", "Invalid isoformat string: '2026Z04-12'"]],
+    ["2026z10", [false, "ValueError", "Invalid isoformat string: '2026z10'"]],
+    ["2026z81", [false, "ValueError", "Invalid isoformat string: '2026z81'"]],
+    ["202912-0", [false, "ValueError", "Invalid isoformat string: '202912-0'"]],
+    ["202:-12-+1", [false, "ValueError", "Invalid isoformat string: '202:-12-+1'"]],
+    ["202T611", [false, "ValueError", "Invalid isoformat string: '202T611'"]],
+    ["202W6110", [false, "ValueError", "Invalid isoformat string: '202W6110'"]],
+    ["202Z6-041z", [false, "ValueError", "Invalid isoformat string: '202Z6-041z'"]],
+    ["202x5-1", [false, "ValueError", "Invalid isoformat string: '202x5-1'"]],
+    ["202z-04-", [false, "ValueError", "Invalid isoformat string: '202z-04-'"]],
+    ["202\u732b-11-03", [false, "ValueError", "Invalid isoformat string: '202\u732b-11-03'"]],
+    ["2036110", [false, "ValueError", "Invalid isoformat string: '2036110'"]],
+    ["2046-11-", [false, "ValueError", "Invalid isoformat string: '2046-11-'"]],
+    ["205-12-", [false, "ValueError", "Invalid isoformat string: '205-12-'"]],
+    ["2055-12", [false, "ValueError", "Invalid isoformat string: '2055-12'"]],
+    ["206-11-", [false, "ValueError", "Invalid isoformat string: '206-11-'"]],
+    ["20604-12", [false, "ValueError", "Invalid isoformat string: '20604-12'"]],
+    ["20625-1", [false, "ValueError", "Invalid isoformat string: '20625-1'"]],
+    ["20726311", [false, "ValueError", "month must be in 1..12"]],
+    ["208261103T", [false, "ValueError", "month must be in 1..12"]],
+    ["20:5-12", [false, "ValueError", "Invalid isoformat string: '20:5-12'"]],
+    ["20T5-192", [false, "ValueError", "Invalid isoformat string: '20T5-192'"]],
+    ["20Z25-12-0", [false, "ValueError", "Invalid isoformat string: '20Z25-12-0'"]],
+    ["20x2611", [false, "ValueError", "Invalid isoformat string: '20x2611'"]],
+    ["20x6+103T0", [false, "ValueError", "Invalid isoformat string: '20x6+103T0'"]],
+    ["20z6110", [false, "ValueError", "Invalid isoformat string: '20z6110'"]],
+    ["20\u732b26-0", [false, "ValueError", "Invalid isoformat string: '20\u732b26-0'"]],
+    ["20\u732b6-11-", [false, "ValueError", "Invalid isoformat string: '20\u732b6-11-'"]],
+    ["21026-04-+", [false, "ValueError", "Invalid isoformat string: '21026-04-+'"]],
+    ["210264-11-", [false, "ValueError", "Invalid isoformat string: '210264-11-'"]],
+    ["2145-12", [false, "ValueError", "Invalid isoformat string: '2145-12'"]],
+    ["22026-11", [false, "ValueError", "Invalid isoformat string: '22026-11'"]],
+    ["220261103T", [false, "ValueError", "month must be in 1..12"]],
+    ["225-12-", [false, "ValueError", "Invalid isoformat string: '225-12-'"]],
+    ["2252-182", [false, "ValueError", "Invalid isoformat string: '2252-182'"]],
+    ["226-04-12 ", [false, "ValueError", "Invalid isoformat string: '226-04-12 '"]],
+    ["226103T", [false, "ValueError", "Invalid isoformat string: '226103T'"]],
+    ["226110:", [false, "ValueError", "Invalid isoformat string: '226110:'"]],
+    ["2302.-12", [false, "ValueError", "Invalid isoformat string: '2302.-12'"]],
+    ["240261103T", [false, "ValueError", "month must be in 1..12"]],
+    ["25025-1", [false, "ValueError", "Invalid isoformat string: '25025-1'"]],
+    ["2526-4-", [false, "ValueError", "Invalid isoformat string: '2526-4-'"]],
+    ["2681103T", [false, "ValueError", "Invalid isoformat string: '2681103T'"]],
+    ["2726103", [false, "ValueError", "Invalid isoformat string: '2726103'"]],
+    ["280z6-04", [false, "ValueError", "Invalid isoformat string: '280z6-04'"]],
+    ["29025-62-0", [false, "ValueError", "Invalid isoformat string: '29025-62-0'"]],
+    ["2902617", [false, "ValueError", "Invalid isoformat string: '2902617'"]],
+    ["2926-04-", [false, "ValueError", "Invalid isoformat string: '2926-04-'"]],
+    ["2T096-04-1", [false, "ValueError", "Invalid isoformat string: '2T096-04-1'"]],
+    ["2W2T5-1", [false, "ValueError", "Invalid isoformat string: '2W2T5-1'"]],
+    ["2Z2-04-1", [false, "ValueError", "Invalid isoformat string: '2Z2-04-1'"]],
+    ["2z025-12-0", [false, "ValueError", "Invalid isoformat string: '2z025-12-0'"]],
+    ["2z26+11", [false, "ValueError", "Invalid isoformat string: '2z26+11'"]],
+    ["2\u732b026110", [false, "ValueError", "Invalid isoformat string: '2\u732b026110'"]],
+    ["3026-04-12", [true, "3026-04-12"]],
+    ["3202611", [false, "ValueError", "Invalid isoformat string: '3202611'"]],
+    ["4202110", [false, "ValueError", "Invalid isoformat string: '4202110'"]],
+    ["52026-04", [false, "ValueError", "Invalid isoformat string: '52026-04'"]],
+    ["60261103T0", [true, "6026-11-03"]],
+    ["7026404", [false, "ValueError", "Invalid isoformat string: '7026404'"]],
+    ["8.26-04-", [false, "ValueError", "Invalid isoformat string: '8.26-04-'"]],
+    ["8T26-04-12", [false, "ValueError", "Invalid isoformat string: '8T26-04-12'"]],
+    ["9999-12", [false, "ValueError", "Invalid isoformat string: '9999-12'"]],
+    [":026-110", [false, "ValueError", "Invalid isoformat string: ':026-110'"]],
+    ["T2026-4-12", [false, "ValueError", "Invalid isoformat string: 'T2026-4-12'"]],
+    ["W026113", [false, "ValueError", "Invalid isoformat string: 'W026113'"]],
+    ["W202611-3T", [false, "ValueError", "Invalid isoformat string: 'W202611-3T'"]],
+    ["x.02611", [false, "ValueError", "Invalid isoformat string: 'x.02611'"]],
+    ["x2026110", [false, "ValueError", "Invalid isoformat string: 'x2026110'"]],
+    ["z2025-12", [false, "ValueError", "Invalid isoformat string: 'z2025-12'"]],
+    ["z4026--04-", [false, "ValueError", "Invalid isoformat string: 'z4026--04-'"]],
+    ["\u732bT20261", [false, "ValueError", "Invalid isoformat string: '\u732bT20261'"]]
+  ],
+  "battery_normalize": [
+    [" 026-11-03T04:05:06.123456+00.00", [true, " 026-11-03T04:05:06.123456+00.00"]],
+    ["0000-01-01 0830+24:00", [true, "0000-01-01 0830+24:00"]],
+    ["0000-01-01-24:00Z", [true, "0000-01-01-24:00Z"]],
+    ["0000-01-01108:30:11.5z", [true, "0000-01-01108:30:11.5z"]],
+    ["0000-01-01W08:3+05:30 ", [true, "0000-01-01W08:3+05:30 "]],
+    ["0000-01-01x083011-14:00", [true, "0000-01-01x083011-14:00"]],
+    ["0000-01-01\ud80008:30+05", [true, "0000-01-01\ud80008:30+05"]],
+    ["0001-01-01 08+05", [true, "0001-01-01T03:00:00+00:00"]],
+    ["0001-01-010-00:00", [true, "0001-01-010-00:00"]],
+    ["0001-01-018:30-14:00", [true, "0001-01-018:30-14:00"]],
+    ["0001-01-01W08:30:11.5+05:30:15.5", [true, "0001-01-01T02:59:56+00:00"]],
+    ["0001-01-01x08:60+0530.5", [true, "0001-01-01x08:60+0530.5"]],
+    ["0001-01-01\ud80008:30:11..5+24:00", [true, "0001-01-01\ud80008:30:11..5+24:00"]],
+    ["1970-01-01\t08:30:11 +053", [true, "1970-01-01\t08:30:11 +053"]],
+    ["1970-01-01-00:00:00.000000+0530", [true, "1969-12-31T18:30:00+00:00"]],
+    ["1970-01-01108:3011-14:00", [true, "1970-01-01108:3011-14:00"]],
+    ["1970-01-01W0-24:00", [true, "1970-01-01W0-24:00"]],
+    ["1970-01-01Z23:59:60z", [true, "1970-01-01Z23:59:60z"]],
+    ["1970-01-01\u732b08:30:11.12345+00:00:00.5", [true, "1970-01-01T08:30:11.123450+00:00"]],
+    ["2.26-04-32 08:30:11", [true, "2.26-04-32 08:30:11"]],
+    ["2020-W53-7\t08:3011-07:00", [true, "2020-W53-7\t08:3011-07:00"]],
+    ["2020-W53-7-08:30:11+00:00", [true, "2021-01-03T08:30:11+00:00"]],
+    ["2020-W53-7108:30:11.12345+0530", [true, "2020-W53-7108:30:11.12345+0530"]],
+    ["2020-W53-7T08:30:11X+05", [true, "2021-01-03T03:30:11+00:00"]],
+    ["2020-W53-7Z08:30:11 z", [true, "2020-W53-7Z08:30:11 z"]],
+    ["2020-W53-7\u732b00:00:00.000000+05:3x", [true, "2020-W53-7\u732b00:00:00.000000+05:3x"]],
+    ["20211113T040506Z", [true, "2021-11-13T04:05:06+00:00"]],
+    ["2024-02-29 08:30:11.1234567+00:00", [true, "2024-02-29T08:30:11.123456+00:00"]],
+    ["2024-02-2908:30-00:00", [true, "2024-02-2908:30-00:00"]],
+    ["2024-02-29T08:30:11.1234567+053", [true, "2024-02-29T08:30:11.1234567+053"]],
+    ["2024-02-29Z08:60+05:99", [true, "2024-02-29Z08:60+05:99"]],
+    ["2024-02-29\u732b0+24:00", [true, "2024-02-29\u732b0+24:00"]],
+    ["2024-02-29\ud80023:59:59.999999+5", [true, "2024-02-29\ud80023:59:59.999999+5"]],
+    ["2025-12-01T03:0.:05-07:00", [true, "2025-12-01T03:0.:05-07:00"]],
+    ["2025-12-01T03:04\u732b:05-07:03", [true, "2025-12-01T03:04\u732b:05-07:03"]],
+    ["2025-13-0+1T03:04:5-07:00", [true, "2025-13-0+1T03:04:5-07:00"]],
+    ["2026-02-29\t00:00:00.000000+05:99", [true, "2026-02-29\t00:00:00.000000+05:99"]],
+    ["2026-02-29 23:59:59.999999+05:30 ", [true, "2026-02-29 23:59:59.999999+05:30 "]],
+    ["2026-02-291083011+05", [true, "2026-02-291083011+05"]],
+    ["2026-02-29T0Z", [true, "2026-02-29T0Z"]],
+    ["2026-02-29Z08:60+00:00:00.5", [true, "2026-02-29Z08:60+00:00:00.5"]],
+    ["2026-02-29\u732b08:3011+12:00", [true, "2026-02-29\u732b08:3011+12:00"]],
+    ["2026-04- 2:08:30:11", [true, "2026-04- 2:08:30:11"]],
+    ["2026-04-1 08:30:11.1234567-23:59", [true, "2026-04-1 08:30:11.1234567-23:59"]],
+    ["2026-04-1083011+00:00", [true, "2026-04-1083011+00:00"]],
+    ["2026-04-12\t08:30:11+05", [true, "2026-04-12T03:30:11+00:00"]],
+    ["2026-04-12 08:30:11X+05:30 ", [true, "2026-04-12 08:30:11X+05:30 "]],
+    ["2026-04-12-08:3011+0530", [true, "2026-04-12-08:3011+0530"]],
+    ["2026-04-1210830-14:00", [true, "2026-04-12T22:30:00+00:00"]],
+    ["2026-04-12T+05:3x", [true, "2026-04-12T+05:3x"]],
+    ["2026-04-12T08+05:99", [true, "2026-04-12T01:21:00+00:00"]],
+    ["2026-04-12T0830115+5", [true, "2026-04-12T0830115+5"]],
+    ["2026-04-12T08:3011+05:3x", [true, "2026-04-12T08:3011+05:3x"]],
+    ["2026-04-12T08:30:11,123+23:59:59.999999", [true, "2026-04-11T08:30:11.123001+00:00"]],
+    ["2026-04-12T08:30:11.12345+05:30 ", [true, "2026-04-12T08:30:11.12345+05:30 "]],
+    ["2026-04-12T08:30:11.z", [true, "2026-04-12T08:30:11.z"]],
+    ["2026-04-12T08:60+05:30:15.1234567", [true, "2026-04-12T08:60+05:30:15.1234567"]],
+    ["2026-04-12T23:59:60Z", [true, "2026-04-12T23:59:60Z"]],
+    ["2026-04-12W08:30:11 +00:00", [true, "2026-04-12T08:30:11+00:00"]],
+    ["2026-04-12x08+05", [true, "2026-04-12T03:00:00+00:00"]],
+    ["2026-04-12\u732b08:30:11:5-24:00", [true, "2026-04-12\u732b08:30:11:5-24:00"]],
+    ["2026-04-1T08:30:11+00:00", [true, "2026-04-1T08:30:11+00:00"]],
+    ["2026-04-1Z08:3011+23:59:59.999999", [true, "2026-04-1Z08:3011+23:59:59.999999"]],
+    ["2026-04-1\u732b08:30:11..5+05:30:15.5", [true, "2026-04-1\u732b08:30:11..5+05:30:15.5"]],
+    ["2026-0412\t0+05", [true, "2026-0412\t0+05"]],
+    ["2026-0412 8:30+05", [true, "2026-0412 8:30+05"]],
+    ["2026-041208:30:11..5+05:30 ", [true, "2026-041208:30:11..5+05:30 "]],
+    ["2026-0412T08Z05", [true, "2026-0412T08Z05"]],
+    ["2026-0412Z8:30+00:00", [true, "2026-0412Z8:30+00:00"]],
+    ["2026-0412\u732b08:30:11..5+05:30:15.5", [true, "2026-0412\u732b08:30:11..5+05:30:15.5"]],
+    ["2026-05+-12 08:30: 11", [true, "2026-05+-12 08:30: 11"]],
+    ["2026-11-03T04:0506.123456+00:00", [true, "2026-11-03T04:0506.123456+00:00"]],
+    ["2026-11-03T04:05:06123456+00:00", [true, "2026-11-03T04:05:06123456+00:00"]],
+    ["2026-11-3T0:05:06.123456+0000", [true, "2026-11-3T0:05:06.123456+0000"]],
+    ["2026-12-32 08+05", [true, "2026-12-32 08+05"]],
+    ["2026-12-3208+0530.5", [true, "2026-12-3208+0530.5"]],
+    ["2026-12-32108:30:11.5-14:00", [true, "2026-12-32108:30:11.5-14:00"]],
+    ["2026-12-32W08:30:11XZ", [true, "2026-12-32W08:30:11XZ"]],
+    ["2026-12-32x08:30:11,123Z", [true, "2026-12-32x08:30:11,123Z"]],
+    ["2026-12-32\ud80008:30:11.1234567+0530", [true, "2026-12-32\ud80008:30:11.1234567+0530"]],
+    ["2026-13-01 08:30:11 Z05", [true, "2026-13-01 08:30:11 Z05"]],
+    ["2026-13-01-8:30+05:30:15.5", [true, "2026-13-01-8:30+05:30:15.5"]],
+    ["2026-13-0123:59:60+05", [true, "2026-13-0123:59:60+05"]],
+    ["2026-13-01W08:30:11.5+05:30:15.5", [true, "2026-13-01W08:30:11.5+05:30:15.5"]],
+    ["2026-13-01x00:00:00.000000+05:30:15.5", [true, "2026-13-01x00:00:00.000000+05:30:15.5"]],
+    [
+      "2026-13-01\u732b23:59:59.999999+23:59:59.999999",
+      [true, "2026-13-01\u732b23:59:59.999999+23:59:59.999999"]
+    ],
+    ["2026-4-12\t08:30:11Z05", [true, "2026-4-12\t08:30:11Z05"]],
+    ["2026-4-12-08:30:11-14:00", [true, "2026-4-12-08:30:11-14:00"]],
+    ["2026-4-12108:30:11..5+05", [true, "2026-4-12108:30:11..5+05"]],
+    ["2026-4-12W08-14:00", [true, "2026-4-12W08-14:00"]],
+    ["2026-4-12Z23:59:59.999999+00:00:00.5", [true, "2026-4-12Z23:59:59.999999+00:00:00.5"]],
+    ["2026-4-12\u732b08:60+0530.5", [true, "2026-4-12\u732b08:60+0530.5"]],
+    ["2026-W00-1\t083011-00:00", [true, "2026-W00-1\t083011-00:00"]],
+    ["2026-W00-1 08:30:11:5+053", [true, "2026-W00-1 08:30:11:5+053"]],
+    ["2026-W00-108:30:11,123+00:00:00.5", [true, "2026-W00-108:30:11,123+00:00:00.5"]],
+    ["2026-W00-1T+0530", [true, "2026-W00-1T+0530"]],
+    ["2026-W00-1W08:30:11X+05:30:15.5", [true, "2026-W00-1W08:30:11X+05:30:15.5"]],
+    ["2026-W00-1x08:30:11 Z", [true, "2026-W00-1x08:30:11 Z"]],
+    ["2026-W00-1\ud80008:30:11+5", [true, "2026-W00-1\ud80008:30:11+5"]],
+    ["2026-W1 0830115+12:00", [true, "2026-W1 0830115+12:00"]],
+    ["2026-W1-24:00+23:59:59.999999", [true, "2026-W1-24:00+23:59:59.999999"]],
+    ["2026-W1108:30:11..5+05:30:15.1234567", [true, "2026-W1108:30:11..5+05:30:15.1234567"]],
+    ["2026-W15 +05:30:15.1234567", [true, "2026-W15 +05:30:15.1234567"]],
+    ["2026-W15-08:30:11.12345+00:00", [true, "2026-04-06T08:30:11.123450+00:00"]],
+    ["2026-W15-1 08:30:11+00:00", [true, "2026-04-06T08:30:11+00:00"]],
+    ["2026-W15-10830115", [true, "2026-W15-10830115"]],
+    ["2026-W15-124:00+05:30:15", [true, "2026-W15-124:00+05:30:15"]],
+    ["2026-W15-1W08+05:30 ", [true, "2026-W15-1W08+05:30 "]],
+    ["2026-W15-1x0830+05:30 ", [true, "2026-W15-1x0830+05:30 "]],
+    ["2026-W15-1\ud8000-14:00", [true, "2026-W15-1\ud8000-14:00"]],
+    ["2026-W15-8\t08:30:11.+05:30 ", [true, "2026-W15-8\t08:30:11.+05:30 "]],
+    ["2026-W15-8 8:30Z", [true, "2026-W15-8 8:30Z"]],
+    ["2026-W15-810830-07:00", [true, "2026-W15-810830-07:00"]],
+    ["2026-W15-8T08:60-23:59", [true, "2026-W15-8T08:60-23:59"]],
+    ["2026-W15-8Z08:30:11.1234567+05", [true, "2026-W15-8Z08:30:11.1234567+05"]],
+    ["2026-W15-8\u732b0830115-24:00", [true, "2026-W15-8\u732b0830115-24:00"]],
+    ["2026-W1508:3+24:00", [true, "2026-W1508:3+24:00"]],
+    ["2026-W151\t23:59:60Z", [true, "2026-W151\t23:59:60Z"]],
+    ["2026-W151-08:30:11.1234567+12:00", [true, "2026-W151-08:30:11.1234567+12:00"]],
+    ["2026-W15108Z05", [true, "2026-W15108Z05"]],
+    ["2026-W151T08:30:11+05:30:15.1234567", [true, "2026-W151T08:30:11+05:30:15.1234567"]],
+    ["2026-W151Z00:00:00.000000+05", [true, "2026-W151Z00:00:00.000000+05"]],
+    ["2026-W151x08:30:11.+5", [true, "2026-W151x08:30:11.+5"]],
+    ["2026-W151\ud80008:30:11..5+05", [true, "2026-W151\ud80008:30:11..5+05"]],
+    ["2026-W15W08:30:11+23:59:59.999999", [true, "2026-04-05T08:30:11.000001+00:00"]],
+    ["2026-W15x08:3011+05", [true, "2026-W15x08:3011+05"]],
+    ["2026-W15\ud80008:30:11+00:00:00.5", [true, "2026-04-06T08:30:11+00:00"]],
+    ["2026-W1W08:30:11..5z", [true, "2026-W1W08:30:11..5z"]],
+    ["2026-W1x08:30:11..5-24:00", [true, "2026-W1x08:30:11..5-24:00"]],
+    ["2026-W1\ud80008:30:11 +05", [true, "2026-W1\ud80008:30:11 +05"]],
+    ["2026-W53 08:30:11+0530.5", [true, "2026-12-28T03:00:10.500000+00:00"]],
+    ["2026-W5308:30:11.+5", [true, "2026-W5308:30:11.+5"]],
+    ["2026-W53T08:30+5", [true, "2026-W53T08:30+5"]],
+    ["2026-W53W08:30:11:5+00:00:00.5", [true, "2026-12-28T08:30:11.500000+00:00"]],
+    ["2026-W53\u732b+053", [true, "2026-W53\u732b+053"]],
+    ["2026-z4-2 08:30:11", [true, "2026-z4-2 08:30:11"]],
+    ["2026/04/12 08:30:11.1234567+05", [true, "2026/04/12 08:30:11.1234567+05"]],
+    ["2026/04/1208:30:11+12:00", [true, "2026/04/1208:30:11+12:00"]],
+    ["2026/04/128:30", [true, "2026/04/128:30"]],
+    ["2026/04/12W08:30:11:5+00:00", [true, "2026/04/12W08:30:11:5+00:00"]],
+    ["2026/04/12x24:00Z", [true, "2026/04/12x24:00Z"]],
+    ["2026/04/12\ud80023:59:60", [true, "2026/04/12\ud80023:59:60"]],
+    ["202604-12 08:30:11.-14:00", [true, "202604-12 08:30:11.-14:00"]],
+    ["202604-1208:30+05:3x", [true, "202604-1208:30+05:3x"]],
+    ["202604-12T0830115+23:59:59.999999", [true, "202604-12T0830115+23:59:59.999999"]],
+    ["202604-12Z0830", [true, "202604-12Z0830"]],
+    ["202604-12\u732b08:3011+05:3x", [true, "202604-12\u732b08:3011+05:3x"]],
+    ["20260412\t08:30:11..5+05:30:15.1234567", [true, "20260412\t08:30:11..5+05:30:15.1234567"]],
+    ["20260412-08:30:11", [true, "20260412-08:30:11"]],
+    ["20260412108:30:11.+05:30 ", [true, "20260412108:30:11.+05:30 "]],
+    ["20260412T08:30:11z", [true, "20260412T08:30:11z"]],
+    ["20260412Z08:60+05:30 ", [true, "20260412Z08:60+05:30 "]],
+    ["20260412\u732b23:59:59.999999+00:00", [true, "2026-04-12T23:59:59.999999+00:00"]],
+    ["202611-03T04:05:06.123456+00:00", [true, "202611-03T04:05:06.123456+00:00"]],
+    ["20261103T0405T6Z", [true, "20261103T0405T6Z"]],
+    ["2026113T0740506Z", [true, "2026113T0740506Z"]],
+    ["2026W15\t083011+23:59:59.999999", [true, "2026-04-05T08:30:11.000001+00:00"]],
+    ["2026W15 23:59:60-07:00", [true, "2026W15 23:59:60-07:00"]],
+    ["2026W15-1\t23:59:60-23:59", [true, "2026W15-1\t23:59:60-23:59"]],
+    ["2026W15-1-8:30+05:30:15", [true, "2026W15-1-8:30+05:30:15"]],
+    ["2026W15-1123:59:59.999999z", [true, "2026W15-1123:59:59.999999z"]],
+    ["2026W15-1W08:30:11.5-14:00", [true, "2026W15-1W08:30:11.5-14:00"]],
+    ["2026W15-1x08:30:11,123+0530", [true, "2026W15-1x08:30:11,123+0530"]],
+    [
+      "2026W15-1\ud80008:30:11.1234567+00:00:00.5",
+      [true, "2026W15-1\ud80008:30:11.1234567+00:00:00.5"]
+    ],
+    ["2026W151\t08:30:11,123+05:30:15.5", [true, "2026-04-06T02:59:55.623000+00:00"]],
+    ["2026W151-08:30:11 -24:00", [true, "2026W151-08:30:11 -24:00"]],
+    ["2026W15108:30:11:5-07:00", [true, "2026-04-06T15:30:11.500000+00:00"]],
+    ["2026W151T0830z", [true, "2026W151T0830z"]],
+    ["2026W151W08:30:11X+23:59:59.999999", [true, "2026-04-05T08:30:11.000001+00:00"]],
+    ["2026W151x23:59:59.999999", [true, "2026W151x23:59:59.999999"]],
+    ["2026W151\ud80008:60+05", [true, "2026W151\ud80008:60+05"]],
+    ["2026W15W08:30+5", [true, "2026W15W08:30+5"]],
+    ["2026W15x0+0530.5", [true, "2026W15x0+0530.5"]],
+    ["2026W15\u732b08:60-00:00", [true, "2026W15\u732b08:60-00:00"]],
+    ["20296-04-12 08:30:11", [true, "20296-04-12 08:30:11"]],
+    ["2086-11-036T04:05:06.823456+00:00", [true, "2086-11-036T04:05:06.823456+00:00"]],
+    ["226-11-03T04:05:06.T123456+00:00", [true, "226-11-03T04:05:06.T123456+00:00"]],
+    ["32026-11-03T 04:05:06.123456+00Z:00", [true, "32026-11-03T 04:05:06.123456+00Z:00"]],
+    ["9999-12-31 0830+24:00", [true, "9999-12-31 0830+24:00"]],
+    ["9999-12-3108:3011+05:99", [true, "9999-12-3108:3011+05:99"]],
+    ["9999-12-31T0830115+00:00:00.5", [true, "9999-12-31T08:30:11+00:00"]],
+    ["9999-12-31Z08:30:11-24:00", [true, "9999-12-31Z08:30:11-24:00"]],
+    ["9999-12-31x8:30", [true, "9999-12-31x8:30"]],
+    [":026-1103T04:05:06.123456+00:0", [true, ":026-1103T04:05:06.123456+00:0"]],
+    [123, [false, "TypeError", "fromisoformat: argument must be str"]]
+  ]
+}

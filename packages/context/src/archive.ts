@@ -1,0 +1,461 @@
+// RAG over past stream transcripts. Each enhanced turn refreshes the recent-broadcasts block, then
+// routes the latest user line: a date- or period-scoped recall, a hint to call recall_streams, or
+// a topical search the retrieval gate may skip. The archive also owns the recall_streams tool,
+// whose per-turn budget shares this turn key.
+import { cpLen, logger, personaTimeZone, pyRepr, pyStr, pyStrip, pyTruthy } from "@eidolon/config";
+import type {
+  ContextProvider,
+  ContextTurn,
+  ConversationContext,
+  LlmTool,
+  ToolCall,
+} from "@eidolon/core";
+import {
+  addDays,
+  type Broadcast,
+  buildQueryText,
+  decodeTopics,
+  formatBroadcasts,
+  hasStreamTimeReference,
+  type IsoDate,
+  isStreamElaboration,
+  isStreamFollowup,
+  isStreamOverview,
+  isStreamQuery,
+  openStreamArchiveRetriever,
+  type Retriever,
+  type SearchRow,
+  StreamCatalog,
+  type StreamScope,
+  streamArchiveSearchParams,
+  streamScope,
+} from "@eidolon/retrieval";
+import { raceAbort, throwIfAborted } from "./abort.ts";
+import { errorText, pyRstrip } from "./compat.ts";
+import { decisionOf, type GateDecision, unlessSkipped } from "./gate.ts";
+import { latestUserText, sameTurn, setBlock, type TurnKey, turnKeyOf } from "./messages.ts";
+import {
+  OVERVIEW_FRAME_KEY,
+  overviewText,
+  type RecallCatalog,
+  type RecallResult,
+  recallResult,
+  StreamRecall,
+} from "./recall.ts";
+import {
+  parseRecallRequest,
+  RECALL_STREAMS_SCHEMA,
+  RECALL_TOOL_NAME,
+  type RecallRequest,
+  type RecallToolResult,
+  TOOL_BUDGET_SPENT,
+  TOOL_FAILED,
+} from "./recall_tool.ts";
+
+export const RECENT_PREFIX = "最近已归档的直播概览：\n";
+export const RECALL_PREFIX = "本次直播回忆查询：\n";
+export const RECALL_HINT =
+  `当前问题需要直播回忆。概览不足时调用 ${RECALL_TOOL_NAME} 确定场次并查找记录；` +
+  "不要把不同时期的直播混在一起，也不要还没查询就说记不清。";
+export const CHUNK_SCOPE_LABEL = "刚才查到的直播片段";
+export const RENDER_HEADER =
+  "以下是已归档直播的记录，用来 ground 回复，不要照念，也不要主动念日期。";
+
+const TOOL_BUDGET = 2;
+
+export interface StreamArchiveParams {
+  readonly topK: number;
+  readonly candidates: number;
+  readonly minQueryChars: number;
+  readonly maxUserTurns: number;
+  /**
+   * SQL pre-filter on `stream_date` when the query names a day, applied before vector + FTS
+   * scoring. Stops "26年3月24" from surfacing 2023-12-24 chunks; one stream day still yields
+   * ~10-20 chunks, so the reranker isn't starved.
+   */
+  readonly datePrefilter: boolean;
+  readonly systemPrompt: string;
+  /**
+   * The system instruction lives on the LLM service rather than in the context, so on the first
+   * turn the context is just `[user]` and any position >= 1 clamps to "append at end".
+   */
+  readonly position: number;
+}
+
+export function streamArchiveParams(
+  overrides: Partial<StreamArchiveParams> = {},
+): StreamArchiveParams {
+  return {
+    ...streamArchiveSearchParams(),
+    minQueryChars: 4,
+    maxUserTurns: 3,
+    datePrefilter: true,
+    systemPrompt:
+      "你过去直播里相关的片段（用来 ground 你的回复，不要照念，也不要把日期念出来）：\n\n",
+    position: 2,
+    ...overrides,
+  };
+}
+
+/**
+ * Renders retrieved chunks as one system block: a v2 chunk's details and extras, else a v1
+ * summary, else the raw transcript. Per-viewer SC lines are what let the persona recall who said
+ * what.
+ */
+export function formatChunks(chunks: readonly SearchRow[], prefix: string): string {
+  const lines = [prefix];
+  chunks.forEach((chunk, index) => {
+    const date = "stream_date" in chunk ? pyStr(chunk.stream_date) : "unknown date";
+    const heading = chunk.heading ?? "";
+    const summary = textOr(chunk.summary);
+    const details = textOr(chunk.details);
+    const topics = decodeTopics(chunk);
+    let header = `[${index + 1}] ${date}`;
+    if (topics.length > 0) header += ` — ${topics.join(", ")}`;
+    if (pyTruthy(heading)) header += ` — ${pyStr(heading)}`;
+    lines.push(header);
+    if (details) {
+      lines.push(pyStrip(details));
+      appendExtras(lines, extrasOf(chunk));
+    } else if (summary) {
+      lines.push(pyStrip(summary));
+    } else {
+      lines.push(pyStrip(pyStr(chunk.text ?? "")));
+    }
+    lines.push("");
+  });
+  return `${pyRstrip(lines.join("\n"))}\n`;
+}
+
+/** Python `value or ""` for a text column. */
+function textOr(value: unknown): string {
+  return pyTruthy(value) ? pyStr(value) : "";
+}
+
+function extrasOf(chunk: SearchRow): Record<string, unknown> {
+  const raw = chunk.extras_json;
+  if (typeof raw !== "string" || !raw) return {};
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+function listOf(value: unknown): unknown[] {
+  return pyTruthy(value) ? (value as unknown[]) : [];
+}
+
+function field(value: unknown, key: string): unknown {
+  return (value as Record<string, unknown>)[key];
+}
+
+function appendExtras(lines: string[], extras: Record<string, unknown>): void {
+  const scEvents = listOf(extras.sc_events);
+  if (scEvents.length > 0) {
+    lines.push("SC回顾:");
+    for (const sc of scEvents) {
+      const viewer = pyTruthy(field(sc, "viewer")) ? pyStr(field(sc, "viewer")) : "?";
+      const amount = field(sc, "amount_yuan");
+      const content = pyStrip(textOr(field(sc, "content")));
+      const response = pyStrip(textOr(field(sc, "response")));
+      let head = `  • ${viewer}`;
+      if (pyTruthy(amount)) head += `（¥${pyStr(amount)}）`;
+      if (content) head += `: ${content}`;
+      lines.push(head);
+      if (response) lines.push(`    → 我的回复: ${response}`);
+    }
+  }
+
+  const songs = listOf(extras.songs);
+  if (songs.length > 0) {
+    const titles: string[] = [];
+    for (const song of songs) {
+      if (typeof song === "string") {
+        titles.push(`《${song}》`);
+      } else if (typeof song === "object" && song !== null && !Array.isArray(song)) {
+        const title = pyStrip(textOr(field(song, "title")));
+        const note = pyStrip(textOr(field(song, "note")));
+        titles.push(`《${title}》${note ? `（${note}）` : ""}`);
+      }
+    }
+    if (titles.length > 0) lines.push(`歌曲: ${titles.join("; ")}`);
+  }
+
+  const events = listOf(extras.events);
+  if (events.length > 0) lines.push(`事件: ${events.map((e) => pyStr(e)).join("; ")}`);
+
+  const promises = listOf(extras.promises);
+  if (promises.length > 0) lines.push(`承诺: ${promises.map((p) => pyStr(p)).join("; ")}`);
+
+  const quotes = listOf(extras.key_quotes);
+  if (quotes.length > 0) {
+    lines.push("金句:");
+    for (const quote of quotes) lines.push(`  · 「${pyStr(quote)}」`);
+  }
+}
+
+/** One recall result as the archive injects it and recall_streams returns it. */
+export function renderRecallResult(result: RecallResult, chunkPrefix: string): string {
+  const lines = [RENDER_HEADER];
+  if (result.scope !== null) lines.push(`查询范围：${result.scope.label || "指定场次"}`);
+  if (result.broadcasts.length > 0) {
+    lines.push(overviewText(result, result.overview ? 10000 : 3000));
+  }
+  if (result.chunks.length > 0) lines.push(formatChunks(result.chunks, chunkPrefix));
+  if (result.note) lines.push(result.note);
+  return lines.join("\n");
+}
+
+export interface ArchiveCatalog extends RecallCatalog {
+  recent(n?: number): Promise<Broadcast[]>;
+  /** Whether stream_catalog.json exists, which alone is enough to offer recall_streams. */
+  exists(): boolean;
+}
+
+export interface StreamArchiveOptions {
+  readonly retriever: Retriever;
+  readonly catalog: ArchiveCatalog;
+  readonly params?: Partial<StreamArchiveParams>;
+  /** Defaults to config's personaTimeZone(). */
+  readonly timeZone?: string;
+  readonly today?: () => IsoDate;
+}
+
+/** The stream-archive RAG provider, which also owns the recall_streams tool. */
+export class StreamArchive implements ContextProvider {
+  /** Rejects when the archive can't be opened; runtime logs `Stream archive disabled: ${e}`. */
+  static async open(options: { dbPath: string; timeZone?: string }): Promise<StreamArchive> {
+    const retriever = await openStreamArchiveRetriever(options.dbPath);
+    const archive = new StreamArchive({
+      retriever,
+      catalog: new StreamCatalog(options.dbPath),
+      timeZone: options.timeZone,
+    });
+    if (retriever.hasTable) {
+      const { candidates, topK, datePrefilter } = archive.params;
+      logger.info(
+        `StreamArchiveService initialized with ${await retriever.rowCount()} chunks ` +
+          `(candidates=${candidates}, top_k=${topK}, date_prefilter=${pyRepr(datePrefilter)})`,
+      );
+    }
+    return archive;
+  }
+
+  readonly params: StreamArchiveParams;
+  readonly recall: StreamRecall;
+  /** Whether the last enhanced turn recalled from the archive, or a recall_streams call has since. */
+  lastWasArchive = false;
+  readonly #retriever: Retriever;
+  readonly #catalog: ArchiveCatalog;
+  #turnKey: TurnKey | null = null;
+  #toolCalls = 0;
+  #tool: LlmTool | null = null;
+
+  constructor(options: StreamArchiveOptions) {
+    this.params = streamArchiveParams(options.params);
+    this.#retriever = options.retriever;
+    this.#catalog = options.catalog;
+    this.recall = new StreamRecall({
+      retriever: options.retriever,
+      catalog: options.catalog,
+      timeZone: options.timeZone ?? personaTimeZone(),
+      candidates: this.params.candidates,
+      topK: this.params.topK,
+      today: options.today,
+    });
+  }
+
+  async onContext(turn: ContextTurn): Promise<void> {
+    const { context, metadata, signal } = turn;
+    signal.throwIfAborted();
+    const query = buildQueryText(context.getMessages(), {
+      maxUserTurns: this.params.maxUserTurns,
+    });
+    // The turn is consumed even when its query is too short to search.
+    if (!this.#beginTurn(context) || !query) return;
+    if (cpLen(pyStrip(query)) < this.params.minQueryChars) return;
+    metadata[OVERVIEW_FRAME_KEY] = await this.enhance(context, query, decisionOf(metadata), signal);
+  }
+
+  errorMessage(error: unknown): string {
+    return `StreamArchiveService error: ${errorText(error)}`;
+  }
+
+  /**
+   * recall_streams, or null when it can't be offered (no table and no catalog). A non-null
+   * result must be registered last; from then on the archive flips it per turn through
+   * `ConversationContext.setHiddenTools`.
+   */
+  async recallTool(): Promise<LlmTool | null> {
+    if (!this.#retriever.hasTable && !this.#catalog.exists()) return null;
+    this.#tool ??= {
+      schema: RECALL_STREAMS_SCHEMA,
+      cancelOnInterruption: true,
+      timeoutSecs: null,
+      run: (call) => this.#runTool(call),
+    };
+    return this.#tool;
+  }
+
+  /** Returns whether the turn was a recap, which makes the facts provider skip it. */
+  async enhance(
+    context: ConversationContext,
+    query: string,
+    decision: GateDecision | null = null,
+    signal?: AbortSignal,
+  ): Promise<boolean> {
+    const { position } = this.params;
+    const recent = await raceAbort(this.#catalog.recent(3), signal);
+    throwIfAborted(signal);
+    setBlock(
+      context,
+      RECENT_PREFIX,
+      recent.length > 0 ? formatBroadcasts(recent, 3600) : "",
+      position,
+    );
+
+    // Routing reads the latest line; the search keeps `query`, which folds in short turns.
+    const latest = latestUserText(context.getMessages()) ?? query;
+    const elaboration = isStreamElaboration(latest);
+    const scope = !elaboration || this.lastWasArchive ? this.recall.resolve(latest) : null;
+    this.lastWasArchive = false;
+    const overview = isStreamOverview(latest);
+    const followup = isStreamFollowup(latest);
+    const archiveQuery = isStreamQuery(latest) || overview || (followup && !elaboration);
+
+    if (scope !== null && (archiveQuery || followup)) {
+      const result = await this.recall.lookup(query, { scope, overview, signal });
+      throwIfAborted(signal);
+      this.lastWasArchive = true;
+      setBlock(context, RECALL_PREFIX, this.renderResult(result), position);
+      logger.info(
+        `Archive recall: overview=${pyRepr(result.overview)}, ` +
+          `broadcasts=${result.broadcasts.length}, chunks=${result.chunks.length}, ` +
+          `scope=${pyRepr(scope.label)}`,
+      );
+      return result.overview;
+    }
+
+    if (archiveQuery && this.#tool !== null && (overview || hasStreamTimeReference(latest))) {
+      this.lastWasArchive = true;
+      setBlock(context, RECALL_PREFIX, RECALL_HINT, position);
+      return overview;
+    }
+
+    const { candidates, topK, datePrefilter } = this.params;
+    const chunks = await unlessSkipped(
+      decision,
+      (search) =>
+        this.#retriever.search(query, { candidates, topK, datePrefilter, signal: search }),
+      signal,
+    );
+    throwIfAborted(signal);
+    if (chunks.length > 0 && archiveQuery) {
+      this.lastWasArchive = true;
+      const parts = streamScope({
+        streamIds: [...new Set(chunks.map((chunk) => pyStr(chunk.stream_id)))],
+        label: CHUNK_SCOPE_LABEL,
+      });
+      const broadcasts = await raceAbort(this.recall.select(parts), signal);
+      throwIfAborted(signal);
+      this.recall.remember(recallResult({ scope: parts, overview: false, broadcasts }));
+    }
+    setBlock(
+      context,
+      RECALL_PREFIX,
+      chunks.length > 0 ? formatChunks(chunks, this.params.systemPrompt) : "",
+      position,
+    );
+    return false;
+  }
+
+  renderResult(result: RecallResult): string {
+    return renderRecallResult(result, this.params.systemPrompt);
+  }
+
+  #beginTurn(context: ConversationContext): boolean {
+    const key = turnKeyOf(context.getMessages());
+    if (sameTurn(this.#turnKey, key)) return false;
+    this.#turnKey = key;
+    this.#toolCalls = 0;
+    if (this.#tool !== null) context.setHiddenTools([]);
+    return true;
+  }
+
+  async #runTool(call: ToolCall): Promise<RecallToolResult> {
+    const { context, signal } = call;
+    signal.throwIfAborted();
+    this.#beginTurn(context);
+    if (this.#toolCalls >= TOOL_BUDGET) return { error: TOOL_BUDGET_SPENT };
+    // Spent before validation, so invalid calls count too. The handler stays registered; only
+    // the advertised list drops the tool until the next user turn.
+    this.#toolCalls += 1;
+    if (this.#toolCalls === TOOL_BUDGET) context.setHiddenTools([RECALL_TOOL_NAME]);
+    try {
+      const request = parseRecallRequest(call.arguments);
+      const scope = await this.#toolScope(request, signal);
+      throwIfAborted(signal);
+      const result = await this.recall.lookup(request.query, {
+        scope,
+        overview: request.mode === "overview",
+        signal,
+      });
+      throwIfAborted(signal);
+      this.lastWasArchive = true;
+      return {
+        content: this.renderResult(result),
+        broadcast_ids: result.broadcasts.map((broadcast) => broadcast.id),
+        chunk_ids: result.chunks.map((chunk) => chunk.id ?? null),
+      };
+    } catch (error) {
+      if (signal.aborted) throw signal.reason;
+      const reason = errorText(error);
+      logger.warning(`Archive recall tool unavailable: ${reason}`);
+      return { error: TOOL_FAILED, reason };
+    }
+  }
+
+  async #toolScope(request: RecallRequest, signal: AbortSignal): Promise<StreamScope> {
+    const period = request.period;
+    switch (period) {
+      case "latest":
+      case "previous":
+        return streamScope({ latest: period === "latest" ? 1 : 2, label: period });
+      case "selected":
+        if (this.recall.selectedScope === null) {
+          throw new Error("还没有已选定的场次，请给出日期范围或使用 latest");
+        }
+        return this.recall.selectedScope;
+      case "broadcasts": {
+        if (request.broadcastIds.length === 0) throw new Error("broadcasts 需要已知场次 ID");
+        const broadcasts = await raceAbort(this.recall.catalog.broadcasts(), signal);
+        const known = new Set(broadcasts.map((broadcast) => broadcast.id));
+        if (!request.broadcastIds.every((id) => known.has(id))) {
+          throw new Error("场次 ID 不在归档中，请使用日期范围查找");
+        }
+        return streamScope({ streamIds: request.broadcastIds, label: "选定的归档直播" });
+      }
+      case "date_range": {
+        const start = request.startDate;
+        if (start === null) throw new Error("date_range 需要 start_date");
+        const end = request.endDate ?? addDays(start, 1);
+        if (end <= start) throw new Error("end_date 必须晚于 start_date，且不包含该日");
+        return streamScope({
+          startDate: start,
+          endDate: end,
+          label: `${start} 至 ${end}（不含结束日）`,
+        });
+      }
+      case "all":
+        return streamScope({ label: "全部已归档直播" });
+      default: {
+        const query =
+          period === "past_days" ? `past ${request.days} days` : period.replaceAll("_", " ");
+        const scope = this.recall.resolve(query);
+        if (scope === null) throw new Error("无法确定查询时间段");
+        return scope;
+      }
+    }
+  }
+}

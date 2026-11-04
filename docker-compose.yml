@@ -35,6 +35,28 @@ services:
     #   - ./streams:/app/streams:ro
     #   - ./persona.md:/app/persona.md:ro
 
+  # The TypeScript bot, beside the Python one: same .env, same Qdrant collection, its own
+  # port and Mem0 history volume. Opt-in, so `docker compose up --build` still builds and
+  # runs only the Python bot:
+  #
+  #   docker compose --profile ts up --build
+  bot-ts:
+    profiles: ["ts"]
+    build:
+      context: .
+      dockerfile: apps/bot/Dockerfile
+    image: laplace-eidolon-ts
+    container_name: laplace-eidolon-ts
+    restart: unless-stopped
+    depends_on:
+      - qdrant
+    env_file:
+      - ./.env
+    ports:
+      - "7861:7860"
+    volumes:
+      - mem0-history-ts:/app/data/mem0
+
   # Long-term memory vectors. Mem0 itself is a library inside the bot —
   # this is the only piece that runs as its own process. Set
   # MEM0_QDRANT_HOST in .env to enable memory (`qdrant` from the bot
@@ -54,3 +76,4 @@ services:
 volumes:
   qdrant-storage:
   mem0-history:
+  mem0-history-ts:

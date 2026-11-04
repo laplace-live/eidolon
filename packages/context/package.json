@@ -1,0 +1,13 @@
+{
+  "name": "@eidolon/context",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@eidolon/config": "workspace:*",
+    "@eidolon/core": "workspace:*",
+    "@eidolon/retrieval": "workspace:*"
+  }
+}

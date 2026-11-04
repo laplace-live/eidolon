@@ -1,0 +1,198 @@
+{
+  "runs": [
+    {
+      "turns": "turns.toml",
+      "env": null,
+      "fail_on": null,
+      "code": 1,
+      "crash": null,
+      "stdout": "model ['typesafe/jev-1.13-20260917', 'typesafe/jev-1.14-20261001'], threshold 0.3, latency {'p50': 527.0, 'p90': 1500.0, 'max': 1500}\ndev      {'recall_kept': '2/2', 'chit_chat_skipped': '1/1', 'lowest_recall_score': 0.89, 'highest_chit_chat_score': 0.1}\nheldout  {'recall_kept': '0/1', 'chit_chat_skipped': '0/1', 'lowest_recall_score': 0.29, 'highest_chit_chat_score': 0.31}\nfresh    {'recall_kept': '1/1', 'chit_chat_skipped': '0/0', 'lowest_recall_score': 1, 'highest_chit_chat_score': None}\nall      {'recall_kept': '3/4', 'chit_chat_skipped': '2/3', 'lowest_recall_score': 0.29, 'highest_chit_chat_score': 0.31}\nborderline 0.40 你觉得呢\nMISSED 0.29 她的花店在哪 {'about_her': 0.29, 'her_past': 0.1, 'named_thing': 0.2}\n",
+      "decisions": "{\n \"model\": [\n  \"typesafe/jev-1.13-20260917\",\n  \"typesafe/jev-1.14-20261001\"\n ],\n \"threshold\": 0.3,\n \"latency_ms\": {\n  \"p50\": 527.0,\n  \"p90\": 1500.0,\n  \"max\": 1500\n },\n \"sets\": {\n  \"dev\": {\n   \"recall_kept\": \"2/2\",\n   \"chit_chat_skipped\": \"1/1\",\n   \"lowest_recall_score\": 0.89,\n   \"highest_chit_chat_score\": 0.1\n  },\n  \"heldout\": {\n   \"recall_kept\": \"0/1\",\n   \"chit_chat_skipped\": \"0/1\",\n   \"lowest_recall_score\": 0.29,\n   \"highest_chit_chat_score\": 0.31\n  },\n  \"fresh\": {\n   \"recall_kept\": \"1/1\",\n   \"chit_chat_skipped\": \"0/0\",\n   \"lowest_recall_score\": 1,\n   \"highest_chit_chat_score\": null\n  },\n  \"all\": {\n   \"recall_kept\": \"3/4\",\n   \"chit_chat_skipped\": \"2/3\",\n   \"lowest_recall_score\": 0.29,\n   \"highest_chit_chat_score\": 0.31\n  }\n },\n \"turns\": [\n  {\n   \"set\": \"dev\",\n   \"text\": \"你梦想是什么\",\n   \"recall\": true,\n   \"score\": 0.89,\n   \"nouls\": {\n    \"about_her\": 0.89,\n    \"her_past\": 0.07,\n    \"named_thing\": 0.06\n   }\n  },\n  {\n   \"set\": \"dev\",\n   \"text\": \"早上好\",\n   \"recall\": false,\n   \"score\": 0.1,\n   \"nouls\": {\n    \"about_her\": 0.1,\n    \"her_past\": 0.0,\n    \"named_thing\": 0.05\n   }\n  },\n  {\n   \"set\": \"dev\",\n   \"text\": \"…它几岁了？\",\n   \"recall\": true,\n   \"score\": 1.0,\n   \"nouls\": {\n    \"about_her\": 1.0,\n    \"her_past\": 0.3,\n    \"named_thing\": 1.0\n   }\n  },\n  {\n   \"set\": \"heldout\",\n   \"text\": \"嗯\",\n   \"recall\": false,\n   \"score\": 0.31,\n   \"nouls\": {\n    \"about_her\": 0.31,\n    \"her_past\": 0.2,\n    \"named_thing\": 0.1\n   }\n  },\n  {\n   \"set\": \"heldout\",\n   \"text\": \"她的花店在哪\",\n   \"recall\": true,\n   \"score\": 0.29,\n   \"nouls\": {\n    \"about_her\": 0.29,\n    \"her_past\": 0.1,\n    \"named_thing\": 0.2\n   }\n  },\n  {\n   \"set\": \"fresh\",\n   \"text\": \"你觉得呢\",\n   \"recall\": null,\n   \"score\": 0.4,\n   \"nouls\": {\n    \"about_her\": 0.4,\n    \"her_past\": 0.3,\n    \"named_thing\": 2e-05\n   }\n  },\n  {\n   \"set\": \"fresh\",\n   \"text\": \"…上次说的那个游戏\",\n   \"recall\": true,\n   \"score\": 1,\n   \"nouls\": {\n    \"about_her\": 0.5,\n    \"her_past\": 0.9,\n    \"named_thing\": 1,\n    \"extra_q\": 0.95\n   }\n  },\n  {\n   \"set\": null,\n   \"text\": \"没有分组的一句\",\n   \"recall\": false,\n   \"score\": 0.25,\n   \"nouls\": {\n    \"about_her\": 0.25,\n    \"her_past\": 0.25,\n    \"named_thing\": 0.125\n   }\n  }\n ]\n}\n",
+      "requests": [
+        {
+          "url": "https://openrouter.ai/api/alpha/decisions",
+          "auth": "Bearer sk-test",
+          "body": "{\"model\":\"~typesafe/jev-latest\",\"state\":{\"streamer\":\"明前奶绿, a Chinese VTuber who streams on Bilibili, runs a fictional flower shop (拉普拉斯花店) whose manager is her cat 坚果, and calls her fans 奶糖花\",\"earlier_turns\":[],\"viewer_latest_message\":\"你好\"},\"questions\":{\"about_her\":{\"type\":\"noul\",\"instructions\":\"Is the viewer's latest message asking about the streamer herself — her preferences, opinions, habits, abilities, body, family, pets, friends, relationships, backstory, or her flower shop?\"},\"her_past\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask about something the streamer said, did, or experienced in the past, including on her past live streams?\"},\"named_thing\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask who or what a specific named person, character, place, group, game, song, or term is, or ask about one by name?\"}}}"
+        },
+        {
+          "url": "https://openrouter.ai/api/alpha/decisions",
+          "auth": "Bearer sk-test",
+          "body": "{\"model\":\"~typesafe/jev-latest\",\"state\":{\"streamer\":\"明前奶绿, a Chinese VTuber who streams on Bilibili, runs a fictional flower shop (拉普拉斯花店) whose manager is her cat 坚果, and calls her fans 奶糖花\",\"earlier_turns\":[],\"viewer_latest_message\":\"你梦想是什么\"},\"questions\":{\"about_her\":{\"type\":\"noul\",\"instructions\":\"Is the viewer's latest message asking about the streamer herself — her preferences, opinions, habits, abilities, body, family, pets, friends, relationships, backstory, or her flower shop?\"},\"her_past\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask about something the streamer said, did, or experienced in the past, including on her past live streams?\"},\"named_thing\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask who or what a specific named person, character, place, group, game, song, or term is, or ask about one by name?\"}}}"
+        },
+        {
+          "url": "https://openrouter.ai/api/alpha/decisions",
+          "auth": "Bearer sk-test",
+          "body": "{\"model\":\"~typesafe/jev-latest\",\"state\":{\"streamer\":\"明前奶绿, a Chinese VTuber who streams on Bilibili, runs a fictional flower shop (拉普拉斯花店) whose manager is her cat 坚果, and calls her fans 奶糖花\",\"earlier_turns\":[],\"viewer_latest_message\":\"早上好\"},\"questions\":{\"about_her\":{\"type\":\"noul\",\"instructions\":\"Is the viewer's latest message asking about the streamer herself — her preferences, opinions, habits, abilities, body, family, pets, friends, relationships, backstory, or her flower shop?\"},\"her_past\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask about something the streamer said, did, or experienced in the past, including on her past live streams?\"},\"named_thing\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask who or what a specific named person, character, place, group, game, song, or term is, or ask about one by name?\"}}}"
+        },
+        {
+          "url": "https://openrouter.ai/api/alpha/decisions",
+          "auth": "Bearer sk-test",
+          "body": "{\"model\":\"~typesafe/jev-latest\",\"state\":{\"streamer\":\"明前奶绿, a Chinese VTuber who streams on Bilibili, runs a fictional flower shop (拉普拉斯花店) whose manager is her cat 坚果, and calls her fans 奶糖花\",\"earlier_turns\":[{\"speaker\":\"viewer\",\"text\":\"你家猫叫什么\"},{\"speaker\":\"streamer\",\"text\":\"叫坚果\"}],\"viewer_latest_message\":\"它几岁了？\"},\"questions\":{\"about_her\":{\"type\":\"noul\",\"instructions\":\"Is the viewer's latest message asking about the streamer herself — her preferences, opinions, habits, abilities, body, family, pets, friends, relationships, backstory, or her flower shop?\"},\"her_past\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask about something the streamer said, did, or experienced in the past, including on her past live streams?\"},\"named_thing\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask who or what a specific named person, character, place, group, game, song, or term is, or ask about one by name?\"}}}"
+        },
+        {
+          "url": "https://openrouter.ai/api/alpha/decisions",
+          "auth": "Bearer sk-test",
+          "body": "{\"model\":\"~typesafe/jev-latest\",\"state\":{\"streamer\":\"明前奶绿, a Chinese VTuber who streams on Bilibili, runs a fictional flower shop (拉普拉斯花店) whose manager is her cat 坚果, and calls her fans 奶糖花\",\"earlier_turns\":[],\"viewer_latest_message\":\"嗯\"},\"questions\":{\"about_her\":{\"type\":\"noul\",\"instructions\":\"Is the viewer's latest message asking about the streamer herself — her preferences, opinions, habits, abilities, body, family, pets, friends, relationships, backstory, or her flower shop?\"},\"her_past\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask about something the streamer said, did, or experienced in the past, including on her past live streams?\"},\"named_thing\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask who or what a specific named person, character, place, group, game, song, or term is, or ask about one by name?\"}}}"
+        },
+        {
+          "url": "https://openrouter.ai/api/alpha/decisions",
+          "auth": "Bearer sk-test",
+          "body": "{\"model\":\"~typesafe/jev-latest\",\"state\":{\"streamer\":\"明前奶绿, a Chinese VTuber who streams on Bilibili, runs a fictional flower shop (拉普拉斯花店) whose manager is her cat 坚果, and calls her fans 奶糖花\",\"earlier_turns\":[],\"viewer_latest_message\":\"她的花店在哪\"},\"questions\":{\"about_her\":{\"type\":\"noul\",\"instructions\":\"Is the viewer's latest message asking about the streamer herself — her preferences, opinions, habits, abilities, body, family, pets, friends, relationships, backstory, or her flower shop?\"},\"her_past\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask about something the streamer said, did, or experienced in the past, including on her past live streams?\"},\"named_thing\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask who or what a specific named person, character, place, group, game, song, or term is, or ask about one by name?\"}}}"
+        },
+        {
+          "url": "https://openrouter.ai/api/alpha/decisions",
+          "auth": "Bearer sk-test",
+          "body": "{\"model\":\"~typesafe/jev-latest\",\"state\":{\"streamer\":\"明前奶绿, a Chinese VTuber who streams on Bilibili, runs a fictional flower shop (拉普拉斯花店) whose manager is her cat 坚果, and calls her fans 奶糖花\",\"earlier_turns\":[],\"viewer_latest_message\":\"你觉得呢\"},\"questions\":{\"about_her\":{\"type\":\"noul\",\"instructions\":\"Is the viewer's latest message asking about the streamer herself — her preferences, opinions, habits, abilities, body, family, pets, friends, relationships, backstory, or her flower shop?\"},\"her_past\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask about something the streamer said, did, or experienced in the past, including on her past live streams?\"},\"named_thing\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask who or what a specific named person, character, place, group, game, song, or term is, or ask about one by name?\"}}}"
+        },
+        {
+          "url": "https://openrouter.ai/api/alpha/decisions",
+          "auth": "Bearer sk-test",
+          "body": "{\"model\":\"~typesafe/jev-latest\",\"state\":{\"streamer\":\"明前奶绿, a Chinese VTuber who streams on Bilibili, runs a fictional flower shop (拉普拉斯花店) whose manager is her cat 坚果, and calls her fans 奶糖花\",\"earlier_turns\":[{\"speaker\":\"viewer\",\"text\":\"我们聊聊游戏\"}],\"viewer_latest_message\":\"上次说的那个游戏\"},\"questions\":{\"about_her\":{\"type\":\"noul\",\"instructions\":\"Is the viewer's latest message asking about the streamer herself — her preferences, opinions, habits, abilities, body, family, pets, friends, relationships, backstory, or her flower shop?\"},\"her_past\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask about something the streamer said, did, or experienced in the past, including on her past live streams?\"},\"named_thing\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask who or what a specific named person, character, place, group, game, song, or term is, or ask about one by name?\"}}}"
+        },
+        {
+          "url": "https://openrouter.ai/api/alpha/decisions",
+          "auth": "Bearer sk-test",
+          "body": "{\"model\":\"~typesafe/jev-latest\",\"state\":{\"streamer\":\"明前奶绿, a Chinese VTuber who streams on Bilibili, runs a fictional flower shop (拉普拉斯花店) whose manager is her cat 坚果, and calls her fans 奶糖花\",\"earlier_turns\":[],\"viewer_latest_message\":\"没有分组的一句\"},\"questions\":{\"about_her\":{\"type\":\"noul\",\"instructions\":\"Is the viewer's latest message asking about the streamer herself — her preferences, opinions, habits, abilities, body, family, pets, friends, relationships, backstory, or her flower shop?\"},\"her_past\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask about something the streamer said, did, or experienced in the past, including on her past live streams?\"},\"named_thing\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask who or what a specific named person, character, place, group, game, song, or term is, or ask about one by name?\"}}}"
+        }
+      ]
+    },
+    {
+      "turns": "turns_ok.toml",
+      "env": {
+        "OPENROUTER_API_KEY": "sk-test",
+        "RETRIEVAL_GATE_MODEL": "~typesafe/jev-1.14"
+      },
+      "fail_on": null,
+      "code": 0,
+      "crash": null,
+      "stdout": "model ['typesafe/jev-1.13-20260917'], threshold 0.3, latency {'p50': 527, 'p90': 2083.8, 'max': 1500}\ndev      {'recall_kept': '1/1', 'chit_chat_skipped': '1/1', 'lowest_recall_score': 0.89, 'highest_chit_chat_score': 0.1}\nheldout  {'recall_kept': '0/0', 'chit_chat_skipped': '0/0', 'lowest_recall_score': None, 'highest_chit_chat_score': None}\nfresh    {'recall_kept': '0/0', 'chit_chat_skipped': '0/0', 'lowest_recall_score': None, 'highest_chit_chat_score': None}\nall      {'recall_kept': '1/1', 'chit_chat_skipped': '1/1', 'lowest_recall_score': 0.89, 'highest_chit_chat_score': 0.1}\nborderline 0.40 你觉得呢\n",
+      "decisions": "{\n \"model\": [\n  \"typesafe/jev-1.13-20260917\"\n ],\n \"threshold\": 0.3,\n \"latency_ms\": {\n  \"p50\": 527,\n  \"p90\": 2083.8,\n  \"max\": 1500\n },\n \"sets\": {\n  \"dev\": {\n   \"recall_kept\": \"1/1\",\n   \"chit_chat_skipped\": \"1/1\",\n   \"lowest_recall_score\": 0.89,\n   \"highest_chit_chat_score\": 0.1\n  },\n  \"heldout\": {\n   \"recall_kept\": \"0/0\",\n   \"chit_chat_skipped\": \"0/0\",\n   \"lowest_recall_score\": null,\n   \"highest_chit_chat_score\": null\n  },\n  \"fresh\": {\n   \"recall_kept\": \"0/0\",\n   \"chit_chat_skipped\": \"0/0\",\n   \"lowest_recall_score\": null,\n   \"highest_chit_chat_score\": null\n  },\n  \"all\": {\n   \"recall_kept\": \"1/1\",\n   \"chit_chat_skipped\": \"1/1\",\n   \"lowest_recall_score\": 0.89,\n   \"highest_chit_chat_score\": 0.1\n  }\n },\n \"turns\": [\n  {\n   \"set\": \"dev\",\n   \"text\": \"你梦想是什么\",\n   \"recall\": true,\n   \"score\": 0.89,\n   \"nouls\": {\n    \"about_her\": 0.89,\n    \"her_past\": 0.07,\n    \"named_thing\": 0.06\n   }\n  },\n  {\n   \"set\": \"dev\",\n   \"text\": \"早上好\",\n   \"recall\": false,\n   \"score\": 0.1,\n   \"nouls\": {\n    \"about_her\": 0.1,\n    \"her_past\": 0.0,\n    \"named_thing\": 0.05\n   }\n  },\n  {\n   \"set\": \"fresh\",\n   \"text\": \"你觉得呢\",\n   \"recall\": null,\n   \"score\": 0.4,\n   \"nouls\": {\n    \"about_her\": 0.4,\n    \"her_past\": 0.3,\n    \"named_thing\": 2e-05\n   }\n  }\n ]\n}\n",
+      "requests": [
+        {
+          "url": "https://openrouter.ai/api/alpha/decisions",
+          "auth": "Bearer sk-test",
+          "body": "{\"model\":\"~typesafe/jev-1.14\",\"state\":{\"streamer\":\"明前奶绿, a Chinese VTuber who streams on Bilibili, runs a fictional flower shop (拉普拉斯花店) whose manager is her cat 坚果, and calls her fans 奶糖花\",\"earlier_turns\":[],\"viewer_latest_message\":\"你好\"},\"questions\":{\"about_her\":{\"type\":\"noul\",\"instructions\":\"Is the viewer's latest message asking about the streamer herself — her preferences, opinions, habits, abilities, body, family, pets, friends, relationships, backstory, or her flower shop?\"},\"her_past\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask about something the streamer said, did, or experienced in the past, including on her past live streams?\"},\"named_thing\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask who or what a specific named person, character, place, group, game, song, or term is, or ask about one by name?\"}}}"
+        },
+        {
+          "url": "https://openrouter.ai/api/alpha/decisions",
+          "auth": "Bearer sk-test",
+          "body": "{\"model\":\"~typesafe/jev-1.14\",\"state\":{\"streamer\":\"明前奶绿, a Chinese VTuber who streams on Bilibili, runs a fictional flower shop (拉普拉斯花店) whose manager is her cat 坚果, and calls her fans 奶糖花\",\"earlier_turns\":[],\"viewer_latest_message\":\"你梦想是什么\"},\"questions\":{\"about_her\":{\"type\":\"noul\",\"instructions\":\"Is the viewer's latest message asking about the streamer herself — her preferences, opinions, habits, abilities, body, family, pets, friends, relationships, backstory, or her flower shop?\"},\"her_past\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask about something the streamer said, did, or experienced in the past, including on her past live streams?\"},\"named_thing\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask who or what a specific named person, character, place, group, game, song, or term is, or ask about one by name?\"}}}"
+        },
+        {
+          "url": "https://openrouter.ai/api/alpha/decisions",
+          "auth": "Bearer sk-test",
+          "body": "{\"model\":\"~typesafe/jev-1.14\",\"state\":{\"streamer\":\"明前奶绿, a Chinese VTuber who streams on Bilibili, runs a fictional flower shop (拉普拉斯花店) whose manager is her cat 坚果, and calls her fans 奶糖花\",\"earlier_turns\":[],\"viewer_latest_message\":\"早上好\"},\"questions\":{\"about_her\":{\"type\":\"noul\",\"instructions\":\"Is the viewer's latest message asking about the streamer herself — her preferences, opinions, habits, abilities, body, family, pets, friends, relationships, backstory, or her flower shop?\"},\"her_past\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask about something the streamer said, did, or experienced in the past, including on her past live streams?\"},\"named_thing\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask who or what a specific named person, character, place, group, game, song, or term is, or ask about one by name?\"}}}"
+        },
+        {
+          "url": "https://openrouter.ai/api/alpha/decisions",
+          "auth": "Bearer sk-test",
+          "body": "{\"model\":\"~typesafe/jev-1.14\",\"state\":{\"streamer\":\"明前奶绿, a Chinese VTuber who streams on Bilibili, runs a fictional flower shop (拉普拉斯花店) whose manager is her cat 坚果, and calls her fans 奶糖花\",\"earlier_turns\":[],\"viewer_latest_message\":\"你觉得呢\"},\"questions\":{\"about_her\":{\"type\":\"noul\",\"instructions\":\"Is the viewer's latest message asking about the streamer herself — her preferences, opinions, habits, abilities, body, family, pets, friends, relationships, backstory, or her flower shop?\"},\"her_past\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask about something the streamer said, did, or experienced in the past, including on her past live streams?\"},\"named_thing\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask who or what a specific named person, character, place, group, game, song, or term is, or ask about one by name?\"}}}"
+        }
+      ]
+    },
+    {
+      "turns": "turns_one.toml",
+      "env": null,
+      "fail_on": null,
+      "code": 0,
+      "crash": null,
+      "stdout": "model ['typesafe/jev-1.13-20260917'], threshold 0.3, latency {'p50': 527, 'p90': 527, 'max': 527}\ndev      {'recall_kept': '1/1', 'chit_chat_skipped': '0/0', 'lowest_recall_score': 0.89, 'highest_chit_chat_score': None}\nheldout  {'recall_kept': '0/0', 'chit_chat_skipped': '0/0', 'lowest_recall_score': None, 'highest_chit_chat_score': None}\nfresh    {'recall_kept': '0/0', 'chit_chat_skipped': '0/0', 'lowest_recall_score': None, 'highest_chit_chat_score': None}\nall      {'recall_kept': '1/1', 'chit_chat_skipped': '0/0', 'lowest_recall_score': 0.89, 'highest_chit_chat_score': None}\n",
+      "decisions": "{\n \"model\": [\n  \"typesafe/jev-1.13-20260917\"\n ],\n \"threshold\": 0.3,\n \"latency_ms\": {\n  \"p50\": 527,\n  \"p90\": 527,\n  \"max\": 527\n },\n \"sets\": {\n  \"dev\": {\n   \"recall_kept\": \"1/1\",\n   \"chit_chat_skipped\": \"0/0\",\n   \"lowest_recall_score\": 0.89,\n   \"highest_chit_chat_score\": null\n  },\n  \"heldout\": {\n   \"recall_kept\": \"0/0\",\n   \"chit_chat_skipped\": \"0/0\",\n   \"lowest_recall_score\": null,\n   \"highest_chit_chat_score\": null\n  },\n  \"fresh\": {\n   \"recall_kept\": \"0/0\",\n   \"chit_chat_skipped\": \"0/0\",\n   \"lowest_recall_score\": null,\n   \"highest_chit_chat_score\": null\n  },\n  \"all\": {\n   \"recall_kept\": \"1/1\",\n   \"chit_chat_skipped\": \"0/0\",\n   \"lowest_recall_score\": 0.89,\n   \"highest_chit_chat_score\": null\n  }\n },\n \"turns\": [\n  {\n   \"set\": \"dev\",\n   \"text\": \"你梦想是什么\",\n   \"recall\": true,\n   \"score\": 0.89,\n   \"nouls\": {\n    \"about_her\": 0.89,\n    \"her_past\": 0.07,\n    \"named_thing\": 0.06\n   }\n  }\n ]\n}\n",
+      "requests": [
+        {
+          "url": "https://openrouter.ai/api/alpha/decisions",
+          "auth": "Bearer sk-test",
+          "body": "{\"model\":\"~typesafe/jev-latest\",\"state\":{\"streamer\":\"明前奶绿, a Chinese VTuber who streams on Bilibili, runs a fictional flower shop (拉普拉斯花店) whose manager is her cat 坚果, and calls her fans 奶糖花\",\"earlier_turns\":[],\"viewer_latest_message\":\"你好\"},\"questions\":{\"about_her\":{\"type\":\"noul\",\"instructions\":\"Is the viewer's latest message asking about the streamer herself — her preferences, opinions, habits, abilities, body, family, pets, friends, relationships, backstory, or her flower shop?\"},\"her_past\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask about something the streamer said, did, or experienced in the past, including on her past live streams?\"},\"named_thing\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask who or what a specific named person, character, place, group, game, song, or term is, or ask about one by name?\"}}}"
+        },
+        {
+          "url": "https://openrouter.ai/api/alpha/decisions",
+          "auth": "Bearer sk-test",
+          "body": "{\"model\":\"~typesafe/jev-latest\",\"state\":{\"streamer\":\"明前奶绿, a Chinese VTuber who streams on Bilibili, runs a fictional flower shop (拉普拉斯花店) whose manager is her cat 坚果, and calls her fans 奶糖花\",\"earlier_turns\":[],\"viewer_latest_message\":\"你梦想是什么\"},\"questions\":{\"about_her\":{\"type\":\"noul\",\"instructions\":\"Is the viewer's latest message asking about the streamer herself — her preferences, opinions, habits, abilities, body, family, pets, friends, relationships, backstory, or her flower shop?\"},\"her_past\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask about something the streamer said, did, or experienced in the past, including on her past live streams?\"},\"named_thing\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask who or what a specific named person, character, place, group, game, song, or term is, or ask about one by name?\"}}}"
+        }
+      ]
+    },
+    {
+      "turns": "turns.toml",
+      "env": {},
+      "fail_on": null,
+      "code": 1,
+      "crash": ["KeyError", "'OPENROUTER_API_KEY'"],
+      "stdout": "",
+      "decisions": null,
+      "requests": []
+    },
+    {
+      "turns": "turns_ok.toml",
+      "env": null,
+      "fail_on": "早上好",
+      "code": 1,
+      "crash": [
+        "HTTPStatusError",
+        "Client error '401 Unauthorized' for url 'https://openrouter.ai/api/alpha/decisions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401"
+      ],
+      "stdout": "",
+      "decisions": null,
+      "requests": [
+        {
+          "url": "https://openrouter.ai/api/alpha/decisions",
+          "auth": "Bearer sk-test",
+          "body": "{\"model\":\"~typesafe/jev-latest\",\"state\":{\"streamer\":\"明前奶绿, a Chinese VTuber who streams on Bilibili, runs a fictional flower shop (拉普拉斯花店) whose manager is her cat 坚果, and calls her fans 奶糖花\",\"earlier_turns\":[],\"viewer_latest_message\":\"你好\"},\"questions\":{\"about_her\":{\"type\":\"noul\",\"instructions\":\"Is the viewer's latest message asking about the streamer herself — her preferences, opinions, habits, abilities, body, family, pets, friends, relationships, backstory, or her flower shop?\"},\"her_past\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask about something the streamer said, did, or experienced in the past, including on her past live streams?\"},\"named_thing\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask who or what a specific named person, character, place, group, game, song, or term is, or ask about one by name?\"}}}"
+        },
+        {
+          "url": "https://openrouter.ai/api/alpha/decisions",
+          "auth": "Bearer sk-test",
+          "body": "{\"model\":\"~typesafe/jev-latest\",\"state\":{\"streamer\":\"明前奶绿, a Chinese VTuber who streams on Bilibili, runs a fictional flower shop (拉普拉斯花店) whose manager is her cat 坚果, and calls her fans 奶糖花\",\"earlier_turns\":[],\"viewer_latest_message\":\"你梦想是什么\"},\"questions\":{\"about_her\":{\"type\":\"noul\",\"instructions\":\"Is the viewer's latest message asking about the streamer herself — her preferences, opinions, habits, abilities, body, family, pets, friends, relationships, backstory, or her flower shop?\"},\"her_past\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask about something the streamer said, did, or experienced in the past, including on her past live streams?\"},\"named_thing\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask who or what a specific named person, character, place, group, game, song, or term is, or ask about one by name?\"}}}"
+        },
+        {
+          "url": "https://openrouter.ai/api/alpha/decisions",
+          "auth": "Bearer sk-test",
+          "body": "{\"model\":\"~typesafe/jev-latest\",\"state\":{\"streamer\":\"明前奶绿, a Chinese VTuber who streams on Bilibili, runs a fictional flower shop (拉普拉斯花店) whose manager is her cat 坚果, and calls her fans 奶糖花\",\"earlier_turns\":[],\"viewer_latest_message\":\"早上好\"},\"questions\":{\"about_her\":{\"type\":\"noul\",\"instructions\":\"Is the viewer's latest message asking about the streamer herself — her preferences, opinions, habits, abilities, body, family, pets, friends, relationships, backstory, or her flower shop?\"},\"her_past\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask about something the streamer said, did, or experienced in the past, including on her past live streams?\"},\"named_thing\":{\"type\":\"noul\",\"instructions\":\"Does the viewer's latest message ask who or what a specific named person, character, place, group, game, song, or term is, or ask about one by name?\"}}}"
+        }
+      ]
+    }
+  ],
+  "stats": [
+    {
+      "data": [460, 527, 783],
+      "median": 527,
+      "q10": [419.8, 446.6, 473.4, 500.2, 527, 629.4, 731.8, 834.2, 936.6],
+      "q4": [460, 527, 783]
+    },
+    {
+      "data": [1, 2, 3, 4],
+      "median": 2.5,
+      "q10": [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5],
+      "q4": [1.25, 2.5, 3.75]
+    },
+    {
+      "data": [5],
+      "median": 5,
+      "q10": [5, 5, 5, 5, 5, 5, 5, 5, 5],
+      "q4": [5, 5, 5]
+    },
+    {
+      "data": [3, 1, 2],
+      "median": 2,
+      "q10": [0.4, 0.8, 1.2, 1.6, 2, 2.4, 2.8, 3.2, 3.6],
+      "q4": [1, 2, 3]
+    },
+    {
+      "data": [10, 20],
+      "median": 15,
+      "q10": [3, 6, 9, 12, 15, 18, 21, 24, 27],
+      "q4": [7.5, 15, 22.5]
+    },
+    {
+      "data": [7, 7, 7, 7, 7],
+      "median": 7,
+      "q10": [7, 7, 7, 7, 7, 7, 7, 7, 7],
+      "q4": [7, 7, 7]
+    },
+    {
+      "data": [100, 3, 57, 22, 9, 41, 13, 88],
+      "median": 31.5,
+      "q10": [2.4, 7.8, 11.8, 18.4, 31.5, 47.4, 66.3, 90.4, 101.2],
+      "q4": [10, 31.5, 80.25]
+    }
+  ]
+}

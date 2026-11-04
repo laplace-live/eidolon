@@ -1,0 +1,13 @@
+{
+  "name": "@eidolon/retrieval",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@eidolon/config": "workspace:*",
+    "@lancedb/lancedb": "0.41.0",
+    "apache-arrow": "21.2.0"
+  }
+}

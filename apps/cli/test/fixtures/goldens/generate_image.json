@@ -1,0 +1,403 @@
+[
+  {
+    "argv": ["-o", "<OUT>/image.png"],
+    "hour": 9,
+    "minute": 5,
+    "response": "one",
+    "env": null,
+    "friends_dir": null,
+    "code": 0,
+    "stdout": "openai/gpt-image-2.5-flare: 1 image(s) from 1 reference(s)\nNo prompt given; using the built-in one:\n  Turn the reference character into a casual selfie, drawn in classic 2D anime\n  style.\n\n  Keep unchanged: the character's face, hairstyle, hair color, eye color, and\n  outfit design. The result has to read as the same character, not a lookalike.\n\n  Exactly one person is in the picture: the character in the single reference image. No second version of her, no one else.\n\n  Framing: a phone selfie held at arm's length — camera slightly above eye\n  level, head and shoulders filling the frame, eyes on the lens, relaxed\n  natural smile.\n\n  Render: hand-drawn 2D anime, the look of a traditional cel animation frame.\n  Crisp inked outlines of varying weight, flat color fills, hard-edged two-tone\n  cel shading, glossy block highlights in the hair, classic anime eyes. No 3D,\n  no photorealism, no physically based materials, no rendered textures.\n\n  Time: it is mid-morning, about 09:05 local time. The light, the shadows, and the sky have to read as that\n  hour.\n\n  Light: bright clear daylight filling the room, drawn as simple cel shadow shapes from one clear direction,\n  over a softly painted, uncluttered indoor background.\n\n  No text, watermarks, logos, UI overlays, or anyone beyond the people\n  described above.\nWrote <OUT>/image.png (2 KB)\nCost: $0.0400\n",
+    "stderr": "",
+    "requests": [
+      {
+        "url": "https://openrouter.ai/api/v1/images",
+        "auth": "Bearer sk-test",
+        "body": "{\"model\":\"openai/gpt-image-2.5-flare\",\"prompt\":\"Turn the reference character into a casual selfie, drawn in classic 2D anime\\nstyle.\\n\\nKeep unchanged: the character's face, hairstyle, hair color, eye color, and\\noutfit design. The result has to read as the same character, not a lookalike.\\n\\nExactly one person is in the picture: the character in the single reference image. No second version of her, no one else.\\n\\nFraming: a phone selfie held at arm's length — camera slightly above eye\\nlevel, head and shoulders filling the frame, eyes on the lens, relaxed\\nnatural smile.\\n\\nRender: hand-drawn 2D anime, the look of a traditional cel animation frame.\\nCrisp inked outlines of varying weight, flat color fills, hard-edged two-tone\\ncel shading, glossy block highlights in the hair, classic anime eyes. No 3D,\\nno photorealism, no physically based materials, no rendered textures.\\n\\nTime: it is mid-morning, about 09:05 local time. The light, the shadows, and the sky have to read as that\\nhour.\\n\\nLight: bright clear daylight filling the room, drawn as simple cel shadow shapes from one clear direction,\\nover a softly painted, uncluttered indoor background.\\n\\nNo text, watermarks, logos, UI overlays, or anyone beyond the people\\ndescribed above.\\n\",\"n\":1,\"input_references\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORyBkYXkgb3V0Zml0\"}}]}"
+      }
+    ],
+    "files": {
+      "<OUT>/image.png": "UFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQ"
+    }
+  },
+  {
+    "argv": ["a prompt", "-o", "<OUT>/a/out", "-n", "3"],
+    "hour": 9,
+    "minute": 5,
+    "response": "three",
+    "env": null,
+    "friends_dir": null,
+    "code": 0,
+    "stdout": "openai/gpt-image-2.5-flare: 3 image(s) from 1 reference(s)\nWrote <OUT>/a/out-1.png (2 KB)\nWrote <OUT>/a/out-2.jpg (0 KB)\nWrote <OUT>/a/out-3.webp (4 KB)\n",
+    "stderr": "",
+    "requests": [
+      {
+        "url": "https://openrouter.ai/api/v1/images",
+        "auth": "Bearer sk-test",
+        "body": "{\"model\":\"openai/gpt-image-2.5-flare\",\"prompt\":\"a prompt\",\"n\":3,\"input_references\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORyBkYXkgb3V0Zml0\"}}]}"
+      }
+    ],
+    "files": {
+      "<OUT>/a/out-2.jpg": "YmJiYmJiYmJiYg==",
+      "<OUT>/a/out-1.png": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYQ==",
+      "<OUT>/a/out-3.webp": "Y2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2M="
+    }
+  },
+  {
+    "argv": ["--friend", "七海Nana7mi", "-o", "<OUT>/b/image.png"],
+    "hour": 22,
+    "minute": 30,
+    "response": "webp_byok",
+    "env": null,
+    "friends_dir": null,
+    "code": 0,
+    "stdout": "openai/gpt-image-2.5-flare: 1 image(s) from 2 reference(s)\nNo prompt given; using the built-in one:\n  Turn the reference character into a casual selfie, drawn in classic 2D anime\n  style.\n\n  Keep unchanged: the character's face, hairstyle, hair color, eye color, and\n  outfit design. The result has to read as the same character, not a lookalike.\n\n  Also in frame: 七海Nana7mi. Exactly 2 people are in the picture — one per reference image, and nobody else. The references map in order: the first is the main character, each one after it is the next friend named above. Draw one character per reference image; never turn a single reference into two characters. Match each friend's face, hair, and outfit as closely as the main character's. It's a group selfie taken while out together: everyone leaning into one phone camera, the main character nearest the lens holding it.\n\n  Framing: a phone selfie held at arm's length — camera slightly above eye\n  level, head and shoulders filling the frame, eyes on the lens, relaxed\n  natural smile.\n\n  Render: hand-drawn 2D anime, the look of a traditional cel animation frame.\n  Crisp inked outlines of varying weight, flat color fills, hard-edged two-tone\n  cel shading, glossy block highlights in the hair, classic anime eyes. No 3D,\n  no photorealism, no physically based materials, no rendered textures.\n\n  Time: it is night, about 22:30 local time. The light, the shadows, and the sky have to read as that\n  hour.\n\n  Light: a fully dark sky, everyone lit by warm street and storefront light, drawn as simple cel shadow shapes from one clear direction,\n  over a softly painted outdoor background in virtual Shanghai — a street, a park, a coffee shop, wherever the group would be.\n\n  No text, watermarks, logos, UI overlays, or anyone beyond the people\n  described above.\nWrote <OUT>/b/image.webp (0 KB)\nCost: $0.0123\n",
+    "stderr": "",
+    "requests": [
+      {
+        "url": "https://openrouter.ai/api/v1/images",
+        "auth": "Bearer sk-test",
+        "body": "{\"model\":\"openai/gpt-image-2.5-flare\",\"prompt\":\"Turn the reference character into a casual selfie, drawn in classic 2D anime\\nstyle.\\n\\nKeep unchanged: the character's face, hairstyle, hair color, eye color, and\\noutfit design. The result has to read as the same character, not a lookalike.\\n\\nAlso in frame: 七海Nana7mi. Exactly 2 people are in the picture — one per reference image, and nobody else. The references map in order: the first is the main character, each one after it is the next friend named above. Draw one character per reference image; never turn a single reference into two characters. Match each friend's face, hair, and outfit as closely as the main character's. It's a group selfie taken while out together: everyone leaning into one phone camera, the main character nearest the lens holding it.\\n\\nFraming: a phone selfie held at arm's length — camera slightly above eye\\nlevel, head and shoulders filling the frame, eyes on the lens, relaxed\\nnatural smile.\\n\\nRender: hand-drawn 2D anime, the look of a traditional cel animation frame.\\nCrisp inked outlines of varying weight, flat color fills, hard-edged two-tone\\ncel shading, glossy block highlights in the hair, classic anime eyes. No 3D,\\nno photorealism, no physically based materials, no rendered textures.\\n\\nTime: it is night, about 22:30 local time. The light, the shadows, and the sky have to read as that\\nhour.\\n\\nLight: a fully dark sky, everyone lit by warm street and storefront light, drawn as simple cel shadow shapes from one clear direction,\\nover a softly painted outdoor background in virtual Shanghai — a street, a park, a coffee shop, wherever the group would be.\\n\\nNo text, watermarks, logos, UI overlays, or anyone beyond the people\\ndescribed above.\\n\",\"n\":1,\"input_references\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORyBuaWdodCBvdXRmaXQ=\"}},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORyBuYW5h\"}}]}"
+      }
+    ],
+    "files": {
+      "<OUT>/b/image.webp": "d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3dw=="
+    }
+  },
+  {
+    "argv": ["--friend", "Alice", "--friend", "七海Nana7mi", "-o", "<OUT>/b2/x.png"],
+    "hour": 4,
+    "minute": 0,
+    "response": "nousage",
+    "env": null,
+    "friends_dir": null,
+    "code": 0,
+    "stdout": "openai/gpt-image-2.5-flare: 1 image(s) from 3 reference(s)\nNo prompt given; using the built-in one:\n  Turn the reference character into a casual selfie, drawn in classic 2D anime\n  style.\n\n  Keep unchanged: the character's face, hairstyle, hair color, eye color, and\n  outfit design. The result has to read as the same character, not a lookalike.\n\n  Also in frame: Alice, 七海Nana7mi. Exactly 3 people are in the picture — one per reference image, and nobody else. The references map in order: the first is the main character, each one after it is the next friend named above. Draw one character per reference image; never turn a single reference into two characters. Match each friend's face, hair, and outfit as closely as the main character's. It's a group selfie taken while out together: everyone leaning into one phone camera, the main character nearest the lens holding it.\n\n  Framing: a phone selfie held at arm's length — camera slightly above eye\n  level, head and shoulders filling the frame, eyes on the lens, relaxed\n  natural smile.\n\n  Render: hand-drawn 2D anime, the look of a traditional cel animation frame.\n  Crisp inked outlines of varying weight, flat color fills, hard-edged two-tone\n  cel shading, glossy block highlights in the hair, classic anime eyes. No 3D,\n  no photorealism, no physically based materials, no rendered textures.\n\n  Time: it is late night, about 04:00 local time. The light, the shadows, and the sky have to read as that\n  hour.\n\n  Light: a quiet dark street under sparse cool streetlight and neon, drawn as simple cel shadow shapes from one clear direction,\n  over a softly painted outdoor background in virtual Shanghai — a street, a park, a coffee shop, wherever the group would be.\n\n  No text, watermarks, logos, UI overlays, or anyone beyond the people\n  described above.\nWrote <OUT>/b2/x.gif (0 KB)\n",
+    "stderr": "",
+    "requests": [
+      {
+        "url": "https://openrouter.ai/api/v1/images",
+        "auth": "Bearer sk-test",
+        "body": "{\"model\":\"openai/gpt-image-2.5-flare\",\"prompt\":\"Turn the reference character into a casual selfie, drawn in classic 2D anime\\nstyle.\\n\\nKeep unchanged: the character's face, hairstyle, hair color, eye color, and\\noutfit design. The result has to read as the same character, not a lookalike.\\n\\nAlso in frame: Alice, 七海Nana7mi. Exactly 3 people are in the picture — one per reference image, and nobody else. The references map in order: the first is the main character, each one after it is the next friend named above. Draw one character per reference image; never turn a single reference into two characters. Match each friend's face, hair, and outfit as closely as the main character's. It's a group selfie taken while out together: everyone leaning into one phone camera, the main character nearest the lens holding it.\\n\\nFraming: a phone selfie held at arm's length — camera slightly above eye\\nlevel, head and shoulders filling the frame, eyes on the lens, relaxed\\nnatural smile.\\n\\nRender: hand-drawn 2D anime, the look of a traditional cel animation frame.\\nCrisp inked outlines of varying weight, flat color fills, hard-edged two-tone\\ncel shading, glossy block highlights in the hair, classic anime eyes. No 3D,\\nno photorealism, no physically based materials, no rendered textures.\\n\\nTime: it is late night, about 04:00 local time. The light, the shadows, and the sky have to read as that\\nhour.\\n\\nLight: a quiet dark street under sparse cool streetlight and neon, drawn as simple cel shadow shapes from one clear direction,\\nover a softly painted outdoor background in virtual Shanghai — a street, a park, a coffee shop, wherever the group would be.\\n\\nNo text, watermarks, logos, UI overlays, or anyone beyond the people\\ndescribed above.\\n\",\"n\":1,\"input_references\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORyBuaWdodCBvdXRmaXQ=\"}},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/jpeg;base64,/9j/IGFsaWNl\"}},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORyBuYW5h\"}}]}"
+      }
+    ],
+    "files": {
+      "<OUT>/b2/x.gif": "eA=="
+    }
+  },
+  {
+    "argv": ["-o", "<OUT>/image.png"],
+    "hour": 9,
+    "minute": 5,
+    "response": "one",
+    "env": {},
+    "friends_dir": null,
+    "code": 1,
+    "stdout": "",
+    "stderr": "OPENROUTER_API_KEY is unset.\n",
+    "requests": [],
+    "files": {}
+  },
+  {
+    "argv": ["-i", "missing.png", "-o", "<OUT>/x.png"],
+    "hour": 9,
+    "minute": 5,
+    "response": "one",
+    "env": null,
+    "friends_dir": null,
+    "code": 1,
+    "stdout": "openai/gpt-image-2.5-flare: 1 image(s) from 1 reference(s)\nNo prompt given; using the built-in one:\n  Turn the reference character into a casual selfie, drawn in classic 2D anime\n  style.\n\n  Keep unchanged: the character's face, hairstyle, hair color, eye color, and\n  outfit design. The result has to read as the same character, not a lookalike.\n\n  Exactly one person is in the picture: the character in the single reference image. No second version of her, no one else.\n\n  Framing: a phone selfie held at arm's length — camera slightly above eye\n  level, head and shoulders filling the frame, eyes on the lens, relaxed\n  natural smile.\n\n  Render: hand-drawn 2D anime, the look of a traditional cel animation frame.\n  Crisp inked outlines of varying weight, flat color fills, hard-edged two-tone\n  cel shading, glossy block highlights in the hair, classic anime eyes. No 3D,\n  no photorealism, no physically based materials, no rendered textures.\n\n  Time: it is mid-morning, about 09:05 local time. The light, the shadows, and the sky have to read as that\n  hour.\n\n  Light: bright clear daylight filling the room, drawn as simple cel shadow shapes from one clear direction,\n  over a softly painted, uncluttered indoor background.\n\n  No text, watermarks, logos, UI overlays, or anyone beyond the people\n  described above.\n",
+    "stderr": "missing.png: no such file\n",
+    "requests": [],
+    "files": {}
+  },
+  {
+    "argv": ["-i", "<REFS>/notes.txt", "-o", "<OUT>/x.png"],
+    "hour": 9,
+    "minute": 5,
+    "response": "one",
+    "env": null,
+    "friends_dir": null,
+    "code": 1,
+    "stdout": "openai/gpt-image-2.5-flare: 1 image(s) from 1 reference(s)\nNo prompt given; using the built-in one:\n  Turn the reference character into a casual selfie, drawn in classic 2D anime\n  style.\n\n  Keep unchanged: the character's face, hairstyle, hair color, eye color, and\n  outfit design. The result has to read as the same character, not a lookalike.\n\n  Exactly one person is in the picture: the character in the single reference image. No second version of her, no one else.\n\n  Framing: a phone selfie held at arm's length — camera slightly above eye\n  level, head and shoulders filling the frame, eyes on the lens, relaxed\n  natural smile.\n\n  Render: hand-drawn 2D anime, the look of a traditional cel animation frame.\n  Crisp inked outlines of varying weight, flat color fills, hard-edged two-tone\n  cel shading, glossy block highlights in the hair, classic anime eyes. No 3D,\n  no photorealism, no physically based materials, no rendered textures.\n\n  Time: it is mid-morning, about 09:05 local time. The light, the shadows, and the sky have to read as that\n  hour.\n\n  Light: bright clear daylight filling the room, drawn as simple cel shadow shapes from one clear direction,\n  over a softly painted, uncluttered indoor background.\n\n  No text, watermarks, logos, UI overlays, or anyone beyond the people\n  described above.\n",
+    "stderr": "<REFS>/notes.txt: not a recognizable image type\n",
+    "requests": [],
+    "files": {}
+  },
+  {
+    "argv": [
+      "-i",
+      "https://example.com/0.png",
+      "-i",
+      "https://example.com/1.png",
+      "-i",
+      "https://example.com/2.png",
+      "-i",
+      "https://example.com/3.png",
+      "-i",
+      "https://example.com/4.png",
+      "-i",
+      "https://example.com/5.png",
+      "-i",
+      "https://example.com/6.png",
+      "-i",
+      "https://example.com/7.png",
+      "-i",
+      "https://example.com/8.png",
+      "-i",
+      "https://example.com/9.png",
+      "-i",
+      "https://example.com/10.png",
+      "-i",
+      "https://example.com/11.png",
+      "-i",
+      "https://example.com/12.png",
+      "-i",
+      "https://example.com/13.png",
+      "-i",
+      "https://example.com/14.png",
+      "-i",
+      "https://example.com/15.png",
+      "-i",
+      "https://example.com/16.png",
+      "-o",
+      "<OUT>/x.png"
+    ],
+    "hour": 9,
+    "minute": 5,
+    "response": "one",
+    "env": null,
+    "friends_dir": null,
+    "code": 1,
+    "stdout": "",
+    "stderr": "17 references given; the cap is 16.\n",
+    "requests": [],
+    "files": {}
+  },
+  {
+    "argv": ["-n", "11", "-o", "<OUT>/x.png"],
+    "hour": 9,
+    "minute": 5,
+    "response": "one",
+    "env": null,
+    "friends_dir": null,
+    "code": 1,
+    "stdout": "",
+    "stderr": "-n must be between 1 and 10.\n",
+    "requests": [],
+    "files": {}
+  },
+  {
+    "argv": ["-n", "0", "-o", "<OUT>/x.png"],
+    "hour": 9,
+    "minute": 5,
+    "response": "one",
+    "env": null,
+    "friends_dir": null,
+    "code": 1,
+    "stdout": "",
+    "stderr": "-n must be between 1 and 10.\n",
+    "requests": [],
+    "files": {}
+  },
+  {
+    "argv": ["p", "-o", "<OUT>/x.png"],
+    "hour": 9,
+    "minute": 5,
+    "response": "credits",
+    "env": null,
+    "friends_dir": null,
+    "code": 1,
+    "stdout": "openai/gpt-image-2.5-flare: 1 image(s) from 1 reference(s)\n",
+    "stderr": "402: Insufficient credits\n",
+    "requests": [
+      {
+        "url": "https://openrouter.ai/api/v1/images",
+        "auth": "Bearer sk-test",
+        "body": "{\"model\":\"openai/gpt-image-2.5-flare\",\"prompt\":\"p\",\"n\":1,\"input_references\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORyBkYXkgb3V0Zml0\"}}]}"
+      }
+    ],
+    "files": {}
+  },
+  {
+    "argv": ["p", "-o", "<OUT>/x.png"],
+    "hour": 9,
+    "minute": 5,
+    "response": "empty",
+    "env": null,
+    "friends_dir": null,
+    "code": 1,
+    "stdout": "openai/gpt-image-2.5-flare: 1 image(s) from 1 reference(s)\n",
+    "stderr": "the response carried no image\n",
+    "requests": [
+      {
+        "url": "https://openrouter.ai/api/v1/images",
+        "auth": "Bearer sk-test",
+        "body": "{\"model\":\"openai/gpt-image-2.5-flare\",\"prompt\":\"p\",\"n\":1,\"input_references\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORyBkYXkgb3V0Zml0\"}}]}"
+      }
+    ],
+    "files": {}
+  },
+  {
+    "argv": ["p", "-o", "<OUT>/c/out.tar.gz"],
+    "hour": 9,
+    "minute": 5,
+    "response": "one",
+    "env": null,
+    "friends_dir": null,
+    "code": 0,
+    "stdout": "openai/gpt-image-2.5-flare: 1 image(s) from 1 reference(s)\nWrote <OUT>/c/out.tar.png (2 KB)\nCost: $0.0400\n",
+    "stderr": "",
+    "requests": [
+      {
+        "url": "https://openrouter.ai/api/v1/images",
+        "auth": "Bearer sk-test",
+        "body": "{\"model\":\"openai/gpt-image-2.5-flare\",\"prompt\":\"p\",\"n\":1,\"input_references\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORyBkYXkgb3V0Zml0\"}}]}"
+      }
+    ],
+    "files": {
+      "<OUT>/c/out.tar.png": "UFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQ"
+    }
+  },
+  {
+    "argv": [
+      "-i",
+      "https://example.com/ref.png",
+      "prompt text",
+      "-o",
+      "<OUT>/d.png",
+      "--aspect-ratio",
+      "3:4",
+      "--quality",
+      "high",
+      "--model",
+      "m/x"
+    ],
+    "hour": 9,
+    "minute": 5,
+    "response": "one",
+    "env": null,
+    "friends_dir": null,
+    "code": 0,
+    "stdout": "m/x: 1 image(s) from 1 reference(s)\nWrote <OUT>/d.png (2 KB)\nCost: $0.0400\n",
+    "stderr": "",
+    "requests": [
+      {
+        "url": "https://openrouter.ai/api/v1/images",
+        "auth": "Bearer sk-test",
+        "body": "{\"model\":\"m/x\",\"prompt\":\"prompt text\",\"n\":1,\"input_references\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"https://example.com/ref.png\"}}],\"aspect_ratio\":\"3:4\",\"quality\":\"high\"}"
+      }
+    ],
+    "files": {
+      "<OUT>/d.png": "UFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQ"
+    }
+  },
+  {
+    "argv": ["p", "-o", "<OUT>/e.png"],
+    "hour": 22,
+    "minute": 30,
+    "response": "one",
+    "env": {
+      "OPENROUTER_API_KEY": "sk-test",
+      "SELFIE_REFERENCE_IMAGES": " <REFS>/outfits/day.png , ,<REFS>/outfits/night.png "
+    },
+    "friends_dir": null,
+    "code": 0,
+    "stdout": "openai/gpt-image-2.5-flare: 1 image(s) from 1 reference(s)\nWrote <OUT>/e.png (2 KB)\nCost: $0.0400\n",
+    "stderr": "",
+    "requests": [
+      {
+        "url": "https://openrouter.ai/api/v1/images",
+        "auth": "Bearer sk-test",
+        "body": "{\"model\":\"openai/gpt-image-2.5-flare\",\"prompt\":\"p\",\"n\":1,\"input_references\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORyBuaWdodCBvdXRmaXQ=\"}}]}"
+      }
+    ],
+    "files": {
+      "<OUT>/e.png": "UFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQ"
+    }
+  },
+  {
+    "argv": ["--friend", "x", "-o", "<OUT>/x.png"],
+    "hour": 9,
+    "minute": 5,
+    "response": "one",
+    "env": null,
+    "friends_dir": "<FIX>/no-such-friends",
+    "code": 1,
+    "stdout": "",
+    "stderr": "unknown friend(s) ['x']; known: []\n",
+    "requests": [],
+    "files": {}
+  },
+  {
+    "argv": ["", "-o", "<OUT>/f.png"],
+    "hour": 18,
+    "minute": 0,
+    "response": "one",
+    "env": null,
+    "friends_dir": null,
+    "code": 0,
+    "stdout": "openai/gpt-image-2.5-flare: 1 image(s) from 1 reference(s)\nNo prompt given; using the built-in one:\n  Turn the reference character into a casual selfie, drawn in classic 2D anime\n  style.\n\n  Keep unchanged: the character's face, hairstyle, hair color, eye color, and\n  outfit design. The result has to read as the same character, not a lookalike.\n\n  Exactly one person is in the picture: the character in the single reference image. No second version of her, no one else.\n\n  Framing: a phone selfie held at arm's length — camera slightly above eye\n  level, head and shoulders filling the frame, eyes on the lens, relaxed\n  natural smile.\n\n  Render: hand-drawn 2D anime, the look of a traditional cel animation frame.\n  Crisp inked outlines of varying weight, flat color fills, hard-edged two-tone\n  cel shading, glossy block highlights in the hair, classic anime eyes. No 3D,\n  no photorealism, no physically based materials, no rendered textures.\n\n  Time: it is dusk, about 18:00 local time. The light, the shadows, and the sky have to read as that\n  hour.\n\n  Light: orange-pink sunset through the window, a lamp just switched on, drawn as simple cel shadow shapes from one clear direction,\n  over a softly painted, uncluttered indoor background.\n\n  No text, watermarks, logos, UI overlays, or anyone beyond the people\n  described above.\nWrote <OUT>/f.png (2 KB)\nCost: $0.0400\n",
+    "stderr": "",
+    "requests": [
+      {
+        "url": "https://openrouter.ai/api/v1/images",
+        "auth": "Bearer sk-test",
+        "body": "{\"model\":\"openai/gpt-image-2.5-flare\",\"prompt\":\"Turn the reference character into a casual selfie, drawn in classic 2D anime\\nstyle.\\n\\nKeep unchanged: the character's face, hairstyle, hair color, eye color, and\\noutfit design. The result has to read as the same character, not a lookalike.\\n\\nExactly one person is in the picture: the character in the single reference image. No second version of her, no one else.\\n\\nFraming: a phone selfie held at arm's length — camera slightly above eye\\nlevel, head and shoulders filling the frame, eyes on the lens, relaxed\\nnatural smile.\\n\\nRender: hand-drawn 2D anime, the look of a traditional cel animation frame.\\nCrisp inked outlines of varying weight, flat color fills, hard-edged two-tone\\ncel shading, glossy block highlights in the hair, classic anime eyes. No 3D,\\nno photorealism, no physically based materials, no rendered textures.\\n\\nTime: it is dusk, about 18:00 local time. The light, the shadows, and the sky have to read as that\\nhour.\\n\\nLight: orange-pink sunset through the window, a lamp just switched on, drawn as simple cel shadow shapes from one clear direction,\\nover a softly painted, uncluttered indoor background.\\n\\nNo text, watermarks, logos, UI overlays, or anyone beyond the people\\ndescribed above.\\n\",\"n\":1,\"input_references\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORyBkYXkgb3V0Zml0\"}}]}"
+      }
+    ],
+    "files": {
+      "<OUT>/f.png": "UFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQ"
+    }
+  },
+  {
+    "argv": [
+      "-i",
+      "<REFS>/outfits/day.png",
+      "-i",
+      "<REFS>/outfits/night.png",
+      "both",
+      "-o",
+      "<OUT>/g.png"
+    ],
+    "hour": 9,
+    "minute": 5,
+    "response": "one",
+    "env": null,
+    "friends_dir": null,
+    "code": 0,
+    "stdout": "openai/gpt-image-2.5-flare: 1 image(s) from 2 reference(s)\nWrote <OUT>/g.png (2 KB)\nCost: $0.0400\n",
+    "stderr": "",
+    "requests": [
+      {
+        "url": "https://openrouter.ai/api/v1/images",
+        "auth": "Bearer sk-test",
+        "body": "{\"model\":\"openai/gpt-image-2.5-flare\",\"prompt\":\"both\",\"n\":1,\"input_references\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORyBkYXkgb3V0Zml0\"}},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORyBuaWdodCBvdXRmaXQ=\"}}]}"
+      }
+    ],
+    "files": {
+      "<OUT>/g.png": "UFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQ"
+    }
+  },
+  {
+    "argv": ["-o", "<OUT>/h.png"],
+    "hour": 21,
+    "minute": 0,
+    "response": "one",
+    "env": null,
+    "friends_dir": "<FIX>/no-such-friends",
+    "code": 0,
+    "stdout": "openai/gpt-image-2.5-flare: 1 image(s) from 1 reference(s)\nNo prompt given; using the built-in one:\n  Turn the reference character into a casual selfie, drawn in classic 2D anime\n  style.\n\n  Keep unchanged: the character's face, hairstyle, hair color, eye color, and\n  outfit design. The result has to read as the same character, not a lookalike.\n\n  Exactly one person is in the picture: the character in the single reference image. No second version of her, no one else.\n\n  Framing: a phone selfie held at arm's length — camera slightly above eye\n  level, head and shoulders filling the frame, eyes on the lens, relaxed\n  natural smile.\n\n  Render: hand-drawn 2D anime, the look of a traditional cel animation frame.\n  Crisp inked outlines of varying weight, flat color fills, hard-edged two-tone\n  cel shading, glossy block highlights in the hair, classic anime eyes. No 3D,\n  no photorealism, no physically based materials, no rendered textures.\n\n  Time: it is night, about 21:00 local time. The light, the shadows, and the sky have to read as that\n  hour.\n\n  Light: warm indoor lamplight against a fully dark window, drawn as simple cel shadow shapes from one clear direction,\n  over a softly painted, uncluttered indoor background.\n\n  No text, watermarks, logos, UI overlays, or anyone beyond the people\n  described above.\nWrote <OUT>/h.png (2 KB)\nCost: $0.0400\n",
+    "stderr": "",
+    "requests": [
+      {
+        "url": "https://openrouter.ai/api/v1/images",
+        "auth": "Bearer sk-test",
+        "body": "{\"model\":\"openai/gpt-image-2.5-flare\",\"prompt\":\"Turn the reference character into a casual selfie, drawn in classic 2D anime\\nstyle.\\n\\nKeep unchanged: the character's face, hairstyle, hair color, eye color, and\\noutfit design. The result has to read as the same character, not a lookalike.\\n\\nExactly one person is in the picture: the character in the single reference image. No second version of her, no one else.\\n\\nFraming: a phone selfie held at arm's length — camera slightly above eye\\nlevel, head and shoulders filling the frame, eyes on the lens, relaxed\\nnatural smile.\\n\\nRender: hand-drawn 2D anime, the look of a traditional cel animation frame.\\nCrisp inked outlines of varying weight, flat color fills, hard-edged two-tone\\ncel shading, glossy block highlights in the hair, classic anime eyes. No 3D,\\nno photorealism, no physically based materials, no rendered textures.\\n\\nTime: it is night, about 21:00 local time. The light, the shadows, and the sky have to read as that\\nhour.\\n\\nLight: warm indoor lamplight against a fully dark window, drawn as simple cel shadow shapes from one clear direction,\\nover a softly painted, uncluttered indoor background.\\n\\nNo text, watermarks, logos, UI overlays, or anyone beyond the people\\ndescribed above.\\n\",\"n\":1,\"input_references\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORyBuaWdodCBvdXRmaXQ=\"}}]}"
+      }
+    ],
+    "files": {
+      "<OUT>/h.png": "UFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQ"
+    }
+  }
+]

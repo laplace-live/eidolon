@@ -1,0 +1,2703 @@
+[
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "",
+      "mode": "overview",
+      "period": "latest"
+    },
+    "error": "1 validation error for RecallRequest\nquery\n  String should have at least 1 character [type=string_too_short, input_value='', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/string_too_short"
+  },
+  {
+    "args": {
+      "query": " ",
+      "mode": "overview",
+      "period": "latest"
+    },
+    "ok": {
+      "query": " ",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "mode": "overview",
+      "period": "latest"
+    },
+    "ok": {
+      "query": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "mode": "overview",
+      "period": "latest"
+    },
+    "error": "1 validation error for RecallRequest\nquery\n  String should have at most 2000 characters [type=string_too_long, input_value='xxxxxxxxxxxxxxxxxxxxxxxx...xxxxxxxxxxxxxxxxxxxxxxx', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/string_too_long"
+  },
+  {
+    "args": {
+      "query": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+      "mode": "overview",
+      "period": "latest"
+    },
+    "ok": {
+      "query": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+      "mode": "overview",
+      "period": "latest"
+    },
+    "error": "1 validation error for RecallRequest\nquery\n  String should have at most 2000 characters [type=string_too_long, input_value='😀😀😀😀😀😀...😀😀😀😀😀', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/string_too_long"
+  },
+  {
+    "args": {
+      "query": 5,
+      "mode": "overview",
+      "period": "latest"
+    },
+    "error": "1 validation error for RecallRequest\nquery\n  Input should be a valid string [type=string_type, input_value=5, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.13/v/string_type"
+  },
+  {
+    "args": {
+      "query": null,
+      "mode": "overview",
+      "period": "latest"
+    },
+    "error": "1 validation error for RecallRequest\nquery\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/string_type"
+  },
+  {
+    "args": {
+      "query": true,
+      "mode": "overview",
+      "period": "latest"
+    },
+    "error": "1 validation error for RecallRequest\nquery\n  Input should be a valid string [type=string_type, input_value=True, input_type=bool]\n    For further information visit https://errors.pydantic.dev/2.13/v/string_type"
+  },
+  {
+    "args": {
+      "query": ["a"],
+      "mode": "overview",
+      "period": "latest"
+    },
+    "error": "1 validation error for RecallRequest\nquery\n  Input should be a valid string [type=string_type, input_value=['a'], input_type=list]\n    For further information visit https://errors.pydantic.dev/2.13/v/string_type"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "details",
+      "period": "latest"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "details",
+      "period": "latest",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "invent",
+      "period": "latest"
+    },
+    "error": "1 validation error for RecallRequest\nmode\n  Input should be 'overview' or 'details' [type=literal_error, input_value='invent', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "OVERVIEW",
+      "period": "latest"
+    },
+    "error": "1 validation error for RecallRequest\nmode\n  Input should be 'overview' or 'details' [type=literal_error, input_value='OVERVIEW', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": 1,
+      "period": "latest"
+    },
+    "error": "1 validation error for RecallRequest\nmode\n  Input should be 'overview' or 'details' [type=literal_error, input_value=1, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": null,
+      "period": "latest"
+    },
+    "error": "1 validation error for RecallRequest\nmode\n  Input should be 'overview' or 'details' [type=literal_error, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "it's",
+      "period": "latest"
+    },
+    "error": "1 validation error for RecallRequest\nmode\n  Input should be 'overview' or 'details' [type=literal_error, input_value=\"it's\", input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "say \"hi\"",
+      "period": "latest"
+    },
+    "error": "1 validation error for RecallRequest\nmode\n  Input should be 'overview' or 'details' [type=literal_error, input_value='say \"hi\"', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "a\nb",
+      "period": "latest"
+    },
+    "error": "1 validation error for RecallRequest\nmode\n  Input should be 'overview' or 'details' [type=literal_error, input_value='a\\nb', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "period": "latest"
+    },
+    "error": "1 validation error for RecallRequest\nmode\n  Input should be 'overview' or 'details' [type=literal_error, input_value='xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "period": "latest"
+    },
+    "error": "1 validation error for RecallRequest\nmode\n  Input should be 'overview' or 'details' [type=literal_error, input_value='xxxxxxxxxxxxxxxxxxxxxxxx...xxxxxxxxxxxxxxxxxxxxxxx', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你",
+      "period": "latest"
+    },
+    "error": "1 validation error for RecallRequest\nmode\n  Input should be 'overview' or 'details' [type=literal_error, input_value='你你你你你你你你...你你你你你你你', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "a你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你",
+      "period": "latest"
+    },
+    "error": "1 validation error for RecallRequest\nmode\n  Input should be 'overview' or 'details' [type=literal_error, input_value='a你你你你你你你...你你你你你你你', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "ab你你你你你你你你你你你你你你你你你你你你你你你你你你你你你你",
+      "period": "latest"
+    },
+    "error": "1 validation error for RecallRequest\nmode\n  Input should be 'overview' or 'details' [type=literal_error, input_value='ab你你你你你你你...你你你你你你你', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a",
+      "period": "latest"
+    },
+    "error": "1 validation error for RecallRequest\nmode\n  Input should be 'overview' or 'details' [type=literal_error, input_value='😀a😀a😀a😀a😀...a😀a😀a😀a😀a', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "previous"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "previous",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "this_week"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "this_week",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "last_week"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "last_week",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "this_month"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "this_month",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "last_month"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "last_month",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "past_days"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "past_days",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "date_range"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "date_range",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "selected"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "selected",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "broadcasts"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "broadcasts",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "all"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "all",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "x"
+    },
+    "error": "1 validation error for RecallRequest\nperiod\n  Input should be 'latest', 'previous', 'this_week', 'last_week', 'this_month', 'last_month', 'past_days', 'date_range', 'selected', 'broadcasts' or 'all' [type=literal_error, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": null
+    },
+    "error": "1 validation error for RecallRequest\nperiod\n  Input should be 'latest', 'previous', 'this_week', 'last_week', 'this_month', 'last_month', 'past_days', 'date_range', 'selected', 'broadcasts' or 'all' [type=literal_error, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "Latest"
+    },
+    "error": "1 validation error for RecallRequest\nperiod\n  Input should be 'latest', 'previous', 'this_week', 'last_week', 'this_month', 'last_month', 'past_days', 'date_range', 'selected', 'broadcasts' or 'all' [type=literal_error, input_value='Latest', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "2026-09-08",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:00:00"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "2026-09-08",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08t00:00:00"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "2026-09-08",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08_00:00:00"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "2026-09-08",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08 00:00"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "2026-09-08",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:00:00Z"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "2026-09-08",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:00:00z"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "2026-09-08",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:00:00.000"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "2026-09-08",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:00:00,000"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "2026-09-08",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:00:00.000000001"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "2026-09-08",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:00:00.0000001"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "2026-09-08",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:00:00.1234567890"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Datetimes provided to dates should have zero time - e.g. be exact dates [type=date_from_datetime_inexact, input_value='2026-09-08T00:00:00.1234567890', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_inexact"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:00:00+08:00"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "2026-09-08",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:00:00+0800"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "2026-09-08",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:00:00-00:00"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "2026-09-08",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:00:00+23:59"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "2026-09-08",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:00:00+24:00"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, timezone offset must be less than 24 hours [type=date_from_datetime_parsing, input_value='2026-09-08T00:00:00+24:00', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:00:00+08"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, invalid timezone minute [type=date_from_datetime_parsing, input_value='2026-09-08T00:00:00+08', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:00:00+0"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, invalid timezone hour [type=date_from_datetime_parsing, input_value='2026-09-08T00:00:00+0', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:00:00+08:0"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, invalid timezone minute [type=date_from_datetime_parsing, input_value='2026-09-08T00:00:00+08:0', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:00:00+ab:00"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, invalid timezone hour [type=date_from_datetime_parsing, input_value='2026-09-08T00:00:00+ab:00', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:00:00+08:ab"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, invalid timezone minute [type=date_from_datetime_parsing, input_value='2026-09-08T00:00:00+08:ab', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:00:00 "
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, invalid timezone sign [type=date_from_datetime_parsing, input_value='2026-09-08T00:00:00 ', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:00:00Zx"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, unexpected extra characters at the end of the input [type=date_from_datetime_parsing, input_value='2026-09-08T00:00:00Zx', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:00:00+08:00x"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, unexpected extra characters at the end of the input [type=date_from_datetime_parsing, input_value='2026-09-08T00:00:00+08:00x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:00:00.000Z"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "2026-09-08",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T12:00:00"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Datetimes provided to dates should have zero time - e.g. be exact dates [type=date_from_datetime_inexact, input_value='2026-09-08T12:00:00', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_inexact"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:00:01"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Datetimes provided to dates should have zero time - e.g. be exact dates [type=date_from_datetime_inexact, input_value='2026-09-08T00:00:01', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_inexact"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:00:00.5"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Datetimes provided to dates should have zero time - e.g. be exact dates [type=date_from_datetime_inexact, input_value='2026-09-08T00:00:00.5', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_inexact"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, input is too short [type=date_from_datetime_parsing, input_value='2026-09-08T00', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T0000"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, input is too short [type=date_from_datetime_parsing, input_value='2026-09-08T0000', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:0"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, input is too short [type=date_from_datetime_parsing, input_value='2026-09-08T00:0', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T0:00"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, input is too short [type=date_from_datetime_parsing, input_value='2026-09-08T0:00', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00-00"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, invalid time separator, expected `:` [type=date_from_datetime_parsing, input_value='2026-09-08T00-00', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:00:0"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, invalid character in second [type=date_from_datetime_parsing, input_value='2026-09-08T00:00:0', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, input is too short [type=date_from_datetime_parsing, input_value='2026-09-08T', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:00:00."
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, second fraction digits missing after `.` [type=date_from_datetime_parsing, input_value='2026-09-08T00:00:00.', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T24:00:00"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, hour value is outside expected range of 0-23 [type=date_from_datetime_parsing, input_value='2026-09-08T24:00:00', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:60:00"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, minute value is outside expected range of 0-59 [type=date_from_datetime_parsing, input_value='2026-09-08T00:60:00', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T00:00:60"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, second value is outside expected range of 0-59 [type=date_from_datetime_parsing, input_value='2026-09-08T00:00:60', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08 "
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, input is too short [type=date_from_datetime_parsing, input_value='2026-09-08 ', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08x"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, invalid datetime separator, expected `T`, `t`, `_` or space [type=date_from_datetime_parsing, input_value='2026-09-08x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-8"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, input is too short [type=date_from_datetime_parsing, input_value='2026-09-8', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-9-08"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, input is too short [type=date_from_datetime_parsing, input_value='2026-9-08', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "026-09-08"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, input is too short [type=date_from_datetime_parsing, input_value='026-09-08', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "12026-09-08"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, invalid date separator, expected `-` [type=date_from_datetime_parsing, input_value='12026-09-08', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-13-01"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, month value is outside expected range of 1-12 [type=date_from_datetime_parsing, input_value='2026-13-01', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-00-10"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, month value is outside expected range of 1-12 [type=date_from_datetime_parsing, input_value='2026-00-10', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-12-32"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, day value is outside expected range [type=date_from_datetime_parsing, input_value='2026-12-32', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-12-00"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, day value is outside expected range [type=date_from_datetime_parsing, input_value='2026-12-00', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2024-02-29"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "2024-02-29",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2023-02-29"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, day value is outside expected range [type=date_from_datetime_parsing, input_value='2023-02-29', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2000-02-29"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "2000-02-29",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "1900-02-29"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, day value is outside expected range [type=date_from_datetime_parsing, input_value='1900-02-29', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "0000-01-01"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date in the format YYYY-MM-DD, year 0 is out of range [type=date_parsing, input_value='0000-01-01', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "0000-01-01T00:00:00"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date in the format YYYY-MM-DD, year 0 is out of range [type=date_parsing, input_value='0000-01-01T00:00:00', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "9999-12-31"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "9999-12-31",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "abcd-09-08"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, invalid character in year [type=date_from_datetime_parsing, input_value='abcd-09-08', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-ab-08"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, invalid character in month [type=date_from_datetime_parsing, input_value='2026-ab-08', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-ab"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, invalid character in day [type=date_from_datetime_parsing, input_value='2026-09-ab', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026/09/08"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, invalid date separator, expected `-` [type=date_from_datetime_parsing, input_value='2026/09/08', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": ""
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, input is too short [type=date_from_datetime_parsing, input_value='', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Datetimes provided to dates should have zero time - e.g. be exact dates [type=date_from_datetime_inexact, input_value='2026', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_inexact"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, input is too short [type=date_from_datetime_parsing, input_value='2026-09', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "20260908"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Datetimes provided to dates should have zero time - e.g. be exact dates [type=date_from_datetime_inexact, input_value='20260908', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_inexact"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "２０２６-09-08"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, invalid character in year [type=date_from_datetime_parsing, input_value='２０２６-09-08', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": " 2026-09-08"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, invalid character in year [type=date_from_datetime_parsing, input_value=' 2026-09-08', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "1788825600"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "2026-09-08",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "1788825601"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Datetimes provided to dates should have zero time - e.g. be exact dates [type=date_from_datetime_inexact, input_value='1788825601', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_inexact"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "1788825600.0"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "2026-09-08",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "1788825600."
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "2026-09-08",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "1788825600.5"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Datetimes provided to dates should have zero time - e.g. be exact dates [type=date_from_datetime_inexact, input_value='1788825600.5', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_inexact"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "1788825600.50"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Datetimes provided to dates should have zero time - e.g. be exact dates [type=date_from_datetime_inexact, input_value='1788825600.50', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_inexact"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": ".5"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Datetimes provided to dates should have zero time - e.g. be exact dates [type=date_from_datetime_inexact, input_value='.5', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_inexact"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "-86400"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "1969-12-31",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "+86400"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "1970-01-02",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "86400"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "1970-01-02",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "0"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "1970-01-01",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "00"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "1970-01-01",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "-0"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "1970-01-01",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "-1"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Datetimes provided to dates should have zero time - e.g. be exact dates [type=date_from_datetime_inexact, input_value='-1', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_inexact"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "1788825600000"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "2026-09-08",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "1788825600001"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Datetimes provided to dates should have zero time - e.g. be exact dates [type=date_from_datetime_inexact, input_value='1788825600001', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_inexact"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "1788825600000.5"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Datetimes provided to dates should have zero time - e.g. be exact dates [type=date_from_datetime_inexact, input_value='1788825600000.5', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_inexact"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "20000000000"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Datetimes provided to dates should have zero time - e.g. be exact dates [type=date_from_datetime_inexact, input_value='20000000000', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_inexact"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "20000000001"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Datetimes provided to dates should have zero time - e.g. be exact dates [type=date_from_datetime_inexact, input_value='20000000001', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_inexact"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "19999999999"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Datetimes provided to dates should have zero time - e.g. be exact dates [type=date_from_datetime_inexact, input_value='19999999999', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_inexact"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "99999999999999999"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, dates after 9999 are not supported as unix timestamps [type=date_from_datetime_parsing, input_value='99999999999999999', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "-99999999999999999"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, dates before 0000 are not supported as unix timestamps [type=date_from_datetime_parsing, input_value='-99999999999999999', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "-11676096000"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "1600-01-01",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "-11676096000000"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "1600-01-01",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "1e9"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, input is too short [type=date_from_datetime_parsing, input_value='1e9', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "1_0"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, input is too short [type=date_from_datetime_parsing, input_value='1_0', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "inf"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, input is too short [type=date_from_datetime_parsing, input_value='inf', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "nan"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, input is too short [type=date_from_datetime_parsing, input_value='nan', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "-inf"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, input is too short [type=date_from_datetime_parsing, input_value='-inf', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "INF"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, input is too short [type=date_from_datetime_parsing, input_value='INF', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "Infinity"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, input is too short [type=date_from_datetime_parsing, input_value='Infinity', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "NaN"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, input is too short [type=date_from_datetime_parsing, input_value='NaN', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": " 1788825600"
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, invalid character in year [type=date_from_datetime_parsing, input_value=' 1788825600', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "1788825600 "
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, invalid date separator, expected `-` [type=date_from_datetime_parsing, input_value='1788825600 ', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": 1788825600
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "2026-09-08",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": 1788825601
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Datetimes provided to dates should have zero time - e.g. be exact dates [type=date_from_datetime_inexact, input_value=1788825601, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_inexact"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": 0
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "1970-01-01",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": -1
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Datetimes provided to dates should have zero time - e.g. be exact dates [type=date_from_datetime_inexact, input_value=-1, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_inexact"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": -86400
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "1969-12-31",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": 86400
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "1970-01-02",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": 1788825600000
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": "2026-09-08",
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": 1788825600001
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Datetimes provided to dates should have zero time - e.g. be exact dates [type=date_from_datetime_inexact, input_value=1788825600001, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_inexact"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": 20000000000
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Datetimes provided to dates should have zero time - e.g. be exact dates [type=date_from_datetime_inexact, input_value=20000000000, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_inexact"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": 19999999999
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Datetimes provided to dates should have zero time - e.g. be exact dates [type=date_from_datetime_inexact, input_value=19999999999, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_inexact"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": 1788825600.5
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Datetimes provided to dates should have zero time - e.g. be exact dates [type=date_from_datetime_inexact, input_value=1788825600.5, input_type=float]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_inexact"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": 99999999999999999
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date or datetime, dates after 9999 are not supported as unix timestamps [type=date_from_datetime_parsing, input_value=99999999999999999, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": true
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date [type=date_type, input_value=True, input_type=bool]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_type"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": false
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date [type=date_type, input_value=False, input_type=bool]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_type"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": null
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": []
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date [type=date_type, input_value=[], input_type=list]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_type"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": {}
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date [type=date_type, input_value={}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_type"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": ["2026-09-08"]
+    },
+    "error": "1 validation error for RecallRequest\nstart_date\n  Input should be a valid date [type=date_type, input_value=['2026-09-08'], input_type=list]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_type"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "end_date": "2026-09-09"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": null,
+      "endDate": "2026-09-09",
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "end_date": null
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "end_date": "bad"
+    },
+    "error": "1 validation error for RecallRequest\nend_date\n  Input should be a valid date or datetime, input is too short [type=date_from_datetime_parsing, input_value='bad', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": 7
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": "7"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": 7.0
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": 7.5
+    },
+    "error": "1 validation error for RecallRequest\ndays\n  Input should be a valid integer, got a number with a fractional part [type=int_from_float, input_value=7.5, input_type=float]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_from_float"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": true
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": null,
+      "endDate": null,
+      "days": 1,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": false
+    },
+    "error": "1 validation error for RecallRequest\ndays\n  Input should be greater than or equal to 1 [type=greater_than_equal, input_value=False, input_type=bool]\n    For further information visit https://errors.pydantic.dev/2.13/v/greater_than_equal"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": 0
+    },
+    "error": "1 validation error for RecallRequest\ndays\n  Input should be greater than or equal to 1 [type=greater_than_equal, input_value=0, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.13/v/greater_than_equal"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": 1
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": null,
+      "endDate": null,
+      "days": 1,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": 366
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": null,
+      "endDate": null,
+      "days": 366,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": 367
+    },
+    "error": "1 validation error for RecallRequest\ndays\n  Input should be less than or equal to 366 [type=less_than_equal, input_value=367, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.13/v/less_than_equal"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": -5
+    },
+    "error": "1 validation error for RecallRequest\ndays\n  Input should be greater than or equal to 1 [type=greater_than_equal, input_value=-5, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.13/v/greater_than_equal"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": null
+    },
+    "error": "1 validation error for RecallRequest\ndays\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": " 7 "
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": "7.0"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": "7.00"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": "1_0"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": null,
+      "endDate": null,
+      "days": 10,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": "1_0.0"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": null,
+      "endDate": null,
+      "days": 10,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": "_10"
+    },
+    "error": "1 validation error for RecallRequest\ndays\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='_10', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": "10_"
+    },
+    "error": "1 validation error for RecallRequest\ndays\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='10_', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": "1__0"
+    },
+    "error": "1 validation error for RecallRequest\ndays\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='1__0', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": "+7"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": "-7"
+    },
+    "error": "1 validation error for RecallRequest\ndays\n  Input should be greater than or equal to 1 [type=greater_than_equal, input_value='-7', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/greater_than_equal"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": "07"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": "0x10"
+    },
+    "error": "1 validation error for RecallRequest\ndays\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='0x10', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": "1e2"
+    },
+    "error": "1 validation error for RecallRequest\ndays\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='1e2', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": "７"
+    },
+    "error": "1 validation error for RecallRequest\ndays\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='７', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": "7\n"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": "\t7"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": ""
+    },
+    "error": "1 validation error for RecallRequest\ndays\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": " "
+    },
+    "error": "1 validation error for RecallRequest\ndays\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value=' ', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": "7."
+    },
+    "error": "1 validation error for RecallRequest\ndays\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='7.', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": ".7"
+    },
+    "error": "1 validation error for RecallRequest\ndays\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='.7', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": "abc"
+    },
+    "error": "1 validation error for RecallRequest\ndays\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='abc', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": "inf"
+    },
+    "error": "1 validation error for RecallRequest\ndays\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='inf', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": "nan"
+    },
+    "error": "1 validation error for RecallRequest\ndays\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='nan', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": "7 7"
+    },
+    "error": "1 validation error for RecallRequest\ndays\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='7 7', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_parsing"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": "366"
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": null,
+      "endDate": null,
+      "days": 366,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": "367"
+    },
+    "error": "1 validation error for RecallRequest\ndays\n  Input should be less than or equal to 366 [type=less_than_equal, input_value='367', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/less_than_equal"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": "999999999999999999999999999999"
+    },
+    "error": "1 validation error for RecallRequest\ndays\n  Input should be less than or equal to 366 [type=less_than_equal, input_value='999999999999999999999999999999', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/less_than_equal"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": []
+    },
+    "error": "1 validation error for RecallRequest\ndays\n  Input should be a valid integer [type=int_type, input_value=[], input_type=list]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": {}
+    },
+    "error": "1 validation error for RecallRequest\ndays\n  Input should be a valid integer [type=int_type, input_value={}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "days": 100.0
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": null,
+      "endDate": null,
+      "days": 100,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "broadcast_ids": []
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": []
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "broadcast_ids": ["a"]
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": ["a"]
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "broadcast_ids": ["a", "a"]
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": ["a", "a"]
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "broadcast_ids": [1]
+    },
+    "error": "1 validation error for RecallRequest\nbroadcast_ids.0\n  Input should be a valid string [type=string_type, input_value=1, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.13/v/string_type"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "broadcast_ids": ["a", 2, null]
+    },
+    "error": "2 validation errors for RecallRequest\nbroadcast_ids.1\n  Input should be a valid string [type=string_type, input_value=2, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.13/v/string_type\nbroadcast_ids.2\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/string_type"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "broadcast_ids": null
+    },
+    "error": "1 validation error for RecallRequest\nbroadcast_ids\n  Input should be a valid list [type=list_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/list_type"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "broadcast_ids": "a"
+    },
+    "error": "1 validation error for RecallRequest\nbroadcast_ids\n  Input should be a valid list [type=list_type, input_value='a', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/list_type"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "broadcast_ids": {
+        "a": 1
+      }
+    },
+    "error": "1 validation error for RecallRequest\nbroadcast_ids\n  Input should be a valid list [type=list_type, input_value={'a': 1}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/list_type"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "broadcast_ids": [
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x"
+      ]
+    },
+    "ok": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "startDate": null,
+      "endDate": null,
+      "days": 7,
+      "broadcastIds": [
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x"
+      ]
+    }
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "broadcast_ids": [
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x"
+      ]
+    },
+    "error": "1 validation error for RecallRequest\nbroadcast_ids\n  List should have at most 20 items after validation, not 21 [type=too_long, input_value=['x', 'x', 'x', 'x', 'x',...'x', 'x', 'x', 'x', 'x'], input_type=list]\n    For further information visit https://errors.pydantic.dev/2.13/v/too_long"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "broadcast_ids": [
+        1,
+        "a",
+        2,
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x"
+      ]
+    },
+    "error": "1 validation error for RecallRequest\nbroadcast_ids\n  List should have at most 20 items after validation, not 23 [type=too_long, input_value=[1, 'a', 2, 'x', 'x', 'x'...'x', 'x', 'x', 'x', 'x'], input_type=list]\n    For further information visit https://errors.pydantic.dev/2.13/v/too_long"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "broadcast_ids": [
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        3
+      ]
+    },
+    "error": "1 validation error for RecallRequest\nbroadcast_ids\n  List should have at most 20 items after validation, not 22 [type=too_long, input_value=['x', 'x', 'x', 'x', 'x',..., 'x', 'x', 'x', 'x', 3], input_type=list]\n    For further information visit https://errors.pydantic.dev/2.13/v/too_long"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "broadcast_ids": [["nested"]]
+    },
+    "error": "1 validation error for RecallRequest\nbroadcast_ids.0\n  Input should be a valid string [type=string_type, input_value=['nested'], input_type=list]\n    For further information visit https://errors.pydantic.dev/2.13/v/string_type"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "sql": "DROP TABLE"
+    },
+    "error": "1 validation error for RecallRequest\nsql\n  Extra inputs are not permitted [type=extra_forbidden, input_value='DROP TABLE', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "sql": "DROP TABLE",
+      "zzz": 1
+    },
+    "error": "2 validation errors for RecallRequest\nsql\n  Extra inputs are not permitted [type=extra_forbidden, input_value='DROP TABLE', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\nzzz\n  Extra inputs are not permitted [type=extra_forbidden, input_value=1, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden"
+  },
+  {
+    "args": {},
+    "error": "3 validation errors for RecallRequest\nquery\n  Field required [type=missing, input_value={}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/missing\nmode\n  Field required [type=missing, input_value={}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/missing\nperiod\n  Field required [type=missing, input_value={}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/missing"
+  },
+  {
+    "args": {
+      "query": "q"
+    },
+    "error": "2 validation errors for RecallRequest\nmode\n  Field required [type=missing, input_value={'query': 'q'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/missing\nperiod\n  Field required [type=missing, input_value={'query': 'q'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/missing"
+  },
+  {
+    "args": {
+      "sql": 1,
+      "query": "",
+      "mode": "x"
+    },
+    "error": "4 validation errors for RecallRequest\nquery\n  String should have at least 1 character [type=string_too_short, input_value='', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/string_too_short\nmode\n  Input should be 'overview' or 'details' [type=literal_error, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error\nperiod\n  Field required [type=missing, input_value={'sql': 1, 'query': '', 'mode': 'x'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/missing\nsql\n  Extra inputs are not permitted [type=extra_forbidden, input_value=1, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden"
+  },
+  {
+    "args": {
+      "mode": "x",
+      "query": "",
+      "zzz": 1,
+      "period": "latest",
+      "days": 0,
+      "aaa": 2
+    },
+    "error": "5 validation errors for RecallRequest\nquery\n  String should have at least 1 character [type=string_too_short, input_value='', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/string_too_short\nmode\n  Input should be 'overview' or 'details' [type=literal_error, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error\ndays\n  Input should be greater than or equal to 1 [type=greater_than_equal, input_value=0, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.13/v/greater_than_equal\nzzz\n  Extra inputs are not permitted [type=extra_forbidden, input_value=1, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\naaa\n  Extra inputs are not permitted [type=extra_forbidden, input_value=2, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "nested": {
+        "a": [1, 2],
+        "b": null,
+        "c": true,
+        "d": 1.5
+      }
+    },
+    "error": "2 validation errors for RecallRequest\nperiod\n  Field required [type=missing, input_value={'query': 'q', 'mode': 'o...e, 'c': True, 'd': 1.5}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/missing\nnested\n  Extra inputs are not permitted [type=extra_forbidden, input_value={'a': [1, 2], 'b': None, 'c': True, 'd': 1.5}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden"
+  },
+  {
+    "args": {
+      "query": "q",
+      "mode": "overview",
+      "period": "latest",
+      "start_date": "2026-09-08T12:00:00",
+      "end_date": "bad",
+      "days": "x",
+      "broadcast_ids": "no"
+    },
+    "error": "4 validation errors for RecallRequest\nstart_date\n  Datetimes provided to dates should have zero time - e.g. be exact dates [type=date_from_datetime_inexact, input_value='2026-09-08T12:00:00', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_inexact\nend_date\n  Input should be a valid date or datetime, input is too short [type=date_from_datetime_parsing, input_value='bad', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/date_from_datetime_parsing\ndays\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_parsing\nbroadcast_ids\n  Input should be a valid list [type=list_type, input_value='no', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/list_type"
+  },
+  {
+    "args": {
+      "query": "recap",
+      "mode": "details",
+      "period": "date_range",
+      "start_date": "2026-09-09",
+      "end_date": "2026-09-08"
+    },
+    "ok": {
+      "query": "recap",
+      "mode": "details",
+      "period": "date_range",
+      "startDate": "2026-09-09",
+      "endDate": "2026-09-08",
+      "days": 7,
+      "broadcastIds": []
+    }
+  }
+]

@@ -39,3 +39,6 @@ data/mem0-cloud-export.json
 # Git
 .git/
 .gitignore
+
+# TypeScript workspace
+node_modules/

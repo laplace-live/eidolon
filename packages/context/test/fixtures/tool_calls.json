@@ -1,0 +1,427 @@
+{
+  "broadcasts": [
+    ["2026-09-08", "BV1abc", 2],
+    ["2026-09-08", "BV2def", 1],
+    ["2026-09-06", "BV1abc", 1],
+    ["2026-08-30", "BV1abc", 1],
+    ["2026-08-12", "BV1abc", 1]
+  ],
+  "steps": [
+    {
+      "args": {
+        "query": "最近一场播了什么",
+        "mode": "overview",
+        "period": "latest"
+      },
+      "reply": {
+        "content": "以下是已归档直播的记录，用来 ground 回复，不要照念，也不要主动念日期。\n查询范围：latest\n已归档录播共2场；仅据现有记录，不能视为完整开播记录。\n2026-09-08 [2026-09-08-BV2def] 1个录播分P/1段\n2026-09-08 聊了 ASMR、游戏和观众 SC。\n2026-09-08 [2026-09-08-BV1abc] 2个录播分P/2段\n2026-09-08 聊了 ASMR、游戏和观众 SC。\n以上是压缩概览，片段为代表性摘录；具体细节需查询原始分段。\n当天有多场归档但没有开播时间，无法确定这些场次的先后；不要猜测哪场最后。",
+        "broadcast_ids": ["2026-09-08-BV2def", "2026-09-08-BV1abc"],
+        "chunk_ids": []
+      },
+      "calls": [],
+      "advertised": ["recall_streams"],
+      "selectedScope": {
+        "startDate": "2026-09-08",
+        "endDate": "2026-09-09",
+        "latest": null,
+        "streamIds": ["2026-09-08-BV2def", "2026-09-08-BV1abc"],
+        "label": "latest"
+      }
+    },
+    {
+      "args": {
+        "query": "上一场呢",
+        "mode": "overview",
+        "period": "previous"
+      },
+      "reply": {
+        "content": "以下是已归档直播的记录，用来 ground 回复，不要照念，也不要主动念日期。\n查询范围：previous\n已归档录播共2场；仅据现有记录，不能视为完整开播记录。\n2026-09-08 [2026-09-08-BV2def] 1个录播分P/1段\n2026-09-08 聊了 ASMR、游戏和观众 SC。\n2026-09-08 [2026-09-08-BV1abc] 2个录播分P/2段\n2026-09-08 聊了 ASMR、游戏和观众 SC。\n以上是压缩概览，片段为代表性摘录；具体细节需查询原始分段。\n当天有多场归档但没有开播时间，无法确定这些场次的先后；不要猜测哪场最后。",
+        "broadcast_ids": ["2026-09-08-BV2def", "2026-09-08-BV1abc"],
+        "chunk_ids": []
+      },
+      "calls": [],
+      "advertised": null,
+      "selectedScope": {
+        "startDate": "2026-09-08",
+        "endDate": "2026-09-09",
+        "latest": null,
+        "streamIds": ["2026-09-08-BV2def", "2026-09-08-BV1abc"],
+        "label": "previous"
+      }
+    },
+    {
+      "nextTurn": true
+    },
+    {
+      "args": {
+        "query": "ASMR",
+        "mode": "details",
+        "period": "selected"
+      },
+      "reply": {
+        "content": "以下是已归档直播的记录，用来 ground 回复，不要照念，也不要主动念日期。\n查询范围：previous\n已归档录播共2场；仅据现有记录，不能视为完整开播记录。\n2026-09-08 [2026-09-08-BV2def] 1个录播分P/1段\n2026-09-08 聊了 ASMR、游戏和观众 SC。\n2026-09-08 [2026-09-08-BV1abc] 2个录播分P/2段\n2026-09-08 聊了 ASMR、游戏和观众 SC。\n以上是压缩概览，片段为代表性摘录；具体细节需查询原始分段。\n你过去直播里相关的片段（用来 ground 你的回复，不要照念，也不要把日期念出来）：\n\n\n[1] 2026-09-06 — 游戏\n片段1\n",
+        "broadcast_ids": ["2026-09-08-BV2def", "2026-09-08-BV1abc"],
+        "chunk_ids": ["c1"]
+      },
+      "calls": [
+        {
+          "query": "ASMR",
+          "candidates": 15,
+          "topK": 3,
+          "datePrefilter": false,
+          "where": "stream_id IN ('2026-09-08-BV2def_p1', '2026-09-08-BV1abc_p1', '2026-09-08-BV1abc_p2')"
+        }
+      ],
+      "advertised": ["recall_streams"],
+      "selectedScope": {
+        "startDate": "2026-09-08",
+        "endDate": "2026-09-09",
+        "latest": null,
+        "streamIds": ["2026-09-08-BV2def", "2026-09-08-BV1abc"],
+        "label": "previous"
+      }
+    },
+    {
+      "args": {
+        "query": "这周",
+        "mode": "overview",
+        "period": "this_week"
+      },
+      "reply": {
+        "content": "以下是已归档直播的记录，用来 ground 回复，不要照念，也不要主动念日期。\n查询范围：2026-09-07 至 2026-09-13\n已归档录播共2场；仅据现有记录，不能视为完整开播记录。\n2026-09-08 [2026-09-08-BV2def] 1个录播分P/1段\n2026-09-08 聊了 ASMR、游戏和观众 SC。\n2026-09-08 [2026-09-08-BV1abc] 2个录播分P/2段\n2026-09-08 聊了 ASMR、游戏和观众 SC。\n以上是压缩概览，片段为代表性摘录；具体细节需查询原始分段。",
+        "broadcast_ids": ["2026-09-08-BV2def", "2026-09-08-BV1abc"],
+        "chunk_ids": []
+      },
+      "calls": [],
+      "advertised": null,
+      "selectedScope": {
+        "startDate": "2026-09-07",
+        "endDate": "2026-09-14",
+        "latest": null,
+        "streamIds": ["2026-09-08-BV2def", "2026-09-08-BV1abc"],
+        "label": "2026-09-07 至 2026-09-13"
+      }
+    },
+    {
+      "nextTurn": true
+    },
+    {
+      "args": {
+        "query": "上周说了什么",
+        "mode": "details",
+        "period": "last_week"
+      },
+      "reply": {
+        "content": "以下是已归档直播的记录，用来 ground 回复，不要照念，也不要主动念日期。\n查询范围：2026-08-31 至 2026-09-06\n已归档录播共1场；仅据现有记录，不能视为完整开播记录。\n2026-09-06 [2026-09-06-BV1abc] 1个录播分P/1段\n2026-09-06 聊了 ASMR、游戏和观众 SC。\n以上是压缩概览，片段为代表性摘录；具体细节需查询原始分段。\n你过去直播里相关的片段（用来 ground 你的回复，不要照念，也不要把日期念出来）：\n\n\n[1] 2026-09-06 — 游戏\n片段2\n",
+        "broadcast_ids": ["2026-09-06-BV1abc"],
+        "chunk_ids": ["c2"]
+      },
+      "calls": [
+        {
+          "query": "上周说了什么",
+          "candidates": 15,
+          "topK": 3,
+          "datePrefilter": false,
+          "where": "stream_date >= '2026-08-31' AND stream_date < '2026-09-07'"
+        }
+      ],
+      "advertised": ["recall_streams"],
+      "selectedScope": {
+        "startDate": "2026-08-31",
+        "endDate": "2026-09-07",
+        "latest": null,
+        "streamIds": ["2026-09-06-BV1abc"],
+        "label": "2026-08-31 至 2026-09-06"
+      }
+    },
+    {
+      "args": {
+        "query": "这个月",
+        "mode": "overview",
+        "period": "this_month"
+      },
+      "reply": {
+        "content": "以下是已归档直播的记录，用来 ground 回复，不要照念，也不要主动念日期。\n查询范围：2026-09-01 至 2026-09-30\n已归档录播共3场；仅据现有记录，不能视为完整开播记录。\n2026-09-08 [2026-09-08-BV2def] 1个录播分P/1段\n2026-09-08 聊了 ASMR、游戏和观众 SC。\n2026-09-08 [2026-09-08-BV1abc] 2个录播分P/2段\n2026-09-08 聊了 ASMR、游戏和观众 SC。\n2026-09-06 [2026-09-06-BV1abc] 1个录播分P/1段\n2026-09-06 聊了 ASMR、游戏和观众 SC。\n以上是压缩概览，片段为代表性摘录；具体细节需查询原始分段。",
+        "broadcast_ids": ["2026-09-08-BV2def", "2026-09-08-BV1abc", "2026-09-06-BV1abc"],
+        "chunk_ids": []
+      },
+      "calls": [],
+      "advertised": null,
+      "selectedScope": {
+        "startDate": "2026-09-01",
+        "endDate": "2026-10-01",
+        "latest": null,
+        "streamIds": ["2026-09-08-BV2def", "2026-09-08-BV1abc", "2026-09-06-BV1abc"],
+        "label": "2026-09-01 至 2026-09-30"
+      }
+    },
+    {
+      "nextTurn": true
+    },
+    {
+      "args": {
+        "query": "上个月",
+        "mode": "overview",
+        "period": "last_month"
+      },
+      "reply": {
+        "content": "以下是已归档直播的记录，用来 ground 回复，不要照念，也不要主动念日期。\n查询范围：2026-08-01 至 2026-08-31\n已归档录播共2场；仅据现有记录，不能视为完整开播记录。\n2026-08-30 [2026-08-30-BV1abc] 1个录播分P/1段\n2026-08-30 聊了 ASMR、游戏和观众 SC。\n2026-08-12 [2026-08-12-BV1abc] 1个录播分P/1段\n2026-08-12 聊了 ASMR、游戏和观众 SC。\n以上是压缩概览，片段为代表性摘录；具体细节需查询原始分段。",
+        "broadcast_ids": ["2026-08-30-BV1abc", "2026-08-12-BV1abc"],
+        "chunk_ids": []
+      },
+      "calls": [],
+      "advertised": ["recall_streams"],
+      "selectedScope": {
+        "startDate": "2026-08-01",
+        "endDate": "2026-09-01",
+        "latest": null,
+        "streamIds": ["2026-08-30-BV1abc", "2026-08-12-BV1abc"],
+        "label": "2026-08-01 至 2026-08-31"
+      }
+    },
+    {
+      "args": {
+        "query": "nothing here",
+        "mode": "details",
+        "period": "past_days",
+        "days": 10
+      },
+      "reply": {
+        "content": "以下是已归档直播的记录，用来 ground 回复，不要照念，也不要主动念日期。\n查询范围：2026-08-31 至 2026-09-09\n已归档录播共3场；仅据现有记录，不能视为完整开播记录。\n2026-09-08 [2026-09-08-BV2def] 1个录播分P/1段\n2026-09-08 聊了 ASMR、游戏和观众 SC。\n2026-09-08 [2026-09-08-BV1abc] 2个录播分P/2段\n2026-09-08 聊了 ASMR、游戏和观众 SC。\n2026-09-06 [2026-09-06-BV1abc] 1个录播分P/1段\n2026-09-06 聊了 ASMR、游戏和观众 SC。\n以上是压缩概览，片段为代表性摘录；具体细节需查询原始分段。\n没有找到能回答这个问题的直播片段；概览只能支持其中明确记录的内容。",
+        "broadcast_ids": ["2026-09-08-BV2def", "2026-09-08-BV1abc", "2026-09-06-BV1abc"],
+        "chunk_ids": []
+      },
+      "calls": [
+        {
+          "query": "nothing here",
+          "candidates": 15,
+          "topK": 3,
+          "datePrefilter": false,
+          "where": "stream_date >= '2026-08-31' AND stream_date < '2026-09-10'"
+        }
+      ],
+      "advertised": null,
+      "selectedScope": {
+        "startDate": "2026-08-31",
+        "endDate": "2026-09-10",
+        "latest": null,
+        "streamIds": ["2026-09-08-BV2def", "2026-09-08-BV1abc", "2026-09-06-BV1abc"],
+        "label": "2026-08-31 至 2026-09-09"
+      }
+    },
+    {
+      "nextTurn": true
+    },
+    {
+      "args": {
+        "query": "那天",
+        "mode": "details",
+        "period": "date_range",
+        "start_date": "2026-09-06"
+      },
+      "reply": {
+        "content": "以下是已归档直播的记录，用来 ground 回复，不要照念，也不要主动念日期。\n查询范围：2026-09-06 至 2026-09-07（不含结束日）\n已归档录播共1场；仅据现有记录，不能视为完整开播记录。\n2026-09-06 [2026-09-06-BV1abc] 1个录播分P/1段\n2026-09-06 聊了 ASMR、游戏和观众 SC。\n以上是压缩概览，片段为代表性摘录；具体细节需查询原始分段。\n你过去直播里相关的片段（用来 ground 你的回复，不要照念，也不要把日期念出来）：\n\n\n[1] 2026-09-06 — 游戏\n片段4\n",
+        "broadcast_ids": ["2026-09-06-BV1abc"],
+        "chunk_ids": ["c4"]
+      },
+      "calls": [
+        {
+          "query": "那天",
+          "candidates": 15,
+          "topK": 3,
+          "datePrefilter": false,
+          "where": "stream_date >= '2026-09-06' AND stream_date < '2026-09-07'"
+        }
+      ],
+      "advertised": ["recall_streams"],
+      "selectedScope": {
+        "startDate": "2026-09-06",
+        "endDate": "2026-09-07",
+        "latest": null,
+        "streamIds": ["2026-09-06-BV1abc"],
+        "label": "2026-09-06 至 2026-09-07（不含结束日）"
+      }
+    },
+    {
+      "args": {
+        "query": "范围",
+        "mode": "overview",
+        "period": "date_range",
+        "start_date": "2026-08-01",
+        "end_date": "2026-09-01"
+      },
+      "reply": {
+        "content": "以下是已归档直播的记录，用来 ground 回复，不要照念，也不要主动念日期。\n查询范围：2026-08-01 至 2026-09-01（不含结束日）\n已归档录播共2场；仅据现有记录，不能视为完整开播记录。\n2026-08-30 [2026-08-30-BV1abc] 1个录播分P/1段\n2026-08-30 聊了 ASMR、游戏和观众 SC。\n2026-08-12 [2026-08-12-BV1abc] 1个录播分P/1段\n2026-08-12 聊了 ASMR、游戏和观众 SC。\n以上是压缩概览，片段为代表性摘录；具体细节需查询原始分段。",
+        "broadcast_ids": ["2026-08-30-BV1abc", "2026-08-12-BV1abc"],
+        "chunk_ids": []
+      },
+      "calls": [],
+      "advertised": null,
+      "selectedScope": {
+        "startDate": "2026-08-01",
+        "endDate": "2026-09-01",
+        "latest": null,
+        "streamIds": ["2026-08-30-BV1abc", "2026-08-12-BV1abc"],
+        "label": "2026-08-01 至 2026-09-01（不含结束日）"
+      }
+    },
+    {
+      "nextTurn": true
+    },
+    {
+      "args": {
+        "query": "第二场",
+        "mode": "details",
+        "period": "broadcasts",
+        "broadcast_ids": ["2026-09-08-BV2def"]
+      },
+      "reply": {
+        "content": "以下是已归档直播的记录，用来 ground 回复，不要照念，也不要主动念日期。\n查询范围：选定的归档直播\n已归档录播共1场；仅据现有记录，不能视为完整开播记录。\n2026-09-08 [2026-09-08-BV2def] 1个录播分P/1段\n2026-09-08 聊了 ASMR、游戏和观众 SC。\n以上是压缩概览，片段为代表性摘录；具体细节需查询原始分段。\n你过去直播里相关的片段（用来 ground 你的回复，不要照念，也不要把日期念出来）：\n\n\n[1] 2026-09-06 — 游戏\n片段5\n",
+        "broadcast_ids": ["2026-09-08-BV2def"],
+        "chunk_ids": ["c5"]
+      },
+      "calls": [
+        {
+          "query": "第二场",
+          "candidates": 15,
+          "topK": 3,
+          "datePrefilter": false,
+          "where": "stream_id IN ('2026-09-08-BV2def_p1')"
+        }
+      ],
+      "advertised": ["recall_streams"],
+      "selectedScope": {
+        "startDate": "2026-09-08",
+        "endDate": "2026-09-09",
+        "latest": null,
+        "streamIds": ["2026-09-08-BV2def"],
+        "label": "选定的归档直播"
+      }
+    },
+    {
+      "args": {
+        "query": "全部",
+        "mode": "details",
+        "period": "all"
+      },
+      "reply": {
+        "content": "以下是已归档直播的记录，用来 ground 回复，不要照念，也不要主动念日期。\n查询范围：全部已归档直播\n已归档录播共5场；仅据现有记录，不能视为完整开播记录。\n2026-09-08 [2026-09-08-BV2def] 1个录播分P/1段\n2026-09-08 聊了 ASMR、游戏和观众 SC。\n2026-09-08 [2026-09-08-BV1abc] 2个录播分P/2段\n2026-09-08 聊了 ASMR、游戏和观众 SC。\n2026-09-06 [2026-09-06-BV1abc] 1个录播分P/1段\n2026-09-06 聊了 ASMR、游戏和观众 SC。\n2026-08-30 [2026-08-30-BV1abc] 1个录播分P/1段\n2026-08-30 聊了 ASMR、游戏和观众 SC。\n2026-08-12 [2026-08-12-BV1abc] 1个录播分P/1段\n2026-08-12 聊了 ASMR、游戏和观众 SC。\n以上是压缩概览，片段为代表性摘录；具体细节需查询原始分段。\n你过去直播里相关的片段（用来 ground 你的回复，不要照念，也不要把日期念出来）：\n\n\n[1] 2026-09-06 — 游戏\n片段6\n",
+        "broadcast_ids": [
+          "2026-09-08-BV2def",
+          "2026-09-08-BV1abc",
+          "2026-09-06-BV1abc",
+          "2026-08-30-BV1abc",
+          "2026-08-12-BV1abc"
+        ],
+        "chunk_ids": ["c6"]
+      },
+      "calls": [
+        {
+          "query": "全部",
+          "candidates": 15,
+          "topK": 3,
+          "datePrefilter": false,
+          "where": null
+        }
+      ],
+      "advertised": null,
+      "selectedScope": {
+        "startDate": "2026-08-12",
+        "endDate": "2026-09-09",
+        "latest": null,
+        "streamIds": [
+          "2026-09-08-BV2def",
+          "2026-09-08-BV1abc",
+          "2026-09-06-BV1abc",
+          "2026-08-30-BV1abc",
+          "2026-08-12-BV1abc"
+        ],
+        "label": "全部已归档直播"
+      }
+    },
+    {
+      "nextTurn": true
+    },
+    {
+      "args": {
+        "query": "全部回顾",
+        "mode": "overview",
+        "period": "all"
+      },
+      "reply": {
+        "content": "以下是已归档直播的记录，用来 ground 回复，不要照念，也不要主动念日期。\n查询范围：全部已归档直播\n已归档录播共5场；仅据现有记录，不能视为完整开播记录。\n2026-09-08 [2026-09-08-BV2def] 1个录播分P/1段\n2026-09-08 聊了 ASMR、游戏和观众 SC。\n2026-09-08 [2026-09-08-BV1abc] 2个录播分P/2段\n2026-09-08 聊了 ASMR、游戏和观众 SC。\n2026-09-06 [2026-09-06-BV1abc] 1个录播分P/1段\n2026-09-06 聊了 ASMR、游戏和观众 SC。\n2026-08-30 [2026-08-30-BV1abc] 1个录播分P/1段\n2026-08-30 聊了 ASMR、游戏和观众 SC。\n2026-08-12 [2026-08-12-BV1abc] 1个录播分P/1段\n2026-08-12 聊了 ASMR、游戏和观众 SC。\n以上是压缩概览，片段为代表性摘录；具体细节需查询原始分段。",
+        "broadcast_ids": [
+          "2026-09-08-BV2def",
+          "2026-09-08-BV1abc",
+          "2026-09-06-BV1abc",
+          "2026-08-30-BV1abc",
+          "2026-08-12-BV1abc"
+        ],
+        "chunk_ids": []
+      },
+      "calls": [],
+      "advertised": ["recall_streams"],
+      "selectedScope": {
+        "startDate": "2026-08-12",
+        "endDate": "2026-09-09",
+        "latest": null,
+        "streamIds": [
+          "2026-09-08-BV2def",
+          "2026-09-08-BV1abc",
+          "2026-09-06-BV1abc",
+          "2026-08-30-BV1abc",
+          "2026-08-12-BV1abc"
+        ],
+        "label": "全部已归档直播"
+      }
+    },
+    {
+      "args": {
+        "query": "nothing at all",
+        "mode": "details",
+        "period": "latest"
+      },
+      "reply": {
+        "content": "以下是已归档直播的记录，用来 ground 回复，不要照念，也不要主动念日期。\n查询范围：latest\n已归档录播共2场；仅据现有记录，不能视为完整开播记录。\n2026-09-08 [2026-09-08-BV2def] 1个录播分P/1段\n2026-09-08 聊了 ASMR、游戏和观众 SC。\n2026-09-08 [2026-09-08-BV1abc] 2个录播分P/2段\n2026-09-08 聊了 ASMR、游戏和观众 SC。\n以上是压缩概览，片段为代表性摘录；具体细节需查询原始分段。\n当天有多场归档但没有开播时间，无法确定这些场次的先后；不要猜测哪场最后。没有找到能回答这个问题的直播片段；概览只能支持其中明确记录的内容。",
+        "broadcast_ids": ["2026-09-08-BV2def", "2026-09-08-BV1abc"],
+        "chunk_ids": []
+      },
+      "calls": [
+        {
+          "query": "nothing at all",
+          "candidates": 15,
+          "topK": 3,
+          "datePrefilter": false,
+          "where": "stream_id IN ('2026-09-08-BV2def_p1', '2026-09-08-BV1abc_p1', '2026-09-08-BV1abc_p2')"
+        }
+      ],
+      "advertised": null,
+      "selectedScope": {
+        "startDate": "2026-09-08",
+        "endDate": "2026-09-09",
+        "latest": null,
+        "streamIds": ["2026-09-08-BV2def", "2026-09-08-BV1abc"],
+        "label": "latest"
+      }
+    },
+    {
+      "args": {
+        "query": "third",
+        "mode": "details",
+        "period": "latest"
+      },
+      "reply": {
+        "error": "本回合查询次数已用完，请根据已有记录回答。"
+      },
+      "calls": [],
+      "advertised": null,
+      "selectedScope": {
+        "startDate": "2026-09-08",
+        "endDate": "2026-09-09",
+        "latest": null,
+        "streamIds": ["2026-09-08-BV2def", "2026-09-08-BV1abc"],
+        "label": "latest"
+      }
+    }
+  ]
+}

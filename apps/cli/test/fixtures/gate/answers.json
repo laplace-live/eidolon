@@ -1,0 +1,11 @@
+{
+  "你好": "{\"answers\": {\"about_her\": {\"type\": \"noul\", \"noul\": 0.2}, \"her_past\": {\"type\": \"noul\", \"noul\": 0.1}, \"named_thing\": {\"type\": \"noul\", \"noul\": 0.05}}, \"model\": \"typesafe/jev-1.13-20260917\"}",
+  "你梦想是什么": "{\"answers\": {\"about_her\": {\"type\": \"noul\", \"noul\": 0.89}, \"her_past\": {\"type\": \"noul\", \"noul\": 0.07}, \"named_thing\": {\"type\": \"noul\", \"noul\": 0.06}}, \"model\": \"typesafe/jev-1.13-20260917\"}",
+  "早上好": "{\"answers\": {\"about_her\": {\"type\": \"noul\", \"noul\": 0.1}, \"her_past\": {\"type\": \"noul\", \"noul\": 0.0}, \"named_thing\": {\"type\": \"noul\", \"noul\": 0.05}}, \"model\": \"typesafe/jev-1.13-20260917\"}",
+  "它几岁了？": "{\"answers\": {\"about_her\": {\"type\": \"noul\", \"noul\": 1.0}, \"her_past\": {\"type\": \"noul\", \"noul\": 0.3}, \"named_thing\": {\"type\": \"noul\", \"noul\": 1.0}}, \"model\": \"typesafe/jev-1.13-20260917\"}",
+  "嗯": "{\"answers\": {\"about_her\": {\"type\": \"noul\", \"noul\": 0.31}, \"her_past\": {\"type\": \"noul\", \"noul\": 0.2}, \"named_thing\": {\"type\": \"noul\", \"noul\": 0.1}}, \"model\": \"typesafe/jev-1.14-20261001\"}",
+  "她的花店在哪": "{\"answers\": {\"about_her\": {\"type\": \"noul\", \"noul\": 0.29}, \"her_past\": {\"type\": \"noul\", \"noul\": 0.1}, \"named_thing\": {\"type\": \"noul\", \"noul\": 0.2}}, \"model\": \"typesafe/jev-1.13-20260917\"}",
+  "你觉得呢": "{\"answers\": {\"about_her\": {\"type\": \"noul\", \"noul\": 0.4}, \"her_past\": {\"type\": \"noul\", \"noul\": 0.3}, \"named_thing\": {\"type\": \"noul\", \"noul\": 2e-05}}, \"model\": \"typesafe/jev-1.13-20260917\"}",
+  "上次说的那个游戏": "{\"answers\": {\"about_her\": {\"type\": \"noul\", \"noul\": 0.5}, \"her_past\": {\"type\": \"noul\", \"noul\": 0.9}, \"named_thing\": {\"type\": \"noul\", \"noul\": 1}, \"extra_q\": {\"type\": \"noul\", \"noul\": 0.95}}, \"model\": \"typesafe/jev-1.13-20260917\"}",
+  "没有分组的一句": "{\"answers\": {\"about_her\": {\"type\": \"noul\", \"noul\": 0.25}, \"her_past\": {\"type\": \"noul\", \"noul\": 0.25}, \"named_thing\": {\"type\": \"noul\", \"noul\": 0.125}}, \"model\": \"typesafe/jev-1.13-20260917\"}"
+}

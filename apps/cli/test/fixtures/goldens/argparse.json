@@ -1,0 +1,1712 @@
+{
+  "search": [
+    {
+      "argv": [],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: the following arguments are required: query\n",
+      "ns": null
+    },
+    {
+      "argv": ["坚果"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "query": "坚果",
+        "top_k": 5,
+        "db_path": "data/lancedb",
+        "table": "stream_chunks",
+        "full": false,
+        "json": false,
+        "recall": false,
+        "today": null
+      }
+    },
+    {
+      "argv": [
+        "q",
+        "--top-k",
+        "3",
+        "--db-path",
+        "x",
+        "--table",
+        "persona_facts",
+        "--full",
+        "--json"
+      ],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "query": "q",
+        "top_k": 3,
+        "db_path": "x",
+        "table": "persona_facts",
+        "full": true,
+        "json": true,
+        "recall": false,
+        "today": null
+      }
+    },
+    {
+      "argv": ["q", "--top-k=7"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "query": "q",
+        "top_k": 7,
+        "db_path": "data/lancedb",
+        "table": "stream_chunks",
+        "full": false,
+        "json": false,
+        "recall": false,
+        "today": null
+      }
+    },
+    {
+      "argv": ["q", "--top", "2"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "query": "q",
+        "top_k": 2,
+        "db_path": "data/lancedb",
+        "table": "stream_chunks",
+        "full": false,
+        "json": false,
+        "recall": false,
+        "today": null
+      }
+    },
+    {
+      "argv": ["q", "--to", "2"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: ambiguous option: --to could match --top-k, --today\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--t", "2"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: ambiguous option: --t could match --top-k, --table, --today\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--top-k", "abc"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: argument --top-k: invalid int value: 'abc'\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--top-k", " 1_0 "],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "query": "q",
+        "top_k": 10,
+        "db_path": "data/lancedb",
+        "table": "stream_chunks",
+        "full": false,
+        "json": false,
+        "recall": false,
+        "today": null
+      }
+    },
+    {
+      "argv": ["q", "--top-k", "-3"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "query": "q",
+        "top_k": -3,
+        "db_path": "data/lancedb",
+        "table": "stream_chunks",
+        "full": false,
+        "json": false,
+        "recall": false,
+        "today": null
+      }
+    },
+    {
+      "argv": ["q", "--top-k"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: argument --top-k: expected one argument\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--top-k", "--json"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: argument --top-k: expected one argument\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--today", "2026-09-09"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: --today requires --recall\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--recall", "--today", "2026-09-09"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "query": "q",
+        "top_k": 5,
+        "db_path": "data/lancedb",
+        "table": "stream_chunks",
+        "full": false,
+        "json": false,
+        "recall": true,
+        "today": {
+          "date": "2026-09-09"
+        }
+      }
+    },
+    {
+      "argv": ["q", "--recall", "--today", "20260909"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "query": "q",
+        "top_k": 5,
+        "db_path": "data/lancedb",
+        "table": "stream_chunks",
+        "full": false,
+        "json": false,
+        "recall": true,
+        "today": {
+          "date": "2026-09-09"
+        }
+      }
+    },
+    {
+      "argv": ["q", "--recall", "--today", "2026-W37-3"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "query": "q",
+        "top_k": 5,
+        "db_path": "data/lancedb",
+        "table": "stream_chunks",
+        "full": false,
+        "json": false,
+        "recall": true,
+        "today": {
+          "date": "2026-09-09"
+        }
+      }
+    },
+    {
+      "argv": ["q", "--recall", "--today", "2026W373"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "query": "q",
+        "top_k": 5,
+        "db_path": "data/lancedb",
+        "table": "stream_chunks",
+        "full": false,
+        "json": false,
+        "recall": true,
+        "today": {
+          "date": "2026-09-09"
+        }
+      }
+    },
+    {
+      "argv": ["q", "--recall", "--today", "2026-W37"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "query": "q",
+        "top_k": 5,
+        "db_path": "data/lancedb",
+        "table": "stream_chunks",
+        "full": false,
+        "json": false,
+        "recall": true,
+        "today": {
+          "date": "2026-09-07"
+        }
+      }
+    },
+    {
+      "argv": ["q", "--recall", "--today", "2026W37"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "query": "q",
+        "top_k": 5,
+        "db_path": "data/lancedb",
+        "table": "stream_chunks",
+        "full": false,
+        "json": false,
+        "recall": true,
+        "today": {
+          "date": "2026-09-07"
+        }
+      }
+    },
+    {
+      "argv": ["q", "--recall", "--today", "2026-13-01"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: argument --today: invalid fromisoformat value: '2026-13-01'\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--recall", "--today", "20260909xx"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "query": "q",
+        "top_k": 5,
+        "db_path": "data/lancedb",
+        "table": "stream_chunks",
+        "full": false,
+        "json": false,
+        "recall": true,
+        "today": {
+          "date": "2026-09-09"
+        }
+      }
+    },
+    {
+      "argv": ["q", "--recall", "--today", "2026-9-9"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: argument --today: invalid fromisoformat value: '2026-9-9'\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--recall", "--today", "2026-02-30"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: argument --today: invalid fromisoformat value: '2026-02-30'\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--recall", "--today", "0000-01-01"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: argument --today: invalid fromisoformat value: '0000-01-01'\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--recall", "--today", "2026-W53-1"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "query": "q",
+        "top_k": 5,
+        "db_path": "data/lancedb",
+        "table": "stream_chunks",
+        "full": false,
+        "json": false,
+        "recall": true,
+        "today": {
+          "date": "2026-12-28"
+        }
+      }
+    },
+    {
+      "argv": ["q", "--recall", "--today", "2020-W53-7"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "query": "q",
+        "top_k": 5,
+        "db_path": "data/lancedb",
+        "table": "stream_chunks",
+        "full": false,
+        "json": false,
+        "recall": true,
+        "today": {
+          "date": "2021-01-03"
+        }
+      }
+    },
+    {
+      "argv": ["q", "--recall", "--today", "9999-W52-6"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: argument --today: invalid fromisoformat value: '9999-W52-6'\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--recall", "--today", "2026-09-09 "],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: argument --today: invalid fromisoformat value: '2026-09-09 '\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--recall", "--today", "２０２６-09-09"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: argument --today: invalid fromisoformat value: '２０２６-09-09'\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--recall", "--today", "2026-0909"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: argument --today: invalid fromisoformat value: '2026-0909'\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--recall", "--today", "202609-09"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: argument --today: invalid fromisoformat value: '202609-09'\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--recall", "--today", "2026-W00-1"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: argument --today: invalid fromisoformat value: '2026-W00-1'\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--recall", "--today", "2026-W01-0"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: argument --today: invalid fromisoformat value: '2026-W01-0'\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--recall", "--today", "2026-W01-8"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: argument --today: invalid fromisoformat value: '2026-W01-8'\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--recall", "--today", "2026-W011"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: argument --today: invalid fromisoformat value: '2026-W011'\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--recall", "--today", "2026W01-1"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: argument --today: invalid fromisoformat value: '2026W01-1'\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--recall", "--today", "+026-09-09"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: argument --today: invalid fromisoformat value: '+026-09-09'\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--recall", "--today", "2026-09-0x"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: argument --today: invalid fromisoformat value: '2026-09-0x'\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "extra"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: unrecognized arguments: extra\n",
+      "ns": null
+    },
+    {
+      "argv": ["-h"],
+      "code": 0,
+      "stdout": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\n\nProbe the stream archive index from the command line.\n\npositional arguments:\n  query               Search query (the question you'd ask the bot)\n\noptions:\n  -h, --help          show this help message and exit\n  --top-k TOP_K       Number of results to return (default: 5)\n  --db-path DB_PATH   LanceDB dir (default: data/lancedb)\n  --table TABLE       Table name (default: stream_chunks)\n  --full              Print full chunk text instead of a 200-char preview\n  --json              Emit raw JSON (drops vector field for readability)\n  --recall            Use broadcast recaps or details within a resolved period\n                      (JSON emits an envelope)\n  --today YYYY-MM-DD  Persona-local reference date for --recall (default:\n                      today in PERSONA_TIMEZONE)\n",
+      "stderr": "",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--json=1"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: argument --json: ignored explicit argument '1'\n",
+      "ns": null
+    },
+    {
+      "argv": ["--", "-x"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "query": "-x",
+        "top_k": 5,
+        "db_path": "data/lancedb",
+        "table": "stream_chunks",
+        "full": false,
+        "json": false,
+        "recall": false,
+        "today": null
+      }
+    },
+    {
+      "argv": ["-x"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: the following arguments are required: query\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "-x"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: unrecognized arguments: -x\n",
+      "ns": null
+    },
+    {
+      "argv": ["-5"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "query": "-5",
+        "top_k": 5,
+        "db_path": "data/lancedb",
+        "table": "stream_chunks",
+        "full": false,
+        "json": false,
+        "recall": false,
+        "today": null
+      }
+    },
+    {
+      "argv": ["q w"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "query": "q w",
+        "top_k": 5,
+        "db_path": "data/lancedb",
+        "table": "stream_chunks",
+        "full": false,
+        "json": false,
+        "recall": false,
+        "today": null
+      }
+    },
+    {
+      "argv": ["--json", "q"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "query": "q",
+        "top_k": 5,
+        "db_path": "data/lancedb",
+        "table": "stream_chunks",
+        "full": false,
+        "json": true,
+        "recall": false,
+        "today": null
+      }
+    },
+    {
+      "argv": ["q", "--db-path="],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "query": "q",
+        "top_k": 5,
+        "db_path": "",
+        "table": "stream_chunks",
+        "full": false,
+        "json": false,
+        "recall": false,
+        "today": null
+      }
+    },
+    {
+      "argv": ["q", "--top-k", "５"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "query": "q",
+        "top_k": 5,
+        "db_path": "data/lancedb",
+        "table": "stream_chunks",
+        "full": false,
+        "json": false,
+        "recall": false,
+        "today": null
+      }
+    },
+    {
+      "argv": ["q", "--top-k", "+4"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "query": "q",
+        "top_k": 4,
+        "db_path": "data/lancedb",
+        "table": "stream_chunks",
+        "full": false,
+        "json": false,
+        "recall": false,
+        "today": null
+      }
+    },
+    {
+      "argv": ["q", "--top-k", "1__0"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: argument --top-k: invalid int value: '1__0'\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--top-k", "_1"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: argument --top-k: invalid int value: '_1'\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--top-k", "1.0"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: argument --top-k: invalid int value: '1.0'\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--top-k", ""],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: argument --top-k: invalid int value: ''\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--recall", "--today"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: argument --today: expected one argument\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--recall=yes"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: argument --recall: ignored explicit argument 'yes'\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "-h"],
+      "code": 0,
+      "stdout": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\n\nProbe the stream archive index from the command line.\n\npositional arguments:\n  query               Search query (the question you'd ask the bot)\n\noptions:\n  -h, --help          show this help message and exit\n  --top-k TOP_K       Number of results to return (default: 5)\n  --db-path DB_PATH   LanceDB dir (default: data/lancedb)\n  --table TABLE       Table name (default: stream_chunks)\n  --full              Print full chunk text instead of a 200-char preview\n  --json              Emit raw JSON (drops vector field for readability)\n  --recall            Use broadcast recaps or details within a resolved period\n                      (JSON emits an envelope)\n  --today YYYY-MM-DD  Persona-local reference date for --recall (default:\n                      today in PERSONA_TIMEZONE)\n",
+      "stderr": "",
+      "ns": null
+    },
+    {
+      "argv": ["--top-k", "abc", "-h"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: argument --top-k: invalid int value: 'abc'\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--full", "--full"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "query": "q",
+        "top_k": 5,
+        "db_path": "data/lancedb",
+        "table": "stream_chunks",
+        "full": true,
+        "json": false,
+        "recall": false,
+        "today": null
+      }
+    },
+    {
+      "argv": ["q", "--", "--json"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: unrecognized arguments: --json\n",
+      "ns": null
+    },
+    {
+      "argv": ["--json", "--", "q"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "query": "q",
+        "top_k": 5,
+        "db_path": "data/lancedb",
+        "table": "stream_chunks",
+        "full": false,
+        "json": true,
+        "recall": false,
+        "today": null
+      }
+    },
+    {
+      "argv": ["q", "--", "a", "b"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: unrecognized arguments: a b\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "-"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: unrecognized arguments: -\n",
+      "ns": null
+    },
+    {
+      "argv": ["-"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "query": "-",
+        "top_k": 5,
+        "db_path": "data/lancedb",
+        "table": "stream_chunks",
+        "full": false,
+        "json": false,
+        "recall": false,
+        "today": null
+      }
+    },
+    {
+      "argv": ["q", "--top-k", "1", "--top-k", "2"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "query": "q",
+        "top_k": 2,
+        "db_path": "data/lancedb",
+        "table": "stream_chunks",
+        "full": false,
+        "json": false,
+        "recall": false,
+        "today": null
+      }
+    },
+    {
+      "argv": ["--to=3", "q"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: ambiguous option: --to=3 could match --top-k, --today\n",
+      "ns": null
+    },
+    {
+      "argv": ["--top-k=", "q"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: argument --top-k: invalid int value: ''\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--json", "x=y"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: unrecognized arguments: x=y\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "-x=1"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: unrecognized arguments: -x=1\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--zzz"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: unrecognized arguments: --zzz\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "--zzz=1"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: unrecognized arguments: --zzz=1\n",
+      "ns": null
+    },
+    {
+      "argv": ["q", "-tx"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]\n                      [--full] [--json] [--recall] [--today YYYY-MM-DD]\n                      query\nlaplace-search: error: unrecognized arguments: -tx\n",
+      "ns": null
+    }
+  ],
+  "eval": [
+    {
+      "argv": [],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "queries": "data/eval/queries.toml",
+        "db_path": "data/lancedb",
+        "table": null,
+        "modes": null,
+        "facts_candidates": 30,
+        "stream_candidates": 15,
+        "date_filter": true,
+        "verbose": false,
+        "save": null,
+        "compare": null,
+        "rerank_models": null
+      }
+    },
+    {
+      "argv": ["--modes", "hybrid", "vector_only"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "queries": "data/eval/queries.toml",
+        "db_path": "data/lancedb",
+        "table": null,
+        "modes": ["hybrid", "vector_only"],
+        "facts_candidates": 30,
+        "stream_candidates": 15,
+        "date_filter": true,
+        "verbose": false,
+        "save": null,
+        "compare": null,
+        "rerank_models": null
+      }
+    },
+    {
+      "argv": ["--modes"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-eval-retrieval [-h] [--queries QUERIES] [--db-path DB_PATH]\n                              [--table {persona_facts,stream_chunks}]\n                              [--modes {vector_only,hybrid,hybrid_rerank} [{vector_only,hybrid,hybrid_rerank} ...]]\n                              [--facts-candidates FACTS_CANDIDATES]\n                              [--stream-candidates STREAM_CANDIDATES]\n                              [--date-filter | --no-date-filter] [--verbose]\n                              [--save SAVE] [--compare COMPARE]\n                              [--rerank-models MODEL [MODEL ...]]\nlaplace-eval-retrieval: error: argument --modes: expected at least one argument\n",
+      "ns": null
+    },
+    {
+      "argv": ["--modes", "foo"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-eval-retrieval [-h] [--queries QUERIES] [--db-path DB_PATH]\n                              [--table {persona_facts,stream_chunks}]\n                              [--modes {vector_only,hybrid,hybrid_rerank} [{vector_only,hybrid,hybrid_rerank} ...]]\n                              [--facts-candidates FACTS_CANDIDATES]\n                              [--stream-candidates STREAM_CANDIDATES]\n                              [--date-filter | --no-date-filter] [--verbose]\n                              [--save SAVE] [--compare COMPARE]\n                              [--rerank-models MODEL [MODEL ...]]\nlaplace-eval-retrieval: error: argument --modes: invalid choice: 'foo' (choose from vector_only, hybrid, hybrid_rerank)\n",
+      "ns": null
+    },
+    {
+      "argv": ["--table", "x"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-eval-retrieval [-h] [--queries QUERIES] [--db-path DB_PATH]\n                              [--table {persona_facts,stream_chunks}]\n                              [--modes {vector_only,hybrid,hybrid_rerank} [{vector_only,hybrid,hybrid_rerank} ...]]\n                              [--facts-candidates FACTS_CANDIDATES]\n                              [--stream-candidates STREAM_CANDIDATES]\n                              [--date-filter | --no-date-filter] [--verbose]\n                              [--save SAVE] [--compare COMPARE]\n                              [--rerank-models MODEL [MODEL ...]]\nlaplace-eval-retrieval: error: argument --table: invalid choice: 'x' (choose from persona_facts, stream_chunks)\n",
+      "ns": null
+    },
+    {
+      "argv": ["--table", "stream_chunks"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "queries": "data/eval/queries.toml",
+        "db_path": "data/lancedb",
+        "table": "stream_chunks",
+        "modes": null,
+        "facts_candidates": 30,
+        "stream_candidates": 15,
+        "date_filter": true,
+        "verbose": false,
+        "save": null,
+        "compare": null,
+        "rerank_models": null
+      }
+    },
+    {
+      "argv": ["--no-date-filter"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "queries": "data/eval/queries.toml",
+        "db_path": "data/lancedb",
+        "table": null,
+        "modes": null,
+        "facts_candidates": 30,
+        "stream_candidates": 15,
+        "date_filter": false,
+        "verbose": false,
+        "save": null,
+        "compare": null,
+        "rerank_models": null
+      }
+    },
+    {
+      "argv": ["--date-filter"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "queries": "data/eval/queries.toml",
+        "db_path": "data/lancedb",
+        "table": null,
+        "modes": null,
+        "facts_candidates": 30,
+        "stream_candidates": 15,
+        "date_filter": true,
+        "verbose": false,
+        "save": null,
+        "compare": null,
+        "rerank_models": null
+      }
+    },
+    {
+      "argv": ["--no-date"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "queries": "data/eval/queries.toml",
+        "db_path": "data/lancedb",
+        "table": null,
+        "modes": null,
+        "facts_candidates": 30,
+        "stream_candidates": 15,
+        "date_filter": false,
+        "verbose": false,
+        "save": null,
+        "compare": null,
+        "rerank_models": null
+      }
+    },
+    {
+      "argv": ["--no"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "queries": "data/eval/queries.toml",
+        "db_path": "data/lancedb",
+        "table": null,
+        "modes": null,
+        "facts_candidates": 30,
+        "stream_candidates": 15,
+        "date_filter": false,
+        "verbose": false,
+        "save": null,
+        "compare": null,
+        "rerank_models": null
+      }
+    },
+    {
+      "argv": ["--date-filter=x"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-eval-retrieval [-h] [--queries QUERIES] [--db-path DB_PATH]\n                              [--table {persona_facts,stream_chunks}]\n                              [--modes {vector_only,hybrid,hybrid_rerank} [{vector_only,hybrid,hybrid_rerank} ...]]\n                              [--facts-candidates FACTS_CANDIDATES]\n                              [--stream-candidates STREAM_CANDIDATES]\n                              [--date-filter | --no-date-filter] [--verbose]\n                              [--save SAVE] [--compare COMPARE]\n                              [--rerank-models MODEL [MODEL ...]]\nlaplace-eval-retrieval: error: argument --date-filter/--no-date-filter: ignored explicit argument 'x'\n",
+      "ns": null
+    },
+    {
+      "argv": ["--no-date-filter=x"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-eval-retrieval [-h] [--queries QUERIES] [--db-path DB_PATH]\n                              [--table {persona_facts,stream_chunks}]\n                              [--modes {vector_only,hybrid,hybrid_rerank} [{vector_only,hybrid,hybrid_rerank} ...]]\n                              [--facts-candidates FACTS_CANDIDATES]\n                              [--stream-candidates STREAM_CANDIDATES]\n                              [--date-filter | --no-date-filter] [--verbose]\n                              [--save SAVE] [--compare COMPARE]\n                              [--rerank-models MODEL [MODEL ...]]\nlaplace-eval-retrieval: error: argument --date-filter/--no-date-filter: ignored explicit argument 'x'\n",
+      "ns": null
+    },
+    {
+      "argv": ["--verbose", "--save", "out.json", "--compare", "base.json"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "queries": "data/eval/queries.toml",
+        "db_path": "data/lancedb",
+        "table": null,
+        "modes": null,
+        "facts_candidates": 30,
+        "stream_candidates": 15,
+        "date_filter": true,
+        "verbose": true,
+        "save": "out.json",
+        "compare": "base.json",
+        "rerank_models": null
+      }
+    },
+    {
+      "argv": ["--rerank-models", "a", "b"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "queries": "data/eval/queries.toml",
+        "db_path": "data/lancedb",
+        "table": null,
+        "modes": null,
+        "facts_candidates": 30,
+        "stream_candidates": 15,
+        "date_filter": true,
+        "verbose": false,
+        "save": null,
+        "compare": null,
+        "rerank_models": ["a", "b"]
+      }
+    },
+    {
+      "argv": ["--rerank-models"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-eval-retrieval [-h] [--queries QUERIES] [--db-path DB_PATH]\n                              [--table {persona_facts,stream_chunks}]\n                              [--modes {vector_only,hybrid,hybrid_rerank} [{vector_only,hybrid,hybrid_rerank} ...]]\n                              [--facts-candidates FACTS_CANDIDATES]\n                              [--stream-candidates STREAM_CANDIDATES]\n                              [--date-filter | --no-date-filter] [--verbose]\n                              [--save SAVE] [--compare COMPARE]\n                              [--rerank-models MODEL [MODEL ...]]\nlaplace-eval-retrieval: error: argument --rerank-models: expected at least one argument\n",
+      "ns": null
+    },
+    {
+      "argv": ["--facts-candidates", "x"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-eval-retrieval [-h] [--queries QUERIES] [--db-path DB_PATH]\n                              [--table {persona_facts,stream_chunks}]\n                              [--modes {vector_only,hybrid,hybrid_rerank} [{vector_only,hybrid,hybrid_rerank} ...]]\n                              [--facts-candidates FACTS_CANDIDATES]\n                              [--stream-candidates STREAM_CANDIDATES]\n                              [--date-filter | --no-date-filter] [--verbose]\n                              [--save SAVE] [--compare COMPARE]\n                              [--rerank-models MODEL [MODEL ...]]\nlaplace-eval-retrieval: error: argument --facts-candidates: invalid int value: 'x'\n",
+      "ns": null
+    },
+    {
+      "argv": ["--facts-candidates", "5", "--stream-candidates", "-2"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "queries": "data/eval/queries.toml",
+        "db_path": "data/lancedb",
+        "table": null,
+        "modes": null,
+        "facts_candidates": 5,
+        "stream_candidates": -2,
+        "date_filter": true,
+        "verbose": false,
+        "save": null,
+        "compare": null,
+        "rerank_models": null
+      }
+    },
+    {
+      "argv": ["--modes", "hybrid", "--modes", "vector_only"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "queries": "data/eval/queries.toml",
+        "db_path": "data/lancedb",
+        "table": null,
+        "modes": ["vector_only"],
+        "facts_candidates": 30,
+        "stream_candidates": 15,
+        "date_filter": true,
+        "verbose": false,
+        "save": null,
+        "compare": null,
+        "rerank_models": null
+      }
+    },
+    {
+      "argv": ["extra"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-eval-retrieval [-h] [--queries QUERIES] [--db-path DB_PATH]\n                              [--table {persona_facts,stream_chunks}]\n                              [--modes {vector_only,hybrid,hybrid_rerank} [{vector_only,hybrid,hybrid_rerank} ...]]\n                              [--facts-candidates FACTS_CANDIDATES]\n                              [--stream-candidates STREAM_CANDIDATES]\n                              [--date-filter | --no-date-filter] [--verbose]\n                              [--save SAVE] [--compare COMPARE]\n                              [--rerank-models MODEL [MODEL ...]]\nlaplace-eval-retrieval: error: unrecognized arguments: extra\n",
+      "ns": null
+    },
+    {
+      "argv": ["-h"],
+      "code": 0,
+      "stdout": "usage: laplace-eval-retrieval [-h] [--queries QUERIES] [--db-path DB_PATH]\n                              [--table {persona_facts,stream_chunks}]\n                              [--modes {vector_only,hybrid,hybrid_rerank} [{vector_only,hybrid,hybrid_rerank} ...]]\n                              [--facts-candidates FACTS_CANDIDATES]\n                              [--stream-candidates STREAM_CANDIDATES]\n                              [--date-filter | --no-date-filter] [--verbose]\n                              [--save SAVE] [--compare COMPARE]\n                              [--rerank-models MODEL [MODEL ...]]\n\nScore retrieval quality for both LanceDB tables.\n\noptions:\n  -h, --help            show this help message and exit\n  --queries QUERIES     TOML file of [[query]] entries (default:\n                        data/eval/queries.toml)\n  --db-path DB_PATH     LanceDB directory (default: data/lancedb)\n  --table {persona_facts,stream_chunks}\n                        Restrict eval to one table. Default: both.\n  --modes {vector_only,hybrid,hybrid_rerank} [{vector_only,hybrid,hybrid_rerank} ...]\n                        Subset of retrieval modes to test. Default: all of\n                        ('vector_only', 'hybrid', 'hybrid_rerank').\n  --facts-candidates FACTS_CANDIDATES\n                        Hybrid-search candidate pool size for persona_facts\n                        (default: 30).\n  --stream-candidates STREAM_CANDIDATES\n                        Hybrid-search candidate pool size for stream_chunks\n                        (default: 15).\n  --date-filter, --no-date-filter\n                        Apply date pre-filter when query mentions a date\n                        (default: on).\n  --verbose             Print per-query rank breakdown after the summary\n                        table.\n  --save SAVE           Save metrics to a JSON file for later --compare.\n  --compare COMPARE     Compare current run against a previously saved metrics\n                        JSON.\n  --rerank-models MODEL [MODEL ...]\n                        Benchmark mode: run the query set through each named\n                        Cohere reranker model and report quality + latency\n                        side-by-side. Requires COHERE_API_KEY. Example:\n                        --rerank-models rerank-multilingual-v3.0\n                        rerank-v4.0-fast rerank-v4.0-pro. When set, the\n                        regular --modes path is skipped — output is the model-\n                        comparison table instead.\n",
+      "stderr": "",
+      "ns": null
+    },
+    {
+      "argv": ["--modes", "hybrid", "extra"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-eval-retrieval [-h] [--queries QUERIES] [--db-path DB_PATH]\n                              [--table {persona_facts,stream_chunks}]\n                              [--modes {vector_only,hybrid,hybrid_rerank} [{vector_only,hybrid,hybrid_rerank} ...]]\n                              [--facts-candidates FACTS_CANDIDATES]\n                              [--stream-candidates STREAM_CANDIDATES]\n                              [--date-filter | --no-date-filter] [--verbose]\n                              [--save SAVE] [--compare COMPARE]\n                              [--rerank-models MODEL [MODEL ...]]\nlaplace-eval-retrieval: error: argument --modes: invalid choice: 'extra' (choose from vector_only, hybrid, hybrid_rerank)\n",
+      "ns": null
+    },
+    {
+      "argv": ["--v"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "queries": "data/eval/queries.toml",
+        "db_path": "data/lancedb",
+        "table": null,
+        "modes": null,
+        "facts_candidates": 30,
+        "stream_candidates": 15,
+        "date_filter": true,
+        "verbose": true,
+        "save": null,
+        "compare": null,
+        "rerank_models": null
+      }
+    },
+    {
+      "argv": ["--s", "x"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-eval-retrieval [-h] [--queries QUERIES] [--db-path DB_PATH]\n                              [--table {persona_facts,stream_chunks}]\n                              [--modes {vector_only,hybrid,hybrid_rerank} [{vector_only,hybrid,hybrid_rerank} ...]]\n                              [--facts-candidates FACTS_CANDIDATES]\n                              [--stream-candidates STREAM_CANDIDATES]\n                              [--date-filter | --no-date-filter] [--verbose]\n                              [--save SAVE] [--compare COMPARE]\n                              [--rerank-models MODEL [MODEL ...]]\nlaplace-eval-retrieval: error: ambiguous option: --s could match --stream-candidates, --save\n",
+      "ns": null
+    },
+    {
+      "argv": ["--d"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-eval-retrieval [-h] [--queries QUERIES] [--db-path DB_PATH]\n                              [--table {persona_facts,stream_chunks}]\n                              [--modes {vector_only,hybrid,hybrid_rerank} [{vector_only,hybrid,hybrid_rerank} ...]]\n                              [--facts-candidates FACTS_CANDIDATES]\n                              [--stream-candidates STREAM_CANDIDATES]\n                              [--date-filter | --no-date-filter] [--verbose]\n                              [--save SAVE] [--compare COMPARE]\n                              [--rerank-models MODEL [MODEL ...]]\nlaplace-eval-retrieval: error: ambiguous option: --d could match --db-path, --date-filter\n",
+      "ns": null
+    },
+    {
+      "argv": ["--queries", "q.toml", "--db-path", "db"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "queries": "q.toml",
+        "db_path": "db",
+        "table": null,
+        "modes": null,
+        "facts_candidates": 30,
+        "stream_candidates": 15,
+        "date_filter": true,
+        "verbose": false,
+        "save": null,
+        "compare": null,
+        "rerank_models": null
+      }
+    },
+    {
+      "argv": ["--modes", "hybrid", "hybrid"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "queries": "data/eval/queries.toml",
+        "db_path": "data/lancedb",
+        "table": null,
+        "modes": ["hybrid", "hybrid"],
+        "facts_candidates": 30,
+        "stream_candidates": 15,
+        "date_filter": true,
+        "verbose": false,
+        "save": null,
+        "compare": null,
+        "rerank_models": null
+      }
+    },
+    {
+      "argv": ["--modes", "hybrid", "--", "vector_only"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-eval-retrieval [-h] [--queries QUERIES] [--db-path DB_PATH]\n                              [--table {persona_facts,stream_chunks}]\n                              [--modes {vector_only,hybrid,hybrid_rerank} [{vector_only,hybrid,hybrid_rerank} ...]]\n                              [--facts-candidates FACTS_CANDIDATES]\n                              [--stream-candidates STREAM_CANDIDATES]\n                              [--date-filter | --no-date-filter] [--verbose]\n                              [--save SAVE] [--compare COMPARE]\n                              [--rerank-models MODEL [MODEL ...]]\nlaplace-eval-retrieval: error: unrecognized arguments: -- vector_only\n",
+      "ns": null
+    },
+    {
+      "argv": ["--rerank-models", "a", "--verbose"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "queries": "data/eval/queries.toml",
+        "db_path": "data/lancedb",
+        "table": null,
+        "modes": null,
+        "facts_candidates": 30,
+        "stream_candidates": 15,
+        "date_filter": true,
+        "verbose": true,
+        "save": null,
+        "compare": null,
+        "rerank_models": ["a"]
+      }
+    },
+    {
+      "argv": ["--rerank-models", "-a"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-eval-retrieval [-h] [--queries QUERIES] [--db-path DB_PATH]\n                              [--table {persona_facts,stream_chunks}]\n                              [--modes {vector_only,hybrid,hybrid_rerank} [{vector_only,hybrid,hybrid_rerank} ...]]\n                              [--facts-candidates FACTS_CANDIDATES]\n                              [--stream-candidates STREAM_CANDIDATES]\n                              [--date-filter | --no-date-filter] [--verbose]\n                              [--save SAVE] [--compare COMPARE]\n                              [--rerank-models MODEL [MODEL ...]]\nlaplace-eval-retrieval: error: argument --rerank-models: expected at least one argument\n",
+      "ns": null
+    },
+    {
+      "argv": ["--modes=hybrid"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "queries": "data/eval/queries.toml",
+        "db_path": "data/lancedb",
+        "table": null,
+        "modes": ["hybrid"],
+        "facts_candidates": 30,
+        "stream_candidates": 15,
+        "date_filter": true,
+        "verbose": false,
+        "save": null,
+        "compare": null,
+        "rerank_models": null
+      }
+    },
+    {
+      "argv": ["--modes=hybrid", "vector_only"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-eval-retrieval [-h] [--queries QUERIES] [--db-path DB_PATH]\n                              [--table {persona_facts,stream_chunks}]\n                              [--modes {vector_only,hybrid,hybrid_rerank} [{vector_only,hybrid,hybrid_rerank} ...]]\n                              [--facts-candidates FACTS_CANDIDATES]\n                              [--stream-candidates STREAM_CANDIDATES]\n                              [--date-filter | --no-date-filter] [--verbose]\n                              [--save SAVE] [--compare COMPARE]\n                              [--rerank-models MODEL [MODEL ...]]\nlaplace-eval-retrieval: error: unrecognized arguments: vector_only\n",
+      "ns": null
+    },
+    {
+      "argv": ["--verbose=1"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-eval-retrieval [-h] [--queries QUERIES] [--db-path DB_PATH]\n                              [--table {persona_facts,stream_chunks}]\n                              [--modes {vector_only,hybrid,hybrid_rerank} [{vector_only,hybrid,hybrid_rerank} ...]]\n                              [--facts-candidates FACTS_CANDIDATES]\n                              [--stream-candidates STREAM_CANDIDATES]\n                              [--date-filter | --no-date-filter] [--verbose]\n                              [--save SAVE] [--compare COMPARE]\n                              [--rerank-models MODEL [MODEL ...]]\nlaplace-eval-retrieval: error: argument --verbose: ignored explicit argument '1'\n",
+      "ns": null
+    },
+    {
+      "argv": ["--date-filter", "--no-date-filter"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "queries": "data/eval/queries.toml",
+        "db_path": "data/lancedb",
+        "table": null,
+        "modes": null,
+        "facts_candidates": 30,
+        "stream_candidates": 15,
+        "date_filter": false,
+        "verbose": false,
+        "save": null,
+        "compare": null,
+        "rerank_models": null
+      }
+    },
+    {
+      "argv": ["--no-date-filter", "--date-filter"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "queries": "data/eval/queries.toml",
+        "db_path": "data/lancedb",
+        "table": null,
+        "modes": null,
+        "facts_candidates": 30,
+        "stream_candidates": 15,
+        "date_filter": true,
+        "verbose": false,
+        "save": null,
+        "compare": null,
+        "rerank_models": null
+      }
+    },
+    {
+      "argv": ["--save"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-eval-retrieval [-h] [--queries QUERIES] [--db-path DB_PATH]\n                              [--table {persona_facts,stream_chunks}]\n                              [--modes {vector_only,hybrid,hybrid_rerank} [{vector_only,hybrid,hybrid_rerank} ...]]\n                              [--facts-candidates FACTS_CANDIDATES]\n                              [--stream-candidates STREAM_CANDIDATES]\n                              [--date-filter | --no-date-filter] [--verbose]\n                              [--save SAVE] [--compare COMPARE]\n                              [--rerank-models MODEL [MODEL ...]]\nlaplace-eval-retrieval: error: argument --save: expected one argument\n",
+      "ns": null
+    }
+  ],
+  "genimg": [
+    {
+      "argv": [],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "prompt": null,
+        "image": null,
+        "out": "data/generated/image.png",
+        "n": 1,
+        "model": "openai/gpt-image-2.5-flare",
+        "aspect_ratio": "auto",
+        "quality": "auto",
+        "friend": null
+      }
+    },
+    {
+      "argv": [
+        "a prompt",
+        "-i",
+        "x.png",
+        "-i",
+        "y.png",
+        "-o",
+        "out",
+        "-n",
+        "3",
+        "--model",
+        "m",
+        "--aspect-ratio",
+        "3:4",
+        "--quality",
+        "high",
+        "--friend",
+        "七海Nana7mi"
+      ],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "prompt": "a prompt",
+        "image": ["x.png", "y.png"],
+        "out": "out",
+        "n": 3,
+        "model": "m",
+        "aspect_ratio": "3:4",
+        "quality": "high",
+        "friend": ["七海Nana7mi"]
+      }
+    },
+    {
+      "argv": ["--friend", "x"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-generate-image [-h] [-i PATH_OR_URL] [-o OUT] [-n N]\n                              [--model MODEL]\n                              [--aspect-ratio {auto,1:1,3:2,2:3,4:3,3:4,16:9,9:16,21:9}]\n                              [--quality {auto,low,medium,high,xhigh,max}]\n                              [--friend NAME]\n                              [prompt]\nlaplace-generate-image: error: argument --friend: invalid choice: 'x' (choose from 七海Nana7mi)\n",
+      "ns": null
+    },
+    {
+      "argv": ["-n", "abc"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-generate-image [-h] [-i PATH_OR_URL] [-o OUT] [-n N]\n                              [--model MODEL]\n                              [--aspect-ratio {auto,1:1,3:2,2:3,4:3,3:4,16:9,9:16,21:9}]\n                              [--quality {auto,low,medium,high,xhigh,max}]\n                              [--friend NAME]\n                              [prompt]\nlaplace-generate-image: error: argument -n: invalid int value: 'abc'\n",
+      "ns": null
+    },
+    {
+      "argv": ["--quality", "ultra"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-generate-image [-h] [-i PATH_OR_URL] [-o OUT] [-n N]\n                              [--model MODEL]\n                              [--aspect-ratio {auto,1:1,3:2,2:3,4:3,3:4,16:9,9:16,21:9}]\n                              [--quality {auto,low,medium,high,xhigh,max}]\n                              [--friend NAME]\n                              [prompt]\nlaplace-generate-image: error: argument --quality: invalid choice: 'ultra' (choose from auto, low, medium, high, xhigh, max)\n",
+      "ns": null
+    },
+    {
+      "argv": ["--aspect-ratio", "5:4"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-generate-image [-h] [-i PATH_OR_URL] [-o OUT] [-n N]\n                              [--model MODEL]\n                              [--aspect-ratio {auto,1:1,3:2,2:3,4:3,3:4,16:9,9:16,21:9}]\n                              [--quality {auto,low,medium,high,xhigh,max}]\n                              [--friend NAME]\n                              [prompt]\nlaplace-generate-image: error: argument --aspect-ratio: invalid choice: '5:4' (choose from auto, 1:1, 3:2, 2:3, 4:3, 3:4, 16:9, 9:16, 21:9)\n",
+      "ns": null
+    },
+    {
+      "argv": ["-n3"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "prompt": null,
+        "image": null,
+        "out": "data/generated/image.png",
+        "n": 3,
+        "model": "openai/gpt-image-2.5-flare",
+        "aspect_ratio": "auto",
+        "quality": "auto",
+        "friend": null
+      }
+    },
+    {
+      "argv": ["-ix.png"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "prompt": null,
+        "image": ["x.png"],
+        "out": "data/generated/image.png",
+        "n": 1,
+        "model": "openai/gpt-image-2.5-flare",
+        "aspect_ratio": "auto",
+        "quality": "auto",
+        "friend": null
+      }
+    },
+    {
+      "argv": ["-i=x.png"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "prompt": null,
+        "image": ["x.png"],
+        "out": "data/generated/image.png",
+        "n": 1,
+        "model": "openai/gpt-image-2.5-flare",
+        "aspect_ratio": "auto",
+        "quality": "auto",
+        "friend": null
+      }
+    },
+    {
+      "argv": ["--asp", "1:1"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "prompt": null,
+        "image": null,
+        "out": "data/generated/image.png",
+        "n": 1,
+        "model": "openai/gpt-image-2.5-flare",
+        "aspect_ratio": "1:1",
+        "quality": "auto",
+        "friend": null
+      }
+    },
+    {
+      "argv": ["--fri", "七海Nana7mi"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "prompt": null,
+        "image": null,
+        "out": "data/generated/image.png",
+        "n": 1,
+        "model": "openai/gpt-image-2.5-flare",
+        "aspect_ratio": "auto",
+        "quality": "auto",
+        "friend": ["七海Nana7mi"]
+      }
+    },
+    {
+      "argv": ["p1", "p2"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-generate-image [-h] [-i PATH_OR_URL] [-o OUT] [-n N]\n                              [--model MODEL]\n                              [--aspect-ratio {auto,1:1,3:2,2:3,4:3,3:4,16:9,9:16,21:9}]\n                              [--quality {auto,low,medium,high,xhigh,max}]\n                              [--friend NAME]\n                              [prompt]\nlaplace-generate-image: error: unrecognized arguments: p2\n",
+      "ns": null
+    },
+    {
+      "argv": ["-h"],
+      "code": 0,
+      "stdout": "usage: laplace-generate-image [-h] [-i PATH_OR_URL] [-o OUT] [-n N]\n                              [--model MODEL]\n                              [--aspect-ratio {auto,1:1,3:2,2:3,4:3,3:4,16:9,9:16,21:9}]\n                              [--quality {auto,low,medium,high,xhigh,max}]\n                              [--friend NAME]\n                              [prompt]\n\nGenerate an image from a text prompt plus optional reference images. The bot's\nselfie tool and this script share one path — ``image_generation`` owns the\nOpenRouter call and the built-in prompt, so what you probe here is what a\nviewer gets. Usage: uv run laplace-generate-image \"put her in a red scarf,\nkeep the pose\" -i ref.png -o out.png uv run laplace-generate-image -i ref.png\n# falls back to the built-in prompt uv run laplace-generate-image --friend\n七海Nana7mi # the group-selfie variant\n\npositional arguments:\n  prompt                What to generate, or how to edit the references\n                        (default: the built-in prompt)\n\noptions:\n  -h, --help            show this help message and exit\n  -i, --image PATH_OR_URL\n                        Reference image, local path or URL; repeat for up to\n                        16. Defaults to the outfit the bot would use at this\n                        hour; naming one here bypasses that choice.\n  -o, --out OUT         Where to write it; the suffix follows the response\n                        (default: data/generated/image.png)\n  -n N                  How many to generate, 1-10 (default: 1)\n  --model MODEL         OpenRouter model slug (default: openai/gpt-\n                        image-2.5-flare)\n  --aspect-ratio {auto,1:1,3:2,2:3,4:3,3:4,16:9,9:16,21:9}\n  --quality {auto,low,medium,high,xhigh,max}\n  --friend NAME         Put a friend from selfie-references/friends in the\n                        shot; repeat for more\n",
+      "stderr": "",
+      "ns": null
+    },
+    {
+      "argv": ["-n", "-1"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "prompt": null,
+        "image": null,
+        "out": "data/generated/image.png",
+        "n": -1,
+        "model": "openai/gpt-image-2.5-flare",
+        "aspect_ratio": "auto",
+        "quality": "auto",
+        "friend": null
+      }
+    },
+    {
+      "argv": ["--model"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-generate-image [-h] [-i PATH_OR_URL] [-o OUT] [-n N]\n                              [--model MODEL]\n                              [--aspect-ratio {auto,1:1,3:2,2:3,4:3,3:4,16:9,9:16,21:9}]\n                              [--quality {auto,low,medium,high,xhigh,max}]\n                              [--friend NAME]\n                              [prompt]\nlaplace-generate-image: error: argument --model: expected one argument\n",
+      "ns": null
+    },
+    {
+      "argv": ["-hn"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-generate-image [-h] [-i PATH_OR_URL] [-o OUT] [-n N]\n                              [--model MODEL]\n                              [--aspect-ratio {auto,1:1,3:2,2:3,4:3,3:4,16:9,9:16,21:9}]\n                              [--quality {auto,low,medium,high,xhigh,max}]\n                              [--friend NAME]\n                              [prompt]\nlaplace-generate-image: error: argument -n: expected one argument\n",
+      "ns": null
+    },
+    {
+      "argv": ["-n", "2", "prompt text"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "prompt": "prompt text",
+        "image": null,
+        "out": "data/generated/image.png",
+        "n": 2,
+        "model": "openai/gpt-image-2.5-flare",
+        "aspect_ratio": "auto",
+        "quality": "auto",
+        "friend": null
+      }
+    },
+    {
+      "argv": ["", "-n", "1"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "prompt": "",
+        "image": null,
+        "out": "data/generated/image.png",
+        "n": 1,
+        "model": "openai/gpt-image-2.5-flare",
+        "aspect_ratio": "auto",
+        "quality": "auto",
+        "friend": null
+      }
+    },
+    {
+      "argv": ["-o"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-generate-image [-h] [-i PATH_OR_URL] [-o OUT] [-n N]\n                              [--model MODEL]\n                              [--aspect-ratio {auto,1:1,3:2,2:3,4:3,3:4,16:9,9:16,21:9}]\n                              [--quality {auto,low,medium,high,xhigh,max}]\n                              [--friend NAME]\n                              [prompt]\nlaplace-generate-image: error: argument -o/--out: expected one argument\n",
+      "ns": null
+    },
+    {
+      "argv": ["--aspect-ratio", "auto", "--aspect-ratio", "1:1"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "prompt": null,
+        "image": null,
+        "out": "data/generated/image.png",
+        "n": 1,
+        "model": "openai/gpt-image-2.5-flare",
+        "aspect_ratio": "1:1",
+        "quality": "auto",
+        "friend": null
+      }
+    },
+    {
+      "argv": ["--friend", "七海Nana7mi", "--friend", "七海Nana7mi"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "prompt": null,
+        "image": null,
+        "out": "data/generated/image.png",
+        "n": 1,
+        "model": "openai/gpt-image-2.5-flare",
+        "aspect_ratio": "auto",
+        "quality": "auto",
+        "friend": ["七海Nana7mi", "七海Nana7mi"]
+      }
+    },
+    {
+      "argv": ["--image", "a", "--image=b"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "prompt": null,
+        "image": ["a", "b"],
+        "out": "data/generated/image.png",
+        "n": 1,
+        "model": "openai/gpt-image-2.5-flare",
+        "aspect_ratio": "auto",
+        "quality": "auto",
+        "friend": null
+      }
+    },
+    {
+      "argv": ["-n=4"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "prompt": null,
+        "image": null,
+        "out": "data/generated/image.png",
+        "n": 4,
+        "model": "openai/gpt-image-2.5-flare",
+        "aspect_ratio": "auto",
+        "quality": "auto",
+        "friend": null
+      }
+    },
+    {
+      "argv": ["-n", "4", "-i", "a", "b"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "prompt": "b",
+        "image": ["a"],
+        "out": "data/generated/image.png",
+        "n": 4,
+        "model": "openai/gpt-image-2.5-flare",
+        "aspect_ratio": "auto",
+        "quality": "auto",
+        "friend": null
+      }
+    },
+    {
+      "argv": ["--", "-n"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "prompt": "-n",
+        "image": null,
+        "out": "data/generated/image.png",
+        "n": 1,
+        "model": "openai/gpt-image-2.5-flare",
+        "aspect_ratio": "auto",
+        "quality": "auto",
+        "friend": null
+      }
+    },
+    {
+      "argv": ["--im", "a"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "prompt": null,
+        "image": ["a"],
+        "out": "data/generated/image.png",
+        "n": 1,
+        "model": "openai/gpt-image-2.5-flare",
+        "aspect_ratio": "auto",
+        "quality": "auto",
+        "friend": null
+      }
+    },
+    {
+      "argv": ["--i", "a"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "prompt": null,
+        "image": ["a"],
+        "out": "data/generated/image.png",
+        "n": 1,
+        "model": "openai/gpt-image-2.5-flare",
+        "aspect_ratio": "auto",
+        "quality": "auto",
+        "friend": null
+      }
+    },
+    {
+      "argv": ["--q", "low"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "prompt": null,
+        "image": null,
+        "out": "data/generated/image.png",
+        "n": 1,
+        "model": "openai/gpt-image-2.5-flare",
+        "aspect_ratio": "auto",
+        "quality": "low",
+        "friend": null
+      }
+    },
+    {
+      "argv": ["-o", "-"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "prompt": null,
+        "image": null,
+        "out": "-",
+        "n": 1,
+        "model": "openai/gpt-image-2.5-flare",
+        "aspect_ratio": "auto",
+        "quality": "auto",
+        "friend": null
+      }
+    },
+    {
+      "argv": ["-n", "1e3"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-generate-image [-h] [-i PATH_OR_URL] [-o OUT] [-n N]\n                              [--model MODEL]\n                              [--aspect-ratio {auto,1:1,3:2,2:3,4:3,3:4,16:9,9:16,21:9}]\n                              [--quality {auto,low,medium,high,xhigh,max}]\n                              [--friend NAME]\n                              [prompt]\nlaplace-generate-image: error: argument -n: invalid int value: '1e3'\n",
+      "ns": null
+    },
+    {
+      "argv": ["--friend"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-generate-image [-h] [-i PATH_OR_URL] [-o OUT] [-n N]\n                              [--model MODEL]\n                              [--aspect-ratio {auto,1:1,3:2,2:3,4:3,3:4,16:9,9:16,21:9}]\n                              [--quality {auto,low,medium,high,xhigh,max}]\n                              [--friend NAME]\n                              [prompt]\nlaplace-generate-image: error: argument --friend: expected one argument\n",
+      "ns": null
+    },
+    {
+      "argv": ["-h", "--friend", "x"],
+      "code": 0,
+      "stdout": "usage: laplace-generate-image [-h] [-i PATH_OR_URL] [-o OUT] [-n N]\n                              [--model MODEL]\n                              [--aspect-ratio {auto,1:1,3:2,2:3,4:3,3:4,16:9,9:16,21:9}]\n                              [--quality {auto,low,medium,high,xhigh,max}]\n                              [--friend NAME]\n                              [prompt]\n\nGenerate an image from a text prompt plus optional reference images. The bot's\nselfie tool and this script share one path — ``image_generation`` owns the\nOpenRouter call and the built-in prompt, so what you probe here is what a\nviewer gets. Usage: uv run laplace-generate-image \"put her in a red scarf,\nkeep the pose\" -i ref.png -o out.png uv run laplace-generate-image -i ref.png\n# falls back to the built-in prompt uv run laplace-generate-image --friend\n七海Nana7mi # the group-selfie variant\n\npositional arguments:\n  prompt                What to generate, or how to edit the references\n                        (default: the built-in prompt)\n\noptions:\n  -h, --help            show this help message and exit\n  -i, --image PATH_OR_URL\n                        Reference image, local path or URL; repeat for up to\n                        16. Defaults to the outfit the bot would use at this\n                        hour; naming one here bypasses that choice.\n  -o, --out OUT         Where to write it; the suffix follows the response\n                        (default: data/generated/image.png)\n  -n N                  How many to generate, 1-10 (default: 1)\n  --model MODEL         OpenRouter model slug (default: openai/gpt-\n                        image-2.5-flare)\n  --aspect-ratio {auto,1:1,3:2,2:3,4:3,3:4,16:9,9:16,21:9}\n  --quality {auto,low,medium,high,xhigh,max}\n  --friend NAME         Put a friend from selfie-references/friends in the\n                        shot; repeat for more\n",
+      "stderr": "",
+      "ns": null
+    },
+    {
+      "argv": ["--friend", "x", "-h"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-generate-image [-h] [-i PATH_OR_URL] [-o OUT] [-n N]\n                              [--model MODEL]\n                              [--aspect-ratio {auto,1:1,3:2,2:3,4:3,3:4,16:9,9:16,21:9}]\n                              [--quality {auto,low,medium,high,xhigh,max}]\n                              [--friend NAME]\n                              [prompt]\nlaplace-generate-image: error: argument --friend: invalid choice: 'x' (choose from 七海Nana7mi)\n",
+      "ns": null
+    },
+    {
+      "argv": ["--out=x.png", "--m=foo"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "prompt": null,
+        "image": null,
+        "out": "x.png",
+        "n": 1,
+        "model": "foo",
+        "aspect_ratio": "auto",
+        "quality": "auto",
+        "friend": null
+      }
+    },
+    {
+      "argv": ["--mo", "foo"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "prompt": null,
+        "image": null,
+        "out": "data/generated/image.png",
+        "n": 1,
+        "model": "foo",
+        "aspect_ratio": "auto",
+        "quality": "auto",
+        "friend": null
+      }
+    },
+    {
+      "argv": ["-io"],
+      "code": "parsed",
+      "stdout": "",
+      "stderr": "",
+      "ns": {
+        "prompt": null,
+        "image": ["o"],
+        "out": "data/generated/image.png",
+        "n": 1,
+        "model": "openai/gpt-image-2.5-flare",
+        "aspect_ratio": "auto",
+        "quality": "auto",
+        "friend": null
+      }
+    }
+  ]
+}

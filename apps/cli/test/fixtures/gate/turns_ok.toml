@@ -1,0 +1,13 @@
+[[turn]]
+set = "dev"
+text = "你梦想是什么"
+recall = true
+
+[[turn]]
+set = "dev"
+text = "早上好"
+recall = false
+
+[[turn]]
+set = "fresh"
+text = "你觉得呢"

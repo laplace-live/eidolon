@@ -1,0 +1,643 @@
+{
+  "formatChunks": [
+    {
+      "chunks": [
+        {
+          "stream_date": "2026-09-08",
+          "heading": "开场",
+          "details": "  D details  ",
+          "topics": "[\"游戏\", \"SC\"]",
+          "extras_json": "{\"sc_events\": [{\"viewer\": \"甲\", \"amount_yuan\": 30, \"content\": \" 你好 \", \"response\": \" 谢谢 \"}, {\"viewer\": \"\", \"amount_yuan\": null, \"content\": \"\", \"response\": \"\"}], \"songs\": [{\"title\": \"歌\", \"note\": \"清唱\"}, {\"title\": \"歌2\", \"note\": \"\"}, \"裸歌\"], \"events\": [\"e1\", \"e2\"], \"promises\": [\"p1\"], \"key_quotes\": [\"q1\", \"q2\"]}"
+        },
+        {
+          "stream_date": "2026-09-07",
+          "heading": "",
+          "summary": "  only summary ",
+          "topics": "[]",
+          "extras_json": "{}"
+        },
+        {
+          "heading": "H3",
+          "summary": null,
+          "details": null,
+          "topics": "not json",
+          "extras_json": "bad{",
+          "text": "  raw text 3 "
+        },
+        {
+          "stream_date": "2026-09-06",
+          "details": "v2 only",
+          "topics": "[\"a\", 1, null]",
+          "extras_json": "{\"sc_events\": [{\"viewer\": \"乙\", \"amount_yuan\": 0, \"content\": \"\", \"response\": \"嗯\"}], \"songs\": [{\"title\": \"\", \"note\": \" n \"}, 5]}"
+        },
+        {
+          "stream_date": "2026-09-05",
+          "text": "\n\n",
+          "topics": "",
+          "extras_json": ""
+        }
+      ],
+      "prefix": "你过去直播里相关的片段（用来 ground 你的回复，不要照念，也不要把日期念出来）：\n\n",
+      "output": "你过去直播里相关的片段（用来 ground 你的回复，不要照念，也不要把日期念出来）：\n\n\n[1] 2026-09-08 — 游戏, SC — 开场\nD details\nSC回顾:\n  • 甲（¥30）: 你好\n    → 我的回复: 谢谢\n  • ?\n歌曲: 《歌》（清唱）; 《歌2》; 《裸歌》\n事件: e1; e2\n承诺: p1\n金句:\n  · 「q1」\n  · 「q2」\n\n[2] 2026-09-07\nonly summary\n\n[3] unknown date — H3\nraw text 3\n\n[4] 2026-09-06 — a, 1, None\nv2 only\nSC回顾:\n  • 乙\n    → 我的回复: 嗯\n歌曲: 《》（n）\n\n[5] 2026-09-05\n"
+    },
+    {
+      "chunks": [],
+      "prefix": "你过去直播里相关的片段（用来 ground 你的回复，不要照念，也不要把日期念出来）：\n\n",
+      "output": "你过去直播里相关的片段（用来 ground 你的回复，不要照念，也不要把日期念出来）：\n"
+    },
+    {
+      "chunks": [
+        {
+          "stream_date": "2026-09-08",
+          "heading": "开场",
+          "details": "  D details  ",
+          "topics": "[\"游戏\", \"SC\"]",
+          "extras_json": "{\"sc_events\": [{\"viewer\": \"甲\", \"amount_yuan\": 30, \"content\": \" 你好 \", \"response\": \" 谢谢 \"}, {\"viewer\": \"\", \"amount_yuan\": null, \"content\": \"\", \"response\": \"\"}], \"songs\": [{\"title\": \"歌\", \"note\": \"清唱\"}, {\"title\": \"歌2\", \"note\": \"\"}, \"裸歌\"], \"events\": [\"e1\", \"e2\"], \"promises\": [\"p1\"], \"key_quotes\": [\"q1\", \"q2\"]}"
+        },
+        {
+          "stream_date": "2026-09-07",
+          "heading": "",
+          "summary": "  only summary ",
+          "topics": "[]",
+          "extras_json": "{}"
+        }
+      ],
+      "prefix": "直播详细片段：\n",
+      "output": "直播详细片段：\n\n[1] 2026-09-08 — 游戏, SC — 开场\nD details\nSC回顾:\n  • 甲（¥30）: 你好\n    → 我的回复: 谢谢\n  • ?\n歌曲: 《歌》（清唱）; 《歌2》; 《裸歌》\n事件: e1; e2\n承诺: p1\n金句:\n  · 「q1」\n  · 「q2」\n\n[2] 2026-09-07\nonly summary\n"
+    },
+    {
+      "chunks": [],
+      "prefix": "  x\n\n",
+      "output": "  x\n"
+    }
+  ],
+  "formatFacts": [
+    {
+      "facts": [
+        {
+          "text": " 喜欢奶茶 ",
+          "date": "2026-09-01"
+        },
+        {
+          "text": "",
+          "date": "x"
+        },
+        {
+          "text": "无日期"
+        },
+        {
+          "text": "空日期",
+          "date": ""
+        },
+        {
+          "text": null
+        },
+        {
+          "date": "2026-01-01"
+        }
+      ],
+      "prefix": "你过去在直播里说过 / 设定过的相关事实（用来 ground 你的回复，不要照念，也不要把日期念出来）：\n\n",
+      "output": "你过去在直播里说过 / 设定过的相关事实（用来 ground 你的回复，不要照念，也不要把日期念出来）：\n\n\n- [2026-09-01] 喜欢奶茶\n- 无日期\n- 空日期\n"
+    },
+    {
+      "facts": [],
+      "prefix": "你过去在直播里说过 / 设定过的相关事实（用来 ground 你的回复，不要照念，也不要把日期念出来）：\n\n",
+      "output": "你过去在直播里说过 / 设定过的相关事实（用来 ground 你的回复，不要照念，也不要把日期念出来）：\n"
+    }
+  ],
+  "scopeFilter": [
+    {
+      "scope": {
+        "startDate": null,
+        "endDate": null,
+        "latest": 1,
+        "streamIds": [],
+        "label": ""
+      },
+      "broadcasts": ["2026-09-08-BV1abc"],
+      "where": "stream_id IN ('2026-09-08-BV1abc_p1', '2026-09-08-BV1abc_p2')"
+    },
+    {
+      "scope": {
+        "startDate": null,
+        "endDate": null,
+        "latest": 1,
+        "streamIds": [],
+        "label": ""
+      },
+      "broadcasts": [],
+      "where": null
+    },
+    {
+      "scope": {
+        "startDate": null,
+        "endDate": null,
+        "latest": null,
+        "streamIds": ["a'b"],
+        "label": ""
+      },
+      "broadcasts": [],
+      "where": "stream_id IN ('a''b')"
+    },
+    {
+      "scope": {
+        "startDate": null,
+        "endDate": null,
+        "latest": null,
+        "streamIds": ["2026-09-08-BV1abc"],
+        "label": ""
+      },
+      "broadcasts": ["2026-09-08-BV1abc"],
+      "where": "stream_id IN ('2026-09-08-BV1abc_p1', '2026-09-08-BV1abc_p2')"
+    },
+    {
+      "scope": {
+        "startDate": "2026-09-01",
+        "endDate": "2026-09-08",
+        "latest": null,
+        "streamIds": [],
+        "label": ""
+      },
+      "broadcasts": ["2026-09-08-BV1abc"],
+      "where": "stream_date >= '2026-09-01' AND stream_date < '2026-09-08'"
+    },
+    {
+      "scope": {
+        "startDate": "2026-09-01",
+        "endDate": null,
+        "latest": null,
+        "streamIds": [],
+        "label": ""
+      },
+      "broadcasts": [],
+      "where": "stream_date >= '2026-09-01'"
+    },
+    {
+      "scope": {
+        "startDate": null,
+        "endDate": "2026-09-08",
+        "latest": null,
+        "streamIds": [],
+        "label": ""
+      },
+      "broadcasts": [],
+      "where": "stream_date < '2026-09-08'"
+    },
+    {
+      "scope": {
+        "startDate": null,
+        "endDate": null,
+        "latest": null,
+        "streamIds": [],
+        "label": ""
+      },
+      "broadcasts": ["2026-09-08-BV1abc"],
+      "where": null
+    },
+    {
+      "scope": {
+        "startDate": null,
+        "endDate": null,
+        "latest": null,
+        "streamIds": ["x", "y"],
+        "label": ""
+      },
+      "broadcasts": ["2026-09-08-BV1abc"],
+      "where": "stream_id IN ('2026-09-08-BV1abc_p1', '2026-09-08-BV1abc_p2')"
+    },
+    {
+      "scope": {
+        "startDate": null,
+        "endDate": null,
+        "latest": 2,
+        "streamIds": ["z"],
+        "label": ""
+      },
+      "broadcasts": [],
+      "where": "stream_id IN ('z')"
+    }
+  ],
+  "renderResult": [
+    {
+      "name": "latest-overview",
+      "output": "以下是已归档直播的记录，用来 ground 回复，不要照念，也不要主动念日期。\n查询范围：最近一次直播\n已归档录播共1场；仅据现有记录，不能视为完整开播记录。\n2026-09-08 [2026-09-08-BV1abc] 2个录播分P/2段\n2026-09-08 聊了 ASMR、游戏和观众 SC。\n以上是压缩概览，片段为代表性摘录；具体细节需查询原始分段。"
+    },
+    {
+      "name": "date-details",
+      "output": "以下是已归档直播的记录，用来 ground 回复，不要照念，也不要主动念日期。\n查询范围：2026-09-08 至 2026-09-08\n已归档录播共1场；仅据现有记录，不能视为完整开播记录。\n2026-09-08 [2026-09-08-BV1abc] 2个录播分P/2段\n2026-09-08 聊了 ASMR、游戏和观众 SC。\n以上是压缩概览，片段为代表性摘录；具体细节需查询原始分段。\n你过去直播里相关的片段（用来 ground 你的回复，不要照念，也不要把日期念出来）：\n\n\n[1] 2026-09-08\n聊了 ASMR。\n"
+    },
+    {
+      "name": "no-scope",
+      "output": "以下是已归档直播的记录，用来 ground 回复，不要照念，也不要主动念日期。\n还没有明确要回顾哪场直播或哪个时间段，请先确定范围。"
+    },
+    {
+      "name": "empty-label",
+      "output": "以下是已归档直播的记录，用来 ground 回复，不要照念，也不要主动念日期。\n查询范围：指定场次"
+    }
+  ],
+  "enhance": [
+    {
+      "name": "last-week",
+      "query": "你上周直播都播了什么？",
+      "broadcasts": [
+        ["2026-09-08", "BV1abc", 2],
+        ["2026-09-06", "BV1abc", 1],
+        ["2026-09-01", "BV1abc", 1]
+      ],
+      "tools": true,
+      "hits": [
+        {
+          "id": "hit-1",
+          "stream_id": "2026-09-08-BV1abc_p1",
+          "summary": "聊了 ASMR。",
+          "stream_date": "2026-09-08"
+        }
+      ],
+      "returned": true,
+      "messages": [
+        {
+          "role": "user",
+          "content": "你上周直播都播了什么？"
+        },
+        {
+          "role": "system",
+          "content": "最近已归档的直播概览：\n已归档录播共3场；仅据现有记录，不能视为完整开播记录。\n2026-09-08 [2026-09-08-BV1abc] 2个录播分P/2段\n2026-09-08 聊了 ASMR、游戏和观众 SC。\n2026-09-06 [2026-09-06-BV1abc] 1个录播分P/1段\n2026-09-06 聊了 ASMR、游戏和观众 SC。\n2026-09-01 [2026-09-01-BV1abc] 1个录播分P/1段\n2026-09-01 聊了 ASMR、游戏和观众 SC。\n以上是压缩概览，片段为代表性摘录；具体细节需查询原始分段。"
+        },
+        {
+          "role": "system",
+          "content": "本次直播回忆查询：\n以下是已归档直播的记录，用来 ground 回复，不要照念，也不要主动念日期。\n查询范围：2026-08-31 至 2026-09-06\n已归档录播共2场；仅据现有记录，不能视为完整开播记录。\n2026-09-06 [2026-09-06-BV1abc] 1个录播分P/1段\n2026-09-06 聊了 ASMR、游戏和观众 SC。\n2026-09-01 [2026-09-01-BV1abc] 1个录播分P/1段\n2026-09-01 聊了 ASMR、游戏和观众 SC。\n以上是压缩概览，片段为代表性摘录；具体细节需查询原始分段。"
+        }
+      ],
+      "selectedScope": {
+        "startDate": "2026-08-31",
+        "endDate": "2026-09-07",
+        "latest": null,
+        "streamIds": ["2026-09-06-BV1abc", "2026-09-01-BV1abc"],
+        "label": "2026-08-31 至 2026-09-06"
+      },
+      "calls": [],
+      "lastWasArchive": true
+    },
+    {
+      "name": "last-thursday",
+      "query": "你上周四直播都播了什么？",
+      "broadcasts": [
+        ["2026-09-08", "BV1abc", 2],
+        ["2026-09-06", "BV1abc", 1],
+        ["2026-09-01", "BV1abc", 1]
+      ],
+      "tools": true,
+      "hits": [
+        {
+          "id": "hit-1",
+          "stream_id": "2026-09-08-BV1abc_p1",
+          "summary": "聊了 ASMR。",
+          "stream_date": "2026-09-08"
+        }
+      ],
+      "returned": false,
+      "messages": [
+        {
+          "role": "user",
+          "content": "你上周四直播都播了什么？"
+        },
+        {
+          "role": "system",
+          "content": "最近已归档的直播概览：\n已归档录播共3场；仅据现有记录，不能视为完整开播记录。\n2026-09-08 [2026-09-08-BV1abc] 2个录播分P/2段\n2026-09-08 聊了 ASMR、游戏和观众 SC。\n2026-09-06 [2026-09-06-BV1abc] 1个录播分P/1段\n2026-09-06 聊了 ASMR、游戏和观众 SC。\n2026-09-01 [2026-09-01-BV1abc] 1个录播分P/1段\n2026-09-01 聊了 ASMR、游戏和观众 SC。\n以上是压缩概览，片段为代表性摘录；具体细节需查询原始分段。"
+        },
+        {
+          "role": "system",
+          "content": "本次直播回忆查询：\n当前问题需要直播回忆。概览不足时调用 recall_streams 确定场次并查找记录；不要把不同时期的直播混在一起，也不要还没查询就说记不清。"
+        }
+      ],
+      "selectedScope": null,
+      "calls": [],
+      "lastWasArchive": true
+    },
+    {
+      "name": "asmr-topic",
+      "query": "你直播里说过喜欢什么ASMR？",
+      "broadcasts": [
+        ["2026-09-08", "BV1abc", 2],
+        ["2026-09-06", "BV1abc", 1],
+        ["2026-09-01", "BV1abc", 1]
+      ],
+      "tools": false,
+      "hits": [
+        {
+          "id": "hit-1",
+          "stream_id": "2026-09-08-BV1abc_p1",
+          "summary": "聊了 ASMR。",
+          "stream_date": "2026-09-08"
+        }
+      ],
+      "returned": false,
+      "messages": [
+        {
+          "role": "user",
+          "content": "你直播里说过喜欢什么ASMR？"
+        },
+        {
+          "role": "system",
+          "content": "最近已归档的直播概览：\n已归档录播共3场；仅据现有记录，不能视为完整开播记录。\n2026-09-08 [2026-09-08-BV1abc] 2个录播分P/2段\n2026-09-08 聊了 ASMR、游戏和观众 SC。\n2026-09-06 [2026-09-06-BV1abc] 1个录播分P/1段\n2026-09-06 聊了 ASMR、游戏和观众 SC。\n2026-09-01 [2026-09-01-BV1abc] 1个录播分P/1段\n2026-09-01 聊了 ASMR、游戏和观众 SC。\n以上是压缩概览，片段为代表性摘录；具体细节需查询原始分段。"
+        },
+        {
+          "role": "system",
+          "content": "本次直播回忆查询：\n你过去直播里相关的片段（用来 ground 你的回复，不要照念，也不要把日期念出来）：\n\n\n[1] 2026-09-08\n聊了 ASMR。\n"
+        }
+      ],
+      "selectedScope": {
+        "startDate": "2026-09-08",
+        "endDate": "2026-09-09",
+        "latest": null,
+        "streamIds": ["2026-09-08-BV1abc"],
+        "label": "刚才查到的直播片段"
+      },
+      "calls": [
+        {
+          "query": "你直播里说过喜欢什么ASMR？",
+          "candidates": 15,
+          "topK": 3,
+          "datePrefilter": true
+        }
+      ],
+      "lastWasArchive": true
+    },
+    {
+      "name": "recent-two",
+      "query": "随便聊聊吧今天",
+      "broadcasts": [["2026-09-08", "BV1abc", 1], ["2026-09-01", "BV1abc", 1]],
+      "tools": false,
+      "hits": [
+        {
+          "id": "hit-1",
+          "stream_id": "2026-09-08-BV1abc_p1",
+          "summary": "聊了 ASMR。",
+          "stream_date": "2026-09-08"
+        }
+      ],
+      "returned": false,
+      "messages": [
+        {
+          "role": "user",
+          "content": "随便聊聊吧今天"
+        },
+        {
+          "role": "system",
+          "content": "最近已归档的直播概览：\n已归档录播共2场；仅据现有记录，不能视为完整开播记录。\n2026-09-08 [2026-09-08-BV1abc] 1个录播分P/1段\n2026-09-08 聊了 ASMR、游戏和观众 SC。\n2026-09-01 [2026-09-01-BV1abc] 1个录播分P/1段\n2026-09-01 聊了 ASMR、游戏和观众 SC。\n以上是压缩概览，片段为代表性摘录；具体细节需查询原始分段。"
+        },
+        {
+          "role": "system",
+          "content": "本次直播回忆查询：\n你过去直播里相关的片段（用来 ground 你的回复，不要照念，也不要把日期念出来）：\n\n\n[1] 2026-09-08\n聊了 ASMR。\n"
+        }
+      ],
+      "selectedScope": null,
+      "calls": [
+        {
+          "query": "随便聊聊吧今天",
+          "candidates": 15,
+          "topK": 3,
+          "datePrefilter": true
+        }
+      ],
+      "lastWasArchive": false
+    },
+    {
+      "name": "empty-catalog",
+      "query": "随便聊聊吧今天",
+      "broadcasts": [],
+      "tools": false,
+      "hits": [
+        {
+          "id": "hit-1",
+          "stream_id": "2026-09-08-BV1abc_p1",
+          "summary": "聊了 ASMR。",
+          "stream_date": "2026-09-08"
+        }
+      ],
+      "returned": false,
+      "messages": [
+        {
+          "role": "user",
+          "content": "随便聊聊吧今天"
+        },
+        {
+          "role": "system",
+          "content": "本次直播回忆查询：\n你过去直播里相关的片段（用来 ground 你的回复，不要照念，也不要把日期念出来）：\n\n\n[1] 2026-09-08\n聊了 ASMR。\n"
+        }
+      ],
+      "selectedScope": null,
+      "calls": [
+        {
+          "query": "随便聊聊吧今天",
+          "candidates": 15,
+          "topK": 3,
+          "datePrefilter": true
+        }
+      ],
+      "lastWasArchive": false
+    }
+  ],
+  "threeTurns": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "你最喜欢吃什么呀？"
+      },
+      {
+        "role": "system",
+        "content": "你过去在直播里说过 / 设定过的相关事实（用来 ground 你的回复，不要照念，也不要把日期念出来）：\n\n\n- [2026-09-01] F1\n"
+      },
+      {
+        "role": "system",
+        "content": "你过去在直播里说过 / 设定过的相关事实（用来 ground 你的回复，不要照念，也不要把日期念出来）：\n\n\n- [2026-09-03] F3\n"
+      },
+      {
+        "role": "system",
+        "content": "本次直播回忆查询：\n你过去直播里相关的片段（用来 ground 你的回复，不要照念，也不要把日期念出来）：\n\n\n[1] 2026-09-08\n片段。\n"
+      },
+      {
+        "role": "system",
+        "content": "最近已归档的直播概览：\n已归档录播共1场；仅据现有记录，不能视为完整开播记录。\n2026-09-08 [2026-09-08-BV1abc] 1个录播分P/1段\n2026-09-08 聊了 ASMR、游戏和观众 SC。\n以上是压缩概览，片段为代表性摘录；具体细节需查询原始分段。"
+      },
+      {
+        "role": "system",
+        "content": "你过去在直播里说过 / 设定过的相关事实（用来 ground 你的回复，不要照念，也不要把日期念出来）：\n\n\n- [2026-09-02] F2\n"
+      },
+      {
+        "role": "assistant",
+        "content": "奶茶。"
+      },
+      {
+        "role": "user",
+        "content": "那你喜欢喝咖啡吗？"
+      },
+      {
+        "role": "assistant",
+        "content": "不太喜欢。"
+      },
+      {
+        "role": "user",
+        "content": "嗯"
+      }
+    ],
+    "metadata": [
+      {
+        "stream_archive_overview": false
+      },
+      {
+        "stream_archive_overview": false
+      },
+      {
+        "stream_archive_overview": false
+      }
+    ],
+    "archiveCalls": [
+      {
+        "query": "你最喜欢吃什么呀？",
+        "candidates": 15,
+        "topK": 3,
+        "datePrefilter": true
+      },
+      {
+        "query": "那你喜欢喝咖啡吗？",
+        "candidates": 15,
+        "topK": 3,
+        "datePrefilter": true
+      },
+      {
+        "query": "你最喜欢吃什么呀？ 那你喜欢喝咖啡吗？ 嗯",
+        "candidates": 15,
+        "topK": 3,
+        "datePrefilter": true
+      }
+    ],
+    "factsCalls": [
+      {
+        "query": "你最喜欢吃什么呀？",
+        "candidates": 30,
+        "topK": 8,
+        "datePrefilter": true
+      },
+      {
+        "query": "那你喜欢喝咖啡吗？",
+        "candidates": 30,
+        "topK": 8,
+        "datePrefilter": true
+      },
+      {
+        "query": "你最喜欢吃什么呀？ 那你喜欢喝咖啡吗？ 嗯",
+        "candidates": 30,
+        "topK": 8,
+        "datePrefilter": true
+      }
+    ]
+  },
+  "personaPrefix": [
+    {
+      "name": "golden",
+      "now": "2026-09-09T07:05:00",
+      "timeZone": "Asia/Shanghai",
+      "viewer": {
+        "isLoggedIn": true,
+        "uname": "小明",
+        "mid": 123
+      },
+      "recent": ["2026-09-09", "2026-09-08", "2026-09-01", "2026-08-01", "2025-09-08"],
+      "voiceHint": "VOICE_HINT",
+      "selfieHint": "SELFIE_HINT",
+      "output": "现在是 2026年9月9日 周三 07:05。如果用户问到时间或日期，根据这里的事实回答；不要主动念时间，除非话题相关。\n今天来花店的奶糖花叫「小明」（B站UID:123）。聊天里可以自然地叫她/他的名字，但不要每句都重复，也不要主动念UID。\n你最近几次直播：9月9日（今天）、9月8日（昨天）、9月1日（1周前）、8月1日（1个月前）、2025年9月8日（1年前）。如果用户问最近 / 上次 / 上一次 / 好久没播 / 这周播了吗 之类的，根据这里的日期自然回答；不要凭空编日期。\nVOICE_HINT\nSELFIE_HINT\n\n"
+    },
+    {
+      "name": "anonymous",
+      "now": "2026-09-09T07:05:00",
+      "timeZone": "Asia/Shanghai",
+      "viewer": {
+        "isLoggedIn": false,
+        "uname": null,
+        "mid": null
+      },
+      "recent": [],
+      "voiceHint": "",
+      "selfieHint": "",
+      "output": "现在是 2026年9月9日 周三 07:05。如果用户问到时间或日期，根据这里的事实回答；不要主动念时间，除非话题相关。\n\n"
+    },
+    {
+      "name": "bad-dates",
+      "now": "2026-09-09T07:05:00",
+      "timeZone": "Asia/Shanghai",
+      "viewer": {
+        "isLoggedIn": false,
+        "uname": null,
+        "mid": null
+      },
+      "recent": ["2026-09-08", "bad", "2026-01-01"],
+      "voiceHint": "",
+      "selfieHint": "",
+      "output": "现在是 2026年9月9日 周三 07:05。如果用户问到时间或日期，根据这里的事实回答；不要主动念时间，除非话题相关。\n你最近几次直播：9月8日（昨天）、1月1日（8个月前）。如果用户问最近 / 上次 / 上一次 / 好久没播 / 这周播了吗 之类的，根据这里的日期自然回答；不要凭空编日期。\n\n"
+    },
+    {
+      "name": "blank-uname",
+      "now": "2026-01-04T00:05:00",
+      "timeZone": "Asia/Shanghai",
+      "viewer": {
+        "isLoggedIn": true,
+        "uname": " ",
+        "mid": 7
+      },
+      "recent": ["2025-12-31", "2026-01-05", "2024-01-04"],
+      "voiceHint": "",
+      "selfieHint": "",
+      "output": "现在是 2026年1月4日 周日 00:05。如果用户问到时间或日期，根据这里的事实回答；不要主动念时间，除非话题相关。\n今天来花店的奶糖花叫「 」（B站UID:7）。聊天里可以自然地叫她/他的名字，但不要每句都重复，也不要主动念UID。\n你最近几次直播：2025年12月31日（4天前）、1月5日（今天）、2024年1月4日（2年前）。如果用户问最近 / 上次 / 上一次 / 好久没播 / 这周播了吗 之类的，根据这里的日期自然回答；不要凭空编日期。\n\n"
+    },
+    {
+      "name": "empty-uname",
+      "now": "2026-01-04T23:59:00",
+      "timeZone": "UTC",
+      "viewer": {
+        "isLoggedIn": true,
+        "uname": "",
+        "mid": 7
+      },
+      "recent": [],
+      "voiceHint": "",
+      "selfieHint": "",
+      "output": "现在是 2026年1月4日 周日 23:59。如果用户问到时间或日期，根据这里的事实回答；不要主动念时间，除非话题相关。\n\n"
+    },
+    {
+      "name": "logged-out-name",
+      "now": "2026-03-02T12:00:00",
+      "timeZone": "UTC",
+      "viewer": {
+        "isLoggedIn": false,
+        "uname": "游客",
+        "mid": 9
+      },
+      "recent": ["2026-03-02"],
+      "voiceHint": "VOICE_HINT",
+      "selfieHint": "",
+      "output": "现在是 2026年3月2日 周一 12:00。如果用户问到时间或日期，根据这里的事实回答；不要主动念时间，除非话题相关。\n你最近几次直播：3月2日（今天）。如果用户问最近 / 上次 / 上一次 / 好久没播 / 这周播了吗 之类的，根据这里的日期自然回答；不要凭空编日期。\nVOICE_HINT\n\n"
+    }
+  ],
+  "humanize": {
+    "-3": "今天",
+    "0": "今天",
+    "1": "昨天",
+    "2": "前天",
+    "3": "3天前",
+    "6": "6天前",
+    "7": "1周前",
+    "13": "1周前",
+    "14": "2周前",
+    "29": "4周前",
+    "30": "1个月前",
+    "59": "1个月前",
+    "60": "2个月前",
+    "364": "12个月前",
+    "365": "1年前",
+    "729": "1年前",
+    "730": "2年前",
+    "1000": "2年前"
+  },
+  "fallbackPersona": "You are a helpful assistant in a voice conversation. Your responses will be spoken aloud, so avoid emojis, bullet points, or other formatting that can't be spoken. Always reply in the same language the user just spoke; if they switch languages, switch with them. Respond briefly."
+}
