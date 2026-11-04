@@ -147,7 +147,8 @@ export async function realTable(name: string): Promise<lancedb.Table | null> {
   try {
     const table = await openTable(resolveDbPath(), name);
     if (table === null) return null;
-    await table.countRows();
+    // Row counts come from the manifest, which isn't in LFS; only reading a row hits a stub.
+    await table.query().limit(1).toArray();
     return table;
   } catch {
     return null;

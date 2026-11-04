@@ -312,6 +312,8 @@ export async function runSessionSafely(
   } catch (e) {
     logger.error(`Bot session failed: ${errorText(e)}`, e);
     // The client already has its answer: left open, the call would connect to no bot.
-    await connection.disconnect();
+    await connection.disconnect().catch((error: unknown) => {
+      logger.warning(`Closing the failed session's connection failed: ${errorText(error)}`);
+    });
   }
 }

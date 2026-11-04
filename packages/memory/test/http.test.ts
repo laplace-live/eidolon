@@ -201,6 +201,20 @@ describe("the SDK's retry policy", () => {
     expect(await failure(c.http.post("x", {}))).toEqual(["AuthenticationError", "Error code: 401"]);
   });
 
+  test("a body that fails mid-read retries like a connection error", async () => {
+    const reset = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.error(new TypeError("socket reset"));
+        },
+      }),
+      { status: 200 },
+    );
+    const { http, seen } = client([reset, json({ ok: true })]);
+    expect(await http.post("x", {})).toEqual({ ok: true });
+    expect(seen).toHaveLength(2);
+  });
+
   test("connection errors and timeouts retry twice, then raise the SDK's errors", async () => {
     const down = client([
       new TypeError("fetch failed"),

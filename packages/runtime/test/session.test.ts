@@ -519,4 +519,27 @@ describe("runSessionSafely", () => {
       "SONIOX_API_KEY environment variable is required",
     );
   });
+  test("a disconnect that throws during cleanup still never rejects", async () => {
+    const connection = new SmallWebRTCConnection();
+    spyOn(connection, "disconnect").mockRejectedValue(new Error("already closed"));
+    const { deps } = fakeDeps({
+      createStt: () => {
+        throw new Error("boom");
+      },
+    });
+    const admission: AllowedOffer = {
+      allowed: true,
+      user: ANONYMOUS,
+      token: null,
+      body: { sdp: "x", type: "offer" },
+      requestData: null,
+      opusBitrateBps: 96000,
+      clientIp: "203.0.113.1",
+      quota: null,
+    };
+    await runSessionSafely(connection, admission, deps);
+    expect(logs.messages("WARNING")).toContain(
+      "Closing the failed session's connection failed: already closed",
+    );
+  });
 });

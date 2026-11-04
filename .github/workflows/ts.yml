@@ -40,6 +40,8 @@ jobs:
     steps:
       # No LFS: the tests that read data/lancedb skip themselves on pointer stubs.
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: oven-sh/setup-bun@v2
         with:
