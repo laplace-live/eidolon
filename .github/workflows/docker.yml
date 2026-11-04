@@ -25,12 +25,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: python
-            image: ghcr.io/laplace-live/eidolon
-            dockerfile: Dockerfile
           - name: ts
-            image: ghcr.io/laplace-live/eidolon-ts
+            image: ghcr.io/laplace-live/eidolon
             dockerfile: apps/bot/Dockerfile
+          - name: python
+            image: ghcr.io/laplace-live/eidolon-python
+            dockerfile: Dockerfile
 
     permissions:
       contents: read
