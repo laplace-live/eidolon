@@ -1,0 +1,68 @@
+name: Release
+
+# Changesets flow (laplace-jupiter / laplace-comet pattern): while changesets
+# exist on master, keep a "chore: version packages" PR open (the version bump in
+# apps/bot/package.json, copied into the Python and TypeScript sources by
+# `bun run version`, plus apps/bot/CHANGELOG.md). Once it merges, `bun run
+# release` tags laplace-eidolon@<version>, the action pushes the tag and
+# publishes its GitHub Release, and the tag fires docker.yml, which pushes the
+# image tagged <version>, <major>.<minor> and <major>.
+#
+# A GitHub App token (not the default GITHUB_TOKEN) authenticates the action:
+# events caused by GITHUB_TOKEN don't start other workflows, so the tag would
+# never build, and checks on the version PR would wait for manual approval.
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history so each CHANGELOG line can link the commit that added its changeset
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+
+      - run: bun install --frozen-lockfile --ignore-scripts
+
+      # Requires the laplace-release-bot GitHub App installed on this repo with
+      # Contents and Pull requests read & write, its Client ID and private key
+      # stored in the `RELEASE_APP_CLIENT_ID` and `RELEASE_APP_PRIVATE_KEY` org
+      # secrets.
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Create version PR or tag the release
+        uses: changesets/action@v2
+        with:
+          version-script: bun run version
+          # Nothing is published to npm: `changeset git-tag` tags the bot's new
+          # version locally, and the action pushes the tag and creates its
+          # GitHub Release through the API.
+          publish-script: bun run release
+          commit-message: "chore: version packages [skip ci]"
+          title: "chore: version packages"
+          # v2 reads the token only from this input, not from the
+          # `GITHUB_TOKEN` env var.
+          github-token: ${{ steps.app-token.outputs.token }}
+          create-github-releases: true
