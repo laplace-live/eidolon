@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { monotonicSeconds, quotaFromEnv, SlidingWindowQuota } from "../src/index.ts";
 import { EnvPatch, FakeClock, LogCapture } from "./helpers.ts";
 
@@ -38,6 +38,19 @@ describe("SlidingWindowQuota", () => {
     expect(quota.peek("ip")).toEqual(result(false, 0, 1));
     clock.t = 1070.5;
     expect(quota.peek("ip")).toEqual(result(true, 1, 0));
+  });
+
+  test("a peek never adds a key; only a recorded attempt does", () => {
+    const quota = new SlidingWindowQuota(3, 60, new FakeClock(1000).now);
+    const set = spyOn(Map.prototype, "set");
+    try {
+      for (let i = 0; i < 5; i++) quota.peek(`203.0.113.${i}`);
+      expect(set).not.toHaveBeenCalled();
+      quota.tryConsume("203.0.113.9");
+      expect(set).toHaveBeenCalledTimes(1);
+    } finally {
+      set.mockRestore();
+    }
   });
 
   test("max=0 refuses everyone and reports the whole window", () => {

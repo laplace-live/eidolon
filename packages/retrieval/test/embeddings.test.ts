@@ -165,6 +165,22 @@ describe("EmbeddingClient", () => {
     expect(sleeps.length).toBe(5);
   });
 
+  test("a body that fails mid-read is retried, an error status's included", async () => {
+    const reset = (status: number) => () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.error(new TypeError("socket reset"));
+          },
+        }),
+        { status },
+      );
+    const { embeddings, calls } = client([reset(200), reset(503), Response.json(vectors([1]))]);
+    const [out] = await embeddings.embedWithUsage(["a"], opts);
+    expect(out).toEqual([[1]]);
+    expect(calls.length).toBe(3);
+  });
+
   test("an abort rejects with the signal's reason, even mid-backoff", async () => {
     const controller = new AbortController();
     const reason = new Error("interrupted");

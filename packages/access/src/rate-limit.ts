@@ -39,6 +39,7 @@ export class SlidingWindowQuota {
     const hits = this.#inWindow(key, now);
     if (hits.length >= this.maxPerWindow) return this.#result(hits, now, false);
     hits.push(now);
+    if (hits.length === 1) this.#hits.set(key, hits);
     return this.#result(hits, now, true);
   }
 
@@ -49,11 +50,8 @@ export class SlidingWindowQuota {
   }
 
   #inWindow(key: string, now: number): number[] {
-    let hits = this.#hits.get(key);
-    if (hits === undefined) {
-      hits = [];
-      this.#hits.set(key, hits);
-    }
+    // Only tryConsume adds a key: a peek (the preflight) costs nothing, so it mustn't grow the map.
+    const hits = this.#hits.get(key) ?? [];
     // Strict: an attempt exactly windowSeconds old still counts.
     const cutoff = now - this.windowSeconds;
     let expired = 0;

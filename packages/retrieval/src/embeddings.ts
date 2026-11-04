@@ -131,12 +131,12 @@ export interface EmbeddingClientOptions {
 }
 
 /** The SDK's APIStatusError text: `Error code: 401 - {'error': ...}`. */
-async function statusError(response: Response): Promise<Error> {
-  const text = pyStrip(await response.text());
+function statusError(status: number, body: string): Error {
+  const text = pyStrip(body);
   try {
-    return new Error(`Error code: ${response.status} - ${pyRepr(JSON.parse(text))}`);
+    return new Error(`Error code: ${status} - ${pyRepr(JSON.parse(text))}`);
   } catch {
-    return new Error(text || `Error code: ${response.status}`);
+    return new Error(text || `Error code: ${status}`);
   }
 }
 
@@ -269,9 +269,12 @@ export class EmbeddingClient {
       const timeout = AbortSignal.timeout(this.#timeoutSec * 1000);
       const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
       let response: Response;
+      let text: string;
       try {
         response = await (this.#fetch ?? fetch)(url, { ...init, signal: combined });
-        if (response.ok) return await response.json();
+        // httpx reads a non-streamed body inside send(), so openai-python retries a reset mid-body.
+        text = await response.text();
+        if (response.ok) return JSON.parse(text);
       } catch (error) {
         if (signal?.aborted) throw signal.reason;
         if (error instanceof SyntaxError) throw error;
@@ -282,14 +285,13 @@ export class EmbeddingClient {
         throw new Error(timeout.aborted ? "Request timed out." : "Connection error.");
       }
       if (remaining > 0 && shouldRetry(response.status, response.headers)) {
-        await response.body?.cancel();
         await this.#abortableSleep(
           retryDelaySeconds(retriesTaken, response.headers, this.#random),
           signal,
         );
         continue;
       }
-      throw await statusError(response);
+      throw statusError(response.status, text);
     }
   }
 
