@@ -1,7 +1,7 @@
 import { RTVIProcessor } from "@pipedog/core/processors/frameworks/rtvi/processor";
 
 /** Sent to the client in RTVI bot-ready `about`. */
-// Keep in sync with pyproject.toml [project].version.
+// Written by apps/bot/scripts/sync-version.ts on each release.
 export const BOT_ABOUT = Object.freeze({
   library: "laplace-eidolon",
   library_version: "0.2.0",

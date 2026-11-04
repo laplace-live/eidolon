@@ -1,5 +1,5 @@
 {
-  "name": "laplace-eidolon",
+  "name": "laplace-eidolon-monorepo",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -16,10 +16,13 @@
     "typecheck": "tsc -p tsconfig.json",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "test": "bun test --no-env-file"
+    "test": "bun test --no-env-file",
+    "version": "changeset version && bun apps/bot/scripts/sync-version.ts",
+    "release": "changeset git-tag"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
+    "@changesets/cli": "3.0.3",
     "@types/bun": "1.4.4",
     "typescript": "7.0.2"
   }

@@ -667,7 +667,7 @@ def _build_persona_prefix(
 class LaplaceRTVIProcessor(RTVIProcessor):
     """RTVIProcessor that brands the bot-ready ``about`` payload as ours."""
 
-    # Keep in sync with pyproject.toml [project].version.
+    # Written by apps/bot/scripts/sync-version.ts on each release.
     _DEFAULT_ABOUT = {
         "library": "laplace-eidolon",
         "library_version": "0.2.0",

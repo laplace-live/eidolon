@@ -255,6 +255,20 @@ module that owns it.
 
 ### Shipping a change
 
+- **Every user-facing change ships with a changeset in the same commit** — add
+  it yourself, unasked, for the Python and the TypeScript bot alike:
+  `bunx changeset add --minor laplace-eidolon -m "feat: Remember a viewer's nickname"`.
+  `--minor` for features and substantial behavior changes, `--patch` for fixes
+  and small changes. Start with `feat:`/`fix:`/`perf:`/`chore:`, then one
+  capitalized plain sentence under ~80 chars, written for users; the prefix is
+  stripped and the rest ships as the GitHub Release notes. No changeset for CI,
+  docs, tests, dev-only tooling, or refactors nobody notices. `laplace-eidolon`
+  (`apps/bot`) is the only released package; `@eidolon/*` are ignored.
+- **Never bump a version, push a release tag, or hand-edit `CHANGELOG.md`.**
+  Merging the Release workflow's version PR bumps `apps/bot/package.json`,
+  copies it into `pyproject.toml`, `uv.lock`, `bot.py` and `rtvi.ts`
+  (`apps/bot/scripts/sync-version.ts`), and tags `laplace-eidolon@<version>`,
+  which builds the image tagged `<version>`, `<major>.<minor>` and `<major>`.
 - **Fix defects you can trigger; don't harden against ones you can't.** Before
   adding a guard — including for a review finding — name the input or sequence
   that produces the failure against the code as it stands. No trigger means

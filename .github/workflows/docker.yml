@@ -4,8 +4,10 @@ on:
   push:
     branches:
       - "master"
+    # laplace-eidolon@<version>, pushed by release.yml (changesets) with the
+    # release bot's token, so this trigger fires.
     tags:
-      - "v*"
+      - "laplace-eidolon@*"
   pull_request:
     branches:
       - "master"
@@ -68,9 +70,9 @@ jobs:
             type=schedule
             type=ref,event=branch
             type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=match,pattern=^laplace-eidolon@(\d+\.\d+\.\d+)$,group=1
+            type=match,pattern=^laplace-eidolon@(\d+\.\d+)\.\d+$,group=1
+            type=match,pattern=^laplace-eidolon@(\d+)\.\d+\.\d+$,group=1
             type=sha
 
       - name: Build and push
