@@ -60,6 +60,8 @@ beforeEach(() => {
     OPENROUTER_API_KEY: undefined,
     RERANK_API_KEY: undefined,
     RERANK_BASE_URL: undefined,
+    // Python's default --db-path, which the goldens were recorded with.
+    LANCEDB_PATH: "data/lancedb",
   });
   logs = captureLogs();
 });

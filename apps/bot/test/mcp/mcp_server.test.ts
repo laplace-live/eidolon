@@ -7,8 +7,8 @@ import { createMcpHandler } from "../../src/mcp/index.ts";
 import {
   projectChunk,
   projectFact,
-  SEARCH_PERSONA_FACTS_DESCRIPTION,
-  SEARCH_STREAMS_DESCRIPTION,
+  searchPersonaFactsDescription,
+  searchStreamsDescription,
 } from "../../src/mcp/tools.ts";
 import {
   ACCEPT,
@@ -152,10 +152,10 @@ describe("golden surface", () => {
   });
 
   test("descriptions and instructions hash to the shipped bytes", async () => {
-    expect(sha256(SEARCH_PERSONA_FACTS_DESCRIPTION)).toBe(
+    expect(sha256(searchPersonaFactsDescription("明前奶绿"))).toBe(
       "079a32c66e555f0d4327e15b0598fc9063c4f8be1766941df2c7589c690de19a",
     );
-    expect(sha256(SEARCH_STREAMS_DESCRIPTION)).toBe(
+    expect(sha256(searchStreamsDescription("明前奶绿"))).toBe(
       "afa38eee3883231c463840beb91c406cd89aa138876377061bab5e3049b5fdbb",
     );
     const handler = await buildHandler();

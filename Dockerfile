@@ -37,16 +37,16 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # - laplace_eidolon/: the package itself (bot, embeddings, openrouter,
 #   persona_facts, stream_archive, and the tools/ subpackage).
 # - persona.md: system prompt source of truth, hot-editable at root.
-# - data/: prebuilt LanceDB indexes — stream_chunks (built via
-#   `uv run laplace-ingest-streams`) and persona_facts (built via
-#   `uv run laplace-ingest-facts`). Build these locally before
-#   `docker build` if you want RAG enabled in the container; both
-#   services gracefully no-op when their tables are absent.
+# - personas/: the persona templates. The LanceDB index is not in the image;
+#   point LANCEDB_PATH at a mounted copy (docs/personas.md).
 # - README.md: hatchling reads it during the project install step.
 COPY ./pyproject.toml ./uv.lock ./README.md ./
 COPY ./laplace_eidolon ./laplace_eidolon
-COPY ./persona.md ./
-COPY ./data ./data
+COPY ./personas ./personas
+# Caches and the default Mem0 history land here at runtime.
+RUN mkdir -p data
+# The data home holding the persona's index, mounted as a volume (docs/personas.md).
+ENV EIDOLON_HOME=/data
 
 # Install the project itself now that the source is in place — this
 # registers the laplace-* console scripts in /app/.venv/bin/ and makes

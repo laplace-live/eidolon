@@ -24,7 +24,7 @@ That alone solves the "backend is taking too long, give me feedback" problem. If
 
 ## Why this matters
 
-The bot is a voice persona ([明前奶绿](../persona.md)) that talks to viewers over WebRTC. Each turn the user speaks → audio is streamed to the server → the pipeline runs:
+The bot is a voice persona ([明前奶绿](../personas/milky-green/prompt.md)) that talks to viewers over WebRTC. Each turn the user speaks → audio is streamed to the server → the pipeline runs:
 
 ```
 transport.input → STT → user_aggregator → [Mem0, PersonaFacts, StreamArchive]

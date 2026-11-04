@@ -19,6 +19,11 @@ import {
 } from "../src/index.ts";
 import { captureLogs, deferred, resetEnv, setEnv } from "./helpers.ts";
 
+const TEMPLATE_PROMPT = readFileSync(
+  join(PROJECT_ROOT, "personas", "milky-green", "prompt.md"),
+  "utf8",
+).trim();
+
 interface PrefixCase {
   name: string;
   now: string;
@@ -178,18 +183,17 @@ describe("loadPersona", () => {
   });
 
   test("returns the stripped text and logs the path under the root", async () => {
-    writeFileSync(join(dir, "persona.md"), "\n  # 奶绿\n\n设定  \n");
-    expect(await loadPersona({ root: dir })).toBe("# 奶绿\n\n设定");
-    expect(logs.records.at(-1)?.message).toBe("Loaded persona from persona.md");
+    writeFileSync(join(dir, "prompt.md"), "\n  # 奶绿\n\n设定  \n");
+    expect(await loadPersona({ root: dir, file: "prompt.md" })).toBe("# 奶绿\n\n设定");
+    expect(logs.records.at(-1)?.message).toBe("Loaded persona from prompt.md");
   });
 
-  test("PERSONA_FILE picks the file; blank means persona.md", async () => {
-    writeFileSync(join(dir, "persona.md"), "default persona");
+  test("PERSONA_FILE picks the file; blank means the persona's prompt.md", async () => {
     writeFileSync(join(dir, "fork.md"), "fork persona");
     setEnv("PERSONA_FILE", "fork.md");
     expect(await loadPersona({ root: dir })).toBe("fork persona");
     setEnv("PERSONA_FILE", "");
-    expect(await loadPersona({ root: dir })).toBe("default persona");
+    expect(await loadPersona({ root: dir })).toBe(TEMPLATE_PROMPT);
   });
 
   test("an absolute path outside the root loads and logs in full", async () => {
@@ -206,10 +210,9 @@ describe("loadPersona", () => {
     await expect(loadPersona({ root: dir, file: "folder" })).rejects.toThrow();
   });
 
-  test("defaults to the repository's persona.md", async () => {
+  test("defaults to the active persona's prompt.md, the template when the data home has none", async () => {
     setEnv("PERSONA_FILE", undefined);
-    const expected = readFileSync(join(PROJECT_ROOT, "persona.md"), "utf8").trim();
-    expect(await loadPersona()).toBe(expected);
+    expect(await loadPersona()).toBe(TEMPLATE_PROMPT);
   });
 });
 

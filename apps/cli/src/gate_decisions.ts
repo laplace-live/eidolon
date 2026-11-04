@@ -17,9 +17,9 @@ import {
 } from "@eidolon/config";
 import {
   DEFAULT_GATE_MODEL,
-  GATE_QUESTIONS,
   GATE_THRESHOLD,
   GATE_URL,
+  gateQuestions,
   gateState,
 } from "@eidolon/context";
 import { type CliIo, printer, resolveIo } from "./io.ts";
@@ -136,7 +136,7 @@ export async function ask(turn: GateTurnSpec, options: AskOptions): Promise<Gate
     body: JSON.stringify({
       model: options.model,
       state: gateState(turnMessages(turn)),
-      questions: GATE_QUESTIONS,
+      questions: gateQuestions(),
     }),
     redirect: "manual",
     signal: AbortSignal.timeout(TIMEOUT_MS),

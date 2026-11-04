@@ -1,6 +1,7 @@
 // The two search tools: what tools/list advertises and what a tools/call runs.
 import type { SlidingWindowQuota } from "@eidolon/access";
 import {
+  activePersona,
   logger,
   type PydanticLineError,
   pyStrip,
@@ -15,15 +16,21 @@ export const SEARCH_PERSONA_FACTS = "search_persona_facts";
 export const SEARCH_STREAMS = "search_streams";
 
 // Shipped to the model verbatim as the tool descriptions; editing one changes runtime behavior.
-export const SEARCH_PERSONA_FACTS_DESCRIPTION =
-  "Search hand-compiled facts about the streamer 明前奶绿 — biography,\n" +
-  "character settings, preferences, recurring bits. Returns the most\n" +
-  "relevant facts with their source dates. Use for stable facts about who\n" +
-  "she is, not for recalling specific stream moments.";
-export const SEARCH_STREAMS_DESCRIPTION =
-  "Search transcripts of 明前奶绿's past live streams. Returns the most\n" +
-  "relevant ~5-minute stream segments with their broadcast dates and\n" +
-  "topics. Use to recall what she said or did on a stream.";
+export function searchPersonaFactsDescription(name: string): string {
+  return (
+    `Search hand-compiled facts about the streamer ${name} — biography,\n` +
+    "character settings, preferences, recurring bits. Returns the most\n" +
+    "relevant facts with their source dates. Use for stable facts about who\n" +
+    "she is, not for recalling specific stream moments."
+  );
+}
+export function searchStreamsDescription(name: string): string {
+  return (
+    `Search transcripts of ${name}'s past live streams. Returns the most\n` +
+    "relevant ~5-minute stream segments with their broadcast dates and\n" +
+    "topics. Use to recall what she said or did on a stream."
+  );
+}
 
 export const FACTS_INDEX_MISSING_NOTE = "Persona-facts index is not built on this server.";
 export const STREAMS_INDEX_MISSING_NOTE = "Stream-archive index is not built on this server.";
@@ -42,11 +49,14 @@ function definition(name: string, description: string): Tool {
   };
 }
 
-/** The Python server's tools/list, in its registration order. */
-export const TOOL_DEFINITIONS: readonly Tool[] = [
-  definition(SEARCH_PERSONA_FACTS, SEARCH_PERSONA_FACTS_DESCRIPTION),
-  definition(SEARCH_STREAMS, SEARCH_STREAMS_DESCRIPTION),
-];
+/** The Python server's tools/list, in its registration order, naming the active persona. */
+export function toolDefinitions(): Tool[] {
+  const { name } = activePersona().identity;
+  return [
+    definition(SEARCH_PERSONA_FACTS, searchPersonaFactsDescription(name)),
+    definition(SEARCH_STREAMS, searchStreamsDescription(name)),
+  ];
+}
 
 export type FactResult = { text: string; date: string | null; score: number | null };
 export type ChunkResult = {

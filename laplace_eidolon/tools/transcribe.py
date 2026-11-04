@@ -970,7 +970,9 @@ def main() -> int:
     )
     # Resolved against this file, not the CWD, so the default glossary is the
     # same one wherever the command is run from.
-    _default_context = Path(__file__).resolve().parent.parent / "soniox_context.toml"
+    _default_context = (
+        Path(__file__).resolve().parents[2] / "personas" / "milky-green" / "glossary.toml"
+    )
     soniox_group.add_argument(
         "--context-file",
         type=Path,

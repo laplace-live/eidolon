@@ -36,7 +36,13 @@ from openai import AsyncOpenAI
 from .env import env_int
 from .openrouter import extract_cost_usd, openrouter_headers
 
-DEFAULT_DB_PATH = "data/lancedb"
+# The persona's index in the data home, where the TypeScript bot looks too (docs/personas.md).
+DEFAULT_DB_PATH = str(
+    Path(os.getenv("EIDOLON_HOME") or "~/.laplace/eidolon").expanduser()
+    / "personas"
+    / "milky-green"
+    / "index"
+)
 DEFAULT_EMBED_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_EMBED_MODEL = "google/gemini-embedding-2-preview"
 DEFAULT_EMBED_DIM = env_int("EMBED_DIM", 3072)

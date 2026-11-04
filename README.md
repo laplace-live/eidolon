@@ -80,8 +80,8 @@ uv sync --extra tools
 uv run laplace-refine
 
 # Build the LanceDB indexes.
-uv run laplace-ingest-streams   # → data/lancedb/stream_chunks.lance
-uv run laplace-ingest-facts     # → data/lancedb/persona_facts.lance
+uv run laplace-ingest-streams   # → <data home>/personas/milky-green/index/stream_chunks.lance
+uv run laplace-ingest-facts     # → <data home>/personas/milky-green/index/persona_facts.lance
 ```
 
 Both ingest scripts populate a jieba-tokenized `tokens` column and build an
@@ -107,9 +107,10 @@ same flags and output: `bun run laplace-search`, `bun run laplace-eval-retrieval
 `bun run laplace-generate-image`, and `bun run gate-decisions` (the retrieval
 gate benchmark).
 
-The indexes live under `data/lancedb/`, committed through Git LFS, and are
-baked into both Docker images at build time. Re-run ingest, commit, then
-rebuild to pick them up.
+The indexes live in the persona's folder in the data home (`~/.laplace/eidolon`,
+or `EIDOLON_HOME`), never in git or an image: a server mounts its own copy, so
+a re-ingest reaches it by copying `index/` there. See
+[`docs/personas.md`](docs/personas.md).
 
 ### Retrieval pipeline
 
@@ -240,10 +241,9 @@ domain(s) so the DNS-rebinding Host check accepts requests; the proxy must pass
   origins allowed to call the bot; blank allows every origin. The Python bot
   always allows every origin.
 - **Persistent state**: viewers' long-term memories live in Qdrant, so its
-  storage volume is the one thing a restart must not lose; `data/mem0/`
-  holds Mem0's change log alongside it. LanceDB indexes ship inside the
-  image — to update them without a rebuild, mount `data/`, `streams/`, and
-  `persona.md` as volumes (commented example in `docker-compose.yml`).
+  storage volume is the one thing a restart must not lose; Mem0's change log
+  sits beside it. Both images read each persona's index and private references
+  from the data home mounted at `/data` (`docker-compose.yml` mounts yours).
 
 ## Releasing
 
@@ -256,9 +256,14 @@ Release, and pushes both images with the version tags. The rules are in
 
 ## Persona authoring
 
-Edit `persona.md` — it's loaded as the LLM `system_instruction` on every
-connection. Restart the bot to pick up changes. For richer detail beyond
-the always-on system prompt, add atomic facts to `data/*设定集.txt` /
+A persona is a folder: `persona.yaml` (her identity and the settings she
+changes), `prompt.md` (the system prompt, re-read on every connection),
+`glossary.toml`, and `references/`. The repository ships 明前奶绿's under
+`personas/milky-green/`; your own copy under `~/.laplace/eidolon/personas/`
+overrides it file by file. Settings layer as code defaults < `settings.yaml` <
+`persona.yaml` < the environment, with keys in `credentials.json`; every field
+is in [`docs/personas.md`](docs/personas.md). For richer detail beyond the
+always-on system prompt, add atomic facts to `data/*设定集.txt` /
 `data/*事件集.txt` and re-run `laplace-ingest-facts`.
 
 ## References

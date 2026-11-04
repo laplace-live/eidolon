@@ -1,9 +1,10 @@
-// Read-only access to the LanceDB tables the offline Python ingest builds, and the per-table
-// presets every caller (context, MCP, CLIs) searches with.
+// Read-only access to the persona's LanceDB tables, which the offline ingest builds, and the
+// per-table presets every caller (context, MCP, CLIs) searches with.
 import { existsSync } from "node:fs";
 import {
   envInt,
   envOptional,
+  personaPath,
   pyRepr,
   pyStr,
   pyTruthy,
@@ -13,16 +14,23 @@ import {
 import * as lancedb from "@lancedb/lancedb";
 import type { SearchRow } from "./hybrid.ts";
 
-export const DEFAULT_DB_PATH = "data/lancedb";
+/** Where a persona keeps its index, relative to its folder. */
+export const INDEX_DIR = "index";
 export const PERSONA_FACTS_TABLE = "persona_facts";
 export const STREAM_CHUNKS_TABLE = "stream_chunks";
 
 /**
- * `LANCEDB_PATH` resolved against the repository root, not the working directory, so the bot
- * and /mcp open the same indexes under any launcher. An absolute value is used as is.
+ * The active persona's index/, or `LANCEDB_PATH` resolved against the repository root, not the
+ * working directory, so the bot and /mcp open the same indexes under any launcher.
  */
 export function resolveDbPath(): string {
-  return resolveProjectPath(envOptional("LANCEDB_PATH") ?? DEFAULT_DB_PATH);
+  const configured = envOptional("LANCEDB_PATH");
+  return configured ? resolveProjectPath(configured) : personaPath(INDEX_DIR);
+}
+
+/** The CLIs' `--db-path` default: `LANCEDB_PATH` as written (they open it from the working directory, as Python's did), else the persona's index. */
+export function dbPathArgument(): string {
+  return envOptional("LANCEDB_PATH") ?? personaPath(INDEX_DIR);
 }
 
 async function tableNames(db: lancedb.Connection): Promise<string[]> {

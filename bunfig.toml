@@ -1,3 +1,7 @@
 # load-env.ts is the only .env reader, with python-dotenv's rules. Bun's own loader would run first,
 # expand bare $VAR, and read .env.local and .env.<NODE_ENV>, none of which the Python bot did.
 env = false
+
+[test]
+# Every test file runs against the repo's persona templates and an empty data home.
+preload = ["./packages/config/test/isolated-home.ts"]

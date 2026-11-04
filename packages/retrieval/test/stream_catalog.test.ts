@@ -19,11 +19,10 @@ import {
   clearCatalogCache,
   compactOverview,
   formatBroadcasts,
-  resolveDbPath,
   StreamCatalog,
   warmStreamCatalog,
 } from "../src/index.ts";
-import { captureLogs } from "./helpers.ts";
+import { captureLogs, REAL_INDEX } from "./helpers.ts";
 
 const FIXTURES = join(import.meta.dir, "fixtures", "catalog");
 const expected = await Bun.file(join(FIXTURES, "expected.json")).json();
@@ -241,7 +240,7 @@ describe("loader edges", () => {
   });
 });
 
-const realPath = join(resolveDbPath(), CATALOG_FILENAME);
+const realPath = join(REAL_INDEX, CATALOG_FILENAME);
 const realBytes = existsSync(realPath) ? await Bun.file(realPath).bytes() : null;
 // Python's goldens were printed for one catalog; a re-ingest changes it.
 const sameAsGoldens =
@@ -255,7 +254,7 @@ describe("the committed catalog", () => {
       const yields = spyOn(globalThis, "setImmediate");
       let broadcasts: Awaited<ReturnType<StreamCatalog["broadcasts"]>>;
       try {
-        broadcasts = await new StreamCatalog(resolveDbPath()).broadcasts();
+        broadcasts = await new StreamCatalog(REAL_INDEX).broadcasts();
         expect(yields).toHaveBeenCalled();
       } finally {
         yields.mockRestore();
@@ -267,7 +266,7 @@ describe("the committed catalog", () => {
   );
 
   test.skipIf(!sameAsGoldens)("formatBroadcasts of the newest seven matches Python", async () => {
-    const broadcasts = await new StreamCatalog(resolveDbPath()).broadcasts();
+    const broadcasts = await new StreamCatalog(REAL_INDEX).broadcasts();
     expect(broadcasts.length).toBe(expected.real_count);
     const top7 = broadcasts.slice(0, 7);
     expect(top7.map((b) => b.id)).toEqual(expected.real_top7_ids);

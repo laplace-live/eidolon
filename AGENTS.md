@@ -50,11 +50,12 @@ laplace_eidolon/      the Python runtime (rollback only) and the offline chain
   rate_limit.py         per-IP sliding-window quota · env.py numeric env vars
   openrouter.py         attribution headers + usage-cost extraction
   tools/                the offline chain, one console script per stage
-persona.md            the system prompt — identity and hard rules, no code
-data/                 fact .txt sources, lancedb/ (Git LFS), eval/, embed_cache.db,
-                      selfie-references/ (what take_selfie redraws: outfits/ —
-                      one per look, one used per render — and friends/ — one
-                      per person, named after them)
+personas/<id>/        a persona's template: persona.yaml, prompt.md (the system
+                      prompt), glossary.toml, references/outfits/ (what take_selfie
+                      redraws, one used per render). Her index and friends/ live
+                      in the data home, ~/.laplace/eidolon (docs/personas.md)
+data/                 local only, never committed: fact .txt sources, eval/,
+                      embed_cache.db
 streams/              transcripts <id>.md + <id>.refined.json sidecars (untracked)
 vods/                 downloaded audio + .info.json sidecars (untracked)
 docs/                 the topics too large to inline here
@@ -72,9 +73,10 @@ a row here and writing the prose there — not a new section in this file.**
 | `/api/memories`, or wiping a viewer's memories | [memory-admin.md](docs/memory-admin.md) |
 | RTVI events the web client listens for | [frontend-loading-state.md](docs/frontend-loading-state.md) |
 | per-viewer affection / XP tiers (design only, unbuilt) | [affection-system.md](docs/affection-system.md) |
-| the persona's identity, voice, or hard rules | `persona.md` |
+| the persona's identity, voice, or hard rules | `personas/milky-green/prompt.md` and `persona.yaml` |
+| settings files, credentials, the data home, or a persona's folder | [personas.md](docs/personas.md) |
 | any env var — all 50-odd are documented there | `.env.example` |
-| Soniox's per-project vocabulary glossary | `laplace_eidolon/soniox_context.toml` |
+| Soniox's per-project vocabulary glossary | `personas/milky-green/glossary.toml` |
 | broadcast overviews, date-scoped recall, or the archive lookup tool | [stream-recall.md](docs/stream-recall.md) |
 | the `take_selfie` tool, image generation, or `/api/selfie` | [selfies.md](docs/selfies.md) |
 | the retrieval gate, or why a turn skipped LanceDB | [retrieval-gate.md](docs/retrieval-gate.md) |
@@ -117,7 +119,7 @@ uv run laplace-ingest-streams    # → stream_chunks.lance
 uv run laplace-ingest-facts      # → persona_facts.lance
 uv run laplace-search            # probe the archive on the bot's exact retrieval path
 uv run laplace-eval-retrieval    # recall@k / MRR against data/eval/queries.toml
-uv run laplace-extract-users     # mine danmaku JSON for soniox_context.toml terms
+uv run laplace-extract-users     # mine danmaku JSON for glossary.toml terms
 uv run laplace-export-mem0       # dump a pre-migration Mem0 cloud account to JSON
 uv run laplace-import-mem0       # load that dump into a Qdrant; idempotent, resumable
 uv run laplace-generate-image    # prompt + reference images → a PNG, via OpenRouter's image API
@@ -132,11 +134,11 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | any Python file | `uv run ruff check .` and `uv run pyright` |
 | `mcp_server.py`, `rate_limit.py`, or `user_context.py` | `uv run pytest` — the suite covers the MCP mount and its quotas, nothing else |
 | retrieval, tokenization, chunking, `top_k`, or `candidates` | `uv run laplace-eval-retrieval` against `data/eval/baseline.json`. A quality claim without a number is not a claim |
-| an ingest script, `EMBED_MODEL`, or `EMBED_DIM` | re-run **both** ingests, then commit the regenerated `data/lancedb/` |
+| an ingest script, `EMBED_MODEL`, or `EMBED_DIM` | re-run **both** ingests into the persona's `index/`, then copy it to each server's mounted data home |
 | the pipeline, the transport, or a monkey-patch | boot the bot and hold a real call (`bun apps/bot/scripts/e2e-call.ts --text`, or `--audio`) — none of this is unit-testable |
 | `image_generation.py` | `uv run laplace-generate-image` against a real reference — it shares `generate()` with the bot, so a successful render is the check. Billed per image |
 | `retrieval_gate.py`'s questions, state, or threshold, or `RETRIEVAL_GATE_MODEL` | `uv run python docs/benchmarks/2026-09-19-retrieval-gate/decisions.py` — exits non-zero if any labeled turn that needs recall would be skipped |
-| `persona.md`'s 表演提示 markup, or `FISH_MODEL` | `uv run python docs/benchmarks/2026-10-17-drama-3-markup/render.py` (add `--model` for another model) — any `leaked` entry in its results means markup is read aloud. Billed per character |
+| `prompt.md`'s 表演提示 markup, or `FISH_MODEL` | `uv run python docs/benchmarks/2026-10-17-drama-3-markup/render.py` (add `--model` for another model) — any `leaked` entry in its results means markup is read aloud. Billed per character |
 | `mem0_local.py`, `memory_service.py`, or `memory_admin.py` | `docker compose up qdrant`, then round-trip a real store → search → delete. No test covers Mem0; it needs a live vector store and an embedding key |
 | an env var | document it in `.env.example` in the same commit |
 | anything under `apps/` or `packages/` | `bun run typecheck`, `bun run lint`, `bun run test`; for retrieval, the gate or the pipeline, the TypeScript CLI or call that matches the Python row above |
@@ -236,9 +238,10 @@ module that owns it.
   ships no CJK tokenizer, so both ingest scripts populate `tokens` and every
   query goes through `retrieval.tokenize_zh_query`. Stopwords are stripped from
   queries only — stripping them from the index collapses BM25.
-- **`data/lancedb/` is committed, and its `*.lance` files live in Git LFS.** CI
-  builds the image from `actions/checkout`, so an un-committed re-ingest ships
-  an empty index, and a checkout without `lfs: true` ships pointer stubs.
+- **A persona's index is never committed.** It lives in the data home
+  (`personas/<id>/index/`), and a deployment mounts it at `/data`; the images
+  carry only the templates. A re-ingest reaches production by copying the index
+  to the server, not by pushing.
 - **`retrieval.py` is the one search path.** The bot, the MCP server, and
   `laplace-eval-retrieval` all go through it, so what the eval scores is what
   the bot runs. Keep it that way. The first two reach it via
@@ -247,15 +250,22 @@ module that owns it.
 
 ### The persona
 
-- **Persona edits go in `persona.md`, not in code.** `_build_persona_prefix`
+- **Persona edits go in `prompt.md` and `persona.yaml`, not in code.** `_build_persona_prefix`
   layers only per-session facts on top — current date, viewer name, recent
   stream dates, available voice styles.
 - **The Chinese prompt text is load-bearing.** The 不要主动念 lines are what stop
   the model narrating the clock and reading UIDs aloud, and the wording tracks
-  `persona.md`'s vocabulary. Don't paraphrase it in passing.
+  `prompt.md`'s vocabulary. Don't paraphrase it in passing.
 - **`change_voice_style` is named once, as `_TOOL_NAME` in
   `voice_switching.py`.** It reaches the prompt through `persona_prefix_hint`,
-  not through `persona.md` — rename it in that one place.
+  not through `prompt.md` — rename it in that one place.
+- **Settings come in layers:** code defaults < `settings.yaml` < `persona.yaml` <
+  the environment, and secrets only in `credentials.json` or the environment.
+  A new setting adds its row to `SETTINGS` (`packages/config/src/settings.ts`)
+  and to [personas.md](docs/personas.md), with the variable that configures it;
+  a test holds the two in step.
+- **A template under `personas/` is published.** Never add an index, a friend
+  image, or anything a viewer said to one; those belong in the data home.
 
 ### Shipping a change
 
@@ -271,8 +281,8 @@ module that owns it.
 - **A push to `master` is a production deploy.** CI rebuilds `:edge`, and
   Watchtower on the production host restarts the bot from it, dropping live
   calls. Pushes that only touch docs, tests, changesets or `AGENTS.md` skip the
-  image build (`paths-ignore` in `docker.yml`); anything else, `persona.md` and
-  `data/` included, ships.
+  image build (`paths-ignore` in `docker.yml`); anything else, `personas/`
+  included, ships.
 - **Never bump a version, push a release tag, or hand-edit `CHANGELOG.md`.**
   Merging the Release workflow's version PR bumps `apps/bot/package.json`,
   copies it into `pyproject.toml`, `uv.lock`, `bot.py` and `rtvi.ts`

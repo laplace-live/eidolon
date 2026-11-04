@@ -33,7 +33,12 @@ const goldens = await golden<Case[]>("search.json");
 let restoreEnv = () => {};
 let logs!: ReturnType<typeof captureLogs>;
 beforeEach(() => {
-  restoreEnv = setEnv({ STREAM_ARCHIVE_CANDIDATES: undefined, PERSONA_TIMEZONE: undefined });
+  // Python's default --db-path, which the goldens were recorded with.
+  restoreEnv = setEnv({
+    STREAM_ARCHIVE_CANDIDATES: undefined,
+    PERSONA_TIMEZONE: undefined,
+    LANCEDB_PATH: "data/lancedb",
+  });
   logs = captureLogs();
 });
 afterEach(() => {

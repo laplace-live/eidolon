@@ -67,14 +67,8 @@ jobs:
         working-directory: ./
 
     steps:
+      # No persona data ships in the images: a deployment mounts its data home (docs/personas.md).
       - uses: actions/checkout@v7
-        with:
-          # The prebuilt LanceDB tables under data/lancedb/**/*.lance are
-          # stored in Git LFS (.gitattributes). Without lfs: true the
-          # runner only checks out the pointer stubs, the Dockerfile's
-          # `COPY ./data ./data` copies stubs into the image, and the
-          # bot ships with empty RAG tables.
-          lfs: true
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4

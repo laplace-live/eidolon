@@ -16,7 +16,7 @@ export interface RenderSelfieOptions {
   readonly extraReferences?: readonly ReferenceImage[];
   /** Picks the outfit; pass the clock the prompt was filled from. */
   readonly clock?: PersonaClock;
-  /** The selfie-references directory; BUNDLED_REFERENCES by default. */
+  /** One references directory; the persona's referenceRoots() by default. */
   readonly root?: string;
   readonly signal?: AbortSignal;
   readonly store?: SelfieStore;

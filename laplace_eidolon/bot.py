@@ -445,11 +445,13 @@ except Exception as e:
     PersonaFactsService = None
     logger.debug(f"PersonaFacts service unavailable: {e}")
 
-# TWO parents: this file is <repo>/laplace_eidolon/bot.py and persona.md
-# lives at the repo root. Walking up only one lands in the package dir,
+# TWO parents: this file is <repo>/laplace_eidolon/bot.py and the persona
+# pack lives at the repo root. Walking up only one lands in the package dir,
 # where the bot silently falls back to its stub persona with RAG disabled.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-PERSONA_PATH = PROJECT_ROOT / os.getenv("PERSONA_FILE", "persona.md")
+PERSONA_PATH = PROJECT_ROOT / (
+    os.getenv("PERSONA_FILE") or "personas/milky-green/prompt.md"
+)
 LANCEDB_PATH = resolve_db_path()
 
 

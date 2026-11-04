@@ -1,6 +1,15 @@
 // change_voice_style: when the viewer asks for a different voice (温柔一点, 换回原来的), the LLM
 // names a style and the session's Fish TTS switches to that style's reference id mid-call.
-import { cpSlice, logger, pyRepr, pyStr, pyStrip, sortedPy } from "@eidolon/config";
+import {
+  activePersona,
+  cpSlice,
+  envEntries,
+  logger,
+  pyRepr,
+  pyStr,
+  pyStrip,
+  sortedPy,
+} from "@eidolon/config";
 import type { LlmTool, ToolSchema } from "@eidolon/core";
 
 export const VOICE_TOOL_NAME = "change_voice_style";
@@ -21,8 +30,8 @@ export const STYLE_HINTS: Readonly<Record<string, string>> = {
   playful: "俏皮/调皮/调侃",
 };
 
-const DESCRIPTION =
-  "切换主播声线风格。**只在奶糖花明确要求换声音时调用** —— " +
+const description = (fans: string): string =>
+  `切换主播声线风格。**只在${fans}明确要求换声音时调用** —— ` +
   "例如『声音温柔一点』『换个活泼的』『换回原来的声音』。" +
   "不要主动切换，不要在打招呼时切换；只在用户表达想换声音时调用。" +
   "切换后用一两句话自然回应（『嗯，这样可以嘛』），不要照念工具名。";
@@ -35,7 +44,7 @@ export type VoiceStyles = ReadonlyMap<string, string>;
  * configured" rather than as an empty voice id.
  */
 export function loadVoiceStyles(
-  env: Readonly<Record<string, string | undefined>> = process.env,
+  env: Readonly<Record<string, string | undefined>> = Object.fromEntries(envEntries()),
 ): Map<string, string> {
   const styles = new Map<string, string>();
   const base = pyStrip(env.FISH_VOICE_ID ?? "");
@@ -63,7 +72,7 @@ export function voiceToolSchema(styles: VoiceStyles): ToolSchema {
   );
   return {
     name: VOICE_TOOL_NAME,
-    description: DESCRIPTION,
+    description: description(activePersona().identity.fans),
     properties: {
       style: { type: "string", description: `声线名称。${hints.join("; ")}。`, enum: styleNames },
     },
@@ -116,7 +125,7 @@ export function voicePromptHint(styles: VoiceStyles): string {
   const alternatives = alternativeStyleNames(styles);
   if (alternatives.length === 0) return "";
   return (
-    "如果奶糖花明确要求换声音（『温柔一点』『换个声音』『换回原来的』之类），" +
+    `如果${activePersona().identity.fans}明确要求换声音（『温柔一点』『换个声音』『换回原来的』之类），` +
     `调用 ${VOICE_TOOL_NAME} 工具，参数 style 可选：` +
     [DEFAULT_STYLE, ...alternatives].join("、") +
     "。不要主动切换；平时保持默认声线。"

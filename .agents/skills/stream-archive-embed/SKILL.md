@@ -110,9 +110,10 @@ report the missing corpus: ingest drops and recreates the entire table.
 Use the repository's full `vods/` and `streams/` directories. Transcription scans
 all downloaded audio, refinement scans all transcripts, and ingestion rebuilds
 the table from all transcripts. Never point production ingest at a batch-only
-transcript directory. The pipeline's ingest stage currently targets
-`data/lancedb/stream_chunks`, even if `LANCEDB_PATH` configures another runtime
-path; report a conflicting runtime path before running an update to the wrong DB.
+transcript directory. The pipeline's ingest stage targets the persona's index in
+the data home (`~/.laplace/eidolon/personas/milky-green/index`, or under
+`EIDOLON_HOME`), even if `LANCEDB_PATH` configures another runtime path; report a
+conflicting runtime path before running an update to the wrong DB.
 
 For each pending/new list, replace the sample path below with that actual path:
 
@@ -168,5 +169,6 @@ interrupted process, or partial result; the next invocation must see it pending.
 
 Report discovered/new BV counts, batch path(s), completed or pending status,
 verified database row counts, and any failures. Local batch files are ignored
-by Git; the regenerated LanceDB files are tracked through Git LFS. Leave commit
-and deployment to a separate request.
+by Git, and the index lives outside the repository: production sees a rebuilt
+one only once it is copied to the server's mounted data home (docs/personas.md).
+Leave that copy and any deployment to a separate request.

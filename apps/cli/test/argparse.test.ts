@@ -35,9 +35,33 @@ function outcome(parse: () => Namespace): Omit<Case, "argv"> {
   }
 }
 
+// Python's --db-path defaults to data/lancedb; the port leaves it unset and opens the persona's
+// index (docs/typescript.md, accepted differences). The goldens stay Python's own output.
+const PYTHON_DB_DEFAULT = "data/lancedb";
+const HELP_LINES: [string, string][] = [
+  ["LanceDB dir (default: data/lancedb)", "LanceDB dir (default: the persona's index/)"],
+  [
+    "LanceDB directory (default: data/lancedb)",
+    "LanceDB directory (default: the persona's index/)",
+  ],
+];
+
+function withPortDefaults(argv: string[], expected: Omit<Case, "argv">): Omit<Case, "argv"> {
+  const help = (text: string) =>
+    HELP_LINES.reduce((out, [from, to]) => out.replace(from, to), text);
+  const ns =
+    expected.ns && expected.ns.db_path === PYTHON_DB_DEFAULT && !argv.includes(PYTHON_DB_DEFAULT)
+      ? { ...expected.ns, db_path: null }
+      : expected.ns;
+  return { ...expected, stdout: help(expected.stdout), stderr: help(expected.stderr), ns };
+}
+
 function expectGoldens(cases: Case[], parse: (argv: string[]) => Namespace): void {
   for (const { argv, ...expected } of cases) {
-    expect({ argv, ...outcome(() => parse(argv)) }).toEqual({ argv, ...expected });
+    expect({ argv, ...outcome(() => parse(argv)) }).toEqual({
+      argv,
+      ...withPortDefaults(argv, expected),
+    });
   }
 }
 

@@ -10,7 +10,7 @@ import {
   type SlidingWindowQuota,
   type UserContext,
 } from "@eidolon/access";
-import { envOptional, isJsonObject, logger } from "@eidolon/config";
+import { activePersona, envOptional, isJsonObject, logger } from "@eidolon/config";
 import {
   openPersonaFactsRetriever,
   openStreamArchiveRetriever,
@@ -49,7 +49,7 @@ import {
   SEARCH_STREAMS,
   type SearchTool,
   STREAMS_INDEX_MISSING_NOTE,
-  TOOL_DEFINITIONS,
+  toolDefinitions,
 } from "./tools.ts";
 
 export interface McpHandler {
@@ -73,8 +73,8 @@ export interface McpHandlerOptions {
 }
 
 const SERVER_NAME = "laplace-eidolon";
-const INSTRUCTIONS =
-  "Retrieval over the streamer 明前奶绿's hand-compiled persona facts and past live-stream transcripts. Read-only.";
+const instructions = (name: string): string =>
+  `Retrieval over the streamer ${name}'s hand-compiled persona facts and past live-stream transcripts. Read-only.`;
 const CAPABILITIES: ServerCapabilities = {
   experimental: {},
   prompts: { listChanged: false },
@@ -129,10 +129,10 @@ async function resolveCallerTier(
 function buildServer(deps: Deps, tier: CallerTier): McpServer {
   const mcp = new McpServer(
     { name: SERVER_NAME, version: "" },
-    { capabilities: CAPABILITIES, instructions: INSTRUCTIONS },
+    { capabilities: CAPABILITIES, instructions: instructions(activePersona().identity.name) },
   );
   const { server } = mcp;
-  server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: [...TOOL_DEFINITIONS] }));
+  server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: toolDefinitions() }));
   server.setRequestHandler(ListResourcesRequestSchema, () => ({ resources: [] }));
   server.setRequestHandler(ListResourceTemplatesRequestSchema, () => ({ resourceTemplates: [] }));
   server.setRequestHandler(ListPromptsRequestSchema, () => ({ prompts: [] }));

@@ -1,17 +1,4 @@
-# Ignore everything in data/ (raw transcripts, embed_cache.db, sample fixtures,
-# etc.) but keep the directory, this file, the prebuilt LanceDB index, and the
-# selfie references tracked. Those must be in-tree so the image built in CI —
-# which only sees git-tracked files via `actions/checkout` — ships with RAG and
-# take_selfie enabled; both features disable themselves when their files are
-# missing, so an untracked one fails silently in production. See the
-# Dockerfile's data section, `laplace-ingest-streams` / `laplace-ingest-facts`
-# for how the tables are (re)built, and docs/selfies.md for the references.
+# Everything here is local: facts, transcripts, caches and memory exports never leave this machine.
+# A persona's index and private references live in its data-home folder (docs/personas.md).
 *
 !.gitignore
-!lancedb/
-!lancedb/**
-!selfie-references/
-!selfie-references/**
-
-# macOS Finder droppings — never commit these, even inside lancedb/.
-.DS_Store

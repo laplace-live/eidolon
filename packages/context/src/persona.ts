@@ -1,12 +1,15 @@
 // The per-session system instruction: a prefix of session facts (clock, viewer, recent stream
-// dates, tool hints) on top of persona.md, which carries the persona itself.
+// dates, tool hints) on top of the persona's prompt.md, which carries the persona itself.
 import { readFile, stat } from "node:fs/promises";
 import { isAbsolute, join, relative } from "node:path";
 import {
-  envStr,
+  activePersona,
+  envOptional,
   errorText,
+  fillPersonaText,
   logger,
   PROJECT_ROOT,
+  personaPath,
   personaTimeZone,
   pyRepr,
   pyStr,
@@ -65,10 +68,9 @@ export interface PersonaPrefixInput {
 }
 
 /**
- * The preamble prepended to persona.md. The 不要主动念 lines are load-bearing: without them the
+ * The preamble prepended to prompt.md. The 不要主动念 lines are load-bearing: without them the
  * model occasionally narrates the current time or reads the UID aloud, which sounds robotic and
- * breaks the persona's 短简、不像 AI 助手 rule. The wording matches persona.md's 奶绿 / 奶糖花
- * vocabulary.
+ * breaks the persona's 短简、不像 AI 助手 rule. The viewer line is the persona's own wording.
  */
 export function buildPersonaPrefix(input: PersonaPrefixInput): string {
   const clock = zonedClock(input.timeZone, input.now);
@@ -79,9 +81,10 @@ export function buildPersonaPrefix(input: PersonaPrefixInput): string {
       "不要主动念时间，除非话题相关。",
   ];
   const viewer = input.viewer;
-  if (viewer.isLoggedIn && viewer.uname) {
+  const { fans, viewerLine } = activePersona().identity;
+  if (viewer.isLoggedIn && viewer.uname && viewerLine) {
     lines.push(
-      `今天来花店的奶糖花叫「${viewer.uname}」（B站UID:${pyStr(viewer.mid)}）。` +
+      fillPersonaText(viewerLine, { fans, viewer: viewer.uname, uid: pyStr(viewer.mid) }) +
         "聊天里可以自然地叫她/他的名字，但不要每句都重复，也不要主动念UID。",
     );
   }
@@ -111,10 +114,10 @@ export function buildPersonaPrefix(input: PersonaPrefixInput): string {
   return `${lines.join("\n")}\n\n`;
 }
 
-/** persona.md, read fresh each session so edits apply without a restart. */
+/** The persona's prompt.md (or PERSONA_FILE), read fresh each session so edits apply without a restart. */
 export async function loadPersona(options: { root?: string; file?: string } = {}): Promise<string> {
   const root = options.root ?? PROJECT_ROOT;
-  const file = options.file ?? envStr("PERSONA_FILE", "persona.md");
+  const file = options.file ?? envOptional("PERSONA_FILE") ?? personaPath("prompt.md");
   const path = isAbsolute(file) ? file : join(root, file);
   const found = await stat(path).then(
     () => true,

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { dataHome } from "@eidolon/config";
 import {
   buildMemoryConfig,
   EMBED_KEY_MISSING,
@@ -63,7 +64,7 @@ describe("buildMemoryConfig", () => {
       apiKey: "sk-or",
       baseUrl: "https://openrouter.ai/api/v1",
     });
-    expect(config.historyDbPath).toBe("data/mem0/history.db");
+    expect(config.historyDbPath).toBe(join(dataHome(), "mem0", "history.db"));
   });
 
   test("the LLM model falls back MEM0_LLM_MODEL → OPENROUTER_MODEL → default, empty counting as unset", () => {

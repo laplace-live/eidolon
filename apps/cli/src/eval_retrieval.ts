@@ -23,8 +23,8 @@ import {
 } from "@eidolon/config";
 import { pyPath } from "@eidolon/imagegen";
 import {
-  DEFAULT_DB_PATH,
   DEFAULT_RERANK_BASE_URL,
+  dbPathArgument,
   embedTexts,
   extractDateFilter,
   type HybridSearchOptions,
@@ -67,7 +67,7 @@ options:
   -h, --help            show this help message and exit
   --queries QUERIES     TOML file of [[query]] entries (default:
                         data/eval/queries.toml)
-  --db-path DB_PATH     LanceDB directory (default: data/lancedb)
+  --db-path DB_PATH     LanceDB directory (default: the persona's index/)
   --table {persona_facts,stream_chunks}
                         Restrict eval to one table. Default: both.
   --modes {vector_only,hybrid,hybrid_rerank} [{vector_only,hybrid,hybrid_rerank} ...]
@@ -98,7 +98,7 @@ options:
 `,
   actions: [
     { dest: "queries", flags: ["--queries"], kind: "store", default: DEFAULT_QUERIES },
-    { dest: "db_path", flags: ["--db-path"], kind: "store", default: DEFAULT_DB_PATH },
+    { dest: "db_path", flags: ["--db-path"], kind: "store", default: null },
     {
       dest: "table",
       flags: ["--table"],
@@ -152,7 +152,7 @@ export function parseEvalArgs(argv: readonly string[]): EvalArgs {
   const ns = parseArgs(EVAL_PARSER, argv);
   return {
     queries: ns.queries as string,
-    dbPath: ns.db_path as string,
+    dbPath: (ns.db_path as string | null) ?? dbPathArgument(),
     table: ns.table as string | null,
     modes: ns.modes as string[] | null,
     factsCandidates: ns.facts_candidates as number,

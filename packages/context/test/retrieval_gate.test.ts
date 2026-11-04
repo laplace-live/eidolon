@@ -7,6 +7,7 @@ import {
   GATE_QUESTIONS,
   GATE_URL,
   GateDecision,
+  gateQuestions,
   gateState,
   PersonaFacts,
   RetrievalGate,
@@ -275,7 +276,7 @@ describe("RetrievalGate.decide", () => {
     expect(Object.keys(body)).toEqual(["model", "state", "questions"]);
     expect(body.state).toEqual(state);
     expect(Object.keys(body.questions)).toEqual(["about_her", "her_past", "named_thing"]);
-    expect(body.questions).toEqual(GATE_QUESTIONS);
+    expect(body.questions).toEqual(gateQuestions());
     expect(body.questions.about_her.instructions).toBe(
       "Is the viewer's latest message asking about the streamer herself — her preferences, " +
         "opinions, habits, abilities, body, family, pets, friends, relationships, backstory, " +

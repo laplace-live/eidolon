@@ -64,9 +64,11 @@ _TOOL_NAME = "take_selfie"
 SELFIE_PATH = "/api/selfie"
 
 # Resolved against the repo root rather than the working directory, like
-# resolve_db_path, so any launcher finds it. The Dockerfile COPYs data/ whole,
-# so what ships in here is what a deployment uses.
-BUNDLED_REFERENCES = Path(__file__).resolve().parent.parent / "data" / "selfie-references"
+# resolve_db_path, so any launcher finds it. Only the template's outfits ship;
+# friend images live in the persona's data-home folder, which this bot never reads.
+BUNDLED_REFERENCES = (
+    Path(__file__).resolve().parent.parent / "personas" / "milky-green" / "references"
+)
 
 # Two directories, two rules: one of ``outfits/`` is the persona, and every
 # ``friends/`` image is a different person.
