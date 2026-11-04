@@ -670,7 +670,7 @@ class LaplaceRTVIProcessor(RTVIProcessor):
     # Written by apps/bot/scripts/sync-version.ts on each release.
     _DEFAULT_ABOUT = {
         "library": "laplace-eidolon",
-        "library_version": "0.2.0",
+        "library_version": "0.3.0",
     }
 
     async def set_bot_ready(self, about=None):
