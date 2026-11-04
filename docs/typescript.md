@@ -94,6 +94,10 @@ Deliberate, and not worth matching:
   than 1.12: a finished `take_selfie` result may be delivered on its own once everything the
   viewer said has been answered.
 - Every response, 500s included, carries CORS headers.
+- Mem0's extraction may reply with up to 8192 tokens, where mem0 allows 2000. A thinking model's
+  reasoning counts toward that cap, and under mem0's cut about 1 in 12 Gemini Flash extractions
+  ended mid-JSON, losing that turn's memories. Lowering the thinking effort instead also fixed it,
+  but then small talk produced junk memories ("User is referred to as 奶糖花").
 
 ## Verified before cutover
 
@@ -111,12 +115,12 @@ On 2026-11-03, against the Python bot on the same machine and the same day:
 
 In production on 2026-11-04, a text call to eidolon.vrp.moe over Cloudflare TURN passed the same
 checks, relay-only (the browser's 12 LAN, CGNAT, Tailscale and ULA candidates dropped), with
-offer→connected at 2.8 s.
+offer→connected at 2.8 s. A logged-in call from China then validated its token through Workers
+(Bun's User-Agent accepted), and Mem0 read and wrote that viewer's memories; offer→connected took
+2.5 s, 1.5 s of it ICE and 1 s the DTLS handshake.
 
 Still open:
 
-- A logged-in call from the production host, which also confirms that Workers validation
-  accepts Bun's User-Agent.
 - 2 of 13 local audio calls took about 4 s longer to connect. The browser's ICE connected at
   once, but werift's own ICE reported connected about 4 s later. It never reproduced with
   tracing on, so the cause is unknown. Watch offer→connected on the Cloudflare TURN call, where

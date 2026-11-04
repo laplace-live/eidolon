@@ -6,7 +6,11 @@ import { describe, expect, test } from "bun:test";
 import { MemoryEngine, openMemoryEngine, sortNewestFirst } from "../src/engine.ts";
 import { ADDITIVE_EXTRACTION_PROMPT, AGENT_CONTEXT_SUFFIX } from "../src/extraction-prompt.ts";
 import { HistoryStore } from "../src/history.ts";
-import { OpenAICompatibleChat, OpenAICompatibleEmbedder } from "../src/openai.ts";
+import {
+  EXTRACTION_MAX_TOKENS,
+  OpenAICompatibleChat,
+  OpenAICompatibleEmbedder,
+} from "../src/openai.ts";
 import { QdrantVectorStore } from "../src/qdrant.ts";
 import type { MemoryItem } from "../src/types.ts";
 import fixtures from "./fixtures/engine.json";
@@ -92,6 +96,15 @@ function json(value: unknown): string {
 
 const PROBLEM_LEVELS = ["WARNING", "ERROR", "CRITICAL"];
 
+/** Python's recorded request, with the one documented departure: the port's larger token cap. */
+function withPortTokenCap(request: unknown): unknown {
+  const body = { ...(request as Record<string, unknown>) };
+  for (const key of ["max_tokens", "max_completion_tokens"]) {
+    if (body[key] === 2000) body[key] = EXTRACTION_MAX_TOKENS;
+  }
+  return body;
+}
+
 describe("add replays mem0", () => {
   for (const c of fixtures.add) {
     test(c.name, async () => {
@@ -136,7 +149,7 @@ describe("add replays mem0", () => {
         }
         return { ...call, messages };
       });
-      expect(json(chat)).toBe(json(c.chat));
+      expect(json(chat)).toBe(json(c.chat.map(withPortTokenCap)));
       expect(rows(dbPath)).toEqual(c.db as never);
       expect(pins.state.clockReads).toBe(c.clock_reads);
       expect(pins.state.uuids).toBe(c.uuids);

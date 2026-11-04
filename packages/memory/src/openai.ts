@@ -114,7 +114,14 @@ export function isReasoningModel(model: string): boolean {
   return REASONING_MODELS.has(base) || ["o1-", "o1.", "o3-", "o3."].some((p) => base.startsWith(p));
 }
 
-/** The request body mem0's OpenAI LLM builds, keys in its order. */
+/**
+ * mem0 caps the reply at 2000 tokens, but a thinking model's reasoning counts toward the cap. The
+ * default Gemini Flash thinks a median ~1,300 tokens per extraction and up to ~2,600, so under
+ * mem0's cap about 1 in 12 replies (measured 2026-11-04) ended mid-JSON and their memories were lost.
+ */
+export const EXTRACTION_MAX_TOKENS = 8192;
+
+/** The request body mem0's OpenAI LLM builds, keys in its order; only the token cap differs. */
 export function extractionRequestBody(
   model: string,
   messages: readonly ChatMessage[],
@@ -124,7 +131,8 @@ export function extractionRequestBody(
     : {
         temperature: 0.1,
         top_p: 0.1,
-        [baseModel(model).startsWith("gpt-5") ? "max_completion_tokens" : "max_tokens"]: 2000,
+        [baseModel(model).startsWith("gpt-5") ? "max_completion_tokens" : "max_tokens"]:
+          EXTRACTION_MAX_TOKENS,
       };
   return { ...sampling, messages, model, response_format: { type: "json_object" } };
 }

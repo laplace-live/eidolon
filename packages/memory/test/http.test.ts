@@ -252,9 +252,9 @@ describe("extraction chat", () => {
     { role: "user" as const, content: "U" },
   ];
 
-  test("the default model gets mem0's sampling params, in mem0's key order", () => {
+  test("the default model gets mem0's sampling params, in mem0's key order, with room to think", () => {
     expect(JSON.stringify(extractionRequestBody("~google/gemini-flash-latest", messages))).toBe(
-      '{"temperature":0.1,"top_p":0.1,"max_tokens":2000,"messages":[{"role":"system","content":"S"},{"role":"user","content":"U"}],"model":"~google/gemini-flash-latest","response_format":{"type":"json_object"}}',
+      '{"temperature":0.1,"top_p":0.1,"max_tokens":8192,"messages":[{"role":"system","content":"S"},{"role":"user","content":"U"}],"model":"~google/gemini-flash-latest","response_format":{"type":"json_object"}}',
     );
   });
 
@@ -265,7 +265,7 @@ describe("extraction chat", () => {
       "response_format",
     ]);
     expect(extractionRequestBody("openai/gpt-5.4-mini", messages)).toMatchObject({
-      max_completion_tokens: 2000,
+      max_completion_tokens: 8192,
     });
     expect(extractionRequestBody("openai/gpt-5.4-mini", messages)).not.toHaveProperty("max_tokens");
     for (const model of ["o1", "O3", "x/o1-2024-12-17", "o3.5", "gpt-5", "openai/gpt-5o-mini"]) {
