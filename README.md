@@ -1,14 +1,21 @@
 # laplace-eidolon
 
-A Pipecat voice bot for a streamer roleplay persona, with optional RAG over
+A voice bot for a streamer roleplay persona, with optional RAG over
 hand-compiled persona facts and refined past-stream transcripts, and optional
 per-viewer long-term memory via Mem0.
 
+The bot is TypeScript on [Bun](https://bun.sh), built on
+[pipedog](https://github.com/polvallverdu/pipedog), a TypeScript port of
+[Pipecat](https://docs.pipecat.ai/); it lives in `apps/` and `packages/`, and
+has run production since 2026-11-04. The offline chain that builds its indexes
+is Python (`laplace_eidolon/tools/`), as is the original Pipecat bot
+(`laplace_eidolon/`), kept as a rollback image until it is retired.
+
 ```
-transport.input → STT → user_aggregator
+transport.input → STT → user_aggregator → RetrievalGate
     → Mem0 (per-viewer memory, optional)
-    → PersonaFacts (RAG over hand-compiled streamer facts, optional)
     → StreamArchive (RAG over past streams, optional)
+    → PersonaFacts (RAG over hand-compiled streamer facts, optional)
     → LLM → TTS → transport.output → assistant_aggregator
 ```
 
@@ -19,9 +26,9 @@ transport.input → STT → user_aggregator
 | STT              | [Soniox](https://console.soniox.com/) (`stt-rt-v5`)                       |
 | LLM              | [OpenRouter](https://openrouter.ai/) (default `~google/gemini-flash-latest`) |
 | TTS              | [Fish Audio](https://fish.audio/app/) (`drama-3`, WebSocket)              |
-| Transport        | SmallWebRTC (Pipecat, self-hosted)                                        |
+| Transport        | SmallWebRTC, relayed through [Cloudflare TURN](https://developers.cloudflare.com/realtime/turn/) when configured |
 | Vector store     | LanceDB (local file, embeddings via OpenRouter)                           |
-| Long-term memory | [Mem0](https://docs.mem0.ai/open-source) self-hosted, over Qdrant (optional) |
+| Long-term memory | [Mem0](https://docs.mem0.ai/open-source)'s engine, self-hosted over Qdrant (optional) |
 
 Model IDs above are defaults. Every model the project runs — these three plus
 the embedding, reranker, and offline refinement models — is declared in one
@@ -33,31 +40,38 @@ behind your own reverse proxy.
 ## Local development
 
 ```bash
-uv sync                                # install runtime deps + laplace_eidolon package
-uv sync --extra tools                  # add faster-whisper + soniox CLI for ingest
-cp .env.example .env                   # fill in SONIOX_API_KEY, OPENROUTER_API_KEY,
-                                       # FISH_API_KEY, FISH_VOICE_ID...
-docker compose up -d qdrant            # optional: backs long-term memory
-uv run python -m laplace_eidolon.bot   # boots the dev runner on localhost:7860
+bun install
+cp .env.example .env          # fill in SONIOX_API_KEY, OPENROUTER_API_KEY,
+                              # FISH_API_KEY, FISH_VOICE_ID...
+docker compose up -d qdrant   # optional: backs long-term memory
+bun run dev                   # watch mode on localhost:7860; --port to move it
+bun run typecheck && bun run lint && bun run test
 ```
 
-Mem0 is a library inside the bot process, not a service — the only thing
-it needs running is Qdrant, and only if you want long-term memory. Set
-`MEM0_QDRANT_HOST=localhost` in `.env` to point the bot at the container
-above; leave it blank and the bot boots normally with memory switched off.
+`bun run start` runs it without watch mode. Mem0 is a library inside the bot
+process, not a service — the only thing it needs running is Qdrant, and only if
+you want long-term memory. Set `MEM0_QDRANT_HOST=localhost` in `.env` to point
+the bot at the container above; leave it blank and the bot boots normally with
+memory switched off.
 
-The bot uses `python -m` rather than a `laplace-bot` console script because
-Pipecat's runner discovers the `bot()` function via `sys.modules["__main__"]`,
-which a console-script entry doesn't satisfy. All offline tools (below) ship
-as proper console scripts.
+The bot serves no UI. The web client is LAPLACE's `/ai` page, whose settings
+take a custom backend URL such as `http://localhost:7860`. To hold a scripted
+call instead, run `bun apps/bot/scripts/e2e-call.ts --text` (or `--audio`).
+How the port is laid out and what keeps it working is in
+[`docs/typescript.md`](docs/typescript.md).
 
-Open http://localhost:7860/client for the bundled Pipecat demo UI (good
-for end-to-end testing while the custom `frontend/` is being built).
+The Python bot still runs, for comparison or rollback:
+
+```bash
+uv sync                                # runtime deps + laplace_eidolon package
+uv run python -m laplace_eidolon.bot   # the same API on localhost:7860
+```
 
 ## Building the RAG indexes (optional)
 
 Both `persona_facts` and `stream_archive` no-op gracefully when their LanceDB
 tables are missing, so the bot is runnable from a fresh checkout without these.
+The offline chain is Python:
 
 ```bash
 uv sync --extra tools
@@ -83,25 +97,31 @@ Other offline tools registered as console scripts:
 | `uv run laplace-transcribe`      | `laplace_eidolon.tools.transcribe`         | Whisper / Soniox transcription                     |
 | `uv run laplace-search`          | `laplace_eidolon.tools.search`             | REPL-style retrieval against the LanceDB index     |
 | `uv run laplace-eval-retrieval`  | `laplace_eidolon.tools.eval_retrieval`     | Score retrieval recall@k / MRR vs known queries    |
+| `uv run laplace-generate-image`  | `laplace_eidolon.tools.generate_image`     | Prompt + reference images → a PNG (billed)         |
 | `uv run laplace-extract-users`   | `laplace_eidolon.tools.extract_users`      | Mine danmaku JSON for top usernames                |
 | `uv run laplace-export-mem0`     | `laplace_eidolon.tools.export_mem0`        | Dump a pre-migration Mem0 cloud account to JSON    |
 | `uv run laplace-import-mem0`     | `laplace_eidolon.tools.import_mem0`        | Load that dump into a Qdrant (idempotent, resumable) |
 
-The indexes live under `server/data/lancedb/` and are baked into the Docker
-image at build time. Re-run ingest then `docker compose build` to pick them up.
+The query-side tools also exist on the TypeScript bot's own code path, with the
+same flags and output: `bun run laplace-search`, `bun run laplace-eval-retrieval`,
+`bun run laplace-generate-image`, and `bun run gate-decisions` (the retrieval
+gate benchmark).
+
+The indexes live under `data/lancedb/`, committed through Git LFS, and are
+baked into both Docker images at build time. Re-run ingest, commit, then
+rebuild to pick them up.
 
 ### Retrieval pipeline
 
 Each runtime turn flows through this when `persona_facts` / `stream_archive`
 are enabled:
 
-1. **Build a query** from the last few user turns
-   ([`retrieval.build_query_text`](laplace_eidolon/retrieval.py)). Short voice
-   utterances ("嗯, 那呢？") get rescued by prior context.
+1. **Build a query** from the last few user turns. Short voice utterances
+   ("嗯, 那呢？") get rescued by prior context.
 2. **Embed the query** once with `EMBED_MODEL` (default Gemini, 3072-dim).
-3. **Date pre-filter** (persona_facts only). If the query mentions a date
-   (`2026年5月9日` / `5月9号` / `2024年3月`), narrow the candidate pool with a
-   SQL where-clause on the `date` column before scoring.
+3. **Date pre-filter**. If the query mentions a date (`2026年5月9日` / `5月9号` /
+   `2024年3月`), narrow the candidate pool with a SQL where-clause on the `date`
+   column before scoring.
 4. **Hybrid search** (vector + jieba-tokenized BM25/FTS) pulls
    `PERSONA_FACTS_CANDIDATES` (default 30) or `STREAM_ARCHIVE_CANDIDATES`
    (default 15) candidates. Stopwords are stripped from the FTS query side
@@ -110,6 +130,10 @@ are enabled:
    re-scores down to `top_k` (8 for facts, 3 for chunks), on the same key
    the LLM uses. Set `RERANK_ENABLED=false` to fall back to LanceDB's
    default RRF fusion — worth keeping on at ~10k+ rows, at $0.002/search.
+
+Alongside the search, the retrieval gate asks a small model whether the turn
+needs recall at all, and cancels both searches if not — it never delays one;
+see [`docs/retrieval-gate.md`](docs/retrieval-gate.md).
 
 To measure how well retrieval is doing on a known set of questions:
 
@@ -125,34 +149,44 @@ adversarial example you add.
 
 ## Self-host with Docker
 
+CI publishes two images to GHCR, both tagged `edge`, `sha-…`, and per release
+`X.Y.Z`, `X.Y` and `X`:
+
+| Image                                 | Dockerfile            | Runs                     |
+| ------------------------------------- | --------------------- | ------------------------ |
+| `ghcr.io/laplace-live/eidolon`        | `apps/bot/Dockerfile` | the TypeScript bot       |
+| `ghcr.io/laplace-live/eidolon-python` | `Dockerfile`          | the Python bot (rollback) |
+
+Both listen on port `7860`, read the same `.env`, and keep Mem0's change log
+in `/app/data/mem0`. To build from this checkout instead:
+
 ```bash
-docker compose up --build
+docker compose up --build                # Python bot on :7860, plus Qdrant
+docker compose --profile ts up --build   # adds the TypeScript bot on :7861
 ```
 
-That builds the image from `Dockerfile`, copies in `laplace_eidolon/`,
-`persona.md`, and any LanceDB indexes you've built, and runs:
-
-```
-uv run python -m laplace_eidolon.bot --host 0.0.0.0 --port 7860
-```
-
-The container exposes port `7860`. Endpoints worth knowing:
+Endpoints worth knowing:
 
 | Endpoint                                    | What it does                                |
 | ------------------------------------------- | ------------------------------------------- |
-| `GET  /`                                    | 302 → `/client/`                            |
-| `GET  /client/*`                            | Bundled Pipecat demo UI (static)            |
+| `GET  /api/ice-servers`                     | ICE servers for the browser (minted Cloudflare TURN credentials) |
 | `POST /api/offer`                           | SmallWebRTC SDP offer → answer              |
 | `PATCH /api/offer`                          | Trickle ICE candidates                      |
-| `POST /start` and `POST /sessions/{id}/...` | RTVI session shim                           |
+| `POST /api/offer/preflight`                 | Check the anonymous quota before dialing    |
+| `GET  /api/selfie/{id}`                     | A picture the `take_selfie` tool rendered   |
 | `GET  /api/memories`                        | List the caller's Mem0 memories (auth req.) |
 | `POST /api/memories/forget`                 | Wipe the caller's Mem0 memories (auth req.) |
 | `POST /mcp`                                 | Public MCP server (Streamable HTTP, read-only) |
 
-A custom frontend (any framework) talks to `POST /api/offer` directly, or uses
-[`@pipecat-ai/client-js`](https://www.npmjs.com/package/@pipecat-ai/client-js)
+The TypeScript bot serves neither Pipecat's bundled demo UI (`/`, `/client`)
+nor its `/start` session API. The Python bot serves `/start`, and the demo UI
+only with `EIDOLON_PIPECAT_DEMO_ENABLED`.
 
-- [`@pipecat-ai/small-webrtc-transport`](https://www.npmjs.com/package/@pipecat-ai/small-webrtc-transport).
+A custom frontend talks to `POST /api/offer` directly, or uses
+[`@pipecat-ai/client-js`](https://www.npmjs.com/package/@pipecat-ai/client-js)
+with
+[`@pipecat-ai/small-webrtc-transport`](https://www.npmjs.com/package/@pipecat-ai/small-webrtc-transport),
+passing it the list from `GET /api/ice-servers`.
 
 See [`docs/frontend-loading-state.md`](docs/frontend-loading-state.md) for how
 to surface backend pipeline state (transcribing / thinking / speaking) in the
@@ -184,8 +218,8 @@ throughput only; it unlocks no private data. Both tools no-op gracefully (an
 empty result with a `note`) when their LanceDB index hasn't been built.
 
 Behind a reverse proxy, set `EIDOLON_MCP_ALLOWED_HOSTS` to your public
-domain(s) so the SDK's DNS-rebinding Host check accepts requests; the proxy
-must pass `POST /mcp` through unbuffered, like `/api/offer`.
+domain(s) so the DNS-rebinding Host check accepts requests; the proxy must pass
+`POST /mcp` through unbuffered, like `/api/offer`.
 
 ### Production checklist
 
@@ -194,20 +228,31 @@ must pass `POST /mcp` through unbuffered, like `/api/offer`.
   pass `POST /api/offer` and `PATCH /api/offer` through unchanged (no
   buffering) — these are small JSON requests but the WebRTC handshake
   hangs if they're delayed or rewritten.
-- **TURN/STUN**: SmallWebRTC defaults to Google's public STUN
-  (`stun:stun.l.google.com:19302`) when the client requests default ICE
-  servers via `POST /start`. For users behind symmetric NAT you'll need
-  your own TURN server (`coturn` is fine); inject ICE servers from the
-  custom frontend.
-- **CORS**: the dev runner ships with `allow_origins=["*"]`, which is
-  permissive but fine for getting started. Lock it down by adding a custom
-  CORS middleware to `pipecat.runner.run.app` before calling `main()` — see
-  `laplace_eidolon/bot.py` for the import surface.
+- **TURN**: set `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_KEY_API_TOKEN`.
+  The bot mints short-lived credentials, serves them at `GET /api/ice-servers`,
+  and gathers relay candidates only, so neither your server's IP nor the
+  viewer's reaches the other side's SDP (media never crosses an HTTP proxy, so
+  only a relay hides the origin). Static TURN (coturn and the like) works too,
+  through `WEBRTC_TURN_URL`; see `.env.example`.
+- **Real client IP**: behind a proxy, set `EIDOLON_REAL_IP_HEADER` (e.g.
+  `cf-connecting-ip`), or every viewer shares the proxy's anonymous quota.
+- **CORS**: `PIPECAT_ALLOWED_ORIGINS` takes a comma-separated list of the
+  origins allowed to call the bot; blank allows every origin. The Python bot
+  always allows every origin.
 - **Persistent state**: viewers' long-term memories live in Qdrant, so its
   storage volume is the one thing a restart must not lose; `data/mem0/`
   holds Mem0's change log alongside it. LanceDB indexes ship inside the
   image — to update them without a rebuild, mount `data/`, `streams/`, and
   `persona.md` as volumes (commented example in `docker-compose.yml`).
+
+## Releasing
+
+Versions and `apps/bot/CHANGELOG.md` are managed by
+[Changesets](https://github.com/changesets/changesets). A user-facing change
+ships with a changeset (`bunx changeset`); the Release workflow keeps a version
+PR open, and merging it tags `laplace-eidolon@X.Y.Z`, publishes the GitHub
+Release, and pushes both images with the version tags. The rules are in
+[`AGENTS.md`](AGENTS.md#shipping-a-change).
 
 ## Persona authoring
 
@@ -218,8 +263,7 @@ the always-on system prompt, add atomic facts to `data/*设定集.txt` /
 
 ## References
 
+- [pipedog](https://github.com/polvallverdu/pipedog) — the TypeScript Pipecat port the bot runs on
 - [Pipecat docs](https://docs.pipecat.ai/)
-- [Pipecat Development Runner guide](https://docs.pipecat.ai/api-reference/server/utilities/runner/guide)
-- [Pipecat deployment pattern](https://docs.pipecat.ai/pipecat/deployment/pattern)
 - [Pipecat client SDK (JS)](https://docs.pipecat.ai/client/js/introduction)
-- [`small-webrtc-prebuilt` source](https://github.com/pipecat-ai/small-webrtc-prebuilt) — reference UI
+- [Cloudflare Realtime TURN](https://developers.cloudflare.com/realtime/turn/)

@@ -37,7 +37,7 @@ the compose `bot-ts` service keeps its own volume, so each runtime's change log 
 
 ```bash
 bun install
-bun run dev --port 7861               # watch mode, beside the Python bot on :7860
+bun run dev                           # watch mode on :7860; --port 7861 to run beside the Python bot
 bun run start                         # no watch
 bun run typecheck && bun run lint && bun run test
 bun run laplace-search "奶绿最喜欢喝什么"

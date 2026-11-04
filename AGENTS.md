@@ -4,10 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-`laplace-eidolon` is a Pipecat voice bot for a streamer RP persona, self-hosted
-over SmallWebRTC — no Daily, no telephony, no Pipecat Cloud. Two halves share
-one LanceDB instance: a runtime pipeline that answers viewers over WebRTC, and
-an offline batch chain that builds the indexes it reads.
+`laplace-eidolon` is a voice bot for a streamer RP persona, self-hosted over
+SmallWebRTC — no Daily, no telephony, no Pipecat Cloud. Two halves share one
+LanceDB instance: a runtime pipeline that answers viewers over WebRTC, and an
+offline batch chain that builds the indexes it reads.
 
 ```text
 transport.input → STT → user_aggregator → RetrievalGate
@@ -19,15 +19,19 @@ else — Mem0, the reranker, the retrieval gate, both RAG indexes — degrades
 quietly when its key, table, or vector store is missing, so a fresh checkout
 runs.
 
-A TypeScript/Bun port of the runtime half lives beside it in `apps/` and
-`packages/`, built on pipedog. Production has run it (`ghcr.io/laplace-live/eidolon`)
-since 2026-11-04; the Python runtime (`eidolon-python`) stays until it is retired.
-Both read the same LanceDB and Qdrant collection.
+The runtime is TypeScript on Bun, built on pipedog (a TypeScript port of
+Pipecat), in `apps/` and `packages/`; production has run it
+(`ghcr.io/laplace-live/eidolon`) since 2026-11-04. The offline chain is Python
+(`laplace_eidolon/tools/`). The original Pipecat runtime in `laplace_eidolon/`
+stays, as the `eidolon-python` rollback image, until it is retired. Both
+runtimes read the same LanceDB and Qdrant collection.
 
 ## Repository layout
 
 ```text
-laplace_eidolon/      the runtime package
+apps/bot/             the bot: HTTP server, routes, MCP, entry point; apps/cli/ its CLIs
+packages/             its subsystems, one Bun workspace package each (docs/typescript.md)
+laplace_eidolon/      the Python runtime (rollback only) and the offline chain
   bot.py                pipeline + Starlette app; the process entry point
   offer_middleware.py   rate limit, body normalization, preflight for /api/offer
   user_context.py       loginSyncToken → UserContext via the Workers helper API
@@ -55,8 +59,6 @@ streams/              transcripts <id>.md + <id>.refined.json sidecars (untracke
 vods/                 downloaded audio + .info.json sidecars (untracked)
 docs/                 the topics too large to inline here
 tests/                pytest — no network, no LanceDB
-packages/             the TypeScript port, one Bun workspace package per subsystem
-apps/bot/             its HTTP server, routes, MCP and entry point; apps/cli/ its CLIs
 ```
 
 ## Where to look
@@ -76,22 +78,33 @@ a row here and writing the prose there — not a new section in this file.**
 | broadcast overviews, date-scoped recall, or the archive lookup tool | [stream-recall.md](docs/stream-recall.md) |
 | the `take_selfie` tool, image generation, or `/api/selfie` | [selfies.md](docs/selfies.md) |
 | the retrieval gate, or why a turn skipped LanceDB | [retrieval-gate.md](docs/retrieval-gate.md) |
-| anything under `apps/` or `packages/` (the TypeScript port) | [typescript.md](docs/typescript.md) |
+| anything under `apps/` or `packages/` (the TypeScript bot) | [typescript.md](docs/typescript.md) |
 
 ## Commands
+
+The bot:
+
+```bash
+bun install
+bun run dev                            # watch mode on :7860 (--port to move it); `start` without watch
+bun run typecheck && bun run lint && bun run test
+bun run laplace-search / laplace-eval-retrieval / laplace-generate-image / gate-decisions
+```
+
+The Python side:
 
 ```bash
 uv sync                                # runtime deps
 uv sync --extra tools                  # + faster-whisper, soniox (offline only)
-uv run python -m laplace_eidolon.bot   # run the bot on :7860 — NOT a console script
+uv run python -m laplace_eidolon.bot   # the Python bot on :7860 — NOT a console script
 
 uv run ruff check .                    # lint — import sorting only, line length 100
 uv run pyright                         # types
 uv run pytest                          # tests
-docker compose up --build              # self-host; ships data/lancedb/ into the image
+docker compose up --build              # Python bot + Qdrant; --profile ts adds the TS bot on :7861
 ```
 
-The bot is deliberately not a `laplace-*` console script: Pipecat's runner
+The Python bot is deliberately not a `laplace-*` console script: Pipecat's runner
 discovers `bot()` through `sys.modules["__main__"]`, which a generated launcher
 doesn't satisfy. Everything under `tools/` is a console script:
 
@@ -110,27 +123,17 @@ uv run laplace-import-mem0       # load that dump into a Qdrant; idempotent, res
 uv run laplace-generate-image    # prompt + reference images → a PNG, via OpenRouter's image API
 ```
 
-The TypeScript port:
-
-```bash
-bun install
-bun run dev --port 7861                # watch mode, beside the Python bot; `start` without watch
-bun run typecheck && bun run lint && bun run test
-bun run laplace-search / laplace-eval-retrieval / laplace-generate-image / gate-decisions
-docker compose --profile ts up --build # bot-ts on :7861
-```
-
 ### Which checks to run
 
 Match the gate to the surface you touched; don't reflexively run everything.
 
 | You changed | Run |
 | --- | --- |
-| any source file | `uv run ruff check .` and `uv run pyright` |
+| any Python file | `uv run ruff check .` and `uv run pyright` |
 | `mcp_server.py`, `rate_limit.py`, or `user_context.py` | `uv run pytest` — the suite covers the MCP mount and its quotas, nothing else |
 | retrieval, tokenization, chunking, `top_k`, or `candidates` | `uv run laplace-eval-retrieval` against `data/eval/baseline.json`. A quality claim without a number is not a claim |
 | an ingest script, `EMBED_MODEL`, or `EMBED_DIM` | re-run **both** ingests, then commit the regenerated `data/lancedb/` |
-| the pipeline, the transport, or a monkey-patch | boot the bot and hold a real call — none of this is unit-testable |
+| the pipeline, the transport, or a monkey-patch | boot the bot and hold a real call (`bun apps/bot/scripts/e2e-call.ts --text`, or `--audio`) — none of this is unit-testable |
 | `image_generation.py` | `uv run laplace-generate-image` against a real reference — it shares `generate()` with the bot, so a successful render is the check. Billed per image |
 | `retrieval_gate.py`'s questions, state, or threshold, or `RETRIEVAL_GATE_MODEL` | `uv run python docs/benchmarks/2026-09-19-retrieval-gate/decisions.py` — exits non-zero if any labeled turn that needs recall would be skipped |
 | `persona.md`'s 表演提示 markup, or `FISH_MODEL` | `uv run python docs/benchmarks/2026-10-17-drama-3-markup/render.py` (add `--model` for another model) — any `leaked` entry in its results means markup is read aloud. Billed per character |
@@ -191,7 +194,7 @@ module that owns it.
   picks one by the hour, behind `reference_sources`, the choke point the bot
   and `laplace-generate-image` share.
 
-### TypeScript port
+### The TypeScript bot
 
 - **Only `packages/runtime` imports `@pipedog/*`.** Biome enforces it; every
   other package must stay usable without a pipeline.
@@ -265,6 +268,11 @@ module that owns it.
   stripped and the rest ships as the GitHub Release notes. No changeset for CI,
   docs, tests, dev-only tooling, or refactors nobody notices. `laplace-eidolon`
   (`apps/bot`) is the only released package; `@eidolon/*` are ignored.
+- **A push to `master` is a production deploy.** CI rebuilds `:edge`, and
+  Watchtower on the production host restarts the bot from it, dropping live
+  calls. Pushes that only touch docs, tests, changesets or `AGENTS.md` skip the
+  image build (`paths-ignore` in `docker.yml`); anything else, `persona.md` and
+  `data/` included, ships.
 - **Never bump a version, push a release tag, or hand-edit `CHANGELOG.md`.**
   Merging the Release workflow's version PR bumps `apps/bot/package.json`,
   copies it into `pyproject.toml`, `uv.lock`, `bot.py` and `rtvi.ts`
