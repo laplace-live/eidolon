@@ -41,8 +41,11 @@ describe("LaplaceRTVIProcessor.setBotReady", () => {
     expect(sent.map(aboutOf)).toEqual([{ library: "x" }]);
   });
 
-  test("BOT_ABOUT is the pyproject identity, frozen", () => {
-    expect(BOT_ABOUT).toEqual({ library: "laplace-eidolon", library_version: "0.2.0" });
+  // The version itself is checked against apps/bot/package.json by apps/bot/test/version.test.ts.
+  test("BOT_ABOUT is the bot's identity, frozen", () => {
+    expect(Object.keys(BOT_ABOUT)).toEqual(["library", "library_version"]);
+    expect(BOT_ABOUT.library).toBe("laplace-eidolon");
+    expect(BOT_ABOUT.library_version).toMatch(/^\d+\.\d+\.\d+$/);
     expect(Object.isFrozen(BOT_ABOUT)).toBe(true);
   });
 });
