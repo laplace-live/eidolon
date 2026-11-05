@@ -157,7 +157,7 @@ test.skipIf(!present && !REQUIRED)(
     );
     const messages = logs.records.map(([, message]) => message);
     const at = (pattern: RegExp) => messages.filter((m) => pattern.test(m));
-    expect(messages[0]).toBe(`Index for persona milky-green: ${canonicalPath(db)}`);
+    expect(messages[0]).toBe(`Persona milky-green's index: ${canonicalPath(db)}`);
     expect(messages[1]).toBe(`Ingesting from: ['${FILES.join("', '")}']`);
     expect(at(/^Loaded /).map((m) => m.replace(/, \d+ duplicates skipped$/, ""))).toEqual(
       FILES.map((name, i) => `Loaded ${name}: ${perSource[i]} facts kept`),

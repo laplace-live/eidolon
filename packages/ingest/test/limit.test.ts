@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   CLEANUP_LIMIT_MS,
@@ -8,6 +10,7 @@ import {
   terminate,
   terminateOnAbort,
 } from "../src/index.ts";
+import { makeFifo, whenReading } from "./fifo.ts";
 
 function deferred<T = void>() {
   let resolve!: (value: T) => void;
@@ -132,6 +135,22 @@ describe("runWithSignals", () => {
     }
   });
 
+  test("a signal that reaches its listener only after the run returned still exits 130 or 143", async () => {
+    for (const [name, code] of [
+      ["SIGINT", 130],
+      ["SIGTERM", 143],
+    ] as const) {
+      const host = new FakeHost();
+      // As a real signal sent during the run's last synchronous stretch: a later turn delivers it.
+      const result = runWithSignals(async () => {
+        setTimeout(() => host.send(name), 0);
+        return 0;
+      }, host);
+      expect(await result).toBe(code);
+      expect(host.exits).toEqual([]);
+    }
+  });
+
   test("a second signal exits at once", async () => {
     const host = new FakeHost();
     const gate = deferred<number>();
@@ -217,6 +236,45 @@ describe("runWithSignals", () => {
       }
     }
   }, 10_000);
+
+  test("a real signal sent while the run is stuck in a synchronous read still exits 130 or 143", async () => {
+    const limit = join(import.meta.dir, "../src/limit.ts");
+    const work = mkdtempSync(join(tmpdir(), "limit-signal-"));
+    try {
+      for (const [name, code] of [
+        ["SIGINT", 130],
+        ["SIGTERM", 143],
+      ] as const) {
+        const fifo = join(work, `${name}.fifo`);
+        makeFifo(fifo);
+        const child = Bun.spawn(
+          [
+            process.execPath,
+            "--no-env-file",
+            "-e",
+            `const { readFileSync } = await import("node:fs");
+             const { runWithSignals } = await import(${JSON.stringify(limit)});
+             process.exitCode = await runWithSignals(async () => {
+               readFileSync(${JSON.stringify(fifo)});
+               return 0;
+             });`,
+          ],
+          { stdin: "ignore", stdout: "pipe", stderr: "pipe" },
+        );
+        try {
+          const release = await whenReading(fifo, child);
+          child.kill(name);
+          await Bun.sleep(50);
+          release("x");
+          expect(await child.exited).toBe(code);
+        } finally {
+          child.kill("SIGKILL");
+        }
+      }
+    } finally {
+      rmSync(work, { recursive: true, force: true });
+    }
+  }, 20_000);
 });
 
 describe("terminate", () => {

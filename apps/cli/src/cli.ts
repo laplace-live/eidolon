@@ -70,7 +70,7 @@ positional arguments:
                         laplace-build-stream-catalog
     pipeline            laplace-pipeline
     extract-users       laplace-extract-users
-    prepare-batch       laplace-prepare-batch (the skill's prepare_batch.py)
+    prepare-batch       laplace-prepare-batch
 
 options:
   -h, --help            show this help message and exit

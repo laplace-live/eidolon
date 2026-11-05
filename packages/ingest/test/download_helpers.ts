@@ -100,14 +100,13 @@ export function readArgvLog(path: string): string[][] {
 }
 
 /**
- * Python's yt-dlp arguments with the port's additions: --ignore-config and this Bun as YouTube's
- * JavaScript runtime first, -- before the URL.
+ * Python's yt-dlp arguments with the port's additions: --ignore-config first, then, for the managed
+ * yt-dlp only, this Bun as YouTube's JavaScript runtime, and -- before the URL.
  */
-export function withPortArgs(python: readonly string[]): string[] {
+export function withPortArgs(python: readonly string[], managed = false): string[] {
   return [
     "--ignore-config",
-    "--js-runtimes",
-    `bun:${process.execPath}`,
+    ...(managed ? ["--js-runtimes", `bun:${process.execPath}`] : []),
     ...python.slice(0, -1),
     "--",
     python.at(-1) as string,

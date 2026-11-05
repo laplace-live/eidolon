@@ -245,7 +245,7 @@ export async function transcribeMain(
 
   let release: () => void;
   try {
-    release = acquireLock(sourcesLockKey(persona), "transcribe");
+    release = acquireLock(sourcesLockKey(persona), TRANSCRIBE_PARSER.prog);
   } catch (error) {
     if (!(error instanceof LockedError)) throw error;
     logger.error(error.message);

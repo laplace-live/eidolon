@@ -708,10 +708,24 @@ async function refineStage(options: PipelineOptions): Promise<StageResult> {
     return result(1);
   };
 
+  const cancelled = (): StageResult => {
+    emit({ type: "stage", stage: "refine", status: "cancelled" });
+    emit({
+      type: "summary",
+      stage: "refine",
+      ok: false,
+      cancelled: true,
+      counts: ZERO_REFINE,
+      durationSec: (performance.now() - started) / 1000,
+    });
+    return result(1, true);
+  };
+
   let streams: ParsedStream[];
   try {
-    streams = refine.selectStreams([], streamsDir);
+    streams = await refine.selectStreams([], streamsDir, signal);
   } catch (error) {
+    if (signal?.aborted) return cancelled();
     // refine.py crashed on a transcript it couldn't parse.
     logger.error(`Refine failed: ${errorText(error)}`, error);
     return fail(errorText(error));
@@ -723,7 +737,14 @@ async function refineStage(options: PipelineOptions): Promise<StageResult> {
     return result(0);
   }
   if (dryRun) {
-    print(refine.dryRun(streams, model).text);
+    let report: refine.DryRunReport;
+    try {
+      report = await refine.dryRun(streams, model, signal);
+    } catch (error) {
+      if (signal?.aborted) return cancelled();
+      throw error;
+    }
+    print(report.text);
     return result(0);
   }
   const apiKey = refine.refineApiKey();
@@ -1285,7 +1306,7 @@ export async function planPipeline(persona: string, options: PlanOptions = {}): 
   return { videos, transcribeModel, refineModel };
 }
 
-/** The dry run's summary event: the plan's totals. */
+/** The dry run's summary event: the plan's totals, under stage "plan". */
 export function planSummaryEvent(plan: Plan, durationSec: number): SummaryEvent {
   const count = (test: (video: PlanVideo) => boolean): number => plan.videos.filter(test).length;
   const unpriced = plan.videos.some((video) => video.estimate.basis === "unpriced");
@@ -1295,7 +1316,7 @@ export function planSummaryEvent(plan: Plan, durationSec: number): SummaryEvent 
   );
   return {
     type: "summary",
-    stage: "pipeline",
+    stage: "plan",
     ok: true,
     counts: {
       videos: plan.videos.length,
@@ -1306,7 +1327,7 @@ export function planSummaryEvent(plan: Plan, durationSec: number): SummaryEvent 
         (sum, video) => sum + (video.refine === null ? 0 : video.refine.chunks - video.refine.done),
         0,
       ),
-      unindexed: count((video) => !video.indexed),
+      unindexed: count((video) => !video.indexed && video.transcribe !== "no-speech"),
     },
     durationSec,
     ...(unpriced

@@ -92,6 +92,9 @@ export async function runWithSignals(
   });
   try {
     const code = await run(controller.signal);
+    // A signal sent during the run's last synchronous stretch reaches its listener only on a later
+    // turn of the event loop; without this one, the run exits with its own code.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     return received === null ? code : SIGNALS[received];
   } finally {
     clearTimeout(deadline);

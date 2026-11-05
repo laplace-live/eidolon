@@ -1,27 +1,18 @@
 // laplace-ingest-facts: embeds the persona's fact files into the persona_facts table.
-import { errorText, logger, sourceFolder } from "@eidolon/config";
+import { logger, sourceFolder } from "@eidolon/config";
 import {
   acquireLock,
   canonicalPath,
-  type EventCode,
   embedCachePath,
   indexLockKey,
-  indexWritePath,
   ingestFacts,
   LockedError,
   ndjsonSink,
   noProgress,
-  type ProgressSink,
 } from "@eidolon/ingest";
 import { type EmbeddingClient, PERSONA_FACTS_TABLE } from "@eidolon/retrieval";
-import {
-  ArgparseExit,
-  commandPersona,
-  INT,
-  type ParserSpec,
-  parseArgs,
-  parserError,
-} from "./argparse.ts";
+import { ArgparseExit, commandPersona, INT, type ParserSpec, parseArgs } from "./argparse.ts";
+import { lockedOut, writerDbPath } from "./ingest_streams.ts";
 import { type CommandDeps, reportExit, resolveIo } from "./io.ts";
 
 const COMMAND = "laplace-ingest-facts";
@@ -46,8 +37,9 @@ options:
   --files [FILES ...]   Explicit fact file paths. If omitted, scans data-dir
                         for the persona's knowledge.facts.files patterns
                         (default: *.txt).
-  --db-path DB_PATH     LanceDB directory (default: the persona's index/,
-                        where the bot reads it)
+  --db-path DB_PATH     LanceDB directory (default: the index the bot reads:
+                        knowledge.index or $LANCEDB_PATH, else the persona's
+                        index/ in the data home)
   --table TABLE         Table name (default: persona_facts)
   --min-chars MIN_CHARS
                         Drop lines shorter than this after cleaning (default:
@@ -96,8 +88,8 @@ export interface IngestFactsArgs {
   readonly dataDir: string;
   /** `--files`; empty or null scans `dataDir`. */
   readonly files: readonly string[] | null;
-  /** `--db-path`; null for the persona's index. */
-  readonly dbPath: string | null;
+  /** `--db-path`, else the index the bot reads (writerDbPath). */
+  readonly dbPath: string;
   readonly table: string;
   readonly minChars: number;
   readonly stripPrefix: boolean;
@@ -112,21 +104,15 @@ export interface IngestFactsArgs {
 export function parseIngestFactsArgs(argv: readonly string[]): IngestFactsArgs {
   const spec = INGEST_FACTS_PARSER;
   const ns = parseArgs(spec, argv);
-  const persona = commandPersona(spec, ns.persona as string | null);
-  const dbPath = ns.db_path as string | null;
-  // The environment's index belongs to whichever persona it was set for.
-  if (dbPath === null && ns.persona && process.env.LANCEDB_PATH) {
-    throw parserError(
-      spec,
-      `LANCEDB_PATH is set in the environment; pass --db-path to write persona ${persona}'s index.`,
-    );
-  }
+  const personaFlag = ns.persona as string | null;
+  const persona = commandPersona(spec, personaFlag);
+  const dbPath = writerDbPath(spec, ns.db_path as string | null, personaFlag, persona);
   const files = ns.files as string[] | null;
   return {
     persona,
     dataDir: canonicalPath((ns.data_dir as string | null) ?? sourceFolder(persona, "facts")),
     files: files === null ? null : files.map(canonicalPath),
-    dbPath: dbPath === null ? null : canonicalPath(dbPath),
+    dbPath: canonicalPath(dbPath),
     table: ns.table as string,
     minChars: ns.min_chars as number,
     stripPrefix: ns.no_strip_prefix !== true,
@@ -146,32 +132,6 @@ export interface IngestFactsDeps extends CommandDeps {
   readonly now?: () => Date;
 }
 
-/** A run that stopped before reading a fact: why, as a failed stage, then its summary. */
-function refused(
-  emit: ProgressSink,
-  table: string,
-  message: string,
-  code: EventCode | null = null,
-): number {
-  logger.error(message);
-  emit({
-    type: "stage",
-    stage: "ingest-facts",
-    status: "failed",
-    message,
-    ...(code === null ? {} : { code }),
-  });
-  emit({
-    type: "summary",
-    stage: "ingest-facts",
-    ok: false,
-    counts: { files: 0, rows: 0, cacheHits: 0, embedded: 0 } satisfies ingestFacts.FactsCounts,
-    durationSec: 0,
-    failures: [{ item: table, error: message }],
-  });
-  return 1;
-}
-
 /** The `laplace-ingest-facts` command; resolves to its exit code. */
 export async function ingestFactsMain(
   argv: readonly string[],
@@ -186,13 +146,8 @@ export async function ingestFactsMain(
     throw error;
   }
   const emit = args.json ? ndjsonSink(io.stdout) : noProgress;
-  let dbPath: string;
-  try {
-    dbPath = args.dbPath ?? canonicalPath(indexWritePath(args.persona));
-  } catch (error) {
-    return refused(emit, args.table, errorText(error));
-  }
-  logger.info(`Index for persona ${args.persona}: ${dbPath}`);
+  const { dbPath } = args;
+  logger.info(`Persona ${args.persona}'s index: ${dbPath}`);
   // A dry run writes nothing, so it runs beside a writer rather than failing on its lock.
   let release = (): void => {};
   if (!args.dryRun) {
@@ -200,7 +155,8 @@ export async function ingestFactsMain(
       release = acquireLock(indexLockKey(dbPath), COMMAND);
     } catch (error) {
       if (!(error instanceof LockedError)) throw error;
-      return refused(emit, args.table, error.message, "locked");
+      const counts: ingestFacts.FactsCounts = { files: 0, rows: 0, cacheHits: 0, embedded: 0 };
+      return lockedOut(emit, "ingest-facts", error, counts, args.table);
     }
   }
   try {

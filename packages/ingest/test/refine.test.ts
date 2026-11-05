@@ -580,6 +580,23 @@ describe("refineStreams", () => {
   });
 });
 
+describe("a signal", () => {
+  test("stops the transcript load and the dry run between files, with its reason", async () => {
+    const first = transcript("a", 1);
+    transcript("b", 2);
+    const loaded = await refine.selectStreams([], work);
+    expect(loaded.map((stream) => stream.streamId)).toEqual(["a", "b"]);
+    const controller = new AbortController();
+    const reason = new DOMException("Interrupted by SIGINT", "AbortError");
+    controller.abort(reason);
+    await expect(refine.selectStreams([], work, controller.signal)).rejects.toBe(reason);
+    await expect(refine.selectStreams([first], work, controller.signal)).rejects.toBe(reason);
+    await expect(
+      refine.dryRun(loaded, "~google/gemini-flash-latest", controller.signal),
+    ).rejects.toBe(reason);
+  });
+});
+
 describe("estimates for the plan", () => {
   test("refineCost is the dry run's arithmetic on counts, for a video not yet transcribed", () => {
     expect(refine.refineCost("~google/gemini-flash-latest", 2, 101)).toEqual({

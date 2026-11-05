@@ -28,13 +28,10 @@ from loguru import logger
 from laplace_eidolon.tools import download
 
 HERE = Path(__file__).resolve().parent
-REPO = HERE.parents[4]
 FAKE = HERE / "fake-yt-dlp.sh"
 URL = "https://example.invalid/"
 
-spec = importlib.util.spec_from_file_location(
-    "prepare_batch", REPO / ".agents/skills/stream-archive-embed/scripts/prepare_batch.py"
-)
+spec = importlib.util.spec_from_file_location("prepare_batch", HERE / "prepare_batch.py")
 assert spec and spec.loader
 prepare_batch = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(prepare_batch)

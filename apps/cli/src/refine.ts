@@ -6,6 +6,7 @@ import {
   LockedError,
   ndjsonSink,
   noProgress,
+  type ParsedStream,
   type ProgressSink,
   refine,
   sourcesLockKey,
@@ -159,6 +160,20 @@ function refused(emit: ProgressSink, code: EventCode, message: string): number {
   return 1;
 }
 
+/** A run a signal stopped before refining: a cancelled stage, then its summary. */
+function cancelled(emit: ProgressSink, durationSec: number): number {
+  emit({ type: "stage", stage: "refine", status: "cancelled" });
+  emit({
+    type: "summary",
+    stage: "refine",
+    ok: false,
+    cancelled: true,
+    counts: ZERO_COUNTS,
+    durationSec,
+  });
+  return 1;
+}
+
 /** The `laplace-refine` command; resolves to its exit code. */
 export async function refineMain(argv: readonly string[], deps: RefineDeps = {}): Promise<number> {
   const io = resolveIo(deps);
@@ -175,7 +190,13 @@ export async function refineMain(argv: readonly string[], deps: RefineDeps = {})
   const clock = deps.monotonic ?? (() => performance.now() / 1000);
   const started = clock();
 
-  const streams = refine.selectStreams(args.paths, args.streamsDir);
+  let streams: ParsedStream[];
+  try {
+    streams = await refine.selectStreams(args.paths, args.streamsDir, deps.signal);
+  } catch (error) {
+    if (!deps.signal?.aborted) throw error;
+    return cancelled(emit, clock() - started);
+  }
   if (streams.length === 0) {
     logger.warning("No streams to process. Add files under streams/ or pass paths.");
     emit({ type: "summary", stage: "refine", ok: true, counts: ZERO_COUNTS, durationSec: 0 });
@@ -183,7 +204,13 @@ export async function refineMain(argv: readonly string[], deps: RefineDeps = {})
   }
 
   if (args.dryRun) {
-    const report = refine.dryRun(streams, args.model);
+    let report: refine.DryRunReport;
+    try {
+      report = await refine.dryRun(streams, args.model, deps.signal);
+    } catch (error) {
+      if (!deps.signal?.aborted) throw error;
+      return cancelled(emit, clock() - started);
+    }
     print(report.text);
     emit({
       type: "summary",

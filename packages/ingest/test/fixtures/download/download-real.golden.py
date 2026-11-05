@@ -15,9 +15,8 @@ from pathlib import Path
 
 from laplace_eidolon.tools.download import read_url_list
 
-REPO = Path(__file__).resolve().parents[5]
 spec = importlib.util.spec_from_file_location(
-    "prepare_batch", REPO / ".agents/skills/stream-archive-embed/scripts/prepare_batch.py"
+    "prepare_batch", Path(__file__).resolve().parent / "prepare_batch.py"
 )
 assert spec and spec.loader
 prepare_batch = importlib.util.module_from_spec(spec)

@@ -5,6 +5,7 @@ import {
   activePersona,
   cpLen,
   partition,
+  personaIds,
   pyParseInt,
   pyPath,
   pyRepr,
@@ -76,12 +77,21 @@ export function parserError(spec: ParserSpec, message: string): ArgparseExit {
 /**
  * The persona a command runs for, given its parsed `--persona`. load-env.ts installed the settings
  * for `--persona` spelled out; an abbreviation (`--pers x`) reaches argparse alone, which would
- * leave another persona's settings in place, so it is a usage error.
+ * leave another persona's settings in place, so it is a usage error. So is a persona with no
+ * folder, in the data home or among the templates: a typo would otherwise start a new persona's
+ * sources and index, with none of her settings.
  */
 export function commandPersona(spec: ParserSpec, value: string | null | undefined): string {
   const active = activePersona().id;
   if (value && value !== active) {
     throw parserError(spec, `argument --persona: write --persona ${value} in full`);
+  }
+  const known = personaIds();
+  if (!known.includes(active)) {
+    throw parserError(
+      spec,
+      `argument --persona: unknown persona ${pyRepr(active)} (choose from ${known.join(", ")})`,
+    );
   }
   return active;
 }

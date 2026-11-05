@@ -79,8 +79,10 @@ bun run laplace-extract-users <export>   # the names a danmaku export reads alou
 Each takes `--persona <id>` (default: the active persona), applied before the settings files load,
 and defaults its folders to that persona's in the data home
 ([personas.md](personas.md#the-data-home)); an explicit path still wins, resolved against the
-working directory. Logs go to stderr. Stdout carries only what Python printed, or with `--json`
-one [progress event](#progress-events) per line.
+working directory. A persona with no folder, in the data home or among the templates, is a usage
+error (exit 2), so a misspelt id never starts a new persona's sources and index. Logs go to
+stderr. Stdout carries only what Python printed, or with `--json` one
+[progress event](#progress-events) per line.
 
 | Module (`packages/ingest/src/`) | Owns | Python counterpart |
 | --- | --- | --- |
@@ -131,11 +133,15 @@ ms, and the human summary moves to stderr. The types are in `packages/ingest/src
 - `progress`: `done` of `total`, in bytes, chunks, rows, files or percent.
 - `entry`: one video `download --expand` found: `{url, id, title?, durationSec?}`.
 - `plan`: one video of `pipeline --dry-run --json`: where each stage stands, and what the rest
-  would cost.
+  would cost. A video Soniox heard no speech in has nothing to index: its `indexed` is false, and
+  the plan summary's `unindexed` leaves it out.
 - `summary`: the last line of every run that didn't crash: `ok`, `cancelled`, `counts` (the keys
-  in `SUMMARY_COUNTS`), `durationSec`, `failures`, and `costUsd` with `costSource` (`reported`,
-  `estimated` or `unpriced`; `costUsd: 0` when nothing was billed). The pipeline's, with stage
-  `pipeline`, follows each stage's own.
+  `SUMMARY_COUNTS` lists under the summary's stage), `durationSec`, `failures`, and `costUsd` with
+  `costSource` (`reported`, `estimated` or `unpriced`; `costUsd: 0` when nothing was billed). A
+  pipeline run's, with stage `pipeline` (`stages`, `failed`, `aborted`), follows each stage's own.
+  `pipeline --dry-run --json` ends in one with stage `plan` instead, cancelled or refused too: the
+  plan's `videos`, `downloadPending`, `transcribePending`, `noDate`, `refinePending` and
+  `unindexed`.
 
 A failed stage or item carries a `code` when the cause is known (a stage only when all its
 failures share it), and a `provider` (`soniox`, `refine` or `embeddings`) when the code is about
@@ -276,9 +282,11 @@ Deliberate, and not worth matching.
 ### Download and batches
 
 - yt-dlp's argv is Python's plus `--ignore-config` first, so a user's yt-dlp config can't
-  redirect the files, and `--` before the URL, so a URL can't pass as an option. Each argv,
-  download and `--expand` alike, also carries `--js-runtimes bun:<the running bun>` for YouTube's
-  JavaScript challenges; a user's `--no-js-runtimes` in `--yt-dlp-args` still wins.
+  redirect the files, and `--` before the URL, so a URL can't pass as an option. The managed
+  yt-dlp's argv, download and `--expand` alike, also carries `--js-runtimes bun:<the running bun>`
+  for YouTube's JavaScript challenges; a user's `--no-js-runtimes` in `--yt-dlp-args` still wins.
+  A `YT_DLP_PATH` or PATH yt-dlp gets no such flag, since one older than the option would fail
+  every URL.
 - With `--json`, yt-dlp's stdout is piped (`--newline`, a `--progress-template` carrying the video
   id, `--progress-delta 0.5`) and parsed into `bytes` progress events; every other line goes to
   stderr. Python let yt-dlp draw on the terminal.
@@ -344,11 +352,12 @@ Deliberate, and not worth matching.
 - `.soniox.json` is written first, then the `.md`, each through `<path>.<pid>.tmp` and a rename,
   so a crash never leaves a half transcript that looks done. Python wrote the `.md` first, in
   place.
-- **No speech.** A transcription that renders no scene writes its `.soniox.json` and no `.md`,
-  reporting `done` with code `no-speech`. The skip rule, standalone and in the pipeline, counts
-  that payload as done, so the audio is billed once; Python exited 1, wrote nothing and billed
-  again on every run. Zero tokens is the usual case, and a payload with tokens but no scene counts
-  too. A forced run that finds no speech removes the old `.md`.
+- **No speech.** A transcription that renders no segments writes its `.soniox.json` and no
+  `.md`, reporting `done` with code `no-speech`. The skip rule, standalone and in the pipeline,
+  counts a payload that renders no segments as done, so the audio is billed once. That is the case
+  in which Python wrote no `.md` either (`No segments returned`), exiting 1 and billing again on
+  every run; zero tokens is the usual cause. A forced run that finds no speech removes the old
+  `.md`.
 - A standalone run refuses (exit 1) to transcribe over a transcript or a no-speech payload without
   `--force`, and with `--force` over a refined stream warns that its `.refined.json` is now stale.
   Under `--json`, a refusal reports the item `skipped` and a summary with `ok: false`.
@@ -380,7 +389,9 @@ Deliberate, and not worth matching.
 - Under `--force`, each checkpoint keeps the old record of every chunk not yet redone, so an
   interrupted run keeps its old refinements; a finished run saves what Python saved.
 - A cancelled run starts no chunk or stream, aborts the requests in flight, and saves a final
-  checkpoint (`model`, `refined_at`, no stats) when anything finished since the last save.
+  checkpoint (`model`, `refined_at`, no stats) when anything finished since the last save. The
+  transcripts, and a dry run's sidecars, are read one per turn of the event loop, so a signal
+  during those reads, seconds long over the real corpus, also ends in a cancelled summary.
 - When a chunk raises an unexpected error, its stream fails as in Python, but its queued chunks
   never start and the ones in flight finish, their results dropped, before the next stream
   begins. Python left them running beside the next stream.
@@ -460,8 +471,8 @@ Deliberate, and not worth matching.
 - **The dry run plans.** It takes no lock, needs no `--db-path` beside `LANCEDB_PATH`, and creates
   no `streams/` folder (Python's did). Without a URL list it covers every video the persona's
   lists, `vods/` and `streams/` know, and the human dry run counts every list's URLs. With
-  `--json` it emits one `plan` event per video, then a summary of `{videos, downloadPending,
-  transcribePending, noDate, refinePending, unindexed}` with the estimated cost.
+  `--json` it emits one `plan` event per video, then a summary with stage `plan` of `{videos,
+  downloadPending, transcribePending, noDate, refinePending, unindexed}` with the estimated cost.
 - A missing yt-dlp fails only the download stage: logged, noted on its summary line, and the run
   goes on unless `--abort-on-error`. Python crashed with no summary. An `.info.json` that doesn't
   decode fails only its file. A missing `SONIOX_API_KEY` is logged once and fails each pending
@@ -521,9 +532,10 @@ Still open:
   once, but werift's own ICE reported connected about 4 s later. It never reproduced with
   tracing on, so the cause is unknown. Watch offer→connected on the Cloudflare TURN call, where
   relay-only leaves far fewer candidate pairs than a multi-interface dev machine.
-- yt-dlp has deprecated Bun as a JavaScript runtime and supports it only up to 1.3.14; under this
-  repo's Bun it warns on each YouTube challenge and may miss formats. Bilibili needs no runtime.
-  Not yet checked against a live YouTube video.
+- yt-dlp has deprecated Bun as a JavaScript runtime and supports it only up to 1.3.14. On
+  2026-11-05 the managed yt-dlp 2026.10.26 still solved a live YouTube video's challenge with Bun
+  1.4.4 and no deno installed, after printing `bun version 1.4.4 is not supported! 1.3.14 is the
+  last supported bun version`; with deno on PATH, yt-dlp uses deno. Bilibili needs no runtime.
 - Each FTS index build orders tied-score hits its own way: two TS builds of the same rows
   disagreed in 7 of 10 queries, as a Python rebuild does with the real index. Scores and result
   sets are identical, so comparing two builds' hybrid ranks has to allow for ties.

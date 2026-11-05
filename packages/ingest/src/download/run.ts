@@ -348,6 +348,7 @@ export async function downloadUrls(
       cookiesFile,
       extraArgs: opts.extraArgs ?? [],
       progressLines: opts.output === "events",
+      ytDlp,
     });
     const item = { type: "item", stage: "download", item: url, index, total } as const;
     let outcome: Outcome;

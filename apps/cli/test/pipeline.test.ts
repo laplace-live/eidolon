@@ -7,10 +7,17 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { sourceFolder } from "@eidolon/config";
-import { acquireLock, download, type ProgressEvent, sourcesLockKey } from "@eidolon/ingest";
+import { personaIds, resetSettings, sourceFolder } from "@eidolon/config";
+import {
+  acquireLock,
+  download,
+  type ProgressEvent,
+  SUMMARY_COUNTS,
+  sourcesLockKey,
+} from "@eidolon/ingest";
 import { installFakeYtDlp } from "../../../packages/ingest/test/download_helpers.ts";
 import { fakeSoniox, sonioxError } from "../../../packages/ingest/test/fake_soniox.ts";
+import { makeFifo, whenReading } from "../../../packages/ingest/test/fifo.ts";
 import {
   fakeEmbeddings,
   fakeRefine,
@@ -24,7 +31,7 @@ import {
   writeVods,
 } from "../../../packages/ingest/test/pipeline_helpers.ts";
 import { PIPELINE_PARSER, type PipelineDeps, pipelineMain, STAGES } from "../src/pipeline.ts";
-import { blockNetwork, captureIo, captureLogs, setEnv } from "./helpers.ts";
+import { blockNetwork, captureIo, captureLogs, setEnv, spawnCli } from "./helpers.ts";
 
 blockNetwork();
 
@@ -193,6 +200,27 @@ describe("argparse", () => {
       const io = captureIo();
       expect(await pipelineMain(argv, io.io), argv.join(" ")).toBe(2);
       expect(io.stderr()).toBe(`${PIPELINE_PARSER.usage}${message}\n`);
+    }
+  });
+
+  test("a persona with no folder is a usage error, before anything is read or written", async () => {
+    // As load-env.ts installs `--persona nobody`.
+    const restore = setEnv({ EIDOLON_PERSONA: "nobody" });
+    resetSettings();
+    try {
+      const list = join(work, "urls.txt");
+      writeFileSync(list, "https://www.bilibili.com/video/BV1aaaaaaaa1\n");
+      const io = captureIo();
+      const argv = [list, "--persona", "nobody", "--stages", "download", "--dry-run"];
+      expect(await pipelineMain(argv, io.io)).toBe(2);
+      expect(io.stderr()).toBe(
+        `${PIPELINE_PARSER.usage}laplace-pipeline: error: argument --persona: unknown persona ` +
+          `'nobody' (choose from ${personaIds().join(", ")})\n`,
+      );
+      expect(logs.records).toEqual([]);
+    } finally {
+      restore();
+      resetSettings();
     }
   });
 
@@ -508,12 +536,52 @@ describe("--json and locks", () => {
     });
     expect(events[2]).toMatchObject({
       type: "summary",
-      stage: "pipeline",
+      stage: "plan",
       ok: true,
       counts: { videos: 2, downloadPending: 1, transcribePending: 2 },
       costSource: "unpriced",
     });
     expect(io.stderr()).toBe("");
+  });
+
+  test("--dry-run --json ends in a plan summary when cancelled or refused too", async () => {
+    const zero = Object.fromEntries(SUMMARY_COUNTS.plan.map((key) => [key, 0]));
+    const streams = join(work, "streams");
+    mkdirSync(streams);
+    const id = "2026-08-01-BV1aaaaaaaa1";
+    writeFileSync(join(streams, `${id}.md`), transcriptText(id, "2026-08-01", 1));
+    const controller = new AbortController();
+    controller.abort(new DOMException("Interrupted by SIGINT", "AbortError"));
+    const cancelled = captureIo();
+    const argv = ["--dry-run", "--json", "--streams-dir", streams];
+    expect(await pipelineMain(argv, { ...cancelled.io, signal: controller.signal })).toBe(1);
+    const [summary, ...rest] = cancelled
+      .stdout()
+      .trimEnd()
+      .split("\n")
+      .map((line) => JSON.parse(line) as ProgressEvent);
+    expect(rest).toEqual([]);
+    expect(summary).toMatchObject({
+      type: "summary",
+      stage: "plan",
+      ok: false,
+      cancelled: true,
+      counts: zero,
+    });
+
+    const missing = join(work, "missing.txt");
+    const refused = captureIo();
+    expect(await pipelineMain([missing, "--dry-run", "--json"], refused.io)).toBe(1);
+    const events = refused
+      .stdout()
+      .trimEnd()
+      .split("\n")
+      .map((line) => JSON.parse(line) as ProgressEvent);
+    expect(events.map((e) => [e.type, "stage" in e ? e.stage : null])).toEqual([
+      ["stage", "setup"],
+      ["summary", "plan"],
+    ]);
+    expect(events[1]).toMatchObject({ ok: false, counts: zero });
   });
 
   /** A persona's sources: two lists, one batch, one audio file and its transcript. */
@@ -558,7 +626,7 @@ describe("--json and locks", () => {
     expect(plans[0]).toMatchObject({ transcribe: "done", refine: { chunks: 2, done: 0 } });
     expect(events.at(-1)).toMatchObject({
       type: "summary",
-      stage: "pipeline",
+      stage: "plan",
       ok: true,
       counts: { videos: 3, downloadPending: 2, transcribePending: 2, refinePending: 2 },
     });
@@ -586,6 +654,47 @@ describe("--json and locks", () => {
     expect(io.stdout()).toContain('"type":"plan"');
     expect(existsSync(join(work, "elsewhere"))).toBe(false);
   });
+
+  test("a real SIGTERM while refine reads the transcripts: exit 143, the stage and the run cancelled", async () => {
+    const streams = join(work, "streams");
+    mkdirSync(streams);
+    const [first, blocked, last] = [
+      "2026-08-01-BV1aaaaaaaa1",
+      "2026-08-02-BV1bbbbbbbb1",
+      "2026-08-03-BV1cccccccc1",
+    ];
+    writeFileSync(join(streams, `${first}.md`), transcriptText(first, "2026-08-01", 1));
+    writeFileSync(join(streams, `${last}.md`), transcriptText(last, "2026-08-03", 1));
+    // Read second; the read blocks until the test writes it.
+    const fifo = join(streams, `${blocked}.md`);
+    makeFifo(fifo);
+    const child = spawnCli([
+      "pipeline",
+      "--dry-run",
+      "--stages",
+      "refine",
+      "--streams-dir",
+      streams,
+    ]);
+    try {
+      const release = await whenReading(fifo, child);
+      child.kill("SIGTERM");
+      await Bun.sleep(50);
+      release(transcriptText(blocked, "2026-08-02", 1));
+      const [code, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      expect(code).toBe(143);
+      expect(stdout).toContain("\n  refine:     cancelled (");
+      expect(stdout).toContain("⚠  Pipeline cancelled — re-run the same command to resume.");
+      expect(stdout).not.toContain("Dry run — model:");
+      expect(stderr).toContain("Stopping; send SIGTERM again to quit now.\n");
+    } finally {
+      child.kill("SIGKILL");
+    }
+  }, 20_000);
 
   test("another run for the persona: exit 1, or a locked setup stage under --json", async () => {
     const list = join(work, "urls.txt");

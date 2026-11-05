@@ -22,6 +22,7 @@ import {
   type PlanVideo,
   type ProgressEvent,
   pipeline,
+  SUMMARY_COUNTS,
   sourceFolder,
 } from "../src/index.ts";
 import { fakeSoniox, sonioxError } from "./fake_soniox.ts";
@@ -386,13 +387,58 @@ describe("the transcribe stage", () => {
     const t = report.transcribe as pipeline.TranscribeStageReport;
     expect([t.succeeded, t.failed.length, t.cancelled]).toEqual([1, 0, true]);
     expect(uploads).toBe(2);
-    expect(events.at(-1)).toMatchObject({ type: "summary", stage: "pipeline", cancelled: true });
+    const last = events.at(-1) as Extract<ProgressEvent, { type: "summary" }>;
+    expect(last).toMatchObject({ type: "summary", stage: "pipeline", cancelled: true });
+    expect(Object.keys(last.counts)).toEqual([...SUMMARY_COUNTS.pipeline]);
     expect(events).toContainEqual(
       expect.objectContaining({ type: "item", item: "BV1aaaaaaaa2.m4a", status: "cancelled" }),
     );
     expect(pipeline.pipelineSummaryText(report, "vods")).toContain(
       "⚠  Pipeline cancelled — re-run the same command to resume.",
     );
+  });
+
+  test("a cancel while refine reads the transcripts ends its stage, and the run, cancelled", async () => {
+    mkdirSync(join(work, "streams"));
+    const id = "2026-08-01-BV1aaaaaaaa1";
+    writeFileSync(join(work, "streams", `${id}.md`), transcriptText(id, "2026-08-01", 1));
+    const controller = new AbortController();
+    controller.abort(new DOMException("Interrupted by SIGTERM", "AbortError"));
+    for (const dryRun of [true, false]) {
+      const events: ProgressEvent[] = [];
+      const printed: string[] = [];
+      const report = await pipeline.runPipeline(
+        base({
+          stages: ["refine"],
+          dryRun,
+          signal: controller.signal,
+          onProgress: (event) => events.push(event),
+          print: (text) => printed.push(text),
+        }),
+      );
+      expect([dryRun, report.refine?.cancelled, report.cancelled]).toEqual([dryRun, true, true]);
+      expect(events).toEqual([
+        { type: "stage", stage: "refine", status: "cancelled" },
+        {
+          type: "summary",
+          stage: "refine",
+          ok: false,
+          cancelled: true,
+          counts: {
+            streams: 0,
+            chunksNew: 0,
+            chunksSkipped: 0,
+            chunksFailed: 0,
+            tokensIn: 0,
+            tokensOut: 0,
+          },
+          durationSec: expect.any(Number),
+        },
+        expect.objectContaining({ type: "summary", stage: "pipeline", cancelled: true }),
+      ]);
+      expect(printed).toEqual([]);
+      expect(pipeline.pipelineSummaryText(report, "vods")).toContain("  refine:     cancelled (");
+    }
   });
 
   test("a key Soniox rejects fails every file, and the stage, with code auth-failed", async () => {
@@ -883,10 +929,12 @@ describe("planPipeline", () => {
       url: "https://www.bilibili.com/video/BV1bbbbbbbb1/",
       download: "pending",
     });
+    // Nothing to index, so not indexed, and never counted as left to index.
     expect(byId.get("BV1cccccccc1")).toMatchObject({
       url: "BV1cccccccc1",
       transcribe: "no-speech",
       refine: null,
+      indexed: false,
       estimate: { transcribeUsd: 0, refineUsd: 0, basis: "price-table" },
     });
     expect(byId.get("yt1")).toMatchObject({
@@ -917,16 +965,18 @@ describe("planPipeline", () => {
 
     const summary = pipeline.planSummaryEvent(plan, 1.5);
     expect(summary).toMatchObject({
+      stage: "plan",
       counts: {
         videos: 10,
         downloadPending: 4,
         transcribePending: 5,
         noDate: 1,
         refinePending: 1 + 1 + 1 + 2,
-        unindexed: 10,
+        unindexed: 9,
       },
       costSource: "unpriced",
     });
+    expect(Object.keys(summary.counts)).toEqual([...SUMMARY_COUNTS.plan]);
   });
 
   test("a URL list plans its own videos and every audio file, a batch named by its id", async () => {

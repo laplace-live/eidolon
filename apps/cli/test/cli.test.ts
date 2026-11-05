@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resetSettings, sourceFolder } from "@eidolon/config";
+import { dataHome, personaIds, resetSettings, sourceFolder } from "@eidolon/config";
 import { CLEANUP_LIMIT_MS } from "@eidolon/ingest";
 import {
   buildStreamCatalogMain,
@@ -24,7 +24,7 @@ import {
   runCli,
   transcribeMain,
 } from "../src/index.ts";
-import { blockNetwork, captureIo, captureLogs, setEnv } from "./helpers.ts";
+import { blockNetwork, captureIo, captureLogs, setEnv, spawnCli } from "./helpers.ts";
 
 blockNetwork();
 
@@ -129,6 +129,7 @@ test("-h lists the commands", async () => {
   expect(await runCli(["--help"], io.io)).toBe(0);
   expect(io.stdout()).toStartWith(CLI_USAGE);
   expect(io.stdout()).toContain("laplace-eval-retrieval");
+  expect(io.stdout()).toContain("\n    prepare-batch       laplace-prepare-batch\n");
 });
 
 test("a command's own -h and usage errors keep their exit codes", async () => {
@@ -218,15 +219,49 @@ describe("--persona", () => {
         ),
       }),
     );
+  });
+
+  test("commandPersona refuses a persona with no folder, in the data home or the templates", () => {
+    const folder = join(dataHome(), "personas", "other");
     const restore = setEnv({ EIDOLON_PERSONA: "other" });
     try {
       resetSettings();
+      // Named or only active, a typo would start a new persona's sources and index.
+      for (const value of ["other", null]) {
+        expect(() => commandPersona(EVAL_PARSER, value)).toThrow(
+          expect.objectContaining({
+            code: 2,
+            stderr: expect.stringContaining(
+              "error: argument --persona: unknown persona 'other' " +
+                `(choose from ${personaIds().join(", ")})\n`,
+            ),
+          }),
+        );
+      }
+      mkdirSync(folder, { recursive: true });
       expect(commandPersona(EVAL_PARSER, "other")).toBe("other");
     } finally {
+      rmSync(folder, { recursive: true, force: true });
       restore();
       resetSettings();
     }
   });
+
+  test("a real run with a misspelt --persona exits 2 before it reads or writes anything", async () => {
+    const child = spawnCli(["ingest-facts", "--persona", "milky-gren", "--json"]);
+    const [code, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(code).toBe(2);
+    expect(stdout).toBe("");
+    expect(stderr).toEndWith(
+      "laplace-ingest-facts: error: argument --persona: unknown persona 'milky-gren' " +
+        `(choose from ${personaIds().join(", ")})\n`,
+    );
+    expect(existsSync(join(dataHome(), "personas", "milky-gren"))).toBe(false);
+  }, 20_000);
 });
 
 /** Every import or re-export statement in `source`, type-only ones included. */

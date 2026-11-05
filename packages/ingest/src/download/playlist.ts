@@ -60,7 +60,7 @@ export async function expandPlaylist(
   const cookies = opts.cookiesFile === undefined ? defaultCookiesFile() : opts.cookiesFile;
   const args = [
     "--ignore-config",
-    ...jsRuntimeArgs(),
+    ...jsRuntimeArgs(ytDlp),
     "--flat-playlist",
     "--print",
     ENTRY_TEMPLATE,

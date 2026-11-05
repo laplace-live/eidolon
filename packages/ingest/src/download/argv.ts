@@ -1,5 +1,6 @@
 // yt-dlp's command line for one URL, and the cookie settings that feed it.
 import { envOptional, pyPath } from "@eidolon/config";
+import type { YtDlp } from "./ytdlp.ts";
 
 export const DEFAULT_FORMAT = "bestaudio[ext=m4a]";
 export const DEFAULT_BROWSER = "chrome";
@@ -17,10 +18,11 @@ const PROGRESS_TEMPLATE =
  * YouTube's pages carry JavaScript challenges that yt-dlp solves with a runtime it finds, only
  * Deno by default; the Bun running this is always there. yt-dlp still prefers a Deno it finds, and
  * has deprecated Bun: past the last Bun it supports, it warns and runs it anyway
- * (https://github.com/yt-dlp/yt-dlp/issues/16766).
+ * (https://github.com/yt-dlp/yt-dlp/issues/16766). Only the managed yt-dlp, always a current
+ * release, gets the flag: a YT_DLP_PATH or PATH one may predate it and would fail every URL.
  */
-export function jsRuntimeArgs(): string[] {
-  return ["--js-runtimes", `bun:${process.execPath}`];
+export function jsRuntimeArgs(ytDlp: Pick<YtDlp, "source">): string[] {
+  return ytDlp.source === "managed" ? ["--js-runtimes", `bun:${process.execPath}`] : [];
 }
 
 /**
@@ -49,17 +51,19 @@ export interface YtDlpArgvOptions {
   readonly extraArgs: readonly string[];
   /** Progress as one parseable line per update on stdout, for --json. */
   readonly progressLines?: boolean;
+  /** The yt-dlp these arguments are for, which decides jsRuntimeArgs. */
+  readonly ytDlp: Pick<YtDlp, "source">;
 }
 
 /**
  * `_build_yt_dlp_cmd`'s arguments, plus `--ignore-config` (a user config could move the files or
- * drop the info.json the stream date comes from), a JavaScript runtime for YouTube, and `--`
- * before the URL, so a list line starting with `-` is never read as an option.
+ * drop the info.json the stream date comes from), the managed yt-dlp's JavaScript runtime for
+ * YouTube, and `--` before the URL, so a list line starting with `-` is never read as an option.
  */
 export function ytDlpArgs(url: string, opts: YtDlpArgvOptions): string[] {
   const args = [
     "--ignore-config",
-    ...jsRuntimeArgs(),
+    ...jsRuntimeArgs(opts.ytDlp),
     "-f",
     opts.format,
     "-o",

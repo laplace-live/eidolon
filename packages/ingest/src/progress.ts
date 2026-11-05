@@ -10,7 +10,8 @@ export type Stage =
   | "refine"
   | "ingest-streams"
   | "ingest-facts"
-  | "catalog";
+  | "catalog"
+  | "plan";
 
 export type ItemStatus = "start" | "done" | "skipped" | "failed" | "cancelled";
 
@@ -63,6 +64,10 @@ export interface PlanVideo {
   readonly download: "pending" | "done";
   readonly transcribe: "pending" | "done" | "no-speech" | "no-date";
   readonly refine: { readonly chunks: number; readonly done: number } | null;
+  /**
+   * Its transcript is in the index as it is now. False for a no-speech video, which has nothing to
+   * index; the plan summary's `unindexed` leaves it out, so that count can reach 0.
+   */
   readonly indexed: boolean;
   readonly estimate: {
     readonly transcribeUsd?: number;
@@ -109,7 +114,10 @@ export type ProgressEvent =
     }
   | { readonly type: "plan"; readonly video: PlanVideo }
   | {
-      /** The last line of every run that didn't crash; the pipeline's comes after each stage's. */
+      /**
+       * The last line of every run that didn't crash. The pipeline's comes after each stage's; a
+       * `pipeline --dry-run --json` ends in the plan's, with stage "plan".
+       */
       readonly type: "summary";
       readonly stage: Stage | "pipeline";
       readonly ok: boolean;
@@ -121,7 +129,7 @@ export type ProgressEvent =
       readonly failures?: readonly { readonly item: string; readonly error: string }[];
     };
 
-/** The counts each stage's summary carries, by name; the web app reads them. */
+/** The counts each summary carries, by name, under its stage; the web app reads them. */
 export const SUMMARY_COUNTS = {
   download: ["requested", "succeeded", "failed", "newFiles"],
   expand: ["entries"],
@@ -130,7 +138,9 @@ export const SUMMARY_COUNTS = {
   "ingest-streams": ["rows", "cacheHits", "embedded"],
   "ingest-facts": ["files", "rows", "cacheHits", "embedded"],
   catalog: ["broadcasts", "parts"],
-} as const satisfies Partial<Record<Stage, readonly string[]>>;
+  plan: ["videos", "downloadPending", "transcribePending", "noDate", "refinePending", "unindexed"],
+  pipeline: ["stages", "failed", "aborted"],
+} as const satisfies Partial<Record<Stage | "pipeline", readonly string[]>>;
 
 export type ProgressSink = (event: ProgressEvent) => void;
 

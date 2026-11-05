@@ -139,7 +139,7 @@ test.skipIf((!HAVE_DATA || UV === null) && !REQUIRED)(
     expect(UV, "uv is not on PATH").not.toBeNull();
     for (const model of [MODEL, "~google/gemini-flash-latest"]) {
       const expected = await python("dry-run", STREAMS, model);
-      expect(refine.dryRun(realStreams(), model).text).toBe(expected);
+      expect((await refine.dryRun(realStreams(), model)).text).toBe(expected);
     }
   },
   600_000,

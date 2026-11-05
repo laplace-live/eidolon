@@ -7,10 +7,20 @@ import { createHash } from "node:crypto";
 import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { activePersona, sortedPy, sourceFolder } from "@eidolon/config";
+import { activePersona, personaIds, resetSettings, sortedPy, sourceFolder } from "@eidolon/config";
 import { acquireLock, refine, sourcesLockKey } from "@eidolon/ingest";
+import { makeFifo, whenReading } from "../../../packages/ingest/test/fifo.ts";
 import { parseRefineArgs, refineMain } from "../src/refine.ts";
-import { blockNetwork, captureIo, captureLogs, FIX, golden, placehold, setEnv } from "./helpers.ts";
+import {
+  blockNetwork,
+  captureIo,
+  captureLogs,
+  FIX,
+  golden,
+  placehold,
+  setEnv,
+  spawnCli,
+} from "./helpers.ts";
 
 blockNetwork();
 
@@ -59,6 +69,14 @@ const HEADERS = [
 ];
 const FIXED_NOW = () => new Date("2026-01-09T12:00:00Z");
 const FIXED_CLOCK = () => 100;
+const ZERO_COUNTS = {
+  streams: 0,
+  chunksNew: 0,
+  chunksSkipped: 0,
+  chunksFailed: 0,
+  tokensIn: 0,
+  tokensOut: 0,
+};
 
 function completion(entry: Canned): Response {
   const headers = { "content-type": "application/json", ...entry.headers };
@@ -269,6 +287,25 @@ describe("arguments", () => {
     );
   });
 
+  test("a persona with no folder is a usage error, before any transcript is read", async () => {
+    // As load-env.ts installs `--persona nobody`.
+    const restore = setEnv({ EIDOLON_PERSONA: "nobody" });
+    resetSettings();
+    try {
+      const io = captureIo();
+      const argv = ["--persona", "nobody", "--streams-dir", streams, "--dry-run"];
+      expect(await refineMain(argv, io.io)).toBe(2);
+      expect(io.stderr()).toEndWith(
+        "laplace-refine: error: argument --persona: unknown persona 'nobody' " +
+          `(choose from ${personaIds().join(", ")})\n`,
+      );
+      expect(logs.records).toEqual([]);
+    } finally {
+      restore();
+      resetSettings();
+    }
+  });
+
   test("no transcripts is a warning and exit 0", async () => {
     const io = captureIo();
     expect(await refineMain(["--streams-dir", join(work, "nowhere")], io.io)).toBe(0);
@@ -415,6 +452,67 @@ describe("--json", () => {
       },
     ]);
   });
+
+  test("a cancel before the transcripts are read ends in a cancelled stage and summary", async () => {
+    const controller = new AbortController();
+    controller.abort(new DOMException("Interrupted by SIGINT", "AbortError"));
+    for (const extra of [["--dry-run"], []]) {
+      const io = captureIo();
+      const code = await refineMain(["--json", "--streams-dir", streams, ...extra], {
+        ...io.io,
+        signal: controller.signal,
+        monotonic: FIXED_CLOCK,
+      });
+      expect([extra, code]).toEqual([extra, 1]);
+      expect(events(io.stdout())).toEqual([
+        { v: 1, type: "stage", stage: "refine", status: "cancelled" },
+        {
+          v: 1,
+          type: "summary",
+          stage: "refine",
+          ok: false,
+          cancelled: true,
+          counts: ZERO_COUNTS,
+          durationSec: 0,
+        },
+      ]);
+      expect(io.stderr()).toBe("");
+    }
+  });
+
+  test("a real SIGINT while the transcripts load: exit 130, a cancelled stage and summary", async () => {
+    // Read third, after 2026-01-03-BV1bbbbbbbbb_p1.md; the read blocks until the test writes it.
+    const fifo = join(streams, "2026-01-03-BV1zzzzzzzzz.md");
+    makeFifo(fifo);
+    const child = spawnCli(["refine", "--dry-run", "--json", "--streams-dir", streams]);
+    try {
+      const release = await whenReading(fifo, child);
+      child.kill("SIGINT");
+      await Bun.sleep(50);
+      release("## 00:00 — 你好\n\n大家好。\n");
+      const [code, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      expect(code).toBe(130);
+      expect(events(stdout)).toEqual([
+        { v: 1, type: "stage", stage: "refine", status: "cancelled" },
+        {
+          v: 1,
+          type: "summary",
+          stage: "refine",
+          ok: false,
+          cancelled: true,
+          counts: ZERO_COUNTS,
+          durationSec: expect.any(Number),
+        },
+      ]);
+      expect(stderr).toContain("Stopping; press Ctrl-C again to quit now.\n");
+    } finally {
+      child.kill("SIGKILL");
+    }
+  }, 20_000);
 
   test("a missing API key fails the stage with missing-credential", async () => {
     const restore = setEnv({ OPENROUTER_API_KEY: undefined });

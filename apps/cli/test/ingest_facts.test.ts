@@ -9,8 +9,10 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  dataHome,
   installSettings,
   PROJECT_ROOT,
+  personaIds,
   pyJsonDumps,
   resetSettings,
   sourceFolder,
@@ -171,7 +173,7 @@ function cacheCount(path: string): number | null {
   }
 }
 
-const INDEX_LINE = /^Index for persona milky-green: /;
+const INDEX_LINE = /^Persona milky-green's index: /;
 
 describe("replays ingest_facts.py's main() over the synthetic fact files", () => {
   let work = "";
@@ -198,7 +200,7 @@ describe("replays ingest_facts.py's main() over the synthetic fact files", () =>
         scenario.logs,
       );
       expect(records.filter(([, message]) => INDEX_LINE.test(message as string))).toEqual([
-        ["INFO", "Index for persona milky-green: <TMP>/index"],
+        ["INFO", "Persona milky-green's index: <TMP>/index"],
       ]);
       expect(calls).toEqual(scenario.calls);
       expect(await tableState(join(work, "index"), scenario.table)).toEqual(scenario.state);
@@ -219,6 +221,12 @@ describe("arguments", () => {
     );
     expect(io.stdout()).toContain("\n  --persona PERSONA     Persona whose facts to ingest");
     expect(io.stdout()).toContain("\n  --clear-cache         Delete every cached vector, of every");
+    // ingest-streams' words, since both default to the index the bot reads.
+    expect(io.stdout()).toContain(
+      "\n  --db-path DB_PATH     LanceDB directory (default: the index the bot reads:\n" +
+        "                        knowledge.index or $LANCEDB_PATH, else the persona's\n" +
+        "                        index/ in the data home)\n",
+    );
   });
 
   test("the folders default to the persona's, in the data home; explicit paths resolve", () => {
@@ -227,7 +235,7 @@ describe("arguments", () => {
       persona: "milky-green",
       dataDir: canonicalPath(sourceFolder("milky-green", "facts")),
       files: null,
-      dbPath: null,
+      dbPath: canonicalPath(join(dataHome(), "personas", "milky-green", "index")),
       table: "persona_facts",
       minChars: 4,
       stripPrefix: true,
@@ -259,6 +267,26 @@ describe("arguments", () => {
     expect(io.stderr()).toEndWith(
       "laplace-ingest-facts: error: argument --persona: write --persona someone-else in full\n",
     );
+  });
+
+  test("a persona with no folder is a usage error, before any fact or index is touched", async () => {
+    // As load-env.ts installs `--persona nobody`.
+    const saved = process.env.EIDOLON_PERSONA;
+    process.env.EIDOLON_PERSONA = "nobody";
+    installSettings();
+    try {
+      const io = captureIo();
+      expect(await ingestFactsMain(["--persona", "nobody", "--dry-run"], io.io)).toBe(2);
+      expect(io.stderr()).toEndWith(
+        "laplace-ingest-facts: error: argument --persona: unknown persona 'nobody' " +
+          `(choose from ${personaIds().join(", ")})\n`,
+      );
+      expect(logs.records).toEqual([]);
+    } finally {
+      if (saved === undefined) delete process.env.EIDOLON_PERSONA;
+      else process.env.EIDOLON_PERSONA = saved;
+      installSettings();
+    }
   });
 
   test("--min-chars takes an int", async () => {
@@ -297,28 +325,21 @@ describe("the index it writes", () => {
     );
     expect(logs.records).toContainEqual([
       "INFO",
-      `Index for persona milky-green: ${canonicalPath(join(work, "elsewhere"))}`,
+      `Persona milky-green's index: ${canonicalPath(join(work, "elsewhere"))}`,
     ]);
   });
 
-  test("an index inside the persona templates is refused before anything runs", async () => {
+  test("an index inside the persona templates is a usage error, as for ingest-streams", async () => {
     process.env.LANCEDB_PATH = "personas/milky-green/index";
     const io = captureIo();
     const code = await ingestFactsMain(["--data-dir", join(work, "facts"), "--json"], io.io);
-    expect(code).toBe(1);
-    const events = io
-      .stdout()
-      .trimEnd()
-      .split("\n")
-      .map((line) => JSON.parse(line));
-    expect(events).toEqual([
-      expect.objectContaining({
-        type: "stage",
-        status: "failed",
-        message: expect.stringContaining("Refusing to write persona milky-green's index"),
-      }),
-      expect.objectContaining({ type: "summary", ok: false }),
-    ]);
+    expect(code).toBe(2);
+    expect(io.stdout()).toBe("");
+    expect(io.stderr()).toContain(
+      "laplace-ingest-facts: error: Refusing to write persona milky-green's index into the " +
+        `template folder ${join(PROJECT_ROOT, "personas/milky-green/index")}`,
+    );
+    expect(logs.records).toEqual([]);
   });
 
   test("a second writer on the same index exits 1 naming the first; a dry run doesn't wait", async () => {

@@ -8,6 +8,7 @@ import {
   pyPathName,
   pyRepr,
 } from "@eidolon/config";
+import { nextTranscript } from "../ingest_streams.ts";
 import { loadSidecar, type ParsedStream, type StreamChunk } from "../streams.ts";
 import type { StreamResult } from "./run.ts";
 import { fmtCost, PRICING_USD_PER_1M, Usage } from "./usage.ts";
@@ -153,8 +154,16 @@ export interface DryRunReport {
   readonly costUsd: number | null;
 }
 
-/** `_dry_run_report`: what refining `streams` with `model` would take, without spending any. */
-export function dryRun(streams: readonly ParsedStream[], model: string): DryRunReport {
+/**
+ * `_dry_run_report`: what refining `streams` with `model` would take, without spending any. A turn
+ * of the event loop follows each sidecar read, and once `signal` aborts it throws its reason, so a
+ * signal sent during any read, the last one's included, stops the dry run before its report.
+ */
+export async function dryRun(
+  streams: readonly ParsedStream[],
+  model: string,
+  signal?: AbortSignal,
+): Promise<DryRunReport> {
   const rows = [
     "",
     `Dry run — model: ${model}  (two-pass: extract → synthesize)`,
@@ -167,6 +176,7 @@ export function dryRun(streams: readonly ParsedStream[], model: string): DryRunR
   let tokensOut = 0;
   for (const parsed of streams) {
     const pending = pendingChunks(parsed, loadSidecar(parsed));
+    await nextTranscript(signal);
     skipped += parsed.chunks.length - pending.length;
     const name = pyPathName(parsed.mdPath);
     if (pending.length === 0) {

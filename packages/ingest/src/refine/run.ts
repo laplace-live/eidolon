@@ -20,11 +20,11 @@ import {
   pyTypeName,
 } from "@eidolon/config";
 import { type Failure, failureOf, sharedFailure } from "../failure.ts";
+import { nextTranscript, transcriptPaths } from "../ingest_streams.ts";
 import { createLimiter, type Limiter } from "../limit.ts";
 import { canonicalPath } from "../paths.ts";
 import { noProgress, type ProgressEvent, type ProgressSink, type RunOptions } from "../progress.ts";
 import {
-  iterStreams,
   loadSidecar,
   type ParsedStream,
   parseStream,
@@ -567,12 +567,24 @@ function itemEnd(result: StreamResult, position: StreamPosition): ProgressEvent 
 /**
  * `_select_streams`: the transcripts named in `paths` (a missing one is logged and skipped), or
  * every `*.md` in `streamsDir`. All are parsed before any LLM call, so a transcript that won't
- * parse stops the run before it spends anything.
+ * parse stops the run before it spends anything. One is parsed per turn of the event loop, and
+ * once `signal` aborts the next turn throws its reason.
  */
-export function selectStreams(paths: readonly string[], streamsDir: string): ParsedStream[] {
-  if (paths.length === 0) return iterStreams(canonicalPath(streamsDir));
+export async function selectStreams(
+  paths: readonly string[],
+  streamsDir: string,
+  signal?: AbortSignal,
+): Promise<ParsedStream[]> {
   const streams: ParsedStream[] = [];
+  if (paths.length === 0) {
+    for (const path of transcriptPaths(canonicalPath(streamsDir))) {
+      await nextTranscript(signal);
+      streams.push(parseStream(path));
+    }
+    return streams;
+  }
   for (const path of paths) {
+    await nextTranscript(signal);
     if (!existsSync(path)) {
       logger.error(`File not found: ${path}`);
       continue;

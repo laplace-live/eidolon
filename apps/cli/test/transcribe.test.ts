@@ -350,6 +350,30 @@ describe("failing before Soniox", () => {
     }
   });
 
+  test("a run holds the persona's sources under its command's name, laplace-transcribe", async () => {
+    const { audio, outDir } = setup();
+    let blocked = "";
+    const { code } = await run(
+      [audio, "--out-dir", outDir, "--no-context", "--json"],
+      single.jobs,
+      (request) => {
+        if (blocked === "" && request.path === "/files") {
+          try {
+            acquireLock(sourcesLockKey("milky-green"), "test")();
+            blocked = "not held";
+          } catch (error) {
+            blocked = (error as Error).message;
+          }
+        }
+        return undefined;
+      },
+    );
+    expect(code).toBe(0);
+    expect(blocked).toBe(
+      `Another laplace-transcribe is running for milky-green (pid ${process.pid}).`,
+    );
+  });
+
   test("a Soniox failure is logged, not a traceback", async () => {
     const { audio, outDir } = setup();
     const { code, events } = await run(

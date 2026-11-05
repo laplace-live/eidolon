@@ -20,6 +20,7 @@ import {
   type ProgressSink,
   pipeline,
   refine,
+  SUMMARY_COUNTS,
   sourcesLockKey,
   transcribe,
 } from "@eidolon/ingest";
@@ -301,9 +302,13 @@ function splitExtraArgs(raw: string): string[] {
   return text ? download.shlexSplit(text) : [];
 }
 
-/** A run that couldn't start: why, as a failed setup stage, then the pipeline's summary. */
+/** A plan's counts before anything was counted. */
+const NO_PLAN = Object.fromEntries(SUMMARY_COUNTS.plan.map((key) => [key, 0]));
+
+/** A run that couldn't start: why, as a failed setup stage, then the run's or the plan's summary. */
 function refused(
   emit: ProgressSink,
+  summary: "pipeline" | "plan",
   stages: readonly string[],
   item: string,
   message: string,
@@ -313,9 +318,9 @@ function refused(
   emit({ type: "stage", stage: "setup", status: "failed", message, ...(code ? { code } : {}) });
   emit({
     type: "summary",
-    stage: "pipeline",
+    stage: summary,
     ok: false,
-    counts: { stages: stages.length, failed: 1, aborted: 0 },
+    counts: summary === "plan" ? NO_PLAN : { stages: stages.length, failed: 1, aborted: 0 },
     durationSec: 0,
     failures: [{ item, error: message }],
   });
@@ -361,7 +366,8 @@ export async function pipelineMain(
       urls = download.readUrlList(urlList);
     } catch (error) {
       if (!(error instanceof Error && error.name === "FileNotFoundError")) throw error;
-      return refused(emit, stages, urlList, errorText(error));
+      const summary = dryRun && json ? "plan" : "pipeline";
+      return refused(emit, summary, stages, urlList, errorText(error));
     }
     if (stages.includes("download") && urls.length === 0) {
       logger.warning(`No URLs in ${urlList} — download stage is a no-op.`);
@@ -391,10 +397,10 @@ export async function pipelineMain(
       if (!deps.signal?.aborted) throw error;
       emit({
         type: "summary",
-        stage: "pipeline",
+        stage: "plan",
         ok: false,
         cancelled: true,
-        counts: {},
+        counts: NO_PLAN,
         durationSec: (performance.now() - started) / 1000,
       });
       return 1;
@@ -416,7 +422,7 @@ export async function pipelineMain(
       release = acquireLock(sourcesLockKey(persona), PROG);
     } catch (error) {
       if (!(error instanceof LockedError)) throw error;
-      return refused(emit, stages, persona, error.message, error.code);
+      return refused(emit, "pipeline", stages, persona, error.message, error.code);
     }
   }
   try {

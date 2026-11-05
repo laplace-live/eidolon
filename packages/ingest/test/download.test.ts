@@ -101,15 +101,30 @@ describe("readUrlList", () => {
 describe("ytDlpArgs", () => {
   test("is _build_yt_dlp_cmd's argv plus --ignore-config and -- before the URL [AD]", () => {
     for (const c of golden.argv) {
-      const args = download.ytDlpArgs(c.url, {
-        vodsDir: c.vods_dir,
-        format: c.format,
-        cookiesFromBrowser: c.browser || null,
-        cookiesFile: c.cookies === null ? null : pyPath(c.cookies),
-        extraArgs: download.shlexSplit(c.extra),
-      });
-      expect(args).toEqual(withPortArgs(c.argv.slice(1)));
+      for (const source of ["managed", "setting", "path"] as const) {
+        const args = download.ytDlpArgs(c.url, {
+          vodsDir: c.vods_dir,
+          format: c.format,
+          cookiesFromBrowser: c.browser || null,
+          cookiesFile: c.cookies === null ? null : pyPath(c.cookies),
+          extraArgs: download.shlexSplit(c.extra),
+          ytDlp: { source },
+        });
+        expect([source, args]).toEqual([
+          source,
+          withPortArgs(c.argv.slice(1), source === "managed"),
+        ]);
+      }
     }
+  });
+
+  test("only the managed yt-dlp gets Bun as its JavaScript runtime: another may predate the flag", () => {
+    expect(download.jsRuntimeArgs({ source: "managed" })).toEqual([
+      "--js-runtimes",
+      `bun:${process.execPath}`,
+    ]);
+    expect(download.jsRuntimeArgs({ source: "setting" })).toEqual([]);
+    expect(download.jsRuntimeArgs({ source: "path" })).toEqual([]);
   });
 
   test("--json mode asks for one parseable progress line per update, before the --", () => {
@@ -120,6 +135,7 @@ describe("ytDlpArgs", () => {
       cookiesFile: null,
       extraArgs: ["--rate-limit", "2M"],
       progressLines: true,
+      ytDlp: { source: "managed" },
     });
     expect(args.slice(-9)).toEqual([
       "--rate-limit",
@@ -528,6 +544,10 @@ describe("after an HTTP 412", () => {
       "https://github.com/yt-dlp/yt-dlp/releases/download/2026.11.01/SHA2-256SUMS",
       "https://github.com/yt-dlp/yt-dlp/releases/download/2026.11.01/yt-dlp_linux",
     ]);
+    // Both copies are managed ones, so each gets this Bun for YouTube's challenges.
+    expect(readArgvLog(join(work, "argv.log")).map((call) => call.slice(0, 3))).toEqual(
+      Array(2).fill(["--ignore-config", "--js-runtimes", `bun:${process.execPath}`]),
+    );
     expect(events.filter((e) => e.type === "stage" && e.stage === "setup")).toEqual([
       { type: "stage", stage: "setup", status: "start", message: "yt-dlp 2026.11.01" },
       { type: "stage", stage: "setup", status: "done", message: "yt-dlp 2026.11.01" },
@@ -574,8 +594,6 @@ describe("expandPlaylist", () => {
     expect(readArgvLog(join(work, "argv.log"))).toEqual([
       [
         "--ignore-config",
-        "--js-runtimes",
-        `bun:${process.execPath}`,
         "--flat-playlist",
         "--print",
         "%(.{webpage_url,id,title,duration})j",
@@ -585,6 +603,26 @@ describe("expandPlaylist", () => {
         "1",
         "--",
         "https://example.invalid/playlist/3",
+      ],
+    ]);
+  });
+
+  test("the managed yt-dlp also gets this Bun for YouTube's JavaScript challenges", async () => {
+    await download.expandPlaylist("https://example.invalid/playlist/1", {
+      ytDlp: { path: fake, source: "managed", tag: "2026.10.26" },
+      cookiesFromBrowser: null,
+      cookiesFile: null,
+    });
+    expect(readArgvLog(join(work, "argv.log"))).toEqual([
+      [
+        "--ignore-config",
+        "--js-runtimes",
+        `bun:${process.execPath}`,
+        "--flat-playlist",
+        "--print",
+        "%(.{webpage_url,id,title,duration})j",
+        "--",
+        "https://example.invalid/playlist/1",
       ],
     ]);
   });

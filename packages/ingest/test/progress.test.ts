@@ -36,7 +36,7 @@ test("noProgress takes any event and does nothing", () => {
   expect(noProgress(summary)).toBeUndefined();
 });
 
-test("each stage's summary counts are pinned by name", () => {
+test("each summary's counts are pinned by name, the plan's and the pipeline run's included", () => {
   expect(SUMMARY_COUNTS.download).toEqual(["requested", "succeeded", "failed", "newFiles"]);
   expect(Object.keys(SUMMARY_COUNTS)).toEqual([
     "download",
@@ -46,5 +46,16 @@ test("each stage's summary counts are pinned by name", () => {
     "ingest-streams",
     "ingest-facts",
     "catalog",
+    "plan",
+    "pipeline",
   ]);
+  expect(SUMMARY_COUNTS.plan).toEqual([
+    "videos",
+    "downloadPending",
+    "transcribePending",
+    "noDate",
+    "refinePending",
+    "unindexed",
+  ]);
+  expect(SUMMARY_COUNTS.pipeline).toEqual(["stages", "failed", "aborted"]);
 });
