@@ -1,9 +1,11 @@
 // The read side of the two LanceDB tables: jieba tokenization, the date pre-filter, hybrid search
 // with RRF or a reranker, the retrievers context and MCP search through, and the stream-time and
-// stream-catalog helpers the archive's recall builds on.
+// stream-catalog helpers the archive's recall builds on. Also their write side, for the offline
+// ingests: the schemas, the table rebuild, and the embedding cache and batches.
 
 export { DEFAULT_EMBED_BASE_URL, DEFAULT_EMBED_MODEL, embedDim } from "@eidolon/config";
 export type { Table as LanceTable } from "@lancedb/lancedb";
+export type { Schema as ArrowSchema } from "apache-arrow";
 export {
   addDays,
   DateRangeError,
@@ -19,6 +21,14 @@ export {
   weekday,
   yearOf,
 } from "./civil_date.ts";
+export {
+  type EmbedInBatchesOptions,
+  type EmbedProgress,
+  type EmbedReport,
+  embeddingTotalsMessage,
+  embedInBatches,
+} from "./embed_batches.ts";
+export { EmbedCache, embedCacheKey } from "./embed_cache.ts";
 export {
   type CostSource,
   defaultEmbeddingClient,
@@ -120,3 +130,4 @@ export {
   type TablePreset,
 } from "./tables.ts";
 export { tokenizeZh, tokenizeZhQuery, warmTokenizer, ZH_QUERY_STOPWORDS } from "./tokenize.ts";
+export { buildFtsIndex, personaFactsSchema, streamChunksSchema, writeTable } from "./write.ts";

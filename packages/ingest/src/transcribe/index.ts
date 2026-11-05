@@ -1,3 +1,76 @@
 // laplace-transcribe's library: the Soniox REST client, the glossary context, ffmpeg and ffprobe,
-// and the transcript rendering.
-export {};
+// the transcript rendering, and the skip rules the pipeline shares.
+export {
+  apiContext,
+  CONTEXT_MAX_CHARS,
+  loadContext,
+  type SonioxContext,
+  summarizeContext,
+} from "./context.ts";
+export { closeMatches } from "./difflib.ts";
+export { TranscribeError } from "./errors.ts";
+export {
+  ffmpegMissing,
+  ffmpegSlice,
+  infoJsonDurationSec,
+  locateBinary,
+  probeDurationSec,
+} from "./media.ts";
+export {
+  DEFAULT_WINDOW_SEC,
+  formatDur,
+  formatTs,
+  groupSegmentsIntoScenes,
+  headingHint,
+  isSlicedPayload,
+  MAX_SEGMENT_SEC,
+  MIN_SEGMENT_SEC,
+  msField,
+  payloadDurationSec,
+  payloadParts,
+  payloadSegments,
+  pyFloorDiv,
+  renderMarkdown,
+  renderPayload,
+  type Scene,
+  type Segment,
+  type SonioxToken,
+  segmentsFromParts,
+  shortTs,
+  type TokenPart,
+  type TranscriptMeta,
+  tokensToSegments,
+} from "./render.ts";
+export {
+  type AudioStatus,
+  audioStatus,
+  configuredModel,
+  DEFAULT_LANGUAGE,
+  DEFAULT_SONIOX_MODEL,
+  dumpToken,
+  estimateTranscribeUsd,
+  glossaryPath,
+  isoformat,
+  listAudioFiles,
+  payloadPath,
+  SLICE_MAX_MIN_DEFAULT,
+  SONIOX_MAX_DURATION_MIN,
+  type TranscribeOptions,
+  type TranscribeResult,
+  type TranscriptState,
+  transcribeAudio,
+  transcriptState,
+} from "./run.ts";
+export {
+  RETRY_DELAYS_MS,
+  SONIOX_API_BASE,
+  SONIOX_IDLE_TIMEOUT_MS,
+  SonioxApiError,
+  SonioxClient,
+  type SonioxClientOptions,
+  SonioxConnectionError,
+  SonioxError,
+  type SonioxFile,
+  type SonioxTranscript,
+  type SonioxTranscription,
+} from "./soniox.ts";

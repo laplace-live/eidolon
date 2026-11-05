@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "stream_id": "2026-01-03-BV1bbbbbbbbb_p1",
+  "chunks": {
+    "2026-01-03-BV1bbbbbbbbb_p1::000": {
+      "heading": "开播",
+      "summary": "旧的摘要。",
+      "topics": ["开播"]
+    }
+  },
+  "model": "old/model",
+  "refined_at": "2025-12-31T00:00:00+00:00",
+  "stats": {
+    "chunks_total": 2,
+    "chunks_refined": 1,
+    "tokens_in": 10,
+    "tokens_out": 20,
+    "cost_usd": 0.5,
+    "cost_source": "openrouter",
+    "model": "old/model",
+    "duration_sec": 1.0
+  }
+}

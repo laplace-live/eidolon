@@ -1,0 +1,568 @@
+{
+  "printed_by": "CPython 3.13.4, soniox 2.9.0, httpx 0.28.1: packages/ingest/test/fixtures/transcribe/run.golden.py",
+  "scenarios": [
+    {
+      "name": "single",
+      "audio": "BV1aaaaaaaaa.m4a",
+      "date": "2026-01-02",
+      "duration": 3725.5,
+      "args": ["--context-file", "<FIXTURES>/glossary/full.toml"],
+      "jobs": [
+        {
+          "file": {
+            "id": "file-1",
+            "filename": "BV1aaaaaaaaa.m4a",
+            "size": 4,
+            "created_at": "2026-01-02T03:04:00Z"
+          },
+          "created": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "created_at": "2026-01-02T03:01:05.678Z",
+            "model": "stt-async-v5",
+            "file_id": "file-1",
+            "filename": "BV1aaaaaaaaa.m4a",
+            "language_hints": ["zh"],
+            "enable_speaker_diarization": false,
+            "enable_language_identification": false,
+            "status": "queued",
+            "audio_duration_ms": null
+          },
+          "polls": [
+            {
+              "id": "00000000-0000-4000-8000-000000000001",
+              "created_at": "2026-01-02T03:01:05.678Z",
+              "model": "stt-async-v5",
+              "file_id": "file-1",
+              "filename": "BV1aaaaaaaaa.m4a",
+              "language_hints": ["zh"],
+              "enable_speaker_diarization": false,
+              "enable_language_identification": false,
+              "status": "processing",
+              "audio_duration_ms": 0
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000001",
+              "created_at": "2026-01-02T03:01:05.678Z",
+              "model": "stt-async-v5",
+              "file_id": "file-1",
+              "filename": "BV1aaaaaaaaa.m4a",
+              "language_hints": ["zh"],
+              "enable_speaker_diarization": false,
+              "enable_language_identification": false,
+              "status": "completed",
+              "audio_duration_ms": 3725400
+            }
+          ],
+          "transcript": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "text": "喂？好了。 Hello world. 在那",
+            "tokens": [
+              {
+                "text": "喂",
+                "start_ms": 341000,
+                "end_ms": 341200,
+                "confidence": 0.9195119142532349
+              },
+              {
+                "text": "？",
+                "start_ms": 341200,
+                "end_ms": 341300,
+                "confidence": 1
+              },
+              {
+                "text": "好",
+                "start_ms": 342000,
+                "end_ms": 342100,
+                "confidence": 1.0,
+                "is_audio_event": null
+              },
+              {
+                "text": "了",
+                "start_ms": 344000,
+                "end_ms": 344500,
+                "confidence": 0.5
+              },
+              {
+                "text": "。",
+                "start_ms": 344500,
+                "end_ms": 344600,
+                "confidence": 0.5
+              },
+              {
+                "text": " ",
+                "start_ms": 344600,
+                "end_ms": 344600,
+                "confidence": 0.5
+              },
+              {
+                "text": "x",
+                "start_ms": null,
+                "end_ms": null,
+                "confidence": 0.5
+              },
+              {
+                "text": "Hello",
+                "start_ms": 400000,
+                "end_ms": 400400,
+                "confidence": 0.5
+              },
+              {
+                "text": " world",
+                "start_ms": 400400,
+                "end_ms": 401000,
+                "confidence": 0.5,
+                "is_audio_event": false
+              },
+              {
+                "text": ".",
+                "start_ms": 401000,
+                "end_ms": 401100,
+                "confidence": 0.5
+              },
+              {
+                "text": " ",
+                "start_ms": 401100,
+                "end_ms": 401100,
+                "confidence": 0.5
+              },
+              {
+                "text": "在",
+                "start_ms": 3660000,
+                "end_ms": 3660100,
+                "confidence": 0.5
+              },
+              {
+                "text": "那",
+                "start_ms": 3700000,
+                "end_ms": 3700200,
+                "confidence": 0.5
+              }
+            ]
+          }
+        }
+      ],
+      "exit_code": 0,
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/files",
+          "form": {
+            "client_reference_id": "laplace-eidolon:BV1aaaaaaaaa.m4a",
+            "filename": "BV1aaaaaaaaa.m4a"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/transcriptions",
+          "json": "{\"model\":\"stt-async-v5\",\"file_id\":\"file-1\",\"language_hints\":[\"zh\"],\"context\":{\"general\":[{\"key\":\"k1\",\"value\":\"v1\"},{\"key\":\"k2\",\"value\":\"v2\"}],\"text\":\"line one\\nline two\\n\",\"terms\":[\"甲\",\"乙\",\"甲\"],\"translation_terms\":[{\"source\":\"A\",\"target\":\"B\"}]},\"client_reference_id\":\"laplace-eidolon:BV1aaaaaaaaa.m4a\"}"
+        },
+        {
+          "method": "GET",
+          "path": "/transcriptions/00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "method": "GET",
+          "path": "/transcriptions/00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "method": "GET",
+          "path": "/transcriptions/00000000-0000-4000-8000-000000000001/transcript"
+        },
+        {
+          "method": "GET",
+          "path": "/transcriptions/00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "method": "DELETE",
+          "path": "/transcriptions/00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "method": "DELETE",
+          "path": "/files/file-1"
+        }
+      ],
+      "md": "---\nstream_date: 2026-01-02\nstream_id: 2026-01-02-BV1aaaaaaaaa\nduration_min: 62\nlanguage: zh\nsource_file: BV1aaaaaaaaa.m4a\n---\n\n## 05:00 — 喂？好了\n\n喂？好了。 Hello world. 在\n\n## 01:00 — 那\n\n那\n",
+      "payload": "{\n  \"provider\": \"soniox\",\n  \"transcription_id\": \"00000000-0000-4000-8000-000000000001\",\n  \"model\": \"stt-async-v5\",\n  \"language_hints\": [\n    \"zh\"\n  ],\n  \"context\": {\n    \"text\": \"line one\\nline two\\n\",\n    \"terms\": [\n      \"甲\",\n      \"乙\",\n      \"甲\"\n    ],\n    \"general\": [\n      {\n        \"value\": \"v1\",\n        \"key\": \"k1\"\n      },\n      {\n        \"key\": \"k2\",\n        \"value\": \"v2\"\n      }\n    ],\n    \"translation_terms\": [\n      {\n        \"target\": \"B\",\n        \"source\": \"A\"\n      }\n    ]\n  },\n  \"audio_filename\": \"BV1aaaaaaaaa.m4a\",\n  \"audio_duration_ms\": 3725400,\n  \"created_at\": \"2026-01-02T03:01:05.678000+00:00\",\n  \"transcript\": {\n    \"id\": \"00000000-0000-4000-8000-000000000001\",\n    \"text\": \"喂？好了。 Hello world. 在那\",\n    \"tokens\": [\n      {\n        \"text\": \"喂\",\n        \"start_ms\": 341000,\n        \"end_ms\": 341200,\n        \"confidence\": 0.9195119142532349,\n        \"is_final\": null,\n        \"speaker\": null,\n        \"translation_status\": null,\n        \"language\": null,\n        \"source_language\": null\n      },\n      {\n        \"text\": \"？\",\n        \"start_ms\": 341200,\n        \"end_ms\": 341300,\n        \"confidence\": 1.0,\n        \"is_final\": null,\n        \"speaker\": null,\n        \"translation_status\": null,\n        \"language\": null,\n        \"source_language\": null\n      },\n      {\n        \"text\": \"好\",\n        \"start_ms\": 342000,\n        \"end_ms\": 342100,\n        \"confidence\": 1.0,\n        \"is_final\": null,\n        \"speaker\": null,\n        \"translation_status\": null,\n        \"language\": null,\n        \"source_language\": null,\n        \"is_audio_event\": null\n      },\n      {\n        \"text\": \"了\",\n        \"start_ms\": 344000,\n        \"end_ms\": 344500,\n        \"confidence\": 0.5,\n        \"is_final\": null,\n        \"speaker\": null,\n        \"translation_status\": null,\n        \"language\": null,\n        \"source_language\": null\n      },\n      {\n        \"text\": \"。\",\n        \"start_ms\": 344500,\n        \"end_ms\": 344600,\n        \"confidence\": 0.5,\n        \"is_final\": null,\n        \"speaker\": null,\n        \"translation_status\": null,\n        \"language\": null,\n        \"source_language\": null\n      },\n      {\n        \"text\": \" \",\n        \"start_ms\": 344600,\n        \"end_ms\": 344600,\n        \"confidence\": 0.5,\n        \"is_final\": null,\n        \"speaker\": null,\n        \"translation_status\": null,\n        \"language\": null,\n        \"source_language\": null\n      },\n      {\n        \"text\": \"x\",\n        \"start_ms\": null,\n        \"end_ms\": null,\n        \"confidence\": 0.5,\n        \"is_final\": null,\n        \"speaker\": null,\n        \"translation_status\": null,\n        \"language\": null,\n        \"source_language\": null\n      },\n      {\n        \"text\": \"Hello\",\n        \"start_ms\": 400000,\n        \"end_ms\": 400400,\n        \"confidence\": 0.5,\n        \"is_final\": null,\n        \"speaker\": null,\n        \"translation_status\": null,\n        \"language\": null,\n        \"source_language\": null\n      },\n      {\n        \"text\": \" world\",\n        \"start_ms\": 400400,\n        \"end_ms\": 401000,\n        \"confidence\": 0.5,\n        \"is_final\": null,\n        \"speaker\": null,\n        \"translation_status\": null,\n        \"language\": null,\n        \"source_language\": null,\n        \"is_audio_event\": false\n      },\n      {\n        \"text\": \".\",\n        \"start_ms\": 401000,\n        \"end_ms\": 401100,\n        \"confidence\": 0.5,\n        \"is_final\": null,\n        \"speaker\": null,\n        \"translation_status\": null,\n        \"language\": null,\n        \"source_language\": null\n      },\n      {\n        \"text\": \" \",\n        \"start_ms\": 401100,\n        \"end_ms\": 401100,\n        \"confidence\": 0.5,\n        \"is_final\": null,\n        \"speaker\": null,\n        \"translation_status\": null,\n        \"language\": null,\n        \"source_language\": null\n      },\n      {\n        \"text\": \"在\",\n        \"start_ms\": 3660000,\n        \"end_ms\": 3660100,\n        \"confidence\": 0.5,\n        \"is_final\": null,\n        \"speaker\": null,\n        \"translation_status\": null,\n        \"language\": null,\n        \"source_language\": null\n      },\n      {\n        \"text\": \"那\",\n        \"start_ms\": 3700000,\n        \"end_ms\": 3700200,\n        \"confidence\": 0.5,\n        \"is_final\": null,\n        \"speaker\": null,\n        \"translation_status\": null,\n        \"language\": null,\n        \"source_language\": null\n      }\n    ]\n  }\n}"
+    },
+    {
+      "name": "sliced",
+      "audio": "BV1bbbbbbbbb.m4a",
+      "date": "2022-09-27",
+      "duration": 18675.394833,
+      "args": ["--no-context", "--auto-slice"],
+      "jobs": [
+        {
+          "file": {
+            "id": "file-1",
+            "filename": "part_01_of_02.m4a",
+            "size": 4,
+            "created_at": "2026-01-02T03:04:00Z"
+          },
+          "created": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "created_at": "2026-01-02T03:01:05.678Z",
+            "model": "stt-async-v5",
+            "file_id": "file-1",
+            "filename": "part_01_of_02.m4a",
+            "language_hints": ["zh"],
+            "enable_speaker_diarization": false,
+            "enable_language_identification": false,
+            "status": "queued",
+            "audio_duration_ms": null
+          },
+          "polls": [
+            {
+              "id": "00000000-0000-4000-8000-000000000001",
+              "created_at": "2026-01-02T03:01:05.678Z",
+              "model": "stt-async-v5",
+              "file_id": "file-1",
+              "filename": "part_01_of_02.m4a",
+              "language_hints": ["zh"],
+              "enable_speaker_diarization": false,
+              "enable_language_identification": false,
+              "status": "processing",
+              "audio_duration_ms": 0
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000001",
+              "created_at": "2026-01-02T03:01:05.678Z",
+              "model": "stt-async-v5",
+              "file_id": "file-1",
+              "filename": "part_01_of_02.m4a",
+              "language_hints": ["zh"],
+              "enable_speaker_diarization": false,
+              "enable_language_identification": false,
+              "status": "completed",
+              "audio_duration_ms": 9337280
+            }
+          ],
+          "transcript": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "text": "一二。",
+            "tokens": [
+              {
+                "text": "一",
+                "start_ms": 0,
+                "end_ms": 100,
+                "confidence": 0.5
+              },
+              {
+                "text": "二",
+                "start_ms": 9336000,
+                "end_ms": 9336100,
+                "confidence": 0.5
+              },
+              {
+                "text": "。",
+                "start_ms": 9336200,
+                "end_ms": 9336300,
+                "confidence": 0.5
+              }
+            ]
+          }
+        },
+        {
+          "file": {
+            "id": "file-2",
+            "filename": "part_02_of_02.m4a",
+            "size": 4,
+            "created_at": "2026-01-02T03:04:00Z"
+          },
+          "created": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "created_at": "2026-01-02T03:02:05.678Z",
+            "model": "stt-async-v5",
+            "file_id": "file-2",
+            "filename": "part_02_of_02.m4a",
+            "language_hints": ["zh"],
+            "enable_speaker_diarization": false,
+            "enable_language_identification": false,
+            "status": "queued",
+            "audio_duration_ms": null
+          },
+          "polls": [
+            {
+              "id": "00000000-0000-4000-8000-000000000002",
+              "created_at": "2026-01-02T03:02:05.678Z",
+              "model": "stt-async-v5",
+              "file_id": "file-2",
+              "filename": "part_02_of_02.m4a",
+              "language_hints": ["zh"],
+              "enable_speaker_diarization": false,
+              "enable_language_identification": false,
+              "status": "processing",
+              "audio_duration_ms": 0
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000002",
+              "created_at": "2026-01-02T03:02:05.678Z",
+              "model": "stt-async-v5",
+              "file_id": "file-2",
+              "filename": "part_02_of_02.m4a",
+              "language_hints": ["zh"],
+              "enable_speaker_diarization": false,
+              "enable_language_identification": false,
+              "status": "completed",
+              "audio_duration_ms": 9337269
+            }
+          ],
+          "transcript": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "text": "三四！ 五",
+            "tokens": [
+              {
+                "text": "三",
+                "start_ms": 100,
+                "end_ms": 200,
+                "confidence": 0.5
+              },
+              {
+                "text": "四",
+                "start_ms": 3000,
+                "end_ms": 3100,
+                "confidence": 0.5
+              },
+              {
+                "text": "！",
+                "start_ms": 3100,
+                "end_ms": 3200,
+                "confidence": 0.5
+              },
+              {
+                "text": " ",
+                "start_ms": 3200,
+                "end_ms": 3200,
+                "confidence": 0.5
+              },
+              {
+                "text": "五",
+                "start_ms": 400000,
+                "end_ms": 400100,
+                "confidence": 0.5
+              }
+            ]
+          }
+        }
+      ],
+      "exit_code": 0,
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/files",
+          "form": {
+            "client_reference_id": "laplace-eidolon:BV1bbbbbbbbb.m4a:part_1_of_2",
+            "filename": "part_01_of_02.m4a"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/transcriptions",
+          "json": "{\"model\":\"stt-async-v5\",\"file_id\":\"file-1\",\"language_hints\":[\"zh\"],\"client_reference_id\":\"laplace-eidolon:BV1bbbbbbbbb.m4a:part_1_of_2\"}"
+        },
+        {
+          "method": "GET",
+          "path": "/transcriptions/00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "method": "GET",
+          "path": "/transcriptions/00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "method": "GET",
+          "path": "/transcriptions/00000000-0000-4000-8000-000000000001/transcript"
+        },
+        {
+          "method": "GET",
+          "path": "/transcriptions/00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "method": "DELETE",
+          "path": "/transcriptions/00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "method": "DELETE",
+          "path": "/files/file-1"
+        },
+        {
+          "method": "POST",
+          "path": "/files",
+          "form": {
+            "client_reference_id": "laplace-eidolon:BV1bbbbbbbbb.m4a:part_2_of_2",
+            "filename": "part_02_of_02.m4a"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/transcriptions",
+          "json": "{\"model\":\"stt-async-v5\",\"file_id\":\"file-2\",\"language_hints\":[\"zh\"],\"client_reference_id\":\"laplace-eidolon:BV1bbbbbbbbb.m4a:part_2_of_2\"}"
+        },
+        {
+          "method": "GET",
+          "path": "/transcriptions/00000000-0000-4000-8000-000000000002"
+        },
+        {
+          "method": "GET",
+          "path": "/transcriptions/00000000-0000-4000-8000-000000000002"
+        },
+        {
+          "method": "GET",
+          "path": "/transcriptions/00000000-0000-4000-8000-000000000002/transcript"
+        },
+        {
+          "method": "GET",
+          "path": "/transcriptions/00000000-0000-4000-8000-000000000002"
+        },
+        {
+          "method": "DELETE",
+          "path": "/transcriptions/00000000-0000-4000-8000-000000000002"
+        },
+        {
+          "method": "DELETE",
+          "path": "/files/file-2"
+        }
+      ],
+      "md": "---\nstream_date: 2022-09-27\nstream_id: 2022-09-27-BV1bbbbbbbbb\nduration_min: 311\nlanguage: zh\nsource_file: BV1bbbbbbbbb.m4a\n---\n\n## 00:00 — 一二\n\n一二\n\n## 02:35 — \n\n。 三四！ 五\n",
+      "payload": "{\n  \"provider\": \"soniox\",\n  \"sliced\": true,\n  \"slice_max_min\": 280,\n  \"model\": \"stt-async-v5\",\n  \"language_hints\": [\n    \"zh\"\n  ],\n  \"context\": null,\n  \"audio_filename\": \"BV1bbbbbbbbb.m4a\",\n  \"audio_duration_ms\": 18674549,\n  \"parts\": [\n    {\n      \"part_index\": 1,\n      \"part_count\": 2,\n      \"offset_sec\": 0.0,\n      \"duration_sec\": 9337.6974165,\n      \"transcription_id\": \"00000000-0000-4000-8000-000000000001\",\n      \"audio_filename\": \"part_01_of_02.m4a\",\n      \"audio_duration_ms\": 9337280,\n      \"created_at\": \"2026-01-02T03:01:05.678000+00:00\",\n      \"transcript_id\": \"00000000-0000-4000-8000-000000000001\"\n    },\n    {\n      \"part_index\": 2,\n      \"part_count\": 2,\n      \"offset_sec\": 9337.6974165,\n      \"duration_sec\": 9337.6974165,\n      \"transcription_id\": \"00000000-0000-4000-8000-000000000002\",\n      \"audio_filename\": \"part_02_of_02.m4a\",\n      \"audio_duration_ms\": 9337269,\n      \"created_at\": \"2026-01-02T03:02:05.678000+00:00\",\n      \"transcript_id\": \"00000000-0000-4000-8000-000000000002\"\n    }\n  ],\n  \"transcript\": {\n    \"id\": \"00000000-0000-4000-8000-000000000001\",\n    \"text\": \"一二。三四！ 五\",\n    \"tokens\": [\n      {\n        \"text\": \"一\",\n        \"start_ms\": 0,\n        \"end_ms\": 100,\n        \"confidence\": 0.5,\n        \"is_final\": null,\n        \"speaker\": null,\n        \"translation_status\": null,\n        \"language\": null,\n        \"source_language\": null\n      },\n      {\n        \"text\": \"二\",\n        \"start_ms\": 9336000,\n        \"end_ms\": 9336100,\n        \"confidence\": 0.5,\n        \"is_final\": null,\n        \"speaker\": null,\n        \"translation_status\": null,\n        \"language\": null,\n        \"source_language\": null\n      },\n      {\n        \"text\": \"。\",\n        \"start_ms\": 9336200,\n        \"end_ms\": 9336300,\n        \"confidence\": 0.5,\n        \"is_final\": null,\n        \"speaker\": null,\n        \"translation_status\": null,\n        \"language\": null,\n        \"source_language\": null\n      },\n      {\n        \"text\": \"三\",\n        \"start_ms\": 9337797,\n        \"end_ms\": 9337897,\n        \"confidence\": 0.5,\n        \"is_final\": null,\n        \"speaker\": null,\n        \"translation_status\": null,\n        \"language\": null,\n        \"source_language\": null\n      },\n      {\n        \"text\": \"四\",\n        \"start_ms\": 9340697,\n        \"end_ms\": 9340797,\n        \"confidence\": 0.5,\n        \"is_final\": null,\n        \"speaker\": null,\n        \"translation_status\": null,\n        \"language\": null,\n        \"source_language\": null\n      },\n      {\n        \"text\": \"！\",\n        \"start_ms\": 9340797,\n        \"end_ms\": 9340897,\n        \"confidence\": 0.5,\n        \"is_final\": null,\n        \"speaker\": null,\n        \"translation_status\": null,\n        \"language\": null,\n        \"source_language\": null\n      },\n      {\n        \"text\": \" \",\n        \"start_ms\": 9340897,\n        \"end_ms\": 9340897,\n        \"confidence\": 0.5,\n        \"is_final\": null,\n        \"speaker\": null,\n        \"translation_status\": null,\n        \"language\": null,\n        \"source_language\": null\n      },\n      {\n        \"text\": \"五\",\n        \"start_ms\": 9737697,\n        \"end_ms\": 9737797,\n        \"confidence\": 0.5,\n        \"is_final\": null,\n        \"speaker\": null,\n        \"translation_status\": null,\n        \"language\": null,\n        \"source_language\": null\n      }\n    ]\n  }\n}"
+    },
+    {
+      "name": "no_language",
+      "audio": "BV1ccccccccc.m4a",
+      "date": "2026-03-04",
+      "duration": 60.0,
+      "args": ["--language", "", "--no-context", "--window", "60"],
+      "jobs": [
+        {
+          "file": {
+            "id": "file-1",
+            "filename": "BV1ccccccccc.m4a",
+            "size": 4,
+            "created_at": "2026-01-02T03:04:00Z"
+          },
+          "created": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "created_at": "2026-01-02T03:01:05.678Z",
+            "model": "stt-async-v5",
+            "file_id": "file-1",
+            "filename": "BV1ccccccccc.m4a",
+            "language_hints": ["zh"],
+            "enable_speaker_diarization": false,
+            "enable_language_identification": false,
+            "status": "queued",
+            "audio_duration_ms": null
+          },
+          "polls": [
+            {
+              "id": "00000000-0000-4000-8000-000000000001",
+              "created_at": "2026-01-02T03:01:05.678Z",
+              "model": "stt-async-v5",
+              "file_id": "file-1",
+              "filename": "BV1ccccccccc.m4a",
+              "language_hints": ["zh"],
+              "enable_speaker_diarization": false,
+              "enable_language_identification": false,
+              "status": "processing",
+              "audio_duration_ms": 0
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000001",
+              "created_at": "2026-01-02T03:01:05.678Z",
+              "model": "stt-async-v5",
+              "file_id": "file-1",
+              "filename": "BV1ccccccccc.m4a",
+              "language_hints": ["zh"],
+              "enable_speaker_diarization": false,
+              "enable_language_identification": false,
+              "status": "completed",
+              "audio_duration_ms": 59999
+            }
+          ],
+          "transcript": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "text": "喂？好了。 ",
+            "tokens": [
+              {
+                "text": "喂",
+                "start_ms": 341000,
+                "end_ms": 341200,
+                "confidence": 0.9195119142532349
+              },
+              {
+                "text": "？",
+                "start_ms": 341200,
+                "end_ms": 341300,
+                "confidence": 1
+              },
+              {
+                "text": "好",
+                "start_ms": 342000,
+                "end_ms": 342100,
+                "confidence": 1.0,
+                "is_audio_event": null
+              },
+              {
+                "text": "了",
+                "start_ms": 344000,
+                "end_ms": 344500,
+                "confidence": 0.5
+              },
+              {
+                "text": "。",
+                "start_ms": 344500,
+                "end_ms": 344600,
+                "confidence": 0.5
+              },
+              {
+                "text": " ",
+                "start_ms": 344600,
+                "end_ms": 344600,
+                "confidence": 0.5
+              }
+            ]
+          }
+        }
+      ],
+      "exit_code": 0,
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/files",
+          "form": {
+            "client_reference_id": "laplace-eidolon:BV1ccccccccc.m4a",
+            "filename": "BV1ccccccccc.m4a"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/transcriptions",
+          "json": "{\"model\":\"stt-async-v5\",\"file_id\":\"file-1\",\"client_reference_id\":\"laplace-eidolon:BV1ccccccccc.m4a\"}"
+        },
+        {
+          "method": "GET",
+          "path": "/transcriptions/00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "method": "GET",
+          "path": "/transcriptions/00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "method": "GET",
+          "path": "/transcriptions/00000000-0000-4000-8000-000000000001/transcript"
+        },
+        {
+          "method": "GET",
+          "path": "/transcriptions/00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "method": "DELETE",
+          "path": "/transcriptions/00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "method": "DELETE",
+          "path": "/files/file-1"
+        }
+      ],
+      "md": "---\nstream_date: 2026-03-04\nstream_id: 2026-03-04-BV1ccccccccc\nduration_min: 0\nsource_file: BV1ccccccccc.m4a\n---\n\n## 05:00 — 喂？好了\n\n喂？好了。\n",
+      "payload": "{\n  \"provider\": \"soniox\",\n  \"transcription_id\": \"00000000-0000-4000-8000-000000000001\",\n  \"model\": \"stt-async-v5\",\n  \"language_hints\": null,\n  \"context\": null,\n  \"audio_filename\": \"BV1ccccccccc.m4a\",\n  \"audio_duration_ms\": 59999,\n  \"created_at\": \"2026-01-02T03:01:05.678000+00:00\",\n  \"transcript\": {\n    \"id\": \"00000000-0000-4000-8000-000000000001\",\n    \"text\": \"喂？好了。 \",\n    \"tokens\": [\n      {\n        \"text\": \"喂\",\n        \"start_ms\": 341000,\n        \"end_ms\": 341200,\n        \"confidence\": 0.9195119142532349,\n        \"is_final\": null,\n        \"speaker\": null,\n        \"translation_status\": null,\n        \"language\": null,\n        \"source_language\": null\n      },\n      {\n        \"text\": \"？\",\n        \"start_ms\": 341200,\n        \"end_ms\": 341300,\n        \"confidence\": 1.0,\n        \"is_final\": null,\n        \"speaker\": null,\n        \"translation_status\": null,\n        \"language\": null,\n        \"source_language\": null\n      },\n      {\n        \"text\": \"好\",\n        \"start_ms\": 342000,\n        \"end_ms\": 342100,\n        \"confidence\": 1.0,\n        \"is_final\": null,\n        \"speaker\": null,\n        \"translation_status\": null,\n        \"language\": null,\n        \"source_language\": null,\n        \"is_audio_event\": null\n      },\n      {\n        \"text\": \"了\",\n        \"start_ms\": 344000,\n        \"end_ms\": 344500,\n        \"confidence\": 0.5,\n        \"is_final\": null,\n        \"speaker\": null,\n        \"translation_status\": null,\n        \"language\": null,\n        \"source_language\": null\n      },\n      {\n        \"text\": \"。\",\n        \"start_ms\": 344500,\n        \"end_ms\": 344600,\n        \"confidence\": 0.5,\n        \"is_final\": null,\n        \"speaker\": null,\n        \"translation_status\": null,\n        \"language\": null,\n        \"source_language\": null\n      },\n      {\n        \"text\": \" \",\n        \"start_ms\": 344600,\n        \"end_ms\": 344600,\n        \"confidence\": 0.5,\n        \"is_final\": null,\n        \"speaker\": null,\n        \"translation_status\": null,\n        \"language\": null,\n        \"source_language\": null\n      }\n    ]\n  }\n}"
+    }
+  ]
+}

@@ -1,0 +1,269 @@
+{
+  "printed_by": "CPython 3.13.4 argparse, COLUMNS=80: apps/cli/test/fixtures/transcribe/parser.golden.py",
+  "transcribe": [
+    {
+      "argv": ["-h"],
+      "code": 0,
+      "stdout": "usage: laplace-transcribe [-h] [--provider {soniox}] [--date DATE]\n                          [--language LANGUAGE] [--window WINDOW]\n                          [--out-dir OUT_DIR] [--persona PERSONA] [--force]\n                          [--json] [--soniox-model SONIOX_MODEL]\n                          [--keep-soniox-files] [--context-file CONTEXT_FILE]\n                          [--no-context] [--auto-slice]\n                          [--slice-max-min SLICE_MAX_MIN]\n                          audio\n\nTranscribe a VOD audio/video file into a streams/*.md transcript.\n\npositional arguments:\n  audio                 VOD file (mp3, m4a, mp4, wav, ...)\n\noptions:\n  -h, --help            show this help message and exit\n  --provider {soniox}   Transcription backend (default: soniox, cloud).\n  --date DATE           Stream date YYYY-MM-DD (default: today)\n  --language LANGUAGE   ISO 639-1 code (e.g. 'en', 'zh'), sent to Soniox as a\n                        language hint (the model still auto-detects). Default:\n                        zh (this project is Mandarin-focused). Pass --language\n                        '' for no hint.\n  --window WINDOW       Scene window in seconds (default: 300 = 5 minutes)\n  --out-dir OUT_DIR     Output directory (default: the persona's streams/ in\n                        the data home's sources)\n  --persona PERSONA     Persona whose sources and glossary to use (default:\n                        the active persona)\n  --force               Transcribe again over an existing transcript (Soniox\n                        bills again)\n  --json                Report progress as JSON lines on stdout\n\nsoniox provider:\n  --soniox-model SONIOX_MODEL\n                        Soniox async STT model (default: the\n                        transcription.model setting, else stt-async-v5)\n  --keep-soniox-files   Don't delete the uploaded file + transcription record\n                        from Soniox after success. Default is to clean up so\n                        the 10GB / 1000-file quota stays open.\n  --context-file CONTEXT_FILE\n                        TOML file with structured context (glossary + domain\n                        hints) passed to Soniox to improve accuracy. Mirrors\n                        Soniox's StructuredContext schema. Defaults to the\n                        persona's glossary.toml. Missing file is fine — the\n                        run just goes out without context.\n  --no-context          Skip the context file even if it exists. Useful for\n                        clean A/B comparisons or when you want to confirm a\n                        transcription issue is not caused by your glossary.\n  --auto-slice          When the source audio exceeds Soniox's 300-min per-\n                        file cap, split it with ffmpeg into multiple parts,\n                        transcribe each independently, and merge the segments\n                        + tokens with offset timestamps. Original file is\n                        never modified — slices live in a temp directory and\n                        are wiped on exit. Default off so the existing fail-\n                        fast behavior is preserved for one-off runs.\n  --slice-max-min SLICE_MAX_MIN\n                        Max minutes per slice when --auto-slice is on\n                        (default: 280). Must be ≤ 300. Lower values produce\n                        more parts and more Soniox jobs but tolerate more\n                        drift from ffmpeg's keyframe-bounded cuts.\n",
+      "stderr": ""
+    },
+    {
+      "argv": [],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-transcribe [-h] [--provider {soniox}] [--date DATE]\n                          [--language LANGUAGE] [--window WINDOW]\n                          [--out-dir OUT_DIR] [--persona PERSONA] [--force]\n                          [--json] [--soniox-model SONIOX_MODEL]\n                          [--keep-soniox-files] [--context-file CONTEXT_FILE]\n                          [--no-context] [--auto-slice]\n                          [--slice-max-min SLICE_MAX_MIN]\n                          audio\nlaplace-transcribe: error: the following arguments are required: audio\n"
+    },
+    {
+      "argv": ["a.m4a"],
+      "code": "parsed",
+      "ns": {
+        "audio": "a.m4a",
+        "provider": "soniox",
+        "date": null,
+        "language": "zh",
+        "window": 300,
+        "out_dir": null,
+        "persona": null,
+        "force": false,
+        "json": false,
+        "soniox_model": null,
+        "keep_soniox_files": false,
+        "context_file": null,
+        "no_context": false,
+        "auto_slice": false,
+        "slice_max_min": 280
+      }
+    },
+    {
+      "argv": ["./vods//a.m4a", "--language", "", "--window", "60", "--date", "2026-01-02"],
+      "code": "parsed",
+      "ns": {
+        "audio": "vods/a.m4a",
+        "provider": "soniox",
+        "date": "2026-01-02",
+        "language": "",
+        "window": 60,
+        "out_dir": null,
+        "persona": null,
+        "force": false,
+        "json": false,
+        "soniox_model": null,
+        "keep_soniox_files": false,
+        "context_file": null,
+        "no_context": false,
+        "auto_slice": false,
+        "slice_max_min": 280
+      }
+    },
+    {
+      "argv": ["a.m4a", "--provider", "whisper"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-transcribe [-h] [--provider {soniox}] [--date DATE]\n                          [--language LANGUAGE] [--window WINDOW]\n                          [--out-dir OUT_DIR] [--persona PERSONA] [--force]\n                          [--json] [--soniox-model SONIOX_MODEL]\n                          [--keep-soniox-files] [--context-file CONTEXT_FILE]\n                          [--no-context] [--auto-slice]\n                          [--slice-max-min SLICE_MAX_MIN]\n                          audio\nlaplace-transcribe: error: argument --provider: invalid choice: 'whisper' (choose from soniox)\n"
+    },
+    {
+      "argv": ["a.m4a", "--window", "x"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-transcribe [-h] [--provider {soniox}] [--date DATE]\n                          [--language LANGUAGE] [--window WINDOW]\n                          [--out-dir OUT_DIR] [--persona PERSONA] [--force]\n                          [--json] [--soniox-model SONIOX_MODEL]\n                          [--keep-soniox-files] [--context-file CONTEXT_FILE]\n                          [--no-context] [--auto-slice]\n                          [--slice-max-min SLICE_MAX_MIN]\n                          audio\nlaplace-transcribe: error: argument --window: invalid int value: 'x'\n"
+    },
+    {
+      "argv": ["a.m4a", "--slice-max-min", "１２"],
+      "code": "parsed",
+      "ns": {
+        "audio": "a.m4a",
+        "provider": "soniox",
+        "date": null,
+        "language": "zh",
+        "window": 300,
+        "out_dir": null,
+        "persona": null,
+        "force": false,
+        "json": false,
+        "soniox_model": null,
+        "keep_soniox_files": false,
+        "context_file": null,
+        "no_context": false,
+        "auto_slice": false,
+        "slice_max_min": 12
+      }
+    },
+    {
+      "argv": ["a.m4a", "--no-context", "--context-file", "g.toml/", "--keep-soniox-files"],
+      "code": "parsed",
+      "ns": {
+        "audio": "a.m4a",
+        "provider": "soniox",
+        "date": null,
+        "language": "zh",
+        "window": 300,
+        "out_dir": null,
+        "persona": null,
+        "force": false,
+        "json": false,
+        "soniox_model": null,
+        "keep_soniox_files": true,
+        "context_file": "g.toml",
+        "no_context": true,
+        "auto_slice": false,
+        "slice_max_min": 280
+      }
+    },
+    {
+      "argv": ["a.m4a", "--auto-slice", "--force", "--json", "--persona", "milky-green"],
+      "code": "parsed",
+      "ns": {
+        "audio": "a.m4a",
+        "provider": "soniox",
+        "date": null,
+        "language": "zh",
+        "window": 300,
+        "out_dir": null,
+        "persona": "milky-green",
+        "force": true,
+        "json": true,
+        "soniox_model": null,
+        "keep_soniox_files": false,
+        "context_file": null,
+        "no_context": false,
+        "auto_slice": true,
+        "slice_max_min": 280
+      }
+    },
+    {
+      "argv": ["a.m4a", "--model", "small"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-transcribe [-h] [--provider {soniox}] [--date DATE]\n                          [--language LANGUAGE] [--window WINDOW]\n                          [--out-dir OUT_DIR] [--persona PERSONA] [--force]\n                          [--json] [--soniox-model SONIOX_MODEL]\n                          [--keep-soniox-files] [--context-file CONTEXT_FILE]\n                          [--no-context] [--auto-slice]\n                          [--slice-max-min SLICE_MAX_MIN]\n                          audio\nlaplace-transcribe: error: unrecognized arguments: --model small\n"
+    },
+    {
+      "argv": ["a.m4a", "b.m4a"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-transcribe [-h] [--provider {soniox}] [--date DATE]\n                          [--language LANGUAGE] [--window WINDOW]\n                          [--out-dir OUT_DIR] [--persona PERSONA] [--force]\n                          [--json] [--soniox-model SONIOX_MODEL]\n                          [--keep-soniox-files] [--context-file CONTEXT_FILE]\n                          [--no-context] [--auto-slice]\n                          [--slice-max-min SLICE_MAX_MIN]\n                          audio\nlaplace-transcribe: error: unrecognized arguments: b.m4a\n"
+    }
+  ],
+  "extract_users": [
+    {
+      "argv": ["-h"],
+      "code": 0,
+      "stdout": "usage: laplace-extract-users [-h] [-n TOP] [--types TYPES] [--persona PERSONA]\n                             input\n\nExtract the top-N most-spoken usernames from a danmakus.com chat export.\n\npositional arguments:\n  input              Path to a danmakus.com JSON export.\n\noptions:\n  -h, --help         show this help message and exit\n  -n, --top TOP      How many top usernames to emit on stdout (default: 50).\n  --types TYPES      Comma-separated message-type integers to include in the\n                     ranking. Default '1,2,3' counts gifts, memberships and\n                     super chats — the events where the streamer reads names\n                     aloud. Pass 'all' to disable filtering, or e.g. '0,1,2,3'\n                     to also include free chat.\n  --persona PERSONA  Persona to run for (default: the active persona)\n",
+      "stderr": ""
+    },
+    {
+      "argv": [],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-extract-users [-h] [-n TOP] [--types TYPES] [--persona PERSONA]\n                             input\nlaplace-extract-users: error: the following arguments are required: input\n"
+    },
+    {
+      "argv": ["x.json"],
+      "code": "parsed",
+      "ns": {
+        "input": "x.json",
+        "top": 50,
+        "types": [1, 2, 3],
+        "persona": null
+      }
+    },
+    {
+      "argv": ["x.json", "-n", "5", "--types", "all"],
+      "code": "parsed",
+      "ns": {
+        "input": "x.json",
+        "top": 5,
+        "types": null,
+        "persona": null
+      }
+    },
+    {
+      "argv": ["x.json", "--types", " ALL "],
+      "code": "parsed",
+      "ns": {
+        "input": "x.json",
+        "top": 50,
+        "types": null,
+        "persona": null
+      }
+    },
+    {
+      "argv": ["x.json", "--types", "0, 2,,9"],
+      "code": "parsed",
+      "ns": {
+        "input": "x.json",
+        "top": 50,
+        "types": [0, 2, 9],
+        "persona": null
+      }
+    },
+    {
+      "argv": ["x.json", "--types", "1,x"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-extract-users [-h] [-n TOP] [--types TYPES] [--persona PERSONA]\n                             input\nlaplace-extract-users: error: argument --types: --types: 'x' is not an integer or 'all'\n"
+    },
+    {
+      "argv": ["x.json", "--types", ","],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-extract-users [-h] [-n TOP] [--types TYPES] [--persona PERSONA]\n                             input\nlaplace-extract-users: error: argument --types: --types must include at least one type\n"
+    },
+    {
+      "argv": ["x.json", "-n", "-3"],
+      "code": "parsed",
+      "ns": {
+        "input": "x.json",
+        "top": -3,
+        "types": [1, 2, 3],
+        "persona": null
+      }
+    },
+    {
+      "argv": ["x.json", "--top", "y"],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: laplace-extract-users [-h] [-n TOP] [--types TYPES] [--persona PERSONA]\n                             input\nlaplace-extract-users: error: argument -n/--top: invalid int value: 'y'\n"
+    }
+  ],
+  "close_matches": [
+    [
+      "BV1aaaaaaaaa.m4a",
+      ["BV1aaaaaaaaa_p1.m4a", "BV1aaaaaaaab.m4a", "notes.txt", "BV1zzzzzzzzz.m4a"],
+      ["BV1aaaaaaaab.m4a", "BV1aaaaaaaaa_p1.m4a"]
+    ],
+    [
+      "录制-23197314-20230709-201234-123-【歌回】唱歌啦.flv",
+      [
+        "录制-23197314-20230709-201234-123-【歌回】唱歌啦!!.flv",
+        "录制-23197314-20230709-201234-123-【歌回】唱歌啦_1.flv",
+        "录制-23197314-20230709.flv",
+        "other.flv"
+      ],
+      [
+        "录制-23197314-20230709-201234-123-【歌回】唱歌啦_1.flv",
+        "录制-23197314-20230709-201234-123-【歌回】唱歌啦!!.flv",
+        "录制-23197314-20230709.flv"
+      ]
+    ],
+    [
+      "录制-23197314-20230709-201234-123-【歌回】唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～.flv",
+      [
+        "录制-23197314-20230709-201234-123-【歌回】唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～!!.flv",
+        "录制-23197314-20230709-201234-123-【歌回】唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌.flv",
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "vlf.～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱～啦歌唱】回歌【-321-432102-90703202-41379132-制录"
+      ],
+      [
+        "录制-23197314-20230709-201234-123-【歌回】唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～!!.flv",
+        "录制-23197314-20230709-201234-123-【歌回】唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌啦～唱歌.flv"
+      ]
+    ],
+    ["ab", ["ba", "ab", "abc", "b", "a"], ["ab", "abc", "b", "a", "ba"]],
+    ["", ["", "a"], [""]],
+    [
+      "a.m4a",
+      ["c.m4a", "b.m4a", "d.m4a", "e.m4a", "f.m4a", "g.m4a"],
+      ["g.m4a", "f.m4a", "e.m4a", "d.m4a", "c.m4a"]
+    ]
+  ]
+}

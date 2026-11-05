@@ -1,0 +1,724 @@
+{
+  "printed_by": "CPython 3.13.4, soniox 2.9.0, pydantic 2.13.5: packages/ingest/test/fixtures/transcribe/render.golden.py",
+  "short_ts": [
+    [0, "00:00"],
+    [0.4, "00:00"],
+    [59.9, "00:00"],
+    [60, "01:00"],
+    [299.99, "04:00"],
+    [300, "05:00"],
+    [734.5, "12:00"],
+    [3599.999, "59:00"],
+    [3600, "01:00"],
+    [3660, "01:01"],
+    [35999, "09:59"],
+    [360000, "100:00"],
+    [10000000.0, "2777:46"]
+  ],
+  "format_ts": [
+    [0, "00:00:00"],
+    [59.9, "00:00:59"],
+    [734.5, "00:12:14"],
+    [3599.5, "00:59:59"],
+    [3600, "01:00:00"],
+    [86399, "23:59:59"],
+    [360000.75, "100:00:00"]
+  ],
+  "format_dur": [
+    [-5, "0s"],
+    [0, "0s"],
+    [42, "42s"],
+    [59.99, "59s"],
+    [60, "1m00s"],
+    [312, "5m12s"],
+    [3599, "59m59s"],
+    [3600, "1h00m"],
+    [5025, "1h23m"],
+    [86400, "24h00m"],
+    [360000, "100h00m"]
+  ],
+  "hints": [
+    ["喂？啊，好了好了好了。 什么游戏？", "喂？啊，好了好了好了"],
+    ["Hello.World", "Hello.World"],
+    ["Wait!!! What", "Wait"],
+    ["好。。。", "好"],
+    ["x　y。 z", "x y"],
+    [
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bcdddddddddd",
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa…"
+    ],
+    [
+      "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+      "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀…"
+    ],
+    [
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ],
+    [
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa…"
+    ],
+    ["。 abc", ""],
+    ["!!!", ""],
+    ["", "(no transcript)"],
+    ["   \t\n ", "(no transcript)"],
+    ["abc\u001c\u001ddef。ghi", "abc def"],
+    ["a​b。 c", "a​b"],
+    ["﻿x。 y", "﻿x"],
+    [
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa b",
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa…"
+    ],
+    [
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bbb",
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa…"
+    ],
+    ["第一句话！第二句话？ 第三句", "第一句话！第二句话"],
+    ["end with space. ", "end with space"],
+    ["tab\tsep.\tnext", "tab sep"]
+  ],
+  "tokens_to_segments": {
+    "spec": {
+      "tokens": [
+        ["你", 0, 100],
+        ["好", 200, 300],
+        ["。", 3100, 3150],
+        [" ", 3150, 3150],
+        ["我", 3200, 3300],
+        ["们", 3400, 3500],
+        ["?", 3600, 3650],
+        [" ", 3650, 3650],
+        ["A", 6800, 6900],
+        ["B", null, 7000],
+        ["C", 37000, 37100]
+      ],
+      "segments": [[0.0, 3.15, "你好。"], [3.15, 37.1, "我们? AC"]]
+    },
+    "english": {
+      "tokens": [
+        ["Hello", 0, 400],
+        [" world", 400, 900],
+        [".", 900, 950],
+        [" How", 4000, 4200],
+        [" are", 4200, 4400],
+        [" you", 4400, 4600],
+        ["?", 4600, 4700],
+        ["  ", 4700, 4700],
+        [" Fine", 8000, 8300],
+        ["!", 8300, 8350]
+      ],
+      "segments": [[0.0, 4.7, "Hello world. How are you?"], [4.7, 8.35, "Fine!"]]
+    },
+    "whitespace_only": {
+      "tokens": [[" ", 0, 0], ["　", 10, 10], ["\n", 4000, 4000]],
+      "segments": []
+    },
+    "no_timestamps": {
+      "tokens": [["a", null, null], ["b", 5, null], ["c", null, 9]],
+      "segments": []
+    },
+    "sentence_then_space_runs": {
+      "tokens": [
+        ["一", 0, 100],
+        ["。", 3000, 3050],
+        ["\u001c", 3050, 3050],
+        ["二", 3100, 3200],
+        ["！", 6200, 6300],
+        ["", 6300, 6300],
+        ["三", 6400, 6500]
+      ],
+      "segments": [[0.0, 3.05, "一。"], [3.05, 6.3, "二！"], [6.3, 6.5, "三"]]
+    },
+    "long_gap": {
+      "tokens": [["x", 0, 100], ["y", 45000, 45100], ["z", 45200, 45300]],
+      "segments": [[0.0, 45.1, "xy"], [45.2, 45.3, "z"]]
+    },
+    "exact_min": {
+      "tokens": [["a", 1000, 1100], [".", 3900, 4000], ["b", 4000, 4100]],
+      "segments": [[1.0, 4.0, "a."], [4.0, 4.1, "b"]]
+    },
+    "empty": {
+      "tokens": [],
+      "segments": []
+    }
+  },
+  "floor_div_300": [
+    [-1e-9, -1.0],
+    [-1e-12, -1.0],
+    [-1e-13, -1.0],
+    [0.0, 0.0],
+    [1e-300, 0.0],
+    [1e-13, 0.0],
+    [0.30000000000000004, 0.0],
+    [299.999999999, 0.0],
+    [299.999999999999, 0.0],
+    [299.9999999999999, 0.0],
+    [300.0, 1.0],
+    [300.0000000000001, 1.0],
+    [599.999999999, 1.0],
+    [599.999999999999, 1.0],
+    [599.9999999999999, 1.0],
+    [600.0, 2.0],
+    [600.0000000000001, 2.0],
+    [899.999999999, 2.0],
+    [899.999999999999, 2.0],
+    [899.9999999999999, 2.0],
+    [900.0, 3.0],
+    [900.0000000000001, 3.0],
+    [1199.999999999, 3.0],
+    [1199.999999999999, 3.0],
+    [1200.0, 4.0],
+    [1499.999999999, 4.0],
+    [1499.999999999999, 4.0],
+    [1500.0, 5.0],
+    [1799.999999999, 5.0],
+    [1799.999999999999, 5.0],
+    [1800.0, 6.0],
+    [2099.999999999, 6.0],
+    [2099.999999999999, 6.0],
+    [2100.0, 7.0],
+    [2399.999999999, 7.0],
+    [2399.999999999999, 7.0],
+    [2400.0, 8.0],
+    [2699.999999999, 8.0],
+    [2699.999999999999, 8.0],
+    [2700.0, 9.0],
+    [2999.999999999, 9.0],
+    [2999.999999999999, 9.0],
+    [3000.0, 10.0],
+    [3299.999999999, 10.0],
+    [3299.999999999999, 10.0],
+    [3300.0, 11.0],
+    [3599.999999999, 11.0],
+    [3599.999999999999, 11.0],
+    [3600.0, 12.0],
+    [3899.999999999, 12.0],
+    [3899.999999999999, 12.0],
+    [3900.0, 13.0],
+    [4199.999999999, 13.0],
+    [4199.999999999999, 13.0],
+    [4200.0, 14.0],
+    [4499.999999999, 14.0],
+    [4499.999999999999, 14.0],
+    [4500.0, 15.0],
+    [4799.999999999, 15.0],
+    [4799.999999999999, 15.0],
+    [4800.0, 16.0],
+    [5099.999999999, 16.0],
+    [5099.999999999999, 16.0],
+    [5100.0, 17.0],
+    [5399.999999999, 17.0],
+    [5399.999999999999, 17.0],
+    [5400.0, 18.0],
+    [5699.999999999, 18.0],
+    [5699.999999999999, 18.0],
+    [5700.0, 19.0],
+    [5999.999999999, 19.0],
+    [5999.999999999999, 19.0],
+    [6000.0, 20.0],
+    [6299.999999999, 20.0],
+    [6299.999999999999, 20.0],
+    [6300.0, 21.0],
+    [6599.999999999, 21.0],
+    [6599.999999999999, 21.0],
+    [6600.0, 22.0],
+    [6899.999999999, 22.0],
+    [6899.999999999999, 22.0],
+    [6900.0, 23.0],
+    [7199.999999999, 23.0],
+    [7199.999999999999, 23.0],
+    [7200.0, 24.0],
+    [7499.999999999, 24.0],
+    [7499.999999999999, 24.0],
+    [7500.0, 25.0],
+    [7799.999999999, 25.0],
+    [7799.999999999999, 25.0],
+    [7800.0, 26.0],
+    [8099.999999999, 26.0],
+    [8099.999999999999, 26.0],
+    [8100.0, 27.0],
+    [8399.999999999, 27.0],
+    [8399.999999999998, 27.0],
+    [8400.0, 28.0],
+    [8699.999999999, 28.0],
+    [8699.999999999998, 28.0],
+    [8700.0, 29.0],
+    [8999.999999999, 29.0],
+    [8999.999999999998, 29.0],
+    [9000.0, 30.0],
+    [9299.999999999, 30.0],
+    [9299.999999999998, 30.0],
+    [9300.0, 31.0],
+    [9599.9874165, 31.0],
+    [9599.988416499998, 31.0],
+    [9599.989416499999, 31.0],
+    [9599.990416499999, 31.0],
+    [9599.9914165, 31.0],
+    [9599.9924165, 31.0],
+    [9599.9934165, 31.0],
+    [9599.9944165, 31.0],
+    [9599.9954165, 31.0],
+    [9599.996416499998, 31.0],
+    [9599.997416499999, 31.0],
+    [9599.998416499999, 31.0],
+    [9599.999416499999, 31.0],
+    [9599.999999999, 31.0],
+    [9599.999999999998, 31.0],
+    [9600.0, 32.0],
+    [9600.0004165, 32.0],
+    [9600.0014165, 32.0],
+    [9600.0024165, 32.0],
+    [9600.0034165, 32.0],
+    [9600.0044165, 32.0],
+    [9600.0054165, 32.0],
+    [9600.006416499999, 32.0],
+    [9600.007416499999, 32.0],
+    [9600.008416499999, 32.0],
+    [9600.0094165, 32.0],
+    [9600.0104165, 32.0],
+    [9600.0114165, 32.0],
+    [9600.0124165, 32.0],
+    [9600.0134165, 32.0],
+    [9600.014416499998, 32.0],
+    [9600.015416499999, 32.0],
+    [9600.016416499999, 32.0],
+    [9899.999999999, 32.0],
+    [9899.999999999998, 32.0],
+    [9900.0, 33.0],
+    [10199.999999999, 33.0],
+    [10199.999999999998, 33.0],
+    [10200.0, 34.0],
+    [10499.999999999, 34.0],
+    [10499.999999999998, 34.0],
+    [10500.0, 35.0],
+    [10799.999999999, 35.0],
+    [10799.999999999998, 35.0],
+    [10800.0, 36.0],
+    [11099.999999999, 36.0],
+    [11099.999999999998, 36.0],
+    [11100.0, 37.0],
+    [11399.999999999, 37.0],
+    [11399.999999999998, 37.0],
+    [11400.0, 38.0],
+    [11699.999999999, 38.0],
+    [11699.999999999998, 38.0],
+    [11700.0, 39.0],
+    [11999.999999999, 39.0],
+    [11999.999999999998, 39.0],
+    [12000.0, 40.0],
+    [12299.999999999, 40.0],
+    [12299.999999999998, 40.0],
+    [12300.0, 41.0],
+    [12599.999999999, 41.0],
+    [12599.999999999998, 41.0],
+    [12600.0, 42.0],
+    [12899.999999999, 42.0],
+    [12899.999999999998, 42.0],
+    [12900.0, 43.0],
+    [13199.999999999, 43.0],
+    [13199.999999999998, 43.0],
+    [13200.0, 44.0],
+    [13499.999999999, 44.0],
+    [13499.999999999998, 44.0],
+    [13500.0, 45.0],
+    [13799.999999999, 45.0],
+    [13799.999999999998, 45.0],
+    [13800.0, 46.0],
+    [14099.999999999, 46.0],
+    [14099.999999999998, 46.0],
+    [14100.0, 47.0],
+    [14399.999999999, 47.0],
+    [14399.999999999998, 47.0],
+    [14400.0, 48.0],
+    [14699.999999999, 48.0],
+    [14699.999999999998, 48.0],
+    [14700.0, 49.0],
+    [14999.999999999, 49.0],
+    [14999.999999999998, 49.0],
+    [15000.0, 50.0],
+    [15299.999999999, 50.0],
+    [15299.999999999998, 50.0],
+    [15300.0, 51.0],
+    [15599.999999999, 51.0],
+    [15599.999999999998, 51.0],
+    [15600.0, 52.0],
+    [15899.999999999, 52.0],
+    [15899.999999999998, 52.0],
+    [15900.0, 53.0],
+    [16199.999999999, 53.0],
+    [16199.999999999998, 53.0],
+    [16200.0, 54.0],
+    [16499.999999999, 54.0],
+    [16500.0, 55.0],
+    [16799.999999999, 55.0],
+    [16800.0, 56.0],
+    [17099.999999999, 56.0],
+    [17100.0, 57.0],
+    [17399.999999999, 57.0],
+    [17400.0, 58.0],
+    [17699.999999999, 58.0],
+    [17700.0, 59.0],
+    [17999.999999999, 59.0],
+    [18000.0, 60.0],
+    [18299.999999999, 60.0],
+    [18300.0, 61.0],
+    [18599.999999999, 61.0],
+    [18600.0, 62.0],
+    [18675.394833, 62.0],
+    [18675.397833, 62.0],
+    [18675.400833, 62.0],
+    [18675.403832999997, 62.0],
+    [18675.406832999997, 62.0],
+    [18675.409832999998, 62.0],
+    [18675.412833, 62.0],
+    [18675.415833, 62.0],
+    [18675.418833, 62.0],
+    [18675.421832999997, 62.0],
+    [18675.424832999997, 62.0],
+    [18675.427832999998, 62.0],
+    [18675.430833, 62.0],
+    [18675.433833, 62.0],
+    [18899.999999999, 62.0],
+    [18900.0, 63.0],
+    [19199.999999999, 63.0],
+    [19200.0, 64.0],
+    [19499.999999999, 64.0],
+    [19500.0, 65.0],
+    [19799.999999999, 65.0],
+    [19800.0, 66.0],
+    [20099.999999999, 66.0],
+    [20100.0, 67.0],
+    [20399.999999999, 67.0],
+    [20400.0, 68.0],
+    [20699.999999999, 68.0],
+    [20700.0, 69.0],
+    [20999.999999999, 69.0],
+    [21000.0, 70.0],
+    [21299.999999999, 70.0],
+    [21300.0, 71.0],
+    [21599.999999999, 71.0],
+    [21600.0, 72.0],
+    [21899.999999999, 72.0],
+    [21900.0, 73.0],
+    [22199.999999999, 73.0],
+    [22200.0, 74.0],
+    [22499.999999999, 74.0],
+    [22500.0, 75.0],
+    [22799.999999999, 75.0],
+    [22800.0, 76.0],
+    [23099.999999999, 76.0],
+    [23100.0, 77.0],
+    [23399.999999999, 77.0],
+    [23400.0, 78.0],
+    [23699.999999999, 78.0],
+    [23700.0, 79.0]
+  ],
+  "scenes": [
+    {
+      "name": "spec",
+      "window": 300,
+      "segments": [[1, 2, " a "], [299.9, 330, "b"], [300, 301, "c"], [905.5, 906, "d"]],
+      "scenes": [
+        {
+          "start": 0,
+          "end": 330,
+          "text": "a b"
+        },
+        {
+          "start": 300,
+          "end": 301,
+          "text": "c"
+        },
+        {
+          "start": 900.0,
+          "end": 906,
+          "text": "d"
+        }
+      ]
+    },
+    {
+      "name": "one",
+      "window": 300,
+      "segments": [[12.5, 14.0, "only"]],
+      "scenes": [
+        {
+          "start": 0.0,
+          "end": 14.0,
+          "text": "only"
+        }
+      ]
+    },
+    {
+      "name": "gaps",
+      "window": 300,
+      "segments": [[0.0, 3.0, "a"], [3.5, 4.0, "b"], [1234.5, 1240.0, "c"], [1235.0, 1236.0, "d"]],
+      "scenes": [
+        {
+          "start": 0.0,
+          "end": 4.0,
+          "text": "a b"
+        },
+        {
+          "start": 1200.0,
+          "end": 1236.0,
+          "text": "c d"
+        }
+      ]
+    },
+    {
+      "name": "window_7",
+      "window": 7,
+      "segments": [[0.0, 1.0, "a"], [6.999, 8.0, "b"], [7.0, 9.0, "c"], [21.0, 22.0, "d"]],
+      "scenes": [
+        {
+          "start": 0.0,
+          "end": 8.0,
+          "text": "a b"
+        },
+        {
+          "start": 7.0,
+          "end": 9.0,
+          "text": "c"
+        },
+        {
+          "start": 21.0,
+          "end": 22.0,
+          "text": "d"
+        }
+      ]
+    },
+    {
+      "name": "window_1",
+      "window": 1,
+      "segments": [[0.25, 0.5, "a"], [0.75, 1.0, "b"], [1.0, 2.0, "c"]],
+      "scenes": [
+        {
+          "start": 0.0,
+          "end": 1.0,
+          "text": "a b"
+        },
+        {
+          "start": 1.0,
+          "end": 2.0,
+          "text": "c"
+        }
+      ]
+    },
+    {
+      "name": "shifted",
+      "window": 300,
+      "segments": [[9599.997416499999, 9600.6974165, "x"], [9599.999416499999, 9607.6974165, "y"]],
+      "scenes": [
+        {
+          "start": 9300.0,
+          "end": 9607.6974165,
+          "text": "x y"
+        }
+      ]
+    },
+    {
+      "name": "empty",
+      "window": 300,
+      "segments": [],
+      "scenes": []
+    }
+  ],
+  "render": [
+    {
+      "args": {
+        "stream_date": "2026-01-02",
+        "stream_id": "2026-01-02-BV1aaaaaaaaa",
+        "duration_min": 143,
+        "source_file": "BV1aaaaaaaaa.m4a",
+        "language": "zh",
+        "scenes": [
+          {
+            "start": 300.0,
+            "end": 330.0,
+            "text": "喂？啊，好了好了好了。 什么游戏？"
+          },
+          {
+            "start": 3600.0,
+            "end": 3601.0,
+            "text": "。 abc"
+          },
+          {
+            "start": 7200.0,
+            "end": 7201.0,
+            "text": "tail  "
+          }
+        ]
+      },
+      "markdown": "---\nstream_date: 2026-01-02\nstream_id: 2026-01-02-BV1aaaaaaaaa\nduration_min: 143\nlanguage: zh\nsource_file: BV1aaaaaaaaa.m4a\n---\n\n## 05:00 — 喂？啊，好了好了好了\n\n喂？啊，好了好了好了。 什么游戏？\n\n## 01:00 — \n\n。 abc\n\n## 02:00 — tail\n\ntail\n"
+    },
+    {
+      "args": {
+        "stream_date": "2026-1-2",
+        "stream_id": "x",
+        "duration_min": 0,
+        "source_file": "a b: c.m4a",
+        "language": null,
+        "scenes": []
+      },
+      "markdown": "---\nstream_date: 2026-1-2\nstream_id: x\nduration_min: 0\nsource_file: a b: c.m4a\n---\n"
+    }
+  ],
+  "created_at": [
+    ["2026-09-18T11:48:53.399Z", "2026-09-18T11:48:53.399000+00:00"],
+    ["2026-09-18T11:48:53.399000Z", "2026-09-18T11:48:53.399000+00:00"],
+    ["2026-09-18T11:48:53Z", "2026-09-18T11:48:53+00:00"],
+    ["2026-09-18T11:48:53.000Z", "2026-09-18T11:48:53+00:00"],
+    ["2026-09-18T11:48:53.1Z", "2026-09-18T11:48:53.100000+00:00"],
+    ["2026-09-18T11:48:53.123456Z", "2026-09-18T11:48:53.123456+00:00"],
+    ["2026-09-18T11:48:53.399+00:00", "2026-09-18T11:48:53.399000+00:00"],
+    ["2026-09-18T11:48:53.399+02:00", "2026-09-18T11:48:53.399000+02:00"],
+    ["2026-09-18T11:48:53.399-05:30", "2026-09-18T11:48:53.399000-05:30"],
+    ["2026-09-18 11:48:53.399Z", "2026-09-18T11:48:53.399000+00:00"]
+  ],
+  "token_dumps": [
+    [
+      "{\"text\": \"是\", \"start_ms\": 390, \"end_ms\": 570, \"confidence\": 0.8469772338867188}",
+      "{\n  \"text\": \"是\",\n  \"start_ms\": 390,\n  \"end_ms\": 570,\n  \"confidence\": 0.8469772338867188,\n  \"is_final\": null,\n  \"speaker\": null,\n  \"translation_status\": null,\n  \"language\": null,\n  \"source_language\": null\n}"
+    ],
+    [
+      "{\"text\": \"好\", \"start_ms\": 1, \"end_ms\": 2, \"confidence\": 1}",
+      "{\n  \"text\": \"好\",\n  \"start_ms\": 1,\n  \"end_ms\": 2,\n  \"confidence\": 1.0,\n  \"is_final\": null,\n  \"speaker\": null,\n  \"translation_status\": null,\n  \"language\": null,\n  \"source_language\": null\n}"
+    ],
+    [
+      "{\"text\": \"好\", \"start_ms\": 1, \"end_ms\": 2, \"confidence\": 1.0, \"is_audio_event\": null}",
+      "{\n  \"text\": \"好\",\n  \"start_ms\": 1,\n  \"end_ms\": 2,\n  \"confidence\": 1.0,\n  \"is_final\": null,\n  \"speaker\": null,\n  \"translation_status\": null,\n  \"language\": null,\n  \"source_language\": null,\n  \"is_audio_event\": null\n}"
+    ],
+    [
+      "{\"text\": \" \", \"start_ms\": 5, \"end_ms\": 5, \"confidence\": 0.5, \"is_audio_event\": true}",
+      "{\n  \"text\": \" \",\n  \"start_ms\": 5,\n  \"end_ms\": 5,\n  \"confidence\": 0.5,\n  \"is_final\": null,\n  \"speaker\": null,\n  \"translation_status\": null,\n  \"language\": null,\n  \"source_language\": null,\n  \"is_audio_event\": true\n}"
+    ],
+    [
+      "{\"text\": \"x\", \"is_audio_event\": false, \"speaker\": \"1\", \"zeta\": 1.0, \"alpha\": [1, \"a\"]}",
+      "{\n  \"text\": \"x\",\n  \"start_ms\": null,\n  \"end_ms\": null,\n  \"confidence\": null,\n  \"is_final\": null,\n  \"speaker\": \"1\",\n  \"translation_status\": null,\n  \"language\": null,\n  \"source_language\": null,\n  \"is_audio_event\": false,\n  \"zeta\": 1.0,\n  \"alpha\": [\n    1,\n    \"a\"\n  ]\n}"
+    ],
+    [
+      "{\"is_audio_event\": null, \"language\": \"zh\", \"text\": \"y\", \"confidence\": 1e-05}",
+      "{\n  \"text\": \"y\",\n  \"start_ms\": null,\n  \"end_ms\": null,\n  \"confidence\": 1e-05,\n  \"is_final\": null,\n  \"speaker\": null,\n  \"translation_status\": null,\n  \"language\": \"zh\",\n  \"source_language\": null,\n  \"is_audio_event\": null\n}"
+    ]
+  ],
+  "contexts": [
+    {
+      "name": "bad_toml",
+      "error_type": "TOMLDecodeError",
+      "error": null
+    },
+    {
+      "name": "empties",
+      "context": null,
+      "serialized": null,
+      "summary": null,
+      "sdk_accepts": true
+    },
+    {
+      "name": "full",
+      "context": {
+        "text": "line one\nline two\n",
+        "terms": ["甲", "乙", "甲"],
+        "general": [
+          {
+            "value": "v1",
+            "key": "k1"
+          },
+          {
+            "key": "k2",
+            "value": "v2"
+          }
+        ],
+        "translation_terms": [
+          {
+            "target": "B",
+            "source": "A"
+          }
+        ]
+      },
+      "serialized": "{\"text\": \"line one\\nline two\\n\", \"terms\": [\"甲\", \"乙\", \"甲\"], \"general\": [{\"value\": \"v1\", \"key\": \"k1\"}, {\"key\": \"k2\", \"value\": \"v2\"}], \"translation_terms\": [{\"target\": \"B\", \"source\": \"A\"}]}",
+      "summary": "2 general, 18 chars text, 3 terms, 1 translation_terms",
+      "sdk_accepts": true
+    },
+    {
+      "name": "general_missing_value",
+      "context": {
+        "general": [
+          {
+            "key": "k"
+          }
+        ]
+      },
+      "serialized": "{\"general\": [{\"key\": \"k\"}]}",
+      "summary": "1 general",
+      "sdk_accepts": false
+    },
+    {
+      "name": "general_table",
+      "error_type": "AttributeError",
+      "error": null
+    },
+    {
+      "name": "near_limit",
+      "context": {
+        "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "serialized": "{\"text\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+      "summary": "8500 chars text",
+      "sdk_accepts": true
+    },
+    {
+      "name": "only_empty_terms",
+      "context": {
+        "text": "t"
+      },
+      "serialized": "{\"text\": \"t\"}",
+      "summary": "1 chars text",
+      "sdk_accepts": true
+    },
+    {
+      "name": "oversize",
+      "error_type": "RuntimeError",
+      "error": "Soniox context from <PATH> is 10012 chars (~2503 tokens), which exceeds the ~8000-token / ~10000-char limit. Trim or split the file."
+    },
+    {
+      "name": "terms_not_strings",
+      "context": {
+        "terms": ["a", 2026]
+      },
+      "serialized": "{\"terms\": [\"a\", 2026]}",
+      "summary": "2 terms",
+      "sdk_accepts": false
+    },
+    {
+      "name": "translation_trap",
+      "error_type": "RuntimeError",
+      "error": "<PATH>: translation_terms[0] has unexpected keys ['terms']. Each entry must contain ONLY `source` and `target`. (Same TOML-ordering pitfall as above.)"
+    },
+    {
+      "name": "trap",
+      "error_type": "RuntimeError",
+      "error": "<PATH>: general[0] has unexpected keys ['terms', 'text']. Each [[general]] entry must contain ONLY `key` and `value`. Hint: top-level scalars like `text = \"...\"` and `terms = [...]` MUST appear ABOVE all [[general]] / [[translation_terms]] blocks in the TOML — otherwise TOML silently nests them into the last array entry."
+    },
+    {
+      "name": "unknown",
+      "context": {
+        "terms": ["a"]
+      },
+      "serialized": "{\"terms\": [\"a\"]}",
+      "summary": "1 terms",
+      "sdk_accepts": true
+    }
+  ],
+  "create_bodies": {
+    "context_zh": "{\"model\": \"stt-async-v5\", \"file_id\": \"file-1\", \"language_hints\": [\"zh\"], \"context\": {\"general\": [{\"key\": \"k1\", \"value\": \"v1\"}, {\"key\": \"k2\", \"value\": \"v2\"}], \"text\": \"line one\\nline two\\n\", \"terms\": [\"甲\", \"乙\", \"甲\"], \"translation_terms\": [{\"source\": \"A\", \"target\": \"B\"}]}, \"client_reference_id\": \"laplace-eidolon:BV1aaaaaaaaa.m4a\"}",
+    "no_context_no_language": "{\"model\": \"stt-async-v5\", \"file_id\": \"file-1\", \"client_reference_id\": \"laplace-eidolon:BV1aaaaaaaaa.m4a\"}"
+  },
+  "real_glossary": {
+    "chars": 1889,
+    "sha256": "7e951c18f0b8ad818f6d744ead4619e510b8e6c17ed6d37da855be5e56e9dad9",
+    "summary": "6 general, 191 chars text, 122 terms",
+    "create_body_sha256": "3090c859c15ac06e3ecd61d9ec48b231f7524e9fce6036ea9a5c6746d9b90c4d"
+  }
+}

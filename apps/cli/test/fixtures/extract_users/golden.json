@@ -1,0 +1,110 @@
+{
+  "printed_by": "CPython 3.13.4: apps/cli/test/fixtures/extract_users/golden.py",
+  "cases": [
+    {
+      "argv": ["danmakus.json"],
+      "code": 0,
+      "raised": null,
+      "stdout": "奶糖花A-tie\n花E\n观众C\nI\nK\n早起G\nF\nD-viewer\nH\nL\nViewer_B\nJ\nbig-uid\nstring-uid\n",
+      "stderr": "Reading <FIX>/danmakus.json (0.0 MB)…\n\n  total entries  : 255\n  unique users   : 14\n  date range     : 2023-06-21 → 2026-03-17\n  skipped (no uId/uName): 4\n  all types      : free chat=48, gift=49, membership=50, SC=76, room entry=24, title update=1, type=7=1, stream start=1, ban=1\n  counted types  : gift=49, membership=50, SC=75\n  total spend    : ¥1,050,799 across all types\n\n  top 10 spenders (informational, not in stdout):\n    ¥1,041,150  big-uid\n    ¥      913  观众C\n    ¥      913  奶糖花A-tie\n    ¥      912  I\n    ¥      837  花E\n    ¥      832  K\n    ¥      813  早起G\n    ¥      792  L\n    ¥      792  F\n    ¥      712  H\n\ntop 50 usernames by message frequency → stdout:\n\n"
+    },
+    {
+      "argv": ["danmakus.json", "-n", "3", "--types", "all"],
+      "code": 0,
+      "raised": null,
+      "stdout": "奶糖花A-tie\n观众C\n花E\n",
+      "stderr": "Reading <FIX>/danmakus.json (0.0 MB)…\n\n  total entries  : 255\n  unique users   : 14\n  date range     : 2023-06-21 → 2026-03-17\n  skipped (no uId/uName): 4\n  all types      : free chat=48, gift=49, membership=50, SC=76, room entry=24, title update=1, type=7=1, stream start=1, ban=1\n  counted types  : free chat=48, gift=49, membership=50, SC=75, room entry=24, type=7=1\n  total spend    : ¥1,050,799 across all types\n\n  top 10 spenders (informational, not in stdout):\n    ¥1,041,150  big-uid\n    ¥      913  观众C\n    ¥      913  奶糖花A-tie\n    ¥      912  I\n    ¥      837  花E\n    ¥      832  K\n    ¥      813  早起G\n    ¥      792  L\n    ¥      792  F\n    ¥      712  H\n\ntop 3 usernames by message frequency → stdout:\n\n"
+    },
+    {
+      "argv": ["danmakus.json", "--types", "0"],
+      "code": 0,
+      "raised": null,
+      "stdout": "J\nD-viewer\nH\nViewer_B\nF\nL\n",
+      "stderr": "Reading <FIX>/danmakus.json (0.0 MB)…\n\n  total entries  : 255\n  unique users   : 14\n  date range     : 2023-06-21 → 2026-03-17\n  skipped (no uId/uName): 4\n  all types      : free chat=48, gift=49, membership=50, SC=76, room entry=24, title update=1, type=7=1, stream start=1, ban=1\n  counted types  : free chat=48\n  total spend    : ¥1,050,799 across all types\n\n  top 10 spenders (informational, not in stdout):\n    ¥1,041,150  big-uid\n    ¥      913  观众C\n    ¥      913  奶糖花A-tie\n    ¥      912  I\n    ¥      837  花E\n    ¥      832  K\n    ¥      813  早起G\n    ¥      792  L\n    ¥      792  F\n    ¥      712  H\n\ntop 50 usernames by message frequency → stdout:\n\n"
+    },
+    {
+      "argv": ["danmakus.json", "--types", "2, 7"],
+      "code": 0,
+      "raised": null,
+      "stdout": "F\n观众C\nH\nI\n早起G\nD-viewer\n花E\nViewer_B\nL\n奶糖花A-tie\nJ\nK\nbig-uid\n",
+      "stderr": "Reading <FIX>/danmakus.json (0.0 MB)…\n\n  total entries  : 255\n  unique users   : 14\n  date range     : 2023-06-21 → 2026-03-17\n  skipped (no uId/uName): 4\n  all types      : free chat=48, gift=49, membership=50, SC=76, room entry=24, title update=1, type=7=1, stream start=1, ban=1\n  counted types  : membership=50, type=7=1\n  total spend    : ¥1,050,799 across all types\n\n  top 10 spenders (informational, not in stdout):\n    ¥1,041,150  big-uid\n    ¥      913  观众C\n    ¥      913  奶糖花A-tie\n    ¥      912  I\n    ¥      837  花E\n    ¥      832  K\n    ¥      813  早起G\n    ¥      792  L\n    ¥      792  F\n    ¥      712  H\n\ntop 50 usernames by message frequency → stdout:\n\n"
+    },
+    {
+      "argv": ["danmakus.json", "-n", "0"],
+      "code": 0,
+      "raised": null,
+      "stdout": "",
+      "stderr": "Reading <FIX>/danmakus.json (0.0 MB)…\n\n  total entries  : 255\n  unique users   : 14\n  date range     : 2023-06-21 → 2026-03-17\n  skipped (no uId/uName): 4\n  all types      : free chat=48, gift=49, membership=50, SC=76, room entry=24, title update=1, type=7=1, stream start=1, ban=1\n  counted types  : gift=49, membership=50, SC=75\n  total spend    : ¥1,050,799 across all types\n\n  top 10 spenders (informational, not in stdout):\n    ¥1,041,150  big-uid\n    ¥      913  观众C\n    ¥      913  奶糖花A-tie\n    ¥      912  I\n    ¥      837  花E\n    ¥      832  K\n    ¥      813  早起G\n    ¥      792  L\n    ¥      792  F\n    ¥      712  H\n\ntop 0 usernames by message frequency → stdout:\n\n"
+    },
+    {
+      "argv": ["danmakus.json", "-n", "-2"],
+      "code": 0,
+      "raised": null,
+      "stdout": "",
+      "stderr": "Reading <FIX>/danmakus.json (0.0 MB)…\n\n  total entries  : 255\n  unique users   : 14\n  date range     : 2023-06-21 → 2026-03-17\n  skipped (no uId/uName): 4\n  all types      : free chat=48, gift=49, membership=50, SC=76, room entry=24, title update=1, type=7=1, stream start=1, ban=1\n  counted types  : gift=49, membership=50, SC=75\n  total spend    : ¥1,050,799 across all types\n\n  top 10 spenders (informational, not in stdout):\n    ¥1,041,150  big-uid\n    ¥      913  观众C\n    ¥      913  奶糖花A-tie\n    ¥      912  I\n    ¥      837  花E\n    ¥      832  K\n    ¥      813  早起G\n    ¥      792  L\n    ¥      792  F\n    ¥      712  H\n\ntop -2 usernames by message frequency → stdout:\n\n"
+    },
+    {
+      "argv": ["danmakus.json", "--types", "6"],
+      "code": 1,
+      "raised": null,
+      "stdout": "",
+      "stderr": "Reading <FIX>/danmakus.json (0.0 MB)…\nerror: no entries matched the type filter. Try --types all.\n"
+    },
+    {
+      "argv": ["edge.json", "--types", "all"],
+      "code": 0,
+      "raised": null,
+      "stdout": "a\nb\nc\nd\ne\n",
+      "stderr": "Reading <FIX>/edge.json (0.0 MB)…\n\n  total entries  : 5\n  unique users   : 5\n  date range     : 1970-01-01 → 1970-01-01\n  all types      : gift=3, SC=2\n  counted types  : gift=3, SC=2\n  total spend    : ¥4 across all types\n\n  top 10 spenders (informational, not in stdout):\n    ¥10,000,000,000,000,000  a\n    ¥        2  e\n    ¥        1  b\n    ¥        0  d\n    ¥-10,000,000,000,000,000  c\n\ntop 50 usernames by message frequency → stdout:\n\n"
+    },
+    {
+      "argv": ["list.json"],
+      "code": 1,
+      "raised": null,
+      "stdout": "",
+      "stderr": "Reading <FIX>/list.json (0.0 MB)…\nerror: unexpected JSON shape (expected .data.data.danmakus): list indices must be integers or slices, not str\n"
+    },
+    {
+      "argv": ["nokey.json"],
+      "code": 1,
+      "raised": null,
+      "stdout": "",
+      "stderr": "Reading <FIX>/nokey.json (0.0 MB)…\nerror: unexpected JSON shape (expected .data.data.danmakus): 'danmakus'\n"
+    },
+    {
+      "argv": ["strdata.json"],
+      "code": 1,
+      "raised": null,
+      "stdout": "",
+      "stderr": "Reading <FIX>/strdata.json (0.0 MB)…\nerror: unexpected JSON shape (expected .data.data.danmakus): string indices must be integers, not 'str'\n"
+    },
+    {
+      "argv": ["nulldata.json"],
+      "code": 1,
+      "raised": null,
+      "stdout": "",
+      "stderr": "Reading <FIX>/nulldata.json (0.0 MB)…\nerror: unexpected JSON shape (expected .data.data.danmakus): 'NoneType' object is not subscriptable\n"
+    },
+    {
+      "argv": ["notlist.json"],
+      "code": 1,
+      "raised": null,
+      "stdout": "",
+      "stderr": "Reading <FIX>/notlist.json (0.0 MB)…\nerror: .data.data.danmakus is not a list\n"
+    },
+    {
+      "argv": ["missing.json"],
+      "code": 1,
+      "raised": null,
+      "stdout": "",
+      "stderr": "error: file not found: <FIX>/missing.json\n"
+    },
+    {
+      "argv": ["bad.txt"],
+      "code": 1,
+      "raised": "JSONDecodeError",
+      "stdout": "",
+      "stderr": "Reading <FIX>/bad.txt (0.0 MB)…\n"
+    }
+  ]
+}

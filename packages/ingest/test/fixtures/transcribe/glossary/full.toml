@@ -1,0 +1,17 @@
+text = """
+line one
+line two
+"""
+terms = ["甲", "乙", "甲"]
+
+[[general]]
+value = "v1"
+key = "k1"
+
+[[general]]
+key = "k2"
+value = "v2"
+
+[[translation_terms]]
+target = "B"
+source = "A"

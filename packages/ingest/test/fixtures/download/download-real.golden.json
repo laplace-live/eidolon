@@ -1,0 +1,36 @@
+{
+  "printed_by": "CPython 3.13.4: packages/ingest/test/fixtures/download/download-real.golden.py over <EIDOLON_REAL_HOME>/sources/milky-green/lists",
+  "lists": {
+    "video-full.txt": {
+      "file_sha256": "26e12818a3978147cc694926943348dcb46753227bbbc464b2dd2b6a11c396b9",
+      "urls": 850,
+      "urls_sha256": "26e12818a3978147cc694926943348dcb46753227bbbc464b2dd2b6a11c396b9",
+      "ids": 850,
+      "ids_sha256": "4a292deb0e2575d39c0395cf28d24f7f4d507c220b53510651862ca82d0a2405"
+    },
+    "video-sample.txt": {
+      "file_sha256": "0ac51accd21c5400c555c43de8646bb9f2c6c224f5982dc895f0057d71787deb",
+      "urls": 3,
+      "urls_sha256": "0ac51accd21c5400c555c43de8646bb9f2c6c224f5982dc895f0057d71787deb",
+      "ids": 3,
+      "ids_sha256": "d8da736e29c441d68978d766b0cd6154cbf8c20b2f35572c2cc85f482635706d"
+    },
+    "batches/videos-2026-09-08-100209.txt": {
+      "file_sha256": "c5f424eaee31c713ea368fd04494a19214f7f03d6dfadf1d0974d9b22bad02d7",
+      "urls": 66,
+      "urls_sha256": "49d5ec3bff25520f0c36544afd12a86a242841ed43f672ae3577928f537c1c7c",
+      "ids": 66,
+      "ids_sha256": "2150d9e3fc6109486072ef6fee7168e46553a01ba9e00b0a446ac112ec087e75"
+    },
+    "batches/videos-2026-09-18-021237.txt": {
+      "file_sha256": "651ac32a9db17e4c67ee0aad6413d3f98dad4ea200892048f4db966abbba67d6",
+      "urls": 7,
+      "urls_sha256": "aea26788b1ae9dd31408902438805987b1c1f93570d08148992cd88a184a5d69",
+      "ids": 7,
+      "ids_sha256": "87ad7a5f362ef8044e5ae7a6566ac28eb8b25291a1f6743bbb8df85e3531e835"
+    }
+  },
+  "known": 926,
+  "known_sha256": "c9dfa7f687fd4e0806ea3cecd0e8ae8ecc83f12b3e5bffe15fcb8fb7a1d5fb2f",
+  "pending": ["batches/videos-2026-09-08-100209.txt", "batches/videos-2026-09-18-021237.txt"]
+}
