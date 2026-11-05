@@ -79,13 +79,11 @@ export { personaArg } from "./persona-arg.ts";
 export { pipelineMain } from "./pipeline.ts";
 export { prepareBatchMain } from "./prepare_batch.ts";
 export {
-  ljust,
   mean,
   median,
   numOf,
   type PyNumber,
   quantilesExclusive,
-  rjust,
   textwrapIndent,
 } from "./py.ts";
 export { refineMain } from "./refine.ts";

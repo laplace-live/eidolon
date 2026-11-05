@@ -51,10 +51,7 @@ describe("the calls", () => {
     const audio = join(work, "BV1x.m4a");
     writeFileSync(audio, "abc");
     const { soniox, client: c } = client();
-    expect(await c.upload(audio, "BV1x.m4a", "laplace-eidolon:BV1x.m4a")).toEqual({
-      id: "f1",
-      filename: "a.m4a",
-    });
+    expect(await c.upload(audio, "BV1x.m4a", "laplace-eidolon:BV1x.m4a")).toEqual({ id: "f1" });
     expect(soniox.requests).toEqual([
       {
         method: "POST",

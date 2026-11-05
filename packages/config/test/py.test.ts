@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   cpLen,
   cpSlice,
+  ljust,
   loadsPy,
   PyFloat,
   partition,
@@ -10,6 +11,7 @@ import {
   pyFloatRepr,
   pyJsonDumps,
   pyLstrip,
+  pyNumber,
   pyParseFloat,
   pyParseInt,
   pyRepr,
@@ -19,8 +21,10 @@ import {
   pyStr,
   pyStrip,
   pyTruthy,
+  rjust,
   sortedPy,
   splitlines,
+  thousands,
 } from "../src/index.ts";
 
 describe("pyRepr", () => {
@@ -124,6 +128,77 @@ test("whitespace follows str.isspace", () => {
   expect(pyStrip(ws)).toBe("x y\ufeff");
   expect(pySplitWs(ws)).toEqual(["x", "y\ufeff"]);
   expect(pyStrip("xxhixx", "x")).toBe("hi");
+});
+
+test("the code-unit strip and cpLen agree with code-point iteration", () => {
+  const points = (s: string): string[] => [...s];
+  // str.isspace(), from CPython's _PyUnicode_IsWhitespace.
+  const ws = new Set("\t\n\v\f\r\x1c\x1d\x1e\x1f \x85\xa0\u1680\u2028\u2029\u202f\u205f\u3000");
+  for (let cp = 0x2000; cp <= 0x200a; cp++) ws.add(String.fromCodePoint(cp));
+  const reference = (s: string, left: boolean, right: boolean): string => {
+    const p = points(s);
+    let start = 0;
+    let end = p.length;
+    while (left && start < end && ws.has(p[start] as string)) start++;
+    while (right && end > start && ws.has(p[end - 1] as string)) end--;
+    return p.slice(start, end).join("");
+  };
+  const parts = [
+    ...ws,
+    "",
+    "x",
+    "中",
+    "\u{1f600}",
+    "\ud83d",
+    "\ude00",
+    "\ufeff",
+    "\u200b",
+    "\u180e",
+  ];
+  const samples = [""];
+  for (const a of parts) {
+    for (const b of parts) {
+      for (const c of [" ", "\ud800", "y"]) samples.push(a + c + b, c + a + b + c, a + b);
+    }
+  }
+  for (const s of samples) {
+    expect(pyStrip(s)).toBe(reference(s, true, true));
+    expect(pyLstrip(s)).toBe(reference(s, true, false));
+    expect(pyRstrip(s)).toBe(reference(s, false, true));
+    expect(cpLen(s)).toBe(points(s).length);
+  }
+  expect(cpLen("\ud800\u{10000}\udc00")).toBe(3);
+});
+
+describe("format-spec padding and grouping", () => {
+  test("ljust and rjust count code points", () => {
+    expect(ljust("😀", 3)).toBe("😀  ");
+    expect(rjust("ab", 4)).toBe("  ab");
+    expect(ljust("abcdef", 3)).toBe("abcdef");
+  });
+
+  test("thousands groups an int's digits, sign kept", () => {
+    expect([0, 999, 1000, 1234567, -1234, -123].map(thousands)).toEqual([
+      "0",
+      "999",
+      "1,000",
+      "1,234,567",
+      "-1,234",
+      "-123",
+    ]);
+    expect(thousands("-1234567")).toBe("-1,234,567");
+  });
+});
+
+test("pyNumber reads an int or a PyFloat, and nothing else", () => {
+  expect([3, new PyFloat(2), "3", true, null, undefined].map(pyNumber)).toEqual([
+    3,
+    2,
+    null,
+    null,
+    null,
+    null,
+  ]);
 });
 
 test("code points", () => {

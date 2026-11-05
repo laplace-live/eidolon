@@ -38,6 +38,28 @@ export function pyPathSuffix(path: string): string {
   return i === -1 ? "" : name.slice(i);
 }
 
+/** `PurePosixPath(path).parent`. */
+export function pyPathParent(path: string): string {
+  const normalized = pyPath(path);
+  const slash = normalized.lastIndexOf("/");
+  if (slash === -1) return ".";
+  const head = normalized.slice(0, slash);
+  // "/x" and "//x" keep their root.
+  return head === "" || head === "/" ? normalized.slice(0, slash + 1) : head;
+}
+
+/** `PurePosixPath(path).relative_to(base)`, for a path inside `base`. */
+export function pyPathRelativeTo(path: string, base: string): string {
+  const normalized = pyPath(path);
+  const root = pyPath(base);
+  if (root === ".") return normalized;
+  const prefix = root.endsWith("/") ? root : `${root}/`;
+  if (!normalized.startsWith(prefix)) {
+    throw new Error(`${pyStrRepr(normalized)} is not in the subpath of ${pyStrRepr(root)}`);
+  }
+  return normalized.slice(prefix.length);
+}
+
 /** `PurePosixPath(path).with_name(name)`, normalized like `pyPath`. */
 export function pyPathWithName(path: string, name: string): string {
   const normalized = pyPath(path);

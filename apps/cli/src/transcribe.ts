@@ -2,7 +2,6 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import {
-  envOptional,
   errorText,
   logger,
   pyPath,
@@ -13,6 +12,7 @@ import {
 } from "@eidolon/config";
 import {
   acquireLock,
+  estimatedCost,
   failureOf,
   LockedError,
   ndjsonSink,
@@ -279,11 +279,9 @@ export async function transcribeMain(
       );
     }
 
-    const apiKey = envOptional("SONIOX_API_KEY");
+    const apiKey = transcribe.sonioxApiKey();
     if (!apiKey) {
-      const message =
-        "SONIOX_API_KEY is not set. Add it to credentials.json or .env (it's the same key the " +
-        "bot's realtime STT uses).";
+      const message = transcribe.MISSING_API_KEY;
       logger.error(message);
       counts.failed = 1;
       emit({ ...item, status: "failed", code: "missing-credential", message });
@@ -331,10 +329,7 @@ export async function transcribeMain(
       counts.failed = 1;
       return fail(errorText(error), failure ?? {});
     }
-    const cost =
-      result.costUsd === null
-        ? { costSource: "unpriced" as const }
-        : { costUsd: result.costUsd, costSource: "estimated" as const };
+    const cost = estimatedCost(result.costUsd);
     if (result.status === "no-speech") {
       counts.noSpeech = 1;
       return finish(0, "done", cost);

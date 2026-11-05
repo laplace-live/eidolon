@@ -69,11 +69,6 @@ export function isV2Refinement(record: unknown): boolean {
 
 const valueError = (message: string): Error => pyError("ValueError", message);
 
-/** Python `bool()`, with a parsed float as the float it holds. */
-export function pyBool(value: unknown): boolean {
-  return value instanceof PyFloat ? value.value !== 0 : pyTruthy(value);
-}
-
 function get(dict: Readonly<Record<string, unknown>>, key: string, fallback: unknown = null) {
   return Object.hasOwn(dict, key) ? dict[key] : fallback;
 }
@@ -86,7 +81,7 @@ function text(dict: Readonly<Record<string, unknown>>, key: string, fallback = "
 /** `dict.get(key) or []`. */
 function orEmpty(dict: Readonly<Record<string, unknown>>, key: string): unknown {
   const value = get(dict, key);
-  return pyBool(value) ? value : [];
+  return pyTruthy(value) ? value : [];
 }
 
 /** Python `int(value)`, or null where it raises TypeError or ValueError. */
@@ -138,8 +133,8 @@ export function validateExtract(raw: unknown): Extract {
         const value = orEmpty(item, key);
         if (Array.isArray(value)) (merged[key] as unknown[]).push(...value);
       }
-      anime ||= pyBool(get(item, "is_anime_audio_dominant"));
-      karaoke ||= pyBool(get(item, "is_karaoke_dominant"));
+      anime ||= pyTruthy(get(item, "is_anime_audio_dominant"));
+      karaoke ||= pyTruthy(get(item, "is_karaoke_dominant"));
     }
     payload = { ...merged, is_anime_audio_dominant: anime, is_karaoke_dominant: karaoke };
   }
@@ -197,8 +192,8 @@ export function validateExtract(raw: unknown): Extract {
     topics: strList("topics", 10),
     mentions: strList("mentions"),
     key_quotes: strList("key_quotes", 10),
-    is_anime_audio_dominant: pyBool(get(dict, "is_anime_audio_dominant")),
-    is_karaoke_dominant: pyBool(get(dict, "is_karaoke_dominant")),
+    is_anime_audio_dominant: pyTruthy(get(dict, "is_anime_audio_dominant")),
+    is_karaoke_dominant: pyTruthy(get(dict, "is_karaoke_dominant")),
   };
 }
 

@@ -142,6 +142,45 @@ export const SUMMARY_COUNTS = {
   pipeline: ["stages", "failed", "aborted"],
 } as const satisfies Partial<Record<Stage | "pipeline", readonly string[]>>;
 
+/** A stage's summary counts before anything was counted. */
+export function zeroCounts<S extends keyof typeof SUMMARY_COUNTS>(
+  stage: S,
+): Record<(typeof SUMMARY_COUNTS)[S][number], number> {
+  return Object.fromEntries(SUMMARY_COUNTS[stage].map((key) => [key, 0])) as Record<
+    (typeof SUMMARY_COUNTS)[S][number],
+    number
+  >;
+}
+
+type SummaryEvent = Extract<ProgressEvent, { type: "summary" }>;
+type SummaryCost = Pick<SummaryEvent, "costUsd" | "costSource">;
+
+/** What a summary calls the cost source an LLM or embedding usage reports. */
+export const COST_SOURCES = {
+  openrouter: "reported",
+  estimate: "estimated",
+  mixed: "estimated",
+  unknown: "unpriced",
+} as const satisfies Record<string, NonNullable<SummaryEvent["costSource"]>>;
+
+/**
+ * A summary's cost from what its requests reported: $0 when none was sent, as for a run the cache
+ * served whole, and no amount when it is unpriced.
+ */
+export function costFields(
+  usage: { readonly costUsd: number; readonly costSource: keyof typeof COST_SOURCES },
+  sent: boolean,
+): SummaryCost {
+  if (!sent) return { costUsd: 0 };
+  const costSource = COST_SOURCES[usage.costSource];
+  return costSource === "unpriced" ? { costSource } : { costUsd: usage.costUsd, costSource };
+}
+
+/** A summary's cost from a price-table estimate; null when the table doesn't price it. */
+export function estimatedCost(usd: number | null): SummaryCost {
+  return usd === null ? { costSource: "unpriced" } : { costUsd: usd, costSource: "estimated" };
+}
+
 export type ProgressSink = (event: ProgressEvent) => void;
 
 export const noProgress: ProgressSink = () => {};

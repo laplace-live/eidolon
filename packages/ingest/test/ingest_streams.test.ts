@@ -379,31 +379,3 @@ describe("skip types", () => {
     }
   });
 });
-
-describe("paths", () => {
-  test("transcriptPaths lists *.md as pathlib's glob does, by code point; [] for no folder", () => {
-    const dir = join(work, "listing");
-    mkdirSync(dir);
-    for (const name of ["b.md", "A.md", ".h.md", "é.md", "x.MD", "y.txt", "z.refined.json"]) {
-      writeFileSync(join(dir, name), "");
-    }
-    expect(ingestStreams.transcriptPaths(`${dir}/`)).toEqual(
-      [".h.md", "A.md", "b.md", "é.md"].map((name) => join(dir, name)),
-    );
-    expect(ingestStreams.transcriptPaths(join(work, "missing"))).toEqual([]);
-    expect(ingestStreams.transcriptPaths(join(dir, "b.md"))).toEqual([]);
-  });
-
-  test("pyParent and pyRelativeTo read paths as PurePosixPath does", () => {
-    expect(
-      ["streams", "/srv/streams", "/x", "/", "//x", ".", "..", "a/..", "a/b/"].map((p) =>
-        ingestStreams.pyParent(p),
-      ),
-    ).toEqual([".", "/srv", "/", "/", "//", ".", ".", "a", "a"]);
-    expect(ingestStreams.pyRelativeTo("streams/x.md", ".")).toBe("streams/x.md");
-    expect(ingestStreams.pyRelativeTo("/srv/streams/x.md", "/srv")).toBe("streams/x.md");
-    expect(ingestStreams.pyRelativeTo("/x.md", "/")).toBe("x.md");
-    expect(ingestStreams.pyRelativeTo("../x.md", ".")).toBe("../x.md");
-    expect(() => ingestStreams.pyRelativeTo("/a/x.md", "/b")).toThrow("is not in the subpath");
-  });
-});

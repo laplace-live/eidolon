@@ -8,10 +8,10 @@ import {
   indexWritePath,
   ingestStreams,
   LockedError,
+  lockedOut,
   ndjsonSink,
   noProgress,
-  type ProgressSink,
-  type Stage,
+  zeroCounts,
 } from "@eidolon/ingest";
 import { type EmbeddingClient, STREAM_CHUNKS_TABLE } from "@eidolon/retrieval";
 import {
@@ -156,27 +156,6 @@ export interface IngestStreamsDeps extends CommandDeps {
   readonly now?: () => Date;
 }
 
-/** Another writer holds the index: why, as a failed stage, then the stage's summary. */
-export function lockedOut(
-  emit: ProgressSink,
-  stage: Stage,
-  error: LockedError,
-  counts: Readonly<Record<string, number>>,
-  item: string,
-): number {
-  logger.error(error.message);
-  emit({ type: "stage", stage, status: "failed", code: "locked", message: error.message });
-  emit({
-    type: "summary",
-    stage,
-    ok: false,
-    counts,
-    durationSec: 0,
-    failures: [{ item, error: error.message }],
-  });
-  return 1;
-}
-
 /** The `laplace-ingest-streams` command; resolves to its exit code. */
 export async function ingestStreamsMain(
   argv: readonly string[],
@@ -198,8 +177,8 @@ export async function ingestStreamsMain(
       release = acquireLock(indexLockKey(args.dbPath), COMMAND);
     } catch (error) {
       if (!(error instanceof LockedError)) throw error;
-      const counts = { rows: 0, cacheHits: 0, embedded: 0 };
-      return lockedOut(emit, "ingest-streams", error, counts, args.table);
+      lockedOut(emit, "ingest-streams", error, zeroCounts("ingest-streams"), args.table);
+      return 1;
     }
   }
   try {

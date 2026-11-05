@@ -55,6 +55,7 @@ beforeEach(() => {
     saved[name] = process.env[name];
     delete process.env[name];
   }
+  process.env.SONIOX_API_KEY = "soniox-test";
 });
 afterEach(() => {
   logs.stop();
@@ -80,7 +81,6 @@ function base(overrides: Partial<pipeline.PipelineOptions> = {}): pipeline.Pipel
     ffmpeg: null,
     sleep: async () => {},
     retryDelaysMs: [],
-    sonioxApiKey: "soniox-test",
     ...overrides,
   };
 }
@@ -107,6 +107,7 @@ describe("pipelineSummaryText", () => {
             newFiles: Array.from({ length: golden.download[3] }, (_, i) => `vods/n${i}.m4a`),
             durationSec: golden.download[4],
             cancelled: false,
+            error: null,
           }
         : null;
       const t = golden.transcribe;
@@ -137,7 +138,6 @@ describe("pipelineSummaryText", () => {
       const report: pipeline.PipelineReport = {
         stages: golden.stages as pipeline.PipelineStage[],
         download,
-        downloadError: null,
         transcribe,
         refine,
         ingest,
@@ -154,8 +154,11 @@ describe("pipelineSummaryText", () => {
   test("adds what Python had no line for: no speech, a cancelled stage, a missing yt-dlp", () => {
     const report: pipeline.PipelineReport = {
       stages: ["download", "transcribe", "refine", "ingest"],
-      download: { ...download.emptyDownloadReport(2), durationSec: 0.04 },
-      downloadError: "yt-dlp isn't installed",
+      download: {
+        ...download.emptyDownloadReport(2),
+        durationSec: 0.04,
+        error: "yt-dlp isn't installed",
+      },
       transcribe: {
         total: 4,
         skipped: 1,
@@ -503,10 +506,9 @@ describe("the transcribe stage", () => {
       "BV1aaaaaaaa1.m4a": '{"upload_date": "20260801"}',
       "BV1aaaaaaaa2.m4a": '{"upload_date": "20260802"}',
     });
+    delete process.env.SONIOX_API_KEY;
     const events: ProgressEvent[] = [];
-    const report = await pipeline.runPipeline(
-      base({ sonioxApiKey: undefined, onProgress: (event) => events.push(event) }),
-    );
+    const report = await pipeline.runPipeline(base({ onProgress: (event) => events.push(event) }));
     expect((report.transcribe as pipeline.TranscribeStageReport).failed).toHaveLength(2);
     const failed = events.filter((e) => e.type === "item" && e.status === "failed");
     expect(failed.map((e) => (e.type === "item" ? e.code : null))).toEqual([
@@ -1116,6 +1118,7 @@ describe("download and the rest", () => {
         `printf audio > '${join(work, "vods")}/BV1aaaaaaaa1.m4a'\n`,
       { mode: 0o755 },
     );
+    delete process.env.SONIOX_API_KEY;
     const order: string[] = [];
     const report = await pipeline.runPipeline(
       base({
@@ -1123,7 +1126,6 @@ describe("download and the rest", () => {
         urls: ["https://www.bilibili.com/video/BV1aaaaaaaa1"],
         ytDlp: { path: yt, source: "setting" },
         dryRun: false,
-        sonioxApiKey: undefined,
         print: (text) => order.push(text.includes("Download Summary") ? "summary" : text),
         onProgress: (event) => {
           if (event.type === "stage" && event.stage === "transcribe") order.push(event.status);
@@ -1144,7 +1146,7 @@ describe("download and the rest", () => {
         vodsDir: join(work, "nothing"),
       }),
     );
-    expect(report.downloadError).toBe(
+    expect(report.download?.error).toBe(
       `yt-dlp not found at ${join(work, "missing-yt-dlp")} (YT_DLP_PATH)`,
     );
     expect(report.transcribe).not.toBeNull();

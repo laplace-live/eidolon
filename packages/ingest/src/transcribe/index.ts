@@ -1,21 +1,9 @@
 // laplace-transcribe's library: the Soniox REST client, the glossary context, ffmpeg and ffprobe,
 // the transcript rendering, and the skip rules the pipeline shares.
-export {
-  apiContext,
-  CONTEXT_MAX_CHARS,
-  loadContext,
-  type SonioxContext,
-  summarizeContext,
-} from "./context.ts";
+export { apiContext, loadContext, type SonioxContext, summarizeContext } from "./context.ts";
 export { closeMatches } from "./difflib.ts";
 export { TranscribeError } from "./errors.ts";
-export {
-  ffmpegMissing,
-  ffmpegSlice,
-  infoJsonDurationSec,
-  locateBinary,
-  probeDurationSec,
-} from "./media.ts";
+export { ffmpegMissing, locateBinary } from "./media.ts";
 export {
   DEFAULT_WINDOW_SEC,
   formatDur,
@@ -23,19 +11,14 @@ export {
   groupSegmentsIntoScenes,
   headingHint,
   isSlicedPayload,
-  MAX_SEGMENT_SEC,
-  MIN_SEGMENT_SEC,
-  msField,
   payloadDurationSec,
   payloadParts,
-  payloadSegments,
   pyFloorDiv,
   renderMarkdown,
   renderPayload,
   type Scene,
   type Segment,
   type SonioxToken,
-  segmentsFromParts,
   shortTs,
   type TokenPart,
   type TranscriptMeta,
@@ -46,16 +29,15 @@ export {
   audioStatus,
   configuredLanguage,
   configuredModel,
-  DEFAULT_LANGUAGE,
-  DEFAULT_SONIOX_MODEL,
   dumpToken,
   estimateTranscribeUsd,
   glossaryPath,
   isoformat,
   listAudioFiles,
+  MISSING_API_KEY,
   payloadPath,
   SLICE_MAX_MIN_DEFAULT,
-  SONIOX_MAX_DURATION_MIN,
+  sonioxApiKey,
   type TranscribeOptions,
   type TranscribeResult,
   type TranscriptState,
@@ -63,9 +45,6 @@ export {
   transcriptState,
 } from "./run.ts";
 export {
-  RETRY_DELAYS_MS,
-  SONIOX_API_BASE,
-  SONIOX_IDLE_TIMEOUT_MS,
   SonioxApiError,
   SonioxClient,
   type SonioxClientOptions,

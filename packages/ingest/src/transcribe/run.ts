@@ -6,11 +6,9 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
-  renameSync,
   rmSync,
   statSync,
   unlinkSync,
-  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -24,6 +22,7 @@ import {
   PyFloat,
   pyFixed,
   pyJsonDumps,
+  pyNumber,
   pyPath,
   pyPathName,
   pyPathStem,
@@ -35,6 +34,7 @@ import {
   sortedPy,
 } from "@eidolon/config";
 import { failureOf } from "../failure.ts";
+import { writeTextAtomic } from "../paths.ts";
 import { noProgress, type RunOptions } from "../progress.ts";
 import {
   AUDIO_EXTENSIONS,
@@ -57,7 +57,6 @@ import {
   formatDur,
   formatTs,
   groupSegmentsIntoScenes,
-  msField,
   payloadSegments,
   renderMarkdown,
   type Segment,
@@ -176,26 +175,24 @@ export function transcriptState(
   }
 }
 
-export interface AudioStatus {
-  /** "no-date": the audio's `.info.json` names no upload date, which the stream id needs. */
-  readonly state: TranscriptState | "no-date";
-  readonly date: string | null;
-  readonly streamId: string | null;
-  readonly mdPath: string | null;
-  readonly payloadPath: string | null;
-}
+export type AudioStatus =
+  /** The audio's `.info.json` names no upload date, which the stream id needs. */
+  | { readonly state: "no-date" }
+  | {
+      readonly state: TranscriptState;
+      readonly date: string;
+      readonly mdPath: string;
+      readonly payloadPath: string;
+    };
 
 /** The pipeline's rule: a downloaded audio file is named by its upload date, and skipped without one. */
 export function audioStatus(audioPath: string, streamsDir: string): AudioStatus {
   const date = readUploadDate(audioPath);
-  if (date === null) {
-    return { state: "no-date", date: null, streamId: null, mdPath: null, payloadPath: null };
-  }
+  if (date === null) return { state: "no-date" };
   const stem = pyPathStem(audioPath);
   return {
     state: transcriptState(streamsDir, date, stem),
     date,
-    streamId: streamId(date, stem),
     mdPath: transcriptPath(streamsDir, date, stem),
     payloadPath: payloadPath(streamsDir, date, stem),
   };
@@ -225,6 +222,15 @@ export function listAudioFiles(vodsDir: string): string[] {
 /** The model a run uses unless told otherwise: the transcription.model setting, else the default. */
 export function configuredModel(): string {
   return envStr("SONIOX_ASYNC_MODEL", DEFAULT_SONIOX_MODEL);
+}
+
+export const MISSING_API_KEY =
+  "SONIOX_API_KEY is not set. Add it to credentials.json or .env (it's the same key the bot's " +
+  "realtime STT uses).";
+
+/** SONIOX_API_KEY; undefined when it isn't set. */
+export function sonioxApiKey(): string | undefined {
+  return envOptional("SONIOX_API_KEY");
 }
 
 /**
@@ -387,7 +393,7 @@ async function transcribe(options: TranscribeOptions): Promise<TranscribeResult>
     const payloadFile = payloadPath(outDir, date, stem);
     const mdPath = transcriptPath(outDir, date, stem);
     const payloadText = pyJsonDumps(outcome.payload, { ensureAscii: false, indent: 2 });
-    writeAtomic(payloadFile, payloadText);
+    writeTextAtomic(payloadFile, payloadText);
     logger.info(
       `Wrote raw soniox payload to ${payloadFile} (${Math.floor(Buffer.byteLength(payloadText) / 1024)} KB)`,
     );
@@ -399,7 +405,7 @@ async function transcribe(options: TranscribeOptions): Promise<TranscribeResult>
         sourceFile: name,
         language,
       };
-      writeAtomic(mdPath, renderMarkdown(meta, scenes));
+      writeTextAtomic(mdPath, renderMarkdown(meta, scenes));
       logger.info(`Wrote ${mdPath} (${scenes.length} scenes via soniox)`);
     } else {
       if (existsSync(mdPath)) {
@@ -422,22 +428,6 @@ async function transcribe(options: TranscribeOptions): Promise<TranscribeResult>
     };
   } finally {
     await deleteJobs(session, options.keepFiles === true);
-  }
-}
-
-/** Written beside `path` and renamed over it, so a reader never sees half a file. */
-function writeAtomic(path: string, text: string): void {
-  const tmp = `${path}.${process.pid}.tmp`;
-  try {
-    writeFileSync(tmp, text, "utf8");
-    renameSync(tmp, path);
-  } catch (error) {
-    try {
-      unlinkSync(tmp);
-    } catch {
-      // Never written.
-    }
-    throw error;
   }
 }
 
@@ -690,7 +680,7 @@ export function dumpToken(token: SonioxToken): Record<string, unknown> {
   for (const key of TOKEN_FIELDS) {
     const value = Object.hasOwn(token, key) ? token[key] : null;
     if (key === "confidence" && typeof value === "number") out[key] = new PyFloat(value);
-    else if (key === "start_ms" || key === "end_ms") out[key] = msField(value);
+    else if (key === "start_ms" || key === "end_ms") out[key] = pyNumber(value);
     else out[key] = value ?? null;
   }
   for (const [key, value] of Object.entries(token)) {

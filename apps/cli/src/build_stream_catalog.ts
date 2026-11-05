@@ -6,12 +6,14 @@ import {
   catalog,
   indexLockKey,
   LockedError,
+  lockedOut,
   ndjsonSink,
   noProgress,
+  zeroCounts,
 } from "@eidolon/ingest";
 import { CATALOG_FILENAME } from "@eidolon/retrieval";
 import { ArgparseExit, commandPersona, PATH, type ParserSpec, parseArgs } from "./argparse.ts";
-import { lockedOut, writerDbPath } from "./ingest_streams.ts";
+import { writerDbPath } from "./ingest_streams.ts";
 import { type CommandDeps, reportExit, resolveIo } from "./io.ts";
 
 const COMMAND = "laplace-build-stream-catalog";
@@ -97,7 +99,8 @@ export async function buildStreamCatalogMain(
     release = acquireLock(indexLockKey(args.dbPath), COMMAND);
   } catch (error) {
     if (!(error instanceof LockedError)) throw error;
-    return lockedOut(emit, "catalog", error, { broadcasts: 0, parts: 0 }, CATALOG_FILENAME);
+    lockedOut(emit, "catalog", error, zeroCounts("catalog"), CATALOG_FILENAME);
+    return 1;
   }
   try {
     const report = await catalog.writeStreamCatalog({

@@ -64,9 +64,9 @@ export function streamChunksSchema(dim: number): Schema {
   ]);
 }
 
-// Whitespace splitting and no stemming keep jieba's boundaries; no lowercasing keeps BV ids and
-// names case-distinct. Python set only those five; the rest are lance's defaults its index was
-// built with, pinned.
+// `build_fts_index`'s index on `tokens`. Whitespace splitting and no stemming keep jieba's
+// boundaries; no lowercasing keeps BV ids and names case-distinct. Python set only those five; the
+// rest are lance's defaults its index was built with, pinned.
 const FTS_OPTIONS = {
   baseTokenizer: "whitespace",
   stem: false,
@@ -81,11 +81,6 @@ const FTS_OPTIONS = {
   prefixOnly: false,
   blockSize: 128,
 } as const;
-
-/** `build_fts_index`: the index hybrid search runs against `field`, named `<field>_idx`. */
-export async function buildFtsIndex(table: lancedb.Table, field = "tokens"): Promise<void> {
-  await table.createIndex(field, { replace: true, config: lancedb.Index.fts(FTS_OPTIONS) });
-}
 
 // pyarrow refuses these where apache-arrow would coerce: a number to a string, 2**31 to -2**31.
 function accepts(type: DataType, value: unknown): boolean {
@@ -159,6 +154,6 @@ export async function writeTable(
   if (exists) await db.dropTable(name);
   const table = await db.createTable(name, data);
   logger.info(`Wrote ${rows.length} rows to ${pyPath(dbPath)}/${name}.lance`);
-  await buildFtsIndex(table);
+  await table.createIndex("tokens", { replace: true, config: lancedb.Index.fts(FTS_OPTIONS) });
   logger.info(`Built FTS index on 'tokens' for ${name}`);
 }

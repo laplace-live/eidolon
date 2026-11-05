@@ -1,7 +1,6 @@
 // laplace-download's library: the managed yt-dlp, URL lists and batches, its argv, the part check
 // and playlist expansion.
 export {
-  DEFAULT_BROWSER,
   DEFAULT_FORMAT,
   defaultCookiesFile,
   defaultCookiesFromBrowser,
@@ -11,7 +10,6 @@ export {
   ytDlpArgs,
 } from "./argv.ts";
 export {
-  BATCHES_DIR,
   type BatchDone,
   BV_ID,
   baselineLists,
@@ -32,7 +30,6 @@ export {
 } from "./batches.ts";
 export { type ExpandOptions, expandPlaylist } from "./playlist.ts";
 export {
-  audioFilesIn,
   bareWithParts,
   COOKIE_HINT,
   type DownloadFailure,
@@ -49,7 +46,6 @@ export {
 export { shlexSplit } from "./shlex.ts";
 export { readUrlList } from "./url_list.ts";
 export {
-  managedYtDlpPath,
   resolveYtDlp,
   UPDATE_INTERVAL_MS,
   type YtDlp,

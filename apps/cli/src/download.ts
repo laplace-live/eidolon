@@ -190,7 +190,7 @@ export async function downloadMain(
       extraArgs,
       ytDlpOptions,
       onProgress,
-      ...(deps.signal ? { signal: deps.signal } : {}),
+      signal: deps.signal,
       print: json ? null : (url) => io.stdout(`${url}\n`),
     });
   }
@@ -240,27 +240,20 @@ export async function downloadMain(
       `Downloading ${urls.length} URL(s) to ${vodsDir}/ ` +
         `(format=${pyRepr(format)}, cookies_from_browser=${pyRepr(cookiesFromBrowser)})`,
     );
-    let report: download.DownloadReport;
-    try {
-      report = await download.downloadUrls(urls, {
-        vodsDir,
-        format,
-        cookiesFromBrowser,
-        cookiesFile,
-        extraArgs,
-        onProgress,
-        output: json ? "events" : "inherit",
-        onOutput: (line) => io.stderr(`${line}\n`),
-        ytDlpOptions,
-        ...(deps.signal ? { signal: deps.signal } : {}),
-      });
-    } catch (error) {
-      if (error instanceof download.YtDlpUnavailableError) {
-        logger.error(error.message);
-        return 1;
-      }
-      throw error;
-    }
+    const report = await download.downloadUrls(urls, {
+      vodsDir,
+      format,
+      cookiesFromBrowser,
+      cookiesFile,
+      extraArgs,
+      onProgress,
+      output: json ? "events" : "inherit",
+      onOutput: (line) => io.stderr(`${line}\n`),
+      ytDlpOptions,
+      signal: deps.signal,
+    });
+    // No yt-dlp ran, so there is no summary to print; the error is logged.
+    if (report.error !== null) return 1;
     human(download.downloadSummaryText(report, vodsDir));
     return report.failedUrls.length > 0 || report.cancelled ? 1 : 0;
   } finally {

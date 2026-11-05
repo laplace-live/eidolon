@@ -9,6 +9,7 @@ import {
   envOptional,
   errorText,
   isPlainObject,
+  ljust,
   logger,
   PyFloat,
   pyError,
@@ -20,6 +21,7 @@ import {
   pyRepr,
   pyStr,
   pyTruthy,
+  rjust,
   setLogLevel,
   sortedPy,
   sourceFolder,
@@ -42,7 +44,7 @@ import {
 } from "@eidolon/retrieval";
 import { ArgparseExit, INT, type ParserSpec, parseArgs } from "./argparse.ts";
 import { type CliIo, printer, reportExit, resolveIo } from "./io.ts";
-import { ljust, mean, median, rjust } from "./py.ts";
+import { mean, median } from "./py.ts";
 
 /** `--queries` when unset: the eval set among the persona's sources in the data home. */
 export function defaultQueriesPath(): string {

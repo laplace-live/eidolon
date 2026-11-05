@@ -5,7 +5,6 @@ import { join } from "node:path";
 import {
   activePersona,
   cpLen,
-  envOptional,
   errorText,
   isPlainObject,
   logger,
@@ -26,25 +25,29 @@ import {
 import { writeStreamCatalog } from "./catalog.ts";
 import * as download from "./download/index.ts";
 import { type Failure, failureOf, sharedFailure } from "./failure.ts";
-import {
-  defaultSkipTypes,
-  indexMetaPath,
-  ingestStreams,
-  nextTranscript,
-  parseSkipTypes,
-  transcriptPaths,
-} from "./ingest_streams.ts";
+import { indexMetaPath } from "./index_build.ts";
+import { defaultSkipTypes, ingestStreams, parseSkipTypes } from "./ingest_streams.ts";
 import { createLimiter } from "./limit.ts";
-import { canonicalPath, embedCachePath, indexWritePath, LockedError } from "./paths.ts";
-import { noProgress, type PlanVideo, type ProgressEvent, type RunOptions } from "./progress.ts";
+import { canonicalPath, embedCachePath, indexWritePath, LockedError, lockedOut } from "./paths.ts";
+import {
+  COST_SOURCES,
+  estimatedCost,
+  noProgress,
+  type PlanVideo,
+  type ProgressEvent,
+  type RunOptions,
+  zeroCounts,
+} from "./progress.ts";
 import * as refine from "./refine/index.ts";
 import {
   AUDIO_EXTENSIONS,
   infoJsonPath,
   loadSidecar,
+  nextTranscript,
   type ParsedStream,
   parseStream,
   readUploadDate,
+  transcriptPaths,
 } from "./streams.ts";
 import * as transcribe from "./transcribe/index.ts";
 
@@ -60,13 +63,6 @@ export interface StageCost {
   readonly usd: number;
   readonly source: CostSource;
 }
-
-const COST_SOURCES: Readonly<Record<refine.CostSource, CostSource>> = {
-  openrouter: "reported",
-  estimate: "estimated",
-  mixed: "estimated",
-  unknown: "unpriced",
-};
 
 /** A summary's cost fields: nothing spent is $0, and one unpriced part leaves the total unpriced. */
 function summaryCost(
@@ -110,8 +106,6 @@ export interface PipelineReport {
   /** The stages asked for, in run order; Python's summary lists these, run or not. */
   readonly stages: readonly PipelineStage[];
   readonly download: download.DownloadReport | null;
-  /** Why the download stage tried no URL: there was no yt-dlp to run. */
-  readonly downloadError: string | null;
   readonly transcribe: TranscribeStageReport | null;
   readonly refine: StageResult | null;
   readonly ingest: StageResult | null;
@@ -165,8 +159,6 @@ export interface PipelineOptions extends RunOptions {
   readonly sliceMaxMin?: number;
   /** 1 or less transcribes one file at a time. */
   readonly transcribeConcurrency?: number;
-  /** SONIOX_API_KEY when omitted. */
-  readonly sonioxApiKey?: string;
   /** ffprobe and ffmpeg: looked up on PATH when undefined, missing when null. */
   readonly ffprobe?: string | null;
   readonly ffmpeg?: string | null;
@@ -177,7 +169,6 @@ export interface PipelineOptions extends RunOptions {
   readonly refineModel?: string | null;
   readonly refineConcurrency?: number | null;
   readonly refineForce?: boolean;
-  readonly identity?: refine.RefineIdentity;
 
   /** `--skip-types` as given; null leaves defaultSkipTypes() in charge. */
   readonly skipTypes?: string | null;
@@ -186,11 +177,6 @@ export interface PipelineOptions extends RunOptions {
   /** Soniox's and the refine provider's fetch. */
   readonly fetch?: typeof fetch;
   readonly now?: () => Date;
-}
-
-/** `shutil.which` on PATH as it is now; Bun.which alone searches the PATH the process started with. */
-function onPath(name: string): string | null {
-  return Bun.which(name, { PATH: process.env.PATH ?? "" });
 }
 
 const RULE = "=".repeat(64);
@@ -211,8 +197,7 @@ export function pipelineSummaryText(report: PipelineReport, vodsDir: string): st
   ];
   if (report.download !== null) {
     const r = report.download;
-    const noYtDlp =
-      report.downloadError === null ? "" : "  ⚠ yt-dlp couldn't run; see the error above";
+    const noYtDlp = r.error === null ? "" : "  ⚠ yt-dlp couldn't run; see the error above";
     lines.push(
       `  download:   ${r.succeededUrls}/${r.requestedUrls} URLs ok, ${r.failedUrls.length} ` +
         `failed, ${r.newFiles.length} new files (${d(r.durationSec)})${noYtDlp}${flag(r)}`,
@@ -263,7 +248,6 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRep
   const dryRun = options.dryRun ?? false;
   // Set inside runStages, which control-flow narrowing can't see.
   let downloadReport = null as download.DownloadReport | null;
-  let downloadError = null as string | null;
   let transcribeReport = null as TranscribeStageReport | null;
   let refineResult = null as StageResult | null;
   let ingestResult = null as StageResult | null;
@@ -282,13 +266,23 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRep
             `(format=${pyRepr(options.format ?? download.DEFAULT_FORMAT)})`,
         );
       } else {
-        const result = await downloadStage(options);
-        downloadReport = result.report;
-        downloadError = result.error;
-        if (downloadError === null) {
-          print(download.downloadSummaryText(result.report, options.vodsDir));
-        }
-        if (halts(downloadError !== null || result.report.failedUrls.length > 0)) return;
+        // Python's RuntimeError for a missing yt-dlp crashed the run; here only the stage fails.
+        const report = await download.downloadUrls(options.urls, {
+          vodsDir: options.vodsDir,
+          format: options.format,
+          cookiesFromBrowser: options.cookiesFromBrowser,
+          cookiesFile: options.cookiesFile,
+          extraArgs: options.extraArgs,
+          output: options.output,
+          onOutput: options.onOutput,
+          ytDlp: options.ytDlp,
+          ytDlpOptions: { command: "laplace-pipeline", ...options.ytDlpOptions },
+          onProgress: options.onProgress,
+          signal,
+        });
+        downloadReport = report;
+        if (report.error === null) print(download.downloadSummaryText(report, options.vodsDir));
+        if (halts(report.error !== null || report.failedUrls.length > 0)) return;
       }
     }
     if (stages.includes("transcribe")) {
@@ -314,7 +308,7 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRep
   const ok =
     !aborted &&
     !cancelled &&
-    downloadError === null &&
+    (downloadReport?.error ?? null) === null &&
     (downloadReport?.failedUrls.length ?? 0) === 0 &&
     (transcribeReport?.failed.length ?? 0) === 0 &&
     (refineResult?.rc ?? 0) === 0 &&
@@ -325,7 +319,6 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRep
   const report: PipelineReport = {
     stages,
     download: downloadReport,
-    downloadError,
     transcribe: transcribeReport,
     refine: refineResult,
     ingest: ingestResult,
@@ -341,8 +334,8 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRep
 
 function pipelineSummaryEvent(report: PipelineReport): SummaryEvent {
   const failures: { item: string; error: string }[] = [];
-  if (report.downloadError !== null) {
-    failures.push({ item: "download", error: report.downloadError });
+  if (report.download !== null && report.download.error !== null) {
+    failures.push({ item: "download", error: report.download.error });
   } else if (report.download !== null && report.download.failedUrls.length > 0) {
     failures.push({ item: "download", error: `${report.download.failedUrls.length} URLs failed` });
   }
@@ -375,38 +368,6 @@ function pipelineSummaryEvent(report: PipelineReport): SummaryEvent {
     ]),
     ...(failures.length > 0 ? { failures } : {}),
   };
-}
-
-async function downloadStage(
-  options: PipelineOptions,
-): Promise<{ report: download.DownloadReport; error: string | null }> {
-  const started = performance.now();
-  try {
-    const report = await download.downloadUrls(options.urls, {
-      vodsDir: options.vodsDir,
-      format: options.format,
-      cookiesFromBrowser: options.cookiesFromBrowser,
-      cookiesFile: options.cookiesFile,
-      extraArgs: options.extraArgs,
-      output: options.output,
-      onOutput: options.onOutput,
-      ytDlp: options.ytDlp,
-      ytDlpOptions: { command: "laplace-pipeline", ...options.ytDlpOptions },
-      onProgress: options.onProgress,
-      signal: options.signal,
-    });
-    return { report, error: null };
-  } catch (error) {
-    // Python's RuntimeError for a missing yt-dlp crashed the run; here only the stage fails.
-    if (!(error instanceof download.YtDlpUnavailableError)) throw error;
-    logger.error(error.message);
-    const report: download.DownloadReport = {
-      ...download.emptyDownloadReport(options.urls.length),
-      durationSec: (performance.now() - started) / 1000,
-      cancelled: options.signal?.aborted === true,
-    };
-    return { report, error: error.message };
-  }
 }
 
 interface TranscribeJob {
@@ -521,23 +482,22 @@ async function transcribeStage(options: PipelineOptions): Promise<TranscribeStag
       continue;
     }
     if (status.state === "done") {
-      logger.info(`${label} ${name}: already transcribed → ${pyPathName(status.mdPath as string)}`);
+      logger.info(`${label} ${name}: already transcribed → ${pyPathName(status.mdPath)}`);
       skipped++;
       emit({ ...item, status: "skipped", message: "already transcribed" });
       continue;
     }
     if (status.state === "no-speech") {
-      const payload = pyPathName(status.payloadPath as string);
+      const payload = pyPathName(status.payloadPath);
       logger.info(`${label} ${name}: already transcribed, no speech → ${payload}`);
       skipped++;
       emit({ ...item, status: "skipped", code: "no-speech", message: "no speech" });
       continue;
     }
-    const date = status.date as string;
+    const { date } = status;
     if (dryRun) {
       logger.info(
-        `${label} [dry-run] would transcribe ${name} (date=${date}) → ` +
-          pyPathName(status.mdPath as string),
+        `${label} [dry-run] would transcribe ${name} (date=${date}) → ${pyPathName(status.mdPath)}`,
       );
       continue;
     }
@@ -545,12 +505,10 @@ async function transcribeStage(options: PipelineOptions): Promise<TranscribeStag
   }
   if (jobs.length === 0) return finish("done");
 
-  const apiKey = options.sonioxApiKey ?? envOptional("SONIOX_API_KEY");
+  const apiKey = transcribe.sonioxApiKey();
   if (!apiKey) {
     // Each of Python's transcribe children failed on it in turn.
-    const message =
-      "SONIOX_API_KEY is not set. Add it to credentials.json or .env (it's the same key the " +
-      "bot's realtime STT uses).";
+    const message = transcribe.MISSING_API_KEY;
     logger.error(message);
     for (const job of jobs) {
       failed.push({ audio: job.audio, error: message });
@@ -584,8 +542,6 @@ async function transcribeStage(options: PipelineOptions): Promise<TranscribeStag
     parallel ? concurrency : 1,
     signal ? AbortSignal.any([signal, halt.signal]) : halt.signal,
   );
-  const ffprobe = options.ffprobe === undefined ? onPath("ffprobe") : options.ffprobe;
-  const ffmpeg = options.ffmpeg === undefined ? onPath("ffmpeg") : options.ffmpeg;
   const contextFile =
     options.contextFile === undefined
       ? transcribe.glossaryPath(activePersona().id)
@@ -610,8 +566,8 @@ async function transcribeStage(options: PipelineOptions): Promise<TranscribeStag
         fetch: options.fetch,
         sleep: options.sleep,
         retryDelaysMs: options.retryDelaysMs,
-        ffprobe,
-        ffmpeg,
+        ffprobe: options.ffprobe,
+        ffmpeg: options.ffmpeg,
         onProgress: emit,
         signal,
       });
@@ -655,20 +611,10 @@ function commandLine(command: string, args: readonly (string | false)[]): string
   return [command, ...args.filter((arg): arg is string => arg !== false)].join(" ");
 }
 
-const ZERO_REFINE = {
-  streams: 0,
-  chunksNew: 0,
-  chunksSkipped: 0,
-  chunksFailed: 0,
-  tokensIn: 0,
-  tokensOut: 0,
-} as const;
-
 /** What refine.py's main did with the pipeline's flags, in this process. */
 async function refineStage(options: PipelineOptions): Promise<StageResult> {
   const emit = options.onProgress ?? noProgress;
-  const print = options.print ?? (() => {});
-  const { signal, streamsDir } = options;
+  const { streamsDir } = options;
   const dryRun = options.dryRun ?? false;
   const started = performance.now();
   // Python forwarded --model only when it was truthy, --concurrency whenever it was given.
@@ -701,77 +647,57 @@ async function refineStage(options: PipelineOptions): Promise<StageResult> {
       type: "summary",
       stage: "refine",
       ok: false,
-      counts: ZERO_REFINE,
+      counts: zeroCounts("refine"),
       durationSec: (performance.now() - started) / 1000,
       failures: [{ item: pyPathName(streamsDir), error: message }],
     });
     return result(1);
   };
 
-  const cancelled = (): StageResult => {
-    emit({ type: "stage", stage: "refine", status: "cancelled" });
-    emit({
-      type: "summary",
-      stage: "refine",
-      ok: false,
-      cancelled: true,
-      counts: ZERO_REFINE,
-      durationSec: (performance.now() - started) / 1000,
-    });
-    return result(1, true);
-  };
-
-  let streams: ParsedStream[];
-  try {
-    streams = await refine.selectStreams([], streamsDir, signal);
-  } catch (error) {
-    if (signal?.aborted) return cancelled();
-    // refine.py crashed on a transcript it couldn't parse.
-    logger.error(`Refine failed: ${errorText(error)}`, error);
-    return fail(errorText(error));
-  }
-  if (streams.length === 0) {
-    logger.warning("No streams to process. Add files under streams/ or pass paths.");
-    emit({ type: "stage", stage: "refine", status: "skipped", total: 0 });
-    emit({ type: "summary", stage: "refine", ok: true, counts: ZERO_REFINE, durationSec: 0 });
-    return result(0);
-  }
-  if (dryRun) {
-    let report: refine.DryRunReport;
-    try {
-      report = await refine.dryRun(streams, model, signal);
-    } catch (error) {
-      if (signal?.aborted) return cancelled();
-      throw error;
-    }
-    print(report.text);
-    return result(0);
-  }
-  const apiKey = refine.refineApiKey();
-  if (apiKey === undefined) {
-    logger.error(refine.MISSING_API_KEY);
-    return fail(refine.MISSING_API_KEY, "missing-credential");
-  }
-  logger.info(
-    `Refining ${streams.length} stream(s) with ${model} ` +
-      `(concurrency=${concurrency}, force=${force ? "True" : "False"})`,
-  );
-  const report = await refine.refineStreams(streams, {
-    client: refine.refineClient(apiKey, { signal, fetch: options.fetch }),
+  const run = await refine.runRefine({
+    paths: [],
+    streamsDir,
     model,
     concurrency,
     force,
-    identity: options.identity ?? activePersona().identity,
-    onProgress: emit,
-    signal,
+    dryRun,
+    print: options.print ?? (() => {}),
+    fetch: options.fetch,
     now: options.now,
+    onProgress: emit,
+    signal: options.signal,
   });
-  print(refine.formatRunSummary(report.results, model, report.durationSec));
-  const spent = report.results.some((r) => r.chunksSucceeded + r.chunksFailed > 0);
-  const cost: StageCost | null = spent
-    ? { usd: report.usage.costUsd, source: COST_SOURCES[report.usage.costSource] }
-    : null;
-  return result(report.ok ? 0 : 1, report.cancelled, cost);
+  switch (run.kind) {
+    case "cancelled":
+      return result(1, true);
+    case "unreadable":
+      // refine.py crashed on a transcript it couldn't parse.
+      logger.error(`Refine failed: ${errorText(run.error)}`, run.error);
+      return fail(errorText(run.error));
+    case "empty":
+      emit({ type: "stage", stage: "refine", status: "skipped", total: 0 });
+      emit({
+        type: "summary",
+        stage: "refine",
+        ok: true,
+        counts: zeroCounts("refine"),
+        durationSec: 0,
+      });
+      return result(0);
+    case "dry-run":
+      return result(0);
+    case "no-key":
+      logger.error(refine.MISSING_API_KEY);
+      return fail(refine.MISSING_API_KEY, "missing-credential");
+    case "done": {
+      const { report } = run;
+      const spent = report.results.some((r) => r.chunksSucceeded + r.chunksFailed > 0);
+      const cost: StageCost | null = spent
+        ? { usd: report.usage.costUsd, source: COST_SOURCES[report.usage.costSource] }
+        : null;
+      return result(report.ok ? 0 : 1, report.cancelled, cost);
+    }
+  }
 }
 
 /** ingest_streams.py, then build_stream_catalog.py when it succeeded and wasn't a dry run. */
@@ -802,22 +728,7 @@ async function ingestStage(options: PipelineOptions): Promise<StageResult> {
       release = options.holdIndex();
     } catch (error) {
       if (!(error instanceof LockedError)) throw error;
-      logger.error(error.message);
-      emit({
-        type: "stage",
-        stage: "ingest-streams",
-        status: "failed",
-        code: "locked",
-        message: error.message,
-      });
-      emit({
-        type: "summary",
-        stage: "ingest-streams",
-        ok: false,
-        counts: { rows: 0, cacheHits: 0, embedded: 0 },
-        durationSec: 0,
-        failures: [{ item: STREAM_CHUNKS_TABLE, error: error.message }],
-      });
+      lockedOut(emit, "ingest-streams", error, zeroCounts("ingest-streams"), STREAM_CHUNKS_TABLE);
       return result(1);
     }
   }
@@ -1113,9 +1024,12 @@ function unchanged(sources: NonNullable<IndexState["sources"]>, path: string): b
 interface Transcript {
   readonly path: string;
   readonly date: string;
-  /** Null when it doesn't parse, which fails the refine and ingest stages. */
-  readonly parsed: ParsedStream | null;
-  readonly sidecar: unknown;
+  /** What the plan reads of it; null when it doesn't parse, which fails refine and ingest. */
+  readonly stream: {
+    readonly streamId: string;
+    readonly sidecarPath: string;
+    readonly work: refine.RefineWork;
+  } | null;
 }
 
 /** readUploadDate, an info.json it can't read counting as no date. */
@@ -1153,8 +1067,9 @@ export async function planPipeline(persona: string, options: PlanOptions = {}): 
   const vods = readVods(vodsDir);
 
   // Transcripts under the audio stem their name carries, read one at a time so a signal lands.
+  // Each keeps only what the plan reads, so the corpus's text and sidecars never pile up.
   const transcripts = new Map<string, Transcript[]>();
-  const sidecars: unknown[] = [];
+  const sidecarStats: unknown[] = [];
   let chars = 0;
   let chunks = 0;
   for (const path of transcriptPaths(streamsDir)) {
@@ -1170,13 +1085,20 @@ export async function planPipeline(persona: string, options: PlanOptions = {}): 
       parsed = null;
       logger.warning(`Can't plan ${pyPathName(path)}: ${errorText(error)}`);
     }
+    let stream: Transcript["stream"] = null;
     if (parsed !== null) {
-      sidecars.push(sidecar);
+      // refineHistory reads nothing of a sidecar but its stats.
+      sidecarStats.push(isPlainObject(sidecar) ? { stats: sidecar.stats } : null);
       for (const chunk of parsed.chunks) chars += cpLen(chunk.text) + cpLen(chunk.heading);
       chunks += parsed.chunks.length;
+      stream = {
+        streamId: parsed.streamId,
+        sidecarPath: parsed.sidecarPath,
+        work: refine.refineWork(parsed, sidecar),
+      };
     }
     const found = transcripts.get(stem) ?? [];
-    found.push({ path, date: name === null ? "" : (name[1] as string), parsed, sidecar });
+    found.push({ path, date: name === null ? "" : (name[1] as string), stream });
     transcripts.set(stem, found);
   }
   const noSpeech = new Set<string>();
@@ -1186,7 +1108,7 @@ export async function planPipeline(persona: string, options: PlanOptions = {}): 
     const [date, stem] = [payload[1] as string, payload[2] as string];
     if (transcribe.transcriptState(streamsDir, date, stem) === "no-speech") noSpeech.add(stem);
   }
-  const history = refine.refineHistory(sidecars, refineModel);
+  const history = refine.refineHistory(sidecarStats, refineModel);
   const charsPerChunk = chunks > 0 ? chars / chunks : CHARS_PER_CHUNK;
   const index = readIndexState(dbPath);
 
@@ -1222,11 +1144,15 @@ export async function planPipeline(persona: string, options: PlanOptions = {}): 
       else if (transcript !== undefined) state = "done";
       else state = noSpeech.has(id) ? "no-speech" : "pending";
     }
-    const parsed = transcript?.parsed ?? null;
+    const stream = transcript?.stream ?? null;
     const work =
-      parsed === null
+      stream === null
         ? null
-        : refine.estimateRefine(parsed, refineModel, { sidecar: transcript?.sidecar, history });
+        : {
+            chunks: stream.work.chunks,
+            done: stream.work.done,
+            ...refine.refineCost(refineModel, stream.work.pending, stream.work.chars, history),
+          };
 
     const bases: PlanVideo["estimate"]["basis"][] = [];
     let transcribeUsd: number | undefined;
@@ -1275,12 +1201,12 @@ export async function planPipeline(persona: string, options: PlanOptions = {}): 
         : "price-table";
 
     let indexed = false;
-    if (parsed !== null && transcript !== undefined) {
+    if (stream !== null && transcript !== undefined) {
       indexed =
         index.sources === null
-          ? index.streamIds.has(parsed.streamId)
+          ? index.streamIds.has(stream.streamId)
           : unchanged(index.sources, transcript.path) &&
-            unchanged(index.sources, parsed.sidecarPath);
+            unchanged(index.sources, stream.sidecarPath);
     }
     const link = url ?? info?.webpageUrl;
     const video: PlanVideo = {
@@ -1330,8 +1256,6 @@ export function planSummaryEvent(plan: Plan, durationSec: number): SummaryEvent 
       unindexed: count((video) => !video.indexed && video.transcribe !== "no-speech"),
     },
     durationSec,
-    ...(unpriced
-      ? { costSource: "unpriced" as const }
-      : { costUsd: usd, costSource: "estimated" as const }),
+    ...estimatedCost(unpriced ? null : usd),
   };
 }

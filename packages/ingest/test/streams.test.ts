@@ -2,7 +2,7 @@
 // laplace_eidolon.tools._streams, for the synthetic transcripts in fixtures/streams; the
 // readUploadDate outcomes by tools/pipeline.py's _read_upload_date.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { PyFloat, pyStr } from "@eidolon/config";
@@ -17,6 +17,7 @@ import {
   splitIntoChunks,
   streamId,
   transcriptPath,
+  transcriptPaths,
 } from "../src/index.ts";
 
 const FIXTURES = join(import.meta.dir, "fixtures");
@@ -59,6 +60,19 @@ describe("iterStreams", () => {
     expect(stream?.mdPath).toBe(`${FIXTURES}/streams/2026-01-02-BV1aaaaaaaaa.md`);
     expect(stream?.sidecarPath).toBe(`${FIXTURES}/streams/2026-01-02-BV1aaaaaaaaa.refined.json`);
     expect(stream?.chunks.every((c) => c.streamId === "2026-01-02-BV1aaaaaaaaa")).toBe(true);
+  });
+
+  test("transcriptPaths lists *.md as pathlib's glob does, by code point; [] for no folder", () => {
+    const dir = join(work, "listing");
+    mkdirSync(dir);
+    for (const name of ["b.md", "A.md", ".h.md", "é.md", "x.MD", "y.txt", "z.refined.json"]) {
+      writeFileSync(join(dir, name), "");
+    }
+    expect(transcriptPaths(`${dir}/`)).toEqual(
+      [".h.md", "A.md", "b.md", "é.md"].map((name) => join(dir, name)),
+    );
+    expect(transcriptPaths(join(work, "missing"))).toEqual([]);
+    expect(transcriptPaths(join(dir, "b.md"))).toEqual([]);
   });
 
   test("a missing folder, or one that isn't a folder, holds no streams", () => {

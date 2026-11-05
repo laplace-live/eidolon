@@ -14,6 +14,7 @@ import {
   splitlines,
 } from "@eidolon/config";
 import type { Subprocess } from "bun";
+import { type Failure, sharedFailure } from "../failure.ts";
 import { terminateOnAbort } from "../limit.ts";
 import {
   type EventCode,
@@ -78,6 +79,8 @@ export interface DownloadReport {
   readonly durationSec: number;
   /** The signal stopped the run before every URL was tried. */
   readonly cancelled: boolean;
+  /** Why no URL was tried: there was no yt-dlp to run. */
+  readonly error: string | null;
 }
 
 export interface DownloadOptions extends RunOptions {
@@ -256,9 +259,8 @@ function removeCreated(
 
 /**
  * `download_urls`: runs yt-dlp on each URL in turn into `opts.vodsDir`, never stopping at a
- * failed one; the report carries each failure's stderr tail. Throws YtDlpUnavailableError when
- * there is no yt-dlp to run. Once `opts.signal` aborts, no URL starts and the running one is
- * stopped.
+ * failed one; the report carries each failure's stderr tail, or the error when there is no yt-dlp
+ * to run. Once `opts.signal` aborts, no URL starts and the running one is stopped.
  */
 export async function downloadUrls(
   urls: readonly string[],
@@ -268,7 +270,7 @@ export async function downloadUrls(
   const { signal, vodsDir } = opts;
   const total = urls.length;
   const failedUrls: DownloadFailure[] = [];
-  const codes: (EventCode | undefined)[] = [];
+  const failures: (Failure | null)[] = [];
   let succeededUrls = 0;
   let cancelled = false;
   let started = performance.now();
@@ -287,15 +289,14 @@ export async function downloadUrls(
             ),
       durationSec: initial === null ? 0 : (performance.now() - started) / 1000,
       cancelled,
+      error: null,
     };
     // A code every failed URL shares is the stage's, as when the cookies are unreadable for all.
-    const [code] = codes;
-    const shared = code !== undefined && codes.every((other) => other === code);
     onProgress({
       type: "stage",
       stage: "download",
       status: cancelled ? "cancelled" : failedUrls.length > 0 ? "failed" : "done",
-      ...(!cancelled && shared ? { code } : {}),
+      ...(cancelled ? {} : sharedFailure(failures)),
     });
     onProgress(downloadSummaryEvent(report));
     return report;
@@ -310,17 +311,21 @@ export async function downloadUrls(
       cancelled = true;
       return finish();
     }
-    if (error instanceof YtDlpUnavailableError) {
-      onProgress({
-        type: "stage",
-        stage: "download",
-        status: "failed",
-        code: error.code,
-        message: error.message,
-      });
-      onProgress({ ...downloadSummaryEvent(emptyDownloadReport(total)), ok: false });
-    }
-    throw error;
+    if (!(error instanceof YtDlpUnavailableError)) throw error;
+    onProgress({
+      type: "stage",
+      stage: "download",
+      status: "failed",
+      code: error.code,
+      message: error.message,
+    });
+    onProgress({ ...downloadSummaryEvent(emptyDownloadReport(total)), ok: false });
+    logger.error(error.message);
+    return {
+      ...emptyDownloadReport(total),
+      durationSec: (performance.now() - started) / 1000,
+      error: error.message,
+    };
   }
 
   mkdirSync(vodsDir, { recursive: true });
@@ -358,7 +363,7 @@ export async function downloadUrls(
       const message = errorText(error);
       logger.error(`  ✗ subprocess error: ${message}`);
       failedUrls.push({ url, error: message });
-      codes.push(undefined);
+      failures.push(null);
       onProgress({ ...item, status: "failed", message });
       continue;
     }
@@ -382,7 +387,7 @@ export async function downloadUrls(
       }
       failedUrls.push({ url, error });
       const code = ytDlpFailureCode(outcome.stderr);
-      codes.push(code);
+      failures.push(code === undefined ? null : { code });
       onProgress({
         ...item,
         status: "failed",
@@ -412,7 +417,7 @@ export async function downloadUrls(
       const removed = removeCreated(vodsDir, created, duplicates);
       logger.error(`  ✗ ${PARTS_UNLISTED}; removed ${removed.join(", ")}`);
       failedUrls.push({ url, error: PARTS_UNLISTED });
-      codes.push(undefined);
+      failures.push(null);
       const kept = outputs().filter((id) => !duplicates.includes(id));
       onProgress({ ...item, status: "failed", message: PARTS_UNLISTED, outputs: kept });
       continue;
@@ -432,6 +437,7 @@ export function emptyDownloadReport(total: number): DownloadReport {
     newFiles: [],
     durationSec: 0,
     cancelled: false,
+    error: null,
   };
 }
 

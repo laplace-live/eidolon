@@ -39,7 +39,7 @@ export const consoleSink: LogSink = (record) => {
 };
 
 /** Every level to stderr, as loguru's default sink writes. */
-export const stderrSink: LogSink = (record) => {
+const stderrSink: LogSink = (record) => {
   console.error(formatLogRecord(record));
 };
 

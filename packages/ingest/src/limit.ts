@@ -1,5 +1,5 @@
 // Concurrency and cancellation for the offline chain: a FIFO limiter (asyncio.Semaphore's order),
-// the CLI's signal handling, and stopping child processes.
+// the CLI's signal handling, and finding and stopping child processes.
 import type { Subprocess } from "bun";
 
 /** Runs `task` once a slot frees, in the order tasks were queued. */
@@ -100,6 +100,14 @@ export async function runWithSignals(
     clearTimeout(deadline);
     for (const [name, listener] of listeners) host.off(name, listener);
   }
+}
+
+/**
+ * `shutil.which`: `name` on PATH as it is now, or null. Bun.which alone searches the PATH the
+ * process started with, before the .env applied.
+ */
+export function which(name: string): string | null {
+  return Bun.which(name, { PATH: process.env.PATH ?? "" });
 }
 
 /** How long a child gets to exit after SIGTERM before it gets SIGKILL. */

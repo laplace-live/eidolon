@@ -12,6 +12,8 @@ import {
   pyIter,
   pyJsonDumps,
   pyPath,
+  pyPathParent,
+  pyPathRelativeTo,
   pyStr,
   pyTruthy,
   wallClockMicros,
@@ -28,15 +30,15 @@ import {
   pyInt,
 } from "@eidolon/retrieval";
 import { failureOf } from "./failure.ts";
-import {
-  nextTranscript,
-  pyParent,
-  pyRelativeTo,
-  transcriptPaths,
-  writeTextAtomic,
-} from "./ingest_streams.ts";
+import { writeTextAtomic } from "./paths.ts";
 import { noProgress, type ProgressEvent, type RunOptions } from "./progress.ts";
-import { loadSidecar, type ParsedStream, parseStream } from "./streams.ts";
+import {
+  loadSidecar,
+  nextTranscript,
+  type ParsedStream,
+  parseStream,
+  transcriptPaths,
+} from "./streams.ts";
 
 const STAGE = "catalog";
 const BV = new PyPattern("BV[A-Za-z0-9]+");
@@ -58,7 +60,7 @@ function partNumber(streamId: string): number {
 }
 
 /** `_part_order`: by part number, so `_p10` follows `_p2`, then by id. */
-function byPart(a: ParsedStream, b: ParsedStream): number {
+function byPart(a: { readonly streamId: string }, b: { readonly streamId: string }): number {
   return partNumber(a.streamId) - partNumber(b.streamId) || pyCompare(a.streamId, b.streamId);
 }
 
@@ -88,10 +90,17 @@ function scenesOf(parsed: ParsedStream): BroadcastScene[] {
   });
 }
 
+/** One transcript of a broadcast; its text is let go once its scenes are read. */
+interface Part {
+  readonly streamId: string;
+  readonly mdPath: string;
+  readonly scenes: BroadcastScene[];
+}
+
 interface Group {
   readonly streamDate: string;
   readonly id: string;
-  readonly parts: { readonly parsed: ParsedStream; readonly scenes: BroadcastScene[] }[];
+  readonly parts: Part[];
 }
 
 export interface Catalog {
@@ -122,24 +131,28 @@ async function groupBroadcasts(
       group = { streamDate, id, parts: [] };
       groups.set(key, group);
     }
-    group.parts.push({ parsed, scenes: scenesOf(parsed) });
+    group.parts.push({
+      streamId: parsed.streamId,
+      mdPath: parsed.mdPath,
+      scenes: scenesOf(parsed),
+    });
     emit({ type: "progress", stage: STAGE, done: i + 1, total: paths.length, unit: "files" });
   }
 
-  const parent = pyParent(streamsDir);
+  const parent = pyPathParent(streamsDir);
   const broadcasts = [...groups.values()]
     .sort((a, b) => pyCompare(b.streamDate, a.streamDate) || pyCompare(b.id, a.id))
     .map(({ streamDate, id, parts }): Broadcast => {
-      const ordered = [...parts].sort((a, b) => byPart(a.parsed, b.parsed));
+      const ordered = [...parts].sort(byPart);
       const scenes = ordered.flatMap((part) => part.scenes);
       return {
         id,
         streamDate,
-        streamIds: ordered.map((part) => part.parsed.streamId),
+        streamIds: ordered.map((part) => part.streamId),
         overview: compactOverview(scenes, OVERVIEW_MAX_CHARS),
         sourceChunkIds: scenes.map((scene) => scene.id),
         scenes,
-        sourcePaths: ordered.map((part) => pyRelativeTo(part.parsed.mdPath, parent)),
+        sourcePaths: ordered.map((part) => pyPathRelativeTo(part.mdPath, parent)),
         unrefinedCount: scenes.filter((scene) => !scene.refined).length,
         overviewCompressed: true,
       };
@@ -261,7 +274,7 @@ export async function writeStreamCatalog(
     const catalog = await groupBroadcasts(options.streamsDir, paths, { onProgress: emit, signal });
     signal?.throwIfAborted();
     const text = catalogJson(catalog, pyIsoformatUtc((options.clock ?? wallClockMicros)()));
-    mkdirSync(pyParent(path), { recursive: true });
+    mkdirSync(pyPathParent(path), { recursive: true });
     writeTextAtomic(path, text);
     const parts = catalog.broadcasts.reduce((sum, b) => sum + b.streamIds.length, 0);
     logger.info(

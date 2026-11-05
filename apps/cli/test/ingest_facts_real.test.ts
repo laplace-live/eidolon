@@ -18,6 +18,10 @@ import { join } from "node:path";
 import { installSettings, resetSettings } from "@eidolon/config";
 import { canonicalPath } from "@eidolon/ingest";
 import { type LanceTable, openTable, resetEmbeddingClient } from "@eidolon/retrieval";
+import {
+  f32Bytes as bytes,
+  tableIndices as indices,
+} from "../../../packages/retrieval/test/helpers.ts";
 import { ingestFactsMain } from "../src/ingest_facts.ts";
 import { captureIo, captureLogs } from "./helpers.ts";
 
@@ -90,19 +94,6 @@ async function load(table: LanceTable) {
   });
   return { schema, metadata: [...data.schema.metadata], columns, vectors, rows: data.numRows };
 }
-
-async function indices(table: LanceTable) {
-  return (await table.listIndices()).map((i) => ({
-    name: i.name,
-    indexType: i.indexType,
-    columns: i.columns,
-    numIndexedRows: i.numIndexedRows,
-    numUnindexedRows: i.numUnindexedRows,
-    indexDetails: i.indexDetails,
-  }));
-}
-
-const bytes = (v: Float32Array) => Buffer.from(v.buffer, v.byteOffset, v.byteLength);
 
 test.skipIf(!present && !REQUIRED)(
   "laplace-ingest-facts rebuilds the real persona_facts exactly, every vector from the cache",

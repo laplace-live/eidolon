@@ -30,13 +30,11 @@ function decodeVector(blob: Uint8Array): Float32Array {
 
 /** The SQLite file of embedding vectors every persona's ingests share. */
 export class EmbedCache {
-  readonly path: string;
   readonly #db: Database;
 
   /** Opens the cache at `path`, creating the file and its folder when missing. */
   constructor(path: string) {
     mkdirSync(dirname(path), { recursive: true });
-    this.path = path;
     this.#db = new Database(path, { create: true });
     // Python's sqlite3 waited up to 5 s for another writer's lock; bun:sqlite fails at once.
     this.#db.exec("PRAGMA busy_timeout = 5000");

@@ -7,12 +7,14 @@ import {
   indexLockKey,
   ingestFacts,
   LockedError,
+  lockedOut,
   ndjsonSink,
   noProgress,
+  zeroCounts,
 } from "@eidolon/ingest";
 import { type EmbeddingClient, PERSONA_FACTS_TABLE } from "@eidolon/retrieval";
 import { ArgparseExit, commandPersona, INT, type ParserSpec, parseArgs } from "./argparse.ts";
-import { lockedOut, writerDbPath } from "./ingest_streams.ts";
+import { writerDbPath } from "./ingest_streams.ts";
 import { type CommandDeps, reportExit, resolveIo } from "./io.ts";
 
 const COMMAND = "laplace-ingest-facts";
@@ -155,8 +157,8 @@ export async function ingestFactsMain(
       release = acquireLock(indexLockKey(dbPath), COMMAND);
     } catch (error) {
       if (!(error instanceof LockedError)) throw error;
-      const counts: ingestFacts.FactsCounts = { files: 0, rows: 0, cacheHits: 0, embedded: 0 };
-      return lockedOut(emit, "ingest-facts", error, counts, args.table);
+      lockedOut(emit, "ingest-facts", error, zeroCounts("ingest-facts"), args.table);
+      return 1;
     }
   }
   try {
@@ -171,9 +173,9 @@ export async function ingestFactsMain(
       cachePath: args.cachePath,
       clearCache: args.clearCache,
       onProgress: emit,
-      ...(deps.signal ? { signal: deps.signal } : {}),
-      ...(deps.client ? { client: deps.client } : {}),
-      ...(deps.now ? { now: deps.now } : {}),
+      signal: deps.signal,
+      client: deps.client,
+      now: deps.now,
     });
     return report.ok ? 0 : 1;
   } finally {

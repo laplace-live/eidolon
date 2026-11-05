@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { consoleSink, logger } from "@eidolon/config";
 import { DEFAULT_EMBED_MODEL, type LanceTable, openTable } from "@eidolon/retrieval";
+import { f32Bytes as bytes, tableIndices as indices } from "../../retrieval/test/helpers.ts";
 import { catalog, ingestStreams } from "../src/index.ts";
 import { maskBuiltAt } from "./ingest_streams_golden.ts";
 
@@ -63,19 +64,6 @@ async function load(table: LanceTable) {
   const fields = data.schema.fields.map((f) => [f.name, String(f.type), f.nullable]);
   return { fields, rows, vectors };
 }
-
-async function indices(table: LanceTable) {
-  return (await table.listIndices()).map((i) => ({
-    name: i.name,
-    indexType: i.indexType,
-    columns: i.columns,
-    numIndexedRows: i.numIndexedRows,
-    numUnindexedRows: i.numUnindexedRows,
-    indexDetails: i.indexDetails,
-  }));
-}
-
-const bytes = (v: Float32Array) => Buffer.from(v.buffer, v.byteOffset, v.byteLength);
 
 test.skipIf((real === null || !haveStreams || !existsSync(CACHE)) && !REQUIRED)(
   "rebuilds the real stream_chunks from the real transcripts: every row, column, vector and index",

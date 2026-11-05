@@ -8,8 +8,6 @@ import {
   openSync,
   readdirSync,
   readFileSync,
-  renameSync,
-  writeFileSync,
   writeSync,
 } from "node:fs";
 import { constants } from "node:os";
@@ -23,6 +21,7 @@ import {
   sortedPy,
   splitlines,
 } from "@eidolon/config";
+import { writeTextAtomic } from "../paths.ts";
 
 /** A Bilibili video id, as the archive and its URLs carry it. */
 export const BV_ID = /^BV[0-9A-Za-z]{10}$/;
@@ -246,10 +245,7 @@ export interface BatchDone {
 
 /** Marks `batchPath` done, atomically. */
 export function writeBatchDone(batchPath: string, done: BatchDone): void {
-  const path = batchDonePath(batchPath);
-  const tmp = `${path}.${process.pid}.tmp`;
-  writeFileSync(tmp, `${JSON.stringify(done, null, 2)}\n`);
-  renameSync(tmp, path);
+  writeTextAtomic(batchDonePath(batchPath), `${JSON.stringify(done, null, 2)}\n`);
 }
 
 const pad = (n: number, width = 2): string => String(n).padStart(width, "0");

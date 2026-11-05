@@ -52,8 +52,8 @@ export async function expandPlaylist(
     opts.ytDlp ??
     (await resolveYtDlp({
       ...opts.ytDlpOptions,
-      ...(opts.onProgress ? { onProgress: opts.onProgress } : {}),
-      ...(opts.signal ? { signal: opts.signal } : {}),
+      onProgress: opts.onProgress,
+      signal: opts.signal,
     }));
   const browser =
     opts.cookiesFromBrowser === undefined ? defaultCookiesFromBrowser() : opts.cookiesFromBrowser;

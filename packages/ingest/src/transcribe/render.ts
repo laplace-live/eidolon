@@ -1,7 +1,16 @@
 // Soniox tokens become Whisper-length segments, segments become fixed-window scenes, and scenes
 // become the transcript's H2 sections, as tools/transcribe.py renders them. The .soniox.json keeps
 // every token, so a transcript re-renders from it without paying Soniox again.
-import { cpLen, cpSlice, isPlainObject, isPySpace, PY_SPACE_CLASS, PyFloat } from "@eidolon/config";
+import {
+  cpLen,
+  cpSlice,
+  isPlainObject,
+  isPySpace,
+  PY_SPACE_CLASS,
+  pyNumber,
+  pyRstrip,
+  pyStrip,
+} from "@eidolon/config";
 
 /** A stretch of speech; `start` and `end` in seconds. */
 export interface Segment {
@@ -31,43 +40,12 @@ const SENTENCE_END_CHARS = ".!?。！？";
 const SPACE_RUN = new RegExp(`[${PY_SPACE_CLASS}]+`, "g");
 const SENTENCE_BREAK = new RegExp(`(?<=[${SENTENCE_END_CHARS}])[${PY_SPACE_CLASS}]`);
 
-// Every Python whitespace character is one BMP code unit, so scanning code units is exact.
-function isSpaceUnit(text: string, i: number): boolean {
-  return isPySpace(text[i] as string);
-}
-
-/** `str.strip()`. */
-function strip(text: string): string {
-  let start = 0;
-  let end = text.length;
-  while (start < end && isSpaceUnit(text, start)) start++;
-  while (end > start && isSpaceUnit(text, end - 1)) end--;
-  return start === 0 && end === text.length ? text : text.slice(start, end);
-}
-
-/** `str.rstrip(chars)`; without `chars`, Python's whitespace. */
-function rstrip(text: string, chars?: string): string {
-  let end = text.length;
-  while (
-    end > 0 &&
-    (chars === undefined ? isSpaceUnit(text, end - 1) : chars.includes(text[end - 1] as string))
-  ) {
-    end--;
-  }
-  return end === text.length ? text : text.slice(0, end);
-}
-
 /** `re.search(r"[.!?。！？]\s*$", text)`. */
 function endsSentence(text: string): boolean {
+  // Every Python whitespace character is one BMP code unit, so scanning code units is exact.
   let i = text.length;
-  while (i > 0 && isSpaceUnit(text, i - 1)) i--;
+  while (i > 0 && isPySpace(text[i - 1] as string)) i--;
   return i > 0 && SENTENCE_END.has(text[i - 1] as string);
-}
-
-/** A millisecond field: an int, or null when Soniox gave none. */
-export function msField(value: unknown): number | null {
-  if (typeof value === "number") return value;
-  return value instanceof PyFloat ? value.value : null;
 }
 
 /**
@@ -84,7 +62,7 @@ export function tokensToSegments(tokens: Iterable<SonioxToken>, shiftMs = 0): Se
   let open = false;
   const flush = (): void => {
     if (!open || curStart === null) return;
-    const text = strip(joined);
+    const text = pyStrip(joined);
     if (text) segments.push({ start: curStart, end: curEnd, text });
     curStart = null;
     curEnd = 0;
@@ -92,8 +70,8 @@ export function tokensToSegments(tokens: Iterable<SonioxToken>, shiftMs = 0): Se
     open = false;
   };
   for (const token of tokens) {
-    const startMs = msField(token.start_ms);
-    const endMs = msField(token.end_ms);
+    const startMs = pyNumber(token.start_ms);
+    const endMs = pyNumber(token.end_ms);
     if (startMs === null || endMs === null) continue;
     const start = (startMs - shiftMs) / 1000;
     const end = (endMs - shiftMs) / 1000;
@@ -134,15 +112,15 @@ export function groupSegmentsIntoScenes(
   for (const seg of segments) {
     if (currentStart === null) currentStart = pyFloorDiv(seg.start, windowSeconds) * windowSeconds;
     if (seg.start - currentStart >= windowSeconds) {
-      scenes.push({ start: currentStart, end: currentEnd, text: strip(parts.join(" ")) });
+      scenes.push({ start: currentStart, end: currentEnd, text: pyStrip(parts.join(" ")) });
       currentStart = pyFloorDiv(seg.start, windowSeconds) * windowSeconds;
       parts = [];
     }
-    parts.push(strip(seg.text));
+    parts.push(pyStrip(seg.text));
     currentEnd = seg.end;
   }
   if (parts.length > 0 && currentStart !== null) {
-    scenes.push({ start: currentStart, end: currentEnd, text: strip(parts.join(" ")) });
+    scenes.push({ start: currentStart, end: currentEnd, text: pyStrip(parts.join(" ")) });
   }
   return scenes;
 }
@@ -175,11 +153,14 @@ export function formatDur(seconds: number): string {
 
 /** `_heading_hint`: the scene's first sentence, at most `maxChars` code points. */
 export function headingHint(text: string, maxChars = 60): string {
-  const collapsed = strip(text.replace(SPACE_RUN, " "));
+  const collapsed = pyStrip(text.replace(SPACE_RUN, " "));
   if (!collapsed) return "(no transcript)";
   const brk = SENTENCE_BREAK.exec(collapsed);
-  let sentence = rstrip(strip(brk ? collapsed.slice(0, brk.index) : collapsed), SENTENCE_END_CHARS);
-  if (cpLen(sentence) > maxChars) sentence = `${rstrip(cpSlice(sentence, 0, maxChars - 1))}…`;
+  let sentence = pyRstrip(
+    pyStrip(brk ? collapsed.slice(0, brk.index) : collapsed),
+    SENTENCE_END_CHARS,
+  );
+  if (cpLen(sentence) > maxChars) sentence = `${pyRstrip(cpSlice(sentence, 0, maxChars - 1))}…`;
   return sentence;
 }
 
@@ -206,7 +187,7 @@ export function renderMarkdown(meta: TranscriptMeta, scenes: readonly Scene[]): 
   for (const scene of scenes) {
     lines.push(`## ${shortTs(scene.start)} — ${headingHint(scene.text)}`, "", scene.text, "");
   }
-  return `${rstrip(lines.join("\n"))}\n`;
+  return `${pyRstrip(lines.join("\n"))}\n`;
 }
 
 /** One Soniox job's tokens, on the job's own timeline; `offsetSec` places it in the source. */
@@ -256,7 +237,7 @@ function field(value: unknown, key: string): unknown {
 }
 
 function numberField(value: unknown, key: string): number | null {
-  return msField(field(value, key));
+  return pyNumber(field(value, key));
 }
 
 function tokenList(payload: unknown): SonioxToken[] {
@@ -283,7 +264,7 @@ export function payloadParts(payload: unknown): TokenPart[] {
   const buckets: SonioxToken[][] = offsets.map(() => []);
   let k = 0;
   for (const token of tokens) {
-    const start = msField(token.start_ms);
+    const start = pyNumber(token.start_ms);
     while (start !== null && k + 1 < offsets.length && start >= (offsetsMs[k + 1] as number)) k++;
     (buckets[k] as SonioxToken[]).push(token);
   }

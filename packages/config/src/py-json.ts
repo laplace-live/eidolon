@@ -2,7 +2,7 @@
 // messages and code-point positions included, since they reach logs and records. JSON.parse also
 // rejects NaN and Infinity, and has no non-strict mode for raw control characters inside strings,
 // which mem0 parses with (`strict=False`).
-import { PyFloat, pyError } from "./py.ts";
+import { loadsPy, PyFloat, pyError } from "./py.ts";
 
 export interface PyJsonOptions {
   /**
@@ -255,6 +255,19 @@ export function pyJsonLoads(text: string, options: PyJsonOptions = {}): unknown 
   } catch (error) {
     if (error instanceof StopIteration) throw decodeError("Expecting value", points, error.index);
     throw error;
+  }
+}
+
+/**
+ * `json.loads(text)` as Python's default decoder reads it, floats as PyFloat: JSON.parse takes the
+ * common case, and what it refuses goes to the exact port, which also accepts NaN and Infinity and
+ * raises Python's errors.
+ */
+export function pyJsonLoadsFast(text: string): unknown {
+  try {
+    return loadsPy(text);
+  } catch {
+    return pyJsonLoads(text, { strict: true, floats: true });
   }
 }
 

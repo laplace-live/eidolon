@@ -20,9 +20,9 @@ import {
   type ProgressSink,
   pipeline,
   refine,
-  SUMMARY_COUNTS,
   sourcesLockKey,
   transcribe,
+  zeroCounts,
 } from "@eidolon/ingest";
 import type { EmbeddingClient } from "@eidolon/retrieval";
 import {
@@ -39,6 +39,7 @@ import {
 } from "./argparse.ts";
 import { writerDbPath } from "./ingest_streams.ts";
 import { type CommandDeps, reportExit, resolveIo } from "./io.ts";
+import { CONCURRENCY, checkConcurrency } from "./refine.ts";
 
 const PROG = "laplace-pipeline";
 
@@ -80,16 +81,6 @@ export const STAGES: ArgType<pipeline.PipelineStage[]> = {
       );
     }
     return pipeline.ALL_STAGES.filter((stage) => requested.has(stage));
-  },
-};
-
-// Python's asyncio.Semaphore(0) hangs refine, and a negative one crashes every stream.
-const CONCURRENCY: ArgType<number> = {
-  name: "int",
-  parse(text: string): number {
-    const value = INT.parse(text);
-    if (value < 1) throw new ArgumentTypeError(`must be at least 1, not ${value}`);
-    return value;
   },
 };
 
@@ -266,10 +257,7 @@ export function parsePipelineArgs(argv: readonly string[]): PipelineArgs {
   }
   const stages = ns.stages as pipeline.PipelineStage[];
   if (stages.includes("refine") && ns.refine_concurrency === null) {
-    const concurrency = refine.refineConcurrency();
-    if (concurrency < 1) {
-      throw parserError(spec, `REFINE_CONCURRENCY must be at least 1, not ${concurrency}`);
-    }
+    checkConcurrency(spec, refine.refineConcurrency());
   }
   const dbFlag = ns.db_path as string | null;
   // A dry run writes nothing, so it needs no --db-path beside LANCEDB_PATH; its plan reads the
@@ -302,9 +290,6 @@ function splitExtraArgs(raw: string): string[] {
   return text ? download.shlexSplit(text) : [];
 }
 
-/** A plan's counts before anything was counted. */
-const NO_PLAN = Object.fromEntries(SUMMARY_COUNTS.plan.map((key) => [key, 0]));
-
 /** A run that couldn't start: why, as a failed setup stage, then the run's or the plan's summary. */
 function refused(
   emit: ProgressSink,
@@ -320,7 +305,8 @@ function refused(
     type: "summary",
     stage: summary,
     ok: false,
-    counts: summary === "plan" ? NO_PLAN : { stages: stages.length, failed: 1, aborted: 0 },
+    counts:
+      summary === "plan" ? zeroCounts("plan") : { stages: stages.length, failed: 1, aborted: 0 },
     durationSec: 0,
     failures: [{ item, error: message }],
   });
@@ -400,7 +386,7 @@ export async function pipelineMain(
         stage: "plan",
         ok: false,
         cancelled: true,
-        counts: NO_PLAN,
+        counts: zeroCounts("plan"),
         durationSec: (performance.now() - started) / 1000,
       });
       return 1;

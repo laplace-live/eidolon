@@ -500,17 +500,10 @@ describe("skip rules", () => {
     writeFileSync(join(vods, "b.m4a"), "");
     writeFileSync(join(vods, "b.info.json"), JSON.stringify({ upload_date: "20250724" }));
     writeFileSync(join(vods, "a.m4a"), "");
-    expect(audioStatus(join(vods, "a.m4a"), streams)).toEqual({
-      state: "no-date",
-      date: null,
-      streamId: null,
-      mdPath: null,
-      payloadPath: null,
-    });
+    expect(audioStatus(join(vods, "a.m4a"), streams)).toEqual({ state: "no-date" });
     expect(audioStatus(join(vods, "b.m4a"), streams)).toEqual({
       state: "pending",
       date: "2025-07-24",
-      streamId: "2025-07-24-b",
       mdPath: join(streams, "2025-07-24-b.md"),
       payloadPath: join(streams, "2025-07-24-b.soniox.json"),
     });

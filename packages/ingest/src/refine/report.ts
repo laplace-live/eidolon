@@ -3,34 +3,23 @@ import {
   cpLen,
   cpSlice,
   isPlainObject,
-  PyFloat,
+  ljust,
   pyFixed,
+  pyNumber,
   pyPathName,
   pyRepr,
+  rjust,
+  thousands,
 } from "@eidolon/config";
-import { nextTranscript } from "../ingest_streams.ts";
-import { loadSidecar, type ParsedStream, type StreamChunk } from "../streams.ts";
+import { loadSidecar, nextTranscript, type ParsedStream, type StreamChunk } from "../streams.ts";
 import type { StreamResult } from "./run.ts";
 import { fmtCost, PRICING_USD_PER_1M, Usage } from "./usage.ts";
 import { isV2Refinement } from "./validate.ts";
 
-/** f-string `{s:<width}`, by code point. */
-function ljust(text: string, width: number): string {
-  return text + " ".repeat(Math.max(0, width - cpLen(text)));
-}
-
-/** f-string `{s:>width}`, by code point. */
-function rjust(text: string | number, width: number): string {
-  const s = String(text);
-  return " ".repeat(Math.max(0, width - cpLen(s))) + s;
-}
-
-/** f-string `{n:,}` for an int. */
-function thousands(n: number): string {
-  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-}
-
 const lines = (rows: readonly string[]): string => rows.map((row) => `${row}\n`).join("");
+
+const tokenPair = (usage: Usage): string =>
+  `${rjust(String(usage.promptTokens), 6)}/${rjust(String(usage.completionTokens), 6)}`;
 
 /** `print_run_summary`: the per-file table and the run's totals. */
 export function formatRunSummary(
@@ -57,20 +46,21 @@ export function formatRunSummary(
     failed += result.chunksFailed;
     skipped += result.chunksSkipped;
     const { usage } = result;
-    const tokens = `${rjust(usage.promptTokens, 6)}/${rjust(usage.completionTokens, 6)}`;
+    const tokens = tokenPair(usage);
     const cost = usage.costUsd ? `$${pyFixed(usage.costUsd, 4)}` : "—";
     let name = pyPathName(result.parsed.mdPath);
     if (cpLen(name) > 40) name = `${cpSlice(name, 0, 37)}...`;
     rows.push(
-      `${ljust(name, 40)} ${rjust(result.chunksSucceeded, 5)} ${rjust(result.chunksSkipped, 5)} ` +
-        `${rjust(result.chunksFailed, 5)} ${rjust(tokens, 14)} ${rjust(cost, 10)}`,
+      `${ljust(name, 40)} ${rjust(String(result.chunksSucceeded), 5)} ` +
+        `${rjust(String(result.chunksSkipped), 5)} ${rjust(String(result.chunksFailed), 5)} ` +
+        `${rjust(tokens, 14)} ${rjust(cost, 10)}`,
     );
   }
-  const tokens = `${rjust(overall.promptTokens, 6)}/${rjust(overall.completionTokens, 6)}`;
+  const tokens = tokenPair(overall);
   rows.push(
     "-".repeat(72),
-    `${ljust("TOTAL", 40)} ${rjust(succeeded, 5)} ${rjust(skipped, 5)} ${rjust(failed, 5)} ` +
-      `${rjust(tokens, 14)} ${rjust(fmtCost(overall), 10)}`,
+    `${ljust("TOTAL", 40)} ${rjust(String(succeeded), 5)} ${rjust(String(skipped), 5)} ` +
+      `${rjust(String(failed), 5)} ${rjust(tokens, 14)} ${rjust(fmtCost(overall), 10)}`,
     "=".repeat(72),
     `Model:    ${model}`,
     `Duration: ${pyFixed(totalDuration, 1)}s`,
@@ -236,19 +226,14 @@ export function refineHistory(sidecars: Iterable<unknown>, model: string): Refin
   for (const sidecar of sidecars) {
     const stats = isPlainObject(sidecar) ? sidecar.stats : undefined;
     if (!isPlainObject(stats) || stats.model !== model || stats.cost_source === "unknown") continue;
-    const usd = numberOf(stats.cost_usd);
-    const refined = numberOf(stats.chunks_refined);
+    const usd = pyNumber(stats.cost_usd);
+    const refined = pyNumber(stats.chunks_refined);
     if (usd === null || refined === null || refined <= 0) continue;
     cost += usd;
     chunks += refined;
     count++;
   }
   return chunks > 0 ? { model, usdPerChunk: cost / chunks, sidecars: count, chunks } : null;
-}
-
-function numberOf(value: unknown): number | null {
-  if (value instanceof PyFloat) return value.value;
-  return typeof value === "number" ? value : null;
 }
 
 /** What refining some chunks would cost, and on what basis. */
@@ -281,6 +266,28 @@ export function refineCost(
     : { ...guess, costUsd: price, basis: "price-table" };
 }
 
+/** What a run would refine of one stream. */
+export interface RefineWork {
+  /** Every chunk of the transcript. */
+  readonly chunks: number;
+  /** Chunks with a v2 record; the dry run counts the rest as new. */
+  readonly done: number;
+  readonly pending: number;
+  /** The pending chunks' characters, text and heading. */
+  readonly chars: number;
+}
+
+/** The chunks of `parsed` a run would refine, given its loaded sidecar. */
+export function refineWork(parsed: ParsedStream, sidecar: unknown): RefineWork {
+  const pending = pendingChunks(parsed, sidecar);
+  return {
+    chunks: parsed.chunks.length,
+    done: parsed.chunks.length - pending.length,
+    pending: pending.length,
+    chars: charsOf(pending),
+  };
+}
+
 /** One stream's refine work for the pipeline's plan. */
 export interface RefineEstimate extends RefineCost {
   /** Every chunk of the transcript. */
@@ -296,10 +303,10 @@ export function estimateRefine(
   options: { readonly sidecar?: unknown; readonly history?: RefineHistory | null } = {},
 ): RefineEstimate {
   const sidecar = options.sidecar === undefined ? loadSidecar(parsed) : options.sidecar;
-  const pending = pendingChunks(parsed, sidecar);
+  const work = refineWork(parsed, sidecar);
   return {
-    chunks: parsed.chunks.length,
-    done: parsed.chunks.length - pending.length,
-    ...refineCost(model, pending.length, charsOf(pending), options.history ?? null),
+    chunks: work.chunks,
+    done: work.done,
+    ...refineCost(model, work.pending, work.chars, options.history ?? null),
   };
 }

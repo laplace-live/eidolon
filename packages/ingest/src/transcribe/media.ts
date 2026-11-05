@@ -3,25 +3,22 @@
 import { existsSync, readFileSync } from "node:fs";
 import {
   loadsPy,
-  PyFloat,
   pyFixed,
   pyGet,
+  pyNumber,
   pyParseFloat,
   pyPathName,
   pyStrip,
 } from "@eidolon/config";
-import { terminateOnAbort } from "../limit.ts";
+import { terminateOnAbort, which } from "../limit.ts";
 import { infoJsonPath } from "../streams.ts";
 import { TranscribeError } from "./errors.ts";
 
 const PROBE_TIMEOUT_MS = 30_000;
 
-/**
- * `binary` as given, else `name` found on PATH as it is now (Bun.which alone searches the PATH the
- * process started with, before the .env applied); null when there is none.
- */
+/** `binary` as given, else `name` found on PATH; null when there is none. */
 export function locateBinary(binary: string | null | undefined, name: string): string | null {
-  return binary === undefined ? Bun.which(name, { PATH: process.env.PATH ?? "" }) : binary;
+  return binary === undefined ? which(name) : binary;
 }
 
 /**
@@ -71,9 +68,7 @@ export function infoJsonDurationSec(audioPath: string): number | null {
   const path = infoJsonPath(audioPath);
   if (!existsSync(path)) return null;
   try {
-    const duration = pyGet(loadsPy(readFileSync(path, "utf8")), "duration");
-    if (duration instanceof PyFloat) return duration.value;
-    return typeof duration === "number" ? duration : null;
+    return pyNumber(pyGet(loadsPy(readFileSync(path, "utf8")), "duration"));
   } catch {
     return null;
   }

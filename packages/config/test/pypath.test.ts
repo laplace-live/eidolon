@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   pyPath,
   pyPathName,
+  pyPathParent,
+  pyPathRelativeTo,
   pyPathStem,
   pyPathSuffix,
   pyPathWithName,
@@ -84,4 +86,15 @@ test("with_suffix swaps the last suffix, as Python 3.13 does", () => {
   expect(() => pyPathWithSuffix("a.md", "x")).toThrow("Invalid suffix 'x'");
   expect(() => pyPathWithSuffix("a.md", ".")).toThrow("Invalid suffix '.'");
   expect(() => pyPathWithSuffix(".", ".x")).toThrow("has an empty name");
+});
+
+test("parent and relative_to read paths as PurePosixPath does", () => {
+  expect(
+    ["streams", "/srv/streams", "/x", "/", "//x", ".", "..", "a/..", "a/b/"].map(pyPathParent),
+  ).toEqual([".", "/srv", "/", "/", "//", ".", ".", "a", "a"]);
+  expect(pyPathRelativeTo("streams/x.md", ".")).toBe("streams/x.md");
+  expect(pyPathRelativeTo("/srv/streams/x.md", "/srv")).toBe("streams/x.md");
+  expect(pyPathRelativeTo("/x.md", "/")).toBe("x.md");
+  expect(pyPathRelativeTo("../x.md", ".")).toBe("../x.md");
+  expect(() => pyPathRelativeTo("/a/x.md", "/b")).toThrow("is not in the subpath");
 });

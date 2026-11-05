@@ -104,7 +104,6 @@ test("unknown keys are dropped with Python's warning; a context near the limit w
 
 test("context off, or no glossary file, means none", () => {
   expect(loadContext(null)).toBeNull();
-  expect(loadContext(join(GLOSSARIES, "full.toml"), true)).toBeNull();
   const missing = join(GLOSSARIES, "missing.toml");
   expect(loadContext(missing)).toBeNull();
   expect(logs).toEqual([

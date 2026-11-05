@@ -31,14 +31,13 @@ import {
   resetEmbeddingClient,
   tokenizeZh,
 } from "@eidolon/retrieval";
-import { ingestFacts, type ProgressEvent } from "../src/index.ts";
+import { indexMetaPath, ingestFacts, type ProgressEvent } from "../src/index.ts";
 
 const {
   factPatterns,
   factPrefixPattern,
   factSubject,
   ingestFactFiles,
-  indexMetaPath,
   loadFacts,
   namePattern,
   parseFactLine,

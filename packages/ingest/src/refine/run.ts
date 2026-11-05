@@ -3,6 +3,7 @@
 // time, and a checkpoint every 16 completions keeps an interrupted run's work.
 import { existsSync } from "node:fs";
 import {
+  activePersona,
   errorText,
   isPlainObject,
   type JsonPoster,
@@ -17,20 +18,30 @@ import {
   pyRepr,
   pyStr,
   pyStrip,
+  pyTruthy,
   pyTypeName,
 } from "@eidolon/config";
 import { type Failure, failureOf, sharedFailure } from "../failure.ts";
-import { nextTranscript, transcriptPaths } from "../ingest_streams.ts";
 import { createLimiter, type Limiter } from "../limit.ts";
 import { canonicalPath } from "../paths.ts";
-import { noProgress, type ProgressEvent, type ProgressSink, type RunOptions } from "../progress.ts";
+import {
+  costFields,
+  noProgress,
+  type ProgressEvent,
+  type ProgressSink,
+  type RunOptions,
+  zeroCounts,
+} from "../progress.ts";
 import {
   loadSidecar,
+  nextTranscript,
   type ParsedStream,
   parseStream,
   type StreamChunk,
   saveSidecar,
+  transcriptPaths,
 } from "../streams.ts";
+import { refineApiKey, refineClient } from "./client.ts";
 import { callLlmJson } from "./llm.ts";
 import {
   EXTRACT_USER_TEMPLATE,
@@ -40,12 +51,12 @@ import {
   refinePrompts,
   SYNTHESIZE_USER_TEMPLATE,
 } from "./prompts.ts";
-import { type CostSource, Usage } from "./usage.ts";
+import { type DryRunReport, dryRun, formatRunSummary } from "./report.ts";
+import { Usage } from "./usage.ts";
 import {
   buildRefinement,
   type Extract,
   isV2Refinement,
-  pyBool,
   type Refinement,
   type Synthesis,
   validateExtract,
@@ -76,7 +87,7 @@ export function streamContext(parsed: Pick<ParsedStream, "metadata">): string {
     ["duration_min", "duration_min"],
   ] as const) {
     const value = Object.hasOwn(meta, key) ? meta[key] : null;
-    if (pyBool(value)) parts.push(`${label}=${pyStr(value)}`);
+    if (pyTruthy(value)) parts.push(`${label}=${pyStr(value)}`);
   }
   return parts.length > 0 ? parts.join("; ") : "(no frontmatter context)";
 }
@@ -433,27 +444,6 @@ async function refineStream(
   });
 }
 
-/** What the summary event calls each cost source. */
-const COST_SOURCES: Record<CostSource, "reported" | "estimated" | "unpriced"> = {
-  openrouter: "reported",
-  estimate: "estimated",
-  mixed: "estimated",
-  unknown: "unpriced",
-};
-
-/**
- * The summary event's `costUsd` and `costSource`: $0 when no chunk was sent, as the ingests report
- * a run the cache served whole.
- */
-function summaryCost(
-  usage: Usage,
-  sent: boolean,
-): { costUsd?: number; costSource?: "reported" | "estimated" | "unpriced" } {
-  if (!sent) return { costUsd: 0 };
-  const costSource = COST_SOURCES[usage.costSource];
-  return costSource === "unpriced" ? { costSource } : { costUsd: usage.costUsd, costSource };
-}
-
 function failureText(result: StreamResult): string | null {
   if (result.error !== null) return result.error;
   if (result.chunksFailed > 0) {
@@ -533,7 +523,7 @@ export async function refineStreams(
       tokensOut: usage.completionTokens,
     },
     durationSec,
-    ...summaryCost(
+    ...costFields(
       usage,
       results.some((result) => result.chunksSucceeded + result.chunksFailed > 0),
     ),
@@ -592,4 +582,104 @@ export async function selectStreams(
     streams.push(parseStream(path));
   }
   return streams;
+}
+
+/** How a refine run ended before or after refining, for its caller to report. */
+export type RefineRun =
+  | { readonly kind: "cancelled" }
+  /** A transcript wouldn't parse; nothing was sent. */
+  | { readonly kind: "unreadable"; readonly error: unknown }
+  | { readonly kind: "empty" }
+  | { readonly kind: "dry-run"; readonly report: DryRunReport; readonly durationSec: number }
+  | { readonly kind: "no-key" }
+  | { readonly kind: "done"; readonly report: RefineReport };
+
+export interface RunRefineOptions extends RunOptions {
+  /** The transcripts to refine; every `*.md` in `streamsDir` when empty. */
+  readonly paths: readonly string[];
+  readonly streamsDir: string;
+  readonly model: string;
+  readonly concurrency: number;
+  readonly force: boolean;
+  readonly dryRun: boolean;
+  /** Receives what refine.py printed: the dry run's report, or the run's summary table. */
+  readonly print: (text: string) => void;
+  /** Called just before the first request; returns the release. laplace-refine's lock. */
+  readonly hold?: () => () => void;
+  readonly fetch?: typeof fetch;
+  readonly now?: () => Date;
+  /** Seconds on a monotonic clock. */
+  readonly monotonic?: () => number;
+}
+
+/**
+ * `main_async` after argument parsing, for laplace-refine and the pipeline's refine stage: selects
+ * the transcripts, then estimates or refines them. A signal that stops the run before refining
+ * ends in a cancelled stage and summary; the other ends before refining are the caller's to
+ * report, since the command and the pipeline report them differently.
+ */
+export async function runRefine(options: RunRefineOptions): Promise<RefineRun> {
+  const emit = options.onProgress ?? noProgress;
+  const clock = options.monotonic ?? monotonicSeconds;
+  const { signal, model } = options;
+  const started = clock();
+  const cancelled = (): RefineRun => {
+    emit({ type: "stage", stage: "refine", status: "cancelled" });
+    emit({
+      type: "summary",
+      stage: "refine",
+      ok: false,
+      cancelled: true,
+      counts: zeroCounts("refine"),
+      durationSec: clock() - started,
+    });
+    return { kind: "cancelled" };
+  };
+
+  let streams: ParsedStream[];
+  try {
+    streams = await selectStreams(options.paths, options.streamsDir, signal);
+  } catch (error) {
+    if (signal?.aborted) return cancelled();
+    return { kind: "unreadable", error };
+  }
+  if (streams.length === 0) {
+    logger.warning("No streams to process. Add files under streams/ or pass paths.");
+    return { kind: "empty" };
+  }
+  if (options.dryRun) {
+    let report: DryRunReport;
+    try {
+      report = await dryRun(streams, model, signal);
+    } catch (error) {
+      if (signal?.aborted) return cancelled();
+      throw error;
+    }
+    options.print(report.text);
+    return { kind: "dry-run", report, durationSec: clock() - started };
+  }
+  const apiKey = refineApiKey();
+  if (apiKey === undefined) return { kind: "no-key" };
+  const release = options.hold?.() ?? (() => {});
+  try {
+    logger.info(
+      `Refining ${streams.length} stream(s) with ${model} ` +
+        `(concurrency=${options.concurrency}, force=${options.force ? "True" : "False"})`,
+    );
+    const report = await refineStreams(streams, {
+      client: refineClient(apiKey, { signal, fetch: options.fetch }),
+      model,
+      concurrency: options.concurrency,
+      force: options.force,
+      identity: activePersona().identity,
+      onProgress: emit,
+      signal,
+      now: options.now,
+      monotonic: clock,
+    });
+    options.print(formatRunSummary(report.results, model, report.durationSec));
+    return { kind: "done", report };
+  } finally {
+    release();
+  }
 }

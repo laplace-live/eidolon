@@ -10,8 +10,7 @@ import {
   pyRepr,
   pyTruthy,
 } from "@eidolon/config";
-
-export type CostSource = "openrouter" | "estimate" | "mixed" | "unknown";
+import type { CostSource } from "@eidolon/retrieval";
 
 /** Tokens and USD, summed per call, then per chunk, then per stream, in that order. */
 export class Usage {

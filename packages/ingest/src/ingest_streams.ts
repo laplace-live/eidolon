@@ -1,25 +1,17 @@
 // laplace-ingest-streams' library: the stream_chunks rows, from transcripts and their sidecars,
 // embedded through the shared cache and written as the table the archive searches. The table is
 // rebuilt whole on every run.
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  renameSync,
-  statSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, statSync } from "node:fs";
 import {
   cpLen,
   envOptional,
-  errorText,
   logger,
   pyGet,
   pyIter,
   pyJsonDumps,
-  pyPath,
   pyPathName,
+  pyPathParent,
+  pyPathRelativeTo,
   pyRepr,
   pyStr,
   pyStrip,
@@ -27,8 +19,6 @@ import {
   sortedPy,
 } from "@eidolon/config";
 import {
-  defaultEmbeddingClient,
-  EmbedCache,
   type EmbeddingClient,
   type EmbeddingUsage,
   type EmbedReport,
@@ -39,16 +29,22 @@ import {
   tokenizeZh,
   writeTable,
 } from "@eidolon/retrieval";
-import { failureOf } from "./failure.ts";
+import { ingestFailure, lazyDefaultClient, openEmbedCache, writeIndexMeta } from "./index_build.ts";
 import { canonicalPath } from "./paths.ts";
 import {
+  costFields,
   type EventCode,
   noProgress,
-  type ProgressEvent,
   type Provider,
   type RunOptions,
 } from "./progress.ts";
-import { loadSidecar, type ParsedStream, parseStream } from "./streams.ts";
+import {
+  loadSidecar,
+  nextTranscript,
+  type ParsedStream,
+  parseStream,
+  transcriptPaths,
+} from "./streams.ts";
 
 const STAGE = "ingest-streams";
 
@@ -100,52 +96,6 @@ export interface StreamRow {
   readonly source_path: string;
 }
 
-/** `iter_streams`' listing: every `*.md` directly in `streamsDir`, in file-name order. */
-export function transcriptPaths(streamsDir: string): string[] {
-  if (!existsSync(streamsDir)) return [];
-  let names: string[];
-  try {
-    names = readdirSync(streamsDir);
-  } catch {
-    // pathlib's glob finds nothing in a folder it can't list.
-    return [];
-  }
-  return sortedPy(names.filter((name) => name.endsWith(".md"))).map((name) =>
-    pyPath(`${streamsDir}/${name}`),
-  );
-}
-
-/**
- * A turn of the event loop, so a long read notices SIGINT between transcripts: on a cold disk,
- * reading 1,697 of them took 45 s.
- */
-export async function nextTranscript(signal: AbortSignal | undefined): Promise<void> {
-  await new Promise<void>((resolve) => setImmediate(resolve));
-  signal?.throwIfAborted();
-}
-
-/** `PurePath.parent`. */
-export function pyParent(path: string): string {
-  const normalized = pyPath(path);
-  const slash = normalized.lastIndexOf("/");
-  if (slash === -1) return ".";
-  const head = normalized.slice(0, slash);
-  // "/x" and "//x" keep their root.
-  return head === "" || head === "/" ? normalized.slice(0, slash + 1) : head;
-}
-
-/** `PurePath(path).relative_to(base)`, for a path inside `base`. */
-export function pyRelativeTo(path: string, base: string): string {
-  const normalized = pyPath(path);
-  const root = pyPath(base);
-  if (root === ".") return normalized;
-  const prefix = root.endsWith("/") ? root : `${root}/`;
-  if (!normalized.startsWith(prefix)) {
-    throw new Error(`${pyRepr(normalized)} is not in the subpath of ${pyRepr(root)}`);
-  }
-  return normalized.slice(prefix.length);
-}
-
 /** Python's `value or fallback`. */
 function or(value: unknown, fallback: unknown): unknown {
   return pyTruthy(value) ? value : fallback;
@@ -160,12 +110,16 @@ function joined(value: unknown): string {
   return pyIter(value).map(pyStr).join(" ");
 }
 
-/** load_streams' loop body: `parsed`'s rows, appended to `rows`. */
+/**
+ * load_streams' loop body: `parsed`'s rows, appended to `rows`. Without `tokenize`, `tokens` stays
+ * empty.
+ */
 function appendRows(
   rows: StreamRow[],
   parsed: ParsedStream,
   sourcePath: string,
   skipTypes: ReadonlySet<string>,
+  tokenize: boolean,
 ): { kept: number; skipped: number; refinedCount: number } {
   const refinedMap = or(pyGet(loadSidecar(parsed), "chunks", {}), {});
   const streamDate = pyStr(pyGet(parsed.metadata, "stream_date", ""));
@@ -214,7 +168,7 @@ function appendRows(
       mentions: dumps(mentions),
       extras_json: dumps(extras),
       refined: pyTruthy(refined),
-      tokens: tokenizeZh(ftsText),
+      tokens: tokenize ? tokenizeZh(ftsText) : "",
       embed_input: embedInput,
       source_path: sourcePath,
     });
@@ -248,6 +202,7 @@ async function readRows(
   streamsDir: string,
   paths: readonly string[],
   options: LoadStreamsOptions,
+  tokenize = true,
 ): Promise<{ rows: StreamRow[]; sources: SourceFile[] }> {
   const emit = options.onProgress ?? noProgress;
   const rows: StreamRow[] = [];
@@ -256,15 +211,21 @@ async function readRows(
     logger.warning(`Streams directory not found or empty: ${streamsDir}`);
     return { rows, sources };
   }
-  const parent = pyParent(streamsDir);
+  const parent = pyPathParent(streamsDir);
   let totalSkipped = 0;
   for (const [i, path] of paths.entries()) {
     await nextTranscript(options.signal);
     sources.push(sourceFile(path));
     const parsed = parseStream(path);
     if (existsSync(parsed.sidecarPath)) sources.push(sourceFile(parsed.sidecarPath));
-    const sourcePath = pyRelativeTo(parsed.mdPath, parent);
-    const { kept, skipped, refinedCount } = appendRows(rows, parsed, sourcePath, options.skipTypes);
+    const sourcePath = pyPathRelativeTo(parsed.mdPath, parent);
+    const { kept, skipped, refinedCount } = appendRows(
+      rows,
+      parsed,
+      sourcePath,
+      options.skipTypes,
+      tokenize,
+    );
     totalSkipped += skipped;
     logger.info(
       `Loaded ${pyPathName(parsed.mdPath)}: ${kept} chunks kept ` +
@@ -292,21 +253,6 @@ export async function loadStreams(
   return (await readRows(streamsDir, transcriptPaths(streamsDir), options)).rows;
 }
 
-/** Writes `text` to `path` through a temporary file beside it, so no reader sees half a file. */
-export function writeTextAtomic(path: string, text: string): void {
-  const tmp = `${path}.${process.pid}.tmp`;
-  try {
-    writeFileSync(tmp, text, "utf8");
-    renameSync(tmp, path);
-  } finally {
-    try {
-      unlinkSync(tmp);
-    } catch {
-      // Renamed, or never written.
-    }
-  }
-}
-
 /** What `index/<table>.meta.json` records of the build that wrote stream_chunks. */
 export interface StreamsIndexMeta {
   readonly embedModel: string;
@@ -318,28 +264,6 @@ export interface StreamsIndexMeta {
   /** The chunk types left out. */
   readonly skipTypes: readonly string[];
 }
-
-/** Where a table's build record sits beside it. */
-export function indexMetaPath(dbPath: string, table: string): string {
-  return pyPath(`${dbPath}/${table}.meta.json`);
-}
-
-class MissingCredentialError extends Error {
-  override name = "MissingCredentialError";
-}
-
-// Built at the first cache miss, so a fully cached run needs no key.
-const lazyDefaultClient: Pick<EmbeddingClient, "embedWithUsage"> = {
-  embedWithUsage(texts, options) {
-    let client: EmbeddingClient;
-    try {
-      client = defaultEmbeddingClient();
-    } catch (error) {
-      throw new MissingCredentialError(errorText(error));
-    }
-    return client.embedWithUsage(texts, options);
-  },
-};
 
 export interface IngestStreamsOptions extends RunOptions {
   readonly streamsDir: string;
@@ -374,22 +298,6 @@ export interface IngestStreamsReport {
   readonly usage: EmbeddingUsage | null;
   readonly error: string | null;
   readonly durationSec: number;
-}
-
-const COST_SOURCES = {
-  openrouter: "reported",
-  estimate: "estimated",
-  mixed: "estimated",
-  unknown: "unpriced",
-} as const;
-
-type SummaryEvent = Extract<ProgressEvent, { type: "summary" }>;
-
-function summaryCost(report: IngestStreamsReport): Pick<SummaryEvent, "costUsd" | "costSource"> {
-  if (report.usage === null) return {};
-  if (report.embedded === 0) return { costUsd: 0 };
-  const costSource = COST_SOURCES[report.usage.costSource];
-  return costSource === "unpriced" ? { costSource } : { costUsd: report.usage.costUsd, costSource };
 }
 
 /**
@@ -434,7 +342,7 @@ export async function ingestStreams(options: IngestStreamsOptions): Promise<Inge
       ...(report.cancelled ? { cancelled: true } : {}),
       counts: { rows: report.rows, cacheHits: report.cacheHits, embedded: report.embedded },
       durationSec: report.durationSec,
-      ...summaryCost(report),
+      ...(report.usage === null ? {} : costFields(report.usage, report.embedded > 0)),
       ...(report.error === null ? {} : { failures: [{ item: table, error: report.error }] }),
     });
     return report;
@@ -443,11 +351,13 @@ export async function ingestStreams(options: IngestStreamsOptions): Promise<Inge
   const paths = transcriptPaths(streamsDir);
   emit({ type: "stage", stage: STAGE, status: "start", total: paths.length });
   try {
-    const read = await readRows(streamsDir, paths, {
-      skipTypes: options.skipTypes,
-      onProgress: emit,
-      signal,
-    });
+    // A dry run writes no tokens, so it skips jieba.
+    const read = await readRows(
+      streamsDir,
+      paths,
+      { skipTypes: options.skipTypes, onProgress: emit, signal },
+      !options.dryRun,
+    );
     rows = read.rows;
     if (rows.length === 0) {
       logger.warning(
@@ -472,17 +382,10 @@ export async function ingestStreams(options: IngestStreamsOptions): Promise<Inge
 
     // Before any spend: a folder that can't be created fails the run now.
     mkdirSync(dbPath, { recursive: true });
-    let cache: EmbedCache | null = null;
-    if (options.cachePath !== null) {
-      const cachePath = canonicalPath(options.cachePath);
-      const existed = existsSync(cachePath);
-      cache = new EmbedCache(cachePath);
-      if (options.clearCache && existed) {
-        cache.clear();
-        logger.info(`Cleared embedding cache at ${cachePath}`);
-      }
-      logger.info(`Embedding cache: ${cachePath} (${cache.count()} vectors on disk)`);
-    }
+    const cache =
+      options.cachePath === null
+        ? null
+        : openEmbedCache(canonicalPath(options.cachePath), options.clearCache === true);
     try {
       vectors = await embedInBatches(
         rows.map((row) => row.embed_input),
@@ -517,16 +420,10 @@ export async function ingestStreams(options: IngestStreamsOptions): Promise<Inge
       sources: read.sources,
       skipTypes: sortedPy(options.skipTypes),
     };
-    writeTextAtomic(indexMetaPath(dbPath, table), `${JSON.stringify(meta, null, 2)}\n`);
+    writeIndexMeta(dbPath, table, meta);
     return finish("done");
   } catch (error) {
     if (signal?.aborted && !written) return finish("cancelled", { code: "cancelled" });
-    const message = errorText(error);
-    if (error instanceof MissingCredentialError) {
-      logger.error(message);
-      return finish("failed", { message, code: "missing-credential" });
-    }
-    logger.error(`Stream ingest failed: ${message}`, error);
-    return finish("failed", { message, ...failureOf(error, "embeddings") });
+    return finish("failed", ingestFailure(error, "Stream ingest"));
   }
 }

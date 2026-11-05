@@ -29,7 +29,6 @@ export {
   logger,
   logToStderr,
   setLogLevel,
-  stderrSink,
 } from "./logger.ts";
 export { type JsonPoster, OpenAIClient, type OpenAIClientOptions } from "./openai-http.ts";
 export { parseRetryAfter, retryDelaySeconds, shouldRetry } from "./openai-retry.ts";
@@ -47,6 +46,7 @@ export {
   isJsonObject,
   isPlainObject,
   isPySpace,
+  ljust,
   loadsPy,
   PY_SPACE_CLASS,
   PyFloat,
@@ -60,6 +60,7 @@ export {
   pyIter,
   pyJsonDumps,
   pyLstrip,
+  pyNumber,
   pyParseFloat,
   pyParseInt,
   pyRepr,
@@ -71,14 +72,18 @@ export {
   pyStrRepr,
   pyTruthy,
   pyTypeName,
+  rjust,
   sortedPy,
   splitlines,
+  thousands,
 } from "./py.ts";
-export { type PyJsonOptions, pyJsonLoads, pyRawDecode } from "./py-json.ts";
+export { type PyJsonOptions, pyJsonLoads, pyJsonLoadsFast, pyRawDecode } from "./py-json.ts";
 export { type PydanticLineError, validationErrorText } from "./pydantic.ts";
 export {
   pyPath,
   pyPathName,
+  pyPathParent,
+  pyPathRelativeTo,
   pyPathStem,
   pyPathSuffix,
   pyPathWithName,

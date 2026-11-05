@@ -2,18 +2,27 @@
 // writing the same files. Everything resolves at call time.
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import {
   activePersona,
   dataHome,
   envOptional,
   isPlainObject,
+  logger,
   personaHomeDir,
   resolveProjectPath,
   templatesDir,
 } from "@eidolon/config";
 import { INDEX_DIR } from "@eidolon/retrieval";
+import type { ProgressSink, Stage } from "./progress.ts";
 
 export { type SourceFolder, sourceFolder, sourcesDir } from "@eidolon/config";
 
@@ -54,6 +63,22 @@ export function binDir(): string {
   return join(dataHome(), "bin");
 }
 
+/** Writes `text` to `path` through a temporary file beside it, so no reader sees half a file. */
+export function writeTextAtomic(path: string, text: string): void {
+  const tmp = `${path}.${process.pid}.tmp`;
+  try {
+    writeFileSync(tmp, text, "utf8");
+    renameSync(tmp, path);
+  } catch (error) {
+    try {
+      unlinkSync(tmp);
+    } catch {
+      // Never written.
+    }
+    throw error;
+  }
+}
+
 /** pathlib's `resolve()`: absolute, with the symlinks of its nearest existing ancestor followed. */
 export function canonicalPath(path: string): string {
   const missing: string[] = [];
@@ -87,15 +112,29 @@ export const YT_DLP_LOCK_KEY = "yt-dlp";
 export class LockedError extends Error {
   override name = "LockedError";
   readonly code = "locked";
-  readonly pid: number | null;
-  readonly holder: string;
-  readonly target: string;
   constructor(holder: string, target: string, pid: number | null) {
     super(`Another ${holder} is running for ${target}${pid === null ? "" : ` (pid ${pid})`}.`);
-    this.holder = holder;
-    this.target = target;
-    this.pid = pid;
   }
+}
+
+/** Another writer holds the index: why, as a failed stage, then the stage's summary. */
+export function lockedOut(
+  emit: ProgressSink,
+  stage: Stage,
+  error: LockedError,
+  counts: Readonly<Record<string, number>>,
+  item: string,
+): void {
+  logger.error(error.message);
+  emit({ type: "stage", stage, status: "failed", code: "locked", message: error.message });
+  emit({
+    type: "summary",
+    stage,
+    ok: false,
+    counts,
+    durationSec: 0,
+    failures: [{ item, error: error.message }],
+  });
 }
 
 // A lock's Database must stay reachable: collecting it would close the connection and release it.

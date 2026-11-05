@@ -16,7 +16,14 @@ import {
   tokenizeZhQuery,
   writeTable,
 } from "../src/index.ts";
-import { captureLogs, messages, REAL_INDEX, realTable } from "./helpers.ts";
+import {
+  f32Bytes as bytes,
+  captureLogs,
+  tableIndices as indices,
+  messages,
+  REAL_INDEX,
+  realTable,
+} from "./helpers.ts";
 import { describeSchema } from "./write_golden.ts";
 
 const REQUIRED = process.env.EIDOLON_REQUIRE_PARITY === "1";
@@ -45,19 +52,6 @@ async function load(table: LanceTable, where?: string) {
     rows.push(Object.fromEntries(names.map((n) => [n, row[n]])));
   }
   return { schema: data.schema, rows, vectors };
-}
-
-const bytes = (v: Float32Array) => Buffer.from(v.buffer, v.byteOffset, v.byteLength);
-
-async function indices(table: LanceTable) {
-  return (await table.listIndices()).map((i) => ({
-    name: i.name,
-    indexType: i.indexType,
-    columns: i.columns,
-    numIndexedRows: i.numIndexedRows,
-    numUnindexedRows: i.numUnindexedRows,
-    indexDetails: i.indexDetails,
-  }));
 }
 
 const versions = async (table: LanceTable) => (await table.listVersions()).map((v) => v.version);

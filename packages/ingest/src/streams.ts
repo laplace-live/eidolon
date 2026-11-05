@@ -1,21 +1,14 @@
 // Transcripts and their sidecars, as tools/_streams.py reads and writes them. Refine, the ingest
 // and the catalog all parse through here, so a chunk id means the same scene to each of them.
-import {
-  existsSync,
-  readdirSync,
-  readFileSync,
-  renameSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import {
   cpLen,
   cpSlice,
   isPlainObject,
-  loadsPy,
   pyGet,
   pyJsonDumps,
   pyJsonLoads,
+  pyJsonLoadsFast,
   pyPath,
   pyPathStem,
   pyPathWithSuffix,
@@ -25,6 +18,7 @@ import {
   sortedPy,
 } from "@eidolon/config";
 import { PyPattern } from "@eidolon/retrieval";
+import { writeTextAtomic } from "./paths.ts";
 
 /** The audio files a download leaves for transcription, by suffix. */
 export const AUDIO_EXTENSIONS: ReadonlySet<string> = new Set([
@@ -54,7 +48,7 @@ export function readUploadDate(audioPath: string): string | null {
   if (!existsSync(path)) return null;
   let data: unknown;
   try {
-    data = loadsPython(readUtf8(path));
+    data = pyJsonLoadsFast(readUtf8(path));
   } catch (error) {
     if (isJsonDecodeError(error)) return null;
     throw error;
@@ -168,11 +162,10 @@ export function parseStream(mdPath: string): ParsedStream {
 }
 
 /**
- * `iter_streams`: every `*.md` directly in `streamsDir` (dotfiles too, case-sensitive), parsed in
- * file-name order, which the date prefix makes chronological. [] when the folder doesn't exist.
+ * `iter_streams`' listing: every `*.md` directly in `streamsDir` (dotfiles too, case-sensitive),
+ * in file-name order, which the date prefix makes chronological. [] when the folder doesn't exist.
  */
-export function iterStreams(streamsDir: string): ParsedStream[] {
-  if (!existsSync(streamsDir)) return [];
+export function transcriptPaths(streamsDir: string): string[] {
   let names: string[];
   try {
     names = readdirSync(streamsDir);
@@ -181,24 +174,26 @@ export function iterStreams(streamsDir: string): ParsedStream[] {
     return [];
   }
   return sortedPy(names.filter((name) => name.endsWith(".md"))).map((name) =>
-    parseStream(`${streamsDir}/${name}`),
+    pyPath(`${streamsDir}/${name}`),
   );
+}
+
+/** `iter_streams`: every transcript in `streamsDir`, parsed, in file-name order. */
+export function iterStreams(streamsDir: string): ParsedStream[] {
+  return transcriptPaths(streamsDir).map(parseStream);
+}
+
+/**
+ * A turn of the event loop, so a long read notices SIGINT between transcripts: on a cold disk,
+ * reading 1,697 of them took 45 s.
+ */
+export async function nextTranscript(signal: AbortSignal | undefined): Promise<void> {
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  signal?.throwIfAborted();
 }
 
 function isJsonDecodeError(error: unknown): boolean {
   return error instanceof Error && error.name === "JSONDecodeError";
-}
-
-/**
- * `json.loads` keeping floats as PyFloat. JSON.parse takes the common case; what it refuses goes
- * to the exact port, which also accepts NaN and Infinity and raises Python's errors.
- */
-function loadsPython(text: string): unknown {
-  try {
-    return loadsPy(text);
-  } catch {
-    return pyJsonLoads(text, { strict: true, floats: true });
-  }
 }
 
 /** `{schema_version: 1, stream_id, chunks: {}}`, what refine starts a stream from. */
@@ -214,7 +209,7 @@ export function loadSidecar(parsed: ParsedStream): unknown {
   if (!existsSync(parsed.sidecarPath)) return emptySidecar(parsed.streamId);
   const text = readUtf8(parsed.sidecarPath);
   try {
-    return loadsPython(text);
+    return pyJsonLoadsFast(text);
   } catch (error) {
     if (isJsonDecodeError(error)) return emptySidecar(parsed.streamId);
     throw error;
@@ -227,16 +222,5 @@ export function loadSidecar(parsed: ParsedStream): unknown {
  * Python would write as `1.0` in PyFloat.
  */
 export function saveSidecar(parsed: ParsedStream, data: unknown): void {
-  const tmp = `${parsed.sidecarPath}.${process.pid}.tmp`;
-  try {
-    writeFileSync(tmp, pyJsonDumps(data, { ensureAscii: false, indent: 2 }), "utf8");
-    renameSync(tmp, parsed.sidecarPath);
-  } catch (error) {
-    try {
-      unlinkSync(tmp);
-    } catch {
-      // Never written.
-    }
-    throw error;
-  }
+  writeTextAtomic(parsed.sidecarPath, pyJsonDumps(data, { ensureAscii: false, indent: 2 }));
 }

@@ -76,7 +76,16 @@ export function pyParseFloat(text: string): number | null {
 }
 
 function strip(s: string, chars: string | undefined, left: boolean, right: boolean): string {
-  const set = chars === undefined ? PY_WHITESPACE_SET : new Set(chars);
+  if (chars === undefined) {
+    // Every Python whitespace character is one BMP code unit, and no surrogate half is one, so
+    // code units find the same ends as code points without splitting the string.
+    let start = 0;
+    let end = s.length;
+    while (left && start < end && PY_WHITESPACE_SET.has(s[start] as string)) start++;
+    while (right && end > start && PY_WHITESPACE_SET.has(s[end - 1] as string)) end--;
+    return s.slice(start, end);
+  }
+  const set = new Set(chars);
   const points = [...s];
   let start = 0;
   let end = points.length;
@@ -155,9 +164,33 @@ export function pySplitWs(s: string): string[] {
 
 /** Python `len(s)`: code points, not UTF-16 units. */
 export function cpLen(s: string): number {
-  let n = 0;
-  for (const _ of s) n++;
+  // As a string's iterator counts: a surrogate pair is one code point, and so is a lone half.
+  let n = s.length;
+  for (let i = 0; i < s.length - 1; i++) {
+    const unit = s.charCodeAt(i);
+    if (unit < 0xd800 || unit > 0xdbff) continue;
+    const next = s.charCodeAt(i + 1);
+    if (next >= 0xdc00 && next <= 0xdfff) {
+      n--;
+      i++;
+    }
+  }
   return n;
+}
+
+/** f-string `{s:<width}`, counted in code points. */
+export function ljust(text: string, width: number): string {
+  return text + " ".repeat(Math.max(0, width - cpLen(text)));
+}
+
+/** f-string `{s:>width}`, counted in code points. */
+export function rjust(text: string, width: number): string {
+  return " ".repeat(Math.max(0, width - cpLen(text))) + text;
+}
+
+/** f-string `{n:,}` of an int, or of `pyFixed(x, 0)`'s digits. */
+export function thousands(value: number | string): string {
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
 /** Python `s[start:end]` over code points, including negative indices. */
@@ -225,6 +258,12 @@ export class PyFloat {
   constructor(value: number) {
     this.value = value;
   }
+}
+
+/** A loaded JSON number's value, int or PyFloat; null for anything else. */
+export function pyNumber(value: unknown): number | null {
+  if (typeof value === "number") return value;
+  return value instanceof PyFloat ? value.value : null;
 }
 
 /** Python `type(value).__name__` for a JSON value; any integral number is an int. */

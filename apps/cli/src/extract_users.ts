@@ -1,7 +1,7 @@
 // laplace-extract-users: mines danmaku JSON for the viewer names a glossary should know. Stdout is
 // one name per line, so it pipes straight into a file; the summary goes to stderr.
 import { existsSync, statSync } from "node:fs";
-import { loadsPy, pyFixed, pyJsonLoads, utcDateParts } from "@eidolon/config";
+import { pyFixed, pyJsonLoadsFast, thousands, utcIsoDate } from "@eidolon/config";
 import { extractUsers } from "@eidolon/ingest";
 import {
   ArgparseExit,
@@ -64,30 +64,18 @@ options:
   ],
 };
 
-/** f-string `{n:,}` of a whole number, or of `.0f` digits. */
-function grouped(digits: string): string {
-  const sign = digits.startsWith("-") ? "-" : "";
-  return sign + digits.slice(sign.length).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-}
-
 /** `{value:,.0f}`. */
 function money(value: number): string {
-  return grouped(pyFixed(value, 0));
+  return thousands(pyFixed(value, 0));
 }
 
 function utcDate(ms: number | null): string {
-  if (!ms) return "?";
-  const [year, month, day] = utcDateParts(ms * 1000);
-  const pad = (n: number, width: number) => String(n).padStart(width, "0");
-  return `${pad(year, 4)}-${pad(month, 2)}-${pad(day, 2)}`;
+  return ms ? utcIsoDate(ms * 1000) : "?";
 }
 
 function typeList(counts: readonly [number, number][]): string {
   return counts
-    .map(
-      ([type, n]) =>
-        `${extractUsers.TYPE_LABELS.get(type) ?? `type=${type}`}=${grouped(String(n))}`,
-    )
+    .map(([type, n]) => `${extractUsers.TYPE_LABELS.get(type) ?? `type=${type}`}=${thousands(n)}`)
     .join(", ");
 }
 
@@ -95,12 +83,7 @@ const UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
 /** `json.load` of a UTF-8 file's bytes, floats kept. */
 function loadJson(bytes: Uint8Array): unknown {
-  const text = UTF8.decode(bytes);
-  try {
-    return loadsPy(text);
-  } catch {
-    return pyJsonLoads(text, { strict: true, floats: true });
-  }
+  return pyJsonLoadsFast(UTF8.decode(bytes));
 }
 
 /** The `laplace-extract-users` command; resolves to its exit code. */
@@ -147,11 +130,11 @@ export async function extractUsersMain(
     return 1;
   }
   err("");
-  err(`  total entries  : ${grouped(String(report.totalEntries))}`);
-  err(`  unique users   : ${grouped(String(report.uniqueUsers))}`);
+  err(`  total entries  : ${thousands(report.totalEntries)}`);
+  err(`  unique users   : ${thousands(report.uniqueUsers)}`);
   err(`  date range     : ${utcDate(report.earliestMs)} → ${utcDate(report.latestMs)}`);
   if (report.skippedNoId) {
-    err(`  skipped (no uId/uName): ${grouped(String(report.skippedNoId))}`);
+    err(`  skipped (no uId/uName): ${thousands(report.skippedNoId)}`);
   }
   err(`  all types      : ${typeList(report.typeCountsAll)}`);
   err(`  counted types  : ${typeList(report.typeCountsKept)}`);

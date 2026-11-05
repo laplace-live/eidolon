@@ -1,16 +1,7 @@
 // laplace-ingest-facts' library: the persona_facts rows, one per line of the persona's fact files,
 // and the run that embeds them and rebuilds the table, as tools/ingest_facts.py did.
 import { createHash } from "node:crypto";
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  renameSync,
-  statSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import {
   activePersona,
@@ -28,8 +19,6 @@ import {
   splitlines,
 } from "@eidolon/config";
 import {
-  defaultEmbeddingClient,
-  EmbedCache,
   type EmbeddingClient,
   EmbeddingUsage,
   type EmbedReport,
@@ -42,11 +31,11 @@ import {
   tokenizeZh,
   writeTable,
 } from "@eidolon/retrieval";
-import { failureOf } from "./failure.ts";
+import { ingestFailure, lazyDefaultClient, openEmbedCache, writeIndexMeta } from "./index_build.ts";
 import {
+  costFields,
   type EventCode,
   noProgress,
-  type ProgressEvent,
   type Provider,
   type RunOptions,
   type SUMMARY_COUNTS,
@@ -429,26 +418,6 @@ export interface FactsIndexMeta {
   readonly patterns: readonly string[] | null;
 }
 
-/** Where a table's build record sits beside it. */
-export function indexMetaPath(dbPath: string, table: string): string {
-  return join(dbPath, `${table}.meta.json`);
-}
-
-function writeIndexMeta(path: string, meta: FactsIndexMeta): void {
-  const temp = `${path}.${process.pid}.tmp`;
-  try {
-    writeFileSync(temp, `${JSON.stringify(meta, null, 2)}\n`);
-    renameSync(temp, path);
-  } catch (error) {
-    try {
-      unlinkSync(temp);
-    } catch {
-      // Never written.
-    }
-    throw error;
-  }
-}
-
 export interface IngestFactsOptions extends RunOptions {
   /** Where the fact files are found (`--data-dir`). */
   readonly factsDir: string;
@@ -489,30 +458,6 @@ export interface IngestFactsReport {
   readonly code: EventCode | null;
 }
 
-class MissingCredentialError extends Error {
-  override name = "MissingCredentialError";
-}
-
-// The key is checked only at the first cache miss, so a fully cached run needs none.
-const lazyDefaultClient: Pick<EmbeddingClient, "embedWithUsage"> = {
-  embedWithUsage(texts, options) {
-    let client: EmbeddingClient;
-    try {
-      client = defaultEmbeddingClient();
-    } catch (error) {
-      throw new MissingCredentialError(errorText(error));
-    }
-    return client.embedWithUsage(texts, options);
-  },
-};
-
-const COST_SOURCES = {
-  openrouter: "reported",
-  estimate: "estimated",
-  mixed: "estimated",
-  unknown: "unpriced",
-} as const;
-
 function sampleLines(rows: readonly FactRow[]): string[] {
   return rows
     .slice(0, 5)
@@ -526,16 +471,6 @@ function sampleLines(rows: readonly FactRow[]): string[] {
 
 /** What the summary counts. */
 export type FactsCounts = Record<(typeof SUMMARY_COUNTS)["ingest-facts"][number], number>;
-
-/** The summary's cost: nothing before the embedding finished, then what it reported. */
-function summaryCost(
-  report: EmbedReport | null,
-): Pick<Extract<ProgressEvent, { type: "summary" }>, "costUsd" | "costSource"> {
-  if (report === null) return {};
-  if (report.embedded === 0) return { costUsd: 0 };
-  const costSource = COST_SOURCES[report.usage.costSource];
-  return costSource === "unpriced" ? { costSource } : { costUsd: report.usage.costUsd, costSource };
-}
 
 /**
  * `main_async` after argument parsing: reads the fact files, embeds what the cache lacks and
@@ -573,7 +508,8 @@ export async function ingestFactFiles(options: IngestFactsOptions): Promise<Inge
       ...(status === "cancelled" ? { cancelled: true } : {}),
       counts,
       durationSec: (performance.now() - started) / 1000,
-      ...summaryCost(report),
+      // Nothing before the embedding finished, then what it reported.
+      ...(report === null ? {} : costFields(report.usage, report.embedded > 0)),
       ...(error === null ? {} : { failures: [{ item: table, error }] }),
     });
     return {
@@ -605,11 +541,11 @@ export async function ingestFactFiles(options: IngestFactsOptions): Promise<Inge
     emit({ type: "stage", stage: "ingest-facts", status: "start", total: files.length });
     logger.info(`Ingesting from: ${pyRepr(files.map(pyPathName))}`);
     const loaded = loadFacts(files, {
-      ...(options.minChars === undefined ? {} : { minChars: options.minChars }),
-      ...(options.stripPrefix === undefined ? {} : { stripPrefix: options.stripPrefix }),
-      ...(options.subject === undefined ? {} : { subject: options.subject }),
+      minChars: options.minChars,
+      stripPrefix: options.stripPrefix,
+      subject: options.subject,
       onProgress: emit,
-      ...(signal ? { signal } : {}),
+      signal,
     });
     sources = loaded.sources;
     rows = loaded.rows;
@@ -626,18 +562,9 @@ export async function ingestFactFiles(options: IngestFactsOptions): Promise<Inge
     }
 
     mkdirSync(dbPath, { recursive: true });
-    let cache: EmbedCache | null = null;
-    if (options.cachePath !== null && options.cachePath !== undefined) {
-      const existed = existsSync(options.cachePath);
-      cache = new EmbedCache(options.cachePath);
-      if (options.clearCache && existed) {
-        cache.clear();
-        logger.info(`Cleared embedding cache at ${pyPath(options.cachePath)}`);
-      }
-      logger.info(
-        `Embedding cache: ${pyPath(options.cachePath)} (${cache.count()} vectors on disk)`,
-      );
-    }
+    const cachePath = options.cachePath ?? null;
+    const cache =
+      cachePath === null ? null : openEmbedCache(cachePath, options.clearCache === true);
     try {
       report = await embedInBatches(
         rows.map((row) => row.embed_input),
@@ -646,38 +573,33 @@ export async function ingestFactFiles(options: IngestFactsOptions): Promise<Inge
           noun: "facts",
           cache,
           client: options.client ?? lazyDefaultClient,
-          ...(options.model === undefined ? {} : { model: options.model }),
-          ...(options.dim === undefined ? {} : { dim: options.dim }),
+          model: options.model,
+          dim: options.dim,
           onProgress: ({ done, total }) =>
             emit({ type: "progress", stage: "ingest-facts", done, total, unit: "rows" }),
-          ...(signal ? { signal } : {}),
+          signal,
         },
       );
     } finally {
       cache?.close();
     }
     await writeTable(dbPath, table, rows, personaFactsSchema(report.dim), report.vectors, {
-      ...(signal ? { signal } : {}),
+      signal,
     });
     written = true;
     logger.info(embeddingTotalsMessage(rows.length, "facts", report.usage));
-    writeIndexMeta(indexMetaPath(dbPath, table), {
+    const meta: FactsIndexMeta = {
       embedModel: report.model,
       embedDim: report.dim,
       rows: rows.length,
       builtAt: (options.now ?? (() => new Date()))().toISOString(),
       sources: sources.map(({ name, size, mtime }) => ({ name, size, mtime })),
       patterns: explicit ? null : [...patterns],
-    });
+    };
+    writeIndexMeta(dbPath, table, meta);
     return finish("done");
   } catch (error) {
     if (signal?.aborted && !written) return finish("cancelled", { code: "cancelled" });
-    const message = errorText(error);
-    if (error instanceof MissingCredentialError) {
-      logger.error(message);
-      return finish("failed", { message, code: "missing-credential" });
-    }
-    logger.error(`Fact ingest failed: ${message}`, error);
-    return finish("failed", { message, ...failureOf(error, "embeddings") });
+    return finish("failed", ingestFailure(error, "Fact ingest"));
   }
 }

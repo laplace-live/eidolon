@@ -12,12 +12,12 @@ import {
   renameSync,
   rmSync,
   unlinkSync,
-  writeFileSync,
   writeSync,
 } from "node:fs";
 import { join } from "node:path";
 import { envOptional, errorText, isPlainObject, logger, raceAbort } from "@eidolon/config";
-import { acquireLock, binDir, LockedError, YT_DLP_LOCK_KEY } from "../paths.ts";
+import { which } from "../limit.ts";
+import { acquireLock, binDir, LockedError, writeTextAtomic, YT_DLP_LOCK_KEY } from "../paths.ts";
 import { noProgress, type RunOptions } from "../progress.ts";
 
 const RELEASES = "https://github.com/yt-dlp/yt-dlp/releases";
@@ -107,19 +107,11 @@ function readStamp(): Stamp | null {
 }
 
 function writeStamp(stamp: Stamp): void {
-  const path = stampPath();
-  const tmp = `${path}.${process.pid}.tmp`;
   const { checkedAt, ...rest } = stamp;
-  writeFileSync(
-    tmp,
+  writeTextAtomic(
+    stampPath(),
     `${JSON.stringify({ ...rest, checkedAt: new Date(checkedAt).toISOString() })}\n`,
   );
-  renameSync(tmp, path);
-}
-
-/** `shutil.which`: Bun.which alone searches the PATH this process started with. */
-function which(command: string): string | null {
-  return Bun.which(command, { PATH: process.env.PATH ?? "" });
 }
 
 /**

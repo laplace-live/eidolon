@@ -198,6 +198,7 @@ test("downloadSummaryText is print_summary's text", () => {
       newFiles: Array.from({ length: c.new }, (_, i) => `n${i}.m4a`),
       durationSec: c.duration,
       cancelled: false,
+      error: null,
     };
     expect(download.downloadSummaryText(report, pyPath(c.vods_dir))).toBe(c.text);
   }
@@ -320,18 +321,20 @@ describe("downloadUrls against download_urls", () => {
     expect(records.at(-1)).toEqual(["ERROR", `  ✗ subprocess error: ${message}`]);
   });
 
-  test("no yt-dlp to run throws before anything is created, and says so in events", async () => {
+  test("no yt-dlp to run ends the run before anything is created, and says so", async () => {
     setEnv("YT_DLP_PATH", join(work, "missing-yt-dlp"));
     const events: ProgressEvent[] = [];
     const vods = join(work, "vods");
-    await expect(
-      download.downloadUrls(["u"], { vodsDir: vods, onProgress: (e) => events.push(e) }),
-    ).rejects.toThrow(
-      expect.objectContaining({
-        name: "YtDlpUnavailableError",
-        message: `yt-dlp not found at ${join(work, "missing-yt-dlp")} (YT_DLP_PATH)`,
-      }),
-    );
+    const report = await download.downloadUrls(["u"], {
+      vodsDir: vods,
+      onProgress: (e) => events.push(e),
+    });
+    const message = `yt-dlp not found at ${join(work, "missing-yt-dlp")} (YT_DLP_PATH)`;
+    expect({ ...report, durationSec: 0 }).toEqual({
+      ...download.emptyDownloadReport(1),
+      error: message,
+    });
+    expect(records.at(-1)).toEqual(["ERROR", message]);
     expect(existsSync(vods)).toBe(false);
     expect(events).toEqual([
       { type: "stage", stage: "download", status: "start", total: 1 },

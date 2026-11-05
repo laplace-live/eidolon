@@ -38,7 +38,6 @@ export class SonioxConnectionError extends SonioxError {
 /** An uploaded file. */
 export interface SonioxFile {
   readonly id: string;
-  readonly filename: string;
 }
 
 /** A transcription job; Soniox sends more, which nothing here reads. */
@@ -63,7 +62,6 @@ export interface SonioxClientOptions {
   readonly apiKey: string;
   readonly baseUrl?: string;
   readonly fetch?: typeof fetch;
-  readonly idleTimeoutMs?: number;
   readonly retryDelaysMs?: readonly number[];
   readonly sleep?: (ms: number) => Promise<void>;
 }
@@ -112,7 +110,6 @@ export class SonioxClient {
   readonly #apiKey: string;
   readonly #baseUrl: string;
   readonly #fetch: typeof fetch;
-  readonly #idleTimeoutMs: number;
   readonly #retryDelaysMs: readonly number[];
   readonly #sleep: (ms: number) => Promise<void>;
 
@@ -120,7 +117,6 @@ export class SonioxClient {
     this.#apiKey = options.apiKey;
     this.#baseUrl = (options.baseUrl ?? SONIOX_API_BASE).replace(/\/+$/, "");
     this.#fetch = options.fetch ?? fetch;
-    this.#idleTimeoutMs = options.idleTimeoutMs ?? SONIOX_IDLE_TIMEOUT_MS;
     this.#retryDelaysMs = options.retryDelaysMs ?? RETRY_DELAYS_MS;
     this.#sleep = options.sleep ?? Bun.sleep;
   }
@@ -145,7 +141,7 @@ export class SonioxClient {
       signal,
     });
     const file = JSON.parse(body) as Record<string, unknown>;
-    return { id: String(file.id), filename: String(file.filename) };
+    return { id: String(file.id) };
   }
 
   async createTranscription(
@@ -199,7 +195,7 @@ export class SonioxClient {
           headers,
           body: request.json !== undefined ? JSON.stringify(request.json) : request.body?.(),
           signal: signal ?? null,
-          timeout: this.#idleTimeoutMs,
+          timeout: SONIOX_IDLE_TIMEOUT_MS,
         } as RequestInit);
         status = response.status;
         body = await response.text();

@@ -58,7 +58,7 @@ export {
   vectorSearch,
 } from "./hybrid.ts";
 export { JiebaTokenizer } from "./jieba.ts";
-export { clip, type PyFlags, PyPattern, pyInt, pyRegexSource } from "./py.ts";
+export { clip, PyPattern, pyInt, pyRegexSource } from "./py.ts";
 export {
   buildQueryText,
   extractDateFilter,
@@ -111,7 +111,6 @@ export {
   streamScope,
 } from "./stream_time.ts";
 export {
-  CLI_LAUNCHER,
   dbPathArgument,
   decodeTopics,
   INDEX_DIR,
@@ -130,4 +129,4 @@ export {
   type TablePreset,
 } from "./tables.ts";
 export { tokenizeZh, tokenizeZhQuery, warmTokenizer, ZH_QUERY_STOPWORDS } from "./tokenize.ts";
-export { buildFtsIndex, personaFactsSchema, streamChunksSchema, writeTable } from "./write.ts";
+export { personaFactsSchema, streamChunksSchema, writeTable } from "./write.ts";

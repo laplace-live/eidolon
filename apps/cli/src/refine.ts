@@ -3,13 +3,14 @@ import { activePersona, logger, sourceFolder } from "@eidolon/config";
 import {
   acquireLock,
   type EventCode,
+  estimatedCost,
   LockedError,
   ndjsonSink,
   noProgress,
-  type ParsedStream,
   type ProgressSink,
   refine,
   sourcesLockKey,
+  zeroCounts,
 } from "@eidolon/ingest";
 import {
   ArgparseExit,
@@ -59,7 +60,7 @@ options:
 const COMMAND = "laplace-refine";
 
 // Python's asyncio.Semaphore(0) hangs the run and a negative one crashes every stream.
-const CONCURRENCY: ArgType<number> = {
+export const CONCURRENCY: ArgType<number> = {
   name: "int",
   parse(text: string): number {
     const value = INT.parse(text);
@@ -115,15 +116,20 @@ export interface RefineArgs {
   readonly json: boolean;
 }
 
+/** A REFINE_CONCURRENCY below 1 as a usage error; a flag's value is checked by CONCURRENCY. */
+export function checkConcurrency(spec: ParserSpec, concurrency: number): void {
+  if (concurrency < 1) {
+    throw parserError(spec, `REFINE_CONCURRENCY must be at least 1, not ${concurrency}`);
+  }
+}
+
 /** Throws ArgparseExit for -h and usage errors. */
 export function parseRefineArgs(argv: readonly string[]): RefineArgs {
   const spec = refineParser();
   const ns = parseArgs(spec, argv);
   const persona = commandPersona(spec, ns.persona as string | null);
   const concurrency = ns.concurrency as number;
-  if (concurrency < 1) {
-    throw parserError(spec, `REFINE_CONCURRENCY must be at least 1, not ${concurrency}`);
-  }
+  checkConcurrency(spec, concurrency);
   return {
     paths: ns.paths as string[],
     streamsDir: ns.streams_dir as string,
@@ -143,33 +149,16 @@ export interface RefineDeps extends CommandDeps {
   readonly monotonic?: () => number;
 }
 
-const ZERO_COUNTS = {
-  streams: 0,
-  chunksNew: 0,
-  chunksSkipped: 0,
-  chunksFailed: 0,
-  tokensIn: 0,
-  tokensOut: 0,
-} as const;
-
 /** A run that stopped before refining: why, as a failed stage, then its summary. */
 function refused(emit: ProgressSink, code: EventCode, message: string): number {
   logger.error(message);
   emit({ type: "stage", stage: "refine", status: "failed", code, message });
-  emit({ type: "summary", stage: "refine", ok: false, counts: ZERO_COUNTS, durationSec: 0 });
-  return 1;
-}
-
-/** A run a signal stopped before refining: a cancelled stage, then its summary. */
-function cancelled(emit: ProgressSink, durationSec: number): number {
-  emit({ type: "stage", stage: "refine", status: "cancelled" });
   emit({
     type: "summary",
     stage: "refine",
     ok: false,
-    cancelled: true,
-    counts: ZERO_COUNTS,
-    durationSec,
+    counts: zeroCounts("refine"),
+    durationSec: 0,
   });
   return 1;
 }
@@ -184,83 +173,65 @@ export async function refineMain(argv: readonly string[], deps: RefineDeps = {})
     if (error instanceof ArgparseExit) return reportExit(io, error);
     throw error;
   }
-  // Under --json stdout carries only the events.
-  const print = args.json ? io.stderr : io.stdout;
   const emit = args.json ? ndjsonSink(io.stdout) : noProgress;
-  const clock = deps.monotonic ?? (() => performance.now() / 1000);
-  const started = clock();
-
-  let streams: ParsedStream[];
+  let run: refine.RefineRun;
   try {
-    streams = await refine.selectStreams(args.paths, args.streamsDir, deps.signal);
-  } catch (error) {
-    if (!deps.signal?.aborted) throw error;
-    return cancelled(emit, clock() - started);
-  }
-  if (streams.length === 0) {
-    logger.warning("No streams to process. Add files under streams/ or pass paths.");
-    emit({ type: "summary", stage: "refine", ok: true, counts: ZERO_COUNTS, durationSec: 0 });
-    return 0;
-  }
-
-  if (args.dryRun) {
-    let report: refine.DryRunReport;
-    try {
-      report = await refine.dryRun(streams, args.model, deps.signal);
-    } catch (error) {
-      if (!deps.signal?.aborted) throw error;
-      return cancelled(emit, clock() - started);
-    }
-    print(report.text);
-    emit({
-      type: "summary",
-      stage: "refine",
-      ok: true,
-      counts: {
-        streams: report.streams,
-        chunksNew: report.chunks,
-        chunksSkipped: report.skipped,
-        chunksFailed: 0,
-        tokensIn: report.tokensIn,
-        tokensOut: report.tokensOut,
-      },
-      durationSec: clock() - started,
-      ...(report.costUsd === null
-        ? { costSource: "unpriced" as const }
-        : { costUsd: report.costUsd, costSource: "estimated" as const }),
+    run = await refine.runRefine({
+      paths: args.paths,
+      streamsDir: args.streamsDir,
+      model: args.model,
+      concurrency: args.concurrency,
+      force: args.force,
+      dryRun: args.dryRun,
+      // Under --json stdout carries only the events.
+      print: args.json ? io.stderr : io.stdout,
+      hold: () => acquireLock(sourcesLockKey(args.persona), COMMAND),
+      fetch: deps.fetch,
+      now: deps.now,
+      monotonic: deps.monotonic,
+      onProgress: emit,
+      signal: deps.signal,
     });
-    return 0;
-  }
-
-  const apiKey = refine.refineApiKey();
-  if (apiKey === undefined) return refused(emit, "missing-credential", refine.MISSING_API_KEY);
-  let release: () => void;
-  try {
-    release = acquireLock(sourcesLockKey(args.persona), COMMAND);
   } catch (error) {
     if (!(error instanceof LockedError)) throw error;
     return refused(emit, "locked", error.message);
   }
-  try {
-    const client = refine.refineClient(apiKey, { signal: deps.signal, fetch: deps.fetch });
-    logger.info(
-      `Refining ${streams.length} stream(s) with ${args.model} ` +
-        `(concurrency=${args.concurrency}, force=${args.force ? "True" : "False"})`,
-    );
-    const report = await refine.refineStreams(streams, {
-      client,
-      model: args.model,
-      concurrency: args.concurrency,
-      force: args.force,
-      identity: activePersona().identity,
-      onProgress: emit,
-      signal: deps.signal,
-      now: deps.now,
-      monotonic: clock,
-    });
-    print(refine.formatRunSummary(report.results, args.model, report.durationSec));
-    return report.ok ? 0 : 1;
-  } finally {
-    release();
+  switch (run.kind) {
+    case "cancelled":
+      return 1;
+    case "unreadable":
+      throw run.error;
+    case "empty":
+      emit({
+        type: "summary",
+        stage: "refine",
+        ok: true,
+        counts: zeroCounts("refine"),
+        durationSec: 0,
+      });
+      return 0;
+    case "dry-run": {
+      const { report } = run;
+      emit({
+        type: "summary",
+        stage: "refine",
+        ok: true,
+        counts: {
+          streams: report.streams,
+          chunksNew: report.chunks,
+          chunksSkipped: report.skipped,
+          chunksFailed: 0,
+          tokensIn: report.tokensIn,
+          tokensOut: report.tokensOut,
+        },
+        durationSec: run.durationSec,
+        ...estimatedCost(report.costUsd),
+      });
+      return 0;
+    }
+    case "no-key":
+      return refused(emit, "missing-credential", refine.MISSING_API_KEY);
+    case "done":
+      return run.report.ok ? 0 : 1;
   }
 }

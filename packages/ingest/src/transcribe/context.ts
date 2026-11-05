@@ -63,8 +63,8 @@ function checkShape(path: string, ctx: SonioxContext): void {
  * or null when context is off, the file is missing, or nothing in it has a value. Throws a
  * TranscribeError for a glossary Soniox would reject, before anything is uploaded.
  */
-export function loadContext(path: string | null, skip = false): SonioxContext | null {
-  if (skip || path === null) return null;
+export function loadContext(path: string | null): SonioxContext | null {
+  if (path === null) return null;
   if (!existsSync(path)) {
     logger.info(
       `No Soniox context file at ${path} — running without glossary. ` +

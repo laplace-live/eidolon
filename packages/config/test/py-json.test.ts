@@ -1,6 +1,6 @@
 // Expected values were printed by CPython 3.13.
 import { describe, expect, test } from "bun:test";
-import { PyFloat, pyJsonDumps, pyJsonLoads, pyRawDecode } from "../src/index.ts";
+import { PyFloat, pyJsonDumps, pyJsonLoads, pyJsonLoadsFast, pyRawDecode } from "../src/index.ts";
 
 function outcome(parse: () => unknown): unknown {
   try {
@@ -58,6 +58,20 @@ describe("json.loads", () => {
     expect(pyJsonDumps(value)).toBe("[1.0, 2, 100000.0, 0, -0.0, NaN, Infinity]");
     expect(pyJsonDumps(pyJsonLoads(text))).toBe("[1, 2, 100000, 0, 0, NaN, Infinity]");
   });
+});
+
+test("pyJsonLoadsFast reads as the strict, float-keeping decoder does", () => {
+  for (const text of [
+    '{"a": [1, 2.0, -0.5e3, "x"]}',
+    "NaN",
+    "[Infinity, -Infinity]",
+    '"\\u00e9"',
+  ]) {
+    expect(pyJsonLoadsFast(text)).toEqual(pyJsonLoads(text, { strict: true, floats: true }));
+  }
+  expect(outcome(() => pyJsonLoadsFast('{"a": 1,}'))).toBe(
+    outcome(() => pyJsonLoads('{"a": 1,}', { strict: true, floats: true })),
+  );
 });
 
 describe("JSONDecoder.raw_decode", () => {

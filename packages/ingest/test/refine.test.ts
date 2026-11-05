@@ -21,6 +21,7 @@ import {
   pyJsonDumps,
   pyJsonLoads,
 } from "@eidolon/config";
+import type { CostSource } from "@eidolon/retrieval";
 import { type ProgressEvent, parseStream, refine } from "../src/index.ts";
 
 const FIXTURES = join(import.meta.dir, "fixtures/refine");
@@ -139,8 +140,8 @@ interface Vectors {
   sanitize: { input: string; output: string }[];
   context: { metadata: Record<string, unknown>; context: string }[];
   timestamps: { heading: string; timestamp: string }[];
-  usage_pairs: (UsageOut & { self: refine.CostSource; other: refine.CostSource })[];
-  usage_chains: (UsageOut & { chain: [refine.CostSource, number][] })[];
+  usage_pairs: (UsageOut & { self: CostSource; other: CostSource })[];
+  usage_chains: (UsageOut & { chain: [CostSource, number][] })[];
   extract_usage: (UsageOut & { model: string; response: unknown })[];
   v2: { record: unknown; v2: boolean }[];
 }
@@ -178,7 +179,7 @@ function usageOut(usage: refine.Usage): UsageOut {
   };
 }
 
-function usageOf(prompt: number, completion: number, cost: number, source: refine.CostSource) {
+function usageOf(prompt: number, completion: number, cost: number, source: CostSource) {
   const usage = new refine.Usage();
   usage.promptTokens = prompt;
   usage.completionTokens = completion;

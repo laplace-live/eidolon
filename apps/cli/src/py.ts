@@ -1,6 +1,6 @@
-// Python semantics the CLI output depends on that @eidolon/config doesn't cover: `textwrap.indent`,
-// `statistics` and format-spec padding by code point.
-import { cpLen, isPySpace, PyFloat, pyError, pyIter, pyTruthy, splitlines } from "@eidolon/config";
+// Python semantics the CLI output depends on that @eidolon/config doesn't cover: `textwrap.indent`
+// and `statistics`.
+import { isPySpace, PyFloat, pyError, pyIter, pyTruthy, splitlines } from "@eidolon/config";
 
 export type PyNumber = number | PyFloat;
 
@@ -13,16 +13,6 @@ export function textwrapIndent(text: string, prefix: string): string {
   return splitlines(text, true)
     .map((line) => ([...line].every(isPySpace) ? line : prefix + line))
     .join("");
-}
-
-/** f-string `{s:<width}`, counted in code points. */
-export function ljust(text: string, width: number): string {
-  return text + " ".repeat(Math.max(0, width - cpLen(text)));
-}
-
-/** f-string `{s:>width}`, counted in code points. */
-export function rjust(text: string, width: number): string {
-  return " ".repeat(Math.max(0, width - cpLen(text))) + text;
 }
 
 /** `value or []`, iterated. */
