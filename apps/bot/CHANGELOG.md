@@ -1,5 +1,11 @@
 # laplace-eidolon
 
+## 0.4.0
+
+### Minor Changes
+
+- ffb6538: Configure personas and settings in YAML files, with keys kept apart
+
 ## 0.3.1
 
 ### Patch Changes
