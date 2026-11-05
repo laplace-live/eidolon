@@ -34,14 +34,14 @@ export function createMemoryAdmin(engines: SharedEngine): MemoryAdmin {
     }
   }
   return {
-    list: (userId) =>
+    list: (userId, agentId) =>
       run(async (engine) =>
         // Without the explicit cap mem0 lists 20, silently understating a chatty viewer.
-        (await engine.getAll({ filters: { userId }, topK: LIST_LIMIT })).map(summary),
+        (await engine.getAll({ filters: { userId, agentId }, topK: LIST_LIMIT })).map(summary),
       ),
-    forget: (userId) =>
+    forget: (userId, agentId) =>
       run(async (engine) => {
-        await engine.deleteAll({ userId });
+        await engine.deleteAll({ userId, agentId });
       }),
   };
 }

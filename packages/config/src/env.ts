@@ -21,6 +21,12 @@ export function envRaw(name: string): string | undefined {
   return raw ? raw : (fileLayer.get(name) ?? raw);
 }
 
+/** A non-empty environment variable: the one value that wins over every settings file. */
+export function envOverride(name: string): string | undefined {
+  const raw = process.env[name];
+  return raw ? raw : undefined;
+}
+
 /** The value, or `undefined` when the variable is unset or empty. */
 export function envOptional(name: string): string | undefined {
   const raw = envRaw(name);

@@ -14,7 +14,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# Root-anchored: a bare lib/ also ignores apps/web/src/lib.
+/lib/
 lib64/
 parts/
 sdist/
@@ -239,3 +240,6 @@ data/generated/
 # TypeScript workspace
 node_modules/
 *.tsbuildinfo
+# The web app's build, which `bun run local` serves. Python's dist/ above matches it too; this line
+# keeps it ignored if that one is ever anchored like /lib/.
+apps/web/dist/

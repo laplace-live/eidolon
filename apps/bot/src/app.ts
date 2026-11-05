@@ -87,7 +87,11 @@ function signallingResponse(result: SignallingResult): Response {
 }
 
 /** uvicorn's access line, which the Python bot printed for every request. */
-function logAccess(request: Request, server: RouteServer | undefined, response: Response): void {
+export function logAccess(
+  request: Request,
+  server: RouteServer | undefined,
+  response: Response,
+): void {
   const peer = server?.requestIP(request);
   const url = new URL(request.url);
   const client = peer ? `${peer.address}:${peer.port}` : "-";

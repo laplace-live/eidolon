@@ -2,6 +2,17 @@
 # expand bare $VAR, and read .env.local and .env.<NODE_ENV>, none of which the Python bot did.
 env = false
 
+[install]
+# `bun add`, and the shadcn CLI that runs it, write exact pins and resolve only versions at least
+# 14 days old. A --frozen-lockfile install never re-resolves, so neither setting reaches CI or Docker.
+exact = true
+minimumReleaseAge = 1209600
+# Pinned before the gate existed, and their peer ranges (~1.16.0) move together.
+minimumReleaseAgeExcludes = [
+  "@pipecat-ai/client-js@1.16.0",
+  "@pipecat-ai/small-webrtc-transport@1.11.2",
+]
+
 [test]
 # Every test file runs against the repo's persona templates and an empty data home.
 preload = ["./packages/config/test/isolated-home.ts"]

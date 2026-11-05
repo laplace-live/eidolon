@@ -18,5 +18,6 @@
     "resolveJsonModule": true,
     "useDefineForClassFields": true
   },
-  "include": ["apps/*/src", "apps/*/test", "apps/*/scripts", "packages/*/src", "packages/*/test"]
+  "include": ["apps/*/src", "apps/*/test", "apps/*/scripts", "packages/*/src", "packages/*/test"],
+  "exclude": ["apps/web"]
 }

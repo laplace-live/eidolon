@@ -1,0 +1,148 @@
+// The local web app's hold on the bot server: the guard in front of every route and the fallback,
+// the local viewer on the offer and memory routes, the /api/local router, and the built app for
+// every other GET.
+import { OFFER_PATH, PREFLIGHT_PATH } from "@eidolon/access";
+import { logger } from "@eidolon/config";
+import type { MemoryAdmin } from "@eidolon/memory";
+import { logAccess, type MethodRoutes, type RouteHandler, type RouteMethod } from "../app.ts";
+import { FORGET_MEMORIES_PATH, LIST_MEMORIES_PATH } from "../memory-admin.ts";
+import type { LocalContext, LocalExtension } from "../server.ts";
+import { allowedHosts, guardRequest, isApiPath, logRefused } from "./guard.ts";
+import { identityHandlers } from "./identity.ts";
+import {
+  createLocalRouter,
+  LOCAL_PREFIX,
+  type LocalApp,
+  type LocalRouteSpec,
+  localRoute,
+} from "./router.ts";
+import { credentialsRoutes } from "./routes/credentials.ts";
+import { jobsRoutes } from "./routes/jobs.ts";
+import { memoriesRoutes } from "./routes/memories.ts";
+import { personasRoutes } from "./routes/personas.ts";
+import { settingsRoutes } from "./routes/settings.ts";
+import { statusRoutes } from "./routes/status.ts";
+import { voicesRoutes } from "./routes/voices.ts";
+import { authenticator, sessionRoutes } from "./session.ts";
+import type { StaticSite } from "./static.ts";
+import type { LocalToken } from "./token.ts";
+
+/** Every route module the local API serves, besides the session exchange. */
+export function localRouteModules(app: LocalApp): LocalRouteSpec[] {
+  return [
+    ...statusRoutes(app),
+    ...settingsRoutes(app),
+    ...credentialsRoutes(app),
+    ...personasRoutes(app),
+    ...voicesRoutes(app),
+    ...jobsRoutes(app),
+    ...memoriesRoutes(app),
+  ];
+}
+
+export interface LocalExtensionOptions {
+  readonly token: LocalToken;
+  readonly site: StaticSite;
+  /** Bound IP literals that Host may name besides localhost, 127.0.0.1 and [::1]. */
+  readonly boundLiterals?: readonly string[];
+  readonly memoryAdmin: () => MemoryAdmin | null;
+  readonly activeCalls: () => number;
+  readonly restart: () => void;
+  readonly routes?: (app: LocalApp) => LocalRouteSpec[];
+  /** The clock link codes are checked against. */
+  readonly nowSeconds?: () => number;
+}
+
+export function createLocalExtension(options: LocalExtensionOptions): LocalExtension {
+  const stopHooks: (() => Promise<void>)[] = [];
+  let hosts: ReadonlySet<string> | null = null;
+  const hostsOf = (context: LocalContext): ReadonlySet<string> => {
+    hosts ??= allowedHosts(context.port(), options.boundLiterals);
+    return hosts;
+  };
+
+  const guarded =
+    (handler: RouteHandler, context: LocalContext): RouteHandler =>
+    async (request, server) => {
+      const refused = guardRequest(request, server, hostsOf(context));
+      if (refused === null) return handler(request, server);
+      logRefused(request, server, refused);
+      return refused;
+    };
+
+  return {
+    routes(botRoutes, context) {
+      const app: LocalApp = {
+        port: context.port,
+        activeCalls: options.activeCalls,
+        restart: options.restart,
+        onStop: (hook) => {
+          stopHooks.push(hook);
+        },
+      };
+      const routes: Record<string, RouteHandler | MethodRoutes> = {};
+      for (const [path, value] of Object.entries(botRoutes)) {
+        if (typeof value === "function") {
+          routes[path] = guarded(value, context);
+          continue;
+        }
+        const methods: MethodRoutes = {};
+        for (const [method, handler] of Object.entries(value) as [RouteMethod, RouteHandler][]) {
+          methods[method] = guarded(handler, context);
+        }
+        routes[path] = methods;
+      }
+
+      const authenticate = authenticator(options.token, context.port);
+      const identity = identityHandlers({
+        signalling: context.signalling,
+        memoryAdmin: options.memoryAdmin,
+      });
+      const local = (method: "GET" | "POST", handler: Parameters<typeof localRoute>[1]) =>
+        guarded(localRoute(method, handler, authenticate), context);
+      // POST stays first: the bot's 405 for this path takes Allow from the first method.
+      routes[OFFER_PATH] = {
+        POST: local("POST", identity.offer),
+        PATCH: (routes[OFFER_PATH] as MethodRoutes).PATCH,
+      };
+      routes[PREFLIGHT_PATH] = { POST: local("POST", identity.preflight) };
+      routes[LIST_MEMORIES_PATH] = { GET: local("GET", identity.listMemories) };
+      routes[FORGET_MEMORIES_PATH] = { POST: local("POST", identity.forgetMemories) };
+
+      const specs = [
+        ...sessionRoutes(app, options.token, options.nowSeconds),
+        ...(options.routes ?? localRouteModules)(app),
+      ];
+      routes[`${LOCAL_PREFIX}/*`] = guarded(createLocalRouter(specs, authenticate), context);
+      return routes;
+    },
+
+    fallback(botFallback, context) {
+      return (request, server) => {
+        const refused = guardRequest(request, server, hostsOf(context));
+        if (refused !== null) {
+          logRefused(request, server, refused);
+          return refused;
+        }
+        const { pathname } = new URL(request.url);
+        if ((request.method === "GET" || request.method === "HEAD") && !isApiPath(pathname)) {
+          const response = options.site.respond(pathname, request);
+          logAccess(request, server, response);
+          return response;
+        }
+        // Unknown /api and /mcp paths keep the bot's own 404 and 405 bytes.
+        return botFallback(request, server);
+      };
+    },
+
+    async stop() {
+      for (const hook of stopHooks.splice(0).reverse()) {
+        try {
+          await hook();
+        } catch (error) {
+          logger.error("A local stop hook failed", error);
+        }
+      }
+    },
+  };
+}

@@ -187,6 +187,7 @@ The install's settings, for every persona. Paths resolve in the data home.
 | Setting | Variable | Kind | What |
 | --- | --- | --- | --- |
 | `persona` | `EIDOLON_PERSONA` | string | Active persona |
+| `local.viewerName` | `EIDOLON_LOCAL_VIEWER_NAME` | string | Your name |
 | `access.workersBaseUrl` | `WORKERS_BASE_URL` | string | LAPLACE Workers URL |
 | `access.validateTtlSec` | `EIDOLON_VALIDATE_TTL_SEC` | int | Login cache seconds |
 | `access.anonRateLimitPerHour` | `EIDOLON_ANON_RATE_LIMIT_PER_HOUR` | int | Anonymous calls per window |
@@ -224,6 +225,8 @@ The install's settings, for every persona. Paths resolve in the data home.
 | `sources.cookiesFromBrowser` | `YT_DLP_COOKIES_FROM_BROWSER` | string | Browser to read cookies from |
 | `sources.cookiesFile` | `YT_DLP_COOKIES` | path | Cookies file |
 
+`local.viewerName` is what the persona calls you in the local web app's calls; the bot that
+`bun run start` and the Docker image run never reads it.
 `sources.ytDlp` replaces the yt-dlp the tools install and update under `<data home>/bin/`.
 `sources.cookiesFromBrowser` defaults to `chrome`; `none` reads no browser's cookies. yt-dlp writes
 the merged cookie jar back into `sources.cookiesFile`.
