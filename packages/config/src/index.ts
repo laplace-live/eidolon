@@ -112,6 +112,7 @@ export {
   type PersonaSettings,
   personaFolders,
   personaPath,
+  readPersonaIdentity,
   readSettingsLayers,
   resetSettings,
   SETTINGS,

@@ -1,5 +1,6 @@
 // What keeps the local app out of production: main.ts reaches none of it, nothing outside
 // apps/bot/src/local names it, apps/bot gains no dependency, and the SPA's leaves import nothing.
+import "../../../../packages/config/test/isolated-guard.ts";
 import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";

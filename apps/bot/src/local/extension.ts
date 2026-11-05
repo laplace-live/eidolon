@@ -79,6 +79,7 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalExten
         onStop: (hook) => {
           stopHooks.push(hook);
         },
+        memoryAdmin: options.memoryAdmin,
       };
       const routes: Record<string, RouteHandler | MethodRoutes> = {};
       for (const [path, value] of Object.entries(botRoutes)) {

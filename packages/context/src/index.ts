@@ -49,6 +49,7 @@ export {
   FALLBACK_PERSONA,
   getRecentStreamDates,
   humanizeDaysAgo,
+  LOCAL_VIEWER_MID,
   loadPersona,
   type PersonaPrefixInput,
   RECENT_STREAM_DATES_N,

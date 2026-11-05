@@ -259,6 +259,8 @@ export interface PersonaIdentity {
   readonly summary: string;
   /** The logged-in viewer line; `{fans}`, `{viewer}` and `{uid}` are filled in. "" omits it. */
   readonly viewerLine: string;
+  /** The line for the local web app's viewer, who has no UID; `{fans}` and `{viewer}` are filled in. */
+  readonly localViewerLine: string;
 }
 
 export interface PersonaSettings {
@@ -268,7 +270,14 @@ export interface PersonaSettings {
   readonly gateQuestions: Readonly<Record<string, string>>;
 }
 
-const IDENTITY_KEYS = ["name", "shortName", "fans", "summary", "viewerLine"] as const;
+const IDENTITY_KEYS = [
+  "name",
+  "shortName",
+  "fans",
+  "summary",
+  "viewerLine",
+  "localViewerLine",
+] as const;
 // identity.timezone is a setting (PERSONA_TIMEZONE), read with the others.
 const IDENTITY_FIELDS = new Set<string>([...IDENTITY_KEYS, "timezone"]);
 /** The retrieval gate's questions, which knowledge.gate.questions may reword. */
@@ -376,21 +385,27 @@ export const IDENTITY_DEFAULTS: Omit<PersonaIdentity, "name" | "shortName"> = {
   fans: "观众",
   summary: "",
   viewerLine: "正在和你聊天的{fans}叫「{viewer}」（UID:{uid}）。",
+  localViewerLine: "正在和你聊天的{fans}叫「{viewer}」。",
 };
 
-function readIdentity(persona: Tree, id: string, label: string): PersonaIdentity {
+function readIdentity(
+  persona: Tree,
+  id: string,
+  label: string,
+  warn: Warn = logWarning,
+): PersonaIdentity {
   const raw = lookup(persona, "identity");
   if (raw !== undefined && raw !== null && !isPlainObject(raw)) {
-    logger.warning(`Ignoring ${label} identity: expected a mapping`);
+    warn(`Ignoring ${label} identity: expected a mapping`);
   }
   const tree = isPlainObject(raw) ? raw : {};
   for (const key of Object.keys(tree)) {
-    if (!IDENTITY_FIELDS.has(key)) logger.warning(`Unknown setting identity.${key} in ${label}`);
+    if (!IDENTITY_FIELDS.has(key)) warn(`Unknown setting identity.${key} in ${label}`);
   }
   const value = (key: (typeof IDENTITY_KEYS)[number], fallback: string): string => {
     const v = tree[key];
     if (typeof v === "string") return v;
-    if (v !== undefined) logger.warning(`Ignoring ${label} identity.${key}: expected string`);
+    if (v !== undefined) warn(`Ignoring ${label} identity.${key}: expected string`);
     return fallback;
   };
   const name = value("name", id);
@@ -400,7 +415,18 @@ function readIdentity(persona: Tree, id: string, label: string): PersonaIdentity
     fans: value("fans", IDENTITY_DEFAULTS.fans),
     summary: value("summary", IDENTITY_DEFAULTS.summary),
     viewerLine: value("viewerLine", IDENTITY_DEFAULTS.viewerLine),
+    localViewerLine: value("localViewerLine", IDENTITY_DEFAULTS.localViewerLine),
   };
+}
+
+/**
+ * Persona `id`'s identity from its persona.yaml, the user's copy first, whether or not it is
+ * active; nothing is logged. The caller validates the id, which becomes a folder name.
+ */
+export function readPersonaIdentity(id: string): PersonaIdentity {
+  const path = resolvePersonaPath(id, "persona.yaml");
+  const quiet: Warn = () => {};
+  return readIdentity(readTree(path, path, quiet), id, path, quiet);
 }
 
 function readGateQuestions(persona: Tree, label: string): Record<string, string> {

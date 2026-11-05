@@ -139,7 +139,12 @@ export interface VoiceStatus {
 
 export interface IndexTable {
   readonly table: "stream_chunks" | "persona_facts";
-  /** null when the table was never built. */
+  /** The table exists, whatever built it. */
+  readonly built: boolean;
+  /**
+   * From the table's `<table>.meta.json`: null without one, as for a table never built or one the
+   * Python tools built.
+   */
   readonly rows: number | null;
   readonly builtAt: string | null;
   readonly model: string | null;
@@ -166,11 +171,19 @@ export interface MemoryStatus {
   readonly reachable: boolean | null;
 }
 
-/** GET status, which the home page polls: cheap, and probes nothing remote. */
+/**
+ * GET status, which the home page polls: cheap. It never waits on a remote probe; Qdrant and the
+ * voice are checked in the background and reported from the last answer.
+ */
 export interface Status {
   readonly version: string;
-  /** A setting or credential the running server read at boot changed since. */
+  /**
+   * A setting or credential that calls read once changed since: at boot, or when memory or
+   * retrieval first ran. POST restart applies it.
+   */
   readonly restartRequired: boolean;
+  /** Only the MCP server keeps what it read at boot, such as which persona's index it serves. */
+  readonly mcpRestartRequired: boolean;
   readonly keys: Readonly<Record<RequiredKey, boolean>>;
   readonly persona: {
     readonly id: string;
@@ -219,6 +232,8 @@ export interface SettingsResponse {
   readonly settings: readonly SettingRow[];
   /** What the files hold that the bot ignores, in English. */
   readonly warnings: readonly string[];
+  /** As in GET status: a saved value waits for POST restart. */
+  readonly restartRequired: boolean;
 }
 
 /** PUT settings: dotted paths → new values in one scope's file; null removes a key. */
@@ -241,27 +256,95 @@ export type CredentialsResponse = Readonly<Record<string, CredentialState>>;
 /** PUT credentials: a value to save, or null to remove it from credentials.json. */
 export type CredentialsUpdate = Readonly<Record<string, string | null>>;
 
-export type CheckProvider = "soniox" | "openrouter" | "fish" | "embeddings" | "rerank" | "qdrant";
+export type CheckProvider =
+  | "soniox"
+  | "openrouter"
+  | "fish"
+  | "embeddings"
+  | "rerank"
+  | "refine"
+  | "qdrant";
 
 export interface CheckRequest {
   readonly provider: CheckProvider;
-  /** A value typed but not saved yet; without it the check reads the saved, effective one. */
+  /**
+   * A value typed but not saved yet; without it the check reads the saved, effective one. A key,
+   * or for qdrant `host` or `host:port`.
+   */
   readonly value?: string;
 }
 
+/** A check's verdict. Each comes from the provider's HTTP status, never from its wording. */
+export const CHECK_CODES = [
+  "ok",
+  /** Nothing to check: no key saved, or no Qdrant host. */
+  "missing",
+  /** 401. For Soniox, also a key from an EU, JP or IN project, which Eidolon can't use. */
+  "invalid-key",
+  /** OpenRouter: a management key, which can't run models. */
+  "management-key",
+  "no-credit",
+  "forbidden",
+  "not-found",
+  "rate-limited",
+  /** No answer, a timeout, or a 5xx. */
+  "unreachable",
+  /** An answer the check can't place. */
+  "unexpected",
+  /** Something other than Qdrant answers there. */
+  "not-qdrant",
+  /** This Qdrant wants an API key, which Eidolon doesn't send. */
+  "needs-api-key",
+  /** Qdrant answered 503: it is still starting. */
+  "starting",
+] as const;
+export type CheckCode = (typeof CHECK_CODES)[number];
+
+/** Why a check that passed still needs a look. */
+export const CHECK_WARNINGS = [
+  /** Soniox: the key works, but may not list models. */
+  "cannot-list-models",
+  /** A configured model the provider doesn't list. */
+  "unknown-model",
+  /** Fish: s1, which retires on 2026-12-31. */
+  "deprecated-model",
+  /** OpenRouter: the account never bought credits. */
+  "free-tier",
+  /** OpenRouter: the key's own spending limit is used up. */
+  "key-limit-reached",
+  /** OpenRouter: a budget the key falls under is used up. */
+  "budget-exhausted",
+  "key-expired",
+  /** Within 14 days. */
+  "key-expiring",
+  /** Fish: no API credit, and the model bills. */
+  "no-credit",
+  /** Fish: the persona's voice doesn't exist. */
+  "voice-unknown",
+  /** Fish: the persona's voice belongs to another account. */
+  "voice-private",
+  /** A provider other than OpenRouter that offers nothing to check the key against. */
+  "cannot-verify",
+  /** Qdrant more than one minor version from the client Eidolon uses. */
+  "version-mismatch",
+] as const;
+export type CheckWarningCode = (typeof CHECK_WARNINGS)[number];
+
 export interface CheckWarning {
-  readonly code: string;
+  readonly code: CheckWarningCode;
   readonly message: string;
 }
 
 /** A provider check's verdict; `code` names it for the SPA, `message` is English detail. */
 export interface CheckResult {
   readonly ok: boolean;
-  readonly code: string;
+  readonly code: CheckCode;
   readonly message: string;
   readonly warnings: readonly CheckWarning[];
   /** A non-empty environment variable overrides the saved value. */
   readonly envOverride: boolean;
+  /** Credit left in USD, where the provider tells: OpenRouter's key limit, Fish's API credit. */
+  readonly credit: number | null;
 }
 
 export interface PersonaSummary {
@@ -340,6 +423,8 @@ export interface FactFile {
 export interface FactsResponse {
   readonly patterns: readonly string[];
   readonly files: readonly FactFile[];
+  /** Files persona_facts was last built from that are gone, or no longer picked. */
+  readonly removed: readonly string[];
 }
 
 export interface VoiceSample {
@@ -377,14 +462,18 @@ export interface VoiceSearchResponse {
   readonly items: readonly Voice[];
 }
 
+/** POST personas/:id/batches: video URLs, as an `expand` job's entries name them. */
 export interface BatchRequest {
   readonly urls: readonly string[];
 }
 
 export interface BatchResponse {
-  /** The batch's id, which jobs name it by. */
-  readonly batch: string;
+  /** The new batch's id, which jobs name it by; null when every URL was listed already. */
+  readonly batch: string | null;
+  /** URLs the batch holds: those none of the persona's lists or batches had yet. */
   readonly count: number;
+  /** URLs a list or batch already had, left out. */
+  readonly known: number;
 }
 
 export const JOB_COMMANDS = [
@@ -397,61 +486,126 @@ export const JOB_COMMANDS = [
   "ingest-facts",
   "build-stream-catalog",
   "plan",
-  "ytdlp-install",
 ] as const;
 
 export type JobCommand = (typeof JOB_COMMANDS)[number];
 
-/** POST jobs. `options` is typed per command; an unknown key is a 400. */
-export interface JobRequest {
-  readonly command: JobCommand;
-  readonly persona: string;
-  readonly options?: Readonly<Record<string, unknown>>;
+/** What a `pipeline` job runs, always in this order. */
+export const PIPELINE_STAGES = ["download", "transcribe", "refine", "ingest"] as const;
+export type PipelineStage = (typeof PIPELINE_STAGES)[number];
+
+/** The options of a command that takes none: any key is refused. */
+export type NoOptions = Readonly<Record<string, never>>;
+
+/**
+ * Each command's options, which the server maps to a fixed set of flags. A batch is named by the
+ * id POST batches answered, a video by its id (the audio's stem, as a plan names it).
+ */
+export interface JobOptions {
+  /** The batch's videos through `stages`, all four by default; billed past download. */
+  readonly pipeline: {
+    readonly batch: string;
+    readonly stages?: readonly PipelineStage[];
+    readonly abortOnError?: boolean;
+    /** Transcriptions in flight at once, 1 to 25; the CLI's default is 1. */
+    readonly transcribeConcurrency?: number;
+  };
+  readonly download: { readonly batch: string };
+  /** One `entry` event per video a playlist, channel or series lists. */
+  readonly expand: { readonly url: string };
+  /** A downloaded video without an upload date, transcribed as streamed on `date`, YYYY-MM-DD. */
+  readonly transcribe: { readonly video: string; readonly date: string };
+  readonly refine: NoOptions;
+  readonly "ingest-streams": NoOptions;
+  readonly "ingest-facts": NoOptions;
+  readonly "build-stream-catalog": NoOptions;
+  /**
+   * `pipeline --dry-run` over every video the persona's lists know. A running or finished plan
+   * is reused until a job that changes her sources ends or a batch is written; `refresh` plans anew.
+   */
+  readonly plan: { readonly refresh?: boolean };
 }
+
+/** POST jobs: a command for one persona. An unknown key, or a string starting with `-`, is a 400. */
+export type JobRequest = {
+  readonly [C in JobCommand]: {
+    readonly command: C;
+    readonly persona: string;
+  } & (NoOptions extends JobOptions[C]
+    ? { readonly options?: JobOptions[C] }
+    : { readonly options: JobOptions[C] });
+}[JobCommand];
 
 export type JobStatus = "running" | "succeeded" | "failed" | "cancelled" | "interrupted";
 
 /** What the server keeps of a job it spawned, in `<data home>/jobs/<id>.json`. */
 export interface JobRecord {
-  /** Minted by the server: `<YYYYMMDDTHHMMSS>-<6 base32>`. */
+  /** Minted by the server: `<YYYYMMDDTHHMMSS>-<6 base32>`, in UTC. */
   readonly id: string;
   readonly command: JobCommand;
   readonly persona: string;
+  /** JobOptions[command], as validated. */
   readonly options: Readonly<Record<string, unknown>>;
+  /**
+   * `failed` includes a run that died without its summary; `interrupted` is one that was running
+   * when the server stopped and ended unseen, without one.
+   */
   readonly status: JobStatus;
   readonly startedAt: string;
   readonly endedAt: string | null;
+  /** null while it runs, and for one that ended unseen. */
   readonly exitCode: number | null;
-  /** Plan and expand jobs, which retention drops first. */
+  /** Plan and expand jobs: outside the last 50 kept, and only the newest of each per persona. */
   readonly ephemeral: boolean;
+  /** The job this one reran. */
+  readonly resumedFrom: string | null;
+  /** The job that reran this one: a job resumes once. */
+  readonly resumedBy: string | null;
 }
 
 /** One stage's progress, from the job's events; `stage` is @eidolon/ingest/progress's Stage. */
 export interface JobStage {
   readonly stage: string;
+  /** Its last stage event's: "start" while it runs. */
+  readonly status: "start" | "done" | "failed" | "skipped" | "cancelled";
+  /** Items that ended each way, each counted once. */
   readonly done: number;
-  readonly total: number | null;
   readonly failed: number;
   readonly skipped: number;
+  readonly total: number | null;
+  /** What the stage reports as a whole, such as rows embedded; `unit` is a progress event's. */
+  readonly progress: {
+    readonly done: number;
+    readonly total: number | null;
+    readonly unit: string;
+  } | null;
 }
 
-/** One item that failed; `code` is @eidolon/ingest/progress's EventCode. */
+/** An item, or a whole stage, that failed; `code` is @eidolon/ingest/progress's EventCode. */
 export interface JobFailure {
   readonly stage: string;
-  readonly item: string;
+  /** null when the stage failed as a whole. */
+  readonly item: string | null;
+  readonly video: string | null;
   readonly code: string | null;
-  readonly message: string;
+  /** Whose key, credit or quota `code` is about: soniox, refine or embeddings. */
+  readonly provider: string | null;
+  readonly message: string | null;
 }
 
 /** GET jobs/:id: the record, reduced from its events. */
 export interface JobSnapshot extends JobRecord {
   readonly stages: readonly JobStage[];
+  /** Spent so far, by its summaries, else its items; null until anything reported a cost. */
   readonly costUsd: number | null;
+  /** Failed stages, and items whose last end was a failure: the first 100; stages count all. */
   readonly failures: readonly JobFailure[];
-  /** The end of its stderr, shown when it ends without a summary. */
+  /** The end of its stderr, which explains a run that ended without a summary. */
   readonly stderrTail: string;
   /** Bytes of events so far: `events?after=` resumes from here. */
   readonly eventsSize: number;
+  /** A cancel was sent, and the process hasn't exited yet. */
+  readonly stopping: boolean;
 }
 
 export interface JobEventsQuery {

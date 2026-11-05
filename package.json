@@ -10,7 +10,7 @@
     "dev": "bun --watch apps/bot/src/main.ts",
     "start": "bun apps/bot/src/main.ts",
     "local": "bun apps/bot/src/local/main.ts",
-    "dev:local": "bun --watch apps/bot/src/local/main.ts",
+    "dev:local": "bun --watch apps/bot/src/local/server.ts",
     "app": "[ -f apps/web/dist/index.html ] || bun run build:web && bun apps/bot/src/local/main.ts --open",
     "dev:web": "bun run --cwd apps/web dev",
     "build:web": "bun run --cwd apps/web build",

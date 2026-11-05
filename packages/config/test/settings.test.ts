@@ -64,6 +64,7 @@ describe("with no files of the user's own", () => {
         "明前奶绿, a Chinese VTuber who streams on Bilibili, runs a fictional flower shop " +
         "(拉普拉斯花店) whose manager is her cat 坚果, and calls her fans 奶糖花",
       viewerLine: "今天来花店的{fans}叫「{viewer}」（B站UID:{uid}）。",
+      localViewerLine: "今天来花店的{fans}叫「{viewer}」。",
     });
     expect(Object.keys(loaded.persona.gateQuestions)).toEqual(["about_her"]);
     expect([...loaded.values]).toEqual([
@@ -122,6 +123,7 @@ describe("layers", () => {
       fans: "观众",
       summary: "",
       viewerLine: "正在和你聊天的{fans}叫「{viewer}」（UID:{uid}）。",
+      localViewerLine: "正在和你聊天的{fans}叫「{viewer}」。",
     });
     expect(gateQuestions).toEqual({});
   });

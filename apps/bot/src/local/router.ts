@@ -3,6 +3,7 @@
 // the 404 and 405 are this router's own. Each route runs one pipeline: the session check, the
 // idle-timeout opt-out, a logged 500, no-store, and the access line.
 import { logger } from "@eidolon/config";
+import type { MemoryAdmin } from "@eidolon/memory";
 import type { BunRequest } from "bun";
 import { logAccess, type RouteHandler, type RouteServer } from "../app.ts";
 import type { LocalRoute } from "./api.ts";
@@ -23,6 +24,8 @@ export interface LocalApp {
   restart(): void;
   /** Runs when the server stops, before the peers disconnect. */
   onStop(hook: () => Promise<void>): void;
+  /** Mem0's admin, built per call so saved Qdrant settings apply at once; null while memory is off. */
+  memoryAdmin(): MemoryAdmin | null;
 }
 
 export interface LocalRequestContext {

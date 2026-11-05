@@ -109,6 +109,7 @@ identity:
   fans: 奶糖花
   summary: 明前奶绿, a Chinese VTuber who streams on Bilibili, …
   viewerLine: 今天来花店的{fans}叫「{viewer}」（B站UID:{uid}）。
+  localViewerLine: 今天来花店的{fans}叫「{viewer}」。
   timezone: Asia/Shanghai
 voice:
   model: drama-3
@@ -126,6 +127,7 @@ voice:
 | `fans` | the voice and selfie tool texts: what she calls a viewer | 观众 |
 | `summary` | the retrieval gate, as who "the streamer" is | empty |
 | `viewerLine` | the logged-in viewer line; `{fans}`, `{viewer}`, `{uid}` are filled in, `""` omits it | 正在和你聊天的{fans}叫「{viewer}」（UID:{uid}）。 |
+| `localViewerLine` | the same line for the local web app's viewer, who has no UID; `{fans}` and `{viewer}` are filled in, `""` omits it | 正在和你聊天的{fans}叫「{viewer}」。 |
 
 `knowledge.gate.questions.<key>` replaces a retrieval-gate question's text (`about_her`, `her_past`,
 `named_thing`); 奶绿's pack tunes `about_her` for her shop. `voice.styles.<name>` adds a voice
