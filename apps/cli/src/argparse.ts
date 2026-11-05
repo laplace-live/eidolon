@@ -38,6 +38,8 @@ export interface ArgAction {
   readonly type?: ArgType<unknown>;
   readonly choices?: readonly string[] | null;
   readonly default?: unknown;
+  /** argparse `required=True`, for an option. */
+  readonly required?: boolean;
 }
 
 export interface ParserSpec {
@@ -153,8 +155,9 @@ class ArgumentError extends Error {
   }
 }
 
-/** A positional, unless `?`, or `*` given a default. */
+/** An option marked required, or a positional, unless `?`, or `*` given a default. */
 function isRequired(action: ArgAction): boolean {
+  if (action.required) return true;
   if (action.flags.length > 0 || !takesValues(action) || action.nargs === "?") return false;
   return action.nargs !== "*" || action.default === undefined;
 }

@@ -154,6 +154,17 @@ describe("ingestStreamsMain", () => {
     );
   });
 
+  test("--db-path into a persona template is refused too", async () => {
+    const index = join(PROJECT_ROOT, "personas/milky-green/index");
+    const io = captureIo();
+    expect(await ingestStreamsMain(["--db-path", index], io.io)).toBe(2);
+    expect(io.stderr()).toEndWith(
+      `error: Refusing to write persona milky-green's index into the template folder ${index}; ` +
+        "point --db-path into the data home\n",
+    );
+    expect(existsSync(index)).toBe(false);
+  });
+
   test("another writer on the index: exit 1, code locked under --json; a dry run goes on", async () => {
     const db = join(work, "db");
     const release = acquireLock(indexLockKey(db), "laplace-ingest-streams");

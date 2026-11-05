@@ -41,16 +41,21 @@ export function indexWritePath(id: string): string {
   }
   const configured = envOptional("LANCEDB_PATH");
   const path = configured ? resolveProjectPath(configured) : join(personaHomeDir(id), INDEX_DIR);
+  refuseTemplatePath(id, path, "LANCEDB_PATH or knowledge.index");
+  return path;
+}
+
+/** Throws when `path`, where persona `id`'s index would be written, is in a published template. */
+export function refuseTemplatePath(id: string, path: string, setting: string): void {
   // Canonical, so `..`, a symlink or another letter case (APFS folds it) can't slip past.
   const target = canonicalPath(path);
   const templates = canonicalPath(templatesDir());
   if (target === templates || target.startsWith(templates + sep)) {
     throw new Error(
       `Refusing to write persona ${id}'s index into the template folder ${path}; ` +
-        "point LANCEDB_PATH or knowledge.index into the data home",
+        `point ${setting} into the data home`,
     );
   }
-  return path;
 }
 
 /** The embedding cache every persona shares; the key holds the model and dimension. */

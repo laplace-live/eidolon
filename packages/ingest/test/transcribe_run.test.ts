@@ -297,6 +297,19 @@ describe("Soniox failures", () => {
     ]);
   });
 
+  test("a transcript that can't be saved stays on Soniox", async () => {
+    const outDir = join(work, "streams");
+    // A folder where the payload goes, so its rename fails as a full disk's write would.
+    mkdirSync(join(outDir, "2026-01-02-a.soniox.json", "x"), { recursive: true });
+    const { promise, soniox } = await run([job("t1", SPEECH)], {});
+    await expect(promise).rejects.toThrow();
+    expect(paths(soniox.requests).filter((p) => p.startsWith("DELETE"))).toEqual([]);
+    expect(logs).toContainEqual([
+      "WARNING",
+      "Kept Soniox transcription t1: its transcript couldn't be saved",
+    ]);
+  });
+
   test("a cleanup that fails only warns", async () => {
     const { promise } = await run([job("t1", SPEECH)], {
       override: (r) =>

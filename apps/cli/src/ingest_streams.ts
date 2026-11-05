@@ -11,6 +11,7 @@ import {
   lockedOut,
   ndjsonSink,
   noProgress,
+  refuseTemplatePath,
   zeroCounts,
 } from "@eidolon/ingest";
 import { type EmbeddingClient, STREAM_CHUNKS_TABLE } from "@eidolon/retrieval";
@@ -103,7 +104,14 @@ export function writerDbPath(
   personaFlag: string | null,
   persona: string,
 ): string {
-  if (dbPath !== null) return dbPath;
+  if (dbPath !== null) {
+    try {
+      refuseTemplatePath(persona, dbPath, "--db-path");
+    } catch (error) {
+      throw parserError(spec, errorText(error));
+    }
+    return dbPath;
+  }
   if (personaFlag && process.env.LANCEDB_PATH) {
     throw parserError(
       spec,

@@ -381,11 +381,14 @@ async function transcribe(options: TranscribeOptions): Promise<TranscribeResult>
     signal,
     jobs: [],
   };
+  // A fetched transcript not yet in its payload exists only on Soniox, so a failed write keeps it.
+  let unsaved = false;
   try {
     const outcome =
       slices === null
         ? await transcribeWhole(session, audio, durationSec)
         : await transcribeSliced(session, audio, slices, options.ffmpeg);
+    unsaved = true;
     // The payload first: it holds everything the transcript renders from, and the transcript
     // stays the mark of a finished stream.
     const scenes = groupSegmentsIntoScenes(outcome.segments, windowSec);
@@ -394,6 +397,7 @@ async function transcribe(options: TranscribeOptions): Promise<TranscribeResult>
     const mdPath = transcriptPath(outDir, date, stem);
     const payloadText = pyJsonDumps(outcome.payload, { ensureAscii: false, indent: 2 });
     writeTextAtomic(payloadFile, payloadText);
+    unsaved = false;
     logger.info(
       `Wrote raw soniox payload to ${payloadFile} (${Math.floor(Buffer.byteLength(payloadText) / 1024)} KB)`,
     );
@@ -427,7 +431,11 @@ async function transcribe(options: TranscribeOptions): Promise<TranscribeResult>
       costUsd: estimateTranscribeUsd(outcome.durationSec, model),
     };
   } finally {
-    await deleteJobs(session, options.keepFiles === true);
+    if (unsaved) {
+      const ids = session.jobs.flatMap((job) => job.transcriptionId ?? []).join(", ");
+      logger.warning(`Kept Soniox transcription ${ids}: its transcript couldn't be saved`);
+    }
+    await deleteJobs(session, options.keepFiles === true || unsaved);
   }
 }
 

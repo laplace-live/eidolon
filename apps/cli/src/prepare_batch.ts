@@ -10,7 +10,6 @@ import {
   PATH,
   type ParserSpec,
   parseArgs,
-  parserError,
 } from "./argparse.ts";
 import { type CommandDeps, reportExit, resolveIo } from "./io.ts";
 
@@ -41,10 +40,15 @@ options:
   --persona PERSONA     Persona whose lists to use (default: the active
                         persona)
 `,
-  // Both required ones are checked after parsing, as argparse.ts has no required options.
   actions: [
-    { dest: "capture", flags: [], kind: "store", nargs: "?", type: PATH },
-    { dest: "expected_count", flags: ["--expected-count"], kind: "store", type: INT },
+    { dest: "capture", flags: [], kind: "store", type: PATH },
+    {
+      dest: "expected_count",
+      flags: ["--expected-count"],
+      kind: "store",
+      type: INT,
+      required: true,
+    },
     { dest: "lists_dir", flags: ["--lists-dir"], kind: "store", type: PATH },
     { dest: "source", flags: ["--source"], kind: "store" },
     { dest: "dry_run", flags: ["--dry-run"], kind: "store_true" },
@@ -79,16 +83,6 @@ export async function prepareBatchMain(
   let persona: string;
   try {
     ns = parseArgs(PREPARE_BATCH_PARSER, argv);
-    const missing = [
-      ...(ns.capture === null ? ["capture"] : []),
-      ...(ns.expected_count === null ? ["--expected-count"] : []),
-    ];
-    if (missing.length > 0) {
-      throw parserError(
-        PREPARE_BATCH_PARSER,
-        `the following arguments are required: ${missing.join(", ")}`,
-      );
-    }
     persona = commandPersona(PREPARE_BATCH_PARSER, ns.persona as string | null);
   } catch (error) {
     if (error instanceof ArgparseExit) return reportExit(io, error);

@@ -6,6 +6,7 @@ import {
   logger,
   pyPath,
   pyPathName,
+  pyPathParent,
   pyPathStem,
   pyPathWithSuffix,
   sourceFolder,
@@ -148,13 +149,6 @@ function localToday(): string {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
-function parentOf(path: string): string {
-  const normalized = pyPath(path);
-  const slash = normalized.lastIndexOf("/");
-  if (slash === -1) return ".";
-  return slash === 0 ? "/" : normalized.slice(0, slash);
-}
-
 function isFile(path: string): boolean {
   try {
     return statSync(path).isFile();
@@ -169,7 +163,7 @@ function isFile(path: string): boolean {
  */
 function reportMissingAudio(audio: string): void {
   logger.error(`Audio file not found: ${audio}`);
-  const parent = parentOf(audio);
+  const parent = pyPathParent(audio);
   if (!existsSync(parent)) {
     logger.error(`Parent directory also missing: ${parent}`);
     return;

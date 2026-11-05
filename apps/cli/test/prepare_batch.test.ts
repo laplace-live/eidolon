@@ -51,6 +51,19 @@ test("argparse errors are prepare_batch.py's", async () => {
   }
 });
 
+// prepare_batch.py under Python 3.13: a missing required argument is reported before an
+// unrecognized one.
+test("a missing required argument outranks an unrecognized one, as in prepare_batch.py", async () => {
+  for (const [argv, error] of [
+    [["capture.txt", "extra"], "the following arguments are required: --expected-count"],
+    [["--bogus"], "the following arguments are required: capture, --expected-count"],
+  ] as const) {
+    const io = captureIo();
+    expect(await prepareBatchMain(argv, io.io)).toBe(2);
+    expect(io.stderr().trimEnd().split("\n").at(-1)).toBe(`laplace-prepare-batch: error: ${error}`);
+  }
+});
+
 test("prints prepare_batch.py's JSON and writes its batch", async () => {
   const c = golden.prepare.find((p) => p.name === "write") as PrepareGolden;
   const lists = join(work, "lists");

@@ -290,6 +290,9 @@ Deliberate, and not worth matching.
 - With `--json`, yt-dlp's stdout is piped (`--newline`, a `--progress-template` carrying the video
   id, `--progress-delta 0.5`) and parsed into `bytes` progress events; every other line goes to
   stderr. Python let yt-dlp draw on the terminal.
+- `url_list` is optional for `laplace-download --expand` and `laplace-pipeline --dry-run`, so a
+  missing list is checked after parsing. When it is missing and an option is unknown, the unknown
+  option is reported first, where Python reported the missing list. Both exit 2.
 - **The part check.** A bare `<id>.<ext>` created beside `<id>_p<N>` parts means yt-dlp couldn't
   list the parts and saved the first one again under another name. The run deletes the files it
   created for that id and fails the URL: `yt-dlp could not list the video's parts; it may be
@@ -345,7 +348,8 @@ Deliberate, and not worth matching.
 - An upload is deleted when creating its transcription fails, even with `--keep-soniox-files`;
   Python left it filling Soniox's 10 GB quota.
 - Soniox's copies are deleted after the payload and transcript are written, where Python deleted
-  first and a failed write lost a paid transcript. A sliced run deletes every part's job at the
+  first and a failed write lost a paid transcript; a payload that can't be written keeps them, and
+  the warning names the transcription. A sliced run deletes every part's job at the
   end, and an upload is deleted even when its transcription's delete fails (409 while it is still
   processing); deletes go straight to the known file id, without the SDK's lookup. A cancelled
   run deletes its jobs and uploads within 8 s.

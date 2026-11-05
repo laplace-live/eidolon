@@ -27,6 +27,7 @@ export {
   indexWritePath,
   LockedError,
   lockedOut,
+  refuseTemplatePath,
   type SourceFolder,
   sourceFolder,
   sourcesDir,
