@@ -199,4 +199,58 @@ describe("cancelling", () => {
     expect(soniox.requests).toHaveLength(1);
     expect(slept).toEqual([]);
   });
+
+  test("the wait between retries gets the request's signal, or none", async () => {
+    const controller = new AbortController();
+    for (const signal of [controller.signal, undefined]) {
+      const given: (AbortSignal | undefined)[] = [];
+      let failed = false;
+      const soniox = fakeSoniox([JOB], () => {
+        if (failed) return undefined;
+        failed = true;
+        return sonioxError(503, "service_unavailable", "busy");
+      });
+      const c = new SonioxClient({
+        apiKey: "k",
+        fetch: soniox.fetch,
+        sleep: async (_ms, sleepSignal) => {
+          given.push(sleepSignal);
+        },
+      });
+      expect(await c.getTranscription("t1", signal)).toMatchObject({ status: "completed" });
+      expect(given).toEqual([signal]);
+    }
+  });
+
+  test("a cancel during the default wait clears its timer, so the process exits at once", async () => {
+    const module = join(import.meta.dir, "../src/transcribe/soniox.ts");
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "--no-env-file",
+        "-e",
+        `const { SonioxClient } = await import(${JSON.stringify(module)});
+         const controller = new AbortController();
+         const client = new SonioxClient({
+           apiKey: "k",
+           retryDelaysMs: [30_000],
+           fetch: async () => {
+             setTimeout(() => controller.abort(new Error("cancelled")), 20);
+             return new Response("{}", { status: 503 });
+           },
+         });
+         await client.getTranscription("t1", controller.signal)
+           .catch((error) => console.log(error.message));`,
+      ],
+      { stdout: "pipe", stderr: "ignore" },
+    );
+    try {
+      const started = performance.now();
+      expect(await child.exited).toBe(0);
+      expect(performance.now() - started).toBeLessThan(5_000);
+      expect(await new Response(child.stdout).text()).toBe("cancelled\n");
+    } finally {
+      child.kill("SIGKILL");
+    }
+  }, 40_000);
 });

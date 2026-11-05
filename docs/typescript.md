@@ -107,9 +107,11 @@ Things it relies on:
   yt-dlp's update holds `yt-dlp`. Dry runs take none.
 - **Cancellation.** `main.ts` runs every command through `runWithSignals`: the first SIGINT or
   SIGTERM aborts the run's signal, a second exits at once, and the exit code is 130 or 143. No new
-  item starts, children get SIGTERM and then SIGKILL after 5 s, requests abort, and cleanup is cut
-  off after 10 s. A command that never reads the signal goes in `IGNORE_SIGNAL` (`cli.ts`), which
-  exits at the first.
+  item starts, children get SIGTERM and then SIGKILL after 5 s, requests and retry waits abort, and
+  cleanup is cut off after 10 s, except inside a `criticalSection` (`limit.ts`): an ingest's
+  rebuild, from dropping the table to its FTS index and build record, finishes first, since the
+  cut would leave no table or an unfinished index. A command that never reads the signal goes in
+  `IGNORE_SIGNAL` (`cli.ts`), which exits at the first.
 - **Rebuilds never leave a half index.** Every file is written to a temporary file beside it and
   renamed. `writeTable` builds and checks the whole Arrow table, every value and vector, before it
   drops the old table, and after a successful write each ingest records its inputs in

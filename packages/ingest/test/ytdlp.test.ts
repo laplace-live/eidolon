@@ -1,4 +1,5 @@
 // The managed yt-dlp against a fake GitHub: never a real download.
+import "../../config/test/isolated-guard.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   chmodSync,

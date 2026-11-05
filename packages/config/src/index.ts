@@ -1,4 +1,4 @@
-export { raceAbort } from "./abort.ts";
+export { abortableSleep, raceAbort } from "./abort.ts";
 export { daysInMonth, isLeap, ordinalToYmd, ymdToOrdinal } from "./calendar.ts";
 export { personaTimeZone, type ZonedClock, zonedClock } from "./clock.ts";
 export { type DotenvEntry, findDotenv, loadDotenv, parseDotenv } from "./dotenv.ts";

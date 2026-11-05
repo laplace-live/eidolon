@@ -168,7 +168,7 @@ function holderInfo(path: string): { pid: number | null; command: string | null 
 export function acquireLock(key: string, command: string): () => void {
   const dir = join(dataHome(), "locks");
   mkdirSync(dir, { recursive: true });
-  const name = createHash("sha1").update(key, "utf8").digest("hex").slice(0, 12);
+  const name = createHash("sha256").update(key, "utf8").digest("hex").slice(0, 12);
   const infoPath = join(dir, `${name}.info`);
   const db = new Database(join(dir, `${name}.lock`), { create: true });
   try {

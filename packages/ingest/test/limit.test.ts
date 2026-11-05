@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   CLEANUP_LIMIT_MS,
   createLimiter,
+  criticalSection,
   runWithSignals,
   type SignalHost,
   terminate,
@@ -171,6 +172,43 @@ describe("runWithSignals", () => {
     expect(host.exits).toEqual([130]);
     gate.resolve(0);
     await result;
+  });
+
+  test("a stop that outlasts the limit inside a critical section exits as the section ends", async () => {
+    const host = new FakeHost();
+    const section = deferred();
+    const result = runWithSignals(
+      async () => {
+        const writing = criticalSection(() => section.promise);
+        host.send("SIGINT");
+        await new Promise((r) => setTimeout(r, 30));
+        expect(host.exits).toEqual([]);
+        section.resolve();
+        await writing;
+        expect(host.exits).toEqual([130]);
+        return 0;
+      },
+      host,
+      10,
+    );
+    expect(await result).toBe(130);
+    expect(host.exits).toEqual([130]);
+  });
+
+  test("a second signal exits at once, inside a critical section too", async () => {
+    const host = new FakeHost();
+    const section = deferred();
+    const result = runWithSignals(async () => {
+      const writing = criticalSection(() => section.promise);
+      host.send("SIGTERM");
+      host.send("SIGINT");
+      expect(host.exits).toEqual([130]);
+      section.resolve();
+      await writing;
+      return 0;
+    }, host);
+    expect(await result).toBe(143);
+    expect(host.exits).toEqual([130]);
   });
 
   test("the first signal says how to quit at once", async () => {

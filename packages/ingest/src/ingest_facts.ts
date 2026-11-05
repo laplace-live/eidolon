@@ -32,6 +32,7 @@ import {
   writeTable,
 } from "@eidolon/retrieval";
 import { ingestFailure, lazyDefaultClient, openEmbedCache, writeIndexMeta } from "./index_build.ts";
+import { criticalSection } from "./limit.ts";
 import {
   costFields,
   type EventCode,
@@ -99,11 +100,20 @@ const lastCp = (s: string): number => [...s].at(-1)?.codePointAt(0) as number;
 const dropLast = (s: string): string => [...s].slice(0, -1).join("");
 const dropFirst = (s: string): string => [...s].slice(1).join("");
 
-/** fnmatch's bracket expression `pat[i:j]` (between `[` and `]`) as Python's `re` reads it. */
+// What fnmatch escapes in a bracket expression: backslashes, the set operations (&&, ~~, ||), and
+// within a range's chunks, hyphens.
+function escapeClassChars(text: string): string {
+  return text.replace(/[\\&~|-]/g, "\\$&");
+}
+
+/**
+ * fnmatch's bracket expression `pat[i:j]` (between `[` and `]`), escaped, as Python's `re` reads
+ * it.
+ */
 function pythonClass(pat: readonly string[], start: number, j: number): string {
   let i = start;
   const stuff = pat.slice(i, j).join("");
-  if (!stuff.includes("-")) return stuff.replaceAll("\\", "\\\\");
+  if (!stuff.includes("-")) return escapeClassChars(stuff);
   const chunks: string[] = [];
   let k = pat[i] === "!" ? i + 2 : i + 1;
   for (;;) {
@@ -125,7 +135,7 @@ function pythonClass(pat: readonly string[], start: number, j: number): string {
       chunks.splice(n, 1);
     }
   }
-  return chunks.map((s) => s.replaceAll("\\", "\\\\").replaceAll("-", "\\-")).join("-");
+  return chunks.map(escapeClassChars).join("-");
 }
 
 /** `fnmatch._translate` of one pattern, for JS. */
@@ -154,7 +164,7 @@ function translatePattern(pattern: string): string {
         out += "\\[";
         continue;
       }
-      let stuff = pythonClass(pat, i, j).replace(/([&~|])/g, "\\$1");
+      let stuff = pythonClass(pat, i, j);
       i = j + 1;
       if (!stuff) {
         out += "(?!)";
@@ -583,20 +593,24 @@ export async function ingestFactFiles(options: IngestFactsOptions): Promise<Inge
     } finally {
       cache?.close();
     }
-    await writeTable(dbPath, table, rows, personaFactsSchema(report.dim), report.vectors, {
-      signal,
+    const built = report;
+    // From the drop to the index and its build record, which a forced exit would leave half done.
+    await criticalSection(async () => {
+      await writeTable(dbPath, table, rows, personaFactsSchema(built.dim), built.vectors, {
+        signal,
+      });
+      written = true;
+      logger.info(embeddingTotalsMessage(rows.length, "facts", built.usage));
+      const meta: FactsIndexMeta = {
+        embedModel: built.model,
+        embedDim: built.dim,
+        rows: rows.length,
+        builtAt: (options.now ?? (() => new Date()))().toISOString(),
+        sources: sources.map(({ name, size, mtime }) => ({ name, size, mtime })),
+        patterns: explicit ? null : [...patterns],
+      };
+      writeIndexMeta(dbPath, table, meta);
     });
-    written = true;
-    logger.info(embeddingTotalsMessage(rows.length, "facts", report.usage));
-    const meta: FactsIndexMeta = {
-      embedModel: report.model,
-      embedDim: report.dim,
-      rows: rows.length,
-      builtAt: (options.now ?? (() => new Date()))().toISOString(),
-      sources: sources.map(({ name, size, mtime }) => ({ name, size, mtime })),
-      patterns: explicit ? null : [...patterns],
-    };
-    writeIndexMeta(dbPath, table, meta);
     return finish("done");
   } catch (error) {
     if (signal?.aborted && !written) return finish("cancelled", { code: "cancelled" });

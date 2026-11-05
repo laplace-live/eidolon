@@ -1,5 +1,6 @@
 // laplace-prepare-batch against prepare_batch.py's main(), from the goldens in
 // packages/ingest/test/fixtures/download.
+import "../../../packages/config/test/isolated-guard.ts";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

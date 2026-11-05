@@ -378,6 +378,24 @@ describe("cancelling", () => {
     expect(paths(soniox.requests)).toEqual(["POST /files"]);
   });
 
+  test("the wait between polls gets the run's signal, so a cancel clears its timer", async () => {
+    const controller = new AbortController();
+    const given: [number, AbortSignal | undefined][] = [];
+    let polls = 0;
+    const { promise } = await run([job("t1", SPEECH)], {
+      signal: controller.signal,
+      sleep: async (ms, signal) => {
+        given.push([ms, signal]);
+      },
+      override: (r) =>
+        r.method === "GET" && r.path === "/transcriptions/t1" && ++polls === 1
+          ? Response.json({ id: "t1", status: "processing" })
+          : undefined,
+    });
+    await promise;
+    expect(given).toEqual([[5_000, controller.signal]]);
+  });
+
   test("a run cancelled before it starts uploads nothing", async () => {
     const controller = new AbortController();
     controller.abort(new DOMException("Interrupted by SIGINT", "AbortError"));

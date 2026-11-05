@@ -604,7 +604,10 @@ export interface RunRefineOptions extends RunOptions {
   readonly dryRun: boolean;
   /** Receives what refine.py printed: the dry run's report, or the run's summary table. */
   readonly print: (text: string) => void;
-  /** Called just before the first request; returns the release. laplace-refine's lock. */
+  /**
+   * Called before a run that isn't a dry run reads its first transcript; returns the release.
+   * laplace-refine's lock.
+   */
   readonly hold?: () => () => void;
   readonly fetch?: typeof fetch;
   readonly now?: () => Date;
@@ -636,32 +639,33 @@ export async function runRefine(options: RunRefineOptions): Promise<RefineRun> {
     return { kind: "cancelled" };
   };
 
-  let streams: ParsedStream[];
+  // Before the first read: a transcript rewritten after it would be billed stale.
+  const release = options.dryRun ? () => {} : (options.hold?.() ?? (() => {}));
   try {
-    streams = await selectStreams(options.paths, options.streamsDir, signal);
-  } catch (error) {
-    if (signal?.aborted) return cancelled();
-    return { kind: "unreadable", error };
-  }
-  if (streams.length === 0) {
-    logger.warning("No streams to process. Add files under streams/ or pass paths.");
-    return { kind: "empty" };
-  }
-  if (options.dryRun) {
-    let report: DryRunReport;
+    let streams: ParsedStream[];
     try {
-      report = await dryRun(streams, model, signal);
+      streams = await selectStreams(options.paths, options.streamsDir, signal);
     } catch (error) {
       if (signal?.aborted) return cancelled();
-      throw error;
+      return { kind: "unreadable", error };
     }
-    options.print(report.text);
-    return { kind: "dry-run", report, durationSec: clock() - started };
-  }
-  const apiKey = refineApiKey();
-  if (apiKey === undefined) return { kind: "no-key" };
-  const release = options.hold?.() ?? (() => {});
-  try {
+    if (streams.length === 0) {
+      logger.warning("No streams to process. Add files under streams/ or pass paths.");
+      return { kind: "empty" };
+    }
+    if (options.dryRun) {
+      let report: DryRunReport;
+      try {
+        report = await dryRun(streams, model, signal);
+      } catch (error) {
+        if (signal?.aborted) return cancelled();
+        throw error;
+      }
+      options.print(report.text);
+      return { kind: "dry-run", report, durationSec: clock() - started };
+    }
+    const apiKey = refineApiKey();
+    if (apiKey === undefined) return { kind: "no-key" };
     logger.info(
       `Refining ${streams.length} stream(s) with ${model} ` +
         `(concurrency=${options.concurrency}, force=${options.force ? "True" : "False"})`,

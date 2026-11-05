@@ -1,7 +1,14 @@
 // The Soniox REST calls a transcription makes, over fetch: upload the audio, create a
 // transcription, poll it, fetch the transcript, delete both. Every call retries network errors and
 // the statuses Soniox calls retryable, with backoff.
-import { errorText, isPlainObject, loadsPy, logger, raceAbort } from "@eidolon/config";
+import {
+  abortableSleep,
+  errorText,
+  isPlainObject,
+  loadsPy,
+  logger,
+  raceAbort,
+} from "@eidolon/config";
 import type { SonioxToken } from "./render.ts";
 
 export const SONIOX_API_BASE = "https://api.soniox.com/v1";
@@ -63,7 +70,8 @@ export interface SonioxClientOptions {
   readonly baseUrl?: string;
   readonly fetch?: typeof fetch;
   readonly retryDelaysMs?: readonly number[];
-  readonly sleep?: (ms: number) => Promise<void>;
+  /** Given the request's signal, which aborts the wait. */
+  readonly sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
 }
 
 function text(value: unknown): string | null {
@@ -111,14 +119,14 @@ export class SonioxClient {
   readonly #baseUrl: string;
   readonly #fetch: typeof fetch;
   readonly #retryDelaysMs: readonly number[];
-  readonly #sleep: (ms: number) => Promise<void>;
+  readonly #sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
 
   constructor(options: SonioxClientOptions) {
     this.#apiKey = options.apiKey;
     this.#baseUrl = (options.baseUrl ?? SONIOX_API_BASE).replace(/\/+$/, "");
     this.#fetch = options.fetch ?? fetch;
     this.#retryDelaysMs = options.retryDelaysMs ?? RETRY_DELAYS_MS;
-    this.#sleep = options.sleep ?? Bun.sleep;
+    this.#sleep = options.sleep ?? abortableSleep;
   }
 
   /** Uploads the audio as a multipart `file` named `filename`. */
@@ -222,7 +230,7 @@ export class SonioxClient {
       `  Soniox ${request.method} ${request.path} failed (${attempt}/${this.#retryDelaysMs.length + 1}), ` +
         `retrying in ${delay / 1000}s: ${reason}`,
     );
-    await raceAbort(this.#sleep(delay), request.signal);
+    await raceAbort(this.#sleep(delay, request.signal), request.signal);
   }
 }
 

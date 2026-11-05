@@ -1,4 +1,6 @@
+import "../../config/test/isolated-guard.ts";
 import { afterEach, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -124,6 +126,21 @@ describe("acquireLock", () => {
     again();
     other();
     expect(readdirSync(join(dataHome(), "locks")).filter((n) => n.endsWith(".info"))).toEqual([]);
+  });
+
+  test("its files are named by the first 12 hex digits of the key's sha256", () => {
+    const release = acquireLock("index:/srv/index", "laplace-ingest-facts");
+    try {
+      const name = createHash("sha256").update("index:/srv/index", "utf8").digest("hex");
+      const files = readdirSync(join(dataHome(), "locks"));
+      expect(new Set(files.map((file) => file.slice(0, file.indexOf("."))))).toEqual(
+        new Set([name.slice(0, 12)]),
+      );
+      expect(files).toContain(`${name.slice(0, 12)}.lock`);
+      expect(files).toContain(`${name.slice(0, 12)}.info`);
+    } finally {
+      release();
+    }
   });
 
   test("another process's lock names it, and dies with it", async () => {

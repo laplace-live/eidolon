@@ -18,6 +18,7 @@ import { join } from "node:path";
 import { consoleSink, installSettings, logger, pyRepr, resetSettings } from "@eidolon/config";
 import { type EmbeddingClient, resetEmbeddingClient } from "@eidolon/retrieval";
 import { ingestStreams, type ProgressEvent } from "../src/index.ts";
+import { cancelMidRebuild } from "./forced_exit.ts";
 import {
   fakeClient,
   GOLDEN,
@@ -282,6 +283,20 @@ describe("ingestStreams", () => {
     expect(await readTable(db)).toEqual(before);
     expect(readFileSync(join(db, "stream_chunks.meta.json"), "utf8")).toBe(meta);
     expect(readdirSync(db).sort()).toEqual(["stream_chunks.lance", "stream_chunks.meta.json"]);
+  });
+
+  test("a cancel's forced exit waits for the rebuild: table, FTS index and build record", async () => {
+    expect((await ingestStreams.ingestStreams(options())).ok).toBe(true);
+    const db = join(work, "db");
+    const metaPath = join(db, "stream_chunks.meta.json");
+    const before = await readTable(db);
+    rmSync(metaPath);
+    const { code, exits } = await cancelMidRebuild(
+      (signal) => ingestStreams.ingestStreams(options({ signal })),
+      metaPath,
+    );
+    expect([code, exits]).toEqual([130, [true]]);
+    expect(await readTable(db)).toEqual(before);
   });
 
   test("a cache miss without an API key fails as missing-credential, before any request", async () => {

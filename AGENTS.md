@@ -223,6 +223,9 @@ module that owns it.
   the `raddr` scrub. Each one's failure mode is in [typescript.md](docs/typescript.md).
 - **Python is the behavioral spec until it is retired.** A golden fixture that fails
   means the port drifted; fix the port, not the fixture.
+- **Run `bun test` from the repository root only.** Elsewhere `bunfig.toml`'s preload is
+  skipped and the data home is the real one, so a test file that deletes in it imports
+  `packages/config/test/isolated-guard.ts` first, and `isolated-guard.test.ts` enforces that.
 
 ### The offline chain
 

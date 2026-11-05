@@ -2,7 +2,7 @@
 // on connection errors, timeouts, 408/409/429/5xx (or as `x-should-retry` says), backoff
 // min(0.5·2^n, 8) s less up to 25% jitter, a server `retry-after` honoured up to two minutes, and a
 // 10-minute timeout. Its error texts reach the logs, so they read as the SDK's do.
-import { raceAbort } from "./abort.ts";
+import { abortableSleep, raceAbort } from "./abort.ts";
 import { retryDelaySeconds, shouldRetry } from "./openai-retry.ts";
 import { pyError, pyStr, pyStrip } from "./py.ts";
 import { pyJsonLoads } from "./py-json.ts";
@@ -16,7 +16,8 @@ export interface OpenAIClientOptions {
   readonly maxRetries?: number;
   readonly timeoutMs?: number;
   readonly random?: () => number;
-  readonly sleep?: (ms: number) => Promise<void>;
+  /** Given `signal`, which aborts the wait. */
+  readonly sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   /** The SDK's `default_headers`: sent with every request, over its own. */
   readonly headers?: Readonly<Record<string, string>>;
   /** Aborts the request in flight and any retry wait; the call then rejects with its reason. */
@@ -58,7 +59,7 @@ export class OpenAIClient implements JsonPoster {
   readonly #maxRetries: number;
   readonly #timeoutMs: number;
   readonly #random: () => number;
-  readonly #sleep: (ms: number) => Promise<void>;
+  readonly #sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
   readonly #headers: Readonly<Record<string, string>>;
   readonly #signal: AbortSignal | undefined;
 
@@ -72,7 +73,7 @@ export class OpenAIClient implements JsonPoster {
     this.#maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
     this.#timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.#random = options.random ?? Math.random;
-    this.#sleep = options.sleep ?? Bun.sleep;
+    this.#sleep = options.sleep ?? abortableSleep;
     this.#headers = options.headers ?? {};
     this.#signal = options.signal;
   }
@@ -122,6 +123,6 @@ export class OpenAIClient implements JsonPoster {
   }
 
   #wait(seconds: number): Promise<void> {
-    return raceAbort(this.#sleep(seconds * 1000), this.#signal);
+    return raceAbort(this.#sleep(seconds * 1000, this.#signal), this.#signal);
   }
 }

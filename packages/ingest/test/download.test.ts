@@ -1,6 +1,7 @@
 // The download library against the Python goldens in fixtures/download (see download_helpers.ts),
 // with fake-yt-dlp.sh as yt-dlp. Where the port differs on purpose, the test says so and applies
 // the difference to Python's output.
+import "../../config/test/isolated-guard.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   existsSync,

@@ -20,6 +20,7 @@ import {
   CATALOG_FILENAME,
   type EmbeddingClient,
   ingestHint,
+  listTableNames,
   STREAM_CHUNKS_TABLE,
 } from "@eidolon/retrieval";
 import { writeStreamCatalog } from "./catalog.ts";
@@ -980,9 +981,21 @@ function readJson(path: string): unknown {
   }
 }
 
-function readIndexState(dbPath: string | null): IndexState {
+/** Whether `dbPath` holds `table`; a path LanceDB can't list, such as a file, holds none. */
+async function hasTable(dbPath: string, table: string): Promise<boolean> {
+  try {
+    return (await listTableNames(dbPath)).includes(table);
+  } catch {
+    return false;
+  }
+}
+
+async function readIndexState(dbPath: string | null): Promise<IndexState> {
   const streamIds = new Set<string>();
-  if (dbPath === null) return { sources: null, streamIds };
+  // The build record and the catalog stay behind when the table is gone.
+  if (dbPath === null || !(await hasTable(dbPath, STREAM_CHUNKS_TABLE))) {
+    return { sources: null, streamIds };
+  }
   const metaPath = indexMetaPath(dbPath, STREAM_CHUNKS_TABLE);
   if (existsSync(metaPath)) {
     const meta = readJson(metaPath);
@@ -1110,7 +1123,7 @@ export async function planPipeline(persona: string, options: PlanOptions = {}): 
   }
   const history = refine.refineHistory(sidecarStats, refineModel);
   const charsPerChunk = chunks > 0 ? chars / chunks : CHARS_PER_CHUNK;
-  const index = readIndexState(dbPath);
+  const index = await readIndexState(dbPath);
 
   const ordered: { id: string; url?: string; batch?: string }[] = [];
   const seen = new Set<string>();

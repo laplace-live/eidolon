@@ -13,6 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  abortableSleep,
   cpLen,
   cpSlice,
   envOptional,
@@ -126,7 +127,8 @@ export interface TranscribeOptions extends RunOptions {
   readonly total?: number;
   readonly fetch?: typeof fetch;
   readonly baseUrl?: string;
-  readonly sleep?: (ms: number) => Promise<void>;
+  /** Given the run's signal, which aborts the wait. */
+  readonly sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   readonly retryDelaysMs?: readonly number[];
   /** ffprobe and ffmpeg: found on PATH when undefined, missing when null. */
   readonly ffprobe?: string | null;
@@ -307,7 +309,7 @@ interface Session {
   readonly model: string;
   readonly languageHints: string[] | null;
   readonly context: SonioxContext | null;
-  readonly sleep: (ms: number) => Promise<void>;
+  readonly sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
   readonly signal: AbortSignal | undefined;
   readonly jobs: Job[];
 }
@@ -377,7 +379,7 @@ async function transcribe(options: TranscribeOptions): Promise<TranscribeResult>
     model,
     languageHints: language === null ? null : [language],
     context,
-    sleep: options.sleep ?? Bun.sleep,
+    sleep: options.sleep ?? abortableSleep,
     signal,
     jobs: [],
   };
@@ -637,7 +639,7 @@ async function runJob(
         `Soniox job failed: ${pyStr(polled.error_type)}: ${pyStr(polled.error_message)}`,
       );
     }
-    await raceAbort(session.sleep(POLL_INTERVAL_MS), signal);
+    await raceAbort(session.sleep(POLL_INTERVAL_MS, signal), signal);
   }
 
   const transcript = await client.getTranscript(created.id, signal);

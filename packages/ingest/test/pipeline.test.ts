@@ -15,7 +15,12 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { EmbeddingClient } from "@eidolon/retrieval";
+import {
+  EmbeddingClient,
+  STREAM_CHUNKS_TABLE,
+  streamChunksSchema,
+  writeTable,
+} from "@eidolon/retrieval";
 import {
   download,
   LockedError,
@@ -836,6 +841,23 @@ describe("a run over a batch", () => {
   });
 });
 
+/** A file as the build record lists it. */
+function sourceRecord(path: string): { name: string; size: number; mtime: string } {
+  const stat = statSync(path);
+  return {
+    name: path.slice(path.lastIndexOf("/") + 1),
+    size: stat.size,
+    mtime: stat.mtime.toISOString(),
+  };
+}
+
+/** A one-row stream_chunks table in `dbPath`; the plan reads only that it exists. */
+async function chunksTable(dbPath: string): Promise<void> {
+  const schema = streamChunksSchema(2);
+  const row = Object.fromEntries(schema.fields.map((field) => [field.name, null]));
+  await writeTable(dbPath, STREAM_CHUNKS_TABLE, [row], schema, new Float32Array(2));
+}
+
 describe("planPipeline", () => {
   const lists = () => join(work, "lists");
 
@@ -1024,22 +1046,15 @@ describe("planPipeline", () => {
         dbPath: index,
       });
     const indexed = async () => (await plan()).videos.map((video) => [video.id, video.indexed]);
+    await chunksTable(index);
     expect(await indexed()).toEqual([
       ["BV1aaaaaaaa1", true],
       ["BV1bbbbbbbb1", false],
     ]);
 
-    const source = (path: string) => {
-      const stat = statSync(path);
-      return {
-        name: path.slice(path.lastIndexOf("/") + 1),
-        size: stat.size,
-        mtime: stat.mtime.toISOString(),
-      };
-    };
     writeFileSync(
       join(index, "stream_chunks.meta.json"),
-      JSON.stringify({ sources: [source(mdPath), source(sidecar)] }),
+      JSON.stringify({ sources: [sourceRecord(mdPath), sourceRecord(sidecar)] }),
     );
     expect(await indexed()).toEqual([
       ["BV1aaaaaaaa1", true],
@@ -1051,6 +1066,41 @@ describe("planPipeline", () => {
       ["BV1aaaaaaaa1", false],
       ["BV1bbbbbbbb1", false],
     ]);
+  });
+
+  test("indexed: never without the stream_chunks table, whatever the catalog and build record say", async () => {
+    const id = "2026-08-01-BV1aaaaaaaa1";
+    writeVods(join(work, "vods"), { "BV1aaaaaaaa1.m4a": '{"upload_date": "20260801"}' });
+    mkdirSync(join(work, "streams"));
+    const mdPath = join(work, "streams", `${id}.md`);
+    const sidecar = join(work, "streams", `${id}.refined.json`);
+    writeFileSync(mdPath, transcriptText(id, "2026-08-01", 1));
+    writeFileSync(sidecar, sidecarText(id, 1));
+    const index = join(work, "index");
+    mkdirSync(index);
+    writeFileSync(
+      join(index, "stream_catalog.json"),
+      JSON.stringify({ broadcasts: [{ stream_ids: [id] }] }),
+    );
+    const indexed = async (dbPath = index) =>
+      (
+        await pipeline.planPipeline("milky-green", {
+          vodsDir: join(work, "vods"),
+          streamsDir: join(work, "streams"),
+          listsDir: lists(),
+          dbPath,
+        })
+      ).videos.map((video) => [video.id, video.indexed]);
+    expect(await indexed()).toEqual([["BV1aaaaaaaa1", false]]);
+    writeFileSync(
+      join(index, "stream_chunks.meta.json"),
+      JSON.stringify({ sources: [sourceRecord(mdPath), sourceRecord(sidecar)] }),
+    );
+    expect(await indexed()).toEqual([["BV1aaaaaaaa1", false]]);
+    // A path LanceDB can't list holds no table either.
+    expect(await indexed(join(index, "stream_catalog.json"))).toEqual([["BV1aaaaaaaa1", false]]);
+    await chunksTable(index);
+    expect(await indexed()).toEqual([["BV1aaaaaaaa1", true]]);
   });
 
   test("refine's estimate prices by this persona's history for the same model", async () => {

@@ -30,6 +30,7 @@ import {
   writeTable,
 } from "@eidolon/retrieval";
 import { ingestFailure, lazyDefaultClient, openEmbedCache, writeIndexMeta } from "./index_build.ts";
+import { criticalSection } from "./limit.ts";
 import { canonicalPath } from "./paths.ts";
 import {
   costFields,
@@ -407,20 +408,24 @@ export async function ingestStreams(options: IngestStreamsOptions): Promise<Inge
       cache?.close();
     }
     embedded = vectors.embedded;
-    await writeTable(dbPath, table, rows, streamChunksSchema(vectors.dim), vectors.vectors, {
-      signal,
+    const built = vectors;
+    // From the drop to the index and its build record, which a forced exit would leave half done.
+    await criticalSection(async () => {
+      await writeTable(dbPath, table, rows, streamChunksSchema(built.dim), built.vectors, {
+        signal,
+      });
+      written = true;
+      logger.info(embeddingTotalsMessage(rows.length, "chunks", built.usage));
+      const meta: StreamsIndexMeta = {
+        embedModel: built.model,
+        embedDim: built.dim,
+        rows: rows.length,
+        builtAt: (options.now ?? (() => new Date()))().toISOString(),
+        sources: read.sources,
+        skipTypes: sortedPy(options.skipTypes),
+      };
+      writeIndexMeta(dbPath, table, meta);
     });
-    written = true;
-    logger.info(embeddingTotalsMessage(rows.length, "chunks", vectors.usage));
-    const meta: StreamsIndexMeta = {
-      embedModel: vectors.model,
-      embedDim: vectors.dim,
-      rows: rows.length,
-      builtAt: (options.now ?? (() => new Date()))().toISOString(),
-      sources: read.sources,
-      skipTypes: sortedPy(options.skipTypes),
-    };
-    writeIndexMeta(dbPath, table, meta);
     return finish("done");
   } catch (error) {
     if (signal?.aborted && !written) return finish("cancelled", { code: "cancelled" });

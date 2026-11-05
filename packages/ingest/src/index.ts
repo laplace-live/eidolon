@@ -12,6 +12,7 @@ export {
   type ChildProcess,
   CLEANUP_LIMIT_MS,
   createLimiter,
+  criticalSection,
   type Limiter,
   runWithSignals,
   type SignalHost,

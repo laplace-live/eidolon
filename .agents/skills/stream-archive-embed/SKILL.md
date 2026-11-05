@@ -135,12 +135,14 @@ both are empty, report that the archive has no new or unfinished batches. A zero
 
 The ingest drops and rebuilds the whole `stream_chunks` table from `streams/`, so
 a stream indexed without a local transcript would vanish from the index. Before
-the first run, snapshot the index, with `DB` set to the index path from the
-introduction:
+the first run, snapshot the index. `home` and `DB` follow the introduction:
+export `EIDOLON_HOME` and `LANCEDB_PATH` first when only `.env` sets them, and
+set `DB` to `knowledge.index` when that is set and `LANCEDB_PATH` is not.
 
 ```bash
-DB="$HOME/.laplace/eidolon/personas/milky-green/index" \
-STREAMS="$HOME/.laplace/eidolon/sources/milky-green/streams" bun -e '
+home="${EIDOLON_HOME:-$HOME/.laplace/eidolon}"
+DB="${LANCEDB_PATH:-$home/personas/milky-green/index}"
+DB="$DB" STREAMS="$home/sources/milky-green/streams" bun -e '
 import { iterStreams } from "./packages/ingest/src/index.ts";
 import { openTable } from "./packages/retrieval/src/index.ts";
 const { DB, STREAMS } = process.env;
@@ -172,7 +174,8 @@ from step 3:
 
 ```bash
 set -o pipefail
-batch_path="$HOME/.laplace/eidolon/sources/milky-green/lists/batches/videos-2026-09-08-093000.txt"
+home="${EIDOLON_HOME:-$HOME/.laplace/eidolon}"
+batch_path="$home/sources/milky-green/lists/batches/videos-2026-09-08-093000.txt"
 bun run laplace-pipeline --persona milky-green "$batch_path" --abort-on-error 2>&1 \
   | tee -a "${batch_path%.txt}.log"
 ```

@@ -593,6 +593,38 @@ describe("--json", () => {
       release();
     }
   });
+
+  test("a paid run takes the lock before it reads a transcript; a dry run takes none", async () => {
+    const path = join(streams, "2026-01-05-BV1ddddddddd.md");
+    const seen: SeenRequest[] = [];
+    const canned = cannedFetch([], seen);
+    const held: boolean[] = [];
+    const run = (dryRun: boolean) =>
+      refine.runRefine({
+        paths: [path],
+        streamsDir: streams,
+        model: "~google/gemini-flash-latest",
+        concurrency: 1,
+        force: false,
+        dryRun,
+        print: () => {},
+        // As a `laplace-transcribe --force` that rewrote it just before the lock came free.
+        hold: () => {
+          held.push(dryRun);
+          writeFileSync(path, "## 00:00 — 重写\n\n锁住之后才读到的文字。\n");
+          return () => {};
+        },
+        fetch: canned.fetch,
+      });
+    expect((await run(false)).kind).toBe("done");
+    const users = seen.map(
+      (request) => (request.body as { messages: { content: string }[] }).messages[1]?.content,
+    );
+    expect(users).toHaveLength(1);
+    expect(users[0]).toContain("锁住之后才读到的文字。");
+    expect((await run(true)).kind).toBe("dry-run");
+    expect(held).toEqual([false]);
+  });
 });
 
 describe("cancellation", () => {

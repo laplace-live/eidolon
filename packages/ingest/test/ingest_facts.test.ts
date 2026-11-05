@@ -1,6 +1,7 @@
 // fixtures/ingest_facts/golden.json is what fixtures/ingest_facts/golden.py printed through
 // tools/ingest_facts.py: line parsing, the prefix strip, pathlib's glob, load_facts. The CLI's
 // tests replay its main() runs; these cover the library alone, and what Python never had.
+import "../../config/test/isolated-guard.ts";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import {
@@ -32,6 +33,7 @@ import {
   tokenizeZh,
 } from "@eidolon/retrieval";
 import { indexMetaPath, ingestFacts, type ProgressEvent } from "../src/index.ts";
+import { cancelMidRebuild } from "./forced_exit.ts";
 
 const {
   factPatterns,
@@ -253,6 +255,26 @@ describe("settings", () => {
     }
   });
 
+  test("a name's backslashes and other metacharacters are escaped as re.escape escapes them", () => {
+    const name = String.raw`C:\d+ (x|y) [z]{2} ^$.*?&~#`;
+    const dir = join(process.env.EIDOLON_HOME as string, "personas", "escaped");
+    writeFiles(dir, { "persona.yaml": `identity:\n  name: ${JSON.stringify(name)}\n` });
+    process.env.EIDOLON_PERSONA = "escaped";
+    resetSettings();
+    try {
+      // Python 3.10's re.escape(name).
+      expect(factSubject()).toBe(String.raw`C:\\d\+\ \(x\|y\)\ \[z\]\{2\}\ \^\$\.\*\?\&\~\#`);
+      const prefix = factPrefixPattern(factSubject());
+      expect(stripFactPrefix(`${name}说过你好`, prefix)).toBe("你好");
+      // An unescaped `\d` would match the digit instead.
+      expect(stripFactPrefix("C:7+ (x|y) [z]{2} ^$.*?&~#说过你好", prefix)).toBe(
+        "C:7+ (x|y) [z]{2} ^$.*?&~#说过你好",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("milky-green's persona.yaml sets both, keeping her embed_input as it was", () => {
     installSettings();
     expect(factPatterns()).toEqual(MILKY_GREEN.patterns);
@@ -450,6 +472,20 @@ describe("ingestFactFiles", () => {
     expect(readFileSync(indexMetaPath(join(work, "index"), "persona_facts"), "utf8")).toBe(
       metaBefore,
     );
+  });
+
+  test("a cancel's forced exit waits for the rebuild: table, FTS index and build record", async () => {
+    await run({ client: fakeClient() }).report;
+    const index = join(work, "index");
+    const metaPath = indexMetaPath(index, "persona_facts");
+    const before = await tableState(index, "persona_facts");
+    rmSync(metaPath);
+    const { code, exits } = await cancelMidRebuild(
+      (signal) => run({ client: fakeClient(), signal }).report,
+      metaPath,
+    );
+    expect([code, exits]).toEqual([130, [true]]);
+    expect(await tableState(index, "persona_facts")).toEqual(before);
   });
 
   test("an abort before the run starts reads nothing", async () => {
