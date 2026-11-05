@@ -1,9 +1,16 @@
 // Python 3.13 argparse's parsing rules for the flags these CLIs declare, so a command line parses,
 // or fails with the same message and exit code, as it does under the Python CLI. Usage and help
 // are Python's own text at 80 columns.
-import { cpLen, isLeap, pyParseInt, pyRepr, pyStr } from "@eidolon/config";
-import { addDays, type IsoDate, isoDate, weekday } from "@eidolon/retrieval";
-import { partition } from "./py.ts";
+import {
+  activePersona,
+  cpLen,
+  partition,
+  pyParseInt,
+  pyPath,
+  pyRepr,
+  pyStr,
+} from "@eidolon/config";
+import { fromIsoformat, type IsoDate } from "@eidolon/retrieval";
 
 /** An argparse `type=`: `parse` throws on a value the Python callable rejects. */
 export interface ArgType<T> {
@@ -12,7 +19,13 @@ export interface ArgType<T> {
   parse(text: string): T;
 }
 
-export type ActionKind = "store" | "store_true" | "append" | "boolean_optional" | "help";
+export type ActionKind =
+  | "store"
+  | "store_true"
+  | "store_false"
+  | "append"
+  | "boolean_optional"
+  | "help";
 
 export interface ArgAction {
   readonly dest: string;
@@ -20,7 +33,7 @@ export interface ArgAction {
   readonly flags: readonly string[];
   readonly kind: ActionKind;
   /** argparse `nargs`; omitted means exactly one value. */
-  readonly nargs?: "?" | "+";
+  readonly nargs?: "?" | "+" | "*";
   readonly type?: ArgType<unknown>;
   readonly choices?: readonly string[] | null;
   readonly default?: unknown;
@@ -50,9 +63,27 @@ export class ArgparseExit extends Error {
   }
 }
 
+/** Raised by a `type` to have argparse print its message, not "invalid <type> value". */
+export class ArgumentTypeError extends Error {
+  override name = "ArgumentTypeError";
+}
+
 /** `parser.error(message)`. */
 export function parserError(spec: ParserSpec, message: string): ArgparseExit {
   return new ArgparseExit(2, "", `${spec.usage}${spec.prog}: error: ${message}\n`);
+}
+
+/**
+ * The persona a command runs for, given its parsed `--persona`. load-env.ts installed the settings
+ * for `--persona` spelled out; an abbreviation (`--pers x`) reaches argparse alone, which would
+ * leave another persona's settings in place, so it is a usage error.
+ */
+export function commandPersona(spec: ParserSpec, value: string | null | undefined): string {
+  const active = activePersona().id;
+  if (value && value !== active) {
+    throw parserError(spec, `argument --persona: write --persona ${value} in full`);
+  }
+  return active;
 }
 
 /** The namespace, keyed by `dest`. */
@@ -70,51 +101,11 @@ export const INT: ArgType<number> = {
   },
 };
 
-/**
- * `date.fromisoformat`, as CPython's C parser reads it: 7, 8 or 10 UTF-8 bytes of `YYYY-MM-DD`,
- * `YYYYMMDD`, `YYYY-Www[-D]` or `YYYYWww[D]`, with any bytes after the last field ignored.
- */
-export const FROMISOFORMAT: ArgType<IsoDate> = {
-  name: "fromisoformat",
-  parse(text: string): IsoDate {
-    const bytes = new TextEncoder().encode(text);
-    const invalid = () => new RangeError(`Invalid isoformat string: ${pyRepr(text)}`);
-    if (![7, 8, 10].includes(bytes.length)) throw invalid();
-    let pos = 0;
-    const digits = (count: number): number => {
-      let value = 0;
-      for (let i = 0; i < count; i++) {
-        const byte = bytes[pos++];
-        if (byte === undefined || byte < 0x30 || byte > 0x39) throw invalid();
-        value = value * 10 + (byte - 0x30);
-      }
-      return value;
-    };
-    const year = digits(4);
-    const separated = bytes[pos] === 0x2d;
-    if (separated) pos++;
-    if (bytes[pos] === 0x57) {
-      pos++;
-      const week = digits(2);
-      let day = 1;
-      if (pos < bytes.length) {
-        if (separated && bytes[pos++] !== 0x2d) throw invalid();
-        day = digits(1);
-      }
-      if (year < 1 || year > 9999) throw invalid();
-      const jan1 = isoDate(year, 1, 1);
-      const jan1Weekday = weekday(jan1);
-      const has53 = jan1Weekday === 3 || (jan1Weekday === 2 && isLeap(year));
-      if (week < 1 || week > (has53 ? 53 : 52) || day < 1 || day > 7) throw invalid();
-      const monday = addDays(jan1, -jan1Weekday + (jan1Weekday > 3 ? 7 : 0));
-      return addDays(monday, (week - 1) * 7 + day - 1);
-    }
-    const month = digits(2);
-    if (separated && bytes[pos++] !== 0x2d) throw invalid();
-    const day = digits(2);
-    return isoDate(year, month, day);
-  },
-};
+/** `type=Path`: never rejects, but the value prints normalized (`streams/` → `streams`). */
+export const PATH: ArgType<string> = { name: "Path", parse: pyPath };
+
+/** `date.fromisoformat`, as CPython's C parser reads it. */
+export const FROMISOFORMAT: ArgType<IsoDate> = { name: "fromisoformat", parse: fromIsoformat };
 
 const HELP_ACTION: ArgAction = { dest: "help", flags: ["-h", "--help"], kind: "help" };
 // argparse treats these as values, not flags, when no option looks like a negative number.
@@ -136,6 +127,7 @@ function nargsPattern(action: ArgAction): string {
   if (!takesValues(action)) return optional ? "()" : "(-*)";
   if (action.nargs === "?") return optional ? "(A?)" : "(-*A?-*)";
   if (action.nargs === "+") return optional ? "(A+)" : "(-*A[A-]*)";
+  if (action.nargs === "*") return optional ? "(A*)" : "(-*[A-]*)";
   return optional ? "([A])" : "(-*A-*)";
 }
 
@@ -151,8 +143,16 @@ class ArgumentError extends Error {
   }
 }
 
+/** A positional, unless `?`, or `*` given a default. */
 function isRequired(action: ArgAction): boolean {
-  return action.flags.length === 0 && takesValues(action) && action.nargs !== "?";
+  if (action.flags.length > 0 || !takesValues(action) || action.nargs === "?") return false;
+  return action.nargs !== "*" || action.default === undefined;
+}
+
+function defaultOf(action: ArgAction): unknown {
+  if (action.default !== undefined) return action.default;
+  if (action.kind === "store_true") return false;
+  return action.kind === "store_false" ? true : null;
 }
 
 /**
@@ -164,9 +164,7 @@ export function parseArgs(spec: ParserSpec, argv: readonly string[]): Namespace 
   const optionActions = new Map<string, ArgAction>();
   for (const action of actions) for (const flag of action.flags) optionActions.set(flag, action);
   const namespace: Namespace = {};
-  for (const action of spec.actions) {
-    namespace[action.dest] = action.default ?? (action.kind === "store_true" ? false : null);
-  }
+  for (const action of spec.actions) namespace[action.dest] = defaultOf(action);
   try {
     const extras = parseKnownArgs(actions, optionActions, argv, namespace, spec);
     if (extras.length > 0)
@@ -250,7 +248,8 @@ function parseKnownArgs(
     if (!action.type) return text;
     try {
       return action.type.parse(text);
-    } catch {
+    } catch (error) {
+      if (error instanceof ArgumentTypeError) throw new ArgumentError(action, error.message);
       throw new ArgumentError(action, `invalid ${action.type.name} value: ${pyRepr(text)}`);
     }
   };
@@ -267,7 +266,12 @@ function parseKnownArgs(
     if (args.length === 0 && action.nargs === "?") {
       return action.default ?? null;
     }
-    if (args.length === 1 && takesValues(action) && action.nargs !== "+") {
+    if (args.length === 0 && action.nargs === "*" && action.flags.length === 0) {
+      if (action.default === undefined || action.default === null) return [];
+      checkValue(action, action.default);
+      return action.default;
+    }
+    if (args.length === 1 && takesValues(action) && (!action.nargs || action.nargs === "?")) {
       const value = getValue(action, args[0] as string);
       checkValue(action, value);
       return value;
@@ -285,6 +289,9 @@ function parseKnownArgs(
         break;
       case "store_true":
         namespace[action.dest] = true;
+        break;
+      case "store_false":
+        namespace[action.dest] = false;
         break;
       case "append": {
         const items = namespace[action.dest];

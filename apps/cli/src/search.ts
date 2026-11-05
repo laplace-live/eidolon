@@ -14,6 +14,7 @@ import {
   pyStrip,
   pyTruthy,
   setLogLevel,
+  splitlines,
 } from "@eidolon/config";
 import {
   formatChunks,
@@ -28,10 +29,12 @@ import {
   decodeTopics,
   hasStreamTimeReference,
   type IsoDate,
+  ingestHint,
   isStreamOverview,
   openStreamArchiveRetriever,
   type Retriever,
   type SearchRow,
+  STREAM_ARCHIVE,
   STREAM_CHUNKS_TABLE,
   StreamCatalog,
   streamArchiveSearchParams,
@@ -45,7 +48,7 @@ import {
   parserError,
 } from "./argparse.ts";
 import { type CliIo, printer, reportExit, resolveIo } from "./io.ts";
-import { itemsOr, splitlines } from "./py.ts";
+import { itemsOr } from "./py.ts";
 
 const USAGE = `usage: laplace-search [-h] [--top-k TOP_K] [--db-path DB_PATH] [--table TABLE]
                       [--full] [--json] [--recall] [--today YYYY-MM-DD]
@@ -307,7 +310,7 @@ export async function searchMain(argv: readonly string[], deps: SearchDeps = {})
   if (args.recall) return recallMain(args, retriever, deps, io);
   if (!retriever.hasTable) {
     io.stderr(`No LanceDB table at ${args.dbPath}/${args.table}.lance\n`);
-    io.stderr("Run `uv run laplace-ingest-streams` first.\n");
+    io.stderr(`Run \`${ingestHint(STREAM_ARCHIVE.ingestCommand)}\` first.\n`);
     return 1;
   }
 

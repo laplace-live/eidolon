@@ -1,0 +1,164 @@
+[
+  {
+    "argv": [],
+    "code": "parsed",
+    "stderr": "",
+    "ns": {
+      "paths": [],
+      "auto_slice": true,
+      "files": null,
+      "stages": null,
+      "out": null
+    }
+  },
+  {
+    "argv": ["a/", "./b", "c//d/."],
+    "code": "parsed",
+    "stderr": "",
+    "ns": {
+      "paths": ["a", "b", "c/d"],
+      "auto_slice": true,
+      "files": null,
+      "stages": null,
+      "out": null
+    }
+  },
+  {
+    "argv": ["--no-auto-slice"],
+    "code": "parsed",
+    "stderr": "",
+    "ns": {
+      "paths": [],
+      "auto_slice": false,
+      "files": null,
+      "stages": null,
+      "out": null
+    }
+  },
+  {
+    "argv": ["--no-auto-slice=x"],
+    "code": 2,
+    "stderr": "usage: prog [-h] [--no-auto-slice] [--files [FILES ...]] [--stages STAGES]\n            [--out OUT]\n            [paths ...]\nprog: error: argument --no-auto-slice: ignored explicit argument 'x'\n",
+    "ns": null
+  },
+  {
+    "argv": ["--files"],
+    "code": "parsed",
+    "stderr": "",
+    "ns": {
+      "paths": [],
+      "auto_slice": true,
+      "files": [],
+      "stages": null,
+      "out": null
+    }
+  },
+  {
+    "argv": ["--files", "a", "b"],
+    "code": "parsed",
+    "stderr": "",
+    "ns": {
+      "paths": [],
+      "auto_slice": true,
+      "files": ["a", "b"],
+      "stages": null,
+      "out": null
+    }
+  },
+  {
+    "argv": ["--files=a"],
+    "code": "parsed",
+    "stderr": "",
+    "ns": {
+      "paths": [],
+      "auto_slice": true,
+      "files": ["a"],
+      "stages": null,
+      "out": null
+    }
+  },
+  {
+    "argv": ["--files", "a", "--no-auto-slice", "x.md"],
+    "code": "parsed",
+    "stderr": "",
+    "ns": {
+      "paths": ["x.md"],
+      "auto_slice": false,
+      "files": ["a"],
+      "stages": null,
+      "out": null
+    }
+  },
+  {
+    "argv": ["x.md", "--files", "y"],
+    "code": "parsed",
+    "stderr": "",
+    "ns": {
+      "paths": ["x.md"],
+      "auto_slice": true,
+      "files": ["y"],
+      "stages": null,
+      "out": null
+    }
+  },
+  {
+    "argv": ["--stages", "download,bogus"],
+    "code": 2,
+    "stderr": "usage: prog [-h] [--no-auto-slice] [--files [FILES ...]] [--stages STAGES]\n            [--out OUT]\n            [paths ...]\nprog: error: argument --stages: Unknown stage(s): bogus\n",
+    "ns": null
+  },
+  {
+    "argv": ["--stages", "download"],
+    "code": "parsed",
+    "stderr": "",
+    "ns": {
+      "paths": [],
+      "auto_slice": true,
+      "files": null,
+      "stages": ["download"],
+      "out": null
+    }
+  },
+  {
+    "argv": ["--out", ""],
+    "code": "parsed",
+    "stderr": "",
+    "ns": {
+      "paths": [],
+      "auto_slice": true,
+      "files": null,
+      "stages": null,
+      "out": "."
+    }
+  },
+  {
+    "argv": ["--out", "x//y/"],
+    "code": "parsed",
+    "stderr": "",
+    "ns": {
+      "paths": [],
+      "auto_slice": true,
+      "files": null,
+      "stages": null,
+      "out": "x/y"
+    }
+  },
+  {
+    "argv": ["--no"],
+    "code": "parsed",
+    "stderr": "",
+    "ns": {
+      "paths": [],
+      "auto_slice": false,
+      "files": null,
+      "stages": null,
+      "out": null
+    }
+  },
+  {
+    "argv": ["a", "--no-auto-slice", "b"],
+    "code": 2,
+    "stderr": "usage: prog [-h] [--no-auto-slice] [--files [FILES ...]] [--stages STAGES]\n            [--out OUT]\n            [paths ...]\nprog: error: unrecognized arguments: b\n",
+    "ns": null
+  }
+]

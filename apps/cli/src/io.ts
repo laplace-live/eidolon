@@ -15,6 +15,11 @@ const processIo: CliIo = {
   },
 };
 
+/** What every command takes: where it writes, and the signal SIGINT and SIGTERM abort. */
+export interface CommandDeps extends Partial<CliIo> {
+  readonly signal?: AbortSignal;
+}
+
 export function resolveIo(deps: Partial<CliIo>): CliIo {
   return { stdout: deps.stdout ?? processIo.stdout, stderr: deps.stderr ?? processIo.stderr };
 }

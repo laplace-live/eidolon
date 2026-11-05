@@ -38,11 +38,41 @@
   },
   "overrides": [
     {
+      "includes": ["apps/bot/**", "packages/**", "!packages/ingest/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@eidolon/ingest": "The bot image skips builds for packages/ingest changes (docker.yml); drop that paths-ignore line before anything the bot loads imports it."
+                },
+                "patterns": [
+                  {
+                    "group": ["@pipedog/*", "@pipedog/**"],
+                    "message": "Only packages/runtime may import pipedog; expose what you need through @eidolon/runtime."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "includes": ["packages/runtime/**"],
       "linter": {
         "rules": {
           "style": {
-            "noRestrictedImports": "off"
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@eidolon/ingest": "The bot image skips builds for packages/ingest changes (docker.yml); drop that paths-ignore line before anything the bot loads imports it."
+                }
+              }
+            }
           }
         }
       }

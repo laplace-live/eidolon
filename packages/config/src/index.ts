@@ -12,6 +12,9 @@ export {
   personaIds,
   personaTemplateDir,
   resolvePersonaPath,
+  type SourceFolder,
+  sourceFolder,
+  sourcesDir,
   templatesDir,
 } from "./home.ts";
 export { type HttpStatusReply, type HttpxStatusOptions, httpxStatusMessage } from "./httpx.ts";
@@ -24,8 +27,11 @@ export {
   type LogRecord,
   type LogSink,
   logger,
+  logToStderr,
   setLogLevel,
+  stderrSink,
 } from "./logger.ts";
+export { type JsonPoster, OpenAIClient, type OpenAIClientOptions } from "./openai-http.ts";
 export { parseRetryAfter, retryDelaySeconds, shouldRetry } from "./openai-retry.ts";
 export {
   extractCostUsd,
@@ -41,8 +47,10 @@ export {
   isJsonObject,
   isPlainObject,
   isPySpace,
+  loadsPy,
   PY_SPACE_CLASS,
   PyFloat,
+  partition,
   pyCompare,
   pyDigitValue,
   pyError,
@@ -51,9 +59,12 @@ export {
   pyGet,
   pyIter,
   pyJsonDumps,
+  pyLstrip,
   pyParseFloat,
   pyParseInt,
   pyRepr,
+  pyRound,
+  pyRstrip,
   pySplitWs,
   pyStr,
   pyStrip,
@@ -61,8 +72,18 @@ export {
   pyTruthy,
   pyTypeName,
   sortedPy,
+  splitlines,
 } from "./py.ts";
+export { type PyJsonOptions, pyJsonLoads, pyRawDecode } from "./py-json.ts";
 export { type PydanticLineError, validationErrorText } from "./pydantic.ts";
+export {
+  pyPath,
+  pyPathName,
+  pyPathStem,
+  pyPathSuffix,
+  pyPathWithName,
+  pyPathWithSuffix,
+} from "./pypath.ts";
 export {
   activePersona,
   CREDENTIALS,
@@ -83,3 +104,4 @@ export {
   type SettingScope,
   type SettingsFiles,
 } from "./settings.ts";
+export { type Clock, pyIsoformatUtc, utcDateParts, utcIsoDate, wallClockMicros } from "./utc.ts";

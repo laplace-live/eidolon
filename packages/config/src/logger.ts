@@ -38,6 +38,11 @@ export const consoleSink: LogSink = (record) => {
   else console.log(text);
 };
 
+/** Every level to stderr, as loguru's default sink writes. */
+export const stderrSink: LogSink = (record) => {
+  console.error(formatLogRecord(record));
+};
+
 class Logger {
   #threshold: number = LOG_LEVELS.DEBUG;
   #sinks: LogSink[] = [consoleSink];
@@ -102,4 +107,9 @@ export const logger = new Logger();
 
 export function setLogLevel(level: LogLevel): void {
   logger.setLevel(level);
+}
+
+/** Sends every log line to stderr, for a command whose stdout is its output. */
+export function logToStderr(): void {
+  logger.setSink(stderrSink);
 }

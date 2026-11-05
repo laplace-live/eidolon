@@ -39,6 +39,7 @@
         "@eidolon/config": "workspace:*",
         "@eidolon/context": "workspace:*",
         "@eidolon/imagegen": "workspace:*",
+        "@eidolon/ingest": "workspace:*",
         "@eidolon/retrieval": "workspace:*",
       },
     },
@@ -66,6 +67,13 @@
       "name": "@eidolon/imagegen",
       "dependencies": {
         "@eidolon/config": "workspace:*",
+      },
+    },
+    "packages/ingest": {
+      "name": "@eidolon/ingest",
+      "dependencies": {
+        "@eidolon/config": "workspace:*",
+        "@eidolon/retrieval": "workspace:*",
       },
     },
     "packages/memory": {
@@ -194,6 +202,8 @@
     "@eidolon/core": ["@eidolon/core@workspace:packages/core"],
 
     "@eidolon/imagegen": ["@eidolon/imagegen@workspace:packages/imagegen"],
+
+    "@eidolon/ingest": ["@eidolon/ingest@workspace:packages/ingest"],
 
     "@eidolon/memory": ["@eidolon/memory@workspace:packages/memory"],
 

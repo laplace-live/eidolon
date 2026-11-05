@@ -10,6 +10,7 @@ export {
   diffDays,
   firstOfMonth,
   firstOfNextMonth,
+  fromIsoformat,
   type IsoDate,
   isoDate,
   isValidIsoDate,
@@ -47,7 +48,7 @@ export {
   vectorSearch,
 } from "./hybrid.ts";
 export { JiebaTokenizer } from "./jieba.ts";
-export { clip, PyPattern, pyInt, pyRegexSource } from "./py.ts";
+export { clip, type PyFlags, PyPattern, pyInt, pyRegexSource } from "./py.ts";
 export {
   buildQueryText,
   extractDateFilter,
@@ -100,9 +101,11 @@ export {
   streamScope,
 } from "./stream_time.ts";
 export {
+  CLI_LAUNCHER,
   dbPathArgument,
   decodeTopics,
   INDEX_DIR,
+  ingestHint,
   listTableNames,
   openTable,
   PERSONA_FACTS,

@@ -1,14 +1,8 @@
 // fixtures/time.json holds CPython's C fromisoformat on curated stamps plus a sample of a
 // 17k-case battery (systematic shapes and random mutations), all of which this port matched.
 import { describe, expect, test } from "bun:test";
-import {
-  normalizeIsoTimestampToUtc,
-  parseIsoDate,
-  parseIsoDatetime,
-  pyIsoformatUtc,
-  utcIsoDate,
-  wallClockMicros,
-} from "../src/time.ts";
+import { pyIsoformatUtc, utcIsoDate, wallClockMicros } from "@eidolon/config";
+import { normalizeIsoTimestampToUtc, parseIsoDate, parseIsoDatetime } from "../src/time.ts";
 import fixtures from "./fixtures/time.json";
 
 function datetimeOutcome(input: unknown): unknown[] {

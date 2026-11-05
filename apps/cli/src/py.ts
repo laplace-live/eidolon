@@ -1,7 +1,6 @@
-// Python semantics the CLI output depends on that @eidolon/config doesn't cover: `str.splitlines`,
-// `textwrap.indent`, `round`, `statistics`, format-spec padding by code point, and a `json.loads`
-// that keeps floats apart from ints.
-import { cpLen, isPySpace, PyFloat, pyError, pyIter, pyTruthy } from "@eidolon/config";
+// Python semantics the CLI output depends on that @eidolon/config doesn't cover: `textwrap.indent`,
+// `statistics` and format-spec padding by code point.
+import { cpLen, isPySpace, PyFloat, pyError, pyIter, pyTruthy, splitlines } from "@eidolon/config";
 
 export type PyNumber = number | PyFloat;
 
@@ -9,34 +8,9 @@ export function numOf(x: PyNumber): number {
   return x instanceof PyFloat ? x.value : x;
 }
 
-// biome-ignore lint/suspicious/noControlCharactersInRegex: str.splitlines() also splits on U+001C–U+001E.
-const LINE_BREAK = /\r\n|[\n\v\f\r\x1c-\x1e\x85\u2028\u2029]/;
-const LINE_BREAKS = new RegExp(LINE_BREAK.source, "g");
-
-/** `str.splitlines()`. */
-export function splitlines(text: string): string[] {
-  if (text === "") return [];
-  const lines = text.split(LINE_BREAK);
-  if (lines.at(-1) === "") lines.pop();
-  return lines;
-}
-
-/** `str.splitlines(keepends=True)`. */
-function splitlinesKeepends(text: string): string[] {
-  const lines: string[] = [];
-  let start = 0;
-  for (const match of text.matchAll(LINE_BREAKS)) {
-    const end = match.index + match[0].length;
-    lines.push(text.slice(start, end));
-    start = end;
-  }
-  if (start < text.length) lines.push(text.slice(start));
-  return lines;
-}
-
 /** `textwrap.indent(text, prefix)`: whitespace-only lines stay unprefixed. */
 export function textwrapIndent(text: string, prefix: string): string {
-  return splitlinesKeepends(text)
+  return splitlines(text, true)
     .map((line) => ([...line].every(isPySpace) ? line : prefix + line))
     .join("");
 }
@@ -54,20 +28,6 @@ export function rjust(text: string, width: number): string {
 /** `value or []`, iterated. */
 export function itemsOr(value: unknown): unknown[] {
   return pyTruthy(value) ? pyIter(value) : [];
-}
-
-/** `str.partition(sep)`. */
-export function partition(text: string, sep: string): [string, string, string] {
-  const i = text.indexOf(sep);
-  return i === -1 ? [text, "", ""] : [text.slice(0, i), sep, text.slice(i + sep.length)];
-}
-
-/** `round(x)` to an int: ties go to the even neighbour. */
-export function pyRound(x: number): number {
-  const floor = Math.floor(x);
-  const fraction = x - floor;
-  if (fraction !== 0.5) return fraction < 0.5 ? floor : floor + 1;
-  return floor % 2 === 0 ? floor : floor + 1;
 }
 
 function sortedNumbers(data: readonly number[]): number[] {
@@ -106,14 +66,4 @@ export function quantilesExclusive(data: readonly number[], n: number): number[]
 export function mean(data: readonly number[]): number {
   if (data.length === 0) throw pyError("StatisticsError", "mean requires at least one data point");
   return data.reduce((sum, x) => sum + x, 0) / data.length;
-}
-
-/**
- * `json.loads`: a number literal with a fraction or an exponent is a Python float, so it comes back
- * as a PyFloat; every other number is an int.
- */
-export function loadsPy(text: string): unknown {
-  return JSON.parse(text, (_key, value: unknown, context?: { source?: string }) =>
-    typeof value === "number" && /[.eE]/.test(context?.source ?? "") ? new PyFloat(value) : value,
-  );
 }

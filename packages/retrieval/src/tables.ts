@@ -2,6 +2,7 @@
 // per-table presets every caller (context, MCP, CLIs) searches with.
 import { existsSync } from "node:fs";
 import {
+  activePersona,
   envInt,
   envOptional,
   personaPath,
@@ -56,14 +57,22 @@ export async function openTable(dbPath: string, tableName: string): Promise<lanc
   return db.openTable(tableName);
 }
 
+/** How a checkout runs the CLI commands that hints name. */
+export const CLI_LAUNCHER = "bun run";
+
+/** `bun run <command> --persona <id>`: what a message tells the user to run. */
+export function ingestHint(command: string, persona: string = activePersona().id): string {
+  return `${CLI_LAUNCHER} ${command} --persona ${persona}`;
+}
+
 export interface TablePreset {
   readonly table: string;
   /** The column the date pre-filter targets when a query names a day. */
   readonly dateColumn: string;
   /** The prefix of this table's log lines. */
   readonly label: string;
-  /** The command that builds the table, shown when it's absent. */
-  readonly ingestHint: string;
+  /** The command that builds the table, without a launcher (see ingestHint). */
+  readonly ingestCommand: string;
   /** The per-table detail on a hit log line. */
   readonly summarize: (hits: readonly SearchRow[]) => string;
 }
@@ -81,7 +90,7 @@ export const PERSONA_FACTS: TablePreset = Object.freeze({
   table: PERSONA_FACTS_TABLE,
   dateColumn: "date",
   label: "Persona facts",
-  ingestHint: "uv run laplace-ingest-facts",
+  ingestCommand: "laplace-ingest-facts",
   summarize: (hits: readonly SearchRow[]) => {
     const sources = sortedSet(hits.map((r) => field(r, "source", "?")));
     const dated = hits.filter((r) => pyTruthy(r.date)).length;
@@ -93,7 +102,7 @@ export const STREAM_ARCHIVE: TablePreset = Object.freeze({
   table: STREAM_CHUNKS_TABLE,
   dateColumn: "stream_date",
   label: "Archive",
-  ingestHint: "uv run laplace-ingest-streams",
+  ingestCommand: "laplace-ingest-streams",
   summarize: (hits: readonly SearchRow[]) => {
     const dates = sortedSet(hits.map((r) => field(r, "stream_date", "?")));
     const refined = hits.filter((r) => pyTruthy(r.refined)).length;

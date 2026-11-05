@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { OpenAIClient } from "@eidolon/config";
 import {
   extractionRequestBody,
   isReasoningModel,
   OpenAICompatibleChat,
   OpenAICompatibleEmbedder,
 } from "../src/openai.ts";
-import { OpenAIClient } from "../src/openai-http.ts";
 
 interface Seen {
   url: string;

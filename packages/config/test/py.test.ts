@@ -3,17 +3,24 @@ import { describe, expect, test } from "bun:test";
 import {
   cpLen,
   cpSlice,
+  loadsPy,
+  PyFloat,
+  partition,
   pyFixed,
   pyFloatRepr,
   pyJsonDumps,
+  pyLstrip,
   pyParseFloat,
   pyParseInt,
   pyRepr,
+  pyRound,
+  pyRstrip,
   pySplitWs,
   pyStr,
   pyStrip,
   pyTruthy,
   sortedPy,
+  splitlines,
 } from "../src/index.ts";
 
 describe("pyRepr", () => {
@@ -184,4 +191,61 @@ describe("pyParseInt and pyParseFloat", () => {
     }
     expect(pyParseFloat("nan")).toBeNaN();
   });
+});
+
+describe("str.lstrip and str.rstrip", () => {
+  test("Python's whitespace, or the given characters, from one end", () => {
+    const s = "\u3000 \x1cx y\x85\u2028 ";
+    expect(pyLstrip(s)).toBe("x y\x85\u2028 ");
+    expect(pyRstrip(s)).toBe("\u3000 \x1cx y");
+    expect(pyLstrip("xxyabcyx", "xy")).toBe("abcyx");
+    expect(pyRstrip("xxyabcyx", "xy")).toBe("xxyabc");
+    expect(pyLstrip("\ufeff a ")).toBe("\ufeff a ");
+  });
+});
+
+describe("str.splitlines", () => {
+  test("splits on every Python line boundary and drops a trailing empty line", () => {
+    expect(splitlines("")).toEqual([]);
+    expect(splitlines("\n")).toEqual([""]);
+    expect(splitlines("a\nb\n")).toEqual(["a", "b"]);
+    expect(splitlines("a\n\n")).toEqual(["a", ""]);
+    expect(splitlines("a\r\nb\rc\vd\fe\x1cf\x1dg\x1eh\x85i\u2028j\u2029k")).toEqual([
+      ..."abcdefghijk",
+    ]);
+  });
+
+  test("keepends", () => {
+    expect(splitlines("a\r\nb\rc\vd\fe\x1cf\x1dg\x1eh\x85i\u2028j\u2029k\n", true)).toEqual([
+      "a\r\n",
+      "b\r",
+      "c\v",
+      "d\f",
+      "e\x1c",
+      "f\x1d",
+      "g\x1e",
+      "h\x85",
+      "i\u2028",
+      "j\u2029",
+      "k\n",
+    ]);
+    expect(splitlines("", true)).toEqual([]);
+    expect(splitlines("a\n\nb", true)).toEqual(["a\n", "\n", "b"]);
+  });
+});
+
+test("round() ties go to the even neighbour", () => {
+  expect([0.5, 1.5, 2.5, -0.5, -1.5, 2.4999, 2.5001].map(pyRound)).toEqual([0, 2, 2, 0, -2, 2, 3]);
+});
+
+test("str.partition", () => {
+  expect(partition("a=b=c", "=")).toEqual(["a", "=", "b=c"]);
+  expect(partition("abc", "=")).toEqual(["abc", "", ""]);
+});
+
+test("loadsPy keeps 1.0 apart from 1", () => {
+  const value = loadsPy('{"a": 1.0, "b": 1, "c": [2e-05, 0.5, -0]}') as Record<string, unknown>;
+  expect(value.a).toEqual(new PyFloat(1));
+  expect(value.b).toBe(1);
+  expect(pyJsonDumps(value)).toBe('{"a": 1.0, "b": 1, "c": [2e-05, 0.5, 0]}');
 });

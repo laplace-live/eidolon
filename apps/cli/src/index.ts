@@ -1,18 +1,23 @@
-// The TS ports of the Python CLIs the bot shares code with: laplace-search,
-// laplace-eval-retrieval, laplace-generate-image and the retrieval-gate benchmark.
+// The TS ports of the Python CLIs: the query side (laplace-search, laplace-eval-retrieval,
+// laplace-generate-image, the retrieval-gate benchmark) and the offline chain that builds an index.
 export {
   type ActionKind,
   type ArgAction,
   ArgparseExit,
   type ArgType,
+  ArgumentTypeError,
+  commandPersona,
   FROMISOFORMAT,
   INT,
   type Namespace,
+  PATH,
   type ParserSpec,
   parseArgs,
   parserError,
 } from "./argparse.ts";
-export { CLI_USAGE, COMMANDS, runCli } from "./cli.ts";
+export { buildStreamCatalogMain } from "./build_stream_catalog.ts";
+export { CLI_USAGE, COMMANDS, cleanupLimitMs, runCli } from "./cli.ts";
+export { downloadMain } from "./download.ts";
 export {
   ALL_MODES,
   aggregate,
@@ -20,7 +25,7 @@ export {
   benchmarkMedianMs,
   benchmarkP95Ms,
   benchmarkRerankerModels,
-  DEFAULT_QUERIES,
+  defaultQueriesPath,
   EVAL_PARSER,
   type EvalArgs,
   type EvalDeps,
@@ -43,6 +48,7 @@ export {
   rowTextForMatch,
   toJsonBlob,
 } from "./eval_retrieval.ts";
+export { extractUsersMain } from "./extract_users.ts";
 export {
   ask,
   BENCHMARK_DIR,
@@ -65,20 +71,24 @@ export {
   outPath,
   parseGenerateImageArgs,
 } from "./generate_image.ts";
-export { type CliIo, printer, resolveIo } from "./io.ts";
+export { ingestFactsMain } from "./ingest_facts.ts";
+export { ingestStreamsMain } from "./ingest_streams.ts";
+export { type CliIo, type CommandDeps, printer, resolveIo } from "./io.ts";
+export { CLI_ENTRY, jobArgv } from "./job.ts";
+export { personaArg } from "./persona-arg.ts";
+export { pipelineMain } from "./pipeline.ts";
+export { prepareBatchMain } from "./prepare_batch.ts";
 export {
   ljust,
-  loadsPy,
   mean,
   median,
   numOf,
   type PyNumber,
-  pyRound,
   quantilesExclusive,
   rjust,
-  splitlines,
   textwrapIndent,
 } from "./py.ts";
+export { refineMain } from "./refine.ts";
 export {
   parseSearchArgs,
   SEARCH_PARSER,
@@ -87,3 +97,4 @@ export {
   searchMain,
   UNRESOLVED_PERIOD_NOTE,
 } from "./search.ts";
+export { transcribeMain } from "./transcribe.ts";

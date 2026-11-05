@@ -75,15 +75,66 @@ export function pyParseFloat(text: string): number | null {
   return special[1] === "-" ? -Infinity : Infinity;
 }
 
-/** Python `str.strip(chars)`; without `chars`, Python's whitespace set. */
-export function pyStrip(s: string, chars?: string): string {
-  const strip = chars === undefined ? PY_WHITESPACE_SET : new Set(chars);
+function strip(s: string, chars: string | undefined, left: boolean, right: boolean): string {
+  const set = chars === undefined ? PY_WHITESPACE_SET : new Set(chars);
   const points = [...s];
   let start = 0;
   let end = points.length;
-  while (start < end && strip.has(points[start] as string)) start++;
-  while (end > start && strip.has(points[end - 1] as string)) end--;
+  while (left && start < end && set.has(points[start] as string)) start++;
+  while (right && end > start && set.has(points[end - 1] as string)) end--;
   return points.slice(start, end).join("");
+}
+
+/** Python `str.strip(chars)`; without `chars`, Python's whitespace set. */
+export function pyStrip(s: string, chars?: string): string {
+  return strip(s, chars, true, true);
+}
+
+/** Python `str.lstrip(chars)`. */
+export function pyLstrip(s: string, chars?: string): string {
+  return strip(s, chars, true, false);
+}
+
+/** Python `str.rstrip(chars)`. */
+export function pyRstrip(s: string, chars?: string): string {
+  return strip(s, chars, false, true);
+}
+
+// biome-ignore lint/suspicious/noControlCharactersInRegex: str.splitlines() also splits on U+001C–U+001E.
+const LINE_BREAK = /\r\n|[\n\v\f\r\x1c-\x1e\x85\u2028\u2029]/;
+const LINE_BREAKS = new RegExp(LINE_BREAK.source, "g");
+
+/** `str.splitlines(keepends)`. */
+export function splitlines(text: string, keepends = false): string[] {
+  if (!keepends) {
+    if (text === "") return [];
+    const lines = text.split(LINE_BREAK);
+    if (lines.at(-1) === "") lines.pop();
+    return lines;
+  }
+  const lines: string[] = [];
+  let start = 0;
+  for (const match of text.matchAll(LINE_BREAKS)) {
+    const end = match.index + match[0].length;
+    lines.push(text.slice(start, end));
+    start = end;
+  }
+  if (start < text.length) lines.push(text.slice(start));
+  return lines;
+}
+
+/** `str.partition(sep)`. */
+export function partition(text: string, sep: string): [string, string, string] {
+  const i = text.indexOf(sep);
+  return i === -1 ? [text, "", ""] : [text.slice(0, i), sep, text.slice(i + sep.length)];
+}
+
+/** `round(x)` to an int: ties go to the even neighbour. */
+export function pyRound(x: number): number {
+  const floor = Math.floor(x);
+  const fraction = x - floor;
+  if (fraction !== 0.5) return fraction < 0.5 ? floor : floor + 1;
+  return floor % 2 === 0 ? floor : floor + 1;
 }
 
 /** Python `str.split()` with no arguments: runs of whitespace separate, empties dropped. */
@@ -399,4 +450,14 @@ export function pyJsonDumps(
     return `${open}\n${pad}${items.join(`,\n${pad}`)}\n${closePad}${close}`;
   };
   return encode(value, 0);
+}
+
+/**
+ * `json.loads`: a number literal with a fraction or an exponent is a Python float, so it comes back
+ * as a PyFloat; every other number is an int.
+ */
+export function loadsPy(text: string): unknown {
+  return JSON.parse(text, (_key, value: unknown, context?: { source?: string }) =>
+    typeof value === "number" && /[.eE]/.test(context?.source ?? "") ? new PyFloat(value) : value,
+  );
 }

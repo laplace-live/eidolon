@@ -6,6 +6,7 @@ import type { Table } from "@lancedb/lancedb";
 import * as lancedb from "@lancedb/lancedb";
 import {
   type HybridSearchOptions,
+  ingestHint,
   LanceRetriever,
   type LanceRetrieverOptions,
   openPersonaFactsRetriever,
@@ -49,7 +50,7 @@ async function harness(
     dateColumn: "date",
     label: PERSONA_FACTS.label,
     summarize: PERSONA_FACTS.summarize,
-    ingestHint: PERSONA_FACTS.ingestHint,
+    ingestHint: ingestHint(PERSONA_FACTS.ingestCommand),
     open: async (dbPath, tableName) => {
       h.opens.push(`${dbPath}/${tableName}`);
       const next = tables.shift() ?? null;
@@ -80,7 +81,7 @@ describe("LanceRetriever", () => {
     expect(h.embeds).toEqual([]);
     expect(messages(records, "WARNING")).toEqual([
       "Persona facts: no LanceDB table at /db/persona_facts.lance — retrieval will be a no-op. " +
-        "Run `uv run laplace-ingest-facts` to build it.",
+        "Run `bun run laplace-ingest-facts --persona milky-green` to build it.",
       "Persona facts search skipped: no table loaded",
     ]);
   });
@@ -266,8 +267,8 @@ describe("factories", () => {
       expect((await openPersonaFactsRetriever(dir, { tableName: "nope" })).hasTable).toBe(false);
       expect((await openStreamArchiveRetriever(dir)).hasTable).toBe(false);
       expect(messages(records, "WARNING")).toEqual([
-        `Persona facts: no LanceDB table at ${dir}/nope.lance — retrieval will be a no-op. Run \`uv run laplace-ingest-facts\` to build it.`,
-        `Archive: no LanceDB table at ${dir}/stream_chunks.lance — retrieval will be a no-op. Run \`uv run laplace-ingest-streams\` to build it.`,
+        `Persona facts: no LanceDB table at ${dir}/nope.lance — retrieval will be a no-op. Run \`bun run laplace-ingest-facts --persona milky-green\` to build it.`,
+        `Archive: no LanceDB table at ${dir}/stream_chunks.lance — retrieval will be a no-op. Run \`bun run laplace-ingest-streams --persona milky-green\` to build it.`,
       ]);
     } finally {
       rmSync(dir, { recursive: true, force: true });

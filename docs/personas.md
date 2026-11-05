@@ -54,8 +54,8 @@ environment:
 ```
 
 The names it accepts: `SONIOX_API_KEY`, `OPENROUTER_API_KEY`, `FISH_API_KEY`, `RERANK_API_KEY`,
-`EMBED_API_KEY`, `OPENAI_API_KEY`, `CLOUDFLARE_TURN_KEY_API_TOKEN`, `WEBRTC_TURN_CREDENTIAL`,
-`CF_WAF_BYPASS_TOKEN`.
+`EMBED_API_KEY`, `REFINE_API_KEY`, `OPENAI_API_KEY`, `CLOUDFLARE_TURN_KEY_API_TOKEN`,
+`WEBRTC_TURN_CREDENTIAL`, `CF_WAF_BYPASS_TOKEN`.
 
 The Python offline tools read none of these files; they still take the environment only.
 
@@ -67,6 +67,7 @@ YAML and a credentials file other users can read each log a warning; the bad val
 ```yaml
 identity:
   name: 明前奶绿
+  shortName: 奶绿
   fans: 奶糖花
   summary: 明前奶绿, a Chinese VTuber who streams on Bilibili, …
   viewerLine: 今天来花店的{fans}叫「{viewer}」（B站UID:{uid}）。
@@ -83,6 +84,7 @@ voice:
 | Field | Used in | Default |
 | --- | --- | --- |
 | `name` | the MCP server's instructions and tool descriptions | the folder name |
+| `shortName` | the refine prompts, where they shorten her name | `name` |
 | `fans` | the voice and selfie tool texts: what she calls a viewer | 观众 |
 | `summary` | the retrieval gate, as who "the streamer" is | empty |
 | `viewerLine` | the logged-in viewer line; `{fans}`, `{viewer}`, `{uid}` are filled in, `""` omits it | 正在和你聊天的{fans}叫「{viewer}」（UID:{uid}）。 |
@@ -112,12 +114,25 @@ first.
 | `knowledge.rerank.model` | `RERANK_MODEL` | string | Reranker model |
 | `knowledge.gate.enabled` | `RETRIEVAL_GATE_ENABLED` | flag | Retrieval gate |
 | `knowledge.gate.model` | `RETRIEVAL_GATE_MODEL` | string | Retrieval gate model |
+| `knowledge.facts.files` | `FACTS_FILES` | list | Fact files |
+| `knowledge.facts.subject` | `FACTS_SUBJECT` | string | Fact subject pattern |
+| `knowledge.archive.skipTypes` | `INGEST_SKIP_TYPES` | list | Scene types left out of the index |
+| `transcription.model` | `SONIOX_ASYNC_MODEL` | string | Transcription model |
+| `refine.model` | `REFINE_MODEL` | string | Refine model |
+| `refine.concurrency` | `REFINE_CONCURRENCY` | int | Refine concurrency |
 | `selfie.model` | `SELFIE_MODEL` | string | Selfie model |
 | `selfie.aspectRatio` | `SELFIE_ASPECT_RATIO` | string | Selfie aspect ratio |
 | `selfie.quality` | `SELFIE_QUALITY` | string | Selfie quality |
 | `selfie.ttlSeconds` | `SELFIE_TTL_SECONDS` | int | Selfie lifetime |
 | `selfie.timeoutSeconds` | `SELFIE_TIMEOUT_SECONDS` | int | Selfie timeout |
 | `selfie.references` | `SELFIE_REFERENCE_IMAGES` | paths | Selfie references |
+
+`knowledge.facts.files` lists the name patterns of the persona's fact files (default `*.txt`; quote
+a pattern that starts with `*`). `knowledge.facts.subject` is a regex for the name most facts open
+with, which their embeddings leave out (default: `identity.name`, matched literally).
+`knowledge.archive.skipTypes` defaults to `anime_audio,karaoke`; `none` keeps every scene.
+`transcription.model` defaults to `stt-async-v5`, `refine.model` to `~google/gemini-pro-latest` and
+`refine.concurrency` to 8.
 
 ## settings.yaml
 
@@ -158,6 +173,14 @@ The install's settings, for every persona. Paths resolve in the data home.
 | `embeddings.dim` | `EMBED_DIM` | int | Embedding dimension |
 | `embeddings.baseUrl` | `EMBED_BASE_URL` | string | Embedding API base |
 | `rerank.baseUrl` | `RERANK_BASE_URL` | string | Reranker API base |
+| `refine.baseUrl` | `REFINE_BASE_URL` | string | Refine API base |
+| `sources.ytDlp` | `YT_DLP_PATH` | path | yt-dlp binary |
+| `sources.cookiesFromBrowser` | `YT_DLP_COOKIES_FROM_BROWSER` | string | Browser to read cookies from |
+| `sources.cookiesFile` | `YT_DLP_COOKIES` | path | Cookies file |
+
+`sources.ytDlp` replaces the yt-dlp the tools install and update under `<data home>/bin/`.
+`sources.cookiesFromBrowser` defaults to `chrome`; `none` reads no browser's cookies. yt-dlp writes
+the merged cookie jar back into `sources.cookiesFile`.
 
 ## Deploying a persona
 

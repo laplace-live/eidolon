@@ -1,6 +1,5 @@
 // mem0's OpenAI embedder and extraction LLM over an OpenAI-compatible endpoint.
-import { isPlainObject, pyError, pyTypeName } from "@eidolon/config";
-import type { JsonPoster } from "./openai-http.ts";
+import { isPlainObject, type JsonPoster, pyError, pyTypeName } from "@eidolon/config";
 
 const EMBED_BATCH_SIZE = 100;
 

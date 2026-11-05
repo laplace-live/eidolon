@@ -1,5 +1,6 @@
-// pathlib's PurePosixPath reading of a path string. Python parses every reference path, URL and
-// selfie id this way before taking its name, stem or suffix, and prints paths in this form.
+// pathlib's PurePosixPath reading of a path string: Python parses paths this way before taking
+// their name, stem or suffix, and prints them in this form.
+import { pyStrRepr } from "./py.ts";
 
 function parts(path: string): string[] {
   return path.split("/").filter((part) => part !== "" && part !== ".");
@@ -43,4 +44,14 @@ export function pyPathWithName(path: string, name: string): string {
   const current = pyPathName(normalized);
   if (!current) throw new Error(`${normalized} has an empty name`);
   return normalized.slice(0, normalized.length - current.length) + name;
+}
+
+/** `PurePosixPath(path).with_suffix(suffix)`, normalized like `pyPath`. */
+export function pyPathWithSuffix(path: string, suffix: string): string {
+  const stem = pyPathStem(path);
+  if (!stem) throw new Error(`${pyPath(path)} has an empty name`);
+  if (suffix === "." || (suffix && !suffix.startsWith("."))) {
+    throw new Error(`Invalid suffix ${pyStrRepr(suffix)}`);
+  }
+  return pyPathWithName(path, stem + suffix);
 }

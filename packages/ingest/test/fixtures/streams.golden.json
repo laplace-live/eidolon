@@ -1,0 +1,105 @@
+{
+  "printed_by": "CPython 3.13.4, python-frontmatter 1.3.0, PyYAML 6.0.3: laplace_eidolon.tools._streams.iter_streams over fixtures/streams, metadata values through str()",
+  "streams": [
+    {
+      "md_path": ".hidden.md",
+      "stream_id": "None",
+      "metadata": {
+        "stream_id": "None"
+      },
+      "sidecar_path": ".hidden.refined.json",
+      "chunks": [["None::000", 0, "h", "null id"]]
+    },
+    {
+      "md_path": "2026-01-02-BV1aaaaaaaaa.md",
+      "stream_id": "2026-01-02-BV1aaaaaaaaa",
+      "metadata": {
+        "stream_date": "2026-01-02",
+        "stream_id": "2026-01-02-BV1aaaaaaaaa",
+        "duration_min": "120",
+        "language": "zh",
+        "source_file": "BV1aaaaaaaaa.m4a"
+      },
+      "sidecar_path": "2026-01-02-BV1aaaaaaaaa.refined.json",
+      "chunks": [
+        [
+          "2026-01-02-BV1aaaaaaaaa::000",
+          0,
+          "00:00 — 开场白",
+          "First scene, line one.\n### not a heading\nstill the first scene."
+        ],
+        ["2026-01-02-BV1aaaaaaaaa::001", 1, "10:00 — third", "Third scene."],
+        ["2026-01-02-BV1aaaaaaaaa::002", 2, "heading from the next line", "and its body."],
+        ["2026-01-02-BV1aaaaaaaaa::003", 3, "15:00 — trailing ---", "body\n---\nafter a rule"]
+      ]
+    },
+    {
+      "md_path": "2026-01-03-BV1bbbbbbbbb_p1.md",
+      "stream_id": "2026-01-03-BV1bbbbbbbbb_p1",
+      "metadata": {
+        "stream_date": "2026-01-03",
+        "stream_id": "2026-01-03-BV1bbbbbbbbb_p1"
+      },
+      "sidecar_path": "2026-01-03-BV1bbbbbbbbb_p1.refined.json",
+      "chunks": [
+        ["2026-01-03-BV1bbbbbbbbb_p1::000", 0, "全角空格", "wide space"],
+        ["2026-01-03-BV1bbbbbbbbb_p1::001", 1, "a b", "c"],
+        ["2026-01-03-BV1bbbbbbbbb_p1::002", 2, "x", "form feed"]
+      ]
+    },
+    {
+      "md_path": "bom.md",
+      "stream_id": "bom",
+      "metadata": {},
+      "sidecar_path": "bom.refined.json",
+      "chunks": [["bom::000", 0, "h", "bom kept"]]
+    },
+    {
+      "md_path": "ints.md",
+      "stream_id": "12345",
+      "metadata": {
+        "stream_id": "12345"
+      },
+      "sidecar_path": "ints.refined.json",
+      "chunks": [["12345::000", 0, "h", "integer id"]]
+    },
+    {
+      "md_path": "json-front.md",
+      "stream_id": "j1",
+      "metadata": {
+        "stream_id": "j1",
+        "n": "1.0"
+      },
+      "sidecar_path": "json-front.refined.json",
+      "chunks": [["j1::000", 0, "h", "json frontmatter"]]
+    },
+    {
+      "md_path": "list-front.md",
+      "stream_id": "list-front",
+      "metadata": {},
+      "sidecar_path": "list-front.refined.json",
+      "chunks": [["list-front::000", 0, "h", "list frontmatter"]]
+    },
+    {
+      "md_path": "nofront.md",
+      "stream_id": "nofront",
+      "metadata": {},
+      "sidecar_path": "nofront.refined.json",
+      "chunks": [["nofront::000", 0, "only", "no frontmatter here"]]
+    },
+    {
+      "md_path": "onefence.md",
+      "stream_id": "onefence",
+      "metadata": {},
+      "sidecar_path": "onefence.refined.json",
+      "chunks": [["onefence::000", 0, "h", "body under one fence"]]
+    },
+    {
+      "md_path": "é-sorted.md",
+      "stream_id": "é-sorted",
+      "metadata": {},
+      "sidecar_path": "é-sorted.refined.json",
+      "chunks": [["é-sorted::000", 0, "é", "sorts after ASCII"]]
+    }
+  ]
+}

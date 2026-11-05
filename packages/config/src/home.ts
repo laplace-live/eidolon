@@ -75,3 +75,14 @@ export function resolvePersonaPath(id: string, rel: string): string {
 export function personaDirs(id: string, rel: string): string[] {
   return [join(personaHomeDir(id), rel), join(personaTemplateDir(id), rel)].filter(isDirectory);
 }
+
+/** What a persona's index is built from, kept apart from her folder so a deploy never copies it. */
+export type SourceFolder = "facts" | "lists" | "vods" | "streams" | "eval";
+
+export function sourcesDir(id: string): string {
+  return join(dataHome(), "sources", id);
+}
+
+export function sourceFolder(id: string, folder: SourceFolder): string {
+  return join(sourcesDir(id), folder);
+}

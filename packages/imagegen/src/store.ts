@@ -1,9 +1,9 @@
 // A rendered selfie runs to ~1 MB, ~1.4 MB once base64'd, past what one SCTP data-channel message
 // carries, so the bytes wait here and only a root-relative URL rides the RTVI message. The store is
 // process-local: a second worker would 404 on the first one's ids.
+import { pyPathStem } from "@eidolon/config";
 import type { GeneratedImage } from "./generate.ts";
 import { imageSuffix } from "./mime.ts";
-import { pyPathStem } from "./pypath.ts";
 
 export const SELFIE_PATH = "/api/selfie";
 export const SELFIE_ID_BYTES = 16;

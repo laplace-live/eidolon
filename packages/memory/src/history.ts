@@ -3,9 +3,8 @@
 // timestamp, so SQLite's tie order decides which 10 messages survive eviction: the earliest
 // inserted, measured identical on Python's sqlite3 and bun:sqlite.
 import { Database, type SQLQueryBindings } from "bun:sqlite";
-import { errorText, logger } from "@eidolon/config";
+import { type Clock, errorText, logger, pyIsoformatUtc, wallClockMicros } from "@eidolon/config";
 import type { StoredMessage } from "./prompts.ts";
-import { type Clock, pyIsoformatUtc, wallClockMicros } from "./time.ts";
 
 const CREATE_HISTORY = `
                     CREATE TABLE IF NOT EXISTS history (

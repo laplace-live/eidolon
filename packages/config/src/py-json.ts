@@ -1,8 +1,18 @@
-// mem0 parses the extraction with `json.loads(text, strict=False)`, which accepts raw control
-// characters (newlines included) inside strings, plus NaN/Infinity; JSON.parse rejects all three,
-// which would silently drop extractions on the TS side only. This follows CPython's C scanner,
-// including its error messages and code-point positions, since they reach the logs.
-import { pyError } from "@eidolon/config";
+// Python's `json.loads` and `JSONDecoder.raw_decode`, following CPython's C scanner, its error
+// messages and code-point positions included, since they reach logs and records. JSON.parse also
+// rejects NaN and Infinity, and has no non-strict mode for raw control characters inside strings,
+// which mem0 parses with (`strict=False`).
+import { PyFloat, pyError } from "./py.ts";
+
+export interface PyJsonOptions {
+  /**
+   * Python's default (`json.loads(s)`, `JSONDecoder()`): a raw control character inside a string
+   * is an error. Off unless set, as mem0 parses.
+   */
+  readonly strict?: boolean;
+  /** Number literals with a fraction or an exponent (and NaN, ±Infinity) come back as PyFloat. */
+  readonly floats?: boolean;
+}
 
 class StopIteration {
   readonly index: number;
@@ -44,8 +54,12 @@ function isDigit(ch: string | undefined): boolean {
 
 class Scanner {
   readonly s: readonly string[];
-  constructor(points: readonly string[]) {
+  readonly strict: boolean;
+  readonly floats: boolean;
+  constructor(points: readonly string[], options: PyJsonOptions) {
     this.s = points;
+    this.strict = options.strict ?? false;
+    this.floats = options.floats ?? false;
   }
 
   skipWhitespace(idx: number): number {
@@ -56,6 +70,10 @@ class Scanner {
   matches(idx: number, word: string): boolean {
     for (let i = 0; i < word.length; i++) if (this.s[idx + i] !== word[i]) return false;
     return true;
+  }
+
+  float(value: number): number | PyFloat {
+    return this.floats ? new PyFloat(value) : value;
   }
 
   value(idx: number): [unknown, number] {
@@ -78,19 +96,19 @@ class Scanner {
         if (this.matches(idx, "false")) return [false, idx + 5];
         break;
       case "N":
-        if (this.matches(idx, "NaN")) return [Number.NaN, idx + 3];
+        if (this.matches(idx, "NaN")) return [this.float(Number.NaN), idx + 3];
         break;
       case "I":
-        if (this.matches(idx, "Infinity")) return [Number.POSITIVE_INFINITY, idx + 8];
+        if (this.matches(idx, "Infinity")) return [this.float(Number.POSITIVE_INFINITY), idx + 8];
         break;
       case "-":
-        if (this.matches(idx, "-Infinity")) return [Number.NEGATIVE_INFINITY, idx + 9];
+        if (this.matches(idx, "-Infinity")) return [this.float(Number.NEGATIVE_INFINITY), idx + 9];
         break;
     }
     return this.number(idx);
   }
 
-  number(start: number): [number, number] {
+  number(start: number): [number | PyFloat, number] {
     const s = this.s;
     let idx = start;
     if (s[idx] === "-") idx++;
@@ -113,8 +131,9 @@ class Scanner {
       }
     }
     const value = Number(s.slice(start, idx).join(""));
+    if (float) return [this.float(value), idx];
     // "-0" is a Python int, and ints have no negative zero.
-    return [float || value !== 0 ? value : 0, idx];
+    return [value !== 0 ? value : 0, idx];
   }
 
   hex4(from: number): number | null {
@@ -133,7 +152,14 @@ class Scanner {
     let out = "";
     for (;;) {
       let next = end;
-      while (next < s.length && s[next] !== '"' && s[next] !== "\\") next++;
+      // The C scanner checks for a control character before it notices the string never ends.
+      for (; next < s.length; next++) {
+        const ch = s[next] as string;
+        if (ch === '"' || ch === "\\") break;
+        if (this.strict && (ch.codePointAt(0) as number) <= 0x1f) {
+          throw decodeError("Invalid control character at", s, next);
+        }
+      }
       if (next >= s.length) throw decodeError("Unterminated string starting at", s, begin);
       out += s.slice(end, next).join("");
       if (s[next] === '"') return [out, next + 1];
@@ -214,18 +240,38 @@ class Scanner {
   }
 }
 
-/** `json.loads(text, strict=False)`; failures raise an error named `JSONDecodeError`. */
-export function pyJsonLoads(text: string): unknown {
+/** `json.loads(text)`; failures raise an error named `JSONDecodeError`. Non-strict unless asked. */
+export function pyJsonLoads(text: string, options: PyJsonOptions = {}): unknown {
   const points = Array.from(text);
   if (points[0] === "\ufeff") {
     throw decodeError("Unexpected UTF-8 BOM (decode using utf-8-sig)", points, 0);
   }
-  const scanner = new Scanner(points);
+  const scanner = new Scanner(points, options);
   try {
     const [value, end] = scanner.value(scanner.skipWhitespace(0));
     const rest = scanner.skipWhitespace(end);
     if (rest !== points.length) throw decodeError("Extra data", points, rest);
     return value;
+  } catch (error) {
+    if (error instanceof StopIteration) throw decodeError("Expecting value", points, error.index);
+    throw error;
+  }
+}
+
+/**
+ * `JSONDecoder(strict=...).raw_decode(text, index)`: the first value starting exactly at `index`
+ * (no whitespace skipped) and the code-point index just past it; whatever follows is ignored.
+ * Non-strict unless asked, where `JSONDecoder()` is strict.
+ */
+export function pyRawDecode(
+  text: string,
+  index = 0,
+  options: PyJsonOptions = {},
+): [unknown, number] {
+  if (index < 0) throw pyError("ValueError", "idx cannot be negative");
+  const points = Array.from(text);
+  try {
+    return new Scanner(points, options).value(index);
   } catch (error) {
     if (error instanceof StopIteration) throw decodeError("Expecting value", points, error.index);
     throw error;
