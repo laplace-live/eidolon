@@ -38,10 +38,10 @@ def transcribe_parser() -> argparse.ArgumentParser:
     p.add_argument("--date", default=None, help="Stream date YYYY-MM-DD (default: today)")
     p.add_argument(
         "--language",
-        default="zh",
+        default=None,
         help=(
             "ISO 639-1 code (e.g. 'en', 'zh'), sent to Soniox as a language hint (the model "
-            "still auto-detects). Default: zh (this project is Mandarin-focused). Pass "
+            "still auto-detects). Default: the transcription.language setting, else zh. Pass "
             "--language '' for no hint."
         ),
     )

@@ -5,6 +5,7 @@ export {
   DEFAULT_FORMAT,
   defaultCookiesFile,
   defaultCookiesFromBrowser,
+  jsRuntimeArgs,
   parseProgressLine,
   type YtDlpArgvOptions,
   ytDlpArgs,
@@ -43,6 +44,7 @@ export {
   emptyDownloadReport,
   PARTS_UNLISTED,
   YtDlpFailedError,
+  ytDlpFailureCode,
 } from "./run.ts";
 export { shlexSplit } from "./shlex.ts";
 export { readUrlList } from "./url_list.ts";

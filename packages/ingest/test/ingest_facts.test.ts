@@ -24,6 +24,7 @@ import {
   sortedPy,
 } from "@eidolon/config";
 import {
+  EmbeddingClient,
   EmbeddingUsage,
   type LanceTable,
   openTable,
@@ -399,6 +400,29 @@ describe("ingestFactFiles", () => {
     });
     expect(events.at(-1)).toMatchObject({ type: "summary", ok: false });
     expect(await tableState(join(work, "index"), "persona_facts")).toEqual(before);
+  });
+
+  test("a provider that rejects the key fails the run with code auth-failed", async () => {
+    const rejected = new EmbeddingClient({
+      baseUrl: "https://x.invalid/v1",
+      apiKey: "k",
+      fetch: (async () =>
+        Response.json(
+          { error: { message: "No auth credentials found", code: 401 } },
+          {
+            status: 401,
+          },
+        )) as unknown as typeof fetch,
+      maxRetries: 0,
+    });
+    const { events, report } = run({ client: rejected, cachePath: null });
+    expect(await report).toMatchObject({ ok: false, written: false });
+    expect(events.at(-2)).toMatchObject({
+      type: "stage",
+      status: "failed",
+      code: "auth-failed",
+      provider: "embeddings",
+    });
   });
 
   test("an abort while embedding cancels the run and keeps the old table and its record", async () => {

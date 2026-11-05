@@ -4,6 +4,7 @@
 export * as catalog from "./catalog.ts";
 export * as download from "./download/index.ts";
 export * as extractUsers from "./extract_users.ts";
+export { type Failure, failureOf, sharedFailure } from "./failure.ts";
 export * as ingestFacts from "./ingest_facts.ts";
 export * as ingestStreams from "./ingest_streams.ts";
 export {
@@ -33,13 +34,16 @@ export {
 } from "./paths.ts";
 export * as pipeline from "./pipeline.ts";
 export {
+  EVENT_CODES,
   type EventCode,
   type ItemStatus,
   ndjsonSink,
   noProgress,
   type PlanVideo,
+  type PlaylistEntry,
   type ProgressEvent,
   type ProgressSink,
+  type Provider,
   type RunOptions,
   type Stage,
   SUMMARY_COUNTS,

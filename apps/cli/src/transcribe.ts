@@ -13,6 +13,7 @@ import {
 } from "@eidolon/config";
 import {
   acquireLock,
+  failureOf,
   LockedError,
   ndjsonSink,
   noProgress,
@@ -60,8 +61,8 @@ options:
   --date DATE           Stream date YYYY-MM-DD (default: today)
   --language LANGUAGE   ISO 639-1 code (e.g. 'en', 'zh'), sent to Soniox as a
                         language hint (the model still auto-detects). Default:
-                        zh (this project is Mandarin-focused). Pass --language
-                        '' for no hint.
+                        the transcription.language setting, else zh. Pass
+                        --language '' for no hint.
   --window WINDOW       Scene window in seconds (default: 300 = 5 minutes)
   --out-dir OUT_DIR     Output directory (default: the persona's streams/ in
                         the data home's sources)
@@ -110,7 +111,7 @@ soniox provider:
       default: "soniox",
     },
     { dest: "date", flags: ["--date"], kind: "store" },
-    { dest: "language", flags: ["--language"], kind: "store", default: "zh" },
+    { dest: "language", flags: ["--language"], kind: "store" },
     { dest: "window", flags: ["--window"], kind: "store", type: INT, default: 300 },
     { dest: "out_dir", flags: ["--out-dir"], kind: "store", type: PATH },
     { dest: "persona", flags: ["--persona"], kind: "store" },
@@ -297,7 +298,7 @@ export async function transcribeMain(
         outDir,
         apiKey,
         model,
-        language: ns.language as string,
+        language: (ns.language as string | null) ?? transcribe.configuredLanguage(),
         windowSec: ns.window as number,
         contextFile:
           ns.no_context === true
@@ -319,14 +320,16 @@ export async function transcribeMain(
       if (deps.signal?.aborted) {
         return finish(1, "cancelled", { cancelled: true }, { code: "cancelled" });
       }
+      const failure = failureOf(error, "soniox");
       if (
-        !(error instanceof transcribe.TranscribeError || error instanceof transcribe.SonioxError)
+        !(error instanceof transcribe.TranscribeError || error instanceof transcribe.SonioxError) &&
+        failure?.code !== "disk-full"
       ) {
         throw error;
       }
       logger.error(errorText(error));
       counts.failed = 1;
-      return fail(errorText(error));
+      return fail(errorText(error), failure ?? {});
     }
     const cost =
       result.costUsd === null

@@ -15,7 +15,13 @@ import {
 } from "@eidolon/config";
 import type { Subprocess } from "bun";
 import { terminateOnAbort } from "../limit.ts";
-import { noProgress, type ProgressEvent, type ProgressSink, type RunOptions } from "../progress.ts";
+import {
+  type EventCode,
+  noProgress,
+  type ProgressEvent,
+  type ProgressSink,
+  type RunOptions,
+} from "../progress.ts";
 import { AUDIO_EXTENSIONS } from "../streams.ts";
 import {
   DEFAULT_FORMAT,
@@ -29,12 +35,30 @@ import { resolveYtDlp, type YtDlp, type YtDlpOptions, YtDlpUnavailableError } fr
 /** Why a URL fails when yt-dlp fell back to a bare `<id>` next to its `<id>_p<N>` parts. */
 export const PARTS_UNLISTED = "yt-dlp could not list the video's parts; it may be outdated";
 
-const COOKIE_TROUBLE = /^ERROR:.*(?:cookie|browser|keyring|keychain|dpapi)/im;
+// Reading a browser's cookie store fails in yt-dlp's cookies.py with these words; a site that wants
+// cookies says so in the same terms.
+const COOKIE_TROUBLE =
+  /^ERROR:.*(?:cookie|browser|keyring|keychain|dpapi|local state|kwallet|secretstorage)/im;
 /** Added to a failure whose yt-dlp error is about cookies. */
 export const COOKIE_HINT =
   "yt-dlp reads cookies from YT_DLP_COOKIES_FROM_BROWSER (sources.cookiesFromBrowser; none for " +
   "no browser) and YT_DLP_COOKIES (sources.cookiesFile), or --cookies-from-browser and --cookies";
 const HTTP_412 = /HTTP Error 412\b/;
+const HTTP_429 = /HTTP Error 429\b/;
+const DISK_FULL = /No space left on device|\[Errno 28\]/i;
+// What yt-dlp's urllib and requests handlers pass along when a site can't be reached.
+const NETWORK =
+  /^ERROR:.*(?:timed out|Connection (?:refused|reset|aborted)|Network is unreachable|No route to host|Name or service not known|nodename nor servname|Temporary failure in name resolution|Failed to resolve|getaddrinfo failed)/im;
+
+/** The event code a failed yt-dlp's stderr points to, if any. */
+export function ytDlpFailureCode(stderr: string): EventCode | undefined {
+  if (DISK_FULL.test(stderr)) return "disk-full";
+  if (COOKIE_TROUBLE.test(stderr)) return "cookies-unavailable";
+  if (HTTP_412.test(stderr)) return "http-412";
+  if (HTTP_429.test(stderr)) return "rate-limited";
+  if (NETWORK.test(stderr)) return "network";
+  return undefined;
+}
 
 export interface DownloadFailure {
   readonly url: string;
@@ -131,7 +155,8 @@ async function readText(stream: ReadableStream<Uint8Array>): Promise<string> {
   return new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes).replace(/\r\n?/g, "\n");
 }
 
-async function forEachLine(
+/** Calls `onLine` with each line of `stream` as it arrives, decoded as UTF-8. */
+export async function forEachLine(
   stream: ReadableStream<Uint8Array>,
   onLine: (line: string) => void,
 ): Promise<void> {
@@ -199,6 +224,12 @@ async function runYtDlp(
 /** yt-dlp exited non-zero where the whole call fails with it, as in expandPlaylist. */
 export class YtDlpFailedError extends Error {
   override name = "YtDlpFailedError";
+  /** What its stderr points to, as ytDlpFailureCode reads it. */
+  readonly code: EventCode | undefined;
+  constructor(message: string, code?: EventCode) {
+    super(message);
+    this.code = code;
+  }
 }
 
 /** Python's stderr tail: its last six lines, indented under the first. */
@@ -237,6 +268,7 @@ export async function downloadUrls(
   const { signal, vodsDir } = opts;
   const total = urls.length;
   const failedUrls: DownloadFailure[] = [];
+  const codes: (EventCode | undefined)[] = [];
   let succeededUrls = 0;
   let cancelled = false;
   let started = performance.now();
@@ -256,10 +288,14 @@ export async function downloadUrls(
       durationSec: initial === null ? 0 : (performance.now() - started) / 1000,
       cancelled,
     };
+    // A code every failed URL shares is the stage's, as when the cookies are unreadable for all.
+    const [code] = codes;
+    const shared = code !== undefined && codes.every((other) => other === code);
     onProgress({
       type: "stage",
       stage: "download",
       status: cancelled ? "cancelled" : failedUrls.length > 0 ? "failed" : "done",
+      ...(!cancelled && shared ? { code } : {}),
     });
     onProgress(downloadSummaryEvent(report));
     return report;
@@ -321,6 +357,7 @@ export async function downloadUrls(
       const message = errorText(error);
       logger.error(`  ✗ subprocess error: ${message}`);
       failedUrls.push({ url, error: message });
+      codes.push(undefined);
       onProgress({ ...item, status: "failed", message });
       continue;
     }
@@ -343,15 +380,16 @@ export async function downloadUrls(
         error += `\n    ${COOKIE_HINT}`;
       }
       failedUrls.push({ url, error });
-      const http412 = HTTP_412.test(outcome.stderr);
+      const code = ytDlpFailureCode(outcome.stderr);
+      codes.push(code);
       onProgress({
         ...item,
         status: "failed",
         message: error,
         outputs: outputs(),
-        ...(http412 ? { code: "http-412" as const } : {}),
+        ...(code === undefined ? {} : { code }),
       });
-      if (http412 && ytDlp.source === "managed" && !checkedAfter412) {
+      if (HTTP_412.test(outcome.stderr) && ytDlp.source === "managed" && !checkedAfter412) {
         checkedAfter412 = true;
         try {
           ytDlp = await resolveYtDlp({ ...opts.ytDlpOptions, onProgress, signal, force: true });
@@ -373,6 +411,7 @@ export async function downloadUrls(
       const removed = removeCreated(vodsDir, created, duplicates);
       logger.error(`  ✗ ${PARTS_UNLISTED}; removed ${removed.join(", ")}`);
       failedUrls.push({ url, error: PARTS_UNLISTED });
+      codes.push(undefined);
       const kept = outputs().filter((id) => !duplicates.includes(id));
       onProgress({ ...item, status: "failed", message: PARTS_UNLISTED, outputs: kept });
       continue;

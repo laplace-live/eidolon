@@ -1,9 +1,11 @@
 // What a run reports while it works: the CLI prints these, or with --json writes one per line for
-// the web app, which spawns the CLI and reads its stdout.
+// the web app, which spawns the CLI and reads its stdout. Keep this module import-free: the web app
+// imports its types (`@eidolon/ingest/progress`) without Bun or Node.
 
 export type Stage =
   | "setup"
   | "download"
+  | "expand"
   | "transcribe"
   | "refine"
   | "ingest-streams"
@@ -12,14 +14,42 @@ export type Stage =
 
 export type ItemStatus = "start" | "done" | "skipped" | "failed" | "cancelled";
 
-export type EventCode =
-  | "missing-credential"
-  | "locked"
-  | "ytdlp-unavailable"
-  | "http-412"
-  | "no-upload-date"
-  | "no-speech"
-  | "cancelled";
+/** Why an item or stage ended as it did, for the web app to say in the viewer's language. */
+export const EVENT_CODES = [
+  "missing-credential",
+  "auth-failed",
+  "insufficient-credits",
+  "rate-limited",
+  "network",
+  "locked",
+  "ytdlp-unavailable",
+  "cookies-unavailable",
+  "ffmpeg-unavailable",
+  "disk-full",
+  "http-412",
+  "no-upload-date",
+  "no-speech",
+  "cancelled",
+] as const;
+
+export type EventCode = (typeof EVENT_CODES)[number];
+
+/**
+ * Whose key, credit or quota an `auth-failed`, `insufficient-credits`, `rate-limited` or `network`
+ * code is about: Soniox's, refine's (REFINE_API_KEY or OPENROUTER_API_KEY, at REFINE_BASE_URL or
+ * OpenRouter) or the embedding API's (EMBED_API_KEY or OPENROUTER_API_KEY, at EMBED_BASE_URL or
+ * OpenRouter). Absent when the code is about a video site yt-dlp was fetching from.
+ */
+export type Provider = "soniox" | "refine" | "embeddings";
+
+/** One video a playlist, channel or series lists, as `download --expand` finds it. */
+export interface PlaylistEntry {
+  readonly url: string;
+  /** The yt-dlp id: a Bilibili BV id, a YouTube video id. */
+  readonly id: string;
+  readonly title?: string;
+  readonly durationSec?: number;
+}
 
 /** One video as the plan sees it: where each stage stands, and what the rest would cost. */
 export interface PlanVideo {
@@ -49,6 +79,7 @@ export type ProgressEvent =
       readonly total?: number;
       readonly message?: string;
       readonly code?: EventCode;
+      readonly provider?: Provider;
     }
   | {
       readonly type: "item";
@@ -61,10 +92,12 @@ export type ProgressEvent =
       readonly total?: number;
       readonly message?: string;
       readonly code?: EventCode;
+      readonly provider?: Provider;
       readonly costUsd?: number;
       /** The video ids a download created. */
       readonly outputs?: readonly string[];
     }
+  | { readonly type: "entry"; readonly entry: PlaylistEntry }
   | {
       readonly type: "progress";
       readonly stage: Stage;
@@ -91,6 +124,7 @@ export type ProgressEvent =
 /** The counts each stage's summary carries, by name; the web app reads them. */
 export const SUMMARY_COUNTS = {
   download: ["requested", "succeeded", "failed", "newFiles"],
+  expand: ["entries"],
   transcribe: ["total", "skipped", "skippedNoDate", "succeeded", "failed", "noSpeech"],
   refine: ["streams", "chunksNew", "chunksSkipped", "chunksFailed", "tokensIn", "tokensOut"],
   "ingest-streams": ["rows", "cacheHits", "embedded"],

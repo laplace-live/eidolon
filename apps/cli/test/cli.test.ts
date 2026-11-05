@@ -72,10 +72,17 @@ test("every command has its root script", async () => {
 });
 
 test("Ctrl-C quits a command that never reads its signal at once; the others get time to stop", () => {
-  for (const name of ["search", "eval-retrieval", "generate-image", "gate-decisions"]) {
+  const ignoring = [
+    "search",
+    "eval-retrieval",
+    "generate-image",
+    "gate-decisions",
+    "prepare-batch",
+  ];
+  for (const name of ignoring) {
     expect(cleanupLimitMs([name, "--help"]), name).toBe(0);
   }
-  for (const name of Object.keys(NEW_COMMANDS)) {
+  for (const name of Object.keys(NEW_COMMANDS).filter((name) => !ignoring.includes(name))) {
     expect(cleanupLimitMs([name, "--help"]), name).toBe(CLEANUP_LIMIT_MS);
   }
 });
@@ -220,6 +227,30 @@ describe("--persona", () => {
       resetSettings();
     }
   });
+});
+
+/** Every import or re-export statement in `source`, type-only ones included. */
+function importStatements(source: string): string[] {
+  return (
+    source.match(
+      /^\s*(?:import\s[^;]*?from\s*["'][^"']*["']|import\s*["'][^"']*["']|export\s[^;]*?from\s*["'][^"']*["'])/gm,
+    ) ?? []
+  );
+}
+
+test("@eidolon/cli/job and @eidolon/ingest/progress are import-free leaves the web app can import", async () => {
+  const manifest = await Bun.file(join(import.meta.dir, "../package.json")).json();
+  expect(manifest.exports["./job"]).toBe("./src/job.ts");
+  const progress = Bun.resolveSync("@eidolon/ingest/progress", import.meta.dir);
+  expect(progress).toEndWith(join("packages", "ingest", "src", "progress.ts"));
+  const transpiler = new Bun.Transpiler({ loader: "ts" });
+  for (const path of [join(import.meta.dir, "../src/job.ts"), progress]) {
+    const source = await Bun.file(path).text();
+    expect(transpiler.scanImports(source), path).toEqual([]);
+    expect(importStatements(source), path).toEqual([]);
+  }
+  // The check itself: a type-only import counts too.
+  expect(importStatements('import type { A } from "a";\nexport { b } from "b";')).toHaveLength(2);
 });
 
 test("a job runs the CLI without a .env from its folder and reports NDJSON", () => {

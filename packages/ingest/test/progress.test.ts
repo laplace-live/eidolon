@@ -40,6 +40,7 @@ test("each stage's summary counts are pinned by name", () => {
   expect(SUMMARY_COUNTS.download).toEqual(["requested", "succeeded", "failed", "newFiles"]);
   expect(Object.keys(SUMMARY_COUNTS)).toEqual([
     "download",
+    "expand",
     "transcribe",
     "refine",
     "ingest-streams",

@@ -42,6 +42,7 @@ const IGNORE_SIGNAL: ReadonlySet<string> = new Set([
   "eval-retrieval",
   "generate-image",
   "gate-decisions",
+  "prepare-batch",
 ]);
 
 /** How long the command `argv` names may take to stop after the first SIGINT or SIGTERM. */

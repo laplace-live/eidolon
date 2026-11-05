@@ -99,7 +99,17 @@ export function readArgvLog(path: string): string[][] {
   return calls;
 }
 
-/** Python's yt-dlp arguments with the port's two additions: --ignore-config first, -- before the URL. */
+/**
+ * Python's yt-dlp arguments with the port's additions: --ignore-config and this Bun as YouTube's
+ * JavaScript runtime first, -- before the URL.
+ */
 export function withPortArgs(python: readonly string[]): string[] {
-  return ["--ignore-config", ...python.slice(0, -1), "--", python.at(-1) as string];
+  return [
+    "--ignore-config",
+    "--js-runtimes",
+    `bun:${process.execPath}`,
+    ...python.slice(0, -1),
+    "--",
+    python.at(-1) as string,
+  ];
 }

@@ -19,6 +19,7 @@ import {
   pyStrip,
   pyTypeName,
 } from "@eidolon/config";
+import { type Failure, failureOf, sharedFailure } from "../failure.ts";
 import { createLimiter, type Limiter } from "../limit.ts";
 import { canonicalPath } from "../paths.ts";
 import { noProgress, type ProgressEvent, type ProgressSink, type RunOptions } from "../progress.ts";
@@ -97,6 +98,8 @@ export interface ChunkOutcome {
   readonly refinement: Refinement | null;
   /** Both passes' cost, a failed chunk's included. */
   readonly usage: Usage;
+  /** The event code of the API error that failed the chunk, if it has one. */
+  readonly failure?: Failure | null;
 }
 
 const direct: Limiter = (task) => task();
@@ -116,12 +119,12 @@ export async function refineChunk(
   const context = streamContext(parsed);
   const timestamp = headingTimestamp(chunk.heading);
   const usage = new Usage();
-  const failed = (message: string): ChunkOutcome => {
+  const failed = (message: string, apiError?: unknown): ChunkOutcome => {
     logger.error(`  ✗ ${chunk.id}: ${message}`);
-    return { chunk, refinement: null, usage };
+    return { chunk, refinement: null, usage, failure: failureOf(apiError, "refine") };
   };
   return limit(async () => {
-    const [extractRaw, extractUsage] = await callLlmJson(client, model, {
+    const [extractRaw, extractUsage, extractError] = await callLlmJson(client, model, {
       system: prompts.extractSystem,
       user: fillTemplate(EXTRACT_USER_TEMPLATE, { context, timestamp, text: chunk.text }),
       temperature: EXTRACT_TEMPERATURE,
@@ -129,7 +132,7 @@ export async function refineChunk(
       responseFormat: prompts.extractResponseFormat,
     });
     usage.add(extractUsage);
-    if (extractRaw === null) return failed("pass 1 (extract) failed");
+    if (extractRaw === null) return failed("pass 1 (extract) failed", extractError);
     let extract: Extract;
     try {
       extract = validateExtract(extractRaw);
@@ -138,7 +141,7 @@ export async function refineChunk(
       return failed(`extract validation failed: ${errorText(error)}`);
     }
 
-    const [synthRaw, synthUsage] = await callLlmJson(client, model, {
+    const [synthRaw, synthUsage, synthError] = await callLlmJson(client, model, {
       system: prompts.synthesizeSystem,
       user: fillTemplate(SYNTHESIZE_USER_TEMPLATE, {
         context,
@@ -151,7 +154,7 @@ export async function refineChunk(
       responseFormat: prompts.synthesisResponseFormat,
     });
     usage.add(synthUsage);
-    if (synthRaw === null) return failed("pass 2 (synthesize) failed");
+    if (synthRaw === null) return failed("pass 2 (synthesize) failed", synthError);
     let synthesis: Synthesis;
     try {
       synthesis = validateSynthesis(synthRaw);
@@ -182,6 +185,8 @@ export interface StreamResult {
   readonly error: string | null;
   /** The run was stopped before every chunk finished; a checkpoint holds what did. */
   readonly cancelled: boolean;
+  /** The event code every failed chunk, or the crash, shares. */
+  readonly failure?: Failure | null;
 }
 
 export interface RefineOptions extends RunOptions {
@@ -302,6 +307,7 @@ async function refineStream(
     signal ? AbortSignal.any([signal, stop.signal]) : stop.signal,
   );
   const usage = new Usage();
+  const failures: (Failure | null)[] = [];
   let succeeded = 0;
   let failed = 0;
   let completed = 0;
@@ -348,6 +354,7 @@ async function refineStream(
       const { refinement } = outcome;
       if (refinement === null) {
         failed++;
+        failures.push(outcome.failure ?? null);
       } else {
         chunks[outcome.chunk.id] = refinement;
         succeeded++;
@@ -400,6 +407,7 @@ async function refineStream(
       usage,
       durationSec: elapsed(),
       cancelled: true,
+      failure: sharedFailure(failures),
     });
   }
 
@@ -421,6 +429,7 @@ async function refineStream(
     chunksFailed: failed,
     usage,
     durationSec: elapsed(),
+    failure: sharedFailure(failures),
   });
 }
 
@@ -432,11 +441,15 @@ const COST_SOURCES: Record<CostSource, "reported" | "estimated" | "unpriced"> = 
   unknown: "unpriced",
 };
 
-/** The summary event's `costUsd` and `costSource`. */
-function summaryCost(usage: Usage): {
-  costUsd?: number;
-  costSource: "reported" | "estimated" | "unpriced";
-} {
+/**
+ * The summary event's `costUsd` and `costSource`: $0 when no chunk was sent, as the ingests report
+ * a run the cache served whole.
+ */
+function summaryCost(
+  usage: Usage,
+  sent: boolean,
+): { costUsd?: number; costSource?: "reported" | "estimated" | "unpriced" } {
+  if (!sent) return { costUsd: 0 };
   const costSource = COST_SOURCES[usage.costSource];
   return costSource === "unpriced" ? { costSource } : { costUsd: usage.costUsd, costSource };
 }
@@ -483,6 +496,7 @@ export async function refineStreams(
         durationSec: 0,
         error: errorText(error),
         cancelled: false,
+        failure: failureOf(error),
       };
     }
     results.push(result);
@@ -498,10 +512,12 @@ export async function refineStreams(
     const error = failureText(result);
     return error === null ? [] : [{ item: result.parsed.streamId, error }];
   });
+  const failed = results.filter((result) => failureText(result) !== null);
   emit({
     type: "stage",
     stage: "refine",
     status: cancelled ? "cancelled" : ok ? "done" : "failed",
+    ...(cancelled || ok ? {} : sharedFailure(failed.map((result) => result.failure ?? null))),
   });
   emit({
     type: "summary",
@@ -517,7 +533,10 @@ export async function refineStreams(
       tokensOut: usage.completionTokens,
     },
     durationSec,
-    ...summaryCost(usage),
+    ...summaryCost(
+      usage,
+      results.some((result) => result.chunksSucceeded + result.chunksFailed > 0),
+    ),
     ...(failures.length > 0 ? { failures } : {}),
   });
   return { results, usage, durationSec, cancelled, ok };
@@ -538,7 +557,9 @@ function itemEnd(result: StreamResult, position: StreamPosition): ProgressEvent 
   const cost = result.usage.costSource === "unknown" ? {} : { costUsd: result.usage.costUsd };
   if (result.cancelled) return { ...base, status: "cancelled", code: "cancelled", ...cost };
   const error = failureText(result);
-  if (error !== null) return { ...base, status: "failed", message: error, ...cost };
+  if (error !== null) {
+    return { ...base, status: "failed", message: error, ...result.failure, ...cost };
+  }
   const worked = result.chunksSucceeded > 0;
   return { ...base, status: worked ? "done" : "skipped", ...cost };
 }

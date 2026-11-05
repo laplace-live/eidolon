@@ -212,6 +212,13 @@ export const SETTINGS: readonly SettingField[] = [
     "Scene types left out of the index",
   ),
   field("persona", "transcription.model", "SONIOX_ASYNC_MODEL", "string", "Transcription model"),
+  field(
+    "persona",
+    "transcription.language",
+    "TRANSCRIBE_LANGUAGE",
+    "string",
+    "Transcription language",
+  ),
   field("persona", "refine.model", "REFINE_MODEL", "string", "Refine model"),
   field("persona", "refine.concurrency", "REFINE_CONCURRENCY", "int", "Refine concurrency"),
   field("persona", "selfie.model", "SELFIE_MODEL", "string", "Selfie model"),

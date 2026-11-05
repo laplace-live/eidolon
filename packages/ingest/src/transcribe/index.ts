@@ -44,6 +44,7 @@ export {
 export {
   type AudioStatus,
   audioStatus,
+  configuredLanguage,
   configuredModel,
   DEFAULT_LANGUAGE,
   DEFAULT_SONIOX_MODEL,

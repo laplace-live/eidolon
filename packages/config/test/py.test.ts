@@ -136,6 +136,13 @@ test("code points", () => {
 test("truthiness", () => {
   expect([null, undefined, false, 0, -0, "", [], {}].map(pyTruthy)).toEqual(Array(8).fill(false));
   expect([true, 1, Number.NaN, " ", [0], { a: 0 }].map(pyTruthy)).toEqual(Array(6).fill(true));
+  // A float as json.loads keeps it: 0.0 is falsy, NaN is not.
+  expect([0, -0, 0.5, Number.NaN].map((v) => pyTruthy(new PyFloat(v)))).toEqual([
+    false,
+    false,
+    true,
+    true,
+  ]);
 });
 
 test("pyJsonDumps matches json.dumps", () => {

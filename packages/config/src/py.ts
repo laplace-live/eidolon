@@ -198,6 +198,7 @@ export function pyTruthy(value: unknown): boolean {
   if (value === null || value === undefined) return false;
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value !== 0;
+  if (value instanceof PyFloat) return value.value !== 0;
   if (typeof value === "bigint") return value !== 0n;
   if (typeof value === "string") return value.length > 0;
   if (Array.isArray(value)) return value.length > 0;

@@ -81,9 +81,15 @@ EOF
     make "$id"
     ;;
   playlist/*)
+    # As --print '%(.{webpage_url,id,title,duration})j' prints entries; the second has no title or
+    # duration.
     i=1
     while [ "$i" -le "${name#playlist/}" ]; do
-      printf 'https://www.bilibili.com/video/BV1eeeeeeee%s\n' "$i"
+      if [ "$i" -eq 2 ]; then
+        printf '{"webpage_url": "https://www.bilibili.com/video/BV1eeeeeeee%s", "id": "BV1eeeeeeee%s"}\n' "$i" "$i"
+      else
+        printf '{"webpage_url": "https://www.bilibili.com/video/BV1eeeeeeee%s", "id": "BV1eeeeeeee%s", "title": "part %s", "duration": %s.5}\n' "$i" "$i" "$i" "$((i * 600))"
+      fi
       i=$((i + 1))
     done
     printf 'WARNING: a warning on stderr\n' >&2

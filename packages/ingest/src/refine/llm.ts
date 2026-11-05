@@ -62,14 +62,14 @@ function firstChoice(response: unknown): { content: unknown; finishReason: unkno
 
 /**
  * `_call_llm_json`: the parsed JSON and what the calls cost, or null and the cost when the call
- * failed or its body wouldn't parse. API errors are logged and give null; any other error, an
- * aborted run's included, propagates.
+ * failed or its body wouldn't parse. API errors are logged and give null, the error third; any
+ * other error, an aborted run's included, propagates.
  */
 export async function callLlmJson(
   client: JsonPoster,
   model: string,
   call: LlmCall,
-): Promise<[unknown, Usage]> {
+): Promise<[unknown, Usage, unknown?]> {
   const responseFormat = call.responseFormat ?? { type: "json_object" };
   // `usage.include` makes OpenRouter return the cost in USD; `provider.require_parameters` makes
   // it skip providers that would silently drop the schema and hand back free-form JSON.
@@ -96,7 +96,7 @@ export async function callLlmJson(
     } catch (error) {
       if (!isApiError(error)) throw error;
       logger.error(`  API error: ${errorText(error)}`);
-      return [null, usage];
+      return [null, usage, error];
     }
 
     // Before any content check, so a body that won't parse still counts its cost.

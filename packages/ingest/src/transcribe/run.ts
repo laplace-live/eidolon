@@ -17,6 +17,7 @@ import { join } from "node:path";
 import {
   cpLen,
   cpSlice,
+  envOptional,
   envStr,
   errorText,
   logger,
@@ -33,6 +34,7 @@ import {
   resolvePersonaPath,
   sortedPy,
 } from "@eidolon/config";
+import { failureOf } from "../failure.ts";
 import { noProgress, type RunOptions } from "../progress.ts";
 import {
   AUDIO_EXTENSIONS,
@@ -225,6 +227,16 @@ export function configuredModel(): string {
   return envStr("SONIOX_ASYNC_MODEL", DEFAULT_SONIOX_MODEL);
 }
 
+/**
+ * The language hint a run sends unless told otherwise: the transcription.language setting
+ * (TRANSCRIBE_LANGUAGE), where `none` sends none, else zh.
+ */
+export function configuredLanguage(): string {
+  const value = envOptional("TRANSCRIBE_LANGUAGE");
+  if (value === undefined) return DEFAULT_LANGUAGE;
+  return value === "none" ? "" : value;
+}
+
 /** A persona's glossary: her own glossary.toml, else her template's. */
 export function glossaryPath(persona: string): string {
   return resolvePersonaPath(persona, "glossary.toml");
@@ -268,7 +280,12 @@ export async function transcribeAudio(options: TranscribeOptions): Promise<Trans
       onProgress({ ...item, status: "cancelled", code: "cancelled" });
       throw options.signal.reason;
     }
-    onProgress({ ...item, status: "failed", message: errorText(error) });
+    onProgress({
+      ...item,
+      status: "failed",
+      message: errorText(error),
+      ...failureOf(error, "soniox"),
+    });
     throw error;
   }
 }

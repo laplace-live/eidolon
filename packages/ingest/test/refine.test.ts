@@ -530,6 +530,54 @@ describe("refineStreams", () => {
     expect(records).toContainEqual(["ERROR", "  API error: Error code: 429 - {}"]);
     expect(records).toContainEqual(["ERROR", "  ✗ a::000: pass 1 (extract) failed"]);
   });
+
+  test("a run with nothing left to refine costs $0, as an ingest the cache served does", async () => {
+    const streams = [parseStream(transcript("a", 1))];
+    await refine.refineStreams(streams, options(fakeClient(normal)));
+    const events: ProgressEvent[] = [];
+    await refine.refineStreams(streams, {
+      ...options(fakeClient(normal)),
+      onProgress: (event) => events.push(event),
+    });
+    expect(events.at(-1)).toMatchObject({ type: "summary", ok: true, costUsd: 0 });
+    expect(events.at(-1)).not.toHaveProperty("costSource");
+  });
+
+  test("a rejected key fails each stream and the stage with code auth-failed", async () => {
+    const events: ProgressEvent[] = [];
+    const rejected = fakeClient(() => {
+      throw pyError("AuthenticationError", "Error code: 401 - {'error': {'message': 'no'}}");
+    });
+    const streams = [parseStream(transcript("a", 2)), parseStream(transcript("b", 1))];
+    const report = await refine.refineStreams(streams, {
+      ...options(rejected),
+      onProgress: (event) => events.push(event),
+    });
+    expect(report.ok).toBe(false);
+    const failed = events.filter((e) => e.type === "item" && e.status === "failed");
+    expect(failed.map((e) => (e.type === "item" ? [e.item, e.code, e.provider] : null))).toEqual([
+      ["a", "auth-failed", "refine"],
+      ["b", "auth-failed", "refine"],
+    ]);
+    expect(events.find((e) => e.type === "stage" && e.status === "failed")).toMatchObject({
+      code: "auth-failed",
+      provider: "refine",
+    });
+
+    // Failures of different kinds share no code.
+    const mixed: ProgressEvent[] = [];
+    const client = fakeClient((call) => {
+      if (call.user.includes("第0段")) throw pyError("APIStatusError", "Error code: 402 - {}");
+      return reply("not json");
+    });
+    await refine.refineStreams([parseStream(transcript("c", 2))], {
+      ...options(client),
+      onProgress: (event) => mixed.push(event),
+    });
+    const item = mixed.find((e) => e.type === "item" && e.status === "failed");
+    expect(item).toMatchObject({ item: "c" });
+    expect(item && "code" in item ? item.code : undefined).toBeUndefined();
+  });
 });
 
 describe("estimates for the plan", () => {

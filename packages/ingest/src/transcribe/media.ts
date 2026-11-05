@@ -16,9 +16,12 @@ import { TranscribeError } from "./errors.ts";
 
 const PROBE_TIMEOUT_MS = 30_000;
 
-/** `binary` as given, else `name` found on PATH; null when there is none. */
+/**
+ * `binary` as given, else `name` found on PATH as it is now (Bun.which alone searches the PATH the
+ * process started with, before the .env applied); null when there is none.
+ */
 export function locateBinary(binary: string | null | undefined, name: string): string | null {
-  return binary === undefined ? Bun.which(name) : binary;
+  return binary === undefined ? Bun.which(name, { PATH: process.env.PATH ?? "" }) : binary;
 }
 
 /**
@@ -41,6 +44,7 @@ export async function probeDurationSec(
   let child: Bun.Subprocess<"ignore", "pipe", "ignore">;
   try {
     child = Bun.spawn(argv, {
+      env: process.env,
       stdin: "ignore",
       stdout: "pipe",
       stderr: "ignore",
@@ -79,6 +83,7 @@ export function ffmpegMissing(): TranscribeError {
   return new TranscribeError(
     "ffmpeg not found on PATH — required for --auto-slice. Install ffmpeg " +
       "(brew install ffmpeg / apt install ffmpeg) and retry.",
+    "ffmpeg-unavailable",
   );
 }
 
@@ -103,7 +108,7 @@ export async function ffmpegSlice(
       ...["-ss", pyFixed(slice.startSec, 3), "-t", pyFixed(slice.durationSec, 3)],
       ...["-i", audio, "-c", "copy", "-vn", "-map_metadata", "-1", slice.outPath],
     ],
-    { stdin: "ignore", stdout: "ignore", stderr: "pipe" },
+    { env: process.env, stdin: "ignore", stdout: "ignore", stderr: "pipe" },
   );
   const release = terminateOnAbort(child, signal);
   let stderr: string;

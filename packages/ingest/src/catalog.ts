@@ -27,6 +27,7 @@ import {
   PyPattern,
   pyInt,
 } from "@eidolon/retrieval";
+import { failureOf } from "./failure.ts";
 import {
   nextTranscript,
   pyParent,
@@ -272,6 +273,6 @@ export async function writeStreamCatalog(
     if (signal?.aborted) return finish({}, "cancelled", { code: "cancelled" });
     const message = errorText(error);
     logger.error(`Stream catalog build failed: ${message}`);
-    return finish({ error: message }, "failed", { message });
+    return finish({ error: message }, "failed", { message, ...failureOf(error) });
   }
 }

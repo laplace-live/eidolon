@@ -265,11 +265,59 @@ describe("resolveYtDlp", () => {
     expect(records.at(-1)?.[1]).toStartWith("Could not update yt-dlp (yt-dlp_linux of 2026.11.01");
 
     rmSync(binDir(), { recursive: true, force: true });
+    // No yt-dlp on PATH to fall back to.
+    setEnv("PATH", join(work, "empty"));
     await expect(
       download.resolveYtDlp({ ...LINUX, fetch: bad.fetch, now: () => now }),
     ).rejects.toThrow(expect.objectContaining({ name: "YtDlpUnavailableError" }));
     expect(existsSync(managed())).toBe(false);
     expect(readdirSync(binDir())).toEqual([]);
+  });
+
+  test("when installing fails, a yt-dlp on PATH runs instead, with a warning", async () => {
+    const onPath = join(work, "path-bin");
+    mkdirSync(onPath);
+    writeFileSync(join(onPath, "yt-dlp"), "#!/bin/sh\n");
+    chmodSync(join(onPath, "yt-dlp"), 0o755);
+    setEnv("PATH", onPath);
+    const fallback = { path: join(onPath, "yt-dlp"), source: "path" } as const;
+
+    // GitHub unreachable: no release to install.
+    const offline = fakeGitHub(() => new Error("getaddrinfo ENOTFOUND"));
+    expect(await download.resolveYtDlp({ ...LINUX, fetch: offline.fetch, now: () => T0 })).toEqual(
+      fallback,
+    );
+    expect(records.at(-1)).toEqual([
+      "WARNING",
+      `Could not install yt-dlp (getaddrinfo ENOTFOUND); using ${fallback.path}, which is never updated`,
+    ]);
+
+    // A download that fails its checksum: the setup stage fails, but yt-dlp is there to run.
+    const events: ProgressEvent[] = [];
+    const bad = fakeGitHub(() => ({ tag: "2026.11.01", body: bytes("evil"), sum: "f".repeat(64) }));
+    const found = await download.resolveYtDlp({
+      ...LINUX,
+      fetch: bad.fetch,
+      now: () => T0,
+      onProgress: (event) => events.push(event),
+    });
+    expect(found).toEqual(fallback);
+    expect(existsSync(managed())).toBe(false);
+    expect(events.at(-1)).toMatchObject({ type: "stage", stage: "setup", status: "failed" });
+    expect(events.at(-1)).not.toHaveProperty("code");
+
+    // And with none on PATH, the stage fails with code ytdlp-unavailable.
+    setEnv("PATH", join(work, "empty"));
+    events.length = 0;
+    await expect(
+      download.resolveYtDlp({
+        ...LINUX,
+        fetch: bad.fetch,
+        now: () => T0,
+        onProgress: (event) => events.push(event),
+      }),
+    ).rejects.toThrow(expect.objectContaining({ name: "YtDlpUnavailableError" }));
+    expect(events.at(-1)).toMatchObject({ status: "failed", code: "ytdlp-unavailable" });
   });
 
   test("a failed check keeps the installed copy and waits a day to ask again", async () => {
@@ -297,6 +345,7 @@ describe("resolveYtDlp", () => {
     expect(github.calls).toEqual([]);
 
     rmSync(binDir(), { recursive: true, force: true });
+    setEnv("PATH", join(work, "empty"));
     await expect(download.resolveYtDlp(opts)).rejects.toThrow(
       "Could not install yt-dlp: getaddrinfo ENOTFOUND. Set YT_DLP_PATH to run another yt-dlp.",
     );

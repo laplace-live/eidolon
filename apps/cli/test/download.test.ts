@@ -231,11 +231,64 @@ describe("laplace-download", () => {
     ]);
   });
 
+  test("--expand --json: an entry event per video, then the summary; the URL comes last, after --", async () => {
+    const io = captureIo();
+    const url = "https://example.invalid/playlist/3";
+    expect(await downloadMain(["--expand", url, "--json"], io.io)).toBe(0);
+    const events = io
+      .stdout()
+      .trimEnd()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(events.every((event) => event.v === 1)).toBe(true);
+    expect(events.map(({ v: _v, t: _t, durationSec: _d, ...event }) => event)).toEqual([
+      { type: "stage", stage: "expand", status: "start" },
+      {
+        type: "entry",
+        entry: {
+          url: "https://www.bilibili.com/video/BV1eeeeeeee1",
+          id: "BV1eeeeeeee1",
+          title: "part 1",
+          durationSec: 600.5,
+        },
+      },
+      {
+        type: "entry",
+        entry: { url: "https://www.bilibili.com/video/BV1eeeeeeee2", id: "BV1eeeeeeee2" },
+      },
+      {
+        type: "entry",
+        entry: {
+          url: "https://www.bilibili.com/video/BV1eeeeeeee3",
+          id: "BV1eeeeeeee3",
+          title: "part 3",
+          durationSec: 1800.5,
+        },
+      },
+      { type: "stage", stage: "expand", status: "done", total: 3 },
+      { type: "summary", stage: "expand", ok: true, counts: { entries: 3 } },
+    ]);
+    expect(readArgvLog(join(work, "argv.log")).at(-1)?.slice(-2)).toEqual(["--", url]);
+
+    const failed = captureIo();
+    const cookies = "https://example.invalid/cookies";
+    expect(await downloadMain(["--expand", cookies, "--json"], failed.io)).toBe(1);
+    const last = failed
+      .stdout()
+      .trimEnd()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+      .slice(-2);
+    expect(last).toMatchObject([
+      { type: "stage", stage: "expand", status: "failed", code: "cookies-unavailable" },
+      { type: "summary", stage: "expand", ok: false, counts: { entries: 0 } },
+    ]);
+  });
+
   test("usage errors", async () => {
     const usage = "usage: laplace-download [-h]";
     for (const [argv, message] of [
       [[], "the following arguments are required: url_list"],
-      [["--expand", "u", "--json"], "argument --json: not allowed with argument --expand"],
       [["--expand", "u", "list.txt"], "argument url_list: not allowed with argument --expand"],
       [["list.txt", "--persona", "nobody"], "argument --persona: write --persona nobody in full"],
       [

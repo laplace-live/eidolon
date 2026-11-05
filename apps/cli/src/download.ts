@@ -62,7 +62,8 @@ options:
   --json                Report progress as JSON lines on stdout; the summary
                         goes to stderr.
   --expand URL          Print the video URLs of a playlist, channel or series,
-                        one per line, and exit.
+                        one per line, and exit. With --json, one entry event per
+                        video instead.
 `,
   actions: [
     { dest: "url_list", flags: [], kind: "store", nargs: "?", type: PATH },
@@ -87,9 +88,6 @@ function parse(argv: readonly string[]): { ns: Namespace; persona: string } {
   const ns = parseArgs(DOWNLOAD_PARSER, argv);
   const persona = commandPersona(DOWNLOAD_PARSER, ns.persona as string | null);
   if (ns.expand !== null) {
-    if (ns.json) {
-      throw parserError(DOWNLOAD_PARSER, "argument --json: not allowed with argument --expand");
-    }
     if (ns.url_list !== null) {
       throw parserError(DOWNLOAD_PARSER, "argument url_list: not allowed with argument --expand");
     }
@@ -97,6 +95,60 @@ function parse(argv: readonly string[]): { ns: Namespace; persona: string } {
     throw parserError(DOWNLOAD_PARSER, "the following arguments are required: url_list");
   }
   return { ns, persona };
+}
+
+/**
+ * `--expand`: the playlist's video URLs printed one per line, or under --json an entry event per
+ * video, then the expansion's summary.
+ */
+async function expand(
+  url: string,
+  options: download.ExpandOptions & { readonly print: ((url: string) => void) | null },
+): Promise<number> {
+  const emit = options.onProgress ?? noProgress;
+  const started = performance.now();
+  const summary = (ok: boolean, entries: number, extra: object = {}) =>
+    emit({
+      type: "summary",
+      stage: "expand",
+      ok,
+      counts: { entries },
+      durationSec: (performance.now() - started) / 1000,
+      ...extra,
+    });
+  emit({ type: "stage", stage: "expand", status: "start" });
+  try {
+    const entries = await download.expandPlaylist(url, options);
+    for (const entry of entries) options.print?.(entry.url);
+    emit({ type: "stage", stage: "expand", status: "done", total: entries.length });
+    summary(true, entries.length);
+    return 0;
+  } catch (error) {
+    if (options.signal?.aborted) {
+      emit({ type: "stage", stage: "expand", status: "cancelled", code: "cancelled" });
+      summary(false, 0, { cancelled: true });
+      return 1;
+    }
+    if (
+      !(
+        error instanceof download.YtDlpUnavailableError ||
+        error instanceof download.YtDlpFailedError
+      )
+    ) {
+      throw error;
+    }
+    logger.error(error.message);
+    const { code } = error;
+    emit({
+      type: "stage",
+      stage: "expand",
+      status: "failed",
+      message: error.message,
+      ...(code === undefined ? {} : { code }),
+    });
+    summary(false, 0, { failures: [{ item: url, error: error.message }] });
+    return 1;
+  }
 }
 
 /** The `laplace-download` command; resolves to its exit code. */
@@ -128,35 +180,24 @@ export async function downloadMain(
   const extraArgs = download.shlexSplit((ns.yt_dlp_args as string) || "");
   const ytDlpOptions = { command: PROG, ...deps.ytDlpOptions };
 
+  const json = ns.json as boolean;
+  const onProgress = json ? ndjsonSink(io.stdout) : noProgress;
+
   if (ns.expand !== null) {
-    try {
-      const urls = await download.expandPlaylist(ns.expand as string, {
-        cookiesFromBrowser,
-        cookiesFile,
-        extraArgs,
-        ytDlpOptions,
-        ...(deps.signal ? { signal: deps.signal } : {}),
-      });
-      for (const url of urls) io.stdout(`${url}\n`);
-      return 0;
-    } catch (error) {
-      if (
-        error instanceof download.YtDlpUnavailableError ||
-        error instanceof download.YtDlpFailedError
-      ) {
-        logger.error(error.message);
-        return 1;
-      }
-      if (deps.signal?.aborted) return 1;
-      throw error;
-    }
+    return expand(ns.expand as string, {
+      cookiesFromBrowser,
+      cookiesFile,
+      extraArgs,
+      ytDlpOptions,
+      onProgress,
+      ...(deps.signal ? { signal: deps.signal } : {}),
+      print: json ? null : (url) => io.stdout(`${url}\n`),
+    });
   }
 
   const urlList = ns.url_list as string;
   const vodsDir = (ns.vods_dir as string | null) ?? sourceFolder(persona, "vods");
   const format = ns.format as string;
-  const json = ns.json as boolean;
-  const onProgress = json ? ndjsonSink(io.stdout) : noProgress;
   // With --json, stdout carries only events.
   const human = json ? io.stderr : io.stdout;
   const failBeforeStart = (message: string, code?: EventCode): number => {

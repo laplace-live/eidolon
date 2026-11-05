@@ -338,6 +338,42 @@ describe("downloadUrls against download_urls", () => {
 });
 
 describe("events", () => {
+  test("a failed URL's code says what its stderr points to", () => {
+    const cases: [string, string | undefined][] = [
+      ['ERROR: could not find chrome cookies database in "/x"', "cookies-unavailable"],
+      [
+        "ERROR: Failed to decrypt with DPAPI. See  https://example.invalid  for more info",
+        "cookies-unavailable",
+      ],
+      ["ERROR: could not find local state file", "cookies-unavailable"],
+      [
+        "ERROR: [youtube] x: Sign in to confirm you’re not a bot. Use --cookies-from-browser or " +
+          "--cookies for the authentication.",
+        "cookies-unavailable",
+      ],
+      ["ERROR: unable to write data: [Errno 28] No space left on device", "disk-full"],
+      [
+        "ERROR: [BiliBili] x: Unable to download JSON metadata: HTTP Error 412: Precondition Failed",
+        "http-412",
+      ],
+      [
+        "ERROR: [youtube] x: Unable to download webpage: HTTP Error 429: Too Many Requests",
+        "rate-limited",
+      ],
+      [
+        "ERROR: [BiliBili] x: Unable to download webpage: <urlopen error [Errno 8] nodename nor " +
+          "servname provided, or not known>",
+        "network",
+      ],
+      ["ERROR: [generic] x: Unable to download webpage: The read operation timed out", "network"],
+      ["ERROR: [generic] 'x' is not a valid URL", undefined],
+      ["WARNING: Connection refused on a retry that worked", undefined],
+    ];
+    for (const [stderr, code] of cases) {
+      expect([stderr, download.ytDlpFailureCode(stderr)]).toEqual([stderr, code]);
+    }
+  });
+
   test("--json mode turns yt-dlp's progress into events and passes the rest on", async () => {
     const vods = join(work, "vods");
     const events: ProgressEvent[] = [];
@@ -392,7 +428,8 @@ describe("events", () => {
         outputs: [],
         code: "http-412",
       },
-      { type: "stage", stage: "download", status: "failed" },
+      // Its one failure's code is the stage's.
+      { type: "stage", stage: "download", status: "failed", code: "http-412" },
     ]);
     expect(events.at(-1)).toEqual({
       type: "summary",
@@ -509,20 +546,39 @@ describe("after an HTTP 412", () => {
 });
 
 describe("expandPlaylist", () => {
-  test("lists a playlist's video URLs through --flat-playlist", async () => {
-    const urls = await download.expandPlaylist("https://example.invalid/playlist/3", {
+  test("lists a playlist's videos through --flat-playlist, an entry event for each", async () => {
+    const events: ProgressEvent[] = [];
+    const entries = await download.expandPlaylist("https://example.invalid/playlist/3", {
       ytDlp: FAKE_YTDLP(),
       cookiesFromBrowser: null,
       cookiesFile: "c.txt",
       extraArgs: ["--sleep-requests", "1"],
+      onProgress: (event) => events.push(event),
     });
-    expect(urls).toEqual([1, 2, 3].map((i) => `https://www.bilibili.com/video/BV1eeeeeeee${i}`));
+    expect(entries).toEqual([
+      {
+        url: "https://www.bilibili.com/video/BV1eeeeeeee1",
+        id: "BV1eeeeeeee1",
+        title: "part 1",
+        durationSec: 600.5,
+      },
+      { url: "https://www.bilibili.com/video/BV1eeeeeeee2", id: "BV1eeeeeeee2" },
+      {
+        url: "https://www.bilibili.com/video/BV1eeeeeeee3",
+        id: "BV1eeeeeeee3",
+        title: "part 3",
+        durationSec: 1800.5,
+      },
+    ]);
+    expect(events).toEqual(entries.map((entry) => ({ type: "entry", entry })));
     expect(readArgvLog(join(work, "argv.log"))).toEqual([
       [
         "--ignore-config",
+        "--js-runtimes",
+        `bun:${process.execPath}`,
         "--flat-playlist",
         "--print",
-        "webpage_url",
+        "%(.{webpage_url,id,title,duration})j",
         "--cookies",
         "c.txt",
         "--sleep-requests",
@@ -531,6 +587,14 @@ describe("expandPlaylist", () => {
         "https://example.invalid/playlist/3",
       ],
     ]);
+  });
+
+  test("a cookie store yt-dlp can't read fails with code cookies-unavailable", async () => {
+    await expect(
+      download.expandPlaylist("https://example.invalid/cookies", { ytDlp: FAKE_YTDLP() }),
+    ).rejects.toThrow(
+      expect.objectContaining({ name: "YtDlpFailedError", code: "cookies-unavailable" }),
+    );
   });
 
   test("a yt-dlp failure throws its stderr tail", async () => {

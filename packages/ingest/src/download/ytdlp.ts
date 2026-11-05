@@ -125,8 +125,8 @@ function which(command: string): string | null {
 /**
  * The yt-dlp to run: YT_DLP_PATH's (sources.ytDlp), else the managed copy in `<home>/bin`,
  * installed on first use and checked against GitHub's latest release at most once per
- * UPDATE_INTERVAL_MS. Where yt-dlp publishes no build for this machine, one on PATH, with a
- * warning. Throws YtDlpUnavailableError when there is none to run.
+ * UPDATE_INTERVAL_MS. Where yt-dlp publishes no build for this machine, or installing it fails,
+ * one on PATH, with a warning. Throws YtDlpUnavailableError when there is none to run.
  */
 export async function resolveYtDlp(opts: YtDlpOptions = {}): Promise<YtDlp> {
   const configured = envOptional("YT_DLP_PATH");
@@ -217,9 +217,16 @@ async function checkAndInstall(
   // A failed check counts as a check, so an offline machine waits a day before trying again.
   const keep = (reason: unknown): YtDlp => {
     if (!existsSync(path)) {
-      throw new YtDlpUnavailableError(
-        `Could not install yt-dlp: ${errorText(reason)}. Set YT_DLP_PATH to run another yt-dlp.`,
+      const onPath = which("yt-dlp");
+      if (onPath === null) {
+        throw new YtDlpUnavailableError(
+          `Could not install yt-dlp: ${errorText(reason)}. Set YT_DLP_PATH to run another yt-dlp.`,
+        );
+      }
+      logger.warning(
+        `Could not install yt-dlp (${errorText(reason)}); using ${onPath}, which is never updated`,
       );
+      return { path: onPath, source: "path" };
     }
     logger.warning(`Could not update yt-dlp (${errorText(reason)}); keeping the installed one`);
     const kept = {
@@ -256,14 +263,21 @@ async function checkAndInstall(
       onProgress({ type: "stage", stage: "setup", status: "cancelled" });
       throw error;
     }
-    onProgress({
+    const failed = {
       type: "stage",
       stage: "setup",
       status: "failed",
       message: errorText(error),
-      ...(existsSync(path) ? {} : { code: "ytdlp-unavailable" as const }),
-    });
-    return keep(error);
+    } as const;
+    let kept: YtDlp;
+    try {
+      kept = keep(error);
+    } catch (unavailable) {
+      onProgress({ ...failed, code: "ytdlp-unavailable" });
+      throw unavailable;
+    }
+    onProgress(failed);
+    return kept;
   }
 }
 

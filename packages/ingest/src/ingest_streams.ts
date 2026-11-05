@@ -39,8 +39,15 @@ import {
   tokenizeZh,
   writeTable,
 } from "@eidolon/retrieval";
+import { failureOf } from "./failure.ts";
 import { canonicalPath } from "./paths.ts";
-import { type EventCode, noProgress, type ProgressEvent, type RunOptions } from "./progress.ts";
+import {
+  type EventCode,
+  noProgress,
+  type ProgressEvent,
+  type Provider,
+  type RunOptions,
+} from "./progress.ts";
 import { loadSidecar, type ParsedStream, parseStream } from "./streams.ts";
 
 const STAGE = "ingest-streams";
@@ -405,7 +412,7 @@ export async function ingestStreams(options: IngestStreamsOptions): Promise<Inge
 
   const finish = (
     status: "done" | "failed" | "cancelled",
-    detail: { message?: string; code?: EventCode } = {},
+    detail: { message?: string; code?: EventCode; provider?: Provider } = {},
   ): IngestStreamsReport => {
     const report: IngestStreamsReport = {
       ok: status === "done",
@@ -520,6 +527,6 @@ export async function ingestStreams(options: IngestStreamsOptions): Promise<Inge
       return finish("failed", { message, code: "missing-credential" });
     }
     logger.error(`Stream ingest failed: ${message}`, error);
-    return finish("failed", { message });
+    return finish("failed", { message, ...failureOf(error, "embeddings") });
   }
 }

@@ -42,10 +42,12 @@ import {
   tokenizeZh,
   writeTable,
 } from "@eidolon/retrieval";
+import { failureOf } from "./failure.ts";
 import {
   type EventCode,
   noProgress,
   type ProgressEvent,
+  type Provider,
   type RunOptions,
   type SUMMARY_COUNTS,
 } from "./progress.ts";
@@ -553,7 +555,7 @@ export async function ingestFactFiles(options: IngestFactsOptions): Promise<Inge
 
   const finish = (
     status: "done" | "skipped" | "failed" | "cancelled",
-    detail: { message?: string; code?: EventCode } = {},
+    detail: { message?: string; code?: EventCode; provider?: Provider } = {},
   ): IngestFactsReport => {
     const ok = status === "done" || status === "skipped";
     emit({ type: "stage", stage: "ingest-facts", status, ...detail });
@@ -676,6 +678,6 @@ export async function ingestFactFiles(options: IngestFactsOptions): Promise<Inge
       return finish("failed", { message, code: "missing-credential" });
     }
     logger.error(`Fact ingest failed: ${message}`, error);
-    return finish("failed", { message });
+    return finish("failed", { message, ...failureOf(error, "embeddings") });
   }
 }

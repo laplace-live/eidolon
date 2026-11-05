@@ -178,6 +178,68 @@ describe("a run", () => {
     expect(code).toBe(0);
     expect(JSON.parse(soniox.requests[1]?.json as string).context).toBeUndefined();
   });
+
+  test("the language hint: --language, else transcription.language, else zh; none sends none", async () => {
+    const hints = async (argv: string[], setting?: string) => {
+      const { audio, outDir } = setup();
+      rmSync(outDir, { recursive: true, force: true });
+      const restore = setEnv({ TRANSCRIBE_LANGUAGE: setting });
+      try {
+        const { code, soniox } = await run([audio, "--out-dir", outDir, ...argv]);
+        expect(code).toBe(0);
+        return JSON.parse(soniox.requests[1]?.json as string).language_hints ?? null;
+      } finally {
+        restore();
+      }
+    };
+    expect(await hints([])).toEqual(["zh"]);
+    expect(await hints([], "ja")).toEqual(["ja"]);
+    expect(await hints([], "")).toEqual(["zh"]);
+    expect(await hints([], "none")).toBeNull();
+    expect(await hints(["--language", "en"], "ja")).toEqual(["en"]);
+    expect(await hints(["--language", ""], "ja")).toBeNull();
+  });
+});
+
+describe("event codes", () => {
+  test("a rejected key, no credit, a rate limit and no network each fail with their code", async () => {
+    const cases: [Override, Record<string, unknown>][] = [
+      [
+        () => Response.json({ error_type: "unauthenticated", message: "bad key" }, { status: 401 }),
+        { code: "auth-failed", provider: "soniox" },
+      ],
+      [
+        () => Response.json({ message: "out of credit" }, { status: 402 }),
+        { code: "insufficient-credits", provider: "soniox" },
+      ],
+      [
+        () => Response.json({ message: "slow down" }, { status: 429 }),
+        { code: "rate-limited", provider: "soniox" },
+      ],
+      [
+        () => {
+          throw new TypeError("Unable to connect");
+        },
+        { code: "network", provider: "soniox" },
+      ],
+    ];
+    for (const [override, expected] of cases) {
+      const { audio, outDir } = setup();
+      rmSync(outDir, { recursive: true, force: true });
+      const { code, events } = await run(
+        [audio, "--out-dir", outDir, "--json"],
+        single.jobs,
+        override,
+      );
+      expect(code).toBe(1);
+      expect(events.find((e) => e.type === "item" && e.status === "failed")).toMatchObject(
+        expected,
+      );
+      expect(events.find((e) => e.type === "stage" && e.status === "failed")).toMatchObject(
+        expected,
+      );
+    }
+  });
 });
 
 describe("what is already transcribed", () => {
