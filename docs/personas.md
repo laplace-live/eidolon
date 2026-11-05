@@ -162,8 +162,27 @@ The install's settings, for every persona. Paths resolve in the data home.
 ## Deploying a persona
 
 Mount a data home holding `personas/<id>/index/` (and any private references) at `/data`, and
-configure the rest through the environment as before. Copying a persona's private folder to a
-server is a plain `rsync -a <data home>/personas/<id>/ <host>:<mounted path>/personas/<id>/`.
+configure the rest through the environment as before. Copy a persona's folder to the server the
+first time, and again after every re-ingest:
+
+```sh
+rsync -a --checksum --delete-after --delay-updates \
+  <data home>/personas/<id>/ <host>:<mounted path>/personas/<id>/
+```
+
+The bot keeps serving calls through the copy and picks up the new tables without a restart, as
+long as the command keeps all three options:
+
+- `--delay-updates` holds the new files back until the transfer ends. Without it, a call that
+  starts mid-transfer can open a new manifest whose data hasn't arrived, and gets no recall.
+- `--delete-after` removes the old files last. A search still holding an old table then fails on
+  a missing file and reopens the new one, logging a "hit stale table" warning. Without it,
+  long-lived handles such as the MCP server's keep serving the old tables until a restart.
+- `--checksum`, because a re-ingest writes the same manifest file names again, and rsync's default
+  check (size, and modification time to the second) can skip a changed one.
+
+`--delete-after` makes the server's folder match yours, so preview with `--dry-run` first: an
+empty or mistyped source folder would empty the server's.
 
 Mem0 writes its change log to `<data home>/mem0/history.db`, so mount the data home writable, or
 mount it read-only and point `MEM0_HISTORY_DB_PATH` at a writable volume; a read-only home without

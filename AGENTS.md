@@ -134,7 +134,7 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | any Python file | `uv run ruff check .` and `uv run pyright` |
 | `mcp_server.py`, `rate_limit.py`, or `user_context.py` | `uv run pytest` — the suite covers the MCP mount and its quotas, nothing else |
 | retrieval, tokenization, chunking, `top_k`, or `candidates` | `uv run laplace-eval-retrieval` against `data/eval/baseline.json`. A quality claim without a number is not a claim |
-| an ingest script, `EMBED_MODEL`, or `EMBED_DIM` | re-run **both** ingests into the persona's `index/`, then copy it to each server's mounted data home |
+| an ingest script, `EMBED_MODEL`, or `EMBED_DIM` | re-run **both** ingests into the persona's `index/`, then copy it to each server's mounted data home with the rsync in [personas.md](docs/personas.md#deploying-a-persona) |
 | the pipeline, the transport, or a monkey-patch | boot the bot and hold a real call (`bun apps/bot/scripts/e2e-call.ts --text`, or `--audio`) — none of this is unit-testable |
 | `image_generation.py` | `uv run laplace-generate-image` against a real reference — it shares `generate()` with the bot, so a successful render is the check. Billed per image |
 | `retrieval_gate.py`'s questions, state, or threshold, or `RETRIEVAL_GATE_MODEL` | `uv run python docs/benchmarks/2026-09-19-retrieval-gate/decisions.py` — exits non-zero if any labeled turn that needs recall would be skipped |
@@ -241,7 +241,10 @@ module that owns it.
 - **A persona's index is never committed.** It lives in the data home
   (`personas/<id>/index/`), and a deployment mounts it at `/data`; the images
   carry only the templates. A re-ingest reaches production by copying the index
-  to the server, not by pushing.
+  to the server, not by pushing, and only with `rsync --checksum --delete-after
+  --delay-updates`: a plain copy leaves the MCP server on the old tables until a
+  restart, and calls that start mid-copy get no recall
+  ([personas.md](docs/personas.md#deploying-a-persona)).
 - **`retrieval.py` is the one search path.** The bot, the MCP server, and
   `laplace-eval-retrieval` all go through it, so what the eval scores is what
   the bot runs. Keep it that way. The first two reach it via
