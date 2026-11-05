@@ -3,18 +3,25 @@
 // sparse vector is written, and search is dense cosine similarity behind a threshold. Writing
 // anything else would desync the points the two bots share.
 import {
+  type Clock,
   errorText,
   isPlainObject,
   logger,
+  OpenAIClient,
+  type OpenAIClientOptions,
   pyError,
   pyFloatRepr,
   pyGet,
+  pyIsoformatUtc,
   pyIter,
   pyStr,
   pyStrip,
   pyTruthy,
   pyTypeName,
   sortedPy,
+  utcDateParts,
+  utcIsoDate,
+  wallClockMicros,
 } from "@eidolon/config";
 import { type MemoryConfig, requireLlmKey } from "./config.ts";
 import { ADDITIVE_EXTRACTION_PROMPT, AGENT_CONTEXT_SUFFIX } from "./extraction-prompt.ts";
@@ -25,7 +32,6 @@ import {
   OpenAICompatibleChat,
   OpenAICompatibleEmbedder,
 } from "./openai.ts";
-import { type HttpOptions, OpenAIClient } from "./openai-http.ts";
 import { generateAdditiveExtractionPrompt } from "./prompts.ts";
 import {
   type QdrantApi,
@@ -35,16 +41,7 @@ import {
 } from "./qdrant.ts";
 import { buildSessionScope, type MemoryScope, scopeFilters } from "./scope.ts";
 import { md5Hex, parseExtraction, parseMessages } from "./text.ts";
-import {
-  type Clock,
-  normalizeIsoTimestampToUtc,
-  parseIsoDate,
-  parseIsoDatetime,
-  pyIsoformatUtc,
-  utcDateParts,
-  utcIsoDate,
-  wallClockMicros,
-} from "./time.ts";
+import { normalizeIsoTimestampToUtc, parseIsoDate, parseIsoDatetime } from "./time.ts";
 import type { MemoryItem } from "./types.ts";
 
 export const LIST_LIMIT = 1000;
@@ -443,7 +440,7 @@ export class MemoryEngine {
 /** Builds the engine's clients, runs mem0's collection setup and opens the history DB. */
 export async function openMemoryEngine(
   config: MemoryConfig,
-  options: { readonly qdrantClient?: QdrantApi; readonly http?: HttpOptions } = {},
+  options: { readonly qdrantClient?: QdrantApi; readonly http?: OpenAIClientOptions } = {},
 ): Promise<MemoryEngine> {
   const embedder = new OpenAICompatibleEmbedder(
     config.embedder,

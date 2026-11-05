@@ -1,3 +1,4 @@
+import "./isolated-guard.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -57,6 +58,7 @@ describe("with no files of the user's own", () => {
     expect(loaded.persona.id).toBe("milky-green");
     expect(loaded.persona.identity).toEqual({
       name: "明前奶绿",
+      shortName: "奶绿",
       fans: "奶糖花",
       summary:
         "明前奶绿, a Chinese VTuber who streams on Bilibili, runs a fictional flower shop " +
@@ -64,7 +66,11 @@ describe("with no files of the user's own", () => {
       viewerLine: "今天来花店的{fans}叫「{viewer}」（B站UID:{uid}）。",
     });
     expect(Object.keys(loaded.persona.gateQuestions)).toEqual(["about_her"]);
-    expect([...loaded.values]).toEqual([["PERSONA_TIMEZONE", "Asia/Shanghai"]]);
+    expect([...loaded.values]).toEqual([
+      ["PERSONA_TIMEZONE", "Asia/Shanghai"],
+      ["FACTS_FILES", "*设定集.txt,*事件集.txt"],
+      ["FACTS_SUBJECT", "明前奶[绿黑]"],
+    ]);
     expect(loaded.files.persona).toBe(join(TEMPLATE, "persona.yaml"));
     expect(warnings).toEqual([]);
   });
@@ -112,6 +118,7 @@ describe("layers", () => {
     const { identity, gateQuestions } = loadSettings().persona;
     expect(identity).toEqual({
       name: "小绿",
+      shortName: "小绿",
       fans: "观众",
       summary: "",
       viewerLine: "正在和你聊天的{fans}叫「{viewer}」（UID:{uid}）。",
@@ -122,6 +129,55 @@ describe("layers", () => {
   test("an explicit empty viewerLine stays empty", () => {
     write("personas/milky-green/persona.yaml", 'identity:\n  viewerLine: ""\n');
     expect(loadSettings().persona.identity.viewerLine).toBe("");
+  });
+
+  test("shortName is the name unless set", () => {
+    write("personas/milky-green/persona.yaml", "identity:\n  name: 小绿\n  shortName: 绿\n");
+    expect(loadSettings().persona.identity.shortName).toBe("绿");
+  });
+
+  test("offline chain settings: lists join, [] reads as unset, install paths in the home", () => {
+    write(
+      "settings.yaml",
+      [
+        "refine:",
+        "  baseUrl: https://example.test/v1",
+        "sources:",
+        "  ytDlp: bin/yt-dlp-custom",
+        "  cookiesFromBrowser: none",
+        "  cookiesFile: /srv/cookies.txt",
+        "",
+      ].join("\n"),
+    );
+    write(
+      "personas/milky-green/persona.yaml",
+      [
+        "knowledge:",
+        "  facts:",
+        "    files: []",
+        "    subject: 小[绿黑]",
+        "  archive:",
+        "    skipTypes: [karaoke, anime_audio]",
+        "transcription:",
+        "  model: stt-async-v4",
+        "refine:",
+        "  model: some/model",
+        "  concurrency: 3",
+        "",
+      ].join("\n"),
+    );
+    installSettings();
+    expect(envOptional("FACTS_FILES")).toBeUndefined();
+    expect(envOptional("FACTS_SUBJECT")).toBe("小[绿黑]");
+    expect(envOptional("INGEST_SKIP_TYPES")).toBe("karaoke,anime_audio");
+    expect(envOptional("SONIOX_ASYNC_MODEL")).toBe("stt-async-v4");
+    expect(envOptional("REFINE_MODEL")).toBe("some/model");
+    expect(envInt("REFINE_CONCURRENCY", 8)).toBe(3);
+    expect(envOptional("REFINE_BASE_URL")).toBe("https://example.test/v1");
+    expect(envOptional("YT_DLP_PATH")).toBe(join(dataHome(), "bin/yt-dlp-custom"));
+    expect(envOptional("YT_DLP_COOKIES_FROM_BROWSER")).toBe("none");
+    expect(envOptional("YT_DLP_COOKIES")).toBe("/srv/cookies.txt");
+    expect(warnings).toEqual([]);
   });
 
   test("voice.styles become FISH_VOICE_ID_<STYLE>, visible to a scan of the environment", () => {
@@ -173,6 +229,12 @@ describe("credentials", () => {
     expect(envOptional("OPENROUTER_API_KEY")).toBe("sk-file");
     setEnv("OPENROUTER_API_KEY", "sk-env");
     expect(envOptional("OPENROUTER_API_KEY")).toBe("sk-env");
+    expect(warnings).toEqual([]);
+  });
+
+  test("REFINE_API_KEY is a credential", () => {
+    chmodSync(write("credentials.json", '{"REFINE_API_KEY": "sk-refine"}'), 0o600);
+    expect(loadSettings().values.get("REFINE_API_KEY")).toBe("sk-refine");
     expect(warnings).toEqual([]);
   });
 
@@ -250,8 +312,9 @@ describe("mistakes", () => {
   });
 
   test("malformed YAML counts as empty", () => {
+    const templateOnly = [...loadSettings().values];
     const path = write("settings.yaml", "access: [unclosed\n");
-    expect([...loadSettings().values].filter(([k]) => k !== "PERSONA_TIMEZONE")).toEqual([]);
+    expect([...loadSettings().values]).toEqual(templateOnly);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toStartWith(`Ignoring ${path}: `);
   });

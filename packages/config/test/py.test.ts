@@ -3,17 +3,28 @@ import { describe, expect, test } from "bun:test";
 import {
   cpLen,
   cpSlice,
+  ljust,
+  loadsPy,
+  PyFloat,
+  partition,
   pyFixed,
   pyFloatRepr,
   pyJsonDumps,
+  pyLstrip,
+  pyNumber,
   pyParseFloat,
   pyParseInt,
   pyRepr,
+  pyRound,
+  pyRstrip,
   pySplitWs,
   pyStr,
   pyStrip,
   pyTruthy,
+  rjust,
   sortedPy,
+  splitlines,
+  thousands,
 } from "../src/index.ts";
 
 describe("pyRepr", () => {
@@ -119,6 +130,77 @@ test("whitespace follows str.isspace", () => {
   expect(pyStrip("xxhixx", "x")).toBe("hi");
 });
 
+test("the code-unit strip and cpLen agree with code-point iteration", () => {
+  const points = (s: string): string[] => [...s];
+  // str.isspace(), from CPython's _PyUnicode_IsWhitespace.
+  const ws = new Set("\t\n\v\f\r\x1c\x1d\x1e\x1f \x85\xa0\u1680\u2028\u2029\u202f\u205f\u3000");
+  for (let cp = 0x2000; cp <= 0x200a; cp++) ws.add(String.fromCodePoint(cp));
+  const reference = (s: string, left: boolean, right: boolean): string => {
+    const p = points(s);
+    let start = 0;
+    let end = p.length;
+    while (left && start < end && ws.has(p[start] as string)) start++;
+    while (right && end > start && ws.has(p[end - 1] as string)) end--;
+    return p.slice(start, end).join("");
+  };
+  const parts = [
+    ...ws,
+    "",
+    "x",
+    "中",
+    "\u{1f600}",
+    "\ud83d",
+    "\ude00",
+    "\ufeff",
+    "\u200b",
+    "\u180e",
+  ];
+  const samples = [""];
+  for (const a of parts) {
+    for (const b of parts) {
+      for (const c of [" ", "\ud800", "y"]) samples.push(a + c + b, c + a + b + c, a + b);
+    }
+  }
+  for (const s of samples) {
+    expect(pyStrip(s)).toBe(reference(s, true, true));
+    expect(pyLstrip(s)).toBe(reference(s, true, false));
+    expect(pyRstrip(s)).toBe(reference(s, false, true));
+    expect(cpLen(s)).toBe(points(s).length);
+  }
+  expect(cpLen("\ud800\u{10000}\udc00")).toBe(3);
+});
+
+describe("format-spec padding and grouping", () => {
+  test("ljust and rjust count code points", () => {
+    expect(ljust("😀", 3)).toBe("😀  ");
+    expect(rjust("ab", 4)).toBe("  ab");
+    expect(ljust("abcdef", 3)).toBe("abcdef");
+  });
+
+  test("thousands groups an int's digits, sign kept", () => {
+    expect([0, 999, 1000, 1234567, -1234, -123].map(thousands)).toEqual([
+      "0",
+      "999",
+      "1,000",
+      "1,234,567",
+      "-1,234",
+      "-123",
+    ]);
+    expect(thousands("-1234567")).toBe("-1,234,567");
+  });
+});
+
+test("pyNumber reads an int or a PyFloat, and nothing else", () => {
+  expect([3, new PyFloat(2), "3", true, null, undefined].map(pyNumber)).toEqual([
+    3,
+    2,
+    null,
+    null,
+    null,
+    null,
+  ]);
+});
+
 test("code points", () => {
   expect(cpLen("😀😀😀😀")).toBe(4);
   expect(cpSlice("a😀b😀c", 1, 3)).toBe("😀b");
@@ -129,6 +211,13 @@ test("code points", () => {
 test("truthiness", () => {
   expect([null, undefined, false, 0, -0, "", [], {}].map(pyTruthy)).toEqual(Array(8).fill(false));
   expect([true, 1, Number.NaN, " ", [0], { a: 0 }].map(pyTruthy)).toEqual(Array(6).fill(true));
+  // A float as json.loads keeps it: 0.0 is falsy, NaN is not.
+  expect([0, -0, 0.5, Number.NaN].map((v) => pyTruthy(new PyFloat(v)))).toEqual([
+    false,
+    false,
+    true,
+    true,
+  ]);
 });
 
 test("pyJsonDumps matches json.dumps", () => {
@@ -184,4 +273,61 @@ describe("pyParseInt and pyParseFloat", () => {
     }
     expect(pyParseFloat("nan")).toBeNaN();
   });
+});
+
+describe("str.lstrip and str.rstrip", () => {
+  test("Python's whitespace, or the given characters, from one end", () => {
+    const s = "\u3000 \x1cx y\x85\u2028 ";
+    expect(pyLstrip(s)).toBe("x y\x85\u2028 ");
+    expect(pyRstrip(s)).toBe("\u3000 \x1cx y");
+    expect(pyLstrip("xxyabcyx", "xy")).toBe("abcyx");
+    expect(pyRstrip("xxyabcyx", "xy")).toBe("xxyabc");
+    expect(pyLstrip("\ufeff a ")).toBe("\ufeff a ");
+  });
+});
+
+describe("str.splitlines", () => {
+  test("splits on every Python line boundary and drops a trailing empty line", () => {
+    expect(splitlines("")).toEqual([]);
+    expect(splitlines("\n")).toEqual([""]);
+    expect(splitlines("a\nb\n")).toEqual(["a", "b"]);
+    expect(splitlines("a\n\n")).toEqual(["a", ""]);
+    expect(splitlines("a\r\nb\rc\vd\fe\x1cf\x1dg\x1eh\x85i\u2028j\u2029k")).toEqual([
+      ..."abcdefghijk",
+    ]);
+  });
+
+  test("keepends", () => {
+    expect(splitlines("a\r\nb\rc\vd\fe\x1cf\x1dg\x1eh\x85i\u2028j\u2029k\n", true)).toEqual([
+      "a\r\n",
+      "b\r",
+      "c\v",
+      "d\f",
+      "e\x1c",
+      "f\x1d",
+      "g\x1e",
+      "h\x85",
+      "i\u2028",
+      "j\u2029",
+      "k\n",
+    ]);
+    expect(splitlines("", true)).toEqual([]);
+    expect(splitlines("a\n\nb", true)).toEqual(["a\n", "\n", "b"]);
+  });
+});
+
+test("round() ties go to the even neighbour", () => {
+  expect([0.5, 1.5, 2.5, -0.5, -1.5, 2.4999, 2.5001].map(pyRound)).toEqual([0, 2, 2, 0, -2, 2, 3]);
+});
+
+test("str.partition", () => {
+  expect(partition("a=b=c", "=")).toEqual(["a", "=", "b=c"]);
+  expect(partition("abc", "=")).toEqual(["abc", "", ""]);
+});
+
+test("loadsPy keeps 1.0 apart from 1", () => {
+  const value = loadsPy('{"a": 1.0, "b": 1, "c": [2e-05, 0.5, -0]}') as Record<string, unknown>;
+  expect(value.a).toEqual(new PyFloat(1));
+  expect(value.b).toBe(1);
+  expect(pyJsonDumps(value)).toBe('{"a": 1.0, "b": 1, "c": [2e-05, 0.5, 0]}');
 });

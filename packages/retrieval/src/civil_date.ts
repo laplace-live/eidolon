@@ -1,6 +1,13 @@
 // Python `datetime.date` on "YYYY-MM-DD" strings: proleptic Gregorian, years 1..9999. Integer day
 // ordinals, because JS Date maps years below 100 to 19xx.
-import { daysInMonth, ordinalToYmd, pyRepr, ymdToOrdinal, zonedClock } from "@eidolon/config";
+import {
+  daysInMonth,
+  isLeap,
+  ordinalToYmd,
+  pyRepr,
+  ymdToOrdinal,
+  zonedClock,
+} from "@eidolon/config";
 
 export type IsoDate = string;
 
@@ -63,6 +70,49 @@ export function isValidIsoDate(text: string): boolean {
 export function parseIsoDate(text: string): IsoDate {
   parts(text);
   return text;
+}
+
+/**
+ * `date.fromisoformat`, as CPython's C parser reads it: 7, 8 or 10 UTF-8 bytes of `YYYY-MM-DD`,
+ * `YYYYMMDD`, `YYYY-Www[-D]` or `YYYYWww[D]`, with any bytes after the last field ignored.
+ */
+export function fromIsoformat(text: string): IsoDate {
+  const bytes = new TextEncoder().encode(text);
+  const invalid = () => new DateRangeError(`Invalid isoformat string: ${pyRepr(text)}`);
+  if (![7, 8, 10].includes(bytes.length)) throw invalid();
+  let pos = 0;
+  const digits = (count: number): number => {
+    let value = 0;
+    for (let i = 0; i < count; i++) {
+      const byte = bytes[pos++];
+      if (byte === undefined || byte < 0x30 || byte > 0x39) throw invalid();
+      value = value * 10 + (byte - 0x30);
+    }
+    return value;
+  };
+  const year = digits(4);
+  const separated = bytes[pos] === 0x2d;
+  if (separated) pos++;
+  if (bytes[pos] === 0x57) {
+    pos++;
+    const week = digits(2);
+    let day = 1;
+    if (pos < bytes.length) {
+      if (separated && bytes[pos++] !== 0x2d) throw invalid();
+      day = digits(1);
+    }
+    if (year < 1 || year > 9999) throw invalid();
+    const jan1 = isoDate(year, 1, 1);
+    const jan1Weekday = weekday(jan1);
+    const has53 = jan1Weekday === 3 || (jan1Weekday === 2 && isLeap(year));
+    if (week < 1 || week > (has53 ? 53 : 52) || day < 1 || day > 7) throw invalid();
+    const monday = addDays(jan1, -jan1Weekday + (jan1Weekday > 3 ? 7 : 0));
+    return addDays(monday, (week - 1) * 7 + day - 1);
+  }
+  const month = digits(2);
+  if (separated && bytes[pos++] !== 0x2d) throw invalid();
+  const day = digits(2);
+  return isoDate(year, month, day);
 }
 
 /** `date + timedelta(days=n)`. */

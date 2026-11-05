@@ -1,0 +1,821 @@
+{
+  "printed_by": "CPython 3.13.4, loguru 0.7.3: packages/ingest/test/fixtures/pipeline/golden.py through laplace_eidolon.tools.pipeline, with ../download/fake-yt-dlp.sh as yt-dlp and the stage children faked by exit code",
+  "stages": [
+    {
+      "raw": "",
+      "stages": ["download", "transcribe", "refine", "ingest"]
+    },
+    {
+      "raw": "all",
+      "stages": ["download", "transcribe", "refine", "ingest"]
+    },
+    {
+      "raw": "ALL",
+      "stages": ["download", "transcribe", "refine", "ingest"]
+    },
+    {
+      "raw": " All ",
+      "stages": ["download", "transcribe", "refine", "ingest"]
+    },
+    {
+      "raw": "download",
+      "stages": ["download"]
+    },
+    {
+      "raw": "ingest,download",
+      "stages": ["download", "ingest"]
+    },
+    {
+      "raw": "DOWNLOAD , Refine",
+      "stages": ["download", "refine"]
+    },
+    {
+      "raw": "\tingest\n",
+      "stages": ["ingest"]
+    },
+    {
+      "raw": "transcribe,transcribe",
+      "stages": ["transcribe"]
+    },
+    {
+      "raw": "　refine　",
+      "stages": ["refine"]
+    },
+    {
+      "raw": ",",
+      "stages": []
+    },
+    {
+      "raw": " , ,",
+      "stages": []
+    },
+    {
+      "raw": "foo",
+      "error": "Unknown stage(s): ['foo']. Valid: ['download', 'transcribe', 'refine', 'ingest']."
+    },
+    {
+      "raw": "Refine, foo,ALL",
+      "error": "Unknown stage(s): ['all', 'foo']. Valid: ['download', 'transcribe', 'refine', 'ingest']."
+    },
+    {
+      "raw": "download,foo,bar,foo",
+      "error": "Unknown stage(s): ['bar', 'foo']. Valid: ['download', 'transcribe', 'refine', 'ingest']."
+    },
+    {
+      "raw": "all,download",
+      "error": "Unknown stage(s): ['all']. Valid: ['download', 'transcribe', 'refine', 'ingest']."
+    },
+    {
+      "raw": "ｄｏｗｎｌｏａｄ",
+      "error": "Unknown stage(s): ['ｄｏｗｎｌｏａｄ']. Valid: ['download', 'transcribe', 'refine', 'ingest']."
+    }
+  ],
+  "summaries": [
+    {
+      "stages": [],
+      "vods_dir": "vods",
+      "duration": 0.0,
+      "text": "\n================================================================\nPipeline Summary\n================================================================\nStages run: (none)\nDuration:   0.0s\n\n\n✓  All stages succeeded.\n================================================================\n"
+    },
+    {
+      "stages": ["download", "transcribe", "refine", "ingest"],
+      "vods_dir": "vods",
+      "duration": 856.55,
+      "download": [66, 49, 17, 2, 856.55],
+      "aborted": true,
+      "text": "\n================================================================\nPipeline Summary\n================================================================\nStages run: download, transcribe, refine, ingest\nDuration:   856.5s\n\n  download:   49/66 URLs ok, 17 failed, 2 new files (856.5s)\n\n⚠  Pipeline aborted early (--abort-on-error was set).\n================================================================\n"
+    },
+    {
+      "stages": ["download", "transcribe", "refine", "ingest"],
+      "vods_dir": "/data/sources/x/vods",
+      "duration": 1.25,
+      "download": [3, 3, 0, 1, 0.05],
+      "transcribe": [5, 2, 1, 1, [], 0.25],
+      "refine": [0, 0.35],
+      "ingest": [0, 0.45],
+      "text": "\n================================================================\nPipeline Summary\n================================================================\nStages run: download, transcribe, refine, ingest\nDuration:   1.2s\n\n  download:   3/3 URLs ok, 0 failed, 1 new files (0.1s)\n  transcribe: 1 new, 2 already done, 1 no-date, 0 failed of 5 audio files in /data/sources/x/vods/ (0.2s)\n  refine:     exit=0 (0.3s)\n  ingest:     exit=0 (0.5s)\n\n✓  All stages succeeded.\n================================================================\n"
+    },
+    {
+      "stages": ["transcribe", "refine", "ingest"],
+      "vods_dir": ".",
+      "duration": 12.0,
+      "transcribe": [7, 0, 0, 3, ["a", "b"], 1.45],
+      "refine": [1, 2.5],
+      "ingest": [2, 3.75],
+      "text": "\n================================================================\nPipeline Summary\n================================================================\nStages run: transcribe, refine, ingest\nDuration:   12.0s\n\n  transcribe: 3 new, 0 already done, 0 no-date, 2 failed of 7 audio files in ./ (1.4s)\n  refine:     exit=1 (2.5s)  ⚠ check refine output above for details\n  ingest:     exit=2 (3.8s)  ⚠ check ingest output above for details\n\n⚠  One or more stages had failures — re-run the same command to retry.\n================================================================\n"
+    },
+    {
+      "stages": ["refine"],
+      "vods_dir": "vods",
+      "duration": 0.04,
+      "refine": [0, 0.04],
+      "text": "\n================================================================\nPipeline Summary\n================================================================\nStages run: refine\nDuration:   0.0s\n\n  refine:     exit=0 (0.0s)\n\n✓  All stages succeeded.\n================================================================\n"
+    },
+    {
+      "stages": ["ingest"],
+      "vods_dir": "vods",
+      "duration": 0.15,
+      "ingest": [1, 0.15],
+      "aborted": true,
+      "text": "\n================================================================\nPipeline Summary\n================================================================\nStages run: ingest\nDuration:   0.1s\n\n  ingest:     exit=1 (0.1s)  ⚠ check ingest output above for details\n\n⚠  Pipeline aborted early (--abort-on-error was set).\n================================================================\n"
+    }
+  ],
+  "plan": {
+    "vods": {
+      "BV1aaaaaaaa1_p1.m4a": "{\"id\": \"BV1aaaaaaaa1_p1\", \"upload_date\": \"20260814\"}",
+      "BV1aaaaaaaa1_p2.m4a": "{\"id\": \"BV1aaaaaaaa1_p2\", \"upload_date\": \"20260814\"}",
+      "BV1bbbbbbbb1.m4a": null,
+      "BV1ccccccccc.mp3": "{\"upload_date\": \"2026-08-14\"}",
+      "BV1dddddddd1.opus": "{\"upload_date\": 20260815}",
+      "BV1eeeeeeee1.webm": "{",
+      "BV1ffffffff1.m4a": "{\"upload_date\": \"\"}",
+      "BV1gggggggg1.flac": "{\"upload_date\": \" 20260816 \"}",
+      "BV1hhhhhhhh1.aac": "{\"upload_date\": \"２０２６０８１７\"}",
+      "BV1iiiiiiii1.wav": "{\"upload_date\": null}",
+      "BV1jjjjjjjj1.M4A": "{\"upload_date\": \"20260819\"}",
+      "BV1kkkkkkkk1.m4a.part": null,
+      ".hidden.m4a": "{\"upload_date\": \"20260820\"}",
+      "直播回放.m4a": "{\"upload_date\": \"20260821\"}",
+      "Z-upper.m4a": "{\"upload_date\": \"20260822\", \"title\": \"x\"}",
+      "notes.txt": null
+    },
+    "streams": ["2026-08-14-BV1aaaaaaaa1_p2.md"],
+    "files": [
+      ".hidden.m4a",
+      "BV1aaaaaaaa1_p1.m4a",
+      "BV1aaaaaaaa1_p2.m4a",
+      "BV1bbbbbbbb1.m4a",
+      "BV1ccccccccc.mp3",
+      "BV1dddddddd1.opus",
+      "BV1eeeeeeee1.webm",
+      "BV1ffffffff1.m4a",
+      "BV1gggggggg1.flac",
+      "BV1hhhhhhhh1.aac",
+      "BV1iiiiiiii1.wav",
+      "Z-upper.m4a",
+      "直播回放.m4a"
+    ],
+    "logs": [
+      [
+        "INFO",
+        "[1/13] [dry-run] would transcribe .hidden.m4a (date=2026-08-20) → 2026-08-20-.hidden.md"
+      ],
+      [
+        "INFO",
+        "[2/13] [dry-run] would transcribe BV1aaaaaaaa1_p1.m4a (date=2026-08-14) → 2026-08-14-BV1aaaaaaaa1_p1.md"
+      ],
+      ["INFO", "[3/13] BV1aaaaaaaa1_p2.m4a: already transcribed → 2026-08-14-BV1aaaaaaaa1_p2.md"],
+      [
+        "WARNING",
+        "[4/13] BV1bbbbbbbb1.m4a: no upload_date in BV1bbbbbbbb1.info.json, skipping. Re-download the URL or transcribe manually with `tools.transcribe <WORK>/vods/BV1bbbbbbbb1.m4a --date YYYY-MM-DD`."
+      ],
+      [
+        "WARNING",
+        "[5/13] BV1ccccccccc.mp3: no upload_date in BV1ccccccccc.info.json, skipping. Re-download the URL or transcribe manually with `tools.transcribe <WORK>/vods/BV1ccccccccc.mp3 --date YYYY-MM-DD`."
+      ],
+      [
+        "INFO",
+        "[6/13] [dry-run] would transcribe BV1dddddddd1.opus (date=2026-08-15) → 2026-08-15-BV1dddddddd1.md"
+      ],
+      [
+        "WARNING",
+        "[7/13] BV1eeeeeeee1.webm: no upload_date in BV1eeeeeeee1.info.json, skipping. Re-download the URL or transcribe manually with `tools.transcribe <WORK>/vods/BV1eeeeeeee1.webm --date YYYY-MM-DD`."
+      ],
+      [
+        "WARNING",
+        "[8/13] BV1ffffffff1.m4a: no upload_date in BV1ffffffff1.info.json, skipping. Re-download the URL or transcribe manually with `tools.transcribe <WORK>/vods/BV1ffffffff1.m4a --date YYYY-MM-DD`."
+      ],
+      [
+        "INFO",
+        "[9/13] [dry-run] would transcribe BV1gggggggg1.flac (date=2026-08-16) → 2026-08-16-BV1gggggggg1.md"
+      ],
+      [
+        "INFO",
+        "[10/13] [dry-run] would transcribe BV1hhhhhhhh1.aac (date=２０２６-０８-１７) → ２０２６-０８-１７-BV1hhhhhhhh1.md"
+      ],
+      [
+        "WARNING",
+        "[11/13] BV1iiiiiiii1.wav: no upload_date in BV1iiiiiiii1.info.json, skipping. Re-download the URL or transcribe manually with `tools.transcribe <WORK>/vods/BV1iiiiiiii1.wav --date YYYY-MM-DD`."
+      ],
+      [
+        "INFO",
+        "[12/13] [dry-run] would transcribe Z-upper.m4a (date=2026-08-22) → 2026-08-22-Z-upper.md"
+      ],
+      [
+        "INFO",
+        "[13/13] [dry-run] would transcribe 直播回放.m4a (date=2026-08-21) → 2026-08-21-直播回放.md"
+      ]
+    ],
+    "counts": {
+      "total": 13,
+      "skipped": 1,
+      "skipped_no_date": 5,
+      "succeeded": 0,
+      "failed": 0
+    },
+    "jobs": [
+      ["[1/13]", ".hidden.m4a", "2026-08-20"],
+      ["[2/13]", "BV1aaaaaaaa1_p1.m4a", "2026-08-14"],
+      ["[6/13]", "BV1dddddddd1.opus", "2026-08-15"],
+      ["[9/13]", "BV1gggggggg1.flac", "2026-08-16"],
+      ["[10/13]", "BV1hhhhhhhh1.aac", "２０２６-０８-１７"],
+      ["[12/13]", "Z-upper.m4a", "2026-08-22"],
+      ["[13/13]", "直播回放.m4a", "2026-08-21"]
+    ],
+    "empty_logs": [
+      [
+        "WARNING",
+        "No audio files in <WORK>/empty/ — did the download stage run? (extensions checked: ['.aac', '.flac', '.m4a', '.mp3', '.opus', '.wav', '.webm'])"
+      ]
+    ],
+    "never_created": true
+  },
+  "main": [
+    {
+      "name": "missing-list",
+      "argv": ["<WORK>/missing.txt"],
+      "rc": {},
+      "code": 1,
+      "raises": null,
+      "stdout": "",
+      "stderr": [],
+      "logs": [["ERROR", "URL list not found: <WORK>/missing.txt"]],
+      "calls": [],
+      "files": null
+    },
+    {
+      "name": "no-stages",
+      "list": "https://example.invalid/ok/BV1aaaaaaaa1\n",
+      "argv": ["<LIST>", "--stages", ","],
+      "rc": {},
+      "code": 0,
+      "raises": null,
+      "stdout": "\n================================================================\nPipeline Summary\n================================================================\nStages run: (none)\nDuration:   <D>s\n\n\n✓  All stages succeeded.\n================================================================\n",
+      "stderr": [],
+      "logs": [["INFO", "Pipeline stages:  (url_list=<WORK>/urls.txt)"]],
+      "calls": [],
+      "files": null
+    },
+    {
+      "name": "bad-stages",
+      "list": "",
+      "argv": ["<LIST>", "--stages", "Refine, foo,ALL"],
+      "rc": {},
+      "code": 2,
+      "raises": null,
+      "stdout": "",
+      "stderr": [
+        "laplace-pipeline: error: argument --stages: Unknown stage(s): ['all', 'foo']. Valid: ['download', 'transcribe', 'refine', 'ingest']."
+      ],
+      "logs": [],
+      "calls": [],
+      "files": null
+    },
+    {
+      "name": "bad-provider",
+      "list": "",
+      "argv": ["<LIST>", "--provider", "whisperx"],
+      "rc": {},
+      "code": 2,
+      "raises": null,
+      "stdout": "",
+      "stderr": [
+        "laplace-pipeline: error: argument --provider: invalid choice: 'whisperx' (choose from soniox, whisper)"
+      ],
+      "logs": [],
+      "calls": [],
+      "files": null
+    },
+    {
+      "name": "shlex",
+      "list": "https://example.invalid/ok/BV1aaaaaaaa1\n",
+      "argv": ["<LIST>", "--yt-dlp-args", "'unclosed", "--stages", "transcribe"],
+      "rc": {},
+      "code": null,
+      "raises": "ValueError: No closing quotation",
+      "stdout": "",
+      "stderr": [],
+      "logs": [],
+      "calls": [],
+      "files": null
+    },
+    {
+      "name": "dry-run",
+      "list": "# a batch\nhttps://example.invalid/ok/BV1aaaaaaaa2\nhttps://example.invalid/fail/1\n",
+      "vods": {
+        "BV1aaaaaaaa1.m4a": "{\"upload_date\": \"20260801\"}",
+        "BV1zzzzzzzz1.m4a": "{\"upload_date\": \"20260802\"}",
+        "BV1yyyyyyyy1.m4a": null
+      },
+      "streams": {
+        "2026-08-02-BV1zzzzzzzz1.md": "---\nstream_date: 2026-08-01\nstream_id: 2026-08-02-BV1zzzzzzzz1\n---\n\n## 00:00 — a\n\nb\n"
+      },
+      "argv": [
+        "<LIST>",
+        "--dry-run",
+        "--vods-dir",
+        "<WORK>/vods/",
+        "--streams-dir",
+        "<WORK>/streams"
+      ],
+      "rc": {},
+      "code": 0,
+      "raises": null,
+      "stdout": "\n================================================================\nPipeline Summary\n================================================================\nStages run: download, transcribe, refine, ingest\nDuration:   <D>s\n\n  transcribe: 0 new, 1 already done, 1 no-date, 0 failed of 3 audio files in <WORK>/vods/ (<D>s)\n  refine:     exit=0 (<D>s)\n  ingest:     exit=0 (<D>s)\n\n✓  All stages succeeded.\n================================================================\n",
+      "stderr": [],
+      "logs": [
+        [
+          "INFO",
+          "Pipeline stages: download, transcribe, refine, ingest (url_list=<WORK>/urls.txt)"
+        ],
+        ["INFO", "[dry-run] would download 2 URL(s) → <WORK>/vods/ (format='bestaudio[ext=m4a]')"],
+        [
+          "INFO",
+          "[1/3] [dry-run] would transcribe BV1aaaaaaaa1.m4a (date=2026-08-01) → 2026-08-01-BV1aaaaaaaa1.md"
+        ],
+        [
+          "WARNING",
+          "[2/3] BV1yyyyyyyy1.m4a: no upload_date in BV1yyyyyyyy1.info.json, skipping. Re-download the URL or transcribe manually with `tools.transcribe <WORK>/vods/BV1yyyyyyyy1.m4a --date YYYY-MM-DD`."
+        ],
+        ["INFO", "[3/3] BV1zzzzzzzz1.m4a: already transcribed → 2026-08-02-BV1zzzzzzzz1.md"],
+        [
+          "INFO",
+          "Refining: <PYTHON> -m laplace_eidolon.tools.refine --streams-dir <WORK>/streams --dry-run"
+        ],
+        [
+          "INFO",
+          "Ingesting: <PYTHON> -m laplace_eidolon.tools.ingest_streams --streams-dir <WORK>/streams --dry-run"
+        ]
+      ],
+      "calls": [
+        ["laplace_eidolon.tools.refine", "--streams-dir", "<WORK>/streams", "--dry-run"],
+        ["laplace_eidolon.tools.ingest_streams", "--streams-dir", "<WORK>/streams", "--dry-run"]
+      ],
+      "files": [
+        "BV1aaaaaaaa1.info.json",
+        "BV1aaaaaaaa1.m4a",
+        "BV1yyyyyyyy1.m4a",
+        "BV1zzzzzzzz1.info.json",
+        "BV1zzzzzzzz1.m4a"
+      ]
+    },
+    {
+      "name": "run",
+      "list": "https://example.invalid/ok/BV1aaaaaaaa2\nhttps://example.invalid/fail/2\n",
+      "vods": {
+        "BV1aaaaaaaa1.m4a": "{\"upload_date\": \"20260801\"}"
+      },
+      "argv": [
+        "<LIST>",
+        "--vods-dir",
+        "<WORK>/vods",
+        "--streams-dir",
+        "<WORK>/streams",
+        "--yt-dlp-args=--sleep-requests 2",
+        "--cookies-from-browser",
+        ""
+      ],
+      "rc": {
+        "BV1aaaaaaaa2.m4a": 1
+      },
+      "code": 1,
+      "raises": null,
+      "stdout": "\n============================================================\nDownload Summary\n============================================================\nURLs requested: 2\nURLs succeeded: 1\nURLs failed:    1\nNew audio:      1 files in <WORK>/vods/\nDuration:       <D>s\n\nFailures (re-run the same command to retry these):\n  ✗ https://example.invalid/fail/2\n      exit=1: WARNING: line 1\n============================================================\n\n================================================================\nPipeline Summary\n================================================================\nStages run: download, transcribe, refine, ingest\nDuration:   <D>s\n\n  download:   1/2 URLs ok, 1 failed, 1 new files (<D>s)\n  transcribe: 1 new, 0 already done, 0 no-date, 1 failed of 2 audio files in <WORK>/vods/ (<D>s)\n  refine:     exit=0 (<D>s)\n  ingest:     exit=0 (<D>s)\n\n⚠  One or more stages had failures — re-run the same command to retry.\n================================================================\n",
+      "stderr": [],
+      "logs": [
+        [
+          "INFO",
+          "Pipeline stages: download, transcribe, refine, ingest (url_list=<WORK>/urls.txt)"
+        ],
+        ["INFO", "[1/2] https://example.invalid/ok/BV1aaaaaaaa2"],
+        ["INFO", "[2/2] https://example.invalid/fail/2"],
+        [
+          "ERROR",
+          "  ✗ yt-dlp failed (exit=1). stderr tail:\n    WARNING: line 1\n    WARNING: line 2"
+        ],
+        ["INFO", "[1/2] transcribing BV1aaaaaaaa1.m4a (date=2026-08-01, provider=soniox)"],
+        ["INFO", "[2/2] transcribing BV1aaaaaaaa2.m4a (date=2026-08-14, provider=soniox)"],
+        ["ERROR", "  ✗ transcribe failed (exit=1)"],
+        ["INFO", "Refining: <PYTHON> -m laplace_eidolon.tools.refine --streams-dir <WORK>/streams"],
+        [
+          "INFO",
+          "Ingesting: <PYTHON> -m laplace_eidolon.tools.ingest_streams --streams-dir <WORK>/streams"
+        ]
+      ],
+      "calls": [
+        [
+          "laplace_eidolon.tools.transcribe",
+          "<WORK>/vods/BV1aaaaaaaa1.m4a",
+          "--date",
+          "2026-08-01",
+          "--out-dir",
+          "<WORK>/streams",
+          "--provider",
+          "soniox",
+          "--language",
+          "zh",
+          "--auto-slice"
+        ],
+        [
+          "laplace_eidolon.tools.transcribe",
+          "<WORK>/vods/BV1aaaaaaaa2.m4a",
+          "--date",
+          "2026-08-14",
+          "--out-dir",
+          "<WORK>/streams",
+          "--provider",
+          "soniox",
+          "--language",
+          "zh",
+          "--auto-slice"
+        ],
+        ["laplace_eidolon.tools.refine", "--streams-dir", "<WORK>/streams"],
+        ["laplace_eidolon.tools.ingest_streams", "--streams-dir", "<WORK>/streams"],
+        [
+          "laplace_eidolon.tools.build_stream_catalog",
+          "--streams-dir",
+          "<WORK>/streams",
+          "--db-path",
+          "<HOME>/personas/milky-green/index"
+        ]
+      ],
+      "files": [
+        "BV1aaaaaaaa1.info.json",
+        "BV1aaaaaaaa1.m4a",
+        "BV1aaaaaaaa2.info.json",
+        "BV1aaaaaaaa2.m4a"
+      ]
+    },
+    {
+      "name": "abort-download",
+      "list": "https://example.invalid/fail/1\nhttps://example.invalid/ok/BV1aaaaaaaa2\n",
+      "vods": {
+        "BV1aaaaaaaa1.m4a": "{\"upload_date\": \"20260801\"}"
+      },
+      "argv": [
+        "<LIST>",
+        "--vods-dir",
+        "<WORK>/vods",
+        "--streams-dir",
+        "<WORK>/streams",
+        "--abort-on-error",
+        "--cookies-from-browser",
+        ""
+      ],
+      "rc": {},
+      "code": 1,
+      "raises": null,
+      "stdout": "\n============================================================\nDownload Summary\n============================================================\nURLs requested: 2\nURLs succeeded: 1\nURLs failed:    1\nNew audio:      1 files in <WORK>/vods/\nDuration:       <D>s\n\nFailures (re-run the same command to retry these):\n  ✗ https://example.invalid/fail/1\n      exit=1: WARNING: line 1\n============================================================\n\n================================================================\nPipeline Summary\n================================================================\nStages run: download, transcribe, refine, ingest\nDuration:   <D>s\n\n  download:   1/2 URLs ok, 1 failed, 1 new files (<D>s)\n\n⚠  Pipeline aborted early (--abort-on-error was set).\n================================================================\n",
+      "stderr": [],
+      "logs": [
+        [
+          "INFO",
+          "Pipeline stages: download, transcribe, refine, ingest (url_list=<WORK>/urls.txt)"
+        ],
+        ["INFO", "[1/2] https://example.invalid/fail/1"],
+        ["ERROR", "  ✗ yt-dlp failed (exit=1). stderr tail:\n    WARNING: line 1"],
+        ["INFO", "[2/2] https://example.invalid/ok/BV1aaaaaaaa2"]
+      ],
+      "calls": [],
+      "files": [
+        "BV1aaaaaaaa1.info.json",
+        "BV1aaaaaaaa1.m4a",
+        "BV1aaaaaaaa2.info.json",
+        "BV1aaaaaaaa2.m4a"
+      ]
+    },
+    {
+      "name": "abort-transcribe",
+      "list": "",
+      "vods": {
+        "BV1aaaaaaaa1.m4a": "{\"upload_date\": \"20260801\"}",
+        "BV1aaaaaaaa2.m4a": "{\"upload_date\": \"20260802\"}",
+        "BV1aaaaaaaa3.m4a": "{\"upload_date\": \"20260803\"}"
+      },
+      "argv": [
+        "<LIST>",
+        "--vods-dir",
+        "<WORK>/vods",
+        "--streams-dir",
+        "<WORK>/streams",
+        "--stages",
+        "transcribe,refine",
+        "--abort-on-error"
+      ],
+      "rc": {
+        "BV1aaaaaaaa1.m4a": 1
+      },
+      "code": 1,
+      "raises": null,
+      "stdout": "\n================================================================\nPipeline Summary\n================================================================\nStages run: transcribe, refine\nDuration:   <D>s\n\n  transcribe: 0 new, 0 already done, 0 no-date, 1 failed of 3 audio files in <WORK>/vods/ (<D>s)\n\n⚠  Pipeline aborted early (--abort-on-error was set).\n================================================================\n",
+      "stderr": [],
+      "logs": [
+        ["INFO", "Pipeline stages: transcribe, refine (url_list=<WORK>/urls.txt)"],
+        ["INFO", "[1/3] transcribing BV1aaaaaaaa1.m4a (date=2026-08-01, provider=soniox)"],
+        ["ERROR", "  ✗ transcribe failed (exit=1)"]
+      ],
+      "calls": [
+        [
+          "laplace_eidolon.tools.transcribe",
+          "<WORK>/vods/BV1aaaaaaaa1.m4a",
+          "--date",
+          "2026-08-01",
+          "--out-dir",
+          "<WORK>/streams",
+          "--provider",
+          "soniox",
+          "--language",
+          "zh",
+          "--auto-slice"
+        ]
+      ],
+      "files": [
+        "BV1aaaaaaaa1.info.json",
+        "BV1aaaaaaaa1.m4a",
+        "BV1aaaaaaaa2.info.json",
+        "BV1aaaaaaaa2.m4a",
+        "BV1aaaaaaaa3.info.json",
+        "BV1aaaaaaaa3.m4a"
+      ]
+    },
+    {
+      "name": "refine-fails",
+      "list": "",
+      "argv": ["<LIST>", "--streams-dir", "<WORK>/streams", "--stages", "ingest,refine"],
+      "rc": {
+        "refine": 1
+      },
+      "code": 1,
+      "raises": null,
+      "stdout": "\n================================================================\nPipeline Summary\n================================================================\nStages run: refine, ingest\nDuration:   <D>s\n\n  refine:     exit=1 (<D>s)  ⚠ check refine output above for details\n  ingest:     exit=0 (<D>s)\n\n⚠  One or more stages had failures — re-run the same command to retry.\n================================================================\n",
+      "stderr": [],
+      "logs": [
+        ["INFO", "Pipeline stages: refine, ingest (url_list=<WORK>/urls.txt)"],
+        ["INFO", "Refining: <PYTHON> -m laplace_eidolon.tools.refine --streams-dir <WORK>/streams"],
+        [
+          "INFO",
+          "Ingesting: <PYTHON> -m laplace_eidolon.tools.ingest_streams --streams-dir <WORK>/streams"
+        ]
+      ],
+      "calls": [
+        ["laplace_eidolon.tools.refine", "--streams-dir", "<WORK>/streams"],
+        ["laplace_eidolon.tools.ingest_streams", "--streams-dir", "<WORK>/streams"],
+        [
+          "laplace_eidolon.tools.build_stream_catalog",
+          "--streams-dir",
+          "<WORK>/streams",
+          "--db-path",
+          "<HOME>/personas/milky-green/index"
+        ]
+      ],
+      "files": null
+    },
+    {
+      "name": "refine-aborts",
+      "list": "",
+      "argv": [
+        "<LIST>",
+        "--streams-dir",
+        "<WORK>/streams",
+        "--stages",
+        "refine,ingest",
+        "--abort-on-error"
+      ],
+      "rc": {
+        "refine": 1
+      },
+      "code": 1,
+      "raises": null,
+      "stdout": "\n================================================================\nPipeline Summary\n================================================================\nStages run: refine, ingest\nDuration:   <D>s\n\n  refine:     exit=1 (<D>s)  ⚠ check refine output above for details\n\n⚠  Pipeline aborted early (--abort-on-error was set).\n================================================================\n",
+      "stderr": [],
+      "logs": [
+        ["INFO", "Pipeline stages: refine, ingest (url_list=<WORK>/urls.txt)"],
+        ["INFO", "Refining: <PYTHON> -m laplace_eidolon.tools.refine --streams-dir <WORK>/streams"]
+      ],
+      "calls": [["laplace_eidolon.tools.refine", "--streams-dir", "<WORK>/streams"]],
+      "files": null
+    },
+    {
+      "name": "ingest-fails",
+      "list": "",
+      "argv": ["<LIST>", "--streams-dir", "<WORK>/streams", "--stages", "ingest"],
+      "rc": {
+        "ingest_streams": 1
+      },
+      "code": 1,
+      "raises": null,
+      "stdout": "\n================================================================\nPipeline Summary\n================================================================\nStages run: ingest\nDuration:   <D>s\n\n  ingest:     exit=1 (<D>s)  ⚠ check ingest output above for details\n\n⚠  One or more stages had failures — re-run the same command to retry.\n================================================================\n",
+      "stderr": [],
+      "logs": [
+        ["INFO", "Pipeline stages: ingest (url_list=<WORK>/urls.txt)"],
+        [
+          "INFO",
+          "Ingesting: <PYTHON> -m laplace_eidolon.tools.ingest_streams --streams-dir <WORK>/streams"
+        ]
+      ],
+      "calls": [["laplace_eidolon.tools.ingest_streams", "--streams-dir", "<WORK>/streams"]],
+      "files": null
+    },
+    {
+      "name": "catalog-fails",
+      "list": "",
+      "argv": ["<LIST>", "--streams-dir", "<WORK>/streams", "--stages", "ingest"],
+      "rc": {
+        "build_stream_catalog": 1
+      },
+      "code": 1,
+      "raises": null,
+      "stdout": "\n================================================================\nPipeline Summary\n================================================================\nStages run: ingest\nDuration:   <D>s\n\n  ingest:     exit=1 (<D>s)  ⚠ check ingest output above for details\n\n⚠  One or more stages had failures — re-run the same command to retry.\n================================================================\n",
+      "stderr": [],
+      "logs": [
+        ["INFO", "Pipeline stages: ingest (url_list=<WORK>/urls.txt)"],
+        [
+          "INFO",
+          "Ingesting: <PYTHON> -m laplace_eidolon.tools.ingest_streams --streams-dir <WORK>/streams"
+        ]
+      ],
+      "calls": [
+        ["laplace_eidolon.tools.ingest_streams", "--streams-dir", "<WORK>/streams"],
+        [
+          "laplace_eidolon.tools.build_stream_catalog",
+          "--streams-dir",
+          "<WORK>/streams",
+          "--db-path",
+          "<HOME>/personas/milky-green/index"
+        ]
+      ],
+      "files": null
+    },
+    {
+      "name": "empty-list",
+      "list": "# nothing yet\n\n",
+      "argv": [
+        "<LIST>",
+        "--vods-dir",
+        "<WORK>/vods",
+        "--stages",
+        "download",
+        "--cookies-from-browser",
+        ""
+      ],
+      "rc": {},
+      "code": 0,
+      "raises": null,
+      "stdout": "\n============================================================\nDownload Summary\n============================================================\nURLs requested: 0\nURLs succeeded: 0\nURLs failed:    0\nNew audio:      0 files in <WORK>/vods/\nDuration:       <D>s\n============================================================\n\n================================================================\nPipeline Summary\n================================================================\nStages run: download\nDuration:   <D>s\n\n  download:   0/0 URLs ok, 0 failed, 0 new files (<D>s)\n\n✓  All stages succeeded.\n================================================================\n",
+      "stderr": [],
+      "logs": [
+        ["WARNING", "No URLs in <WORK>/urls.txt — download stage is a no-op."],
+        ["INFO", "Pipeline stages: download (url_list=<WORK>/urls.txt)"]
+      ],
+      "calls": [],
+      "files": []
+    },
+    {
+      "name": "flags",
+      "list": "",
+      "vods": {
+        "BV1aaaaaaaa1.m4a": "{\"upload_date\": \"20260801\"}"
+      },
+      "argv": [
+        "<LIST>",
+        "--vods-dir",
+        "<WORK>/vods",
+        "--streams-dir",
+        "<WORK>/streams",
+        "--stages",
+        "transcribe,refine,ingest",
+        "--language",
+        "",
+        "--soniox-model",
+        "stt-x",
+        "--no-context",
+        "--context-file",
+        "<WORK>/c.toml",
+        "--keep-soniox-files",
+        "--slice-max-min",
+        "100",
+        "--refine-model",
+        "m",
+        "--refine-concurrency",
+        "3",
+        "--refine-force",
+        "--skip-types",
+        ""
+      ],
+      "rc": {},
+      "code": 0,
+      "raises": null,
+      "stdout": "\n================================================================\nPipeline Summary\n================================================================\nStages run: transcribe, refine, ingest\nDuration:   <D>s\n\n  transcribe: 1 new, 0 already done, 0 no-date, 0 failed of 1 audio files in <WORK>/vods/ (<D>s)\n  refine:     exit=0 (<D>s)\n  ingest:     exit=0 (<D>s)\n\n✓  All stages succeeded.\n================================================================\n",
+      "stderr": [],
+      "logs": [
+        ["INFO", "Pipeline stages: transcribe, refine, ingest (url_list=<WORK>/urls.txt)"],
+        ["INFO", "[1/1] transcribing BV1aaaaaaaa1.m4a (date=2026-08-01, provider=soniox)"],
+        [
+          "INFO",
+          "Refining: <PYTHON> -m laplace_eidolon.tools.refine --streams-dir <WORK>/streams --model m --concurrency 3 --force"
+        ],
+        [
+          "INFO",
+          "Ingesting: <PYTHON> -m laplace_eidolon.tools.ingest_streams --streams-dir <WORK>/streams --skip-types "
+        ]
+      ],
+      "calls": [
+        [
+          "laplace_eidolon.tools.transcribe",
+          "<WORK>/vods/BV1aaaaaaaa1.m4a",
+          "--date",
+          "2026-08-01",
+          "--out-dir",
+          "<WORK>/streams",
+          "--provider",
+          "soniox",
+          "--language",
+          "",
+          "--soniox-model",
+          "stt-x",
+          "--no-context",
+          "--context-file",
+          "<WORK>/c.toml",
+          "--keep-soniox-files",
+          "--auto-slice",
+          "--slice-max-min",
+          "100"
+        ],
+        [
+          "laplace_eidolon.tools.refine",
+          "--streams-dir",
+          "<WORK>/streams",
+          "--model",
+          "m",
+          "--concurrency",
+          "3",
+          "--force"
+        ],
+        [
+          "laplace_eidolon.tools.ingest_streams",
+          "--streams-dir",
+          "<WORK>/streams",
+          "--skip-types",
+          ""
+        ],
+        [
+          "laplace_eidolon.tools.build_stream_catalog",
+          "--streams-dir",
+          "<WORK>/streams",
+          "--db-path",
+          "<HOME>/personas/milky-green/index"
+        ]
+      ],
+      "files": ["BV1aaaaaaaa1.info.json", "BV1aaaaaaaa1.m4a"]
+    },
+    {
+      "name": "no-auto-slice",
+      "list": "",
+      "vods": {
+        "BV1aaaaaaaa1.m4a": "{\"upload_date\": \"20260801\"}"
+      },
+      "argv": [
+        "<LIST>",
+        "--vods-dir",
+        "<WORK>/vods",
+        "--streams-dir",
+        "<WORK>/streams",
+        "--stages",
+        "transcribe",
+        "--no-auto-slice",
+        "--slice-max-min",
+        "100",
+        "--refine-model",
+        ""
+      ],
+      "rc": {},
+      "code": 0,
+      "raises": null,
+      "stdout": "\n================================================================\nPipeline Summary\n================================================================\nStages run: transcribe\nDuration:   <D>s\n\n  transcribe: 1 new, 0 already done, 0 no-date, 0 failed of 1 audio files in <WORK>/vods/ (<D>s)\n\n✓  All stages succeeded.\n================================================================\n",
+      "stderr": [],
+      "logs": [
+        ["INFO", "Pipeline stages: transcribe (url_list=<WORK>/urls.txt)"],
+        ["INFO", "[1/1] transcribing BV1aaaaaaaa1.m4a (date=2026-08-01, provider=soniox)"]
+      ],
+      "calls": [
+        [
+          "laplace_eidolon.tools.transcribe",
+          "<WORK>/vods/BV1aaaaaaaa1.m4a",
+          "--date",
+          "2026-08-01",
+          "--out-dir",
+          "<WORK>/streams",
+          "--provider",
+          "soniox",
+          "--language",
+          "zh"
+        ]
+      ],
+      "files": ["BV1aaaaaaaa1.info.json", "BV1aaaaaaaa1.m4a"]
+    }
+  ],
+  "help": [
+    "usage: laplace-pipeline [-h] [--stages STAGES] [--vods-dir VODS_DIR]\n                        [--streams-dir STREAMS_DIR] [--abort-on-error]\n                        [--dry-run] [--persona PERSONA] [--json]\n                        [--format FORMAT]\n                        [--cookies-from-browser COOKIES_FROM_BROWSER]\n                        [--cookies COOKIES] [--yt-dlp-args YT_DLP_ARGS]\n                        [--language LANGUAGE] [--provider {soniox}]\n                        [--soniox-model SONIOX_MODEL] [--no-context]\n                        [--context-file CONTEXT_FILE] [--keep-soniox-files]\n                        [--no-auto-slice] [--slice-max-min SLICE_MAX_MIN]\n                        [--transcribe-concurrency TRANSCRIBE_CONCURRENCY]\n                        [--refine-model REFINE_MODEL]\n                        [--refine-concurrency REFINE_CONCURRENCY]\n                        [--refine-force] [--skip-types SKIP_TYPES]\n                        [--db-path DB_PATH]\n                        [url_list]\n",
+    "usage: laplace-pipeline [-h] [--stages STAGES] [--vods-dir VODS_DIR]\n                        [--streams-dir STREAMS_DIR] [--abort-on-error]\n                        [--dry-run] [--persona PERSONA] [--json]\n                        [--format FORMAT]\n                        [--cookies-from-browser COOKIES_FROM_BROWSER]\n                        [--cookies COOKIES] [--yt-dlp-args YT_DLP_ARGS]\n                        [--language LANGUAGE] [--provider {soniox}]\n                        [--soniox-model SONIOX_MODEL] [--no-context]\n                        [--context-file CONTEXT_FILE] [--keep-soniox-files]\n                        [--no-auto-slice] [--slice-max-min SLICE_MAX_MIN]\n                        [--transcribe-concurrency TRANSCRIBE_CONCURRENCY]\n                        [--refine-model REFINE_MODEL]\n                        [--refine-concurrency REFINE_CONCURRENCY]\n                        [--refine-force] [--skip-types SKIP_TYPES]\n                        [--db-path DB_PATH]\n                        [url_list]\n\nEnd-to-end pipeline: bilibili URL list → ingested LanceDB rows.\n\npositional arguments:\n  url_list              Path to a text file with one URL per line (# comments\n                        + blanks ignored). Optional with --dry-run, which then\n                        plans every video the persona's sources know.\n\noptions:\n  -h, --help            show this help message and exit\n  --stages STAGES       Comma-separated stages to run. Default: all four.\n                        Stages always execute in\n                        download→transcribe→refine→ingest order regardless of\n                        how you list them. Valid:\n                        download,transcribe,refine,ingest.\n  --vods-dir VODS_DIR   Where audio files live (default: the persona's vods/\n                        in the data home's sources).\n  --streams-dir STREAMS_DIR\n                        Where transcripts go (default: the persona's streams/\n                        in the data home's sources).\n  --abort-on-error      Fail fast on the first per-item failure (a bad URL, a\n                        transcribe crash). Default is to log and continue so a\n                        44-VOD batch isn't killed by one flaky video.\n  --dry-run             Don't run any stage; just report what would happen.\n                        Refine and ingest report what they would do. With\n                        --json, one plan event per video instead.\n  --persona PERSONA     Persona whose sources and index to use (default: the\n                        active persona)\n  --json                Report progress as JSON lines on stdout; the summaries\n                        go to stderr\n\ndownload stage:\n  --format FORMAT       yt-dlp format spec (default: 'bestaudio[ext=m4a]').\n  --cookies-from-browser COOKIES_FROM_BROWSER\n                        Browser to read cookies from (default:\n                        YT_DLP_COOKIES_FROM_BROWSER, else chrome). Pass an\n                        empty string to disable.\n  --cookies COOKIES     Path to a cookies.txt file (default: YT_DLP_COOKIES).\n                        yt-dlp writes the cookies it used back into it.\n  --yt-dlp-args YT_DLP_ARGS\n                        Extra args forwarded to yt-dlp as a single shell-\n                        quoted string. Example: --yt-dlp-args=\"--rate-limit 2M\n                        --sleep-interval 5\".\n\ntranscribe stage:\n  --language LANGUAGE   Language hint (default: the transcription.language\n                        setting, else zh). Pass --language '' for none.\n  --provider {soniox}   Transcription backend (default: soniox).\n  --soniox-model SONIOX_MODEL\n                        Override Soniox model (default: the\n                        transcription.model setting, else stt-async-v5).\n  --no-context          Skip the Soniox structured-context glossary even if\n                        the file exists.\n  --context-file CONTEXT_FILE\n                        Override the path to the Soniox context TOML (default:\n                        the persona's glossary.toml).\n  --keep-soniox-files   Don't delete the uploaded file + transcription record\n                        from Soniox after success.\n  --no-auto-slice       Disable automatic ffmpeg slicing of audio that exceeds\n                        Soniox's 300-min per-file cap. With slicing off,\n                        oversized files fail their transcribe step (and are\n                        reported as failures in the summary). Default: slicing\n                        on.\n  --slice-max-min SLICE_MAX_MIN\n                        Max minutes per slice when --auto-slice is on\n                        (default: 280, which sits well under the 300-min hard\n                        cap to absorb container/encoder drift).\n  --transcribe-concurrency TRANSCRIBE_CONCURRENCY\n                        Max transcriptions in flight at once (default: 1, i.e.\n                        sequential). Soniox async accounts cap concurrent jobs\n                        at 25 — pick a number well below that for safety; 4–8\n                        is a good sweet spot for typical home upload\n                        bandwidth.\n\nrefine stage:\n  --refine-model REFINE_MODEL\n                        Override OpenRouter model (default: refine.model or\n                        $REFINE_MODEL, else ~google/gemini-pro-latest).\n  --refine-concurrency REFINE_CONCURRENCY\n                        Max concurrent LLM calls during refine (default:\n                        refine.concurrency or $REFINE_CONCURRENCY, else 8).\n  --refine-force        Re-refine all chunks even if a sidecar already exists.\n\ningest stage:\n  --skip-types SKIP_TYPES\n                        Comma-separated chunk_type values to leave out of the\n                        index (default: knowledge.archive.skipTypes or\n                        $INGEST_SKIP_TYPES, else 'anime_audio,karaoke'; none\n                        drops nothing). Pass an empty string to disable\n                        filtering.\n  --db-path DB_PATH     LanceDB directory the ingest stage writes (default:\n                        the index the bot reads: knowledge.index or\n                        $LANCEDB_PATH, else the persona's index/ in the data\n                        home)\n"
+  ]
+}

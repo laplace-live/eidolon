@@ -1,0 +1,44 @@
+{
+  "schema_version": 2,
+  "stream_id": "2026-01-04-BV1ccccccccc",
+  "chunks": {
+    "2026-01-04-BV1ccccccccc::000": {
+      "heading": "旧标题",
+      "summary": "旧摘要。",
+      "details": "旧细节。",
+      "chunk_type": "commentary",
+      "topics": ["旧"],
+      "mentions": [],
+      "key_quotes": [],
+      "sc_events": [],
+      "songs": [],
+      "events": [],
+      "promises": []
+    },
+    "2026-01-04-BV1ccccccccc::007": {
+      "heading": "孤儿记录",
+      "summary": "旧摘要。",
+      "details": "旧细节。",
+      "chunk_type": "commentary",
+      "topics": ["旧"],
+      "mentions": [],
+      "key_quotes": [],
+      "sc_events": [],
+      "songs": [],
+      "events": [],
+      "promises": []
+    }
+  },
+  "model": "~google/gemini-flash-latest",
+  "refined_at": "2025-12-30T00:00:00+00:00",
+  "stats": {
+    "chunks_total": 1,
+    "chunks_refined": 2,
+    "tokens_in": 100,
+    "tokens_out": 50,
+    "cost_usd": 0.0001,
+    "cost_source": "openrouter",
+    "model": "~google/gemini-flash-latest",
+    "duration_sec": 2.5
+  }
+}

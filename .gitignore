@@ -219,8 +219,8 @@ __marimo__/
 
 # server-local ignores (root .gitignore covers Python venv, env files, etc.)
 
-# Raw VOD audio/video files — large, not needed in the repo.
-# Transcripts (streams/*.md) ARE committed; only the source media isn't.
+# Audio and video stay out of the repo. A persona's sources, transcripts included, live in the
+# data home (docs/personas.md).
 *.mp3
 *.m4a
 *.wav

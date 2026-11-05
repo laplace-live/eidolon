@@ -23,6 +23,12 @@ on:
       - "CLAUDE.md"
       - ".github/workflows/ts.yml"
       - ".github/workflows/release.yml"
+      # The bot never runs these. The image copies only apps/cli's manifest, whose dependency
+      # changes also reach bun.lock. packages/ingest holds only while nothing the bot image loads
+      # imports @eidolon/ingest, which a Biome rule enforces; PR 3 removes that line.
+      - "apps/cli/**"
+      - "packages/ingest/**"
+      - ".agents/**"
   pull_request:
     branches:
       - "master"
@@ -37,6 +43,9 @@ on:
       - "CLAUDE.md"
       - ".github/workflows/ts.yml"
       - ".github/workflows/release.yml"
+      - "apps/cli/**"
+      - "packages/ingest/**"
+      - ".agents/**"
   repository_dispatch:
     types:
       - webhook

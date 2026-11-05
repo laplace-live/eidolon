@@ -1,4 +1,4 @@
-export { raceAbort } from "./abort.ts";
+export { abortableSleep, raceAbort } from "./abort.ts";
 export { daysInMonth, isLeap, ordinalToYmd, ymdToOrdinal } from "./calendar.ts";
 export { personaTimeZone, type ZonedClock, zonedClock } from "./clock.ts";
 export { type DotenvEntry, findDotenv, loadDotenv, parseDotenv } from "./dotenv.ts";
@@ -12,6 +12,9 @@ export {
   personaIds,
   personaTemplateDir,
   resolvePersonaPath,
+  type SourceFolder,
+  sourceFolder,
+  sourcesDir,
   templatesDir,
 } from "./home.ts";
 export { type HttpStatusReply, type HttpxStatusOptions, httpxStatusMessage } from "./httpx.ts";
@@ -24,8 +27,10 @@ export {
   type LogRecord,
   type LogSink,
   logger,
+  logToStderr,
   setLogLevel,
 } from "./logger.ts";
+export { type JsonPoster, OpenAIClient, type OpenAIClientOptions } from "./openai-http.ts";
 export { parseRetryAfter, retryDelaySeconds, shouldRetry } from "./openai-retry.ts";
 export {
   extractCostUsd,
@@ -41,8 +46,11 @@ export {
   isJsonObject,
   isPlainObject,
   isPySpace,
+  ljust,
+  loadsPy,
   PY_SPACE_CLASS,
   PyFloat,
+  partition,
   pyCompare,
   pyDigitValue,
   pyError,
@@ -51,18 +59,36 @@ export {
   pyGet,
   pyIter,
   pyJsonDumps,
+  pyLstrip,
+  pyNumber,
   pyParseFloat,
   pyParseInt,
   pyRepr,
+  pyRound,
+  pyRstrip,
   pySplitWs,
   pyStr,
   pyStrip,
   pyStrRepr,
   pyTruthy,
   pyTypeName,
+  rjust,
   sortedPy,
+  splitlines,
+  thousands,
 } from "./py.ts";
+export { type PyJsonOptions, pyJsonLoads, pyJsonLoadsFast, pyRawDecode } from "./py-json.ts";
 export { type PydanticLineError, validationErrorText } from "./pydantic.ts";
+export {
+  pyPath,
+  pyPathName,
+  pyPathParent,
+  pyPathRelativeTo,
+  pyPathStem,
+  pyPathSuffix,
+  pyPathWithName,
+  pyPathWithSuffix,
+} from "./pypath.ts";
 export {
   activePersona,
   CREDENTIALS,
@@ -83,3 +109,4 @@ export {
   type SettingScope,
   type SettingsFiles,
 } from "./settings.ts";
+export { type Clock, pyIsoformatUtc, utcDateParts, utcIsoDate, wallClockMicros } from "./utc.ts";

@@ -6,6 +6,7 @@ import {
   diffDays,
   firstOfMonth,
   firstOfNextMonth,
+  fromIsoformat,
   isoDate,
   isValidIsoDate,
   parseIsoDate,
@@ -58,6 +59,20 @@ describe("civil dates", () => {
     expect(isValidIsoDate("２０２６-０９-０８")).toBe(false);
     expect(parseIsoDate("2026-09-08")).toBe("2026-09-08");
     expect(() => parseIsoDate("20260908")).toThrow(DateRangeError);
+  });
+
+  test("date.fromisoformat reads the C parser's grammar", () => {
+    expect(fromIsoformat("2026-09-09")).toBe("2026-09-09");
+    expect(fromIsoformat("20260909")).toBe("2026-09-09");
+    expect(fromIsoformat("2026-W37-3")).toBe("2026-09-09");
+    expect(fromIsoformat("2026W37")).toBe("2026-09-07");
+    expect(fromIsoformat("20260909xx")).toBe("2026-09-09");
+    expect(fromIsoformat("2020-W53-7")).toBe("2021-01-03");
+    expect(fromIsoformat("0001-W01-1")).toBe("0001-01-01");
+    expect(() => fromIsoformat("2026-9-9")).toThrow("Invalid isoformat string: '2026-9-9'");
+    for (const bad of ["2026-13-01", "2026-W53-1x", "2021-W53-1", "9999-W52-6", "0000-01-01"]) {
+      expect(() => fromIsoformat(bad)).toThrow(DateRangeError);
+    }
   });
 
   test("todayIn reads the zone's wall clock", () => {

@@ -3,12 +3,14 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./job": "./src/job.ts"
   },
   "dependencies": {
     "@eidolon/config": "workspace:*",
     "@eidolon/context": "workspace:*",
     "@eidolon/imagegen": "workspace:*",
+    "@eidolon/ingest": "workspace:*",
     "@eidolon/retrieval": "workspace:*"
   }
 }

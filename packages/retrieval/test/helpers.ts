@@ -159,6 +159,22 @@ export async function realTable(name: string): Promise<lancedb.Table | null> {
   }
 }
 
+/** A table's indices as a parity test compares them. */
+export async function tableIndices(table: lancedb.Table) {
+  return (await table.listIndices()).map((i) => ({
+    name: i.name,
+    indexType: i.indexType,
+    columns: i.columns,
+    numIndexedRows: i.numIndexedRows,
+    numUnindexedRows: i.numUnindexedRows,
+    indexDetails: i.indexDetails,
+  }));
+}
+
+/** The vectors' bytes, to compare bit for bit. */
+export const f32Bytes = (v: Float32Array): Buffer =>
+  Buffer.from(v.buffer, v.byteOffset, v.byteLength);
+
 /** The latest version and its commit time; any re-ingest changes it. */
 export async function fingerprint(table: lancedb.Table): Promise<string> {
   const latest = (await table.listVersions()).at(-1);

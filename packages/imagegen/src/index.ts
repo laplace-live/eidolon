@@ -29,7 +29,6 @@ export {
   personaClock,
   SELFIE_PROMPT,
 } from "./prompt.ts";
-export { pyPath, pyPathName, pyPathStem, pyPathSuffix, pyPathWithName } from "./pypath.ts";
 export {
   FRIENDS,
   friendSources,

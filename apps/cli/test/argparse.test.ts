@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import {
   ArgparseExit,
+  ArgumentTypeError,
   EVAL_PARSER,
   FROMISOFORMAT,
   generateImageParser,
   INT,
   type Namespace,
+  PATH,
   type ParserSpec,
   parseArgs,
   parserError,
@@ -36,23 +38,32 @@ function outcome(parse: () => Namespace): Omit<Case, "argv"> {
 }
 
 // Python's --db-path defaults to data/lancedb; the port leaves it unset and opens the persona's
-// index (docs/typescript.md, accepted differences). The goldens stay Python's own output.
-const PYTHON_DB_DEFAULT = "data/lancedb";
+// index (docs/typescript.md, accepted differences). [AD] Likewise --queries, whose default moved
+// from data/eval/queries.toml to the persona's sources in the data home. The goldens stay
+// Python's own output.
+const PYTHON_DEFAULTS: Record<string, string> = {
+  db_path: "data/lancedb",
+  queries: "data/eval/queries.toml",
+};
 const HELP_LINES: [string, string][] = [
   ["LanceDB dir (default: data/lancedb)", "LanceDB dir (default: the persona's index/)"],
   [
     "LanceDB directory (default: data/lancedb)",
     "LanceDB directory (default: the persona's index/)",
   ],
+  [
+    "entries (default:\n                        data/eval/queries.toml)",
+    "entries (default: the persona's\n                        eval/queries.toml in the data home's sources)",
+  ],
 ];
 
 function withPortDefaults(argv: string[], expected: Omit<Case, "argv">): Omit<Case, "argv"> {
   const help = (text: string) =>
     HELP_LINES.reduce((out, [from, to]) => out.replace(from, to), text);
-  const ns =
-    expected.ns && expected.ns.db_path === PYTHON_DB_DEFAULT && !argv.includes(PYTHON_DB_DEFAULT)
-      ? { ...expected.ns, db_path: null }
-      : expected.ns;
+  let ns = expected.ns;
+  for (const [dest, value] of Object.entries(PYTHON_DEFAULTS)) {
+    if (ns && ns[dest] === value && !argv.includes(value)) ns = { ...ns, [dest]: null };
+  }
   return { ...expected, stdout: help(expected.stdout), stderr: help(expected.stderr), ns };
 }
 
@@ -118,6 +129,52 @@ describe("types", () => {
       expect(() => FROMISOFORMAT.parse(bad)).toThrow();
     }
   });
+});
+
+// fixtures/goldens/argparse-features.json was printed by CPython 3.13 argparse for this parser:
+// paths (nargs="*", type=Path), --no-auto-slice (store_false, dest="auto_slice"), --files
+// (nargs="*"), --stages (a type raising ArgumentTypeError) and --out (type=Path).
+const FEATURES_USAGE = `usage: prog [-h] [--no-auto-slice] [--files [FILES ...]] [--stages STAGES]
+            [--out OUT]
+            [paths ...]
+`;
+const STAGES = {
+  name: "stages",
+  parse(text: string): string[] {
+    const names = text.split(",").map((s) => s.trim());
+    const bad = names.filter((n) => !["download", "transcribe"].includes(n));
+    if (bad.length > 0) throw new ArgumentTypeError(`Unknown stage(s): ${bad.join(", ")}`);
+    return names;
+  },
+};
+const FEATURES: ParserSpec = {
+  prog: "prog",
+  usage: FEATURES_USAGE,
+  help: FEATURES_USAGE,
+  actions: [
+    { dest: "paths", flags: [], kind: "store", nargs: "*", type: PATH },
+    { dest: "auto_slice", flags: ["--no-auto-slice"], kind: "store_false" },
+    { dest: "files", flags: ["--files"], kind: "store", nargs: "*" },
+    { dest: "stages", flags: ["--stages"], kind: "store", type: STAGES },
+    { dest: "out", flags: ["--out"], kind: "store", type: PATH },
+  ],
+};
+
+test("store_false, nargs '*', ArgumentTypeError and type=Path parse as Python's", async () => {
+  const cases = await golden<Omit<Case, "stdout">[]>("argparse-features.json");
+  for (const { argv, ...expected } of cases) {
+    const { stdout, ...got } = outcome(() => parseArgs(FEATURES, argv));
+    expect(stdout).toBe("");
+    expect({ argv, ...got }).toEqual({ argv, ...expected });
+  }
+});
+
+test("a '*' positional with a default takes it when no value comes", () => {
+  const spec: ParserSpec = {
+    ...FEATURES,
+    actions: [{ dest: "paths", flags: [], kind: "store", nargs: "*", default: ["x"] }],
+  };
+  expect(parseArgs(spec, []).paths).toEqual(["x"]);
 });
 
 test("parserError writes the usage, then `<prog>: error:`", () => {

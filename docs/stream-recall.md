@@ -19,13 +19,14 @@ remain represented in the broadcast overview even though the detailed LanceDB
 index excludes them by default. Missing refinement is recorded. Missing
 archive coverage never establishes that the streamer did not broadcast.
 
-Run `uv run laplace-build-stream-catalog` after adding or refining transcripts.
+Run `bun run laplace-build-stream-catalog` after adding or refining transcripts.
 Use `--streams-dir` and `--db-path` for another archive. The normal
 `laplace-pipeline` command rebuilds the catalog after a successful ingest.
 Standalone `laplace-ingest-streams` users must run the catalog builder separately.
-The generated file lives inside the LanceDB directory and ships with `data/`
-in the existing Docker image. Rebuilding it does not change chunk vectors or
-require either embedding ingest to run again.
+The generated file lives beside the tables in the persona's index,
+`<data home>/personas/<id>/index/`, and deploys with it
+([personas.md](personas.md#deploying-a-persona)). Rebuilding it does not change
+chunk vectors or require either embedding ingest to run again.
 
 ## Answering a turn
 

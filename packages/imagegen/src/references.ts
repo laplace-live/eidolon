@@ -1,10 +1,18 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { envOptional, expandUser, personaFolders, pyStrip, sortedPy } from "@eidolon/config";
+import {
+  envOptional,
+  expandUser,
+  personaFolders,
+  pyPath,
+  pyPathName,
+  pyPathStem,
+  pyStrip,
+  sortedPy,
+} from "@eidolon/config";
 import { ImageGenError } from "./errors.ts";
 import { imageMediaType } from "./mime.ts";
 import { AFTER_DARK, ambience, type PersonaClock, personaClock } from "./prompt.ts";
-import { pyPath, pyPathName, pyPathStem } from "./pypath.ts";
 
 // Two directories, two rules: one of outfits/ is the persona, and every friends/ image is a
 // different person.

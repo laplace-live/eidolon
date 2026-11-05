@@ -1,6 +1,7 @@
 import type { AllowedOffer, UserContext } from "@eidolon/access";
 import { cpLen, errorText, logger, pyRepr } from "@eidolon/config";
 import type { ContextProvider, LlmTool } from "@eidolon/core";
+import { ingestHint, PERSONA_FACTS, STREAM_ARCHIVE } from "@eidolon/retrieval";
 import type { VoiceStyles } from "@eidolon/tools";
 import { rethrowIfCancelled } from "@pipedog/asyncio";
 import { LLMRunFrame } from "@pipedog/core/frames/frames";
@@ -106,7 +107,7 @@ async function optionalProvider<T>(
 ): Promise<T | null> {
   if (!(await deps.dbPathExists(dbPath))) {
     logger.info(
-      `${label} disabled: no LanceDB index at ${dbPath}. Run \`uv run ${ingestCommand}\` to build it.`,
+      `${label} disabled: no LanceDB index at ${dbPath}. Run \`${ingestHint(ingestCommand)}\` to build it.`,
     );
     return null;
   }
@@ -179,7 +180,7 @@ export async function buildSession(
   const dbPath = deps.dbPath();
   const archive = await optionalProvider(
     "Stream archive",
-    "laplace-ingest-streams",
+    STREAM_ARCHIVE.ingestCommand,
     dbPath,
     deps,
     deps.openArchive,
@@ -203,7 +204,7 @@ export async function buildSession(
   const memory = await sessionMemory(user, deps);
   const facts = await optionalProvider(
     "Persona facts",
-    "laplace-ingest-facts",
+    PERSONA_FACTS.ingestCommand,
     dbPath,
     deps,
     deps.openFacts,

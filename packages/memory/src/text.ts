@@ -8,11 +8,11 @@ import {
   PY_SPACE_CLASS,
   pyError,
   pyGet,
+  pyJsonLoads,
   pyStr,
   pyStrip,
   pyTypeName,
 } from "@eidolon/config";
-import { pyJsonLoads } from "./py-json.ts";
 
 /** mem0 `parse_messages`: one `role: content` line per system/user/assistant message. */
 export function parseMessages(messages: readonly Readonly<Record<string, unknown>>[]): string {
@@ -79,6 +79,8 @@ export function parseExtraction(content: unknown): unknown {
     const text = removeCodeBlocks(content);
     if (!text || !pyStrip(text)) return [];
     let parsed: unknown;
+    // mem0's json.loads(strict=False): JSON.parse would reject the raw newlines models put inside
+    // strings, and drop those extractions on the TS side only.
     try {
       parsed = pyJsonLoads(text);
     } catch (error) {

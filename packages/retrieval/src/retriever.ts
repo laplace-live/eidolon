@@ -6,6 +6,7 @@ import { type EmbedOptions, embedTexts } from "./embeddings.ts";
 import { type HybridSearchOptions, hybridSearch, type SearchRow, scoreOf } from "./hybrid.ts";
 import { extractDateFilter } from "./query.ts";
 import {
+  ingestHint,
   openTable,
   PERSONA_FACTS,
   resolveDbPath,
@@ -201,7 +202,7 @@ function openPreset(
     dateColumn: preset.dateColumn,
     label: preset.label,
     summarize: preset.summarize,
-    ingestHint: preset.ingestHint,
+    ingestHint: ingestHint(preset.ingestCommand),
   });
 }
 

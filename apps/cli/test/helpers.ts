@@ -3,6 +3,7 @@
 import { afterAll, beforeAll } from "bun:test";
 import { join } from "node:path";
 import { consoleSink, type LogLevel, type LogRecord, logger, setLogLevel } from "@eidolon/config";
+import type { Subprocess } from "bun";
 
 export const FIX = join(import.meta.dir, "fixtures");
 
@@ -73,6 +74,19 @@ export function captureLogs(): { readonly records: [LogLevel, string][]; stop():
       setLogLevel("DEBUG");
     },
   };
+}
+
+/** The CLI in a process of its own, as main.ts runs it minus the .env load, in this environment. */
+export function spawnCli(argv: readonly string[]): Subprocess<"ignore", "pipe", "pipe"> {
+  return Bun.spawn(
+    [process.execPath, "--no-env-file", join(import.meta.dir, "cli_child.ts"), ...argv],
+    {
+      env: process.env,
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
 }
 
 /** Sets (or, for undefined, deletes) env vars; the returned function restores them. */

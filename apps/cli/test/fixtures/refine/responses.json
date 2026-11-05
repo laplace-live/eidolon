@@ -1,0 +1,196 @@
+{
+  "run": [
+    {
+      "status": 200,
+      "content": "{\"sc_events\": [{\"viewer\": \"小明\", \"amount_yuan\": 30, \"content\": \"今天的歌很好听\", \"response\": \"谢谢你呀\"}, {\"viewer\": null, \"amount_yuan\": \"12\", \"content\": \"加油\", \"response\": \"\"}, {\"viewer\": \"\", \"content\": \"\", \"amount_yuan\": 5}], \"songs\": [], \"events\": [\"和大家打招呼\", \"聊花店\"], \"promises\": [\"下次再唱\"], \"topics\": [\"开场\", \"花店\", \"坚果\", \"t4\", \"t5\", \"t6\", \"t7\", \"t8\", \"t9\", \"t10\", \"t11\"], \"mentions\": [\"小明\", \"坚果\"], \"key_quotes\": [\"坚果今天也很乖。\"], \"is_anime_audio_dominant\": false, \"is_karaoke_dominant\": false}",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 1200,
+        "completion_tokens": 300,
+        "cost": 0.0012
+      }
+    },
+    {
+      "status": 200,
+      "content": "{\"heading\": \"开场聊花店和坚果\", \"summary\": \"我开播和大家打招呼，聊了花店和坚果。\", \"details\": \"我一开播就和大家打招呼。我聊了花店的事情，还说“坚果今天也很乖。”小明送了SC。\", \"chunk_type\": \"opening\"}",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 1500,
+        "completion_tokens": 400,
+        "cost": 0.0021
+      }
+    },
+    {
+      "status": 200,
+      "content": "{\"sc_events\": [{\"viewer\": \"小明\", \"amount_yuan\": 30, \"content\": \"今天的歌\n很好听\", \"response\": \"谢谢你呀\"}], \"songs\": [], \"events\": [\"感谢SC\"], \"promises\": [], \"topics\": [\"SC\"], \"mentions\": [\"小明\"], \"key_quotes\": [\"谢谢你呀。\"], \"is_anime_audio_dominant\": false, \"is_karaoke_dominant\": false}",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 1100,
+        "completion_tokens": 250
+      }
+    },
+    {
+      "status": 200,
+      "content": "[{\"heading\": \"感谢小明的SC\", \"summary\": \"我感谢了小明的SC。\", \"details\": \"小明送了三十块的SC，说今天的歌很好听，我说谢谢你呀。\", \"chunk_type\": \"sc_session\"}]",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 1400,
+        "completion_tokens": 350,
+        "cost": 0,
+        "cost_details": {
+          "upstream_inference_cost": 0.0004
+        }
+      }
+    },
+    {
+      "status": 200,
+      "content": "{\"sc_events\": [], \"songs\": [{\"title\": \"小星",
+      "finish_reason": "length",
+      "usage": {
+        "prompt_tokens": 1300,
+        "completion_tokens": 4096,
+        "cost": 0.003
+      }
+    },
+    {
+      "status": 200,
+      "content": "{\"sc_events\": [], \"songs\": [{\"title\": \"小星星\", \"note\": \"唱了一段\"}, {\"title\": \"\", \"note\": \"一闪一闪\"}], \"events\": [\"唱歌\"], \"promises\": [], \"topics\": [\"唱歌\", \"小星星\"], \"mentions\": [], \"key_quotes\": [\"一闪一闪亮晶晶\"], \"is_anime_audio_dominant\": false, \"is_karaoke_dominant\": true}}",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 1300,
+        "completion_tokens": 500,
+        "cost": 0.0015
+      }
+    },
+    {
+      "status": 429,
+      "headers": {
+        "retry-after-ms": "1"
+      },
+      "json": {
+        "error": {
+          "message": "Rate limit exceeded",
+          "code": 429
+        }
+      }
+    },
+    {
+      "status": 200,
+      "content": "{\"heading\": \"  唱小星星  \", \"summary\": \"我唱了小星星。\", \"details\": \"我唱了一首小星星。\", \"chunk_type\": \" KARAOKE \"}",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 1450,
+        "completion_tokens": 380,
+        "cost": 0.002
+      }
+    },
+    {
+      "status": 200,
+      "content": "",
+      "finish_reason": "length",
+      "usage": {
+        "prompt_tokens": 900,
+        "completion_tokens": 4096,
+        "cost": 0.0025
+      }
+    },
+    {
+      "status": 200,
+      "json": {
+        "error": {
+          "message": "Provider returned error",
+          "code": 502
+        }
+      }
+    },
+    {
+      "status": 400,
+      "json": {
+        "error": {
+          "message": "bad request",
+          "code": 400
+        }
+      }
+    },
+    {
+      "status": 200,
+      "content": "```json\n{\"sc_events\": []}\n```",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 800,
+        "completion_tokens": 20,
+        "cost": 0.0001
+      }
+    },
+    {
+      "status": 200,
+      "content": "null",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 800,
+        "completion_tokens": 2,
+        "cost": 0.0001
+      }
+    },
+    {
+      "status": 200,
+      "content": "[1, 2]",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 800,
+        "completion_tokens": 5,
+        "cost": 0.0001
+      }
+    },
+    {
+      "status": 200,
+      "content": "{\"sc_events\": [], \"songs\": [], \"events\": [\"说了第四段\"], \"promises\": [], \"topics\": [\"第四段\"], \"mentions\": [], \"key_quotes\": [], \"is_anime_audio_dominant\": false, \"is_karaoke_dominant\": false}",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 800,
+        "completion_tokens": 60,
+        "cost": 0.0002
+      }
+    },
+    {
+      "status": 200,
+      "content": "{\"heading\": \"x\", \"details\": \"y\"}",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 900,
+        "completion_tokens": 10,
+        "cost": 0.0001
+      }
+    },
+    {
+      "status": 200,
+      "content": "{\"events\": [\"很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 800,
+        "completion_tokens": 1300,
+        "cost": 0.0009
+      }
+    }
+  ],
+  "force": [
+    {
+      "status": 200,
+      "content": "{\"sc_events\": [], \"songs\": [], \"events\": [\"重新精炼\"], \"promises\": [], \"topics\": [\"重做\"], \"mentions\": [], \"key_quotes\": [], \"is_anime_audio_dominant\": false, \"is_karaoke_dominant\": false}",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 700,
+        "completion_tokens": 40
+      }
+    },
+    {
+      "status": 200,
+      "content": "{\"heading\": \"重新精炼的一段\", \"summary\": \"我重新说了这一段。\", \"details\": \"这一段重新精炼过。\", \"chunk_type\": \"commentary\"}",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 900,
+        "completion_tokens": 80
+      }
+    }
+  ]
+}

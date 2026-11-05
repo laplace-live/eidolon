@@ -20,6 +20,7 @@ COPY packages/config/package.json packages/config/
 COPY packages/context/package.json packages/context/
 COPY packages/core/package.json packages/core/
 COPY packages/imagegen/package.json packages/imagegen/
+COPY packages/ingest/package.json packages/ingest/
 COPY packages/memory/package.json packages/memory/
 COPY packages/retrieval/package.json packages/retrieval/
 COPY packages/runtime/package.json packages/runtime/

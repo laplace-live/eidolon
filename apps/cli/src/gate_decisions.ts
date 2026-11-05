@@ -6,6 +6,8 @@ import {
   envOptional,
   httpxStatusMessage,
   isPlainObject,
+  ljust,
+  loadsPy,
   openrouterHeaders,
   PROJECT_ROOT,
   PyFloat,
@@ -13,6 +15,7 @@ import {
   pyFixed,
   pyJsonDumps,
   pyRepr,
+  pyRound,
   sortedPy,
 } from "@eidolon/config";
 import {
@@ -23,7 +26,7 @@ import {
   gateState,
 } from "@eidolon/context";
 import { type CliIo, printer, resolveIo } from "./io.ts";
-import { ljust, loadsPy, median, numOf, type PyNumber, pyRound, quantilesExclusive } from "./py.ts";
+import { median, numOf, type PyNumber, quantilesExclusive } from "./py.ts";
 
 export const BENCHMARK_DIR = join(PROJECT_ROOT, "docs/benchmarks/2026-09-19-retrieval-gate");
 const TIMEOUT_MS = 20_000;

@@ -1,0 +1,13 @@
+{
+  "data": {
+    "data": {
+      "danmakus": [
+        { "uId": 1, "uName": "a", "type": 1, "price": 1e16, "sendDate": 0 },
+        { "uId": 2, "uName": "b", "type": 1, "price": 1.0, "sendDate": 0 },
+        { "uId": 3, "uName": "c", "type": 1, "price": -1e16, "sendDate": 0 },
+        { "uId": 4, "uName": "d", "type": 3, "price": 0.5, "sendDate": 1 },
+        { "uId": 5, "uName": "e", "type": 3, "price": 2.5, "sendDate": 1 }
+      ]
+    }
+  }
+}

@@ -1,6 +1,7 @@
 // Expected values were printed by CPython 3.13 and pydantic 2.13.
 import { describe, expect, test } from "bun:test";
 import {
+  abortableSleep,
   daysInMonth,
   errorText,
   httpxStatusMessage,
@@ -177,6 +178,26 @@ describe("raceAbort", () => {
     } finally {
       process.off("unhandledRejection", onUnhandled);
     }
+  });
+});
+
+describe("abortableSleep", () => {
+  test("waits its time without a signal, or with one that never aborts", async () => {
+    for (const signal of [undefined, new AbortController().signal]) {
+      const started = performance.now();
+      await abortableSleep(30, signal);
+      expect(performance.now() - started).toBeGreaterThanOrEqual(25);
+    }
+  });
+
+  test("an abort rejects at once with the reason, and an aborted signal never waits", async () => {
+    const controller = new AbortController();
+    const started = performance.now();
+    const pending = abortableSleep(30_000, controller.signal);
+    controller.abort("stop");
+    await expect(pending).rejects.toBe("stop");
+    await expect(abortableSleep(30_000, controller.signal)).rejects.toBe("stop");
+    expect(performance.now() - started).toBeLessThan(1_000);
   });
 });
 

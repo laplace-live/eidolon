@@ -12,8 +12,13 @@ personas/<id>/
   glossary.toml         Soniox transcription vocabulary (Soniox's StructuredContext)
   references/outfits/   what take_selfie redraws; exactly one reaches a render
   references/friends/   one image per person she can be photographed with, named after them
-  index/                the LanceDB tables the ingests build; derived, rebuildable, never edited
+  index/                what the ingests build; derived, rebuildable, never edited
 ```
+
+`index/` holds the two LanceDB tables (`stream_chunks.lance`, `persona_facts.lance`),
+`stream_catalog.json`, and beside each table a `<table>.meta.json` recording what built it: the
+embedding model and dimension, the row count, when, and each source file's size and modification
+time.
 
 Two copies of that folder exist. The repository ships each persona's template under `personas/`,
 and the user keeps their own under `<data home>/personas/<id>/`. Every file resolves from the
@@ -35,8 +40,40 @@ set `EIDOLON_HOME=/data`.
   settings.yaml         the install's settings
   credentials.json      API keys and tokens, mode 0600
   personas/<id>/        the user's own persona folders
+  sources/<id>/         what builds a persona's index (below); never deployed
+  cache/embed_cache.db  the embedding cache every persona shares; its key holds the model
+  bin/yt-dlp            the yt-dlp the offline tools install and keep current, with its stamp
+  locks/                the offline tools' locks, released when their process exits
   mem0/history.db       Mem0's change log (the TypeScript bot's default)
 ```
+
+## A persona's sources
+
+What the offline tools build a persona's index from. The bot reads none of it, a deploy never
+copies it, and it never goes in a repository.
+
+```text
+<data home>/sources/<id>/
+  facts/                fact files, one fact per line (knowledge.facts.files picks them)
+  lists/                URL lists, one video per line; batches/ holds batches of new videos
+  vods/                 downloaded audio, each with yt-dlp's <id>.info.json
+  streams/              transcripts <date>-<id>.md, Soniox payloads .soniox.json, refinements
+                        .refined.json
+  eval/                 queries.toml and baseline.json for laplace-eval-retrieval
+```
+
+The offline commands (`bun run laplace-*`, [typescript.md](typescript.md#the-offline-chain)) take
+`--persona <id>`, default to these folders and to the persona's `index/`, and accept a path flag
+for each. `laplace-pipeline <list>` downloads a list's videos into `vods/`, transcribes and
+refines whatever in `vods/` and `streams/` still needs it, then rebuilds `stream_chunks` from
+**every** transcript in `streams/`: a transcript removed from there drops out of the index at the
+next ingest. `laplace-ingest-facts` rebuilds `persona_facts` from `facts/`.
+
+`laplace-prepare-batch` writes the videos no list in `lists/` has yet into a new batch,
+`lists/batches/videos-<YYYY-MM-DD-HHMMSS>.txt`. A clean pipeline run of all four stages over a
+batch writes `<batch>.done.json` beside it once every video the batch lists is downloaded and
+transcribed; a batch without one is still pending. A `.soniox.json` without its `.md` is audio
+Soniox heard no speech in: it counts as transcribed, so the audio isn't billed again.
 
 ## Layers
 
@@ -54,10 +91,11 @@ environment:
 ```
 
 The names it accepts: `SONIOX_API_KEY`, `OPENROUTER_API_KEY`, `FISH_API_KEY`, `RERANK_API_KEY`,
-`EMBED_API_KEY`, `OPENAI_API_KEY`, `CLOUDFLARE_TURN_KEY_API_TOKEN`, `WEBRTC_TURN_CREDENTIAL`,
-`CF_WAF_BYPASS_TOKEN`.
+`EMBED_API_KEY`, `REFINE_API_KEY`, `OPENAI_API_KEY`, `CLOUDFLARE_TURN_KEY_API_TOKEN`,
+`WEBRTC_TURN_CREDENTIAL`, `CF_WAF_BYPASS_TOKEN`.
 
-The Python offline tools read none of these files; they still take the environment only.
+The TypeScript offline tools read these files as the bot does, for the persona `--persona` names.
+The Python ones, kept until Python is retired, still take the environment only.
 
 A misspelled key (`identity` and the gate questions included), a value of the wrong type, malformed
 YAML and a credentials file other users can read each log a warning; the bad value is ignored.
@@ -67,6 +105,7 @@ YAML and a credentials file other users can read each log a warning; the bad val
 ```yaml
 identity:
   name: 明前奶绿
+  shortName: 奶绿
   fans: 奶糖花
   summary: 明前奶绿, a Chinese VTuber who streams on Bilibili, …
   viewerLine: 今天来花店的{fans}叫「{viewer}」（B站UID:{uid}）。
@@ -83,6 +122,7 @@ voice:
 | Field | Used in | Default |
 | --- | --- | --- |
 | `name` | the MCP server's instructions and tool descriptions | the folder name |
+| `shortName` | the refine prompts, where they shorten her name | `name` |
 | `fans` | the voice and selfie tool texts: what she calls a viewer | 观众 |
 | `summary` | the retrieval gate, as who "the streamer" is | empty |
 | `viewerLine` | the logged-in viewer line; `{fans}`, `{viewer}`, `{uid}` are filled in, `""` omits it | 正在和你聊天的{fans}叫「{viewer}」（UID:{uid}）。 |
@@ -112,12 +152,33 @@ first.
 | `knowledge.rerank.model` | `RERANK_MODEL` | string | Reranker model |
 | `knowledge.gate.enabled` | `RETRIEVAL_GATE_ENABLED` | flag | Retrieval gate |
 | `knowledge.gate.model` | `RETRIEVAL_GATE_MODEL` | string | Retrieval gate model |
+| `knowledge.facts.files` | `FACTS_FILES` | list | Fact files |
+| `knowledge.facts.subject` | `FACTS_SUBJECT` | string | Fact subject pattern |
+| `knowledge.archive.skipTypes` | `INGEST_SKIP_TYPES` | list | Scene types left out of the index |
+| `transcription.model` | `SONIOX_ASYNC_MODEL` | string | Transcription model |
+| `transcription.language` | `TRANSCRIBE_LANGUAGE` | string | Transcription language |
+| `refine.model` | `REFINE_MODEL` | string | Refine model |
+| `refine.concurrency` | `REFINE_CONCURRENCY` | int | Refine concurrency |
 | `selfie.model` | `SELFIE_MODEL` | string | Selfie model |
 | `selfie.aspectRatio` | `SELFIE_ASPECT_RATIO` | string | Selfie aspect ratio |
 | `selfie.quality` | `SELFIE_QUALITY` | string | Selfie quality |
 | `selfie.ttlSeconds` | `SELFIE_TTL_SECONDS` | int | Selfie lifetime |
 | `selfie.timeoutSeconds` | `SELFIE_TIMEOUT_SECONDS` | int | Selfie timeout |
 | `selfie.references` | `SELFIE_REFERENCE_IMAGES` | paths | Selfie references |
+
+`knowledge.facts.files` lists name patterns for the fact files in `sources/<id>/facts/` (default
+`*.txt`). A pattern matches a file name as Python's pathlib glob does: `*`, `?`, `[…]` and `[!…]`,
+case-sensitive, dotfiles included. Each pattern's files are taken in code-point order, the
+patterns in list order, and a file two patterns match is read once. Quote a pattern that starts
+with `*`, which YAML would read as an alias. `knowledge.facts.subject` is a regex, in Python's
+syntax, for the name most facts open with (default: `identity.name`, matched literally); the
+ingest leaves it out of what it embeds, together with a reporting verb after it (声称, 表示, …)
+and the punctuation that follows.
+
+`knowledge.archive.skipTypes` defaults to `anime_audio,karaoke`; `none` keeps every scene.
+`transcription.model` defaults to `stt-async-v5`, `refine.model` to `~google/gemini-pro-latest` and
+`refine.concurrency` to 8. `transcription.language` is the two-letter language hint Soniox gets for
+the persona's videos (default `zh`; `none` sends none), as `--language` sets it for one run.
 
 ## settings.yaml
 
@@ -158,14 +219,37 @@ The install's settings, for every persona. Paths resolve in the data home.
 | `embeddings.dim` | `EMBED_DIM` | int | Embedding dimension |
 | `embeddings.baseUrl` | `EMBED_BASE_URL` | string | Embedding API base |
 | `rerank.baseUrl` | `RERANK_BASE_URL` | string | Reranker API base |
+| `refine.baseUrl` | `REFINE_BASE_URL` | string | Refine API base |
+| `sources.ytDlp` | `YT_DLP_PATH` | path | yt-dlp binary |
+| `sources.cookiesFromBrowser` | `YT_DLP_COOKIES_FROM_BROWSER` | string | Browser to read cookies from |
+| `sources.cookiesFile` | `YT_DLP_COOKIES` | path | Cookies file |
+
+`sources.ytDlp` replaces the yt-dlp the tools install and update under `<data home>/bin/`.
+`sources.cookiesFromBrowser` defaults to `chrome`; `none` reads no browser's cookies. yt-dlp writes
+the merged cookie jar back into `sources.cookiesFile`.
 
 ## Deploying a persona
 
-Mount a data home holding `personas/<id>/index/` (and any private references) at `/data`, and
-configure the rest through the environment as before. Copy a persona's folder to the server the
-first time, and again after every re-ingest:
+Mount a data home holding the persona's folder at `/data`, and configure the rest through the
+environment as before. What goes in that folder depends on where the persona comes from:
+
+- **A template persona**, one the repository ships under `personas/` (milky-green): its `index/`
+  and `references/` only. Its `prompt.md` and `persona.yaml` come from the image, so each release
+  brings the published ones; a copy on the server would override them, file by file. Remove any
+  that an earlier copy of the whole folder left there.
+- **A persona of your own**: its whole `personas/<id>/` folder.
+- **Never** `sources/`: the bot reads none of it.
+
+Copy the first time, and again after every re-ingest:
 
 ```sh
+# a template persona: each folder on its own (leave out one you don't have)
+for folder in index references; do
+  rsync -a --checksum --delete-after --delay-updates \
+    "<data home>/personas/<id>/$folder/" "<host>:<mounted path>/personas/<id>/$folder/"
+done
+
+# a persona of your own
 rsync -a --checksum --delete-after --delay-updates \
   <data home>/personas/<id>/ <host>:<mounted path>/personas/<id>/
 ```
@@ -189,3 +273,30 @@ mount it read-only and point `MEM0_HISTORY_DB_PATH` at a writable volume; a read
 that runs every call without memory. Set `EIDOLON_HOME: /data` in the service's `environment`
 too: an `env_file` copied from `.env.example` carries a blank `EIDOLON_HOME=`, which would replace
 the image's value.
+
+## Moving sources out of a checkout
+
+The Python tools kept a persona's sources in the checkout: `data/`, `streams/` and `vods/`, and
+the embedding cache in `data/embed_cache.db`. The TypeScript tools read them from the data home
+only. To move them, for a persona `<id>`, with nothing running that uses them:
+
+```sh
+home=${EIDOLON_HOME:-$HOME/.laplace/eidolon}
+src=$home/sources/<id>
+lsof data/embed_cache.db    # must print nothing
+sqlite3 data/embed_cache.db 'PRAGMA wal_checkpoint(TRUNCATE)'
+mkdir -p "$home/cache" "$home/mem0" "$src/facts" "$src/lists/batches" "$src/eval" \
+  "$src/streams" "$src/vods"
+mv data/embed_cache.db* "$home/cache/"
+mv data/*设定集.txt data/*事件集.txt "$src/facts/"
+mv data/video*.txt "$src/lists/"
+mv data/auto-embed/* "$src/lists/batches/"
+mv data/eval/* "$src/eval/"
+mv streams/* "$src/streams/"
+mv vods/* "$src/vods/"
+mv data/mem0-cloud-export.json "$home/mem0/cloud-export.json"   # if you have one
+```
+
+`*` skips dotfiles, so each folder's tracked `.gitignore` stays. On one volume each `mv` is
+instant; the cache moves with its `-wal` and `-shm` once checkpointed. Then
+`bun run laplace-pipeline --persona <id> --dry-run` should find every transcript already done.

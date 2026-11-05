@@ -21,17 +21,21 @@ runs.
 
 The runtime is TypeScript on Bun, built on pipedog (a TypeScript port of
 Pipecat), in `apps/` and `packages/`; production has run it
-(`ghcr.io/laplace-live/eidolon`) since 2026-11-04. The offline chain is Python
-(`laplace_eidolon/tools/`). The original Pipecat runtime in `laplace_eidolon/`
-stays, as the `eidolon-python` rollback image, until it is retired. Both
-runtimes read the same LanceDB and Qdrant collection.
+(`ghcr.io/laplace-live/eidolon`) since 2026-11-04. The offline chain is
+TypeScript too: `packages/ingest`, run through the `laplace-*` commands in
+`apps/cli`. The original Pipecat runtime in `laplace_eidolon/` stays, as the
+`eidolon-python` rollback image, until it is retired, and its offline tools
+(`laplace_eidolon/tools/`) with it, as the spec the port is checked against.
+Both runtimes read the same LanceDB and Qdrant collection.
 
 ## Repository layout
 
 ```text
-apps/bot/             the bot: HTTP server, routes, MCP, entry point; apps/cli/ its CLIs
-packages/             its subsystems, one Bun workspace package each (docs/typescript.md)
-laplace_eidolon/      the Python runtime (rollback only) and the offline chain
+apps/bot/             the bot: HTTP server, routes, MCP, entry point
+apps/cli/             every laplace-* command, the offline chain's included
+packages/             subsystems, one Bun workspace package each (docs/typescript.md);
+                      packages/ingest is the offline chain
+laplace_eidolon/      the Python runtime (rollback only) and its offline chain (the spec)
   bot.py                pipeline + Starlette app; the process entry point
   offer_middleware.py   rate limit, body normalization, preflight for /api/offer
   user_context.py       loginSyncToken → UserContext via the Workers helper API
@@ -49,15 +53,16 @@ laplace_eidolon/      the Python runtime (rollback only) and the offline chain
   memory_service.py     Mem0 subclass · memory_admin.py serves /api/memories
   rate_limit.py         per-IP sliding-window quota · env.py numeric env vars
   openrouter.py         attribution headers + usage-cost extraction
-  tools/                the offline chain, one console script per stage
+  tools/                the Python offline chain, one console script per stage
 personas/<id>/        a persona's template: persona.yaml, prompt.md (the system
                       prompt), glossary.toml, references/outfits/ (what take_selfie
-                      redraws, one used per render). Her index and friends/ live
-                      in the data home, ~/.laplace/eidolon (docs/personas.md)
-data/                 local only, never committed: fact .txt sources, eval/,
-                      embed_cache.db
-streams/              transcripts <id>.md + <id>.refined.json sidecars (untracked)
-vods/                 downloaded audio + .info.json sidecars (untracked)
+                      redraws, one used per render). Her index, friends/ and
+                      sources live in the data home, ~/.laplace/eidolon
+                      (docs/personas.md)
+data/                 local only, never committed: generated/ (laplace-generate-image)
+streams/, vods/       empty: the Python tools' old defaults. A persona's sources are in
+                      ~/.laplace/eidolon/sources/<id>/
+.agents/skills/       agent skills; stream-archive-embed syncs new stream replays
 docs/                 the topics too large to inline here
 tests/                pytest — no network, no LanceDB
 ```
@@ -74,7 +79,8 @@ a row here and writing the prose there — not a new section in this file.**
 | RTVI events the web client listens for | [frontend-loading-state.md](docs/frontend-loading-state.md) |
 | per-viewer affection / XP tiers (design only, unbuilt) | [affection-system.md](docs/affection-system.md) |
 | the persona's identity, voice, or hard rules | `personas/milky-green/prompt.md` and `persona.yaml` |
-| settings files, credentials, the data home, or a persona's folder | [personas.md](docs/personas.md) |
+| settings files, credentials, the data home, a persona's folder or its sources | [personas.md](docs/personas.md) |
+| the offline chain (`packages/ingest` and its `laplace-*` commands) or their `--json` events | [typescript.md](docs/typescript.md#the-offline-chain) |
 | any env var — all 50-odd are documented there | `.env.example` |
 | Soniox's per-project vocabulary glossary | `personas/milky-green/glossary.toml` |
 | broadcast overviews, date-scoped recall, or the archive lookup tool | [stream-recall.md](docs/stream-recall.md) |
@@ -93,6 +99,22 @@ bun run typecheck && bun run lint && bun run test
 bun run laplace-search / laplace-eval-retrieval / laplace-generate-image / gate-decisions
 ```
 
+The offline chain, each command taking `--persona <id>` and working in that
+persona's folders in the data home (`--json` reports NDJSON events on stdout):
+
+```bash
+bun run laplace-pipeline <url list>    # download → transcribe → refine → ingest → catalog, resumable
+bun run laplace-pipeline --dry-run     # plans every video the persona's sources know; writes nothing
+bun run laplace-download <url list>    # yt-dlp → vods/, installing its own yt-dlp; --expand <url>
+bun run laplace-transcribe <audio>     # Soniox async → streams/<date>-<id>.md
+bun run laplace-refine                 # LLM cleanup → streams/*.refined.json
+bun run laplace-ingest-streams         # → stream_chunks.lance
+bun run laplace-ingest-facts           # facts/ → persona_facts.lance
+bun run laplace-build-stream-catalog   # → stream_catalog.json
+bun run laplace-prepare-batch          # a series capture's new videos → lists/batches/
+bun run laplace-extract-users          # mine danmaku JSON for glossary.toml terms
+```
+
 The Python side:
 
 ```bash
@@ -108,21 +130,14 @@ docker compose up --build              # Python bot + Qdrant; --profile ts adds 
 
 The Python bot is deliberately not a `laplace-*` console script: Pipecat's runner
 discovers `bot()` through `sys.modules["__main__"]`, which a generated launcher
-doesn't satisfy. Everything under `tools/` is a console script:
+doesn't satisfy. Everything under `tools/` is one, named like its TypeScript
+command (`uv run laplace-pipeline`, …). Those are the spec the port is checked
+against, and still default to the checkout's `data/`, `streams/` and `vods/`,
+which no longer hold any sources. Two exist only in Python:
 
 ```bash
-uv run laplace-pipeline          # download → transcribe → refine → ingest, resumable
-uv run laplace-download          # yt-dlp batch fetch → vods/
-uv run laplace-transcribe        # soniox (default) or local whisper → streams/*.md
-uv run laplace-refine            # LLM cleanup → streams/*.refined.json
-uv run laplace-ingest-streams    # → stream_chunks.lance
-uv run laplace-ingest-facts      # → persona_facts.lance
-uv run laplace-search            # probe the archive on the bot's exact retrieval path
-uv run laplace-eval-retrieval    # recall@k / MRR against data/eval/queries.toml
-uv run laplace-extract-users     # mine danmaku JSON for glossary.toml terms
 uv run laplace-export-mem0       # dump a pre-migration Mem0 cloud account to JSON
 uv run laplace-import-mem0       # load that dump into a Qdrant; idempotent, resumable
-uv run laplace-generate-image    # prompt + reference images → a PNG, via OpenRouter's image API
 ```
 
 ### Which checks to run
@@ -133,15 +148,16 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | --- | --- |
 | any Python file | `uv run ruff check .` and `uv run pyright` |
 | `mcp_server.py`, `rate_limit.py`, or `user_context.py` | `uv run pytest` — the suite covers the MCP mount and its quotas, nothing else |
-| retrieval, tokenization, chunking, `top_k`, or `candidates` | `uv run laplace-eval-retrieval` against `data/eval/baseline.json`. A quality claim without a number is not a claim |
-| an ingest script, `EMBED_MODEL`, or `EMBED_DIM` | re-run **both** ingests into the persona's `index/`, then copy it to each server's mounted data home with the rsync in [personas.md](docs/personas.md#deploying-a-persona) |
-| the pipeline, the transport, or a monkey-patch | boot the bot and hold a real call (`bun apps/bot/scripts/e2e-call.ts --text`, or `--audio`) — none of this is unit-testable |
+| retrieval, tokenization, chunking, `top_k`, or `candidates` | `bun run laplace-eval-retrieval --compare ~/.laplace/eidolon/sources/<id>/eval/baseline.json`. A quality claim without a number is not a claim |
+| an ingest, `EMBED_MODEL`, or `EMBED_DIM` | re-run **both** ingests (`bun run laplace-ingest-streams`, `laplace-ingest-facts`) into the persona's `index/`, then copy it to each server's mounted data home with the rsync in [personas.md](docs/personas.md#deploying-a-persona) |
+| anything under `packages/ingest`, an offline command in `apps/cli`, or the write side of `packages/retrieval` | the gates below, then the stage's real-data test with `EIDOLON_REQUIRE_PARITY=1 bun test --no-env-file <file>`: `packages/ingest/test/*_real.test.ts` (streams, download, transcribe, refine, ingest_streams, pipeline), `apps/cli/test/ingest_facts_real.test.ts`, `packages/retrieval/test/write_real.test.ts`. They are free and only read `~/.laplace/eidolon` (`EIDOLON_REAL_HOME`); refine's and the pipeline's need `uv`. Without the variable a missing corpus skips silently |
+| the bot's pipeline, the transport, or a monkey-patch | boot the bot and hold a real call (`bun apps/bot/scripts/e2e-call.ts --text`, or `--audio`) — none of this is unit-testable |
 | `image_generation.py` | `uv run laplace-generate-image` against a real reference — it shares `generate()` with the bot, so a successful render is the check. Billed per image |
 | `retrieval_gate.py`'s questions, state, or threshold, or `RETRIEVAL_GATE_MODEL` | `uv run python docs/benchmarks/2026-09-19-retrieval-gate/decisions.py` — exits non-zero if any labeled turn that needs recall would be skipped |
 | `prompt.md`'s 表演提示 markup, or `FISH_MODEL` | `uv run python docs/benchmarks/2026-10-17-drama-3-markup/render.py` (add `--model` for another model) — any `leaked` entry in its results means markup is read aloud. Billed per character |
 | `mem0_local.py`, `memory_service.py`, or `memory_admin.py` | `docker compose up qdrant`, then round-trip a real store → search → delete. No test covers Mem0; it needs a live vector store and an embedding key |
 | an env var | document it in `.env.example` in the same commit |
-| anything under `apps/` or `packages/` | `bun run typecheck`, `bun run lint`, `bun run test`; for retrieval, the gate or the pipeline, the TypeScript CLI or call that matches the Python row above |
+| anything under `apps/` or `packages/` | `bun run typecheck`, `bun run lint`, `bun run test`; for retrieval, the gate or the bot's pipeline, the TypeScript CLI or call that matches the Python row above |
 
 ## Rules
 
@@ -207,6 +223,23 @@ module that owns it.
   the `raddr` scrub. Each one's failure mode is in [typescript.md](docs/typescript.md).
 - **Python is the behavioral spec until it is retired.** A golden fixture that fails
   means the port drifted; fix the port, not the fixture.
+- **Run `bun test` from the repository root only.** Elsewhere `bunfig.toml`'s preload is
+  skipped and the data home is the real one, so a test file that deletes in it imports
+  `packages/config/test/isolated-guard.ts` first, and `isolated-guard.test.ts` enforces that.
+
+### The offline chain
+
+- **`@eidolon/ingest` never reaches the bot image.** Biome forbids importing it
+  outside `packages/ingest` and `apps/cli`, because `docker.yml` skips the image
+  build for changes to those two; lift both together.
+- **Under `--json`, stdout carries NDJSON events only**, read line by line by
+  whatever spawned the command. Library code reports through `onProgress` and
+  the logger (stderr) and never writes to stdout; the `apps/cli` command owns
+  printing, the locks and the exit code.
+- **Real-data tests never write to the data home.** They read
+  `EIDOLON_REAL_HOME` (`~/.laplace/eidolon`), write to temporary folders, clone
+  the embedding cache, and fake every paid request. `EIDOLON_REQUIRE_PARITY=1`
+  turns their skips into failures.
 
 ### Identity and quotas
 
@@ -230,12 +263,12 @@ module that owns it.
 
 - **Ingest-time and query-time vectors must come from the same model and
   dimension.** Changing `EMBED_MODEL` or `EMBED_DIM` means re-running both
-  ingest scripts; the LanceDB schema is fixed-size and old vectors are not
+  ingests; the LanceDB schema is fixed-size and old vectors are not
   comparable to new ones. Mem0's Qdrant collection reads the same two vars
   and pins its dimension at creation, so it also needs a new
   `MEM0_QDRANT_COLLECTION` — and viewers' memories do not survive that.
 - **FTS runs over the jieba-tokenized `tokens` column, never raw text.** LanceDB
-  ships no CJK tokenizer, so both ingest scripts populate `tokens` and every
+  ships no CJK tokenizer, so both ingests populate `tokens` and every
   query goes through `retrieval.tokenize_zh_query`. Stopwords are stripped from
   queries only — stripping them from the index collapses BM25.
 - **A persona's index is never committed.** It lives in the data home
@@ -245,6 +278,12 @@ module that owns it.
   --delay-updates`: a plain copy leaves the MCP server on the old tables until a
   restart, and calls that start mid-copy get no recall
   ([personas.md](docs/personas.md#deploying-a-persona)).
+- **A persona's sources are never committed or deployed, and the ingest needs
+  all of them.** Fact files, URL lists, audio and transcripts live in
+  `<data home>/sources/<id>/`, which the bot never reads. `laplace-ingest-streams`
+  rebuilds the whole `stream_chunks` table from every transcript in `streams/`,
+  so a transcript missing there drops its stream from the index
+  ([personas.md](docs/personas.md#a-personas-sources)).
 - **`retrieval.py` is the one search path.** The bot, the MCP server, and
   `laplace-eval-retrieval` all go through it, so what the eval scores is what
   the bot runs. Keep it that way. The first two reach it via
@@ -267,8 +306,9 @@ module that owns it.
   A new setting adds its row to `SETTINGS` (`packages/config/src/settings.ts`)
   and to [personas.md](docs/personas.md), with the variable that configures it;
   a test holds the two in step.
-- **A template under `personas/` is published.** Never add an index, a friend
-  image, or anything a viewer said to one; those belong in the data home.
+- **A template under `personas/` is published.** Never add an index, a source
+  file, a friend image, or anything a viewer said to one; those belong in the
+  data home.
 
 ### Shipping a change
 
@@ -283,9 +323,9 @@ module that owns it.
   (`apps/bot`) is the only released package; `@eidolon/*` are ignored.
 - **A push to `master` is a production deploy.** CI rebuilds `:edge`, and
   Watchtower on the production host restarts the bot from it, dropping live
-  calls. Pushes that only touch docs, tests, changesets or `AGENTS.md` skip the
-  image build (`paths-ignore` in `docker.yml`); anything else, `personas/`
-  included, ships.
+  calls. Pushes that only touch docs, tests, changesets, `AGENTS.md`, `.agents/`
+  or the offline chain (`apps/cli`, `packages/ingest`) skip the image build
+  (`paths-ignore` in `docker.yml`); anything else, `personas/` included, ships.
 - **Never bump a version, push a release tag, or hand-edit `CHANGELOG.md`.**
   Merging the Release workflow's version PR bumps `apps/bot/package.json`,
   copies it into `pyproject.toml`, `uv.lock`, `bot.py` and `rtvi.ts`

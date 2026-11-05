@@ -3,8 +3,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { consoleSink, cpLen, type LogRecord, logger } from "@eidolon/config";
-import type { JsonPoster } from "../src/openai-http.ts";
+import { consoleSink, cpLen, type JsonPoster, type LogRecord, logger } from "@eidolon/config";
 import type { QdrantApi } from "../src/qdrant.ts";
 
 export type Payload = Record<string, unknown>;

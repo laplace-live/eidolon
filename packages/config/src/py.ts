@@ -75,15 +75,75 @@ export function pyParseFloat(text: string): number | null {
   return special[1] === "-" ? -Infinity : Infinity;
 }
 
-/** Python `str.strip(chars)`; without `chars`, Python's whitespace set. */
-export function pyStrip(s: string, chars?: string): string {
-  const strip = chars === undefined ? PY_WHITESPACE_SET : new Set(chars);
+function strip(s: string, chars: string | undefined, left: boolean, right: boolean): string {
+  if (chars === undefined) {
+    // Every Python whitespace character is one BMP code unit, and no surrogate half is one, so
+    // code units find the same ends as code points without splitting the string.
+    let start = 0;
+    let end = s.length;
+    while (left && start < end && PY_WHITESPACE_SET.has(s[start] as string)) start++;
+    while (right && end > start && PY_WHITESPACE_SET.has(s[end - 1] as string)) end--;
+    return s.slice(start, end);
+  }
+  const set = new Set(chars);
   const points = [...s];
   let start = 0;
   let end = points.length;
-  while (start < end && strip.has(points[start] as string)) start++;
-  while (end > start && strip.has(points[end - 1] as string)) end--;
+  while (left && start < end && set.has(points[start] as string)) start++;
+  while (right && end > start && set.has(points[end - 1] as string)) end--;
   return points.slice(start, end).join("");
+}
+
+/** Python `str.strip(chars)`; without `chars`, Python's whitespace set. */
+export function pyStrip(s: string, chars?: string): string {
+  return strip(s, chars, true, true);
+}
+
+/** Python `str.lstrip(chars)`. */
+export function pyLstrip(s: string, chars?: string): string {
+  return strip(s, chars, true, false);
+}
+
+/** Python `str.rstrip(chars)`. */
+export function pyRstrip(s: string, chars?: string): string {
+  return strip(s, chars, false, true);
+}
+
+// biome-ignore lint/suspicious/noControlCharactersInRegex: str.splitlines() also splits on U+001C–U+001E.
+const LINE_BREAK = /\r\n|[\n\v\f\r\x1c-\x1e\x85\u2028\u2029]/;
+const LINE_BREAKS = new RegExp(LINE_BREAK.source, "g");
+
+/** `str.splitlines(keepends)`. */
+export function splitlines(text: string, keepends = false): string[] {
+  if (!keepends) {
+    if (text === "") return [];
+    const lines = text.split(LINE_BREAK);
+    if (lines.at(-1) === "") lines.pop();
+    return lines;
+  }
+  const lines: string[] = [];
+  let start = 0;
+  for (const match of text.matchAll(LINE_BREAKS)) {
+    const end = match.index + match[0].length;
+    lines.push(text.slice(start, end));
+    start = end;
+  }
+  if (start < text.length) lines.push(text.slice(start));
+  return lines;
+}
+
+/** `str.partition(sep)`. */
+export function partition(text: string, sep: string): [string, string, string] {
+  const i = text.indexOf(sep);
+  return i === -1 ? [text, "", ""] : [text.slice(0, i), sep, text.slice(i + sep.length)];
+}
+
+/** `round(x)` to an int: ties go to the even neighbour. */
+export function pyRound(x: number): number {
+  const floor = Math.floor(x);
+  const fraction = x - floor;
+  if (fraction !== 0.5) return fraction < 0.5 ? floor : floor + 1;
+  return floor % 2 === 0 ? floor : floor + 1;
 }
 
 /** Python `str.split()` with no arguments: runs of whitespace separate, empties dropped. */
@@ -104,9 +164,33 @@ export function pySplitWs(s: string): string[] {
 
 /** Python `len(s)`: code points, not UTF-16 units. */
 export function cpLen(s: string): number {
-  let n = 0;
-  for (const _ of s) n++;
+  // As a string's iterator counts: a surrogate pair is one code point, and so is a lone half.
+  let n = s.length;
+  for (let i = 0; i < s.length - 1; i++) {
+    const unit = s.charCodeAt(i);
+    if (unit < 0xd800 || unit > 0xdbff) continue;
+    const next = s.charCodeAt(i + 1);
+    if (next >= 0xdc00 && next <= 0xdfff) {
+      n--;
+      i++;
+    }
+  }
   return n;
+}
+
+/** f-string `{s:<width}`, counted in code points. */
+export function ljust(text: string, width: number): string {
+  return text + " ".repeat(Math.max(0, width - cpLen(text)));
+}
+
+/** f-string `{s:>width}`, counted in code points. */
+export function rjust(text: string, width: number): string {
+  return " ".repeat(Math.max(0, width - cpLen(text))) + text;
+}
+
+/** f-string `{n:,}` of an int, or of `pyFixed(x, 0)`'s digits. */
+export function thousands(value: number | string): string {
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
 /** Python `s[start:end]` over code points, including negative indices. */
@@ -147,6 +231,7 @@ export function pyTruthy(value: unknown): boolean {
   if (value === null || value === undefined) return false;
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value !== 0;
+  if (value instanceof PyFloat) return value.value !== 0;
   if (typeof value === "bigint") return value !== 0n;
   if (typeof value === "string") return value.length > 0;
   if (Array.isArray(value)) return value.length > 0;
@@ -173,6 +258,12 @@ export class PyFloat {
   constructor(value: number) {
     this.value = value;
   }
+}
+
+/** A loaded JSON number's value, int or PyFloat; null for anything else. */
+export function pyNumber(value: unknown): number | null {
+  if (typeof value === "number") return value;
+  return value instanceof PyFloat ? value.value : null;
 }
 
 /** Python `type(value).__name__` for a JSON value; any integral number is an int. */
@@ -399,4 +490,14 @@ export function pyJsonDumps(
     return `${open}\n${pad}${items.join(`,\n${pad}`)}\n${closePad}${close}`;
   };
   return encode(value, 0);
+}
+
+/**
+ * `json.loads`: a number literal with a fraction or an exponent is a Python float, so it comes back
+ * as a PyFloat; every other number is an int.
+ */
+export function loadsPy(text: string): unknown {
+  return JSON.parse(text, (_key, value: unknown, context?: { source?: string }) =>
+    typeof value === "number" && /[.eE]/.test(context?.source ?? "") ? new PyFloat(value) : value,
+  );
 }

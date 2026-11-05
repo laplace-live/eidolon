@@ -1,0 +1,468 @@
+{
+  "printed_by": "CPython 3.13.4, numpy 2.5.3, pyarrow 25.0.1, lancedb 0.39.0: packages/retrieval/test/fixtures/write_side.golden.py through laplace_eidolon.embeddings and tools.ingest_streams / tools.ingest_facts",
+  "keys": [
+    [
+      "google/gemini-embedding-2-preview",
+      3072,
+      "On 2026-09-08, 开场问候.\n大家好。",
+      "6d573d46bb013463b05572b91203ff71ca6abab8"
+    ],
+    ["", 3072, "", "264a764f137c4a1880a182e93da9358472eb19c9"],
+    ["m", 4, "a\u0000b", "ae903f85117234e7d4d1e41d6d566bd957588e39"],
+    ["~google/x", 1, "😀 emoji", "ea94f69f05f2d3b6fa95c7b8990a3f7ff6f25ddf"],
+    [
+      "openai/text-embedding-3-large",
+      3072,
+      "line1\r\nline2",
+      "a5dc2793e341f8d1610e8c8a39b6ce9a220f6a38"
+    ]
+  ],
+  "blobs": [
+    [[0.1, -0.0, 1e-45, 3.4028235e38], "cdcccc3d0000008001000000ffff7f7f"],
+    [
+      [0.3333333333333333, 0.30000000000000004, 16777217.0, 1e39],
+      "abaaaa3e9a99993e0000804b0000807f"
+    ],
+    [[2.5e-38, -1.5, 0.0, 7.006492321624085e-46], "ea1c08010000c0bf0000000000000000"]
+  ],
+  "cache_file": {
+    "sql": "CREATE TABLE embed_cache (  key TEXT PRIMARY KEY,   vector BLOB NOT NULL)",
+    "journal_mode": "wal"
+  },
+  "tables": {
+    "persona_facts": {
+      "rows": [
+        {
+          "id": "f0",
+          "source": "a设定集.txt",
+          "date": "2026-05-09",
+          "floor": 12,
+          "text": "坚果体重5.5kg",
+          "tokens": "坚果 体重 5.5 kg",
+          "embed_input": "2026-05-09 体重5.5kg",
+          "vector": [1.0, 0.0, 0.0, 0.0]
+        },
+        {
+          "id": "f1",
+          "source": "b事件集.txt",
+          "date": "",
+          "floor": 0,
+          "text": "坚果出生",
+          "tokens": "坚果 出生",
+          "embed_input": "出生",
+          "vector": [0.9, 0.1, -0.0, 1e-45]
+        },
+        {
+          "id": "f2",
+          "source": "a设定集.txt",
+          "date": "2025-01-02",
+          "floor": -7,
+          "text": "Café BV1x",
+          "tokens": "Café BV1x",
+          "embed_input": "Café",
+          "vector": [0.3333333333333333, 2.5e-38, 16777217.0, -1.5]
+        }
+      ],
+      "indices": [
+        [
+          "tokens_idx",
+          "FTS",
+          ["tokens"],
+          {
+            "lance_tokenizer": "text",
+            "base_tokenizer": "whitespace",
+            "language": "English",
+            "with_position": false,
+            "max_token_length": 40,
+            "lower_case": false,
+            "stem": false,
+            "remove_stop_words": false,
+            "custom_stop_words": null,
+            "ascii_folding": true,
+            "min_ngram_length": 3,
+            "max_ngram_length": 3,
+            "prefix_only": false,
+            "block_size": 128,
+            "split_identifiers": false,
+            "split_on_numerics": false,
+            "preserve_original": false,
+            "index_operators": false
+          }
+        ]
+      ],
+      "versions": [1, 2],
+      "manifests": [
+        "18446744073709551613.manifest",
+        "18446744073709551614.manifest",
+        "latest_version_hint.json"
+      ],
+      "read_back": [
+        {
+          "id": "f0",
+          "source": "a设定集.txt",
+          "date": "2026-05-09",
+          "floor": 12,
+          "text": "坚果体重5.5kg",
+          "tokens": "坚果 体重 5.5 kg"
+        },
+        {
+          "id": "f1",
+          "source": "b事件集.txt",
+          "date": "",
+          "floor": 0,
+          "text": "坚果出生",
+          "tokens": "坚果 出生"
+        },
+        {
+          "id": "f2",
+          "source": "a设定集.txt",
+          "date": "2025-01-02",
+          "floor": -7,
+          "text": "Café BV1x",
+          "tokens": "Café BV1x"
+        }
+      ],
+      "vectors_f32_hex": [
+        "0000803f000000000000000000000000",
+        "6666663fcdcccc3d0000008001000000",
+        "abaaaa3eea1c08010000804b0000c0bf"
+      ]
+    },
+    "stream_chunks": {
+      "rows": [
+        {
+          "id": "s_p1::000",
+          "stream_id": "s_p1",
+          "stream_date": "2026-09-08",
+          "heading": "开场问候",
+          "text": "大家好。",
+          "summary": "",
+          "details": "我和大家打了招呼。",
+          "chunk_type": "karaoke",
+          "topics": "\"ab\"",
+          "mentions": "[\"Alex\"]",
+          "extras_json": "{\"key_quotes\": []}",
+          "refined": true,
+          "tokens": "开场 问候",
+          "source_path": "streams/s_p1.md",
+          "embed_input": "On 2026-09-08, 开场问候.\n大家好。",
+          "vector": [0.5, 0.25, 0.125, 1.0]
+        },
+        {
+          "id": "s_p1::001",
+          "stream_id": "s_p1",
+          "stream_date": "None",
+          "heading": "10:00 — 第三段",
+          "text": "继续聊天。",
+          "summary": "",
+          "details": "",
+          "chunk_type": "",
+          "topics": "[]",
+          "mentions": "[]",
+          "extras_json": "{}",
+          "refined": false,
+          "tokens": "10 : 00 — 第三 三段",
+          "source_path": "streams/s_p1.md",
+          "embed_input": "x",
+          "vector": [0.0, 1.0, 0.0, 0.0]
+        }
+      ],
+      "indices": [
+        [
+          "tokens_idx",
+          "FTS",
+          ["tokens"],
+          {
+            "lance_tokenizer": "text",
+            "base_tokenizer": "whitespace",
+            "language": "English",
+            "with_position": false,
+            "max_token_length": 40,
+            "lower_case": false,
+            "stem": false,
+            "remove_stop_words": false,
+            "custom_stop_words": null,
+            "ascii_folding": true,
+            "min_ngram_length": 3,
+            "max_ngram_length": 3,
+            "prefix_only": false,
+            "block_size": 128,
+            "split_identifiers": false,
+            "split_on_numerics": false,
+            "preserve_original": false,
+            "index_operators": false
+          }
+        ]
+      ],
+      "versions": [1, 2],
+      "manifests": [
+        "18446744073709551613.manifest",
+        "18446744073709551614.manifest",
+        "latest_version_hint.json"
+      ],
+      "read_back": [
+        {
+          "id": "s_p1::000",
+          "stream_id": "s_p1",
+          "stream_date": "2026-09-08",
+          "heading": "开场问候",
+          "text": "大家好。",
+          "summary": "",
+          "details": "我和大家打了招呼。",
+          "chunk_type": "karaoke",
+          "topics": "\"ab\"",
+          "mentions": "[\"Alex\"]",
+          "extras_json": "{\"key_quotes\": []}",
+          "refined": true,
+          "tokens": "开场 问候",
+          "source_path": "streams/s_p1.md"
+        },
+        {
+          "id": "s_p1::001",
+          "stream_id": "s_p1",
+          "stream_date": "None",
+          "heading": "10:00 — 第三段",
+          "text": "继续聊天。",
+          "summary": "",
+          "details": "",
+          "chunk_type": "",
+          "topics": "[]",
+          "mentions": "[]",
+          "extras_json": "{}",
+          "refined": false,
+          "tokens": "10 : 00 — 第三 三段",
+          "source_path": "streams/s_p1.md"
+        }
+      ],
+      "vectors_f32_hex": ["0000003f0000803e0000003e0000803f", "000000000000803f0000000000000000"]
+    }
+  },
+  "scenarios": [
+    {
+      "name": "mixed",
+      "noun": "chunks",
+      "texts": ["零", "一 one", "二\n二", "三3", "四 four", "五", "六 six"],
+      "batch_size": 2,
+      "seeded": [1],
+      "use_cache": true,
+      "usages": [
+        [7, 7, 1.0500000000000001e-6, "estimate"],
+        [9, 9, 1.23e-5, "openrouter"],
+        [5, 6, 0.0, "unknown"]
+      ],
+      "messages": [
+        "Cache: 1/7 embeddings reused, 6 need fresh embedding",
+        "Embedded 2/6 chunks (7 tokens, $0.000001 est.)",
+        "Embedded 4/6 chunks (9 tokens, $0.000012)",
+        "Embedded 6/6 chunks (6 tokens)"
+      ],
+      "calls": [
+        {
+          "texts": ["零", "二\n二"],
+          "model": "google/gemini-embedding-2-preview",
+          "dimensions": 4
+        },
+        {
+          "texts": ["三3", "四 four"],
+          "model": "google/gemini-embedding-2-preview",
+          "dimensions": 4
+        },
+        {
+          "texts": ["五", "六 six"],
+          "model": "google/gemini-embedding-2-preview",
+          "dimensions": 4
+        }
+      ],
+      "vectors_f32_hex": [
+        "6edbb640555555c100008040fa82be3c",
+        "0000e040abaa82c1cdcc9c40d9899d3c",
+        "b76d1b415555b5c19a99d940b4c2663c",
+        "2549d240555575c133339340052fa73c",
+        "dbb6ed3fabaa8ac06666a63f0000803d",
+        "9224a940555545c1cdcc6c40cdcccc3c",
+        "254922415555bdc13333e340c9675d3c"
+      ],
+      "total": [21, 22, 1.3350000000000001e-5, "mixed"],
+      "cache_count": 7,
+      "cache_blobs": {
+        "零": "6edbb640555555c100008040fa82be3c",
+        "一 one": "0000e040abaa82c1cdcc9c40d9899d3c",
+        "二\n二": "b76d1b415555b5c19a99d940b4c2663c",
+        "三3": "2549d240555575c133339340052fa73c",
+        "四 four": "dbb6ed3fabaa8ac06666a63f0000803d",
+        "五": "9224a940555545c1cdcc6c40cdcccc3c",
+        "六 six": "254922415555bdc13333e340c9675d3c"
+      }
+    },
+    {
+      "name": "facts-nocache",
+      "noun": "facts",
+      "texts": ["甲", "乙", "丙"],
+      "batch_size": 96,
+      "seeded": [],
+      "use_cache": false,
+      "usages": [[3, 3, 4.5e-7, "estimate"]],
+      "messages": ["Embedded 3/3 facts (3 tokens, $0.000000 est.)"],
+      "calls": [
+        {
+          "texts": ["甲", "乙", "丙"],
+          "model": "google/gemini-embedding-2-preview",
+          "dimensions": 4
+        }
+      ],
+      "vectors_f32_hex": [
+        "49928440abaa1ac19a9939400000003d",
+        "b76d2b410000c8c10000f040210d523c",
+        "9224c93fabaa6ac0cdcc8c3f2549923d"
+      ],
+      "total": [3, 3, 4.5e-7, "estimate"],
+      "cache_count": null,
+      "cache_blobs": {}
+    },
+    {
+      "name": "all-cached",
+      "noun": "facts",
+      "texts": ["甲", "乙"],
+      "batch_size": 96,
+      "seeded": [0, 1],
+      "use_cache": true,
+      "usages": [],
+      "messages": [
+        "Cache: 2/2 embeddings reused, 0 need fresh embedding",
+        "All embeddings served from cache; nothing to embed."
+      ],
+      "calls": [],
+      "vectors_f32_hex": ["49928440abaa1ac19a9939400000003d", "b76d2b410000c8c10000f040210d523c"],
+      "total": [0, 0, 0.0, "unknown"],
+      "cache_count": 2,
+      "cache_blobs": {
+        "甲": "49928440abaa1ac19a9939400000003d",
+        "乙": "b76d2b410000c8c10000f040210d523c"
+      }
+    },
+    {
+      "name": "no-hits",
+      "noun": "chunks",
+      "texts": ["a", "b", "c"],
+      "batch_size": 64,
+      "seeded": [],
+      "use_cache": true,
+      "usages": [[0, 0, 0.0, "unknown"]],
+      "messages": ["Embedded 3/3 chunks (0 tokens)"],
+      "calls": [
+        {
+          "texts": ["a", "b", "c"],
+          "model": "google/gemini-embedding-2-preview",
+          "dimensions": 4
+        }
+      ],
+      "vectors_f32_hex": [
+        "000000000000000000000000abaaaa3e",
+        "2549123eabaaaabecdcccc3d0000803e",
+        "2549923eabaa2abfcdcc4c3ecdcc4c3e"
+      ],
+      "total": [0, 0, 0.0, "unknown"],
+      "cache_count": 3,
+      "cache_blobs": {
+        "a": "000000000000000000000000abaaaa3e",
+        "b": "2549123eabaaaabecdcccc3d0000803e",
+        "c": "2549923eabaa2abfcdcc4c3ecdcc4c3e"
+      }
+    },
+    {
+      "name": "empty-nocache",
+      "noun": "chunks",
+      "texts": [],
+      "batch_size": 64,
+      "seeded": [],
+      "use_cache": false,
+      "usages": [],
+      "messages": ["All embeddings served from cache; nothing to embed."],
+      "calls": [],
+      "vectors_f32_hex": [],
+      "total": [0, 0, 0.0, "unknown"],
+      "cache_count": null,
+      "cache_blobs": {}
+    },
+    {
+      "name": "dup-texts",
+      "noun": "chunks",
+      "texts": ["x", "y", "x"],
+      "batch_size": 2,
+      "seeded": [],
+      "use_cache": true,
+      "usages": [[2, 2, 0.5, "openrouter"], [1, 1, 0.25, "openrouter"]],
+      "messages": [
+        "Embedded 2/3 chunks (2 tokens, $0.500000)",
+        "Embedded 3/3 chunks (1 tokens, $0.250000)"
+      ],
+      "calls": [
+        {
+          "texts": ["x", "y"],
+          "model": "google/gemini-embedding-2-preview",
+          "dimensions": 4
+        },
+        {
+          "texts": ["x"],
+          "model": "google/gemini-embedding-2-preview",
+          "dimensions": 4
+        }
+      ],
+      "vectors_f32_hex": [
+        "254952405555f5c033331340d9891d3d",
+        "b76d5b40000000c19a99194026b4173d",
+        "254952405555f5c033331340d9891d3d"
+      ],
+      "total": [3, 3, 0.75, "openrouter"],
+      "cache_count": 2,
+      "cache_blobs": {
+        "x": "254952405555f5c033331340d9891d3d",
+        "y": "b76d5b40000000c19a99194026b4173d"
+      }
+    }
+  ],
+  "totals": {
+    "chunks/openrouter": "Embedding totals: 2 chunks, 11 tokens, $0.000012 USD",
+    "facts/openrouter": "Embedding totals: 2 facts, 11 tokens, $0.000012 USD",
+    "chunks/estimate": "Embedding totals: 2 chunks, 12 tokens, $0.000002 USD (client-side estimate; BYOK on /v1/embeddings — OpenRouter withholds cost data)",
+    "facts/estimate": "Embedding totals: 2 facts, 12 tokens, $0.000002 USD (client-side estimate; BYOK on /v1/embeddings — OpenRouter withholds cost data)",
+    "chunks/mixed": "Embedding totals: 2 chunks, 13 tokens, $0.000002 USD (mixed: some batches reported, some estimated)",
+    "facts/mixed": "Embedding totals: 2 facts, 13 tokens, $0.000002 USD (mixed: some batches reported, some estimated)",
+    "chunks/unknown": "Embedding totals: 2 chunks, 14 tokens (provider did not report cost and no local price entry — add the model to embeddings.EMBED_PRICING_USD_PER_1M to fix)",
+    "facts/unknown": "Embedding totals: 2 facts, 14 tokens (provider did not report cost and no local price entry — add the model to embeddings.EMBED_PRICING_USD_PER_1M to fix)"
+  },
+  "schemas": {
+    "persona_facts": {
+      "metadata": {},
+      "fields": [
+        ["id", "string", true],
+        ["source", "string", true],
+        ["date", "string", true],
+        ["floor", "int32", true],
+        ["text", "string", true],
+        ["tokens", "string", true],
+        ["vector", "fixed_size_list<item: float>[4]", true, "item", "float", true]
+      ]
+    },
+    "stream_chunks": {
+      "metadata": {},
+      "fields": [
+        ["id", "string", true],
+        ["stream_id", "string", true],
+        ["stream_date", "string", true],
+        ["heading", "string", true],
+        ["text", "string", true],
+        ["summary", "string", true],
+        ["details", "string", true],
+        ["chunk_type", "string", true],
+        ["topics", "string", true],
+        ["mentions", "string", true],
+        ["extras_json", "string", true],
+        ["refined", "bool", true],
+        ["tokens", "string", true],
+        ["source_path", "string", true],
+        ["vector", "fixed_size_list<item: float>[4]", true, "item", "float", true]
+      ]
+    }
+  }
+}

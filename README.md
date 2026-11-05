@@ -8,8 +8,9 @@ The bot is TypeScript on [Bun](https://bun.sh), built on
 [pipedog](https://github.com/polvallverdu/pipedog), a TypeScript port of
 [Pipecat](https://docs.pipecat.ai/); it lives in `apps/` and `packages/`, and
 has run production since 2026-11-04. The offline chain that builds its indexes
-is Python (`laplace_eidolon/tools/`), as is the original Pipecat bot
-(`laplace_eidolon/`), kept as a rollback image until it is retired.
+is TypeScript too (`packages/ingest`). The original Pipecat bot
+(`laplace_eidolon/`) and its Python tools are kept, as a rollback image and as
+the spec the port is checked against, until they are retired.
 
 ```
 transport.input → STT → user_aggregator → RetrievalGate
@@ -71,46 +72,56 @@ uv run python -m laplace_eidolon.bot   # the same API on localhost:7860
 
 Both `persona_facts` and `stream_archive` no-op gracefully when their LanceDB
 tables are missing, so the bot is runnable from a fresh checkout without these.
-The offline chain is Python:
+A persona's sources and its index live in the data home (`~/.laplace/eidolon`,
+or `EIDOLON_HOME`), never in git or an image:
 
-```bash
-uv sync --extra tools
-
-# Refine raw stream transcripts → JSON sidecars (uses OPENROUTER_API_KEY).
-uv run laplace-refine
-
-# Build the LanceDB indexes.
-uv run laplace-ingest-streams   # → <data home>/personas/milky-green/index/stream_chunks.lance
-uv run laplace-ingest-facts     # → <data home>/personas/milky-green/index/persona_facts.lance
+```text
+~/.laplace/eidolon/sources/<id>/facts/     fact files, one fact per line
+~/.laplace/eidolon/sources/<id>/lists/     URL lists, one video per line
+~/.laplace/eidolon/personas/<id>/index/    what the ingests build
 ```
 
-Both ingest scripts populate a jieba-tokenized `tokens` column and build an
-FTS index on it after embedding, so hybrid search (vector + Chinese BM25)
-works at runtime without an extra build step.
+```bash
+# Fact files → persona_facts (embeddings reuse OPENROUTER_API_KEY).
+bun run laplace-ingest-facts
 
-Other offline tools registered as console scripts:
+# Videos → transcripts → refined scenes → stream_chunks and the stream catalog.
+# Transcription (Soniox) and refinement (OpenRouter) are billed; --dry-run
+# shows what a run would do first.
+bun run laplace-pipeline --dry-run ~/.laplace/eidolon/sources/<id>/lists/videos.txt
+bun run laplace-pipeline ~/.laplace/eidolon/sources/<id>/lists/videos.txt
+```
 
-| Command                          | Source module                              | Purpose                                            |
-| -------------------------------- | ------------------------------------------ | -------------------------------------------------- |
-| `uv run laplace-pipeline`        | `laplace_eidolon.tools.pipeline`           | End-to-end download → transcribe → refine → ingest |
-| `uv run laplace-download`        | `laplace_eidolon.tools.download`           | yt-dlp wrapper for batch VOD fetch                 |
-| `uv run laplace-transcribe`      | `laplace_eidolon.tools.transcribe`         | Whisper / Soniox transcription                     |
-| `uv run laplace-search`          | `laplace_eidolon.tools.search`             | REPL-style retrieval against the LanceDB index     |
-| `uv run laplace-eval-retrieval`  | `laplace_eidolon.tools.eval_retrieval`     | Score retrieval recall@k / MRR vs known queries    |
-| `uv run laplace-generate-image`  | `laplace_eidolon.tools.generate_image`     | Prompt + reference images → a PNG (billed)         |
-| `uv run laplace-extract-users`   | `laplace_eidolon.tools.extract_users`      | Mine danmaku JSON for top usernames                |
-| `uv run laplace-export-mem0`     | `laplace_eidolon.tools.export_mem0`        | Dump a pre-migration Mem0 cloud account to JSON    |
-| `uv run laplace-import-mem0`     | `laplace_eidolon.tools.import_mem0`        | Load that dump into a Qdrant (idempotent, resumable) |
+The offline commands work on the active persona, or the one `--persona <id>`
+names. The download stage installs and updates its own yt-dlp; audio over five
+hours also needs ffmpeg. Both ingests populate a jieba-tokenized `tokens`
+column and build an FTS index on it after embedding, so hybrid search
+(vector + Chinese BM25) works at runtime without an extra build step.
 
-The query-side tools also exist on the TypeScript bot's own code path, with the
-same flags and output: `bun run laplace-search`, `bun run laplace-eval-retrieval`,
-`bun run laplace-generate-image`, and `bun run gate-decisions` (the retrieval
-gate benchmark).
+| Command                                | Purpose                                                       |
+| -------------------------------------- | ------------------------------------------------------------- |
+| `bun run laplace-pipeline`             | Download → transcribe → refine → ingest, resumable; `--dry-run` plans |
+| `bun run laplace-download`             | yt-dlp batch download; `--expand` lists a playlist's videos   |
+| `bun run laplace-transcribe`           | Soniox async transcription, with the persona's glossary       |
+| `bun run laplace-refine`               | Two LLM passes per scene → structured memory records          |
+| `bun run laplace-ingest-streams`       | Refined transcripts → `stream_chunks`                         |
+| `bun run laplace-ingest-facts`         | Fact files → `persona_facts`                                  |
+| `bun run laplace-build-stream-catalog` | Broadcast overviews for date-scoped recall                    |
+| `bun run laplace-prepare-batch`        | A series capture's new videos → a batch list                  |
+| `bun run laplace-extract-users`        | Mine danmaku JSON for top usernames                           |
+| `bun run laplace-search`               | Probe the index on the bot's exact retrieval path             |
+| `bun run laplace-eval-retrieval`       | Score retrieval recall@k / MRR against known queries          |
+| `bun run laplace-generate-image`       | Prompt + reference images → a PNG (billed)                    |
+| `bun run gate-decisions`               | The retrieval gate benchmark (billed)                         |
 
-The indexes live in the persona's folder in the data home (`~/.laplace/eidolon`,
-or `EIDOLON_HOME`), never in git or an image: a server mounts its own copy, so
-a re-ingest reaches it by copying `index/` there. See
-[`docs/personas.md`](docs/personas.md).
+Each takes `--help` except `gate-decisions`, which takes no arguments and starts
+its billed run at once. The Python tools they port stay, as `uv run laplace-*`
+after `uv sync --extra tools`, until Python is retired; two exist only there:
+`laplace-export-mem0` and `laplace-import-mem0`, which move memories off Mem0's
+cloud into a Qdrant.
+
+A server mounts its own copy of the data home, so a re-ingest reaches it by
+copying `index/` there. See [`docs/personas.md`](docs/personas.md).
 
 ### Retrieval pipeline
 
@@ -139,14 +150,14 @@ see [`docs/retrieval-gate.md`](docs/retrieval-gate.md).
 To measure how well retrieval is doing on a known set of questions:
 
 ```bash
-uv run laplace-eval-retrieval --verbose --save data/eval/baseline.json
+bun run laplace-eval-retrieval --verbose --save ~/.laplace/eidolon/sources/<id>/eval/baseline.json
 # ... change something, ingest, re-run ...
-uv run laplace-eval-retrieval --compare data/eval/baseline.json
+bun run laplace-eval-retrieval --compare ~/.laplace/eidolon/sources/<id>/eval/baseline.json
 ```
 
-Add new queries to `data/eval/queries.toml` whenever you discover a question
-the bot mishandles — the harness becomes more discriminating with every
-adversarial example you add.
+Add new queries to the persona's `eval/queries.toml`, beside that baseline,
+whenever you discover a question the bot mishandles — the harness becomes more
+discriminating with every adversarial example you add.
 
 ## Self-host with Docker
 
@@ -263,8 +274,9 @@ changes), `prompt.md` (the system prompt, re-read on every connection),
 overrides it file by file. Settings layer as code defaults < `settings.yaml` <
 `persona.yaml` < the environment, with keys in `credentials.json`; every field
 is in [`docs/personas.md`](docs/personas.md). For richer detail beyond the
-always-on system prompt, add atomic facts to `data/*设定集.txt` /
-`data/*事件集.txt` and re-run `laplace-ingest-facts`.
+always-on system prompt, add atomic facts, one per line, to the persona's fact
+files in `~/.laplace/eidolon/sources/<id>/facts/` and re-run
+`bun run laplace-ingest-facts`.
 
 ## References
 

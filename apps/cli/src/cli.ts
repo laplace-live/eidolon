@@ -1,12 +1,22 @@
-// Routes `main.ts <command> [args]` to the ports of the Python CLIs that share the bot's code.
+// Routes `main.ts <command> [args]` to the TypeScript ports of the Python CLIs.
 import { pyRepr } from "@eidolon/config";
+import { CLEANUP_LIMIT_MS } from "@eidolon/ingest";
+import { buildStreamCatalogMain } from "./build_stream_catalog.ts";
+import { downloadMain } from "./download.ts";
 import { evalRetrievalMain } from "./eval_retrieval.ts";
+import { extractUsersMain } from "./extract_users.ts";
 import { gateDecisionsMain } from "./gate_decisions.ts";
 import { generateImageMain } from "./generate_image.ts";
-import { type CliIo, resolveIo } from "./io.ts";
+import { ingestFactsMain } from "./ingest_facts.ts";
+import { ingestStreamsMain } from "./ingest_streams.ts";
+import { type CommandDeps, resolveIo } from "./io.ts";
+import { pipelineMain } from "./pipeline.ts";
+import { prepareBatchMain } from "./prepare_batch.ts";
+import { refineMain } from "./refine.ts";
 import { searchMain } from "./search.ts";
+import { transcribeMain } from "./transcribe.ts";
 
-type Command = (argv: readonly string[], io: CliIo) => Promise<number>;
+type Command = (argv: readonly string[], deps: CommandDeps) => Promise<number>;
 
 /** Each command and the Python CLI it ports. */
 export const COMMANDS: Readonly<Record<string, Command>> = {
@@ -14,12 +24,36 @@ export const COMMANDS: Readonly<Record<string, Command>> = {
   "eval-retrieval": evalRetrievalMain,
   "generate-image": generateImageMain,
   "gate-decisions": gateDecisionsMain,
+  download: downloadMain,
+  transcribe: transcribeMain,
+  refine: refineMain,
+  "ingest-streams": ingestStreamsMain,
+  "ingest-facts": ingestFactsMain,
+  "build-stream-catalog": buildStreamCatalogMain,
+  pipeline: pipelineMain,
+  "extract-users": extractUsersMain,
+  "prepare-batch": prepareBatchMain,
 };
 
+// These never read deps.signal, so the first Ctrl-C quits them at once instead of leaving them
+// running, silently, until the cleanup limit.
+const IGNORE_SIGNAL: ReadonlySet<string> = new Set([
+  "search",
+  "eval-retrieval",
+  "generate-image",
+  "gate-decisions",
+  "prepare-batch",
+]);
+
+/** How long the command `argv` names may take to stop after the first SIGINT or SIGTERM. */
+export function cleanupLimitMs(argv: readonly string[]): number {
+  return IGNORE_SIGNAL.has(argv[0] ?? "") ? 0 : CLEANUP_LIMIT_MS;
+}
+
 const NAMES = Object.keys(COMMANDS);
-export const CLI_USAGE = `usage: main.ts [-h] {${NAMES.join(",")}} ...\n`;
+export const CLI_USAGE = `usage: main.ts [-h]\n               {${NAMES.join(",")}} ...\n`;
 const CLI_HELP = `${CLI_USAGE}
-The Python CLIs the bot shares code with. Each takes its Python flags.
+The TypeScript ports of the Python CLIs. Each takes its Python flags.
 
 positional arguments:
   {${NAMES.join(",")}}
@@ -27,6 +61,16 @@ positional arguments:
     eval-retrieval      laplace-eval-retrieval
     generate-image      laplace-generate-image
     gate-decisions      docs/benchmarks/2026-09-19-retrieval-gate/decisions.py
+    download            laplace-download
+    transcribe          laplace-transcribe
+    refine              laplace-refine
+    ingest-streams      laplace-ingest-streams
+    ingest-facts        laplace-ingest-facts
+    build-stream-catalog
+                        laplace-build-stream-catalog
+    pipeline            laplace-pipeline
+    extract-users       laplace-extract-users
+    prepare-batch       laplace-prepare-batch
 
 options:
   -h, --help            show this help message and exit
@@ -36,7 +80,7 @@ options:
  * Runs one command and resolves to the process exit code. An uncaught error is a Python
  * traceback's equivalent: its stack on stderr and exit 1.
  */
-export async function runCli(argv: readonly string[], deps: Partial<CliIo> = {}): Promise<number> {
+export async function runCli(argv: readonly string[], deps: CommandDeps = {}): Promise<number> {
   const io = resolveIo(deps);
   const [name, ...rest] = argv;
   if (name === "-h" || name === "--help") {
@@ -53,7 +97,7 @@ export async function runCli(argv: readonly string[], deps: Partial<CliIo> = {})
     return 2;
   }
   try {
-    return await command(rest, io);
+    return await command(rest, { ...io, signal: deps.signal });
   } catch (error) {
     io.stderr(`${error instanceof Error ? (error.stack ?? String(error)) : String(error)}\n`);
     return 1;

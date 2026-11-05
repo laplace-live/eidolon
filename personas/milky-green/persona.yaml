@@ -3,6 +3,7 @@
 
 identity:
   name: 明前奶绿
+  shortName: 奶绿
   fans: 奶糖花
   summary: >-
     明前奶绿, a Chinese VTuber who streams on Bilibili, runs a fictional flower shop
@@ -11,6 +12,11 @@ identity:
   timezone: Asia/Shanghai
 
 knowledge:
+  facts:
+    # Quoted: a bare leading * is a YAML alias.
+    files: ["*设定集.txt", "*事件集.txt"]
+    # A regex: 奶绿 the persona, 奶黑 her alter ego.
+    subject: 明前奶[绿黑]
   gate:
     questions:
       # "or her flower shop" carries recall for questions about 坚果 and the shop: dropping it,

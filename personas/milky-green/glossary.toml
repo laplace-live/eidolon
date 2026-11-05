@@ -1,6 +1,6 @@
 # Soniox transcription context — biases the Soniox STT model toward this
 # project's vocabulary (persona names, audience slang, recurring topics).
-# Loaded automatically by `tools.transcribe --provider soniox`.
+# Loaded automatically by `laplace-transcribe` and `laplace-pipeline`.
 #
 # Schema mirrors Soniox's StructuredContext exactly:
 #   https://soniox.com/docs/stt/concepts/context
@@ -26,7 +26,7 @@
 #
 # We deliberately do NOT pass a per-stream "topic" hint. A single VOD often
 # spans chat, gaming, karaoke, and watchalongs, so a single label would be
-# misleading. Per-scene topics live on each chunk after `tools/refine.py`.
+# misleading. Per-scene topics live on each chunk after `laplace-refine`.
 #
 # TOML gotcha: top-level scalars/arrays (`text`, `terms`) MUST appear
 # before any `[[general]]` / `[[translation_terms]]` array-of-tables

@@ -1,0 +1,865 @@
+{
+  "printed_by": "CPython 3.13.4: laplace_eidolon.tools.refine through packages/ingest/test/fixtures/refine/vectors.golden.py",
+  "extract": [
+    {
+      "input": "{\"sc_events\": [{\"viewer\": null, \"content\": null, \"amount_yuan\": \"30\", \"response\": null}, {\"viewer\": \"  \", \"content\": \"hi\", \"amount_yuan\": 12.7}, {\"viewer\": \"a\", \"amount_yuan\": true}, {\"viewer\": \"b\", \"amount_yuan\": \" 1_000 \"}, {\"viewer\": \"c\", \"amount_yuan\": \"30.5\"}, {\"viewer\": \"\", \"content\": \"\"}, \"not a dict\"]}",
+      "result": "{\"sc_events\": [{\"viewer\": \"None\", \"amount_yuan\": 30, \"content\": \"None\", \"response\": \"None\"}, {\"viewer\": \"(unknown)\", \"amount_yuan\": 12, \"content\": \"hi\", \"response\": \"\"}, {\"viewer\": \"a\", \"amount_yuan\": 1, \"content\": \"\", \"response\": \"\"}, {\"viewer\": \"b\", \"amount_yuan\": 1000, \"content\": \"\", \"response\": \"\"}, {\"viewer\": \"c\", \"amount_yuan\": null, \"content\": \"\", \"response\": \"\"}], \"songs\": [], \"events\": [], \"promises\": [], \"topics\": [], \"mentions\": [], \"key_quotes\": [], \"is_anime_audio_dominant\": false, \"is_karaoke_dominant\": false}"
+    },
+    {
+      "input": "{\"songs\": [{\"title\": null, \"note\": \"x\"}, {\"title\": \"\", \"note\": \"lyric\"}, \"  Song A  \", {\"title\": \"B\"}, 5]}",
+      "result": "{\"sc_events\": [], \"songs\": [{\"title\": \"None\", \"note\": \"x\"}, {\"title\": \"Song A\", \"note\": \"\"}, {\"title\": \"B\", \"note\": \"\"}], \"events\": [], \"promises\": [], \"topics\": [], \"mentions\": [], \"key_quotes\": [], \"is_anime_audio_dominant\": false, \"is_karaoke_dominant\": false}"
+    },
+    {
+      "input": "{\"events\": [\"  e1 \", \"\", null, 3, {\"k\": \"v\"}, [\"l\"]]}",
+      "result": "{\"sc_events\": [], \"songs\": [], \"events\": [\"e1\", \"None\", \"3\", \"{'k': 'v'}\", \"['l']\"], \"promises\": [], \"topics\": [], \"mentions\": [], \"key_quotes\": [], \"is_anime_audio_dominant\": false, \"is_karaoke_dominant\": false}"
+    },
+    {
+      "input": "{\"topics\": [\"t1\", \"t2\", \"t3\", \"t4\", \"t5\", \"t6\", \"t7\", \"t8\", \"t9\", \"t10\", \"t11\", \"t12\"], \"is_anime_audio_dominant\": \"false\"}",
+      "result": "{\"sc_events\": [], \"songs\": [], \"events\": [], \"promises\": [], \"topics\": [\"t1\", \"t2\", \"t3\", \"t4\", \"t5\", \"t6\", \"t7\", \"t8\", \"t9\", \"t10\"], \"mentions\": [], \"key_quotes\": [], \"is_anime_audio_dominant\": true, \"is_karaoke_dominant\": false}"
+    },
+    {
+      "input": "[{\"topics\": [\"a\"], \"is_karaoke_dominant\": 1}, {\"topics\": [\"b\"], \"events\": \"notalist\"}]",
+      "result": "{\"sc_events\": [], \"songs\": [], \"events\": [], \"promises\": [], \"topics\": [\"a\", \"b\"], \"mentions\": [], \"key_quotes\": [], \"is_anime_audio_dominant\": false, \"is_karaoke_dominant\": true}"
+    },
+    {
+      "input": "[]",
+      "error": "ValueError: Empty list returned"
+    },
+    {
+      "input": "[1]",
+      "error": "ValueError: List contained non-dict items"
+    },
+    {
+      "input": "\"str\"",
+      "error": "ValueError: Expected JSON object, got str"
+    },
+    {
+      "input": "{\"sc_events\": [{\"viewer\": \"n\", \"amount_yuan\": NaN}, {\"viewer\": \"f\", \"amount_yuan\": -2.9}, {\"viewer\": \"e\", \"amount_yuan\": 1e2}, {\"viewer\": \"l\", \"amount_yuan\": [1]}, {\"viewer\": \"d\", \"amount_yuan\": {\"a\": 1}}, {\"viewer\": \"u\", \"amount_yuan\": \"٣\"}, {\"viewer\": \"z\", \"amount_yuan\": false}, {\"content\": \"only content\"}]}",
+      "result": "{\"sc_events\": [{\"viewer\": \"n\", \"amount_yuan\": null, \"content\": \"\", \"response\": \"\"}, {\"viewer\": \"f\", \"amount_yuan\": -2, \"content\": \"\", \"response\": \"\"}, {\"viewer\": \"e\", \"amount_yuan\": 100, \"content\": \"\", \"response\": \"\"}, {\"viewer\": \"l\", \"amount_yuan\": null, \"content\": \"\", \"response\": \"\"}, {\"viewer\": \"d\", \"amount_yuan\": null, \"content\": \"\", \"response\": \"\"}, {\"viewer\": \"u\", \"amount_yuan\": 3, \"content\": \"\", \"response\": \"\"}, {\"viewer\": \"z\", \"amount_yuan\": 0, \"content\": \"\", \"response\": \"\"}, {\"viewer\": \"(unknown)\", \"amount_yuan\": null, \"content\": \"only content\", \"response\": \"\"}], \"songs\": [], \"events\": [], \"promises\": [], \"topics\": [], \"mentions\": [], \"key_quotes\": [], \"is_anime_audio_dominant\": false, \"is_karaoke_dominant\": false}"
+    },
+    {
+      "input": "{\"sc_events\": [{\"viewer\": \"x\", \"amount_yuan\": Infinity}]}",
+      "error": "OverflowError: cannot convert float infinity to integer"
+    },
+    {
+      "input": "{\"topics\": [1.0, 2.5, -0.0, 1e20, 1e-7, true, null], \"mentions\": [{\"k\": \"it's\"}], \"events\": [\"\\u3000x\\u3000\", \"\\u00a0\", \"\\ufeffy\", \"\\u0085z\\u001c\"], \"sc_events\": [{\"viewer\": {\"a\": [1, null, true]}, \"content\": 5, \"response\": 1.5}]}",
+      "result": "{\"sc_events\": [{\"viewer\": \"{'a': [1, None, True]}\", \"amount_yuan\": null, \"content\": \"5\", \"response\": \"1.5\"}], \"songs\": [], \"events\": [\"x\", \"﻿y\", \"z\"], \"promises\": [], \"topics\": [\"1.0\", \"2.5\", \"-0.0\", \"1e+20\", \"1e-07\", \"True\", \"None\"], \"mentions\": [\"{'k': \\\"it's\\\"}\"], \"key_quotes\": [], \"is_anime_audio_dominant\": false, \"is_karaoke_dominant\": false}"
+    },
+    {
+      "input": "{\"events\": [\"e0\", \"e1\", \"e2\", \"e3\", \"e4\", \"e5\", \"e6\", \"e7\", \"e8\", \"e9\", \"e10\", \"e11\", \"e12\", \"e13\", \"e14\", \"e15\", \"e16\", \"e17\", \"e18\", \"e19\", \"e20\", \"e21\", \"e22\", \"e23\", \"e24\", \"e25\", \"e26\", \"e27\", \"e28\", \"e29\", \"e30\", \"e31\", \"e32\", \"e33\", \"e34\", \"e35\", \"e36\", \"e37\", \"e38\", \"e39\", \"e40\", \"e41\", \"e42\", \"e43\", \"e44\", \"e45\", \"e46\", \"e47\", \"e48\", \"e49\", \"e50\", \"e51\", \"e52\", \"e53\", \"e54\", \"e55\", \"e56\", \"e57\", \"e58\", \"e59\"], \"promises\": [\"\", \" \", \"\", \" \", \"\", \" \", \"\", \" \", \"\", \" \", \"\", \" \", \"\", \" \", \"\", \" \", \"\", \" \", \"\", \" \", \"\", \" \", \"\", \" \", \"\", \" \", \"\", \" \", \"\", \" \", \"\", \" \", \"\", \" \", \"\", \" \", \"\", \" \", \"\", \" \", \"\", \" \", \"\", \" \", \"\", \" \", \"\", \" \", \"\", \" \", \"\", \" \", \"\", \" \", \"\", \" \", \"\", \" \", \"\", \" \", \"p0\", \"p1\", \"p2\", \"p3\", \"p4\", \"p5\", \"p6\", \"p7\", \"p8\", \"p9\", \"p10\", \"p11\", \"p12\", \"p13\", \"p14\", \"p15\", \"p16\", \"p17\", \"p18\", \"p19\", \"p20\", \"p21\", \"p22\", \"p23\", \"p24\", \"p25\", \"p26\", \"p27\", \"p28\", \"p29\", \"p30\", \"p31\", \"p32\", \"p33\", \"p34\", \"p35\", \"p36\", \"p37\", \"p38\", \"p39\", \"p40\", \"p41\", \"p42\", \"p43\", \"p44\", \"p45\", \"p46\", \"p47\", \"p48\", \"p49\", \"p50\", \"p51\", \"p52\", \"p53\", \"p54\"], \"key_quotes\": [\"q0\", \"q1\", \"q2\", \"q3\", \"q4\", \"q5\", \"q6\", \"q7\", \"q8\", \"q9\", \"q10\", \"q11\"], \"mentions\": [\"m0\", \"m1\", \"m2\", \"m3\", \"m4\", \"m5\", \"m6\", \"m7\", \"m8\", \"m9\", \"m10\", \"m11\", \"m12\", \"m13\", \"m14\", \"m15\", \"m16\", \"m17\", \"m18\", \"m19\", \"m20\", \"m21\", \"m22\", \"m23\", \"m24\", \"m25\", \"m26\", \"m27\", \"m28\", \"m29\", \"m30\", \"m31\", \"m32\", \"m33\", \"m34\", \"m35\", \"m36\", \"m37\", \"m38\", \"m39\", \"m40\", \"m41\", \"m42\", \"m43\", \"m44\", \"m45\", \"m46\", \"m47\", \"m48\", \"m49\", \"m50\", \"m51\"]}",
+      "result": "{\"sc_events\": [], \"songs\": [], \"events\": [\"e0\", \"e1\", \"e2\", \"e3\", \"e4\", \"e5\", \"e6\", \"e7\", \"e8\", \"e9\", \"e10\", \"e11\", \"e12\", \"e13\", \"e14\", \"e15\", \"e16\", \"e17\", \"e18\", \"e19\", \"e20\", \"e21\", \"e22\", \"e23\", \"e24\", \"e25\", \"e26\", \"e27\", \"e28\", \"e29\", \"e30\", \"e31\", \"e32\", \"e33\", \"e34\", \"e35\", \"e36\", \"e37\", \"e38\", \"e39\", \"e40\", \"e41\", \"e42\", \"e43\", \"e44\", \"e45\", \"e46\", \"e47\", \"e48\", \"e49\"], \"promises\": [\"p0\", \"p1\", \"p2\", \"p3\", \"p4\", \"p5\", \"p6\", \"p7\", \"p8\", \"p9\", \"p10\", \"p11\", \"p12\", \"p13\", \"p14\", \"p15\", \"p16\", \"p17\", \"p18\", \"p19\", \"p20\", \"p21\", \"p22\", \"p23\", \"p24\", \"p25\", \"p26\", \"p27\", \"p28\", \"p29\", \"p30\", \"p31\", \"p32\", \"p33\", \"p34\", \"p35\", \"p36\", \"p37\", \"p38\", \"p39\", \"p40\", \"p41\", \"p42\", \"p43\", \"p44\", \"p45\", \"p46\", \"p47\", \"p48\", \"p49\"], \"topics\": [], \"mentions\": [\"m0\", \"m1\", \"m2\", \"m3\", \"m4\", \"m5\", \"m6\", \"m7\", \"m8\", \"m9\", \"m10\", \"m11\", \"m12\", \"m13\", \"m14\", \"m15\", \"m16\", \"m17\", \"m18\", \"m19\", \"m20\", \"m21\", \"m22\", \"m23\", \"m24\", \"m25\", \"m26\", \"m27\", \"m28\", \"m29\", \"m30\", \"m31\", \"m32\", \"m33\", \"m34\", \"m35\", \"m36\", \"m37\", \"m38\", \"m39\", \"m40\", \"m41\", \"m42\", \"m43\", \"m44\", \"m45\", \"m46\", \"m47\", \"m48\", \"m49\"], \"key_quotes\": [\"q0\", \"q1\", \"q2\", \"q3\", \"q4\", \"q5\", \"q6\", \"q7\", \"q8\", \"q9\"], \"is_anime_audio_dominant\": false, \"is_karaoke_dominant\": false}"
+    },
+    {
+      "input": "{\"events\": \"x\", \"topics\": {\"a\": 1}, \"songs\": {\"title\": \"t\"}, \"sc_events\": \"s\", \"is_anime_audio_dominant\": 0.0, \"is_karaoke_dominant\": []}",
+      "result": "{\"sc_events\": [], \"songs\": [], \"events\": [], \"promises\": [], \"topics\": [], \"mentions\": [], \"key_quotes\": [], \"is_anime_audio_dominant\": false, \"is_karaoke_dominant\": false}"
+    },
+    {
+      "input": "{\"is_anime_audio_dominant\": NaN, \"is_karaoke_dominant\": \"0\"}",
+      "result": "{\"sc_events\": [], \"songs\": [], \"events\": [], \"promises\": [], \"topics\": [], \"mentions\": [], \"key_quotes\": [], \"is_anime_audio_dominant\": true, \"is_karaoke_dominant\": true}"
+    },
+    {
+      "input": "[{\"sc_events\": [{\"viewer\": \"v1\"}], \"songs\": [\"s1\"], \"is_anime_audio_dominant\": 0}, {\"sc_events\": null, \"songs\": [{\"title\": \"s2\", \"note\": \" n \"}], \"key_quotes\": [\"k\"], \"is_anime_audio_dominant\": [0]}, {\"mentions\": \"notalist\", \"promises\": [\"p\"]}]",
+      "result": "{\"sc_events\": [{\"viewer\": \"v1\", \"amount_yuan\": null, \"content\": \"\", \"response\": \"\"}], \"songs\": [{\"title\": \"s1\", \"note\": \"\"}, {\"title\": \"s2\", \"note\": \"n\"}], \"events\": [], \"promises\": [\"p\"], \"topics\": [], \"mentions\": [], \"key_quotes\": [\"k\"], \"is_anime_audio_dominant\": true, \"is_karaoke_dominant\": false}"
+    },
+    {
+      "input": "[{\"topics\": [\"only\"]}]",
+      "result": "{\"sc_events\": [], \"songs\": [], \"events\": [], \"promises\": [], \"topics\": [\"only\"], \"mentions\": [], \"key_quotes\": [], \"is_anime_audio_dominant\": false, \"is_karaoke_dominant\": false}"
+    },
+    {
+      "input": "5",
+      "error": "ValueError: Expected JSON object, got int"
+    },
+    {
+      "input": "5.5",
+      "error": "ValueError: Expected JSON object, got float"
+    },
+    {
+      "input": "true",
+      "error": "ValueError: Expected JSON object, got bool"
+    },
+    {
+      "input": "null",
+      "error": "ValueError: Expected JSON object, got NoneType"
+    },
+    {
+      "input": "{}",
+      "result": "{\"sc_events\": [], \"songs\": [], \"events\": [], \"promises\": [], \"topics\": [], \"mentions\": [], \"key_quotes\": [], \"is_anime_audio_dominant\": false, \"is_karaoke_dominant\": false}"
+    }
+  ],
+  "synthesis": [
+    {
+      "input": "{\"heading\": \" H \", \"summary\": \" S \", \"details\": null, \"chunk_type\": \" KARAOKE \"}",
+      "result": "{\"heading\": \"H\", \"summary\": \"S\", \"details\": \"None\", \"chunk_type\": \"karaoke\"}"
+    },
+    {
+      "input": "{\"heading\": \"H\", \"summary\": \"\"}",
+      "error": "ValueError: heading and summary are required from synthesis"
+    },
+    {
+      "input": "{\"heading\": \"\", \"summary\": \"S\"}",
+      "error": "ValueError: heading and summary are required from synthesis"
+    },
+    {
+      "input": "{\"heading\": \"H\", \"summary\": \"S\", \"chunk_type\": \"weird\"}",
+      "result": "{\"heading\": \"H\", \"summary\": \"S\", \"details\": \"\", \"chunk_type\": \"commentary\"}"
+    },
+    {
+      "input": "{\"heading\": \"H\", \"summary\": \"S\"}",
+      "result": "{\"heading\": \"H\", \"summary\": \"S\", \"details\": \"\", \"chunk_type\": \"commentary\"}"
+    },
+    {
+      "input": "[{\"heading\": \"A\", \"summary\": \"B\", \"chunk_type\": \"closing\"}, {\"heading\": \"C\", \"summary\": \"D\"}]",
+      "result": "{\"heading\": \"A\", \"summary\": \"B\", \"details\": \"\", \"chunk_type\": \"closing\"}"
+    },
+    {
+      "input": "[]",
+      "error": "ValueError: Empty list returned"
+    },
+    {
+      "input": "[\"x\"]",
+      "error": "ValueError: List contained non-dict items"
+    },
+    {
+      "input": "\"s\"",
+      "error": "ValueError: Expected JSON object, got str"
+    },
+    {
+      "input": "{\"heading\": 1.0, \"summary\": 2, \"chunk_type\": null, \"details\": [\"d\"]}",
+      "result": "{\"heading\": \"1.0\", \"summary\": \"2\", \"details\": \"['d']\", \"chunk_type\": \"commentary\"}"
+    },
+    {
+      "input": "{\"heading\": \"H\", \"summary\": \"S\", \"chunk_type\": \"Karaoke\"}",
+      "result": "{\"heading\": \"H\", \"summary\": \"S\", \"details\": \"\", \"chunk_type\": \"karaoke\"}"
+    },
+    {
+      "input": "{\"heading\": \"H\", \"summary\": \"S\", \"chunk_type\": \"SC_SESSION\", \"details\": \" d \"}",
+      "result": "{\"heading\": \"H\", \"summary\": \"S\", \"details\": \"d\", \"chunk_type\": \"sc_session\"}"
+    },
+    {
+      "input": "3",
+      "error": "ValueError: Expected JSON object, got int"
+    }
+  ],
+  "lenient": [
+    {
+      "input": "{\"a\": 1}",
+      "value": "{\"a\": 1}",
+      "note": null
+    },
+    {
+      "input": "{\"a\": \"x\ny\"}",
+      "value": "{\"a\": \"x\\ny\"}",
+      "note": "sanitized"
+    },
+    {
+      "input": "{\"a\": 1}}",
+      "value": "{\"a\": 1}",
+      "note": "truncated_trailing"
+    },
+    {
+      "input": "{\"a\": 1}\n{\"a\": 1}",
+      "value": "{\"a\": 1}",
+      "note": "truncated_trailing"
+    },
+    {
+      "input": "{\"a\": \"x\ny\"}}",
+      "value": "{\"a\": \"x\\ny\"}",
+      "note": "sanitized+truncated"
+    },
+    {
+      "input": "```json\n{\"a\": 1}\n```",
+      "value": "null",
+      "note": "Expecting value: line 1 column 1 (char 0)"
+    },
+    {
+      "input": "Here: {\"a\": 1}",
+      "value": "null",
+      "note": "Expecting value: line 1 column 1 (char 0)"
+    },
+    {
+      "input": "null",
+      "value": "null",
+      "note": null
+    },
+    {
+      "input": "{\"a\": NaN}",
+      "value": "{\"a\": NaN}",
+      "note": null
+    },
+    {
+      "input": "{\"a\": \"abc",
+      "value": "null",
+      "note": "Unterminated string starting at: line 1 column 7 (char 6)"
+    },
+    {
+      "input": "[{\"a\": 1}]",
+      "value": "[{\"a\": 1}]",
+      "note": null
+    },
+    {
+      "input": "　{\"a\": 1}",
+      "value": "{\"a\": 1}",
+      "note": "truncated_trailing"
+    },
+    {
+      "input": "﻿{\"a\": 1}",
+      "value": "null",
+      "note": "Unexpected UTF-8 BOM (decode using utf-8-sig): line 1 column 1 (char 0)"
+    },
+    {
+      "input": "{\"a\": \"\t\"}",
+      "value": "{\"a\": \"\\t\"}",
+      "note": "sanitized"
+    },
+    {
+      "input": "{\"a\": \"x\\\"}",
+      "value": "null",
+      "note": "Unterminated string starting at: line 1 column 7 (char 6)"
+    },
+    {
+      "input": "{\"a\": \"\u0001\u001f\"}",
+      "value": "{\"a\": \"\\u0001\\u001f\"}",
+      "note": "sanitized"
+    },
+    {
+      "input": "{\"a\": 1.0, \"b\": -0, \"c\": 1e400, \"d\": -Infinity}",
+      "value": "{\"a\": 1.0, \"b\": 0, \"c\": Infinity, \"d\": -Infinity}",
+      "note": null
+    },
+    {
+      "input": "   ",
+      "value": "null",
+      "note": "Expecting value: line 1 column 4 (char 3)"
+    },
+    {
+      "input": "",
+      "value": "null",
+      "note": "Expecting value: line 1 column 1 (char 0)"
+    },
+    {
+      "input": "{\"a\": [1, 2,]}",
+      "value": "null",
+      "note": "Illegal trailing comma before end of array: line 1 column 12 (char 11)"
+    },
+    {
+      "input": "{\"a\": \"x\"",
+      "value": "null",
+      "note": "Expecting ',' delimiter: line 1 column 10 (char 9)"
+    },
+    {
+      "input": "{\"a\":\"x\"}\n\n garbage",
+      "value": "{\"a\": \"x\"}",
+      "note": "truncated_trailing"
+    },
+    {
+      "input": "{\n  \"a\": \"line\nbreak\",\n  \"b\": [\n    1\n  ]\n}",
+      "value": "{\"a\": \"line\\nbreak\", \"b\": [1]}",
+      "note": "sanitized"
+    },
+    {
+      "input": "{\"a\": \"\\u00e9\\ud83d\\ude00\\ud800\"}",
+      "value": "{\"a\": \"\\u00e9\\ud83d\\ude00\\ud800\"}",
+      "note": null
+    },
+    {
+      "input": "{\"a\": \"x\ny\"}\n{\"b\": \"p\tq\"}",
+      "value": "{\"a\": \"x\\ny\"}",
+      "note": "sanitized+truncated"
+    },
+    {
+      "input": "{\"a\": 1}\u0000",
+      "value": "{\"a\": 1}",
+      "note": "truncated_trailing"
+    },
+    {
+      "input": "\n\t {\"a\": \"\r\"}",
+      "value": "{\"a\": \"\\r\"}",
+      "note": "sanitized"
+    }
+  ],
+  "sanitize": [
+    {
+      "input": "a\nb\"c\nd\"e\nf",
+      "output": "a\nb\"c\\nd\"e\nf"
+    },
+    {
+      "input": "\"\\\"\n\"",
+      "output": "\"\\\"\\n\""
+    },
+    {
+      "input": "\"\\\n\"",
+      "output": "\"\\\n\""
+    },
+    {
+      "input": "\"\u0000\u0007\u001b \"",
+      "output": "\"\\u0000\\u0007\\u001b \""
+    },
+    {
+      "input": "no strings\n\t\r",
+      "output": "no strings\n\t\r"
+    },
+    {
+      "input": "\"unterminated\n",
+      "output": "\"unterminated\\n"
+    }
+  ],
+  "context": [
+    {
+      "metadata": {
+        "stream_date": "2022-04-24",
+        "language": "zh",
+        "duration_min": 143,
+        "source_file": "x.m4a"
+      },
+      "context": "date=2022-04-24; language=zh; duration_min=143"
+    },
+    {
+      "metadata": {
+        "stream_date": "2022-04-24",
+        "language": "zh",
+        "duration_min": 0
+      },
+      "context": "date=2022-04-24; language=zh"
+    },
+    {
+      "metadata": {},
+      "context": "(no frontmatter context)"
+    },
+    {
+      "metadata": {
+        "mood": "happy",
+        "notes": ["a", "b"],
+        "duration_min": 180.0,
+        "language": false
+      },
+      "context": "mood=happy; notes=['a', 'b']; duration_min=180.0"
+    },
+    {
+      "metadata": {
+        "notes": {
+          "k": 1
+        },
+        "stream_date": null,
+        "language": "",
+        "duration_min": true
+      },
+      "context": "notes={'k': 1}; duration_min=True"
+    }
+  ],
+  "timestamps": [
+    {
+      "heading": "05:00 — 喂？啊，好了",
+      "timestamp": "05:00"
+    },
+    {
+      "heading": "无破折号",
+      "timestamp": "无破折号"
+    },
+    {
+      "heading": "  01:23  —  x — y",
+      "timestamp": "01:23"
+    },
+    {
+      "heading": "—x",
+      "timestamp": ""
+    },
+    {
+      "heading": "a–b",
+      "timestamp": "a–b"
+    },
+    {
+      "heading": "",
+      "timestamp": ""
+    }
+  ],
+  "usage_pairs": [
+    {
+      "self": "openrouter",
+      "other": "openrouter",
+      "prompt_tokens": 4,
+      "completion_tokens": 6,
+      "cost_usd": "0.75",
+      "cost_source": "openrouter",
+      "fmt": "$0.7500"
+    },
+    {
+      "self": "openrouter",
+      "other": "estimate",
+      "prompt_tokens": 4,
+      "completion_tokens": 6,
+      "cost_usd": "0.75",
+      "cost_source": "mixed",
+      "fmt": "$0.7500 (mixed)"
+    },
+    {
+      "self": "openrouter",
+      "other": "mixed",
+      "prompt_tokens": 4,
+      "completion_tokens": 6,
+      "cost_usd": "0.75",
+      "cost_source": "openrouter",
+      "fmt": "$0.7500"
+    },
+    {
+      "self": "openrouter",
+      "other": "unknown",
+      "prompt_tokens": 4,
+      "completion_tokens": 6,
+      "cost_usd": "0.75",
+      "cost_source": "openrouter",
+      "fmt": "$0.7500"
+    },
+    {
+      "self": "estimate",
+      "other": "openrouter",
+      "prompt_tokens": 4,
+      "completion_tokens": 6,
+      "cost_usd": "0.75",
+      "cost_source": "estimate",
+      "fmt": "$0.7500 (estimate)"
+    },
+    {
+      "self": "estimate",
+      "other": "estimate",
+      "prompt_tokens": 4,
+      "completion_tokens": 6,
+      "cost_usd": "0.75",
+      "cost_source": "estimate",
+      "fmt": "$0.7500 (estimate)"
+    },
+    {
+      "self": "estimate",
+      "other": "mixed",
+      "prompt_tokens": 4,
+      "completion_tokens": 6,
+      "cost_usd": "0.75",
+      "cost_source": "estimate",
+      "fmt": "$0.7500 (estimate)"
+    },
+    {
+      "self": "estimate",
+      "other": "unknown",
+      "prompt_tokens": 4,
+      "completion_tokens": 6,
+      "cost_usd": "0.75",
+      "cost_source": "estimate",
+      "fmt": "$0.7500 (estimate)"
+    },
+    {
+      "self": "mixed",
+      "other": "openrouter",
+      "prompt_tokens": 4,
+      "completion_tokens": 6,
+      "cost_usd": "0.75",
+      "cost_source": "mixed",
+      "fmt": "$0.7500 (mixed)"
+    },
+    {
+      "self": "mixed",
+      "other": "estimate",
+      "prompt_tokens": 4,
+      "completion_tokens": 6,
+      "cost_usd": "0.75",
+      "cost_source": "mixed",
+      "fmt": "$0.7500 (mixed)"
+    },
+    {
+      "self": "mixed",
+      "other": "mixed",
+      "prompt_tokens": 4,
+      "completion_tokens": 6,
+      "cost_usd": "0.75",
+      "cost_source": "mixed",
+      "fmt": "$0.7500 (mixed)"
+    },
+    {
+      "self": "mixed",
+      "other": "unknown",
+      "prompt_tokens": 4,
+      "completion_tokens": 6,
+      "cost_usd": "0.75",
+      "cost_source": "mixed",
+      "fmt": "$0.7500 (mixed)"
+    },
+    {
+      "self": "unknown",
+      "other": "openrouter",
+      "prompt_tokens": 4,
+      "completion_tokens": 6,
+      "cost_usd": "0.75",
+      "cost_source": "openrouter",
+      "fmt": "$0.7500"
+    },
+    {
+      "self": "unknown",
+      "other": "estimate",
+      "prompt_tokens": 4,
+      "completion_tokens": 6,
+      "cost_usd": "0.75",
+      "cost_source": "estimate",
+      "fmt": "$0.7500 (estimate)"
+    },
+    {
+      "self": "unknown",
+      "other": "mixed",
+      "prompt_tokens": 4,
+      "completion_tokens": 6,
+      "cost_usd": "0.75",
+      "cost_source": "mixed",
+      "fmt": "$0.7500 (mixed)"
+    },
+    {
+      "self": "unknown",
+      "other": "unknown",
+      "prompt_tokens": 4,
+      "completion_tokens": 6,
+      "cost_usd": "0.75",
+      "cost_source": "unknown",
+      "fmt": "(not priced)"
+    }
+  ],
+  "usage_chains": [
+    {
+      "chain": [["openrouter", 0.1], ["estimate", 0.2], ["openrouter", 0.3]],
+      "prompt_tokens": 3,
+      "completion_tokens": 3,
+      "cost_usd": "0.6000000000000001",
+      "cost_source": "mixed",
+      "fmt": "$0.6000 (mixed)"
+    },
+    {
+      "chain": [["estimate", 0.1], ["openrouter", 0.2]],
+      "prompt_tokens": 2,
+      "completion_tokens": 2,
+      "cost_usd": "0.30000000000000004",
+      "cost_source": "estimate",
+      "fmt": "$0.3000 (estimate)"
+    },
+    {
+      "chain": [["unknown", 0.0], ["unknown", 0.0], ["estimate", 1e-5]],
+      "prompt_tokens": 3,
+      "completion_tokens": 3,
+      "cost_usd": "1e-05",
+      "cost_source": "estimate",
+      "fmt": "$0.0000 (estimate)"
+    },
+    {
+      "chain": [["openrouter", 0.1], ["openrouter", 0.2], ["unknown", 0.0]],
+      "prompt_tokens": 3,
+      "completion_tokens": 3,
+      "cost_usd": "0.30000000000000004",
+      "cost_source": "openrouter",
+      "fmt": "$0.3000"
+    },
+    {
+      "chain": [["mixed", 0.1], ["estimate", 0.2]],
+      "prompt_tokens": 2,
+      "completion_tokens": 2,
+      "cost_usd": "0.30000000000000004",
+      "cost_source": "mixed",
+      "fmt": "$0.3000 (mixed)"
+    }
+  ],
+  "extract_usage": [
+    {
+      "model": "~google/gemini-flash-latest",
+      "response": {
+        "usage": {
+          "prompt_tokens": 10,
+          "completion_tokens": 5,
+          "cost": 0.001
+        }
+      },
+      "prompt_tokens": 10,
+      "completion_tokens": 5,
+      "cost_usd": "0.001",
+      "cost_source": "openrouter",
+      "fmt": "$0.0010"
+    },
+    {
+      "model": "~google/gemini-flash-latest",
+      "response": {
+        "usage": {
+          "prompt_tokens": 10,
+          "completion_tokens": 5,
+          "cost": 0,
+          "cost_details": {
+            "upstream_inference_cost": 0.0005
+          }
+        }
+      },
+      "prompt_tokens": 10,
+      "completion_tokens": 5,
+      "cost_usd": "0.0005",
+      "cost_source": "openrouter",
+      "fmt": "$0.0005"
+    },
+    {
+      "model": "~google/gemini-flash-latest",
+      "response": {
+        "usage": {
+          "prompt_tokens": 10,
+          "completion_tokens": 5,
+          "cost": 0
+        }
+      },
+      "prompt_tokens": 10,
+      "completion_tokens": 5,
+      "cost_usd": "0.0",
+      "cost_source": "openrouter",
+      "fmt": "$0.0000"
+    },
+    {
+      "model": "~google/gemini-flash-latest",
+      "response": {
+        "usage": {
+          "prompt_tokens": 1234,
+          "completion_tokens": 567
+        }
+      },
+      "prompt_tokens": 1234,
+      "completion_tokens": 567,
+      "cost_usd": "0.00026264999999999996",
+      "cost_source": "estimate",
+      "fmt": "$0.0003 (estimate)"
+    },
+    {
+      "model": "~google/gemini-flash-latest",
+      "response": {
+        "usage": null
+      },
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "cost_usd": "0.0",
+      "cost_source": "estimate",
+      "fmt": "$0.0000 (estimate)"
+    },
+    {
+      "model": "~google/gemini-flash-latest",
+      "response": {},
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "cost_usd": "0.0",
+      "cost_source": "estimate",
+      "fmt": "$0.0000 (estimate)"
+    },
+    {
+      "model": "~google/gemini-flash-latest",
+      "response": {
+        "usage": {
+          "prompt_tokens": "12",
+          "completion_tokens": 12.7,
+          "cost": "0.25"
+        }
+      },
+      "prompt_tokens": 12,
+      "completion_tokens": 12,
+      "cost_usd": "0.25",
+      "cost_source": "openrouter",
+      "fmt": "$0.2500"
+    },
+    {
+      "model": "~google/gemini-flash-latest",
+      "response": {
+        "usage": {
+          "prompt_tokens": true,
+          "completion_tokens": null,
+          "cost": null,
+          "cost_details": {
+            "upstream_inference_cost": null
+          }
+        }
+      },
+      "prompt_tokens": 1,
+      "completion_tokens": 0,
+      "cost_usd": "7.5e-08",
+      "cost_source": "estimate",
+      "fmt": "$0.0000 (estimate)"
+    },
+    {
+      "model": "~google/gemini-flash-latest",
+      "response": {
+        "usage": {
+          "prompt_tokens": 3,
+          "completion_tokens": 4,
+          "cost": -1
+        }
+      },
+      "prompt_tokens": 3,
+      "completion_tokens": 4,
+      "cost_usd": "-1.0",
+      "cost_source": "openrouter",
+      "fmt": "$-1.0000"
+    },
+    {
+      "model": "~google/gemini-pro-latest",
+      "response": {
+        "usage": {
+          "prompt_tokens": 10,
+          "completion_tokens": 5,
+          "cost": 0.001
+        }
+      },
+      "prompt_tokens": 10,
+      "completion_tokens": 5,
+      "cost_usd": "0.001",
+      "cost_source": "openrouter",
+      "fmt": "$0.0010"
+    },
+    {
+      "model": "~google/gemini-pro-latest",
+      "response": {
+        "usage": {
+          "prompt_tokens": 10,
+          "completion_tokens": 5,
+          "cost": 0,
+          "cost_details": {
+            "upstream_inference_cost": 0.0005
+          }
+        }
+      },
+      "prompt_tokens": 10,
+      "completion_tokens": 5,
+      "cost_usd": "0.0005",
+      "cost_source": "openrouter",
+      "fmt": "$0.0005"
+    },
+    {
+      "model": "~google/gemini-pro-latest",
+      "response": {
+        "usage": {
+          "prompt_tokens": 10,
+          "completion_tokens": 5,
+          "cost": 0
+        }
+      },
+      "prompt_tokens": 10,
+      "completion_tokens": 5,
+      "cost_usd": "0.0",
+      "cost_source": "openrouter",
+      "fmt": "$0.0000"
+    },
+    {
+      "model": "~google/gemini-pro-latest",
+      "response": {
+        "usage": {
+          "prompt_tokens": 1234,
+          "completion_tokens": 567
+        }
+      },
+      "prompt_tokens": 1234,
+      "completion_tokens": 567,
+      "cost_usd": "0.0",
+      "cost_source": "unknown",
+      "fmt": "(not priced)"
+    },
+    {
+      "model": "~google/gemini-pro-latest",
+      "response": {
+        "usage": null
+      },
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "cost_usd": "0.0",
+      "cost_source": "unknown",
+      "fmt": "(not priced)"
+    },
+    {
+      "model": "~google/gemini-pro-latest",
+      "response": {},
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "cost_usd": "0.0",
+      "cost_source": "unknown",
+      "fmt": "(not priced)"
+    },
+    {
+      "model": "~google/gemini-pro-latest",
+      "response": {
+        "usage": {
+          "prompt_tokens": "12",
+          "completion_tokens": 12.7,
+          "cost": "0.25"
+        }
+      },
+      "prompt_tokens": 12,
+      "completion_tokens": 12,
+      "cost_usd": "0.25",
+      "cost_source": "openrouter",
+      "fmt": "$0.2500"
+    },
+    {
+      "model": "~google/gemini-pro-latest",
+      "response": {
+        "usage": {
+          "prompt_tokens": true,
+          "completion_tokens": null,
+          "cost": null,
+          "cost_details": {
+            "upstream_inference_cost": null
+          }
+        }
+      },
+      "prompt_tokens": 1,
+      "completion_tokens": 0,
+      "cost_usd": "0.0",
+      "cost_source": "unknown",
+      "fmt": "(not priced)"
+    },
+    {
+      "model": "~google/gemini-pro-latest",
+      "response": {
+        "usage": {
+          "prompt_tokens": 3,
+          "completion_tokens": 4,
+          "cost": -1
+        }
+      },
+      "prompt_tokens": 3,
+      "completion_tokens": 4,
+      "cost_usd": "-1.0",
+      "cost_source": "openrouter",
+      "fmt": "$-1.0000"
+    }
+  ],
+  "v2": [
+    {
+      "record": {
+        "details": "",
+        "key_quotes": []
+      },
+      "v2": true
+    },
+    {
+      "record": {
+        "details": "d"
+      },
+      "v2": false
+    },
+    {
+      "record": {
+        "key_quotes": []
+      },
+      "v2": false
+    },
+    {
+      "record": [],
+      "v2": false
+    },
+    {
+      "record": null,
+      "v2": false
+    },
+    {
+      "record": "x",
+      "v2": false
+    },
+    {
+      "record": {
+        "summary": "s",
+        "heading": "h"
+      },
+      "v2": false
+    }
+  ]
+}

@@ -149,6 +149,16 @@ export const SETTINGS: readonly SettingField[] = [
   field("app", "embeddings.dim", "EMBED_DIM", "int", "Embedding dimension"),
   field("app", "embeddings.baseUrl", "EMBED_BASE_URL", "string", "Embedding API base"),
   field("app", "rerank.baseUrl", "RERANK_BASE_URL", "string", "Reranker API base"),
+  field("app", "refine.baseUrl", "REFINE_BASE_URL", "string", "Refine API base"),
+  field("app", "sources.ytDlp", "YT_DLP_PATH", "path", "yt-dlp binary"),
+  field(
+    "app",
+    "sources.cookiesFromBrowser",
+    "YT_DLP_COOKIES_FROM_BROWSER",
+    "string",
+    "Browser to read cookies from",
+  ),
+  field("app", "sources.cookiesFile", "YT_DLP_COOKIES", "path", "Cookies file"),
 
   field("persona", "prompt", "PERSONA_FILE", "path", "System prompt file"),
   field("persona", "identity.timezone", "PERSONA_TIMEZONE", "string", "Time zone"),
@@ -192,6 +202,25 @@ export const SETTINGS: readonly SettingField[] = [
     "string",
     "Retrieval gate model",
   ),
+  field("persona", "knowledge.facts.files", "FACTS_FILES", "list", "Fact files"),
+  field("persona", "knowledge.facts.subject", "FACTS_SUBJECT", "string", "Fact subject pattern"),
+  field(
+    "persona",
+    "knowledge.archive.skipTypes",
+    "INGEST_SKIP_TYPES",
+    "list",
+    "Scene types left out of the index",
+  ),
+  field("persona", "transcription.model", "SONIOX_ASYNC_MODEL", "string", "Transcription model"),
+  field(
+    "persona",
+    "transcription.language",
+    "TRANSCRIBE_LANGUAGE",
+    "string",
+    "Transcription language",
+  ),
+  field("persona", "refine.model", "REFINE_MODEL", "string", "Refine model"),
+  field("persona", "refine.concurrency", "REFINE_CONCURRENCY", "int", "Refine concurrency"),
   field("persona", "selfie.model", "SELFIE_MODEL", "string", "Selfie model"),
   field("persona", "selfie.aspectRatio", "SELFIE_ASPECT_RATIO", "string", "Selfie aspect ratio"),
   field("persona", "selfie.quality", "SELFIE_QUALITY", "string", "Selfie quality"),
@@ -211,6 +240,7 @@ export const CREDENTIALS: readonly string[] = [
   "FISH_API_KEY",
   "RERANK_API_KEY",
   "EMBED_API_KEY",
+  "REFINE_API_KEY",
   "OPENAI_API_KEY",
   "CLOUDFLARE_TURN_KEY_API_TOKEN",
   "WEBRTC_TURN_CREDENTIAL",
@@ -220,6 +250,8 @@ export const CREDENTIALS: readonly string[] = [
 /** Who the persona is, as the built-in prompts name her. Written in the persona's language. */
 export interface PersonaIdentity {
   readonly name: string;
+  /** Her name for short, where the built-in prompts shorten it. */
+  readonly shortName: string;
   /** What she calls a viewer. */
   readonly fans: string;
   /** One English sentence about her, for the retrieval gate. */
@@ -235,7 +267,7 @@ export interface PersonaSettings {
   readonly gateQuestions: Readonly<Record<string, string>>;
 }
 
-const IDENTITY_KEYS = ["name", "fans", "summary", "viewerLine"] as const;
+const IDENTITY_KEYS = ["name", "shortName", "fans", "summary", "viewerLine"] as const;
 // identity.timezone is a setting (PERSONA_TIMEZONE), read with the others.
 const IDENTITY_FIELDS = new Set<string>([...IDENTITY_KEYS, "timezone"]);
 /** The retrieval gate's questions, which knowledge.gate.questions may reword. */
@@ -335,7 +367,7 @@ function choosePersona(app: Tree): string {
 }
 
 /** What a persona that leaves an identity field out gets. */
-export const IDENTITY_DEFAULTS: Omit<PersonaIdentity, "name"> = {
+export const IDENTITY_DEFAULTS: Omit<PersonaIdentity, "name" | "shortName"> = {
   fans: "观众",
   summary: "",
   viewerLine: "正在和你聊天的{fans}叫「{viewer}」（UID:{uid}）。",
@@ -356,8 +388,10 @@ function readIdentity(persona: Tree, id: string, label: string): PersonaIdentity
     if (v !== undefined) logger.warning(`Ignoring ${label} identity.${key}: expected string`);
     return fallback;
   };
+  const name = value("name", id);
   return {
-    name: value("name", id),
+    name,
+    shortName: value("shortName", name),
     fans: value("fans", IDENTITY_DEFAULTS.fans),
     summary: value("summary", IDENTITY_DEFAULTS.summary),
     viewerLine: value("viewerLine", IDENTITY_DEFAULTS.viewerLine),

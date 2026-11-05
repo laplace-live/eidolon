@@ -1,0 +1,13 @@
+{
+  "name": "@eidolon/ingest",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./progress": "./src/progress.ts"
+  },
+  "dependencies": {
+    "@eidolon/config": "workspace:*",
+    "@eidolon/retrieval": "workspace:*"
+  }
+}

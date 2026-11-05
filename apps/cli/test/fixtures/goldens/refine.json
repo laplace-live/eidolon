@@ -1,0 +1,880 @@
+{
+  "printed_by": "CPython 3.13.4, openai 3.19.1, httpx2 2.13.1: laplace_eidolon.tools.refine.main_async through apps/cli/test/fixtures/refine/golden.py",
+  "scenarios": [
+    {
+      "name": "run",
+      "responses": "run",
+      "argv": [
+        "--streams-dir",
+        "<DIR>",
+        "--model",
+        "~google/gemini-flash-latest",
+        "--concurrency",
+        "1"
+      ],
+      "exit_code": 1,
+      "stdout": "\n========================================================================\nRefinement Summary\n========================================================================\nFile                                       New  Skip  Fail         Tokens       Cost\n------------------------------------------------------------------------\n2026-01-02-BV1aaaaaaaaa.md                   3     0     0    9250/  6276    $0.0104\n2026-01-03-BV1bbbbbbbbb_p1.md                0     1     1     900/  4096    $0.0025\n2026-01-04-BV1ccccccccc.md                   0     1     0       0/     0          —\n2026-01-05-BV1ddddddddd.md                   0     0     2       0/     0          —\n2026-01-06-BV1eeeeeeeee.md                   0     0     5    4900/  1397    $0.0015\n2026-01-07-BV1fffffffff.md                   0     0     0       0/     0          —\n------------------------------------------------------------------------\nTOTAL                                        3     2     8   15050/ 11769 $0.0144 (mixed)\n========================================================================\nModel:    ~google/gemini-flash-latest\nDuration: 0.0s\nPer chunk: 0.00s avg, $0.004786 avg\n\n⚠  8 chunks failed and stay unrefined — re-run the same command to retry just the failures.\n\nℹ  Cost source: mixed. OpenRouter didn't surface per-call cost for some/all calls; fell back to local price table.\n\n",
+      "logs": [
+        [
+          "INFO",
+          "Refining 6 stream(s) with ~google/gemini-flash-latest (concurrency=1, force=False)"
+        ],
+        [
+          "INFO",
+          "  2026-01-02-BV1aaaaaaaaa.md: 3 chunks to refine (0 already done) using ~google/gemini-flash-latest"
+        ],
+        [
+          "WARNING",
+          "  recovered malformed JSON via sanitized (finish_reason='stop', body_len=271)"
+        ],
+        ["DEBUG", "  ✓ 2026-01-02-BV1aaaaaaaaa::000 (1/3): '开场聊花店和坚果' [opening]"],
+        [
+          "WARNING",
+          "  truncated response (finish_reason=length, body_len=41); retrying with max_tokens=8192"
+        ],
+        ["DEBUG", "  ✓ 2026-01-02-BV1aaaaaaaaa::001 (2/3): '感谢小明的SC' [sc_session]"],
+        [
+          "WARNING",
+          "  recovered malformed JSON via truncated_trailing (finish_reason='stop', body_len=259)"
+        ],
+        ["DEBUG", "  ✓ 2026-01-02-BV1aaaaaaaaa::002 (3/3): '唱小星星' [karaoke]"],
+        [
+          "WARNING",
+          "  2026-01-03-BV1bbbbbbbbb_p1.md: 1 chunks are still in v1 format (no `details` / `sc_events`). Re-run with --force to upgrade."
+        ],
+        [
+          "INFO",
+          "  2026-01-03-BV1bbbbbbbbb_p1.md: 1 chunks to refine (1 already done) using ~google/gemini-flash-latest"
+        ],
+        ["ERROR", "  empty response (finish_reason='length', max_tokens=4096)"],
+        ["ERROR", "  ✗ 2026-01-03-BV1bbbbbbbbb_p1::001: pass 1 (extract) failed"],
+        ["INFO", "  2026-01-04-BV1ccccccccc.md: all 1 chunks already refined"],
+        [
+          "INFO",
+          "  2026-01-05-BV1ddddddddd.md: 2 chunks to refine (0 already done) using ~google/gemini-flash-latest"
+        ],
+        ["ERROR", "  empty response (finish_reason=None, max_tokens=4096)"],
+        ["ERROR", "  ✗ 2026-01-05-BV1ddddddddd::000: pass 1 (extract) failed"],
+        [
+          "ERROR",
+          "  API error: Error code: 400 - {'error': {'message': 'bad request', 'code': 400}}"
+        ],
+        ["ERROR", "  ✗ 2026-01-05-BV1ddddddddd::001: pass 1 (extract) failed"],
+        [
+          "INFO",
+          "  2026-01-06-BV1eeeeeeeee.md: 5 chunks to refine (0 already done) using ~google/gemini-flash-latest"
+        ],
+        [
+          "ERROR",
+          "  invalid JSON (Expecting value: line 1 column 1 (char 0)); finish_reason='stop', body_len=29, head='```json\\n{\"sc_events\": []}\\n```'"
+        ],
+        ["ERROR", "  ✗ 2026-01-06-BV1eeeeeeeee::000: pass 1 (extract) failed"],
+        ["ERROR", "  invalid JSON (None); finish_reason='stop', body_len=4, head='null'"],
+        ["ERROR", "  ✗ 2026-01-06-BV1eeeeeeeee::001: pass 1 (extract) failed"],
+        [
+          "ERROR",
+          "  ✗ 2026-01-06-BV1eeeeeeeee::002: extract validation failed: List contained non-dict items"
+        ],
+        [
+          "ERROR",
+          "  ✗ 2026-01-06-BV1eeeeeeeee::003: synthesis validation failed: heading and summary are required from synthesis"
+        ],
+        [
+          "ERROR",
+          "  invalid JSON (Unterminated string starting at: line 1 column 13 (char 12)); finish_reason='stop', body_len=1263, head='{\"events\": [\"很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长', tail='很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容很长的内容'"
+        ],
+        ["ERROR", "  ✗ 2026-01-06-BV1eeeeeeeee::004: pass 1 (extract) failed"],
+        ["INFO", "  2026-01-07-BV1fffffffff.md: all 0 chunks already refined"]
+      ],
+      "requests": [
+        {
+          "url": "https://openrouter.ai/api/v1/chat/completions",
+          "headers": {
+            "authorization": "Bearer test-key",
+            "content-type": "application/json",
+            "accept": "application/json",
+            "http-referer": "https://laplace.live/ai",
+            "x-title": "LAPLACE Live!",
+            "x-openrouter-title": "LAPLACE Live!",
+            "x-openrouter-categories": "roleplay"
+          },
+          "sha256": "f7f34d52a425a516937a4c52cc88c8e6c0852bd8def914cac6e1d4da0b831691",
+          "body": {
+            "messages": [
+              {
+                "role": "system",
+                "content": "<EXTRACT_SYSTEM_PROMPT>"
+              },
+              {
+                "role": "user",
+                "content": "Stream context:\ndate=2026-01-02; language=zh; duration_min=95\n\nChunk timestamp: 00:00\n\nTranscript:\n大家好，今天来聊聊花店的事情。坚果今天也很乖。"
+              }
+            ],
+            "model": "~google/gemini-flash-latest",
+            "max_tokens": 4096,
+            "response_format": "<ExtractResult>",
+            "temperature": 0.2,
+            "usage": {
+              "include": true
+            },
+            "provider": {
+              "require_parameters": true
+            }
+          }
+        },
+        {
+          "url": "https://openrouter.ai/api/v1/chat/completions",
+          "headers": {
+            "authorization": "Bearer test-key",
+            "content-type": "application/json",
+            "accept": "application/json",
+            "http-referer": "https://laplace.live/ai",
+            "x-title": "LAPLACE Live!",
+            "x-openrouter-title": "LAPLACE Live!",
+            "x-openrouter-categories": "roleplay"
+          },
+          "sha256": "d38326b0a52c2c68adfd4c5838b4c16564b16359e679202d426c09857427063f",
+          "body": {
+            "messages": [
+              {
+                "role": "system",
+                "content": "<SYNTHESIZE_SYSTEM_PROMPT>"
+              },
+              {
+                "role": "user",
+                "content": "Stream context:\ndate=2026-01-02; language=zh; duration_min=95\n\nChunk timestamp: 00:00\nExisting heading (replace if it's a placeholder): 00:00 — 大家好\n\nStructured extract:\n{\"sc_events\": [{\"viewer\": \"小明\", \"amount_yuan\": 30, \"content\": \"今天的歌很好听\", \"response\": \"谢谢你呀\"}, {\"viewer\": \"None\", \"amount_yuan\": 12, \"content\": \"加油\", \"response\": \"\"}], \"songs\": [], \"events\": [\"和大家打招呼\", \"聊花店\"], \"promises\": [\"下次再唱\"], \"topics\": [\"开场\", \"花店\", \"坚果\", \"t4\", \"t5\", \"t6\", \"t7\", \"t8\", \"t9\", \"t10\"], \"mentions\": [\"小明\", \"坚果\"], \"key_quotes\": [\"坚果今天也很乖。\"], \"is_anime_audio_dominant\": false, \"is_karaoke_dominant\": false}"
+              }
+            ],
+            "model": "~google/gemini-flash-latest",
+            "max_tokens": 8192,
+            "response_format": "<SynthesisResult>",
+            "temperature": 0.4,
+            "usage": {
+              "include": true
+            },
+            "provider": {
+              "require_parameters": true
+            }
+          }
+        },
+        {
+          "url": "https://openrouter.ai/api/v1/chat/completions",
+          "headers": {
+            "authorization": "Bearer test-key",
+            "content-type": "application/json",
+            "accept": "application/json",
+            "http-referer": "https://laplace.live/ai",
+            "x-title": "LAPLACE Live!",
+            "x-openrouter-title": "LAPLACE Live!",
+            "x-openrouter-categories": "roleplay"
+          },
+          "sha256": "783064f8f7084f22452e799f4bc30b6feee56dbe5e45ced3ca7ebefb2417210f",
+          "body": {
+            "messages": [
+              {
+                "role": "system",
+                "content": "<EXTRACT_SYSTEM_PROMPT>"
+              },
+              {
+                "role": "user",
+                "content": "Stream context:\ndate=2026-01-02; language=zh; duration_min=95\n\nChunk timestamp: 05:00\n\nTranscript:\n感谢小明的SC，三十块，说今天的歌很好听。谢谢你呀。"
+              }
+            ],
+            "model": "~google/gemini-flash-latest",
+            "max_tokens": 4096,
+            "response_format": "<ExtractResult>",
+            "temperature": 0.2,
+            "usage": {
+              "include": true
+            },
+            "provider": {
+              "require_parameters": true
+            }
+          }
+        },
+        {
+          "url": "https://openrouter.ai/api/v1/chat/completions",
+          "headers": {
+            "authorization": "Bearer test-key",
+            "content-type": "application/json",
+            "accept": "application/json",
+            "http-referer": "https://laplace.live/ai",
+            "x-title": "LAPLACE Live!",
+            "x-openrouter-title": "LAPLACE Live!",
+            "x-openrouter-categories": "roleplay"
+          },
+          "sha256": "79d104ab5a11acee399e40742038114bacc90164c23a0966b3d9137f43093500",
+          "body": {
+            "messages": [
+              {
+                "role": "system",
+                "content": "<SYNTHESIZE_SYSTEM_PROMPT>"
+              },
+              {
+                "role": "user",
+                "content": "Stream context:\ndate=2026-01-02; language=zh; duration_min=95\n\nChunk timestamp: 05:00\nExisting heading (replace if it's a placeholder): 05:00 — 感谢小明的SC\n\nStructured extract:\n{\"sc_events\": [{\"viewer\": \"小明\", \"amount_yuan\": 30, \"content\": \"今天的歌\\n很好听\", \"response\": \"谢谢你呀\"}], \"songs\": [], \"events\": [\"感谢SC\"], \"promises\": [], \"topics\": [\"SC\"], \"mentions\": [\"小明\"], \"key_quotes\": [\"谢谢你呀。\"], \"is_anime_audio_dominant\": false, \"is_karaoke_dominant\": false}"
+              }
+            ],
+            "model": "~google/gemini-flash-latest",
+            "max_tokens": 8192,
+            "response_format": "<SynthesisResult>",
+            "temperature": 0.4,
+            "usage": {
+              "include": true
+            },
+            "provider": {
+              "require_parameters": true
+            }
+          }
+        },
+        {
+          "url": "https://openrouter.ai/api/v1/chat/completions",
+          "headers": {
+            "authorization": "Bearer test-key",
+            "content-type": "application/json",
+            "accept": "application/json",
+            "http-referer": "https://laplace.live/ai",
+            "x-title": "LAPLACE Live!",
+            "x-openrouter-title": "LAPLACE Live!",
+            "x-openrouter-categories": "roleplay"
+          },
+          "sha256": "255abc84e10638f5ef28b2bf3e5e923477056e9adb90f1a356283b60df7d82e9",
+          "body": {
+            "messages": [
+              {
+                "role": "system",
+                "content": "<EXTRACT_SYSTEM_PROMPT>"
+              },
+              {
+                "role": "user",
+                "content": "Stream context:\ndate=2026-01-02; language=zh; duration_min=95\n\nChunk timestamp: 10:00\n\nTranscript:\n接下来唱一首小星星。一闪一闪亮晶晶，满天都是小星星。"
+              }
+            ],
+            "model": "~google/gemini-flash-latest",
+            "max_tokens": 4096,
+            "response_format": "<ExtractResult>",
+            "temperature": 0.2,
+            "usage": {
+              "include": true
+            },
+            "provider": {
+              "require_parameters": true
+            }
+          }
+        },
+        {
+          "url": "https://openrouter.ai/api/v1/chat/completions",
+          "headers": {
+            "authorization": "Bearer test-key",
+            "content-type": "application/json",
+            "accept": "application/json",
+            "http-referer": "https://laplace.live/ai",
+            "x-title": "LAPLACE Live!",
+            "x-openrouter-title": "LAPLACE Live!",
+            "x-openrouter-categories": "roleplay"
+          },
+          "sha256": "ed3675c59db9c04d3a314b717e0deaf5963af8db9632ee5e4de01049cf4586a5",
+          "body": {
+            "messages": [
+              {
+                "role": "system",
+                "content": "<EXTRACT_SYSTEM_PROMPT>"
+              },
+              {
+                "role": "user",
+                "content": "Stream context:\ndate=2026-01-02; language=zh; duration_min=95\n\nChunk timestamp: 10:00\n\nTranscript:\n接下来唱一首小星星。一闪一闪亮晶晶，满天都是小星星。"
+              }
+            ],
+            "model": "~google/gemini-flash-latest",
+            "max_tokens": 8192,
+            "response_format": "<ExtractResult>",
+            "temperature": 0.2,
+            "usage": {
+              "include": true
+            },
+            "provider": {
+              "require_parameters": true
+            }
+          }
+        },
+        {
+          "url": "https://openrouter.ai/api/v1/chat/completions",
+          "headers": {
+            "authorization": "Bearer test-key",
+            "content-type": "application/json",
+            "accept": "application/json",
+            "http-referer": "https://laplace.live/ai",
+            "x-title": "LAPLACE Live!",
+            "x-openrouter-title": "LAPLACE Live!",
+            "x-openrouter-categories": "roleplay"
+          },
+          "sha256": "b88b6c724f04ed36813da01566f3986d21a2995e1e1c1826ffccc31c3c4e8210",
+          "body": {
+            "messages": [
+              {
+                "role": "system",
+                "content": "<SYNTHESIZE_SYSTEM_PROMPT>"
+              },
+              {
+                "role": "user",
+                "content": "Stream context:\ndate=2026-01-02; language=zh; duration_min=95\n\nChunk timestamp: 10:00\nExisting heading (replace if it's a placeholder): 10:00 — 接下来唱一首\n\nStructured extract:\n{\"sc_events\": [], \"songs\": [{\"title\": \"小星星\", \"note\": \"唱了一段\"}], \"events\": [\"唱歌\"], \"promises\": [], \"topics\": [\"唱歌\", \"小星星\"], \"mentions\": [], \"key_quotes\": [\"一闪一闪亮晶晶\"], \"is_anime_audio_dominant\": false, \"is_karaoke_dominant\": true}"
+              }
+            ],
+            "model": "~google/gemini-flash-latest",
+            "max_tokens": 8192,
+            "response_format": "<SynthesisResult>",
+            "temperature": 0.4,
+            "usage": {
+              "include": true
+            },
+            "provider": {
+              "require_parameters": true
+            }
+          }
+        },
+        {
+          "url": "https://openrouter.ai/api/v1/chat/completions",
+          "headers": {
+            "authorization": "Bearer test-key",
+            "content-type": "application/json",
+            "accept": "application/json",
+            "http-referer": "https://laplace.live/ai",
+            "x-title": "LAPLACE Live!",
+            "x-openrouter-title": "LAPLACE Live!",
+            "x-openrouter-categories": "roleplay"
+          },
+          "sha256": "b88b6c724f04ed36813da01566f3986d21a2995e1e1c1826ffccc31c3c4e8210",
+          "body": {
+            "messages": [
+              {
+                "role": "system",
+                "content": "<SYNTHESIZE_SYSTEM_PROMPT>"
+              },
+              {
+                "role": "user",
+                "content": "Stream context:\ndate=2026-01-02; language=zh; duration_min=95\n\nChunk timestamp: 10:00\nExisting heading (replace if it's a placeholder): 10:00 — 接下来唱一首\n\nStructured extract:\n{\"sc_events\": [], \"songs\": [{\"title\": \"小星星\", \"note\": \"唱了一段\"}], \"events\": [\"唱歌\"], \"promises\": [], \"topics\": [\"唱歌\", \"小星星\"], \"mentions\": [], \"key_quotes\": [\"一闪一闪亮晶晶\"], \"is_anime_audio_dominant\": false, \"is_karaoke_dominant\": true}"
+              }
+            ],
+            "model": "~google/gemini-flash-latest",
+            "max_tokens": 8192,
+            "response_format": "<SynthesisResult>",
+            "temperature": 0.4,
+            "usage": {
+              "include": true
+            },
+            "provider": {
+              "require_parameters": true
+            }
+          }
+        },
+        {
+          "url": "https://openrouter.ai/api/v1/chat/completions",
+          "headers": {
+            "authorization": "Bearer test-key",
+            "content-type": "application/json",
+            "accept": "application/json",
+            "http-referer": "https://laplace.live/ai",
+            "x-title": "LAPLACE Live!",
+            "x-openrouter-title": "LAPLACE Live!",
+            "x-openrouter-categories": "roleplay"
+          },
+          "sha256": "36e5b58e49e92ed6c4c2bcf220506246837a01ebceb58759f7e72b710aa7fd45",
+          "body": {
+            "messages": [
+              {
+                "role": "system",
+                "content": "<EXTRACT_SYSTEM_PROMPT>"
+              },
+              {
+                "role": "user",
+                "content": "Stream context:\ndate=2026-01-03; language=zh\n\nChunk timestamp: 01:00 无破折号的标题\n\nTranscript:\n这一段的标题没有破折号。我们来聊聊天气。"
+              }
+            ],
+            "model": "~google/gemini-flash-latest",
+            "max_tokens": 4096,
+            "response_format": "<ExtractResult>",
+            "temperature": 0.2,
+            "usage": {
+              "include": true
+            },
+            "provider": {
+              "require_parameters": true
+            }
+          }
+        },
+        {
+          "url": "https://openrouter.ai/api/v1/chat/completions",
+          "headers": {
+            "authorization": "Bearer test-key",
+            "content-type": "application/json",
+            "accept": "application/json",
+            "http-referer": "https://laplace.live/ai",
+            "x-title": "LAPLACE Live!",
+            "x-openrouter-title": "LAPLACE Live!",
+            "x-openrouter-categories": "roleplay"
+          },
+          "sha256": "4f784978a5bda78eb8fb4de8ea6721a5eaa7a67a98e12511578c1440ab47adf0",
+          "body": {
+            "messages": [
+              {
+                "role": "system",
+                "content": "<EXTRACT_SYSTEM_PROMPT>"
+              },
+              {
+                "role": "user",
+                "content": "Stream context:\n(no frontmatter context)\n\nChunk timestamp: 00:00\n\nTranscript:\n没有前言的转录稿。"
+              }
+            ],
+            "model": "~google/gemini-flash-latest",
+            "max_tokens": 4096,
+            "response_format": "<ExtractResult>",
+            "temperature": 0.2,
+            "usage": {
+              "include": true
+            },
+            "provider": {
+              "require_parameters": true
+            }
+          }
+        },
+        {
+          "url": "https://openrouter.ai/api/v1/chat/completions",
+          "headers": {
+            "authorization": "Bearer test-key",
+            "content-type": "application/json",
+            "accept": "application/json",
+            "http-referer": "https://laplace.live/ai",
+            "x-title": "LAPLACE Live!",
+            "x-openrouter-title": "LAPLACE Live!",
+            "x-openrouter-categories": "roleplay"
+          },
+          "sha256": "246089edcefc692d8573f57d62c19c6646265afc823cc51c20bf79dfab95798f",
+          "body": {
+            "messages": [
+              {
+                "role": "system",
+                "content": "<EXTRACT_SYSTEM_PROMPT>"
+              },
+              {
+                "role": "user",
+                "content": "Stream context:\n(no frontmatter context)\n\nChunk timestamp: 05:00\n\nTranscript:\n第二段文字。"
+              }
+            ],
+            "model": "~google/gemini-flash-latest",
+            "max_tokens": 4096,
+            "response_format": "<ExtractResult>",
+            "temperature": 0.2,
+            "usage": {
+              "include": true
+            },
+            "provider": {
+              "require_parameters": true
+            }
+          }
+        },
+        {
+          "url": "https://openrouter.ai/api/v1/chat/completions",
+          "headers": {
+            "authorization": "Bearer test-key",
+            "content-type": "application/json",
+            "accept": "application/json",
+            "http-referer": "https://laplace.live/ai",
+            "x-title": "LAPLACE Live!",
+            "x-openrouter-title": "LAPLACE Live!",
+            "x-openrouter-categories": "roleplay"
+          },
+          "sha256": "5dab7efe6ef9e8c083af47c39afd3d703bc564c72642c6663737ba36d14296cd",
+          "body": {
+            "messages": [
+              {
+                "role": "system",
+                "content": "<EXTRACT_SYSTEM_PROMPT>"
+              },
+              {
+                "role": "user",
+                "content": "Stream context:\ndate=2026-01-06; language=zh; duration_min=25\n\nChunk timestamp: 00:00\n\nTranscript:\n第一段。"
+              }
+            ],
+            "model": "~google/gemini-flash-latest",
+            "max_tokens": 4096,
+            "response_format": "<ExtractResult>",
+            "temperature": 0.2,
+            "usage": {
+              "include": true
+            },
+            "provider": {
+              "require_parameters": true
+            }
+          }
+        },
+        {
+          "url": "https://openrouter.ai/api/v1/chat/completions",
+          "headers": {
+            "authorization": "Bearer test-key",
+            "content-type": "application/json",
+            "accept": "application/json",
+            "http-referer": "https://laplace.live/ai",
+            "x-title": "LAPLACE Live!",
+            "x-openrouter-title": "LAPLACE Live!",
+            "x-openrouter-categories": "roleplay"
+          },
+          "sha256": "e6e3af33e730793b23d8b2bb7cf45cd9e6d13d716c051e02f7c190c04bd4f14f",
+          "body": {
+            "messages": [
+              {
+                "role": "system",
+                "content": "<EXTRACT_SYSTEM_PROMPT>"
+              },
+              {
+                "role": "user",
+                "content": "Stream context:\ndate=2026-01-06; language=zh; duration_min=25\n\nChunk timestamp: 05:00\n\nTranscript:\n第二段。"
+              }
+            ],
+            "model": "~google/gemini-flash-latest",
+            "max_tokens": 4096,
+            "response_format": "<ExtractResult>",
+            "temperature": 0.2,
+            "usage": {
+              "include": true
+            },
+            "provider": {
+              "require_parameters": true
+            }
+          }
+        },
+        {
+          "url": "https://openrouter.ai/api/v1/chat/completions",
+          "headers": {
+            "authorization": "Bearer test-key",
+            "content-type": "application/json",
+            "accept": "application/json",
+            "http-referer": "https://laplace.live/ai",
+            "x-title": "LAPLACE Live!",
+            "x-openrouter-title": "LAPLACE Live!",
+            "x-openrouter-categories": "roleplay"
+          },
+          "sha256": "1e227aec6b0ae6c7b6b81e9b9a975b9df9a0bc1f3a6b125e7aef1730ce8ee31a",
+          "body": {
+            "messages": [
+              {
+                "role": "system",
+                "content": "<EXTRACT_SYSTEM_PROMPT>"
+              },
+              {
+                "role": "user",
+                "content": "Stream context:\ndate=2026-01-06; language=zh; duration_min=25\n\nChunk timestamp: 10:00\n\nTranscript:\n第三段。"
+              }
+            ],
+            "model": "~google/gemini-flash-latest",
+            "max_tokens": 4096,
+            "response_format": "<ExtractResult>",
+            "temperature": 0.2,
+            "usage": {
+              "include": true
+            },
+            "provider": {
+              "require_parameters": true
+            }
+          }
+        },
+        {
+          "url": "https://openrouter.ai/api/v1/chat/completions",
+          "headers": {
+            "authorization": "Bearer test-key",
+            "content-type": "application/json",
+            "accept": "application/json",
+            "http-referer": "https://laplace.live/ai",
+            "x-title": "LAPLACE Live!",
+            "x-openrouter-title": "LAPLACE Live!",
+            "x-openrouter-categories": "roleplay"
+          },
+          "sha256": "56e7e5f3d23dc88c655b37926df08bcd3f422df092be030d75c09de293371578",
+          "body": {
+            "messages": [
+              {
+                "role": "system",
+                "content": "<EXTRACT_SYSTEM_PROMPT>"
+              },
+              {
+                "role": "user",
+                "content": "Stream context:\ndate=2026-01-06; language=zh; duration_min=25\n\nChunk timestamp: 15:00\n\nTranscript:\n第四段。"
+              }
+            ],
+            "model": "~google/gemini-flash-latest",
+            "max_tokens": 4096,
+            "response_format": "<ExtractResult>",
+            "temperature": 0.2,
+            "usage": {
+              "include": true
+            },
+            "provider": {
+              "require_parameters": true
+            }
+          }
+        },
+        {
+          "url": "https://openrouter.ai/api/v1/chat/completions",
+          "headers": {
+            "authorization": "Bearer test-key",
+            "content-type": "application/json",
+            "accept": "application/json",
+            "http-referer": "https://laplace.live/ai",
+            "x-title": "LAPLACE Live!",
+            "x-openrouter-title": "LAPLACE Live!",
+            "x-openrouter-categories": "roleplay"
+          },
+          "sha256": "254f3bc574706c9603762dddbf6f9fa49dc66e711d5075aad23d5455135da3f0",
+          "body": {
+            "messages": [
+              {
+                "role": "system",
+                "content": "<SYNTHESIZE_SYSTEM_PROMPT>"
+              },
+              {
+                "role": "user",
+                "content": "Stream context:\ndate=2026-01-06; language=zh; duration_min=25\n\nChunk timestamp: 15:00\nExisting heading (replace if it's a placeholder): 15:00 — 第四段\n\nStructured extract:\n{\"sc_events\": [], \"songs\": [], \"events\": [\"说了第四段\"], \"promises\": [], \"topics\": [\"第四段\"], \"mentions\": [], \"key_quotes\": [], \"is_anime_audio_dominant\": false, \"is_karaoke_dominant\": false}"
+              }
+            ],
+            "model": "~google/gemini-flash-latest",
+            "max_tokens": 8192,
+            "response_format": "<SynthesisResult>",
+            "temperature": 0.4,
+            "usage": {
+              "include": true
+            },
+            "provider": {
+              "require_parameters": true
+            }
+          }
+        },
+        {
+          "url": "https://openrouter.ai/api/v1/chat/completions",
+          "headers": {
+            "authorization": "Bearer test-key",
+            "content-type": "application/json",
+            "accept": "application/json",
+            "http-referer": "https://laplace.live/ai",
+            "x-title": "LAPLACE Live!",
+            "x-openrouter-title": "LAPLACE Live!",
+            "x-openrouter-categories": "roleplay"
+          },
+          "sha256": "09e353fd13afd8776c86fe92652907143b29d132bf5627e368b3b4f13cfe2d69",
+          "body": {
+            "messages": [
+              {
+                "role": "system",
+                "content": "<EXTRACT_SYSTEM_PROMPT>"
+              },
+              {
+                "role": "user",
+                "content": "Stream context:\ndate=2026-01-06; language=zh; duration_min=25\n\nChunk timestamp: 20:00\n\nTranscript:\n第五段。"
+              }
+            ],
+            "model": "~google/gemini-flash-latest",
+            "max_tokens": 4096,
+            "response_format": "<ExtractResult>",
+            "temperature": 0.2,
+            "usage": {
+              "include": true
+            },
+            "provider": {
+              "require_parameters": true
+            }
+          }
+        }
+      ],
+      "unused_responses": 0,
+      "sidecars": {
+        "2026-01-02-BV1aaaaaaaaa.refined.json": "{\n  \"schema_version\": 2,\n  \"stream_id\": \"2026-01-02-BV1aaaaaaaaa\",\n  \"chunks\": {\n    \"2026-01-02-BV1aaaaaaaaa::000\": {\n      \"heading\": \"开场聊花店和坚果\",\n      \"summary\": \"我开播和大家打招呼，聊了花店和坚果。\",\n      \"details\": \"我一开播就和大家打招呼。我聊了花店的事情，还说“坚果今天也很乖。”小明送了SC。\",\n      \"chunk_type\": \"opening\",\n      \"topics\": [\n        \"开场\",\n        \"花店\",\n        \"坚果\",\n        \"t4\",\n        \"t5\",\n        \"t6\",\n        \"t7\"\n      ],\n      \"mentions\": [\n        \"小明\",\n        \"坚果\"\n      ],\n      \"key_quotes\": [\n        \"坚果今天也很乖。\"\n      ],\n      \"sc_events\": [\n        {\n          \"viewer\": \"小明\",\n          \"amount_yuan\": 30,\n          \"content\": \"今天的歌很好听\",\n          \"response\": \"谢谢你呀\"\n        },\n        {\n          \"viewer\": \"None\",\n          \"amount_yuan\": 12,\n          \"content\": \"加油\",\n          \"response\": \"\"\n        }\n      ],\n      \"songs\": [],\n      \"events\": [\n        \"和大家打招呼\",\n        \"聊花店\"\n      ],\n      \"promises\": [\n        \"下次再唱\"\n      ]\n    },\n    \"2026-01-02-BV1aaaaaaaaa::001\": {\n      \"heading\": \"感谢小明的SC\",\n      \"summary\": \"我感谢了小明的SC。\",\n      \"details\": \"小明送了三十块的SC，说今天的歌很好听，我说谢谢你呀。\",\n      \"chunk_type\": \"sc_session\",\n      \"topics\": [\n        \"SC\"\n      ],\n      \"mentions\": [\n        \"小明\"\n      ],\n      \"key_quotes\": [\n        \"谢谢你呀。\"\n      ],\n      \"sc_events\": [\n        {\n          \"viewer\": \"小明\",\n          \"amount_yuan\": 30,\n          \"content\": \"今天的歌\\n很好听\",\n          \"response\": \"谢谢你呀\"\n        }\n      ],\n      \"songs\": [],\n      \"events\": [\n        \"感谢SC\"\n      ],\n      \"promises\": []\n    },\n    \"2026-01-02-BV1aaaaaaaaa::002\": {\n      \"heading\": \"唱小星星\",\n      \"summary\": \"我唱了小星星。\",\n      \"details\": \"我唱了一首小星星。\",\n      \"chunk_type\": \"karaoke\",\n      \"topics\": [\n        \"唱歌\",\n        \"小星星\"\n      ],\n      \"mentions\": [],\n      \"key_quotes\": [\n        \"一闪一闪亮晶晶\"\n      ],\n      \"sc_events\": [],\n      \"songs\": [\n        {\n          \"title\": \"小星星\",\n          \"note\": \"唱了一段\"\n        }\n      ],\n      \"events\": [\n        \"唱歌\"\n      ],\n      \"promises\": []\n    }\n  },\n  \"model\": \"~google/gemini-flash-latest\",\n  \"refined_at\": \"2026-01-09T12:00:00+00:00\",\n  \"stats\": {\n    \"chunks_total\": 3,\n    \"chunks_refined\": 3,\n    \"tokens_in\": 9250,\n    \"tokens_out\": 6276,\n    \"cost_usd\": 0.010358,\n    \"cost_source\": \"mixed\",\n    \"model\": \"~google/gemini-flash-latest\",\n    \"duration_sec\": 0.0\n  }\n}",
+        "2026-01-03-BV1bbbbbbbbb_p1.refined.json": "{\n  \"schema_version\": 2,\n  \"stream_id\": \"2026-01-03-BV1bbbbbbbbb_p1\",\n  \"chunks\": {\n    \"2026-01-03-BV1bbbbbbbbb_p1::000\": {\n      \"heading\": \"开播\",\n      \"summary\": \"旧的摘要。\",\n      \"topics\": [\n        \"开播\"\n      ]\n    }\n  },\n  \"model\": \"~google/gemini-flash-latest\",\n  \"refined_at\": \"2026-01-09T12:00:00+00:00\",\n  \"stats\": {\n    \"chunks_total\": 2,\n    \"chunks_refined\": 1,\n    \"tokens_in\": 900,\n    \"tokens_out\": 4096,\n    \"cost_usd\": 0.0025,\n    \"cost_source\": \"openrouter\",\n    \"model\": \"~google/gemini-flash-latest\",\n    \"duration_sec\": 0.0\n  }\n}",
+        "2026-01-04-BV1ccccccccc.refined.json": "{\n  \"schema_version\": 2,\n  \"stream_id\": \"2026-01-04-BV1ccccccccc\",\n  \"chunks\": {\n    \"2026-01-04-BV1ccccccccc::000\": {\n      \"heading\": \"旧标题\",\n      \"summary\": \"旧摘要。\",\n      \"details\": \"旧细节。\",\n      \"chunk_type\": \"commentary\",\n      \"topics\": [\"旧\"],\n      \"mentions\": [],\n      \"key_quotes\": [],\n      \"sc_events\": [],\n      \"songs\": [],\n      \"events\": [],\n      \"promises\": []\n    },\n    \"2026-01-04-BV1ccccccccc::007\": {\n      \"heading\": \"孤儿记录\",\n      \"summary\": \"旧摘要。\",\n      \"details\": \"旧细节。\",\n      \"chunk_type\": \"commentary\",\n      \"topics\": [\"旧\"],\n      \"mentions\": [],\n      \"key_quotes\": [],\n      \"sc_events\": [],\n      \"songs\": [],\n      \"events\": [],\n      \"promises\": []\n    }\n  },\n  \"model\": \"~google/gemini-flash-latest\",\n  \"refined_at\": \"2025-12-30T00:00:00+00:00\",\n  \"stats\": {\n    \"chunks_total\": 1,\n    \"chunks_refined\": 2,\n    \"tokens_in\": 100,\n    \"tokens_out\": 50,\n    \"cost_usd\": 0.0001,\n    \"cost_source\": \"openrouter\",\n    \"model\": \"~google/gemini-flash-latest\",\n    \"duration_sec\": 2.5\n  }\n}\n",
+        "2026-01-05-BV1ddddddddd.refined.json": "{\n  \"schema_version\": 2,\n  \"stream_id\": \"2026-01-05-BV1ddddddddd\",\n  \"chunks\": {},\n  \"model\": \"~google/gemini-flash-latest\",\n  \"refined_at\": \"2026-01-09T12:00:00+00:00\",\n  \"stats\": {\n    \"chunks_total\": 2,\n    \"chunks_refined\": 0,\n    \"tokens_in\": 0,\n    \"tokens_out\": 0,\n    \"cost_usd\": 0.0,\n    \"cost_source\": \"estimate\",\n    \"model\": \"~google/gemini-flash-latest\",\n    \"duration_sec\": 0.0\n  }\n}",
+        "2026-01-06-BV1eeeeeeeee.refined.json": "{\n  \"schema_version\": 2,\n  \"stream_id\": \"2026-01-06-BV1eeeeeeeee\",\n  \"chunks\": {},\n  \"model\": \"~google/gemini-flash-latest\",\n  \"refined_at\": \"2026-01-09T12:00:00+00:00\",\n  \"stats\": {\n    \"chunks_total\": 5,\n    \"chunks_refined\": 0,\n    \"tokens_in\": 4900,\n    \"tokens_out\": 1397,\n    \"cost_usd\": 0.0015,\n    \"cost_source\": \"openrouter\",\n    \"model\": \"~google/gemini-flash-latest\",\n    \"duration_sec\": 0.0\n  }\n}"
+      },
+      "files": [
+        "2026-01-02-BV1aaaaaaaaa.md",
+        "2026-01-02-BV1aaaaaaaaa.refined.json",
+        "2026-01-03-BV1bbbbbbbbb_p1.md",
+        "2026-01-03-BV1bbbbbbbbb_p1.refined.json",
+        "2026-01-04-BV1ccccccccc.md",
+        "2026-01-04-BV1ccccccccc.refined.json",
+        "2026-01-05-BV1ddddddddd.md",
+        "2026-01-05-BV1ddddddddd.refined.json",
+        "2026-01-06-BV1eeeeeeeee.md",
+        "2026-01-06-BV1eeeeeeeee.refined.json",
+        "2026-01-07-BV1fffffffff.md"
+      ]
+    },
+    {
+      "name": "force",
+      "responses": "force",
+      "argv": [
+        "--force",
+        "--concurrency",
+        "1",
+        "<DIR>/2026-01-04-BV1ccccccccc.md",
+        "<DIR>/missing.md"
+      ],
+      "exit_code": 0,
+      "stdout": "\n========================================================================\nRefinement Summary\n========================================================================\nFile                                       New  Skip  Fail         Tokens       Cost\n------------------------------------------------------------------------\n2026-01-04-BV1ccccccccc.md                   1     0     0    1600/   120          —\n------------------------------------------------------------------------\nTOTAL                                        1     0     0    1600/   120 (not priced)\n========================================================================\nModel:    ~google/gemini-pro-latest\nDuration: 0.0s\nPer chunk: 0.00s avg\n\n⚠  Cost is 0 because the model isn't in the local price table and OpenRouter didn't return cost. Tokens are accurate.\n\n",
+      "logs": [
+        ["ERROR", "File not found: <DIR>/missing.md"],
+        ["INFO", "Refining 1 stream(s) with ~google/gemini-pro-latest (concurrency=1, force=True)"],
+        [
+          "INFO",
+          "  2026-01-04-BV1ccccccccc.md: 1 chunks to refine (0 already done) using ~google/gemini-pro-latest"
+        ],
+        [
+          "WARNING",
+          "No cost data and no pricing entry for '~google/gemini-pro-latest'; reporting tokens only. Add it to PRICING_USD_PER_1M to fix."
+        ],
+        [
+          "WARNING",
+          "No cost data and no pricing entry for '~google/gemini-pro-latest'; reporting tokens only. Add it to PRICING_USD_PER_1M to fix."
+        ],
+        ["DEBUG", "  ✓ 2026-01-04-BV1ccccccccc::000 (1/1): '重新精炼的一段' [commentary]"]
+      ],
+      "requests": [
+        {
+          "url": "https://openrouter.ai/api/v1/chat/completions",
+          "headers": {
+            "authorization": "Bearer test-key",
+            "content-type": "application/json",
+            "accept": "application/json",
+            "http-referer": "https://laplace.live/ai",
+            "x-title": "LAPLACE Live!",
+            "x-openrouter-title": "LAPLACE Live!",
+            "x-openrouter-categories": "roleplay"
+          },
+          "sha256": "2303aaf4ed259e0740a463b51b780c93dcb82c534b2974364916d32cdb6947a7",
+          "body": {
+            "messages": [
+              {
+                "role": "system",
+                "content": "<EXTRACT_SYSTEM_PROMPT>"
+              },
+              {
+                "role": "user",
+                "content": "Stream context:\ndate=2026-01-04; language=zh; duration_min=30\n\nChunk timestamp: 00:00\n\nTranscript:\n只有一段的转录稿，已经精炼过了。"
+              }
+            ],
+            "model": "~google/gemini-pro-latest",
+            "max_tokens": 4096,
+            "response_format": "<ExtractResult>",
+            "temperature": 0.2,
+            "usage": {
+              "include": true
+            },
+            "provider": {
+              "require_parameters": true
+            }
+          }
+        },
+        {
+          "url": "https://openrouter.ai/api/v1/chat/completions",
+          "headers": {
+            "authorization": "Bearer test-key",
+            "content-type": "application/json",
+            "accept": "application/json",
+            "http-referer": "https://laplace.live/ai",
+            "x-title": "LAPLACE Live!",
+            "x-openrouter-title": "LAPLACE Live!",
+            "x-openrouter-categories": "roleplay"
+          },
+          "sha256": "89fb84eb6b99c22b76ff6ab3c6fdd2b74953bfbbc093ce7d6cb54779c6679620",
+          "body": {
+            "messages": [
+              {
+                "role": "system",
+                "content": "<SYNTHESIZE_SYSTEM_PROMPT>"
+              },
+              {
+                "role": "user",
+                "content": "Stream context:\ndate=2026-01-04; language=zh; duration_min=30\n\nChunk timestamp: 00:00\nExisting heading (replace if it's a placeholder): 00:00 — 只有一段\n\nStructured extract:\n{\"sc_events\": [], \"songs\": [], \"events\": [\"重新精炼\"], \"promises\": [], \"topics\": [\"重做\"], \"mentions\": [], \"key_quotes\": [], \"is_anime_audio_dominant\": false, \"is_karaoke_dominant\": false}"
+              }
+            ],
+            "model": "~google/gemini-pro-latest",
+            "max_tokens": 8192,
+            "response_format": "<SynthesisResult>",
+            "temperature": 0.4,
+            "usage": {
+              "include": true
+            },
+            "provider": {
+              "require_parameters": true
+            }
+          }
+        }
+      ],
+      "unused_responses": 0,
+      "sidecars": {
+        "2026-01-03-BV1bbbbbbbbb_p1.refined.json": "{\n  \"schema_version\": 1,\n  \"stream_id\": \"2026-01-03-BV1bbbbbbbbb_p1\",\n  \"chunks\": {\n    \"2026-01-03-BV1bbbbbbbbb_p1::000\": {\n      \"heading\": \"开播\",\n      \"summary\": \"旧的摘要。\",\n      \"topics\": [\"开播\"]\n    }\n  },\n  \"model\": \"old/model\",\n  \"refined_at\": \"2025-12-31T00:00:00+00:00\",\n  \"stats\": {\n    \"chunks_total\": 2,\n    \"chunks_refined\": 1,\n    \"tokens_in\": 10,\n    \"tokens_out\": 20,\n    \"cost_usd\": 0.5,\n    \"cost_source\": \"openrouter\",\n    \"model\": \"old/model\",\n    \"duration_sec\": 1.0\n  }\n}\n",
+        "2026-01-04-BV1ccccccccc.refined.json": "{\n  \"schema_version\": 2,\n  \"stream_id\": \"2026-01-04-BV1ccccccccc\",\n  \"chunks\": {\n    \"2026-01-04-BV1ccccccccc::000\": {\n      \"heading\": \"重新精炼的一段\",\n      \"summary\": \"我重新说了这一段。\",\n      \"details\": \"这一段重新精炼过。\",\n      \"chunk_type\": \"commentary\",\n      \"topics\": [\n        \"重做\"\n      ],\n      \"mentions\": [],\n      \"key_quotes\": [],\n      \"sc_events\": [],\n      \"songs\": [],\n      \"events\": [\n        \"重新精炼\"\n      ],\n      \"promises\": []\n    }\n  },\n  \"model\": \"~google/gemini-pro-latest\",\n  \"refined_at\": \"2026-01-09T12:00:00+00:00\",\n  \"stats\": {\n    \"chunks_total\": 1,\n    \"chunks_refined\": 1,\n    \"tokens_in\": 1600,\n    \"tokens_out\": 120,\n    \"cost_usd\": 0.0,\n    \"cost_source\": \"unknown\",\n    \"model\": \"~google/gemini-pro-latest\",\n    \"duration_sec\": 0.0\n  }\n}",
+        "2026-01-05-BV1ddddddddd.refined.json": "{not json"
+      },
+      "files": [
+        "2026-01-02-BV1aaaaaaaaa.md",
+        "2026-01-03-BV1bbbbbbbbb_p1.md",
+        "2026-01-03-BV1bbbbbbbbb_p1.refined.json",
+        "2026-01-04-BV1ccccccccc.md",
+        "2026-01-04-BV1ccccccccc.refined.json",
+        "2026-01-05-BV1ddddddddd.md",
+        "2026-01-05-BV1ddddddddd.refined.json",
+        "2026-01-06-BV1eeeeeeeee.md",
+        "2026-01-07-BV1fffffffff.md"
+      ]
+    },
+    {
+      "name": "dry-run",
+      "responses": null,
+      "argv": ["--dry-run", "--streams-dir", "<DIR>", "--model", "~google/gemini-flash-latest"],
+      "exit_code": 0,
+      "stdout": "\nDry run — model: ~google/gemini-flash-latest  (two-pass: extract → synthesize)\n(estimates based on char count; actual cost is usually a bit lower)\n\n  2026-01-02-BV1aaaaaaaaa.md: 3 chunks × 2 passes, ~5,157 in / ~4,200 out → ~$0.0016\n  2026-01-03-BV1bbbbbbbbb_p1.md: 2 chunks × 2 passes, ~3,426 in / ~2,800 out → ~$0.0011\n  2026-01-04-BV1ccccccccc.md: 0 new chunks\n  2026-01-05-BV1ddddddddd.md: 2 chunks × 2 passes, ~3,419 in / ~2,800 out → ~$0.0011\n  2026-01-06-BV1eeeeeeeee.md: 5 chunks × 2 passes, ~8,537 in / ~7,000 out → ~$0.0027\n  2026-01-07-BV1fffffffff.md: 0 new chunks\n\nEstimated total: 12 chunks (2 passes each), ~20,539 in / ~16,800 out → ~$0.0066\n\n",
+      "logs": [],
+      "requests": [],
+      "unused_responses": 0,
+      "sidecars": {
+        "2026-01-03-BV1bbbbbbbbb_p1.refined.json": "{\n  \"schema_version\": 1,\n  \"stream_id\": \"2026-01-03-BV1bbbbbbbbb_p1\",\n  \"chunks\": {\n    \"2026-01-03-BV1bbbbbbbbb_p1::000\": {\n      \"heading\": \"开播\",\n      \"summary\": \"旧的摘要。\",\n      \"topics\": [\"开播\"]\n    }\n  },\n  \"model\": \"old/model\",\n  \"refined_at\": \"2025-12-31T00:00:00+00:00\",\n  \"stats\": {\n    \"chunks_total\": 2,\n    \"chunks_refined\": 1,\n    \"tokens_in\": 10,\n    \"tokens_out\": 20,\n    \"cost_usd\": 0.5,\n    \"cost_source\": \"openrouter\",\n    \"model\": \"old/model\",\n    \"duration_sec\": 1.0\n  }\n}\n",
+        "2026-01-04-BV1ccccccccc.refined.json": "{\n  \"schema_version\": 2,\n  \"stream_id\": \"2026-01-04-BV1ccccccccc\",\n  \"chunks\": {\n    \"2026-01-04-BV1ccccccccc::000\": {\n      \"heading\": \"旧标题\",\n      \"summary\": \"旧摘要。\",\n      \"details\": \"旧细节。\",\n      \"chunk_type\": \"commentary\",\n      \"topics\": [\"旧\"],\n      \"mentions\": [],\n      \"key_quotes\": [],\n      \"sc_events\": [],\n      \"songs\": [],\n      \"events\": [],\n      \"promises\": []\n    },\n    \"2026-01-04-BV1ccccccccc::007\": {\n      \"heading\": \"孤儿记录\",\n      \"summary\": \"旧摘要。\",\n      \"details\": \"旧细节。\",\n      \"chunk_type\": \"commentary\",\n      \"topics\": [\"旧\"],\n      \"mentions\": [],\n      \"key_quotes\": [],\n      \"sc_events\": [],\n      \"songs\": [],\n      \"events\": [],\n      \"promises\": []\n    }\n  },\n  \"model\": \"~google/gemini-flash-latest\",\n  \"refined_at\": \"2025-12-30T00:00:00+00:00\",\n  \"stats\": {\n    \"chunks_total\": 1,\n    \"chunks_refined\": 2,\n    \"tokens_in\": 100,\n    \"tokens_out\": 50,\n    \"cost_usd\": 0.0001,\n    \"cost_source\": \"openrouter\",\n    \"model\": \"~google/gemini-flash-latest\",\n    \"duration_sec\": 2.5\n  }\n}\n",
+        "2026-01-05-BV1ddddddddd.refined.json": "{not json"
+      },
+      "files": [
+        "2026-01-02-BV1aaaaaaaaa.md",
+        "2026-01-03-BV1bbbbbbbbb_p1.md",
+        "2026-01-03-BV1bbbbbbbbb_p1.refined.json",
+        "2026-01-04-BV1ccccccccc.md",
+        "2026-01-04-BV1ccccccccc.refined.json",
+        "2026-01-05-BV1ddddddddd.md",
+        "2026-01-05-BV1ddddddddd.refined.json",
+        "2026-01-06-BV1eeeeeeeee.md",
+        "2026-01-07-BV1fffffffff.md"
+      ]
+    },
+    {
+      "name": "dry-run-unpriced",
+      "responses": null,
+      "argv": ["--dry-run", "--streams-dir", "<DIR>"],
+      "exit_code": 0,
+      "stdout": "\nDry run — model: ~google/gemini-pro-latest  (two-pass: extract → synthesize)\n(estimates based on char count; actual cost is usually a bit lower)\n\n  2026-01-02-BV1aaaaaaaaa.md: 3 chunks × 2 passes, ~5,157 in / ~4,200 out → ~$0.0000\n  2026-01-03-BV1bbbbbbbbb_p1.md: 2 chunks × 2 passes, ~3,426 in / ~2,800 out → ~$0.0000\n  2026-01-04-BV1ccccccccc.md: 0 new chunks\n  2026-01-05-BV1ddddddddd.md: 2 chunks × 2 passes, ~3,419 in / ~2,800 out → ~$0.0000\n  2026-01-06-BV1eeeeeeeee.md: 5 chunks × 2 passes, ~8,537 in / ~7,000 out → ~$0.0000\n  2026-01-07-BV1fffffffff.md: 0 new chunks\n\nEstimated total: 12 chunks (2 passes each), ~20,539 in / ~16,800 out → ~$0.0000\n(model '~google/gemini-pro-latest' not in local price table; estimate is $0)\n\n",
+      "logs": [],
+      "requests": [],
+      "unused_responses": 0,
+      "sidecars": {
+        "2026-01-03-BV1bbbbbbbbb_p1.refined.json": "{\n  \"schema_version\": 1,\n  \"stream_id\": \"2026-01-03-BV1bbbbbbbbb_p1\",\n  \"chunks\": {\n    \"2026-01-03-BV1bbbbbbbbb_p1::000\": {\n      \"heading\": \"开播\",\n      \"summary\": \"旧的摘要。\",\n      \"topics\": [\"开播\"]\n    }\n  },\n  \"model\": \"old/model\",\n  \"refined_at\": \"2025-12-31T00:00:00+00:00\",\n  \"stats\": {\n    \"chunks_total\": 2,\n    \"chunks_refined\": 1,\n    \"tokens_in\": 10,\n    \"tokens_out\": 20,\n    \"cost_usd\": 0.5,\n    \"cost_source\": \"openrouter\",\n    \"model\": \"old/model\",\n    \"duration_sec\": 1.0\n  }\n}\n",
+        "2026-01-04-BV1ccccccccc.refined.json": "{\n  \"schema_version\": 2,\n  \"stream_id\": \"2026-01-04-BV1ccccccccc\",\n  \"chunks\": {\n    \"2026-01-04-BV1ccccccccc::000\": {\n      \"heading\": \"旧标题\",\n      \"summary\": \"旧摘要。\",\n      \"details\": \"旧细节。\",\n      \"chunk_type\": \"commentary\",\n      \"topics\": [\"旧\"],\n      \"mentions\": [],\n      \"key_quotes\": [],\n      \"sc_events\": [],\n      \"songs\": [],\n      \"events\": [],\n      \"promises\": []\n    },\n    \"2026-01-04-BV1ccccccccc::007\": {\n      \"heading\": \"孤儿记录\",\n      \"summary\": \"旧摘要。\",\n      \"details\": \"旧细节。\",\n      \"chunk_type\": \"commentary\",\n      \"topics\": [\"旧\"],\n      \"mentions\": [],\n      \"key_quotes\": [],\n      \"sc_events\": [],\n      \"songs\": [],\n      \"events\": [],\n      \"promises\": []\n    }\n  },\n  \"model\": \"~google/gemini-flash-latest\",\n  \"refined_at\": \"2025-12-30T00:00:00+00:00\",\n  \"stats\": {\n    \"chunks_total\": 1,\n    \"chunks_refined\": 2,\n    \"tokens_in\": 100,\n    \"tokens_out\": 50,\n    \"cost_usd\": 0.0001,\n    \"cost_source\": \"openrouter\",\n    \"model\": \"~google/gemini-flash-latest\",\n    \"duration_sec\": 2.5\n  }\n}\n",
+        "2026-01-05-BV1ddddddddd.refined.json": "{not json"
+      },
+      "files": [
+        "2026-01-02-BV1aaaaaaaaa.md",
+        "2026-01-03-BV1bbbbbbbbb_p1.md",
+        "2026-01-03-BV1bbbbbbbbb_p1.refined.json",
+        "2026-01-04-BV1ccccccccc.md",
+        "2026-01-04-BV1ccccccccc.refined.json",
+        "2026-01-05-BV1ddddddddd.md",
+        "2026-01-05-BV1ddddddddd.refined.json",
+        "2026-01-06-BV1eeeeeeeee.md",
+        "2026-01-07-BV1fffffffff.md"
+      ]
+    }
+  ]
+}

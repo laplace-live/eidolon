@@ -2,12 +2,14 @@
 // (vector-only, hybrid, hybrid+rerank), so tokenizer, reranker and top_k changes have one number to
 // move.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import {
+  activePersona,
   cpSlice,
   envOptional,
   errorText,
   isPlainObject,
+  ljust,
   logger,
   PyFloat,
   pyError,
@@ -15,13 +17,15 @@ import {
   pyGet,
   pyIter,
   pyJsonDumps,
+  pyPath,
   pyRepr,
   pyStr,
   pyTruthy,
+  rjust,
   setLogLevel,
   sortedPy,
+  sourceFolder,
 } from "@eidolon/config";
-import { pyPath } from "@eidolon/imagegen";
 import {
   DEFAULT_RERANK_BASE_URL,
   dbPathArgument,
@@ -40,9 +44,13 @@ import {
 } from "@eidolon/retrieval";
 import { ArgparseExit, INT, type ParserSpec, parseArgs } from "./argparse.ts";
 import { type CliIo, printer, reportExit, resolveIo } from "./io.ts";
-import { ljust, mean, median, rjust } from "./py.ts";
+import { mean, median } from "./py.ts";
 
-export const DEFAULT_QUERIES = "data/eval/queries.toml";
+/** `--queries` when unset: the eval set among the persona's sources in the data home. */
+export function defaultQueriesPath(): string {
+  return join(sourceFolder(activePersona().id, "eval"), "queries.toml");
+}
+
 export const K_VALUES = [1, 3, 5, 10] as const;
 export const ALL_MODES = ["vector_only", "hybrid", "hybrid_rerank"] as const;
 const MAX_K = Math.max(...K_VALUES);
@@ -65,8 +73,8 @@ Score retrieval quality for both LanceDB tables.
 
 options:
   -h, --help            show this help message and exit
-  --queries QUERIES     TOML file of [[query]] entries (default:
-                        data/eval/queries.toml)
+  --queries QUERIES     TOML file of [[query]] entries (default: the persona's
+                        eval/queries.toml in the data home's sources)
   --db-path DB_PATH     LanceDB directory (default: the persona's index/)
   --table {persona_facts,stream_chunks}
                         Restrict eval to one table. Default: both.
@@ -97,7 +105,7 @@ options:
                         comparison table instead.
 `,
   actions: [
-    { dest: "queries", flags: ["--queries"], kind: "store", default: DEFAULT_QUERIES },
+    { dest: "queries", flags: ["--queries"], kind: "store" },
     { dest: "db_path", flags: ["--db-path"], kind: "store", default: null },
     {
       dest: "table",
@@ -134,7 +142,8 @@ options:
 };
 
 export interface EvalArgs {
-  readonly queries: string;
+  /** null: defaultQueriesPath(). */
+  readonly queries: string | null;
   readonly dbPath: string;
   readonly table: string | null;
   readonly modes: readonly string[] | null;
@@ -151,7 +160,7 @@ export interface EvalArgs {
 export function parseEvalArgs(argv: readonly string[]): EvalArgs {
   const ns = parseArgs(EVAL_PARSER, argv);
   return {
-    queries: ns.queries as string,
+    queries: ns.queries as string | null,
     dbPath: (ns.db_path as string | null) ?? dbPathArgument(),
     table: ns.table as string | null,
     modes: ns.modes as string[] | null,
@@ -649,7 +658,12 @@ export async function evalRetrievalMain(
   const d = resolveDeps(deps);
   const print = printer(io.stdout);
 
-  let queries = loadQueries(args.queries);
+  const queriesPath = args.queries ?? defaultQueriesPath();
+  if (args.queries === null && !existsSync(queriesPath)) {
+    logger.error(`Queries file not found: ${queriesPath}. Pass --queries <file>.`);
+    return 1;
+  }
+  let queries = loadQueries(queriesPath);
   if (args.table) queries = queries.filter((q) => q.table === args.table);
   if (queries.length === 0) {
     logger.error("No queries to evaluate (post-filter).");

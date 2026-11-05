@@ -1,0 +1,1010 @@
+{
+  "printed_by": "CPython 3.13.4, loguru 0.7.3: packages/ingest/test/fixtures/download/download.golden.py through laplace_eidolon.tools.download and .agents/skills/stream-archive-embed/scripts/prepare_batch.py, with fake-yt-dlp.sh as yt-dlp",
+  "shlex": [
+    {
+      "text": "",
+      "tokens": []
+    },
+    {
+      "text": "   ",
+      "tokens": []
+    },
+    {
+      "text": "--rate-limit 2M --sleep-interval 5",
+      "tokens": ["--rate-limit", "2M", "--sleep-interval", "5"]
+    },
+    {
+      "text": "--sleep-requests 2 -o 'x y'",
+      "tokens": ["--sleep-requests", "2", "-o", "x y"]
+    },
+    {
+      "text": "a\\ b",
+      "tokens": ["a b"]
+    },
+    {
+      "text": "\"a\\\"b\" c",
+      "tokens": ["a\"b", "c"]
+    },
+    {
+      "text": "'a\\b'",
+      "tokens": ["a\\b"]
+    },
+    {
+      "text": "\"a\\b\"",
+      "tokens": ["a\\b"]
+    },
+    {
+      "text": "\"a\\\\b\"",
+      "tokens": ["a\\b"]
+    },
+    {
+      "text": "a#b # c",
+      "tokens": ["a#b", "#", "c"]
+    },
+    {
+      "text": "''",
+      "tokens": [""]
+    },
+    {
+      "text": "\"\"",
+      "tokens": [""]
+    },
+    {
+      "text": "a\"\"b",
+      "tokens": ["ab"]
+    },
+    {
+      "text": "a'b'c\"d\"e",
+      "tokens": ["abcde"]
+    },
+    {
+      "text": "a\u000bb\tc\rd\ne",
+      "tokens": ["a\u000bb", "c", "d", "e"]
+    },
+    {
+      "text": "\u3000x y\u3000",
+      "tokens": ["\u3000x", "y\u3000"]
+    },
+    {
+      "text": "\\",
+      "error": "No escaped character"
+    },
+    {
+      "text": "x\\",
+      "error": "No escaped character"
+    },
+    {
+      "text": "'abc",
+      "error": "No closing quotation"
+    },
+    {
+      "text": "\"abc",
+      "error": "No closing quotation"
+    },
+    {
+      "text": "'a\"b'",
+      "tokens": ["a\"b"]
+    },
+    {
+      "text": "\"a'b\"",
+      "tokens": ["a'b"]
+    },
+    {
+      "text": "\\'",
+      "tokens": ["'"]
+    },
+    {
+      "text": "tab\\\tafter",
+      "tokens": ["tab\tafter"]
+    },
+    {
+      "text": "\u4e2d\u6587 '\u5f15\u53f7'",
+      "tokens": ["\u4e2d\u6587", "\u5f15\u53f7"]
+    }
+  ],
+  "url_list": {
+    "text": "\ufeff# a BOM keeps the first line from reading as a comment\r\nhttps://www.bilibili.com/video/BV1aaaaaaaa1\r\n   https://www.bilibili.com/video/BV1aaaaaaaa2/   \n\n  # an indented comment\nhttps://www.bilibili.com/video/BV1aaaaaaaa3 # not a comment\r\u001c\u001dhttps://www.bilibili.com/video/BV1aaaaaaaa4\u0085\u2028\u3000https://www.bilibili.com/video/BV1aaaaaaaa5\u3000\f\ufeffhttps://www.bilibili.com/video/BV1aaaaaaaa6\u000b-o /tmp/elsewhere\nhttps://www.bilibili.com/video/BV1aaaaaaaa1\n",
+    "urls": [
+      "\ufeff# a BOM keeps the first line from reading as a comment",
+      "https://www.bilibili.com/video/BV1aaaaaaaa1",
+      "https://www.bilibili.com/video/BV1aaaaaaaa2/",
+      "https://www.bilibili.com/video/BV1aaaaaaaa3 # not a comment",
+      "https://www.bilibili.com/video/BV1aaaaaaaa4",
+      "https://www.bilibili.com/video/BV1aaaaaaaa5",
+      "\ufeffhttps://www.bilibili.com/video/BV1aaaaaaaa6",
+      "-o /tmp/elsewhere",
+      "https://www.bilibili.com/video/BV1aaaaaaaa1"
+    ],
+    "missing": "URL list not found: <WORK>/missing.txt"
+  },
+  "argv": [
+    {
+      "url": "https://example.invalid/ok/x",
+      "vods_dir": "vods",
+      "format": "bestaudio[ext=m4a]",
+      "browser": "chrome",
+      "cookies": null,
+      "extra": "",
+      "argv": [
+        "yt-dlp",
+        "-f",
+        "bestaudio[ext=m4a]",
+        "-o",
+        "vods/%(id)s.%(ext)s",
+        "--write-info-json",
+        "--no-overwrites",
+        "--no-write-playlist-metafiles",
+        "--cookies-from-browser",
+        "chrome",
+        "https://example.invalid/ok/x"
+      ]
+    },
+    {
+      "url": "https://example.invalid/ok/x",
+      "vods_dir": "vods",
+      "format": "bestaudio[ext=m4a]",
+      "browser": null,
+      "cookies": null,
+      "extra": "--sleep-requests 2 -o 'x y'",
+      "argv": [
+        "yt-dlp",
+        "-f",
+        "bestaudio[ext=m4a]",
+        "-o",
+        "vods/%(id)s.%(ext)s",
+        "--write-info-json",
+        "--no-overwrites",
+        "--no-write-playlist-metafiles",
+        "--sleep-requests",
+        "2",
+        "-o",
+        "x y",
+        "https://example.invalid/ok/x"
+      ]
+    },
+    {
+      "url": "--exec=touch pwned",
+      "vods_dir": "/abs/v o d s/",
+      "format": "ba",
+      "browser": "firefox:default",
+      "cookies": "c/cookies.txt",
+      "extra": "--rate-limit 2M",
+      "argv": [
+        "yt-dlp",
+        "-f",
+        "ba",
+        "-o",
+        "/abs/v o d s/%(id)s.%(ext)s",
+        "--write-info-json",
+        "--no-overwrites",
+        "--no-write-playlist-metafiles",
+        "--cookies-from-browser",
+        "firefox:default",
+        "--cookies",
+        "c/cookies.txt",
+        "--rate-limit",
+        "2M",
+        "--exec=touch pwned"
+      ]
+    },
+    {
+      "url": "https://example.invalid/ok/x",
+      "vods_dir": ".",
+      "format": "bestaudio[ext=m4a]",
+      "browser": "chrome",
+      "cookies": "./c//k.txt",
+      "extra": "",
+      "argv": [
+        "yt-dlp",
+        "-f",
+        "bestaudio[ext=m4a]",
+        "-o",
+        "%(id)s.%(ext)s",
+        "--write-info-json",
+        "--no-overwrites",
+        "--no-write-playlist-metafiles",
+        "--cookies-from-browser",
+        "chrome",
+        "--cookies",
+        "c/k.txt",
+        "https://example.invalid/ok/x"
+      ]
+    },
+    {
+      "url": "https://example.invalid/ok/x",
+      "vods_dir": "a/../b",
+      "format": "bestaudio[ext=m4a]",
+      "browser": "",
+      "cookies": null,
+      "extra": "-- --x",
+      "argv": [
+        "yt-dlp",
+        "-f",
+        "bestaudio[ext=m4a]",
+        "-o",
+        "a/../b/%(id)s.%(ext)s",
+        "--write-info-json",
+        "--no-overwrites",
+        "--no-write-playlist-metafiles",
+        "--",
+        "--x",
+        "https://example.invalid/ok/x"
+      ]
+    }
+  ],
+  "summary": [
+    {
+      "vods_dir": "vods",
+      "requested": 0,
+      "succeeded": 0,
+      "failed": [],
+      "new": 0,
+      "duration": 0.0,
+      "text": "\n============================================================\nDownload Summary\n============================================================\nURLs requested: 0\nURLs succeeded: 0\nURLs failed:    0\nNew audio:      0 files in vods/\nDuration:       0.0s\n============================================================\n"
+    },
+    {
+      "vods_dir": "/data/sources/x/vods",
+      "requested": 2,
+      "succeeded": 1,
+      "failed": [
+        ["https://www.bilibili.com/video/BV1Tp7W64EP7", "exit=1: WARNING: line one\n    ERROR: two"]
+      ],
+      "new": 1,
+      "duration": 0.25,
+      "text": "\n============================================================\nDownload Summary\n============================================================\nURLs requested: 2\nURLs succeeded: 1\nURLs failed:    1\nNew audio:      1 files in /data/sources/x/vods/\nDuration:       0.2s\n\nFailures (re-run the same command to retry these):\n  \u2717 https://www.bilibili.com/video/BV1Tp7W64EP7\n      exit=1: WARNING: line one\n============================================================\n"
+    },
+    {
+      "vods_dir": ".",
+      "requested": 3,
+      "succeeded": 0,
+      "failed": [["u1", ""], ["u2", "\nsecond"], ["u3", "exit=-9: (no stderr captured)"]],
+      "new": 0,
+      "duration": 856.55,
+      "text": "\n============================================================\nDownload Summary\n============================================================\nURLs requested: 3\nURLs succeeded: 0\nURLs failed:    3\nNew audio:      0 files in ./\nDuration:       856.5s\n\nFailures (re-run the same command to retry these):\n  \u2717 u1\n      (no detail)\n  \u2717 u2\n      \n  \u2717 u3\n      exit=-9: (no stderr captured)\n============================================================\n"
+    }
+  ],
+  "runs": [
+    {
+      "name": "mixed",
+      "initial": [],
+      "urls": [
+        "https://example.invalid/ok/BV1aaaaaaaa1",
+        "https://example.invalid/parts/BV1bbbbbbbb1/3",
+        "https://example.invalid/fail/8",
+        "https://example.invalid/quiet",
+        "https://example.invalid/warn",
+        "https://example.invalid/exists/BV1aaaaaaaa1",
+        "https://example.invalid/412",
+        "--version",
+        "https://example.invalid/crlf",
+        "https://example.invalid/unicode",
+        "https://example.invalid/kill",
+        "https://example.invalid/cookies",
+        "https://example.invalid/fail/1"
+      ],
+      "extra": "--sleep-requests 2",
+      "browser": "chrome",
+      "cookies": null,
+      "argv": [
+        [
+          "-f",
+          "bestaudio[ext=m4a]",
+          "-o",
+          "<WORK>/vods/%(id)s.%(ext)s",
+          "--write-info-json",
+          "--no-overwrites",
+          "--no-write-playlist-metafiles",
+          "--cookies-from-browser",
+          "chrome",
+          "--sleep-requests",
+          "2",
+          "https://example.invalid/ok/BV1aaaaaaaa1"
+        ],
+        [
+          "-f",
+          "bestaudio[ext=m4a]",
+          "-o",
+          "<WORK>/vods/%(id)s.%(ext)s",
+          "--write-info-json",
+          "--no-overwrites",
+          "--no-write-playlist-metafiles",
+          "--cookies-from-browser",
+          "chrome",
+          "--sleep-requests",
+          "2",
+          "https://example.invalid/parts/BV1bbbbbbbb1/3"
+        ],
+        [
+          "-f",
+          "bestaudio[ext=m4a]",
+          "-o",
+          "<WORK>/vods/%(id)s.%(ext)s",
+          "--write-info-json",
+          "--no-overwrites",
+          "--no-write-playlist-metafiles",
+          "--cookies-from-browser",
+          "chrome",
+          "--sleep-requests",
+          "2",
+          "https://example.invalid/fail/8"
+        ],
+        [
+          "-f",
+          "bestaudio[ext=m4a]",
+          "-o",
+          "<WORK>/vods/%(id)s.%(ext)s",
+          "--write-info-json",
+          "--no-overwrites",
+          "--no-write-playlist-metafiles",
+          "--cookies-from-browser",
+          "chrome",
+          "--sleep-requests",
+          "2",
+          "https://example.invalid/quiet"
+        ],
+        [
+          "-f",
+          "bestaudio[ext=m4a]",
+          "-o",
+          "<WORK>/vods/%(id)s.%(ext)s",
+          "--write-info-json",
+          "--no-overwrites",
+          "--no-write-playlist-metafiles",
+          "--cookies-from-browser",
+          "chrome",
+          "--sleep-requests",
+          "2",
+          "https://example.invalid/warn"
+        ],
+        [
+          "-f",
+          "bestaudio[ext=m4a]",
+          "-o",
+          "<WORK>/vods/%(id)s.%(ext)s",
+          "--write-info-json",
+          "--no-overwrites",
+          "--no-write-playlist-metafiles",
+          "--cookies-from-browser",
+          "chrome",
+          "--sleep-requests",
+          "2",
+          "https://example.invalid/exists/BV1aaaaaaaa1"
+        ],
+        [
+          "-f",
+          "bestaudio[ext=m4a]",
+          "-o",
+          "<WORK>/vods/%(id)s.%(ext)s",
+          "--write-info-json",
+          "--no-overwrites",
+          "--no-write-playlist-metafiles",
+          "--cookies-from-browser",
+          "chrome",
+          "--sleep-requests",
+          "2",
+          "https://example.invalid/412"
+        ],
+        [
+          "-f",
+          "bestaudio[ext=m4a]",
+          "-o",
+          "<WORK>/vods/%(id)s.%(ext)s",
+          "--write-info-json",
+          "--no-overwrites",
+          "--no-write-playlist-metafiles",
+          "--cookies-from-browser",
+          "chrome",
+          "--sleep-requests",
+          "2",
+          "--version"
+        ],
+        [
+          "-f",
+          "bestaudio[ext=m4a]",
+          "-o",
+          "<WORK>/vods/%(id)s.%(ext)s",
+          "--write-info-json",
+          "--no-overwrites",
+          "--no-write-playlist-metafiles",
+          "--cookies-from-browser",
+          "chrome",
+          "--sleep-requests",
+          "2",
+          "https://example.invalid/crlf"
+        ],
+        [
+          "-f",
+          "bestaudio[ext=m4a]",
+          "-o",
+          "<WORK>/vods/%(id)s.%(ext)s",
+          "--write-info-json",
+          "--no-overwrites",
+          "--no-write-playlist-metafiles",
+          "--cookies-from-browser",
+          "chrome",
+          "--sleep-requests",
+          "2",
+          "https://example.invalid/unicode"
+        ],
+        [
+          "-f",
+          "bestaudio[ext=m4a]",
+          "-o",
+          "<WORK>/vods/%(id)s.%(ext)s",
+          "--write-info-json",
+          "--no-overwrites",
+          "--no-write-playlist-metafiles",
+          "--cookies-from-browser",
+          "chrome",
+          "--sleep-requests",
+          "2",
+          "https://example.invalid/kill"
+        ],
+        [
+          "-f",
+          "bestaudio[ext=m4a]",
+          "-o",
+          "<WORK>/vods/%(id)s.%(ext)s",
+          "--write-info-json",
+          "--no-overwrites",
+          "--no-write-playlist-metafiles",
+          "--cookies-from-browser",
+          "chrome",
+          "--sleep-requests",
+          "2",
+          "https://example.invalid/cookies"
+        ],
+        [
+          "-f",
+          "bestaudio[ext=m4a]",
+          "-o",
+          "<WORK>/vods/%(id)s.%(ext)s",
+          "--write-info-json",
+          "--no-overwrites",
+          "--no-write-playlist-metafiles",
+          "--cookies-from-browser",
+          "chrome",
+          "--sleep-requests",
+          "2",
+          "https://example.invalid/fail/1"
+        ]
+      ],
+      "requested": 13,
+      "succeeded": 4,
+      "failed": [
+        [
+          "https://example.invalid/fail/8",
+          "exit=1: WARNING: line 3\n    WARNING: line 4\n    WARNING: line 5\n    WARNING: line 6\n    WARNING: line 7\n    WARNING: line 8"
+        ],
+        ["https://example.invalid/quiet", "exit=2: (no stderr captured)"],
+        [
+          "https://example.invalid/412",
+          "exit=1: WARNING: Your yt-dlp version (2026.06.09) is older than 90 days!\n             It is strongly recommended to always use the latest version.\n             You installed yt-dlp with pip or using the wheel from PyPi; Use that to update.\n             To suppress this warning, add --no-update to your command/config.\n    ERROR: [BiliBili] 1c3YJ6VETN: Unable to download JSON metadata: HTTP Error 412: Precondition Failed (caused by <HTTPError 412: Precondition Failed>)\n    ERROR: [BiliBili] 1c3YJ6VETN: Unable to download JSON metadata: HTTP Error 412: Precondition Failed (caused by <HTTPError 412: Precondition Failed>)"
+        ],
+        ["--version", "exit=1: ERROR: [generic] '--version' is not a valid URL"],
+        ["https://example.invalid/crlf", "exit=1: WARNING: a  \n    \n    ERROR: b"],
+        [
+          "https://example.invalid/unicode",
+          "exit=1: \u8b66\u544a\uff1a\u4e00\n    \u4e8c\n    \u4e09"
+        ],
+        ["https://example.invalid/kill", "exit=-9: about to die"],
+        [
+          "https://example.invalid/cookies",
+          "exit=1: ERROR: could not find chrome cookies database in \"/nonexistent\""
+        ],
+        ["https://example.invalid/fail/1", "exit=1: WARNING: line 1"]
+      ],
+      "new_files": [
+        "BV1aaaaaaaa1.m4a",
+        "BV1bbbbbbbb1_p1.m4a",
+        "BV1bbbbbbbb1_p2.m4a",
+        "BV1bbbbbbbb1_p3.m4a"
+      ],
+      "files": [
+        "BV1aaaaaaaa1.info.json",
+        "BV1aaaaaaaa1.m4a",
+        "BV1bbbbbbbb1_p1.info.json",
+        "BV1bbbbbbbb1_p1.m4a",
+        "BV1bbbbbbbb1_p2.info.json",
+        "BV1bbbbbbbb1_p2.m4a",
+        "BV1bbbbbbbb1_p3.info.json",
+        "BV1bbbbbbbb1_p3.m4a"
+      ],
+      "summary": "\n============================================================\nDownload Summary\n============================================================\nURLs requested: 13\nURLs succeeded: 4\nURLs failed:    9\nNew audio:      4 files in <WORK>/vods/\nDuration:       0.0s\n\nFailures (re-run the same command to retry these):\n  \u2717 https://example.invalid/fail/8\n      exit=1: WARNING: line 3\n  \u2717 https://example.invalid/quiet\n      exit=2: (no stderr captured)\n  \u2717 https://example.invalid/412\n      exit=1: WARNING: Your yt-dlp version (2026.06.09) is older than 90 days!\n  \u2717 --version\n      exit=1: ERROR: [generic] '--version' is not a valid URL\n  \u2717 https://example.invalid/crlf\n      exit=1: WARNING: a  \n  \u2717 https://example.invalid/unicode\n      exit=1: \u8b66\u544a\uff1a\u4e00\n  \u2717 https://example.invalid/kill\n      exit=-9: about to die\n  \u2717 https://example.invalid/cookies\n      exit=1: ERROR: could not find chrome cookies database in \"/nonexistent\"\n  \u2717 https://example.invalid/fail/1\n      exit=1: WARNING: line 1\n============================================================\n",
+      "logs": [
+        ["INFO", "[1/13] https://example.invalid/ok/BV1aaaaaaaa1"],
+        ["INFO", "[2/13] https://example.invalid/parts/BV1bbbbbbbb1/3"],
+        ["INFO", "[3/13] https://example.invalid/fail/8"],
+        [
+          "ERROR",
+          "  \u2717 yt-dlp failed (exit=1). stderr tail:\n    WARNING: line 3\n    WARNING: line 4\n    WARNING: line 5\n    WARNING: line 6\n    WARNING: line 7\n    WARNING: line 8"
+        ],
+        ["INFO", "[4/13] https://example.invalid/quiet"],
+        ["ERROR", "  \u2717 yt-dlp failed (exit=2). stderr tail:\n    (no stderr captured)"],
+        ["INFO", "[5/13] https://example.invalid/warn"],
+        ["INFO", "[6/13] https://example.invalid/exists/BV1aaaaaaaa1"],
+        ["INFO", "[7/13] https://example.invalid/412"],
+        [
+          "ERROR",
+          "  \u2717 yt-dlp failed (exit=1). stderr tail:\n    WARNING: Your yt-dlp version (2026.06.09) is older than 90 days!\n             It is strongly recommended to always use the latest version.\n             You installed yt-dlp with pip or using the wheel from PyPi; Use that to update.\n             To suppress this warning, add --no-update to your command/config.\n    ERROR: [BiliBili] 1c3YJ6VETN: Unable to download JSON metadata: HTTP Error 412: Precondition Failed (caused by <HTTPError 412: Precondition Failed>)\n    ERROR: [BiliBili] 1c3YJ6VETN: Unable to download JSON metadata: HTTP Error 412: Precondition Failed (caused by <HTTPError 412: Precondition Failed>)"
+        ],
+        ["INFO", "[8/13] --version"],
+        [
+          "ERROR",
+          "  \u2717 yt-dlp failed (exit=1). stderr tail:\n    ERROR: [generic] '--version' is not a valid URL"
+        ],
+        ["INFO", "[9/13] https://example.invalid/crlf"],
+        [
+          "ERROR",
+          "  \u2717 yt-dlp failed (exit=1). stderr tail:\n    WARNING: a  \n    \n    ERROR: b"
+        ],
+        ["INFO", "[10/13] https://example.invalid/unicode"],
+        [
+          "ERROR",
+          "  \u2717 yt-dlp failed (exit=1). stderr tail:\n    \u8b66\u544a\uff1a\u4e00\n    \u4e8c\n    \u4e09"
+        ],
+        ["INFO", "[11/13] https://example.invalid/kill"],
+        ["ERROR", "  \u2717 yt-dlp failed (exit=-9). stderr tail:\n    about to die"],
+        ["INFO", "[12/13] https://example.invalid/cookies"],
+        [
+          "ERROR",
+          "  \u2717 yt-dlp failed (exit=1). stderr tail:\n    ERROR: could not find chrome cookies database in \"/nonexistent\""
+        ],
+        ["INFO", "[13/13] https://example.invalid/fail/1"],
+        ["ERROR", "  \u2717 yt-dlp failed (exit=1). stderr tail:\n    WARNING: line 1"]
+      ]
+    },
+    {
+      "name": "fallback",
+      "initial": [
+        "BV1cccccccc1_p1.m4a",
+        "BV1cccccccc1_p1.info.json",
+        "BV1cccccccc1_p2.m4a",
+        "BV1dddddddd1.info.json",
+        "notes.txt",
+        ".hidden.m4a"
+      ],
+      "urls": [
+        "https://example.invalid/fallback/BV1cccccccc1",
+        "https://example.invalid/ok/BV1dddddddd1"
+      ],
+      "extra": "",
+      "browser": null,
+      "cookies": null,
+      "argv": [
+        [
+          "-f",
+          "bestaudio[ext=m4a]",
+          "-o",
+          "<WORK>/vods/%(id)s.%(ext)s",
+          "--write-info-json",
+          "--no-overwrites",
+          "--no-write-playlist-metafiles",
+          "https://example.invalid/fallback/BV1cccccccc1"
+        ],
+        [
+          "-f",
+          "bestaudio[ext=m4a]",
+          "-o",
+          "<WORK>/vods/%(id)s.%(ext)s",
+          "--write-info-json",
+          "--no-overwrites",
+          "--no-write-playlist-metafiles",
+          "https://example.invalid/ok/BV1dddddddd1"
+        ]
+      ],
+      "requested": 2,
+      "succeeded": 2,
+      "failed": [],
+      "new_files": ["BV1cccccccc1.m4a", "BV1dddddddd1.m4a"],
+      "files": [
+        ".hidden.m4a",
+        "BV1cccccccc1.info.json",
+        "BV1cccccccc1.m4a",
+        "BV1cccccccc1_p1.info.json",
+        "BV1cccccccc1_p1.m4a",
+        "BV1cccccccc1_p2.m4a",
+        "BV1dddddddd1.info.json",
+        "BV1dddddddd1.m4a",
+        "notes.txt"
+      ],
+      "summary": "\n============================================================\nDownload Summary\n============================================================\nURLs requested: 2\nURLs succeeded: 2\nURLs failed:    0\nNew audio:      2 files in <WORK>/vods/\nDuration:       0.0s\n============================================================\n",
+      "logs": [
+        ["INFO", "[1/2] https://example.invalid/fallback/BV1cccccccc1"],
+        ["INFO", "[2/2] https://example.invalid/ok/BV1dddddddd1"]
+      ]
+    }
+  ],
+  "main": [
+    {
+      "name": "missing",
+      "list": null,
+      "argv": ["<WORK>/missing.txt", "--vods-dir", "<WORK>/vods"],
+      "code": 1,
+      "raises": null,
+      "stdout": "",
+      "logs": [["ERROR", "URL list not found: <WORK>/missing.txt"]],
+      "argv_calls": []
+    },
+    {
+      "name": "empty",
+      "list": "# nothing yet\n\n",
+      "argv": ["<LIST>", "--vods-dir", "<WORK>/vods"],
+      "code": 0,
+      "raises": null,
+      "stdout": "",
+      "logs": [["WARNING", "No URLs in <WORK>/urls.txt."]],
+      "argv_calls": []
+    },
+    {
+      "name": "run",
+      "list": "https://example.invalid/ok/BV1aaaaaaaa1\nhttps://example.invalid/fail/2\n",
+      "argv": ["<LIST>", "--vods-dir", "<WORK>/vods/", "--yt-dlp-args=--sleep-requests 2"],
+      "code": 1,
+      "raises": null,
+      "stdout": "\n============================================================\nDownload Summary\n============================================================\nURLs requested: 2\nURLs succeeded: 1\nURLs failed:    1\nNew audio:      1 files in <WORK>/vods/\nDuration:       <D>s\n\nFailures (re-run the same command to retry these):\n  \u2717 https://example.invalid/fail/2\n      exit=1: WARNING: line 1\n============================================================\n",
+      "logs": [
+        [
+          "INFO",
+          "Downloading 2 URL(s) to <WORK>/vods/ (format='bestaudio[ext=m4a]', cookies_from_browser='chrome')"
+        ],
+        ["INFO", "[1/2] https://example.invalid/ok/BV1aaaaaaaa1"],
+        ["INFO", "[2/2] https://example.invalid/fail/2"],
+        [
+          "ERROR",
+          "  \u2717 yt-dlp failed (exit=1). stderr tail:\n    WARNING: line 1\n    WARNING: line 2"
+        ]
+      ],
+      "argv_calls": [
+        [
+          "-f",
+          "bestaudio[ext=m4a]",
+          "-o",
+          "<WORK>/vods/%(id)s.%(ext)s",
+          "--write-info-json",
+          "--no-overwrites",
+          "--no-write-playlist-metafiles",
+          "--cookies-from-browser",
+          "chrome",
+          "--sleep-requests",
+          "2",
+          "https://example.invalid/ok/BV1aaaaaaaa1"
+        ],
+        [
+          "-f",
+          "bestaudio[ext=m4a]",
+          "-o",
+          "<WORK>/vods/%(id)s.%(ext)s",
+          "--write-info-json",
+          "--no-overwrites",
+          "--no-write-playlist-metafiles",
+          "--cookies-from-browser",
+          "chrome",
+          "--sleep-requests",
+          "2",
+          "https://example.invalid/fail/2"
+        ]
+      ]
+    },
+    {
+      "name": "ok",
+      "list": "https://example.invalid/ok/BV1aaaaaaaa1\n",
+      "argv": ["--cookies-from-browser", "", "--vods-dir=<WORK>/vods", "<LIST>"],
+      "code": 0,
+      "raises": null,
+      "stdout": "\n============================================================\nDownload Summary\n============================================================\nURLs requested: 1\nURLs succeeded: 1\nURLs failed:    0\nNew audio:      1 files in <WORK>/vods/\nDuration:       <D>s\n============================================================\n",
+      "logs": [
+        [
+          "INFO",
+          "Downloading 1 URL(s) to <WORK>/vods/ (format='bestaudio[ext=m4a]', cookies_from_browser=None)"
+        ],
+        ["INFO", "[1/1] https://example.invalid/ok/BV1aaaaaaaa1"]
+      ],
+      "argv_calls": [
+        [
+          "-f",
+          "bestaudio[ext=m4a]",
+          "-o",
+          "<WORK>/vods/%(id)s.%(ext)s",
+          "--write-info-json",
+          "--no-overwrites",
+          "--no-write-playlist-metafiles",
+          "https://example.invalid/ok/BV1aaaaaaaa1"
+        ]
+      ]
+    },
+    {
+      "name": "both-cookies",
+      "list": "https://example.invalid/ok/BV1aaaaaaaa1\n",
+      "argv": [
+        "<LIST>",
+        "--vods-dir",
+        "<WORK>/vods",
+        "--cookies",
+        "<WORK>/c.txt",
+        "--format",
+        "ba/b"
+      ],
+      "code": 0,
+      "raises": null,
+      "stdout": "\n============================================================\nDownload Summary\n============================================================\nURLs requested: 1\nURLs succeeded: 1\nURLs failed:    0\nNew audio:      1 files in <WORK>/vods/\nDuration:       <D>s\n============================================================\n",
+      "logs": [
+        [
+          "WARNING",
+          "Both --cookies-from-browser and --cookies were given; --cookies-from-browser will win in yt-dlp's flag order."
+        ],
+        [
+          "INFO",
+          "Downloading 1 URL(s) to <WORK>/vods/ (format='ba/b', cookies_from_browser='chrome')"
+        ],
+        ["INFO", "[1/1] https://example.invalid/ok/BV1aaaaaaaa1"]
+      ],
+      "argv_calls": [
+        [
+          "-f",
+          "ba/b",
+          "-o",
+          "<WORK>/vods/%(id)s.%(ext)s",
+          "--write-info-json",
+          "--no-overwrites",
+          "--no-write-playlist-metafiles",
+          "--cookies-from-browser",
+          "chrome",
+          "--cookies",
+          "<WORK>/c.txt",
+          "https://example.invalid/ok/BV1aaaaaaaa1"
+        ]
+      ]
+    },
+    {
+      "name": "shlex",
+      "list": "https://example.invalid/ok/BV1aaaaaaaa1\n",
+      "argv": ["<LIST>", "--vods-dir", "<WORK>/vods", "--yt-dlp-args", "'unclosed"],
+      "code": null,
+      "raises": "ValueError: No closing quotation",
+      "stdout": "",
+      "logs": [],
+      "argv_calls": []
+    }
+  ],
+  "prepare_files": {
+    "data/video-full.txt": "https://www.bilibili.com/video/BV1aaaaaaaa1\nhttps://www.bilibili.com/video/BV1aaaaaaaa2/\n//www.bilibili.com/video/BV1aaaaaaaa3\n# a comment\nBV1aaaaaaaa4\n\nhttp://bilibili.com/video/BV1aaaaaaaa5?p=2#t=1\nHTTPS://WWW.BILIBILI.COM:443/video/BV1aaaaaaaa1/\n",
+    "data/video-sample.txt": "  BV1aaaaaaaa6  \r\nhttps://user@www.bilibili.com/video/BV1aaaaaaaa7\r\n",
+    "data/auto-embed/videos-2026-01-01-000000.txt": "# Source: x\n# Captured: 2026-01-01T00:00:00+00:00\n# Archive total: 9; new BV IDs: 1\nhttps://www.bilibili.com/video/BV1bbbbbbbb1\n",
+    "data/auto-embed/videos-2026-01-01-000000.done.json": "{}\n",
+    "data/auto-embed/videos-2026-01-01-000000.log": "a log\n",
+    "data/auto-embed/videos-2026-02-01-000000.txt": "https://www.bilibili.com/video/BV1bbbbbbbb2\n",
+    "capture.txt": "BV1aaaaaaaa1\nhttps://www.bilibili.com/video/BV1cccccccc1\n# the archive page, newest first\nhttps://www.bilibili.com/video/BV1bbbbbbbb2/?spm_id_from=333\n//bilibili.com/video/BV1cccccccc2\nBV1cccccccc1\n\u001chttps://www.bilibili.com/video/BV1cccccccc3\u001c\nBV1aaaaaaaa7\n",
+    "known.txt": "BV1aaaaaaaa1\nBV1bbbbbbbb1\n",
+    "mobile.txt": "BV1aaaaaaaa1\nhttps://m.bilibili.com/video/BV1cccccccc1\n",
+    "short.txt": "https://b23.tv/AbCdEf1\n",
+    "ipv6.txt": "https://[::1/video/BV1cccccccc1\n",
+    "bom.txt": "\ufeffBV1cccccccc1\n",
+    "space.txt": "https://space.bilibili.com/2132180406/video/BV1cccccccc1\n",
+    "lowercase.txt": "bv1cccccccc1\nBV1cccccccc\n",
+    "latin1.txt": {
+      "b64": "QlYxY2NjY2NjY2MxCul06Qo="
+    },
+    "truncated.txt": {
+      "b64": "QlYxY2NjY2NjY2MxCuS4"
+    }
+  },
+  "prepare": [
+    {
+      "name": "dry-run",
+      "capture": "capture.txt",
+      "expected": 6,
+      "dry_run": true,
+      "result": {
+        "captured_count": 6,
+        "known_count": 9,
+        "new_count": 3,
+        "new_ids": ["BV1cccccccc1", "BV1cccccccc2", "BV1cccccccc3"],
+        "pending_batches": ["<WORK>/data/auto-embed/videos-2026-02-01-000000.txt"],
+        "created_batch": null,
+        "dry_run": true
+      },
+      "error": null,
+      "created_text": null
+    },
+    {
+      "name": "write",
+      "capture": "capture.txt",
+      "expected": 6,
+      "dry_run": false,
+      "result": {
+        "captured_count": 6,
+        "known_count": 9,
+        "new_count": 3,
+        "new_ids": ["BV1cccccccc1", "BV1cccccccc2", "BV1cccccccc3"],
+        "pending_batches": ["<WORK>/data/auto-embed/videos-2026-02-01-000000.txt"],
+        "created_batch": "<WORK>/data/auto-embed/videos-2026-09-08-100209.txt",
+        "dry_run": false
+      },
+      "error": null,
+      "created_text": "# Source: https://space.bilibili.com/2132180406/lists/2484684?type=series\n# Captured: 2026-09-08T10:02:09-07:00\n# Archive total: 6; new BV IDs: 3\nhttps://www.bilibili.com/video/BV1cccccccc1\nhttps://www.bilibili.com/video/BV1cccccccc2\nhttps://www.bilibili.com/video/BV1cccccccc3\n"
+    },
+    {
+      "name": "nothing-new",
+      "capture": "known.txt",
+      "expected": 2,
+      "dry_run": false,
+      "result": {
+        "captured_count": 2,
+        "known_count": 9,
+        "new_count": 0,
+        "new_ids": [],
+        "pending_batches": ["<WORK>/data/auto-embed/videos-2026-02-01-000000.txt"],
+        "created_batch": null,
+        "dry_run": false
+      },
+      "error": null,
+      "created_text": null
+    },
+    {
+      "name": "mismatch",
+      "capture": "capture.txt",
+      "expected": 7,
+      "dry_run": true,
+      "result": null,
+      "error": "Archive coverage mismatch: captured 6 unique IDs, expected 7; no batch written",
+      "created_text": null
+    },
+    {
+      "name": "zero",
+      "capture": "capture.txt",
+      "expected": 0,
+      "dry_run": true,
+      "result": null,
+      "error": "Archive coverage mismatch: captured 6 unique IDs, expected 0; no batch written",
+      "created_text": null
+    },
+    {
+      "name": "mobile",
+      "capture": "mobile.txt",
+      "expected": 2,
+      "dry_run": true,
+      "result": null,
+      "error": "<WORK>/mobile.txt:2: expected a BV ID or Bilibili video URL",
+      "created_text": null
+    },
+    {
+      "name": "short",
+      "capture": "short.txt",
+      "expected": 1,
+      "dry_run": true,
+      "result": null,
+      "error": "<WORK>/short.txt:1: expected a BV ID or Bilibili video URL",
+      "created_text": null
+    },
+    {
+      "name": "ipv6",
+      "capture": "ipv6.txt",
+      "expected": 1,
+      "dry_run": true,
+      "result": null,
+      "error": "Invalid IPv6 URL",
+      "created_text": null
+    },
+    {
+      "name": "bom",
+      "capture": "bom.txt",
+      "expected": 1,
+      "dry_run": true,
+      "result": null,
+      "error": "<WORK>/bom.txt:1: expected a BV ID or Bilibili video URL",
+      "created_text": null
+    },
+    {
+      "name": "space",
+      "capture": "space.txt",
+      "expected": 1,
+      "dry_run": true,
+      "result": null,
+      "error": "<WORK>/space.txt:1: expected a BV ID or Bilibili video URL",
+      "created_text": null
+    },
+    {
+      "name": "lowercase",
+      "capture": "lowercase.txt",
+      "expected": 2,
+      "dry_run": true,
+      "result": null,
+      "error": "<WORK>/lowercase.txt:1: expected a BV ID or Bilibili video URL",
+      "created_text": null
+    },
+    {
+      "name": "latin1",
+      "capture": "latin1.txt",
+      "expected": 1,
+      "dry_run": true,
+      "result": null,
+      "error": "'utf-8' codec can't decode byte 0xe9 in position 13: invalid continuation byte",
+      "created_text": null
+    },
+    {
+      "name": "truncated",
+      "capture": "truncated.txt",
+      "expected": 1,
+      "dry_run": true,
+      "result": null,
+      "error": "'utf-8' codec can't decode bytes in position 13-14: unexpected end of data",
+      "created_text": null
+    },
+    {
+      "name": "missing",
+      "capture": "nope/capture.txt",
+      "expected": 1,
+      "dry_run": true,
+      "result": null,
+      "error": "[Errno 2] No such file or directory: '<WORK>/nope/capture.txt'",
+      "created_text": null
+    },
+    {
+      "name": "no-baselines",
+      "capture": "capture.txt",
+      "expected": 6,
+      "dry_run": true,
+      "drop": ["data/video-full.txt", "data/video-sample.txt"],
+      "result": null,
+      "error": "No prepared data/video*.txt lists found; check --root",
+      "created_text": null
+    },
+    {
+      "name": "bad-baseline",
+      "capture": "capture.txt",
+      "expected": 6,
+      "dry_run": true,
+      "extra": {
+        "data/video-bad.txt": "BV1aaaaaaaa1\nnot a url\n"
+      },
+      "result": null,
+      "error": "<WORK>/data/video-bad.txt:2: expected a BV ID or Bilibili video URL",
+      "created_text": null
+    },
+    {
+      "name": "taken",
+      "capture": "capture.txt",
+      "expected": 6,
+      "dry_run": false,
+      "extra": {
+        "data/auto-embed/videos-2026-09-08-100209.txt": "BV1aaaaaaaa1\n"
+      },
+      "result": null,
+      "error": "[Errno 17] File exists: '<WORK>/data/auto-embed/videos-2026-09-08-100209.txt'",
+      "created_text": null
+    }
+  ],
+  "prepare_main": [
+    {
+      "argv": [],
+      "code": 2,
+      "error": "prepare_batch.py: error: the following arguments are required: capture, --expected-count"
+    },
+    {
+      "argv": ["capture.txt"],
+      "code": 2,
+      "error": "prepare_batch.py: error: the following arguments are required: --expected-count"
+    },
+    {
+      "argv": ["--expected-count", "3"],
+      "code": 2,
+      "error": "prepare_batch.py: error: the following arguments are required: capture"
+    },
+    {
+      "argv": ["--expected-count", "x", "capture.txt"],
+      "code": 2,
+      "error": "prepare_batch.py: error: argument --expected-count: invalid int value: 'x'"
+    },
+    {
+      "argv": ["--expected-count", "3", "capture.txt", "extra"],
+      "code": 2,
+      "error": "prepare_batch.py: error: unrecognized arguments: extra"
+    },
+    {
+      "argv": ["--dry-run=1", "--expected-count", "3", "capture.txt"],
+      "code": 2,
+      "error": "prepare_batch.py: error: argument --dry-run: ignored explicit argument '1'"
+    }
+  ]
+}

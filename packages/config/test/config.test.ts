@@ -1,8 +1,10 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  consoleSink,
+  dataHome,
   envFlag,
   envFloat,
   envInt,
@@ -14,11 +16,15 @@ import {
   type LogRecord,
   loadDotenv,
   logger,
+  logToStderr,
   openrouterHeaders,
   PROJECT_ROOT,
   parseDotenv,
   personaTimeZone,
+  pyIsoformatUtc,
   resolveProjectPath,
+  sourceFolder,
+  sourcesDir,
   zonedClock,
 } from "../src/index.ts";
 
@@ -208,6 +214,13 @@ describe("flags, raw values and paths", () => {
     expect(resolveProjectPath("data/lancedb")).toBe(join(PROJECT_ROOT, "data/lancedb"));
     expect(resolveProjectPath("/abs/x")).toBe("/abs/x");
   });
+
+  test("a persona's sources live in the data home, beside the personas", () => {
+    expect(sourcesDir("milky-green")).toBe(join(dataHome(), "sources", "milky-green"));
+    expect(sourceFolder("milky-green", "streams")).toBe(
+      join(dataHome(), "sources", "milky-green", "streams"),
+    );
+  });
 });
 
 describe("persona clock", () => {
@@ -256,6 +269,36 @@ describe("logger", () => {
     }
     expect(seen).toEqual(["WARNING:shown"]);
   });
+
+  test("logToStderr sends every level to stderr", () => {
+    const err: string[] = [];
+    const out: string[] = [];
+    const error = spyOn(console, "error").mockImplementation((line: unknown) => {
+      err.push(String(line));
+    });
+    const log = spyOn(console, "log").mockImplementation((line: unknown) => {
+      out.push(String(line));
+    });
+    try {
+      logToStderr();
+      logger.info("progress");
+      logger.warning("careful");
+    } finally {
+      logger.setSink(consoleSink);
+      error.mockRestore();
+      log.mockRestore();
+    }
+    expect(out).toEqual([]);
+    expect(err.map((line) => line.slice(line.indexOf(" | ") + 3))).toEqual([
+      "INFO     | progress",
+      "WARNING  | careful",
+    ]);
+  });
+});
+
+test("isoformat takes a bigint for instants past 2^53 microseconds", () => {
+  expect(pyIsoformatUtc(253402300799999999n)).toBe("9999-12-31T23:59:59.999999+00:00");
+  expect(pyIsoformatUtc(0)).toBe("1970-01-01T00:00:00+00:00");
 });
 
 describe("openrouter", () => {

@@ -178,9 +178,9 @@ describe("buildSession", () => {
     const transport = new FakeTransport();
     const session = await buildSession(transport, ANONYMOUS, deps);
     expect(sessionLines()).toEqual([
-      "Stream archive disabled: no LanceDB index at /repo/data/lancedb. Run `uv run laplace-ingest-streams` to build it.",
+      "Stream archive disabled: no LanceDB index at /repo/data/lancedb. Run `bun run laplace-ingest-streams --persona milky-green` to build it.",
       "Mem0 skipped: anonymous viewer (no loginSyncToken / validation failed)",
-      "Persona facts disabled: no LanceDB index at /repo/data/lancedb. Run `uv run laplace-ingest-facts` to build it.",
+      "Persona facts disabled: no LanceDB index at /repo/data/lancedb. Run `bun run laplace-ingest-facts --persona milky-green` to build it.",
     ]);
     expect(calls.gates).toBe(0);
     expect(calls.opened).toEqual([]);
@@ -446,9 +446,9 @@ describe("runTransportSession", () => {
       expect(sessionLines()).toEqual([
         "[bot] Session start without loginSyncToken; runner_args.body={'audioQuality': 'medium'}",
         "Starting bot",
-        "Stream archive disabled: no LanceDB index at /repo/data/lancedb. Run `uv run laplace-ingest-streams` to build it.",
+        "Stream archive disabled: no LanceDB index at /repo/data/lancedb. Run `bun run laplace-ingest-streams --persona milky-green` to build it.",
         "Mem0 skipped: anonymous viewer (no loginSyncToken / validation failed)",
-        "Persona facts disabled: no LanceDB index at /repo/data/lancedb. Run `uv run laplace-ingest-facts` to build it.",
+        "Persona facts disabled: no LanceDB index at /repo/data/lancedb. Run `bun run laplace-ingest-facts --persona milky-green` to build it.",
         "Client connected",
         "Client disconnected",
       ]);
