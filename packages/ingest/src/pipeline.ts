@@ -1124,6 +1124,7 @@ export async function planPipeline(persona: string, options: PlanOptions = {}): 
   const history = refine.refineHistory(sidecarStats, refineModel);
   const charsPerChunk = chunks > 0 ? chars / chunks : CHARS_PER_CHUNK;
   const index = await readIndexState(dbPath);
+  signal?.throwIfAborted();
 
   const ordered: { id: string; url?: string; batch?: string }[] = [];
   const seen = new Set<string>();

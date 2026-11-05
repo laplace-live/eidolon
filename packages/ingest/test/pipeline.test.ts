@@ -1103,6 +1103,25 @@ describe("planPipeline", () => {
     expect(await indexed()).toEqual([["BV1aaaaaaaa1", true]]);
   });
 
+  test("a signal that lands while the index is read cancels the plan", async () => {
+    writeVods(join(work, "vods"), { "BV1aaaaaaaa1.m4a": '{"upload_date": "20260801"}' });
+    mkdirSync(join(work, "streams"));
+    const index = join(work, "index");
+    mkdirSync(index);
+    await chunksTable(index);
+    const controller = new AbortController();
+    // No transcripts: the index read is the plan's first await, so this abort lands inside it.
+    const plan = pipeline.planPipeline("milky-green", {
+      vodsDir: join(work, "vods"),
+      streamsDir: join(work, "streams"),
+      listsDir: lists(),
+      dbPath: index,
+      signal: controller.signal,
+    });
+    controller.abort();
+    await expect(plan).rejects.toThrow();
+  });
+
   test("refine's estimate prices by this persona's history for the same model", async () => {
     const id = "2026-08-01-BV1aaaaaaaa1";
     writeVods(join(work, "vods"), {
