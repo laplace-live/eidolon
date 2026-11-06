@@ -7,10 +7,12 @@ import {
   factFileName,
   hasDeliveryCues,
   IMAGE_EXTENSIONS,
+  IMAGE_TYPES,
   imageProblem,
   MAX_IMAGE_BYTES,
   nameProblem,
   previewable,
+  previewUrl,
   renamed,
   stemOf,
   textCounts,
@@ -70,6 +72,20 @@ test("a reference shows when the server would serve its type", () => {
     false,
     false,
   ]);
+});
+
+test("a picked image previews as an object URL of its type; any other file gets none", async () => {
+  for (const type of IMAGE_TYPES) {
+    const url = previewUrl(new File(["pixels"], "friend", { type }));
+    expect(url).toStartWith("blob:");
+    const response = await fetch(url as string);
+    expect([response.headers.get("content-type"), await response.text()]).toEqual([type, "pixels"]);
+    URL.revokeObjectURL(url as string);
+  }
+  for (const type of ["image/svg+xml", "text/html", ""]) {
+    const page = new File(["<svg onload=alert(1)>"], "friend.png", { type });
+    expect(previewUrl(page)).toBeNull();
+  }
 });
 
 test("text counts characters, not UTF-16 units", () => {

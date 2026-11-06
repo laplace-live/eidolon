@@ -7,6 +7,8 @@ const HEADER: typeof PROOF_HEADER = "X-Eidolon-Proof";
 
 /** Kept here as well, for a browser whose storage refuses it. */
 let kept: string | null = null;
+/** Whether storage refused `kept`: whatever it still holds is from an earlier sign-in. */
+let unsaved = false;
 
 /** Per port, as the session cookie is named. */
 function storageKey(): string {
@@ -18,13 +20,17 @@ export function keepProof(proof: string): void {
   kept = proof;
   try {
     globalThis.localStorage?.setItem(storageKey(), proof);
+    unsaved = false;
   } catch {
-    // Storage is off, as in some private windows: the proof lasts until the page reloads.
+    // Storage is off or full, as in some private windows: the proof lasts until the page reloads.
+    unsaved = true;
   }
 }
 
 function storedProof(): string | null {
+  if (unsaved) return kept;
   try {
+    // Storage first while it takes the proof: another tab's sign-in replaces it there.
     return globalThis.localStorage?.getItem(storageKey()) ?? kept;
   } catch {
     return kept;

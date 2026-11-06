@@ -39,6 +39,7 @@ import {
   MAX_IMAGE_BYTES,
   nameProblem,
   previewable,
+  previewUrl,
   renamed,
   stemOf,
 } from "./files";
@@ -255,9 +256,9 @@ function FriendDialog({
   useEffect(() => {
     if (file === null) return;
     setName(stemOf(file.name));
-    const objectUrl = URL.createObjectURL(file);
+    const objectUrl = previewUrl(file);
     setPreview(objectUrl);
-    return () => URL.revokeObjectURL(objectUrl);
+    if (objectUrl !== null) return () => URL.revokeObjectURL(objectUrl);
   }, [file]);
   const target = file === null ? "" : renamed(file.name, name);
   const problem = file === null || name.trim() === "" ? null : uploadProblem(file, target, lang);

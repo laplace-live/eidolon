@@ -1,7 +1,6 @@
 // GET status, which the home page polls, so every part of it is local and cheap. Qdrant and the
 // persona's voice are checked in the background and reported from the last answer; the tools on
 // PATH are looked up at most once a minute.
-import { createHash } from "node:crypto";
 import { existsSync, statfsSync, statSync } from "node:fs";
 import { activePersona, dataHome, envOptional, envOverride, logger } from "@eidolon/config";
 import { referenceCandidates } from "@eidolon/imagegen";
@@ -65,11 +64,11 @@ export function recordQdrant(
 
 /**
  * What a voice answer is about: the voice, and the key that asked, since a voice another account
- * owns is private to every other key. The key stands in as a prefix of its SHA-256.
+ * owns is private to every other key. The key itself, unhashed: the cache stays in this process,
+ * and only an answer's `ok` leaves it.
  */
 function voiceKey(voiceId: string, key: string): string {
-  const fingerprint = createHash("sha256").update(key, "utf8").digest("hex").slice(0, 16);
-  return `${voiceId}:${fingerprint}`;
+  return `${voiceId}:${key}`;
 }
 
 /** Whether `key` is still the Fish key calls use: an answer for one replaced meanwhile is dropped. */

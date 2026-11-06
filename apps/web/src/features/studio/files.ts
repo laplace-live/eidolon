@@ -57,6 +57,18 @@ export function imageProblem(file: Pick<File, "type" | "size">): ImageProblem | 
   return file.size > MAX_IMAGE_BYTES ? "size" : null;
 }
 
+/**
+ * An object URL showing `file` before its upload, typed as one of IMAGE_TYPES; null for a file of
+ * any other type. The URL is this page's origin, so one of an SVG or HTML file, opened in a tab,
+ * would be a page of the app.
+ */
+export function previewUrl(file: Blob): string | null {
+  const type = IMAGE_TYPES.find((allowed) => allowed === file.type);
+  // A Blob of the list's type, not the file: CodeQL's js/xss-through-dom traces an object URL of
+  // the file itself back to the <input> that picked it.
+  return type === undefined ? null : URL.createObjectURL(new Blob([file], { type }));
+}
+
 export interface TextCounts {
   /** Unicode characters, so a Chinese character counts once. */
   readonly chars: number;

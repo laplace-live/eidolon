@@ -150,6 +150,13 @@ describe("the local entries", () => {
       ]);
     }
   });
+
+  test("hash no key: only token.ts digests, to compare its random secret in constant time", () => {
+    const hashing = sources(LOCAL_SRC)
+      .filter((file) => /\b(createHash|CryptoHasher)\b/.test(readFileSync(file, "utf8")))
+      .map((file) => relative(LOCAL_SRC, file));
+    expect(hashing).toEqual(["token.ts"]);
+  });
 });
 
 describe("the SPA's leaves", () => {

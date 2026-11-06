@@ -229,6 +229,7 @@ describe("GET status", () => {
     await until(() => buildStatus(app, deps).persona.voice.ok === true);
     expect(keys).toEqual(["Bearer fk-other-account", "Bearer fk-owner"]);
     expect(logs.lines().join("\n")).not.toContain("fk-");
+    expect(JSON.stringify(buildStatus(app, deps))).not.toContain("fk-");
   });
 
   test("an answer for a key replaced while Fish answered is dropped", async () => {
