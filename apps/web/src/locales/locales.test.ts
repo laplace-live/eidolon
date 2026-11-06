@@ -5,7 +5,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { SETTINGS } from "@eidolon/config";
 import { EVENT_CODES } from "@eidolon/ingest/progress";
-import { ERROR_CODES } from "../../../bot/src/local/api.ts";
+import { CHECK_CODES, CHECK_WARNINGS, ERROR_CODES } from "../../../bot/src/local/api.ts";
 import { CLIENT_ERROR_CODES } from "../lib/api";
 import { buildCatalogs, type Catalog, LANGS, placeholders } from "../lib/i18n";
 
@@ -75,6 +75,16 @@ test("every EventCode a job reports has a string", () => {
 test("every error code the API sends or the client makes up, and the fallback, has a string", () => {
   const codes = [...ERROR_CODES, ...CLIENT_ERROR_CODES, "unknown"];
   expect(missing(codes.map((code) => `errors.${code}`))).toEqual(nothingMissing);
+});
+
+test("every provider check's verdict and warning, and the fallbacks, has a string", () => {
+  const keys = [
+    ...CHECK_CODES.map((code) => `settings.check.${code}`),
+    ...CHECK_WARNINGS.map((code) => `settings.check.warning.${code}`),
+    "settings.check.passed",
+    "settings.check.failed",
+  ];
+  expect(missing(keys)).toEqual(nothingMissing);
 });
 
 test("every SETTINGS row has a title", () => {

@@ -313,6 +313,13 @@ describe("mistakes", () => {
     expect(warnings[1]).toStartWith(`Ignoring ${path}: `);
   });
 
+  test("credentials.json that isn't JSON is logged as that alone, never quoting a key", () => {
+    const path = write("credentials.json", '{"SONIOX_API_KEY": sk-soniox-secret, "x": 1}');
+    chmodSync(path, 0o600);
+    expect(loadSettings().values.has("SONIOX_API_KEY")).toBe(false);
+    expect(warnings).toEqual([`Ignoring ${path}: not valid JSON`]);
+  });
+
   test("malformed YAML counts as empty", () => {
     const templateOnly = [...loadSettings().values];
     const path = write("settings.yaml", "access: [unclosed\n");

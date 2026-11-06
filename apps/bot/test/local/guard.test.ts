@@ -63,7 +63,13 @@ const ROUTES: readonly Route[] = [
   { method: "GET", path: "/api/memories", session: true, api: true },
   { method: "POST", path: "/api/memories/forget", session: true, api: true, body: "{}" },
   { method: "GET", path: "/api/local/status", session: true, api: true },
-  { method: "PUT", path: "/api/local/settings", session: true, api: true, body: "{}" },
+  {
+    method: "PUT",
+    path: "/api/local/settings",
+    session: true,
+    api: true,
+    body: '{"scope":"app","values":{}}',
+  },
 ];
 
 function send(
@@ -161,7 +167,7 @@ describe("Origin and Sec-Fetch-Site on the API", () => {
       }
     }
     const typed = await send(ROUTES[12] as Route, signedIn({ "Sec-Fetch-Site": "none" }));
-    expect(typed.status).toBe(501);
+    expect(typed.status).toBe(200);
   });
 
   test("the web app's pages are served whatever Origin or Sec-Fetch-Site say", async () => {
@@ -198,8 +204,8 @@ describe("the session", () => {
       ["POST /api/offer/preflight", 200],
       ["GET /api/memories", 200],
       ["POST /api/memories/forget", 200],
-      ["GET /api/local/status", 501],
-      ["PUT /api/local/settings", 501],
+      ["GET /api/local/status", 200],
+      ["PUT /api/local/settings", 200],
     ]);
   });
 

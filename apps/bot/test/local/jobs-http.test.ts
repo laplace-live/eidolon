@@ -2,7 +2,7 @@
 // and its offsets, the log, cancelling, resuming, batches, and paths that try to leave the folder.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataHome, sourceFolder } from "@eidolon/config";
 import type { BatchResponse, ErrorBody, JobSnapshot } from "../../src/local/api.ts";
@@ -263,6 +263,58 @@ test("GET jobs/:id/log is the job's stderr as plain text", async () => {
   expect(text.endsWith("TypeError: boom\n")).toBe(true);
 });
 
+test("GET jobs/:id/log answers a long log's last MiB, from a whole line, saying so", async () => {
+  const started = await job(REFINE);
+  await server.settled(started.id);
+  const lines = Array.from({ length: 30_000 }, (_, i) => `line ${i} ${"x".repeat(60)}\n`);
+  const log = lines.join("");
+  writeFileSync(join(dataHome(), "jobs", `${started.id}.log`), log);
+  const text = await (await server.call("GET", `/api/local/jobs/${started.id}/log`)).text();
+  const [note, ...rest] = text.split("\n");
+  const kept = rest.join("\n");
+  expect(Buffer.byteLength(kept)).toBeLessThanOrEqual(1024 * 1024);
+  expect(Buffer.byteLength(kept)).toBeGreaterThan(1024 * 1024 - 100);
+  expect(log.endsWith(kept)).toBe(true);
+  expect(kept.startsWith("line ")).toBe(true);
+  expect(note).toBe(
+    `[The first ${Buffer.byteLength(log) - Buffer.byteLength(kept)} bytes of this log are left out.]`,
+  );
+});
+
+test("the route table is built without the data home; the first request loads the jobs", async () => {
+  await server.close();
+  rmSync(dataHome(), { recursive: true, force: true });
+  server = serveJobs();
+  expect(existsSync(dataHome())).toBe(false);
+  await server.close();
+
+  const plan = "20261105T120000-ABCDEF";
+  mkdirSync(join(dataHome(), "jobs"), { recursive: true });
+  const record = join(dataHome(), "jobs", `${plan}.json`);
+  writeFileSync(
+    record,
+    JSON.stringify({
+      id: plan,
+      command: "plan",
+      persona: "milky-green",
+      options: {},
+      status: "succeeded",
+      startedAt: new Date().toISOString(),
+      endedAt: new Date().toISOString(),
+      exitCode: 0,
+      ephemeral: true,
+      resumedFrom: null,
+      resumedBy: null,
+      pid: null,
+    }),
+  );
+  server = serveJobs();
+  expect(existsSync(record)).toBe(true);
+  // A runner drops an earlier start's plans as it loads.
+  expect(await (await server.call("GET", "/api/local/jobs")).json()).toEqual([]);
+  expect(existsSync(record)).toBe(false);
+});
+
 describe("DELETE jobs/:id", () => {
   test("stops a running job: 202 while it stops, then cancelled", async () => {
     const started = await job(REFINE, "slow");
@@ -273,15 +325,51 @@ describe("DELETE jobs/:id", () => {
       ).json()) as JobSnapshot;
       return snapshot.stages.length > 0;
     });
+    expect(started.signalable).toBe(true);
     const response = await server.call("DELETE", `/api/local/jobs/${started.id}`);
     expect(response.status).toBe(202);
-    expect(await response.json()).toMatchObject({ status: "running", stopping: true });
-    expect(await server.settled(started.id)).toMatchObject({ status: "cancelled", stopping: true });
+    expect(await response.json()).toMatchObject({
+      status: "running",
+      stopping: true,
+      signalable: true,
+    });
+    expect(await server.settled(started.id)).toMatchObject({
+      status: "cancelled",
+      stopping: false,
+      signalable: false,
+    });
     const again = await server.call("DELETE", `/api/local/jobs/${started.id}`);
     expect([again.status, ((await again.json()) as ErrorBody).error.code]).toEqual([
       409,
       "job-not-running",
     ]);
+  });
+
+  test("?force=1 kills a job a first DELETE is stopping; anything else is 400", async () => {
+    const started = await job(REFINE, "stubborn");
+    await until(async () => {
+      const snapshot = (await (
+        await server.call("GET", `/api/local/jobs/${started.id}`)
+      ).json()) as JobSnapshot;
+      return snapshot.stages.length > 0;
+    });
+    const refused = await server.call("DELETE", `/api/local/jobs/${started.id}?force=true`);
+    expect([refused.status, ((await refused.json()) as ErrorBody).error.code]).toEqual([
+      400,
+      "bad-request",
+    ]);
+    expect((await server.call("DELETE", `/api/local/jobs/${started.id}`)).status).toBe(202);
+    await Bun.sleep(200);
+    const ignored = (await (
+      await server.call("GET", `/api/local/jobs/${started.id}`)
+    ).json()) as JobSnapshot;
+    expect(ignored).toMatchObject({ status: "running", stopping: true, signalable: true });
+    expect((await server.call("DELETE", `/api/local/jobs/${started.id}?force=1`)).status).toBe(202);
+    expect(await server.settled(started.id)).toMatchObject({
+      status: "cancelled",
+      exitCode: 137,
+      summarySeen: false,
+    });
   });
 
   test("an unknown id is 404, and anything that isn't an id is 400", async () => {
@@ -294,7 +382,7 @@ describe("DELETE jobs/:id", () => {
     expect(bad.status).toBe(400);
   });
 
-  test("a stale record naming a live, unrelated process is 409, and the process survives", async () => {
+  test("an earlier server's job, left stopping, isn't signalable: a cancel, forced or not, is 409", async () => {
     await server.close();
     const stranger = Bun.spawn(["sleep", "30"]);
     try {
@@ -308,21 +396,31 @@ describe("DELETE jobs/:id", () => {
           persona: "milky-green",
           options: {},
           status: "running",
-          startedAt: "2026-11-05T12:00:00.000Z",
+          // Since this boot: an earlier one's job would be gone, whatever its pid names now.
+          startedAt: new Date().toISOString(),
           endedAt: null,
           exitCode: null,
           ephemeral: false,
           resumedFrom: null,
           resumedBy: null,
+          // A stale record naming a live, unrelated process, which must survive.
           pid: stranger.pid,
+          stopReason: "shutdown",
         }),
       );
       server = serveJobs();
-      const response = await server.call("DELETE", `/api/local/jobs/${id}`);
-      expect([response.status, ((await response.json()) as ErrorBody).error.code]).toEqual([
-        409,
-        "conflict",
-      ]);
+      expect(await (await server.call("GET", `/api/local/jobs/${id}`)).json()).toMatchObject({
+        status: "running",
+        stopping: true,
+        signalable: false,
+      });
+      for (const query of ["", "?force=1"]) {
+        const response = await server.call("DELETE", `/api/local/jobs/${id}${query}`);
+        expect([response.status, ((await response.json()) as ErrorBody).error.code]).toEqual([
+          409,
+          "conflict",
+        ]);
+      }
       await Bun.sleep(100);
       expect(isAlive(stranger.pid)).toBe(true);
       expect(stranger.exitCode).toBeNull();

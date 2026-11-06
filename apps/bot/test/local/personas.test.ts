@@ -14,6 +14,8 @@ import {
   sourceFolder,
   templatesDir,
 } from "@eidolon/config";
+import { referenceSources } from "@eidolon/imagegen";
+import { selfieReferenceCount } from "../../src/local/personas.ts";
 import { MAX_UPLOAD_BYTES } from "../../src/local/routes/personas.ts";
 import { type CapturedLogs, captureLogs } from "../fakes.ts";
 import { type Booted, bootFixture, cleanUpBoot, fakeModules, raw } from "./harness.ts";
@@ -279,7 +281,15 @@ describe("prompt, glossary and identity", () => {
     expect([read.body.source, read.body.errors]).toEqual(["template", []]);
     const broken = await call("PUT", `/personas/${MILKY}/glossary`, { text: "terms = [1,\n" });
     expect([broken.status, broken.body.error.code]).toEqual([400, "invalid-toml"]);
-    expect(broken.body.error.message).toMatch(/^line \d+, column \d+: /);
+    expect(broken.body.error.message).toBe("line 1, column 12: Unterminated array; expected ']'");
+    // The place in the TOML, counted in characters, never this server's own source position.
+    for (const [text, message] of [
+      ["a = 1\n\n  b = = 2\n", "line 3, column 7: Expected a value but found '='"],
+      ['"名字" = "奶绿"\n"别名" = = "x"\n', "line 2, column 8: Expected a value but found '='"],
+    ] as const) {
+      const refused = await call("PUT", `/personas/${MILKY}/glossary`, { text });
+      expect([refused.status, refused.body.error.message]).toEqual([400, message]);
+    }
     expect(existsSync(join(personaHomeDir(MILKY), "glossary.toml"))).toBe(false);
     const shaped = await call("PUT", `/personas/${MILKY}/glossary`, { text: 'terms = "x"\n' });
     expect(shaped.status).toBe(200);
@@ -440,7 +450,8 @@ describe("references and the avatar", () => {
     expect(png.body).toEqual({ name: "avatar.png", source: "own", size: PNG.length });
     const jpeg = await call("PUT", `/personas/${MILKY}/avatar`, JPEG, "image/jpeg");
     expect(jpeg.body.name).toBe("avatar.jpg");
-    expect(readdirSync(join(personaHomeDir(MILKY), "references"))).toEqual(["avatar.jpg"]);
+    // At the root of her folder, beside persona.yaml, and the only one.
+    expect(readdirSync(personaHomeDir(MILKY))).toEqual(["avatar.jpg"]);
     const served = await api("GET", `/personas/${MILKY}/avatar?v=2`);
     expect([served.status, served.headers.get("content-type")]).toEqual([200, "image/jpeg"]);
     const listed = await call("GET", `/personas/${MILKY}/references`);
@@ -450,6 +461,16 @@ describe("references and the avatar", () => {
     expect(
       (await call("PUT", `/personas/${MILKY}/avatar`, new TextEncoder().encode("<svg/>"))).status,
     ).toBe(415);
+  });
+
+  test("an avatar alone turns on no selfies: the selfie tool finds no outfit", async () => {
+    await call("POST", "/personas", NEW_PERSONA);
+    await call("PUT", "/personas/active", { id: "aria" });
+    expect((await call("PUT", "/personas/aria/avatar", PNG)).status).toBe(200);
+    expect(activePersona().id).toBe("aria");
+    expect(referenceSources()).toEqual([]);
+    // What GET status reports.
+    expect(selfieReferenceCount()).toBe(0);
   });
 });
 

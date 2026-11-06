@@ -7,6 +7,8 @@ import {
   isFinished,
   isKnown,
   needsFfmpeg,
+  PAID_STAGES,
+  paidRunOptions,
   parseLinks,
   planTotals,
   runBatch,
@@ -144,6 +146,20 @@ describe("a plan's videos", () => {
     ).toBe("videos-2");
     expect(runBatch([video("a")], null)).toBeNull();
     expect(runBatch([], "videos-new")).toBeNull();
+  });
+
+  test("a paid run without a batch runs the paid stages alone, over hand-made lists' videos", () => {
+    const listed = [video("a", { transcribe: "pending", refine: null, indexed: false })];
+    expect(paidRunOptions(listed, null, 4)).toEqual({
+      stages: ["transcribe", "refine", "ingest"],
+      transcribeConcurrency: 4,
+    });
+    expect(PAID_STAGES).not.toContain("download");
+    const batched = [...listed, video("b", { batch: "videos-1" })];
+    expect(paidRunOptions(batched, null, 6)).toEqual({
+      batch: "videos-1",
+      transcribeConcurrency: 6,
+    });
   });
 
   test("totals add up the work and the estimates, and count what can't be priced", () => {

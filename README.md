@@ -20,6 +20,19 @@ transport.input → STT → user_aggregator → RetrievalGate
     → LLM → TTS → transport.output → assistant_aggregator
 ```
 
+## Quick start
+
+```bash
+bun install
+bun run app
+```
+
+That builds and opens the local web app, which runs on your computer only: a wizard for your
+Soniox, OpenRouter and Fish Audio keys, the 明前奶绿 demo or a persona of your own built from her
+prompt, facts and stream videos, and a page to call her. The terminal prints the link that signs
+your browser in. How it works, and how it stays out of a deployed bot, is in
+[`docs/web-app.md`](docs/web-app.md).
+
 ## Stack
 
 | Layer            | Service                                                                   |
@@ -56,7 +69,8 @@ the bot at the container above; leave it blank and the bot boots normally with
 memory switched off.
 
 The bot serves no UI. The web client is LAPLACE's `/ai` page, whose settings
-take a custom backend URL such as `http://localhost:7860`. To hold a scripted
+take a custom backend URL such as `http://localhost:7860`; the local web app
+(`bun run app`) is a separate entry point with its own pages. To hold a scripted
 call instead, run `bun apps/bot/scripts/e2e-call.ts --text` (or `--audio`).
 How the port is laid out and what keeps it working is in
 [`docs/typescript.md`](docs/typescript.md).

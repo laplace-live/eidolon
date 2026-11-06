@@ -179,7 +179,7 @@ export function AddVideos({
         );
         if (signal.aborted) break;
         const ended = await refreshJob(queryClient, job.id);
-        const outcome = jobOutcome(view, ended);
+        const outcome = jobOutcome(ended);
         update(
           at,
           outcome === "succeeded"

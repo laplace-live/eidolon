@@ -18,9 +18,16 @@ export function mintJobId(now: Date): string {
   return `${stamp}-${suffix}`;
 }
 
-/** A record as its file holds it: the pid lets a later server tell whether the job still runs. */
+/** Why the server told a job to stop: a cancel from the app, or the server itself stopping. */
+export type StopReason = "cancel" | "shutdown";
+
+/**
+ * A record as its file holds it: the pid lets a later server tell whether the job still runs, and
+ * the stop reason, saved before the signal, how a job told to stop ended.
+ */
 export interface StoredJob extends JobRecord {
   readonly pid: number | null;
+  readonly stopReason: StopReason | null;
 }
 
 export function jobsDir(): string {
@@ -87,7 +94,7 @@ const STATUSES: readonly JobStatus[] = [
 
 function recordOf(id: string, value: unknown): StoredJob | null {
   if (!isPlainObject(value) || value.id !== id) return null;
-  const { command, persona, options, status, startedAt, ephemeral, pid } = value;
+  const { command, persona, options, status, startedAt, ephemeral, pid, stopReason } = value;
   if (
     !(JOB_COMMANDS as readonly unknown[]).includes(command) ||
     typeof persona !== "string" ||
@@ -113,6 +120,7 @@ function recordOf(id: string, value: unknown): StoredJob | null {
     resumedBy: text(value.resumedBy),
     // Only ever probed with signal 0, where 0 and 1 would name this process group and init.
     pid: typeof pid === "number" && Number.isInteger(pid) && pid > 1 ? pid : null,
+    stopReason: stopReason === "cancel" || stopReason === "shutdown" ? stopReason : null,
   };
 }
 

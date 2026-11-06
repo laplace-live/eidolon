@@ -1,6 +1,7 @@
 // /api/local/jobs: the offline chain's commands as child processes, and the URL batches they read.
 import { statSync } from "node:fs";
 import { JobRefused, type JobSpec, parseJobRequest } from "../jobs/argv.ts";
+import { endOf } from "../jobs/events.ts";
 import { PlanCache } from "../jobs/plan.ts";
 import { type Job, JobRunner, type JobRunnerOptions } from "../jobs/runner.ts";
 import { JOB_ID, jobFiles } from "../jobs/store.ts";
@@ -9,6 +10,8 @@ import type { LocalApp, LocalRouteSpec } from "../router.ts";
 import { batchesRoutes } from "./batches.ts";
 
 const JOB_BODY_LIMIT = 16 * 1024;
+/** Past this, GET log answers with the log's end. */
+const LOG_LIMIT_BYTES = 1024 * 1024;
 
 /** The job a path's `:id` names, or the 400 or 404 to answer; ids are only ever looked up. */
 function lookup(runner: JobRunner, id: string | undefined): Job | Response {
@@ -28,12 +31,28 @@ function parsed(body: unknown): JobSpec | Response {
   }
 }
 
+interface Jobs {
+  readonly runner: JobRunner;
+  readonly plans: PlanCache;
+}
+
 export function jobsRoutes(app: LocalApp, options: JobRunnerOptions = {}): LocalRouteSpec[] {
-  const runner = new JobRunner(options);
-  const plans = new PlanCache(runner);
-  app.onStop(() => runner.stop());
+  // Made by the first request that needs it: the runner starts by settling the jobs on disk,
+  // which building the route table must leave alone.
+  let made: Jobs | null = null;
+  const jobs = (): Jobs => {
+    if (made === null) {
+      const runner = new JobRunner(options);
+      made = { runner, plans: new PlanCache(runner) };
+    }
+    return made;
+  };
+  app.onStop(async () => {
+    await made?.runner.stop();
+  });
 
   const run = (spec: JobSpec, resumedFrom: string | null = null): Response => {
+    const { runner, plans } = jobs();
     const job = runner.start(spec, resumedFrom);
     if (spec.command === "plan") plans.remember(job);
     return localJson(201, runner.snapshot(job));
@@ -48,6 +67,7 @@ export function jobsRoutes(app: LocalApp, options: JobRunnerOptions = {}): Local
         const spec = parsed(body.value);
         if (spec instanceof Response) return spec;
         if (spec.command === "plan" && spec.options.refresh !== true) {
+          const { runner, plans } = jobs();
           const cached = plans.reusable(spec.persona);
           if (cached !== null) return localJson(200, runner.snapshot(cached));
         }
@@ -56,11 +76,12 @@ export function jobsRoutes(app: LocalApp, options: JobRunnerOptions = {}): Local
     },
     {
       route: "GET /api/local/jobs",
-      handler: () => localJson(200, runner.list()),
+      handler: () => localJson(200, jobs().runner.list()),
     },
     {
       route: "GET /api/local/jobs/:id",
       handler(_request, { params }) {
+        const { runner } = jobs();
         const job = lookup(runner, params.id);
         return job instanceof Response ? job : localJson(200, runner.snapshot(job));
       },
@@ -68,6 +89,7 @@ export function jobsRoutes(app: LocalApp, options: JobRunnerOptions = {}): Local
     {
       route: "GET /api/local/jobs/:id/events",
       handler(_request, { params, url }) {
+        const { runner } = jobs();
         const job = lookup(runner, params.id);
         if (job instanceof Response) return job;
         const after = url.searchParams.get("after") ?? "0";
@@ -87,11 +109,10 @@ export function jobsRoutes(app: LocalApp, options: JobRunnerOptions = {}): Local
     },
     {
       route: "GET /api/local/jobs/:id/log",
-      async handler(_request, { params }) {
-        const job = lookup(runner, params.id);
+      handler(_request, { params }) {
+        const job = lookup(jobs().runner, params.id);
         if (job instanceof Response) return job;
-        const log = Bun.file(jobFiles(job.record.id).log);
-        return new Response((await log.exists()) ? log : "", {
+        return new Response(endOf(jobFiles(job.record.id).log, LOG_LIMIT_BYTES), {
           headers: {
             "content-type": "text/plain; charset=utf-8",
             "x-content-type-options": "nosniff",
@@ -101,10 +122,15 @@ export function jobsRoutes(app: LocalApp, options: JobRunnerOptions = {}): Local
     },
     {
       route: "DELETE /api/local/jobs/:id",
-      handler(_request, { params }) {
+      handler(_request, { params, url }) {
+        const force = url.searchParams.get("force");
+        if (force !== null && force !== "1") {
+          return localError(400, "bad-request", "`force` is 1, or left out");
+        }
+        const { runner } = jobs();
         const job = lookup(runner, params.id);
         if (job instanceof Response) return job;
-        const outcome = runner.cancel(job);
+        const outcome = runner.cancel(job, force === "1");
         if (outcome === "ended") {
           return localError(409, "job-not-running", "The job has ended already");
         }
@@ -121,7 +147,7 @@ export function jobsRoutes(app: LocalApp, options: JobRunnerOptions = {}): Local
     {
       route: "POST /api/local/jobs/:id/resume",
       handler(_request, { params }) {
-        const job = lookup(runner, params.id);
+        const job = lookup(jobs().runner, params.id);
         if (job instanceof Response) return job;
         const { record } = job;
         if (record.status === "running" || record.status === "succeeded") {
@@ -142,6 +168,7 @@ export function jobsRoutes(app: LocalApp, options: JobRunnerOptions = {}): Local
         return spec instanceof Response ? spec : run(spec, record.id);
       },
     },
-    ...batchesRoutes(plans),
+    // No plan is cached before the runner exists.
+    ...batchesRoutes((persona) => made?.plans.forget(persona)),
   ];
 }

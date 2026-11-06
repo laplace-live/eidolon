@@ -4,7 +4,6 @@ import { basename } from "node:path";
 import { errorText, isPlainObject, sourceFolder } from "@eidolon/config";
 import { download } from "@eidolon/ingest";
 import { checkPersona, checkUrl, JobRefused } from "../jobs/argv.ts";
-import type { PlanCache } from "../jobs/plan.ts";
 import { localError, localJson, readJson } from "../responses.ts";
 import type { LocalRouteSpec } from "../router.ts";
 import { ensureDataHome } from "../write.ts";
@@ -15,8 +14,9 @@ export const MAX_BATCH_URLS = 5000;
 // The errors reading a list throws: its line that names no video, or its bytes.
 const LIST_ERRORS = new Set(["ValueError", "UnicodeDecodeError"]);
 
+/** `forgetPlan` drops the persona's cached plan, which a new batch outdates. */
 export function batchesRoutes(
-  plans: PlanCache,
+  forgetPlan: (persona: string) => void,
   now: () => Date = () => new Date(),
 ): LocalRouteSpec[] {
   return [
@@ -86,7 +86,7 @@ export function batchesRoutes(
           }
           throw error;
         }
-        plans.forget(persona);
+        forgetPlan(persona);
         return localJson(201, {
           batch: basename(path, ".txt"),
           count: fresh.length,

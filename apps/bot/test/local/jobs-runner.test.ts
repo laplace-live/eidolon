@@ -13,6 +13,7 @@ import {
   utimesSync,
   writeFileSync,
 } from "node:fs";
+import { uptime } from "node:os";
 import { join } from "node:path";
 import { dataHome } from "@eidolon/config";
 import type { JobCommand, JobStatus } from "../../src/local/api.ts";
@@ -81,6 +82,8 @@ describe("a job's run", () => {
       exitCode: 0,
       ephemeral: false,
       stopping: false,
+      signalable: false,
+      summarySeen: true,
       resumedFrom: null,
       resumedBy: null,
       failures: [],
@@ -98,10 +101,15 @@ describe("a job's run", () => {
       },
     ]);
     expect(snapshot.stderrTail).toContain("fake CLI ok ingest-facts");
-    expect("pid" in snapshot).toBe(false);
+    expect(["pid" in snapshot, "stopReason" in snapshot]).toEqual([false, false]);
     // The record on disk holds the pid, for a later server to check on.
     const stored = JSON.parse(readFileSync(files.record, "utf8")) as StoredJob;
-    expect(stored).toMatchObject({ status: "succeeded", exitCode: 0, pid: job.record.pid });
+    expect(stored).toMatchObject({
+      status: "succeeded",
+      exitCode: 0,
+      pid: job.record.pid,
+      stopReason: null,
+    });
     expect(stored.pid).toBeGreaterThan(1);
   });
 
@@ -194,7 +202,7 @@ describe("a job's run", () => {
     const job = start(jobs, "crash");
     await job.ended;
     const snapshot = jobs.snapshot(job);
-    expect(snapshot).toMatchObject({ status: "failed", exitCode: 1 });
+    expect(snapshot).toMatchObject({ status: "failed", exitCode: 1, summarySeen: false });
     const tail = snapshot.stderrTail.split("\n");
     expect(tail).toHaveLength(40);
     expect(tail[0]).toBe("trace line 22");
@@ -207,6 +215,20 @@ describe("a job's run", () => {
     await plan.ended;
     expect(jobs.snapshot(plan)).toMatchObject({ ephemeral: true, status: "succeeded" });
   });
+
+  test("a job inherits the server's environment, EIDOLON_NO_DOTENV with it", async () => {
+    mkdirSync(dataHome(), { recursive: true });
+    const child = Bun.spawn(
+      [process.execPath, "--no-env-file", join(import.meta.dir, "jobs-env-child.ts")],
+      {
+        env: { PATH: process.env.PATH ?? "", EIDOLON_HOME: dataHome(), EIDOLON_NO_DOTENV: "1" },
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const [out, code] = await Promise.all([new Response(child.stdout).text(), child.exited]);
+    expect([code, /^job saw (.*)$/m.exec(out)?.[1]]).toEqual([0, '"1"']);
+  });
 });
 
 describe("cancelling", () => {
@@ -214,28 +236,57 @@ describe("cancelling", () => {
     const jobs = runner();
     const job = start(jobs, "slow");
     await until(() => jobs.snapshot(job).stages.length > 0);
+    expect(jobs.snapshot(job)).toMatchObject({ stopping: false, signalable: true });
     expect(jobs.cancel(job)).toBe("stopping");
-    expect(jobs.snapshot(job)).toMatchObject({ status: "running", stopping: true });
+    expect(jobs.snapshot(job)).toMatchObject({
+      status: "running",
+      stopping: true,
+      signalable: true,
+    });
     // A second request must not send a second SIGTERM, which makes the CLI quit at once.
     expect(jobs.cancel(job)).toBe("stopping");
     await job.ended;
     const snapshot = jobs.snapshot(job);
-    expect(snapshot).toMatchObject({ status: "cancelled", exitCode: 143, stopping: true });
+    expect(snapshot).toMatchObject({
+      status: "cancelled",
+      exitCode: 143,
+      stopping: false,
+      signalable: false,
+    });
     expect(snapshot.stderrTail).toContain("SIGTERM 1");
     expect(snapshot.stderrTail).not.toContain("SIGTERM 2");
     expect(jobs.cancel(job)).toBe("ended");
+    const stored = JSON.parse(readFileSync(jobFiles(job.record.id).record, "utf8")) as StoredJob;
+    expect(stored).toMatchObject({ status: "cancelled", stopReason: "cancel" });
   });
 
-  test("kills the whole process group when the job outlasts the grace period", async () => {
-    const jobs = runner({ killAfterMs: 200 });
+  test("never kills on a timer; a forced repeat kills the whole process group", async () => {
+    const jobs = runner();
     const job = start(jobs, "stubborn");
     await until(() => jobs.snapshot(job).stages.length > 0);
     const grandchild = Number(firstMessage(job));
+    expect(jobs.cancel(job)).toBe("stopping");
+    await Bun.sleep(300);
+    expect(jobs.snapshot(job)).toMatchObject({ status: "running", stopping: true });
     expect(isAlive(grandchild)).toBe(true);
-    jobs.cancel(job);
+    expect(jobs.cancel(job, true)).toBe("stopping");
     await job.ended;
-    expect(jobs.snapshot(job)).toMatchObject({ status: "cancelled", exitCode: 137 });
+    expect(jobs.snapshot(job)).toMatchObject({
+      status: "cancelled",
+      exitCode: 137,
+      stopping: false,
+      summarySeen: false,
+    });
     await until(() => !isAlive(grandchild));
+  });
+
+  test("force asks first: on a job not yet stopping it sends SIGTERM alone", async () => {
+    const jobs = runner();
+    const job = start(jobs, "slow");
+    await until(() => jobs.snapshot(job).stages.length > 0);
+    expect(jobs.cancel(job, true)).toBe("stopping");
+    await job.ended;
+    expect(jobs.snapshot(job)).toMatchObject({ status: "cancelled", exitCode: 143 });
   });
 
   test("an events stream stops reading once its client goes away", async () => {
@@ -259,15 +310,49 @@ describe("cancelling", () => {
     expect(jobs.streaming).toBe(1);
     await jobs.stop();
     expect(jobs.streaming).toBe(0);
-    expect(jobs.snapshot(job).status).toBe("cancelled");
+    // Stopped by the server, not by the viewer: it resumes.
+    expect(jobs.snapshot(job)).toMatchObject({ status: "interrupted", exitCode: 143 });
     for (;;) if ((await reader.read()).done) break;
+  });
+
+  test("a stop kills nothing: a job still busy runs on, and the next server ends it interrupted", async () => {
+    const jobs = runner();
+    const job = start(jobs, "stubborn");
+    await until(() => jobs.snapshot(job).stages.length > 0);
+    const pid = job.record.pid as number;
+    try {
+      await jobs.stop();
+      expect(isAlive(pid)).toBe(true);
+      const stored = JSON.parse(readFileSync(jobFiles(job.record.id).record, "utf8")) as StoredJob;
+      expect(stored).toMatchObject({ status: "running", stopReason: "shutdown" });
+      const next = runner();
+      const watched = next.find(job.record.id) as Job;
+      // Still stopping, but the next server never signals what it didn't spawn, forced or not.
+      expect(next.snapshot(watched)).toMatchObject({
+        status: "running",
+        stopping: true,
+        signalable: false,
+      });
+      expect(next.cancel(watched, true)).toBe("not-ours");
+      await Bun.sleep(60);
+      expect(isAlive(pid)).toBe(true);
+      process.kill(-pid, "SIGKILL");
+      await until(() => next.snapshot(watched).status !== "running");
+      expect(next.snapshot(watched).status).toBe("interrupted");
+    } finally {
+      try {
+        process.kill(-pid, "SIGKILL");
+      } catch {
+        // Gone already.
+      }
+    }
   });
 });
 
 describe("what a restart finds", () => {
   let next = 0;
 
-  /** A record as an earlier server left it, with events and a log. */
+  /** A record as an earlier server left it, with events and a log; started since this boot. */
   function leave(fields: Partial<StoredJob>, events: object[] = []): StoredJob {
     next++;
     const record: StoredJob = {
@@ -276,13 +361,14 @@ describe("what a restart finds", () => {
       persona: "milky-green",
       options: {},
       status: "running",
-      startedAt: new Date(Date.UTC(2026, 10, 5, 12, 0, next)).toISOString(),
+      startedAt: new Date(Date.now() - 1000 + next).toISOString(),
       endedAt: null,
       exitCode: null,
       ephemeral: false,
       resumedFrom: null,
       resumedBy: null,
       pid: null,
+      stopReason: null,
       ...fields,
     };
     const files = jobFiles(record.id);
@@ -306,10 +392,14 @@ describe("what a restart finds", () => {
     return job === undefined ? undefined : jobs.snapshot(job).status;
   }
 
-  test("a running job whose process is gone ends as its summary says, else interrupted", async () => {
+  test("a running job whose process is gone ends as its summary and stop reason say", async () => {
     const pid = await deadPid();
+    const CANCELLED = { ...SUMMARY, ok: false, cancelled: true };
     const finished = leave({ pid }, [{ ...SUMMARY, ok: true }]);
-    const cancelled = leave({ pid }, [{ ...SUMMARY, ok: false, cancelled: true }]);
+    const cancelled = leave({ pid, stopReason: "cancel" }, [CANCELLED]);
+    const restarted = leave({ pid, stopReason: "shutdown" }, [CANCELLED]);
+    const signalled = leave({ pid }, [CANCELLED]);
+    const failed = leave({ pid }, [{ ...SUMMARY, ok: false }]);
     const cut = leave({ pid }, [{ type: "stage", stage: "ingest-facts", status: "start" }]);
     const unknown = leave({ pid: null });
     const init = leave({ pid: 1 });
@@ -326,6 +416,9 @@ describe("what a restart finds", () => {
     const jobs = runner();
     expect(statusOf(jobs, finished.id)).toBe("succeeded");
     expect(statusOf(jobs, cancelled.id)).toBe("cancelled");
+    expect(statusOf(jobs, restarted.id)).toBe("interrupted");
+    expect(statusOf(jobs, signalled.id)).toBe("interrupted");
+    expect(statusOf(jobs, failed.id)).toBe("failed");
     expect(statusOf(jobs, cut.id)).toBe("interrupted");
     expect(statusOf(jobs, unknown.id)).toBe("interrupted");
     expect(statusOf(jobs, init.id)).toBe("interrupted");
@@ -345,14 +438,34 @@ describe("what a restart finds", () => {
       const record = leave({ pid: stranger.pid });
       const jobs = runner();
       const job = jobs.find(record.id) as Job;
-      expect(jobs.snapshot(job).status).toBe("running");
+      expect(jobs.snapshot(job)).toMatchObject({
+        status: "running",
+        stopping: false,
+        signalable: false,
+      });
       expect(jobs.cancel(job)).toBe("not-ours");
+      expect(jobs.cancel(job, true)).toBe("not-ours");
       await Bun.sleep(60);
       expect(isAlive(stranger.pid)).toBe(true);
       stranger.kill();
       await stranger.exited;
       await until(() => jobs.snapshot(job).status !== "running");
       expect(jobs.snapshot(job).status).toBe("interrupted");
+    } finally {
+      stranger.kill();
+    }
+  });
+
+  test("a running record from before this machine booted is gone, whatever its pid names now", async () => {
+    const stranger = Bun.spawn(["sleep", "30"]);
+    try {
+      const beforeBoot = new Date(Date.now() - uptime() * 1000 - 3_600_000).toISOString();
+      const record = leave({ pid: stranger.pid, startedAt: beforeBoot });
+      const jobs = runner();
+      const job = jobs.find(record.id) as Job;
+      expect(jobs.snapshot(job).status).toBe("interrupted");
+      expect(jobs.cancel(job)).toBe("ended");
+      expect(isAlive(stranger.pid)).toBe(true);
     } finally {
       stranger.kill();
     }
@@ -408,6 +521,7 @@ describe("retention", () => {
         resumedFrom: null,
         resumedBy: null,
         pid: null,
+        stopReason: null,
       };
       const files = jobFiles(record.id);
       writeFileSync(files.record, JSON.stringify(record));

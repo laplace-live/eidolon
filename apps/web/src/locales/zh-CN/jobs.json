@@ -102,5 +102,12 @@
   "stages.none": "这个任务没有报告进度。",
   "resumedFrom": "重新运行了之前的任务",
   "resumedBy": "已由之后的任务继续",
-  "cancel.stopping": "正在停止…"
+  "cancel.stopping": "正在停止…",
+  "forceStop.button": "强制停止",
+  "forceStop.title": "强制停止这个任务？",
+  "forceStop.body": "取消之后它仍然没有停下。强制停止会立刻结束它，不等它写完手头的内容：正在构建的索引可能只完成一半，之后请重新运行那个任务。",
+  "forceStop.wait": "继续等待",
+  "forceStop.confirm": "强制停止",
+  "earlierRun.title": "无法在这里停止",
+  "earlierRun.body": "这个任务是之前运行的 Eidolon 启动的，现在的 Eidolon 无法停止它。它会自行完成，或被标记为已中断。"
 }

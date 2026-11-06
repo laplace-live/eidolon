@@ -21,6 +21,7 @@ import { activatePersona, refreshPersonas } from "@/features/setup/personas";
 import { errorKey, type Status } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { statusQuery } from "@/lib/query";
+import { MemoryPanel } from "./memory-panel";
 import { studioPath } from "./readiness";
 import { ReadinessList } from "./readiness-list";
 import { VoiceDialog } from "./voice-dialog";
@@ -130,6 +131,8 @@ export function Component() {
           <ReadinessList status={status.data} onPickVoice={() => setPickingVoice(true)} />
         </CardContent>
       </Card>
+
+      <MemoryPanel persona={persona} memory={status.data.memory} />
 
       <p className="text-muted-foreground text-xs">
         {t("home.version", { version: status.data.version })}

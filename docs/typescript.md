@@ -168,8 +168,9 @@ that provider's key, credit or reach:
 
 yt-dlp's codes are read off its stderr, so they are a best guess. A job runs
 `jobArgv(command, args)` from `@eidolon/cli/job`, also import-free: `bun --no-env-file
-<CLI_ENTRY> <command> --json …`, started in the data home and cancelled with SIGTERM, then
-SIGKILL after 15 s.
+<CLI_ENTRY> <command> --json …`, started in the data home. A cancel sends it SIGTERM. Nothing
+kills it on a timer: only a forced second cancel (`DELETE jobs/:id?force=1`) of a job this server
+spawned sends SIGKILL, to its whole process group ([web-app.md](web-app.md#jobs)).
 
 ### Real-data tests
 
@@ -474,6 +475,7 @@ Deliberate, and not worth matching.
   `exit=N`, and parallel transcription logs `Running N transcribe job(s) in parallel
   (concurrency=N)` without re-emitting each child's output.
 - New flags `--persona`, `--json` and `--db-path`; `--provider` takes only `soniox`.
+- `url_list` is optional when `--stages` leaves out download; Python required it regardless.
 - **The dry run plans.** It takes no lock, needs no `--db-path` beside `LANCEDB_PATH`, and creates
   no `streams/` folder (Python's did). Without a URL list it covers every video the persona's
   lists, `vods/` and `streams/` know, and the human dry run counts every list's URLs. With

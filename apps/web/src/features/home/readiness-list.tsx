@@ -7,7 +7,7 @@ import { checkTone, verdictKey } from "@/components/settings-form/credentials";
 import { hasString } from "@/components/settings-form/field";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { useRestart } from "@/features/settings/restart";
+import { RestartButton } from "@/features/settings/restart-button";
 import { call, errorKey, type Status } from "@/lib/api";
 import { useLang, useT } from "@/lib/i18n";
 import { statusQuery } from "@/lib/query";
@@ -44,17 +44,6 @@ function CheckButton({ provider }: { readonly provider: "fish" | "qdrant" }) {
   );
 }
 
-function RestartButton() {
-  const t = useT();
-  const { restart, restarting } = useRestart();
-  return (
-    <Button variant="outline" size="sm" disabled={restarting} onClick={() => void restart()}>
-      {restarting && <Spinner />}
-      {t(restarting ? "settings.restart.waiting" : "home.fix.restart")}
-    </Button>
-  );
-}
-
 function FixButton({ fix, onPickVoice }: { readonly fix: Fix; readonly onPickVoice: () => void }) {
   const t = useT();
   switch (fix.kind) {
@@ -73,7 +62,7 @@ function FixButton({ fix, onPickVoice }: { readonly fix: Fix; readonly onPickVoi
     case "check":
       return <CheckButton provider={fix.provider} />;
     case "restart":
-      return <RestartButton />;
+      return <RestartButton label="home.fix.restart" variant="outline" />;
   }
 }
 

@@ -2,11 +2,12 @@
 // a missing build, a bad token and a taken port, and stopping or restarting it.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdtempSync, rmSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { activePersona, consoleSink, envOptional, logger } from "@eidolon/config";
 import { bootLocal, shutdownOnce } from "../../src/local/boot.ts";
+import { serverLockInfoPath, takeServerLock } from "../../src/local/server-lock.ts";
 import { tokenPath } from "../../src/local/token.ts";
 import {
   type Booted,
@@ -165,6 +166,43 @@ describe("a port in use", () => {
     expect(io.exits).toEqual([1]);
     expect(io.err.join("")).toContain("taken by another program");
     expect(io.out).toEqual([]);
+    // The boot that gave up holds nothing.
+    const lock = takeServerLock();
+    expect("release" in lock).toBe(true);
+    if ("release" in lock) lock.release();
+  });
+});
+
+describe("one server per data home", () => {
+  test("a second, on another port, exits 2 naming the first's pid and port", async () => {
+    booted = await bootFixture();
+    const io = fakeIo();
+    const dist = fixtureDist();
+    try {
+      expect(await bootLocal(NO_OPEN, fakeModules().modules, { dist, io })).toBeNull();
+    } finally {
+      rmSync(dist, { recursive: true, force: true });
+    }
+    expect(io.exits).toEqual([2]);
+    expect(io.err.join("")).toBe(
+      `eidolon: Eidolon is already running on this data home (pid ${process.pid}, port ` +
+        `${booted.port}); stop it first\n`,
+    );
+    expect(io.out).toEqual([]);
+    expect((await fetch(`${booted.base}/`)).status).toBe(200);
+  });
+
+  test("the first holds the lock until it stops; then another starts", async () => {
+    booted = await bootFixture();
+    expect(JSON.parse(readFileSync(serverLockInfoPath(), "utf8"))).toMatchObject({
+      pid: process.pid,
+      port: booted.port,
+      command: "eidolon",
+    });
+    expect("holder" in takeServerLock()).toBe(true);
+    await booted.stop();
+    booted = await bootFixture();
+    expect(booted.io.exits).toEqual([]);
   });
 });
 

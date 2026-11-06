@@ -1,12 +1,13 @@
 // Starts the local web app's server, the bot plus the app, on loopback only, and prints the link
 // that signs a browser in. server.ts runs it as the supervisor's child.
-import { envOptional, type LogLevel, logger } from "@eidolon/config";
+import { envOptional, errorText, type LogLevel, logger } from "@eidolon/config";
 import type { SignallingServer } from "@eidolon/runtime";
 import type { IceService } from "@eidolon/turn";
 import { type BotDeps, type BotServer, startBotServer } from "../server.ts";
 import { type LocalHost, parseLocalArgs, resolveLocalHost } from "./args.ts";
 import { createLocalExtension } from "./extension.ts";
 import { usePersonaMemoryScope } from "./identity.ts";
+import { recordServerPort, type ServerHolder, takeServerLock } from "./server-lock.ts";
 import { loadStaticSite, MissingDist, WEB_DIST } from "./static.ts";
 import { type ListeningMessage, RESTART_EXIT_CODE } from "./supervisor.ts";
 import { type LocalToken, loadLocalToken, probeNonce, TokenError } from "./token.ts";
@@ -134,10 +135,59 @@ async function answersAsThisEidolon(port: number, token: LocalToken): Promise<bo
   return false;
 }
 
+/** The local token, or null after exiting 1 for one that can't be used. */
+function tokenOrExit(io: BootIo): LocalToken | null {
+  try {
+    return loadLocalToken();
+  } catch (error) {
+    if (!(error instanceof TokenError)) throw error;
+    io.stderr(`eidolon: ${error.message}\n`);
+    io.exit(1);
+    return null;
+  }
+}
+
+/** Prints a fresh link to this data home's Eidolon and exits 0, if `port` answers as it. */
+async function linkToRunning(
+  port: number,
+  host: LocalHost,
+  token: LocalToken,
+  io: BootIo,
+): Promise<boolean> {
+  if (!(await answersAsThisEidolon(port, token))) return false;
+  io.stdout(`Eidolon is already running: ${linkUrl(host, port, token, io.nowSeconds())}\n`);
+  io.exit(0);
+  return true;
+}
+
+/**
+ * A second server on the data home exits 2 naming the first, unless it was asked for the first's
+ * port, which gets that server's link as a taken port would.
+ */
+async function refuseSecond(
+  holder: ServerHolder,
+  port: number,
+  host: LocalHost,
+  io: BootIo,
+): Promise<null> {
+  if (holder.port !== null && holder.port === port) {
+    const token = tokenOrExit(io);
+    if (token === null || (await linkToRunning(port, host, token, io))) return null;
+  }
+  const named = [
+    holder.pid === null ? null : `pid ${holder.pid}`,
+    holder.port === null ? null : `port ${holder.port}`,
+  ].filter((part) => part !== null);
+  const which = named.length > 0 ? ` (${named.join(", ")})` : "";
+  io.stderr(`eidolon: Eidolon is already running on this data home${which}; stop it first\n`);
+  io.exit(2);
+  return null;
+}
+
 /**
  * Boots, prints the link and returns the server; null when it exited instead: a usage error (2),
- * no built app (2), an unusable token (1), or a port already serving this Eidolon (0, after
- * printing a fresh link to it).
+ * no built app (2), another server on the data home (2), an unusable token (1), or a port
+ * already serving this Eidolon (0, after printing a fresh link to it).
  */
 export async function bootLocal(
   argv: readonly string[],
@@ -157,15 +207,16 @@ export async function bootLocal(
     return null;
   }
   ensureDataHome();
-  let token: LocalToken;
+  // Before the token, which a first start makes: two first starts would each write their own.
+  const lock = takeServerLock();
+  if ("holder" in lock) return refuseSecond(lock.holder, args.port, host, io);
+  let token: LocalToken | null = null;
   try {
-    token = loadLocalToken();
-  } catch (error) {
-    if (!(error instanceof TokenError)) throw error;
-    io.stderr(`eidolon: ${error.message}\n`);
-    io.exit(1);
-    return null;
+    token = tokenOrExit(io);
+  } finally {
+    if (token === null) lock.release();
   }
+  if (token === null) return null;
   usePersonaMemoryScope();
 
   let signalling: Pick<SignallingServer, "activeSessions"> | null = null;
@@ -201,24 +252,38 @@ export async function bootLocal(
     }),
   };
 
-  let bot: BotServer;
+  let started: BotServer;
   try {
-    bot = await startBotServer({ host: host.bind, port: args.port, verbose: args.verbose }, deps);
+    started = await startBotServer(
+      { host: host.bind, port: args.port, verbose: args.verbose },
+      deps,
+    );
   } catch (error) {
+    lock.release();
     if (!isAddressInUse(error)) throw error;
-    if (await answersAsThisEidolon(args.port, token)) {
-      io.stdout(
-        `Eidolon is already running: ${linkUrl(host, args.port, token, io.nowSeconds())}\n`,
-      );
-      io.exit(0);
-    } else {
+    if (!(await linkToRunning(args.port, host, token, io))) {
       io.stderr(`eidolon: port ${args.port} is taken by another program; choose one with --port\n`);
       io.exit(1);
     }
     return null;
   }
+  const bot: BotServer = {
+    server: started.server,
+    async stop() {
+      try {
+        await started.stop();
+      } finally {
+        lock.release();
+      }
+    },
+  };
   shutdown = shutdownOnce(bot, (code) => io.exit(code));
   const port = bot.server.port as number;
+  try {
+    recordServerPort(port);
+  } catch (error) {
+    logger.warning(`A second start won't be told this one's port: ${errorText(error)}`);
+  }
   io.notify({ kind: "listening", port });
   const url = linkUrl(host, port, token, io.nowSeconds());
   io.stdout(`Eidolon is ready: ${url}\n`);

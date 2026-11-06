@@ -11,7 +11,7 @@ import { toastError } from "@/features/jobs/feedback";
 import { call, type PersonaSummary, type SettingRow, type Voice } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { statusQuery } from "@/lib/query";
-import { CUE_MODEL, hasDeliveryCues } from "./files";
+import { CUE_MODEL, cueClash } from "./files";
 import { LoadError, Section } from "./parts";
 import { personaQueries } from "./queries";
 
@@ -41,13 +41,7 @@ export function VoiceTab({ persona }: { readonly persona: PersonaSummary }) {
   const voiceRow = rows.find((row) => row.path === "voice.voiceId");
   const modelRow = rows.find((row) => row.path === "voice.model");
   const voiceId = fileValue(voiceRow);
-  // Unset, the bot's default model applies, which the built-in prompts are written for.
-  const model = fileValue(modelRow);
-  const cueClash =
-    model !== null &&
-    model !== CUE_MODEL &&
-    prompt.data !== undefined &&
-    hasDeliveryCues(prompt.data.text);
+  const clash = cueClash(modelRow, prompt.data?.text);
 
   const pick = useMutation({
     mutationFn: (voice: Voice) =>
@@ -98,12 +92,21 @@ export function VoiceTab({ persona }: { readonly persona: PersonaSummary }) {
         />
       </Section>
       <Section title={t("studio.voice.modelTitle")} description={t("studio.voice.modelHelp")}>
-        {cueClash && (
+        {clash?.kind === "model" && (
           <Alert variant="destructive">
             <TriangleAlertIcon />
-            <AlertTitle>{t("studio.voice.cueClash.title", { model: model ?? "" })}</AlertTitle>
+            <AlertTitle>{t("studio.voice.cueClash.title", { model: clash.model })}</AlertTitle>
             <AlertDescription>
               {t("studio.voice.cueClash.body", { model: CUE_MODEL })}
+            </AlertDescription>
+          </Alert>
+        )}
+        {clash?.kind === "env" && (
+          <Alert>
+            <TriangleAlertIcon />
+            <AlertTitle>{t("studio.voice.cueEnv.title", { env: clash.env })}</AlertTitle>
+            <AlertDescription>
+              {t("studio.voice.cueEnv.body", { env: clash.env, model: CUE_MODEL })}
             </AlertDescription>
           </Alert>
         )}

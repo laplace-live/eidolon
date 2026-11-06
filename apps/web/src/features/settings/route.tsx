@@ -6,7 +6,6 @@ import { SettingsForm } from "@/components/settings-form";
 import { CredentialsEditor } from "@/components/settings-form/credentials-editor";
 import { personasQuery, settingsQuery } from "@/components/settings-form/queries";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Label } from "@/components/ui/label";
 import {
@@ -16,11 +15,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useT } from "@/lib/i18n";
 import { statusQuery } from "@/lib/query";
-import { useRestart } from "./restart";
+import { RestartButton } from "./restart-button";
 
 const TABS = ["keys", "app", "persona"] as const;
 type Tab = (typeof TABS)[number];
@@ -33,7 +31,6 @@ function isTab(value: string | null): value is Tab {
 function RestartBanner() {
   const t = useT();
   const status = useQuery(statusQuery);
-  const { restart, restarting } = useRestart();
   const all = status.data?.restartRequired === true;
   if (!all && status.data?.mcpRestartRequired !== true) return null;
   return (
@@ -44,10 +41,7 @@ function RestartBanner() {
         {t(all ? "settings.restart.body" : "settings.restart.mcpBody")}
       </AlertDescription>
       <AlertAction>
-        <Button size="sm" disabled={restarting} onClick={() => void restart()}>
-          {restarting && <Spinner />}
-          {t(restarting ? "settings.restart.waiting" : "settings.restart.button")}
-        </Button>
+        <RestartButton label="settings.restart.button" />
       </AlertAction>
     </Alert>
   );

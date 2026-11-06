@@ -180,6 +180,11 @@ switch (scenario) {
     summary();
     break;
 
+  case "env":
+    emit({ type: "stage", stage, status: "done", message: process.env.EIDOLON_NO_DOTENV ?? "" });
+    summary();
+    break;
+
   default:
     process.stderr.write(`unknown scenario ${scenario}\n`);
     process.exit(2);

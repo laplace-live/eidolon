@@ -502,14 +502,21 @@ export type NoOptions = Readonly<Record<string, never>>;
  * id POST batches answered, a video by its id (the audio's stem, as a plan names it).
  */
 export interface JobOptions {
-  /** The batch's videos through `stages`, all four by default; billed past download. */
+  /**
+   * The batch's videos through `stages`, all four by default; billed past download. Only the
+   * download stage reads the batch: the later stages take every video the persona has.
+   */
   readonly pipeline: {
-    readonly batch: string;
-    readonly stages?: readonly PipelineStage[];
     readonly abortOnError?: boolean;
     /** Transcriptions in flight at once, 1 to 25; the CLI's default is 1. */
     readonly transcribeConcurrency?: number;
-  };
+  } & (
+    | { readonly batch: string; readonly stages?: readonly PipelineStage[] }
+    | {
+        readonly batch?: undefined;
+        readonly stages: readonly Exclude<PipelineStage, "download">[];
+      }
+  );
   readonly download: { readonly batch: string };
   /** One `entry` event per video a playlist, channel or series lists. */
   readonly expand: { readonly url: string };
@@ -547,8 +554,9 @@ export interface JobRecord {
   /** JobOptions[command], as validated. */
   readonly options: Readonly<Record<string, unknown>>;
   /**
-   * `failed` includes a run that died without its summary; `interrupted` is one that was running
-   * when the server stopped and ended unseen, without one.
+   * `cancelled`: stopped by a DELETE. `interrupted`: stopped by the server's own stop or restart,
+   * or by a signal from elsewhere, or it ended while no server watched; it resumes. `failed`
+   * includes a run that died without its summary.
    */
   readonly status: JobStatus;
   readonly startedAt: string;
@@ -604,13 +612,32 @@ export interface JobSnapshot extends JobRecord {
   readonly stderrTail: string;
   /** Bytes of events so far: `events?after=` resumes from here. */
   readonly eventsSize: number;
-  /** A cancel was sent, and the process hasn't exited yet. */
+  /** The run's own summary arrived; a run that ended without it crashed or was killed. */
+  readonly summarySeen: boolean;
+  /** Told to stop, and not exited yet: it may be finishing an index rebuild first. */
   readonly stopping: boolean;
+  /**
+   * This server spawned it and still holds its process, so a DELETE can signal it. False once it
+   * has ended, and for a job an earlier server started, which a DELETE answers with 409.
+   */
+  readonly signalable: boolean;
 }
 
 export interface JobEventsQuery {
   /** A byte offset into the events file. */
   readonly after?: number;
+}
+
+/**
+ * DELETE jobs/:id sends the job SIGTERM, which it answers by cancelling its run once any index
+ * rebuild it is in has finished; a repeat sends nothing more.
+ */
+export interface JobCancelQuery {
+  /**
+   * 1, on a job already stopping: SIGKILL for its whole process group, at once, which can leave an
+   * index without its table or its full-text index until the next ingest.
+   */
+  readonly force?: 1;
 }
 
 /** One memory as Mem0 keeps it, in the field names /api/memories uses. */
@@ -671,7 +698,7 @@ export interface LocalApi {
   "GET /api/local/jobs/:id": Endpoint<undefined, JobSnapshot>;
   "GET /api/local/jobs/:id/events": Endpoint<undefined, Raw<"ndjson">, JobEventsQuery>;
   "GET /api/local/jobs/:id/log": Endpoint<undefined, Raw<"text">>;
-  "DELETE /api/local/jobs/:id": Endpoint<undefined, JobSnapshot>;
+  "DELETE /api/local/jobs/:id": Endpoint<undefined, JobSnapshot, JobCancelQuery>;
   "POST /api/local/jobs/:id/resume": Endpoint<undefined, JobSnapshot>;
   "GET /api/local/memories": Endpoint<undefined, MemoriesResponse, MemoriesQuery>;
   "DELETE /api/local/memories": Endpoint<undefined, Ok, MemoriesQuery>;

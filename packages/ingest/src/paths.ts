@@ -58,9 +58,19 @@ export function refuseTemplatePath(id: string, path: string, setting: string): v
   }
 }
 
+/**
+ * `<home>/<name>`, created with the data home when either is missing, both readable by this user
+ * only; a folder that exists keeps its mode.
+ */
+function privateDir(name: string): string {
+  const dir = join(dataHome(), name);
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  return dir;
+}
+
 /** The embedding cache every persona shares; the key holds the model and dimension. */
 export function embedCachePath(): string {
-  return join(dataHome(), "cache", "embed_cache.db");
+  return join(privateDir("cache"), "embed_cache.db");
 }
 
 /** Where the managed yt-dlp lives. */
@@ -166,8 +176,7 @@ function holderInfo(path: string): { pid: number | null; command: string | null 
  * dies, so a crash never leaves a stale lock. Call the returned function to release it.
  */
 export function acquireLock(key: string, command: string): () => void {
-  const dir = join(dataHome(), "locks");
-  mkdirSync(dir, { recursive: true });
+  const dir = privateDir("locks");
   const name = createHash("sha256").update(key, "utf8").digest("hex").slice(0, 12);
   const infoPath = join(dir, `${name}.info`);
   const db = new Database(join(dir, `${name}.lock`), { create: true });

@@ -1,0 +1,348 @@
+# The local web app
+
+Eidolon on your own computer, with a web app to set it up, build personas and call them: a setup
+wizard, a persona studio (identity, prompt, voice, facts, videos, glossary, pictures), a call page,
+settings, and the offline chain's commands run as jobs. It is a second entry point beside the bot,
+`apps/bot/src/local/`, serving the built app from `apps/web/` (Vite, React, shadcn, Tailwind) on
+loopback only. The bot that `bun run start` and the Docker image run never loads it.
+
+## Running it
+
+```bash
+bun install
+bun run app        # builds apps/web/dist when it has no index.html, then `local --open`
+```
+
+| Command | What it runs |
+| --- | --- |
+| `bun run app` | `bun run build:web` when the app isn't built, then `bun run local --open` |
+| `bun run local` | `apps/bot/src/local/main.ts`: the supervisor and the server under it. Without a build it exits 2 and names `bun run build:web` |
+| `bun run dev:local` | `apps/bot/src/local/server.ts` alone, under `bun --watch` |
+| `bun run dev:web` | Vite on `http://127.0.0.1:5173`, proxying `/api` and `/mcp` to the server on `localhost:7860` |
+| `bun run build:web` | `apps/web/dist` |
+
+The server's flags: `--host` (default `localhost`; loopback addresses only), `--port` (default
+7860; `0` picks a free one), `-v` (DEBUG; `-vv` TRACE; INFO without), and `--open`/`--no-open`
+(default open, except over SSH, where `SSH_CONNECTION` is set). Its last boot line, written to
+stdout and never through the logger, is the link that signs a browser in:
+
+```text
+Eidolon is ready: http://localhost:7860/#1762300800.Lb0Yx…
+```
+
+`bun run local` keeps the server in a child process. When the server exits 75, which is what
+Restart in the app (`POST /api/local/restart`) does, the supervisor starts a new one on the same
+port without opening another tab; that is how settings read once at boot take effect. It passes
+SIGINT and SIGTERM on, and otherwise exits with the server's code. A data home runs one server,
+which holds a lock in its `locks/`: starting again on the port it serves prints a fresh link to it
+and exits 0, and on any other port exits 2, naming its pid and port. A port another program holds
+exits 1.
+
+`bun run dev:local` has no supervisor, so Restart stops it, and every reload `--watch` makes
+opens another tab unless you pass `--no-open` (`bun run dev:local --no-open`). To work on the
+app's pages with hot reload, keep the server on 7860, start `bun run dev:web`, and open
+`http://127.0.0.1:5173/#<code>`, where `<code>` is everything after `#` in the server's link. The
+proxy rewrites `Origin` only for requests from that dev origin, so the server's Origin rule still
+refuses every other page.
+
+## What stays out of production
+
+- **Nothing in production imports it.** `main.ts` and the code it loads never import
+  `apps/bot/src/local/`: a Biome rule forbids it and `apps/bot/test/local/boundaries.test.ts`
+  follows `main.ts`'s import graph to prove it. `production.test.ts` pins what the bot answers
+  without the local extension, the same as before it existed.
+- **Nothing turns it on.** Local mode is the separate entry, not a flag, a setting or an
+  environment variable, so no `settings.yaml` on a server's mounted data home can switch it on.
+- **The image leaves it out.** `apps/bot/Dockerfile.dockerignore` excludes `apps/bot/src/local/`,
+  `apps/bot/test/local/`, `apps/bot/scripts/local-smoke.ts` and `apps/web/` except its
+  `package.json`, which the frozen install needs. `docker.yml` skips the image build for changes
+  under `apps/web/**` and `apps/bot/src/local/**`.
+- `local.viewerName` (`EIDOLON_LOCAL_VIEWER_NAME`) is read in local mode only.
+
+## Security
+
+A session runs programs as you (every job is the CLI, and downloads run yt-dlp), spends your
+providers' credit, and can send your keys to whatever API base it saves. The checks below, and
+the secret behind them, are the only boundary, so treat the link, the cookie and `local-token`
+like a password for this computer.
+
+- **Loopback only.** Every address `--host` resolves to must be loopback (127.0.0.0/8 or `::1`),
+  or the server exits 2. There is no remote mode. From another computer, forward the port and open
+  the printed link there:
+
+  ```bash
+  ssh -L 7860:localhost:7860 <host>
+  ```
+
+  Through the tunnel the browser still talks to `localhost`, which passes the Host check and is
+  the secure context the microphone needs; SSH encrypts the rest.
+- **The guard** runs before any route, on every request:
+  - the socket's peer must be loopback; forwarded-for headers never count;
+  - `Host` must be `localhost`, `127.0.0.1` or `[::1]` (or the bound IP literal) with the bound
+    port, else 421 `misdirected`, which stops DNS rebinding;
+  - every `OPTIONS` gets 405, and no answer carries a CORS header;
+  - under `/api` and `/mcp`, an `Origin` other than `http://<Host>` gets 403, and so does a
+    `Sec-Fetch-Site` other than `same-origin` or `none`, since every localhost port is the same
+    site to a browser;
+  - a change (any method but GET and HEAD) made with the cookie must carry `Origin`;
+  - HEAD on a GET API route gets 405, and `/api/local` answers are `Cache-Control: no-store`.
+- **The secret** is `<data home>/local-token`, made at the first start, mode 0600 from creation.
+  The server refuses to start (exit 1) when it isn't a regular file, another user owns it, its
+  mode lets other users in, or it holds no valid token. It never reaches a browser.
+- **The link code** in the printed link's fragment is `<unix seconds>.<HMAC(secret, "link:" +
+  seconds)>`: good for 10 minutes, survives restarts, and never reaches an access log or a
+  `Referer`. The page trades it for the cookie once (`POST /api/local/session`) and removes it
+  from the address bar. A refused code sets nothing, so a stale link never signs out a working
+  session.
+- **The cookie** is `eidolon_session_<port>=<HMAC(secret, "session")>; HttpOnly;
+  SameSite=Strict; Path=/; Max-Age=2592000`, so the app stays signed in for 30 days across browser
+  restarts. Every copy of it in the `Cookie` header is checked, because cookies ignore ports and
+  another localhost app can plant a decoy. No token is ever read from a query string or kept in
+  web storage.
+- **Bearer.** A CLI or a test that can read `local-token` sends it as `Authorization: Bearer
+  <secret>`; a header can't ride along on a cross-site request, so it needs no `Origin`:
+
+  ```bash
+  curl -H "Authorization: Bearer $(cat ~/.laplace/eidolon/local-token)" \
+    http://localhost:7860/api/local/status
+  ```
+
+- **Rotation.** Delete `local-token` and restart: every browser, link and Bearer caller is signed
+  out, and the next start makes a new secret.
+- **The app's own files** are read into memory from `apps/web/dist` once at boot. A request path
+  is looked up in that map, never joined to a filesystem path; an unknown one gets `index.html`.
+  Every page carries a strict `Content-Security-Policy` (`frame-ancestors 'none'`),
+  `X-Frame-Options: DENY`, `nosniff` and `Referrer-Policy: same-origin`.
+- **What a request may name on disk.** Persona ids are slugs, `^[a-z0-9][a-z0-9_-]{0,63}$`; job
+  ids are minted by the server and only looked up; a fact or picture name is one plain path
+  segment with an allowed extension (`.txt`; `.png`, `.jpg`, `.jpeg`, `.webp`). Writes go only
+  into the data home, never into a template under `personas/`, through a temporary file and a
+  rename. Uploads are recognized by their bytes (PNG, JPEG, WebP) and capped at 20 MiB. A persona's
+  path settings must stay inside her folder, and `sources.ytDlp` can't be set through the API.
+- **Secrets at rest.** `credentials.json` is written 0600 from creation; no answer returns a key
+  or quotes what a request sent; the data home, `jobs/` and `locks/` are created 0700.
+
+## The API
+
+Under `/api/local`, JSON in and out; the wire types are `apps/bot/src/local/api.ts`, which the app
+imports type-only. An error is `{"error": {"code": "…", "message": "…"}}`: the app shows its own
+string for `code`, in English or 简体中文, and the English `message` only as detail.
+
+| Area | Routes | What |
+| --- | --- | --- |
+| Session | `POST session`, `GET session` | Trades a link code for the cookie; GET says whether the caller is signed in, or with `?probe=` proves this server holds the secret, for a second start |
+| Status | `GET status`, `POST restart` | Readiness, polled by the home page and never waiting on a remote probe; restart is refused during a call |
+| Settings | `GET settings?persona=`, `PUT settings` | Every `SETTINGS` row: the value the files give it and which file, and whether the environment overrides it; PUT `{scope, persona?, values}` is checked by kind and written to `settings.yaml` or her `persona.yaml` |
+| Credentials | `GET`, `PUT credentials`, `POST credentials/check` | `{NAME: {set, source}}`, never a value; the check asks the provider about a typed or the saved key |
+| Personas | `GET`, `POST personas`, `PUT personas/active` | List, create (with a voice and a starter `prompt.md`), switch (refused during a call) |
+| Persona files | `GET`, `PUT personas/:id/{prompt,glossary,identity}` | Her copy in the data home, copied from the template on the first write; a glossary that doesn't parse isn't saved |
+| Pictures | `personas/:id/references/:kind/:name`, `personas/:id/avatar` | Outfits and friends under `references/`, and the avatar, `avatar.*` at the root of her folder, where selfies never take it for an outfit; a template's pictures can't be deleted |
+| Knowledge | `personas/:id/facts[/:file]`, `GET personas/:id/index` | Fact files with whether the patterns pick them and whether they changed since the last index; the index from its build records |
+| Videos | `POST personas/:id/batches` | `{urls}` → a new batch of the URLs her lists don't have yet |
+| Voices | `GET voices/search?q=&language=&page=` | Fish Audio's public voices, searched without your key |
+| Jobs | `POST jobs`, `GET jobs`, `GET jobs/:id`, `…/events?after=`, `…/log`, `DELETE jobs/:id`, `POST jobs/:id/resume` | [Jobs](#jobs) |
+| Memories | `GET`, `DELETE memories?persona=` | One persona's memories of you |
+
+The bot's own routes stay, behind the guard: `POST /api/offer` and `/api/offer/preflight` take
+the session and call as [the local viewer](#the-local-viewer-and-memory), with no quota;
+`GET /api/memories` and `POST /api/memories/forget` take the session and act on the active
+persona; `PATCH /api/offer`, `/api/selfie/:id`, `/api/ice-servers` and `/mcp` are unchanged.
+
+`ERROR_CODES` in `api.ts`:
+
+| Code | Status | When |
+| --- | --- | --- |
+| `bad-json` | 400 | The body isn't JSON |
+| `bad-request` | 400 | A body, query or path segment of the wrong shape |
+| `unauthorized` | 401 | No session and no Bearer token, or a link code that isn't this Eidolon's |
+| `link-expired` | 401 | A link code over 10 minutes old |
+| `forbidden` | 403 | The guard: a peer off this computer, another page's `Origin` or `Sec-Fetch-Site`, a cookie change without `Origin` |
+| `misdirected` | 421 | A `Host` other than a loopback name with the bound port |
+| `not-found` | 404 | No such route, file or picture |
+| `method-not-allowed` | 405 | Another method, any `OPTIONS`, HEAD on a GET route; `Allow` names the right one |
+| `conflict` | 409 | A file that doesn't read as it should (`credentials.json`, a `persona.yaml`, a hand-made URL list), a persona `EIDOLON_PERSONA` pins, a job an earlier server started |
+| `payload-too-large` | 413 | A body or upload over its cap |
+| `unsupported-media-type` | 415 | An upload that isn't PNG, JPEG or WebP by its bytes |
+| `not-implemented` | 501 | A declared route that isn't built |
+| `unavailable` | 503 | Memory is off or Qdrant doesn't answer; Fish Audio doesn't answer a voice search |
+| `upstream-failed` | 502 | Mem0 or Fish Audio failed |
+| `internal` | 500 | A bug; the terminal has the details |
+| `invalid-persona-id` | 400 | A persona id that isn't a slug |
+| `unknown-persona` | 404, 400 | No persona has that id; 400 in a job's body |
+| `persona-exists` | 409 | Creating a persona with an id in use |
+| `call-active` | 409 | Switching persona or restarting during a call |
+| `unknown-setting` | 400 | A path no setting of that scope has |
+| `invalid-setting` | 400 | A value its setting's kind refuses |
+| `read-only-setting` | 400 | `sources.ytDlp` |
+| `invalid-path` | 400, 409 | A persona path that is absolute or leaves her folder; 409 when her saved `prompt` setting does |
+| `unknown-credential` | 400 | A name `credentials.json` doesn't take |
+| `invalid-file-name` | 400 | A fact or picture name that isn't one plain segment with an allowed extension |
+| `template-file` | 409 | Deleting a picture the template ships |
+| `invalid-toml` | 400 | A glossary that doesn't parse |
+| `invalid-url` | 400 | A link that isn't http(s), holds whitespace or a control character, or is over 2048 characters |
+| `unknown-command` | 400 | A job command outside `JOB_COMMANDS` |
+| `invalid-option` | 400 | A job option the command doesn't take, of the wrong type, starting with `-`, or naming an unknown batch or video |
+| `unknown-job` | 404 | No job has that id |
+| `job-not-running` | 409 | Cancelling a job that ended |
+| `job-not-resumable` | 409 | Resuming a running or succeeded job, or one resumed already |
+
+## The local viewer and memory
+
+Whoever holds the session is the local viewer: a logged-in viewer with UID 0, which no Bilibili
+account has, so a Qdrant shared with production can't mix their memories with anyone's. Only a
+valid cookie or Bearer token grants it, never a request body. Their name is `local.viewerName`,
+read at every call, and the persona's prompt names them through `identity.localViewerLine`, which
+has no UID. The anonymous quota doesn't apply.
+
+Memories are kept per persona: Mem0's user id is `0`, and while `memory.agentId` is unset its
+agent id is the active persona's id. That default is set in code, never written into a
+`persona.yaml`, because production's milky-green memories carry no agent id. Home lists what the
+active persona remembers and forgets it on request, through `GET` and
+`DELETE /api/local/memories?persona=<id>`; other personas keep theirs.
+
+Memory needs Qdrant; without it calls run without memory. The wizard's memory step
+(`/setup?step=memory`) shows this command, which publishes on loopback only (Qdrant has no auth),
+turns CORS off and keeps the data in a named volume:
+
+```bash
+docker run -d --name eidolon-qdrant --restart unless-stopped -p 127.0.0.1:6333:6333 \
+  -v eidolon-qdrant:/qdrant/storage -e QDRANT__SERVICE__ENABLE_CORS=false \
+  -e QDRANT__TELEMETRY_DISABLED=true qdrant/qdrant:v1.19.1
+```
+
+Keep the tag in step with `docker-compose.yml`'s; if compose's `qdrant` already answers on 6333,
+use it instead. The step checks an address (127.0.0.1:6333 unless you change it) and saves it as
+`memory.qdrant.host` and `memory.qdrant.port` only when Qdrant answers. The first address needs no
+restart; a later change does.
+
+## Jobs
+
+`POST /api/local/jobs` takes `{command, persona, options}`. Each command maps its typed options
+to a fixed set of the CLI's flags; only the server adds `--persona`, a batch or a video is named
+by id and looked up among her files, and an option the command doesn't take, or a string starting
+with `-`, is refused. No request reaches `--yt-dlp-args`, a path flag, `--cookies`, `--force` or
+`--clear-cache`.
+
+| Command | Options | Runs |
+| --- | --- | --- |
+| `pipeline` | `batch`, `stages`, `abortOnError`, `transcribeConcurrency` (1–25) | `laplace-pipeline`; the batch is needed only with the download stage, the later stages take every video she has |
+| `download` | `batch` | `laplace-download` over the batch |
+| `expand` | `url` | `laplace-download --expand <url>`: one `entry` event per video a link lists |
+| `transcribe` | `video`, `date` | one downloaded video without an upload date, as streamed on `date` |
+| `refine`, `ingest-streams`, `ingest-facts`, `build-stream-catalog` | none | the command, for her |
+| `plan` | `refresh` | `laplace-pipeline --dry-run` over every video she has |
+
+A job is `bun --no-env-file apps/cli/src/main.ts <command> --json …` (`jobArgv` in
+`@eidolon/cli/job`), started in the data home, detached in its own process group, so Ctrl-C in the
+terminal reaches only the server. Its files are in `<data home>/jobs/` (0700): the record
+`<id>.json`, its stdout `<id>.ndjson` (the [progress events](typescript.md#progress-events)) and
+its stderr `<id>.log`, both 0600. The server tails the files, so a job outlives a reloaded page and
+the server itself. `GET jobs/:id` is a snapshot reduced from the events (status, each stage's
+done and total, cost so far, failures, the end of stderr, and whether the run's summary arrived);
+`events?after=<byte offset>` streams the events from there; `log` is stderr, or its last MiB.
+
+A job ends `succeeded` by its run's summary; `cancelled` when you stopped it; `interrupted` when
+the server's own stop or restart stopped it, another signal did, or it ended while no server
+watched; and `failed` when it died on its own.
+
+- **Cancel and force stop.** `DELETE jobs/:id` saves why, then sends the CLI one SIGTERM: it
+  starts nothing new, cancels what runs, and first finishes an index rebuild it is in, so a table
+  is never left half built. The snapshot says `stopping` until it exits, and a repeat sends
+  nothing, since a second SIGTERM makes the CLI quit at once. `DELETE jobs/:id?force=1` on a job
+  already stopping kills its whole process group, which can leave an index without its table or
+  its full-text index until the next ingest; the job page offers it as Force stop once a cancel
+  has hung for 20 s. Nothing is killed on a timer. A job an earlier server started can't be
+  stopped from here (409 `conflict`), since a server signals only the processes it spawned: its
+  snapshot says `signalable: false`, and its page offers neither Cancel nor Force stop and says
+  instead that it will finish on its own or be marked interrupted.
+- **Interrupted and Resume.** Stopping the server sends its jobs SIGTERM and kills none: one
+  finishing an index rebuild runs on in its own process group, and the next start watches it to
+  its end. At a start, a record still `running` whose process is gone, or that began before the
+  computer booted, ends as its events say, else `interrupted`. `POST jobs/:id/resume` reruns an
+  interrupted, failed or cancelled job's request once, as a new job linked to it (`resumedFrom`,
+  `resumedBy`); each stage skips the work already done.
+- **Kept.** The newest 50 jobs. Plans and link previews (`plan`, `expand`) don't count: only the
+  newest of each per persona is kept, and none survives a restart.
+- **Plans** are cached per persona: a running or finished plan is answered again until a
+  `pipeline`, `download`, `transcribe`, `refine` or `ingest-streams` job of hers ends or a batch is
+  written; `refresh: true` plans anew. A plan takes no lock.
+- **Locks** are the CLI's, and the server never probes one: a job and a terminal run that need
+  the same lock can't both run, and the second fails `locked`.
+
+## The videos flow
+
+The studio's Videos tab builds a persona's stream archive from links: a Bilibili series, a
+YouTube playlist, or single videos. Personas speak Mandarin, and their videos should be Mandarin
+streams; `transcription.language` sets the hint Soniox gets.
+
+1. Each link runs an `expand` job, and its entries show as a preview: how many are new, their
+   total length, and the disk their audio would take against the free space.
+2. Confirming writes the new URLs as a batch (`POST personas/:id/batches`), in
+   `<data home>/sources/<id>/lists/batches/`.
+3. **Download**, which costs nothing: a `pipeline` job with `stages: ["download"]` over the batch.
+   Before the first one the tab shows where yt-dlp reads cookies from
+   (`sources.cookiesFromBrowser`, which the wizard sets to `none` on a new install).
+4. A plan prices the rest: transcription and refinement, and what's left to index.
+5. **The paid stages** run after you confirm, over every video of hers that still needs them,
+   those in hand-made lists included, transcribing four at a time unless Advanced says otherwise.
+   A video without an upload date waits for you to give the day it was streamed, which runs a
+   `transcribe` job.
+
+The table comes from the plan and follows the running job's item events as they arrive.
+
+## Only the process environment: EIDOLON_NO_DOTENV
+
+Both `load-env.ts` files, the server's and the CLI's, walk up from their folder to the first
+`.env` and apply it over the environment. In a git worktree, or any checkout inside another, that
+is the outer checkout's `.env`, with its keys and maybe its `EIDOLON_HOME`. `EIDOLON_NO_DOTENV=1`
+skips it: the process environment is all there is, with the data home's settings files beneath it
+as always. Jobs inherit the server's environment, the flag included. Use it for smoke tests and
+clean runs:
+
+```bash
+EIDOLON_NO_DOTENV=1 EIDOLON_HOME=/tmp/eidolon-try bun run local
+```
+
+## The browser smoke test
+
+`bun apps/bot/scripts/local-smoke.ts` (`--headful` to watch it; headless Chrome is killed on some
+Macs) boots the server with `EIDOLON_NO_DOTENV=1`, a temporary data home and no provider key, and
+walks the app in Chrome:
+
+- sign-in: the fragment removed, the cookie set, nothing in web storage;
+- the wizard's keys step in English and 简体中文, with fake keys the providers refuse for free
+  (`--offline` saves them without the checks);
+- `credentials.json` at 0600, and no answer or log line holding a key;
+- a saved prompt landing in the temporary home, with `personas/` byte-identical;
+- an `ingest-facts` job over two fact lines against a fake embeddings server, and the jobs page
+  showing it done;
+
+then stops the server and deletes the home. It refuses to start when either `load-env.ts` would
+apply a `.env` or use another data home, and exits 0 when every check passes, else 1.
+
+## Troubleshooting
+
+- **"The web app is not built"** (exit 2): `bun run build:web`, or start with `bun run app`.
+- **The page asks you to open Eidolon from your terminal**: the link is over 10 minutes old, or
+  the cookie is gone. Run the same command again: a running Eidolon prints a fresh link and exits.
+  Pasting the link into that page works too.
+- **421**: the app was opened through a name other than `localhost`, `127.0.0.1` or `[::1]`, or
+  another port. From another computer, use `ssh -L`.
+- **403 "Only Eidolon's own pages may call its API"**: the request came from another page, such
+  as a browser extension, another app on localhost, or `dev:web` talking to a server not on 7860.
+- **"local-token is readable by other users"** (exit 1): `chmod 600` it, or delete it to sign
+  everything out and make a new one.
+- **"port 7860 is taken by another program"** (exit 1): pass `--port`.
+- **"Eidolon is already running on this data home"** (exit 2): another start serves it, on the
+  port the message names. Use that one, or stop it first.
+- **Keys, or a data home, you didn't expect**: a `.env` further up was applied. Set
+  `EIDOLON_NO_DOTENV=1`.
+- **Memory is off, or 503 `unavailable`**: Qdrant isn't set or doesn't answer; start it with the
+  command above and check it in the wizard's memory step.
+- **A restart banner**: a saved value is read only at boot. Restart from Home or Settings; it is
+  refused during a call, and it interrupts running jobs, after asking.
+- **A job reads `interrupted`**: the server stopped or restarted while it ran. Resume it from its
+  page.
+- **A cancelled job stays `stopping`**: it is finishing an index rebuild, which can take a while
+  on a large archive. Wait, or Force stop it and run that ingest again. A job an earlier start
+  of Eidolon ran has no Force stop: it will finish on its own or be marked interrupted.

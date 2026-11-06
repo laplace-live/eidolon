@@ -4,6 +4,7 @@ import { closeSync, fstatSync, openSync, readSync } from "node:fs";
 import { isPlainObject } from "@eidolon/config";
 import type { ProgressEvent } from "@eidolon/ingest/progress";
 import type { JobCommand, JobFailure, JobStage, JobStatus } from "../api.ts";
+import type { StopReason } from "./store.ts";
 
 const EMPTY = Buffer.alloc(0);
 
@@ -58,6 +59,32 @@ export function tailOf(path: string): string {
     return text.trimEnd().split("\n").slice(-TAIL_LINES).join("\n");
   } catch {
     return "";
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/**
+ * The text file at `path`, or its last `limit` bytes from the first whole line in them, after a
+ * line that says how much was left out; empty when there is no file.
+ */
+export function endOf(path: string, limit: number): string {
+  let fd: number;
+  try {
+    fd = openSync(path, "r");
+  } catch {
+    return "";
+  }
+  try {
+    const size = fstatSync(fd).size;
+    const start = Math.max(0, size - limit);
+    const buffer = Buffer.alloc(size - start);
+    const read = readSync(fd, buffer, 0, buffer.length, start);
+    let bytes = buffer.subarray(0, read);
+    if (start === 0) return bytes.toString("utf8");
+    const newline = bytes.indexOf(0x0a);
+    if (newline !== -1) bytes = bytes.subarray(newline + 1);
+    return `[The first ${size - bytes.length} bytes of this log are left out.]\n${bytes.toString("utf8")}`;
   } finally {
     closeSync(fd);
   }
@@ -245,14 +272,19 @@ export class JobEvents {
 }
 
 /**
- * How a job ended: by its run's summary when it wrote one; else cancelled when it was told to
- * stop, interrupted when it ended while no server watched, and failed when it died on its own.
+ * How a job ended: succeeded by its run's summary; else by why the server stopped it, cancelled
+ * for the app's cancel and interrupted for its own stop or restart. A run some other signal
+ * cancelled, or one that ended while no server watched, is interrupted too; one that died on its
+ * own failed.
  */
-export function endedStatus(final: Summary | null, stopping: boolean, unseen: boolean): JobStatus {
-  if (final !== null) {
-    if (final.ok) return "succeeded";
-    return final.cancelled || stopping ? "cancelled" : "failed";
-  }
-  if (unseen) return "interrupted";
-  return stopping ? "cancelled" : "failed";
+export function endedStatus(
+  final: Summary | null,
+  reason: StopReason | null,
+  unseen: boolean,
+): JobStatus {
+  if (final?.ok) return "succeeded";
+  if (reason === "cancel") return "cancelled";
+  if (reason === "shutdown") return "interrupted";
+  if (final !== null) return final.cancelled ? "interrupted" : "failed";
+  return unseen ? "interrupted" : "failed";
 }

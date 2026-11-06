@@ -490,7 +490,8 @@ def ts_parser() -> argparse.ArgumentParser:
         nargs="?",
         type=Path,
         help="Path to a text file with one URL per line (# comments + blanks ignored). Optional "
-        "with --dry-run, which then plans every video the persona's sources know.",
+        "when --stages leaves out download, and with --dry-run, which then plans every video the "
+        "persona's sources know.",
     )
     p.add_argument(
         "--stages",

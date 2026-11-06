@@ -7,6 +7,7 @@ import {
   CircleSlashIcon,
   CircleXIcon,
   LoaderCircleIcon,
+  OctagonXIcon,
   SquareIcon,
   TriangleAlertIcon,
 } from "lucide-react";
@@ -45,7 +46,8 @@ import { cn } from "@/lib/utils";
 import { describeEvent, reasonText, stageName, type Tone } from "./describe";
 import { toastError } from "./feedback";
 import { formatBytes, formatClock, formatCount, formatDateTime } from "./format";
-import { jobQuery, useCancelJob } from "./queries";
+import { jobQuery, useCancelJob, useForceStopJob } from "./queries";
+import { forceStopIn, stopOffer, stoppingSince } from "./stopping";
 import { type JobEvents, useJobEvents } from "./use-job-events";
 
 /** The time, ticking each second while `ticking`, for durations that are still growing. */
@@ -60,10 +62,13 @@ export function useNow(ticking: boolean): number {
   return now;
 }
 
-/** A job's state: its record's, until the events are read to the end. */
-export function outcomeOf(job: Pick<JobRecord, "command" | "status">, events: JobEvents): Outcome {
+/** A job's state, once its events are read to the end: the view then shows how it ended. */
+export function outcomeOf(
+  job: Pick<JobSnapshot, "status" | "summarySeen">,
+  events: JobEvents,
+): Outcome {
   if (job.status === "running" || !events.ended) return "running";
-  return jobOutcome(events.view, job);
+  return jobOutcome(job);
 }
 
 const OUTCOME_ICONS = {
@@ -323,24 +328,69 @@ export function JobLog({
   );
 }
 
+/** Shown once a cancelled job has had FORCE_STOP_AFTER_MS to exit and hasn't. */
+function ForceStopButton({ id }: { readonly id: string }) {
+  const t = useT();
+  const force = useForceStopJob();
+  const [since] = useState(() => stoppingSince(id, Date.now()));
+  const [ready, setReady] = useState(() => forceStopIn(since, Date.now()) === 0);
+  useEffect(() => {
+    if (ready) return;
+    const timer = setTimeout(() => setReady(true), forceStopIn(since, Date.now()));
+    return () => clearTimeout(timer);
+  }, [since, ready]);
+  if (!ready) return null;
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button variant="destructive" size="sm" disabled={force.isPending}>
+          <OctagonXIcon />
+          {t("jobs.forceStop.button")}
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t("jobs.forceStop.title")}</AlertDialogTitle>
+          <AlertDialogDescription>{t("jobs.forceStop.body")}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{t("jobs.forceStop.wait")}</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            onClick={() => force.mutate(id, { onError: toastError })}
+          >
+            {t("jobs.forceStop.confirm")}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+/**
+ * A running job's stop buttons: Cancel, then Stopping beside Force stop. A job an earlier server
+ * started, which this one can't signal, shows only whether it is stopping.
+ */
 export function CancelJobButton({
-  id,
-  stopping,
+  job,
 }: {
-  readonly id: string;
-  /** A cancel was sent and the process hasn't exited yet. */
-  readonly stopping: boolean;
+  readonly job: Pick<JobSnapshot, "id" | "status" | "stopping" | "signalable">;
 }) {
   const t = useT();
   const cancel = useCancelJob();
-  if (stopping) {
+  const offer = stopOffer(job);
+  if (job.stopping) {
     return (
-      <Button variant="outline" size="sm" disabled>
-        <LoaderCircleIcon className="animate-spin" />
-        {t("jobs.cancel.stopping")}
-      </Button>
+      <>
+        <Button variant="outline" size="sm" disabled>
+          <LoaderCircleIcon className="animate-spin" />
+          {t("jobs.cancel.stopping")}
+        </Button>
+        {offer === "force-stop" && <ForceStopButton id={job.id} />}
+      </>
     );
   }
+  if (offer !== "cancel") return null;
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
@@ -358,7 +408,7 @@ export function CancelJobButton({
           <AlertDialogCancel>{t("jobs.cancel.keep")}</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
-            onClick={() => cancel.mutate(id, { onError: toastError })}
+            onClick={() => cancel.mutate(job.id, { onError: toastError })}
           >
             {t("jobs.cancel.confirm")}
           </AlertDialogAction>
@@ -436,12 +486,15 @@ export function JobCard({
         <OutcomeBadge outcome={outcome} />
         <span className="text-muted-foreground text-xs">{formatDateTime(job.startedAt, lang)}</span>
         <div className="ml-auto flex items-center gap-1">
-          {job.status === "running" && <CancelJobButton id={job.id} stopping={job.stopping} />}
+          <CancelJobButton job={job} />
           <Button variant="ghost" size="sm" asChild>
             <Link to={`/jobs/${encodeURIComponent(job.id)}`}>{t("jobs.details")}</Link>
           </Button>
         </div>
       </div>
+      {stopOffer(job) === "earlier-run" && (
+        <p className="text-muted-foreground text-xs">{t("jobs.earlierRun.body")}</p>
+      )}
       {outcome === "running" && stage && <StageRow stage={stage} />}
       {outcome === "running" && <RunningItems view={events.view} limit={4} />}
       {note && <p className="break-words text-destructive text-xs">{note}</p>}

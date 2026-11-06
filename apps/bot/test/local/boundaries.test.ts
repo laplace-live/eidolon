@@ -172,6 +172,7 @@ describe("the route table", () => {
       activeCalls: () => 0,
       restart: () => {},
       onStop: () => {},
+      memoryAdmin: () => null,
     };
     const registered = [
       ...sessionRoutes(app, new LocalToken("s".repeat(43))),

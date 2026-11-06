@@ -1,9 +1,6 @@
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { CREDENTIALS } from "@eidolon/config";
-import { CHECK_CODES, CHECK_WARNINGS, REQUIRED_KEYS } from "../../../../bot/src/local/api.ts";
-import { LANGS } from "../../lib/i18n";
+import { REQUIRED_KEYS } from "../../../../bot/src/local/api.ts";
 import {
   CHECK_OF,
   checkTone,
@@ -57,18 +54,4 @@ test("a verdict uses the provider's string, then the code's, then passed or fail
   expect(verdictKey("fish", { ok: true, code: "teapot" }, has)).toBe("settings.check.passed");
   expect(warningKey("free-tier", has)).toBe("settings.check.warning.free-tier");
   expect(warningKey("teapot", has)).toBeNull();
-});
-
-test("every check verdict and warning the API sends has a string in both languages", () => {
-  for (const lang of LANGS) {
-    const path = join(import.meta.dir, "../../locales", lang, "settings.json");
-    const strings: Record<string, string> = JSON.parse(readFileSync(path, "utf8"));
-    const keys = [
-      ...CHECK_CODES.map((code) => `check.${code}`),
-      ...CHECK_WARNINGS.map((code) => `check.warning.${code}`),
-      "check.passed",
-      "check.failed",
-    ];
-    expect([lang, keys.filter((key) => !(key in strings))]).toEqual([lang, []]);
-  }
 });

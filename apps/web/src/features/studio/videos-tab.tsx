@@ -45,7 +45,7 @@ import { LoadError, Section } from "./parts";
 import { personaQueries } from "./queries";
 import { usePlan } from "./use-plan";
 import { VideoTable } from "./video-table";
-import { downloadBatches, needsFfmpeg, planTotals, runBatch } from "./videos";
+import { downloadBatches, needsFfmpeg, paidRunOptions, planTotals } from "./videos";
 
 /** The jobs this tab starts, of which the latest is the one it follows. */
 const RUN_COMMANDS: readonly JobCommand[] = ["pipeline", "download", "transcribe"];
@@ -227,7 +227,6 @@ export function VideosTab({ persona }: { readonly persona: PersonaSummary }) {
   const downloadCount = plan.videos.filter(
     (video) => video.download === "pending" && video.batch === downloadBatch,
   ).length;
-  const paidBatch = runBatch(plan.videos, batch);
   const busy = running || start.isPending || plan.refreshing;
   const usd = totals.transcribeUsd + totals.refineUsd;
   const firstDownload = !plan.videos.some((video) => video.download === "done");
@@ -257,12 +256,11 @@ export function VideosTab({ persona }: { readonly persona: PersonaSummary }) {
   }
 
   function runPaid() {
-    if (paidBatch === null) return;
     start.mutate(
       {
         command: "pipeline",
         persona: persona.id,
-        options: { batch: paidBatch, transcribeConcurrency: concurrency },
+        options: paidRunOptions(plan.videos, batch, concurrency),
       },
       { onError: toastError },
     );
@@ -375,12 +373,9 @@ export function VideosTab({ persona }: { readonly persona: PersonaSummary }) {
           <RunPaid
             usd={usd}
             unpriced={totals.unpriced}
-            disabled={busy || totals.paidWork === 0 || paidBatch === null}
+            disabled={busy || totals.paidWork === 0}
             onRun={runPaid}
           />
-          {totals.paidWork > 0 && paidBatch === null && (
-            <span className="text-muted-foreground text-xs">{t("studio.videos.needsBatch")}</span>
-          )}
         </div>
       </Section>
 

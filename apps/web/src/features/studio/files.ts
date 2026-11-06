@@ -1,5 +1,6 @@
 // The studio's checks on files before they reach the server, which checks them again: names,
 // image types and sizes, and what a prompt asks of the voice model.
+import type { SettingRow } from "@/lib/api";
 import { parseMarkup } from "@/lib/markup";
 
 /** The server refuses larger uploads. */
@@ -66,4 +67,24 @@ export function textCounts(text: string): TextCounts {
 /** Whether a prompt teaches delivery cues: `[…]` directions or paired word tags. */
 export function hasDeliveryCues(prompt: string): boolean {
   return parseMarkup(prompt).some((token) => token.kind !== "text" || token.tags.length > 0);
+}
+
+/**
+ * Why the voice model may speak a prompt's cues as words: the model the bot reads is set and isn't
+ * CUE_MODEL, or the environment sets it, whose value the settings API never shows.
+ */
+export type CueClash =
+  | { readonly kind: "model"; readonly model: string }
+  | { readonly kind: "env"; readonly env: string };
+
+/** The clash between voice.model's row, read layer by layer, and a prompt; null when none. */
+export function cueClash(
+  row: Pick<SettingRow, "env" | "value" | "envOverride"> | undefined,
+  prompt: string | undefined,
+): CueClash | null {
+  if (row === undefined || prompt === undefined || !hasDeliveryCues(prompt)) return null;
+  if (row.envOverride) return { kind: "env", env: row.env };
+  const model = typeof row.value === "string" ? row.value.trim() : "";
+  // Unset, the bot's default model applies, which the built-in prompts are written for.
+  return model !== "" && model !== CUE_MODEL ? { kind: "model", model } : null;
 }

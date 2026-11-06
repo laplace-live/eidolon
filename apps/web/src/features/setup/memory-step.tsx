@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckIcon, CopyIcon } from "lucide-react";
+import { CheckIcon } from "lucide-react";
 import { useId, useState } from "react";
 import { controlFor, draftOf, parseDraft } from "@/components/settings-form/controls";
 import { CheckResultView } from "@/components/settings-form/key-field";
@@ -14,6 +14,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { type ApiError, call, errorKey } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { statusQuery } from "@/lib/query";
+import { CopyCommand } from "./copy-command";
 import { asApiError } from "./personas";
 import { StepCard } from "./step-card";
 import { QDRANT_COMMAND, QDRANT_HOST, QDRANT_PORT } from "./wizard";
@@ -21,28 +22,6 @@ import { QDRANT_COMMAND, QDRANT_HOST, QDRANT_PORT } from "./wizard";
 const HOST = "memory.qdrant.host";
 const PORT = "memory.qdrant.port";
 const PORT_CONTROL = controlFor({ path: PORT, kind: "int", scope: "app" });
-
-function CopyCommand({ command }: { readonly command: string }) {
-  const t = useT();
-  const [copied, setCopied] = useState(false);
-  return (
-    <div className="flex items-start gap-2 rounded-lg border bg-muted/50 p-3">
-      <pre className="min-w-0 flex-1 overflow-x-auto whitespace-pre-wrap break-all font-mono text-xs">
-        {command}
-      </pre>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label={t("setup.memory.copy")}
-        onClick={() => {
-          void navigator.clipboard.writeText(command).then(() => setCopied(true));
-        }}
-      >
-        {copied ? <CheckIcon /> : <CopyIcon />}
-      </Button>
-    </div>
-  );
-}
 
 /**
  * Memory is Qdrant, run in Docker. The check probes the typed address before anything is saved,

@@ -1,7 +1,14 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDownIcon, FilePlusIcon, PencilIcon, PlayIcon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  FilePlusIcon,
+  PencilIcon,
+  PlayIcon,
+  TriangleAlertIcon,
+} from "lucide-react";
 import { useCallback, useState } from "react";
 import { SettingsForm } from "@/components/settings-form";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,9 +37,10 @@ import { JobCard } from "@/features/jobs/parts";
 import { jobsQuery, useStartJob } from "@/features/jobs/queries";
 import type { IndexTable, JobCommand, PersonaSummary } from "@/lib/api";
 import { useLang, useT } from "@/lib/i18n";
-import { latestJob } from "@/lib/jobs";
+import { latestJob, type Outcome } from "@/lib/jobs";
 import { statusQuery } from "@/lib/query";
 import { FactEditor, type FactTarget } from "./facts-editor";
+import { factsHint, factsState, wasIndexed } from "./knowledge";
 import { LoadError, Section } from "./parts";
 import { personaQueries } from "./queries";
 
@@ -161,22 +169,41 @@ function FactsSection({ persona }: { readonly persona: PersonaSummary }) {
   const t = useT();
   const lang = useLang();
   const facts = useQuery(personaQueries(persona.id).facts);
+  const index = useQuery(personaQueries(persona.id).index);
   const { data: jobs } = useQuery(jobsQuery);
   const factsJob = latestJob(jobs ?? [], persona.id, ["ingest-facts"]);
-  const onEnded = useIngestEnded(persona.id);
+  const ingestEnded = useIngestEnded(persona.id);
   const [target, setTarget] = useState<FactTarget | null>(null);
   const [dirty, setDirty] = useState(false);
   // A switch the viewer asked for while the open file has unsaved edits, waiting for an answer.
   const [pending, setPending] = useState<{ readonly next: FactTarget | null } | null>(null);
+  // Files deleted here that the index held, until an ingest drops them.
+  const [deleted, setDeleted] = useState<readonly string[]>([]);
 
   function open(next: FactTarget | null) {
     if (dirty) setPending({ next });
     else setTarget(next);
   }
 
+  const onEnded = useCallback(
+    (outcome: Outcome) => {
+      if (outcome === "succeeded") setDeleted([]);
+      ingestEnded();
+    },
+    [ingestEnded],
+  );
+
   const files = facts.data?.files ?? [];
-  const changed = files.filter((file) => file.matched && file.changed).length;
-  const matched = files.filter((file) => file.matched).length;
+  const state = factsState({ files, removed: facts.data?.removed ?? [] }, deleted);
+  const hint = factsHint(state);
+  const factsTable = index.data?.tables.find((table) => table.table === "persona_facts");
+
+  function onDeleted(name: string) {
+    const file = files.find((entry) => entry.name === name);
+    if (file && wasIndexed(file, factsTable)) setDeleted((names) => [...names, name]);
+    setDirty(false);
+    setTarget(null);
+  }
 
   return (
     <Section
@@ -262,8 +289,19 @@ function FactsSection({ persona }: { readonly persona: PersonaSummary }) {
                 setTarget(next);
               }}
               onClose={() => open(null)}
+              onDeleted={onDeleted}
               onDirtyChange={setDirty}
             />
+          )}
+          {state.gone.length > 0 && (
+            <Alert>
+              <TriangleAlertIcon />
+              <AlertTitle>{t("studio.facts.goneTitle", { count: state.gone.length })}</AlertTitle>
+              <AlertDescription>
+                <p>{t(state.matched > 0 ? "studio.facts.goneBody" : "studio.facts.goneEmpty")}</p>
+                <p className="break-all font-mono text-xs">{state.gone.join(", ")}</p>
+              </AlertDescription>
+            </Alert>
           )}
           <div className="flex flex-wrap items-center gap-3">
             <RunButton
@@ -272,13 +310,7 @@ function FactsSection({ persona }: { readonly persona: PersonaSummary }) {
               label={t("studio.facts.ingest")}
               running={factsJob?.status === "running"}
             />
-            <span className="text-muted-foreground text-xs">
-              {matched === 0
-                ? t("studio.facts.nothingMatched")
-                : changed > 0
-                  ? t("studio.facts.changedCount", { count: changed })
-                  : t("studio.facts.ingestHelp")}
-            </span>
+            <span className="text-muted-foreground text-xs">{t(hint.key, hint.vars)}</span>
           </div>
         </>
       )}

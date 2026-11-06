@@ -1,6 +1,7 @@
 // The videos tab's arithmetic: links typed in, what a link check found, and what a plan says is
 // left to do and to spend.
 import type { PlanVideo, PlaylistEntry } from "@eidolon/ingest/progress";
+import type { JobOptions, PipelineStage } from "@/lib/api";
 
 /** The server refuses a longer URL. */
 const MAX_URL_LENGTH = 2048;
@@ -129,6 +130,27 @@ export function runBatch(videos: readonly PlanVideo[], preferred: string | null)
   const pending = [...withWork].sort();
   if (pending.length > 0) return pending[0] as string;
   return [...batches].sort().at(-1) ?? null;
+}
+
+/** Every stage but download, which alone reads a batch's list. */
+export const PAID_STAGES = ["transcribe", "refine", "ingest"] as const satisfies readonly Exclude<
+  PipelineStage,
+  "download"
+>[];
+
+/**
+ * The paid run's options: runBatch's batch, whose videos it downloads first; without one, as when
+ * every video sits in hand-made lists, the paid stages alone.
+ */
+export function paidRunOptions(
+  videos: readonly PlanVideo[],
+  preferred: string | null,
+  transcribeConcurrency: number,
+): JobOptions["pipeline"] {
+  const batch = runBatch(videos, preferred);
+  return batch === null
+    ? { stages: PAID_STAGES, transcribeConcurrency }
+    : { batch, transcribeConcurrency };
 }
 
 export interface PlanTotals {

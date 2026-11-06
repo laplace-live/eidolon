@@ -332,12 +332,15 @@ export function listReferences(id: string, kind: ReferenceKind): ReferenceImage[
 
 export const AVATAR_STEM = "avatar";
 
-/** references/avatar.{png,jpg,jpeg,webp}, the user's first. */
+/**
+ * avatar.{png,jpg,jpeg,webp} at the root of her folder, the user's first. Never in references/,
+ * whose loose images imagegen takes for outfits to redraw in every selfie.
+ */
 export function findAvatar(id: string): (ReferenceImage & { readonly path: string }) | null {
   for (const [root, source] of layers(id)) {
     for (const extension of IMAGE_EXTENSIONS) {
       const name = `${AVATAR_STEM}${extension}`;
-      const path = join(root, "references", name);
+      const path = join(root, name);
       try {
         const stat = statSync(path);
         if (stat.isFile()) return { name, source, size: stat.size, path };

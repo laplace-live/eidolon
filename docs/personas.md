@@ -10,6 +10,7 @@ personas/<id>/
   persona.yaml          identity and the settings this persona changes (below)
   prompt.md             the system prompt — identity and hard rules, no code
   glossary.toml         Soniox transcription vocabulary (Soniox's StructuredContext)
+  avatar.{png,jpg,webp} the avatar the web app shows; never a selfie reference
   references/outfits/   what take_selfie redraws; exactly one reaches a render
   references/friends/   one image per person she can be photographed with, named after them
   index/                what the ingests build; derived, rebuildable, never edited
@@ -239,17 +240,21 @@ Mount a data home holding the persona's folder at `/data`, and configure the res
 environment as before. What goes in that folder depends on where the persona comes from:
 
 - **A template persona**, one the repository ships under `personas/` (milky-green): its `index/`
-  and `references/` only. Its `prompt.md` and `persona.yaml` come from the image, so each release
-  brings the published ones; a copy on the server would override them, file by file. Remove any
-  that an earlier copy of the whole folder left there.
-- **A persona of your own**: its whole `personas/<id>/` folder.
+  and `references/friends/` only. Its `prompt.md`, `persona.yaml`, `glossary.toml` and outfits
+  come from the image, so each release brings the published ones. A copy on the server would
+  override them file by file, and they are what the local web app's studio edits in your data
+  home, so copying them would ship those edits to production. Remove any that an earlier copy of
+  the whole folder left there.
+- **A persona of your own**: its whole `personas/<id>/` folder, the avatar at its root included.
 - **Never** `sources/`: the bot reads none of it.
 
 Copy the first time, and again after every re-ingest:
 
 ```sh
-# a template persona: each folder on its own (leave out one you don't have)
-for folder in index references; do
+# a template persona: each folder on its own (leave out one you don't have). rsync makes only
+# the last folder of a destination, so the first copy needs the persona's references/ there.
+ssh <host> mkdir -p "<mounted path>/personas/<id>/references"
+for folder in index references/friends; do
   rsync -a --checksum --delete-after --delay-updates \
     "<data home>/personas/<id>/$folder/" "<host>:<mounted path>/personas/<id>/$folder/"
 done

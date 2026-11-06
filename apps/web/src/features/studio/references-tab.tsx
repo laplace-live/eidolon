@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ImagePlusIcon, Trash2Icon, UserPlusIcon } from "lucide-react";
+import { ImagePlusIcon, InfoIcon, Trash2Icon, UserPlusIcon } from "lucide-react";
 import {
   type ChangeEvent,
   type FormEvent,
@@ -11,7 +11,9 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { PersonaAvatar } from "@/components/avatar";
+import { avatarChanged } from "@/components/avatar/version";
 import { SettingsForm } from "@/components/settings-form";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -126,7 +128,8 @@ function useUpload(persona: string, onDone: () => void) {
             params: { id: persona, kind, name },
             body: file,
           }),
-    onSuccess: async () => {
+    onSuccess: async (_image, { kind }) => {
+      if (kind === "avatar") avatarChanged(persona);
       onDone();
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: personaQueries(persona).references.queryKey }),
@@ -146,7 +149,8 @@ function useRemove(persona: string, onDone: () => void) {
         : call("DELETE /api/local/personas/:id/references/:kind/:name", {
             params: { id: persona, kind, name },
           }),
-    onSuccess: async () => {
+    onSuccess: async (_ok, { kind }) => {
+      if (kind === "avatar") avatarChanged(persona);
       onDone();
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: personaQueries(persona).references.queryKey }),
@@ -337,12 +341,21 @@ export function ReferencesTab({ persona }: { readonly persona: PersonaSummary })
 
   return (
     <div className="flex flex-col gap-6">
+      {persona.template && (
+        <Alert>
+          <InfoIcon />
+          <AlertTitle>{t("studio.references.localTitle")}</AlertTitle>
+          <AlertDescription>
+            {t("studio.references.localBody", { name: persona.name })}
+          </AlertDescription>
+        </Alert>
+      )}
       <Section
         title={t("studio.references.avatarTitle")}
         description={t("studio.references.avatarHelp")}
       >
         <div className="flex flex-wrap items-center gap-4">
-          <PersonaAvatar persona={persona} size="xl" version={version} />
+          <PersonaAvatar persona={persona} size="xl" />
           <div className="flex flex-wrap gap-2">
             <PickButton
               label={t(

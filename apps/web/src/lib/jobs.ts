@@ -9,7 +9,7 @@ import type {
   Provider,
   Stage,
 } from "@eidolon/ingest/progress";
-import type { JobCommand, JobRecord } from "./api";
+import type { JobCommand, JobRecord, JobSnapshot } from "./api";
 
 /** One line of a job's events file: the event, its schema version `v` and its time `t` in ms. */
 export type JobEvent = ProgressEvent & { readonly v?: number; readonly t?: number };
@@ -282,17 +282,11 @@ export function runSummary(view: JobView, command: JobCommand): SummaryEvent | n
 export type Outcome = "running" | "succeeded" | "failed" | "cancelled" | "interrupted" | "crashed";
 
 /**
- * How a job ended, once its events are all read. A run that writes no summary died before its end
- * (`crashed`), and only its stderr explains why.
+ * How a job ended, by its snapshot, whose status the server reads from the run's summary. A run
+ * that failed without writing one died before its end (`crashed`), and only its stderr says why.
  */
-export function jobOutcome(view: JobView, job: Pick<JobRecord, "command" | "status">): Outcome {
-  if (job.status === "running" || job.status === "interrupted" || job.status === "cancelled") {
-    return job.status;
-  }
-  const summary = runSummary(view, job.command);
-  if (summary === null) return job.status === "succeeded" ? "succeeded" : "crashed";
-  if (summary.cancelled) return "cancelled";
-  return summary.ok ? "succeeded" : "failed";
+export function jobOutcome(job: Pick<JobSnapshot, "status" | "summarySeen">): Outcome {
+  return job.status === "failed" && !job.summarySeen ? "crashed" : job.status;
 }
 
 /**
@@ -356,6 +350,18 @@ export function videoActivity(view: JobView): Map<string, ItemView> {
     }
   }
   return latest;
+}
+
+/**
+ * The jobs this server runs, oldest first: what a restart interrupts. A job an earlier server
+ * started is left out; a restart doesn't signal it, and the next server picks it up again.
+ */
+export function runningJobs<J extends Pick<JobSnapshot, "status" | "startedAt" | "signalable">>(
+  jobs: readonly J[],
+): J[] {
+  return jobs
+    .filter((job) => job.status === "running" && job.signalable)
+    .sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt));
 }
 
 /** The persona's job of one of `commands` that started last. */

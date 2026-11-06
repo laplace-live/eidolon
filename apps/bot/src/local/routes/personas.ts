@@ -219,19 +219,31 @@ function glossaryErrors(id: string): string[] {
   }
 }
 
-/** Where the TOML stops parsing; the parser's quote of the text there is left out. */
-function tomlError(text: string): string | null {
+/** Where the glossary sits for the bundler, which reads it from memory, never from the disk. */
+const GLOSSARY_ENTRY = "/glossary.toml";
+
+/**
+ * Where the TOML stops parsing, as `line L, column C: reason` with both counted from 1; the
+ * parser's quote of the text there is left out. Null when it parses.
+ */
+async function tomlError(text: string): Promise<string | null> {
   try {
     Bun.TOML.parse(text);
     return null;
   } catch (error) {
-    const where = error as { line?: unknown; column?: unknown; message?: unknown };
-    const reason = String(where.message ?? "")
+    // Bun.TOML.parse's error has `line` and `column`, but they are JavaScriptCore's: where this
+    // file called it. Bun.build parses TOML with the same parser and logs the text's own place.
+    const built = await Bun.build({
+      entrypoints: [GLOSSARY_ENTRY],
+      files: { [GLOSSARY_ENTRY]: text },
+      throw: false,
+    });
+    const log = built.logs.find((entry) => entry.position !== null);
+    const reason = (log?.message ?? String((error as { message?: unknown }).message ?? ""))
       .replace(/^TOML Parse error:\s*/, "")
       .replace(/:?\s*"[^"]*"/g, "");
-    return typeof where.line === "number"
-      ? `line ${where.line}, column ${String(where.column)}: ${reason}`
-      : reason;
+    const at = log?.position;
+    return at ? `line ${at.line}, column ${at.column}: ${reason}` : reason;
   }
 }
 
@@ -386,7 +398,7 @@ export function personasRoutes(app: LocalApp): LocalRouteSpec[] {
       handler: forPersona(async (request, id) => {
         const text = await textBody(request);
         if (text instanceof Response) return text;
-        const error = tomlError(text);
+        const error = await tomlError(text);
         if (error !== null) return localError(400, "invalid-toml", error);
         try {
           writeDataFile(personaWriteTarget(id, "glossary.toml"), text);
@@ -508,7 +520,7 @@ export function personasRoutes(app: LocalApp): LocalRouteSpec[] {
       handler: forPersona(async (request, id) => {
         const upload = await readUpload(request);
         if (upload instanceof Response) return upload;
-        const folder = join(personaHomeDir(id), "references");
+        const folder = personaHomeDir(id);
         const name = `${AVATAR_STEM}${upload.image.extension}`;
         try {
           writeDataFile(join(folder, name), upload.bytes);

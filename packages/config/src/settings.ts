@@ -304,7 +304,9 @@ function readTree(path: string, label: string, warn: Warn): Tree {
     if (isPlainObject(parsed)) return parsed;
     warn(`Ignoring ${label}: expected a mapping at the top level`);
   } catch (error) {
-    warn(`Ignoring ${label}: ${error instanceof Error ? error.message : String(error)}`);
+    // JSON.parse's message quotes the text it stopped at, which in credentials.json is a key.
+    if (path.endsWith(".json")) warn(`Ignoring ${label}: not valid JSON`);
+    else warn(`Ignoring ${label}: ${error instanceof Error ? error.message : String(error)}`);
   }
   return {};
 }

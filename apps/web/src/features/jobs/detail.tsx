@@ -31,6 +31,7 @@ import {
   useNow,
 } from "./parts";
 import { jobQuery, useResumeJob } from "./queries";
+import { stopOffer } from "./stopping";
 import { useJobEvents } from "./use-job-events";
 
 /** How much of a long stderr log the page shows: its end, where a crash is. */
@@ -189,7 +190,7 @@ export function JobDetail({ id }: { readonly id: string }) {
           </h1>
           <OutcomeBadge outcome={outcome} />
           <div className="ml-auto flex gap-2">
-            {job.status === "running" && <CancelJobButton id={job.id} stopping={job.stopping} />}
+            <CancelJobButton job={job} />
             {resumable && (
               <Button
                 size="sm"
@@ -256,6 +257,12 @@ export function JobDetail({ id }: { readonly id: string }) {
         )}
       </div>
 
+      {stopOffer(job) === "earlier-run" && (
+        <Alert>
+          <AlertTitle>{t("jobs.earlierRun.title")}</AlertTitle>
+          <AlertDescription>{t("jobs.earlierRun.body")}</AlertDescription>
+        </Alert>
+      )}
       {outcome === "interrupted" && (
         <Alert>
           <AlertTitle>{t("jobs.interrupted.title")}</AlertTitle>

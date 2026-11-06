@@ -102,5 +102,12 @@
   "stages.none": "This job reported no progress.",
   "resumedFrom": "Reruns an earlier job",
   "resumedBy": "Resumed by a later job",
-  "cancel.stopping": "Stopping…"
+  "cancel.stopping": "Stopping…",
+  "forceStop.button": "Force stop",
+  "forceStop.title": "Force this job to stop?",
+  "forceStop.body": "It still hasn't stopped since you cancelled it. Force stop ends it at once, without letting it finish what it is writing: an index it was building can be left half built, so run that job again afterwards.",
+  "forceStop.wait": "Keep waiting",
+  "forceStop.confirm": "Force stop",
+  "earlierRun.title": "Can't be stopped from here",
+  "earlierRun.body": "An earlier run of Eidolon started this job, so this one can't stop it. It will finish on its own, or be marked interrupted."
 }

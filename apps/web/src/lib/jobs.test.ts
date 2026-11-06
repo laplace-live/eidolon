@@ -13,6 +13,7 @@ import {
   latestJob,
   reduceJob,
   runningItems,
+  runningJobs,
   runSummary,
   type StageView,
   stageFraction,
@@ -162,33 +163,16 @@ describe("summaries and outcomes", () => {
     expect(runSummary(reduce(summary("ingest-facts", false)), "ingest-facts")?.ok).toBe(false);
   });
 
-  test("a summary decides how the run ended", () => {
-    const job = { command: "pipeline", status: "failed" } as const;
-    expect(jobOutcome(pipeline(summary("pipeline", true)), { ...job, status: "succeeded" })).toBe(
-      "succeeded",
-    );
-    expect(jobOutcome(pipeline(summary("pipeline", false)), job)).toBe("failed");
-    expect(jobOutcome(pipeline(summary("pipeline", false, { cancelled: true })), job)).toBe(
-      "cancelled",
-    );
+  test("a failed run crashed when it wrote no summary, as the snapshot says", () => {
+    expect(jobOutcome({ status: "failed", summarySeen: false })).toBe("crashed");
+    expect(jobOutcome({ status: "failed", summarySeen: true })).toBe("failed");
   });
 
-  test("a run that died without its summary crashed, even after a stage's summary", () => {
-    expect(jobOutcome(pipeline(), { command: "pipeline", status: "failed" })).toBe("crashed");
-    expect(jobOutcome(EMPTY_JOB_VIEW, { command: "ingest-facts", status: "failed" })).toBe(
-      "crashed",
-    );
-    // Exiting 0 is success even without the summary every command writes.
-    expect(jobOutcome(EMPTY_JOB_VIEW, { command: "refine", status: "succeeded" })).toBe(
-      "succeeded",
-    );
-  });
-
-  test("cancelled, interrupted and running come from the job, whatever was written", () => {
-    const view = pipeline(summary("pipeline", true));
-    expect(jobOutcome(view, { command: "pipeline", status: "cancelled" })).toBe("cancelled");
-    expect(jobOutcome(view, { command: "pipeline", status: "interrupted" })).toBe("interrupted");
-    expect(jobOutcome(view, { command: "pipeline", status: "running" })).toBe("running");
+  test("every other status is the job's own, summary or not", () => {
+    for (const status of ["running", "succeeded", "cancelled", "interrupted"] as const) {
+      expect(jobOutcome({ status, summarySeen: true })).toBe(status);
+      expect(jobOutcome({ status, summarySeen: false })).toBe(status);
+    }
   });
 });
 
@@ -304,4 +288,19 @@ test("latestJob picks the persona's newest job of the commands asked for", () =>
   expect(latestJob(jobs, "a", ["plan"])?.id).toBe("2");
   expect(latestJob(jobs, "a", ["plan", "pipeline"])?.id).toBe("4");
   expect(latestJob(jobs, "c", ["plan"])).toBeNull();
+});
+
+test("runningJobs lists what a restart would interrupt, oldest first", () => {
+  const job = (id: string, status: JobSnapshot["status"], startedAt: string, signalable = true) =>
+    ({ id, status, startedAt, signalable }) as const;
+  const jobs = [
+    job("1", "succeeded", "2026-11-05T09:00:00.000Z", false),
+    job("2", "running", "2026-11-05T11:00:00.000Z"),
+    job("3", "interrupted", "2026-11-05T12:00:00.000Z", false),
+    job("4", "running", "2026-11-05T10:00:00.000Z"),
+    // Started by an earlier server: a restart doesn't touch it.
+    job("5", "running", "2026-11-05T08:00:00.000Z", false),
+  ];
+  expect(runningJobs(jobs).map((entry) => entry.id)).toEqual(["4", "2"]);
+  expect(runningJobs(jobs.filter((entry) => entry.status !== "running"))).toEqual([]);
 });

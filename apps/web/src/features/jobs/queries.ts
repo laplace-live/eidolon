@@ -49,6 +49,16 @@ export function useCancelJob() {
   });
 }
 
+/** SIGKILL for a cancelled job that won't exit. */
+export function useForceStopJob() {
+  const remember = useRemember();
+  return useMutation({
+    mutationFn: (id: string) =>
+      call("DELETE /api/local/jobs/:id", { params: { id }, query: { force: 1 } }),
+    onSuccess: remember,
+  });
+}
+
 export function useResumeJob() {
   const remember = useRemember();
   return useMutation({

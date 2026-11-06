@@ -185,13 +185,17 @@ function mapped(
   const who = ["--persona", persona];
   switch (command) {
     case "pipeline": {
-      const batch = batchFile(persona, options.batch);
       const stages = stagesOf(options.stages);
+      // Only the download stage reads the batch; the later ones take every video she has.
+      const batch =
+        options.batch === undefined && stages?.includes("download") === false
+          ? null
+          : batchFile(persona, options.batch);
       const abortOnError = flagOf(options, "abortOnError");
       const concurrency = concurrencyOf(options.transcribeConcurrency);
       return {
         options: {
-          batch: options.batch,
+          ...(batch === null ? {} : { batch: options.batch }),
           ...(stages === undefined ? {} : { stages }),
           ...(abortOnError === undefined ? {} : { abortOnError }),
           ...(concurrency === undefined ? {} : { transcribeConcurrency: concurrency }),
@@ -202,8 +206,7 @@ function mapped(
           ...(stages === undefined ? [] : ["--stages", stages.join(",")]),
           ...(abortOnError ? ["--abort-on-error"] : []),
           ...(concurrency === undefined ? [] : ["--transcribe-concurrency", String(concurrency)]),
-          "--",
-          batch,
+          ...(batch === null ? [] : ["--", batch]),
         ],
       };
     }

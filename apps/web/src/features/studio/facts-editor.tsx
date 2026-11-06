@@ -103,12 +103,12 @@ function DeleteFact({
 function ExistingFact({
   persona,
   name,
-  onClose,
+  onDeleted,
   onDirtyChange,
 }: {
   readonly persona: string;
   readonly name: string;
-  readonly onClose: () => void;
+  readonly onDeleted: (name: string) => void;
   readonly onDirtyChange: (dirty: boolean) => void;
 }) {
   const t = useT();
@@ -128,7 +128,7 @@ function ExistingFact({
         toast.success(t("studio.facts.saved", { name }));
         return text;
       }}
-      actions={<DeleteFact persona={persona} name={name} onDeleted={onClose} />}
+      actions={<DeleteFact persona={persona} name={name} onDeleted={() => onDeleted(name)} />}
     />
   );
 }
@@ -202,6 +202,7 @@ export function FactEditor({
   existing,
   onSelect,
   onClose,
+  onDeleted,
   onDirtyChange,
 }: {
   readonly persona: string;
@@ -209,6 +210,8 @@ export function FactEditor({
   readonly existing: readonly string[];
   readonly onSelect: (target: FactTarget) => void;
   readonly onClose: () => void;
+  /** The open file is gone, unsaved edits and all. */
+  readonly onDeleted: (name: string) => void;
   readonly onDirtyChange: (dirty: boolean) => void;
 }) {
   const t = useT();
@@ -239,7 +242,7 @@ export function FactEditor({
           key={target.name}
           persona={persona}
           name={target.name}
-          onClose={onClose}
+          onDeleted={onDeleted}
           onDirtyChange={onDirtyChange}
         />
       )}

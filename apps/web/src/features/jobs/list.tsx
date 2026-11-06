@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/table";
 import { ApiError, errorKey, type JobSnapshot } from "@/lib/api";
 import { type Lang, type Translate, useLang, useT } from "@/lib/i18n";
+import { jobOutcome } from "@/lib/jobs";
 import { elapsedSeconds, formatDateTime, formatDuration, formatUsd } from "./format";
 import { OutcomeBadge, useNow } from "./parts";
 import { jobsQuery } from "./queries";
@@ -42,7 +43,7 @@ function JobRow({ job, lang, now }: { job: JobSnapshot; lang: Lang; now: number 
         <div className="text-muted-foreground text-xs">{job.persona}</div>
       </TableCell>
       <TableCell>
-        <OutcomeBadge outcome={job.status} />
+        <OutcomeBadge outcome={jobOutcome(job)} />
       </TableCell>
       <TableCell className="text-muted-foreground tabular-nums">
         {snapshotProgress(t, job)}

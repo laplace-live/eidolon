@@ -11,7 +11,7 @@ import { BUILD_STREAM_CATALOG_PARSER } from "../../../cli/src/build_stream_catal
 import { DOWNLOAD_PARSER } from "../../../cli/src/download.ts";
 import { INGEST_FACTS_PARSER } from "../../../cli/src/ingest_facts.ts";
 import { ingestStreamsParser } from "../../../cli/src/ingest_streams.ts";
-import { PIPELINE_PARSER } from "../../../cli/src/pipeline.ts";
+import { PIPELINE_PARSER, parsePipelineArgs } from "../../../cli/src/pipeline.ts";
 import { refineParser } from "../../../cli/src/refine.ts";
 import { TRANSCRIBE_PARSER } from "../../../cli/src/transcribe.ts";
 import type { JobRequest } from "../../src/local/api.ts";
@@ -84,6 +84,23 @@ describe("each command spawns a fixed argv", () => {
       },
       ["pipeline", ...PERSONA, "--stages", "download", "--", "<batch>"],
       { batch: BATCH, stages: ["download"], abortOnError: false },
+    ],
+    [
+      "pipeline, the later stages over every video, no batch",
+      {
+        command: "pipeline",
+        persona: "milky-green",
+        options: { stages: ["ingest", "transcribe", "refine"], transcribeConcurrency: 4 },
+      },
+      [
+        "pipeline",
+        ...PERSONA,
+        "--stages",
+        "transcribe,refine,ingest",
+        "--transcribe-concurrency",
+        "4",
+      ],
+      { stages: ["transcribe", "refine", "ingest"], transcribeConcurrency: 4 },
     ],
     [
       "download",
@@ -191,6 +208,21 @@ describe("the CLI reads each argv as meant", () => {
       db_path: null,
       refine_force: false,
     });
+  });
+
+  test("pipeline without a batch: the later stages, which the CLI runs without a list", () => {
+    const spec = parseJobRequest({
+      command: "pipeline",
+      persona: "milky-green",
+      options: { stages: ["transcribe", "refine"] },
+    });
+    const args = read(spec);
+    expect(parseArgs(PIPELINE_PARSER, args)).toMatchObject({
+      url_list: null,
+      dry_run: false,
+      stages: ["transcribe", "refine"],
+    });
+    expect(parsePipelineArgs(args)).toMatchObject({ urlList: null, persona: "milky-green" });
   });
 
   test("plan: a dry run of every known video", () => {
@@ -365,6 +397,16 @@ describe("refused requests", () => {
       400,
       "invalid-option",
     ],
+    [
+      "no batch for the download stage",
+      {
+        command: "pipeline",
+        persona: "milky-green",
+        options: { stages: ["download", "refine"] },
+      },
+      400,
+      "invalid-option",
+    ],
     ["a batch path", pipeline({ batch: "../../credentials" }), 400, "invalid-option"],
     ["a batch starting with -", pipeline({ batch: "--yt-dlp-args=x" }), 400, "invalid-option"],
     [
@@ -485,15 +527,22 @@ describe("refused requests", () => {
 test("JobRequest types each command's options", () => {
   const requests: JobRequest[] = [
     { command: "pipeline", persona: "p", options: { batch: "b", stages: ["download"] } },
+    { command: "pipeline", persona: "p", options: { stages: ["transcribe", "refine"] } },
     { command: "refine", persona: "p" },
     { command: "plan", persona: "p", options: { refresh: true } },
     { command: "expand", persona: "p", options: { url: "https://a.example/" } },
   ];
   // @ts-expect-error a pipeline names its batch
   const noBatch: JobRequest = { command: "pipeline", persona: "p" };
+  const noBatchToDownload: JobRequest = {
+    command: "pipeline",
+    persona: "p",
+    // @ts-expect-error the download stage reads a batch
+    options: { stages: ["download", "refine"] },
+  };
   // @ts-expect-error refine takes no options
   const extra: JobRequest = { command: "refine", persona: "p", options: { force: true } };
   // @ts-expect-error generate-image is no job
   const image: JobRequest = { command: "generate-image", persona: "p" };
-  expect([...requests, noBatch, extra, image]).toHaveLength(7);
+  expect([...requests, noBatch, noBatchToDownload, extra, image]).toHaveLength(9);
 });

@@ -1,6 +1,7 @@
 // The jobs this server runs: the CLI as detached children whose stdout and stderr go straight to
 // files the server tails, so a job outlives a reloaded page and the server's own restart.
 import { closeSync } from "node:fs";
+import { uptime } from "node:os";
 import { jobArgv } from "@eidolon/cli/job";
 import { dataHome, errorText, logger } from "@eidolon/config";
 import type { Subprocess } from "bun";
@@ -14,6 +15,7 @@ import {
   loadRecords,
   mintJobId,
   removeJob,
+  type StopReason,
   type StoredJob,
   writeRecord,
 } from "./store.ts";
@@ -24,8 +26,6 @@ export type ArgvBuilder = (command: string, args: readonly string[]) => string[]
 export interface JobRunnerOptions {
   readonly argv?: ArgvBuilder;
   readonly now?: () => Date;
-  /** How long a cancelled job has to exit before its process group is killed. */
-  readonly killAfterMs?: number;
   /** How often an open events stream, and a job an earlier server started, are checked. */
   readonly pollMs?: number;
   /** Jobs kept, besides plans and previews. */
@@ -39,8 +39,6 @@ export interface Job {
   child: Subprocess | null;
   /** Running, started by an earlier server: watched until it ends, never signalled. */
   adopted: boolean;
-  stopping: boolean;
-  killTimer: ReturnType<typeof setTimeout> | null;
   /** The stderr tail of an ended job, which no longer changes. */
   tail: string | null;
   readonly ended: Promise<void>;
@@ -74,18 +72,20 @@ export class JobRunner {
   private readonly streams = new Set<() => void>();
   private readonly argv: ArgvBuilder;
   private readonly now: () => Date;
-  private readonly killAfterMs: number;
   private readonly pollMs: number;
   private readonly keep: number;
   private watcher: ReturnType<typeof setInterval> | null = null;
 
-  /** Loads the jobs on disk: a plan or preview is dropped, and a running one is checked on. */
+  /**
+   * Loads the jobs on disk: a plan or preview is dropped, and a running one is checked on. One
+   * started before this machine booted is gone, whatever process its pid names now.
+   */
   constructor(options: JobRunnerOptions = {}) {
     this.argv = options.argv ?? jobArgv;
     this.now = options.now ?? (() => new Date());
-    this.killAfterMs = options.killAfterMs ?? 15_000;
     this.pollMs = options.pollMs ?? 250;
     this.keep = options.keep ?? 50;
+    const bootedAt = Date.now() - uptime() * 1000;
     for (const record of loadRecords()) {
       if (record.ephemeral) {
         removeJob(record.id);
@@ -97,7 +97,12 @@ export class JobRunner {
         continue;
       }
       job.events.advance(jobFiles(record.id).events);
-      if (job.events.final === null && record.pid !== null && alive(record.pid)) {
+      if (
+        job.events.final === null &&
+        record.pid !== null &&
+        Date.parse(record.startedAt) >= bootedAt &&
+        alive(record.pid)
+      ) {
         job.adopted = true;
       } else {
         this.end(job, null, true, lastWrite(record.id) ?? this.now());
@@ -139,6 +144,7 @@ export class JobRunner {
       resumedFrom,
       resumedBy: null,
       pid: null,
+      stopReason: null,
     };
     const outputs = createOutputs(files);
     let child: Subprocess;
@@ -192,7 +198,7 @@ export class JobRunner {
       tail = tailOf(files.log);
       if (job.record.status !== "running") job.tail = tail;
     }
-    const { pid: _pid, ...record } = job.record;
+    const { pid: _pid, stopReason, ...record } = job.record;
     return {
       ...record,
       stages: job.events.stageList(),
@@ -200,29 +206,31 @@ export class JobRunner {
       failures: job.events.failures(),
       stderrTail: tail,
       eventsSize: job.events.offset,
-      stopping: job.stopping,
+      summarySeen: job.events.final !== null,
+      stopping: record.status === "running" && stopReason !== null,
+      signalable: job.child !== null,
     };
   }
 
   /**
-   * Asks this server's running job to stop: SIGTERM, which the CLI answers by cancelling its run,
-   * then SIGKILL for its whole process group if it hasn't exited after killAfterMs.
+   * Asks this server's running job to stop with SIGTERM, which the CLI answers by cancelling its
+   * run once any index rebuild it is in has finished. Asked again with `force`, it kills the
+   * job's whole process group, which can leave an index half rebuilt.
    */
-  cancel(job: Job): CancelOutcome {
+  cancel(job: Job, force = false): CancelOutcome {
     if (job.record.status !== "running") return "ended";
     const child = job.child;
     if (child === null) return "not-ours";
-    // A second SIGTERM makes the CLI exit at once, even halfway through rebuilding an index.
-    if (job.stopping) return "stopping";
-    job.stopping = true;
-    child.kill("SIGTERM");
-    job.killTimer = setTimeout(() => {
+    if (job.record.stopReason === null) {
+      this.signalStop(job, "cancel");
+    } else if (force) {
       try {
         process.kill(-child.pid, "SIGKILL");
       } catch {
         // The group is gone.
       }
-    }, this.killAfterMs);
+    }
+    // Otherwise nothing: a second SIGTERM makes the CLI quit at once, even mid-rebuild.
     return "stopping";
   }
 
@@ -271,16 +279,18 @@ export class JobRunner {
     });
   }
 
-  /** Sends SIGTERM to every job this server runs and ends the streams; the stop hook. */
+  /**
+   * The stop hook: ends the streams and sends SIGTERM to every job this server runs, then waits
+   * briefly so the quick ones record how they ended. Nothing is killed: a job still finishing an
+   * index rebuild runs on in its own process group, and the next server watches it to its end.
+   */
   async stop(): Promise<void> {
     if (this.watcher !== null) clearInterval(this.watcher);
     this.watcher = null;
     for (const close of [...this.streams]) close();
     const running = [...this.jobs.values()].filter((job) => job.child !== null);
     for (const job of running) {
-      if (job.stopping) continue;
-      job.stopping = true;
-      job.child?.kill("SIGTERM");
+      if (job.record.stopReason === null) this.signalStop(job, "shutdown");
     }
     if (running.length === 0) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -293,6 +303,17 @@ export class JobRunner {
     clearTimeout(timer);
   }
 
+  /** Saves why `job` stops, then sends it SIGTERM: a server that dies in between still knows. */
+  private signalStop(job: Job, reason: StopReason): void {
+    job.record = { ...job.record, stopReason: reason };
+    try {
+      writeRecord(job.record);
+    } catch (error) {
+      logger.error(`Job ${job.record.id}'s stop wasn't saved`, error);
+    }
+    job.child?.kill("SIGTERM");
+  }
+
   private track(record: StoredJob): Job {
     let markEnded = (): void => {};
     const ended = new Promise<void>((resolve) => {
@@ -303,8 +324,6 @@ export class JobRunner {
       events: new JobEvents(record.command),
       child: null,
       adopted: false,
-      stopping: false,
-      killTimer: null,
       tail: null,
       ended,
       markEnded,
@@ -318,10 +337,8 @@ export class JobRunner {
     if (job.record.status !== "running") return;
     job.child = null;
     job.adopted = false;
-    if (job.killTimer !== null) clearTimeout(job.killTimer);
-    job.killTimer = null;
     job.events.advance(jobFiles(job.record.id).events);
-    const status = endedStatus(job.events.final, job.stopping, unseen);
+    const status = endedStatus(job.events.final, job.record.stopReason, unseen);
     job.record = { ...job.record, status, endedAt: at.toISOString(), exitCode };
     if (this.jobs.get(job.record.id) === job) {
       try {

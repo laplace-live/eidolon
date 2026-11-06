@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
+import { avatarSrc, useAvatarVersion } from "@/components/avatar/version";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { call, url } from "@/lib/api";
+import { call } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { monogram } from "./format";
 
@@ -28,6 +29,7 @@ export function PersonaAvatar({
       call("GET /api/local/personas/:id/references", { params: { id: persona.id }, signal }),
     retry: false,
   });
+  const version = useAvatarVersion(persona.id);
   const hasPicture = references.data?.avatar != null;
   return (
     <Avatar
@@ -38,12 +40,7 @@ export function PersonaAvatar({
         className,
       )}
     >
-      {hasPicture && (
-        <AvatarImage
-          src={url("GET /api/local/personas/:id/avatar", { params: { id: persona.id } })}
-          alt=""
-        />
-      )}
+      {hasPicture && <AvatarImage key={version} src={avatarSrc(persona.id, version)} alt="" />}
       <AvatarFallback>{monogram(persona.shortName, persona.name)}</AvatarFallback>
     </Avatar>
   );
