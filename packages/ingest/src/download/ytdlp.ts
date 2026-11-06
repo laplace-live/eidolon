@@ -106,6 +106,11 @@ function readStamp(): Stamp | null {
   }
 }
 
+/** The managed copy's release tag as its stamp records it; null without a readable stamp. */
+export function managedYtDlpTag(): string | null {
+  return readStamp()?.tag ?? null;
+}
+
 function writeStamp(stamp: Stamp): void {
   const { checkedAt, ...rest } = stamp;
   writeTextAtomic(

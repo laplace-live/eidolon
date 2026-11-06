@@ -31,7 +31,9 @@ Both runtimes read the same LanceDB and Qdrant collection.
 ## Repository layout
 
 ```text
-apps/bot/             the bot: HTTP server, routes, MCP, entry point
+apps/bot/             the bot: HTTP server, routes, MCP, entry point; src/local/ is the
+                      local web app's own entry and API, which production never loads
+apps/web/             the local web app's pages (Vite, React, shadcn), served by src/local/
 apps/cli/             every laplace-* command, the offline chain's included
 packages/             subsystems, one Bun workspace package each (docs/typescript.md);
                       packages/ingest is the offline chain
@@ -81,6 +83,7 @@ a row here and writing the prose there — not a new section in this file.**
 | the persona's identity, voice, or hard rules | `personas/milky-green/prompt.md` and `persona.yaml` |
 | settings files, credentials, the data home, a persona's folder or its sources | [personas.md](docs/personas.md) |
 | the offline chain (`packages/ingest` and its `laplace-*` commands) or their `--json` events | [typescript.md](docs/typescript.md#the-offline-chain) |
+| the local web app (`apps/web`, `apps/bot/src/local`): local mode, its API, jobs or security | [web-app.md](docs/web-app.md) |
 | any env var — all 50-odd are documented there | `.env.example` |
 | Soniox's per-project vocabulary glossary | `personas/milky-green/glossary.toml` |
 | broadcast overviews, date-scoped recall, or the archive lookup tool | [stream-recall.md](docs/stream-recall.md) |
@@ -97,6 +100,16 @@ bun install
 bun run dev                            # watch mode on :7860 (--port to move it); `start` without watch
 bun run typecheck && bun run lint && bun run test
 bun run laplace-search / laplace-eval-retrieval / laplace-generate-image / gate-decisions
+```
+
+The local web app, on loopback only ([web-app.md](docs/web-app.md)):
+
+```bash
+bun run app                            # builds apps/web/dist if missing, then `local --open`
+bun run local                          # the local entry; prints the link that signs a browser in
+bun run dev:local                      # its server alone, under --watch; --no-open, or each reload opens a tab
+bun run dev:web                        # Vite on 127.0.0.1:5173, proxying to :7860; open /#<code>
+bun run build:web                      # apps/web/dist
 ```
 
 The offline chain, each command taking `--persona <id>` and working in that
@@ -158,6 +171,8 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | `mem0_local.py`, `memory_service.py`, or `memory_admin.py` | `docker compose up qdrant`, then round-trip a real store → search → delete. No test covers Mem0; it needs a live vector store and an embedding key |
 | an env var | document it in `.env.example` in the same commit |
 | anything under `apps/` or `packages/` | `bun run typecheck`, `bun run lint`, `bun run test`; for retrieval, the gate or the bot's pipeline, the TypeScript CLI or call that matches the Python row above |
+| anything under `apps/web` | the row above, whose typecheck also runs both `apps/web` tsconfigs, then `bun run build:web` |
+| local mode (`apps/bot/src/local`) | `bun test --no-env-file apps/bot/test/local` from the repository root, then `bun apps/bot/scripts/local-smoke.ts --headful`: a browser walk on a temporary data home that bills nothing |
 
 ## Rules
 
@@ -217,7 +232,13 @@ module that owns it.
 - **Only `packages/runtime` imports `@pipedog/*`.** Biome enforces it; every
   other package must stay usable without a pipeline.
 - **`load-env.ts` is the only `.env` reader.** `bunfig.toml` sets `env = false`
-  and tests pass `--no-env-file`; no module reads env at import.
+  and tests pass `--no-env-file`; no module reads env at import. It walks up to
+  the first `.env`, which from a worktree is the outer checkout's, real keys
+  included; `EIDOLON_NO_DOTENV=1` skips it.
+- **Production never runs local mode.** `main.ts` and the code it loads never
+  import `apps/bot/src/local/` (Biome and `boundaries.test.ts` hold it), and
+  nothing but that separate entry turns it on: no flag, setting or env var,
+  which a server's mounted `settings.yaml` could flip.
 - **The werift patches in `packages/runtime/src/webrtc/handler.ts` are
   load-bearing** — no default STUN server, disconnect on DTLS close, relay-only,
   the `raddr` scrub. Each one's failure mode is in [typescript.md](docs/typescript.md).
@@ -323,9 +344,10 @@ module that owns it.
   (`apps/bot`) is the only released package; `@eidolon/*` are ignored.
 - **A push to `master` is a production deploy.** CI rebuilds `:edge`, and
   Watchtower on the production host restarts the bot from it, dropping live
-  calls. Pushes that only touch docs, tests, changesets, `AGENTS.md`, `.agents/`
-  or the offline chain (`apps/cli`, `packages/ingest`) skip the image build
-  (`paths-ignore` in `docker.yml`); anything else, `personas/` included, ships.
+  calls. Pushes that only touch docs, tests, changesets, `AGENTS.md`, `.agents/`,
+  the offline chain (`apps/cli`, `packages/ingest`) or the local web app
+  (`apps/web`, `apps/bot/src/local`) skip the image build (`paths-ignore` in
+  `docker.yml`); anything else, `personas/` included, ships.
 - **Never bump a version, push a release tag, or hand-edit `CHANGELOG.md`.**
   Merging the Release workflow's version PR bumps `apps/bot/package.json`,
   copies it into `pyproject.toml`, `uv.lock`, `bot.py` and `rtvi.ts`

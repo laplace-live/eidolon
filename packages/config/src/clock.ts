@@ -26,7 +26,8 @@ function formatter(timeZone: string): Intl.DateTimeFormat {
   return f;
 }
 
-function isValidTimeZone(timeZone: string): boolean {
+/** Whether the clock can keep `timeZone`'s time, rather than fall back to UTC. */
+export function isValidTimeZone(timeZone: string): boolean {
   try {
     formatter(timeZone);
     return true;

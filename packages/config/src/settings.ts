@@ -33,6 +33,7 @@ const field = (
 /** Every setting a YAML file may hold, in the order the web settings show them. */
 export const SETTINGS: readonly SettingField[] = [
   field("app", "persona", "EIDOLON_PERSONA", "string", "Active persona"),
+  field("app", "local.viewerName", "EIDOLON_LOCAL_VIEWER_NAME", "string", "Your name"),
   field("app", "access.workersBaseUrl", "WORKERS_BASE_URL", "string", "LAPLACE Workers URL"),
   field("app", "access.validateTtlSec", "EIDOLON_VALIDATE_TTL_SEC", "int", "Login cache seconds"),
   field(
@@ -258,6 +259,8 @@ export interface PersonaIdentity {
   readonly summary: string;
   /** The logged-in viewer line; `{fans}`, `{viewer}` and `{uid}` are filled in. "" omits it. */
   readonly viewerLine: string;
+  /** The line for the local web app's viewer, who has no UID; `{fans}` and `{viewer}` are filled in. */
+  readonly localViewerLine: string;
 }
 
 export interface PersonaSettings {
@@ -267,7 +270,14 @@ export interface PersonaSettings {
   readonly gateQuestions: Readonly<Record<string, string>>;
 }
 
-const IDENTITY_KEYS = ["name", "shortName", "fans", "summary", "viewerLine"] as const;
+const IDENTITY_KEYS = [
+  "name",
+  "shortName",
+  "fans",
+  "summary",
+  "viewerLine",
+  "localViewerLine",
+] as const;
 // identity.timezone is a setting (PERSONA_TIMEZONE), read with the others.
 const IDENTITY_FIELDS = new Set<string>([...IDENTITY_KEYS, "timezone"]);
 /** The retrieval gate's questions, which knowledge.gate.questions may reword. */
@@ -277,8 +287,11 @@ const GATE_QUESTIONS_PATH = "knowledge.gate.questions";
 const PERSONA_STRUCTURE = new Set(["identity", "knowledge.gate.questions", VOICE_STYLES_PATH]);
 
 type Tree = Record<string, unknown>;
+type Warn = (message: string) => void;
 
-function readTree(path: string, label: string): Tree {
+const logWarning: Warn = (message) => logger.warning(message);
+
+function readTree(path: string, label: string, warn: Warn): Tree {
   let text: string;
   try {
     text = readFileSync(path, "utf8");
@@ -289,9 +302,11 @@ function readTree(path: string, label: string): Tree {
     const parsed: unknown = path.endsWith(".json") ? JSON.parse(text) : Bun.YAML.parse(text);
     if (parsed === null || parsed === undefined) return {};
     if (isPlainObject(parsed)) return parsed;
-    logger.warning(`Ignoring ${label}: expected a mapping at the top level`);
+    warn(`Ignoring ${label}: expected a mapping at the top level`);
   } catch (error) {
-    logger.warning(`Ignoring ${label}: ${error instanceof Error ? error.message : String(error)}`);
+    // JSON.parse's message quotes the text it stopped at, which in credentials.json is a key.
+    if (path.endsWith(".json")) warn(`Ignoring ${label}: not valid JSON`);
+    else warn(`Ignoring ${label}: ${error instanceof Error ? error.message : String(error)}`);
   }
   return {};
 }
@@ -323,9 +338,10 @@ function asEnvValue(
   setting: SettingField,
   label: string,
   resolvePath: (rel: string) => string,
+  warn: Warn,
 ): string | null {
   const bad = () => {
-    logger.warning(`Ignoring ${label} ${setting.path}: expected ${setting.kind}`);
+    warn(`Ignoring ${label} ${setting.path}: expected ${setting.kind}`);
     return null;
   };
   switch (setting.kind) {
@@ -371,21 +387,27 @@ export const IDENTITY_DEFAULTS: Omit<PersonaIdentity, "name" | "shortName"> = {
   fans: "观众",
   summary: "",
   viewerLine: "正在和你聊天的{fans}叫「{viewer}」（UID:{uid}）。",
+  localViewerLine: "正在和你聊天的{fans}叫「{viewer}」。",
 };
 
-function readIdentity(persona: Tree, id: string, label: string): PersonaIdentity {
+function readIdentity(
+  persona: Tree,
+  id: string,
+  label: string,
+  warn: Warn = logWarning,
+): PersonaIdentity {
   const raw = lookup(persona, "identity");
   if (raw !== undefined && raw !== null && !isPlainObject(raw)) {
-    logger.warning(`Ignoring ${label} identity: expected a mapping`);
+    warn(`Ignoring ${label} identity: expected a mapping`);
   }
   const tree = isPlainObject(raw) ? raw : {};
   for (const key of Object.keys(tree)) {
-    if (!IDENTITY_FIELDS.has(key)) logger.warning(`Unknown setting identity.${key} in ${label}`);
+    if (!IDENTITY_FIELDS.has(key)) warn(`Unknown setting identity.${key} in ${label}`);
   }
   const value = (key: (typeof IDENTITY_KEYS)[number], fallback: string): string => {
     const v = tree[key];
     if (typeof v === "string") return v;
-    if (v !== undefined) logger.warning(`Ignoring ${label} identity.${key}: expected string`);
+    if (v !== undefined) warn(`Ignoring ${label} identity.${key}: expected string`);
     return fallback;
   };
   const name = value("name", id);
@@ -395,7 +417,18 @@ function readIdentity(persona: Tree, id: string, label: string): PersonaIdentity
     fans: value("fans", IDENTITY_DEFAULTS.fans),
     summary: value("summary", IDENTITY_DEFAULTS.summary),
     viewerLine: value("viewerLine", IDENTITY_DEFAULTS.viewerLine),
+    localViewerLine: value("localViewerLine", IDENTITY_DEFAULTS.localViewerLine),
   };
+}
+
+/**
+ * Persona `id`'s identity from its persona.yaml, the user's copy first, whether or not it is
+ * active; nothing is logged. The caller validates the id, which becomes a folder name.
+ */
+export function readPersonaIdentity(id: string): PersonaIdentity {
+  const path = resolvePersonaPath(id, "persona.yaml");
+  const quiet: Warn = () => {};
+  return readIdentity(readTree(path, path, quiet), id, path, quiet);
 }
 
 function readGateQuestions(persona: Tree, label: string): Record<string, string> {
@@ -418,10 +451,10 @@ function readGateQuestions(persona: Tree, label: string): Record<string, string>
   return questions;
 }
 
-function warnIfShared(path: string): void {
+function warnIfShared(path: string, warn: Warn): void {
   try {
     if (statSync(path).mode & 0o077) {
-      logger.warning(`${path} is readable by other users; run \`chmod 600 ${path}\``);
+      warn(`${path} is readable by other users; run \`chmod 600 ${path}\``);
     }
   } catch {
     // Absent: nothing to protect.
@@ -435,6 +468,126 @@ export interface SettingsFiles {
   readonly persona: string;
 }
 
+/** Which file a value comes from; `default` when none sets it. */
+export type SettingSource = "default" | "app" | "persona" | "credentials";
+
+/** One variable as the settings files hold it, beneath the environment. */
+export interface LayeredSetting {
+  readonly source: SettingSource;
+  /** As the variable would spell it; null when unset, or when the file's value is the wrong kind. */
+  readonly value: string | null;
+  /** The file's own value (a relative path stays relative, a list stays a list); null when unset. */
+  readonly raw: unknown;
+}
+
+export interface SettingsLayers {
+  readonly persona: string;
+  readonly files: SettingsFiles;
+  /**
+   * Every SETTINGS variable in its order, then the FISH_VOICE_ID_<STYLE> variables the persona's
+   * voice.styles adds, then every credential: credentials.json's in its order, the rest unset.
+   */
+  readonly values: ReadonlyMap<string, LayeredSetting>;
+  /** What loadSettings would log about these files, in its order. */
+  readonly warnings: readonly string[];
+}
+
+const UNSET: LayeredSetting = Object.freeze({ source: "default", value: null, raw: null });
+
+interface ReadLayers {
+  readonly id: string;
+  readonly persona: Tree;
+  readonly values: Map<string, LayeredSetting>;
+  readonly files: SettingsFiles;
+}
+
+/** The one reader behind loadSettings and readSettingsLayers; `chosen` null picks the active persona. */
+function readLayers(chosen: string | null, warn: Warn): ReadLayers {
+  const home = dataHome();
+  const settingsPath = join(home, "settings.yaml");
+  const credentialsPath = join(home, "credentials.json");
+  const app = readTree(settingsPath, settingsPath, warn);
+  const id = chosen ?? choosePersona(app);
+  const personaPath = resolvePersonaPath(id, "persona.yaml");
+  const persona = readTree(personaPath, personaPath, warn);
+
+  const values = new Map<string, LayeredSetting>();
+  const known = new Set<string>();
+  for (const setting of SETTINGS) {
+    const tree = setting.scope === "app" ? app : persona;
+    known.add(`${setting.scope}:${setting.path}`);
+    const raw = lookup(tree, setting.path);
+    if (raw === undefined || raw === null) {
+      values.set(setting.env, UNSET);
+      continue;
+    }
+    const label = setting.scope === "app" ? settingsPath : personaPath;
+    const resolvePath =
+      setting.scope === "app"
+        ? (rel: string) => {
+            const path = expandUser(rel);
+            return isAbsolute(path) ? path : join(home, path);
+          }
+        : (rel: string) => resolvePersonaPath(id, rel);
+    const value = asEnvValue(raw, setting, label, resolvePath, warn);
+    values.set(setting.env, { source: setting.scope, value, raw });
+  }
+  const styles = lookup(persona, VOICE_STYLES_PATH);
+  if (styles !== undefined && styles !== null && !isPlainObject(styles)) {
+    warn(`Ignoring ${personaPath} ${VOICE_STYLES_PATH}: expected a mapping`);
+  }
+  if (isPlainObject(styles)) {
+    for (const [name, voiceId] of Object.entries(styles)) {
+      if (typeof voiceId === "string" && voiceId) {
+        const env = `${VOICE_STYLE_PREFIX}${name.toUpperCase()}`;
+        values.set(env, { source: "persona", value: voiceId, raw: voiceId });
+      } else {
+        warn(`Ignoring ${personaPath} ${VOICE_STYLES_PATH}.${name}: expected string`);
+      }
+    }
+  }
+  for (const [scope, tree, label] of [
+    ["app", app, settingsPath],
+    ["persona", persona, personaPath],
+  ] as const) {
+    for (const path of leafPaths(tree)) {
+      if (!known.has(`${scope}:${path}`)) warn(`Unknown setting ${path} in ${label}`);
+    }
+  }
+
+  // Before parsing: a file that fails to parse can still hold real keys.
+  warnIfShared(credentialsPath, warn);
+  const credentials = readTree(credentialsPath, credentialsPath, warn);
+  for (const [name, secret] of Object.entries(credentials)) {
+    if (!CREDENTIALS.includes(name)) {
+      warn(`Ignoring ${name} in ${credentialsPath}: not a credential`);
+    } else if (typeof secret === "string" && secret) {
+      values.set(name, { source: "credentials", value: secret, raw: secret });
+    } else if (secret !== "") {
+      warn(`Ignoring ${name} in ${credentialsPath}: expected a non-empty string`);
+      values.set(name, { source: "credentials", value: null, raw: secret });
+    }
+  }
+  for (const name of CREDENTIALS) if (!values.has(name)) values.set(name, UNSET);
+
+  return {
+    id,
+    persona,
+    values,
+    files: { home, settings: settingsPath, credentials: credentialsPath, persona: personaPath },
+  };
+}
+
+/**
+ * Persona `personaId`'s settings files, layer by layer, for a settings editor: nothing is
+ * installed and nothing is logged. The caller validates the id, which becomes a folder name.
+ */
+export function readSettingsLayers(personaId: string): SettingsLayers {
+  const warnings: string[] = [];
+  const read = readLayers(personaId, (message) => warnings.push(message));
+  return { persona: read.id, files: read.files, values: read.values, warnings };
+}
+
 export interface LoadedSettings {
   readonly persona: PersonaSettings;
   /** Variable name → value, as the files set them. */
@@ -444,90 +597,49 @@ export interface LoadedSettings {
 
 /** Reads every layer without installing it. */
 export function loadSettings(): LoadedSettings {
-  const home = dataHome();
-  const settingsPath = join(home, "settings.yaml");
-  const credentialsPath = join(home, "credentials.json");
-  const app = readTree(settingsPath, settingsPath);
-  const id = choosePersona(app);
-  const personaPath = resolvePersonaPath(id, "persona.yaml");
-  const persona = readTree(personaPath, personaPath);
-
+  const read = readLayers(null, logWarning);
   const values = new Map<string, string>();
-  const known = new Set<string>();
-  for (const setting of SETTINGS) {
-    const tree = setting.scope === "app" ? app : persona;
-    known.add(`${setting.scope}:${setting.path}`);
-    const value = lookup(tree, setting.path);
-    if (value === undefined || value === null) continue;
-    const label = setting.scope === "app" ? settingsPath : personaPath;
-    const resolvePath =
-      setting.scope === "app"
-        ? (rel: string) => {
-            const path = expandUser(rel);
-            return isAbsolute(path) ? path : join(home, path);
-          }
-        : (rel: string) => resolvePersonaPath(id, rel);
-    const env = asEnvValue(value, setting, label, resolvePath);
-    if (env !== null) values.set(setting.env, env);
-  }
-  const styles = lookup(persona, VOICE_STYLES_PATH);
-  if (styles !== undefined && styles !== null && !isPlainObject(styles)) {
-    logger.warning(`Ignoring ${personaPath} ${VOICE_STYLES_PATH}: expected a mapping`);
-  }
-  if (isPlainObject(styles)) {
-    for (const [name, voiceId] of Object.entries(styles)) {
-      if (typeof voiceId === "string" && voiceId) {
-        values.set(`${VOICE_STYLE_PREFIX}${name.toUpperCase()}`, voiceId);
-      } else {
-        logger.warning(`Ignoring ${personaPath} ${VOICE_STYLES_PATH}.${name}: expected string`);
-      }
-    }
-  }
-  for (const [scope, tree, label] of [
-    ["app", app, settingsPath],
-    ["persona", persona, personaPath],
-  ] as const) {
-    for (const path of leafPaths(tree)) {
-      if (!known.has(`${scope}:${path}`)) logger.warning(`Unknown setting ${path} in ${label}`);
-    }
-  }
-
-  // Before parsing: a file that fails to parse can still hold real keys.
-  warnIfShared(credentialsPath);
-  const credentials = readTree(credentialsPath, credentialsPath);
-  for (const [name, secret] of Object.entries(credentials)) {
-    if (!CREDENTIALS.includes(name)) {
-      logger.warning(`Ignoring ${name} in ${credentialsPath}: not a credential`);
-    } else if (typeof secret === "string" && secret) {
-      values.set(name, secret);
-    } else if (secret !== "") {
-      logger.warning(`Ignoring ${name} in ${credentialsPath}: expected a non-empty string`);
-    }
-  }
-
+  for (const [env, layer] of read.values) if (layer.value !== null) values.set(env, layer.value);
   return {
     persona: {
-      id,
-      identity: readIdentity(persona, id, personaPath),
-      gateQuestions: readGateQuestions(persona, personaPath),
+      id: read.id,
+      identity: readIdentity(read.persona, read.id, read.files.persona),
+      gateQuestions: readGateQuestions(read.persona, read.files.persona),
     },
     values,
-    files: {
-      home,
-      settings: settingsPath,
-      credentials: credentialsPath,
-      persona: personaPath,
-    },
+    files: read.files,
   };
 }
 
+/** Values beneath every settings file, derived from the persona that was loaded. */
+export type SettingDefaults = (persona: PersonaSettings) => Readonly<Record<string, string>>;
+
 let installed: LoadedSettings | null = null;
+let defaults: SettingDefaults | null = null;
+
+function fileLayer(loaded: LoadedSettings): ReadonlyMap<string, string> {
+  if (defaults === null) return loaded.values;
+  const layer = new Map(loaded.values);
+  for (const [env, value] of Object.entries(defaults(loaded.persona))) {
+    if (!layer.has(env)) layer.set(env, value);
+  }
+  return layer;
+}
 
 /** Loads every layer and makes it the one the env readers and persona lookups see. */
 export function installSettings(): LoadedSettings {
   installed = loadSettings();
-  setFileLayer(installed.values);
+  setFileLayer(fileLayer(installed));
   return installed;
+}
+
+/**
+ * Sets the values every later installSettings() puts beneath the files, and applies them to what
+ * is installed now. Only the local app sets any; null removes them.
+ */
+export function setSettingDefaults(derive: SettingDefaults | null): void {
+  defaults = derive;
+  if (installed !== null) setFileLayer(fileLayer(installed));
 }
 
 /** The active persona: the installed one, or one read on demand where nothing installed it. */

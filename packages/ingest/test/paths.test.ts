@@ -2,12 +2,14 @@ import "../../config/test/isolated-guard.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   realpathSync,
   rmSync,
+  statSync,
   symlinkSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -53,6 +55,25 @@ describe("folders", () => {
     expect(sourceFolder("milky-green", "vods")).toBe(
       join(dataHome(), "sources", "milky-green", "vods"),
     );
+  });
+
+  test("the data home, locks/ and cache/ are made private; a folder that exists keeps its mode", () => {
+    const mode = (path: string) => statSync(path).mode & 0o777;
+    acquireLock("sources:milky-green", "laplace-refine")();
+    expect([mode(dataHome()), mode(join(dataHome(), "locks"))]).toEqual([0o700, 0o700]);
+    rmSync(dataHome(), { recursive: true, force: true });
+    embedCachePath();
+    expect([mode(dataHome()), mode(join(dataHome(), "cache"))]).toEqual([0o700, 0o700]);
+
+    rmSync(dataHome(), { recursive: true, force: true });
+    const folders = [dataHome(), join(dataHome(), "locks"), join(dataHome(), "cache")];
+    for (const path of folders) {
+      mkdirSync(path);
+      chmodSync(path, 0o755);
+    }
+    acquireLock("sources:milky-green", "laplace-refine")();
+    embedCachePath();
+    expect(folders.map(mode)).toEqual([0o755, 0o755, 0o755]);
   });
 
   test("indexWritePath is where the bot reads, never a template", () => {

@@ -29,6 +29,9 @@ const IMAGE_TYPES = new Map<string, string>([
   [".xwd", "image/x-xwindowdump"],
 ]);
 
+/** The extensions of the files the selfie tool takes for images, lowercase with the dot. */
+export const REFERENCE_EXTENSIONS: readonly string[] = [...IMAGE_TYPES.keys()];
+
 // guess_extension: the first extension the table lists for each type.
 const EXTENSIONS = new Map<string, string>([
   ["text/javascript", ".js"],

@@ -168,8 +168,9 @@ that provider's key, credit or reach:
 
 yt-dlp's codes are read off its stderr, so they are a best guess. A job runs
 `jobArgv(command, args)` from `@eidolon/cli/job`, also import-free: `bun --no-env-file
-<CLI_ENTRY> <command> --json …`, started in the data home and cancelled with SIGTERM, then
-SIGKILL after 15 s.
+<CLI_ENTRY> <command> --json …`, started in the data home. A cancel sends it SIGTERM. Nothing
+kills it on a timer: only a forced second cancel (`DELETE jobs/:id?force=1`) of a job this server
+spawned sends SIGKILL, to its whole process group ([web-app.md](web-app.md#jobs)).
 
 ### Real-data tests
 
@@ -191,9 +192,13 @@ into a failure. `refine_real` and `pipeline_real` also run Python through `uv` a
   `$VAR` and read `.env.local`, which the Python bot never did. Tests run with `--no-env-file`.
 - **No module reads env at import.** Everything reads at call time, so the order of imports
   against the `.env` load cannot pin a fallback.
-- **Children get `env: process.env`, and lookups `Bun.which(name, {PATH: process.env.PATH})`.**
-  `Bun.spawn` without `env`, and `Bun.which` without `PATH`, use the environment the process
-  started with, missing everything `load-env.ts` applied from `.env`.
+- **A child that needs what `.env` set gets `env: process.env`, and lookups
+  `Bun.which(name, {PATH: process.env.PATH})`.** `Bun.spawn` without `env`, and `Bun.which`
+  without `PATH`, use the environment the process started with, missing everything `load-env.ts`
+  applied from `.env`: yt-dlp would miss a proxy the `.env` sets. A child that runs a
+  `load-env.ts` of its own, a job's CLI or the server `bun run local` restarts, gets no `env` and
+  reads `.env` as it is now. Handed `process.env`, it would keep every key deleted from `.env`
+  since, because `override` sets keys and never unsets them.
 - **werift needs four corrections, all in `packages/runtime/src/webrtc/handler.ts`.**
   1. It queries `stun.l.google.com` when no STUN server is configured. That put the origin's
      public IP in every non-relay answer and, where UDP to Google is blocked, stalled every
@@ -474,6 +479,7 @@ Deliberate, and not worth matching.
   `exit=N`, and parallel transcription logs `Running N transcribe job(s) in parallel
   (concurrency=N)` without re-emitting each child's output.
 - New flags `--persona`, `--json` and `--db-path`; `--provider` takes only `soniox`.
+- `url_list` is optional when `--stages` leaves out download; Python required it regardless.
 - **The dry run plans.** It takes no lock, needs no `--db-path` beside `LANCEDB_PATH`, and creates
   no `streams/` folder (Python's did). Without a URL list it covers every video the persona's
   lists, `vods/` and `streams/` know, and the human dry run counts every list's URLs. With

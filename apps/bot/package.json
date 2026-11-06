@@ -20,6 +20,8 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@eidolon/cli": "workspace:*",
+    "@eidolon/ingest": "workspace:*",
     "@pipecat-ai/client-js": "1.16.0",
     "@pipecat-ai/small-webrtc-transport": "1.11.2",
     "playwright-core": "1.64.1"

@@ -12,7 +12,7 @@ import type { MemoryAdmin } from "@eidolon/memory";
 import type { SignallingServer } from "@eidolon/runtime";
 import type { IceService } from "@eidolon/turn";
 import type { Server } from "bun";
-import { type BotAccess, createBotApp } from "./app.ts";
+import { type BotAccess, type BotApp, createBotApp } from "./app.ts";
 import type { BotArgs } from "./args.ts";
 import type { McpHandler } from "./mcp/index.ts";
 import { FORGET_MEMORIES_PATH, LIST_MEMORIES_PATH } from "./memory-admin.ts";
@@ -36,10 +36,27 @@ export interface BotDeps {
     warmAudioModels(): Promise<void>;
     createSignallingServer(options: {
       ice: Pick<IceService, "serverPlan">;
-    }): Pick<SignallingServer, "offer" | "patch" | "close">;
+    }): Pick<SignallingServer, "offer" | "patch" | "close" | "activeSessions">;
   };
   readonly turn: { iceServiceFromEnv(): IceService };
   readonly mcp: { createMcpHandler(): Promise<Pick<McpHandler, "handle">> };
+  /** The local web app (apps/bot/src/local); production passes none. */
+  readonly local?: LocalExtension;
+}
+
+/** What the local extension gets from the server it extends. */
+export interface LocalContext {
+  readonly signalling: Pick<SignallingServer, "offer" | "patch" | "activeSessions">;
+  /** The port the server listens on; valid once a request arrives. */
+  port(): number;
+}
+
+/** The local web app's hold on the server: it rewrites the routes and the fallback. */
+export interface LocalExtension {
+  routes(routes: BotApp["routes"], context: LocalContext): BotApp["routes"];
+  fallback(fallback: BotApp["fallback"], context: LocalContext): BotApp["fallback"];
+  /** Runs on stop(), once the server no longer listens and before the peers disconnect. */
+  stop(): Promise<void>;
 }
 
 export interface BotServer {
@@ -79,6 +96,11 @@ export async function startBotServer(args: BotArgs, deps: BotDeps): Promise<BotS
     mcp: await deps.mcp.createMcpHandler(),
   });
 
+  const local = deps.local;
+  const context: LocalContext = { signalling, port: () => server.port as number };
+  const routes = local ? local.routes(app.routes, context) : app.routes;
+  const fallback = local ? local.fallback(app.fallback, context) : app.fallback;
+
   const listen = (hostname: string, port: number) =>
     Bun.serve({
       hostname,
@@ -86,20 +108,34 @@ export async function startBotServer(args: BotArgs, deps: BotDeps): Promise<BotS
       // The default is NODE_ENV !== "production", which answers an uncaught error with an HTML
       // debug page.
       development: false,
-      routes: app.routes,
-      fetch: app.fallback,
+      // With development off, Bun sets SO_REUSEPORT unless told not to, so another server could
+      // bind the same port and take its requests, cookies included. The local app's port is its own.
+      ...(local ? { reusePort: false } : {}),
+      routes,
+      fetch: fallback,
       error: app.onError,
     });
   const [first, ...rest] = await bindAddresses(args.host);
   const server = listen(first as string, args.port);
-  const servers = [server, ...rest.map((hostname) => listen(hostname, server.port as number))];
+  const servers = [server];
+  try {
+    for (const hostname of rest) servers.push(listen(hostname, server.port as number));
+  } catch (error) {
+    // Else the addresses already bound keep serving, and answer the local entry's probe.
+    await Promise.all(servers.map((s) => s.stop(true)));
+    throw error;
+  }
   const url = args.host === "localhost" ? `http://localhost:${server.port}/` : server.url;
   logger.info(`Bot server listening on ${url}`);
   return {
     server,
     async stop() {
       await Promise.all(servers.map((s) => s.stop(true)));
-      await signalling.close();
+      try {
+        await local?.stop();
+      } finally {
+        await signalling.close();
+      }
     },
   };
 }

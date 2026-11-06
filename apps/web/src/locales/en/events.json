@@ -1,0 +1,19 @@
+{
+  "missing-credential": "An API key this step needs isn't set, so nothing was sent.",
+  "auth-failed": "The provider refused the API key.",
+  "insufficient-credits": "The provider account is out of credit.",
+  "rate-limited": "The provider is limiting requests. Try again later.",
+  "network": "The request got no answer. Check the network connection.",
+  "locked": "Another run is already working on this persona.",
+  "ytdlp-unavailable": "yt-dlp isn't installed and couldn't be installed.",
+  "cookies-unavailable": "yt-dlp couldn't read the browser's cookies, or the site asked for them.",
+  "ffmpeg-unavailable": "Audio over 5 hours needs ffmpeg to split it. Install ffmpeg and try again.",
+  "disk-full": "The disk is full.",
+  "http-412": "The site refused yt-dlp, usually because it is out of date.",
+  "no-upload-date": "This video has no upload date, so it can't be placed among the streams.",
+  "no-speech": "No speech was heard in this audio.",
+  "cancelled": "Cancelled.",
+  "provider.soniox": "Soniox",
+  "provider.refine": "Refine API",
+  "provider.embeddings": "Embedding API"
+}

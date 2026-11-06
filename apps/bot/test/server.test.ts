@@ -6,6 +6,8 @@ import { type BotDeps, type BotServer, shutdownHandler, startBotServer } from ".
 import { type CapturedLogs, captureLogs, deferred, fakeAccess } from "./fakes.ts";
 
 const ARGS: BotArgs = { host: "127.0.0.1", port: 0, verbose: 0 };
+/** What `localhost` resolves to, in the order the server binds it. */
+const LOCALHOST = [...new Set((await lookup("localhost", { all: true })).map((a) => a.address))];
 const SETTINGS = {
   presetsBps: { best: 192000, medium: 96000, low: 64000, lowest: 8000 },
   defaultBitrateBps: 96000,
@@ -88,6 +90,7 @@ function fakeDeps(overrides: { warmAudioModels?: () => Promise<void> } = {}): {
           offer: async () => ({ status: 200, body: {} }),
           patch: async () => ({ status: 200, body: {} }),
           close: async () => {},
+          activeSessions: 0,
         };
       },
     },
@@ -177,6 +180,34 @@ describe("startBotServer", () => {
     }
     bot = null;
   });
+
+  test.skipIf(LOCALHOST.length < 2)(
+    "an address of localhost that won't bind stops the ones bound before it",
+    async () => {
+      const [first, last] = [LOCALHOST[0] as string, LOCALHOST.at(-1) as string];
+      // Another program on the last address, without SO_REUSEPORT, so the bot's bind there fails.
+      const other = Bun.serve({
+        hostname: last,
+        port: 0,
+        reusePort: false,
+        fetch: () => new Response("other"),
+      });
+      try {
+        const { deps } = fakeDeps();
+        await expect(
+          startBotServer({ ...ARGS, host: "localhost", port: other.port as number }, deps),
+        ).rejects.toThrow();
+        const host = first.includes(":") ? `[${first}]` : first;
+        const refused = await fetch(`http://${host}:${other.port}/api/ice-servers`).then(
+          () => false,
+          () => true,
+        );
+        expect(refused).toBe(true);
+      } finally {
+        await other.stop(true);
+      }
+    },
+  );
 
   test("-v logs at TRACE", async () => {
     const { deps, recorded } = fakeDeps();

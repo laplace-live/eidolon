@@ -46,6 +46,8 @@ export {
 export { shlexSplit } from "./shlex.ts";
 export { readUrlList } from "./url_list.ts";
 export {
+  managedYtDlpPath,
+  managedYtDlpTag,
   resolveYtDlp,
   UPDATE_INTERVAL_MS,
   type YtDlp,

@@ -9,6 +9,7 @@ identity:
     明前奶绿, a Chinese VTuber who streams on Bilibili, runs a fictional flower shop
     (拉普拉斯花店) whose manager is her cat 坚果, and calls her fans 奶糖花
   viewerLine: 今天来花店的{fans}叫「{viewer}」（B站UID:{uid}）。
+  localViewerLine: 今天来花店的{fans}叫「{viewer}」。
   timezone: Asia/Shanghai
 
 knowledge:

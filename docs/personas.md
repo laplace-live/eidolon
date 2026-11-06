@@ -10,6 +10,7 @@ personas/<id>/
   persona.yaml          identity and the settings this persona changes (below)
   prompt.md             the system prompt — identity and hard rules, no code
   glossary.toml         Soniox transcription vocabulary (Soniox's StructuredContext)
+  avatar.{png,jpg,webp} the avatar the web app shows; never a selfie reference
   references/outfits/   what take_selfie redraws; exactly one reaches a render
   references/friends/   one image per person she can be photographed with, named after them
   index/                what the ingests build; derived, rebuildable, never edited
@@ -109,6 +110,7 @@ identity:
   fans: 奶糖花
   summary: 明前奶绿, a Chinese VTuber who streams on Bilibili, …
   viewerLine: 今天来花店的{fans}叫「{viewer}」（B站UID:{uid}）。
+  localViewerLine: 今天来花店的{fans}叫「{viewer}」。
   timezone: Asia/Shanghai
 voice:
   model: drama-3
@@ -126,6 +128,7 @@ voice:
 | `fans` | the voice and selfie tool texts: what she calls a viewer | 观众 |
 | `summary` | the retrieval gate, as who "the streamer" is | empty |
 | `viewerLine` | the logged-in viewer line; `{fans}`, `{viewer}`, `{uid}` are filled in, `""` omits it | 正在和你聊天的{fans}叫「{viewer}」（UID:{uid}）。 |
+| `localViewerLine` | the same line for the local web app's viewer, who has no UID; `{fans}` and `{viewer}` are filled in, `""` omits it | 正在和你聊天的{fans}叫「{viewer}」。 |
 
 `knowledge.gate.questions.<key>` replaces a retrieval-gate question's text (`about_her`, `her_past`,
 `named_thing`); 奶绿's pack tunes `about_her` for her shop. `voice.styles.<name>` adds a voice
@@ -187,6 +190,7 @@ The install's settings, for every persona. Paths resolve in the data home.
 | Setting | Variable | Kind | What |
 | --- | --- | --- | --- |
 | `persona` | `EIDOLON_PERSONA` | string | Active persona |
+| `local.viewerName` | `EIDOLON_LOCAL_VIEWER_NAME` | string | Your name |
 | `access.workersBaseUrl` | `WORKERS_BASE_URL` | string | LAPLACE Workers URL |
 | `access.validateTtlSec` | `EIDOLON_VALIDATE_TTL_SEC` | int | Login cache seconds |
 | `access.anonRateLimitPerHour` | `EIDOLON_ANON_RATE_LIMIT_PER_HOUR` | int | Anonymous calls per window |
@@ -224,6 +228,8 @@ The install's settings, for every persona. Paths resolve in the data home.
 | `sources.cookiesFromBrowser` | `YT_DLP_COOKIES_FROM_BROWSER` | string | Browser to read cookies from |
 | `sources.cookiesFile` | `YT_DLP_COOKIES` | path | Cookies file |
 
+`local.viewerName` is what the persona calls you in the local web app's calls; the bot that
+`bun run start` and the Docker image run never reads it.
 `sources.ytDlp` replaces the yt-dlp the tools install and update under `<data home>/bin/`.
 `sources.cookiesFromBrowser` defaults to `chrome`; `none` reads no browser's cookies. yt-dlp writes
 the merged cookie jar back into `sources.cookiesFile`.
@@ -234,17 +240,21 @@ Mount a data home holding the persona's folder at `/data`, and configure the res
 environment as before. What goes in that folder depends on where the persona comes from:
 
 - **A template persona**, one the repository ships under `personas/` (milky-green): its `index/`
-  and `references/` only. Its `prompt.md` and `persona.yaml` come from the image, so each release
-  brings the published ones; a copy on the server would override them, file by file. Remove any
-  that an earlier copy of the whole folder left there.
-- **A persona of your own**: its whole `personas/<id>/` folder.
+  and `references/friends/` only. Its `prompt.md`, `persona.yaml`, `glossary.toml` and outfits
+  come from the image, so each release brings the published ones. A copy on the server would
+  override them file by file, and they are what the local web app's studio edits in your data
+  home, so copying them would ship those edits to production. Remove any that an earlier copy of
+  the whole folder left there.
+- **A persona of your own**: its whole `personas/<id>/` folder, the avatar at its root included.
 - **Never** `sources/`: the bot reads none of it.
 
 Copy the first time, and again after every re-ingest:
 
 ```sh
-# a template persona: each folder on its own (leave out one you don't have)
-for folder in index references; do
+# a template persona: each folder on its own (leave out one you don't have). rsync makes only
+# the last folder of a destination, so the first copy needs the persona's references/ there.
+ssh <host> mkdir -p "<mounted path>/personas/<id>/references"
+for folder in index references/friends; do
   rsync -a --checksum --delete-after --delay-updates \
     "<data home>/personas/<id>/$folder/" "<host>:<mounted path>/personas/<id>/$folder/"
 done

@@ -44,6 +44,7 @@ export type AdminOutcome<T> =
  * owns auth, HTTP, and every `[memory-admin]` log line, taking failures from `error`.
  */
 export interface MemoryAdmin {
-  list(userId: string): Promise<AdminOutcome<MemorySummary[]>>;
-  forget(userId: string): Promise<AdminOutcome<void>>;
+  /** `agentId` narrows the scope to one agent's memories, as the local app's per-persona ones. */
+  list(userId: string, agentId?: string): Promise<AdminOutcome<MemorySummary[]>>;
+  forget(userId: string, agentId?: string): Promise<AdminOutcome<void>>;
 }

@@ -92,8 +92,9 @@ End-to-end pipeline: bilibili URL list → ingested LanceDB rows.
 
 positional arguments:
   url_list              Path to a text file with one URL per line (# comments
-                        + blanks ignored). Optional with --dry-run, which then
-                        plans every video the persona's sources know.
+                        + blanks ignored). Optional when --stages leaves out
+                        download, and with --dry-run, which then plans every
+                        video the persona's sources know.
 
 options:
   -h, --help            show this help message and exit
@@ -239,7 +240,10 @@ export interface PipelineArgs {
   readonly ns: Namespace;
   readonly persona: string;
   readonly stages: pipeline.PipelineStage[];
-  /** Null only for a dry run, which then plans every list's videos. */
+  /**
+   * Null for a dry run, which then plans every list's videos, and for a run without the download
+   * stage, the only one that reads a list.
+   */
   readonly urlList: string | null;
   /** Null when no ingest stage writes and no --db-path was given. */
   readonly dbPath: string | null;
@@ -252,10 +256,10 @@ export function parsePipelineArgs(argv: readonly string[]): PipelineArgs {
   const personaFlag = ns.persona as string | null;
   const persona = commandPersona(spec, personaFlag);
   const urlList = ns.url_list as string | null;
-  if (urlList === null && !ns.dry_run) {
+  const stages = ns.stages as pipeline.PipelineStage[];
+  if (urlList === null && !ns.dry_run && stages.includes("download")) {
     throw parserError(spec, "the following arguments are required: url_list");
   }
-  const stages = ns.stages as pipeline.PipelineStage[];
   if (stages.includes("refine") && ns.refine_concurrency === null) {
     checkConcurrency(spec, refine.refineConcurrency());
   }
@@ -345,8 +349,9 @@ export async function pipelineMain(
   const sonioxModel = (ns.soniox_model as string | null) || transcribe.configuredModel();
 
   // Read before any stage, so a bad path fails before Soniox bills anything. A dry run without a
-  // list counts every list's videos.
-  let urls: string[] = urlList === null ? pipeline.knownUrls(listsDir) : [];
+  // list counts every list's videos as its download.
+  let urls: string[] =
+    urlList === null && stages.includes("download") ? pipeline.knownUrls(listsDir) : [];
   if (urlList !== null) {
     try {
       urls = download.readUrlList(urlList);

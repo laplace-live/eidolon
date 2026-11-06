@@ -15,7 +15,7 @@ export {
   OPENROUTER_IMAGES_URL,
   QUALITIES,
 } from "./generate.ts";
-export { imageMediaType, imageSuffix } from "./mime.ts";
+export { imageMediaType, imageSuffix, REFERENCE_EXTENSIONS } from "./mime.ts";
 export {
   AFTER_DARK,
   AMBIENCE,
@@ -40,6 +40,7 @@ export {
   OUTFITS,
   type ReferenceImage,
   type ReferenceOptions,
+  referenceCandidates,
   referenceRoots,
   referenceSources,
   selectOutfit,

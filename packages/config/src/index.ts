@@ -1,9 +1,18 @@
 export { abortableSleep, raceAbort } from "./abort.ts";
 export { daysInMonth, isLeap, ordinalToYmd, ymdToOrdinal } from "./calendar.ts";
-export { personaTimeZone, type ZonedClock, zonedClock } from "./clock.ts";
+export { isValidTimeZone, personaTimeZone, type ZonedClock, zonedClock } from "./clock.ts";
 export { type DotenvEntry, findDotenv, loadDotenv, parseDotenv } from "./dotenv.ts";
 export { DEFAULT_EMBED_BASE_URL, DEFAULT_EMBED_MODEL, embedDim } from "./embed.ts";
-export { envEntries, envFlag, envFloat, envInt, envOptional, envRaw, envStr } from "./env.ts";
+export {
+  envEntries,
+  envFlag,
+  envFloat,
+  envInt,
+  envOptional,
+  envOverride,
+  envRaw,
+  envStr,
+} from "./env.ts";
 export {
   DEFAULT_PERSONA,
   dataHome,
@@ -96,17 +105,24 @@ export {
   GATE_QUESTION_KEYS,
   IDENTITY_DEFAULTS,
   installSettings,
+  type LayeredSetting,
   type LoadedSettings,
   loadSettings,
   type PersonaIdentity,
   type PersonaSettings,
   personaFolders,
   personaPath,
+  readPersonaIdentity,
+  readSettingsLayers,
   resetSettings,
   SETTINGS,
+  type SettingDefaults,
   type SettingField,
   type SettingKind,
   type SettingScope,
+  type SettingSource,
   type SettingsFiles,
+  type SettingsLayers,
+  setSettingDefaults,
 } from "./settings.ts";
 export { type Clock, pyIsoformatUtc, utcDateParts, utcIsoDate, wallClockMicros } from "./utc.ts";

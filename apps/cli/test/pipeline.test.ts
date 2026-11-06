@@ -4,7 +4,15 @@
 // that end the same way: the fake Soniox, refine provider and embedding API, or a transcript the
 // catalog rejects.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { personaIds, resetSettings, sourceFolder } from "@eidolon/config";
@@ -30,7 +38,13 @@ import {
   transcriptText,
   writeVods,
 } from "../../../packages/ingest/test/pipeline_helpers.ts";
-import { PIPELINE_PARSER, type PipelineDeps, pipelineMain, STAGES } from "../src/pipeline.ts";
+import {
+  PIPELINE_PARSER,
+  type PipelineDeps,
+  parsePipelineArgs,
+  pipelineMain,
+  STAGES,
+} from "../src/pipeline.ts";
 import { blockNetwork, captureIo, captureLogs, setEnv, spawnCli } from "./helpers.ts";
 
 blockNetwork();
@@ -201,6 +215,15 @@ describe("argparse", () => {
       expect(await pipelineMain(argv, io.io), argv.join(" ")).toBe(2);
       expect(io.stderr()).toBe(`${PIPELINE_PARSER.usage}${message}\n`);
     }
+  });
+
+  test("url_list is optional once no download stage would read it", async () => {
+    expect(parsePipelineArgs(["--stages", "transcribe,refine,ingest"]).urlList).toBeNull();
+    const io = captureIo();
+    expect(await pipelineMain(["--stages", "refine,download"], io.io)).toBe(2);
+    expect(io.stderr()).toBe(
+      `${PIPELINE_PARSER.usage}laplace-pipeline: error: the following arguments are required: url_list\n`,
+    );
   });
 
   test("a persona with no folder is a usage error, before anything is read or written", async () => {
@@ -722,6 +745,21 @@ describe("--json and locks", () => {
     } finally {
       lock();
     }
+  });
+
+  test("a run without the download stage takes no URL list, and reads none", async () => {
+    process.env.EIDOLON_HOME = join(work, "home");
+    const lists = sourceFolder("milky-green", "lists");
+    mkdirSync(lists, { recursive: true });
+    const unreadable = join(lists, "mine.txt");
+    writeFileSync(unreadable, "https://www.bilibili.com/video/BV1aaaaaaaa1\n");
+    chmodSync(unreadable, 0o000);
+    try {
+      expect(await pipelineMain(["--stages", "refine"], captureIo().io)).toBe(0);
+    } finally {
+      chmodSync(unreadable, 0o600);
+    }
+    expect(logs.records).toContainEqual(["INFO", "Pipeline stages: refine (url_list=None)"]);
   });
 
   test("the folders default to the persona's sources in the data home", async () => {

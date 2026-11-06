@@ -1,7 +1,14 @@
 {
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "files": {
-    "includes": ["apps/**", "packages/**", "*.json", "!**/node_modules", "!packages/retrieval/data"]
+    "includes": [
+      "apps/**",
+      "packages/**",
+      "*.json",
+      "!**/node_modules",
+      "!packages/retrieval/data",
+      "!apps/web/dist"
+    ]
   },
   "formatter": {
     "indentStyle": "space",
@@ -11,6 +18,9 @@
   "linter": {
     "rules": {
       "preset": "recommended",
+      "security": {
+        "noDangerouslySetInnerHtml": "error"
+      },
       "suspicious": {
         "noExplicitAny": "off"
       },
@@ -36,22 +46,70 @@
       "semicolons": "always"
     }
   },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
   "overrides": [
     {
-      "includes": ["apps/bot/**", "packages/**", "!packages/ingest/**"],
+      "includes": [
+        "apps/bot/**",
+        "!apps/bot/src/local/**",
+        "!apps/bot/test/local/**",
+        "packages/**",
+        "!packages/ingest/**"
+      ],
       "linter": {
         "rules": {
           "style": {
             "noRestrictedImports": {
               "level": "error",
               "options": {
-                "paths": {
-                  "@eidolon/ingest": "The bot image skips builds for packages/ingest changes (docker.yml); drop that paths-ignore line before anything the bot loads imports it."
-                },
                 "patterns": [
+                  {
+                    "group": ["@eidolon/ingest", "@eidolon/ingest/**"],
+                    "message": "The bot image skips builds for packages/ingest changes (docker.yml); only apps/bot/src/local, which the image leaves out, may import it."
+                  },
+                  {
+                    "group": ["@eidolon/cli", "@eidolon/cli/**"],
+                    "message": "The bot image skips builds for apps/cli changes (docker.yml); only apps/bot/src/local, which the image leaves out, may import it."
+                  },
                   {
                     "group": ["@pipedog/*", "@pipedog/**"],
                     "message": "Only packages/runtime may import pipedog; expose what you need through @eidolon/runtime."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/bot/src/**", "!apps/bot/src/local/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["@eidolon/ingest", "@eidolon/ingest/**"],
+                    "message": "The bot image skips builds for packages/ingest changes (docker.yml); only apps/bot/src/local, which the image leaves out, may import it."
+                  },
+                  {
+                    "group": ["@eidolon/cli", "@eidolon/cli/**"],
+                    "message": "The bot image skips builds for apps/cli changes (docker.yml); only apps/bot/src/local, which the image leaves out, may import it."
+                  },
+                  {
+                    "group": ["@pipedog/*", "@pipedog/**"],
+                    "message": "Only packages/runtime may import pipedog; expose what you need through @eidolon/runtime."
+                  },
+                  {
+                    "group": ["**/local", "**/local/**"],
+                    "message": "The image leaves apps/bot/src/local out: production code never imports the local entry."
                   }
                 ]
               }
@@ -68,11 +126,76 @@
             "noRestrictedImports": {
               "level": "error",
               "options": {
-                "paths": {
-                  "@eidolon/ingest": "The bot image skips builds for packages/ingest changes (docker.yml); drop that paths-ignore line before anything the bot loads imports it."
-                }
+                "patterns": [
+                  {
+                    "group": ["@eidolon/ingest", "@eidolon/ingest/**"],
+                    "message": "The bot image skips builds for packages/ingest changes (docker.yml); only apps/bot/src/local, which the image leaves out, may import it."
+                  },
+                  {
+                    "group": ["@eidolon/cli", "@eidolon/cli/**"],
+                    "message": "The bot image skips builds for apps/cli changes (docker.yml); only apps/bot/src/local, which the image leaves out, may import it."
+                  }
+                ]
               }
             }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/web/**", "!apps/web/vite.config.ts", "!apps/web/**/*.test.ts"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noNodejsModules": "error"
+          },
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "bun": "The web app runs in the browser: no Bun or Node modules."
+                },
+                "patterns": [
+                  {
+                    "group": ["bun:*", "node:*"],
+                    "message": "The web app runs in the browser: no Bun or Node modules."
+                  },
+                  {
+                    "group": [
+                      "@eidolon/*",
+                      "@eidolon/**",
+                      "!@eidolon/ingest/progress",
+                      "!@eidolon/cli/job"
+                    ],
+                    "message": "The web app imports only the import-free leaves @eidolon/ingest/progress and @eidolon/cli/job, with `import type`; it gets everything else from the admin API."
+                  },
+                  {
+                    "group": ["**/src/**", "!**/bot/src/local/api.ts"],
+                    "message": "The web app reaches server code only through the wire types in apps/bot/src/local/api.ts, with `import type`."
+                  },
+                  {
+                    "group": ["@pipedog/*", "@pipedog/**"],
+                    "message": "Only packages/runtime may import pipedog; expose what you need through @eidolon/runtime."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/web/src/components/ui/**"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "useKeyWithClickEvents": "off",
+            "useSemanticElements": "off"
+          },
+          "suspicious": {
+            "noArrayIndexKey": "off",
+            "noDoubleEquals": "off"
           }
         }
       }

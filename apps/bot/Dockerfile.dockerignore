@@ -18,3 +18,11 @@ streams/
 vods/
 data/embed_cache.db
 data/mem0-cloud-export.json
+
+# The local web app, its entry, and their tests and smoke script never ship: production serves
+# neither. apps/web's manifest stays for --frozen-lockfile.
+apps/bot/src/local/
+apps/bot/test/local/
+apps/bot/scripts/local-smoke.ts
+apps/web/*
+!apps/web/package.json

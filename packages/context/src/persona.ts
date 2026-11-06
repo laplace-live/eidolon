@@ -35,6 +35,12 @@ export const RECENT_STREAM_DATES_N = 5;
 // stream shows up without a restart.
 export const STREAM_DATES_TTL_SEC = 600;
 
+/**
+ * The mid of the local web app's viewer, whoever sits at that computer. No Bilibili account has
+ * it, so the persona prefix gives that viewer identity.localViewerLine, which names no UID.
+ */
+export const LOCAL_VIEWER_MID = 0;
+
 /** The viewer fields the persona prefix reads; access's UserContext satisfies it. */
 export interface Viewer {
   readonly isLoggedIn: boolean;
@@ -81,10 +87,14 @@ export function buildPersonaPrefix(input: PersonaPrefixInput): string {
       "不要主动念时间，除非话题相关。",
   ];
   const viewer = input.viewer;
-  const { fans, viewerLine } = activePersona().identity;
-  if (viewer.isLoggedIn && viewer.uname && viewerLine) {
+  const { fans, viewerLine, localViewerLine } = activePersona().identity;
+  const local = viewer.mid === LOCAL_VIEWER_MID;
+  const line = local ? localViewerLine : viewerLine;
+  if (viewer.isLoggedIn && viewer.uname && line) {
+    const values: Record<string, string> = { fans, viewer: viewer.uname };
+    if (!local) values.uid = pyStr(viewer.mid);
     lines.push(
-      fillPersonaText(viewerLine, { fans, viewer: viewer.uname, uid: pyStr(viewer.mid) }) +
+      fillPersonaText(line, values) +
         "聊天里可以自然地叫她/他的名字，但不要每句都重复，也不要主动念UID。",
     );
   }
