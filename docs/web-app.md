@@ -320,6 +320,32 @@ walks the app in Chrome:
 then stops the server and deletes the home. It refuses to start when either `load-env.ts` would
 apply a `.env` or use another data home, and exits 0 when every check passes, else 1.
 
+### A real call: `--call`
+
+`--call` calls the active persona from the call page itself, with real keys. It rebuilds the app,
+leaves `EIDOLON_NO_DOTENV` unset so the server applies the `.env` above the checkout, and keeps the
+temporary data home: it refuses to start when that `.env` sets `EIDOLON_HOME`, or puts
+`MEM0_HISTORY_DB_PATH` outside the home, naming the variable and never its value. Chrome always
+shows (with a fake, silent microphone) and plays the bot through the speakers. The persona must be
+milky-green, whose template needs no index: recall is simply off. It checks:
+
+- the call connecting, the greeting in the transcript, and the bot's audio playing;
+- a typed question and its reply, text and audio;
+- with `--selfie`, a same-origin `/api/selfie/` picture in its 3:4 box within 90 s;
+- Fish markup shown as chips and notes, never as `[…]` or `<tag>`;
+- no bot error, page error, console error or CSP violation, and the page showing the call ended
+  after Hang up;
+
+then prints the transcript and each turn's stages (LLM runs, tool calls, speech, audio, the
+picture) timed from the turn's start. When the `.env`'s Qdrant answers, the call is remembered like
+any other: as the local viewer's, for that persona.
+
+**Which checks.** `--call` is paid and uses the real keys in the `.env`: about one short call to
+Soniox, OpenRouter and Fish, and `--selfie` adds one image. Run it after changing the call page
+(`apps/web/src/features/call`), the offer or ICE routes, or anything a call runs through, with
+`--selfie` when selfies are involved. The walk without `--call` stays free; run it for everything
+else.
+
 ## Troubleshooting
 
 - **"The web app is not built"** (exit 2): `bun run build:web`, or start with `bun run app`.
