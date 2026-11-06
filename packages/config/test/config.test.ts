@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  cliEntry,
   consoleSink,
   dataHome,
   envFlag,
@@ -13,6 +14,7 @@ import {
   envStr,
   extractCostUsd,
   findDotenv,
+  jiebaDir,
   type LogRecord,
   loadDotenv,
   logger,
@@ -20,11 +22,16 @@ import {
   openrouterHeaders,
   PROJECT_ROOT,
   parseDotenv,
+  personaIds,
+  personaTemplateDir,
   personaTimeZone,
   pyIsoformatUtc,
   resolveProjectPath,
+  serverEntry,
   sourceFolder,
   sourcesDir,
+  templatesDir,
+  webDist,
   zonedClock,
 } from "../src/index.ts";
 
@@ -213,6 +220,56 @@ describe("flags, raw values and paths", () => {
     expect(existsSync(join(PROJECT_ROOT, "personas", "milky-green", "prompt.md"))).toBe(true);
     expect(resolveProjectPath("data/lancedb")).toBe(join(PROJECT_ROOT, "data/lancedb"));
     expect(resolveProjectPath("/abs/x")).toBe("/abs/x");
+  });
+
+  test("shipped files are this checkout's, or the npm package's that EIDOLON_APP_ROOT names", () => {
+    const shipped = () => ({
+      templates: templatesDir(),
+      web: webDist(),
+      server: serverEntry(),
+      cli: cliEntry(),
+      jieba: jiebaDir(),
+    });
+    expect(shipped()).toEqual({
+      templates: join(PROJECT_ROOT, "personas"),
+      web: join(PROJECT_ROOT, "apps/web/dist"),
+      server: join(PROJECT_ROOT, "apps/bot/src/local/server.ts"),
+      cli: join(PROJECT_ROOT, "apps/cli/src/main.ts"),
+      jieba: join(PROJECT_ROOT, "packages/retrieval/data/jieba"),
+    });
+    for (const file of [
+      join(templatesDir(), "milky-green", "prompt.md"),
+      serverEntry(),
+      cliEntry(),
+      join(jiebaDir(), "dict.txt"),
+    ]) {
+      expect([file, existsSync(file)]).toEqual([file, true]);
+    }
+    setEnv("EIDOLON_APP_ROOT", "");
+    expect(shipped().templates).toBe(join(PROJECT_ROOT, "personas"));
+
+    setEnv("EIDOLON_APP_ROOT", "/opt/eidolon");
+    expect(shipped()).toEqual({
+      templates: "/opt/eidolon/personas",
+      web: "/opt/eidolon/web",
+      server: "/opt/eidolon/dist/server.js",
+      cli: "/opt/eidolon/dist/cli.js",
+      jieba: "/opt/eidolon/data/jieba",
+    });
+    expect(personaTemplateDir("milky-green")).toBe("/opt/eidolon/personas/milky-green");
+    // What a user configures never resolves into the package, which an update replaces.
+    expect(resolveProjectPath("data/lancedb")).toBe(join(PROJECT_ROOT, "data/lancedb"));
+  });
+
+  test("a packaged install lists the package's templates", () => {
+    const root = mkdtempSync(join(tmpdir(), "eidolon-app-root-"));
+    try {
+      mkdirSync(join(root, "personas", "packaged"), { recursive: true });
+      setEnv("EIDOLON_APP_ROOT", root);
+      expect(personaIds()).toEqual(["packaged"]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("a persona's sources live in the data home, beside the personas", () => {

@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:tes
 import {
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
   realpathSync,
@@ -13,7 +14,7 @@ import {
   utimesSync,
   writeFileSync,
 } from "node:fs";
-import { uptime } from "node:os";
+import { tmpdir, uptime } from "node:os";
 import { join } from "node:path";
 import { dataHome } from "@eidolon/config";
 import type { JobCommand, JobStatus } from "../../src/local/api.ts";
@@ -207,6 +208,32 @@ describe("a job's run", () => {
     expect(tail).toHaveLength(40);
     expect(tail[0]).toBe("trace line 22");
     expect(tail.at(-1)).toBe("TypeError: boom");
+  });
+
+  test("runs the npm package's dist/cli.js when EIDOLON_APP_ROOT names it", async () => {
+    const root = mkdtempSync(join(tmpdir(), "eidolon-app-root-"));
+    mkdirSync(join(root, "dist"));
+    writeFileSync(
+      join(root, "dist", "cli.js"),
+      `const [command, ...args] = Bun.argv.slice(2);
+const summary = { v: 1, t: Date.now(), type: "summary", stage: command, ok: true, counts: {}, durationSec: 0 };
+process.stdout.write(JSON.stringify(summary) + "\\n");
+process.stderr.write(JSON.stringify(args));`,
+    );
+    process.env.EIDOLON_APP_ROOT = root;
+    try {
+      const jobs = new JobRunner({ pollMs: 20 });
+      runners.push(jobs);
+      const job = jobs.start(spec());
+      await job.ended;
+      expect(jobs.snapshot(job)).toMatchObject({
+        status: "succeeded",
+        stderrTail: '["--json","--persona","milky-green"]',
+      });
+    } finally {
+      delete process.env.EIDOLON_APP_ROOT;
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("plans and previews are ephemeral", async () => {

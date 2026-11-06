@@ -3,9 +3,8 @@
 // package's own file, byte for byte; `hmm.json` is `json.dumps` of finalseg's prob_start,
 // prob_trans and prob_emit, whose shortest-repr floats parse back to the same doubles.
 import { readFileSync } from "node:fs";
-
-const DICT_URL = new URL("../data/jieba/dict.txt", import.meta.url);
-const HMM_URL = new URL("../data/jieba/hmm.json", import.meta.url);
+import { join } from "node:path";
+import { jiebaDir } from "@eidolon/config";
 
 const MIN_FLOAT = -3.14e100;
 
@@ -43,7 +42,7 @@ interface HmmJson {
 }
 
 function loadHmm(): HmmTables {
-  const raw = JSON.parse(readFileSync(HMM_URL, "utf8")) as HmmJson;
+  const raw = JSON.parse(readFileSync(join(jiebaDir(), "hmm.json"), "utf8")) as HmmJson;
   const start = new Float64Array(4);
   const trans = new Float64Array(16).fill(MIN_FLOAT);
   const emit: Map<string, number>[] = [];
@@ -119,7 +118,8 @@ export class JiebaTokenizer {
   /** Builds the prefix dict and loads the HMM tables. Idempotent. */
   initialize(): void {
     if (this.#freq !== null) return;
-    const { freq, total } = genPfdict(readFileSync(DICT_URL, "utf8"), DICT_URL.pathname);
+    const dict = join(jiebaDir(), "dict.txt");
+    const { freq, total } = genPfdict(readFileSync(dict, "utf8"), dict);
     this.#hmm = loadHmm();
     this.#logTotal = Math.log(total);
     this.#freq = freq;

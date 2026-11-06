@@ -4,9 +4,9 @@ import "../../../../packages/config/test/isolated-guard.ts";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { dataHome } from "@eidolon/config";
-import { loadStaticSite, MissingDist, STATIC_HEADERS, WEB_DIST } from "../../src/local/static.ts";
+import { loadStaticSite, MissingDist, STATIC_HEADERS } from "../../src/local/static.ts";
 import { type CapturedLogs, captureLogs } from "../fakes.ts";
 import {
   APP_JS,
@@ -147,8 +147,17 @@ describe("files", () => {
 });
 
 describe("the build", () => {
-  test("is found next to the code, not the working directory", () => {
-    expect(WEB_DIST).toBe(resolve(import.meta.dir, "../../../web/dist"));
+  test("a packaged install serves the package's web/", () => {
+    const root = mkdtempSync(join(tmpdir(), "eidolon-app-root-"));
+    try {
+      mkdirSync(join(root, "web"));
+      writeFileSync(join(root, "web", "index.html"), INDEX_HTML);
+      process.env.EIDOLON_APP_ROOT = root;
+      expect(loadStaticSite().paths).toEqual(["/index.html"]);
+    } finally {
+      delete process.env.EIDOLON_APP_ROOT;
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("a build without index.html is MissingDist", () => {

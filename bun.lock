@@ -45,6 +45,14 @@
         "@eidolon/retrieval": "workspace:*",
       },
     },
+    "apps/eidolon": {
+      "name": "@laplace.live/eidolon",
+      "version": "0.4.0",
+      "devDependencies": {
+        "@eidolon/cli": "workspace:*",
+        "@eidolon/config": "workspace:*",
+      },
+    },
     "apps/web": {
       "name": "@eidolon/web",
       "devDependencies": {
@@ -401,6 +409,8 @@
     "@lancedb/lancedb-win32-arm64-msvc": ["@lancedb/lancedb-win32-arm64-msvc@0.41.0", "", { "os": "win32", "cpu": "arm64" }, "sha512-lc8YyEBK2GeoKk6sfBbRQAe20I0f7SLfLP+B4NZ2q8hamcvaNDpWC82bD7813q3T34Hp/ORGNBYTb+m571+N2w=="],
 
     "@lancedb/lancedb-win32-x64-msvc": ["@lancedb/lancedb-win32-x64-msvc@0.41.0", "", { "os": "win32", "cpu": "x64" }, "sha512-tLKdFMcWR9ayVPcZdIpPsPr3M35JsB42i/FIkRPdI9vMtqiIbd4Fm1DraeSsdeStmN6NUabNVvLUsqg4CSrbzQ=="],
+
+    "@laplace.live/eidolon": ["@laplace.live/eidolon@workspace:apps/eidolon"],
 
     "@leichtgewicht/ip-codec": ["@leichtgewicht/ip-codec@2.0.5", "", {}, "sha512-Vo+PSpZG2/fmgmiNzYK9qWRh8h/CHrwD0mo1h1DzL4yzHNSfWYujGTYsWGreD000gcgmZ7K4Ys6Tx9TxtsKdDw=="],
 

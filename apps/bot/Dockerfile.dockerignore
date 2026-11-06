@@ -24,5 +24,11 @@ data/mem0-cloud-export.json
 apps/bot/src/local/
 apps/bot/test/local/
 apps/bot/scripts/local-smoke.ts
+apps/bot/scripts/output.ts
 apps/web/*
 !apps/web/package.json
+
+# The npm package's launcher, build script and staged output never ship: the image runs the
+# checkout. Its manifest stays for --frozen-lockfile.
+apps/eidolon/*
+!apps/eidolon/package.json

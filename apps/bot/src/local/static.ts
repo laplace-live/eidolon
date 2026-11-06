@@ -2,11 +2,9 @@
 // A request is answered from that map or with index.html; its path is never decoded or joined to
 // a filesystem path, so no spelling of `..` reaches outside the build.
 import { readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
+import { webDist } from "@eidolon/config";
 import { isInside } from "./write.ts";
-
-/** Found from this file, never the working directory, so every launcher finds the same build. */
-export const WEB_DIST = resolve(import.meta.dir, "../../../web/dist");
 
 /**
  * `blob:` lets the WebRTC client load its AudioWorklets, and `https:` lets voice covers and
@@ -59,7 +57,7 @@ function load(path: string, urlPath: string): StaticFile {
 }
 
 /** Walks `dist` once. Files only; anything whose real path leaves `dist` is skipped. */
-export function loadStaticSite(dist = WEB_DIST): StaticSite {
+export function loadStaticSite(dist = webDist()): StaticSite {
   let root: string;
   try {
     root = realpathSync(dist);

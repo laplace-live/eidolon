@@ -3,11 +3,10 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { dataHome, personaIds, resetSettings, sourceFolder } from "@eidolon/config";
+import { cliEntry, dataHome, personaIds, resetSettings, sourceFolder } from "@eidolon/config";
 import { CLEANUP_LIMIT_MS } from "@eidolon/ingest";
 import {
   buildStreamCatalogMain,
-  CLI_ENTRY,
   CLI_USAGE,
   COMMANDS,
   cleanupLimitMs,
@@ -290,11 +289,10 @@ test("@eidolon/cli/job and @eidolon/ingest/progress are import-free leaves the w
 });
 
 test("a job runs the CLI without a .env from its folder and reports NDJSON", () => {
-  expect(CLI_ENTRY).toBe(join(import.meta.dir, "../src/main.ts"));
-  expect(jobArgv("refine", ["--persona", "milky-green"])).toEqual([
+  expect(jobArgv(cliEntry(), "refine", ["--persona", "milky-green"])).toEqual([
     process.execPath,
     "--no-env-file",
-    CLI_ENTRY,
+    cliEntry(),
     "refine",
     "--json",
     "--persona",

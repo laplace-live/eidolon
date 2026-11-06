@@ -14,6 +14,8 @@
     "app": "[ -f apps/web/dist/index.html ] || bun run build:web && bun apps/bot/src/local/main.ts --open",
     "dev:web": "bun run --cwd apps/web dev",
     "build:web": "bun run --cwd apps/web build",
+    "build:npm": "bun apps/eidolon/scripts/build.ts",
+    "pack:npm": "bun apps/eidolon/scripts/build.ts --pack",
     "laplace-search": "bun apps/cli/src/main.ts search",
     "laplace-eval-retrieval": "bun apps/cli/src/main.ts eval-retrieval",
     "laplace-generate-image": "bun apps/cli/src/main.ts generate-image",

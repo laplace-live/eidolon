@@ -3,7 +3,7 @@
 import { readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import { expandUser, PROJECT_ROOT } from "./paths.ts";
+import { expandUser, shippedPath } from "./paths.ts";
 import { sortedPy } from "./py.ts";
 
 /** The persona used when nothing names one. */
@@ -34,7 +34,7 @@ export function dataHome(): string {
 
 /** The personas that ship with the code. */
 export function templatesDir(): string {
-  return join(PROJECT_ROOT, "personas");
+  return shippedPath("personas", "personas");
 }
 
 /** The user's folder for persona `id`, where edits and private data are written. */

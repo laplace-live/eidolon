@@ -106,12 +106,13 @@ Things it relies on:
   the ingests, the catalog and the pipeline's ingest stage hold `index:<db path>`; the managed
   yt-dlp's update holds `yt-dlp`. Dry runs take none.
 - **Cancellation.** `main.ts` runs every command through `runWithSignals`: the first SIGINT or
-  SIGTERM aborts the run's signal, a second exits at once, and the exit code is 130 or 143. No new
-  item starts, children get SIGTERM and then SIGKILL after 5 s, requests and retry waits abort, and
-  cleanup is cut off after 10 s, except inside a `criticalSection` (`limit.ts`): an ingest's
-  rebuild, from dropping the table to its FTS index and build record, finishes first, since the
-  cut would leave no table or an unfinished index. A command that never reads the signal goes in
-  `IGNORE_SIGNAL` (`cli.ts`), which exits at the first.
+  SIGTERM aborts the run's signal, a second exits at once unless it comes within `REPEAT_MS`
+  (500 ms), as the first delivered twice, and the exit code is 130 or 143. No new item starts,
+  children get SIGTERM and then SIGKILL after 5 s, requests and retry waits abort, and cleanup is
+  cut off after 10 s, except inside a `criticalSection` (`limit.ts`): an ingest's rebuild, from
+  dropping the table to its FTS index and build record, finishes first, since the cut would leave
+  no table or an unfinished index. A command that never reads the signal goes in `IGNORE_SIGNAL`
+  (`cli.ts`), which exits at the first.
 - **Rebuilds never leave a half index.** Every file is written to a temporary file beside it and
   renamed. `writeTable` builds and checks the whole Arrow table, every value and vector, before it
   drops the old table, and after a successful write each ingest records its inputs in
@@ -167,10 +168,11 @@ that provider's key, credit or reach:
 | `cancelled` | the run was cancelled |
 
 yt-dlp's codes are read off its stderr, so they are a best guess. A job runs
-`jobArgv(command, args)` from `@eidolon/cli/job`, also import-free: `bun --no-env-file
-<CLI_ENTRY> <command> --json …`, started in the data home. A cancel sends it SIGTERM. Nothing
-kills it on a timer: only a forced second cancel (`DELETE jobs/:id?force=1`) of a job this server
-spawned sends SIGKILL, to its whole process group ([web-app.md](web-app.md#jobs)).
+`jobArgv(entry, command, args)` from `@eidolon/cli/job`, also import-free, with
+`@eidolon/config`'s `cliEntry()` as the entry: `bun --no-env-file <entry> <command> --json …`,
+started in the data home. A cancel sends it SIGTERM. Nothing kills it on a timer: only a forced
+second cancel (`DELETE jobs/:id?force=1`) of a job this server spawned sends SIGKILL, to its whole
+process group ([web-app.md](web-app.md#jobs)).
 
 ### Real-data tests
 

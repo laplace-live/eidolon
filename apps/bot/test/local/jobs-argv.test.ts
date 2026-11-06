@@ -5,8 +5,8 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "@eidolon/cli";
-import { CLI_ENTRY, jobArgv } from "@eidolon/cli/job";
-import { dataHome } from "@eidolon/config";
+import { jobArgv } from "@eidolon/cli/job";
+import { cliEntry, dataHome } from "@eidolon/config";
 import { BUILD_STREAM_CATALOG_PARSER } from "../../../cli/src/build_stream_catalog.ts";
 import { DOWNLOAD_PARSER } from "../../../cli/src/download.ts";
 import { INGEST_FACTS_PARSER } from "../../../cli/src/ingest_facts.ts";
@@ -34,7 +34,7 @@ const PERSONA = ["--persona", "milky-green"];
 const URL = "https://space.bilibili.com/1/lists/2?type=series";
 
 function argv(spec: JobSpec): string[] {
-  return jobArgv(spec.cli, spec.args);
+  return jobArgv(cliEntry(), spec.cli, spec.args);
 }
 
 describe("each command spawns a fixed argv", () => {
@@ -167,7 +167,7 @@ describe("each command spawns a fixed argv", () => {
       expect(argv(spec)).toEqual([
         process.execPath,
         "--no-env-file",
-        CLI_ENTRY,
+        cliEntry(),
         cli,
         "--json",
         ...args,

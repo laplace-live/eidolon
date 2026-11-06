@@ -1,5 +1,8 @@
 // Expected values were printed by Python jieba 0.42.1 through laplace_eidolon.retrieval.
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   JiebaTokenizer,
   tokenizeZh,
@@ -166,4 +169,20 @@ describe("parity with the stored tokens column", () => {
     expect(rows?.length).toBeGreaterThan(1000);
     expect(mismatched.map((r) => r.id)).toEqual([]);
   });
+});
+
+test("a packaged install reads jieba's data from the package EIDOLON_APP_ROOT names", () => {
+  const root = mkdtempSync(join(tmpdir(), "eidolon-app-root-"));
+  const jieba = join(root, "data", "jieba");
+  try {
+    process.env.EIDOLON_APP_ROOT = root;
+    expect(() => new JiebaTokenizer().initialize()).toThrow(join(jieba, "dict.txt"));
+    // One word gets past the dictionary to the HMM tables, without building the real dictionary.
+    mkdirSync(jieba, { recursive: true });
+    writeFileSync(join(jieba, "dict.txt"), "哪首 3 r\n");
+    expect(() => new JiebaTokenizer().initialize()).toThrow(join(jieba, "hmm.json"));
+  } finally {
+    delete process.env.EIDOLON_APP_ROOT;
+    rmSync(root, { recursive: true, force: true });
+  }
 });

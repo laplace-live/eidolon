@@ -2,14 +2,12 @@
 // fresh one, which is how settings read once at boot take effect. Otherwise this process exits with
 // the child's code. The child gets its own process group, so a terminal's Ctrl-C reaches it once,
 // through here, and an IPC channel ends it if this process is killed outright.
-import { join } from "node:path";
+import { serverEntry } from "@eidolon/config";
 import type { Subprocess } from "bun";
 import { localArgv, parseLocalArgs } from "./args.ts";
 
 /** EX_TEMPFAIL: the server stopped so that a new one can start. */
 export const RESTART_EXIT_CODE = 75;
-
-export const SERVER_ENTRY = join(import.meta.dir, "server.ts");
 
 /** What the server tells the supervisor once it listens. */
 export interface ListeningMessage {
@@ -68,7 +66,7 @@ export async function supervise(
       // No env: the server applies the .env itself. Passing what this process applied from it
       // would keep a key deleted from the .env since alive across every restart.
       child = Bun.spawn(
-        [process.execPath, "--no-env-file", options.entry ?? SERVER_ENTRY, ...localArgv(args)],
+        [process.execPath, "--no-env-file", options.entry ?? serverEntry(), ...localArgv(args)],
         {
           stdio: ["ignore", "inherit", "inherit"],
           detached: process.platform !== "win32",
