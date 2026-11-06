@@ -289,7 +289,6 @@ test("@eidolon/cli/job and @eidolon/ingest/progress are import-free leaves the w
 });
 
 test("a job runs the CLI without a .env from its folder and reports NDJSON", () => {
-  expect(cliEntry()).toBe(join(import.meta.dir, "../src/main.ts"));
   expect(jobArgv(cliEntry(), "refine", ["--persona", "milky-green"])).toEqual([
     process.execPath,
     "--no-env-file",

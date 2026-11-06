@@ -7,7 +7,8 @@
       "*.json",
       "!**/node_modules",
       "!packages/retrieval/data",
-      "!apps/web/dist"
+      "!apps/web/dist",
+      "!apps/eidolon/pack"
     ]
   },
   "formatter": {

@@ -24,6 +24,7 @@ data/mem0-cloud-export.json
 apps/bot/src/local/
 apps/bot/test/local/
 apps/bot/scripts/local-smoke.ts
+apps/bot/scripts/output.ts
 apps/web/*
 !apps/web/package.json
 

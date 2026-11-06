@@ -93,7 +93,6 @@ describe("findBun", () => {
 
   function lookup(files: Record<string, number>, versions: Record<string, string> = {}): BunLookup {
     return {
-      override: undefined,
       resolve: (specifier) =>
         specifier === "@oven/bun-darwin-aarch64/bin/bun" && OWN in files
           ? OWN
@@ -107,14 +106,6 @@ describe("findBun", () => {
 
   test("takes the platform package's binary", () => {
     expect(findBun("darwin-arm64", "1.4.4", lookup({ [OWN]: 88_000_000 }))).toBe(OWN);
-  });
-
-  test("EIDOLON_BUN wins", () => {
-    const found = findBun("darwin-arm64", "1.4.4", {
-      ...lookup({ [OWN]: 88_000_000 }),
-      override: "/opt/bun",
-    });
-    expect(found).toBe("/opt/bun");
   });
 
   test("finds the binary bun's postinstall moved, at this version only", () => {

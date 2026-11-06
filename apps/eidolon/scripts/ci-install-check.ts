@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import type { Subprocess } from "bun";
+import { Output, READY_LINE } from "../../bot/scripts/output.ts";
 import {
   type ErrorBody,
   PROOF_HEADER,
@@ -20,11 +21,12 @@ temporary HOME and data home, and deletes them. Exits 0 when every check passes,
 
 const BOOT_TIMEOUT_MS = 120_000;
 const STOP_TIMEOUT_MS = 15_000;
+const TAIL_LINES = 40;
 
-export class CheckFailed extends Error {}
+class CheckFailed extends Error {}
 
 /** Prints the check, and throws when it failed. */
-export function check(name: string, pass: boolean, detail: string): void {
+function check(name: string, pass: boolean, detail: string): asserts pass {
   console.log(`${pass ? "PASS" : "FAIL"} ${name}: ${detail}`);
   if (!pass) throw new CheckFailed(name);
 }
@@ -34,7 +36,7 @@ function versionOf(tool: string): string {
 }
 
 /** `npm install --prefix`, which runs the dependencies' install scripts; returns the bin it links. */
-export function install(tarball: string, prefix: string): string {
+function install(tarball: string, prefix: string): string {
   mkdirSync(prefix, { recursive: true });
   const npm = Bun.spawnSync(
     ["npm", "install", "--prefix", prefix, "--no-audit", "--no-fund", resolve(tarball)],
@@ -49,44 +51,23 @@ export function install(tarball: string, prefix: string): string {
   return join(prefix, "node_modules", ".bin", "eidolon");
 }
 
-/** A first run's environment: this PATH, and nothing of this computer's Eidolon. */
-export function firstRunEnv(home: string, dataHome: string): Record<string, string> {
-  return { PATH: process.env.PATH ?? "", HOME: home, EIDOLON_HOME: dataHome };
-}
-
-/** What a stream has carried so far. */
-class Collected {
-  text = "";
-
-  constructor(stream: ReadableStream<Uint8Array>) {
-    void (async () => {
-      const decoder = new TextDecoder();
-      for await (const chunk of stream) this.text += decoder.decode(chunk, { stream: true });
-    })();
-  }
-
-  tail(lines = 40): string {
-    return this.text.trimEnd().split("\n").slice(-lines).join("\n");
-  }
-}
-
-export interface App {
+interface App {
   /** The launcher, which leads its own process group. */
   readonly process: Subprocess<"ignore", "pipe", "pipe">;
-  readonly stdout: Collected;
-  readonly stderr: Collected;
+  readonly stdout: Output;
+  readonly stderr: Output;
   readonly origin: string;
   /** The link's fragment, which POST session trades for the cookie and the proof. */
   readonly code: string;
 }
 
 /** The launcher's exit code, or null when it hasn't exited within `ms`. */
-export function exitWithin(child: Subprocess, ms: number): Promise<number | null> {
+function exitWithin(child: Subprocess, ms: number): Promise<number | null> {
   return Promise.race([child.exited, Bun.sleep(ms).then(() => null)]);
 }
 
 /** Runs a command to its end, keeping this process's event loop, and so the app's pipes, going. */
-export async function run(
+async function run(
   argv: readonly string[],
   env: Record<string, string>,
   cwd: string,
@@ -101,7 +82,7 @@ export async function run(
 }
 
 /** Stops what still runs: SIGTERM to the launcher's process group, then SIGKILL. */
-export async function stopAll(child: Subprocess): Promise<void> {
+async function stopAll(child: Subprocess): Promise<void> {
   for (const signal of ["SIGTERM", "SIGKILL"] as const) {
     if (child.exitCode !== null || child.signalCode !== null) return;
     try {
@@ -114,7 +95,7 @@ export async function stopAll(child: Subprocess): Promise<void> {
 }
 
 /** Starts `eidolon --no-open --port 0` and waits for the link it prints. */
-export async function boot(bin: string, env: Record<string, string>, cwd: string): Promise<App> {
+async function boot(bin: string, env: Record<string, string>, cwd: string): Promise<App> {
   const child = Bun.spawn([bin, "--no-open", "--port", "0"], {
     cwd,
     env,
@@ -123,28 +104,28 @@ export async function boot(bin: string, env: Record<string, string>, cwd: string
     stderr: "pipe",
     detached: true,
   });
-  const stdout = new Collected(child.stdout);
-  const stderr = new Collected(child.stderr);
-  const deadline = Date.now() + BOOT_TIMEOUT_MS;
-  for (;;) {
-    const link = /^Eidolon is ready: (\S+)$/m.exec(stdout.text)?.[1];
-    if (link !== undefined) {
-      const url = new URL(link);
-      check("link", true, url.origin);
-      return { process: child, stdout, stderr, origin: url.origin, code: url.hash.slice(1) };
-    }
-    if (child.exitCode !== null || child.signalCode !== null || Date.now() > deadline) {
-      await stopAll(child);
-      const why =
-        Date.now() > deadline ? "timed out" : `exited ${child.exitCode ?? child.signalCode}`;
-      check("link", false, `${why} without one:\n${stdout.tail()}\n${stderr.tail()}`);
-    }
-    await Bun.sleep(100);
+  const stdout = new Output(child.stdout);
+  const stderr = new Output(child.stderr);
+  let link: string;
+  try {
+    link = await stdout.waitFor(READY_LINE, child.exited, BOOT_TIMEOUT_MS);
+  } catch {
+    const exit = child.exitCode ?? child.signalCode;
+    await stopAll(child);
+    check(
+      "link",
+      false,
+      `${exit === null ? "timed out" : `exited ${exit}`} without one:\n` +
+        `${stdout.tail(TAIL_LINES)}\n${stderr.tail(TAIL_LINES)}`,
+    );
   }
+  const url = new URL(link);
+  check("link", true, url.origin);
+  return { process: child, stdout, stderr, origin: url.origin, code: url.hash.slice(1) };
 }
 
 /** The headers the app's pages send: the cookie and the proof POST session traded the code for. */
-export async function signIn(origin: string, code: string): Promise<Record<string, string>> {
+async function signIn(origin: string, code: string): Promise<Record<string, string>> {
   const response = await fetch(`${origin}/api/local/session`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Origin: origin },
@@ -159,17 +140,18 @@ export async function signIn(origin: string, code: string): Promise<Record<strin
     `POST /api/local/session with the link's code: ${response.status}, ` +
       `${cookie === undefined ? "no" : "a"} cookie and ${proof === undefined ? "no" : "a"} proof`,
   );
-  return { Cookie: cookie as string, [PROOF_HEADER]: proof as string, Origin: origin };
+  return { Cookie: cookie, [PROOF_HEADER]: proof, Origin: origin };
 }
 
 /** Every check on the package at `tarball`, installed into `prefix`; `temp` holds its homes. */
-export async function checkPackage(tarball: string, prefix: string, temp: string): Promise<void> {
+async function checkPackage(tarball: string, prefix: string, temp: string): Promise<void> {
   const bin = install(tarball, prefix);
   const manifest = join(prefix, "node_modules", "@laplace.live", "eidolon", "package.json");
   const { version } = JSON.parse(readFileSync(manifest, "utf8")) as { version: string };
   const home = join(temp, "home");
   mkdirSync(home, { recursive: true });
-  const env = firstRunEnv(home, join(temp, "data"));
+  // A first run's environment: this PATH, and nothing of this computer's Eidolon.
+  const env = { PATH: process.env.PATH ?? "", HOME: home, EIDOLON_HOME: join(temp, "data") };
   const app = await boot(bin, env, temp);
   try {
     const session = await signIn(app.origin, app.code);
@@ -182,7 +164,7 @@ export async function checkPackage(tarball: string, prefix: string, temp: string
         `${body.version ?? "none"}`,
     );
     const alone = await fetch(`${app.origin}/api/local/status`, {
-      headers: { Cookie: session.Cookie as string },
+      headers: { Cookie: session.Cookie },
     });
     const refusal = ((await alone.json().catch(() => ({}))) as Partial<ErrorBody>).error?.code;
     check(
@@ -209,7 +191,10 @@ export async function checkPackage(tarball: string, prefix: string, temp: string
         `${answers ? "still answers" : "is closed"}`,
     );
   } catch (error) {
-    console.log(`The app's stdout:\n${app.stdout.tail()}\nIts stderr:\n${app.stderr.tail()}`);
+    console.log(
+      `The app's stdout:\n${app.stdout.tail(TAIL_LINES)}\n` +
+        `Its stderr:\n${app.stderr.tail(TAIL_LINES)}`,
+    );
     throw error;
   } finally {
     await stopAll(app.process);
@@ -233,16 +218,19 @@ function options(argv: string[]): { tarball: string; prefix: string | undefined 
   process.exit(2);
 }
 
-if (import.meta.main) {
+async function main(): Promise<number> {
   const { tarball, prefix } = options(Bun.argv.slice(2));
   const temp = mkdtempSync(join(tmpdir(), "eidolon-install-check-"));
   try {
     await checkPackage(resolve(tarball), resolve(prefix ?? join(temp, "prefix")), temp);
     console.log("Every check passed.");
+    return 0;
   } catch (error) {
     if (!(error instanceof CheckFailed)) console.log(`FAIL: ${(error as Error).stack}`);
-    process.exitCode = 1;
+    return 1;
   } finally {
     rmSync(temp, { recursive: true, force: true });
   }
 }
+
+process.exitCode = await main();

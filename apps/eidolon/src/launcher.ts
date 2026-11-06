@@ -112,8 +112,6 @@ export function unsupportedReason(host: Host): string | null {
 }
 
 export interface BunLookup {
-  /** `EIDOLON_BUN`: a Bun binary to use instead. */
-  readonly override: string | undefined;
   /** `require.resolve` from the launcher; null when nothing resolves. */
   resolve(specifier: string): string | null;
   /** A file's size in bytes; null when it is missing. */
@@ -127,7 +125,6 @@ const PLACEHOLDER_MAX_BYTES = 64 * 1024;
 
 /** The Bun to run on `platform`: `version`, the one this package depends on. */
 export function findBun(platform: Platform, version: string, lookup: BunLookup): string | null {
-  if (lookup.override) return lookup.override;
   const own = lookup.resolve(`${PLATFORMS[platform].bun}/bin/bun`);
   if (own !== null) return own;
   // In a project that also depends on bun at this version, bun's postinstall moved the binary
@@ -138,7 +135,7 @@ export function findBun(platform: Platform, version: string, lookup: BunLookup):
   return (lookup.size(exe) ?? 0) > PLACEHOLDER_MAX_BYTES ? exe : null;
 }
 
-export function bunMissing(platform: Platform, version: string): string {
+function bunMissing(platform: Platform, version: string): string {
   return (
     `the Bun runtime for ${platform} (${PLATFORMS[platform].bun}@${version}) is not installed. ` +
     "It is an optional dependency: install again without --omit=optional or --no-optional, or " +
@@ -179,7 +176,6 @@ function currentHost(): Host {
 function systemLookup(): BunLookup {
   const require = createRequire(import.meta.url);
   return {
-    override: process.env.EIDOLON_BUN || undefined,
     resolve(specifier) {
       try {
         return require.resolve(specifier);
@@ -258,7 +254,7 @@ export function main(argv: readonly string[]): void {
   }
   const platform = `${host.platform}-${host.arch}` as Platform;
   const version = manifest.optionalDependencies[PLATFORMS[platform].bun] ?? "";
-  const bun = findBun(platform, version, systemLookup());
+  const bun = process.env.EIDOLON_BUN || findBun(platform, version, systemLookup());
   if (bun === null) {
     fail(bunMissing(platform, version));
     return;

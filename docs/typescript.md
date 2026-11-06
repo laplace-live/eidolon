@@ -167,10 +167,11 @@ that provider's key, credit or reach:
 | `cancelled` | the run was cancelled |
 
 yt-dlp's codes are read off its stderr, so they are a best guess. A job runs
-`jobArgv(command, args)` from `@eidolon/cli/job`, also import-free: `bun --no-env-file
-<CLI_ENTRY> <command> --json …`, started in the data home. A cancel sends it SIGTERM. Nothing
-kills it on a timer: only a forced second cancel (`DELETE jobs/:id?force=1`) of a job this server
-spawned sends SIGKILL, to its whole process group ([web-app.md](web-app.md#jobs)).
+`jobArgv(entry, command, args)` from `@eidolon/cli/job`, also import-free, with
+`@eidolon/config`'s `cliEntry()` as the entry: `bun --no-env-file <entry> <command> --json …`,
+started in the data home. A cancel sends it SIGTERM. Nothing kills it on a timer: only a forced
+second cancel (`DELETE jobs/:id?force=1`) of a job this server spawned sends SIGKILL, to its whole
+process group ([web-app.md](web-app.md#jobs)).
 
 ### Real-data tests
 

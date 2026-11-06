@@ -16,7 +16,7 @@ import { ENTRIES, PLATFORMS } from "../src/launcher.ts";
 
 const ROOT = resolve(import.meta.dir, "../../..");
 const HERE = resolve(import.meta.dir, "..");
-export const PACK_DIR = join(HERE, "pack");
+const PACK_DIR = join(HERE, "pack");
 /** SPDX's license texts (github.com/spdx/license-list-data, text/), named by identifier. */
 const SPDX_DIR = join(HERE, "spdx");
 
@@ -27,13 +27,7 @@ const SPDX_DIR = join(HERE, "spdx");
  * shares: the runtime patches werift's prototype for @pipedog's copy, and LanceDB checks
  * apache-arrow's tables, which must be one copy for both.
  */
-export const EXTERNAL = [
-  "@pipedog/*",
-  "onnxruntime-node",
-  "werift",
-  "apache-arrow",
-  "@lancedb/lancedb-*",
-];
+const EXTERNAL = ["@pipedog/*", "onnxruntime-node", "werift", "apache-arrow", "@lancedb/lancedb-*"];
 
 /** LanceDB requires it inside its OpenAI embedding function only, which nothing calls. */
 const NEVER_LOADED = ["openai"];
@@ -147,16 +141,6 @@ export function packageManifest(bunVersion: string): Manifest {
     },
     type: "module",
     bin: { eidolon: "bin/eidolon.mjs" },
-    files: [
-      "bin",
-      "dist",
-      "web",
-      "personas",
-      "data",
-      "bunfig.toml",
-      "NOTICE",
-      "THIRD_PARTY_NOTICES.md",
-    ],
     os: [...new Set(platforms.map(([os]) => os))],
     cpu: [...new Set(platforms.map(([, cpu]) => cpu))],
     engines: { node: ">=20" },
@@ -355,7 +339,7 @@ function productionBun(): string {
 }
 
 /** Writes the package into PACK_DIR, replacing what was there. */
-export async function stage(): Promise<Manifest> {
+async function stage(): Promise<Manifest> {
   const manifest = packageManifest(productionBun());
   rmSync(PACK_DIR, { recursive: true, force: true });
   mkdirSync(PACK_DIR);
@@ -373,7 +357,7 @@ export async function stage(): Promise<Manifest> {
 }
 
 /** `npm pack` of PACK_DIR into apps/eidolon/; returns the tarball's path. */
-export function pack(): string {
+function pack(): string {
   const packed = Bun.spawnSync(["npm", "pack", "--json", "--pack-destination", HERE], {
     cwd: PACK_DIR,
     stderr: "inherit",

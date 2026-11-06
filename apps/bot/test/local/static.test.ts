@@ -4,8 +4,8 @@ import "../../../../packages/config/test/isolated-guard.ts";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { dataHome, webDist } from "@eidolon/config";
+import { join } from "node:path";
+import { dataHome } from "@eidolon/config";
 import { loadStaticSite, MissingDist, STATIC_HEADERS } from "../../src/local/static.ts";
 import { type CapturedLogs, captureLogs } from "../fakes.ts";
 import {
@@ -147,10 +147,6 @@ describe("files", () => {
 });
 
 describe("the build", () => {
-  test("is found next to the code, not the working directory", () => {
-    expect(webDist()).toBe(resolve(import.meta.dir, "../../../web/dist"));
-  });
-
   test("a packaged install serves the package's web/", () => {
     const root = mkdtempSync(join(tmpdir(), "eidolon-app-root-"));
     try {

@@ -25,6 +25,7 @@ import {
   type Page,
 } from "playwright-core";
 import type { JobSnapshot, Status } from "../src/local/api.ts";
+import { Output, READY_LINE } from "./output.ts";
 
 const ROOT = resolve(import.meta.dir, "../../..");
 const MAC_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -172,37 +173,6 @@ class Checks {
 
   get pass(): boolean {
     return this.list.every((check) => check.pass);
-  }
-}
-
-/** A child's output as it arrives. */
-class Output {
-  text = "";
-
-  constructor(stream: ReadableStream<Uint8Array>) {
-    void (async () => {
-      const decoder = new TextDecoder();
-      for await (const chunk of stream) this.text += decoder.decode(chunk, { stream: true });
-    })();
-  }
-
-  /** The first group of `pattern` once it shows; throws when `exited` settles or time runs out. */
-  async waitFor(pattern: RegExp, exited: Promise<unknown>, timeoutMs: number): Promise<string> {
-    const deadline = Date.now() + timeoutMs;
-    let over = false;
-    void exited.then(() => {
-      over = true;
-    });
-    for (;;) {
-      const match = pattern.exec(this.text);
-      if (match) return match[1] ?? match[0];
-      if (over || Date.now() > deadline) throw new Error(`no ${pattern} in the output`);
-      await Bun.sleep(100);
-    }
-  }
-
-  tail(lines = 20): string {
-    return this.text.trimEnd().split("\n").slice(-lines).join("\n");
   }
 }
 
@@ -450,7 +420,7 @@ class Run {
     const stderr = new Output(child.stderr);
     let link: string;
     try {
-      link = await stdout.waitFor(/^Eidolon is ready: (\S+)$/m, child.exited, 60_000);
+      link = await stdout.waitFor(READY_LINE, child.exited, 60_000);
     } catch {
       checks.add("boot", false, `no link printed:\n${stderr.tail()}`);
       return null;
