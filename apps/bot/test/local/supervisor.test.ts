@@ -1,7 +1,7 @@
 // The supervisor against a fake server child, a plain Bun script that follows a plan file and
 // records each run's flags: restart on 75, signals passed on, and the child's exit code returned.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type ForwardedSignal, supervise } from "../../src/local/supervisor.ts";
@@ -131,6 +131,20 @@ describe("supervise", () => {
     }
     const probes = readFileSync(join(dir, "probes.ndjson"), "utf8").trim().split("\n");
     expect(probes.map((line) => JSON.parse(line))).toEqual([null, null]);
+  });
+
+  test("runs the npm package's dist/server.js when EIDOLON_APP_ROOT names it", async () => {
+    mkdirSync(join(dir, "dist"));
+    writeFileSync(
+      join(dir, "dist", "server.js"),
+      'process.exit(Bun.argv.includes("--port=41234") ? 7 : 1);',
+    );
+    process.env.EIDOLON_APP_ROOT = dir;
+    try {
+      expect(await supervise(["--port", "41234"], { signals: () => () => {} })).toBe(7);
+    } finally {
+      delete process.env.EIDOLON_APP_ROOT;
+    }
   });
 
   test("a server the signal kills reports 128 plus its number", async () => {

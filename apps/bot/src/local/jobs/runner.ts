@@ -3,7 +3,7 @@
 import { closeSync } from "node:fs";
 import { uptime } from "node:os";
 import { jobArgv } from "@eidolon/cli/job";
-import { dataHome, errorText, logger } from "@eidolon/config";
+import { cliEntry, dataHome, errorText, logger } from "@eidolon/config";
 import type { Subprocess } from "bun";
 import type { JobSnapshot } from "../api.ts";
 import { EPHEMERAL_COMMANDS, type JobSpec } from "./argv.ts";
@@ -79,7 +79,7 @@ export class JobRunner {
    * started before this machine booted is gone, whatever process its pid names now.
    */
   constructor(options: JobRunnerOptions = {}) {
-    this.argv = options.argv ?? jobArgv;
+    this.argv = options.argv ?? ((command, args) => jobArgv(cliEntry(), command, args));
     this.pollMs = options.pollMs ?? 250;
     this.keep = options.keep ?? 50;
     const bootedAt = Date.now() - uptime() * 1000;

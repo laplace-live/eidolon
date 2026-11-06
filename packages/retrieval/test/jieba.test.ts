@@ -1,5 +1,9 @@
 // Expected values were printed by Python jieba 0.42.1 through laplace_eidolon.retrieval.
 import { describe, expect, test } from "bun:test";
+import { cpSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { jiebaDir } from "@eidolon/config";
 import {
   JiebaTokenizer,
   tokenizeZh,
@@ -166,4 +170,22 @@ describe("parity with the stored tokens column", () => {
     expect(rows?.length).toBeGreaterThan(1000);
     expect(mismatched.map((r) => r.id)).toEqual([]);
   });
+});
+
+test("a packaged install reads the dictionary from the package EIDOLON_APP_ROOT names", () => {
+  const root = mkdtempSync(join(tmpdir(), "eidolon-app-root-"));
+  try {
+    cpSync(jiebaDir(), join(root, "data", "jieba"), { recursive: true });
+    process.env.EIDOLON_APP_ROOT = root;
+    expect(new JiebaTokenizer().cutForSearch("你最喜欢的歌是哪首")).toEqual(
+      "你 最 喜欢 的 歌 是 哪首".split(" "),
+    );
+    rmSync(join(root, "data", "jieba", "dict.txt"));
+    expect(() => new JiebaTokenizer().initialize()).toThrow(
+      join(root, "data", "jieba", "dict.txt"),
+    );
+  } finally {
+    delete process.env.EIDOLON_APP_ROOT;
+    rmSync(root, { recursive: true, force: true });
+  }
 });

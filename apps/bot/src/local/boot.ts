@@ -6,7 +6,7 @@ import { type LocalHost, parseLocalArgs, resolveLocalHost } from "./args.ts";
 import { createLocalExtension } from "./extension.ts";
 import { usePersonaMemoryScope } from "./identity.ts";
 import { recordServerPort, type ServerHolder, takeServerLock } from "./server-lock.ts";
-import { loadStaticSite, MissingDist, WEB_DIST } from "./static.ts";
+import { loadStaticSite, MissingDist } from "./static.ts";
 import { type ListeningMessage, RESTART_EXIT_CODE } from "./supervisor.ts";
 import { type LocalToken, loadLocalToken, probeNonce, TokenError } from "./token.ts";
 import { ensureDataHome } from "./write.ts";
@@ -191,7 +191,7 @@ export async function bootLocal(
   const host = await resolveLocalHost(args.host);
   let site: ReturnType<typeof loadStaticSite>;
   try {
-    site = loadStaticSite(options.dist ?? WEB_DIST);
+    site = loadStaticSite(options.dist);
   } catch (error) {
     if (!(error instanceof MissingDist)) throw error;
     io.stderr(`eidolon: ${error.message}. Build it first: bun run build:web\n`);

@@ -47,7 +47,16 @@ export {
   openrouterAppUrl,
   openrouterHeaders,
 } from "./openrouter.ts";
-export { expandUser, PROJECT_ROOT, resolveProjectPath } from "./paths.ts";
+export {
+  cliEntry,
+  expandUser,
+  jiebaDir,
+  PROJECT_ROOT,
+  resolveProjectPath,
+  serverEntry,
+  shippedPath,
+  webDist,
+} from "./paths.ts";
 export {
   cpLen,
   cpSlice,

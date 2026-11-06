@@ -74,7 +74,7 @@ export {
 export { ingestFactsMain } from "./ingest_facts.ts";
 export { ingestStreamsMain } from "./ingest_streams.ts";
 export { type CliIo, type CommandDeps, printer, resolveIo } from "./io.ts";
-export { CLI_ENTRY, jobArgv } from "./job.ts";
+export { jobArgv } from "./job.ts";
 export { personaArg } from "./persona-arg.ts";
 export { pipelineMain } from "./pipeline.ts";
 export { prepareBatchMain } from "./prepare_batch.ts";

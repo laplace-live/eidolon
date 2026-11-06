@@ -26,7 +26,9 @@ TypeScript too: `packages/ingest`, run through the `laplace-*` commands in
 `apps/cli`. The original Pipecat runtime in `laplace_eidolon/` stays, as the
 `eidolon-python` rollback image, until it is retired, and its offline tools
 (`laplace_eidolon/tools/`) with it, as the spec the port is checked against.
-Both runtimes read the same LanceDB and Qdrant collection.
+Both runtimes read the same LanceDB and Qdrant collection. The local web app and
+the offline commands also ship as the npm package `@laplace.live/eidolon`
+(`apps/eidolon`), which runs them, bundled, on the Bun it installs.
 
 ## Repository layout
 
@@ -35,6 +37,8 @@ apps/bot/             the bot: HTTP server, routes, MCP, entry point; src/local/
                       local web app's own entry and API, which production never loads
 apps/web/             the local web app's pages (Vite, React, shadcn), served by src/local/
 apps/cli/             every laplace-* command, the offline chain's included
+apps/eidolon/         the npm package @laplace.live/eidolon: a Node launcher, and a build that
+                      bundles the local app and the CLI with the web app, templates and jieba
 packages/             subsystems, one Bun workspace package each (docs/typescript.md);
                       packages/ingest is the offline chain
 laplace_eidolon/      the Python runtime (rollback only) and its offline chain (the spec)
@@ -84,6 +88,7 @@ a row here and writing the prose there — not a new section in this file.**
 | settings files, credentials, the data home, a persona's folder or its sources | [personas.md](docs/personas.md) |
 | the offline chain (`packages/ingest` and its `laplace-*` commands) or their `--json` events | [typescript.md](docs/typescript.md#the-offline-chain) |
 | the local web app (`apps/web`, `apps/bot/src/local`): local mode, its API, jobs or security | [web-app.md](docs/web-app.md) |
+| changesets, the version PR, tags, or publishing the npm package (`apps/eidolon`) | [releasing.md](docs/releasing.md) |
 | any env var — all 50-odd are documented there | `.env.example` |
 | Soniox's per-project vocabulary glossary | `personas/milky-green/glossary.toml` |
 | broadcast overviews, date-scoped recall, or the archive lookup tool | [stream-recall.md](docs/stream-recall.md) |
@@ -126,6 +131,13 @@ bun run laplace-ingest-facts           # facts/ → persona_facts.lance
 bun run laplace-build-stream-catalog   # → stream_catalog.json
 bun run laplace-prepare-batch          # a series capture's new videos → lists/batches/
 bun run laplace-extract-users          # mine danmaku JSON for glossary.toml terms
+```
+
+The npm package, `@laplace.live/eidolon` ([releasing.md](docs/releasing.md)):
+
+```bash
+bun run build:npm                      # stages it in apps/eidolon/pack/: bundles, web app, templates
+bun run pack:npm                       # stages it, then packs apps/eidolon/laplace.live-eidolon-<version>.tgz
 ```
 
 The Python side:
@@ -173,6 +185,7 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | anything under `apps/` or `packages/` | `bun run typecheck`, `bun run lint`, `bun run test`; for retrieval, the gate or the bot's pipeline, the TypeScript CLI or call that matches the Python row above |
 | anything under `apps/web` | the row above, whose typecheck also runs both `apps/web` tsconfigs, then `bun run build:web` |
 | local mode (`apps/bot/src/local`) | `bun test --no-env-file apps/bot/test/local` from the repository root, then `bun apps/bot/scripts/local-smoke.ts --headful`: a browser walk on a temporary data home that bills nothing |
+| `apps/eidolon`, or a file the package bundles or copies | the gates above, then `bun run pack:npm`, install the tarball with npm (`npm install --prefix <tmp> <tarball>`: inside the repository npm needs `--prefix`), and boot it on a temporary home: `EIDOLON_HOME=<tmp home> <tmp>/node_modules/.bin/eidolon --no-open --port 0` |
 
 ## Rules
 
@@ -247,6 +260,10 @@ module that owns it.
 - **Run `bun test` from the repository root only.** Elsewhere `bunfig.toml`'s preload is
   skipped and the data home is the real one, so a test file that deletes in it imports
   `packages/config/test/isolated-guard.ts` first, and `isolated-guard.test.ts` enforces that.
+- **Never find a shipped file through `import.meta`.** The npm package runs bundles, where every
+  module's folder is `dist/`. A file the code ships with (a template, the web build, jieba's
+  data, an entry to spawn) resolves through `shippedPath` in `@eidolon/config`, under the
+  launcher's `EIDOLON_APP_ROOT` or else the checkout, and `apps/eidolon`'s build copies it in.
 
 ### The offline chain
 
@@ -335,24 +352,31 @@ module that owns it.
 
 - **Every user-facing change ships with a changeset in the same commit** — add
   it yourself, unasked, for the Python and the TypeScript bot alike:
-  `bunx changeset add --minor laplace-eidolon -m "feat: Remember a viewer's nickname"`.
+  `bunx changeset add --minor laplace-eidolon,@laplace.live/eidolon -m "feat: Remember a viewer's nickname"`.
   `--minor` for features and substantial behavior changes, `--patch` for fixes
   and small changes. Start with `feat:`/`fix:`/`perf:`/`chore:`, then one
   capitalized plain sentence under ~80 chars, written for users; the prefix is
   stripped and the rest ships as the GitHub Release notes. No changeset for CI,
   docs, tests, dev-only tooling, or refactors nobody notices. `laplace-eidolon`
-  (`apps/bot`) is the only released package; `@eidolon/*` are ignored.
+  (`apps/bot`) and the npm package `@laplace.live/eidolon` (`apps/eidolon`) are
+  released together at one version, so name both: each changelog lists only the
+  changesets naming it. `@eidolon/*` are ignored.
 - **A push to `master` is a production deploy.** CI rebuilds `:edge`, and
   Watchtower on the production host restarts the bot from it, dropping live
   calls. Pushes that only touch docs, tests, changesets, `AGENTS.md`, `.agents/`,
-  the offline chain (`apps/cli`, `packages/ingest`) or the local web app
-  (`apps/web`, `apps/bot/src/local`) skip the image build (`paths-ignore` in
-  `docker.yml`); anything else, `personas/` included, ships.
-- **Never bump a version, push a release tag, or hand-edit `CHANGELOG.md`.**
-  Merging the Release workflow's version PR bumps `apps/bot/package.json`,
-  copies it into `pyproject.toml`, `uv.lock`, `bot.py` and `rtvi.ts`
+  the offline chain (`apps/cli`, `packages/ingest`), the local web app
+  (`apps/web`, `apps/bot/src/local`) or the npm package (`apps/eidolon`) skip the
+  image build (`paths-ignore` in `docker.yml`); anything else, `personas/`
+  included, ships.
+- **Never bump a version, push a release tag, hand-edit `CHANGELOG.md`, or
+  publish to npm.** Merging the Release workflow's version PR bumps
+  `apps/bot/package.json` and `apps/eidolon/package.json`, copies the version
+  into `pyproject.toml`, `uv.lock`, `bot.py` and `rtvi.ts`
   (`apps/bot/scripts/sync-version.ts`), and tags `laplace-eidolon@<version>`,
-  which builds the image tagged `<version>`, `<major>.<minor>` and `<major>`.
+  which builds the image tagged `<version>`, `<major>.<minor>` and `<major>`,
+  and `@laplace.live/eidolon@<version>`. That run publishes the npm package while
+  the `NPM_PUBLISH` variable is `true`; only its one-time setup is done by hand
+  ([releasing.md](docs/releasing.md)).
 - **Fix defects you can trigger; don't harden against ones you can't.** Before
   adding a guard — including for a review finding — name the input or sequence
   that produces the failure against the code as it stands. No trigger means

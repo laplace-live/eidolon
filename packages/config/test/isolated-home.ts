@@ -8,3 +8,4 @@ process.env.EIDOLON_REAL_HOME ??=
   process.env.EIDOLON_HOME || join(homedir(), ".laplace", "eidolon");
 process.env.EIDOLON_HOME = join(tmpdir(), `eidolon-test-home-${process.pid}`);
 delete process.env.EIDOLON_PERSONA;
+delete process.env.EIDOLON_APP_ROOT;

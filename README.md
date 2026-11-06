@@ -23,15 +23,48 @@ transport.input → STT → user_aggregator → RetrievalGate
 ## Quick start
 
 ```bash
-bun install
-bun run app
+npx @laplace.live/eidolon
 ```
 
-That builds and opens the local web app, which runs on your computer only: a wizard for your
-Soniox, OpenRouter and Fish Audio keys, the 明前奶绿 demo or a persona of your own built from her
-prompt, facts and stream videos, and a page to call her. The terminal prints the link that signs
-your browser in. How it works, and how it stays out of a deployed bot, is in
+That opens the local web app, which runs on your computer only: a wizard for your Soniox,
+OpenRouter and Fish Audio keys, the 明前奶绿 demo or a persona of your own built from her prompt,
+facts and stream videos, and a page to call her. The terminal prints the link that signs your
+browser in. How it works, and how it stays out of a deployed bot, is in
 [`docs/web-app.md`](docs/web-app.md).
+
+It needs Node.js 20 or later and brings its own Bun. `npx @laplace.live/eidolon <command>` runs
+the [offline commands](#building-the-rag-indexes-optional) without a checkout, and `--help` lists
+them. Everything it keeps, settings and keys included, is in the data home, `~/.laplace/eidolon`;
+it never reads a `.env`, so set it up in the app or through the environment.
+
+The package reaches npm with the first public release. Until then, and to work on Eidolon, run
+it from a checkout:
+
+```bash
+bun install
+bun run app        # builds the web app when it isn't built, then opens it
+```
+
+### Supported platforms
+
+LanceDB and ONNX Runtime, its native parts, decide where it runs:
+
+| Platform | |
+| --- | --- |
+| macOS on Apple silicon | Yes, with an arm64 Node: an x64 one under Rosetta looks like an Intel Mac |
+| Linux on x64 or arm64, with glibc | Yes |
+| Intel Macs, musl Linux (Alpine), Windows | No |
+
+The first `npx` downloads about 280 MB, mostly Bun, LanceDB and ONNX Runtime for your platform,
+which unpack to about 0.7 GB on a Mac and more on Linux. On Linux x64, npm 11 also runs
+onnxruntime-node's install script, which fetches CUDA libraries Eidolon never uses, about 240 MB
+from NuGet, and fails the install when NuGet is out of reach. Skip it:
+
+```bash
+ONNXRUNTIME_NODE_INSTALL_CUDA=skip npx @laplace.live/eidolon
+```
+
+npm 12 runs no dependency's install script unless you allow it; leave onnxruntime-node's out.
 
 ## Stack
 
@@ -110,7 +143,9 @@ The offline commands work on the active persona, or the one `--persona <id>`
 names. The download stage installs and updates its own yt-dlp; audio over five
 hours also needs ffmpeg. Both ingests populate a jieba-tokenized `tokens`
 column and build an FTS index on it after embedding, so hybrid search
-(vector + Chinese BM25) works at runtime without an extra build step.
+(vector + Chinese BM25) works at runtime without an extra build step. From
+npm, each is `npx @laplace.live/eidolon <command>`, its name without the
+`laplace-` prefix: `npx @laplace.live/eidolon pipeline --dry-run`.
 
 | Command                                | Purpose                                                       |
 | -------------------------------------- | ------------------------------------------------------------- |
@@ -272,11 +307,12 @@ domain(s) so the DNS-rebinding Host check accepts requests; the proxy must pass
 
 ## Releasing
 
-Versions and `apps/bot/CHANGELOG.md` are managed by
-[Changesets](https://github.com/changesets/changesets). A user-facing change
-ships with a changeset (`bunx changeset`); the Release workflow keeps a version
-PR open, and merging it tags `laplace-eidolon@X.Y.Z`, publishes the GitHub
-Release, and pushes both images with the version tags. The rules are in
+Versions and the two changelogs, `apps/bot/CHANGELOG.md` and `apps/eidolon/CHANGELOG.md`, are
+managed by [Changesets](https://github.com/changesets/changesets). A user-facing change ships with
+a changeset; the Release workflow keeps a version PR open, and merging it tags
+`laplace-eidolon@X.Y.Z` and `@laplace.live/eidolon@X.Y.Z`, publishes their GitHub Releases, pushes
+both images with the version tags, and, once npm publishing is set up, publishes the npm package.
+How, and that one-time setup, is in [`docs/releasing.md`](docs/releasing.md); the rules are in
 [`AGENTS.md`](AGENTS.md#shipping-a-change).
 
 ## Persona authoring
@@ -291,6 +327,12 @@ is in [`docs/personas.md`](docs/personas.md). For richer detail beyond the
 always-on system prompt, add atomic facts, one per line, to the persona's fact
 files in `~/.laplace/eidolon/sources/<id>/facts/` and re-run
 `bun run laplace-ingest-facts`.
+
+## License
+
+Eidolon is licensed under version 3 of the GNU Affero General Public License
+([`LICENSE`](LICENSE)). The third-party data it includes, jieba's dictionary and the Geist font,
+keeps its own licenses, in [`NOTICE`](NOTICE).
 
 ## References
 
