@@ -216,7 +216,7 @@ describe("a job's run", () => {
     expect(jobs.snapshot(plan)).toMatchObject({ ephemeral: true, status: "succeeded" });
   });
 
-  test("a job inherits the server's environment, EIDOLON_NO_DOTENV with it", async () => {
+  test("a job inherits the environment the server started with, and nothing it applied since", async () => {
     mkdirSync(dataHome(), { recursive: true });
     const child = Bun.spawn(
       [process.execPath, "--no-env-file", join(import.meta.dir, "jobs-env-child.ts")],
@@ -227,7 +227,12 @@ describe("a job's run", () => {
       },
     );
     const [out, code] = await Promise.all([new Response(child.stdout).text(), child.exited]);
-    expect([code, /^job saw (.*)$/m.exec(out)?.[1]]).toEqual([0, '"1"']);
+    // The job's CLI applies the .env itself: what the server applied would outlive a key deleted
+    // from the .env since.
+    expect([code, JSON.parse(/^job saw (.*)$/m.exec(out)?.[1] ?? "null")]).toEqual([
+      0,
+      { EIDOLON_NO_DOTENV: "1", EIDOLON_ENV_PROBE: null },
+    ]);
   });
 });
 

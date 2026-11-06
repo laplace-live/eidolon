@@ -38,6 +38,7 @@ import {
   imageProblem,
   MAX_IMAGE_BYTES,
   nameProblem,
+  previewable,
   renamed,
   stemOf,
 } from "./files";
@@ -192,12 +193,18 @@ function ImageGrid({
         });
         return (
           <li key={image.name} className="flex flex-col gap-1.5">
-            <img
-              src={`${src}?v=${version}`}
-              alt={image.name}
-              loading="lazy"
-              className="aspect-square w-full rounded-lg border bg-muted object-cover"
-            />
+            {previewable(image.name) ? (
+              <img
+                src={`${src}?v=${version}`}
+                alt={image.name}
+                loading="lazy"
+                className="aspect-square w-full rounded-lg border bg-muted object-cover"
+              />
+            ) : (
+              <div className="flex aspect-square w-full items-center justify-center rounded-lg border bg-muted p-3 text-center text-muted-foreground text-xs">
+                {t("studio.references.noPreview")}
+              </div>
+            )}
             <div className="flex items-start gap-1">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm" title={image.name}>

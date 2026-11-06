@@ -115,10 +115,12 @@ like a password for this computer.
   `X-Frame-Options: DENY`, `nosniff` and `Referrer-Policy: same-origin`.
 - **What a request may name on disk.** Persona ids are slugs, `^[a-z0-9][a-z0-9_-]{0,63}$`; job
   ids are minted by the server and only looked up; a fact or picture name is one plain path
-  segment with an allowed extension (`.txt`; `.png`, `.jpg`, `.jpeg`, `.webp`). Writes go only
-  into the data home, never into a template under `personas/`, through a temporary file and a
-  rename. Uploads are recognized by their bytes (PNG, JPEG, WebP) and capped at 20 MiB. A persona's
-  path settings must stay inside her folder, and `sources.ytDlp` can't be set through the API.
+  segment with an allowed extension: `.txt` for a fact, `.png`, `.jpg`, `.jpeg` or `.webp` for an
+  upload, and any image type the selfie tool reads for a picture listed, shown or deleted. Writes
+  go only into the data home, never into a template under `personas/`, through a temporary file
+  and a rename. Uploads are recognized by their bytes (PNG, JPEG, WebP) and capped at 20 MiB, and
+  only a picture whose bytes are one of the three is served. A persona's path settings must stay
+  inside her folder, and `sources.ytDlp` can't be set through the API.
 - **Secrets at rest.** `credentials.json` is written 0600 from creation; no answer returns a key
   or quotes what a request sent; the data home, `jobs/` and `locks/` are created 0700.
 
@@ -132,7 +134,7 @@ string for `code`, in English or 简体中文, and the English `message` only as
 | --- | --- | --- |
 | Session | `POST session`, `GET session` | Trades a link code for the cookie; GET says whether the caller is signed in, or with `?probe=` proves this server holds the secret, for a second start |
 | Status | `GET status`, `POST restart` | Readiness, polled by the home page and never waiting on a remote probe; restart is refused during a call |
-| Settings | `GET settings?persona=`, `PUT settings` | Every `SETTINGS` row: the value the files give it and which file, and whether the environment overrides it; PUT `{scope, persona?, values}` is checked by kind and written to `settings.yaml` or her `persona.yaml` |
+| Settings | `GET settings?persona=`, `PUT settings` | Every `SETTINGS` row: the value the files give it and which file, and whether the environment overrides it; PUT `{scope, persona?, values}` is checked by kind, the time zone as an IANA zone, and written to `settings.yaml` or her `persona.yaml` |
 | Credentials | `GET`, `PUT credentials`, `POST credentials/check` | `{NAME: {set, source}}`, never a value; the check asks the provider about a typed or the saved key |
 | Personas | `GET`, `POST personas`, `PUT personas/active` | List, create (with a voice and a starter `prompt.md`), switch (refused during a call) |
 | Persona files | `GET`, `PUT personas/:id/{prompt,glossary,identity}` | Her copy in the data home, copied from the template on the first write; a glossary that doesn't parse isn't saved |
@@ -295,8 +297,8 @@ Both `load-env.ts` files, the server's and the CLI's, walk up from their folder 
 `.env` and apply it over the environment. In a git worktree, or any checkout inside another, that
 is the outer checkout's `.env`, with its keys and maybe its `EIDOLON_HOME`. `EIDOLON_NO_DOTENV=1`
 skips it: the process environment is all there is, with the data home's settings files beneath it
-as always. Jobs inherit the server's environment, the flag included. Use it for smoke tests and
-clean runs:
+as always. Jobs inherit the environment the server started with, the flag included, and the CLI's
+own `load-env.ts` applies the `.env` when the flag is unset. Use it for smoke tests and clean runs:
 
 ```bash
 EIDOLON_NO_DOTENV=1 EIDOLON_HOME=/tmp/eidolon-try bun run local

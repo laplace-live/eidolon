@@ -25,6 +25,10 @@ if (step.onSignal !== undefined) {
     });
   }
 }
+appendFileSync(
+  join(import.meta.dir, "probes.ndjson"),
+  JSON.stringify(process.env.EIDOLON_ENV_PROBE ?? null) + "\\n",
+);
 appendFileSync(runs, JSON.stringify(Bun.argv.slice(2)) + "\\n");
 if (step.exit !== undefined) process.exit(step.exit);
 setInterval(() => {}, 1000);
@@ -113,6 +117,20 @@ describe("supervise", () => {
     fire?.("SIGINT");
     expect(await done).toBe(0);
     expect(readFileSync(join(dir, "signals.txt"), "utf8")).toBe("SIGINT\n");
+  });
+
+  test("a restarted server reads the .env afresh: it inherits nothing this process applied", async () => {
+    plan([{ port: 41234, exit: 75 }, { exit: 0 }]);
+    // As load-env.ts applies the .env: after this process started. A key deleted from the .env
+    // must not outlive the restart that follows.
+    process.env.EIDOLON_ENV_PROBE = "applied";
+    try {
+      expect(await run([])).toBe(0);
+    } finally {
+      delete process.env.EIDOLON_ENV_PROBE;
+    }
+    const probes = readFileSync(join(dir, "probes.ndjson"), "utf8").trim().split("\n");
+    expect(probes.map((line) => JSON.parse(line))).toEqual([null, null]);
   });
 
   test("a server the signal kills reports 128 plus its number", async () => {

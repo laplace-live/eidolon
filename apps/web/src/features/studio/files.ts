@@ -22,6 +22,11 @@ function extensionOf(name: string): string {
   return dot <= 0 ? "" : name.slice(dot).toLowerCase();
 }
 
+/** Whether the studio can show reference `name`: the server serves PNG, JPEG and WebP alone. */
+export function previewable(name: string): boolean {
+  return (IMAGE_EXTENSIONS as readonly string[]).includes(extensionOf(name));
+}
+
 /** Why the server would refuse `name` for a file with one of `extensions`, or null. */
 export function nameProblem(name: string, extensions: readonly string[]): NameProblem | null {
   const normal = name.normalize("NFC");
@@ -62,6 +67,11 @@ export function textCounts(text: string): TextCounts {
   let chars = 0;
   for (const _ of text) chars++;
   return { chars, lines: text === "" ? 0 : text.split("\n").length };
+}
+
+/** The draft once a save of `sent` answers `saved`: what was typed while it was out stays. */
+export function draftAfterSave(draft: string, sent: string, saved: string): string {
+  return draft === sent ? saved : draft;
 }
 
 /** Whether a prompt teaches delivery cues: `[…]` directions or paired word tags. */

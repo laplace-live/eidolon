@@ -143,6 +143,7 @@
   "references.uploaded": "{name} uploaded.",
   "references.remove": "Remove {name}",
   "references.builtIn": "Built in",
+  "references.noPreview": "No preview: only PNG, JPEG and WebP are shown here. Selfies still use it.",
   "references.badType": "Pictures must be PNG, JPEG or WebP.",
   "references.tooLarge": "Pictures can be up to {max}.",
   "references.badName": "{name} isn't a usable file name. Rename the file without / \\ or :, so that it doesn't start with a dot.",

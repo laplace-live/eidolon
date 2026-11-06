@@ -1,5 +1,5 @@
-// A persona's picture: references/avatar.{png,jpg,webp} in her folder, else a monogram of her
-// short name. The image goes through the session cookie, which an <img> sends on its own.
+// A persona's picture: avatar.{png,jpg,jpeg,webp} at the root of her folder, else a monogram of
+// her short name. The image goes through the session cookie, which an <img> sends on its own.
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { monogram } from "./monogram";

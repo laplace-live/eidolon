@@ -48,8 +48,11 @@ export const DEFAULT_FACT_PATTERNS: readonly string[] = ["*.txt"];
 /** Facts per embedding request: they average ~30 characters, so more fit than stream chunks. */
 export const FACTS_BATCH_SIZE = 96;
 
-/** knowledge.facts.files (FACTS_FILES): name patterns of the files in the facts folder. */
-export function factPatterns(raw: string | undefined = envOptional("FACTS_FILES")): string[] {
+/**
+ * knowledge.facts.files (FACTS_FILES): name patterns of the files in the facts folder. Null for
+ * unset: an `undefined` argument would take the default, the active persona's value.
+ */
+export function factPatterns(raw: string | null = envOptional("FACTS_FILES") ?? null): string[] {
   const patterns = (raw ?? "")
     .split(",")
     .map((pattern) => pyStrip(pattern))

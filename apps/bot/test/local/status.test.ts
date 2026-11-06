@@ -160,6 +160,22 @@ describe("GET status", () => {
     expect(buildStatus(app, deps).persona.voice.source).toBe("env");
   });
 
+  test("the voice's source is the installed settings', so a poll reads no settings file", () => {
+    const path = write(
+      "personas/milky-green/persona.yaml",
+      "voice:\n  voiceId: 0123456789abcdef0123456789abcdef\n",
+    );
+    reinstallSettings(app);
+    // Edited by hand since: the bot keeps the installed voice until a restart.
+    writeFileSync(path, "{}\n");
+    const { deps } = fakeDeps({});
+    expect(buildStatus(app, deps).persona.voice).toEqual({
+      id: "0123456789abcdef0123456789abcdef",
+      source: "persona",
+      ok: null,
+    });
+  });
+
   test("probes Qdrant in the background, once per TTL, and reports the last answer", async () => {
     setEnv("MEM0_QDRANT_HOST", "127.0.0.1");
     const { deps, asked } = fakeDeps({
@@ -272,9 +288,8 @@ describe("yt-dlp", () => {
     setEnv("YT_DLP_PATH", script);
     const own = fakeApp();
     expect(buildStatus(own, deps).ytDlp).toEqual({ state: "installed", tag: "" });
-    deps.clock += 60_000;
+    // Within the minute the lookup is kept: the next poll after --version answers has the tag.
     await until(() => {
-      deps.clock += 60_000;
       const ytDlp = buildStatus(own, deps).ytDlp;
       return ytDlp.state === "installed" && ytDlp.tag === "2026.11.01";
     });

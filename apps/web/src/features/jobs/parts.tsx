@@ -42,13 +42,13 @@ import {
   failedItems,
   type ItemView,
   type JobView,
-  jobOutcome,
   type LogLine,
   type Outcome,
   type Progress,
   runningItems,
   runSummary,
   type StageView,
+  shownOutcome,
   stageFraction,
 } from "@/lib/jobs";
 import { useNow } from "@/lib/use-now";
@@ -70,15 +70,6 @@ export function Elapsed({
 }) {
   const now = useNow(ticking);
   return formatDuration(elapsedSeconds(start, end, now));
-}
-
-/** A job's state, once its events are read to the end: the view then shows how it ended. */
-export function outcomeOf(
-  job: Pick<JobSnapshot, "status" | "summarySeen">,
-  events: JobEvents,
-): Outcome {
-  if (job.status === "running" || !events.ended) return "running";
-  return jobOutcome(job);
 }
 
 const OUTCOME_ICONS = {
@@ -484,7 +475,8 @@ export function JobCard({
   const { data: job = initial } = useQuery({ ...jobQuery(initial.id), initialData: initial });
   const own = useJobEvents(followed ? null : initial.id);
   const events = followed ?? own;
-  const outcome = outcomeOf(job, events);
+  const [endedWhenShown] = useState(initial.status !== "running");
+  const outcome = shownOutcome(job, events.ended, endedWhenShown);
   useOnEnded(job.status, outcome, onEnded);
   const stage = currentStage(events.view);
   const note = outcome === "running" ? null : endNote(t, events.view, job, outcome);

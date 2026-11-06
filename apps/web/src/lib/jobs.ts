@@ -290,6 +290,20 @@ export function jobOutcome(job: Pick<JobSnapshot, "status" | "summarySeen">): Ou
 }
 
 /**
+ * A job's state as a page shows it. One that ends while shown stays running until its events are
+ * read to the end (`viewEnded`), so the view then shows how it ended; one that had ended before
+ * it was shown has no end to wait for while its events replay.
+ */
+export function shownOutcome(
+  job: Pick<JobSnapshot, "status" | "summarySeen">,
+  viewEnded: boolean,
+  endedWhenShown: boolean,
+): Outcome {
+  if (job.status === "running" || (!viewEnded && !endedWhenShown)) return "running";
+  return jobOutcome(job);
+}
+
+/**
  * The stage to show for the run as a whole: the latest still running, since one stage can open
  * inside another (yt-dlp's setup inside a download), else the last to open.
  */

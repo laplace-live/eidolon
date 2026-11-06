@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   CUE_MODEL,
   cueClash,
+  draftAfterSave,
   FACT_EXTENSIONS,
   factFileName,
   hasDeliveryCues,
@@ -9,6 +10,7 @@ import {
   imageProblem,
   MAX_IMAGE_BYTES,
   nameProblem,
+  previewable,
   renamed,
   stemOf,
   textCounts,
@@ -55,9 +57,29 @@ test("images are PNG, JPEG or WebP, up to 20 MiB", () => {
   expect(imageProblem({ type: "image/jpeg", size: MAX_IMAGE_BYTES + 1 })).toBe("size");
 });
 
+test("a reference shows when the server would serve its type", () => {
+  expect(["day.png", "a.JPG", "b.jpeg", "c.webp"].map(previewable)).toEqual([
+    true,
+    true,
+    true,
+    true,
+  ]);
+  expect(["beach.gif", "photo.heic", "x.svg", "noext"].map(previewable)).toEqual([
+    false,
+    false,
+    false,
+    false,
+  ]);
+});
+
 test("text counts characters, not UTF-16 units", () => {
   expect(textCounts("")).toEqual({ chars: 0, lines: 0 });
   expect(textCounts("奶绿🌸\n第二行")).toEqual({ chars: 7, lines: 2 });
+});
+
+test("a save takes the text as the server keeps it, but not over what was typed meanwhile", () => {
+  expect(draftAfterSave("第一行", "第一行", "第一行\n")).toBe("第一行\n");
+  expect(draftAfterSave("第一行，还在写", "第一行", "第一行\n")).toBe("第一行，还在写");
 });
 
 test("a prompt that teaches delivery cues is told apart from one that doesn't", () => {

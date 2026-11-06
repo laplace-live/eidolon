@@ -117,7 +117,14 @@ export async function startBotServer(args: BotArgs, deps: BotDeps): Promise<BotS
     });
   const [first, ...rest] = await bindAddresses(args.host);
   const server = listen(first as string, args.port);
-  const servers = [server, ...rest.map((hostname) => listen(hostname, server.port as number))];
+  const servers = [server];
+  try {
+    for (const hostname of rest) servers.push(listen(hostname, server.port as number));
+  } catch (error) {
+    // Else the addresses already bound keep serving, and answer the local entry's probe.
+    await Promise.all(servers.map((s) => s.stop(true)));
+    throw error;
+  }
   const url = args.host === "localhost" ? `http://localhost:${server.port}/` : server.url;
   logger.info(`Bot server listening on ${url}`);
   return {

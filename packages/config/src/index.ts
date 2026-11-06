@@ -1,6 +1,6 @@
 export { abortableSleep, raceAbort } from "./abort.ts";
 export { daysInMonth, isLeap, ordinalToYmd, ymdToOrdinal } from "./calendar.ts";
-export { personaTimeZone, type ZonedClock, zonedClock } from "./clock.ts";
+export { isValidTimeZone, personaTimeZone, type ZonedClock, zonedClock } from "./clock.ts";
 export { type DotenvEntry, findDotenv, loadDotenv, parseDotenv } from "./dotenv.ts";
 export { DEFAULT_EMBED_BASE_URL, DEFAULT_EMBED_MODEL, embedDim } from "./embed.ts";
 export {

@@ -65,6 +65,8 @@ export async function supervise(
   try {
     for (;;) {
       boundPort = null;
+      // No env: the server applies the .env itself. Passing what this process applied from it
+      // would keep a key deleted from the .env since alive across every restart.
       child = Bun.spawn(
         [process.execPath, "--no-env-file", options.entry ?? SERVER_ENTRY, ...localArgv(args)],
         {

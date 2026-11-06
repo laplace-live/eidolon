@@ -254,6 +254,16 @@ describe("PUT settings", () => {
     expect(float.status).toBe(200);
   });
 
+  test("the time zone is an IANA zone, as the identity editor requires", async () => {
+    const timezone = (zone: string) =>
+      put({ scope: "persona", persona: "milky-green", values: { "identity.timezone": zone } });
+    const refused = await timezone("Asia/Shangai");
+    expect([refused.status, refused.body.error.code]).toEqual([400, "invalid-setting"]);
+    expect(existsSync(join(personaHomeDir("milky-green"), "persona.yaml"))).toBe(false);
+    expect((await timezone("Asia/Tokyo")).status).toBe(200);
+    expect(row(await settings("milky-green"), "identity.timezone").value).toBe("Asia/Tokyo");
+  });
+
   test("a value names a setting of its scope, and a persona one its persona", async () => {
     const wrongScope = await put({ scope: "app", values: { "voice.model": "s2-pro" } });
     expect([wrongScope.status, wrongScope.body.error.code]).toEqual([400, "unknown-setting"]);

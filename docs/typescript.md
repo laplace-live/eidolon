@@ -192,9 +192,13 @@ into a failure. `refine_real` and `pipeline_real` also run Python through `uv` a
   `$VAR` and read `.env.local`, which the Python bot never did. Tests run with `--no-env-file`.
 - **No module reads env at import.** Everything reads at call time, so the order of imports
   against the `.env` load cannot pin a fallback.
-- **Children get `env: process.env`, and lookups `Bun.which(name, {PATH: process.env.PATH})`.**
-  `Bun.spawn` without `env`, and `Bun.which` without `PATH`, use the environment the process
-  started with, missing everything `load-env.ts` applied from `.env`.
+- **A child that needs what `.env` set gets `env: process.env`, and lookups
+  `Bun.which(name, {PATH: process.env.PATH})`.** `Bun.spawn` without `env`, and `Bun.which`
+  without `PATH`, use the environment the process started with, missing everything `load-env.ts`
+  applied from `.env`: yt-dlp would miss a proxy the `.env` sets. A child that runs a
+  `load-env.ts` of its own, a job's CLI or the server `bun run local` restarts, gets no `env` and
+  reads `.env` as it is now. Handed `process.env`, it would keep every key deleted from `.env`
+  since, because `override` sets keys and never unsets them.
 - **werift needs four corrections, all in `packages/runtime/src/webrtc/handler.ts`.**
   1. It queries `stun.l.google.com` when no STUN server is configured. That put the origin's
      public IP in every non-relay answer and, where UDP to Google is blocked, stalled every

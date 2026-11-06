@@ -181,7 +181,15 @@ switch (scenario) {
     break;
 
   case "env":
-    emit({ type: "stage", stage, status: "done", message: process.env.EIDOLON_NO_DOTENV ?? "" });
+    emit({
+      type: "stage",
+      stage,
+      status: "done",
+      message: JSON.stringify({
+        EIDOLON_NO_DOTENV: process.env.EIDOLON_NO_DOTENV ?? null,
+        EIDOLON_ENV_PROBE: process.env.EIDOLON_ENV_PROBE ?? null,
+      }),
+    });
     summary();
     break;
 

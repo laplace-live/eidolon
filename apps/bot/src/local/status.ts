@@ -2,14 +2,7 @@
 // persona's voice are checked in the background and reported from the last answer; the tools on
 // PATH are looked up at most once a minute.
 import { existsSync, statfsSync, statSync } from "node:fs";
-import {
-  activePersona,
-  dataHome,
-  envOptional,
-  envOverride,
-  logger,
-  readSettingsLayers,
-} from "@eidolon/config";
+import { activePersona, dataHome, envOptional, envOverride, logger } from "@eidolon/config";
 import { referenceCandidates } from "@eidolon/imagegen";
 import { download, which } from "@eidolon/ingest";
 import manifest from "../../package.json" with { type: "json" };
@@ -145,7 +138,11 @@ function installedAt(state: StatusState, path: string): YtDlpStatus {
   }
   if (!state.versions.has(key)) {
     state.versions.set(key, null);
-    void versionOf(path).then((tag) => state.versions.set(key, tag));
+    void versionOf(path).then((tag) => {
+      state.versions.set(key, tag);
+      // The lookup kept for a minute has no tag yet: the next poll looks again.
+      state.tools = null;
+    });
   }
   return { state: "installed", tag: state.versions.get(key) ?? "" };
 }
@@ -197,10 +194,13 @@ function freeBytes(): number | null {
   }
 }
 
-/** Where the active persona's voice comes from. */
-function voiceSource(id: string): ValueSource {
+/**
+ * Where the active persona's voice comes from, read from what is installed: only her persona.yaml
+ * sets FISH_VOICE_ID beneath the environment, so a status poll re-reads no settings file.
+ */
+function voiceSource(voiceId: string | null): ValueSource {
   if (envOverride("FISH_VOICE_ID") !== undefined) return "env";
-  return readSettingsLayers(id).values.get("FISH_VOICE_ID")?.source ?? "default";
+  return voiceId === null ? "default" : "persona";
 }
 
 export function buildStatus(app: LocalApp, deps: StatusDeps = defaultStatusDeps): Status {
@@ -243,7 +243,7 @@ export function buildStatus(app: LocalApp, deps: StatusDeps = defaultStatusDeps)
       shortName: persona.identity.shortName,
       voice: {
         id: voiceId,
-        source: voiceSource(persona.id),
+        source: voiceSource(voiceId),
         ok: voiceId === null ? null : (state.voices.get(voiceId)?.ok ?? null),
       },
     },

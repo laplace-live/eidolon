@@ -32,6 +32,8 @@ function hashTree(root: string): Map<string, string> {
 
 let templates: Map<string, string>;
 beforeAll(() => {
+  // An earlier file in the same run can leave folders whose mode the first test checks.
+  rmSync(dataHome(), { recursive: true, force: true });
   templates = hashTree(templatesDir());
   expect(templates.size).toBeGreaterThan(0);
 });

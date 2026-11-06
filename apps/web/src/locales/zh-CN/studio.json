@@ -143,6 +143,7 @@
   "references.uploaded": "{name} 已上传。",
   "references.remove": "移除 {name}",
   "references.builtIn": "内置",
+  "references.noPreview": "无法预览：这里只显示 PNG、JPEG 和 WebP 图片。自拍仍会用到它。",
   "references.badType": "图片必须是 PNG、JPEG 或 WebP 格式。",
   "references.tooLarge": "图片最大 {max}。",
   "references.badName": "{name} 不能用作文件名。请重命名文件，不要包含 / \\ 或 :，也不要以点开头。",

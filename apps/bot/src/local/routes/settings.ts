@@ -6,6 +6,7 @@ import {
   activePersona,
   envOverride,
   isPlainObject,
+  isValidTimeZone,
   pyStrip,
   readSettingsLayers,
   SETTINGS,
@@ -100,7 +101,11 @@ export function checkValue(field: SettingField, value: unknown, persona: string)
   switch (field.kind) {
     case "string": {
       const checked = text(value);
-      if (!checked.ok || field.env !== "EIDOLON_PERSONA" || checked.value === null) return checked;
+      if (!checked.ok || checked.value === null) return checked;
+      if (field.env === "PERSONA_TIMEZONE" && !isValidTimeZone(checked.value as string)) {
+        return invalid("The time zone is not an IANA zone name");
+      }
+      if (field.env !== "EIDOLON_PERSONA") return checked;
       const refused = personaRefusal(checked.value as string);
       return refused === null ? checked : { ok: false, response: refused };
     }

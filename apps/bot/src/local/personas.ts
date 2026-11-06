@@ -30,6 +30,7 @@ import {
   sortedPy,
   sourceFolder,
 } from "@eidolon/config";
+import { REFERENCE_EXTENSIONS } from "@eidolon/imagegen";
 import { indexMetaPath, ingestFacts } from "@eidolon/ingest";
 import {
   CATALOG_FILENAME,
@@ -320,12 +321,15 @@ function layers(id: string): [string, "own" | "template"][] {
   ];
 }
 
-/** The images of one kind in both folders; a user's file hides the template's of the same name. */
+/**
+ * The images of one kind in both folders, every type the selfie tool takes, though the app shows
+ * only PNG, JPEG and WebP; a user's file hides the template's of the same name.
+ */
 export function listReferences(id: string, kind: ReferenceKind): ReferenceImage[] {
   const found = new Map<string, ReferenceImage>();
   for (const [root, source] of layers(id)) {
     for (const [name, stat] of filesIn(join(root, "references", kind))) {
-      if (found.has(name) || checkFileName(name, IMAGE_EXTENSIONS) === null) continue;
+      if (found.has(name) || checkFileName(name, REFERENCE_EXTENSIONS) === null) continue;
       found.set(name, { name, source, size: stat.size });
     }
   }
@@ -390,7 +394,7 @@ function metaSources(meta: Tree | null): Map<string, MetaSource> {
 /** Persona `id`'s fact folder: every file, which ones the patterns pick, and what changed. */
 export function listFacts(id: string): FactsResponse {
   const dir = sourceFolder(id, "facts");
-  const patterns = ingestFacts.factPatterns(personaSetting(id, "FACTS_FILES"));
+  const patterns = ingestFacts.factPatterns(personaSetting(id, "FACTS_FILES") ?? null);
   const picked = new Set(ingestFacts.resolveFactFiles(dir, patterns).map((path) => basename(path)));
   const built = metaSources(readJsonObject(indexMetaPath(indexDir(id), PERSONA_FACTS_TABLE)));
   const found = filesIn(dir);

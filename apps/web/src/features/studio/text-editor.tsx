@@ -19,7 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatCount } from "@/lib/format";
 import { useLang, useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { textCounts } from "./files";
+import { draftAfterSave, textCounts } from "./files";
 
 /** Asks whether to leave unsaved edits behind. */
 export function LeaveDialog({
@@ -122,10 +122,11 @@ export function TextEditor({
 
   async function save() {
     if (!dirty || saving || disabled || saveDisabled) return;
+    const sent = draft;
     try {
-      const saved = await onSave(draft);
+      const saved = await onSave(sent);
       setBase(saved);
-      setDraft(saved);
+      setDraft((current) => draftAfterSave(current, sent, saved));
     } catch {
       // The caller says why; the draft stays for another try.
     }

@@ -4,7 +4,7 @@ import "../../../../packages/config/test/isolated-guard.ts";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import {
   activePersona,
   dataHome,
@@ -405,6 +405,34 @@ describe("references and the avatar", () => {
     expect(existsSync(join(personaHomeDir(MILKY), "references"))).toBe(false);
   });
 
+  test("an image the selfie tool takes in a type the app can't show is listed and deletable", async () => {
+    write(`personas/${MILKY}/references/outfits/beach.gif`, "GIF89a");
+    const listed = await call("GET", `/personas/${MILKY}/references`);
+    expect(listed.body.outfits.map((image: { name: string }) => image.name)).toEqual([
+      "beach.gif",
+      "day.png",
+      "night.png",
+    ]);
+    // What the home page counts: the same images.
+    expect(referenceCandidates().map((path) => basename(path))).toEqual([
+      "beach.gif",
+      "day.png",
+      "night.png",
+    ]);
+    const shown = await call("GET", `/personas/${MILKY}/references/outfits/beach.gif`);
+    expect([shown.status, shown.body.error.code]).toEqual([415, "unsupported-media-type"]);
+    const uploaded = await upload("outfits/beach.gif", PNG, "image/gif");
+    expect([uploaded.status, uploaded.body.error.code]).toEqual([400, "invalid-file-name"]);
+    expect((await call("DELETE", `/personas/${MILKY}/references/outfits/beach.gif`)).status).toBe(
+      200,
+    );
+    const after = await call("GET", `/personas/${MILKY}/references`);
+    expect(after.body.outfits.map((image: { name: string }) => image.name)).toEqual([
+      "day.png",
+      "night.png",
+    ]);
+  });
+
   test("a template image stays; the user's goes, and the template's shows again", async () => {
     const template = await call("DELETE", `/personas/${MILKY}/references/outfits/day.png`);
     expect([template.status, template.body.error.code]).toEqual([409, "template-file"]);
@@ -508,6 +536,14 @@ describe("facts and the index", () => {
     listed = await call("GET", `/personas/${MILKY}/facts`);
     expect(listed.body.files.find((f: any) => f.name === "明前奶绿设定集.txt").changed).toBe(false);
     expect(listed.body.removed).toEqual(["旧事件集.txt"]);
+  });
+
+  test("a persona that isn't active is listed with her own patterns, not the active one's", async () => {
+    await call("POST", "/personas", NEW_PERSONA);
+    await call("PUT", "/personas/aria/facts/notes.txt", { text: "草稿\n" });
+    const listed = await call("GET", "/personas/aria/facts");
+    expect(listed.body.patterns).toEqual(["*.txt"]);
+    expect(listed.body.files.map((f: any) => [f.name, f.matched])).toEqual([["notes.txt", true]]);
   });
 
   test("reads, writes and deletes one .txt file, inside her fact folder only", async () => {

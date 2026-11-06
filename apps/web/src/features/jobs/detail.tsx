@@ -18,7 +18,7 @@ import {
 import { ApiError, errorKey, type JobSnapshot, stream } from "@/lib/api";
 import { formatDateTime, formatDuration, formatUsd } from "@/lib/format";
 import { useLang, useT } from "@/lib/i18n";
-import { costSoFar, type JobView, runSummary } from "@/lib/jobs";
+import { costSoFar, type JobView, runSummary, shownOutcome } from "@/lib/jobs";
 import { studioPath } from "@/lib/paths";
 import {
   CancelJobButton,
@@ -26,7 +26,6 @@ import {
   Failures,
   JobLog,
   OutcomeBadge,
-  outcomeOf,
   RunningItems,
   StageList,
 } from "./parts";
@@ -140,6 +139,8 @@ export function JobDetail({ id }: { readonly id: string }) {
   const events = useJobEvents(id);
   const resume = useResumeJob();
   const [stderrOpen, setStderrOpen] = useState(false);
+  const [endedWhenShown, setEndedWhenShown] = useState<boolean | null>(null);
+  if (job && endedWhenShown === null) setEndedWhenShown(job.status !== "running");
 
   // An id the server never minted is refused before it is looked up.
   if (error instanceof ApiError && (error.status === 404 || error.status === 400)) {
@@ -162,7 +163,7 @@ export function JobDetail({ id }: { readonly id: string }) {
     );
   }
 
-  const outcome = outcomeOf(job, events);
+  const outcome = shownOutcome(job, events.ended, endedWhenShown ?? false);
   const summary = runSummary(events.view, job.command);
   const cost = summary?.costUsd ?? costSoFar(events.view) ?? job.costUsd;
   // A job resumes once: its rerun is the one to resume after that.

@@ -7,6 +7,7 @@ import {
   SETTINGS,
   type SettingField,
 } from "@eidolon/config";
+import { FISH_MODELS as CHECKED_MODELS } from "../../../../bot/src/local/checks.ts";
 import type { SettingRow } from "../../lib/api";
 import {
   BASIC,
@@ -74,6 +75,8 @@ describe("the control for each kind", () => {
       type: "select",
       options: ["drama-3", "s2.1-pro", "s2.1-pro-free", "s2-pro", "s1"],
     });
+    // The models the server's Fish check accepts: the select offers no other.
+    expect(control("voice.model")).toMatchObject({ options: [...CHECKED_MODELS] });
     expect(control("sources.cookiesFromBrowser").type).toBe("select");
     expect(control("selfie.quality").type).toBe("select");
     expect(control("knowledge.rerank.enabled")).toEqual({ type: "flag" });

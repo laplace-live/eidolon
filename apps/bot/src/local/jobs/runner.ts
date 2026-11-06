@@ -148,6 +148,8 @@ export class JobRunner {
     try {
       // Before the spawn: a server that dies right after it still finds the job at its next start.
       writeRecord(record);
+      // No env: the CLI applies the .env itself. Passing what this process applied from it would
+      // keep a key deleted from the .env since.
       child = Bun.spawn(this.argv(spec.cli, spec.args), {
         cwd: dataHome(),
         stdin: "ignore",

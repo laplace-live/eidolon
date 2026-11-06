@@ -162,12 +162,10 @@ export function checkFileName(raw: string, extensions: readonly string[]): strin
   return name;
 }
 
-/** `name` in `folder`, refused unless the file's real parent is the folder itself. */
+/** `name` in `folder`, refused unless it names a file directly in the folder. */
 export function fileIn(folder: string, name: string): string {
   const root = resolve(folder);
   const target = resolve(root, name);
-  if (dirname(target) !== root || realish(dirname(target)) !== realish(root)) {
-    throw new WriteRefused(`${name} is not a file in ${folder}`);
-  }
+  if (dirname(target) !== root) throw new WriteRefused(`${name} is not a file in ${folder}`);
   return target;
 }

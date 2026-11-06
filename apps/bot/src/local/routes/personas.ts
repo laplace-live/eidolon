@@ -7,6 +7,7 @@ import {
   activePersona,
   dataHome,
   isPlainObject,
+  isValidTimeZone,
   personaHomeDir,
   personaIds,
   personaTemplateDir,
@@ -15,6 +16,7 @@ import {
   sourceFolder,
   templatesDir,
 } from "@eidolon/config";
+import { REFERENCE_EXTENSIONS } from "@eidolon/imagegen";
 import { transcribe } from "@eidolon/ingest";
 import {
   LOCAL_ROUTES,
@@ -135,15 +137,6 @@ function line(value: unknown, max: number): string | null {
   return trimmed.length <= max ? trimmed : null;
 }
 
-function isTimeZone(zone: string): boolean {
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: zone });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /** The identity fields a body sends, checked; "" leaves a field to its default. */
 function identityFrom(body: Record<string, unknown>): PersonaIdentityFields | Response {
   const limits = { name: 64, shortName: 32, fans: 32, summary: 500, timezone: 64 } as const;
@@ -155,7 +148,7 @@ function identityFrom(body: Record<string, unknown>): PersonaIdentityFields | Re
     }
     fields[key] = value;
   }
-  if (fields.timezone !== "" && !isTimeZone(fields.timezone as string)) {
+  if (fields.timezone !== "" && !isValidTimeZone(fields.timezone as string)) {
     return localError(400, "bad-request", "The time zone is not an IANA zone name");
   }
   return fields as unknown as PersonaIdentityFields;
@@ -238,7 +231,10 @@ async function textBody(request: Request, limit?: number): Promise<string | Resp
   return text;
 }
 
-/** `name` in persona `id`'s folder `kind`, checked; the user's copy is where writes go. */
+/**
+ * `name` in persona `id`'s folder `kind`, checked: any image the selfie tool takes, as the folder
+ * lists them. The user's copy is where writes go.
+ */
 function referenceTarget(
   id: string,
   kind: string,
@@ -246,8 +242,8 @@ function referenceTarget(
 ): { folder: string; name: string } | Response {
   const checkedKind = kindOf(kind);
   if (checkedKind === null) return localError(400, "bad-request", "The kind is outfits or friends");
-  const name = checkFileName(raw, IMAGE_EXTENSIONS);
-  if (name === null) return localError(400, "invalid-file-name", "Name a .png, .jpg or .webp file");
+  const name = checkFileName(raw, REFERENCE_EXTENSIONS);
+  if (name === null) return localError(400, "invalid-file-name", "Name an image file");
   return { folder: join(personaHomeDir(id), "references", checkedKind), name };
 }
 
@@ -452,6 +448,9 @@ export function personasRoutes(app: LocalApp): LocalRouteSpec[] {
       handler: forPersona(async (request, id, params) => {
         const target = referenceTarget(id, params.kind as string, params.name as string);
         if (target instanceof Response) return target;
+        if (checkFileName(target.name, IMAGE_EXTENSIONS) === null) {
+          return localError(400, "invalid-file-name", "Name a .png, .jpg or .webp file");
+        }
         const upload = await readUpload(request);
         if (upload instanceof Response) return upload;
         const name = checkFileName(renamedFor(target.name, upload.image), IMAGE_EXTENSIONS);

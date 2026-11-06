@@ -16,6 +16,7 @@ import {
   runningJobs,
   runSummary,
   type StageView,
+  shownOutcome,
   stageFraction,
   videoActivity,
 } from "./jobs";
@@ -173,6 +174,16 @@ describe("summaries and outcomes", () => {
       expect(jobOutcome({ status, summarySeen: true })).toBe(status);
       expect(jobOutcome({ status, summarySeen: false })).toBe(status);
     }
+  });
+
+  test("a job that ended while shown waits for its events; one that had ended doesn't", () => {
+    const done = { status: "succeeded", summarySeen: true } as const;
+    expect(shownOutcome(done, false, false)).toBe("running");
+    expect(shownOutcome(done, true, false)).toBe("succeeded");
+    // Its events only replay: the card says how it ended from the start.
+    expect(shownOutcome(done, false, true)).toBe("succeeded");
+    expect(shownOutcome({ status: "failed", summarySeen: false }, false, true)).toBe("crashed");
+    expect(shownOutcome({ status: "running", summarySeen: false }, true, true)).toBe("running");
   });
 });
 
