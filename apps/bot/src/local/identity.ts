@@ -25,7 +25,7 @@ import type { AdminOutcome, MemoryAdmin } from "@eidolon/memory";
 import type { SignallingServer } from "@eidolon/runtime";
 import { jsonResponse } from "../responses.ts";
 import { personaSetting } from "./personas.ts";
-import { localError } from "./responses.ts";
+import { localError, localFailure } from "./responses.ts";
 import type { LocalHandler } from "./router.ts";
 
 /** The Mem0 user of the local viewer's memories: a session keys Mem0 on `String(mid)`. */
@@ -79,6 +79,11 @@ export interface IdentityHandlers {
   readonly preflight: LocalHandler;
   readonly listMemories: LocalHandler;
   readonly forgetMemories: LocalHandler;
+  /**
+   * Offers admitted whose answer hasn't left yet. The signalling server counts a call only once
+   * its connection starts a session, which comes after the ICE plan and the SDP answer.
+   */
+  pendingOffers(): number;
 }
 
 /** The 503 or 502 for a Mem0 admin call that failed, logged. */
@@ -86,20 +91,24 @@ export function memoryFailure(
   outcome: Extract<AdminOutcome<unknown>, { ok: false }>,
   what: string,
 ): Response {
+  const detail = errorText(outcome.error);
   if (outcome.reason === "unavailable") {
-    logger.error(
-      `[memory-admin] Could not reach the Mem0 vector store: ${errorText(outcome.error)}`,
+    return localFailure(503, "unavailable", "Memory is unavailable: Qdrant did not answer", (id) =>
+      logger.error(`[memory-admin] Could not reach the Mem0 vector store (error ${id}): ${detail}`),
     );
-    return localError(503, "unavailable", "Memory is unavailable: Qdrant did not answer");
   }
-  logger.error(`[memory-admin] ${what} failed: ${errorText(outcome.error)}`);
-  return localError(502, "upstream-failed", `Mem0 failed to ${what}`);
+  return localFailure(502, "upstream-failed", `Mem0 failed to ${what}`, (id) =>
+    logger.error(`[memory-admin] ${what} failed (error ${id}): ${detail}`),
+  );
 }
 
 export const MEMORY_OFF = "Memory is off: set a Qdrant host to turn it on";
 
 export function identityHandlers(parts: IdentityParts): IdentityHandlers {
+  let pending = 0;
   return {
+    pendingOffers: () => pending,
+
     async offer(request, { server }) {
       const body = parseOfferBody(await request.text());
       const requestData = offerRequestData(body);
@@ -114,8 +123,13 @@ export function identityHandlers(parts: IdentityParts): IdentityHandlers {
         quota: null,
       };
       logger.info(`[local] Offer from the local viewer to ${pyRepr(activePersona().id)}`);
-      const result = await parts.signalling.offer(admission);
-      return jsonResponse(result.status, result.body);
+      pending++;
+      try {
+        const result = await parts.signalling.offer(admission);
+        return jsonResponse(result.status, result.body);
+      } finally {
+        pending--;
+      }
     },
 
     preflight: () => jsonResponse(200, { ok: true, anonymous: false }),

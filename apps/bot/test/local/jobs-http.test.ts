@@ -2,10 +2,19 @@
 // and its offsets, the log, cancelling, resuming, batches, and paths that try to leave the folder.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { dataHome, sourceFolder } from "@eidolon/config";
 import type { BatchResponse, ErrorBody, JobSnapshot } from "../../src/local/api.ts";
+import { PLAN_VARIABLES } from "../../src/local/jobs/plan.ts";
 import { MAX_BATCH_URLS } from "../../src/local/routes/batches.ts";
 import { type CapturedLogs, captureLogs } from "../fakes.ts";
 import { type Booted, bootFixture, cleanUpBoot, raw } from "./harness.ts";
@@ -168,6 +177,48 @@ describe("the plan cache", () => {
     expect(alice.id).not.toBe(retried.id);
     await server.settled(alice.id);
     expect((await post("/api/local/jobs", PLAN))[1].id).toBe(retried.id);
+  });
+
+  test("a setting the plan reads makes the next plan run again; another setting doesn't", async () => {
+    expect(PLAN_VARIABLES.toSorted()).toEqual([
+      "LANCEDB_PATH",
+      "REFINE_MODEL",
+      "SONIOX_ASYNC_MODEL",
+    ]);
+    const yaml = join(dataHome(), "personas", "milky-green", "persona.yaml");
+    mkdirSync(join(yaml, ".."), { recursive: true });
+    writeFileSync(yaml, "transcription:\n  language: ja\n");
+    let latest = (await job(PLAN, "plan")).id;
+    await server.settled(latest);
+    writeFileSync(yaml, "transcription:\n  language: en\n");
+    expect((await post("/api/local/jobs", PLAN))[1].id).toBe(latest);
+
+    const changes: [string, () => void][] = [
+      ["refine.model", () => writeFileSync(yaml, "refine:\n  model: other/refiner\n")],
+      [
+        "transcription.model",
+        () => writeFileSync(yaml, "refine:\n  model: other/refiner\ntranscription:\n  model: x\n"),
+      ],
+      ["knowledge.index", () => appendFileSync(yaml, "knowledge:\n  index: elsewhere\n")],
+      [
+        "REFINE_MODEL",
+        () => {
+          process.env.REFINE_MODEL = "from/env";
+        },
+      ],
+    ];
+    try {
+      for (const [setting, change] of changes) {
+        change();
+        const [status, fresh] = await post("/api/local/jobs", PLAN);
+        expect([setting, status, fresh.id === latest]).toEqual([setting, 201, false]);
+        await server.settled(fresh.id);
+        expect((await post("/api/local/jobs", PLAN))[1].id).toBe(fresh.id);
+        latest = fresh.id;
+      }
+    } finally {
+      delete process.env.REFINE_MODEL;
+    }
   });
 
   test("a new batch makes the next plan run again", async () => {
@@ -639,8 +690,7 @@ describe("in the local server", () => {
 
   test("the routes are registered behind the session, with the CLI's own argv", async () => {
     const headers = {
-      Cookie: booted.cookie,
-      Origin: booted.origin,
+      ...booted.session,
       "Sec-Fetch-Site": "same-origin",
       "Content-Type": "application/json",
     };

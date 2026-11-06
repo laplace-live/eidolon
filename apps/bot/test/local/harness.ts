@@ -16,6 +16,7 @@ import {
   setSettingDefaults,
 } from "@eidolon/config";
 import type { MemoryAdmin } from "@eidolon/memory";
+import { PROOF_HEADER } from "../../src/local/api.ts";
 import {
   type BootIo,
   bootLocal,
@@ -159,7 +160,11 @@ export interface Booted {
   readonly token: LocalToken;
   /** `Cookie: …` for a signed-in browser. */
   readonly cookie: string;
+  /** What the signed-in page sends as X-Eidolon-Proof beside the cookie. */
+  readonly proof: string;
   readonly origin: string;
+  /** The headers a signed-in page of the app sends: the cookie, the proof and its Origin. */
+  readonly session: Readonly<Record<string, string>>;
   stop(): Promise<void>;
 }
 
@@ -177,7 +182,9 @@ export async function bootFixture(
   if (server === null) throw new Error(`boot exited: ${io.err.join("")}`);
   const port = server.bot.server.port as number;
   const token = loadLocalToken();
-  const value = token.sessionCookie(port).split(";")[0] as string;
+  const cookie = token.sessionCookie(port).split(";")[0] as string;
+  const proof = token.proof();
+  const origin = `http://127.0.0.1:${port}`;
   return {
     server,
     fakes,
@@ -185,8 +192,10 @@ export async function bootFixture(
     port,
     base: `http://127.0.0.1:${port}`,
     token,
-    cookie: value,
-    origin: `http://127.0.0.1:${port}`,
+    cookie,
+    proof,
+    origin,
+    session: { Cookie: cookie, [PROOF_HEADER]: proof, Origin: origin },
     async stop() {
       await server.bot.stop();
       if (options.dist === undefined) rmSync(dist, { recursive: true, force: true });

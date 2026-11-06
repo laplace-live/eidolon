@@ -1,4 +1,6 @@
 // The local API's response bytes: compact JSON that no cache keeps, and one error shape.
+import { randomBytes } from "node:crypto";
+import { logger } from "@eidolon/config";
 import type { ErrorBody, ErrorCode } from "./api.ts";
 
 export const NO_STORE = "no-store";
@@ -23,6 +25,32 @@ export function localError(
 ): Response {
   const body: ErrorBody = { error: { code, message } };
   return localJson(status, body, headers);
+}
+
+/**
+ * A 5xx: its code and a fixed message, never the exception's text or stack. `log` writes the
+ * details under a short id, which the answer carries so a report can be matched to its log line.
+ */
+export function localFailure(
+  status: number,
+  code: ErrorCode,
+  message: string,
+  log: (id: string) => void,
+): Response {
+  const id = randomBytes(4).toString("hex");
+  log(id);
+  const body: ErrorBody = { error: { code, message, id } };
+  return localJson(status, body);
+}
+
+/** The 500 for a request that threw, logged with its stack. */
+export function internalError(request: Request, error: unknown): Response {
+  return localFailure(500, "internal", "Eidolon hit an error; the terminal has the details", (id) =>
+    logger.exception(
+      `${request.method} ${new URL(request.url).pathname} failed (error ${id})`,
+      error,
+    ),
+  );
 }
 
 /** JSON request bodies are small; anything bigger is refused before it is parsed. */

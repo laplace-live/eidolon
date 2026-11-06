@@ -76,13 +76,25 @@ describe("RestartTracker", () => {
     return { values, tracker: new RestartTracker(read) };
   }
 
-  test("a value read at boot needs a restart once it changes", () => {
+  test("a value read at boot needs a restart once it changes, even once it is set back", () => {
     const { values, tracker } = tracked({ WEBRTC_STUN_URL: "stun:a" });
     expect(tracker.changes()).toEqual({ calls: [], mcp: [] });
     values.WEBRTC_STUN_URL = "stun:b";
     expect(tracker.changes()).toEqual({ calls: ["WEBRTC_STUN_URL"], mcp: [] });
     values.WEBRTC_STUN_URL = "stun:a";
-    expect(tracker.changes()).toEqual({ calls: [], mcp: [] });
+    expect(tracker.changes()).toEqual({ calls: ["WEBRTC_STUN_URL"], mcp: [] });
+  });
+
+  test("a key changed and set back between two polls still needs one", () => {
+    const { values, tracker } = tracked({});
+    values.OPENROUTER_API_KEY = "sk-first";
+    tracker.noteInstalled();
+    // Saved, then a call builds retrieval's client with it, then the old key is saved back.
+    values.OPENROUTER_API_KEY = "sk-second";
+    tracker.noteInstalled();
+    values.OPENROUTER_API_KEY = "sk-first";
+    tracker.noteInstalled();
+    expect(tracker.changes()).toEqual({ calls: ["OPENROUTER_API_KEY"], mcp: [] });
   });
 
   test("the wizard's first keys and Qdrant need no restart; later changes do", () => {
@@ -110,9 +122,12 @@ describe("RestartTracker", () => {
     expect(tracker.changes()).toEqual({ calls: [], mcp: [] });
   });
 
-  test("a persona switch leaves only the MCP server behind", () => {
+  test("a persona switch leaves only the MCP server behind, until a restart", () => {
     const { values, tracker } = tracked({ EIDOLON_PERSONA: "milky-green" });
     values.EIDOLON_PERSONA = "beta";
+    expect(tracker.changes()).toEqual({ calls: [], mcp: ["EIDOLON_PERSONA"] });
+    values.EIDOLON_PERSONA = "milky-green";
+    tracker.noteInstalled();
     expect(tracker.changes()).toEqual({ calls: [], mcp: ["EIDOLON_PERSONA"] });
   });
 

@@ -1,7 +1,7 @@
 // The local app's one secret, `<data home>/local-token`, and what is derived from it: the link
-// code the terminal prints (good for ten minutes) and the session cookie the page trades it for.
-// The secret itself reaches no browser; a CLI or test that can read the file sends it as a Bearer
-// token. Deleting the file signs every browser out.
+// code the terminal prints (good for ten minutes), and the session cookie and proof the page trades
+// it for. The secret itself reaches no browser; a CLI or test that can read the file sends it as a
+// Bearer token. Deleting the file signs every browser out.
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { lstatSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -41,11 +41,13 @@ export class LocalToken {
   readonly #secret: string;
   readonly #secretDigest: Buffer;
   readonly #sessionDigest: Buffer;
+  readonly #proofDigest: Buffer;
 
   constructor(secret: string) {
     this.#secret = secret;
     this.#secretDigest = digest(secret);
     this.#sessionDigest = digest(this.#sign("session"));
+    this.#proofDigest = digest(this.proof());
   }
 
   /** The secret, for a Bearer header this process sends; never for a page. */
@@ -90,6 +92,15 @@ export class LocalToken {
 
   isSession(value: string): boolean {
     return timingSafeEqual(digest(value), this.#sessionDigest);
+  }
+
+  /** What the page sends beside the cookie: HMAC(secret, "proof"), never a cookie itself. */
+  proof(): string {
+    return this.#sign("proof");
+  }
+
+  isProof(value: string): boolean {
+    return timingSafeEqual(digest(value), this.#proofDigest);
   }
 
   /** Proves this server holds the secret without sending it: HMAC(secret, "probe:" + nonce). */

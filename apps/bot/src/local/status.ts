@@ -1,6 +1,7 @@
 // GET status, which the home page polls, so every part of it is local and cheap. Qdrant and the
 // persona's voice are checked in the background and reported from the last answer; the tools on
 // PATH are looked up at most once a minute.
+import { createHash } from "node:crypto";
 import { existsSync, statfsSync, statSync } from "node:fs";
 import { activePersona, dataHome, envOptional, envOverride, logger } from "@eidolon/config";
 import { referenceCandidates } from "@eidolon/imagegen";
@@ -62,9 +63,26 @@ export function recordQdrant(
   stateOf(app).qdrant.set(`${address.host}:${address.port}`, { ok, at: Date.now() });
 }
 
-/** A Fish check's answer about a voice, which GET status reports as persona.voice.ok. */
-export function recordVoice(app: LocalApp, id: string, ok: boolean | null): void {
-  stateOf(app).voices.set(id, { ok, at: Date.now() });
+/**
+ * What a voice answer is about: the voice, and the key that asked, since a voice another account
+ * owns is private to every other key. The key stands in as a prefix of its SHA-256.
+ */
+function voiceKey(voiceId: string, key: string): string {
+  const fingerprint = createHash("sha256").update(key, "utf8").digest("hex").slice(0, 16);
+  return `${voiceId}:${fingerprint}`;
+}
+
+/** Whether `key` is still the Fish key calls use: an answer for one replaced meanwhile is dropped. */
+function isFishKey(key: string): boolean {
+  return envOptional("FISH_API_KEY") === key;
+}
+
+/**
+ * A Fish check's answer about a voice with `key`, which GET status reports as persona.voice.ok
+ * while that key is the saved one.
+ */
+export function recordVoice(app: LocalApp, id: string, key: string, ok: boolean | null): void {
+  if (isFishKey(key)) stateOf(app).voices.set(voiceKey(id, key), { ok, at: Date.now() });
 }
 
 // packages/runtime's runSessionSafely logs a session that failed after its offer was answered.
@@ -84,7 +102,10 @@ export function trackSessionErrors(app: LocalApp): void {
   app.onStop(async () => remove());
 }
 
-/** Runs `probe` unless one for `key` runs already or its last answer is fresher than `ttl`. */
+/**
+ * Runs `probe` unless one for `key` runs already or its last answer is fresher than `ttl`. The
+ * answer is kept only if `current` still holds when it arrives.
+ */
 function refresh(
   state: StatusState,
   kind: "qdrant" | "voices",
@@ -92,6 +113,7 @@ function refresh(
   ttl: (answer: Answer) => number,
   deps: StatusDeps,
   probe: () => Promise<boolean | null>,
+  current: () => boolean = () => true,
 ): void {
   const cache = state[kind];
   const last = cache.get(key);
@@ -99,7 +121,9 @@ function refresh(
   if (state.probing.has(id) || (last !== undefined && deps.now() - last.at < ttl(last))) return;
   state.probing.add(id);
   void probe()
-    .then((ok) => cache.set(key, { ok, at: deps.now() }))
+    .then((ok) => {
+      if (current()) cache.set(key, { ok, at: deps.now() });
+    })
     .finally(() => state.probing.delete(id));
 }
 
@@ -209,11 +233,21 @@ export function buildStatus(app: LocalApp, deps: StatusDeps = defaultStatusDeps)
 
   const voiceId = envOptional("FISH_VOICE_ID") ?? null;
   const fishKey = envOptional("FISH_API_KEY");
-  // Fish limits concurrent requests per account, which a call's speech needs.
-  if (voiceId !== null && fishKey !== undefined && app.activeCalls() === 0) {
-    refresh(state, "voices", voiceId, voiceTtl, deps, async () =>
-      voiceOk(await checkFishVoice(deps, voiceId, fishKey)),
-    );
+  let voice: string | null = null;
+  if (voiceId !== null && fishKey !== undefined) {
+    voice = voiceKey(voiceId, fishKey);
+    // Fish limits concurrent requests per account, which a call's speech needs.
+    if (app.activeCalls() === 0) {
+      refresh(
+        state,
+        "voices",
+        voice,
+        voiceTtl,
+        deps,
+        async () => voiceOk(await checkFishVoice(deps, voiceId, fishKey)),
+        () => isFishKey(fishKey),
+      );
+    }
   }
 
   const qdrant = configuredQdrant(envOptional);
@@ -244,7 +278,7 @@ export function buildStatus(app: LocalApp, deps: StatusDeps = defaultStatusDeps)
       voice: {
         id: voiceId,
         source: voiceSource(voiceId),
-        ok: voiceId === null ? null : (state.voices.get(voiceId)?.ok ?? null),
+        ok: voice === null ? null : (state.voices.get(voice)?.ok ?? null),
       },
     },
     index: indexStatus(persona.id),

@@ -1,7 +1,7 @@
 // The videos tab's arithmetic: links typed in, what a link check found, and what a plan says is
 // left to do and to spend.
 import type { PlanVideo, PlaylistEntry } from "@eidolon/ingest/progress";
-import type { JobOptions, PipelineStage } from "@/lib/api";
+import type { JobOptions, PipelineStage, PLAN_SETTINGS as PlanSettings } from "@/lib/api";
 
 /** The server refuses a longer URL. */
 const MAX_URL_LENGTH = 2048;
@@ -211,4 +211,32 @@ export function planTotals(videos: readonly PlanVideo[]): PlanTotals {
     }
   }
   return totals;
+}
+
+/** The settings a plan reads besides her files, as the server keys its cached plans. */
+export const PLAN_SETTINGS: typeof PlanSettings = [
+  "transcription.model",
+  "refine.model",
+  "knowledge.index",
+];
+
+/** Whether a save of `values` outdates the plan on screen. */
+export function outdatesPlan(values: Readonly<Record<string, unknown>>): boolean {
+  return PLAN_SETTINGS.some((path) => path in values);
+}
+
+export interface PlanProgress {
+  /** The plan request failed: there is nothing to wait for. */
+  readonly failed: boolean;
+  /** No plan has answered yet. */
+  readonly loading: boolean;
+  /** The plan's job has ended and its events are read. */
+  readonly ended: boolean;
+  /** A plan was asked for anew: refreshed, or after a setting it reads was saved. */
+  readonly asking: boolean;
+}
+
+/** A plan is being made, so what shows can't be acted on: the paid run waits for it. */
+export function planRefreshing(progress: PlanProgress): boolean {
+  return !progress.failed && (progress.loading || !progress.ended || progress.asking);
 }

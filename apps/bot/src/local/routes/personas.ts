@@ -186,7 +186,9 @@ function glossaryErrors(id: string): string[] {
     transcribe.loadContext(path);
     return [];
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    // Only the transcriber's own verdicts are shown; anything else is a bug, and a 500.
+    if (!(error instanceof transcribe.TranscribeError)) throw error;
+    const { message } = error;
     return [message.startsWith(`${path}: `) ? message.slice(path.length + 2) : message];
   }
 }
@@ -431,6 +433,7 @@ export function personasRoutes(app: LocalApp): LocalRouteSpec[] {
     },
     {
       route: "GET /api/local/personas/:id/references/:kind/:name",
+      image: true,
       handler: forPersona(async (_request, id, params) => {
         const target = referenceTarget(id, params.kind as string, params.name as string);
         if (target instanceof Response) return target;
@@ -488,6 +491,7 @@ export function personasRoutes(app: LocalApp): LocalRouteSpec[] {
     },
     {
       route: "GET /api/local/personas/:id/avatar",
+      image: true,
       handler: forPersona(async (_request, id) => {
         const avatar = findAvatar(id);
         return avatar === null

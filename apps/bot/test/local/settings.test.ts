@@ -76,7 +76,7 @@ afterEach(async () => {
 function api(method: string, path: string, body?: unknown): Promise<Response> {
   return fetch(`${booted.base}/api/local${path}`, {
     method,
-    headers: { Cookie: booted.cookie, Origin: booted.origin, "Content-Type": "application/json" },
+    headers: { ...booted.session, "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 }

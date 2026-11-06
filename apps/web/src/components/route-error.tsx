@@ -2,7 +2,7 @@ import { isRouteErrorResponse, Link, useRouteError } from "react-router";
 import { LockedScreen } from "@/components/locked-screen";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { ApiError, errorKey } from "@/lib/api";
+import { ApiError, errorDetail, errorKey } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 
 function statusOf(error: unknown): number | null {
@@ -29,7 +29,7 @@ export function RouteError() {
         {status !== 404 && (
           <AlertDescription>
             <p>{t(errorKey(error))}</p>
-            {error instanceof Error && <p className="font-mono text-xs">{error.message}</p>}
+            {error instanceof Error && <p className="font-mono text-xs">{errorDetail(error)}</p>}
           </AlertDescription>
         )}
       </Alert>

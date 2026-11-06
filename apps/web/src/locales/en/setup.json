@@ -70,6 +70,7 @@
   "memory.copy": "Copy the command",
   "memory.skip": "Skip",
   "memory.check": "Check and turn on",
+  "memory.recheck": "Check and save",
   "memory.on": "Memory is on.",
   "memory.docker": "Install Docker Desktop, or Docker Engine on Linux, and start it.",
   "memory.run": "Run this once in a terminal:",

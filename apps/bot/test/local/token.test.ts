@@ -1,5 +1,5 @@
 // The local token and the session it grants: the secret stays on disk, mode 0600; the printed link
-// code lasts ten minutes; the cookie is a third value; and none of the three reaches a log.
+// code lasts ten minutes; the cookie and the proof are two more values; and none reaches a log.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, statSync, writeFileSync } from "node:fs";
@@ -82,12 +82,19 @@ describe("link codes", () => {
     }
   });
 
-  test("the cookie, the code and the secret all differ", () => {
+  test("the cookie, the proof, the code and the secret all differ", () => {
     const cookie = token.sessionCookie(7860).split(";")[0]?.split("=")[1] as string;
+    const proof = token.proof();
     const code = token.linkCode(NOW);
-    expect(new Set([SECRET, cookie, code, code.split(".")[1]]).size).toBe(4);
+    expect(new Set([SECRET, cookie, proof, code, code.split(".")[1]]).size).toBe(5);
+    expect(proof).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(token.isSession(cookie)).toBe(true);
     expect(token.isSession(SECRET)).toBe(false);
+    expect(token.isSession(proof)).toBe(false);
+    expect(token.isProof(proof)).toBe(true);
+    expect(token.isProof(cookie)).toBe(false);
+    expect(token.isProof("")).toBe(false);
+    expect(new LocalToken("t".repeat(43)).isProof(proof)).toBe(false);
     expect(token.isSecret(cookie)).toBe(false);
     expect(token.isSecret("")).toBe(false);
     expect(token.isSession("x".repeat(500))).toBe(false);
@@ -124,18 +131,27 @@ async function exchange(code: unknown, headers: Record<string, string> = {}) {
 }
 
 describe("the session exchange", () => {
-  test("a fresh code sets the cookie; the cookie then opens the API", async () => {
+  test("a fresh code sets the cookie and answers the proof; the two then open the API", async () => {
     booted = await bootFixture();
     booted.io.now = NOW;
     const response = await exchange(booted.token.linkCode(NOW));
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ ok: true });
+    const { proof } = (await response.json()) as { proof: string };
+    expect(proof).toBe(booted.proof);
     const cookie = response.headers.get("set-cookie") as string;
     expect(cookie).toBe(booted.token.sessionCookie(booted.port));
+    expect(cookie).not.toContain(proof);
     const check = await fetch(`${booted.base}/api/local/session`, {
-      headers: { Cookie: cookie.split(";")[0] as string },
+      headers: { Cookie: cookie.split(";")[0] as string, "X-Eidolon-Proof": proof },
     });
     expect([check.status, await check.json()]).toEqual([200, { ok: true }]);
+    const cookieOnly = await fetch(`${booted.base}/api/local/session`, {
+      headers: { Cookie: cookie.split(";")[0] as string },
+    });
+    expect([cookieOnly.status, (await cookieOnly.json()).error.code]).toEqual([
+      401,
+      "proof-missing",
+    ]);
   });
 
   test("an 11-minute-old code is 401 link-expired, and sets no cookie", async () => {
@@ -154,9 +170,8 @@ describe("the session exchange", () => {
     });
     expect(response.status).toBe(401);
     expect(response.headers.get("set-cookie")).toBeNull();
-    const still = await fetch(`${booted.base}/api/local/session`, {
-      headers: { Cookie: booted.cookie },
-    });
+    expect(JSON.stringify(await response.json())).not.toContain(booted.proof);
+    const still = await fetch(`${booted.base}/api/local/session`, { headers: booted.session });
     expect(still.status).toBe(200);
   });
 
@@ -174,12 +189,15 @@ describe("the session exchange", () => {
     const name = sessionCookieName(booted.port);
     const good = booted.cookie.split("=")[1] as string;
     const both = await fetch(`${booted.base}/api/local/session`, {
-      headers: { Cookie: `${name}=decoy; other=1; ${name}=${good}` },
+      headers: {
+        Cookie: `${name}=decoy; other=1; ${name}=${good}`,
+        "X-Eidolon-Proof": booted.proof,
+      },
     });
     expect(both.status).toBe(200);
     for (const value of ["", "x", "y".repeat(4096)]) {
       const response = await fetch(`${booted.base}/api/local/session`, {
-        headers: { Cookie: `${name}=${value}` },
+        headers: { Cookie: `${name}=${value}`, "X-Eidolon-Proof": booted.proof },
       });
       expect([value.length, response.status]).toEqual([value.length, 401]);
     }
@@ -189,7 +207,10 @@ describe("the session exchange", () => {
     booted = await bootFixture();
     const value = booted.cookie.split("=")[1] as string;
     const response = await fetch(`${booted.base}/api/local/session`, {
-      headers: { Cookie: `${sessionCookieName(booted.port + 1)}=${value}` },
+      headers: {
+        Cookie: `${sessionCookieName(booted.port + 1)}=${value}`,
+        "X-Eidolon-Proof": booted.proof,
+      },
     });
     expect(response.status).toBe(401);
   });
@@ -209,7 +230,7 @@ describe("the session exchange", () => {
   });
 });
 
-test("no log line holds the secret, the link code or the cookie, through boot and a session", async () => {
+test("no log line holds the secret, the link code, the cookie or the proof, through a session", async () => {
   logs = captureLogs();
   booted = await bootFixture();
   const printed = booted.io.out.join("");
@@ -220,12 +241,13 @@ test("no log line holds the secret, the link code or the cookie, through boot an
   await fetch(`${booted.base}/api/offer`, {
     method: "POST",
     body: '{"sdp":"v=0","type":"offer","requestData":{"audioQuality":"low"}}',
-    headers: { Cookie: booted.cookie, Origin: booted.origin },
+    headers: booted.session,
   });
   const cookieValue = booted.cookie.split("=")[1] as string;
   const everything = [...logs.lines(), ...logs.access].join("\n");
   expect(everything).toContain("[local] Offer from the local viewer");
-  for (const value of [booted.token.secret, code, code.split(".")[1] as string, cookieValue]) {
+  const secrets = [booted.token.secret, code, code.split(".")[1] as string, cookieValue];
+  for (const value of [...secrets, booted.proof]) {
     expect(everything.includes(value)).toBe(false);
   }
 });

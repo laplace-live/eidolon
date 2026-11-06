@@ -7,9 +7,11 @@ import {
   isFinished,
   knownIn,
   needsFfmpeg,
+  outdatesPlan,
   PAID_STAGES,
   paidRunOptions,
   parseLinks,
+  planRefreshing,
   planTotals,
   runBatch,
   summarizeEntries,
@@ -198,5 +200,26 @@ describe("a plan's videos", () => {
       unpriced: 1,
       paidWork: 3,
     });
+  });
+});
+
+describe("a plan whose settings changed", () => {
+  test("is outdated by a save of a setting the plan reads, and only by one", () => {
+    for (const path of ["transcription.model", "refine.model", "knowledge.index"]) {
+      expect([path, outdatesPlan({ [path]: "x" })]).toEqual([path, true]);
+    }
+    expect(outdatesPlan({ "refine.model": null, "refine.concurrency": 4 })).toBe(true);
+    expect(outdatesPlan({ "transcription.language": "ja", "refine.concurrency": 4 })).toBe(false);
+    expect(outdatesPlan({})).toBe(false);
+  });
+
+  test("holds the paid run while the fresh plan is asked for, then while it runs", () => {
+    const shown = { failed: false, loading: false, ended: true, asking: false };
+    expect(planRefreshing(shown)).toBe(false);
+    // The old plan's job ended long ago, but its prices are the old setting's.
+    expect(planRefreshing({ ...shown, asking: true })).toBe(true);
+    expect(planRefreshing({ ...shown, ended: false })).toBe(true);
+    expect(planRefreshing({ ...shown, loading: true, ended: false })).toBe(true);
+    expect(planRefreshing({ ...shown, failed: true, asking: true })).toBe(false);
   });
 });

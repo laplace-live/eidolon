@@ -70,9 +70,14 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalExten
 
   return {
     routes(botRoutes, context) {
+      const identity = identityHandlers({
+        signalling: context.signalling,
+        memoryAdmin: options.memoryAdmin,
+      });
       const app: LocalApp = {
         port: context.port,
-        activeCalls: () => context.signalling.activeSessions,
+        // A connecting offer is a call already: a switch or restart now would cut it off.
+        activeCalls: () => context.signalling.activeSessions + identity.pendingOffers(),
         restart: options.restart,
         onStop: (hook) => {
           stopHooks.push(hook);
@@ -93,10 +98,6 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalExten
       }
 
       const authenticate = authenticator(options.token, context.port);
-      const identity = identityHandlers({
-        signalling: context.signalling,
-        memoryAdmin: options.memoryAdmin,
-      });
       const local = (method: "GET" | "POST", handler: Parameters<typeof localRoute>[1]) =>
         guarded(localRoute(method, handler, authenticate), context);
       // POST stays first: the bot's 405 for this path takes Allow from the first method.

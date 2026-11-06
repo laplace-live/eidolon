@@ -69,7 +69,10 @@ export function formatDateTime(iso: string, lang: Lang): string {
   return format.format(date);
 }
 
-/** As toLocaleTimeString(lang, {hour12: false}) writes it. */
+/**
+ * A 24-hour clock from 00 to 23. Not hour12: false, which V8 resolves to h24 for a 12-hour
+ * locale such as en, writing five past midnight as 24:05.
+ */
 export function formatClock(ms: number, lang: Lang): string {
   const format = cached(
     `clock:${lang}`,
@@ -78,7 +81,7 @@ export function formatClock(ms: number, lang: Lang): string {
         hour: "numeric",
         minute: "numeric",
         second: "numeric",
-        hour12: false,
+        hourCycle: "h23",
       }),
   );
   return format.format(ms);

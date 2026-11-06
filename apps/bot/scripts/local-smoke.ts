@@ -3,7 +3,7 @@
 // The keys are fake, so the providers refuse them for free, and the embeddings come from a fake
 // server, so nothing is billed. --call instead places a real call from the call page with the
 // .env's keys, which bills them.
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import {
   existsSync,
   mkdtempSync,
@@ -27,7 +27,7 @@ import {
 import type { JobSnapshot, Status } from "../src/local/api.ts";
 
 const ROOT = resolve(import.meta.dir, "../../..");
-const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const MAC_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const SERVER_ENTRY = join(ROOT, "apps/bot/src/local/server.ts");
 const SERVER_LOAD_ENV = "apps/bot/src/load-env.ts";
 /** The server's and the job CLI's: each walks up to a .env and applies it over the environment. */
@@ -68,7 +68,17 @@ Without --call it runs without the .env or any provider key, so nothing is bille
   --call      call the active persona from the call page with the real keys in the .env, which
               bills them: the greeting, a typed question and its reply, then hang up. The browser
               always shows, with a fake microphone
-  --selfie    with --call, also ask for a selfie, billed per image`;
+  --selfie    with --call, also ask for a selfie, billed per image
+
+EIDOLON_CHROME names the browser to drive; without it, Google Chrome in /Applications on macOS,
+and elsewhere the Chrome Playwright finds.`;
+
+/** EIDOLON_CHROME, else Google Chrome where macOS installs it, else the Chrome Playwright finds. */
+function chrome(): { readonly executablePath: string } | { readonly channel: "chrome" } {
+  const path = envOptional("EIDOLON_CHROME");
+  if (path !== undefined) return { executablePath: path };
+  return process.platform === "darwin" ? { executablePath: MAC_CHROME } : { channel: "chrome" };
+}
 
 class UsageError extends Error {}
 
@@ -544,8 +554,13 @@ async function signIn(walk: Walk): Promise<void> {
   );
   const code = new URL(walk.link).hash.slice(1);
   const secret = readFileSync(join(walk.home, "local-token"), "utf8").trim();
-  const stored = await page.evaluate(() =>
-    JSON.stringify([Object.entries(localStorage), Object.entries(sessionStorage)]),
+  const proofKey = `eidolon_proof_${port}`;
+  const [stored, proof] = await page.evaluate(
+    (key): [string, string | null] => [
+      JSON.stringify([Object.entries(localStorage), Object.entries(sessionStorage)]),
+      localStorage.getItem(key),
+    ],
+    proofKey,
   );
   const leaked = [code, secret, cookie?.value].some((value) => value && stored.includes(value));
   const monthAhead = Date.now() / 1000 + 29 * 86_400;
@@ -558,10 +573,25 @@ async function signIn(walk: Walk): Promise<void> {
       cookie.expires > monthAhead &&
       cookie.value !== code &&
       cookie.value !== secret &&
+      proof === createHmac("sha256", secret).update("proof").digest("base64url") &&
       !leaked,
     `landed on ${url.pathname}${url.hash || " without the fragment"}; cookie ` +
       (cookie ? `HttpOnly=${cookie.httpOnly} SameSite=${cookie.sameSite}` : "missing") +
-      `; web storage ${leaked ? "holds a token" : "holds no token"}`,
+      `; ${proof === null ? "no proof" : `a proof under ${proofKey}`}` +
+      `; web storage ${leaked ? "holds a token" : "holds no other token"}`,
+  );
+
+  // What a service on another localhost port can replay: the cookie, with any Origin it likes.
+  const status = `${walk.origin}/api/local/status`;
+  const replayed: Record<string, string> = { Origin: walk.origin };
+  if (cookie !== undefined) replayed.Cookie = `${cookie.name}=${cookie.value}`;
+  const without = await fetch(status, { headers: replayed });
+  const refusal = ((await without.json()) as { error?: { code?: string } }).error?.code;
+  const both = await fetch(status, { headers: { ...replayed, "X-Eidolon-Proof": proof ?? "" } });
+  walk.checks.add(
+    "session proof",
+    without.status === 401 && refusal === "proof-missing" && both.status === 200,
+    `the cookie alone: ${without.status} ${refusal ?? ""}; with the page's proof: ${both.status}`,
   );
 }
 
@@ -838,7 +868,7 @@ async function smoke(options: Options): Promise<Checks> {
 
     let browser: Browser;
     try {
-      browser = await chromium.launch({ executablePath: CHROME, headless: !options.headful });
+      browser = await chromium.launch({ ...chrome(), headless: !options.headful });
     } catch (error) {
       checks.add("browser", false, error instanceof Error ? error.message.split("\n")[0] : "");
       return checks;
@@ -1575,7 +1605,7 @@ async function callSmoke(options: Options): Promise<Checks> {
     let browser: Browser;
     try {
       browser = await chromium.launch({
-        executablePath: CHROME,
+        ...chrome(),
         headless: false,
         args: [
           "--use-fake-ui-for-media-stream",

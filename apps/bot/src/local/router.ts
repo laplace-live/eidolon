@@ -2,18 +2,24 @@
 // exact route can fall through to the bot's fallback and its allow-every-origin preflight answer;
 // the 404 and 405 are this router's own. Each route runs one pipeline: the session check, the
 // idle-timeout opt-out, a logged 500, no-store, and the access line.
-import { logger } from "@eidolon/config";
 import type { MemoryAdmin } from "@eidolon/memory";
 import type { BunRequest } from "bun";
 import { logAccess, type RouteHandler, type RouteServer } from "../app.ts";
 import type { LocalRoute } from "./api.ts";
-import { localError, NO_STORE } from "./responses.ts";
+import { internalError, localError, NO_STORE } from "./responses.ts";
 
 export const LOCAL_PREFIX = "/api/local";
 
 /** Who is calling: a browser with the session cookie, or a holder of the secret. */
 export type Caller = "cookie" | "bearer";
-export type Authenticate = (request: Request) => Caller | null;
+
+/**
+ * What a request proves: the secret as a Bearer token, the session cookie with the proof header
+ * the app's pages send, or the cookie alone, which a service on another localhost port receives
+ * too, since cookies ignore ports.
+ */
+export type Auth = "bearer" | "session" | "cookie" | null;
+export type Authenticate = (request: Request) => Auth;
 
 /** What a route module gets from the server it serves. */
 export interface LocalApp {
@@ -47,6 +53,8 @@ export interface LocalRouteSpec {
   readonly handler: LocalHandler;
   /** Served without a session; the handler checks `caller` itself where it matters. */
   readonly public?: boolean;
+  /** A picture the app shows as an <img>, which can't send the proof: the cookie alone reads it. */
+  readonly image?: boolean;
 }
 
 const SAFE_METHODS = new Set(["GET", "HEAD"]);
@@ -69,18 +77,35 @@ function finish(request: Request, server: RouteServer, response: Response): Resp
   return sent;
 }
 
+/** The 401 for a request without a session; a cookie that came without its proof says so. */
+export function unauthenticated(auth: Auth): Response {
+  if (auth === "cookie") {
+    return localError(
+      401,
+      "proof-missing",
+      "The session cookie came without the page's proof; open the link Eidolon printed",
+    );
+  }
+  return localError(401, "unauthorized", "Open the link Eidolon printed in the terminal");
+}
+
+/** Who `auth` lets in: the cookie alone only to a picture. */
+function callerOf(auth: Auth, image: boolean): Caller | null {
+  if (auth === "bearer") return "bearer";
+  return auth === "session" || (auth === "cookie" && image) ? "cookie" : null;
+}
+
 async function respond(
   request: Request,
   server: RouteServer,
-  route: Pick<LocalRouteSpec, "handler" | "public">,
+  route: Pick<LocalRouteSpec, "handler" | "public" | "image">,
   params: Readonly<Record<string, string>>,
   authenticate: Authenticate,
 ): Promise<Response> {
-  const caller = authenticate(request);
+  const auth = authenticate(request);
+  const caller = callerOf(auth, route.image === true);
   if (!route.public) {
-    if (caller === null) {
-      return localError(401, "unauthorized", "Open the link Eidolon printed in the terminal");
-    }
+    if (caller === null) return unauthenticated(auth);
     // The cookie rides along on any request the browser sends; Origin shows the app sent it.
     if (
       caller === "cookie" &&
@@ -93,8 +118,7 @@ async function respond(
   try {
     return await route.handler(request, { url: new URL(request.url), params, server, caller });
   } catch (error) {
-    logger.exception(`${request.method} ${new URL(request.url).pathname} failed`, error);
-    return localError(500, "internal", "Eidolon hit an error; the terminal has the details");
+    return internalError(request, error);
   }
 }
 

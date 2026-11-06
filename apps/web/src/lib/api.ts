@@ -1,7 +1,9 @@
 // The admin API at /api/local, typed by its wire types in apps/bot/src/local/api.ts, which the SPA
-// reaches only through this module. Calls are same-origin with the session cookie; a failure is an
-// ApiError whose `code` the UI shows as t(errorKey(error)), keeping `message` as detail only.
+// reaches only through this module. Calls are same-origin with the session cookie and its proof; a
+// failure is an ApiError whose `code` the UI shows as t(errorKey(error)), keeping `message` as
+// detail only.
 import type { ErrorCode, LocalApi, Raw } from "../../../bot/src/local/api.ts";
+import { proofHeaders } from "./proof";
 
 export type * from "../../../bot/src/local/api.ts";
 
@@ -14,11 +16,19 @@ export class ApiError extends Error {
   /** 0 when no response arrived. */
   readonly status: number;
   readonly code: ErrorCode | ClientErrorCode;
+  /** A 5xx's: names the server's log line that says what went wrong. */
+  readonly id: string | null;
 
-  constructor(status: number, code: ErrorCode | ClientErrorCode, message: string) {
+  constructor(
+    status: number,
+    code: ErrorCode | ClientErrorCode,
+    message: string,
+    id: string | null = null,
+  ) {
     super(message);
     this.status = status;
     this.code = code;
+    this.id = id;
   }
 }
 
@@ -31,7 +41,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** The ApiError a failed response's {error: {code, message}} body describes. */
+/** The ApiError a failed response's {error: {code, message, id?}} body describes. */
 export async function errorFrom(response: Response): Promise<ApiError> {
   const body: unknown = await response.json().catch(() => undefined);
   const error = isRecord(body) && isRecord(body.error) ? body.error : {};
@@ -39,12 +49,21 @@ export async function errorFrom(response: Response): Promise<ApiError> {
     response.status,
     typeof error.code === "string" ? (error.code as ErrorCode) : "bad-response",
     typeof error.message === "string" ? error.message : `HTTP ${response.status}`,
+    typeof error.id === "string" ? error.id : null,
   );
 }
 
 /** The locale key that names an error for the viewer. */
 export function errorKey(error: unknown): string {
   return `errors.${error instanceof ApiError ? error.code : "unknown"}`;
+}
+
+/** The server's English for an error, with the id of its log line when it has one. */
+export function errorDetail(error: unknown): string | undefined {
+  if (!(error instanceof Error)) return undefined;
+  return error instanceof ApiError && error.id !== null
+    ? `${error.message} (error ${error.id})`
+    : error.message;
 }
 
 export type Route = keyof LocalApi;
@@ -104,17 +123,19 @@ export function url<R extends Route>(route: R, ...[input]: Args<R>): string {
 
 async function send(route: string, input: Loose = {}): Promise<Response> {
   const { body, signal } = input;
+  const headers = proofHeaders();
   const init: RequestInit = {
     method: route.slice(0, route.indexOf(" ")),
     credentials: "same-origin",
     signal,
+    headers,
   };
   if (body instanceof Blob) {
     init.body = body;
-    init.headers = { "Content-Type": body.type || "application/octet-stream" };
+    headers["Content-Type"] = body.type || "application/octet-stream";
   } else if (body !== undefined) {
     init.body = JSON.stringify(body);
-    init.headers = { "Content-Type": "application/json" };
+    headers["Content-Type"] = "application/json";
   }
   let response: Response;
   try {

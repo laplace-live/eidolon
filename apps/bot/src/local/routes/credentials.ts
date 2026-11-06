@@ -141,14 +141,16 @@ export function credentialsRoutes(
         if (typed === null) {
           return localError(400, "bad-request", "The value to check is one line of text");
         }
+        // The key a check of the saved one reads, which its answer about the voice is for.
+        const fishKey = envOptional("FISH_API_KEY");
         const outcome = await checkProvider(provider as CheckProvider, typed, {
           ...deps.check,
           read: envOptional,
           fromEnv: (name) => envOverride(name) !== undefined,
         });
         // What the check learned of the saved voice and Qdrant, GET status shows too.
-        if (outcome.voice !== undefined && typed === undefined) {
-          recordVoice(app, outcome.voice.id, outcome.voice.ok);
+        if (outcome.voice !== undefined && typed === undefined && fishKey !== undefined) {
+          recordVoice(app, outcome.voice.id, fishKey, outcome.voice.ok);
         }
         if (outcome.qdrant !== undefined && typed === undefined) {
           recordQdrant(app, outcome.qdrant, outcome.qdrant.ok);

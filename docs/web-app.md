@@ -63,8 +63,8 @@ refuses every other page.
 
 A session runs programs as you (every job is the CLI, and downloads run yt-dlp), spends your
 providers' credit, and can send your keys to whatever API base it saves. The checks below, and
-the secret behind them, are the only boundary, so treat the link, the cookie and `local-token`
-like a password for this computer.
+the secret behind them, are the only boundary, so treat the link, the cookie, the proof and
+`local-token` like a password for this computer.
 
 - **Loopback only.** Every address `--host` resolves to must be loopback (127.0.0.0/8 or `::1`),
   or the server exits 2. There is no remote mode. From another computer, forward the port and open
@@ -91,14 +91,25 @@ like a password for this computer.
   mode lets other users in, or it holds no valid token. It never reaches a browser.
 - **The link code** in the printed link's fragment is `<unix seconds>.<HMAC(secret, "link:" +
   seconds)>`: good for 10 minutes, survives restarts, and never reaches an access log or a
-  `Referer`. The page trades it for the cookie once (`POST /api/local/session`) and removes it
-  from the address bar. A refused code sets nothing, so a stale link never signs out a working
-  session.
+  `Referer`. The page trades it for the cookie and the proof once (`POST /api/local/session`) and
+  removes it from the address bar. A refused code sets nothing, so a stale link never signs out a
+  working session.
 - **The cookie** is `eidolon_session_<port>=<HMAC(secret, "session")>; HttpOnly;
   SameSite=Strict; Path=/; Max-Age=2592000`, so the app stays signed in for 30 days across browser
   restarts. Every copy of it in the `Cookie` header is checked, because cookies ignore ports and
-  another localhost app can plant a decoy. No token is ever read from a query string or kept in
-  web storage.
+  another localhost app can plant a decoy. No token is ever read from a query string.
+- **The proof.** Cookies ignore ports, so a service on any other localhost port receives the
+  cookie with every request a page makes to it, and could replay it with a forged `Origin`. So
+  `POST /api/local/session` also answers with a proof, `{"ok": true, "proof": "…"}`, where the
+  proof is `HMAC(secret, "proof")`. The page keeps it in `localStorage` under
+  `eidolon_proof_<port>`, which no page on another port can read, since storage is per origin, and
+  sends it as `X-Eidolon-Proof` on every request under `/api`, `/api/offer` and `/api/memories`
+  included. Every route that takes the session needs the cookie and the proof, compared as SHA-256
+  digests in constant time; the cookie alone is 401 `proof-missing`, and the page shows the
+  sign-in screen, which asks for the link. The two pictures the page shows as `<img>`, which can't
+  send a header, take the cookie alone: a persona's avatar and her reference images, and only to
+  read them. A Bearer token needs neither, and `/api/selfie/:id` stays gated by its own unguessable
+  id.
 - **Bearer.** A CLI or a test that can read `local-token` sends it as `Authorization: Bearer
   <secret>`; a header can't ride along on a cross-site request, so it needs no `Origin`:
 
@@ -107,8 +118,8 @@ like a password for this computer.
     http://localhost:7860/api/local/status
   ```
 
-- **Rotation.** Delete `local-token` and restart: every browser, link and Bearer caller is signed
-  out, and the next start makes a new secret.
+- **Rotation.** Delete `local-token` and restart: every browser, link, proof and Bearer caller is
+  signed out, and the next start makes a new secret.
 - **The app's own files** are read into memory from `apps/web/dist` once at boot. A request path
   is looked up in that map, never joined to a filesystem path; an unknown one gets `index.html`.
   Every page carries a strict `Content-Security-Policy` (`frame-ancestors 'none'`),
@@ -128,15 +139,17 @@ like a password for this computer.
 
 Under `/api/local`, JSON in and out; the wire types are `apps/bot/src/local/api.ts`, which the app
 imports type-only. An error is `{"error": {"code": "…", "message": "…"}}`: the app shows its own
-string for `code`, in English or 简体中文, and the English `message` only as detail.
+string for `code`, in English or 简体中文, and the English `message` only as detail. A 5xx's
+message is fixed and never carries an exception's text or stack; it adds `"id"`, which names the
+terminal's log line that holds what went wrong, and the app shows it beside the detail.
 
 | Area | Routes | What |
 | --- | --- | --- |
-| Session | `POST session`, `GET session` | Trades a link code for the cookie; GET says whether the caller is signed in, or with `?probe=` proves this server holds the secret, for a second start |
-| Status | `GET status`, `POST restart` | Readiness, polled by the home page and never waiting on a remote probe; restart is refused during a call |
+| Session | `POST session`, `GET session` | Trades a link code for the cookie and the proof; GET says whether the caller is signed in, or with `?probe=` proves this server holds the secret, for a second start |
+| Status | `GET status`, `POST restart` | Readiness, polled by the home page and never waiting on a remote probe; restart is refused during a call, or while one is connecting |
 | Settings | `GET settings?persona=`, `PUT settings` | Every `SETTINGS` row: the value the files give it and which file, and whether the environment overrides it; PUT `{scope, persona?, values}` is checked by kind, the time zone as an IANA zone, and written to `settings.yaml` or her `persona.yaml` |
 | Credentials | `GET`, `PUT credentials`, `POST credentials/check` | `{NAME: {set, source}}`, never a value; the check asks the provider about a typed or the saved key |
-| Personas | `GET`, `POST personas`, `PUT personas/active` | List, create (with a voice and a starter `prompt.md`), switch (refused during a call) |
+| Personas | `GET`, `POST personas`, `PUT personas/active` | List, create (with a voice and a starter `prompt.md`), switch (refused during a call, or while one is connecting) |
 | Persona files | `GET`, `PUT personas/:id/{prompt,glossary,identity}` | Her copy in the data home, copied from the template on the first write; a glossary that doesn't parse isn't saved |
 | Pictures | `personas/:id/references/:kind/:name`, `personas/:id/avatar` | Outfits and friends under `references/`, and the avatar, `avatar.*` at the root of her folder, where selfies never take it for an outfit; a template's pictures can't be deleted |
 | Knowledge | `personas/:id/facts[/:file]`, `GET personas/:id/index` | Fact files with whether the patterns pick them and whether they changed since the last index; the index from its build records |
@@ -148,7 +161,9 @@ string for `code`, in English or 简体中文, and the English `message` only as
 The bot's own routes stay, behind the guard: `POST /api/offer` and `/api/offer/preflight` take
 the session and call as [the local viewer](#the-local-viewer-and-memory), with no quota;
 `GET /api/memories` and `POST /api/memories/forget` take the session and act on the active
-persona; `PATCH /api/offer`, `/api/selfie/:id`, `/api/ice-servers` and `/mcp` are unchanged.
+persona; `PATCH /api/offer`, `/api/selfie/:id`, `/api/ice-servers` and `/mcp` are unchanged. An
+offer counts as a call from the moment it is admitted, before its session starts, so a persona
+switch, a `persona` setting or a restart sent meanwhile is refused `call-active` too.
 
 `ERROR_CODES` in `api.ts`:
 
@@ -158,6 +173,7 @@ persona; `PATCH /api/offer`, `/api/selfie/:id`, `/api/ice-servers` and `/mcp` ar
 | `bad-request` | 400 | A body, query or path segment of the wrong shape |
 | `unauthorized` | 401 | No session and no Bearer token, or a link code that isn't this Eidolon's |
 | `link-expired` | 401 | A link code over 10 minutes old |
+| `proof-missing` | 401 | The session cookie without its `X-Eidolon-Proof`, or with a wrong one |
 | `forbidden` | 403 | The guard: a peer off this computer, another page's `Origin` or `Sec-Fetch-Site`, a cookie change without `Origin` |
 | `misdirected` | 421 | A `Host` other than a loopback name with the bound port |
 | `not-found` | 404 | No such route, file or picture |
@@ -167,11 +183,11 @@ persona; `PATCH /api/offer`, `/api/selfie/:id`, `/api/ice-servers` and `/mcp` ar
 | `unsupported-media-type` | 415 | An upload that isn't PNG, JPEG or WebP by its bytes |
 | `unavailable` | 503 | Memory is off or Qdrant doesn't answer; Fish Audio doesn't answer a voice search |
 | `upstream-failed` | 502 | Mem0 or Fish Audio failed |
-| `internal` | 500 | A bug; the terminal has the details |
+| `internal` | 500 | A bug; the terminal's line with the answer's `id` has the details |
 | `invalid-persona-id` | 400 | A persona id that isn't a slug |
 | `unknown-persona` | 404, 400 | No persona has that id; 400 in a job's body |
 | `persona-exists` | 409 | Creating a persona with an id in use |
-| `call-active` | 409 | Switching persona or restarting during a call |
+| `call-active` | 409 | Switching persona or restarting during a call, or while one is connecting |
 | `unknown-setting` | 400 | A path no setting of that scope has |
 | `invalid-setting` | 400 | A value its setting's kind refuses |
 | `read-only-setting` | 400 | `sources.ytDlp` |
@@ -213,8 +229,9 @@ docker run -d --name eidolon-qdrant --restart unless-stopped -p 127.0.0.1:6333:6
 
 Keep the tag in step with `docker-compose.yml`'s; if compose's `qdrant` already answers on 6333,
 use it instead. The step checks an address (127.0.0.1:6333 unless you change it) and saves it as
-`memory.qdrant.host` and `memory.qdrant.port` only when Qdrant answers. The first address needs no
-restart; a later change does.
+`memory.qdrant.host` and `memory.qdrant.port` only when Qdrant answers; once memory is on, an
+edited address is checked and saved the same way. The first address needs no restart; a later
+change does.
 
 ## Jobs
 
@@ -265,8 +282,11 @@ watched; and `failed` when it died on its own.
 - **Kept.** The newest 50 jobs. Plans and link previews (`plan`, `expand`) don't count: only the
   newest of each per persona is kept, and none survives a restart.
 - **Plans** are cached per persona: a running or finished plan is answered again until a
-  `pipeline`, `download`, `transcribe`, `refine` or `ingest-streams` job of hers ends or a batch is
-  written; `refresh: true` plans anew. A plan takes no lock.
+  `pipeline`, `download`, `transcribe`, `refine` or `ingest-streams` job of hers ends, a batch is
+  written, or a setting the plan reads (`PLAN_SETTINGS`: `transcription.model`, `refine.model`
+  and `knowledge.index`) changes, in her files or the environment; `refresh: true` plans anew. A
+  plan takes no lock. Saving one of those settings in the Videos tab asks for the plan again, and
+  the paid run waits until the new plan is in.
 - **Locks** are the CLI's, and the server never probes one: a job and a terminal run that need
   the same lock can't both run, and the second fails `locked`.
 
@@ -308,9 +328,12 @@ EIDOLON_NO_DOTENV=1 EIDOLON_HOME=/tmp/eidolon-try bun run local
 
 `bun apps/bot/scripts/local-smoke.ts` (`--headful` to watch it; headless Chrome is killed on some
 Macs) boots the server with `EIDOLON_NO_DOTENV=1`, a temporary data home and no provider key, and
-walks the app in Chrome:
+walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chrome in
+`/Applications` on macOS, and elsewhere the Chrome Playwright finds (its `chrome` channel).
 
-- sign-in: the fragment removed, the cookie set, nothing in web storage;
+- sign-in: the fragment removed, the cookie set, the proof in `localStorage` under the port's
+  key and no other token in web storage; the cookie alone refused `proof-missing`, and taken with
+  the proof;
 - the wizard's keys step in English and 简体中文, with fake keys the providers refuse for free
   (`--offline` saves them without the checks);
 - `credentials.json` at 0600, and no answer or log line holding a key;
@@ -351,8 +374,9 @@ else.
 
 - **"The web app is not built"** (exit 2): `bun run build:web`, or start with `bun run app`.
 - **The page asks you to open Eidolon from your terminal**: the link is over 10 minutes old, or
-  the cookie is gone. Run the same command again: a running Eidolon prints a fresh link and exits.
-  Pasting the link into that page works too.
+  the cookie or the proof is gone (cleared site data, another browser profile). Run the same
+  command again: a running Eidolon prints a fresh link and exits. Pasting the link into that page
+  works too.
 - **421**: the app was opened through a name other than `localhost`, `127.0.0.1` or `[::1]`, or
   another port. From another computer, use `ssh -L`.
 - **403 "Only Eidolon's own pages may call its API"**: the request came from another page, such
@@ -367,7 +391,8 @@ else.
 - **Memory is off, or 503 `unavailable`**: Qdrant isn't set or doesn't answer; start it with the
   command above and check it in the wizard's memory step.
 - **A restart banner**: a saved value is read only at boot. Restart from Home or Settings; it is
-  refused during a call, and it interrupts running jobs, after asking.
+  refused during a call, or while one is connecting, and it interrupts running jobs, after asking.
+  Setting the value back doesn't clear it: a call may have read the changed one.
 - **A job reads `interrupted`**: the server stopped or restarted while it ran. Resume it from its
   page.
 - **A cancelled job stays `stopping`**: it is finishing an index rebuild, which can take a while

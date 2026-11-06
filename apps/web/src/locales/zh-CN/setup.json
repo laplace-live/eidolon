@@ -70,6 +70,7 @@
   "memory.copy": "复制命令",
   "memory.skip": "跳过",
   "memory.check": "检查并开启",
+  "memory.recheck": "检查并保存",
   "memory.on": "记忆已开启。",
   "memory.docker": "安装并启动 Docker Desktop（Linux 上为 Docker Engine）。",
   "memory.run": "在终端里运行一次这条命令：",

@@ -6,6 +6,7 @@
   "bad-request": "The request wasn't valid.",
   "unauthorized": "This page isn't signed in. Open the link from the terminal.",
   "link-expired": "That link has expired. Run the same command again for a fresh one.",
+  "proof-missing": "This page's sign-in isn't complete. Open the link from the terminal.",
   "forbidden": "The request was refused.",
   "misdirected": "Eidolon answers only at localhost or 127.0.0.1. Open it at one of those.",
   "not-found": "That doesn't exist.",

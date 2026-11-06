@@ -209,6 +209,55 @@ describe("GET status", () => {
     expect(asked).toEqual(["https://api.fish.audio/model/0123456789abcdef0123456789abcdef"]);
   });
 
+  test("a voice's answer belongs to the key that asked: another key asks again", async () => {
+    const VOICE = "0123456789abcdef0123456789abcdef";
+    setEnv("FISH_VOICE_ID", VOICE);
+    setEnv("FISH_API_KEY", "fk-other-account");
+    const keys: string[] = [];
+    const deps: StatusDeps = {
+      now: Date.now,
+      fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const key = new Headers(init?.headers).get("authorization") ?? "";
+        keys.push(key);
+        // The voice is the second account's own, so only its key may use it.
+        return json(key === "Bearer fk-owner" ? 200 : 403, {});
+      }) as typeof fetch,
+    };
+    await until(() => buildStatus(app, deps).persona.voice.ok === false);
+    setEnv("FISH_API_KEY", "fk-owner");
+    expect(buildStatus(app, deps).persona.voice.ok).toBeNull();
+    await until(() => buildStatus(app, deps).persona.voice.ok === true);
+    expect(keys).toEqual(["Bearer fk-other-account", "Bearer fk-owner"]);
+    expect(logs.lines().join("\n")).not.toContain("fk-");
+  });
+
+  test("an answer for a key replaced while Fish answered is dropped", async () => {
+    setEnv("FISH_VOICE_ID", "0123456789abcdef0123456789abcdef");
+    setEnv("FISH_API_KEY", "fk-old");
+    const pending: ((response: Response) => void)[] = [];
+    const keys: string[] = [];
+    const deps: StatusDeps = {
+      now: Date.now,
+      fetch: ((_input: RequestInfo | URL, init?: RequestInit) => {
+        keys.push(new Headers(init?.headers).get("authorization") ?? "");
+        return new Promise<Response>((resolve) => pending.push(resolve));
+      }) as typeof fetch,
+    };
+    buildStatus(app, deps);
+    await until(() => pending.length === 1);
+    // A key saved meanwhile is checked at once, not after the old key's answer.
+    setEnv("FISH_API_KEY", "fk-new");
+    buildStatus(app, deps);
+    await until(() => pending.length === 2);
+    pending[0]?.(json(200, {}));
+    await Bun.sleep(5);
+    setEnv("FISH_API_KEY", "fk-old");
+    expect(buildStatus(app, deps).persona.voice.ok).toBeNull();
+    await until(() => pending.length === 3);
+    expect(keys).toEqual(["Bearer fk-old", "Bearer fk-new", "Bearer fk-old"]);
+    for (const answer of pending.slice(1)) answer(json(404, {}));
+  });
+
   test("reads the index from its build records and the catalog's head, opening no table", () => {
     const index = join(personaHomeDir("milky-green"), "index");
     mkdirSync(join(index, "stream_chunks.lance"), { recursive: true });

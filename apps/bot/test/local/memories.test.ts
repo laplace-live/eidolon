@@ -73,7 +73,7 @@ afterEach(async () => {
 function api(method: string, query = ""): Promise<Response> {
   return fetch(`${booted.base}/api/local/memories${query}`, {
     method,
-    headers: { Cookie: booted.cookie, Origin: booted.origin },
+    headers: booted.session,
   });
 }
 

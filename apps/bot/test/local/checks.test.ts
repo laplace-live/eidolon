@@ -528,5 +528,8 @@ describe("POST credentials/check", () => {
     expect(response.status).toBe(200);
     const status = buildStatus(app, { fetch: fake.fetch, now: Date.now });
     expect(status.persona.voice).toEqual({ id: VOICE, source: "env", ok: false });
+    // The answer is that key's: a key saved since hasn't been asked yet.
+    process.env.FISH_API_KEY = "fk-saved-since";
+    expect(buildStatus(app, { fetch: fake.fetch, now: Date.now }).persona.voice.ok).toBeNull();
   });
 });

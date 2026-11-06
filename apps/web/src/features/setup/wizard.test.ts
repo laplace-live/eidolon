@@ -12,6 +12,7 @@ import {
   EMPTY_PERSONA,
   firstStep,
   isNewInstall,
+  memoryStepAction,
   nextStep,
   PERSONA_ID,
   personaErrors,
@@ -20,6 +21,7 @@ import {
   QDRANT_IMAGE,
   RESERVED_IDS,
   STEPS,
+  savedQdrant,
   suggestPersonaId,
 } from "./wizard";
 
@@ -161,5 +163,38 @@ describe("the Qdrant one-liner", () => {
     expect(QDRANT_COMMAND).toContain(" -v eidolon-qdrant:/qdrant/storage ");
     expect(QDRANT_COMMAND).toContain(" -e QDRANT__SERVICE__ENABLE_CORS=false ");
     expect(QDRANT_COMMAND.endsWith(` ${QDRANT_IMAGE}`)).toBe(true);
+  });
+});
+
+describe("the memory step", () => {
+  const saved = { host: "127.0.0.1", port: 6333 };
+
+  test("goes on while memory is on at the address shown", () => {
+    expect(memoryStepAction({ on: true, fromEnv: false, saved, typed: { ...saved } })).toBe("next");
+    expect(memoryStepAction({ on: false, fromEnv: false, saved, typed: saved })).toBe("check");
+  });
+
+  test("an address edited once memory is on can be checked and saved again", () => {
+    for (const typed of [
+      { host: "qdrant.local", port: 6333 },
+      { host: "127.0.0.1", port: 6334 },
+      null,
+    ]) {
+      expect([typed, memoryStepAction({ on: true, fromEnv: false, saved, typed })]).toEqual([
+        typed,
+        "check",
+      ]);
+    }
+    // The fields can't change an address the environment sets.
+    expect(
+      memoryStepAction({ on: true, fromEnv: true, saved, typed: { host: "x", port: 1 } }),
+    ).toBe("next");
+  });
+
+  test("the saved address is settings.yaml's, the port defaulting as memory's does", () => {
+    expect(savedQdrant(" 127.0.0.1 ", null)).toEqual(saved);
+    expect(savedQdrant("qdrant.local", 7000)).toEqual({ host: "qdrant.local", port: 7000 });
+    expect(savedQdrant(null, 6333)).toBeNull();
+    expect(savedQdrant("  ", 6333)).toBeNull();
   });
 });

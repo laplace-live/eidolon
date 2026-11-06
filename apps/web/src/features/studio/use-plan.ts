@@ -1,5 +1,6 @@
 // The persona's plan: where each video stands and what the rest would cost. The server reuses a
-// plan until a job that changes her sources ends or a batch is written, so asking for one is cheap.
+// plan until a job that changes her sources ends, a batch is written or a setting it reads
+// changes, so asking for one is cheap.
 import type { PlanVideo } from "@eidolon/ingest/progress";
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
@@ -7,6 +8,7 @@ import { useJobEvents } from "@/features/jobs/use-job-events";
 import { call, type JobSnapshot } from "@/lib/api";
 import { toastError } from "@/lib/feedback";
 import { runSummary, type SummaryEvent } from "@/lib/jobs";
+import { planRefreshing } from "./videos";
 
 export function planQuery(persona: string) {
   return queryOptions({
@@ -28,6 +30,11 @@ export interface Plan {
   readonly error: Error | null;
   /** Asks for the current plan again: after a batch is written, or a run ends. */
   readonly update: () => void;
+  /**
+   * Asks again after a setting the plan reads was saved, refreshing until the answer: what shows
+   * until then was priced with the old setting.
+   */
+  readonly outdated: () => void;
   /** Plans anew even when nothing changed. */
   readonly refresh: () => void;
 }
@@ -60,6 +67,12 @@ export function usePlan(persona: string): Plan {
   });
   const { refetch } = query;
   const update = useCallback(() => void refetch(), [refetch]);
+  // Counted, as a second save can ask again while the first answer is on its way.
+  const [asking, setAsking] = useState(0);
+  const outdated = useCallback(() => {
+    setAsking((count) => count + 1);
+    void refetch().finally(() => setAsking((count) => count - 1));
+  }, [refetch]);
   const { mutate } = replan;
   const refresh = useCallback(() => mutate(), [mutate]);
 
@@ -67,10 +80,16 @@ export function usePlan(persona: string): Plan {
     job,
     videos: complete ? events.view.plan : (settled?.videos ?? events.view.plan),
     summary: complete ? summary : (settled?.summary ?? null),
-    refreshing: query.error === null && (query.isPending || !events.ended || replan.isPending),
+    refreshing: planRefreshing({
+      failed: query.error !== null,
+      loading: query.isPending,
+      ended: events.ended,
+      asking: asking > 0 || replan.isPending,
+    }),
     failed: events.ended && summary === null,
     error: query.error,
     update,
+    outdated,
     refresh,
   };
 }

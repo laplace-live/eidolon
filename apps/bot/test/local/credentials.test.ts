@@ -35,7 +35,7 @@ const file = () => join(dataHome(), "credentials.json");
 function api(method: string, path: string, body?: unknown, raw?: string): Promise<Response> {
   return fetch(`${booted.base}/api/local${path}`, {
     method,
-    headers: { Cookie: booted.cookie, Origin: booted.origin, "Content-Type": "application/json" },
+    headers: { ...booted.session, "Content-Type": "application/json" },
     body: raw ?? (body === undefined ? undefined : JSON.stringify(body)),
   });
 }

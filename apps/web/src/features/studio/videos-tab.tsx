@@ -44,7 +44,7 @@ import { LoadError, Section } from "./parts";
 import { personaQueries } from "./queries";
 import { usePlan } from "./use-plan";
 import { VideoTable } from "./video-table";
-import { downloadBatches, needsFfmpeg, paidRunOptions, planTotals } from "./videos";
+import { downloadBatches, needsFfmpeg, outdatesPlan, paidRunOptions, planTotals } from "./videos";
 
 /** The jobs this tab starts, of which the latest is the one it follows. */
 const RUN_COMMANDS: readonly JobCommand[] = ["pipeline", "download", "transcribe"];
@@ -414,7 +414,14 @@ export function VideosTab({ persona }: { readonly persona: PersonaSummary }) {
       </Section>
 
       <Folded label={t("studio.videos.transcriptionSettings")}>
-        <SettingsForm scope="persona" persona={persona.id} paths={TRANSCRIPTION_PATHS} />
+        <SettingsForm
+          scope="persona"
+          persona={persona.id}
+          paths={TRANSCRIPTION_PATHS}
+          onSaved={(values) => {
+            if (outdatesPlan(values)) plan.outdated();
+          }}
+        />
       </Folded>
     </div>
   );

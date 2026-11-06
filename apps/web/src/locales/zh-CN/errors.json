@@ -6,6 +6,7 @@
   "bad-request": "请求无效。",
   "unauthorized": "此页面尚未登录，请打开终端里的链接。",
   "link-expired": "链接已过期，再运行一次相同的命令即可获取新链接。",
+  "proof-missing": "此页面的登录不完整，请打开终端里的链接。",
   "forbidden": "请求被拒绝。",
   "misdirected": "Eidolon 只响应 localhost 或 127.0.0.1，请通过其中之一打开。",
   "not-found": "内容不存在。",

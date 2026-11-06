@@ -17,7 +17,14 @@ import { useT } from "@/lib/i18n";
 import { statusQuery } from "@/lib/query";
 import { CopyCommand } from "./copy-command";
 import { StepCard } from "./step-card";
-import { QDRANT_COMMAND, QDRANT_HOST, QDRANT_PORT } from "./wizard";
+import {
+  memoryStepAction,
+  QDRANT_COMMAND,
+  QDRANT_HOST,
+  QDRANT_PORT,
+  type QdrantAddress,
+  savedQdrant,
+} from "./wizard";
 
 const HOST = "memory.qdrant.host";
 const PORT = "memory.qdrant.port";
@@ -45,7 +52,8 @@ export function MemoryStep({
   const [outcome, setOutcome] = useState<CheckOutcome | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiError | null>(null);
-  const [saved, setSaved] = useState(false);
+  // The address this visit checked and saved.
+  const [saved, setSaved] = useState<QdrantAddress | null>(null);
 
   if (settings.isPending) return <Skeleton className="h-80 w-full" />;
   if (settings.isError) {
@@ -61,31 +69,38 @@ export function MemoryStep({
   const hostValue = hostText.trim() || QDRANT_HOST;
   const portParsed = parseDraft(portText, PORT_CONTROL);
   const portValue = portParsed.ok ? ((portParsed.value as number | null) ?? QDRANT_PORT) : null;
+  const typed = portValue === null ? null : { host: hostValue, port: portValue };
   const memory = status.data?.memory;
-  const on = saved || (memory?.configured === true && memory.reachable === true);
+  const on = saved !== null || (memory?.configured === true && memory.reachable === true);
+  const action = memoryStepAction({
+    on,
+    fromEnv,
+    saved: saved ?? savedQdrant(hostRow?.value, portRow?.value),
+    typed,
+  });
 
   async function checkAndSave() {
-    if (portValue === null) return;
+    if (typed === null) return;
     setBusy(true);
     setFailure(null);
     try {
       // The environment's address wins over the files, so only it can be checked.
-      const value = fromEnv ? undefined : `${hostValue}:${portValue}`;
+      const value = fromEnv ? undefined : `${typed.host}:${typed.port}`;
       const result = await call("POST /api/local/credentials/check", {
         body: { provider: "qdrant", value },
       });
       setOutcome({ result });
       if (result.ok && !fromEnv) {
         await call("PUT /api/local/settings", {
-          body: { scope: "app", values: { [HOST]: hostValue, [PORT]: portValue } },
+          body: { scope: "app", values: { [HOST]: typed.host, [PORT]: typed.port } },
         });
-        setSaved(true);
+        setSaved(typed);
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: ["settings"] }),
           queryClient.invalidateQueries({ queryKey: statusQuery.queryKey }),
         ]);
       } else if (result.ok) {
-        setSaved(true);
+        setSaved(typed);
       }
     } catch (error) {
       setFailure(asApiError(error));
@@ -101,16 +116,17 @@ export function MemoryStep({
       onBack={onBack}
       busy={busy}
       footer={
-        on ? (
+        action === "next" ? (
           <Button onClick={onDone}>{t("setup.next")}</Button>
         ) : (
           <>
+            {/* Once memory is on, going on keeps the address it runs on. */}
             <Button variant="ghost" onClick={onDone} disabled={busy}>
-              {t("setup.memory.skip")}
+              {t(on ? "setup.next" : "setup.memory.skip")}
             </Button>
-            <Button onClick={() => void checkAndSave()} disabled={busy || portValue === null}>
+            <Button onClick={() => void checkAndSave()} disabled={busy || typed === null}>
               {busy && <Spinner />}
-              {t("setup.memory.check")}
+              {t(on ? "setup.memory.recheck" : "setup.memory.check")}
             </Button>
           </>
         )

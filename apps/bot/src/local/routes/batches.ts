@@ -1,7 +1,7 @@
 // POST /api/local/personas/:id/batches: the videos an expand job previewed, saved as a new batch in
 // the persona's URL lists for a pipeline job to name. This file is how URLs reach the CLI.
 import { basename } from "node:path";
-import { errorText, isPlainObject, sourceFolder } from "@eidolon/config";
+import { isPlainObject, sourceFolder } from "@eidolon/config";
 import { download } from "@eidolon/ingest";
 import { checkUrl } from "../jobs/argv.ts";
 import { personaRefusal } from "../personas.ts";
@@ -53,8 +53,9 @@ export function batchesRoutes(forgetPlan: (persona: string) => void): LocalRoute
         try {
           known = download.knownIds(lists);
         } catch (error) {
+          // The list reader's own words, as the CLI prints them; anything else is a 500.
           if (error instanceof Error && LIST_ERRORS.has(error.name)) {
-            return localError(409, "conflict", errorText(error));
+            return localError(409, "conflict", error.message);
           }
           throw error;
         }

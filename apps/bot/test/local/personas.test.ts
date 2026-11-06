@@ -41,11 +41,16 @@ afterAll(() => {
 let booted: Booted;
 let logs: CapturedLogs;
 let calls = 0;
+/** What the fake signalling server waits on before it answers an offer. */
+let connecting: Promise<void> = Promise.resolve();
+let offering = 0;
 const saved = new Map<string, string | undefined>();
 
 beforeEach(async () => {
   logs = captureLogs();
   calls = 0;
+  connecting = Promise.resolve();
+  offering = 0;
   const fakes = fakeModules();
   const runtime = fakes.modules.runtime;
   booted = await bootFixture({
@@ -55,12 +60,21 @@ beforeEach(async () => {
         ...fakes.modules,
         runtime: {
           ...runtime,
-          createSignallingServer: (options) => ({
-            ...runtime.createSignallingServer(options),
-            get activeSessions() {
-              return calls;
-            },
-          }),
+          createSignallingServer: (options) => {
+            const signalling = runtime.createSignallingServer(options);
+            return {
+              ...signalling,
+              // As the real one: the ICE plan and the SDP answer come before the session counts.
+              async offer(admission) {
+                offering++;
+                await connecting;
+                return signalling.offer(admission);
+              },
+              get activeSessions() {
+                return calls;
+              },
+            };
+          },
         },
       },
     },
@@ -93,7 +107,7 @@ function api(
       : JSON.stringify(body);
   return fetch(`${booted.base}/api/local${path}`, {
     method,
-    headers: { Cookie: booted.cookie, Origin: booted.origin, "Content-Type": type },
+    headers: { ...booted.session, "Content-Type": type },
     body: encoded,
   });
 }
@@ -242,6 +256,58 @@ describe("switching", () => {
     const pinned = await call("PUT", "/personas/active", { id: "aria" });
     expect([pinned.status, pinned.body.error.code]).toEqual([409, "conflict"]);
     expect(existsSync(join(dataHome(), "settings.yaml"))).toBe(false);
+  });
+
+  /** Sends an offer the fake signalling server holds until `settle` runs. */
+  async function holdOffer(settle: "answer" | "fail"): Promise<{
+    readonly answer: Promise<Response>;
+    readonly settle: () => void;
+  }> {
+    let resolve = () => {};
+    let reject = (_error: Error) => {};
+    connecting = new Promise<void>((yes, no) => {
+      resolve = yes;
+      reject = no;
+    });
+    const answer = fetch(`${booted.base}/api/offer`, {
+      method: "POST",
+      headers: { ...booted.session, "Content-Type": "application/json" },
+      body: JSON.stringify({ sdp: "v=0\r\n", type: "offer" }),
+    });
+    for (let i = 0; i < 500 && offering === 0; i++) await Bun.sleep(2);
+    expect(offering).toBe(1);
+    return {
+      answer,
+      settle: () => (settle === "answer" ? resolve() : reject(new Error("ICE plan failed"))),
+    };
+  }
+
+  test("an offer still connecting is a call: no switch or restart until it is answered", async () => {
+    await call("POST", "/personas", NEW_PERSONA);
+    const offer = await holdOffer("answer");
+    for (const [method, path, body] of [
+      ["PUT", "/personas/active", { id: "aria" }],
+      ["PUT", "/settings", { scope: "app", values: { persona: "aria" } }],
+      ["POST", "/restart", undefined],
+    ] as const) {
+      const refused = await call(method, path, body);
+      expect([path, refused.status, refused.body.error?.code]).toEqual([path, 409, "call-active"]);
+    }
+    expect((await call("GET", "/status")).body.activeCalls).toBe(1);
+    expect(existsSync(join(dataHome(), "settings.yaml"))).toBe(false);
+    offer.settle();
+    expect((await offer.answer).status).toBe(200);
+    expect((await call("GET", "/status")).body.activeCalls).toBe(0);
+    expect((await call("PUT", "/personas/active", { id: "aria" })).status).toBe(200);
+  });
+
+  test("an offer that fails to connect stops counting as a call", async () => {
+    await call("POST", "/personas", NEW_PERSONA);
+    const offer = await holdOffer("fail");
+    expect((await call("PUT", "/personas/active", { id: "aria" })).status).toBe(409);
+    offer.settle();
+    expect((await offer.answer).status).toBe(500);
+    expect((await call("PUT", "/personas/active", { id: "aria" })).status).toBe(200);
   });
 });
 
@@ -632,6 +698,7 @@ describe("names that try to leave their folder", () => {
         `${method} ${path} HTTP/1.1`,
         `Host: 127.0.0.1:${booted.port}`,
         `Cookie: ${booted.cookie}`,
+        `X-Eidolon-Proof: ${booted.proof}`,
         `Origin: ${booted.origin}`,
         "Content-Type: application/json",
         `Content-Length: ${length}`,

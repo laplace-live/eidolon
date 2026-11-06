@@ -96,7 +96,7 @@ afterEach(async () => {
 });
 
 function signedIn(extra: Record<string, string> = {}): Record<string, string> {
-  return { Cookie: booted.cookie, Origin: booted.origin, ...extra };
+  return { ...booted.session, ...extra };
 }
 
 async function offer(requestData: Record<string, unknown> = { audioQuality: "medium" }) {
@@ -244,7 +244,17 @@ describe("memories per persona", () => {
         method: "POST",
         headers: signedIn(),
       });
-      expect([response.status, (await response.json()).error.code]).toEqual([status, code]);
+      const text = await response.text();
+      const { error } = JSON.parse(text);
+      expect([response.status, error.code, text.includes("qdrant down")]).toEqual([
+        status,
+        code,
+        false,
+      ]);
+      // The answer's id names the log line that holds what went wrong.
+      expect(logs.lines().some((line) => line.endsWith(`(error ${error.id}): qdrant down`))).toBe(
+        true,
+      );
     }
   });
 });

@@ -6,13 +6,9 @@ import { type RefObject, useCallback, useEffect, useReducer, useRef, useState } 
 import { deviceProblemOf, type MicProblem, probeMic } from "./media";
 import { type CallPhase, connectEnd, endOf, IDLE, reducePhase } from "./phase";
 import { selfiePaths } from "./selfie";
+import { fetchIceServers, offerRequest } from "./signalling";
 import { EMPTY_TRANSCRIPT, reduceTranscript, type Transcript } from "./transcript";
 import { type WaitState, Watchdog } from "./watchdog";
-
-const OFFER_PATH = "/api/offer";
-const ICE_SERVERS_PATH = "/api/ice-servers";
-/** The Opus preset the bot encodes the call with, as the public page sends by default. */
-const AUDIO_QUALITY = "medium";
 
 export interface BotError {
   /** The latest error the bot reported, as it worded it. */
@@ -51,19 +47,6 @@ interface ActiveCall {
   /** When the call last heard speech, to tell the bot's idle timeout from other endings. */
   heardAt: number;
   detach(): void;
-}
-
-/** An empty list is a valid answer: without TURN the bot offers host candidates. */
-async function fetchIceServers(): Promise<RTCIceServer[]> {
-  const response = await fetch(ICE_SERVERS_PATH, { credentials: "same-origin" });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const body: unknown = await response.json();
-  const servers =
-    typeof body === "object" && body !== null
-      ? (body as { iceServers?: unknown }).iceServers
-      : null;
-  if (!Array.isArray(servers)) throw new Error("malformed response");
-  return servers;
 }
 
 /**
@@ -255,9 +238,7 @@ export function useCall(): Call {
     activeRef.current = call;
     dispatchPhase({ type: "dial" });
     try {
-      await client.connect({
-        webrtcRequestParams: { endpoint: OFFER_PATH, requestData: { audioQuality: AUDIO_QUALITY } },
-      });
+      await client.connect({ webrtcRequestParams: offerRequest() });
     } catch (error) {
       if (stale()) return;
       release(call);

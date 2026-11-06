@@ -1,11 +1,18 @@
-// Who may call the local API: a browser holding the session cookie, or a CLI or test sending the
-// secret as a Bearer token. No token is ever read from a query string, and the cookie is matched
-// against every copy the browser sends: a page on another localhost port can plant a decoy, since
-// cookies ignore ports.
+// Who may call the local API: a browser holding the session cookie and the proof its page sends as
+// a header, or a CLI or test sending the secret as a Bearer token. Cookies ignore ports, so a
+// service on another localhost port receives the cookie and could replay it; the proof lives in
+// the app's own origin's storage. No token is ever read from a query string, and the cookie is
+// matched against every copy the browser sends: a page on another port can plant a decoy.
 import { extractBearerToken } from "@eidolon/access";
 import { isPlainObject } from "@eidolon/config";
+import { PROOF_HEADER, type SessionGrant } from "./api.ts";
 import { localError, localJson, readJson } from "./responses.ts";
-import type { Authenticate, LocalApp, LocalRouteSpec } from "./router.ts";
+import {
+  type Authenticate,
+  type LocalApp,
+  type LocalRouteSpec,
+  unauthenticated,
+} from "./router.ts";
 import { type LocalToken, sessionCookieName } from "./token.ts";
 
 /** Every value cookie `name` has in a Cookie header, in order. */
@@ -24,22 +31,26 @@ export function authenticator(token: LocalToken, port: () => number): Authentica
     const bearer = extractBearerToken(request.headers.get("authorization"));
     if (bearer !== null && token.isSecret(bearer)) return "bearer";
     const cookies = cookieValues(request.headers.get("cookie"), sessionCookieName(port()));
-    return cookies.some((value) => token.isSession(value)) ? "cookie" : null;
+    if (!cookies.some((value) => token.isSession(value))) return null;
+    const proof = request.headers.get(PROOF_HEADER);
+    return proof !== null && token.isProof(proof) ? "session" : "cookie";
   };
 }
 
 const SESSION_BODY_LIMIT = 4096;
 
 /**
- * POST trades the link code for the cookie; a refused code sets nothing, so a stale link never
- * signs out a working session. GET answers whether the caller is signed in, or, given `probe`, a
- * proof that this server holds the secret (a second `bun run local` asks before printing a link).
+ * POST trades the link code for the cookie and the proof; a refused code sets nothing, so a stale
+ * link never signs out a working session. GET answers whether the caller is signed in, or, given
+ * `probe`, a proof that this server holds the secret (a second `bun run local` asks before
+ * printing a link).
  */
 export function sessionRoutes(
   app: LocalApp,
   token: LocalToken,
   nowSeconds: () => number = () => Date.now() / 1000,
 ): LocalRouteSpec[] {
+  const authenticate = authenticator(token, app.port);
   return [
     {
       route: "POST /api/local/session",
@@ -58,13 +69,14 @@ export function sessionRoutes(
         if (check === "invalid") {
           return localError(401, "unauthorized", "This link is not this Eidolon's");
         }
-        return localJson(200, { ok: true }, { "set-cookie": token.sessionCookie(app.port()) });
+        const grant: SessionGrant = { ok: true, proof: token.proof() };
+        return localJson(200, grant, { "set-cookie": token.sessionCookie(app.port()) });
       },
     },
     {
       route: "GET /api/local/session",
       public: true,
-      handler(_request, { url, caller }) {
+      handler(request, { url, caller }) {
         const nonce = url.searchParams.get("probe");
         if (nonce !== null) {
           const proof = token.probeProof(nonce);
@@ -72,9 +84,7 @@ export function sessionRoutes(
             ? localError(400, "bad-request", "The probe is not a nonce")
             : localJson(200, { proof });
         }
-        if (caller === null) {
-          return localError(401, "unauthorized", "Open the link Eidolon printed in the terminal");
-        }
+        if (caller === null) return unauthenticated(authenticate(request));
         return localJson(200, { ok: true });
       },
     },

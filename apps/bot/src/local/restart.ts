@@ -134,11 +134,16 @@ export interface RestartChanges {
   readonly mcp: readonly string[];
 }
 
-/** Each kept variable's value from when its first reader could have kept it. */
+/**
+ * Each kept variable's value from when its first reader could have kept it, and which have differed
+ * since. A reader may have taken up a changed value before it was set back, so a change stays
+ * flagged until the restart.
+ */
 export class RestartTracker {
   readonly #read: Read;
   readonly #armed = new Set<BootReader>();
   readonly #baseline = new Map<string, string | undefined>();
+  readonly #changed = new Set<string>();
 
   constructor(read: Read = effective) {
     this.#read = read;
@@ -147,6 +152,7 @@ export class RestartTracker {
 
   /** After each installSettings(): a reader whose first use is now possible starts its watch. */
   noteInstalled(): void {
+    this.#noteChanges();
     for (const reader of READERS) {
       if (this.#armed.has(reader) || !ARMED[reader](this.#read)) continue;
       this.#armed.add(reader);
@@ -158,11 +164,17 @@ export class RestartTracker {
     }
   }
 
+  #noteChanges(): void {
+    for (const [name, before] of this.#baseline) {
+      if (this.#read(name) !== before) this.#changed.add(name);
+    }
+  }
+
   changes(): RestartChanges {
+    this.#noteChanges();
     const calls: string[] = [];
     const mcp: string[] = [];
-    for (const [name, before] of this.#baseline) {
-      if (this.#read(name) === before) continue;
+    for (const name of this.#changed) {
       const mcpOnly = (BOOT_READ[name] ?? []).every((reader) => reader === "mcp");
       (mcpOnly ? mcp : calls).push(name);
     }

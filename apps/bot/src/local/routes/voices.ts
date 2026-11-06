@@ -1,10 +1,10 @@
 // GET /api/local/voices/search: Fish Audio's public voice library. Searched without the key, so a
 // search never spends one of the account's TTS slots during a call; covers and samples come back as
 // absolute https URLs.
-import { isPlainObject } from "@eidolon/config";
+import { isPlainObject, logger } from "@eidolon/config";
 import type { Voice, VoiceSample, VoiceSearchResponse } from "../api.ts";
 import { ask } from "../checks.ts";
-import { localError, localJson } from "../responses.ts";
+import { localError, localFailure, localJson } from "../responses.ts";
 import type { LocalApp, LocalRouteSpec } from "../router.ts";
 
 const SEARCH_URL = "https://api.fish.audio/model";
@@ -70,6 +70,17 @@ export function voiceOf(item: unknown): Voice | null {
   };
 }
 
+/** A search Fish failed: 503 for no answer, else 502, with what Fish sent in the log. */
+function searchFailed(status: 502 | 503, detail: string): Response {
+  const unanswered = status === 503;
+  return localFailure(
+    status,
+    unanswered ? "unavailable" : "upstream-failed",
+    unanswered ? "Fish Audio didn't answer" : "Fish Audio failed the search",
+    (id) => logger.warning(`[voices] A voice search failed (error ${id}): ${detail}`),
+  );
+}
+
 export interface VoicesDeps {
   readonly fetch: typeof fetch;
 }
@@ -100,16 +111,10 @@ export function voicesRoutes(_app: LocalApp, deps: VoicesDeps = { fetch }): Loca
         if (language !== "") search.searchParams.set("language", language);
         // No key: the public library needs none.
         const { status, body } = await ask(deps, search.href);
-        if (status === 0) return localError(503, "unavailable", "Fish Audio didn't answer");
-        if (status !== 200) {
-          return localError(502, "upstream-failed", `Fish Audio answered ${status}`);
-        }
-        if (body === null) {
-          return localError(502, "upstream-failed", "Fish Audio's answer wasn't JSON");
-        }
-        if (!isPlainObject(body)) {
-          return localError(502, "upstream-failed", "Fish Audio's answer had no results");
-        }
+        if (status === 0) return searchFailed(503, "no answer");
+        if (status !== 200) return searchFailed(502, `HTTP ${status}`);
+        if (body === null) return searchFailed(502, "an answer that isn't JSON");
+        if (!isPlainObject(body)) return searchFailed(502, "an answer without results");
         const items = (Array.isArray(body.items) ? body.items : [])
           .map(voiceOf)
           .filter((voice): voice is Voice => voice !== null);

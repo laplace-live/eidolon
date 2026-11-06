@@ -12,6 +12,7 @@ import { VoicePicker } from "@/components/voice-picker";
 import { refreshPersonas, saveVoice } from "@/features/setup/personas";
 import type { Voice } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { changeVoiceDialog } from "./voice";
 
 /** Picks a public Fish voice for a persona and saves it in her persona.yaml. */
 export function VoiceDialog({
@@ -38,10 +39,9 @@ export function VoiceDialog({
   return (
     <Dialog
       open={open}
-      onOpenChange={(next) => {
-        if (!save.isPending) onOpenChange(next);
-        if (!next) save.reset();
-      }}
+      onOpenChange={(next) =>
+        changeVoiceDialog(next, save.isPending, onOpenChange, () => save.reset())
+      }
     >
       <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>

@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { ApiError, call, errorFrom, errorKey, stream, url } from "./api";
+import { PROOF_HEADER } from "../../../bot/src/local/api.ts";
+import { ApiError, call, errorDetail, errorFrom, errorKey, stream, url } from "./api";
+import { keepProof } from "./proof";
 
 afterEach(() => {
   mock.restore();
@@ -21,6 +23,19 @@ describe("errorFrom", () => {
   test("a body that isn't the API's, such as a proxy's error page, is bad-response", async () => {
     const error = await errorFrom(new Response("<h1>Bad Gateway</h1>", { status: 502 }));
     expect([error.status, error.code, error.message]).toEqual([502, "bad-response", "HTTP 502"]);
+  });
+
+  test("a 5xx's id, which names the server's log line, joins its detail", async () => {
+    const error = await errorFrom(
+      Response.json(
+        { error: { code: "internal", message: "Eidolon hit an error", id: "0a1b2c3d" } },
+        { status: 500 },
+      ),
+    );
+    expect([error.code, error.id]).toEqual(["internal", "0a1b2c3d"]);
+    expect(errorDetail(error)).toBe("Eidolon hit an error (error 0a1b2c3d)");
+    expect(errorDetail(new ApiError(404, "not-found", "No such route"))).toBe("No such route");
+    expect(errorDetail(null)).toBeUndefined();
   });
 });
 
@@ -108,6 +123,26 @@ describe("call", () => {
     );
     expect(failure).not.toBeInstanceOf(ApiError);
     expect((failure as Error).name).toBe("AbortError");
+  });
+});
+
+describe("the session's proof", () => {
+  test("goes with every call and stream, as the header the server reads", async () => {
+    keepProof("proof-from-the-session");
+    const fetch = spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({}))
+      .mockResolvedValueOnce(Response.json({}))
+      .mockResolvedValueOnce(new Response("log"));
+    await call("GET /api/local/status");
+    await call("PUT /api/local/personas/:id/prompt", {
+      params: { id: "mine" },
+      body: { text: "x" },
+    });
+    await stream("GET /api/local/jobs/:id/log", { params: { id: "20261105T120000-ABCDEF" } });
+    for (const [, init] of fetch.mock.calls) {
+      expect(new Headers(init?.headers).get(PROOF_HEADER)).toBe("proof-from-the-session");
+    }
+    expect(fetch.mock.calls).toHaveLength(3);
   });
 });
 

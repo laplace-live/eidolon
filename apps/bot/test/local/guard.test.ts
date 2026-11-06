@@ -4,7 +4,9 @@ import "../../../../packages/config/test/isolated-guard.ts";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { MemoryAdmin } from "@eidolon/memory";
 import type { RouteServer } from "../../src/app.ts";
+import { type ErrorBody, PROOF_HEADER as PROOF } from "../../src/local/api.ts";
 import { allowedHosts, guardRequest, isApiPath, isLoopbackAddress } from "../../src/local/guard.ts";
+import { LocalToken } from "../../src/local/token.ts";
 import { type CapturedLogs, captureLogs } from "../fakes.ts";
 import { type Booted, bootFixture, cleanUpBoot, type RawResponse, raw } from "./harness.ts";
 
@@ -33,6 +35,8 @@ afterAll(async () => {
   logs.restore();
   cleanUpBoot();
 });
+
+const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
 
 interface Route {
   readonly method: string;
@@ -91,11 +95,14 @@ function send(
 /** What a signed-in page of the app sends. */
 function signedIn(extra: Record<string, string | undefined> = {}) {
   return {
-    Cookie: booted.cookie,
-    Origin: booted.origin,
+    ...booted.session,
     "Sec-Fetch-Site": "same-origin",
     ...extra,
   };
+}
+
+function errorCode(response: RawResponse): string | undefined {
+  return (JSON.parse(response.body) as Partial<ErrorBody>).error?.code;
 }
 
 function expectNoCors(response: RawResponse, label: string): void {
@@ -209,9 +216,9 @@ describe("the session", () => {
     ]);
   });
 
-  test("a change carried by the cookie alone, without Origin, is 403; the Bearer secret isn't", async () => {
+  test("a change carried by the cookie and proof without Origin is 403; the Bearer secret isn't", async () => {
     for (const route of ROUTES.filter((r) => r.session && r.method !== "GET")) {
-      const cookie = await send(route, { Cookie: booted.cookie });
+      const cookie = await send(route, { Cookie: booted.cookie, [PROOF]: booted.proof });
       expect([route.path, cookie.status]).toEqual([route.path, 403]);
       const bearer = await send(route, { Authorization: `Bearer ${booted.token.secret}` });
       expect([route.path, bearer.status === 401 || bearer.status === 403]).toEqual([
@@ -219,6 +226,110 @@ describe("the session", () => {
         false,
       ]);
     }
+  });
+
+  test("the cookie without its proof, or with a wrong one, is 401 proof-missing and runs nothing", async () => {
+    const before = [memoryCalls, booted.fakes.offers.length];
+    const another = new LocalToken("t".repeat(43)).proof();
+    for (const route of ROUTES.filter((r) => r.session)) {
+      for (const proof of [undefined, "x".repeat(43), another, booted.cookie.split("=")[1]]) {
+        const response = await send(route, signedIn({ [PROOF]: proof }));
+        expect([route.path, proof, response.status, errorCode(response)]).toEqual([
+          route.path,
+          proof,
+          401,
+          "proof-missing",
+        ]);
+      }
+    }
+    expect([memoryCalls, booted.fakes.offers.length]).toEqual(before);
+  });
+
+  test("the proof without the cookie is 401 unauthorized", async () => {
+    for (const route of ROUTES.filter((r) => r.session)) {
+      const response = await send(route, signedIn({ Cookie: undefined }));
+      expect([route.path, response.status, errorCode(response)]).toEqual([
+        route.path,
+        401,
+        "unauthorized",
+      ]);
+    }
+  });
+
+  test("the Bearer secret alone opens every session route", async () => {
+    for (const route of ROUTES.filter((r) => r.session)) {
+      const response = await send(route, { Authorization: `Bearer ${booted.token.secret}` });
+      expect([route.path, response.status]).toEqual([route.path, 200]);
+    }
+  });
+
+  test("a cookie another localhost port received, replayed with a forged Origin, opens nothing", async () => {
+    // Cookies ignore ports: a page's request to any localhost port carries Eidolon's cookie.
+    const seen: { cookie: string | null } = { cookie: null };
+    const elsewhere = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch(request) {
+        seen.cookie = request.headers.get("cookie");
+        return new Response("ok");
+      },
+    });
+    try {
+      await fetch(`http://127.0.0.1:${elsewhere.port}/`, {
+        headers: { Cookie: `theirs=1; ${booted.cookie}` },
+      });
+    } finally {
+      await elsewhere.stop(true);
+    }
+    expect(seen.cookie).toContain(booted.cookie);
+    const before = [memoryCalls, booted.fakes.offers.length];
+    for (const route of ROUTES.filter((r) => r.session)) {
+      for (const host of [`127.0.0.1:${booted.port}`, `localhost:${booted.port}`]) {
+        const response = await send(route, {
+          Host: host,
+          Cookie: seen.cookie ?? undefined,
+          Origin: `http://${host}`,
+          "Sec-Fetch-Site": "same-origin",
+        });
+        expect([route.path, host, response.status, errorCode(response)]).toEqual([
+          route.path,
+          host,
+          401,
+          "proof-missing",
+        ]);
+      }
+    }
+    expect([memoryCalls, booted.fakes.offers.length]).toEqual(before);
+  });
+
+  test("a picture the app shows as an <img> opens with the cookie alone; changing it doesn't", async () => {
+    const avatar = "/api/local/personas/milky-green/avatar";
+    const uploaded = await fetch(`${booted.base}${avatar}`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${booted.token.secret}`, "Content-Type": "image/png" },
+      body: PNG,
+    });
+    expect(uploaded.status).toBe(200);
+    // What an <img> sends: the cookie, and no Origin on a GET.
+    const img = { Cookie: booted.cookie, "Sec-Fetch-Site": "same-origin" };
+    for (const path of [avatar, "/api/local/personas/milky-green/references/outfits/day.png"]) {
+      const route: Route = { method: "GET", path, session: true, api: true };
+      const shown = await send(route, img);
+      expect([path, shown.status, shown.headers.get("content-type")]).toEqual([
+        path,
+        200,
+        "image/png",
+      ]);
+      const signedOut = await send(route, { "Sec-Fetch-Site": "same-origin" });
+      expect([path, signedOut.status, errorCode(signedOut)]).toEqual([path, 401, "unauthorized"]);
+    }
+    const status = await send(ROUTES[12] as Route, img);
+    expect([status.status, errorCode(status)]).toEqual([401, "proof-missing"]);
+    const removed = await send(
+      { method: "DELETE", path: avatar, session: true, api: true },
+      { ...img, Origin: booted.origin },
+    );
+    expect([removed.status, errorCode(removed)]).toEqual([401, "proof-missing"]);
   });
 
   test("routes gated by their own capability need no session", async () => {

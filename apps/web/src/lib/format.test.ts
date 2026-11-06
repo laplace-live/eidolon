@@ -1,5 +1,36 @@
-import { expect, test } from "bun:test";
-import { elapsedSeconds, formatBytes, formatDuration, formatUsd } from "./format";
+import { afterEach, expect, test } from "bun:test";
+import { elapsedSeconds, formatBytes, formatClock, formatDuration, formatUsd } from "./format";
+
+const IntlDateTimeFormat = Intl.DateTimeFormat;
+
+afterEach(() => {
+  Intl.DateTimeFormat = IntlDateTimeFormat;
+});
+
+/**
+ * Intl.DateTimeFormat under ECMA-402's earlier hour12 rule, which V8 follows: hour12: false is h24
+ * where the locale's own cycle is 12-hour. JavaScriptCore, which runs these tests, picks h23.
+ */
+class V8DateTimeFormat extends IntlDateTimeFormat {
+  constructor(lang?: string | string[], options: Intl.DateTimeFormatOptions = {}) {
+    const own = new IntlDateTimeFormat(lang, { hour: "numeric" }).resolvedOptions().hourCycle;
+    const { hour12, ...rest } = options;
+    super(
+      lang,
+      hour12 === false && (own === "h12" || own === "h24")
+        ? { ...rest, hourCycle: "h24" }
+        : options,
+    );
+  }
+}
+
+test("the clock runs from 00 to 23, five past midnight included, as V8 writes it too", () => {
+  Intl.DateTimeFormat = V8DateTimeFormat as typeof Intl.DateTimeFormat;
+  const fivePast = new Date(2026, 10, 5, 0, 5, 0).getTime();
+  expect(formatClock(fivePast, "en")).toBe("00:05:00");
+  expect(formatClock(fivePast, "zh-CN")).toBe("00:05:00");
+  expect(formatClock(new Date(2026, 10, 5, 23, 59, 59).getTime(), "en")).toBe("23:59:59");
+});
 
 test("durations read as clock time, hours only when there are any", () => {
   expect([0, 65, 3600, 3723, -5].map(formatDuration)).toEqual([

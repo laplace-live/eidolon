@@ -58,6 +58,7 @@ export const ERROR_CODES = [
   "bad-request",
   "unauthorized",
   "link-expired",
+  "proof-missing",
   "forbidden",
   "misdirected",
   "not-found",
@@ -90,9 +91,16 @@ export const ERROR_CODES = [
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
 
-/** The body of every 4xx and 5xx the local API sends. */
+/**
+ * The body of every 4xx and 5xx the local API sends. A 5xx's message is fixed: what went wrong is
+ * in the terminal's log line that `id` names.
+ */
 export interface ErrorBody {
-  readonly error: { readonly code: ErrorCode; readonly message: string };
+  readonly error: {
+    readonly code: ErrorCode;
+    readonly message: string;
+    readonly id?: string;
+  };
 }
 
 /** A body or response that is not JSON: an upload's bytes, a job's NDJSON events, a log's text. */
@@ -114,6 +122,19 @@ export interface Ok {
 /** POST session: the link code from the URL the terminal printed, `<unix seconds>.<signature>`. */
 export interface SessionRequest {
   readonly code: string;
+}
+
+/**
+ * The header every API request from the app's pages carries the proof in. Cookies ignore ports,
+ * so a service on another localhost port receives the session cookie too; only the app's own
+ * pages hold the proof.
+ */
+export const PROOF_HEADER = "X-Eidolon-Proof";
+
+/** POST session's answer beside the cookie: the proof to send as PROOF_HEADER. */
+export interface SessionGrant {
+  readonly ok: true;
+  readonly proof: string;
 }
 
 /** GET session with `probe`: whether this server holds the token another start would use. */
@@ -178,7 +199,8 @@ export interface Status {
   readonly version: string;
   /**
    * A setting or credential that calls read once changed since: at boot, or when memory or
-   * retrieval first ran. POST restart applies it.
+   * retrieval first ran. It stays set until POST restart, even if the value is set back: a
+   * reader may hold the changed one.
    */
   readonly restartRequired: boolean;
   /** Only the MCP server keeps what it read at boot, such as which persona's index it serves. */
@@ -532,10 +554,14 @@ export interface JobOptions {
   readonly "build-stream-catalog": NoOptions;
   /**
    * `pipeline --dry-run` over every video the persona's lists know. A running or finished plan
-   * is reused until a job that changes her sources ends or a batch is written; `refresh` plans anew.
+   * is reused until a job that changes her sources ends, a batch is written or one of
+   * PLAN_SETTINGS changes; `refresh` plans anew.
    */
   readonly plan: { readonly refresh?: boolean };
 }
+
+/** The settings a plan reads besides her files: the models it prices and the index it checks. */
+export const PLAN_SETTINGS = ["transcription.model", "refine.model", "knowledge.index"] as const;
 
 /** POST jobs: a command for one persona. An unknown key, or a string starting with `-`, is a 400. */
 export type JobRequest = {
@@ -667,7 +693,7 @@ export interface MemoriesResponse {
 }
 
 export interface LocalApi {
-  "POST /api/local/session": Endpoint<SessionRequest, Ok>;
+  "POST /api/local/session": Endpoint<SessionRequest, SessionGrant>;
   "GET /api/local/session": Endpoint<undefined, Ok | SessionProbe, { readonly probe?: string }>;
   "GET /api/local/status": Endpoint<undefined, Status>;
   "POST /api/local/restart": Endpoint<undefined, Ok>;

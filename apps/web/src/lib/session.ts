@@ -1,6 +1,8 @@
 // The terminal prints, or opens, the app's URL with a link code as its fragment. The page trades
-// the code for the session cookie once; the code never reaches storage, logs or a Referer.
+// the code for the session cookie and its proof once; the code never reaches storage, logs or a
+// Referer.
 import { ApiError, call } from "./api";
+import { keepProof } from "./proof";
 
 const LINK_CODE = /^\d+\.[\w-]+$/;
 
@@ -21,10 +23,11 @@ export function takeLinkCode(
   return code;
 }
 
-/** Sets the session cookie; null on success, else why the code was refused. */
+/** Sets the session cookie and keeps its proof; null on success, else why the code was refused. */
 export async function exchangeLinkCode(code: string): Promise<ApiError | null> {
   try {
-    await call("POST /api/local/session", { body: { code } });
+    const { proof } = await call("POST /api/local/session", { body: { code } });
+    keepProof(proof);
     return null;
   } catch (error) {
     if (error instanceof ApiError) return error;

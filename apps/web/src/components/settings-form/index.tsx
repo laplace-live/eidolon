@@ -42,8 +42,8 @@ export interface SettingsFormProps {
   readonly persona?: string;
   /** Only these SETTINGS paths, in this order and unfolded; every row of the scope when absent. */
   readonly paths?: readonly string[];
-  /** After a save the server accepted. */
-  readonly onSaved?: () => void;
+  /** After a save the server accepted, with the values it saved. */
+  readonly onSaved?: (values: Readonly<Record<string, unknown>>) => void;
 }
 
 export function SettingsForm({ scope, persona, paths, onSaved }: SettingsFormProps) {
@@ -63,14 +63,14 @@ export function SettingsForm({ scope, persona, paths, onSaved }: SettingsFormPro
           values,
         },
       }),
-    onSuccess: async (response) => {
+    onSuccess: async (response, values) => {
       queryClient.setQueryData(settingsQuery(persona).queryKey, response);
       setDrafts({});
       setTouched(new Set());
       toast.success(
         t(response.restartRequired ? "settings.form.savedRestart" : "settings.form.saved"),
       );
-      onSaved?.();
+      onSaved?.(values);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["settings"] }),
         queryClient.invalidateQueries({ queryKey: statusQuery.queryKey }),
