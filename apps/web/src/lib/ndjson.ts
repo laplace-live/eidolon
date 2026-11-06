@@ -31,17 +31,8 @@ export class LineSplitter {
     const lines: Line[] = [];
     let start = 0;
     for (let end = chunk.indexOf(NEWLINE); end !== -1; end = chunk.indexOf(NEWLINE, start)) {
-      this.#pending.push(chunk.subarray(start, end));
-      this.#pendingBytes += end - start;
-      const bytes = new Uint8Array(this.#pendingBytes);
-      let at = 0;
-      for (const part of this.#pending) {
-        bytes.set(part, at);
-        at += part.length;
-      }
-      this.#offset += this.#pendingBytes + 1;
-      this.#pending = [];
-      this.#pendingBytes = 0;
+      const bytes = this.#line(chunk.subarray(start, end));
+      this.#offset += bytes.length + 1;
       const text = this.#decoder.decode(bytes).replace(/\r$/, "");
       if (text.trim() !== "") lines.push({ text, offset: this.#offset });
       start = end + 1;
@@ -51,6 +42,20 @@ export class LineSplitter {
       this.#pendingBytes += chunk.length - start;
     }
     return lines;
+  }
+
+  /** A line's bytes: `tail` alone, copied together only when earlier chunks left a start. */
+  #line(tail: Uint8Array): Uint8Array {
+    if (this.#pending.length === 0) return tail;
+    const bytes = new Uint8Array(this.#pendingBytes + tail.length);
+    let at = 0;
+    for (const part of [...this.#pending, tail]) {
+      bytes.set(part, at);
+      at += part.length;
+    }
+    this.#pending = [];
+    this.#pendingBytes = 0;
+    return bytes;
   }
 }
 

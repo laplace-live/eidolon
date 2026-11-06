@@ -25,7 +25,6 @@ export type ArgvBuilder = (command: string, args: readonly string[]) => string[]
 
 export interface JobRunnerOptions {
   readonly argv?: ArgvBuilder;
-  readonly now?: () => Date;
   /** How often an open events stream, and a job an earlier server started, are checked. */
   readonly pollMs?: number;
   /** Jobs kept, besides plans and previews. */
@@ -39,7 +38,7 @@ export interface Job {
   child: Subprocess | null;
   /** Running, started by an earlier server: watched until it ends, never signalled. */
   adopted: boolean;
-  /** The stderr tail of an ended job, which no longer changes. */
+  /** The stderr tail of an ended job, set once its files are read to their end. */
   tail: string | null;
   readonly ended: Promise<void>;
   readonly markEnded: () => void;
@@ -71,7 +70,6 @@ export class JobRunner {
   private readonly endListeners: ((job: Job) => void)[] = [];
   private readonly streams = new Set<() => void>();
   private readonly argv: ArgvBuilder;
-  private readonly now: () => Date;
   private readonly pollMs: number;
   private readonly keep: number;
   private watcher: ReturnType<typeof setInterval> | null = null;
@@ -82,7 +80,6 @@ export class JobRunner {
    */
   constructor(options: JobRunnerOptions = {}) {
     this.argv = options.argv ?? jobArgv;
-    this.now = options.now ?? (() => new Date());
     this.pollMs = options.pollMs ?? 250;
     this.keep = options.keep ?? 50;
     const bootedAt = Date.now() - uptime() * 1000;
@@ -105,7 +102,7 @@ export class JobRunner {
       ) {
         job.adopted = true;
       } else {
-        this.end(job, null, true, lastWrite(record.id) ?? this.now());
+        this.end(job, null, true, lastWrite(record.id) ?? new Date());
       }
     }
     this.prune(null);
@@ -128,7 +125,7 @@ export class JobRunner {
 
   /** Spawns `spec`'s CLI command line as a new job; `resumedFrom` names the job it reruns. */
   start(spec: JobSpec, resumedFrom: string | null = null): Job {
-    const at = this.now();
+    const at = new Date();
     const id = mintJobId(at);
     const files = jobFiles(id);
     const record: StoredJob = {
@@ -191,10 +188,11 @@ export class JobRunner {
   }
 
   snapshot(job: Job): JobSnapshot {
-    const files = jobFiles(job.record.id);
-    job.events.advance(files.events);
     let tail = job.tail;
+    // An ended job's files no longer change: read once more after its end, then kept.
     if (tail === null) {
+      const files = jobFiles(job.record.id);
+      job.events.advance(files.events);
       tail = tailOf(files.log);
       if (job.record.status !== "running") job.tail = tail;
     }
@@ -333,7 +331,7 @@ export class JobRunner {
   }
 
   /** Records how `job` ended; `unseen` when no server saw its process exit. */
-  private end(job: Job, exitCode: number | null, unseen: boolean, at: Date = this.now()): void {
+  private end(job: Job, exitCode: number | null, unseen: boolean, at = new Date()): void {
     if (job.record.status !== "running") return;
     job.child = null;
     job.adopted = false;

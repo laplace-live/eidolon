@@ -2,7 +2,7 @@
 // English summary for the retrieval gate and the time zone her clock runs in.
 import { LanguagesIcon } from "lucide-react";
 import { useId, useState } from "react";
-import { timeZones } from "@/components/settings-form/controls";
+import { TimeZoneList } from "@/components/settings-form/field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -99,11 +99,7 @@ export function PersonaFields({
       {field("fans", { placeholder: "观众" })}
       {field("summary", { multiline: true, placeholder: t("setup.persona.summary.placeholder") })}
       {field("timezone", { list: zones })}
-      <datalist id={zones}>
-        {timeZones().map((zone) => (
-          <option key={zone} value={zone} />
-        ))}
-      </datalist>
+      <TimeZoneList id={zones} />
     </FieldGroup>
   );
 }

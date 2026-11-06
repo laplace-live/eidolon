@@ -57,12 +57,22 @@ export function uniqueEntries(entries: readonly PlaylistEntry[]): PlaylistEntry[
   return unique;
 }
 
-/** The persona has it already: the same id, a part of it (`<id>_p2`), or the same URL. */
-export function isKnown(entry: PlaylistEntry, videos: readonly PlanVideo[]): boolean {
-  return videos.some(
-    (video) =>
-      video.id === entry.id || video.id.startsWith(`${entry.id}_p`) || video.url === entry.url,
-  );
+/**
+ * Whether the persona has an entry already: the same id, a part of it (`<id>_p2`), or the same
+ * URL. Built once for the plan's videos, so each entry is a lookup.
+ */
+export function knownIn(videos: readonly PlanVideo[]): (entry: PlaylistEntry) => boolean {
+  const ids = new Set<string>();
+  const urls = new Set<string>();
+  for (const video of videos) {
+    ids.add(video.id);
+    // Every id it is a part of: whatever precedes a `_p` in it.
+    for (let at = video.id.indexOf("_p"); at !== -1; at = video.id.indexOf("_p", at + 1)) {
+      ids.add(video.id.slice(0, at));
+    }
+    if (video.url !== undefined) urls.add(video.url);
+  }
+  return (entry) => ids.has(entry.id) || urls.has(entry.url);
 }
 
 export interface EntriesSummary {

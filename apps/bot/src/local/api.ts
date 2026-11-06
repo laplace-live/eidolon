@@ -65,7 +65,6 @@ export const ERROR_CODES = [
   "conflict",
   "payload-too-large",
   "unsupported-media-type",
-  "not-implemented",
   "unavailable",
   "upstream-failed",
   "internal",
@@ -256,14 +255,17 @@ export type CredentialsResponse = Readonly<Record<string, CredentialState>>;
 /** PUT credentials: a value to save, or null to remove it from credentials.json. */
 export type CredentialsUpdate = Readonly<Record<string, string | null>>;
 
-export type CheckProvider =
-  | "soniox"
-  | "openrouter"
-  | "fish"
-  | "embeddings"
-  | "rerank"
-  | "refine"
-  | "qdrant";
+export const CHECK_PROVIDERS = [
+  "soniox",
+  "openrouter",
+  "fish",
+  "embeddings",
+  "rerank",
+  "refine",
+  "qdrant",
+] as const;
+
+export type CheckProvider = (typeof CHECK_PROVIDERS)[number];
 
 export interface CheckRequest {
   readonly provider: CheckProvider;
@@ -396,7 +398,9 @@ export interface TextUpdate {
   readonly text: string;
 }
 
-export type ReferenceKind = "outfits" | "friends";
+export const REFERENCE_KINDS = ["outfits", "friends"] as const;
+
+export type ReferenceKind = (typeof REFERENCE_KINDS)[number];
 
 export interface ReferenceImage {
   readonly name: string;
@@ -543,7 +547,9 @@ export type JobRequest = {
     : { readonly options: JobOptions[C] });
 }[JobCommand];
 
-export type JobStatus = "running" | "succeeded" | "failed" | "cancelled" | "interrupted";
+export const JOB_STATUSES = ["running", "succeeded", "failed", "cancelled", "interrupted"] as const;
+
+export type JobStatus = (typeof JOB_STATUSES)[number];
 
 /** What the server keeps of a job it spawned, in `<data home>/jobs/<id>.json`. */
 export interface JobRecord {

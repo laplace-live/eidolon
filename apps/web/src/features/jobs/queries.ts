@@ -1,5 +1,6 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { call, type JobRequest, type JobSnapshot } from "@/lib/api";
+import { toastError } from "@/lib/feedback";
 
 /** Snapshots poll this often while a job runs, and the list this often when none does. */
 export const RUNNING_POLL_MS = 2000;
@@ -33,36 +34,29 @@ function useRemember() {
   };
 }
 
-export function useStartJob() {
+/** A job call: its answer goes into the caches, and a failure shows as a toast. */
+function useJobMutation<T>(mutationFn: (input: T) => Promise<JobSnapshot>) {
   const remember = useRemember();
-  return useMutation({
-    mutationFn: (request: JobRequest) => call("POST /api/local/jobs", { body: request }),
-    onSuccess: remember,
-  });
+  return useMutation({ mutationFn, onSuccess: remember, onError: toastError });
+}
+
+export function useStartJob() {
+  return useJobMutation((request: JobRequest) => call("POST /api/local/jobs", { body: request }));
 }
 
 export function useCancelJob() {
-  const remember = useRemember();
-  return useMutation({
-    mutationFn: (id: string) => call("DELETE /api/local/jobs/:id", { params: { id } }),
-    onSuccess: remember,
-  });
+  return useJobMutation((id: string) => call("DELETE /api/local/jobs/:id", { params: { id } }));
 }
 
 /** SIGKILL for a cancelled job that won't exit. */
 export function useForceStopJob() {
-  const remember = useRemember();
-  return useMutation({
-    mutationFn: (id: string) =>
-      call("DELETE /api/local/jobs/:id", { params: { id }, query: { force: 1 } }),
-    onSuccess: remember,
-  });
+  return useJobMutation((id: string) =>
+    call("DELETE /api/local/jobs/:id", { params: { id }, query: { force: 1 } }),
+  );
 }
 
 export function useResumeJob() {
-  const remember = useRemember();
-  return useMutation({
-    mutationFn: (id: string) => call("POST /api/local/jobs/:id/resume", { params: { id } }),
-    onSuccess: remember,
-  });
+  return useJobMutation((id: string) =>
+    call("POST /api/local/jobs/:id/resume", { params: { id } }),
+  );
 }

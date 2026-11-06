@@ -16,6 +16,7 @@ import {
   editPersonaYaml,
   editSettingsYaml,
   personaRefusal,
+  queryPersona,
   setDotted,
   staysInPersona,
   writeFailure,
@@ -160,8 +161,8 @@ export function settingsRoutes(app: LocalApp): LocalRouteSpec[] {
     {
       route: "GET /api/local/settings",
       handler(_request, { url }) {
-        const persona = url.searchParams.get("persona") ?? activePersona().id;
-        return personaRefusal(persona) ?? localJson(200, settingsOf(app, persona));
+        const persona = queryPersona(url);
+        return persona instanceof Response ? persona : localJson(200, settingsOf(app, persona));
       },
     },
     {

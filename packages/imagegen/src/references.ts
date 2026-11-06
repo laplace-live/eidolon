@@ -106,17 +106,22 @@ export function selectOutfit(sources: readonly string[], clock?: PersonaClock): 
   return sources.slice(0, 1);
 }
 
-/** The persona's reference for right now — one outfit, never two. */
-export function referenceSources(options: ReferenceOptions = {}): string[] {
+/** Every outfit the hour picks among: the configured list, else outfits/, else loose images. */
+export function referenceCandidates(options: Pick<ReferenceOptions, "root"> = {}): string[] {
   const configured = (envOptional("SELFIE_REFERENCE_IMAGES") ?? "")
     .split(",")
     .map((part) => pyStrip(part))
     .filter((part) => part !== "");
-  if (configured.length > 0) return selectOutfit(configured, options.clock);
+  if (configured.length > 0) return configured;
   const roots = rootsOf(options);
   // Loose images directly under references/ also count as outfits.
   const outfits = imagesUnder(roots, OUTFITS);
-  return selectOutfit(outfits.length > 0 ? outfits : imagesUnder(roots, ""), options.clock);
+  return outfits.length > 0 ? outfits : imagesUnder(roots, "");
+}
+
+/** The persona's reference for right now — one outfit, never two. */
+export function referenceSources(options: ReferenceOptions = {}): string[] {
+  return selectOutfit(referenceCandidates(options), options.clock);
 }
 
 /**

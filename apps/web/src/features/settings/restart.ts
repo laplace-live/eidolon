@@ -1,7 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
-import { call, errorKey } from "@/lib/api";
+import { call } from "@/lib/api";
+import { toastError } from "@/lib/feedback";
 import { useT } from "@/lib/i18n";
 
 const WAIT_MS = 60_000;
@@ -44,7 +45,7 @@ export function useRestart() {
         toast.error(t("settings.restart.timeout"));
       }
     } catch (error) {
-      toast.error(t(errorKey(error)));
+      toastError(error);
     } finally {
       setRestarting(false);
     }

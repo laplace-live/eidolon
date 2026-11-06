@@ -9,16 +9,6 @@ import {
 import { useCallback, useState } from "react";
 import { SettingsForm } from "@/components/settings-form";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -31,11 +21,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { toastError } from "@/features/jobs/feedback";
-import { formatBytes, formatCount, formatDateTime } from "@/features/jobs/format";
 import { JobCard } from "@/features/jobs/parts";
 import { jobsQuery, useStartJob } from "@/features/jobs/queries";
 import type { IndexTable, JobCommand, PersonaSummary } from "@/lib/api";
+import { formatBytes, formatCount, formatDateTime } from "@/lib/format";
 import { useLang, useT } from "@/lib/i18n";
 import { latestJob, type Outcome } from "@/lib/jobs";
 import { statusQuery } from "@/lib/query";
@@ -43,6 +32,7 @@ import { FactEditor, type FactTarget } from "./facts-editor";
 import { factsHint, factsState, wasIndexed } from "./knowledge";
 import { LoadError, Section } from "./parts";
 import { personaQueries } from "./queries";
+import { LeaveDialog } from "./text-editor";
 
 const KNOWLEDGE_PATHS = [
   "knowledge.facts.files",
@@ -92,7 +82,7 @@ function RunButton({
       size="sm"
       variant="outline"
       disabled={running || start.isPending}
-      onClick={() => start.mutate({ command, persona }, { onError: toastError })}
+      onClick={() => start.mutate({ command, persona })}
     >
       <PlayIcon />
       {label}
@@ -315,27 +305,15 @@ function FactsSection({ persona }: { readonly persona: PersonaSummary }) {
         </>
       )}
       {factsJob && <JobCard key={factsJob.id} job={factsJob} onEnded={onEnded} />}
-      <AlertDialog open={pending !== null} onOpenChange={(open) => !open && setPending(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("studio.editor.leaveTitle")}</AlertDialogTitle>
-            <AlertDialogDescription>{t("studio.editor.leaveBody")}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("studio.editor.stay")}</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              onClick={() => {
-                setDirty(false);
-                setTarget(pending?.next ?? null);
-                setPending(null);
-              }}
-            >
-              {t("studio.editor.leave")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <LeaveDialog
+        open={pending !== null}
+        onStay={() => setPending(null)}
+        onLeave={() => {
+          setDirty(false);
+          setTarget(pending?.next ?? null);
+          setPending(null);
+        }}
+      />
     </Section>
   );
 }

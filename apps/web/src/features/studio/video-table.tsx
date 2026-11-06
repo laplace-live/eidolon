@@ -2,7 +2,7 @@
 // doing to each meanwhile.
 import type { PlanVideo } from "@eidolon/ingest/progress";
 import { ExternalLinkIcon } from "lucide-react";
-import { type FormEvent, useId, useState } from "react";
+import { type FormEvent, memo, useId, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,8 +26,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { reasonText } from "@/features/jobs/describe";
-import { formatDuration, formatUsd } from "@/features/jobs/format";
 import { progressText } from "@/features/jobs/parts";
+import { formatDuration, formatUsd } from "@/lib/format";
 import { type Lang, type Translate, useLang, useT } from "@/lib/i18n";
 import type { ItemView } from "@/lib/jobs";
 import { hasPaidWork, isFinished, needsFfmpeg } from "./videos";
@@ -147,6 +147,73 @@ function DateDialog({
   );
 }
 
+/** A video's row: its plan entry and item keep their objects, so only changed rows render. */
+const VideoRow = memo(function VideoRow({
+  video,
+  live,
+  ffmpeg,
+  busy,
+  onSetDate,
+}: {
+  readonly video: PlanVideo;
+  /** The running job's latest item for it. */
+  readonly live: ItemView | undefined;
+  readonly ffmpeg: boolean;
+  readonly busy: boolean;
+  readonly onSetDate: (video: PlanVideo) => void;
+}) {
+  const t = useT();
+  const lang = useLang();
+  const state = live ? liveState(t, lang, live) : planState(t, video);
+  const usd = (video.estimate.transcribeUsd ?? 0) + (video.estimate.refineUsd ?? 0);
+  const unpriced = video.estimate.basis === "unpriced" && hasPaidWork(video);
+  return (
+    <TableRow>
+      <TableCell className="max-w-80 whitespace-normal">
+        <div className="flex items-center gap-1.5">
+          <span className="truncate" title={video.title ?? video.id}>
+            {video.title ?? video.id}
+          </span>
+          <SourceLink url={video.url} />
+        </div>
+        {video.title && <div className="font-mono text-muted-foreground text-xs">{video.id}</div>}
+      </TableCell>
+      <TableCell className="text-muted-foreground tabular-nums">
+        {video.uploadDate ?? "—"}
+      </TableCell>
+      <TableCell className="tabular-nums">
+        {video.durationSec === undefined ? "—" : formatDuration(video.durationSec)}
+        {!ffmpeg && needsFfmpeg(video) && (
+          <Badge variant="destructive" className="ml-2">
+            {t("studio.table.needsFfmpeg")}
+          </Badge>
+        )}
+      </TableCell>
+      <TableCell>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge variant={state.tone}>{state.label}</Badge>
+          {!live && video.transcribe === "no-date" && video.download === "done" && (
+            <Button variant="link" size="xs" disabled={busy} onClick={() => onSetDate(video)}>
+              {t("studio.table.setDate")}
+            </Button>
+          )}
+        </div>
+      </TableCell>
+      <TableCell className="text-right tabular-nums">
+        {unpriced ? (
+          <span className="text-muted-foreground" title={t("studio.table.unpriced")}>
+            ?
+          </span>
+        ) : usd > 0 ? (
+          formatUsd(usd, lang)
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </TableCell>
+    </TableRow>
+  );
+});
+
 export function VideoTable({
   videos,
   activity,
@@ -164,7 +231,6 @@ export function VideoTable({
   readonly onTranscribe: (video: PlanVideo, date: string) => void;
 }) {
   const t = useT();
-  const lang = useLang();
   const switchId = useId();
   const finished = videos.filter(isFinished).length;
   const [showFinished, setShowFinished] = useState(false);
@@ -208,65 +274,16 @@ export function VideoTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {shown.slice(0, limit).map((video) => {
-            const live =
-              activity.get(video.id) ?? (video.url ? activity.get(video.url) : undefined);
-            const state = live ? liveState(t, lang, live) : planState(t, video);
-            const usd = (video.estimate.transcribeUsd ?? 0) + (video.estimate.refineUsd ?? 0);
-            const unpriced = video.estimate.basis === "unpriced" && hasPaidWork(video);
-            return (
-              <TableRow key={video.id}>
-                <TableCell className="max-w-80 whitespace-normal">
-                  <div className="flex items-center gap-1.5">
-                    <span className="truncate" title={video.title ?? video.id}>
-                      {video.title ?? video.id}
-                    </span>
-                    <SourceLink url={video.url} />
-                  </div>
-                  {video.title && (
-                    <div className="font-mono text-muted-foreground text-xs">{video.id}</div>
-                  )}
-                </TableCell>
-                <TableCell className="text-muted-foreground tabular-nums">
-                  {video.uploadDate ?? "—"}
-                </TableCell>
-                <TableCell className="tabular-nums">
-                  {video.durationSec === undefined ? "—" : formatDuration(video.durationSec)}
-                  {!ffmpeg && needsFfmpeg(video) && (
-                    <Badge variant="destructive" className="ml-2">
-                      {t("studio.table.needsFfmpeg")}
-                    </Badge>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <Badge variant={state.tone}>{state.label}</Badge>
-                    {!live && video.transcribe === "no-date" && video.download === "done" && (
-                      <Button
-                        variant="link"
-                        size="xs"
-                        disabled={busy}
-                        onClick={() => setDating(video)}
-                      >
-                        {t("studio.table.setDate")}
-                      </Button>
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {unpriced ? (
-                    <span className="text-muted-foreground" title={t("studio.table.unpriced")}>
-                      ?
-                    </span>
-                  ) : usd > 0 ? (
-                    formatUsd(usd, lang)
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
-                </TableCell>
-              </TableRow>
-            );
-          })}
+          {shown.slice(0, limit).map((video) => (
+            <VideoRow
+              key={video.id}
+              video={video}
+              live={activity.get(video.id) ?? (video.url ? activity.get(video.url) : undefined)}
+              ffmpeg={ffmpeg}
+              busy={busy}
+              onSetDate={setDating}
+            />
+          ))}
         </TableBody>
       </Table>
       {shown.length > limit && (

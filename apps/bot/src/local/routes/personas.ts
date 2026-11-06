@@ -21,6 +21,7 @@ import {
   type PersonaIdentityFields,
   type PersonaSummary,
   type PersonasResponse,
+  REFERENCE_KINDS,
   type ReferenceKind,
 } from "../api.ts";
 import {
@@ -35,7 +36,6 @@ import {
   listReferences,
   personaRefusal,
   promptFile,
-  REFERENCE_KINDS,
   readIdentityFields,
   renamedFor,
   type SniffedImage,
@@ -45,7 +45,7 @@ import {
   writeIdentityFields,
   writeNewPersona,
 } from "../personas.ts";
-import { localError, localJson, readJson } from "../responses.ts";
+import { localError, localJson, readBytes, readJson } from "../responses.ts";
 import { reinstallSettings } from "../restart.ts";
 import type { LocalApp, LocalRouteSpec } from "../router.ts";
 import {
@@ -60,6 +60,7 @@ import {
   writeDataFile,
 } from "../write.ts";
 import { switchRefusal } from "./settings.ts";
+import { VOICE_ID } from "./voices.ts";
 
 /** Upload cap, counted while the body streams. */
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
@@ -74,7 +75,6 @@ const RESERVED_IDS = new Set(
 );
 
 const CONTROL = /\p{Cc}/u;
-const VOICE_ID = /^[0-9a-f]{32}$/;
 
 /** Sandboxed, and typed by the bytes, never by the name. */
 function imageResponse(bytes: Uint8Array<ArrayBuffer>, image: SniffedImage): Response {
@@ -95,27 +95,6 @@ async function serveImage(path: string): Promise<Response> {
     return localError(415, "unsupported-media-type", "Only PNG, JPEG and WebP images are shown");
   }
   return imageResponse(bytes, image);
-}
-
-/** The body's bytes, or null once it passes `limit`; nothing is kept past it. */
-async function readBytes(request: Request, limit: number): Promise<Uint8Array | null> {
-  const declared = Number(request.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > limit) return null;
-  if (request.body === null) return new Uint8Array();
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > limit) {
-      await reader.cancel();
-      return null;
-    }
-    chunks.push(value);
-  }
-  return Buffer.concat(chunks);
 }
 
 /** An upload's bytes and type, or the 413 or 415 to answer. */
@@ -219,6 +198,10 @@ function glossaryErrors(id: string): string[] {
   }
 }
 
+function glossaryOf(id: string) {
+  return { ...textOf(id, "glossary.toml"), errors: glossaryErrors(id) };
+}
+
 /** Where the glossary sits for the bundler, which reads it from memory, never from the disk. */
 const GLOSSARY_ENTRY = "/glossary.toml";
 
@@ -268,12 +251,6 @@ function referenceTarget(
   return { folder: join(personaHomeDir(id), "references", checkedKind), name };
 }
 
-function factTarget(id: string, raw: string): { folder: string; name: string } | Response {
-  const name = checkFileName(raw, [".txt"]);
-  if (name === null) return localError(400, "invalid-file-name", "Name a .txt file");
-  return { folder: sourceFolder(id, "facts"), name };
-}
-
 /** The file `name` in `folder`, or the 400 for a name that leaves it. */
 function within(folder: string, name: string): string | Response {
   try {
@@ -284,6 +261,26 @@ function within(folder: string, name: string): string | Response {
     }
     throw error;
   }
+}
+
+/** Fact file `raw` in persona `id`'s facts folder, checked, or the 400 to answer. */
+function factTarget(
+  id: string,
+  raw: string,
+): { folder: string; name: string; path: string } | Response {
+  const name = checkFileName(raw, [".txt"]);
+  if (name === null) return localError(400, "invalid-file-name", "Name a .txt file");
+  const folder = sourceFolder(id, "facts");
+  const path = within(folder, name);
+  return path instanceof Response ? path : { folder, name, path };
+}
+
+/** Her prompt file, relative to her folder, or the 409 when her setting names one outside it. */
+function promptTarget(id: string): string | Response {
+  return (
+    promptFile(id) ??
+    localError(409, "invalid-path", "Her prompt setting names a file outside her folder")
+  );
 }
 
 export function personasRoutes(app: LocalApp): LocalRouteSpec[] {
@@ -354,28 +351,15 @@ export function personasRoutes(app: LocalApp): LocalRouteSpec[] {
     {
       route: "GET /api/local/personas/:id/prompt",
       handler: forPersona((_request, id) => {
-        const rel = promptFile(id);
-        if (rel === null) {
-          return localError(
-            409,
-            "invalid-path",
-            "Her prompt setting names a file outside her folder",
-          );
-        }
-        return localJson(200, textOf(id, rel));
+        const rel = promptTarget(id);
+        return rel instanceof Response ? rel : localJson(200, textOf(id, rel));
       }),
     },
     {
       route: "PUT /api/local/personas/:id/prompt",
       handler: forPersona(async (request, id) => {
-        const rel = promptFile(id);
-        if (rel === null) {
-          return localError(
-            409,
-            "invalid-path",
-            "Her prompt setting names a file outside her folder",
-          );
-        }
+        const rel = promptTarget(id);
+        if (rel instanceof Response) return rel;
         const text = await textBody(request);
         if (text instanceof Response) return text;
         try {
@@ -388,10 +372,7 @@ export function personasRoutes(app: LocalApp): LocalRouteSpec[] {
     },
     {
       route: "GET /api/local/personas/:id/glossary",
-      handler: forPersona((_request, id) => {
-        const file = textOf(id, "glossary.toml");
-        return localJson(200, { ...file, errors: glossaryErrors(id) });
-      }),
+      handler: forPersona((_request, id) => localJson(200, glossaryOf(id))),
     },
     {
       route: "PUT /api/local/personas/:id/glossary",
@@ -405,7 +386,7 @@ export function personasRoutes(app: LocalApp): LocalRouteSpec[] {
         } catch (failure) {
           return writeFailure(failure);
         }
-        return localJson(200, { ...textOf(id, "glossary.toml"), errors: glossaryErrors(id) });
+        return localJson(200, glossaryOf(id));
       }),
     },
     {
@@ -562,11 +543,9 @@ export function personasRoutes(app: LocalApp): LocalRouteSpec[] {
       handler: forPersona((_request, id, params) => {
         const target = factTarget(id, params.file as string);
         if (target instanceof Response) return target;
-        const path = within(target.folder, target.name);
-        if (path instanceof Response) return path;
         let bytes: Buffer;
         try {
-          bytes = readFileSync(path);
+          bytes = readFileSync(target.path);
         } catch {
           return localError(404, "not-found", "No such fact file");
         }
@@ -582,12 +561,10 @@ export function personasRoutes(app: LocalApp): LocalRouteSpec[] {
       handler: forPersona(async (request, id, params) => {
         const target = factTarget(id, params.file as string);
         if (target instanceof Response) return target;
-        const path = within(target.folder, target.name);
-        if (path instanceof Response) return path;
         const text = await textBody(request, FACTS_BODY_LIMIT);
         if (text instanceof Response) return text;
         try {
-          writeDataFile(path, text);
+          writeDataFile(target.path, text);
         } catch (error) {
           return writeFailure(error);
         }
@@ -599,13 +576,11 @@ export function personasRoutes(app: LocalApp): LocalRouteSpec[] {
       handler: forPersona((_request, id, params) => {
         const target = factTarget(id, params.file as string);
         if (target instanceof Response) return target;
-        const path = within(target.folder, target.name);
-        if (path instanceof Response) return path;
-        if (!existsSync(path)) return localError(404, "not-found", "No such fact file");
+        if (!existsSync(target.path)) return localError(404, "not-found", "No such fact file");
         if (!userFolder(target.folder)) {
           return localError(403, "forbidden", "Eidolon deletes only in its data home");
         }
-        rmSync(path, { force: true });
+        rmSync(target.path, { force: true });
         return localJson(200, { ok: true });
       }),
     },

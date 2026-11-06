@@ -44,13 +44,11 @@ export interface LocalExtensionOptions {
   readonly token: LocalToken;
   readonly site: StaticSite;
   /** Bound IP literals that Host may name besides localhost, 127.0.0.1 and [::1]. */
-  readonly boundLiterals?: readonly string[];
+  readonly boundLiterals: readonly string[];
   readonly memoryAdmin: () => MemoryAdmin | null;
-  readonly activeCalls: () => number;
   readonly restart: () => void;
-  readonly routes?: (app: LocalApp) => LocalRouteSpec[];
   /** The clock link codes are checked against. */
-  readonly nowSeconds?: () => number;
+  readonly nowSeconds: () => number;
 }
 
 export function createLocalExtension(options: LocalExtensionOptions): LocalExtension {
@@ -74,7 +72,7 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalExten
     routes(botRoutes, context) {
       const app: LocalApp = {
         port: context.port,
-        activeCalls: options.activeCalls,
+        activeCalls: () => context.signalling.activeSessions,
         restart: options.restart,
         onStop: (hook) => {
           stopHooks.push(hook);
@@ -112,7 +110,7 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalExten
 
       const specs = [
         ...sessionRoutes(app, options.token, options.nowSeconds),
-        ...(options.routes ?? localRouteModules)(app),
+        ...localRouteModules(app),
       ];
       routes[`${LOCAL_PREFIX}/*`] = guarded(createLocalRouter(specs, authenticate), context);
       return routes;

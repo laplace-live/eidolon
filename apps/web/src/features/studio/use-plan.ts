@@ -3,9 +3,9 @@
 import type { PlanVideo } from "@eidolon/ingest/progress";
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
-import { toastError } from "@/features/jobs/feedback";
 import { useJobEvents } from "@/features/jobs/use-job-events";
 import { call, type JobSnapshot } from "@/lib/api";
+import { toastError } from "@/lib/feedback";
 import { runSummary, type SummaryEvent } from "@/lib/jobs";
 
 export function planQuery(persona: string) {

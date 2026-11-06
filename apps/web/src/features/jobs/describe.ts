@@ -1,9 +1,9 @@
 // A job's events as sentences in the viewer's language. Messages the CLI wrote are English, so they
 // only ever appear as detail beside a translated line.
 import type { EventCode, Provider, Stage } from "@eidolon/ingest/progress";
+import { formatDuration, formatUsd } from "@/lib/format";
 import type { Lang, Translate } from "@/lib/i18n";
 import type { LoggedEvent } from "@/lib/jobs";
-import { formatDuration, formatUsd } from "./format";
 
 export type Tone = "info" | "ok" | "warn" | "error";
 

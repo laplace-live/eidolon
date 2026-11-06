@@ -1,7 +1,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
-  ApiError,
+  type ApiError,
+  asApiError,
   type CheckResult,
   type CredentialsResponse,
   type CredentialsUpdate,
@@ -15,10 +16,6 @@ import { credentialsQuery } from "./queries";
 export type CheckOutcome =
   | { readonly result: CheckResult; readonly error?: undefined }
   | { readonly error: ApiError; readonly result?: undefined };
-
-function asApiError(error: unknown): ApiError {
-  return error instanceof ApiError ? error : new ApiError(0, "unreachable", String(error));
-}
 
 /** Keys being typed, saved and checked. */
 export function useKeys() {

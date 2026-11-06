@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { toast } from "sonner";
+import { ErrorAlert } from "@/components/error-alert";
+import { browserTimeZone } from "@/components/settings-form/controls";
 import { personasQuery } from "@/components/settings-form/queries";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,16 +17,11 @@ import { Field, FieldError, FieldLabel, FieldLegend, FieldSet } from "@/componen
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { VoicePicker } from "@/components/voice-picker";
-import { errorKey, type PersonaSummary, type Voice } from "@/lib/api";
+import type { PersonaSummary, Voice } from "@/lib/api";
+import { toastError } from "@/lib/feedback";
 import { useT } from "@/lib/i18n";
 import { MandarinNote, PersonaFields } from "./persona-fields";
-import {
-  activatePersona,
-  asApiError,
-  browserTimeZone,
-  createPersona,
-  refreshPersonas,
-} from "./personas";
+import { activatePersona, createPersona, refreshPersonas } from "./personas";
 import { EMPTY_PERSONA, type PersonaDraft, personaErrors } from "./wizard";
 
 /** Creates a persona, with the fields and the voice she needs, outside the wizard. */
@@ -55,9 +51,7 @@ export function NewPersonaDialog({
       toast.success(t("setup.newPersona.created", { name: created.name }));
       if (activate) {
         // She exists either way; a refused switch (a call is live) only leaves her inactive.
-        await activatePersona(created.id).catch((error: unknown) =>
-          toast.error(t(errorKey(asApiError(error)))),
-        );
+        await activatePersona(created.id).catch(toastError);
       }
       await refreshPersonas(queryClient);
       onCreated?.(created);
@@ -110,12 +104,7 @@ export function NewPersonaDialog({
           />
           <FieldLabel htmlFor={switchId}>{t("setup.newPersona.activate")}</FieldLabel>
         </Field>
-        {create.isError && (
-          <Alert variant="destructive">
-            <AlertTitle>{t(errorKey(create.error))}</AlertTitle>
-            <AlertDescription>{create.error.message}</AlertDescription>
-          </Alert>
-        )}
+        {create.isError && <ErrorAlert error={create.error} />}
         <DialogFooter>
           <Button variant="ghost" onClick={() => close(false)} disabled={create.isPending}>
             {t("setup.cancel")}

@@ -88,6 +88,7 @@ function fakeDeps(overrides: { warmAudioModels?: () => Promise<void> } = {}): {
           offer: async () => ({ status: 200, body: {} }),
           patch: async () => ({ status: 200, body: {} }),
           close: async () => {},
+          activeSessions: 0,
         };
       },
     },

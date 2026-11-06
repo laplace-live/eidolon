@@ -1,8 +1,6 @@
 // Starts the local web app's server, the bot plus the app, on loopback only, and prints the link
 // that signs a browser in. server.ts runs it as the supervisor's child.
 import { envOptional, errorText, type LogLevel, logger } from "@eidolon/config";
-import type { SignallingServer } from "@eidolon/runtime";
-import type { IceService } from "@eidolon/turn";
 import { type BotDeps, type BotServer, startBotServer } from "../server.ts";
 import { type LocalHost, parseLocalArgs, resolveLocalHost } from "./args.ts";
 import { createLocalExtension } from "./extension.ts";
@@ -13,14 +11,8 @@ import { type ListeningMessage, RESTART_EXIT_CODE } from "./supervisor.ts";
 import { type LocalToken, loadLocalToken, probeNonce, TokenError } from "./token.ts";
 import { ensureDataHome } from "./write.ts";
 
-/** The packages, as main.ts hands them to startBotServer; the signalling server counts calls. */
-export interface LocalModules extends Omit<BotDeps, "runtime" | "local"> {
-  readonly runtime: Omit<BotDeps["runtime"], "createSignallingServer"> & {
-    createSignallingServer(options: {
-      ice: Pick<IceService, "serverPlan">;
-    }): Pick<SignallingServer, "offer" | "patch" | "close" | "activeSessions">;
-  };
-}
+/** The packages, as main.ts hands them to startBotServer. */
+export type LocalModules = Omit<BotDeps, "local">;
 
 export interface BootIo {
   /** The link line, written past the logger so no log sink ever holds a link code. */
@@ -219,7 +211,6 @@ export async function bootLocal(
   if (token === null) return null;
   usePersonaMemoryScope();
 
-  let signalling: Pick<SignallingServer, "activeSessions"> | null = null;
   let shutdown: ((code: number) => void) | null = null;
   const restart = (): void => {
     setTimeout(() => shutdown?.(RESTART_EXIT_CODE), RESTART_DELAY_MS);
@@ -235,18 +226,12 @@ export async function bootLocal(
     runtime: {
       ...modules.runtime,
       configureLogging: () => modules.runtime.configureLogging({ level: logLevel(args.verbose) }),
-      createSignallingServer(options) {
-        const created = modules.runtime.createSignallingServer(options);
-        signalling = created;
-        return created;
-      },
     },
     local: createLocalExtension({
       token,
       site,
       boundLiterals: host.literals,
       memoryAdmin: () => modules.memory.memoryAdmin(),
-      activeCalls: () => signalling?.activeSessions ?? 0,
       restart,
       nowSeconds: () => io.nowSeconds(),
     }),

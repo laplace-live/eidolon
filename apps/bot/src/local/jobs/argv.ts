@@ -4,6 +4,7 @@
 import { basename, extname } from "node:path";
 import { isPlainObject, personaIds, sourceFolder } from "@eidolon/config";
 import { download, transcribe } from "@eidolon/ingest";
+import { isValidIsoDate } from "@eidolon/retrieval";
 import {
   type ErrorCode,
   JOB_COMMANDS,
@@ -27,20 +28,18 @@ export interface JobSpec {
   readonly args: readonly string[];
 }
 
-/** Why a request can't run, as the API answers it. */
+/** Why a request can't run, as the API's 400 answers it. */
 export class JobRefused extends Error {
   override readonly name = "JobRefused";
-  readonly status: 400 | 404;
   readonly code: ErrorCode;
 
-  constructor(status: 400 | 404, code: ErrorCode, message: string) {
+  constructor(code: ErrorCode, message: string) {
     super(message);
-    this.status = status;
     this.code = code;
   }
 
   response(): Response {
-    return localError(this.status, this.code, this.message);
+    return localError(400, this.code, this.message);
   }
 }
 
@@ -93,18 +92,18 @@ export function checkUrl(value: unknown): string | null {
 }
 
 /** A persona the request names, refused unless it is a slug the data home or templates have. */
-export function checkPersona(value: unknown, status: 400 | 404): string {
+function checkPersona(value: unknown): string {
   if (!isPersonaId(value)) {
-    throw new JobRefused(400, "invalid-persona-id", "A persona id is a lowercase slug");
+    throw new JobRefused("invalid-persona-id", "A persona id is a lowercase slug");
   }
   if (!personaIds().includes(value)) {
-    throw new JobRefused(status, "unknown-persona", "No persona has that id");
+    throw new JobRefused("unknown-persona", "No persona has that id");
   }
   return value;
 }
 
 function invalid(message: string): JobRefused {
-  return new JobRefused(400, "invalid-option", message);
+  return new JobRefused("invalid-option", message);
 }
 
 const BATCH_ID = /^videos-[A-Za-z0-9_-]{1,64}$/;
@@ -132,12 +131,7 @@ function audioFile(persona: string, id: unknown): string {
 }
 
 function streamDate(value: unknown): string {
-  const match = typeof value === "string" ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(value) : null;
-  if (match !== null) {
-    const [year, month, day] = match.slice(1).map(Number) as [number, number, number];
-    const date = new Date(Date.UTC(year, month - 1, day));
-    if (date.getUTCMonth() === month - 1 && date.getUTCDate() === day) return value as string;
-  }
+  if (typeof value === "string" && isValidIsoDate(value)) return value;
   throw invalid("`date` is not a date written YYYY-MM-DD");
 }
 
@@ -219,7 +213,7 @@ function mapped(
     case "expand": {
       const url = checkUrl(options.url);
       if (url === null) {
-        throw new JobRefused(400, "invalid-url", "`url` is not an http(s) URL without spaces");
+        throw new JobRefused("invalid-url", "`url` is not an http(s) URL without spaces");
       }
       return { options: { url }, cli: "download", args: [...who, "--expand", url] };
     }
@@ -252,17 +246,17 @@ function mapped(
 /** A POST jobs body as the job it runs; throws JobRefused for anything else. */
 export function parseJobRequest(body: unknown): JobSpec {
   if (!isPlainObject(body)) {
-    throw new JobRefused(400, "bad-request", "Send {command, persona, options}");
+    throw new JobRefused("bad-request", "Send {command, persona, options}");
   }
   if (Object.keys(body).some((key) => !["command", "persona", "options"].includes(key))) {
-    throw new JobRefused(400, "bad-request", "A job takes command, persona and options only");
+    throw new JobRefused("bad-request", "A job takes command, persona and options only");
   }
   const { command } = body;
   if (typeof command !== "string" || !(JOB_COMMANDS as readonly string[]).includes(command)) {
-    throw new JobRefused(400, "unknown-command", "No job runs that command");
+    throw new JobRefused("unknown-command", "No job runs that command");
   }
   const job = command as JobCommand;
-  const persona = checkPersona(body.persona, 400);
+  const persona = checkPersona(body.persona);
   const options = body.options ?? {};
   if (!isPlainObject(options)) throw invalid("`options` is an object");
   const known: readonly string[] = OPTION_KEYS[job];

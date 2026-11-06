@@ -13,7 +13,6 @@
   "conflict": "内容已发生变化，请刷新后重试。",
   "payload-too-large": "文件太大。",
   "unsupported-media-type": "不支持该文件类型。",
-  "not-implemented": "该功能尚未提供。",
   "unavailable": "该服务暂时不可用。",
   "upstream-failed": "Eidolon 依赖的服务出错了，请稍后再试。",
   "internal": "Eidolon 发生内部错误，详情请查看终端。",

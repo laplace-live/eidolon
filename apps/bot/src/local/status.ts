@@ -1,22 +1,21 @@
 // GET status, which the home page polls, so every part of it is local and cheap. Qdrant and the
 // persona's voice are checked in the background and reported from the last answer; the tools on
 // PATH are looked up at most once a minute.
-import { existsSync, readFileSync, statfsSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, statfsSync, statSync } from "node:fs";
 import {
   activePersona,
   dataHome,
   envOptional,
   envOverride,
-  isPlainObject,
   logger,
   readSettingsLayers,
 } from "@eidolon/config";
-import { binDir, download } from "@eidolon/ingest";
+import { referenceCandidates } from "@eidolon/imagegen";
+import { download, which } from "@eidolon/ingest";
 import manifest from "../../package.json" with { type: "json" };
 import { REQUIRED_KEYS, type Status, type ValueSource, type YtDlpStatus } from "./api.ts";
 import { checkFishVoice, checkQdrant, configuredQdrant, voiceOk } from "./checks.ts";
-import { indexStatus, selfieReferenceCount } from "./personas.ts";
+import { indexStatus } from "./personas.ts";
 import { restartTracker } from "./restart.ts";
 import type { LocalApp } from "./router.ts";
 
@@ -66,19 +65,13 @@ export function recordQdrant(
   app: LocalApp,
   address: { readonly host: string; readonly port: number },
   ok: boolean,
-  at: number = Date.now(),
 ): void {
-  stateOf(app).qdrant.set(`${address.host}:${address.port}`, { ok, at });
+  stateOf(app).qdrant.set(`${address.host}:${address.port}`, { ok, at: Date.now() });
 }
 
 /** A Fish check's answer about a voice, which GET status reports as persona.voice.ok. */
-export function recordVoice(
-  app: LocalApp,
-  id: string,
-  ok: boolean | null,
-  at: number = Date.now(),
-): void {
-  stateOf(app).voices.set(id, { ok, at });
+export function recordVoice(app: LocalApp, id: string, ok: boolean | null): void {
+  stateOf(app).voices.set(id, { ok, at: Date.now() });
 }
 
 // packages/runtime's runSessionSafely logs a session that failed after its offer was answered.
@@ -161,7 +154,7 @@ function installedAt(state: StatusState, path: string): YtDlpStatus {
 function ytDlpStatus(state: StatusState): YtDlpStatus {
   const configured = envOptional("YT_DLP_PATH");
   if (configured !== undefined) {
-    const path = Bun.which(configured);
+    const path = which(configured);
     if (path === null) {
       return { state: "unavailable", reason: `yt-dlp not found at ${configured} (sources.ytDlp)` };
     }
@@ -169,7 +162,7 @@ function ytDlpStatus(state: StatusState): YtDlpStatus {
   }
   // Only the file name changes with the C library, never whether a build exists.
   if (download.ytDlpAsset(process.platform, process.arch, false) === null) {
-    const onPath = Bun.which("yt-dlp");
+    const onPath = which("yt-dlp");
     if (onPath === null) {
       return {
         state: "unavailable",
@@ -180,16 +173,8 @@ function ytDlpStatus(state: StatusState): YtDlpStatus {
     }
     return installedAt(state, onPath);
   }
-  const managed = join(binDir(), process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp");
-  if (!existsSync(managed)) return { state: "installs-on-first-download" };
-  let tag = "";
-  try {
-    const stamp: unknown = JSON.parse(readFileSync(join(binDir(), "yt-dlp.stamp.json"), "utf8"));
-    if (isPlainObject(stamp) && typeof stamp.tag === "string") tag = stamp.tag;
-  } catch {
-    // The next download checks the release again.
-  }
-  return { state: "installed", tag };
+  if (!existsSync(download.managedYtDlpPath())) return { state: "installs-on-first-download" };
+  return { state: "installed", tag: download.managedYtDlpTag() ?? "" };
 }
 
 function tools(state: StatusState, deps: StatusDeps): NonNullable<StatusState["tools"]> {
@@ -197,7 +182,7 @@ function tools(state: StatusState, deps: StatusDeps): NonNullable<StatusState["t
     state.tools = {
       at: deps.now(),
       ytDlp: ytDlpStatus(state),
-      ffmpeg: Bun.which("ffmpeg") !== null,
+      ffmpeg: which("ffmpeg") !== null,
     };
   }
   return state.tools;
@@ -263,7 +248,7 @@ export function buildStatus(app: LocalApp, deps: StatusDeps = defaultStatusDeps)
       },
     },
     index: indexStatus(persona.id),
-    selfieReferences: selfieReferenceCount(),
+    selfieReferences: referenceCandidates().length,
     memory: {
       configured: qdrant !== null,
       reachable:

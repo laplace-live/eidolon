@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronRightIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { ErrorAlert } from "@/components/error-alert";
 import { SettingsForm } from "@/components/settings-form";
 import { OPTIONAL, REQUIRED } from "@/components/settings-form/credentials";
 import { KeyField } from "@/components/settings-form/key-field";
@@ -11,9 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { FieldGroup } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
-import { type ApiError, call, errorKey } from "@/lib/api";
+import { type ApiError, asApiError, call } from "@/lib/api";
 import { useT } from "@/lib/i18n";
-import { asApiError } from "./personas";
 import { StepCard } from "./step-card";
 import { cookieDefault, isNewInstall } from "./wizard";
 
@@ -91,12 +91,7 @@ export function KeysStep({ onDone }: { readonly onDone: () => void }) {
         </>
       }
     >
-      {keys.credentials.isError && (
-        <Alert variant="destructive">
-          <AlertTitle>{t(errorKey(keys.credentials.error))}</AlertTitle>
-          <AlertDescription>{keys.credentials.error.message}</AlertDescription>
-        </Alert>
-      )}
+      {keys.credentials.isError && <ErrorAlert error={keys.credentials.error} />}
       <FieldGroup>
         {REQUIRED.map((name) => (
           <KeyField key={name} name={name} keys={keys} pages />
@@ -135,12 +130,7 @@ export function KeysStep({ onDone }: { readonly onDone: () => void }) {
           <AlertDescription>{t("setup.keys.checksFailedBody")}</AlertDescription>
         </Alert>
       )}
-      {failure && (
-        <Alert variant="destructive">
-          <AlertTitle>{t(errorKey(failure))}</AlertTitle>
-          <AlertDescription>{failure.message}</AlertDescription>
-        </Alert>
-      )}
+      {failure && <ErrorAlert error={failure} />}
     </StepCard>
   );
 }

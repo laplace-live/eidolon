@@ -13,6 +13,7 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { type CheckProvider, type CredentialState, errorKey, type RequiredKey } from "@/lib/api";
+import { formatUsd } from "@/lib/format";
 import { useLang, useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { CHECK_OF, checkTone, KEY_PAGES, type Tone, verdictKey, warningKey } from "./credentials";
@@ -59,11 +60,7 @@ export function CheckResultView({
       {result.message && <p className="pl-5.5 text-muted-foreground text-xs">{result.message}</p>}
       {result.credit !== null && (
         <p className="pl-5.5 text-muted-foreground text-xs">
-          {t("settings.check.credit", {
-            amount: new Intl.NumberFormat(lang, { style: "currency", currency: "USD" }).format(
-              result.credit,
-            ),
-          })}
+          {t("settings.check.credit", { amount: formatUsd(result.credit, lang) })}
         </p>
       )}
       {result.warnings.map((warning) => {

@@ -22,6 +22,11 @@ export class ApiError extends Error {
   }
 }
 
+/** `error` as an ApiError: one the API answered, else a request that never reached it. */
+export function asApiError(error: unknown): ApiError {
+  return error instanceof ApiError ? error : new ApiError(0, "unreachable", String(error));
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

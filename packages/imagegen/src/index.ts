@@ -40,6 +40,7 @@ export {
   OUTFITS,
   type ReferenceImage,
   type ReferenceOptions,
+  referenceCandidates,
   referenceRoots,
   referenceSources,
   selectOutfit,

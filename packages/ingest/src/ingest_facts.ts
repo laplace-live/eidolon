@@ -49,8 +49,8 @@ export const DEFAULT_FACT_PATTERNS: readonly string[] = ["*.txt"];
 export const FACTS_BATCH_SIZE = 96;
 
 /** knowledge.facts.files (FACTS_FILES): name patterns of the files in the facts folder. */
-export function factPatterns(): string[] {
-  const patterns = (envOptional("FACTS_FILES") ?? "")
+export function factPatterns(raw: string | undefined = envOptional("FACTS_FILES")): string[] {
+  const patterns = (raw ?? "")
     .split(",")
     .map((pattern) => pyStrip(pattern))
     .filter((pattern) => pattern !== "");

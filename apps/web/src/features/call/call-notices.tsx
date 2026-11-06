@@ -4,6 +4,7 @@ import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import type { Status } from "@/lib/api";
 import { type Translate, useT } from "@/lib/i18n";
+import { studioPath } from "@/lib/paths";
 import type { MicProblem } from "./media";
 import { type CallEnd, sessionErrorSince } from "./phase";
 import type { Call } from "./use-call";
@@ -129,9 +130,7 @@ export function CallNotices({
           <AlertTitle>{t("call.voice.unknown", { name })}</AlertTitle>
           <AlertAction>
             <Button size="sm" variant="outline" asChild>
-              <Link to={`/personas/${encodeURIComponent(status.persona.id)}/voice`}>
-                {t("call.voice.pick")}
-              </Link>
+              <Link to={studioPath(status.persona.id, "voice")}>{t("call.voice.pick")}</Link>
             </Button>
           </AlertAction>
         </Alert>

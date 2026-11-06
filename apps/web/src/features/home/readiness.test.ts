@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { studioPath } from "@/lib/paths";
 import type { Status } from "../../lib/api";
-import { type Formats, formatsFor, type Item, readiness, studioPath } from "./readiness";
+import { type Formats, formatsFor, type Item, readiness } from "./readiness";
 
 const plain: Formats = {
   bytes: (bytes) => `${bytes}B`,

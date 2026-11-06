@@ -29,6 +29,7 @@ export {
   audioStatus,
   configuredLanguage,
   configuredModel,
+  DEFAULT_SONIOX_MODEL,
   dumpToken,
   estimateTranscribeUsd,
   glossaryPath,

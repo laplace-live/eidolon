@@ -14,8 +14,7 @@ import {
   sourceFolder,
   templatesDir,
 } from "@eidolon/config";
-import { referenceSources } from "@eidolon/imagegen";
-import { selfieReferenceCount } from "../../src/local/personas.ts";
+import { referenceCandidates, referenceSources } from "@eidolon/imagegen";
 import { MAX_UPLOAD_BYTES } from "../../src/local/routes/personas.ts";
 import { type CapturedLogs, captureLogs } from "../fakes.ts";
 import { type Booted, bootFixture, cleanUpBoot, fakeModules, raw } from "./harness.ts";
@@ -469,8 +468,8 @@ describe("references and the avatar", () => {
     expect((await call("PUT", "/personas/aria/avatar", PNG)).status).toBe(200);
     expect(activePersona().id).toBe("aria");
     expect(referenceSources()).toEqual([]);
-    // What GET status reports.
-    expect(selfieReferenceCount()).toBe(0);
+    // What GET status counts.
+    expect(referenceCandidates()).toEqual([]);
   });
 });
 

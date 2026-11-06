@@ -16,19 +16,19 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ApiError, errorKey, type JobSnapshot, stream } from "@/lib/api";
+import { formatDateTime, formatDuration, formatUsd } from "@/lib/format";
 import { useLang, useT } from "@/lib/i18n";
 import { costSoFar, type JobView, runSummary } from "@/lib/jobs";
-import { toastError } from "./feedback";
-import { elapsedSeconds, formatDateTime, formatDuration, formatUsd } from "./format";
+import { studioPath } from "@/lib/paths";
 import {
   CancelJobButton,
+  Elapsed,
   Failures,
   JobLog,
   OutcomeBadge,
   outcomeOf,
   RunningItems,
   StageList,
-  useNow,
 } from "./parts";
 import { jobQuery, useResumeJob } from "./queries";
 import { stopOffer } from "./stopping";
@@ -140,7 +140,6 @@ export function JobDetail({ id }: { readonly id: string }) {
   const events = useJobEvents(id);
   const resume = useResumeJob();
   const [stderrOpen, setStderrOpen] = useState(false);
-  const now = useNow(job?.status === "running");
 
   // An id the server never minted is refused before it is looked up.
   if (error instanceof ApiError && (error.status === 404 || error.status === 400)) {
@@ -200,7 +199,6 @@ export function JobDetail({ id }: { readonly id: string }) {
                     onSuccess: (next) => {
                       if (next.id !== job.id) navigate(`/jobs/${encodeURIComponent(next.id)}`);
                     },
-                    onError: toastError,
                   })
                 }
               >
@@ -214,7 +212,7 @@ export function JobDetail({ id }: { readonly id: string }) {
           <span>
             {t("jobs.meta.persona")}{" "}
             <Link
-              to={`/personas/${encodeURIComponent(job.persona)}`}
+              to={studioPath(job.persona)}
               className="text-foreground underline-offset-4 hover:underline"
             >
               {job.persona}
@@ -225,7 +223,7 @@ export function JobDetail({ id }: { readonly id: string }) {
           </span>
           <span className="tabular-nums">
             {t("jobs.meta.duration")}{" "}
-            {formatDuration(elapsedSeconds(job.startedAt, job.endedAt, now))}
+            <Elapsed start={job.startedAt} end={job.endedAt} ticking={job.status === "running"} />
           </span>
           {cost !== null && cost !== undefined && (
             <span className="tabular-nums">

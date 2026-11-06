@@ -7,7 +7,9 @@ import type {
   Status,
   VoiceStatus,
 } from "@/lib/api";
+import { formatCount, formatDateTime } from "@/lib/format";
 import type { Lang, Vars } from "@/lib/i18n";
+import { studioPath } from "@/lib/paths";
 
 export type Tone = "ok" | "info" | "warn" | "error";
 
@@ -40,25 +42,15 @@ export function formatsFor(lang: Lang): Formats {
     unit: "gigabyte",
     maximumFractionDigits: 1,
   });
-  const date = new Intl.DateTimeFormat(lang, { dateStyle: "medium", timeStyle: "short" });
-  const count = new Intl.NumberFormat(lang);
   return {
     bytes: (bytes) => size.format(bytes / 1e9),
-    date: (iso) => {
-      const at = new Date(iso);
-      return Number.isNaN(at.getTime()) ? iso : date.format(at);
-    },
-    count: (n) => count.format(n),
+    date: (iso) => formatDateTime(iso, lang),
+    count: (n) => formatCount(n, lang),
   };
 }
 
 /** Below this, home warns: a few videos' audio fills it. */
 export const LOW_DISK_BYTES = 10e9;
-
-/** A studio tab: identity, prompt, voice, knowledge, videos, glossary or references. */
-export function studioPath(persona: string, tab: string): string {
-  return `/personas/${encodeURIComponent(persona)}/${tab}`;
-}
 
 const PROVIDERS: Readonly<Record<RequiredKey, string>> = {
   SONIOX_API_KEY: "Soniox",

@@ -18,6 +18,7 @@ export {
   type SignalHost,
   terminate,
   terminateOnAbort,
+  which,
 } from "./limit.ts";
 export {
   acquireLock,
@@ -28,6 +29,7 @@ export {
   indexWritePath,
   LockedError,
   lockedOut,
+  lockInfoPath,
   refuseTemplatePath,
   type SourceFolder,
   sourceFolder,

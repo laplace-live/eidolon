@@ -138,6 +138,11 @@ export function timeZones(): readonly string[] {
   return zones;
 }
 
+/** The browser's time zone, which a new persona starts with. */
+export function browserTimeZone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
 /** Relative, and never climbing above the folder it resolves in. */
 export function staysInside(path: string): boolean {
   if (/^[/\\~]/.test(path) || /^[A-Za-z]:/.test(path)) return false;

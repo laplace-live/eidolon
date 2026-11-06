@@ -13,7 +13,6 @@
   "conflict": "That conflicts with what changed meanwhile. Reload and try again.",
   "payload-too-large": "The file is too large.",
   "unsupported-media-type": "That file type isn't supported.",
-  "not-implemented": "That isn't available yet.",
   "unavailable": "That service isn't available right now.",
   "upstream-failed": "A service Eidolon relies on failed. Try again later.",
   "internal": "Eidolon hit an internal error. The terminal has the details.",

@@ -3,7 +3,7 @@ import { RefreshCwIcon, Trash2Icon } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ErrorAlert } from "@/components/error-alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,10 +26,10 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { toastError } from "@/features/jobs/feedback";
 import { CopyCommand } from "@/features/setup/copy-command";
 import { QDRANT_COMMAND } from "@/features/setup/wizard";
-import { call, errorKey, type MemoryStatus, type Status } from "@/lib/api";
+import { call, type MemoryStatus, type Status } from "@/lib/api";
+import { toastError } from "@/lib/feedback";
 import { useLang, useT } from "@/lib/i18n";
 import { memoryView, shownMemories } from "./memory";
 import { formatsFor } from "./readiness";
@@ -170,12 +170,7 @@ export function MemoryPanel({
           <QdrantHelp view={view} retrying={list.isFetching} onRetry={() => void list.refetch()} />
         )}
         {view === "loading" && <Skeleton className="h-24" />}
-        {view === "failed" && (
-          <Alert variant="destructive">
-            <AlertTitle>{t(errorKey(list.error))}</AlertTitle>
-            <AlertDescription>{list.error?.message}</AlertDescription>
-          </Alert>
-        )}
+        {view === "failed" && <ErrorAlert error={list.error} />}
         {view === "list" &&
           (memories.length === 0 ? (
             <p className="text-muted-foreground text-sm">{t("home.memory.empty", { name })}</p>

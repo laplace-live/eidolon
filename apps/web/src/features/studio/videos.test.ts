@@ -5,7 +5,7 @@ import {
   estimateAudioBytes,
   hasPaidWork,
   isFinished,
-  isKnown,
+  knownIn,
   needsFfmpeg,
   PAID_STAGES,
   paidRunOptions,
@@ -81,8 +81,8 @@ describe("link checks", () => {
 
   test("a video is known by its id, its parts or its URL", () => {
     const videos = [video("BV1_p1"), video("BV9", { url: "https://b/BV3" })];
-    expect(entries.map((entry) => isKnown(entry, videos))).toEqual([true, false, true, true]);
-    expect(isKnown({ url: "https://b/BV10", id: "BV10" }, [video("BV1")])).toBe(false);
+    expect(entries.map(knownIn(videos))).toEqual([true, false, true, true]);
+    expect(knownIn([video("BV1")])({ url: "https://b/BV10", id: "BV10" })).toBe(false);
   });
 
   test("an hour of audio is about 86 MB, rounding up the usual bitrates", () => {

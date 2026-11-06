@@ -7,25 +7,3 @@ export function formatDuration(ms: number): string {
     .join(":");
   return hours > 0 ? `${hours}:${mmss}` : mmss;
 }
-
-function graphemes(text: string): string[] {
-  return Array.from(
-    new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text),
-    ({ segment }) => segment,
-  );
-}
-
-/** What an avatar without a picture shows: a short name whole, else its initials. */
-export function monogram(shortName: string, name: string): string {
-  const source = shortName.trim() || name.trim();
-  const words = source.split(/\s+/).filter(Boolean);
-  if (words.length > 1)
-    return words
-      .slice(0, 2)
-      .map((word) => graphemes(word)[0]!)
-      .join("")
-      .toUpperCase();
-  const letters = graphemes(source);
-  if (letters.length <= 2) return source;
-  return letters[0]!.toUpperCase();
-}

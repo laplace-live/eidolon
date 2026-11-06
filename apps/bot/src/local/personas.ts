@@ -21,18 +21,15 @@ import {
   envOverride,
   IDENTITY_DEFAULTS,
   isPlainObject,
-  personaDirs,
   personaHomeDir,
   personaIds,
   personaTemplateDir,
-  pyStrip,
   readSettingsLayers,
   resolvePersonaPath,
   resolveProjectPath,
   sortedPy,
   sourceFolder,
 } from "@eidolon/config";
-import { imagesIn } from "@eidolon/imagegen";
 import { indexMetaPath, ingestFacts } from "@eidolon/ingest";
 import {
   CATALOG_FILENAME,
@@ -142,6 +139,12 @@ export function personaRefusal(id: string): Response | null {
   }
   if (!personaIds().includes(id)) return localError(404, "unknown-persona", "No persona has it");
   return null;
+}
+
+/** The persona `?persona=` names, else the active one; the 400 or 404 when it names none. */
+export function queryPersona(url: URL): string | Response {
+  const id = url.searchParams.get("persona") ?? activePersona().id;
+  return personaRefusal(id) ?? id;
 }
 
 /** The answer to a write that `edit` refused; rethrows anything else. */
@@ -308,7 +311,6 @@ function filesIn(dir: string): Map<string, Stats> {
 }
 
 export const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp"] as const;
-export const REFERENCE_KINDS: readonly ReferenceKind[] = ["outfits", "friends"];
 
 /** The user's folder and the template's, in the order a name resolves. */
 function layers(id: string): [string, "own" | "template"][] {
@@ -352,35 +354,6 @@ export function findAvatar(id: string): (ReferenceImage & { readonly path: strin
   return null;
 }
 
-/**
- * How many images the selfie tool picks among for the active persona, as imagegen's
- * referenceSources finds them: the configured list, else outfits/, else loose images in
- * references/.
- */
-export function selfieReferenceCount(): number {
-  const configured = (envOptional("SELFIE_REFERENCE_IMAGES") ?? "")
-    .split(",")
-    .map((part) => pyStrip(part))
-    .filter((part) => part !== "");
-  if (configured.length > 0) return configured.length;
-  const roots = personaDirs(activePersona().id, "references");
-  const names = (sub: string) =>
-    new Set(
-      roots.flatMap((root) => imagesIn(sub ? join(root, sub) : root).map((p) => basename(p))),
-    );
-  const outfits = names("outfits");
-  return outfits.size > 0 ? outfits.size : names("").size;
-}
-
-/** knowledge.facts.files for persona `id`, split as the ingest splits it. */
-export function factPatternsOf(id: string): string[] {
-  const patterns = (personaSetting(id, "FACTS_FILES") ?? "")
-    .split(",")
-    .map((pattern) => pyStrip(pattern))
-    .filter((pattern) => pattern !== "");
-  return patterns.length > 0 ? patterns : [...ingestFacts.DEFAULT_FACT_PATTERNS];
-}
-
 /** Persona `id`'s index folder, as the bot would open it with her active. */
 export function indexDir(id: string): string {
   if (id === activePersona().id) return resolveDbPath();
@@ -417,7 +390,7 @@ function metaSources(meta: Tree | null): Map<string, MetaSource> {
 /** Persona `id`'s fact folder: every file, which ones the patterns pick, and what changed. */
 export function listFacts(id: string): FactsResponse {
   const dir = sourceFolder(id, "facts");
-  const patterns = factPatternsOf(id);
+  const patterns = ingestFacts.factPatterns(personaSetting(id, "FACTS_FILES"));
   const picked = new Set(ingestFacts.resolveFactFiles(dir, patterns).map((path) => basename(path)));
   const built = metaSources(readJsonObject(indexMetaPath(indexDir(id), PERSONA_FACTS_TABLE)));
   const found = filesIn(dir);

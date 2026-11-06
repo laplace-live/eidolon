@@ -254,7 +254,9 @@ describe("yt-dlp", () => {
     const { deps } = fakeDeps({});
     expect(buildStatus(app, deps).ytDlp).toEqual({ state: "installs-on-first-download" });
     write("bin/yt-dlp", "#!/bin/sh\n");
-    write("bin/yt-dlp.stamp.json", JSON.stringify({ tag: "2026.10.30", asset: "yt-dlp_macos" }));
+    // As download's writeStamp leaves it.
+    const stamp = { tag: "2026.10.30", asset: "yt-dlp_macos", sha256: "0".repeat(64) };
+    write("bin/yt-dlp.stamp.json", JSON.stringify({ ...stamp, checkedAt: new Date(0) }));
     const fresh = fakeApp();
     expect(buildStatus(fresh, deps).ytDlp).toEqual({ state: "installed", tag: "2026.10.30" });
   });

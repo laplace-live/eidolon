@@ -4,6 +4,7 @@ import { Link } from "react-router";
 import { PersonaAvatar } from "@/components/avatar";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/lib/i18n";
+import { studioPath } from "@/lib/paths";
 import { statusQuery } from "@/lib/query";
 import type { PersonaRef } from "./personas";
 import { StepCard } from "./step-card";
@@ -56,7 +57,7 @@ export function DoneStep({
         <div className="flex flex-col gap-2 rounded-lg border p-3 text-sm">
           <p>{t("setup.done.studio")}</p>
           <Button variant="outline" className="w-fit" asChild>
-            <Link to={`/personas/${encodeURIComponent(active.id)}`}>
+            <Link to={studioPath(active.id)}>
               <BookOpenIcon />
               {t("setup.done.openStudio")}
             </Link>

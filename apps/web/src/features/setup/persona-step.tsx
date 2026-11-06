@@ -2,19 +2,19 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SparklesIcon } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 import { PersonaAvatar } from "@/components/avatar";
-import { parseDraft } from "@/components/settings-form/controls";
+import { ErrorAlert } from "@/components/error-alert";
+import { browserTimeZone, parseDraft } from "@/components/settings-form/controls";
 import { personasQuery, settingsQuery } from "@/components/settings-form/queries";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { type ApiError, call, errorKey } from "@/lib/api";
+import { type ApiError, asApiError, call } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { MandarinNote, PersonaFields } from "./persona-fields";
-import { asApiError, browserTimeZone, type PersonaRef } from "./personas";
+import type { PersonaRef } from "./personas";
 import { StepCard } from "./step-card";
 import { DEMO_PERSONA, EMPTY_PERSONA, type PersonaDraft, personaErrors } from "./wizard";
 
@@ -85,12 +85,7 @@ export function PersonaStep({
   }
   if (personas.isError || settings.isError) {
     const error = personas.error ?? settings.error;
-    return (
-      <Alert variant="destructive">
-        <AlertTitle>{t(errorKey(error))}</AlertTitle>
-        <AlertDescription>{error?.message}</AlertDescription>
-      </Alert>
-    );
+    return <ErrorAlert error={error} />;
   }
 
   const list = personas.data.personas;
@@ -207,12 +202,7 @@ export function PersonaStep({
         />
       )}
 
-      {failure && (
-        <Alert variant="destructive">
-          <AlertTitle>{t(errorKey(failure))}</AlertTitle>
-          <AlertDescription>{failure.message}</AlertDescription>
-        </Alert>
-      )}
+      {failure && <ErrorAlert error={failure} />}
     </StepCard>
   );
 }

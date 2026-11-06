@@ -1,16 +1,16 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { ErrorAlert } from "@/components/error-alert";
 import { personasQuery, settingsQuery } from "@/components/settings-form/queries";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { VoicePicker } from "@/components/voice-picker";
-import { type ApiError, errorKey, type Voice } from "@/lib/api";
+import { type ApiError, asApiError, type Voice } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import type { VoiceTarget } from "./persona-step";
 import {
   activatePersona,
-  asApiError,
   createPersona,
   type PersonaRef,
   refreshPersonas,
@@ -91,12 +91,7 @@ export function VoiceStep({
         </Alert>
       )}
       <VoicePicker value={chosen?.id ?? current} onChange={setChosen} disabled={busy} />
-      {failure && (
-        <Alert variant="destructive">
-          <AlertTitle>{t(errorKey(failure))}</AlertTitle>
-          <AlertDescription>{failure.message}</AlertDescription>
-        </Alert>
-      )}
+      {failure && <ErrorAlert error={failure} />}
     </StepCard>
   );
 }

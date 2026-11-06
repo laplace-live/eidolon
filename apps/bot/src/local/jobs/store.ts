@@ -4,7 +4,13 @@ import { randomBytes } from "node:crypto";
 import { mkdirSync, openSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { dataHome, errorText, isPlainObject, logger } from "@eidolon/config";
-import { JOB_COMMANDS, type JobCommand, type JobRecord, type JobStatus } from "../api.ts";
+import {
+  JOB_COMMANDS,
+  JOB_STATUSES,
+  type JobCommand,
+  type JobRecord,
+  type JobStatus,
+} from "../api.ts";
 import { ensureDataHome, writeDataFile } from "../write.ts";
 
 /** `<YYYYMMDDTHHMMSS>-<6 base32>`, the time in UTC. */
@@ -84,14 +90,6 @@ export function lastWrite(id: string): Date | null {
   return latest === null ? null : new Date(latest);
 }
 
-const STATUSES: readonly JobStatus[] = [
-  "running",
-  "succeeded",
-  "failed",
-  "cancelled",
-  "interrupted",
-];
-
 function recordOf(id: string, value: unknown): StoredJob | null {
   if (!isPlainObject(value) || value.id !== id) return null;
   const { command, persona, options, status, startedAt, ephemeral, pid, stopReason } = value;
@@ -99,7 +97,7 @@ function recordOf(id: string, value: unknown): StoredJob | null {
     !(JOB_COMMANDS as readonly unknown[]).includes(command) ||
     typeof persona !== "string" ||
     !isPlainObject(options) ||
-    !(STATUSES as readonly unknown[]).includes(status) ||
+    !(JOB_STATUSES as readonly unknown[]).includes(status) ||
     typeof startedAt !== "string" ||
     typeof ephemeral !== "boolean"
   ) {

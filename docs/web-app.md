@@ -163,7 +163,6 @@ persona; `PATCH /api/offer`, `/api/selfie/:id`, `/api/ice-servers` and `/mcp` ar
 | `conflict` | 409 | A file that doesn't read as it should (`credentials.json`, a `persona.yaml`, a hand-made URL list), a persona `EIDOLON_PERSONA` pins, a job an earlier server started |
 | `payload-too-large` | 413 | A body or upload over its cap |
 | `unsupported-media-type` | 415 | An upload that isn't PNG, JPEG or WebP by its bytes |
-| `not-implemented` | 501 | A declared route that isn't built |
 | `unavailable` | 503 | Memory is off or Qdrant doesn't answer; Fish Audio doesn't answer a voice search |
 | `upstream-failed` | 502 | Mem0 or Fish Audio failed |
 | `internal` | 500 | A bug; the terminal has the details |

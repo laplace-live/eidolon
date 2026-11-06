@@ -9,9 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { toastError } from "@/features/jobs/feedback";
-import { call, type PersonaSummary } from "@/lib/api";
+import { activatePersona } from "@/features/setup/personas";
+import type { PersonaSummary } from "@/lib/api";
+import { toastError } from "@/lib/feedback";
 import { useT } from "@/lib/i18n";
+import { studioPath } from "@/lib/paths";
 import { statusQuery } from "@/lib/query";
 import { GlossaryTab } from "./glossary-tab";
 import { IdentityTab } from "./identity-tab";
@@ -38,10 +40,6 @@ function isTab(value: string | undefined): value is Tab {
   return value !== undefined && Object.hasOwn(TABS, value);
 }
 
-function studioPath(id: string, tab: Tab): string {
-  return `/personas/${encodeURIComponent(id)}/${tab}`;
-}
-
 function Header({
   persona,
   active,
@@ -52,7 +50,7 @@ function Header({
   const t = useT();
   const queryClient = useQueryClient();
   const activate = useMutation({
-    mutationFn: () => call("PUT /api/local/personas/active", { body: { id: persona.id } }),
+    mutationFn: () => activatePersona(persona.id),
     onSuccess: async (personas) => {
       queryClient.setQueryData(personasQuery.queryKey, personas);
       toast.success(t("studio.activated", { name: persona.name }));

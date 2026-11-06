@@ -5,11 +5,11 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataHome, envOptional, installSettings, resetSettings } from "@eidolon/config";
+import { LOCAL_VIEWER_MID } from "@eidolon/context";
 import type { MemoryAdmin, MemorySummary } from "@eidolon/memory";
 import {
   activeMemoryScope,
   LOCAL_MEMORY_USER,
-  LOCAL_MID,
   type MemoryScope,
   memoryScopeOf,
 } from "../../src/local/identity.ts";
@@ -131,7 +131,7 @@ describe("offers", () => {
     process.env.EIDOLON_LOCAL_VIEWER_NAME = " 小明 ";
     const admission = await offer({ audioQuality: "low" });
     expect(admission?.user).toEqual({
-      mid: LOCAL_MID,
+      mid: LOCAL_VIEWER_MID,
       uname: "小明",
       face: null,
       isLoggedIn: true,
@@ -156,7 +156,7 @@ describe("offers", () => {
 
   test("never take the identity from the body", async () => {
     const admission = await offer({ loginSyncToken: "a-real-looking-token", audioQuality: "best" });
-    expect(admission?.user.mid).toBe(LOCAL_MID);
+    expect(admission?.user.mid).toBe(LOCAL_VIEWER_MID);
     expect(admission?.token).toBeNull();
     expect(booted.fakes.admitted).toEqual([]);
   });

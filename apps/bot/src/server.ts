@@ -36,7 +36,7 @@ export interface BotDeps {
     warmAudioModels(): Promise<void>;
     createSignallingServer(options: {
       ice: Pick<IceService, "serverPlan">;
-    }): Pick<SignallingServer, "offer" | "patch" | "close">;
+    }): Pick<SignallingServer, "offer" | "patch" | "close" | "activeSessions">;
   };
   readonly turn: { iceServiceFromEnv(): IceService };
   readonly mcp: { createMcpHandler(): Promise<Pick<McpHandler, "handle">> };
@@ -46,7 +46,7 @@ export interface BotDeps {
 
 /** What the local extension gets from the server it extends. */
 export interface LocalContext {
-  readonly signalling: Pick<SignallingServer, "offer" | "patch">;
+  readonly signalling: Pick<SignallingServer, "offer" | "patch" | "activeSessions">;
   /** The port the server listens on; valid once a request arrives. */
   port(): number;
 }

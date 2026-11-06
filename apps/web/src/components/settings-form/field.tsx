@@ -27,6 +27,17 @@ import { catalogs } from "@/locales";
 import { type Control, controlFor, optionsOf, timeZones } from "./controls";
 
 /** A string the locale files have, so a row without help text shows none. */
+/** Every IANA time zone, as the suggestions of the input whose `list` is `id`. */
+export function TimeZoneList({ id }: { readonly id: string }) {
+  return (
+    <datalist id={id}>
+      {timeZones().map((zone) => (
+        <option key={zone} value={zone} />
+      ))}
+    </datalist>
+  );
+}
+
 export function hasString(key: string): boolean {
   return key in catalogs.en;
 }
@@ -120,11 +131,7 @@ function ControlInput({ id, row, control, draft, invalid, locked, onDraft }: Inp
             placeholder={placeholder}
             onChange={(event) => onDraft(event.target.value)}
           />
-          <datalist id={listId}>
-            {timeZones().map((zone) => (
-              <option key={zone} value={zone} />
-            ))}
-          </datalist>
+          <TimeZoneList id={listId} />
         </>
       );
     case "voice":

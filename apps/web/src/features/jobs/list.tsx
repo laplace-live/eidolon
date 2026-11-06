@@ -14,10 +14,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ApiError, errorKey, type JobSnapshot } from "@/lib/api";
+import { formatDateTime, formatUsd } from "@/lib/format";
 import { type Lang, type Translate, useLang, useT } from "@/lib/i18n";
 import { jobOutcome } from "@/lib/jobs";
-import { elapsedSeconds, formatDateTime, formatDuration, formatUsd } from "./format";
-import { OutcomeBadge, useNow } from "./parts";
+import { Elapsed, OutcomeBadge } from "./parts";
 import { jobsQuery } from "./queries";
 
 /** The stage a snapshot is on, as `Transcribe 3/10`. */
@@ -29,7 +29,7 @@ function snapshotProgress(t: Translate, job: JobSnapshot): string {
   return stage.total === null ? name : `${name} ${finished}/${stage.total}`;
 }
 
-function JobRow({ job, lang, now }: { job: JobSnapshot; lang: Lang; now: number }) {
+function JobRow({ job, lang }: { job: JobSnapshot; lang: Lang }) {
   const t = useT();
   return (
     <TableRow>
@@ -50,7 +50,7 @@ function JobRow({ job, lang, now }: { job: JobSnapshot; lang: Lang; now: number 
       </TableCell>
       <TableCell className="text-muted-foreground">{formatDateTime(job.startedAt, lang)}</TableCell>
       <TableCell className="text-muted-foreground tabular-nums">
-        {formatDuration(elapsedSeconds(job.startedAt, job.endedAt, now))}
+        <Elapsed start={job.startedAt} end={job.endedAt} ticking={job.status === "running"} />
       </TableCell>
       <TableCell className="text-right tabular-nums">
         {job.costUsd === null ? "—" : formatUsd(job.costUsd, lang)}
@@ -64,8 +64,6 @@ export function JobsList() {
   const lang = useLang();
   const { data: jobs, error, isPending } = useQuery(jobsQuery);
   const [showEphemeral, setShowEphemeral] = useState(false);
-  const running = jobs?.some((job) => job.status === "running") ?? false;
-  const now = useNow(running);
 
   const shown = (jobs ?? [])
     .filter((job) => showEphemeral || !job.ephemeral)
@@ -121,7 +119,7 @@ export function JobsList() {
           </TableHeader>
           <TableBody>
             {shown.map((job) => (
-              <JobRow key={job.id} job={job} lang={lang} now={now} />
+              <JobRow key={job.id} job={job} lang={lang} />
             ))}
           </TableBody>
         </Table>

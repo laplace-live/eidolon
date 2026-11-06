@@ -14,30 +14,32 @@ import {
 import {
   activePersona,
   envOptional,
-  envOverride,
   errorText,
   logger,
   pyRepr,
   pyStrip,
-  readSettingsLayers,
   setSettingDefaults,
 } from "@eidolon/config";
+import { LOCAL_VIEWER_MID } from "@eidolon/context";
 import type { AdminOutcome, MemoryAdmin } from "@eidolon/memory";
 import type { SignallingServer } from "@eidolon/runtime";
 import { jsonResponse } from "../responses.ts";
+import { personaSetting } from "./personas.ts";
 import { localError } from "./responses.ts";
 import type { LocalHandler } from "./router.ts";
 
-/** No Bilibili account has mid 0, so the local viewer can never share a Mem0 user with one. */
-export const LOCAL_MID = 0;
-
 /** The Mem0 user of the local viewer's memories: a session keys Mem0 on `String(mid)`. */
-export const LOCAL_MEMORY_USER = String(LOCAL_MID);
+export const LOCAL_MEMORY_USER = String(LOCAL_VIEWER_MID);
 
 /** The local viewer, named by local.viewerName as it reads now; nameless omits the viewer line. */
 export function localViewer(): UserContext {
   const name = pyStrip(envOptional("EIDOLON_LOCAL_VIEWER_NAME") ?? "");
-  return Object.freeze({ mid: LOCAL_MID, uname: name || null, face: null, isLoggedIn: true });
+  return Object.freeze({
+    mid: LOCAL_VIEWER_MID,
+    uname: name || null,
+    face: null,
+    isLoggedIn: true,
+  });
 }
 
 export interface MemoryScope {
@@ -62,8 +64,7 @@ export function activeMemoryScope(): MemoryScope {
 /** The scope of persona `id`'s memories, whether or not it is active. The caller validates `id`. */
 export function memoryScopeOf(id: string): MemoryScope {
   if (id === activePersona().id) return activeMemoryScope();
-  const fromFile = readSettingsLayers(id).values.get("MEM0_AGENT_ID")?.value ?? null;
-  return { userId: LOCAL_MEMORY_USER, agentId: envOverride("MEM0_AGENT_ID") ?? fromFile ?? id };
+  return { userId: LOCAL_MEMORY_USER, agentId: personaSetting(id, "MEM0_AGENT_ID") ?? id };
 }
 
 export interface IdentityParts {
@@ -80,7 +81,11 @@ export interface IdentityHandlers {
   readonly forgetMemories: LocalHandler;
 }
 
-function memoryFailure(outcome: Extract<AdminOutcome<unknown>, { ok: false }>, what: string) {
+/** The 503 or 502 for a Mem0 admin call that failed, logged. */
+export function memoryFailure(
+  outcome: Extract<AdminOutcome<unknown>, { ok: false }>,
+  what: string,
+): Response {
   if (outcome.reason === "unavailable") {
     logger.error(
       `[memory-admin] Could not reach the Mem0 vector store: ${errorText(outcome.error)}`,
@@ -91,7 +96,7 @@ function memoryFailure(outcome: Extract<AdminOutcome<unknown>, { ok: false }>, w
   return localError(502, "upstream-failed", `Mem0 failed to ${what}`);
 }
 
-const MEMORY_OFF = "Memory is off: set a Qdrant host to turn it on";
+export const MEMORY_OFF = "Memory is off: set a Qdrant host to turn it on";
 
 export function identityHandlers(parts: IdentityParts): IdentityHandlers {
   return {

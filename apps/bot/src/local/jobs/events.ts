@@ -37,30 +37,42 @@ export function readLines(path: string, offset: number, limit = Number.POSITIVE_
   }
 }
 
+/**
+ * The file at `path`, or its last `limit` bytes from the first whole line in them, with how many
+ * bytes came before; null when there is no file.
+ */
+function readEnd(path: string, limit: number): { text: string; skipped: number } | null {
+  let fd: number;
+  try {
+    fd = openSync(path, "r");
+  } catch {
+    return null;
+  }
+  try {
+    const size = fstatSync(fd).size;
+    const start = Math.max(0, size - limit);
+    const buffer = Buffer.alloc(size - start);
+    let bytes = buffer.subarray(0, readSync(fd, buffer, 0, buffer.length, start));
+    if (start === 0) return { text: bytes.toString("utf8"), skipped: 0 };
+    // Reading from the middle of the file cuts its first line.
+    const newline = bytes.indexOf(0x0a);
+    if (newline !== -1) bytes = bytes.subarray(newline + 1);
+    return { text: bytes.toString("utf8"), skipped: size - bytes.length };
+  } finally {
+    closeSync(fd);
+  }
+}
+
 const TAIL_BYTES = 16 * 1024;
 const TAIL_LINES = 40;
 
 /** The last lines of the text file at `path`; empty when there is none. */
 export function tailOf(path: string): string {
-  let fd: number;
   try {
-    fd = openSync(path, "r");
+    const end = readEnd(path, TAIL_BYTES);
+    return end === null ? "" : end.text.trimEnd().split("\n").slice(-TAIL_LINES).join("\n");
   } catch {
     return "";
-  }
-  try {
-    const size = fstatSync(fd).size;
-    const start = Math.max(0, size - TAIL_BYTES);
-    const buffer = Buffer.alloc(size - start);
-    const read = readSync(fd, buffer, 0, buffer.length, start);
-    let text = buffer.subarray(0, read).toString("utf8");
-    // Reading from the middle of the file cuts its first line.
-    if (start > 0) text = text.slice(text.indexOf("\n") + 1);
-    return text.trimEnd().split("\n").slice(-TAIL_LINES).join("\n");
-  } catch {
-    return "";
-  } finally {
-    closeSync(fd);
   }
 }
 
@@ -69,25 +81,10 @@ export function tailOf(path: string): string {
  * line that says how much was left out; empty when there is no file.
  */
 export function endOf(path: string, limit: number): string {
-  let fd: number;
-  try {
-    fd = openSync(path, "r");
-  } catch {
-    return "";
-  }
-  try {
-    const size = fstatSync(fd).size;
-    const start = Math.max(0, size - limit);
-    const buffer = Buffer.alloc(size - start);
-    const read = readSync(fd, buffer, 0, buffer.length, start);
-    let bytes = buffer.subarray(0, read);
-    if (start === 0) return bytes.toString("utf8");
-    const newline = bytes.indexOf(0x0a);
-    if (newline !== -1) bytes = bytes.subarray(newline + 1);
-    return `[The first ${size - bytes.length} bytes of this log are left out.]\n${bytes.toString("utf8")}`;
-  } finally {
-    closeSync(fd);
-  }
+  const end = readEnd(path, limit);
+  if (end === null) return "";
+  if (end.skipped === 0) return end.text;
+  return `[The first ${end.skipped} bytes of this log are left out.]\n${end.text}`;
 }
 
 type Summary = Extract<ProgressEvent, { type: "summary" }>;

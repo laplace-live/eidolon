@@ -9,7 +9,7 @@ import {
   ClockIcon,
   ListPlusIcon,
 } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -19,14 +19,14 @@ import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { reasonText } from "@/features/jobs/describe";
-import { toastError } from "@/features/jobs/feedback";
-import { formatBytes, formatCount, formatDuration } from "@/features/jobs/format";
 import { followJob, refreshJob } from "@/features/jobs/use-job-events";
 import { ApiError, type BatchResponse, call, errorKey } from "@/lib/api";
+import { toastError } from "@/lib/feedback";
+import { formatBytes, formatCount, formatDuration } from "@/lib/format";
 import { useLang, useT } from "@/lib/i18n";
 import { EMPTY_JOB_VIEW, type JobView, jobOutcome, reduceJob, runSummary } from "@/lib/jobs";
 import { cn } from "@/lib/utils";
-import { estimateAudioBytes, isKnown, parseLinks, summarizeEntries, uniqueEntries } from "./videos";
+import { estimateAudioBytes, knownIn, parseLinks, summarizeEntries, uniqueEntries } from "./videos";
 
 interface Failure {
   readonly code: EventCode | null;
@@ -134,8 +134,10 @@ export function AddVideos({
   const [text, setText] = useState("");
   const [invalid, setInvalid] = useState<readonly string[]>([]);
   const [checks, setChecks] = useState<readonly Check[] | null>(null);
-  const [checking, setChecking] = useState(false);
+  const checking =
+    checks?.some((check) => check.state === "waiting" || check.state === "running") ?? false;
   const run = useRef<AbortController | null>(null);
+  const known = useMemo(() => knownIn(videos), [videos]);
 
   // Leaving the page stops following; a link check left running ends on its own.
   useEffect(() => () => run.current?.abort(), []);
@@ -154,7 +156,6 @@ export function AddVideos({
     const controller = new AbortController();
     run.current = controller;
     const { signal } = controller;
-    setChecking(true);
     setChecks(
       links.urls.map((url) => ({ url, state: "waiting", entries: [], failure: null, job: null })),
     );
@@ -213,7 +214,6 @@ export function AddVideos({
             ),
       );
     }
-    setChecking(false);
   }
 
   function stop() {
@@ -246,7 +246,7 @@ export function AddVideos({
   });
 
   const entries = uniqueEntries(checks?.flatMap((check) => check.entries) ?? []);
-  const fresh = entries.filter((entry) => !isKnown(entry, videos));
+  const fresh = entries.filter((entry) => !known(entry));
   const summary = summarizeEntries(fresh);
   const bytes = estimateAudioBytes(summary.durationSec);
   const tooBig = freeBytes !== null && bytes > freeBytes;
@@ -331,9 +331,7 @@ export function AddVideos({
                 <span className="min-w-0 flex-1 truncate" title={entry.url}>
                   {entry.title ?? entry.url}
                 </span>
-                {isKnown(entry, videos) && (
-                  <Badge variant="outline">{t("studio.videos.alreadyAdded")}</Badge>
-                )}
+                {known(entry) && <Badge variant="outline">{t("studio.videos.alreadyAdded")}</Badge>}
                 <span className="shrink-0 text-muted-foreground text-xs tabular-nums">
                   {entry.durationSec === undefined ? "—" : formatDuration(entry.durationSec)}
                 </span>

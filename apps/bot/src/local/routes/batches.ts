@@ -3,7 +3,8 @@
 import { basename } from "node:path";
 import { errorText, isPlainObject, sourceFolder } from "@eidolon/config";
 import { download } from "@eidolon/ingest";
-import { checkPersona, checkUrl, JobRefused } from "../jobs/argv.ts";
+import { checkUrl } from "../jobs/argv.ts";
+import { personaRefusal } from "../personas.ts";
 import { localError, localJson, readJson } from "../responses.ts";
 import type { LocalRouteSpec } from "../router.ts";
 import { ensureDataHome } from "../write.ts";
@@ -15,21 +16,14 @@ export const MAX_BATCH_URLS = 5000;
 const LIST_ERRORS = new Set(["ValueError", "UnicodeDecodeError"]);
 
 /** `forgetPlan` drops the persona's cached plan, which a new batch outdates. */
-export function batchesRoutes(
-  forgetPlan: (persona: string) => void,
-  now: () => Date = () => new Date(),
-): LocalRouteSpec[] {
+export function batchesRoutes(forgetPlan: (persona: string) => void): LocalRouteSpec[] {
   return [
     {
       route: "POST /api/local/personas/:id/batches",
       async handler(request, { params }) {
-        let persona: string;
-        try {
-          persona = checkPersona(params.id, 404);
-        } catch (error) {
-          if (error instanceof JobRefused) return error.response();
-          throw error;
-        }
+        const persona = params.id as string;
+        const refused = personaRefusal(persona);
+        if (refused !== null) return refused;
         const body = await readJson(request);
         if (!body.ok) return body.response;
         const { value } = body;
@@ -67,7 +61,7 @@ export function batchesRoutes(
         const fresh = [...keys].filter((key) => !known.has(key));
         if (fresh.length === 0) return localJson(200, { batch: null, count: 0, known: keys.size });
         ensureDataHome();
-        const at = now();
+        const at = new Date();
         let path: string;
         try {
           path = download.writeBatch(

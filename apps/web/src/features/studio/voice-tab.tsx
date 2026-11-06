@@ -7,8 +7,9 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VoicePicker } from "@/components/voice-picker";
-import { toastError } from "@/features/jobs/feedback";
-import { call, type PersonaSummary, type SettingRow, type Voice } from "@/lib/api";
+import { saveVoice } from "@/features/setup/personas";
+import type { PersonaSummary, SettingRow, Voice } from "@/lib/api";
+import { toastError } from "@/lib/feedback";
 import { useT } from "@/lib/i18n";
 import { statusQuery } from "@/lib/query";
 import { CUE_MODEL, cueClash } from "./files";
@@ -44,10 +45,7 @@ export function VoiceTab({ persona }: { readonly persona: PersonaSummary }) {
   const clash = cueClash(modelRow, prompt.data?.text);
 
   const pick = useMutation({
-    mutationFn: (voice: Voice) =>
-      call("PUT /api/local/settings", {
-        body: { scope: "persona", persona: persona.id, values: { "voice.voiceId": voice.id } },
-      }),
+    mutationFn: (voice: Voice) => saveVoice(persona.id, voice.id),
     onSuccess: async (response, voice) => {
       queryClient.setQueryData(settingsQuery(persona.id).queryKey, response);
       toast.success(t("studio.voice.saved", { title: voice.title }));

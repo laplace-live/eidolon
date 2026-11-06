@@ -1,10 +1,8 @@
 // One local server per data home: the server holds the offline chain's lock `local-server` while it
 // runs, and adds its port to the pid in the lock's .info, so a second start can name it.
-import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { dataHome, isPlainObject } from "@eidolon/config";
-import { acquireLock, LockedError } from "@eidolon/ingest";
+import { isPlainObject } from "@eidolon/config";
+import { acquireLock, LockedError, lockInfoPath } from "@eidolon/ingest";
 import { writeDataFile } from "./write.ts";
 
 const KEY = "local-server";
@@ -15,10 +13,9 @@ export interface ServerHolder {
   readonly port: number | null;
 }
 
-/** acquireLock's .info for the key: named by the first 12 hex digits of the key's SHA-256. */
+/** acquireLock's .info for the server's lock. */
 export function serverLockInfoPath(): string {
-  const name = createHash("sha256").update(KEY, "utf8").digest("hex").slice(0, 12);
-  return join(dataHome(), "locks", `${name}.info`);
+  return lockInfoPath(KEY);
 }
 
 function readInfo(): Record<string, unknown> {

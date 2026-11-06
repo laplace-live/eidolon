@@ -16,23 +16,27 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { formatCount } from "@/features/jobs/format";
+import { formatCount } from "@/lib/format";
 import { useLang, useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { textCounts } from "./files";
 
-/** Asks before a navigation, or a reload, would drop unsaved edits. */
-function UnsavedGuard({ dirty }: { readonly dirty: boolean }) {
+/** Asks whether to leave unsaved edits behind. */
+export function LeaveDialog({
+  open,
+  onStay,
+  onLeave,
+}: {
+  readonly open: boolean;
+  readonly onStay: () => void;
+  readonly onLeave: () => void;
+}) {
   const t = useT();
-  const blocker = useBlocker(dirty);
-  useBeforeUnload((event) => {
-    if (dirty) event.preventDefault();
-  });
   return (
     <AlertDialog
-      open={blocker.state === "blocked"}
-      onOpenChange={(open) => {
-        if (!open) blocker.reset?.();
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onStay();
       }}
     >
       <AlertDialogContent>
@@ -42,12 +46,27 @@ function UnsavedGuard({ dirty }: { readonly dirty: boolean }) {
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>{t("studio.editor.stay")}</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" onClick={() => blocker.proceed?.()}>
+          <AlertDialogAction variant="destructive" onClick={onLeave}>
             {t("studio.editor.leave")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+  );
+}
+
+/** Asks before a navigation, or a reload, would drop unsaved edits. */
+function UnsavedGuard({ dirty }: { readonly dirty: boolean }) {
+  const blocker = useBlocker(dirty);
+  useBeforeUnload((event) => {
+    if (dirty) event.preventDefault();
+  });
+  return (
+    <LeaveDialog
+      open={blocker.state === "blocked"}
+      onStay={() => blocker.reset?.()}
+      onLeave={() => blocker.proceed?.()}
+    />
   );
 }
 

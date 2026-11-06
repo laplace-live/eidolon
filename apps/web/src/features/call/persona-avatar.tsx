@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
+import { monogram } from "@/components/avatar/monogram";
 import { avatarSrc, useAvatarVersion } from "@/components/avatar/version";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { call } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { monogram } from "./format";
 
 export interface PersonaFace {
   readonly id: string;
@@ -41,7 +41,7 @@ export function PersonaAvatar({
       )}
     >
       {hasPicture && <AvatarImage key={version} src={avatarSrc(persona.id, version)} alt="" />}
-      <AvatarFallback>{monogram(persona.shortName, persona.name)}</AvatarFallback>
+      <AvatarFallback>{monogram(persona.shortName || persona.name)}</AvatarFallback>
     </Avatar>
   );
 }

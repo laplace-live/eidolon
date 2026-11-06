@@ -2,10 +2,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AudioLinesIcon, BookOpenIcon, PhoneIcon, PlusIcon } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
-import { toast } from "sonner";
 import { PersonaAvatar } from "@/components/avatar";
+import { ErrorAlert } from "@/components/error-alert";
 import { personasQuery } from "@/components/settings-form/queries";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -18,11 +17,12 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { NewPersonaDialog } from "@/features/setup/new-persona";
 import { activatePersona, refreshPersonas } from "@/features/setup/personas";
-import { errorKey, type Status } from "@/lib/api";
+import type { Status } from "@/lib/api";
+import { toastError } from "@/lib/feedback";
 import { useT } from "@/lib/i18n";
+import { studioPath } from "@/lib/paths";
 import { statusQuery } from "@/lib/query";
 import { MemoryPanel } from "./memory-panel";
-import { studioPath } from "./readiness";
 import { ReadinessList } from "./readiness-list";
 import { VoiceDialog } from "./voice-dialog";
 
@@ -36,7 +36,7 @@ function PersonaSwitch({ status }: { readonly status: Status }) {
   const change = useMutation({
     mutationFn: activatePersona,
     onSuccess: () => refreshPersonas(queryClient),
-    onError: (error) => toast.error(t(errorKey(error)), { description: error.message }),
+    onError: toastError,
   });
   const list = personas.data?.personas ?? [];
   if (list.length < 2) return null;
@@ -69,12 +69,7 @@ export function Component() {
 
   if (status.isPending) return <Skeleton className="h-96 w-full" />;
   if (status.isError) {
-    return (
-      <Alert variant="destructive">
-        <AlertTitle>{t(errorKey(status.error))}</AlertTitle>
-        <AlertDescription>{status.error.message}</AlertDescription>
-      </Alert>
-    );
+    return <ErrorAlert error={status.error} />;
   }
 
   const { persona } = status.data;

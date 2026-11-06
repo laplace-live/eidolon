@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronRightIcon } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { toast } from "sonner";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ErrorAlert } from "@/components/error-alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,7 +20,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { FieldGroup, FieldLegend, FieldSet } from "@/components/ui/field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { call, errorKey, type SettingRow, type SettingScope } from "@/lib/api";
+import { call, type SettingRow, type SettingScope } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { statusQuery } from "@/lib/query";
 import {
@@ -88,12 +88,7 @@ export function SettingsForm({ scope, persona, paths, onSaved }: SettingsFormPro
     );
   }
   if (settings.isError) {
-    return (
-      <Alert variant="destructive">
-        <AlertTitle>{t(errorKey(settings.error))}</AlertTitle>
-        <AlertDescription>{settings.error.message}</AlertDescription>
-      </Alert>
-    );
+    return <ErrorAlert error={settings.error} />;
   }
 
   const rows = visibleRows(settings.data.settings, scope, paths);
@@ -174,12 +169,7 @@ export function SettingsForm({ scope, persona, paths, onSaved }: SettingsFormPro
         </>
       )}
 
-      {save.isError && (
-        <Alert variant="destructive">
-          <AlertTitle>{t(errorKey(save.error))}</AlertTitle>
-          <AlertDescription>{save.error.message}</AlertDescription>
-        </Alert>
-      )}
+      {save.isError && <ErrorAlert error={save.error} />}
 
       {rows.length > 0 && (
         <div className="flex items-center gap-2">

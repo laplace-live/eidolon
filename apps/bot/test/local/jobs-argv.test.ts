@@ -488,7 +488,7 @@ describe("refused requests", () => {
   for (const [label, body, status, code] of cases) {
     test(label, () => {
       const error = refused(body);
-      expect({ status: error.status as number, code: error.code as string }).toEqual({
+      expect({ status: error.response().status, code: error.code as string }).toEqual({
         status,
         code,
       });

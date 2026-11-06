@@ -23,8 +23,8 @@ export class TokenError extends Error {
   override readonly name = "TokenError";
 }
 
-export function tokenPath(home = dataHome()): string {
-  return join(home, TOKEN_FILE);
+export function tokenPath(): string {
+  return join(dataHome(), TOKEN_FILE);
 }
 
 export type LinkCheck = "ok" | "expired" | "invalid";

@@ -30,12 +30,11 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
-import { toastError } from "@/features/jobs/feedback";
-import { formatBytes, formatCount, formatUsd } from "@/features/jobs/format";
 import { JobCard } from "@/features/jobs/parts";
 import { jobsQuery, useStartJob } from "@/features/jobs/queries";
 import { useJobEvents } from "@/features/jobs/use-job-events";
 import type { JobCommand, PersonaSummary, Status } from "@/lib/api";
+import { formatBytes, formatCount, formatUsd } from "@/lib/format";
 import { useLang, useT } from "@/lib/i18n";
 import { latestJob, videoActivity } from "@/lib/jobs";
 import { statusQuery } from "@/lib/query";
@@ -245,25 +244,19 @@ export function VideosTab({ persona }: { readonly persona: PersonaSummary }) {
 
   function download() {
     if (downloadBatch === null) return;
-    start.mutate(
-      {
-        command: "pipeline",
-        persona: persona.id,
-        options: { batch: downloadBatch, stages: ["download"] },
-      },
-      { onError: toastError },
-    );
+    start.mutate({
+      command: "pipeline",
+      persona: persona.id,
+      options: { batch: downloadBatch, stages: ["download"] },
+    });
   }
 
   function runPaid() {
-    start.mutate(
-      {
-        command: "pipeline",
-        persona: persona.id,
-        options: paidRunOptions(plan.videos, batch, concurrency),
-      },
-      { onError: toastError },
-    );
+    start.mutate({
+      command: "pipeline",
+      persona: persona.id,
+      options: paidRunOptions(plan.videos, batch, concurrency),
+    });
   }
 
   return (
@@ -410,14 +403,11 @@ export function VideosTab({ persona }: { readonly persona: PersonaSummary }) {
             ffmpeg={status?.ffmpeg ?? true}
             busy={busy}
             onTranscribe={(video, date) =>
-              start.mutate(
-                {
-                  command: "transcribe",
-                  persona: persona.id,
-                  options: { video: video.id, date },
-                },
-                { onError: toastError },
-              )
+              start.mutate({
+                command: "transcribe",
+                persona: persona.id,
+                options: { video: video.id, date },
+              })
             }
           />
         )}

@@ -11,7 +11,7 @@ import {
   SquareIcon,
   TriangleAlertIcon,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import {
   AlertDialog,
@@ -28,6 +28,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress as ProgressBar } from "@/components/ui/progress";
 import type { JobRecord, JobSnapshot } from "@/lib/api";
+import {
+  elapsedSeconds,
+  formatBytes,
+  formatClock,
+  formatCount,
+  formatDateTime,
+  formatDuration,
+} from "@/lib/format";
 import { type Lang, type Translate, useLang, useT } from "@/lib/i18n";
 import {
   currentStage,
@@ -35,6 +43,7 @@ import {
   type ItemView,
   type JobView,
   jobOutcome,
+  type LogLine,
   type Outcome,
   type Progress,
   runningItems,
@@ -42,24 +51,25 @@ import {
   type StageView,
   stageFraction,
 } from "@/lib/jobs";
+import { useNow } from "@/lib/use-now";
 import { cn } from "@/lib/utils";
 import { describeEvent, reasonText, stageName, type Tone } from "./describe";
-import { toastError } from "./feedback";
-import { formatBytes, formatClock, formatCount, formatDateTime } from "./format";
 import { jobQuery, useCancelJob, useForceStopJob } from "./queries";
 import { forceStopIn, stopOffer, stoppingSince } from "./stopping";
 import { type JobEvents, useJobEvents } from "./use-job-events";
 
-/** The time, ticking each second while `ticking`, for durations that are still growing. */
-export function useNow(ticking: boolean): number {
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    if (!ticking) return;
-    setNow(Date.now());
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [ticking]);
-  return now;
+/** How long a job ran, ticking while it runs: only this text renders each second. */
+export function Elapsed({
+  start,
+  end,
+  ticking,
+}: {
+  readonly start: string;
+  readonly end: string | null;
+  readonly ticking: boolean;
+}) {
+  const now = useNow(ticking);
+  return formatDuration(elapsedSeconds(start, end, now));
 }
 
 /** A job's state, once its events are read to the end: the view then shows how it ended. */
@@ -281,6 +291,7 @@ export function JobLog({
   const lang = useLang();
   const box = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
+  // A line's number in the whole log, which stays its own as earlier lines are dropped.
   const lines = view.log.map((line, at) => ({ line, n: view.logDropped + at }));
   // Every line so far: past the cap, the lines shown stay as many while new ones arrive.
   const written = view.logDropped + view.log.length;
@@ -307,26 +318,31 @@ export function JobLog({
           {t("jobs.log.dropped", { count: formatCount(view.logDropped, lang) })}
         </p>
       )}
-      {lines.length === 0 && <p className="text-muted-foreground">{t("jobs.log.empty")}</p>}
-      {lines.map(({ line, n }) => {
-        const described = describeEvent(t, lang, line.event);
-        return (
-          <div key={n} className="flex gap-2">
-            <span className="shrink-0 text-muted-foreground tabular-nums">
-              {line.t === null ? "--:--:--" : formatClock(line.t, lang)}
-            </span>
-            <span className="min-w-0 break-words">
-              <span className={TONE_CLASS[described.tone]}>{described.text}</span>
-              {described.detail && (
-                <span className="text-muted-foreground"> {described.detail}</span>
-              )}
-            </span>
-          </div>
-        );
-      })}
+      {view.log.length === 0 && <p className="text-muted-foreground">{t("jobs.log.empty")}</p>}
+      {lines.map(({ line, n }) => (
+        <LogRow key={n} line={line} />
+      ))}
     </div>
   );
 }
+
+/** One log line; a line keeps its object as events arrive, so only new ones are described. */
+const LogRow = memo(function LogRow({ line }: { readonly line: LogLine }) {
+  const t = useT();
+  const lang = useLang();
+  const described = describeEvent(t, lang, line.event);
+  return (
+    <div className="flex gap-2">
+      <span className="shrink-0 text-muted-foreground tabular-nums">
+        {line.t === null ? "--:--:--" : formatClock(line.t, lang)}
+      </span>
+      <span className="min-w-0 break-words">
+        <span className={TONE_CLASS[described.tone]}>{described.text}</span>
+        {described.detail && <span className="text-muted-foreground"> {described.detail}</span>}
+      </span>
+    </div>
+  );
+});
 
 /** Shown once a cancelled job has had FORCE_STOP_AFTER_MS to exit and hasn't. */
 function ForceStopButton({ id }: { readonly id: string }) {
@@ -355,10 +371,7 @@ function ForceStopButton({ id }: { readonly id: string }) {
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>{t("jobs.forceStop.wait")}</AlertDialogCancel>
-          <AlertDialogAction
-            variant="destructive"
-            onClick={() => force.mutate(id, { onError: toastError })}
-          >
+          <AlertDialogAction variant="destructive" onClick={() => force.mutate(id)}>
             {t("jobs.forceStop.confirm")}
           </AlertDialogAction>
         </AlertDialogFooter>
@@ -406,10 +419,7 @@ export function CancelJobButton({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>{t("jobs.cancel.keep")}</AlertDialogCancel>
-          <AlertDialogAction
-            variant="destructive"
-            onClick={() => cancel.mutate(job.id, { onError: toastError })}
-          >
+          <AlertDialogAction variant="destructive" onClick={() => cancel.mutate(job.id)}>
             {t("jobs.cancel.confirm")}
           </AlertDialogAction>
         </AlertDialogFooter>

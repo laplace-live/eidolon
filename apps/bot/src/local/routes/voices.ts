@@ -3,6 +3,7 @@
 // absolute https URLs.
 import { isPlainObject } from "@eidolon/config";
 import type { Voice, VoiceSample, VoiceSearchResponse } from "../api.ts";
+import { ask } from "../checks.ts";
 import { localError, localJson } from "../responses.ts";
 import type { LocalApp, LocalRouteSpec } from "../router.ts";
 
@@ -13,9 +14,9 @@ export const PAGE_SIZE = 20;
 const MAX_OFFSET = 1000;
 const LANGUAGES = new Set(["zh", "en", "ja"]);
 const QUERY_MAX_CHARS = 100;
-const TIMEOUT_MS = 10_000;
 
-const VOICE_ID = /^[0-9a-f]{32}$/;
+/** A Fish voice id. */
+export const VOICE_ID = /^[0-9a-f]{32}$/;
 // A relative key such as coverimage/<id>.
 const COVER_KEY = /^[A-Za-z0-9][A-Za-z0-9_.-]*(?:\/[A-Za-z0-9_.-]+)*$/;
 
@@ -97,23 +98,13 @@ export function voicesRoutes(_app: LocalApp, deps: VoicesDeps = { fetch }): Loca
         search.searchParams.set("page_number", String(page));
         if (q !== "") search.searchParams.set("title", q);
         if (language !== "") search.searchParams.set("language", language);
-        let response: Response;
-        try {
-          // No Authorization: the public library needs none.
-          response = await deps.fetch(search, {
-            redirect: "manual",
-            signal: AbortSignal.timeout(TIMEOUT_MS),
-          });
-        } catch {
-          return localError(503, "unavailable", "Fish Audio didn't answer");
+        // No key: the public library needs none.
+        const { status, body } = await ask(deps, search.href);
+        if (status === 0) return localError(503, "unavailable", "Fish Audio didn't answer");
+        if (status !== 200) {
+          return localError(502, "upstream-failed", `Fish Audio answered ${status}`);
         }
-        if (response.status !== 200) {
-          return localError(502, "upstream-failed", `Fish Audio answered ${response.status}`);
-        }
-        let body: unknown;
-        try {
-          body = await response.json();
-        } catch {
+        if (body === null) {
           return localError(502, "upstream-failed", "Fish Audio's answer wasn't JSON");
         }
         if (!isPlainObject(body)) {

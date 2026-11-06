@@ -4,7 +4,7 @@
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { CheckIcon, HeartIcon, SearchIcon } from "lucide-react";
 import { type SyntheticEvent, useEffect, useId, useRef, useState } from "react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ErrorAlert } from "@/components/error-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { call, errorKey, type Voice } from "@/lib/api";
+import { call, type Voice } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import {
@@ -133,12 +133,7 @@ export function VoicePicker({ value, onChange, disabled = false }: VoicePickerPr
         </p>
       )}
 
-      {search.isError && (
-        <Alert variant="destructive">
-          <AlertTitle>{t(errorKey(search.error))}</AlertTitle>
-          <AlertDescription>{search.error.message}</AlertDescription>
-        </Alert>
-      )}
+      {search.isError && <ErrorAlert error={search.error} />}
 
       {search.isPending ? (
         <div className="flex flex-col gap-2">

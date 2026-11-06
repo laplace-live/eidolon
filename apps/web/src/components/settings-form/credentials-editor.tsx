@@ -1,7 +1,7 @@
 // The settings page's key list: credentials.json's keys, never shown back once saved.
 import { type FormEvent, useState } from "react";
 import { toast } from "sonner";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ErrorAlert } from "@/components/error-alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { FieldGroup, FieldLegend, FieldSet } from "@/components/ui/field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { ApiError, errorKey } from "@/lib/api";
+import { type ApiError, asApiError } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { CHECK_OF, OPTIONAL, REQUIRED } from "./credentials";
 import { KeyField } from "./key-field";
@@ -30,12 +30,7 @@ export function CredentialsEditor() {
 
   if (keys.credentials.isPending) return <Skeleton className="h-40 w-full" />;
   if (keys.credentials.isError) {
-    return (
-      <Alert variant="destructive">
-        <AlertTitle>{t(errorKey(keys.credentials.error))}</AlertTitle>
-        <AlertDescription>{keys.credentials.error.message}</AlertDescription>
-      </Alert>
-    );
+    return <ErrorAlert error={keys.credentials.error} />;
   }
 
   const dirty = Object.values(keys.typed).some((value) => value.trim() !== "");
@@ -48,7 +43,7 @@ export function CredentialsEditor() {
       toast.success(t("settings.credentials.saved"));
       await Promise.all(saved.filter((name) => CHECK_OF[name]).map((name) => keys.check(name)));
     } catch (error) {
-      setFailure(error instanceof ApiError ? error : new ApiError(0, "unreachable", String(error)));
+      setFailure(asApiError(error));
     }
   }
 
@@ -58,7 +53,7 @@ export function CredentialsEditor() {
       await keys.remove(name);
       toast.success(t("settings.credentials.removed"));
     } catch (error) {
-      setFailure(error instanceof ApiError ? error : new ApiError(0, "unreachable", String(error)));
+      setFailure(asApiError(error));
     }
   }
 
@@ -87,12 +82,7 @@ export function CredentialsEditor() {
         </p>
         <FieldGroup>{OPTIONAL.map((name) => field(name, false))}</FieldGroup>
       </FieldSet>
-      {failure && (
-        <Alert variant="destructive">
-          <AlertTitle>{t(errorKey(failure))}</AlertTitle>
-          <AlertDescription>{failure.message}</AlertDescription>
-        </Alert>
-      )}
+      {failure && <ErrorAlert error={failure} />}
       <div>
         <Button type="submit" disabled={!dirty || keys.saving}>
           {keys.saving && <Spinner />}

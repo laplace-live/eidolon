@@ -1,21 +1,21 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckIcon } from "lucide-react";
 import { useId, useState } from "react";
+import { ErrorAlert } from "@/components/error-alert";
 import { controlFor, draftOf, parseDraft } from "@/components/settings-form/controls";
 import { CheckResultView } from "@/components/settings-form/key-field";
 import { settingsQuery } from "@/components/settings-form/queries";
 import type { CheckOutcome } from "@/components/settings-form/use-keys";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { type ApiError, call, errorKey } from "@/lib/api";
+import { type ApiError, asApiError, call } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { statusQuery } from "@/lib/query";
 import { CopyCommand } from "./copy-command";
-import { asApiError } from "./personas";
 import { StepCard } from "./step-card";
 import { QDRANT_COMMAND, QDRANT_HOST, QDRANT_PORT } from "./wizard";
 
@@ -49,12 +49,7 @@ export function MemoryStep({
 
   if (settings.isPending) return <Skeleton className="h-80 w-full" />;
   if (settings.isError) {
-    return (
-      <Alert variant="destructive">
-        <AlertTitle>{t(errorKey(settings.error))}</AlertTitle>
-        <AlertDescription>{settings.error.message}</AlertDescription>
-      </Alert>
-    );
+    return <ErrorAlert error={settings.error} />;
   }
 
   const find = (path: string) => settings.data.settings.find((row) => row.path === path);
@@ -180,12 +175,7 @@ export function MemoryStep({
       )}
 
       {outcome && <CheckResultView provider="qdrant" outcome={outcome} />}
-      {failure && (
-        <Alert variant="destructive">
-          <AlertTitle>{t(errorKey(failure))}</AlertTitle>
-          <AlertDescription>{failure.message}</AlertDescription>
-        </Alert>
-      )}
+      {failure && <ErrorAlert error={failure} />}
     </StepCard>
   );
 }

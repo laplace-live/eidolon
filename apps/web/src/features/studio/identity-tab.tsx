@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { SettingsForm } from "@/components/settings-form";
+import { browserTimeZone, timeZones } from "@/components/settings-form/controls";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -15,8 +16,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { toastError } from "@/features/jobs/feedback";
 import { call, type PersonaIdentityFields, type PersonaSummary } from "@/lib/api";
+import { toastError } from "@/lib/feedback";
 import { useT } from "@/lib/i18n";
 import { statusQuery } from "@/lib/query";
 import { LoadError, Section } from "./parts";
@@ -33,10 +34,6 @@ const SETTINGS_PATHS = [
 
 const FIELDS = ["name", "shortName", "fans", "summary"] as const;
 
-function browserTimeZone(): string {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone;
-}
-
 function TimeZoneSelect({
   id,
   value,
@@ -47,7 +44,7 @@ function TimeZoneSelect({
   readonly onChange: (zone: string) => void;
 }) {
   const zones = useMemo(() => {
-    const known = Intl.supportedValuesOf("timeZone");
+    const known = timeZones();
     return value === "" || known.includes(value) ? known : [value, ...known];
   }, [value]);
   return (

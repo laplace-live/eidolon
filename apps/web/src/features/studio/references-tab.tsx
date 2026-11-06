@@ -27,9 +27,9 @@ import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { toastError } from "@/features/jobs/feedback";
-import { formatBytes } from "@/features/jobs/format";
 import { call, type PersonaSummary, type ReferenceImage, type ReferenceKind, url } from "@/lib/api";
+import { toastError } from "@/lib/feedback";
+import { formatBytes } from "@/lib/format";
 import { type Lang, t as translate, useLang, useT } from "@/lib/i18n";
 import { statusQuery } from "@/lib/query";
 import {
@@ -110,8 +110,21 @@ function PickButton({
   );
 }
 
-function useUpload(persona: string, onDone: () => void) {
+/** After a picture changed: every avatar of hers reloads, and so do her list and status. */
+function useChanged(persona: string, onDone: () => void) {
   const queryClient = useQueryClient();
+  return async (_result: unknown, { kind }: { kind: ReferenceKind | "avatar" }) => {
+    if (kind === "avatar") avatarChanged(persona);
+    onDone();
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: personaQueries(persona).references.queryKey }),
+      queryClient.invalidateQueries({ queryKey: statusQuery.queryKey }),
+    ]);
+  };
+}
+
+function useUpload(persona: string, onDone: () => void) {
+  const onSuccess = useChanged(persona, onDone);
   return useMutation({
     mutationFn: ({
       kind,
@@ -128,20 +141,13 @@ function useUpload(persona: string, onDone: () => void) {
             params: { id: persona, kind, name },
             body: file,
           }),
-    onSuccess: async (_image, { kind }) => {
-      if (kind === "avatar") avatarChanged(persona);
-      onDone();
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: personaQueries(persona).references.queryKey }),
-        queryClient.invalidateQueries({ queryKey: statusQuery.queryKey }),
-      ]);
-    },
+    onSuccess,
     onError: toastError,
   });
 }
 
 function useRemove(persona: string, onDone: () => void) {
-  const queryClient = useQueryClient();
+  const onSuccess = useChanged(persona, onDone);
   return useMutation({
     mutationFn: ({ kind, name }: { kind: ReferenceKind | "avatar"; name: string }) =>
       kind === "avatar"
@@ -149,14 +155,7 @@ function useRemove(persona: string, onDone: () => void) {
         : call("DELETE /api/local/personas/:id/references/:kind/:name", {
             params: { id: persona, kind, name },
           }),
-    onSuccess: async (_ok, { kind }) => {
-      if (kind === "avatar") avatarChanged(persona);
-      onDone();
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: personaQueries(persona).references.queryKey }),
-        queryClient.invalidateQueries({ queryKey: statusQuery.queryKey }),
-      ]);
-    },
+    onSuccess,
     onError: toastError,
   });
 }

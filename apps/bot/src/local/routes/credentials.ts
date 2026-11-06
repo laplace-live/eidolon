@@ -10,23 +10,13 @@ import {
   isPlainObject,
   logger,
 } from "@eidolon/config";
-import type { CheckProvider, CredentialsResponse } from "../api.ts";
+import { CHECK_PROVIDERS, type CheckProvider, type CredentialsResponse } from "../api.ts";
 import { type CheckDeps, checkProvider } from "../checks.ts";
 import { localError, localJson, readJson } from "../responses.ts";
 import { reinstallSettings } from "../restart.ts";
 import type { LocalApp, LocalRouteSpec } from "../router.ts";
 import { recordQdrant, recordVoice } from "../status.ts";
 import { writeDataFile } from "../write.ts";
-
-const PROVIDERS: readonly CheckProvider[] = [
-  "soniox",
-  "openrouter",
-  "fish",
-  "embeddings",
-  "rerank",
-  "refine",
-  "qdrant",
-];
 
 /** A key's longest plausible length; anything longer is a paste gone wrong. */
 const MAX_KEY_CHARS = 4096;
@@ -141,7 +131,10 @@ export function credentialsRoutes(
         if (!body.ok) return body.response;
         const value = isPlainObject(body.value) ? body.value : {};
         const provider = value.provider;
-        if (typeof provider !== "string" || !(PROVIDERS as readonly string[]).includes(provider)) {
+        if (
+          typeof provider !== "string" ||
+          !(CHECK_PROVIDERS as readonly string[]).includes(provider)
+        ) {
           return localError(400, "bad-request", "Name a provider to check");
         }
         const typed = value.value === undefined ? undefined : typedValue(value.value);

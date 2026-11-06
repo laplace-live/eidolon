@@ -8,7 +8,7 @@ import {
   pyParseInt,
   pyStrip,
 } from "@eidolon/config";
-import { refine } from "@eidolon/ingest";
+import { refine, transcribe } from "@eidolon/ingest";
 import { DEFAULT_RERANK_BASE_URL, DEFAULT_RERANK_MODEL } from "@eidolon/retrieval";
 import type {
   CheckCode,
@@ -51,10 +51,12 @@ const EXPIRY_WARNING_MS = 14 * 24 * 60 * 60 * 1000;
 interface Answer {
   /** 0 when nothing answered in time. */
   readonly status: number;
+  /** The JSON it sent; null for anything else. */
   readonly body: unknown;
 }
 
-async function ask(
+/** One GET or POST that never follows a redirect; a key goes only in the Authorization header. */
+export async function ask(
   deps: Pick<CheckDeps, "fetch">,
   url: string,
   options: { key?: string; method?: "GET" | "POST"; timeoutMs?: number } = {},
@@ -256,10 +258,10 @@ async function checkSoniox(deps: CheckDeps, key: string): Promise<Verdict> {
   if (answer.status !== 200) return fail(codeOf(answer.status));
   const ids = listedIds(answer.body, "models");
   const warnings: CheckWarning[] = [];
-  // The defaults packages/runtime and packages/ingest's transcribe use, which they don't export.
   for (const [setting, name, fallback] of [
+    // packages/runtime's default, which it doesn't export.
     ["hearing.model", "SONIOX_MODEL", "stt-rt-v5"],
-    ["transcription.model", "SONIOX_ASYNC_MODEL", "stt-async-v5"],
+    ["transcription.model", "SONIOX_ASYNC_MODEL", transcribe.DEFAULT_SONIOX_MODEL],
   ] as const) {
     const model = deps.read(name) ?? fallback;
     if (ids !== null && !ids.has(model)) {
@@ -409,8 +411,7 @@ const BASES = {
   },
   refine: {
     base: ["REFINE_BASE_URL", refine.DEFAULT_BASE_URL],
-    // packages/ingest's refine default, which it doesn't export.
-    model: ["REFINE_MODEL", "~google/gemini-pro-latest", "refine.model"],
+    model: ["REFINE_MODEL", refine.DEFAULT_MODEL, "refine.model"],
     listing: `${OPENROUTER_BASE}/models`,
   },
 } as const;

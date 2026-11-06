@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { NavLink, Outlet, useLocation } from "react-router";
 import { LanguageSwitch, ThemeMenu } from "@/components/preferences";
 import { useT } from "@/lib/i18n";
+import { studioPath } from "@/lib/paths";
 import { statusQuery } from "@/lib/query";
 import { cn } from "@/lib/utils";
 
@@ -38,7 +39,7 @@ export function AppShell() {
   const studio: NavItem[] = status
     ? [
         {
-          to: `/personas/${encodeURIComponent(status.persona.id)}`,
+          to: studioPath(status.persona.id),
           label: "studio.nav",
           end: false,
           section: "/personas/",

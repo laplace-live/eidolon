@@ -8,7 +8,8 @@ import { hasString } from "@/components/settings-form/field";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { RestartButton } from "@/features/settings/restart-button";
-import { call, errorKey, type Status } from "@/lib/api";
+import { call, type Status } from "@/lib/api";
+import { toastError } from "@/lib/feedback";
 import { useLang, useT } from "@/lib/i18n";
 import { statusQuery } from "@/lib/query";
 import { cn } from "@/lib/utils";
@@ -34,7 +35,7 @@ function CheckButton({ provider }: { readonly provider: "fish" | "qdrant" }) {
       else toast.error(text, { description: result.message });
       await queryClient.invalidateQueries({ queryKey: statusQuery.queryKey });
     },
-    onError: (error) => toast.error(t(errorKey(error)), { description: error.message }),
+    onError: toastError,
   });
   return (
     <Button variant="outline" size="sm" disabled={check.isPending} onClick={() => check.mutate()}>

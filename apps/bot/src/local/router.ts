@@ -49,10 +49,6 @@ export interface LocalRouteSpec {
   readonly public?: boolean;
 }
 
-/** The answer of a route that is declared but not built yet. */
-export const notImplemented: LocalHandler = () =>
-  localError(501, "not-implemented", "This part of Eidolon is not built yet");
-
 const SAFE_METHODS = new Set(["GET", "HEAD"]);
 
 function withNoStore(response: Response): Response {

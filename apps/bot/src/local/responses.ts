@@ -47,11 +47,11 @@ export async function readJson(
   }
 }
 
-/** The body as UTF-8 text, or null once it passes `limit` bytes, counted while it streams. */
-export async function readText(request: Request, limit: number): Promise<string | null> {
+/** The body's bytes, or null once it passes `limit` bytes, counted while it streams. */
+export async function readBytes(request: Request, limit: number): Promise<Uint8Array | null> {
   const declared = Number(request.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > limit) return null;
-  if (request.body === null) return "";
+  if (request.body === null) return new Uint8Array();
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
@@ -65,5 +65,11 @@ export async function readText(request: Request, limit: number): Promise<string 
     }
     chunks.push(value);
   }
-  return new TextDecoder().decode(Buffer.concat(chunks));
+  return Buffer.concat(chunks);
+}
+
+/** The body as UTF-8 text, or null once it passes `limit` bytes. */
+export async function readText(request: Request, limit: number): Promise<string | null> {
+  const bytes = await readBytes(request, limit);
+  return bytes === null ? null : new TextDecoder().decode(bytes);
 }

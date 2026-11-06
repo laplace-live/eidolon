@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ErrorAlert } from "@/components/error-alert";
 import {
   Dialog,
   DialogContent,
@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { VoicePicker } from "@/components/voice-picker";
 import { refreshPersonas, saveVoice } from "@/features/setup/personas";
-import { errorKey, type Voice } from "@/lib/api";
+import type { Voice } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 
 /** Picks a public Fish voice for a persona and saves it in her persona.yaml. */
@@ -53,12 +53,7 @@ export function VoiceDialog({
           onChange={(voice) => save.mutate(voice)}
           disabled={save.isPending}
         />
-        {save.isError && (
-          <Alert variant="destructive">
-            <AlertTitle>{t(errorKey(save.error))}</AlertTitle>
-            <AlertDescription>{save.error.message}</AlertDescription>
-          </Alert>
-        )}
+        {save.isError && <ErrorAlert error={save.error} />}
       </DialogContent>
     </Dialog>
   );

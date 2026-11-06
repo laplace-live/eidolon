@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { BrainIcon, KeyRoundIcon } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo } from "react";
 import { Link, useRevalidator } from "react-router";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +9,9 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { errorKey, type MemoryStatus, type Status } from "@/lib/api";
 import { type Translate, useT } from "@/lib/i18n";
+import { studioPath } from "@/lib/paths";
 import { statusQuery } from "@/lib/query";
+import { useNow } from "@/lib/use-now";
 import { cn } from "@/lib/utils";
 import { CallControls, MicPill } from "./call-controls";
 import { CallNotices } from "./call-notices";
@@ -18,18 +20,6 @@ import { PersonaAvatar, type PersonaFace } from "./persona-avatar";
 import type { CallPhase } from "./phase";
 import { TranscriptView } from "./transcript-view";
 import { useCall } from "./use-call";
-
-/** Now, once a second while `ticking`. */
-function useNow(ticking: boolean): number {
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    if (!ticking) return;
-    setNow(Date.now());
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [ticking]);
-  return now;
-}
 
 function stateLine(phase: CallPhase, now: number, name: string, t: Translate): string {
   switch (phase.name) {
@@ -52,6 +42,13 @@ function stateLine(phase: CallPhase, now: number, name: string, t: Translate): s
             duration: formatDuration(phase.endedAt - phase.answeredAt),
           });
   }
+}
+
+/** The call's state; only this line renders each second while the call runs. */
+function CallState({ phase, name }: { readonly phase: CallPhase; readonly name: string }) {
+  const t = useT();
+  const now = useNow(phase.name === "live" && phase.answeredAt !== null);
+  return stateLine(phase, now, name, t);
 }
 
 function MemoryChip({ memory, name }: { readonly memory: MemoryStatus; readonly name: string }) {
@@ -85,7 +82,6 @@ function CallRoom({ status, onEnded }: { readonly status: Status; readonly onEnd
   const { id, name, shortName } = status.persona;
   const persona = useMemo<PersonaFace>(() => ({ id, name, shortName }), [id, name, shortName]);
   const short = shortName.trim() || name;
-  const now = useNow(phase.name === "live" && phase.answeredAt !== null);
 
   // Status then says whether the bot recorded a failure, and whether Qdrant still answers.
   const ended = phase.name === "ended";
@@ -118,7 +114,9 @@ function CallRoom({ status, onEnded }: { readonly status: Status; readonly onEnd
             <h2 className="truncate font-heading text-base font-semibold">{name}</h2>
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
               {waiting && <Spinner className="size-3" />}
-              <span className="truncate">{stateLine(phase, now, short, t)}</span>
+              <span className="truncate">
+                <CallState phase={phase} name={short} />
+              </span>
             </p>
           </div>
           <MemoryChip memory={status.memory} name={short} />
@@ -213,7 +211,7 @@ export function CallPage() {
         media={<PersonaAvatar persona={persona} size="lg" />}
         title={t("call.voice.missing.title", { name: short })}
         body={t("call.voice.missing.body")}
-        to={`/personas/${encodeURIComponent(persona.id)}/voice`}
+        to={studioPath(persona.id, "voice")}
         action={t("call.voice.pick")}
       />
     );
