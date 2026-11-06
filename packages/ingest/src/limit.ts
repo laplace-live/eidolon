@@ -50,6 +50,13 @@ type HandledSignal = keyof typeof SIGNALS;
 /** How long a cancelled run may take to clean up before the process exits anyway. */
 export const CLEANUP_LIMIT_MS = 10_000;
 
+/**
+ * A signal this soon after the first is that one delivered twice, a few ms apart: `bun run` passes
+ * Ctrl-C on to its script, and a SIGTERM to the npm launcher's process group reaches Bun directly
+ * and through the launcher.
+ */
+export const REPEAT_MS = 500;
+
 let openSections = 0;
 // The forced exits that came due while a section was open.
 const afterSections = new Set<() => void>();
@@ -83,27 +90,30 @@ export interface SignalHost {
 
 /**
  * Runs a command with an AbortSignal that SIGINT and SIGTERM abort. The first signal starts a
- * graceful stop of at most `cleanupLimitMs`, saying how to skip it; a second signal exits at once,
- * and a stop that outlasts the limit exits once no criticalSection is open. Pass 0 for a run that
- * never reads its signal, so the first signal exits at once. A run a signal stopped exits 130
- * (SIGINT) or 143 (SIGTERM), whatever it returned.
+ * graceful stop of at most `cleanupLimitMs`, saying how to skip it; a second signal, REPEAT_MS or
+ * more after it, exits at once, and a stop that outlasts the limit exits once no criticalSection is
+ * open. Pass 0 for a run that never reads its signal, so the first signal exits at once. A run a
+ * signal stopped exits 130 (SIGINT) or 143 (SIGTERM), whatever it returned.
  */
 export async function runWithSignals(
   run: (signal: AbortSignal) => Promise<number>,
   host: SignalHost = process,
   cleanupLimitMs: number = CLEANUP_LIMIT_MS,
+  now: () => number = () => performance.now(),
 ): Promise<number> {
   const controller = new AbortController();
   let received: HandledSignal | null = null;
+  let receivedAt = 0;
   let deadline: ReturnType<typeof setTimeout> | undefined;
   let deferred: (() => void) | undefined;
   const listeners = (Object.keys(SIGNALS) as HandledSignal[]).map((name) => {
     const listener = (): void => {
       if (received !== null) {
-        host.exit(SIGNALS[name]);
+        if (now() - receivedAt >= REPEAT_MS) host.exit(SIGNALS[name]);
         return;
       }
       received = name;
+      receivedAt = now();
       if (cleanupLimitMs > 0) {
         const again = name === "SIGINT" ? "press Ctrl-C" : "send SIGTERM";
         host.stderr.write(`Stopping; ${again} again to quit now.\n`);

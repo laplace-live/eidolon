@@ -209,11 +209,11 @@ function fail(message: string, code = 1): void {
 /** Runs Bun until it exits, then exits as it did. */
 function run(bun: string, argv: readonly string[], env: NodeJS.ProcessEnv): void {
   const child = spawn(bun, argv, { stdio: "inherit", env });
-  // A terminal's Ctrl-C reaches the child itself, in this process group. Passing it on as well
-  // would be a second SIGINT, which makes a CLI command quit without finishing an index.
+  // A terminal's Ctrl-C reaches the child itself, in this process group: passing it on would
+  // deliver it twice.
   process.on("SIGINT", () => {});
   process.on("SIGTERM", () => child.kill("SIGTERM"));
-  // The app and the CLI stop gracefully on SIGTERM; neither handles SIGHUP.
+  // As SIGTERM: the CLI has no SIGHUP handler, so a SIGHUP would end it at once.
   process.on("SIGHUP", () => child.kill("SIGTERM"));
   child.on("error", (error) => {
     fail(`could not start ${bun}: ${error.message}`);

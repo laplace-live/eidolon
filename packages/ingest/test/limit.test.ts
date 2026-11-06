@@ -6,6 +6,7 @@ import {
   CLEANUP_LIMIT_MS,
   createLimiter,
   criticalSection,
+  REPEAT_MS,
   runWithSignals,
   type SignalHost,
   terminate,
@@ -22,6 +23,16 @@ function deferred<T = void>() {
 }
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
+
+function fakeClock() {
+  let at = 0;
+  return {
+    now: () => at,
+    advance(ms: number): void {
+      at += ms;
+    },
+  };
+}
 
 describe("createLimiter", () => {
   test("runs at most `concurrency` tasks, starting them in the order they came", async () => {
@@ -152,15 +163,33 @@ describe("runWithSignals", () => {
     }
   });
 
-  test("a second signal exits at once", async () => {
+  test("a second signal, REPEAT_MS after the first, exits at once", async () => {
     const host = new FakeHost();
+    const clock = fakeClock();
     const gate = deferred<number>();
-    const result = runWithSignals(() => gate.promise, host);
+    const result = runWithSignals(() => gate.promise, host, CLEANUP_LIMIT_MS, clock.now);
     host.send("SIGTERM");
+    clock.advance(REPEAT_MS);
     host.send("SIGINT");
     expect(host.exits).toEqual([130]);
     gate.resolve(0);
     expect(await result).toBe(143);
+  });
+
+  test("a repeat within REPEAT_MS is the first signal delivered twice: the stop goes on", async () => {
+    const host = new FakeHost();
+    const clock = fakeClock();
+    const gate = deferred<number>();
+    const result = runWithSignals(() => gate.promise, host, CLEANUP_LIMIT_MS, clock.now);
+    host.send("SIGTERM");
+    clock.advance(REPEAT_MS - 1);
+    host.send("SIGTERM");
+    host.send("SIGINT");
+    expect(host.exits).toEqual([]);
+    expect(host.written).toBe("Stopping; send SIGTERM again to quit now.\n");
+    gate.resolve(0);
+    expect(await result).toBe(143);
+    expect(host.exits).toEqual([]);
   });
 
   test("a stop that outlasts the cleanup limit exits anyway", async () => {
@@ -197,16 +226,23 @@ describe("runWithSignals", () => {
 
   test("a second signal exits at once, inside a critical section too", async () => {
     const host = new FakeHost();
+    const clock = fakeClock();
     const section = deferred();
-    const result = runWithSignals(async () => {
-      const writing = criticalSection(() => section.promise);
-      host.send("SIGTERM");
-      host.send("SIGINT");
-      expect(host.exits).toEqual([130]);
-      section.resolve();
-      await writing;
-      return 0;
-    }, host);
+    const result = runWithSignals(
+      async () => {
+        const writing = criticalSection(() => section.promise);
+        host.send("SIGTERM");
+        clock.advance(REPEAT_MS);
+        host.send("SIGINT");
+        expect(host.exits).toEqual([130]);
+        section.resolve();
+        await writing;
+        return 0;
+      },
+      host,
+      CLEANUP_LIMIT_MS,
+      clock.now,
+    );
     expect(await result).toBe(143);
     expect(host.exits).toEqual([130]);
   });
@@ -272,6 +308,47 @@ describe("runWithSignals", () => {
       } finally {
         child.kill("SIGKILL");
       }
+    }
+  }, 10_000);
+
+  test("a real SIGTERM that arrives twice, as the npm launcher's process group gets one, stops gracefully once", async () => {
+    const limit = join(import.meta.dir, "../src/limit.ts");
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "--no-env-file",
+        "-e",
+        `const { runWithSignals } = await import(${JSON.stringify(limit)});
+         process.exitCode = await runWithSignals(async (signal) => {
+           console.log("ready");
+           await new Promise((stop) => signal.addEventListener("abort", stop));
+           await Bun.sleep(200);
+           console.log("stopped");
+           return 0;
+         });`,
+      ],
+      { stdout: "pipe", stderr: "pipe" },
+    );
+    const decoder = new TextDecoder();
+    try {
+      const stdout = child.stdout.getReader();
+      const stderr = child.stderr.getReader();
+      expect(decoder.decode((await stdout.read()).value)).toBe("ready\n");
+      child.kill("SIGTERM");
+      // The second once the first reached its listener, as the launcher's copy comes: two pending
+      // SIGTERMs merge into one.
+      expect(decoder.decode((await stderr.read()).value)).toBe(
+        "Stopping; send SIGTERM again to quit now.\n",
+      );
+      child.kill("SIGTERM");
+      expect(await child.exited).toBe(143);
+      let rest = "";
+      for (let chunk = await stdout.read(); !chunk.done; chunk = await stdout.read()) {
+        rest += decoder.decode(chunk.value);
+      }
+      expect(rest).toBe("stopped\n");
+    } finally {
+      child.kill("SIGKILL");
     }
   }, 10_000);
 

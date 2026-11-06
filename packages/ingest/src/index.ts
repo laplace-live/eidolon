@@ -14,6 +14,7 @@ export {
   createLimiter,
   criticalSection,
   type Limiter,
+  REPEAT_MS,
   runWithSignals,
   type SignalHost,
   terminate,

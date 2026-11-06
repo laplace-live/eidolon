@@ -55,7 +55,9 @@ the server, which serves `web/` in place of `apps/web/dist`, and jobs run `dist/
 
 The launcher exits as Bun does. A terminal's Ctrl-C reaches Bun directly, and SIGTERM or SIGHUP
 sent to the launcher reach it as SIGTERM. A SIGINT sent to the launcher's pid alone is ignored,
-so that Ctrl-C doesn't reach a running command twice: a second SIGINT makes it quit without
+so that Ctrl-C reaches a running command once. A SIGTERM sent to the whole process group, as
+`timeout` sends one, reaches Bun twice, directly and through the launcher; a command counts a
+second signal within half a second as the first, and only a later one makes it quit without
 finishing an index. A tool that stops the app should send SIGTERM.
 
 ## What stays out of production

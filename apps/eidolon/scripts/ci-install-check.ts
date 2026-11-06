@@ -4,7 +4,6 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { parseArgs } from "node:util";
 import type { Subprocess } from "bun";
 import { Output, READY_LINE } from "../../bot/scripts/output.ts";
 import {
@@ -14,10 +13,10 @@ import {
   type Status,
 } from "../../bot/src/local/api.ts";
 
-const USAGE = `usage: bun apps/eidolon/scripts/ci-install-check.ts <tarball> [--prefix DIR]
+const USAGE = `usage: bun apps/eidolon/scripts/ci-install-check.ts <tarball>
 
-Installs the tarball with npm into DIR, else into a temporary folder, runs its eidolon on a
-temporary HOME and data home, and deletes them. Exits 0 when every check passes, else 1.`;
+Installs the tarball with npm into a temporary folder, runs its eidolon on a temporary HOME and
+data home, and deletes them. Exits 0 when every check passes, else 1.`;
 
 const BOOT_TIMEOUT_MS = 120_000;
 const STOP_TIMEOUT_MS = 15_000;
@@ -62,8 +61,17 @@ interface App {
 }
 
 /** The launcher's exit code, or null when it hasn't exited within `ms`. */
-function exitWithin(child: Subprocess, ms: number): Promise<number | null> {
-  return Promise.race([child.exited, Bun.sleep(ms).then(() => null)]);
+export async function exitWithin(child: Subprocess, ms: number): Promise<number | null> {
+  // Cleared on exit: a pending Bun.sleep would hold this script open for the rest of `ms`.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), ms);
+  });
+  try {
+    return await Promise.race([child.exited, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** Runs a command to its end, keeping this process's event loop, and so the app's pipes, going. */
@@ -143,8 +151,9 @@ async function signIn(origin: string, code: string): Promise<Record<string, stri
   return { Cookie: cookie, [PROOF_HEADER]: proof, Origin: origin };
 }
 
-/** Every check on the package at `tarball`, installed into `prefix`; `temp` holds its homes. */
-async function checkPackage(tarball: string, prefix: string, temp: string): Promise<void> {
+/** Every check on the package at `tarball`, installed and run inside `temp`. */
+async function checkPackage(tarball: string, temp: string): Promise<void> {
+  const prefix = join(temp, "prefix");
   const bin = install(tarball, prefix);
   const manifest = join(prefix, "node_modules", "@laplace.live", "eidolon", "package.json");
   const { version } = JSON.parse(readFileSync(manifest, "utf8")) as { version: string };
@@ -201,28 +210,18 @@ async function checkPackage(tarball: string, prefix: string, temp: string): Prom
   }
 }
 
-function options(argv: string[]): { tarball: string; prefix: string | undefined } {
-  try {
-    const { values, positionals } = parseArgs({
-      args: argv,
-      options: { prefix: { type: "string" } },
-      allowPositionals: true,
-    });
-    const [tarball] = positionals;
-    if (tarball !== undefined && positionals.length === 1)
-      return { tarball, prefix: values.prefix };
-  } catch (error) {
-    console.error((error as Error).message);
-  }
+function tarballArg(argv: readonly string[]): string {
+  const [tarball, ...rest] = argv;
+  if (tarball !== undefined && rest.length === 0 && !tarball.startsWith("-")) return tarball;
   console.error(USAGE);
   process.exit(2);
 }
 
 async function main(): Promise<number> {
-  const { tarball, prefix } = options(Bun.argv.slice(2));
+  const tarball = tarballArg(Bun.argv.slice(2));
   const temp = mkdtempSync(join(tmpdir(), "eidolon-install-check-"));
   try {
-    await checkPackage(resolve(tarball), resolve(prefix ?? join(temp, "prefix")), temp);
+    await checkPackage(resolve(tarball), temp);
     console.log("Every check passed.");
     return 0;
   } catch (error) {
@@ -233,4 +232,4 @@ async function main(): Promise<number> {
   }
 }
 
-process.exitCode = await main();
+if (import.meta.main) process.exitCode = await main();
