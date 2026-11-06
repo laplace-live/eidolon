@@ -185,7 +185,7 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | anything under `apps/` or `packages/` | `bun run typecheck`, `bun run lint`, `bun run test`; for retrieval, the gate or the bot's pipeline, the TypeScript CLI or call that matches the Python row above |
 | anything under `apps/web` | the row above, whose typecheck also runs both `apps/web` tsconfigs, then `bun run build:web` |
 | local mode (`apps/bot/src/local`) | `bun test --no-env-file apps/bot/test/local` from the repository root, then `bun apps/bot/scripts/local-smoke.ts --headful`: a browser walk on a temporary data home that bills nothing |
-| `apps/eidolon`, or a file the package bundles or copies | the gates above, then `bun run pack:npm`, install the tarball with npm (`npm install --prefix <tmp> <tarball>`: inside the repository npm needs `--prefix`), and boot it on a temporary home: `EIDOLON_HOME=<tmp home> <tmp>/node_modules/.bin/eidolon --no-open --port 0` |
+| `apps/eidolon`, or a file the package bundles or copies | the gates above, then `bun run pack:npm` and `bun apps/eidolon/scripts/ci-install-check.ts apps/eidolon/<tarball>`, which CI runs on Linux x64: it installs the tarball with npm, boots it on a temporary home, signs in, and stops it |
 
 ## Rules
 

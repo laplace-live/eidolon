@@ -17,6 +17,8 @@ import { ENTRIES, PLATFORMS } from "../src/launcher.ts";
 const ROOT = resolve(import.meta.dir, "../../..");
 const HERE = resolve(import.meta.dir, "..");
 export const PACK_DIR = join(HERE, "pack");
+/** SPDX's license texts (github.com/spdx/license-list-data, text/), named by identifier. */
+const SPDX_DIR = join(HERE, "spdx");
 
 /**
  * What the bundles leave in node_modules, each a dependency of the package: files read beside the
@@ -241,8 +243,18 @@ export function checkImports(root: string, manifest: Manifest): void {
   }
 }
 
-/** The web app, built into `out` with the licenses of what it bundles, which it returns. */
-async function buildWeb(out: string): Promise<string> {
+/** A package a bundle includes, as Vite's license.json lists one. */
+export interface Bundled {
+  readonly name: string;
+  readonly version: string;
+  /** Its package.json's `license`. */
+  readonly identifier?: string;
+  /** Its license file's. */
+  readonly text?: string;
+}
+
+/** The web app, built into `out`; returns the packages it bundles. */
+async function buildWeb(out: string): Promise<Bundled[]> {
   const web = join(ROOT, "apps/web");
   const vite = (await import(Bun.resolveSync("vite", web))) as {
     build(config: Record<string, unknown>): Promise<unknown>;
@@ -251,36 +263,71 @@ async function buildWeb(out: string): Promise<string> {
     root: web,
     configFile: join(web, "vite.config.ts"),
     logLevel: "warn",
-    build: { outDir: out, emptyOutDir: true, license: true },
+    build: { outDir: out, emptyOutDir: true, license: { fileName: ".vite/license.json" } },
   });
-  const licenses = readFileSync(join(out, ".vite", "license.md"), "utf8");
+  const licenses = readJson<Bundled[]>(join(out, ".vite", "license.json"));
   rmSync(join(out, ".vite"), { recursive: true });
   return licenses;
 }
 
 const LICENSE_FILE = /^(licen[cs]e|copying)([.-].*)?$/i;
 
-/** THIRD_PARTY_NOTICES.md: each package the bundles inline, with its license text, then the web app's. */
-export function notices(inlined: ReadonlyMap<string, string>, webLicenses: string): string {
-  const sections = [...inlined]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([name, dir]) => {
-      const { version, license } = readJson<{ version: string; license?: string }>(
-        join(dir, "package.json"),
-      );
-      const file = readdirSync(dir).find((entry) => LICENSE_FILE.test(entry));
-      const text = file
-        ? readFileSync(join(dir, file), "utf8").trim()
-        : "The package ships no license file.";
-      return `## ${name} ${version} (${license ?? "no license field"})\n\n${text}\n`;
-    });
+/** The packages the Bun bundles inline, with what their folders hold, as Vite reads the web app's. */
+export function inlinedPackages(inlined: ReadonlyMap<string, string>): Bundled[] {
+  return [...inlined].map(([name, dir]) => {
+    const { version, license } = readJson<{ version: string; license?: string }>(
+      join(dir, "package.json"),
+    );
+    const file = readdirSync(dir).find((entry) => LICENSE_FILE.test(entry));
+    return {
+      name,
+      version,
+      identifier: license,
+      text: file === undefined ? undefined : readFileSync(join(dir, file), "utf8").trim(),
+    };
+  });
+}
+
+/**
+ * A package's license text: its own file's, else SPDX's text of the license it declares. One with
+ * neither fails the build, so no notice ships without its text.
+ */
+export function licenseText(pkg: Bundled): string {
+  if (pkg.text) return pkg.text;
+  const known = readdirSync(SPDX_DIR).map((file) => basename(file, ".txt"));
+  if (pkg.identifier === undefined || !known.includes(pkg.identifier)) {
+    throw new Error(
+      `${pkg.name} ships no license file, and ${relative(ROOT, SPDX_DIR)}/ has no text for ` +
+        `${pkg.identifier === undefined ? "its license, which it doesn't name" : pkg.identifier}`,
+    );
+  }
+  const spdx = readFileSync(join(SPDX_DIR, `${pkg.identifier}.txt`), "utf8").trim();
+  return (
+    `The package ships no license file; this is SPDX's text of ${pkg.identifier}, the license ` +
+    `its package.json declares.\n\n${spdx}`
+  );
+}
+
+function sections(packages: readonly Bundled[]): string[] {
+  return [...packages]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(
+      (pkg) =>
+        `### ${pkg.name} ${pkg.version} (${pkg.identifier ?? "no license field"})\n\n` +
+        `${licenseText(pkg)}\n`,
+    );
+}
+
+/** THIRD_PARTY_NOTICES.md: each package the bundles and the web app include, with its license. */
+export function notices(dist: readonly Bundled[], web: readonly Bundled[]): string {
   return [
     "# Third-party notices\n",
-    "The bundles in dist/ include the packages below, each with its license, and the web app's",
-    "notices for what web/ includes follow them. NOTICE covers the data and the font it ships.\n",
-    ...sections,
-    webLicenses.trim(),
-    "",
+    "The bundles in dist/ and the web app in web/ include the packages below, each with its",
+    "license. NOTICE covers the data and the font the package ships.\n",
+    "## dist/\n",
+    ...sections(dist),
+    "## web/\n",
+    ...sections(web),
   ].join("\n");
 }
 
@@ -314,11 +361,11 @@ export async function stage(): Promise<Manifest> {
   mkdirSync(PACK_DIR);
   const inlined = await bundle(PACK_DIR);
   checkImports(PACK_DIR, manifest);
-  const webLicenses = await buildWeb(inPackage(PACK_DIR, webDist));
+  const web = await buildWeb(inPackage(PACK_DIR, webDist));
   copyTracked(templatesDir(), inPackage(PACK_DIR, templatesDir));
   copyTracked(jiebaDir(), inPackage(PACK_DIR, jiebaDir));
   writeFileSync(join(PACK_DIR, "bunfig.toml"), BUNFIG);
-  writeFileSync(join(PACK_DIR, "THIRD_PARTY_NOTICES.md"), notices(inlined, webLicenses));
+  writeFileSync(join(PACK_DIR, "THIRD_PARTY_NOTICES.md"), notices(inlinedPackages(inlined), web));
   cpSync(join(HERE, "README.md"), join(PACK_DIR, "README.md"));
   for (const file of ["LICENSE", "NOTICE"]) cpSync(join(ROOT, file), join(PACK_DIR, file));
   writeFileSync(join(PACK_DIR, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);

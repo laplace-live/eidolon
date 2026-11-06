@@ -64,7 +64,9 @@ function fakeDeps(replies: Record<string, () => Response>) {
 }
 
 async function until(done: () => boolean): Promise<void> {
-  for (let i = 0; i < 200 && !done(); i++) await Bun.sleep(2);
+  // A deadline, not a count of sleeps: spawning --version took over 0.5 s on a loaded Mac.
+  const deadline = Date.now() + 2_000;
+  while (!done() && Date.now() < deadline) await Bun.sleep(2);
   expect(done()).toBe(true);
 }
 

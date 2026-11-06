@@ -9,8 +9,11 @@ import {
   bareImports,
   bundle,
   checkImports,
+  inlinedPackages,
   inPackage,
+  licenseText,
   type Manifest,
+  notices,
   packageManifest,
 } from "../scripts/build.ts";
 import { ENTRIES, PLATFORMS } from "../src/launcher.ts";
@@ -101,6 +104,44 @@ describe("the bundles", () => {
     const unknown = Bun.spawnSync([process.execPath, launcher, "serve"]);
     expect(unknown.exitCode).toBe(2);
     expect(unknown.stderr.toString()).toStartWith('eidolon: unknown command "serve"');
+  });
+});
+
+describe("the third-party notices", () => {
+  test("carry a package's own license file, else SPDX's text of the license it declares", () => {
+    const own = { name: "own", version: "1.0.0", identifier: "MIT", text: "Copyright (c) Own" };
+    expect(notices([own], [])).toContain("### own 1.0.0 (MIT)\n\nCopyright (c) Own\n");
+    for (const [identifier, line] of [
+      ["Apache-2.0", "Version 2.0, January 2004"],
+      ["BSD-2-Clause", "Redistribution and use in source and binary forms"],
+      ["MIT", "Permission is hereby granted, free of charge"],
+    ] as const) {
+      const text = licenseText({ name: "bare", version: "1.0.0", identifier });
+      expect(text).toStartWith(
+        `The package ships no license file; this is SPDX's text of ${identifier}`,
+      );
+      expect(text).toContain(line);
+    }
+  });
+
+  test("fail the build for a package with no license file and no license SPDX's text covers", () => {
+    for (const identifier of ["(MIT OR Apache-2.0)", undefined]) {
+      expect(() => licenseText({ name: "bare", version: "1.0.0", identifier })).toThrow(
+        "bare ships no license file, and apps/eidolon/spdx/ has no text for",
+      );
+    }
+  });
+
+  test("give each package the bundles inline its text, LanceDB's from SPDX", () => {
+    const dist = inlinedPackages(inlined);
+    const lancedb = dist.find((pkg) => pkg.name === "@lancedb/lancedb");
+    expect(lancedb).toMatchObject({ identifier: "Apache-2.0", text: undefined });
+    const text = notices(dist, []);
+    expect(text).toContain(
+      `### @lancedb/lancedb ${lancedb?.version} (Apache-2.0)\n\nThe package ships no license ` +
+        "file; this is SPDX's text of Apache-2.0",
+    );
+    expect(text.match(/^### /gm)?.length).toBe(dist.length);
   });
 });
 

@@ -45,6 +45,19 @@ app's pages with hot reload, keep the server on 7860, start `bun run dev:web`, a
 proxy rewrites `Origin` only for requests from that dev origin, so the server's Origin rule still
 refuses every other page.
 
+### From the npm package
+
+`npx @laplace.live/eidolon` runs the same app with no checkout. The package's launcher,
+`bin/eidolon.mjs`, starts its bundles on the Bun it installs, with `EIDOLON_NO_DOTENV=1` and
+`EIDOLON_APP_ROOT` set to the package. `dist/app.js` and `dist/server.js` are the supervisor and
+the server, which serves `web/` in place of `apps/web/dist`, and jobs run `dist/cli.js` in place of
+`apps/cli/src/main.ts`. `eidolon <command>` runs an offline command the same way.
+
+The launcher exits as Bun does. A terminal's Ctrl-C reaches Bun directly, and SIGTERM or SIGHUP
+sent to the launcher reach it as SIGTERM. A SIGINT sent to the launcher's pid alone is ignored,
+so that Ctrl-C doesn't reach a running command twice: a second SIGINT makes it quit without
+finishing an index. A tool that stops the app should send SIGTERM.
+
 ## What stays out of production
 
 - **Nothing in production imports it.** `main.ts` and the code it loads never import
