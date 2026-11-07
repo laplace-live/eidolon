@@ -94,6 +94,7 @@
   "memory.forget": "Forget everything",
   "memory.forgetTitle": "Make {name} forget you?",
   "memory.forgetBody": "This deletes all {count} memories {name} keeps of you, for good. Other personas keep theirs.",
+  "memory.forgetBody_one": "This deletes the {count} memory {name} keeps of you, for good. Other personas keep theirs.",
   "memory.forgetKeep": "Keep them",
   "memory.forgetConfirm": "Forget",
   "memory.forgotten": "{name} forgot you."

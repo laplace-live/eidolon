@@ -31,5 +31,6 @@
   "error.title": "Something went wrong",
   "error.retry": "Try again",
   "error.notFound": "This page doesn't exist.",
-  "error.home": "Back to home"
+  "error.home": "Back to home",
+  "close": "Close"
 }

@@ -101,7 +101,6 @@
   "meta.options": "选项",
   "interrupted.title": "任务运行期间 Eidolon 停止了",
   "interrupted.body": "点“继续”会重新运行，每个阶段都会跳过已经完成的部分。",
-  "cancelled.title": "已取消",
   "cancelled.body": "点“继续”会重新运行，每个阶段都会跳过已经完成的部分。",
   "resumeNote": "点“继续”会重新运行，每个阶段都会跳过已经完成的部分。",
   "crashed.title": "任务没有完成就停止了",

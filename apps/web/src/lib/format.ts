@@ -48,6 +48,8 @@ export function formatBytes(bytes: number, lang: Lang): string {
       new Intl.NumberFormat(lang, {
         style: "unit",
         unit: BYTE_UNITS[unit],
+        // Short bytes read "94 byte" in English; long ones are "94 bytes" and "94字节".
+        unitDisplay: unit === 0 ? "long" : "short",
         maximumFractionDigits: unit === 0 ? 0 : 1,
       }),
   );

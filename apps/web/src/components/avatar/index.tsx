@@ -16,7 +16,13 @@ const SIZES = {
 export type PersonaAvatarSize = keyof typeof SIZES;
 
 export interface PersonaAvatarProps {
-  readonly persona: { readonly id: string; readonly name: string; readonly shortName: string };
+  readonly persona: {
+    readonly id: string;
+    readonly name: string;
+    readonly shortName: string;
+    /** False skips the request a missing picture would answer with a 404. */
+    readonly avatar?: boolean;
+  };
   /** xs 24 px, sm 32, md 40, lg 64, xl 96. */
   readonly size?: PersonaAvatarSize;
   /**
@@ -37,7 +43,9 @@ export function PersonaAvatar({ persona, size = "md", alt, className }: PersonaA
       aria-label={alt || undefined}
       aria-hidden={alt ? undefined : true}
     >
-      <AvatarImage key={`${persona.id}:${version}`} src={avatarSrc(persona.id, version)} alt="" />
+      {persona.avatar !== false && (
+        <AvatarImage key={`${persona.id}:${version}`} src={avatarSrc(persona.id, version)} alt="" />
+      )}
       <AvatarFallback className={cn("font-medium", text)}>
         {monogram(persona.shortName || persona.name)}
       </AvatarFallback>

@@ -272,28 +272,6 @@ export function groupOf(path: string, scope: SettingScope): Group {
   return GROUP_OF[head] ?? "other";
 }
 
-/** Shown unfolded; every other row sits under Advanced. */
-export const BASIC: ReadonlySet<string> = new Set([
-  "local.viewerName",
-  "memory.qdrant.host",
-  "memory.qdrant.port",
-  "embeddings.model",
-  "embeddings.dim",
-  "sources.cookiesFromBrowser",
-  "identity.timezone",
-  "voice.voiceId",
-  "voice.model",
-  "mind.model",
-  "memory.searchLimit",
-  "knowledge.rerank.enabled",
-  "knowledge.gate.enabled",
-  "knowledge.facts.files",
-  "transcription.language",
-  "refine.model",
-  "selfie.model",
-  "selfie.quality",
-]);
-
 /** The scope's rows a local install uses, in the order of `paths` when given. */
 export function visibleRows(
   rows: readonly SettingRow[],
@@ -319,16 +297,6 @@ function bySection(rows: readonly SettingRow[]): Section[] {
     group,
     rows: rows.filter((row) => groupOf(row.path, row.scope) === group),
   })).filter((section) => section.rows.length > 0);
-}
-
-export function sections(rows: readonly SettingRow[]): {
-  readonly basic: Section[];
-  readonly advanced: Section[];
-} {
-  return {
-    basic: bySection(rows.filter((row) => BASIC.has(row.path))),
-    advanced: bySection(rows.filter((row) => !BASIC.has(row.path))),
-  };
 }
 
 /** A SettingsCard line: one row's path, or the paths of rows shown side by side. */

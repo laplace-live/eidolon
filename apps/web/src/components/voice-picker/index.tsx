@@ -36,6 +36,8 @@ export interface VoicePickerProps {
   readonly value: string | null;
   readonly onChange: (voice: Voice) => void;
   readonly disabled?: boolean;
+  /** Leaves out the line naming a chosen voice the results don't show, for a page that names it. */
+  readonly hideCurrent?: boolean;
 }
 
 const DEBOUNCE_MS = 350;
@@ -50,7 +52,12 @@ function useDebounced(value: string): string {
   return settled;
 }
 
-export function VoicePicker({ value, onChange, disabled = false }: VoicePickerProps) {
+export function VoicePicker({
+  value,
+  onChange,
+  disabled = false,
+  hideCurrent = false,
+}: VoicePickerProps) {
   const t = useT();
   const searchId = useId();
   const [text, setText] = useState("");
@@ -128,7 +135,7 @@ export function VoicePicker({ value, onChange, disabled = false }: VoicePickerPr
       </div>
       <p className="text-muted-foreground text-xs">{t("setup.voice.mandarin")}</p>
 
-      {value !== null && !chosenShown && (
+      {value !== null && !chosenShown && !hideCurrent && (
         <p className="text-sm">
           {t("setup.voice.current")} <code className="font-mono text-xs">{value}</code>
         </p>

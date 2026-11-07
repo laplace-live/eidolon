@@ -76,9 +76,44 @@ export function rich(text: string, nodes: Readonly<Record<string, ReactNode>>): 
   );
 }
 
-/** The string in `lang`, else in English, else the key itself so a missing one shows. */
+/** CLDR's plural categories other than "other", which a string's base key stands for. */
+export const PLURAL_FORMS = ["zero", "one", "two", "few", "many"] as const;
+
+const pluralRules = new Map<Lang, Intl.PluralRules>();
+const countFormats = new Map<Lang, Intl.NumberFormat>();
+
+function pluralOf(lang: Lang, count: number): string {
+  let rules = pluralRules.get(lang);
+  if (rules === undefined) {
+    rules = new Intl.PluralRules(lang);
+    pluralRules.set(lang, rules);
+  }
+  return rules.select(count);
+}
+
+function formatCountIn(lang: Lang, count: number): string {
+  let format = countFormats.get(lang);
+  if (format === undefined) {
+    format = new Intl.NumberFormat(lang);
+    countFormats.set(lang, format);
+  }
+  return format.format(count);
+}
+
+/**
+ * The string in `lang`, else in English, else the key itself so a missing one shows. A numeric
+ * `count` picks `<key>_<form>` where the language has one ("Add 1 video" beside "Add 2 videos"),
+ * and is written as the language writes numbers.
+ */
 export function translate(catalogs: Catalogs, lang: Lang, key: string, vars?: Vars): string {
-  return format(catalogs[lang][key] ?? catalogs.en[key] ?? key, vars);
+  const count = vars?.count;
+  if (typeof count !== "number")
+    return format(catalogs[lang][key] ?? catalogs.en[key] ?? key, vars);
+  const form = `${key}_${pluralOf(lang, count)}`;
+  const enForm = `${key}_${pluralOf("en", count)}`;
+  const text =
+    catalogs[lang][form] ?? catalogs[lang][key] ?? catalogs.en[enForm] ?? catalogs.en[key];
+  return format(text ?? key, { ...vars, count: formatCountIn(lang, count) });
 }
 
 const listeners = new Set<() => void>();

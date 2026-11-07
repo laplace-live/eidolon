@@ -159,7 +159,16 @@ describe("listing and creating", () => {
       200,
       {
         active: MILKY,
-        personas: [{ id: MILKY, name: "明前奶绿", shortName: "奶绿", template: true, own: false }],
+        personas: [
+          {
+            id: MILKY,
+            name: "明前奶绿",
+            shortName: "奶绿",
+            template: true,
+            own: false,
+            avatar: false,
+          },
+        ],
       },
     ]);
   });
@@ -168,7 +177,7 @@ describe("listing and creating", () => {
     const created = await call("POST", "/personas", NEW_PERSONA);
     expect([created.status, created.body]).toEqual([
       201,
-      { id: "aria", name: "阿莉亚", shortName: "莉亚", template: false, own: true },
+      { id: "aria", name: "阿莉亚", shortName: "莉亚", template: false, own: true, avatar: false },
     ]);
     const yaml = Bun.YAML.parse(readFileSync(join(personaHomeDir("aria"), "persona.yaml"), "utf8"));
     expect(yaml).toEqual({
@@ -549,7 +558,12 @@ describe("references and the avatar", () => {
     expect([served.status, served.headers.get("content-type")]).toEqual([200, "image/jpeg"]);
     const listed = await call("GET", `/personas/${MILKY}/references`);
     expect(listed.body.avatar).toEqual({ name: "avatar.jpg", source: "own", size: JPEG.length });
+    // The list says she has one, so the pages request it; without one they show her monogram.
+    const withAvatar = await call("GET", "/personas");
+    expect(withAvatar.body.personas.find((p: { id: string }) => p.id === MILKY).avatar).toBe(true);
     expect((await call("DELETE", `/personas/${MILKY}/avatar`)).status).toBe(200);
+    const without = await call("GET", "/personas");
+    expect(without.body.personas.find((p: { id: string }) => p.id === MILKY).avatar).toBe(false);
     expect((await call("GET", `/personas/${MILKY}/avatar`)).status).toBe(404);
     expect(
       (await call("PUT", `/personas/${MILKY}/avatar`, new TextEncoder().encode("<svg/>"))).status,

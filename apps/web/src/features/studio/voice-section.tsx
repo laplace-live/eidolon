@@ -225,6 +225,7 @@ function VoiceCard({ persona }: { readonly persona: PersonaSummary }) {
         value={own}
         onChange={(voice) => pick.mutate(voice)}
         disabled={busy || settings.data === undefined}
+        hideCurrent
       />
     </SectionCard>
   );

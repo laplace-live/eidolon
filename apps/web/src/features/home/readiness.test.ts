@@ -18,6 +18,7 @@ const healthy: Status = {
     id: "milky-green",
     name: "明前奶绿",
     shortName: "奶绿",
+    avatar: false,
     voice: { id: "a".repeat(32), source: "persona", ok: true },
   },
   index: {

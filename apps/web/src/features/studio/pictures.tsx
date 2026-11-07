@@ -2,6 +2,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type ChangeEvent, type DragEvent, useRef } from "react";
 import { avatarChanged } from "@/components/avatar/version";
+import { personasQuery } from "@/components/settings-form/queries";
 import { call, type ReferenceKind } from "@/lib/api";
 import { toastError } from "@/lib/feedback";
 import { formatBytes } from "@/lib/format";
@@ -63,6 +64,10 @@ function useChanged(persona: string, onDone?: () => void) {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: personaQueries(persona).references.queryKey }),
       queryClient.invalidateQueries({ queryKey: statusQuery.queryKey }),
+      // Her list entry says whether she has an avatar, which the switcher and Home read.
+      ...(kind === "avatar"
+        ? [queryClient.invalidateQueries({ queryKey: personasQuery.queryKey })]
+        : []),
     ]);
   };
 }

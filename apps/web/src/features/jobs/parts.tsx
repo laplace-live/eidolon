@@ -316,7 +316,6 @@ export function JobLog({
   readonly className?: string;
 }) {
   const t = useT();
-  const lang = useLang();
   const box = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
   // A line's number in the whole log, which stays its own as earlier lines are dropped.
@@ -342,9 +341,7 @@ export function JobLog({
       )}
     >
       {view.logDropped > 0 && (
-        <p className="text-muted-foreground">
-          {t("jobs.log.dropped", { count: formatCount(view.logDropped, lang) })}
-        </p>
+        <p className="text-muted-foreground">{t("jobs.log.dropped", { count: view.logDropped })}</p>
       )}
       {view.log.length === 0 && <p className="text-muted-foreground">{t("jobs.log.empty")}</p>}
       {lines.map(({ line, n }) => (

@@ -211,6 +211,8 @@ export interface Status {
     readonly id: string;
     readonly name: string;
     readonly shortName: string;
+    /** As PersonaSummary's. */
+    readonly avatar: boolean;
     readonly voice: VoiceStatus;
   };
   readonly index: IndexStatus;
@@ -386,6 +388,8 @@ export interface PersonaSummary {
   readonly template: boolean;
   /** Has a folder in the data home. */
   readonly own: boolean;
+  /** Has an avatar picture; without one the pages show her monogram and request none. */
+  readonly avatar: boolean;
 }
 
 export interface PersonasResponse {

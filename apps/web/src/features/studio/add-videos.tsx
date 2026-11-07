@@ -72,7 +72,6 @@ const COMPACT = "min-h-11 py-2";
 
 function CheckRow({ check }: { readonly check: Check }) {
   const t = useT();
-  const lang = useLang();
   const Icon = check.state === "running" ? null : STATE_ICONS[check.state];
   const reason =
     check.failure === null
@@ -116,7 +115,7 @@ function CheckRow({ check }: { readonly check: Check }) {
         <>
           {check.entries.length > 0 && (
             <span className="text-muted-foreground text-xs tabular-nums">
-              {t("studio.videos.checkFound", { count: formatCount(check.entries.length, lang) })}
+              {t("studio.videos.checkFound", { count: check.entries.length })}
             </span>
           )}
           {/* Link checks are kept only until the next one, so only the running one has a page. */}
@@ -303,7 +302,7 @@ export function AddVideosCard({
               {add.isPending ? <Spinner /> : <ListPlusIcon />}
               {fresh.length === 0
                 ? t("studio.videos.nothingNew")
-                : t("studio.videos.add", { count: formatCount(fresh.length, lang) })}
+                : t("studio.videos.add", { count: fresh.length })}
             </Button>
           )}
         </>
@@ -349,7 +348,7 @@ export function AddVideosCard({
           <div className="flex flex-col gap-1">
             <p className="font-medium text-sm">
               {t("studio.videos.preview", {
-                count: formatCount(fresh.length, lang),
+                count: fresh.length,
                 known: formatCount(entries.length - fresh.length, lang),
               })}
             </p>

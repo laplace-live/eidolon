@@ -8,7 +8,7 @@ import { download, which } from "@eidolon/ingest";
 import manifest from "../../package.json" with { type: "json" };
 import { REQUIRED_KEYS, type Status, type VoiceStatus, type YtDlpStatus } from "./api.ts";
 import { checkFishVoice, checkQdrant, configuredQdrant, voiceOk } from "./checks.ts";
-import { indexStatus } from "./personas.ts";
+import { findAvatar, indexStatus } from "./personas.ts";
 import { restartTracker } from "./restart.ts";
 import type { LocalApp } from "./router.ts";
 
@@ -274,6 +274,7 @@ export function buildStatus(app: LocalApp, deps: StatusDeps = defaultStatusDeps)
       id: persona.id,
       name: persona.identity.name,
       shortName: persona.identity.shortName,
+      avatar: findAvatar(persona.id) !== null,
       voice: {
         id: voiceId,
         source: voiceSource(voiceId),

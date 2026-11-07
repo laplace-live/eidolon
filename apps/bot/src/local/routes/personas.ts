@@ -162,6 +162,7 @@ function summaryOf(id: string): PersonaSummary {
     shortName: identity.shortName,
     template: existsSync(personaTemplateDir(id)),
     own: existsSync(personaHomeDir(id)),
+    avatar: findAvatar(id) !== null,
   };
 }
 

@@ -40,7 +40,7 @@ import { JobCard } from "@/features/jobs/parts";
 import { jobsQuery, useStartJob } from "@/features/jobs/queries";
 import { useJobEvents } from "@/features/jobs/use-job-events";
 import type { JobCommand, PersonaSummary, Status } from "@/lib/api";
-import { formatBytes, formatCount, formatUsd } from "@/lib/format";
+import { formatBytes, formatUsd } from "@/lib/format";
 import { useLang, useT } from "@/lib/i18n";
 import { latestJob, videoActivity } from "@/lib/jobs";
 import { statusQuery } from "@/lib/query";
@@ -165,7 +165,7 @@ function DownloadCard({
       actions={
         <Button onClick={() => onDownload?.()} disabled={busy || onDownload === null}>
           <DownloadIcon />
-          {t("studio.videos.download", { count: formatCount(downloadCount, lang) })}
+          {t("studio.videos.download", { count: downloadCount })}
         </Button>
       }
     >
@@ -412,7 +412,7 @@ export function VideosSection({ persona }: { readonly persona: PersonaSummary })
               {totals.transcribePending > 0 && (
                 <Cost
                   label={t("studio.videos.estimateTranscribe", {
-                    count: formatCount(totals.transcribePending, lang),
+                    count: totals.transcribePending,
                   })}
                   amount={formatUsd(totals.transcribeUsd, lang)}
                 />
@@ -420,7 +420,7 @@ export function VideosSection({ persona }: { readonly persona: PersonaSummary })
               {totals.refineChunks > 0 && (
                 <Cost
                   label={t("studio.videos.estimateRefine", {
-                    count: formatCount(totals.refineChunks, lang),
+                    count: totals.refineChunks,
                   })}
                   amount={formatUsd(totals.refineUsd, lang)}
                 />
@@ -428,7 +428,7 @@ export function VideosSection({ persona }: { readonly persona: PersonaSummary })
               {totals.unindexed > 0 && (
                 <Cost
                   label={t("studio.videos.estimateIndex", {
-                    count: formatCount(totals.unindexed, lang),
+                    count: totals.unindexed,
                   })}
                   amount="—"
                 />

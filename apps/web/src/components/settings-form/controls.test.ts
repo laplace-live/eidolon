@@ -10,7 +10,6 @@ import {
 import { FISH_MODELS as CHECKED_MODELS } from "../../../../bot/src/local/checks.ts";
 import type { SettingRow } from "../../lib/api";
 import {
-  BASIC,
   cardSections,
   changes,
   controlFor,
@@ -23,7 +22,6 @@ import {
   parseDraft,
   REINDEX_PATHS,
   SPACE_CLASS,
-  sections,
   staysInside,
   visibleRows,
 } from "./controls";
@@ -284,9 +282,9 @@ describe("layout", () => {
     expect(GROUPS.at(-1)).toBe("other");
   });
 
-  test("BASIC and REINDEX_PATHS name real rows", () => {
+  test("REINDEX_PATHS name real rows", () => {
     const paths = new Set(SETTINGS.map((setting) => setting.path));
-    expect([...BASIC, ...REINDEX_PATHS].filter((path) => !paths.has(path))).toEqual([]);
+    expect(REINDEX_PATHS.filter((path) => !paths.has(path))).toEqual([]);
   });
 
   test("the form leaves out production-only rows, the persona row and the other scope", () => {
@@ -301,21 +299,6 @@ describe("layout", () => {
     expect(
       visibleRows(rows, "persona", ["voice.model", "nope", "prompt"]).map((r) => r.path),
     ).toEqual(["voice.model", "prompt"]);
-  });
-
-  test("sections split basic from advanced, in group order", () => {
-    const rows = ["mind.model", "prompt", "voice.voiceId", "hearing.model"].map((path) =>
-      row(field(path)),
-    );
-    const { basic, advanced } = sections(rows);
-    expect(basic.map((s) => [s.group, s.rows.map((r) => r.path)])).toEqual([
-      ["voice", ["voice.voiceId"]],
-      ["models", ["mind.model"]],
-    ]);
-    expect(advanced.map((s) => [s.group, s.rows.map((r) => r.path)])).toEqual([
-      ["persona", ["prompt"]],
-      ["models", ["hearing.model"]],
-    ]);
   });
 });
 

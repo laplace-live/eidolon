@@ -49,7 +49,9 @@ test("costs are to the cent, and a fraction of a cent isn't rounded away", () =>
 });
 
 test("sizes use decimal units", () => {
-  expect(formatBytes(999, "en")).toBe("999 byte");
+  expect(formatBytes(999, "en")).toBe("999 bytes");
+  expect(formatBytes(1, "en")).toBe("1 byte");
+  expect(formatBytes(94, "zh-CN")).toBe("94字节");
   expect(formatBytes(1_234_567_890, "en")).toBe("1.2 GB");
   expect(formatBytes(2_000_000_000_000_000, "en")).toBe("2,000 TB");
 });

@@ -83,6 +83,7 @@
   "voice.current": "Current voice:",
   "voice.none": "No voices match.",
   "voice.total": "{count} voices",
+  "voice.total_one": "{count} voice",
   "voice.more": "Show more",
   "voice.noPreview": "No sample",
   "voice.chosen": "Chosen",

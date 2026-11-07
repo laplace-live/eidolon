@@ -31,5 +31,6 @@
   "error.title": "出了点问题",
   "error.retry": "重试",
   "error.notFound": "页面不存在。",
-  "error.home": "返回首页"
+  "error.home": "返回首页",
+  "close": "关闭"
 }

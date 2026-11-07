@@ -1,6 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { PhoneIcon, UserRoundXIcon } from "lucide-react";
-import type { ComponentType } from "react";
+import {
+  AudioLinesIcon,
+  BookOpenIcon,
+  BrainIcon,
+  ClapperboardIcon,
+  ImagesIcon,
+  LanguagesIcon,
+  PhoneIcon,
+  ScrollTextIcon,
+  SlidersHorizontalIcon,
+  UserRoundIcon,
+  UserRoundXIcon,
+} from "lucide-react";
+import type { ComponentType, ReactNode } from "react";
 import { Link, Navigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { PersonaAvatar } from "@/components/avatar";
@@ -28,6 +40,19 @@ import { PromptSection } from "./prompt-section";
 import { ReferencesSection } from "./references-section";
 import { isSection, SECTIONS, type SectionId } from "./sections";
 import { VideosSection } from "./videos-section";
+
+const ICONS: Readonly<Record<SectionId, ReactNode>> = {
+  identity: <UserRoundIcon />,
+  prompt: <ScrollTextIcon />,
+  voice: <AudioLinesIcon />,
+  models: <BrainIcon />,
+  knowledge: <BookOpenIcon />,
+  videos: <ClapperboardIcon />,
+  glossary: <LanguagesIcon />,
+  references: <ImagesIcon />,
+  advanced: <SlidersHorizontalIcon />,
+};
+
 import { VoiceSection } from "./voice-section";
 
 const PANELS: Readonly<Record<SectionId, ComponentType<{ readonly persona: PersonaSummary }>>> = {
@@ -154,6 +179,7 @@ export function Component() {
           id: section,
           label: t(`studio.section.${section}`),
           href: studioPath(persona.id, section),
+          icon: ICONS[section],
         }))}
         active={current}
         label={t("studio.sections", { name: persona.shortName || persona.name })}
