@@ -1,15 +1,24 @@
-import { CircleAlertIcon, InfoIcon, TriangleAlertIcon, Volume2Icon, XIcon } from "lucide-react";
+import {
+  CircleAlertIcon,
+  InfoIcon,
+  type LucideIcon,
+  TriangleAlertIcon,
+  Volume2Icon,
+  XIcon,
+} from "lucide-react";
+import type { ReactNode } from "react";
 import { Link } from "react-router";
-import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import type { Status } from "@/lib/api";
 import { type Translate, useT } from "@/lib/i18n";
 import { studioPath } from "@/lib/paths";
+import { cn } from "@/lib/utils";
 import type { MicProblem } from "./media";
 import { type CallEnd, sessionErrorSince } from "./phase";
 import type { Call } from "./use-call";
 
-interface Notice {
+interface Ending {
   readonly title: string;
   readonly detail?: string;
   /** The detail is untranslated text, such as the bot's own error message. */
@@ -17,7 +26,7 @@ interface Notice {
   readonly error: boolean;
 }
 
-function micNotice(problem: MicProblem, t: Translate): Notice {
+function micEnding(problem: MicProblem, t: Translate): Ending {
   return {
     title: t(`call.mic.${problem}.title`),
     detail: t(`call.mic.${problem}.body`),
@@ -26,9 +35,9 @@ function micNotice(problem: MicProblem, t: Translate): Notice {
 }
 
 /** Why the call ended, unless the viewer hung up; a session failure the bot recorded wins. */
-function endNotice(end: CallEnd, sessionError: string | null, t: Translate): Notice | null {
+function endingOf(end: CallEnd, sessionError: string | null, t: Translate): Ending | null {
   if (end.kind === "hung-up") return null;
-  if (end.kind === "mic") return micNotice(end.problem, t);
+  if (end.kind === "mic") return micEnding(end.problem, t);
   if (end.kind === "silence") return { title: t("call.ended.silence"), error: false };
   if (sessionError !== null && (end.kind === "connect" || end.kind === "dropped")) {
     return { title: t("call.ended.failed"), detail: sessionError, verbatim: true, error: true };
@@ -48,18 +57,77 @@ function endNotice(end: CallEnd, sessionError: string | null, t: Translate): Not
   return { title: t("call.ended.connect"), detail: end.detail, verbatim: true, error: true };
 }
 
-function NoticeAlert({ notice }: { readonly notice: Notice }) {
-  const Icon = notice.error ? CircleAlertIcon : InfoIcon;
+const TONE_ICON_CLASS = {
+  error: "text-destructive",
+  warning: "text-warning",
+  info: "text-muted-foreground",
+} as const;
+
+/** One notice: an icon, a line, an optional detail, and a button at its end. */
+function Notice({
+  icon: Icon,
+  tone,
+  title,
+  children,
+  action,
+  onDismiss,
+  dismissLabel,
+}: {
+  readonly icon: LucideIcon;
+  readonly tone: keyof typeof TONE_ICON_CLASS;
+  readonly title: ReactNode;
+  readonly children?: ReactNode;
+  readonly action?: ReactNode;
+  readonly onDismiss?: () => void;
+  readonly dismissLabel?: string;
+}) {
   return (
-    <Alert variant={notice.error ? "destructive" : "default"}>
-      <Icon />
-      <AlertTitle>{notice.title}</AlertTitle>
-      {notice.detail && (
-        <AlertDescription className={notice.verbatim ? "font-mono text-xs break-words" : undefined}>
-          {notice.detail}
-        </AlertDescription>
+    <Alert
+      variant={tone === "error" ? "destructive" : "default"}
+      className={cn(
+        "flex flex-wrap items-start gap-x-2.5 gap-y-2 px-3 py-2.5",
+        onDismiss && "pr-10",
+      )}
+    >
+      {/* Wrapped: the alert recolours an svg child to its own text colour. */}
+      <span className={cn("mt-0.5 flex shrink-0", TONE_ICON_CLASS[tone])}>
+        <Icon className="size-4" />
+      </span>
+      <div className="flex min-w-0 flex-1 basis-56 flex-col gap-0.5">
+        <AlertTitle>{title}</AlertTitle>
+        {children !== undefined && <AlertDescription>{children}</AlertDescription>}
+      </div>
+      {action !== undefined && (
+        <div className="ml-6.5 flex shrink-0 items-center sm:ml-0 sm:self-center">{action}</div>
+      )}
+      {onDismiss && (
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          className="absolute top-2 right-2"
+          onClick={onDismiss}
+          aria-label={dismissLabel}
+        >
+          <XIcon />
+        </Button>
       )}
     </Alert>
+  );
+}
+
+function EndingNotice({ ending }: { readonly ending: Ending }) {
+  return (
+    <Notice
+      icon={ending.error ? CircleAlertIcon : InfoIcon}
+      tone={ending.error ? "error" : "info"}
+      title={ending.title}
+    >
+      {ending.detail && (
+        <span className={ending.verbatim ? "break-words font-mono text-xs" : undefined}>
+          {ending.detail}
+        </span>
+      )}
+    </Notice>
   );
 }
 
@@ -76,64 +144,66 @@ export function CallNotices({
 }) {
   const t = useT();
   const { phase, botError } = call;
+  const { voice } = status.persona;
   const ended = phase.name === "ended" ? phase : null;
   const end =
-    ended && endNotice(ended.end, sessionErrorSince(status.lastSessionError, ended.startedAt), t);
+    ended && endingOf(ended.end, sessionErrorSince(status.lastSessionError, ended.startedAt), t);
   const inCall = phase.name === "connecting" || phase.name === "live";
-  const mic = call.micProblem !== null && inCall ? micNotice(call.micProblem, t) : null;
+  const mic = call.micProblem !== null && inCall ? micEnding(call.micProblem, t) : null;
 
-  if (!end && !mic && !botError && !call.audioBlocked && status.persona.voice.ok !== false)
-    return null;
+  if (!end && !mic && !botError && !call.audioBlocked && voice.ok !== false) return null;
   return (
-    <div className="flex flex-col gap-2 border-b px-4 py-3">
-      {end && <NoticeAlert notice={end} />}
-      {mic && <NoticeAlert notice={mic} />}
+    <div className="flex flex-col gap-2 border-b px-4 py-3 sm:px-6">
+      {end && <EndingNotice ending={end} />}
+      {mic && <EndingNotice ending={mic} />}
       {call.audioBlocked && (
-        <Alert>
-          <Volume2Icon />
-          <AlertTitle>{t("call.audio.blocked", { name })}</AlertTitle>
-          <AlertAction>
+        <Notice
+          icon={Volume2Icon}
+          tone="info"
+          title={t("call.audio.blocked", { name })}
+          action={
             <Button size="sm" onClick={call.playAudio}>
               {t("call.audio.play")}
             </Button>
-          </AlertAction>
-        </Alert>
+          }
+        />
       )}
       {botError && (
-        <Alert variant="destructive">
-          <TriangleAlertIcon />
-          <AlertTitle>{t("call.botError.title", { name })}</AlertTitle>
-          <AlertDescription>
-            <div>{t("call.botError.body")}</div>
+        <Notice
+          icon={TriangleAlertIcon}
+          tone="error"
+          title={t("call.botError.title", { name })}
+          onDismiss={call.dismissBotError}
+          dismissLabel={t("call.botError.dismiss")}
+        >
+          <span className="flex flex-col gap-1">
+            <span>{t("call.botError.body")}</span>
             {botError.message && (
-              <div className="font-mono text-xs break-words">{botError.message}</div>
+              <span className="break-words font-mono text-xs">{botError.message}</span>
             )}
             {botError.count > 1 && (
-              <div className="text-xs">{t("call.botError.count", { count: botError.count })}</div>
+              <span className="text-xs">{t("call.botError.count", { count: botError.count })}</span>
             )}
-          </AlertDescription>
-          <AlertAction>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={call.dismissBotError}
-              aria-label={t("call.botError.dismiss")}
-            >
-              <XIcon />
-            </Button>
-          </AlertAction>
-        </Alert>
+          </span>
+        </Notice>
       )}
-      {status.persona.voice.ok === false && (
-        <Alert>
-          <TriangleAlertIcon />
-          <AlertTitle>{t("call.voice.unknown", { name })}</AlertTitle>
-          <AlertAction>
+      {voice.ok === false && (
+        <Notice
+          icon={TriangleAlertIcon}
+          tone="warning"
+          title={
+            voice.source === "env"
+              ? t("call.voice.inheritedUnknown", { name })
+              : t("call.voice.unknown", { name })
+          }
+          action={
             <Button size="sm" variant="outline" asChild>
               <Link to={studioPath(status.persona.id, "voice")}>{t("call.voice.pick")}</Link>
             </Button>
-          </AlertAction>
-        </Alert>
+          }
+        >
+          {voice.source === "env" ? t("call.voice.inheritedHint") : undefined}
+        </Notice>
       )}
     </div>
   );

@@ -56,7 +56,9 @@
   "voice.missing.title": "Pick a voice for {name}",
   "voice.missing.body": "A call needs a voice. Pick one of Fish Audio's public voices first.",
   "voice.pick": "Pick a voice",
-  "voice.unknown": "Fish Audio doesn't know {name}'s voice, so calls may have no sound.",
+  "voice.unknown": "Fish Audio can't use {name}'s voice, so calls may have no sound.",
+  "voice.inheritedUnknown": "Fish Audio can't use the voice {name} inherits from FISH_VOICE_ID, so calls may have no sound.",
+  "voice.inheritedHint": "Pick her own voice: it overrides the environment's for her alone.",
   "keys.missing.title": "Add your API keys first",
   "keys.missing.body": "Calls need Soniox, OpenRouter and Fish Audio keys.",
   "keys.add": "Add keys"
