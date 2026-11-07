@@ -90,7 +90,16 @@ export function useKeys() {
     setOutcomes(({ [name]: _, ...rest }) => rest);
   }
 
-  return { credentials, typed, setTyped, outcomes, checking, check, save, remove, saving };
+  /** Clears every typed key, and the verdicts on those unsaved keys. */
+  function discard() {
+    const unsaved = new Set(Object.keys(typed).filter((name) => typed[name] !== ""));
+    setTypedState({});
+    setOutcomes((current) =>
+      Object.fromEntries(Object.entries(current).filter(([name]) => !unsaved.has(name))),
+    );
+  }
+
+  return { credentials, typed, setTyped, outcomes, checking, check, save, remove, discard, saving };
 }
 
 export type Keys = ReturnType<typeof useKeys>;

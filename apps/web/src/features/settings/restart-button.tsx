@@ -27,10 +27,12 @@ interface Asking {
 export function RestartButton({
   label,
   variant = "default",
+  size = "sm",
 }: {
   /** A locale key. */
   readonly label: string;
   readonly variant?: "default" | "outline";
+  readonly size?: "sm" | "default";
 }) {
   const t = useT();
   const queryClient = useQueryClient();
@@ -52,7 +54,7 @@ export function RestartButton({
   return (
     <>
       <Button
-        size="sm"
+        size={size}
         variant={variant}
         disabled={restarting || checking}
         onClick={() => void begin()}

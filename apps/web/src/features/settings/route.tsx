@@ -1,144 +1,117 @@
+// Settings for this install: keys, and what every persona shares. A persona's own settings are in
+// her studio.
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRightIcon, RotateCcwIcon, TriangleAlertIcon } from "lucide-react";
-import { useId } from "react";
-import { useSearchParams } from "react-router";
-import { SettingsForm } from "@/components/settings-form";
-import { CredentialsEditor } from "@/components/settings-form/credentials-editor";
-import { personasQuery, settingsQuery } from "@/components/settings-form/queries";
-import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useT } from "@/lib/i18n";
+  DatabaseIcon,
+  DownloadIcon,
+  KeyRoundIcon,
+  PlugIcon,
+  SettingsIcon,
+  SlidersHorizontalIcon,
+} from "lucide-react";
+import type { ReactNode } from "react";
+import { Link, Navigate, useSearchParams } from "react-router";
+import { PersonaAvatar } from "@/components/avatar";
+import { PageHeader } from "@/components/page-header";
+import { SectionLayout } from "@/components/section-layout";
+import { CredentialsEditor } from "@/components/settings-form/credentials-editor";
+import { SettingsCard } from "@/components/settings-form/settings-card";
+import { rich, type Translate, useT } from "@/lib/i18n";
+import { studioPath } from "@/lib/paths";
 import { statusQuery } from "@/lib/query";
-import { RestartButton } from "./restart-button";
+import { Notices } from "./notices";
+import { CARDS, NAMED, resolveSection, SECTIONS, type SectionId } from "./sections";
+import { YtDlpBadge, YtDlpProblem } from "./yt-dlp-state";
 
-const TABS = ["keys", "app", "persona"] as const;
-type Tab = (typeof TABS)[number];
+const ICONS: Readonly<Record<SectionId, ReactNode>> = {
+  keys: <KeyRoundIcon />,
+  general: <SettingsIcon />,
+  memory: <DatabaseIcon />,
+  providers: <PlugIcon />,
+  downloads: <DownloadIcon />,
+  advanced: <SlidersHorizontalIcon />,
+};
 
-function isTab(value: string | null): value is Tab {
-  return (TABS as readonly (string | null)[]).includes(value);
+/** A card's description; `{keys}` in it links to that section. */
+function describe(t: Translate, key: string): ReactNode {
+  return rich(t(key), {
+    keys: (
+      <Link
+        to="?tab=keys"
+        className="font-medium text-foreground underline-offset-4 hover:underline"
+      >
+        {t("settings.nav.keys")}
+      </Link>
+    ),
+  });
 }
 
-/** A saved value that waits for a restart; MCP-only staleness is said to be just that. */
-function RestartBanner() {
+function Section({ section }: { readonly section: SectionId }) {
   const t = useT();
-  const status = useQuery(statusQuery);
-  const all = status.data?.restartRequired === true;
-  if (!all && status.data?.mcpRestartRequired !== true) return null;
-  return (
-    <Alert>
-      <RotateCcwIcon />
-      <AlertTitle>{t(all ? "settings.restart.title" : "settings.restart.mcpTitle")}</AlertTitle>
-      <AlertDescription>
-        {t(all ? "settings.restart.body" : "settings.restart.mcpBody")}
-      </AlertDescription>
-      <AlertAction>
-        <RestartButton label="settings.restart.button" />
-      </AlertAction>
-    </Alert>
-  );
-}
-
-/** What the settings files hold that the bot ignores, in the server's English. */
-function FileWarnings({ warnings }: { readonly warnings: readonly string[] }) {
-  const t = useT();
-  if (warnings.length === 0) return null;
-  return (
-    <Collapsible className="rounded-lg border p-3">
-      <CollapsibleTrigger className="group flex w-full items-center gap-2 text-left text-sm">
-        <TriangleAlertIcon className="size-4 text-amber-600 dark:text-amber-400" />
-        <span className="flex-1">{t("settings.warnings", { count: warnings.length })}</span>
-        <ChevronRightIcon className="size-4 transition-transform group-data-[state=open]:rotate-90" />
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <ul className="mt-2 flex flex-col gap-1 pl-6 font-mono text-muted-foreground text-xs">
-          {warnings.map((warning) => (
-            <li key={warning}>{warning}</li>
-          ))}
-        </ul>
-      </CollapsibleContent>
-    </Collapsible>
-  );
+  switch (section) {
+    case "keys":
+      return <CredentialsEditor />;
+    case "advanced":
+      return (
+        <SettingsCard
+          scope="app"
+          exclude={NAMED}
+          title={t("settings.card.advanced.title")}
+          description={t("settings.card.advanced.body")}
+        />
+      );
+    default:
+      return CARDS[section].map((card) => (
+        <SettingsCard
+          key={card.id}
+          scope="app"
+          paths={card.paths}
+          title={t(`settings.card.${card.id}.title`)}
+          description={describe(t, `settings.card.${card.id}.body`)}
+          action={card.id === "ytDlp" ? <YtDlpBadge /> : undefined}
+        >
+          {card.id === "ytDlp" && <YtDlpProblem />}
+        </SettingsCard>
+      ));
+  }
 }
 
 export function Component() {
   const t = useT();
-  const pickerId = useId();
-  const [params, setParams] = useSearchParams();
-  const status = useQuery(statusQuery);
-  const personas = useQuery(personasQuery);
-  const requested = params.get("tab");
-  const tab: Tab = isTab(requested) ? requested : "keys";
-  const persona = params.get("persona") ?? status.data?.persona.id;
-  const settings = useQuery({ ...settingsQuery(persona), enabled: persona !== undefined });
+  const [params] = useSearchParams();
+  // The root loader primes it, so the active persona is known from the first render.
+  const persona = useQuery(statusQuery).data?.persona;
+  if (!persona) return null;
 
-  function update(key: "tab" | "persona", value: string) {
-    setParams(
-      (current) => {
-        const next = new URLSearchParams(current);
-        next.set(key, value);
-        return next;
-      },
-      { replace: true },
-    );
-  }
+  const resolved = resolveSection(params, persona.id);
+  if ("redirect" in resolved) return <Navigate to={resolved.redirect} replace />;
+  const { section } = resolved;
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-1">
-        <h1 className="font-heading font-semibold text-2xl">{t("settings.title")}</h1>
-        <p className="text-muted-foreground text-sm">{t("settings.intro")}</p>
-      </div>
-      <RestartBanner />
-      <Tabs value={tab} onValueChange={(next) => update("tab", next)}>
-        <TabsList>
-          {TABS.map((name) => (
-            <TabsTrigger key={name} value={name}>
-              {t(`settings.tab.${name}`)}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-        <TabsContent value="keys" className="pt-4">
-          <CredentialsEditor />
-        </TabsContent>
-        <TabsContent value="app" className="flex flex-col gap-4 pt-4">
-          <p className="text-muted-foreground text-sm">{t("settings.app.intro")}</p>
-          {persona && <SettingsForm scope="app" persona={persona} />}
-        </TabsContent>
-        <TabsContent value="persona" className="flex flex-col gap-4 pt-4">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor={pickerId}>{t("settings.persona.which")}</Label>
-            <Select
-              value={persona}
-              onValueChange={(id) => update("persona", id)}
-              disabled={!personas.data}
-            >
-              <SelectTrigger id={pickerId} className="w-full sm:w-72">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(personas.data?.personas ?? []).map((entry) => (
-                  <SelectItem key={entry.id} value={entry.id}>
-                    {entry.name}
-                    {entry.id === personas.data?.active && ` · ${t("settings.persona.active")}`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-muted-foreground text-sm">{t("settings.persona.intro")}</p>
-          </div>
-          {persona && <SettingsForm key={persona} scope="persona" persona={persona} />}
-        </TabsContent>
-      </Tabs>
-      <FileWarnings warnings={settings.data?.warnings ?? []} />
+    <div className="flex flex-col gap-8">
+      <PageHeader title={t("settings.title")} description={t("settings.intro")}>
+        <p className="flex items-center gap-2.5">
+          <PersonaAvatar persona={persona} size="xs" />
+          <span>
+            {rich(t("settings.persona.line", { name: persona.name }), {
+              studio: <Link to={studioPath(persona.id)}>{t("settings.persona.studio")}</Link>,
+            })}
+          </span>
+        </p>
+      </PageHeader>
+      <SectionLayout
+        label={t("settings.nav.label")}
+        active={section}
+        nav={SECTIONS.map((id) => ({
+          id,
+          label: t(`settings.nav.${id}`),
+          href: `?tab=${id}`,
+          icon: ICONS[id],
+        }))}
+      >
+        <Notices />
+        <Section key={section} section={section} />
+      </SectionLayout>
     </div>
   );
 }
