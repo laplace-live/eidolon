@@ -1,10 +1,12 @@
-// The settings layers. Code defaults < settings.yaml (the install) < personas/<id>/persona.yaml
-// (the persona) < the environment; secrets come from credentials.json or the environment, never
-// YAML. Every setting maps to the variable that always configured it, and the env readers
-// consult this layer, so a value parses and warns exactly as it would from the environment.
+// The settings layers. The install's: code defaults < settings.yaml < the environment. A persona's:
+// code defaults < the local app's derived defaults < the environment < her persona.yaml, and the
+// environment's FISH_VOICE_ID_<STYLE> voices skip a persona with her own voice. Secrets come from
+// credentials.json or the environment, never YAML. Every setting maps to the variable that always
+// configured it, and the env readers consult this layer, so a value parses and warns exactly as it
+// would from the environment.
 import { readFileSync, statSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
-import { setFileLayer } from "./env.ts";
+import { envVariable, setFileLayer } from "./env.ts";
 import { DEFAULT_PERSONA, dataHome, personaDirs, personaIds, resolvePersonaPath } from "./home.ts";
 import { logger } from "./logger.ts";
 import { expandUser } from "./paths.ts";
@@ -488,6 +490,11 @@ export interface SettingsLayers {
    * voice.styles adds, then every credential: credentials.json's in its order, the rest unset.
    */
   readonly values: ReadonlyMap<string, LayeredSetting>;
+  /**
+   * The variables her persona.yaml decides, whatever the environment says: those it gives a value,
+   * and with her own voice every FISH_VOICE_ID_<STYLE> in the environment.
+   */
+  readonly owned: ReadonlySet<string>;
   /** What loadSettings would log about these files, in its order. */
   readonly warnings: readonly string[];
 }
@@ -498,6 +505,7 @@ interface ReadLayers {
   readonly id: string;
   readonly persona: Tree;
   readonly values: Map<string, LayeredSetting>;
+  readonly owned: ReadonlySet<string>;
   readonly files: SettingsFiles;
 }
 
@@ -512,6 +520,8 @@ function readLayers(chosen: string | null, warn: Warn): ReadLayers {
   const persona = readTree(personaPath, personaPath, warn);
 
   const values = new Map<string, LayeredSetting>();
+  // "" decides nothing: an empty value reads as unset, as an empty variable does.
+  const owned = new Set<string>();
   const known = new Set<string>();
   for (const setting of SETTINGS) {
     const tree = setting.scope === "app" ? app : persona;
@@ -531,6 +541,7 @@ function readLayers(chosen: string | null, warn: Warn): ReadLayers {
         : (rel: string) => resolvePersonaPath(id, rel);
     const value = asEnvValue(raw, setting, label, resolvePath, warn);
     values.set(setting.env, { source: setting.scope, value, raw });
+    if (setting.scope === "persona" && value) owned.add(setting.env);
   }
   const styles = lookup(persona, VOICE_STYLES_PATH);
   if (styles !== undefined && styles !== null && !isPlainObject(styles)) {
@@ -541,9 +552,16 @@ function readLayers(chosen: string | null, warn: Warn): ReadLayers {
       if (typeof voiceId === "string" && voiceId) {
         const env = `${VOICE_STYLE_PREFIX}${name.toUpperCase()}`;
         values.set(env, { source: "persona", value: voiceId, raw: voiceId });
+        owned.add(env);
       } else {
         warn(`Ignoring ${personaPath} ${VOICE_STYLES_PATH}.${name}: expected string`);
       }
+    }
+  }
+  // The environment's styles are another voice's moods: with her own voice they'd switch to it.
+  if (owned.has("FISH_VOICE_ID")) {
+    for (const name of Object.keys(process.env)) {
+      if (name.startsWith(VOICE_STYLE_PREFIX)) owned.add(name);
     }
   }
   for (const [scope, tree, label] of [
@@ -574,6 +592,7 @@ function readLayers(chosen: string | null, warn: Warn): ReadLayers {
     id,
     persona,
     values,
+    owned,
     files: { home, settings: settingsPath, credentials: credentialsPath, persona: personaPath },
   };
 }
@@ -585,13 +604,24 @@ function readLayers(chosen: string | null, warn: Warn): ReadLayers {
 export function readSettingsLayers(personaId: string): SettingsLayers {
   const warnings: string[] = [];
   const read = readLayers(personaId, (message) => warnings.push(message));
-  return { persona: read.id, files: read.files, values: read.values, warnings };
+  return { persona: read.id, files: read.files, values: read.values, owned: read.owned, warnings };
+}
+
+/**
+ * `name` as the bot reads it with `layers`' persona active, the local app's derived defaults left
+ * out: her own value, else the environment's, else the files'.
+ */
+export function layeredValue(layers: SettingsLayers, name: string): string | undefined {
+  const fromEnv = layers.owned.has(name) ? undefined : envVariable(name);
+  return fromEnv ?? layers.values.get(name)?.value ?? undefined;
 }
 
 export interface LoadedSettings {
   readonly persona: PersonaSettings;
   /** Variable name → value, as the files set them. */
   readonly values: ReadonlyMap<string, string>;
+  /** As SettingsLayers' owned. */
+  readonly owned: ReadonlySet<string>;
   readonly files: SettingsFiles;
 }
 
@@ -607,6 +637,7 @@ export function loadSettings(): LoadedSettings {
       gateQuestions: readGateQuestions(read.persona, read.files.persona),
     },
     values,
+    owned: read.owned,
     files: read.files,
   };
 }
@@ -629,7 +660,13 @@ function fileLayer(loaded: LoadedSettings): ReadonlyMap<string, string> {
 /** Loads every layer and makes it the one the env readers and persona lookups see. */
 export function installSettings(): LoadedSettings {
   installed = loadSettings();
-  setFileLayer(fileLayer(installed));
+  setFileLayer(fileLayer(installed), installed.owned);
+  for (const name of installed.owned) {
+    if (envVariable(name) === undefined) continue;
+    const setting = SETTINGS.find((field) => field.env === name);
+    const why = setting === undefined ? "has her own voice" : `sets ${setting.path}`;
+    logger.info(`${name} from the environment is ignored: persona ${installed.persona.id} ${why}`);
+  }
   return installed;
 }
 
@@ -639,7 +676,7 @@ export function installSettings(): LoadedSettings {
  */
 export function setSettingDefaults(derive: SettingDefaults | null): void {
   defaults = derive;
-  if (installed !== null) setFileLayer(fileLayer(installed));
+  if (installed !== null) setFileLayer(fileLayer(installed), installed.owned);
 }
 
 /** The active persona: the installed one, or one read on demand where nothing installed it. */
@@ -668,5 +705,5 @@ export function fillPersonaText(text: string, values: Readonly<Record<string, st
 /** Forgets what was loaded; the next lookup reads the files again. For tests and reloads. */
 export function resetSettings(): void {
   installed = null;
-  setFileLayer(new Map());
+  setFileLayer(new Map(), new Set());
 }

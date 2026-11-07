@@ -4,6 +4,7 @@
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { CheckIcon, HeartIcon, SearchIcon } from "lucide-react";
 import { type SyntheticEvent, useEffect, useId, useRef, useState } from "react";
+import { EmptyState } from "@/components/empty-state";
 import { ErrorAlert } from "@/components/error-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -136,13 +137,19 @@ export function VoicePicker({ value, onChange, disabled = false }: VoicePickerPr
       {search.isError && <ErrorAlert error={search.error} />}
 
       {search.isPending ? (
-        <div className="flex flex-col gap-2">
-          {[0, 1, 2].map((n) => (
-            <Skeleton key={n} className="h-20 w-full" />
+        <div className="flex flex-col divide-y rounded-xl border bg-card">
+          {["a", "b", "c"].map((key) => (
+            <div key={key} className="flex items-center gap-3 px-4 py-3">
+              <Skeleton className="size-12 rounded-md" />
+              <div className="flex flex-1 flex-col gap-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-3 w-full max-w-sm" />
+              </div>
+            </div>
           ))}
         </div>
       ) : voices.length === 0 && !search.isError ? (
-        <p className="py-6 text-center text-muted-foreground text-sm">{t("setup.voice.none")}</p>
+        <EmptyState icon={<SearchIcon />} title={t("setup.voice.none")} />
       ) : (
         <>
           {first && (
@@ -150,7 +157,7 @@ export function VoicePicker({ value, onChange, disabled = false }: VoicePickerPr
               {t("setup.voice.total", { count: totalLabel(first) })}
             </p>
           )}
-          <ul className="flex max-h-[28rem] flex-col gap-2 overflow-y-auto pr-1">
+          <ul className="flex max-h-[28rem] flex-col divide-y overflow-y-auto rounded-xl border bg-card">
             {voices.map((voice) => (
               <VoiceRow
                 key={voice.id}
@@ -193,8 +200,8 @@ function VoiceRow({ voice, chosen, disabled, onChoose, onPlay }: VoiceRowProps) 
   return (
     <li
       className={cn(
-        "flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center",
-        chosen && "border-primary bg-primary/5",
+        "flex flex-col gap-3 px-4 py-3 transition-colors sm:flex-row sm:items-center",
+        chosen && "bg-muted/60",
       )}
     >
       <div className="flex min-w-0 flex-1 items-start gap-3">

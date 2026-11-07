@@ -12,6 +12,7 @@ export {
   envOverride,
   envRaw,
   envStr,
+  envVariable,
 } from "./env.ts";
 export {
   DEFAULT_PERSONA,
@@ -116,6 +117,7 @@ export {
   installSettings,
   type LayeredSetting,
   type LoadedSettings,
+  layeredValue,
   loadSettings,
   type PersonaIdentity,
   type PersonaSettings,

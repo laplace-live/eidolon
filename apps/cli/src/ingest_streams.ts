@@ -1,5 +1,5 @@
 // laplace-ingest-streams: embeds the refined scenes into the stream_chunks table.
-import { errorText, logger, sourceFolder } from "@eidolon/config";
+import { envOverride, errorText, logger, sourceFolder } from "@eidolon/config";
 import {
   acquireLock,
   canonicalPath,
@@ -95,8 +95,8 @@ export function ingestStreamsParser(): ParserSpec {
 
 /**
  * `--db-path` when given, else where the bot reads `persona`'s index. A `LANCEDB_PATH` from the
- * environment names one index for every persona, so with `--persona` spelled out it must be
- * overridden explicitly.
+ * environment names one index for every persona that sets no knowledge.index, so with `--persona`
+ * spelled out it must be overridden explicitly.
  */
 export function writerDbPath(
   spec: ParserSpec,
@@ -112,10 +112,11 @@ export function writerDbPath(
     }
     return dbPath;
   }
-  if (personaFlag && process.env.LANCEDB_PATH) {
+  if (personaFlag && envOverride("LANCEDB_PATH") !== undefined) {
     throw parserError(
       spec,
-      `LANCEDB_PATH is set in the environment; pass --db-path to write persona ${persona}'s index.`,
+      "LANCEDB_PATH is set in the environment; pass --db-path or set her knowledge.index to " +
+        `write persona ${persona}'s index.`,
     );
   }
   try {

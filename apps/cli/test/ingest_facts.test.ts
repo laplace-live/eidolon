@@ -313,8 +313,8 @@ describe("the index it writes", () => {
     const argv = ["--persona", "milky-green", "--data-dir", join(work, "facts"), "--dry-run"];
     expect(await ingestFactsMain(argv, io.io)).toBe(2);
     expect(io.stderr()).toEndWith(
-      "laplace-ingest-facts: error: LANCEDB_PATH is set in the environment; pass --db-path to " +
-        "write persona milky-green's index.\n",
+      "laplace-ingest-facts: error: LANCEDB_PATH is set in the environment; pass --db-path or " +
+        "set her knowledge.index to write persona milky-green's index.\n",
     );
     const db = captureIo();
     expect(await ingestFactsMain([...argv, "--db-path", join(work, "index")], db.io)).toBe(0);

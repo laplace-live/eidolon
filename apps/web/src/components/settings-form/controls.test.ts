@@ -11,12 +11,15 @@ import { FISH_MODELS as CHECKED_MODELS } from "../../../../bot/src/local/checks.
 import type { SettingRow } from "../../lib/api";
 import {
   BASIC,
+  cardSections,
   changes,
   controlFor,
   draftOf,
+  envDraft,
   GROUPS,
   groupOf,
   optionsOf,
+  originOf,
   parseDraft,
   REINDEX_PATHS,
   SPACE_CLASS,
@@ -30,6 +33,7 @@ function row(field: SettingField, extra: Partial<SettingRow> = {}): SettingRow {
     ...field,
     value: null,
     source: "default",
+    envValue: null,
     envOverride: false,
     productionOnly: false,
     readOnly: false,
@@ -345,5 +349,119 @@ describe("changes", () => {
         "memory.qdrant.port": "port",
       }),
     ).toEqual({ values: {}, errors: { "memory.qdrant.port": "settings.form.invalid.integer" } });
+  });
+});
+
+describe("where a field's value comes from", () => {
+  const voice = (extra: Partial<SettingRow>) => row(field("voice.voiceId"), extra);
+  const host = (extra: Partial<SettingRow>) => row(field("memory.qdrant.host"), extra);
+
+  test("a persona row inherits the environment's value while her draft is empty", () => {
+    expect(originOf(voice({ envValue: "env-voice" }), "")).toBe("inherited");
+    expect(originOf(voice({ envValue: "env-voice" }), " \u3000")).toBe("inherited");
+  });
+
+  test("her own value overrides the environment's, as soon as she types one", () => {
+    const set = voice({ envValue: "env-voice", value: "mine", source: "persona" });
+    expect(originOf(set, "mine")).toBe("overrides");
+    // Cleared but not saved: the environment's value is what she would get.
+    expect(originOf(set, "")).toBe("inherited");
+    expect(originOf(voice({ envValue: "env-voice" }), "typed")).toBe("overrides");
+  });
+
+  test("without an environment value a row says nothing of it", () => {
+    expect(originOf(voice({}), "")).toBe("own");
+    expect(originOf(voice({ value: "mine", source: "persona" }), "mine")).toBe("own");
+    expect(originOf(host({}), "")).toBe("own");
+  });
+
+  test("only an app row the environment overrides, or a read-only one, is locked", () => {
+    expect(originOf(host({ envValue: "10.0.0.2", envOverride: true }), "")).toBe("locked");
+    expect(originOf(host({ envValue: "10.0.0.2", envOverride: true }), "x")).toBe("locked");
+    expect(originOf(row(field("sources.ytDlp"), { readOnly: true }), "")).toBe("readOnly");
+    // A persona row is never overridden, whatever the environment holds.
+    expect(originOf(voice({ envValue: "env-voice", envOverride: false }), "")).toBe("inherited");
+  });
+
+  test("the environment's value as each control shows it", () => {
+    expect(envDraft(voice({ envValue: "env-voice" }), control("voice.voiceId"))).toBe("env-voice");
+    expect(envDraft(voice({}), control("voice.voiceId"))).toBeNull();
+    const rerank = control("knowledge.rerank.enabled");
+    expect(envDraft({ envValue: "true" }, rerank)).toBe("on");
+    expect(envDraft({ envValue: "0" }, rerank)).toBe("off");
+    expect(envDraft({ envValue: "*.txt,notes.txt" }, control("knowledge.facts.files"))).toBe(
+      "*.txt, notes.txt",
+    );
+    expect(envDraft({ envValue: "a.png,b.png" }, control("selfie.references"))).toBe(
+      "a.png\nb.png",
+    );
+  });
+});
+
+describe("a settings card's rows", () => {
+  const rows = SETTINGS.map((setting) =>
+    row(setting, { productionOnly: setting.path.startsWith("mcp.") }),
+  );
+  const paths = (sections: ReturnType<typeof cardSections>) =>
+    sections.map((section) => [
+      section.group,
+      section.lines.map((line) => line.map((r) => r.path)),
+    ]);
+
+  test("named rows come in the given order, an array of paths as one line", () => {
+    const card = cardSections(rows, "app", [
+      ["memory.qdrant.host", "memory.qdrant.port"],
+      "memory.qdrant.collection",
+      "memory.historyDb",
+    ]);
+    expect(paths(card)).toEqual([
+      [
+        null,
+        [
+          ["memory.qdrant.host", "memory.qdrant.port"],
+          ["memory.qdrant.collection"],
+          ["memory.historyDb"],
+        ],
+      ],
+    ]);
+  });
+
+  test("rows of the other scope, hidden or production-only rows, and unknown paths drop out", () => {
+    const card = cardSections(rows, "persona", [
+      "voice.model",
+      "memory.qdrant.host",
+      ["nope", "mind.model"],
+      "mcp.allowedHosts",
+    ]);
+    expect(paths(card)).toEqual([[null, [["voice.model"], ["mind.model"]]]]);
+    expect(cardSections(rows, "app", ["persona", "mcp.allowedHosts"])).toEqual([]);
+  });
+
+  test("without paths, every shown row of the scope but the excluded ones, by group", () => {
+    const shown = visibleRows(rows, "persona").map((r) => r.path);
+    const exclude = shown.filter((path) => !path.startsWith("memory.") && path !== "prompt");
+    const card = cardSections(rows, "persona", undefined, exclude);
+    expect(paths(card)).toEqual([
+      ["persona", [["prompt"]]],
+      [
+        "memory",
+        visibleRows(rows, "persona")
+          .filter((r) => r.path.startsWith("memory."))
+          .map((r) => [r.path]),
+      ],
+    ]);
+  });
+
+  test("one group needs no legend, and exclude applies to named rows too", () => {
+    const card = cardSections(rows, "persona", undefined, [
+      ...visibleRows(rows, "persona")
+        .map((r) => r.path)
+        .filter((path) => !path.startsWith("selfie.")),
+    ]);
+    expect(card).toHaveLength(1);
+    expect(card[0]?.group).toBeNull();
+    expect(
+      paths(cardSections(rows, "persona", ["voice.model", "mind.model"], ["mind.model"])),
+    ).toEqual([[null, [["voice.model"]]]]);
   });
 });

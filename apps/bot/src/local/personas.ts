@@ -18,9 +18,9 @@ import {
   dataHome,
   embedDim,
   envOptional,
-  envOverride,
   IDENTITY_DEFAULTS,
   isPlainObject,
+  layeredValue,
   personaHomeDir,
   personaIds,
   personaTemplateDir,
@@ -176,7 +176,7 @@ export function staysInPersona(id: string, value: string): boolean {
 
 /** Persona `id`'s value of a setting, as the bot would read it with her active. */
 export function personaSetting(id: string, env: string): string | undefined {
-  return envOverride(env) ?? readSettingsLayers(id).values.get(env)?.value ?? undefined;
+  return layeredValue(readSettingsLayers(id), env);
 }
 
 /** Her prompt file, relative to her folder: `prompt`, else prompt.md; null when it leaves it. */

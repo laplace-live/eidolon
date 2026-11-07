@@ -59,6 +59,7 @@ function setting(path: string, extra: Partial<SettingRow> = {}): SettingRow {
     title: path,
     value: null,
     source: "default",
+    envValue: null,
     envOverride: false,
     productionOnly: false,
     readOnly: false,

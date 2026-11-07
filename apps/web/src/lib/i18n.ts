@@ -1,6 +1,6 @@
 // Strings live in src/locales/<lang>/<feature>.json, each a flat map whose keys are reached as
 // `<feature>.<key>`: settings.json's "embeddings.model" is t("settings.embeddings.model").
-import { useMemo, useSyncExternalStore } from "react";
+import { createElement, Fragment, type ReactNode, useMemo, useSyncExternalStore } from "react";
 
 export const LANGS = ["en", "zh-CN"] as const;
 export type Lang = (typeof LANGS)[number];
@@ -61,6 +61,19 @@ export function format(text: string, vars?: Vars): string {
     const value = vars[name];
     return value === undefined ? whole : String(value);
   });
+}
+
+/**
+ * A string whose `{name}` placeholders are React nodes, such as a variable's name in <code>: pass it
+ * `t(key)` with no vars, which leaves the placeholders as written.
+ */
+export function rich(text: string, nodes: Readonly<Record<string, ReactNode>>): ReactNode {
+  const parts = text.split(/\{(\w+)\}/g);
+  return createElement(
+    Fragment,
+    null,
+    ...parts.map((part, index) => (index % 2 === 0 ? part : (nodes[part] ?? `{${part}}`))),
+  );
 }
 
 /** The string in `lang`, else in English, else the key itself so a missing one shows. */

@@ -331,6 +331,67 @@ export function sections(rows: readonly SettingRow[]): {
   };
 }
 
+/** A SettingsCard line: one row's path, or the paths of rows shown side by side. */
+export type CardPath = string | readonly string[];
+
+export interface CardSection {
+  /** The legend over it: null when the card holds one group, or names its rows. */
+  readonly group: Group | null;
+  /** Each line is one row, or a few side by side. */
+  readonly lines: readonly (readonly SettingRow[])[];
+}
+
+/**
+ * A SettingsCard's rows: those `paths` names, in its order and lines, else every row of the scope
+ * the local app shows, by group. Rows in `exclude` are left out either way.
+ */
+export function cardSections(
+  rows: readonly SettingRow[],
+  scope: SettingScope,
+  paths?: readonly CardPath[],
+  exclude: readonly string[] = [],
+): CardSection[] {
+  const skipped = new Set(exclude);
+  const shown = visibleRows(rows, scope).filter((row) => !skipped.has(row.path));
+  if (paths) {
+    const byPath = new Map(shown.map((row) => [row.path, row]));
+    const lines = paths
+      .map((line) => (typeof line === "string" ? [line] : line).flatMap((p) => byPath.get(p) ?? []))
+      .filter((line) => line.length > 0);
+    return lines.length > 0 ? [{ group: null, lines }] : [];
+  }
+  const groups = bySection(shown);
+  return groups.map(({ group, rows: inGroup }) => ({
+    group: groups.length > 1 ? group : null,
+    lines: inGroup.map((row) => [row]),
+  }));
+}
+
+/**
+ * Where the value a row's field shows comes from, as its draft stands:
+ * - `locked`: an app row the environment sets, which wins over the file;
+ * - `readOnly`: shown, never written through the API;
+ * - `inherited`: a persona row she leaves unset, so the environment's value is hers;
+ * - `overrides`: her own value, which wins over the environment's;
+ * - `own`: the environment doesn't set it.
+ */
+export type Origin = "locked" | "readOnly" | "inherited" | "overrides" | "own";
+
+export function originOf(
+  row: Pick<SettingRow, "scope" | "envValue" | "envOverride" | "readOnly">,
+  draft: string,
+): Origin {
+  if (row.envOverride) return "locked";
+  if (row.readOnly) return "readOnly";
+  if (row.scope !== "persona" || row.envValue === null) return "own";
+  return strip(draft) === "" ? "inherited" : "overrides";
+}
+
+/** The environment's value as `control` shows it, or null when the environment sets none. */
+export function envDraft(row: Pick<SettingRow, "envValue">, control: Control): string | null {
+  return row.envValue === null ? null : draftOf(row.envValue, control);
+}
+
 /**
  * What a save sends: each edited row's new value, unless it is unchanged, and the locale key of
  * each row whose draft doesn't parse.

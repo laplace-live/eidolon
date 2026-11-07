@@ -174,21 +174,22 @@ test("eval-retrieval's queries default to the persona's eval sources", async () 
   ]);
 });
 
-test("main.ts loads .env before any other module is evaluated, then logs to stderr", async () => {
+test("main.ts loads .env before any other module is evaluated", async () => {
   const source = await Bun.file(join(import.meta.dir, "../src/main.ts")).text();
   const imports = source.split("\n").filter((line) => line.startsWith("import "));
   expect(imports[0]).toBe('import "./load-env.ts";');
-  expect(source).toContain("logToStderr();");
   expect(source).toContain("const argv = Bun.argv.slice(2);");
   expect(source).toContain(
     "await runWithSignals(\n  (signal) => runCli(argv, { signal }),\n  process,\n  cleanupLimitMs(argv),\n);",
   );
 });
 
-test("load-env.ts installs the settings for the persona --persona names", async () => {
+test("load-env.ts logs to stderr, then installs the settings for the persona --persona names", async () => {
   const source = await Bun.file(join(import.meta.dir, "../src/load-env.ts")).text();
   expect(source.indexOf("personaArg(Bun.argv.slice(2))")).toBeGreaterThan(-1);
   expect(source.indexOf("personaArg(")).toBeLessThan(source.indexOf("installSettings();"));
+  expect(source.indexOf("logToStderr();")).toBeGreaterThan(-1);
+  expect(source.indexOf("logToStderr();")).toBeLessThan(source.indexOf("installSettings();"));
 });
 
 describe("--persona", () => {

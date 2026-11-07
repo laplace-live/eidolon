@@ -85,13 +85,16 @@ describe("with no files of the user's own", () => {
 });
 
 describe("layers", () => {
-  test("persona.yaml sets a value the environment overrides; a blank variable defers", () => {
+  test("persona.yaml's value wins over the environment's, which she inherits without one", () => {
+    setEnv("FISH_MODEL", "drama-3-pro");
+    installSettings();
+    expect(envStr("FISH_MODEL", "drama-3")).toBe("drama-3-pro");
+    setEnv("FISH_MODEL", "");
+    expect(envStr("FISH_MODEL", "drama-3")).toBe("drama-3");
     write("personas/milky-green/persona.yaml", "voice:\n  model: s2\n");
     installSettings();
     expect(envStr("FISH_MODEL", "drama-3")).toBe("s2");
     setEnv("FISH_MODEL", "drama-3-pro");
-    expect(envStr("FISH_MODEL", "drama-3")).toBe("drama-3-pro");
-    setEnv("FISH_MODEL", "");
     expect(envStr("FISH_MODEL", "drama-3")).toBe("s2");
   });
 

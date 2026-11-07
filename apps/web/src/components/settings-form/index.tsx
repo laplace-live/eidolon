@@ -5,16 +5,6 @@ import { ChevronRightIcon } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { toast } from "sonner";
 import { ErrorAlert } from "@/components/error-alert";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { FieldGroup, FieldLegend, FieldSet } from "@/components/ui/field";
@@ -33,7 +23,8 @@ import {
   visibleRows,
 } from "./controls";
 import { SettingField } from "./field";
-import { settingsQuery } from "./queries";
+import { personasQuery, settingsQuery } from "./queries";
+import { ReindexDialog } from "./reindex-dialog";
 
 export interface SettingsFormProps {
   /** settings.yaml (`app`) or the persona's persona.yaml (`persona`). */
@@ -50,6 +41,7 @@ export function SettingsForm({ scope, persona, paths, onSaved }: SettingsFormPro
   const t = useT();
   const queryClient = useQueryClient();
   const settings = useQuery(settingsQuery(persona));
+  const personas = useQuery(personasQuery);
   const [drafts, setDrafts] = useState<Readonly<Record<string, string>>>({});
   const [touched, setTouched] = useState<ReadonlySet<string>>(new Set());
   const [confirming, setConfirming] = useState<Record<string, unknown> | null>(null);
@@ -96,6 +88,10 @@ export function SettingsForm({ scope, persona, paths, onSaved }: SettingsFormPro
   const invalid = Object.keys(errors).length > 0;
   const changed = invalid || Object.keys(values).length > 0;
 
+  const owner = persona ?? settings.data.persona;
+  const her = personas.data?.personas.find((entry) => entry.id === owner);
+  const personaName = her ? her.shortName || her.name : owner;
+
   function draftFor(row: SettingRow): string {
     return drafts[row.path] ?? draftOf(row.value, controlFor(row));
   }
@@ -125,6 +121,7 @@ export function SettingsForm({ scope, persona, paths, onSaved }: SettingsFormPro
           setTouched((seen) => (seen.has(row.path) ? seen : new Set(seen).add(row.path)))
         }
         disabled={save.isPending}
+        personaName={personaName}
       />
     );
   }
@@ -195,25 +192,14 @@ export function SettingsForm({ scope, persona, paths, onSaved }: SettingsFormPro
         </div>
       )}
 
-      <AlertDialog open={confirming !== null} onOpenChange={(open) => !open && setConfirming(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("settings.form.reindex.title")}</AlertDialogTitle>
-            <AlertDialogDescription>{t("settings.form.reindex.body")}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("settings.form.reindex.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (confirming) save.mutate(confirming);
-                setConfirming(null);
-              }}
-            >
-              {t("settings.form.reindex.confirm")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ReindexDialog
+        open={confirming !== null}
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => {
+          if (confirming) save.mutate(confirming);
+          setConfirming(null);
+        }}
+      />
     </form>
   );
 }

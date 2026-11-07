@@ -110,10 +110,15 @@ describe("GET settings", () => {
       scope: "persona",
       value: "Asia/Shanghai",
       source: "persona",
+      envValue: null,
       envOverride: false,
     });
     expect(row(answer, "persona")).toMatchObject({ value: null, source: "default" });
-    expect(row(answer, "embeddings.model")).toMatchObject({ value: null, envOverride: true });
+    expect(row(answer, "embeddings.model")).toMatchObject({
+      value: null,
+      envValue: "from/env",
+      envOverride: true,
+    });
     for (const path of ["access.realIpHeader", "mcp.allowedHosts", "network.turnUrl"]) {
       expect(row(answer, path).productionOnly).toBe(true);
     }
@@ -124,6 +129,60 @@ describe("GET settings", () => {
     expect(row(answer, "providers.openrouter.apiBase").productionOnly).toBe(false);
     expect(answer.settings.filter((r) => r.readOnly).map((r) => r.path)).toEqual(["sources.ytDlp"]);
     expect(answer.restartRequired).toBe(false);
+  });
+
+  test("envValue is the environment's, for any persona; only an app row is overridden", async () => {
+    for (const [name, value] of [
+      ["EMBED_MODEL", "from/env"],
+      ["FISH_VOICE_ID", "env-voice"],
+      ["OPENROUTER_MODEL", "env/chat"],
+      ["FISH_MODEL", ""],
+    ] as const) {
+      process.env[name] = value;
+      touched.push(name);
+    }
+    const mine = await put({
+      scope: "persona",
+      persona: "milky-green",
+      values: { "voice.voiceId": "her-voice" },
+    });
+    expect(mine.status).toBe(200);
+    mkdirSync(join(dataHome(), "personas", "beta"), { recursive: true });
+
+    const answer = await settings();
+    expect(row(answer, "embeddings.model")).toMatchObject({
+      source: "default",
+      envValue: "from/env",
+      envOverride: true,
+    });
+    expect(row(answer, "embeddings.dim")).toMatchObject({ envValue: null, envOverride: false });
+    expect(row(answer, "voice.voiceId")).toMatchObject({
+      value: "her-voice",
+      source: "persona",
+      envValue: "env-voice",
+      envOverride: false,
+    });
+    expect(row(answer, "mind.model")).toMatchObject({
+      value: null,
+      source: "default",
+      envValue: "env/chat",
+      envOverride: false,
+    });
+    expect(row(answer, "voice.model")).toMatchObject({ envValue: null, envOverride: false });
+    expect(envOptional("FISH_VOICE_ID")).toBe("her-voice");
+
+    // Not the installed persona: what milky-green's file decides is no answer for her.
+    const beta = await settings("beta");
+    expect(row(beta, "voice.voiceId")).toMatchObject({
+      value: null,
+      source: "default",
+      envValue: "env-voice",
+      envOverride: false,
+    });
+    expect(row(beta, "embeddings.model")).toMatchObject({
+      envValue: "from/env",
+      envOverride: true,
+    });
   });
 
   test("names a persona by id, and refuses one that isn't", async () => {

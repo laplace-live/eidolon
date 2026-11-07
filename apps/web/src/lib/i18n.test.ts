@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { buildCatalogs, detectLang, format, placeholders, translate } from "./i18n";
+import { createElement, isValidElement, type ReactElement, type ReactNode } from "react";
+import { buildCatalogs, detectLang, format, placeholders, rich, translate } from "./i18n";
 
 describe("detectLang", () => {
   test("a stored choice wins", () => {
@@ -67,4 +68,22 @@ test("format leaves a placeholder without a value as written", () => {
 
 test("placeholders are sorted and unique", () => {
   expect(placeholders("{b} {a} {b} {not a placeholder}")).toEqual(["a", "b"]);
+});
+
+describe("rich", () => {
+  const children = (node: ReactNode): unknown =>
+    isValidElement(node) ? (node as ReactElement<{ children: unknown }>).props.children : null;
+
+  test("puts a node where each placeholder was, keeping the text around it", () => {
+    const code = createElement("code", null, "FISH_VOICE_ID");
+    expect(
+      children(rich("Inherited from {env} for {name} alone.", { env: code, name: "奶绿" })),
+    ).toEqual(["Inherited from ", code, " for ", "奶绿", " alone."]);
+  });
+
+  test("a placeholder without a node stays as written", () => {
+    expect(children(rich("{a} and {b}", { a: "x" }))).toEqual(["", "x", " and ", "{b}", ""]);
+    // React keeps a lone child as itself, not in an array.
+    expect(children(rich("no placeholders", {}))).toBe("no placeholders");
+  });
 });

@@ -339,9 +339,11 @@ module that owns it.
 - **`change_voice_style` is named once, as `_TOOL_NAME` in
   `voice_switching.py`.** It reaches the prompt through `persona_prefix_hint`,
   not through `prompt.md` — rename it in that one place.
-- **Settings come in layers:** code defaults < `settings.yaml` < `persona.yaml` <
-  the environment, and secrets only in `credentials.json` or the environment.
-  A new setting adds its row to `SETTINGS` (`packages/config/src/settings.ts`)
+- **Settings come in layers:** an app setting is code defaults < `settings.yaml`
+  < the environment, a persona's is code defaults < the environment < her
+  `persona.yaml`, and the environment's `FISH_VOICE_ID_<STYLE>` voices skip a
+  persona with her own voice. Secrets go only in `credentials.json` or the
+  environment. A new setting adds its row to `SETTINGS` (`packages/config/src/settings.ts`)
   and to [personas.md](docs/personas.md), with the variable that configures it;
   a test holds the two in step.
 - **A template under `personas/` is published.** Never add an index, a source

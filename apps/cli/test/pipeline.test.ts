@@ -264,8 +264,8 @@ describe("argparse", () => {
     const io = captureIo();
     expect(await pipelineMain(["x.txt", "--persona", "milky-green"], io.io)).toBe(2);
     expect(io.stderr()).toEndWith(
-      "laplace-pipeline: error: LANCEDB_PATH is set in the environment; pass --db-path to write " +
-        "persona milky-green's index.\n",
+      "laplace-pipeline: error: LANCEDB_PATH is set in the environment; pass --db-path or set " +
+        "her knowledge.index to write persona milky-green's index.\n",
     );
     // Without the ingest stage there is no index to write.
     const list = join(work, "urls.txt");

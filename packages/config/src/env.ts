@@ -4,12 +4,26 @@ import { logger } from "./logger.ts";
 import { pyParseFloat, pyParseInt, pyRepr } from "./py.ts";
 
 // What settings.yaml, persona.yaml and credentials.json set, keyed by the variable each setting
-// maps to. A non-empty environment variable always wins, so a deployment's env stays authoritative.
+// maps to. A non-empty environment variable wins over the files, so a deployment's env stays
+// authoritative, except for a variable the persona's own file decides: there the environment is
+// ignored, and with no value in her file the variable is unset.
 let fileLayer: ReadonlyMap<string, string> = new Map();
+let owned: ReadonlySet<string> = new Set();
 
-/** Replaces the values the settings files supply; settings.ts is the only caller. */
-export function setFileLayer(values: ReadonlyMap<string, string>): void {
+/**
+ * Replaces the values the settings files supply, and the variables the persona's file decides;
+ * settings.ts is the only caller.
+ */
+export function setFileLayer(
+  values: ReadonlyMap<string, string>,
+  ownedNames: ReadonlySet<string>,
+): void {
   fileLayer = values;
+  owned = ownedNames;
+}
+
+function fromEnvironment(name: string): string | undefined {
+  return owned.has(name) ? undefined : process.env[name];
 }
 
 /**
@@ -17,12 +31,18 @@ export function setFileLayer(values: ReadonlyMap<string, string>): void {
  * variables where blank means something.
  */
 export function envRaw(name: string): string | undefined {
-  const raw = process.env[name];
+  const raw = fromEnvironment(name);
   return raw ? raw : (fileLayer.get(name) ?? raw);
 }
 
-/** A non-empty environment variable: the one value that wins over every settings file. */
+/** A non-empty environment variable that wins over the files: never one the persona's decides. */
 export function envOverride(name: string): string | undefined {
+  const raw = fromEnvironment(name);
+  return raw ? raw : undefined;
+}
+
+/** The environment's own non-empty value, even where a persona's file decides the variable. */
+export function envVariable(name: string): string | undefined {
   const raw = process.env[name];
   return raw ? raw : undefined;
 }

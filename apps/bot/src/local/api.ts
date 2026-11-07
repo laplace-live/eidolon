@@ -146,14 +146,15 @@ export interface SessionProbe {
 export const REQUIRED_KEYS = ["SONIOX_API_KEY", "OPENROUTER_API_KEY", "FISH_API_KEY"] as const;
 export type RequiredKey = (typeof REQUIRED_KEYS)[number];
 
-/** Which file sets a value, as @eidolon/config's readSettingsLayers reports it, or the env. */
-export type ValueSource = "default" | "app" | "persona" | "credentials" | "env";
-
 export interface VoiceStatus {
   /** FISH_VOICE_ID as the bot reads it; null when unset (a call needs one). */
   readonly id: string | null;
-  readonly source: ValueSource;
-  /** Whether Fish knows the voice: null until checked. */
+  /**
+   * "persona" when her persona.yaml sets the voice, even with FISH_VOICE_ID in the environment;
+   * "env" when she inherits the environment's; "default" when neither sets one.
+   */
+  readonly source: "default" | "persona" | "env";
+  /** Whether Fish knows the voice: null until checked. False with source "env": an inherited one. */
   readonly ok: boolean | null;
 }
 
@@ -240,7 +241,13 @@ export interface SettingRow {
   /** The file's own value; null when no file sets it. */
   readonly value: unknown;
   readonly source: "default" | "app" | "persona";
-  /** A non-empty environment variable wins over the file. */
+  /** The environment's non-empty value of `env`, or null. Settings hold no secrets. */
+  readonly envValue: string | null;
+  /**
+   * The environment's value is used instead of the file's: an app row with envValue set. A persona
+   * row is never overridden: her file wins, and without a file value the environment's is the
+   * default she inherits.
+   */
   readonly envOverride: boolean;
   /** Only a public deployment reads it; the local app hides it. */
   readonly productionOnly: boolean;
