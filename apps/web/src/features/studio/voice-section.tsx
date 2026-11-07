@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AudioLinesIcon, CircleCheckIcon, CircleXIcon, TriangleAlertIcon } from "lucide-react";
+import { type FormEvent, useId, useState } from "react";
 import { toast } from "sonner";
 import { ListCard, ListRow } from "@/components/list";
 import { SectionCard } from "@/components/section-card";
@@ -19,6 +20,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VoicePicker } from "@/components/voice-picker";
 import { saveVoice } from "@/features/setup/personas";
@@ -33,6 +36,70 @@ import { personaQueries } from "./queries";
 import { CARD_PATHS } from "./sections";
 
 const [VOICE_PATH] = CARD_PATHS.voice;
+
+/** A Fish voice's id, as its page on fish.audio shows it. */
+const VOICE_ID = /^[0-9a-f]{32}$/;
+
+/** A voice the public search can't find, such as a private one of her own account, by its id. */
+function VoiceById({
+  disabled,
+  onUse,
+}: {
+  readonly disabled: boolean;
+  readonly onUse: (id: string) => void;
+}) {
+  const t = useT();
+  const inputId = useId();
+  const [draft, setDraft] = useState("");
+  const [invalid, setInvalid] = useState(false);
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    const id = draft.trim().toLowerCase();
+    if (!VOICE_ID.test(id)) {
+      setInvalid(true);
+      return;
+    }
+    onUse(id);
+    setDraft("");
+  }
+
+  return (
+    <form className="flex flex-col gap-2" onSubmit={submit} noValidate>
+      <Label htmlFor={inputId}>{t("studio.voice.byId.label")}</Label>
+      <div className="flex max-w-xl gap-2">
+        <Input
+          id={inputId}
+          className="font-mono text-xs"
+          value={draft}
+          placeholder={t("studio.voice.byId.placeholder")}
+          autoComplete="off"
+          spellCheck={false}
+          aria-invalid={invalid}
+          aria-describedby={`${inputId}-help`}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            setInvalid(false);
+          }}
+        />
+        <Button
+          type="submit"
+          variant="outline"
+          size="lg"
+          disabled={disabled || draft.trim() === ""}
+        >
+          {t("studio.voice.byId.use")}
+        </Button>
+      </div>
+      <p
+        id={`${inputId}-help`}
+        className={invalid ? "text-destructive text-sm" : "text-muted-foreground text-sm"}
+      >
+        {t(invalid ? "studio.voice.byId.invalid" : "studio.voice.byId.help")}
+      </p>
+    </form>
+  );
+}
 
 /** Whether Fish knows the voice: the server checks only the active persona's. */
 function useVoiceCheck(persona: string, voiceId: string | null): boolean | null {
@@ -175,6 +242,14 @@ function VoiceCard({ persona }: { readonly persona: PersonaSummary }) {
     },
     onError: toastError,
   });
+  const byId = useMutation({
+    mutationFn: (id: string) => saveVoice(persona.id, id),
+    onSuccess: async (response, id) => {
+      toast.success(t("studio.voice.savedId", { id }));
+      await refreshSettings(queryClient, persona.id, response);
+    },
+    onError: toastError,
+  });
   const clear = useMutation({
     mutationFn: () => saveVoice(persona.id, null),
     onSuccess: async (response) => {
@@ -183,7 +258,7 @@ function VoiceCard({ persona }: { readonly persona: PersonaSummary }) {
     },
     onError: toastError,
   });
-  const busy = pick.isPending || clear.isPending;
+  const busy = pick.isPending || byId.isPending || clear.isPending;
 
   return (
     <SectionCard
@@ -210,6 +285,7 @@ function VoiceCard({ persona }: { readonly persona: PersonaSummary }) {
         disabled={busy || settings.data === undefined}
         hideCurrent
       />
+      <VoiceById disabled={busy || settings.data === undefined} onUse={(id) => byId.mutate(id)} />
     </SectionCard>
   );
 }

@@ -360,7 +360,9 @@ function asEnvValue(
         ? value.join(",")
         : bad();
     case "path":
-      return typeof value === "string" ? resolvePath(value) : bad();
+      if (typeof value !== "string") return bad();
+      // Blank is unset, as for every other kind: resolved, it would name her folder itself.
+      return value.trim() === "" ? null : resolvePath(value);
     case "paths": {
       const parts = typeof value === "string" ? value.split(",") : value;
       if (!Array.isArray(parts) || !parts.every((v) => typeof v === "string")) return bad();

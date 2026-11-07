@@ -409,6 +409,9 @@ export interface PersonaIdentityFields {
   readonly timezone: string;
 }
 
+/** PUT identity: the fields to change; one left out stays as it is. */
+export type IdentityUpdate = Partial<PersonaIdentityFields>;
+
 /** POST personas. The id is a slug, `^[a-z0-9][a-z0-9_-]{0,63}$`. */
 export interface CreatePersonaRequest extends PersonaIdentityFields {
   readonly id: string;
@@ -724,7 +727,7 @@ export interface LocalApi {
   "GET /api/local/personas/:id/glossary": Endpoint<undefined, GlossaryResponse>;
   "PUT /api/local/personas/:id/glossary": Endpoint<TextUpdate, GlossaryResponse>;
   "GET /api/local/personas/:id/identity": Endpoint<undefined, PersonaIdentityFields>;
-  "PUT /api/local/personas/:id/identity": Endpoint<PersonaIdentityFields, PersonaIdentityFields>;
+  "PUT /api/local/personas/:id/identity": Endpoint<IdentityUpdate, PersonaIdentityFields>;
   "GET /api/local/personas/:id/references": Endpoint<undefined, ReferencesResponse>;
   "GET /api/local/personas/:id/references/:kind/:name": Endpoint<undefined, Raw<"image">>;
   "POST /api/local/personas/:id/references/:kind/:name": Endpoint<Raw<"image">, ReferenceImage>;

@@ -44,9 +44,9 @@ export function NewPersonaDialog({
 
   const create = useMutation({
     mutationFn: ({ voiceId }: { voiceId: string }) => createPersona(draft, voiceId),
-    onSuccess: async (created) => {
-      toast.success(t("setup.newPersona.created", { name: created.name }));
-      if (avatar) await addAvatar(created, avatar);
+    onSuccess: async (made) => {
+      toast.success(t("setup.newPersona.created", { name: made.name }));
+      const created = avatar ? await addAvatar(made, avatar) : made;
       if (activate) {
         // She exists either way; a refused switch (a call is live) only leaves her inactive.
         await activatePersona(created.id).catch(toastError);

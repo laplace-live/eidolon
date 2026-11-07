@@ -42,6 +42,7 @@ import {
 import type {
   FactFile,
   FactsResponse,
+  IdentityUpdate,
   IndexStatus,
   IndexTable,
   PersonaIdentityFields,
@@ -212,10 +213,11 @@ export function readIdentityFields(id: string): PersonaIdentityFields {
 export const IDENTITY_FIELDS = ["name", "shortName", "fans", "summary", "timezone"] as const;
 
 /** Writes the identity fields into persona.yaml; "" removes one, so its default applies. */
-export function writeIdentityFields(id: string, fields: PersonaIdentityFields): void {
+export function writeIdentityFields(id: string, fields: IdentityUpdate): void {
   editPersonaYaml(id, (tree) => {
     for (const key of IDENTITY_FIELDS) {
-      setDotted(tree, `identity.${key}`, fields[key] === "" ? null : fields[key]);
+      const value = fields[key];
+      if (value !== undefined) setDotted(tree, `identity.${key}`, value === "" ? null : value);
     }
   });
 }

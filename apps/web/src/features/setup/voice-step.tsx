@@ -62,7 +62,7 @@ export function VoiceStep({
       if (target.kind === "create") {
         if (!chosen) return;
         persona = created ?? (await createPersona(target.draft, chosen.id));
-        if (created === null && target.avatar) await addAvatar(persona, target.avatar);
+        if (created === null && target.avatar) persona = await addAvatar(persona, target.avatar);
         setCreated(persona);
       } else {
         persona = target.persona;

@@ -27,14 +27,6 @@ export function useAvatarVersion(id: string): number {
   return useSyncExternalStore(subscribe, () => avatarVersion(id));
 }
 
-/**
- * Whether her avatar asks for the picture: her `avatar` flag says she has one, or her picture
- * changed on this page after whoever holds the flag read it.
- */
-export function loadsPicture(avatar: boolean | undefined, version: number): boolean {
-  return avatar !== false || version > 0;
-}
-
 /** The avatar route's URL for the picture's `version`. */
 export function avatarSrc(id: string, version: number): string {
   const src = url("GET /api/local/personas/:id/avatar", { params: { id } });

@@ -39,7 +39,8 @@ export function PersonaSwitcher() {
     if (studio && studio.params.id !== id) navigate(studioPath(id, studio.params.tab));
   });
 
-  const activeId = personas.data?.active ?? status.data?.persona.id;
+  // Status first: Home polls it, so it learns of a switch another tab made; the list is not.
+  const activeId = status.data?.persona.id ?? personas.data?.active;
   const list = personas.data?.personas ?? [];
   const active = list.find((persona) => persona.id === activeId) ?? status.data?.persona;
   if (!active || activeId === undefined) return null;

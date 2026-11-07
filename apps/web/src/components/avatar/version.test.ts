@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { avatarChanged, avatarSrc, avatarVersion, loadsPicture } from "./version";
+import { avatarChanged, avatarSrc, avatarVersion } from "./version";
 
 test("a changed picture gets a URL the page hasn't loaded, for that persona only", () => {
   const before = avatarSrc("milky-green", avatarVersion("milky-green"));
@@ -15,15 +15,6 @@ test("a changed picture gets a URL the page hasn't loaded, for that persona only
   expect(avatarSrc("someone-else", avatarVersion("someone-else"))).toBe(
     "/api/local/personas/someone-else/avatar",
   );
-});
-
-test("a flag read before her picture changed doesn't keep it from loading", () => {
-  expect(loadsPicture(undefined, avatarVersion("new-one"))).toBe(true);
-  expect(loadsPicture(true, avatarVersion("new-one"))).toBe(true);
-  expect(loadsPicture(false, avatarVersion("new-one"))).toBe(false);
-  // The wizard's Done step holds her as created, avatar: false, and then uploads her picture.
-  avatarChanged("new-one");
-  expect(loadsPicture(false, avatarVersion("new-one"))).toBe(true);
 });
 
 test("the id is one encoded path segment", () => {

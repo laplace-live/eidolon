@@ -402,6 +402,18 @@ describe("prompt, glossary and identity", () => {
     });
     expect(zone.status).toBe(400);
   });
+
+  test("a field the save leaves out stays, so the Profile card can't undo a newer time zone", async () => {
+    const tz = await call("PUT", `/personas/${MILKY}/identity`, { timezone: "Asia/Tokyo" });
+    expect(tz.body.timezone).toBe("Asia/Tokyo");
+    const named = await call("PUT", `/personas/${MILKY}/identity`, {
+      name: "明前奶绿",
+      shortName: "奶绿",
+      fans: "奶糖花",
+      summary: "s",
+    });
+    expect(named.body).toMatchObject({ summary: "s", timezone: "Asia/Tokyo" });
+  });
 });
 
 describe("references and the avatar", () => {

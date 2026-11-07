@@ -6,10 +6,14 @@ import { t } from "@/lib/i18n";
 import type { PersonaRef } from "./personas";
 
 /**
- * Uploads `file` as her avatar. A refusal only toasts: she exists either way, and her studio can
- * take another picture.
+ * Uploads `file` as her avatar, and returns her with `avatar` set, for the pages that show her
+ * next. A refusal only toasts and returns her as she was: she exists either way, and her studio
+ * can take another picture.
  */
-export async function addAvatar(persona: PersonaRef, file: Blob): Promise<void> {
+export async function addAvatar<P extends PersonaRef>(
+  persona: P,
+  file: Blob,
+): Promise<P & { readonly avatar?: boolean }> {
   try {
     await call("PUT /api/local/personas/:id/avatar", { params: { id: persona.id }, body: file });
   } catch (error) {
@@ -19,7 +23,8 @@ export async function addAvatar(persona: PersonaRef, file: Blob): Promise<void> 
         description: t(errorKey(error)),
       });
     }
-    return;
+    return persona;
   }
   avatarChanged(persona.id);
+  return { ...persona, avatar: true };
 }

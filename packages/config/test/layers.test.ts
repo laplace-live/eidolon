@@ -282,13 +282,16 @@ describe("a persona's own settings over the environment", () => {
     setEnv("FISH_VOICE_ID", "env-voice");
     setEnv("FISH_VOICE_ID_GENTLE", "env-gentle");
     setEnv("FACTS_FILES", "env*.txt");
+    setEnv("PERSONA_FILE", "/env/prompt.md");
     write(
       "personas/milky-green/persona.yaml",
-      "voice:\n  voiceId: [1]\nknowledge:\n  facts:\n    files: []\n",
+      'voice:\n  voiceId: [1]\nknowledge:\n  facts:\n    files: []\nprompt: " "\n',
     );
     installSettings();
     expect(voices()).toEqual({ voice: "env-voice", gentle: "env-gentle", scanned: "env-gentle" });
     expect(envOptional("FACTS_FILES")).toBe("env*.txt");
+    // A blank path would resolve to her folder itself: it is unset instead.
+    expect(envOptional("PERSONA_FILE")).toBe("/env/prompt.md");
   });
 
   test("reinstalling for another persona recomputes what her file decides", () => {

@@ -33,7 +33,13 @@ import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { call, type PersonaIdentityFields, type PersonaSummary, type SettingRow } from "@/lib/api";
+import {
+  call,
+  type IdentityUpdate,
+  type PersonaIdentityFields,
+  type PersonaSummary,
+  type SettingRow,
+} from "@/lib/api";
 import { toastError } from "@/lib/feedback";
 import { useLang, useT } from "@/lib/i18n";
 import { statusQuery } from "@/lib/query";
@@ -187,7 +193,7 @@ function IdentityCard({
   const missing = draft.name.trim() === "" || draft.shortName.trim() === "";
 
   const save = useMutation({
-    mutationFn: (fields: PersonaIdentityFields) =>
+    mutationFn: (fields: IdentityUpdate) =>
       call("PUT /api/local/personas/:id/identity", { params: { id: persona.id }, body: fields }),
     onSuccess: async (next) => {
       queryClient.setQueryData(personaQueries(persona.id).identity.queryKey, next);
@@ -210,8 +216,6 @@ function IdentityCard({
       shortName: draft.shortName.trim(),
       fans: draft.fans.trim(),
       summary: draft.summary.trim(),
-      // The time zone card saves the zone; this sends it back as it is.
-      timezone: identity.timezone,
     });
   }
 
@@ -332,7 +336,7 @@ function TimeZoneForm({
         body: { scope: "persona", persona: persona.id, values: { [row.path]: value } },
       }),
     onSuccess: async (response, value) => {
-      // The identity card sends the zone back with every save, so it must hold this one.
+      // Her cached identity holds the zone too; keep it in step.
       queryClient.setQueryData(personaQueries(persona.id).identity.queryKey, (identity) =>
         identity === undefined
           ? identity

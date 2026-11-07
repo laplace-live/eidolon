@@ -19,6 +19,7 @@ import {
 import { REFERENCE_EXTENSIONS } from "@eidolon/imagegen";
 import { transcribe } from "@eidolon/ingest";
 import {
+  type IdentityUpdate,
   LOCAL_ROUTES,
   type PersonaIdentityFields,
   type PersonaSummary,
@@ -137,21 +138,30 @@ function line(value: unknown, max: number): string | null {
   return trimmed.length <= max ? trimmed : null;
 }
 
-/** The identity fields a body sends, checked; "" leaves a field to its default. */
-function identityFrom(body: Record<string, unknown>): PersonaIdentityFields | Response {
+/**
+ * The identity fields a body sends, checked; "" leaves a field to its default. With `partial`, a
+ * field the body leaves out is left out, so a save can't undo another card's newer value.
+ */
+function identityFrom(body: Record<string, unknown>, partial: true): IdentityUpdate | Response;
+function identityFrom(body: Record<string, unknown>): PersonaIdentityFields | Response;
+function identityFrom(
+  body: Record<string, unknown>,
+  partial = false,
+): PersonaIdentityFields | IdentityUpdate | Response {
   const limits = { name: 64, shortName: 32, fans: 32, summary: 500, timezone: 64 } as const;
   const fields: Record<string, string> = {};
   for (const key of IDENTITY_FIELDS) {
+    if (partial && !Object.hasOwn(body, key)) continue;
     const value = line(body[key] ?? "", limits[key]);
     if (value === null) {
       return localError(400, "bad-request", `identity ${key} is one line of text, or too long`);
     }
     fields[key] = value;
   }
-  if (fields.timezone !== "" && !isValidTimeZone(fields.timezone as string)) {
+  if (fields.timezone && !isValidTimeZone(fields.timezone)) {
     return localError(400, "bad-request", "The time zone is not an IANA zone name");
   }
-  return fields as unknown as PersonaIdentityFields;
+  return fields as unknown as PersonaIdentityFields | IdentityUpdate;
 }
 
 function summaryOf(id: string): PersonaSummary {
@@ -406,7 +416,7 @@ export function personasRoutes(app: LocalApp): LocalRouteSpec[] {
         if (!isPlainObject(body.value)) {
           return localError(400, "bad-request", "Send the identity fields");
         }
-        const fields = identityFrom(body.value);
+        const fields = identityFrom(body.value, true);
         if (fields instanceof Response) return fields;
         try {
           writeIdentityFields(id, fields);
