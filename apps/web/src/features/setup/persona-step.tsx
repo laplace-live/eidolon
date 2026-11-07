@@ -1,18 +1,20 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { SparklesIcon } from "lucide-react";
+import { CheckIcon, PlusIcon } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 import { PersonaAvatar } from "@/components/avatar";
 import { ErrorAlert } from "@/components/error-alert";
+import { SectionCardSkeleton } from "@/components/section-card";
 import { browserTimeZone, parseDraft } from "@/components/settings-form/controls";
 import { personasQuery, settingsQuery } from "@/components/settings-form/queries";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { type ApiError, asApiError, call } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { AvatarPicker } from "./avatar-picker";
 import { MandarinNote, PersonaFields } from "./persona-fields";
 import type { PersonaRef } from "./personas";
 import { StepCard } from "./step-card";
@@ -21,7 +23,7 @@ import { DEMO_PERSONA, EMPTY_PERSONA, type PersonaDraft, personaErrors } from ".
 /** Whose voice the next step picks: a persona that exists, or one it will create. */
 export type VoiceTarget =
   | { readonly kind: "existing"; readonly persona: PersonaRef }
-  | { readonly kind: "create"; readonly draft: PersonaDraft };
+  | { readonly kind: "create"; readonly draft: PersonaDraft; readonly avatar: File | null };
 
 type Choice = "demo" | "current" | "create";
 
@@ -30,11 +32,17 @@ const VIEWER_NAME = "local.viewerName";
 function ChoiceCard({
   selected,
   onSelect,
-  children,
+  leading,
+  title,
+  badge,
+  body,
 }: {
   readonly selected: boolean;
   readonly onSelect: () => void;
-  readonly children: ReactNode;
+  readonly leading: ReactNode;
+  readonly title: ReactNode;
+  readonly badge?: ReactNode;
+  readonly body: ReactNode;
 }) {
   return (
     <button
@@ -42,11 +50,27 @@ function ChoiceCard({
       aria-pressed={selected}
       onClick={onSelect}
       className={cn(
-        "flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-muted/50",
-        selected && "border-primary bg-primary/5 hover:bg-primary/5",
+        "flex w-full items-center gap-4 rounded-xl border bg-card p-4 text-left outline-none transition-colors hover:bg-muted/40 focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        selected && "border-foreground/70 ring-1 ring-foreground/70 hover:bg-card",
       )}
     >
-      {children}
+      {leading}
+      <span className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="flex flex-wrap items-center gap-2 font-medium text-sm">
+          {title}
+          {badge}
+        </span>
+        <span className="text-muted-foreground text-sm">{body}</span>
+      </span>
+      <span
+        aria-hidden
+        className={cn(
+          "flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors",
+          selected && "border-foreground bg-foreground text-background",
+        )}
+      >
+        {selected && <CheckIcon className="size-3" strokeWidth={3} />}
+      </span>
     </button>
   );
 }
@@ -75,14 +99,15 @@ export function PersonaStep({
   const [draft, setDraft] = useState<PersonaDraft>(() =>
     initial?.kind === "create" ? initial.draft : { ...EMPTY_PERSONA, timezone: browserTimeZone() },
   );
+  const [avatar, setAvatar] = useState<File | null>(() =>
+    initial?.kind === "create" ? initial.avatar : null,
+  );
   const [viewerName, setViewerName] = useState<string | null>(null);
   const [showErrors, setShowErrors] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiError | null>(null);
 
-  if (personas.isPending || settings.isPending) {
-    return <Skeleton className="h-96 w-full" />;
-  }
+  if (personas.isPending || settings.isPending) return <SectionCardSkeleton rows={3} />;
   if (personas.isError || settings.isError) {
     const error = personas.error ?? settings.error;
     return <ErrorAlert error={error} />;
@@ -115,7 +140,7 @@ export function PersonaStep({
         });
         await queryClient.invalidateQueries({ queryKey: ["settings"] });
       }
-      if (chosen === "create") onDone({ kind: "create", draft });
+      if (chosen === "create") onDone({ kind: "create", draft, avatar });
       else {
         const persona = chosen === "demo" ? demo : current;
         if (persona) onDone({ kind: "existing", persona });
@@ -140,7 +165,7 @@ export function PersonaStep({
         </Button>
       }
     >
-      <Field>
+      <Field className="max-w-md">
         <FieldLabel htmlFor={nameId}>{t("setup.persona.viewerName")}</FieldLabel>
         <Input
           id={nameId}
@@ -156,50 +181,59 @@ export function PersonaStep({
         </FieldDescription>
       </Field>
 
-      <fieldset className="flex flex-col gap-2">
+      <fieldset className="flex min-w-0 flex-col gap-3">
         <legend className="sr-only">{t("setup.persona.choose")}</legend>
         {demo && (
-          <ChoiceCard selected={chosen === "demo"} onSelect={() => setChoice("demo")}>
-            <PersonaAvatar persona={demo} size="md" />
-            <span className="flex flex-col gap-1">
-              <span className="font-medium">
-                {demo.name}{" "}
-                <span className="text-muted-foreground">· {t("setup.persona.demo")}</span>
-              </span>
-              <span className="text-muted-foreground text-sm">{t("setup.persona.demoBody")}</span>
-            </span>
-          </ChoiceCard>
+          <ChoiceCard
+            selected={chosen === "demo"}
+            onSelect={() => setChoice("demo")}
+            leading={<PersonaAvatar persona={demo} size="md" />}
+            title={demo.name}
+            badge={<Badge variant="outline">{t("setup.persona.demo")}</Badge>}
+            body={t("setup.persona.demoBody")}
+          />
         )}
         {current && (
-          <ChoiceCard selected={chosen === "current"} onSelect={() => setChoice("current")}>
-            <PersonaAvatar persona={current} size="md" />
-            <span className="flex flex-col gap-1">
-              <span className="font-medium">{current.name}</span>
-              <span className="text-muted-foreground text-sm">{t("setup.persona.keepBody")}</span>
-            </span>
-          </ChoiceCard>
+          <ChoiceCard
+            selected={chosen === "current"}
+            onSelect={() => setChoice("current")}
+            leading={<PersonaAvatar persona={current} size="md" />}
+            title={current.name}
+            badge={<Badge>{t("setup.persona.active")}</Badge>}
+            body={t("setup.persona.keepBody")}
+          />
         )}
-        <ChoiceCard selected={chosen === "create"} onSelect={() => setChoice("create")}>
-          <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-muted">
-            <SparklesIcon className="size-5 text-muted-foreground" />
-          </span>
-          <span className="flex flex-col gap-1">
-            <span className="font-medium">{t("setup.persona.create")}</span>
-            <span className="text-muted-foreground text-sm">{t("setup.persona.createBody")}</span>
-          </span>
-        </ChoiceCard>
+        <ChoiceCard
+          selected={chosen === "create"}
+          onSelect={() => setChoice("create")}
+          leading={
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-dashed text-muted-foreground">
+              <PlusIcon className="size-4" />
+            </span>
+          }
+          title={t("setup.persona.create")}
+          body={t("setup.persona.createBody")}
+        />
       </fieldset>
 
       <MandarinNote />
 
       {chosen === "create" && (
-        <PersonaFields
-          draft={draft}
-          onDraft={setDraft}
-          taken={taken}
-          showErrors={showErrors}
-          disabled={busy}
-        />
+        <div className="flex flex-col gap-6 border-t pt-6">
+          <AvatarPicker
+            file={avatar}
+            onFile={setAvatar}
+            name={draft.shortName || draft.name}
+            disabled={busy}
+          />
+          <PersonaFields
+            draft={draft}
+            onDraft={setDraft}
+            taken={taken}
+            showErrors={showErrors}
+            disabled={busy}
+          />
+        </div>
       )}
 
       {failure && <ErrorAlert error={failure} />}

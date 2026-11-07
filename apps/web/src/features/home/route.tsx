@@ -1,133 +1,71 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AudioLinesIcon, BookOpenIcon, PhoneIcon, PlusIcon } from "lucide-react";
-import { useState } from "react";
-import { Link } from "react-router";
-import { PersonaAvatar } from "@/components/avatar";
+import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 import { ErrorAlert } from "@/components/error-alert";
-import { personasQuery } from "@/components/settings-form/queries";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SectionCardSkeleton } from "@/components/section-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NewPersonaDialog } from "@/features/setup/new-persona";
-import { activatePersona, refreshPersonas } from "@/features/setup/personas";
-import type { Status } from "@/lib/api";
-import { toastError } from "@/lib/feedback";
-import { useT } from "@/lib/i18n";
-import { studioPath } from "@/lib/paths";
+import { useLang, useT } from "@/lib/i18n";
 import { statusQuery } from "@/lib/query";
+import { Hero } from "./hero";
 import { MemoryPanel } from "./memory-panel";
+import { PersonaGrid } from "./persona-grid";
+import { formatsFor, readiness, verdict } from "./readiness";
 import { ReadinessList } from "./readiness-list";
+import { HomeSection } from "./section";
 import { VoiceDialog } from "./voice-dialog";
 
 /** Status is cheap and never waits on a remote probe, so home can poll it. */
 const POLL_MS = 10_000;
 
-function PersonaSwitch({ status }: { readonly status: Status }) {
-  const t = useT();
-  const queryClient = useQueryClient();
-  const personas = useQuery(personasQuery);
-  const change = useMutation({
-    mutationFn: activatePersona,
-    onSuccess: () => refreshPersonas(queryClient),
-    onError: toastError,
-  });
-  const list = personas.data?.personas ?? [];
-  if (list.length < 2) return null;
-  const live = status.activeCalls > 0;
+function Loading() {
   return (
-    <Select
-      value={status.persona.id}
-      onValueChange={(id) => change.mutate(id)}
-      disabled={live || change.isPending}
-    >
-      <SelectTrigger className="w-full sm:w-56" aria-label={t("home.persona.switch")}>
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {list.map((persona) => (
-          <SelectItem key={persona.id} value={persona.id}>
-            {persona.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <div className="flex flex-col gap-10">
+      <div className="flex items-center gap-6">
+        <Skeleton className="size-24 rounded-full" />
+        <div className="flex flex-col gap-2.5">
+          <Skeleton className="h-4 w-20" />
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-4 w-36" />
+        </div>
+      </div>
+      <SectionCardSkeleton rows={4} footer={false} />
+    </div>
   );
 }
 
 export function Component() {
   const t = useT();
+  const lang = useLang();
+  const formats = useMemo(() => formatsFor(lang), [lang]);
   const status = useQuery({ ...statusQuery, refetchInterval: POLL_MS });
   const [pickingVoice, setPickingVoice] = useState(false);
   const [creating, setCreating] = useState(false);
+  const items = useMemo(
+    () => (status.data ? readiness(status.data, formats) : []),
+    [status.data, formats],
+  );
 
-  if (status.isPending) return <Skeleton className="h-96 w-full" />;
-  if (status.isError) {
-    return <ErrorAlert error={status.error} />;
-  }
+  if (status.isPending) return <Loading />;
+  if (status.isError) return <ErrorAlert error={status.error} />;
 
   const { persona } = status.data;
-  const voiceFromEnv = persona.voice.source === "env";
+  const live = status.data.activeCalls > 0;
   return (
-    <div className="flex flex-col gap-6">
-      <section className="flex flex-col gap-4 sm:flex-row sm:items-center">
-        <PersonaAvatar persona={persona} size="xl" />
-        <div className="flex min-w-0 flex-1 flex-col gap-3">
-          <div className="flex flex-col gap-0.5">
-            <span className="text-muted-foreground text-sm">{t("home.persona.active")}</span>
-            <h1 className="truncate font-heading font-semibold text-3xl">{persona.name}</h1>
-            <code className="text-muted-foreground text-xs">{persona.id}</code>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button size="lg" asChild>
-              <Link to="/call">
-                <PhoneIcon />
-                {t("home.call", { name: persona.shortName || persona.name })}
-              </Link>
-            </Button>
-            <Button size="lg" variant="outline" asChild>
-              <Link to={studioPath(persona.id, "identity")}>
-                <BookOpenIcon />
-                {t("home.studio")}
-              </Link>
-            </Button>
-            {!voiceFromEnv && (
-              <Button size="lg" variant="outline" onClick={() => setPickingVoice(true)}>
-                <AudioLinesIcon />
-                {t("home.voice.change")}
-              </Button>
-            )}
-          </div>
-        </div>
-      </section>
+    <div className="flex flex-col gap-12">
+      <Hero persona={persona} verdict={verdict(items)} />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <PersonaSwitch status={status.data} />
-        <Button variant="ghost" onClick={() => setCreating(true)}>
-          <PlusIcon />
-          {t("home.persona.new")}
-        </Button>
-        {status.data.activeCalls > 0 && (
-          <span className="text-muted-foreground text-sm">{t("home.persona.inCall")}</span>
-        )}
-      </div>
+      <HomeSection title={t("home.ready.title")} description={t("home.ready.description")}>
+        <ReadinessList items={items} onPickVoice={() => setPickingVoice(true)} />
+      </HomeSection>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("home.ready.title")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ReadinessList status={status.data} onPickVoice={() => setPickingVoice(true)} />
-        </CardContent>
-      </Card>
+      <HomeSection
+        title={t("home.personas.title")}
+        description={t(live ? "home.personas.inCall" : "home.personas.description")}
+      >
+        <PersonaGrid live={live} onNew={() => setCreating(true)} />
+      </HomeSection>
 
-      <MemoryPanel persona={persona} memory={status.data.memory} />
+      <MemoryPanel key={persona.id} persona={persona} memory={status.data.memory} />
 
       <p className="text-muted-foreground text-xs">
         {t("home.version", { version: status.data.version })}

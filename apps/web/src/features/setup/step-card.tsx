@@ -1,14 +1,7 @@
 import { ArrowLeftIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { SectionCard } from "@/components/section-card";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { useT } from "@/lib/i18n";
 
 export interface StepCardProps {
@@ -17,30 +10,40 @@ export interface StepCardProps {
   readonly children: ReactNode;
   /** The step's own actions, at the right of the footer. */
   readonly footer: ReactNode;
+  /** Back, at the left of the footer; the first step has none. */
   readonly onBack?: () => void;
+  /** The footer's left side when there is no Back. */
+  readonly note?: ReactNode;
   readonly busy?: boolean;
 }
 
-export function StepCard({ title, description, children, footer, onBack, busy }: StepCardProps) {
+export function StepCard({
+  title,
+  description,
+  children,
+  footer,
+  onBack,
+  note,
+  busy,
+}: StepCardProps) {
   const t = useT();
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-lg">{title}</CardTitle>
-        {description && <CardDescription>{description}</CardDescription>}
-      </CardHeader>
-      <CardContent className="flex flex-col gap-6">{children}</CardContent>
-      <CardFooter className="flex flex-wrap justify-between gap-2">
-        {onBack ? (
-          <Button variant="ghost" onClick={onBack} disabled={busy}>
+    <SectionCard
+      title={title}
+      description={description}
+      note={
+        onBack ? (
+          <Button variant="ghost" className="-ml-2.5" onClick={onBack} disabled={busy}>
             <ArrowLeftIcon />
             {t("setup.back")}
           </Button>
         ) : (
-          <span />
-        )}
-        <div className="flex flex-wrap gap-2">{footer}</div>
-      </CardFooter>
-    </Card>
+          note
+        )
+      }
+      actions={footer}
+    >
+      {children}
+    </SectionCard>
   );
 }

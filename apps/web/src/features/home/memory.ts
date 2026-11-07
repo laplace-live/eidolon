@@ -19,6 +19,9 @@ export function memoryView(
   return memory.reachable === false ? "down" : "loading";
 }
 
+/** How many the list shows before "Show all": the newest ones. */
+export const MEMORIES_SHOWN = 8;
+
 function timeOf(memory: Memory): number {
   const at = Date.parse(memory.updated_at ?? memory.created_at ?? "");
   return Number.isNaN(at) ? Number.NEGATIVE_INFINITY : at;

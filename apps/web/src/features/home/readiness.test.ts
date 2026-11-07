@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { studioPath } from "@/lib/paths";
 import type { Status } from "../../lib/api";
-import { type Formats, formatsFor, type Item, readiness } from "./readiness";
+import { type Formats, formatsFor, type Item, readiness, verdict } from "./readiness";
 
 const plain: Formats = {
   bytes: (bytes) => `${bytes}B`,
@@ -56,7 +56,7 @@ function item(status: Status, id: string): Item | undefined {
   return readiness(status, plain).find((entry) => entry.id === id);
 }
 
-test("a healthy install is all ok, in a fixed order", () => {
+test("a healthy install is all ok, in a fixed order, and only her voice offers a change", () => {
   const items = readiness(healthy, plain);
   expect(items.map((entry) => entry.id)).toEqual([
     "keys",
@@ -69,8 +69,16 @@ test("a healthy install is all ok, in a fixed order", () => {
     "ffmpeg",
     "disk",
   ]);
-  expect(items.every((entry) => entry.tone === "ok" && entry.fix === undefined)).toBe(true);
+  expect(items.every((entry) => entry.tone === "ok")).toBe(true);
+  expect(items.filter((entry) => entry.fix !== undefined).map((entry) => entry.id)).toEqual([
+    "voice",
+  ]);
+  expect(item(healthy, "voice")?.fix).toEqual({
+    kind: "pick-voice",
+    label: "home.fix.changeVoice",
+  });
   expect(item(healthy, "streams")?.vars).toEqual({ rows: "900", date: "@2026-11-01T00:00:00Z" });
+  expect(verdict(items)).toBe("ready");
 });
 
 test("a missing key names its provider and links to setup", () => {
@@ -93,27 +101,55 @@ describe("the voice", () => {
     persona: { ...healthy.persona, voice: { ...healthy.persona.voice, ...patch } },
   });
 
-  test("unset or unknown to Fish blocks calls, and the fix is picking one", () => {
-    expect(item(voice({ id: null, ok: null }), "voice")).toMatchObject({
+  test("unset or unknown to Fish blocks calls, and the fix is picking one in place", () => {
+    const pick = { kind: "pick-voice", label: "home.fix.pickVoice" } as const;
+    expect(item(voice({ id: null, source: "default", ok: null }), "voice")).toEqual({
+      id: "voice",
       tone: "error",
       text: "home.ready.voice.none",
-      fix: { kind: "pick-voice" },
+      fix: pick,
     });
     expect(item(voice({ ok: false }), "voice")).toMatchObject({
       tone: "error",
-      fix: { kind: "pick-voice" },
+      text: "home.ready.voice.bad",
+      fix: pick,
     });
   });
 
-  test("unchecked offers the Fish check", () => {
-    expect(item(voice({ ok: null }), "voice")?.fix).toEqual({ kind: "check", provider: "fish" });
+  test("unchecked offers the Fish check, and says whether she inherits it", () => {
+    expect(item(voice({ ok: null }), "voice")).toMatchObject({
+      text: "home.ready.voice.unchecked",
+      fix: { kind: "check", provider: "fish" },
+    });
+    expect(item(voice({ source: "env", ok: null }), "voice")).toMatchObject({
+      text: "home.ready.voice.uncheckedEnv",
+      fix: { kind: "check", provider: "fish" },
+    });
   });
 
-  test("one the environment sets can't be picked here", () => {
-    const bad = item(voice({ source: "env", ok: false }), "voice");
-    expect(bad).toMatchObject({ tone: "error", text: "home.ready.voice.badEnv" });
-    expect(bad?.fix).toBeUndefined();
+  test("an inherited voice says so, and is changed in her studio's voice section", () => {
+    const studio = { kind: "link", to: "/personas/milky-green/voice" } as const;
+    expect(item(voice({ source: "env", ok: false }), "voice")).toMatchObject({
+      tone: "error",
+      text: "home.ready.voice.badEnv",
+      vars: { id: "a".repeat(32) },
+      fix: { ...studio, label: "home.fix.pickVoice" },
+    });
+    expect(item(voice({ source: "env", ok: true }), "voice")).toMatchObject({
+      tone: "ok",
+      text: "home.ready.voice.env",
+      fix: { ...studio, label: "home.fix.changeVoice" },
+    });
   });
+});
+
+test("the verdict: an error blocks calls, a warning wants a look, information is fine", () => {
+  expect(verdict([{ tone: "ok" }, { tone: "info" }])).toBe("ready");
+  expect(verdict([{ tone: "info" }, { tone: "warn" }])).toBe("attention");
+  expect(verdict([{ tone: "warn" }, { tone: "error" }, { tone: "ok" }])).toBe("blocked");
+  const noKeys = { ...healthy, keys: { ...healthy.keys, FISH_API_KEY: false } };
+  expect(verdict(readiness(noKeys, plain))).toBe("blocked");
+  expect(verdict(readiness({ ...healthy, freeBytes: 2e9 }, plain))).toBe("attention");
 });
 
 test("memory off links to the wizard's memory step; down or unchecked offers a check", () => {

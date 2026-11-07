@@ -43,17 +43,22 @@ export function VoiceDialog({
         changeVoiceDialog(next, save.isPending, onOpenChange, () => save.reset())
       }
     >
-      <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{t("setup.voice.title")}</DialogTitle>
+      {/* A grid track grows to fit the voice list's rows, past a phone's screen, unless held. */}
+      <DialogContent className="max-h-[90svh] grid-cols-[minmax(0,1fr)] gap-0 overflow-y-auto p-0 sm:max-w-2xl">
+        <DialogHeader className="border-b p-6">
+          <DialogTitle className="font-semibold text-xl tracking-tight">
+            {t("setup.voice.title")}
+          </DialogTitle>
           <DialogDescription>{t("setup.voice.stepBody", { name: persona.name })}</DialogDescription>
         </DialogHeader>
-        <VoicePicker
-          value={save.variables?.id ?? current}
-          onChange={(voice) => save.mutate(voice)}
-          disabled={save.isPending}
-        />
-        {save.isError && <ErrorAlert error={save.error} />}
+        <div className="flex flex-col gap-6 p-6">
+          <VoicePicker
+            value={save.variables?.id ?? current}
+            onChange={(voice) => save.mutate(voice)}
+            disabled={save.isPending}
+          />
+          {save.isError && <ErrorAlert error={save.error} />}
+        </div>
       </DialogContent>
     </Dialog>
   );

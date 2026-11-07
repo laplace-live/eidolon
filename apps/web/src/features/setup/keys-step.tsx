@@ -1,11 +1,11 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronRightIcon } from "lucide-react";
+import { ChevronRightIcon, LockIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ErrorAlert } from "@/components/error-alert";
-import { SettingsForm } from "@/components/settings-form";
 import { OPTIONAL, REQUIRED } from "@/components/settings-form/credentials";
 import { KeyField } from "@/components/settings-form/key-field";
 import { settingsQuery } from "@/components/settings-form/queries";
+import { SettingsCard } from "@/components/settings-form/settings-card";
 import { useKeys } from "@/components/settings-form/use-keys";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -20,8 +20,7 @@ import { cookieDefault, isNewInstall } from "./wizard";
 /** The rows another provider's key needs beside it. */
 const PROVIDER_SETTINGS = [
   "embeddings.baseUrl",
-  "embeddings.model",
-  "embeddings.dim",
+  ["embeddings.model", "embeddings.dim"],
   "rerank.baseUrl",
   "refine.baseUrl",
 ] as const;
@@ -77,6 +76,12 @@ export function KeysStep({ onDone }: { readonly onDone: () => void }) {
     <StepCard
       title={t("setup.keys.title")}
       description={t("setup.keys.body")}
+      note={
+        <span className="flex items-center gap-1.5">
+          <LockIcon className="size-3.5 shrink-0" aria-hidden />
+          {t("setup.keys.note")}
+        </span>
+      }
       footer={
         <>
           {checksFailed && (
@@ -92,17 +97,17 @@ export function KeysStep({ onDone }: { readonly onDone: () => void }) {
       }
     >
       {keys.credentials.isError && <ErrorAlert error={keys.credentials.error} />}
-      <FieldGroup>
+      <FieldGroup className="gap-7">
         {REQUIRED.map((name) => (
           <KeyField key={name} name={name} keys={keys} pages />
         ))}
       </FieldGroup>
 
-      <Collapsible className="flex flex-col gap-4">
+      <Collapsible className="-mx-6 flex flex-col gap-6 border-t px-6 pt-4">
         <CollapsibleTrigger asChild>
           <Button
             variant="ghost"
-            className="group w-fit px-0 text-muted-foreground hover:bg-transparent"
+            className="group -ml-2.5 w-fit text-muted-foreground hover:text-foreground aria-expanded:bg-transparent"
           >
             <ChevronRightIcon className="transition-transform group-data-[state=open]:rotate-90" />
             {t("setup.keys.otherProviders")}
@@ -110,12 +115,17 @@ export function KeysStep({ onDone }: { readonly onDone: () => void }) {
         </CollapsibleTrigger>
         <CollapsibleContent className="flex flex-col gap-6">
           <p className="text-muted-foreground text-sm">{t("setup.keys.otherProvidersBody")}</p>
-          <FieldGroup>
+          <FieldGroup className="gap-7">
             {OPTIONAL.filter((name) => name !== "OPENAI_API_KEY").map((name) => (
               <KeyField key={name} name={name} keys={keys} />
             ))}
           </FieldGroup>
-          <SettingsForm scope="app" paths={PROVIDER_SETTINGS} />
+          <SettingsCard
+            scope="app"
+            paths={PROVIDER_SETTINGS}
+            title={<span className="block text-base">{t("setup.keys.providerSettings")}</span>}
+            description={t("setup.keys.providerSettingsBody")}
+          />
         </CollapsibleContent>
       </Collapsible>
 

@@ -52,6 +52,17 @@ export function cookieDefault(
   return { [COOKIE_SETTING]: "none" };
 }
 
+/**
+ * The environment's value a persona inherits for a persona row: the environment sets it and her
+ * file doesn't, which would override it for her alone. Null otherwise.
+ */
+export function inheritedValue(
+  row: Pick<SettingRow, "value" | "envValue"> | undefined,
+): string | null {
+  if (row === undefined || row.envValue === null) return null;
+  return row.value === null || row.value === "" ? row.envValue : null;
+}
+
 /** Ids become folder names, lock keys and --persona, so they stay lowercase ASCII. */
 export const PERSONA_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 

@@ -1,7 +1,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckIcon } from "lucide-react";
-import { useId, useState } from "react";
+import { CircleCheckIcon } from "lucide-react";
+import { type ReactNode, useId, useState } from "react";
 import { ErrorAlert } from "@/components/error-alert";
+import { SectionCardSkeleton } from "@/components/section-card";
 import { controlFor, draftOf, parseDraft } from "@/components/settings-form/controls";
 import { CheckResultView } from "@/components/settings-form/key-field";
 import { settingsQuery } from "@/components/settings-form/queries";
@@ -10,7 +11,6 @@ import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { type ApiError, asApiError, call } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -29,6 +29,17 @@ import {
 const HOST = "memory.qdrant.host";
 const PORT = "memory.qdrant.port";
 const PORT_CONTROL = controlFor({ path: PORT, kind: "int", scope: "app" });
+
+function Instruction({ n, children }: { readonly n: number; readonly children: ReactNode }) {
+  return (
+    <li className="flex gap-3">
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-full border bg-card font-medium text-muted-foreground text-xs">
+        {n}
+      </span>
+      <div className="min-w-0 flex-1 pt-0.5">{children}</div>
+    </li>
+  );
+}
 
 /**
  * Memory is Qdrant, run in Docker. The check probes the typed address before anything is saved,
@@ -55,7 +66,7 @@ export function MemoryStep({
   // The address this visit checked and saved.
   const [saved, setSaved] = useState<QdrantAddress | null>(null);
 
-  if (settings.isPending) return <Skeleton className="h-80 w-full" />;
+  if (settings.isPending) return <SectionCardSkeleton rows={3} />;
   if (settings.isError) {
     return <ErrorAlert error={settings.error} />;
   }
@@ -134,24 +145,23 @@ export function MemoryStep({
     >
       {on && (
         <Alert>
-          <CheckIcon />
+          <CircleCheckIcon className="text-success" />
           <AlertTitle>{t("setup.memory.on")}</AlertTitle>
         </Alert>
       )}
-      <ol className="flex list-decimal flex-col gap-3 pl-5 text-sm">
-        <li>{t("setup.memory.docker")}</li>
-        <li>
-          {/* A flex <li> is no longer a list item, and would lose its number. */}
-          <div className="flex flex-col gap-2">
+      <ol className="flex flex-col gap-5 text-sm">
+        <Instruction n={1}>{t("setup.memory.docker")}</Instruction>
+        <Instruction n={2}>
+          <div className="flex flex-col gap-2.5">
             {t("setup.memory.run")}
             <CopyCommand command={QDRANT_COMMAND} />
             <span className="text-muted-foreground text-xs">{t("setup.memory.runNote")}</span>
           </div>
-        </li>
-        <li>{t("setup.memory.checkHint")}</li>
+        </Instruction>
+        <Instruction n={3}>{t("setup.memory.checkHint")}</Instruction>
       </ol>
 
-      <div className="grid gap-4 sm:grid-cols-[1fr_8rem]">
+      <div className="grid max-w-xl gap-4 sm:grid-cols-[1fr_8rem]">
         <Field>
           <FieldLabel htmlFor={hostId}>{t("settings.memory.qdrant.host")}</FieldLabel>
           <Input

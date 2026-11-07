@@ -20,11 +20,13 @@ import { VoicePicker } from "@/components/voice-picker";
 import type { PersonaSummary, Voice } from "@/lib/api";
 import { toastError } from "@/lib/feedback";
 import { useT } from "@/lib/i18n";
+import { addAvatar } from "./avatar";
+import { AvatarPicker } from "./avatar-picker";
 import { MandarinNote, PersonaFields } from "./persona-fields";
 import { activatePersona, createPersona, refreshPersonas } from "./personas";
 import { EMPTY_PERSONA, type PersonaDraft, personaErrors } from "./wizard";
 
-/** Creates a persona, with the fields and the voice she needs, outside the wizard. */
+/** Creates a persona, with the fields and the voice she needs and an avatar, outside the wizard. */
 export function NewPersonaDialog({
   open,
   onOpenChange,
@@ -40,6 +42,7 @@ export function NewPersonaDialog({
   const personas = useQuery(personasQuery);
   const blank = () => ({ ...EMPTY_PERSONA, timezone: browserTimeZone() });
   const [draft, setDraft] = useState<PersonaDraft>(blank);
+  const [avatar, setAvatar] = useState<File | null>(null);
   const [voice, setVoice] = useState<Voice | null>(null);
   const [activate, setActivate] = useState(true);
   const [showErrors, setShowErrors] = useState(false);
@@ -49,6 +52,7 @@ export function NewPersonaDialog({
     mutationFn: ({ voiceId }: { voiceId: string }) => createPersona(draft, voiceId),
     onSuccess: async (created) => {
       toast.success(t("setup.newPersona.created", { name: created.name }));
+      if (avatar) await addAvatar(created, avatar);
       if (activate) {
         // She exists either way; a refused switch (a call is live) only leaves her inactive.
         await activatePersona(created.id).catch(toastError);
@@ -62,6 +66,7 @@ export function NewPersonaDialog({
   function close(next: boolean) {
     if (!next) {
       setDraft(blank());
+      setAvatar(null);
       setVoice(null);
       setShowErrors(false);
       create.reset();
@@ -77,42 +82,66 @@ export function NewPersonaDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !create.isPending && close(next)}>
-      <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{t("setup.newPersona.title")}</DialogTitle>
+      {/* The grid's track and the voice fieldset would each grow to fit the voice list's rows,
+          past a phone's screen: both are held to the dialog's width. */}
+      <DialogContent className="max-h-[90svh] grid-cols-[minmax(0,1fr)] gap-0 overflow-y-auto p-0 sm:max-w-2xl">
+        <DialogHeader className="border-b p-6">
+          <DialogTitle className="font-semibold text-xl tracking-tight">
+            {t("setup.newPersona.title")}
+          </DialogTitle>
           <DialogDescription>{t("setup.newPersona.body")}</DialogDescription>
         </DialogHeader>
-        <MandarinNote />
-        <PersonaFields
-          draft={draft}
-          onDraft={setDraft}
-          taken={taken}
-          showErrors={showErrors}
-          disabled={create.isPending}
-        />
-        <FieldSet>
-          <FieldLegend>{t("setup.newPersona.voice")}</FieldLegend>
-          <VoicePicker value={voice?.id ?? null} onChange={setVoice} disabled={create.isPending} />
-          {showErrors && !voice && <FieldError>{t("setup.newPersona.voiceRequired")}</FieldError>}
-        </FieldSet>
-        <Field orientation="horizontal">
-          <Switch
-            id={switchId}
-            checked={activate}
-            onCheckedChange={setActivate}
+        <div className="flex flex-col gap-6 p-6">
+          <MandarinNote />
+          <AvatarPicker
+            file={avatar}
+            onFile={setAvatar}
+            name={draft.shortName || draft.name}
             disabled={create.isPending}
           />
-          <FieldLabel htmlFor={switchId}>{t("setup.newPersona.activate")}</FieldLabel>
-        </Field>
-        {create.isError && <ErrorAlert error={create.error} />}
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => close(false)} disabled={create.isPending}>
-            {t("setup.cancel")}
-          </Button>
-          <Button onClick={submit} disabled={create.isPending}>
-            {create.isPending && <Spinner />}
-            {t("setup.newPersona.create")}
-          </Button>
+          <PersonaFields
+            draft={draft}
+            onDraft={setDraft}
+            taken={taken}
+            showErrors={showErrors}
+            disabled={create.isPending}
+          />
+          <div className="border-t pt-6">
+            <FieldSet className="min-w-0">
+              <FieldLegend>{t("setup.newPersona.voice")}</FieldLegend>
+              <VoicePicker
+                value={voice?.id ?? null}
+                onChange={setVoice}
+                disabled={create.isPending}
+              />
+              {showErrors && !voice && (
+                <FieldError>{t("setup.newPersona.voiceRequired")}</FieldError>
+              )}
+            </FieldSet>
+          </div>
+          {create.isError && <ErrorAlert error={create.error} />}
+        </div>
+        <DialogFooter className="sticky bottom-0 z-10 m-0 flex-row flex-wrap items-center justify-between gap-3 px-6 py-3 backdrop-blur-md">
+          <Field orientation="horizontal" className="w-auto">
+            <Switch
+              id={switchId}
+              checked={activate}
+              onCheckedChange={setActivate}
+              disabled={create.isPending}
+            />
+            <FieldLabel htmlFor={switchId} className="font-normal">
+              {t("setup.newPersona.activate")}
+            </FieldLabel>
+          </Field>
+          <div className="ml-auto flex gap-2">
+            <Button variant="ghost" onClick={() => close(false)} disabled={create.isPending}>
+              {t("setup.cancel")}
+            </Button>
+            <Button onClick={submit} disabled={create.isPending}>
+              {create.isPending && <Spinner />}
+              {t("setup.newPersona.create")}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
