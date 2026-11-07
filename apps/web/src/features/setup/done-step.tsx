@@ -1,9 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { BookOpenIcon, HomeIcon, PhoneIcon } from "lucide-react";
+import { useMemo } from "react";
 import { Link } from "react-router";
 import { PersonaAvatar } from "@/components/avatar";
 import { Button } from "@/components/ui/button";
-import { useT } from "@/lib/i18n";
+import { VerdictLabel } from "@/features/home/hero";
+import { formatsFor, readiness, verdict } from "@/features/home/readiness";
+import { useLang, useT } from "@/lib/i18n";
 import { studioPath } from "@/lib/paths";
 import { statusQuery } from "@/lib/query";
 import type { PersonaRef } from "./personas";
@@ -20,8 +23,13 @@ export function DoneStep({
   readonly onBack: () => void;
 }) {
   const t = useT();
+  const lang = useLang();
   const status = useQuery(statusQuery);
   const active = persona ?? status.data?.persona ?? null;
+  const state = useMemo(
+    () => (status.data ? verdict(readiness(status.data, formatsFor(lang))) : null),
+    [status.data, lang],
+  );
   return (
     <StepCard
       title={t("setup.done.title")}
@@ -47,19 +55,23 @@ export function DoneStep({
       {active && (
         <div className="flex items-center gap-4">
           <PersonaAvatar persona={active} size="lg" />
-          <div className="flex flex-col gap-1">
-            <span className="font-heading font-semibold text-xl">{active.name}</span>
-            <span className="text-muted-foreground text-sm">{t("setup.done.ready")}</span>
+          <div className="flex min-w-0 flex-col gap-1">
+            <span className="break-words font-semibold text-xl tracking-tight">{active.name}</span>
+            {state && (
+              <span className="text-muted-foreground text-sm">
+                <VerdictLabel verdict={state} />
+              </span>
+            )}
           </div>
         </div>
       )}
       {created && active && (
-        <div className="flex flex-col gap-2 rounded-lg border p-3 text-sm">
-          <p>{t("setup.done.studio")}</p>
-          <Button variant="outline" className="w-fit" asChild>
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-lg border bg-muted/40 p-4">
+          <p className="min-w-0 flex-1 basis-64 text-sm">{t("setup.done.studio")}</p>
+          <Button variant="outline" asChild>
             <Link to={studioPath(active.id)}>
               <BookOpenIcon />
-              {t("setup.done.openStudio")}
+              {t("common.openStudio")}
             </Link>
           </Button>
         </div>

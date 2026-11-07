@@ -1,86 +1,262 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeftIcon, ChevronDownIcon, PlayIcon, RefreshCwIcon } from "lucide-react";
-import { useState } from "react";
+import {
+  ArrowLeftIcon,
+  ChevronDownIcon,
+  CircleXIcon,
+  CornerDownRightIcon,
+  HistoryIcon,
+  RefreshCwIcon,
+  SearchXIcon,
+  TriangleAlertIcon,
+} from "lucide-react";
+import { type ReactNode, useId, useState } from "react";
 import { Link, useNavigate } from "react-router";
+import { PersonaAvatar } from "@/components/avatar";
+import { EmptyState } from "@/components/empty-state";
+import { PageHeader } from "@/components/page-header";
+import { SectionCard, SectionCardSkeleton } from "@/components/section-card";
+import { personasQuery } from "@/components/settings-form/queries";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { ApiError, errorKey, type JobSnapshot, stream } from "@/lib/api";
 import { formatDateTime, formatDuration, formatUsd } from "@/lib/format";
 import { useLang, useT } from "@/lib/i18n";
-import { costSoFar, type JobView, runSummary, shownOutcome } from "@/lib/jobs";
+import { costSoFar, type JobView, type Outcome, runSummary, shownOutcome } from "@/lib/jobs";
 import { studioPath } from "@/lib/paths";
+import { cn } from "@/lib/utils";
 import {
   CancelJobButton,
   Elapsed,
   Failures,
   JobLog,
   OutcomeBadge,
+  ResumeJobButton,
   RunningItems,
   StageList,
 } from "./parts";
-import { jobQuery, useResumeJob } from "./queries";
-import { stopOffer } from "./stopping";
-import { useJobEvents } from "./use-job-events";
+import { jobQuery } from "./queries";
+import { canResume } from "./resume";
+import { showsStop, stopOffer } from "./stopping";
+import { type JobEvents, useJobEvents } from "./use-job-events";
 
 /** How much of a long stderr log the page shows: its end, where a crash is. */
 const LOG_TAIL_CHARS = 200_000;
 
-function StderrLog({ id, running }: { readonly id: string; readonly running: boolean }) {
+/** A card's body content that runs to its edges, under a rule, like a terminal pane. */
+const FLUSH = "-mx-6 -mb-6 rounded-none border-0 border-t";
+
+function BackLink() {
   const t = useT();
-  const { data, error, isFetching, refetch } = useQuery({
-    queryKey: ["jobs", id, "log"],
-    queryFn: async ({ signal }) =>
-      new Response(await stream("GET /api/local/jobs/:id/log", { params: { id }, signal })).text(),
-    refetchInterval: running ? 5000 : false,
-  });
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex justify-end">
-        <Button variant="ghost" size="sm" onClick={() => refetch()} disabled={isFetching}>
-          <RefreshCwIcon className={isFetching ? "animate-spin" : undefined} />
-          {t("jobs.stderr.refresh")}
-        </Button>
-      </div>
-      {error ? (
-        <p className="text-destructive text-sm">{t(errorKey(error))}</p>
-      ) : (
-        <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-lg border bg-muted/30 p-3 font-mono text-xs">
-          {data === undefined
-            ? t("jobs.stderr.loading")
-            : data.trim() === ""
-              ? t("jobs.stderr.empty")
-              : data.slice(-LOG_TAIL_CHARS)}
-        </pre>
-      )}
+    <Link
+      to="/jobs"
+      className="inline-flex items-center gap-1.5 self-start rounded-md text-muted-foreground text-sm outline-none transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+    >
+      <ArrowLeftIcon className="size-4" />
+      {t("jobs.back")}
+    </Link>
+  );
+}
+
+function Meta({
+  label,
+  className,
+  children,
+}: {
+  readonly label: string;
+  readonly className?: string;
+  readonly children: ReactNode;
+}) {
+  return (
+    <div className={cn("flex min-w-0 flex-col gap-1", className)}>
+      <dt className="text-muted-foreground text-sm">{label}</dt>
+      <dd className="min-w-0 font-medium text-sm">{children}</dd>
     </div>
   );
 }
 
 function Options({ options }: { readonly options: JobSnapshot["options"] }) {
+  const t = useT();
   const entries = Object.entries(options);
   if (entries.length === 0) return null;
   return (
-    <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-      {entries.map(([key, value]) => (
-        <div key={key} className="contents">
-          <dt className="text-muted-foreground">{key}</dt>
-          <dd className="break-all font-mono">
-            {typeof value === "string" ? value : JSON.stringify(value)}
-          </dd>
+    <Meta label={t("jobs.meta.options")} className="col-span-full">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 font-normal text-xs">
+        {entries.map(([key, value]) => (
+          <div key={key} className="contents">
+            <dt className="text-muted-foreground">{key}</dt>
+            <dd className="break-all font-mono">
+              {typeof value === "string" ? value : JSON.stringify(value)}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </Meta>
+  );
+}
+
+/** Why a failed or crashed run didn't finish, at the top of its card. */
+function Failure({
+  job,
+  outcome,
+  view,
+}: {
+  readonly job: JobSnapshot;
+  readonly outcome: Outcome;
+  readonly view: JobView;
+}) {
+  const t = useT();
+  if (outcome !== "failed" && outcome !== "crashed") return null;
+  const crashed = outcome === "crashed";
+  const Icon = crashed ? TriangleAlertIcon : CircleXIcon;
+  return (
+    <div className="flex gap-3">
+      <Icon aria-hidden className="mt-0.5 size-4 shrink-0 text-destructive" />
+      <div className="flex min-w-0 flex-1 flex-col gap-3">
+        <div className="flex flex-col gap-1">
+          <p className="font-medium text-destructive text-sm">
+            {t(crashed ? "jobs.crashed.title" : "jobs.failed.title")}
+          </p>
+          {crashed && <p className="text-muted-foreground text-sm">{t("jobs.crashed.body")}</p>}
         </div>
-      ))}
-    </dl>
+        {crashed ? (
+          job.stderrTail.trim() !== "" && (
+            <pre className="max-h-60 overflow-auto whitespace-pre-wrap break-words rounded-lg border bg-muted/40 px-4 py-3 font-mono text-xs">
+              {job.stderrTail}
+            </pre>
+          )
+        ) : (
+          <Failures view={view} job={job} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Two lines: what happened, then what to do about it. */
+function Note({ title, body }: { readonly title: string; readonly body?: string }) {
+  return (
+    <span className="flex flex-col gap-0.5">
+      <span className="font-medium text-foreground">{title}</span>
+      {body && <span>{body}</span>}
+    </span>
+  );
+}
+
+/**
+ * Who the job is for and what it took, with why it stopped short when it did; its footer says
+ * what the page can do about it, beside the button that does.
+ */
+function Overview({
+  job,
+  outcome,
+  events,
+}: {
+  readonly job: JobSnapshot;
+  readonly outcome: Outcome;
+  readonly events: JobEvents;
+}) {
+  const t = useT();
+  const lang = useLang();
+  const navigate = useNavigate();
+  const { data: personas } = useQuery(personasQuery);
+  const persona = personas?.personas.find((entry) => entry.id === job.persona) ?? {
+    id: job.persona,
+    name: job.persona,
+    shortName: "",
+  };
+  const summary = runSummary(events.view, job.command);
+  const cost = summary?.costUsd ?? costSoFar(events.view) ?? job.costUsd;
+  const offer = stopOffer(job);
+  const resumable = canResume(job, outcome);
+  const failed = outcome === "failed" || outcome === "crashed";
+
+  let note: ReactNode;
+  if (offer === "earlier-run") {
+    note = <Note title={t("jobs.earlierRun.title")} body={t("jobs.earlierRun.body")} />;
+  } else if (offer !== null) {
+    note = t(job.stopping ? "jobs.note.stopping" : "jobs.note.running");
+  } else if (outcome === "interrupted") {
+    note = (
+      <Note
+        title={t("jobs.interrupted.title")}
+        body={resumable ? t("jobs.interrupted.body") : undefined}
+      />
+    );
+  } else if (resumable) {
+    note = t(outcome === "cancelled" ? "jobs.cancelled.body" : "jobs.resumeNote");
+  }
+  const actions = showsStop(job) ? (
+    <CancelJobButton job={job} size="default" />
+  ) : resumable ? (
+    <ResumeJobButton
+      id={job.id}
+      size="default"
+      onResumed={(next) => {
+        if (next.id !== job.id) navigate(`/jobs/${encodeURIComponent(next.id)}`);
+      }}
+    />
+  ) : undefined;
+
+  return (
+    <SectionCard tone={failed ? "danger" : "default"} note={note} actions={actions}>
+      <Failure job={job} outcome={outcome} view={events.view} />
+      <dl
+        className={cn("grid grid-cols-2 gap-x-6 gap-y-5 lg:grid-cols-4", failed && "border-t pt-6")}
+      >
+        <Meta label={t("jobs.meta.persona")}>
+          <Link
+            to={studioPath(job.persona)}
+            className="inline-flex max-w-full items-center gap-2 rounded-sm underline-offset-4 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            <PersonaAvatar persona={persona} size="xs" />
+            <span className="truncate">{persona.name}</span>
+          </Link>
+        </Meta>
+        <Meta label={t("jobs.meta.started")}>
+          <time dateTime={job.startedAt}>{formatDateTime(job.startedAt, lang)}</time>
+        </Meta>
+        <Meta label={t("jobs.meta.duration")}>
+          <span className="tabular-nums">
+            <Elapsed start={job.startedAt} end={job.endedAt} ticking={job.status === "running"} />
+          </span>
+        </Meta>
+        <Meta label={t(summary ? "jobs.meta.cost" : "jobs.meta.costSoFar")}>
+          <span className="tabular-nums">
+            {cost === null || cost === undefined ? "—" : formatUsd(cost, lang)}
+          </span>
+          {summary?.costSource === "unpriced" && (
+            <span className="block font-normal text-muted-foreground text-xs">
+              {t("jobs.meta.unpriced")}
+            </span>
+          )}
+        </Meta>
+        <Options options={job.options} />
+      </dl>
+      {(job.resumedFrom || job.resumedBy) && (
+        <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+          {job.resumedFrom && (
+            <Link
+              to={`/jobs/${encodeURIComponent(job.resumedFrom)}`}
+              className="inline-flex items-center gap-1.5 text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+            >
+              <HistoryIcon aria-hidden className="size-4" />
+              {t("jobs.resumedFrom")}
+            </Link>
+          )}
+          {job.resumedBy && (
+            <Link
+              to={`/jobs/${encodeURIComponent(job.resumedBy)}`}
+              className="inline-flex items-center gap-1.5 text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+            >
+              <CornerDownRightIcon aria-hidden className="size-4" />
+              {t("jobs.resumedBy")}
+            </Link>
+          )}
+        </div>
+      )}
+    </SectionCard>
   );
 }
 
@@ -88,63 +264,134 @@ function Entries({ view }: { readonly view: JobView }) {
   const t = useT();
   if (view.entries.length === 0) return null;
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t("jobs.entries.title", { count: view.entries.length })}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t("jobs.entries.video")}</TableHead>
-              <TableHead className="text-right">{t("jobs.entries.length")}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {view.entries.map((entry) => (
-              <TableRow key={`${entry.id}:${entry.url}`}>
-                <TableCell className="max-w-md whitespace-normal">
-                  <div className="truncate">{entry.title ?? entry.url}</div>
-                  <div className="font-mono text-muted-foreground text-xs">{entry.id}</div>
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {entry.durationSec === undefined ? "—" : formatDuration(entry.durationSec)}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+    <SectionCard title={t("jobs.entries.title", { count: view.entries.length })}>
+      <ul className={cn(FLUSH, "divide-y")}>
+        {view.entries.map((entry) => (
+          <li key={`${entry.id}:${entry.url}`} className="flex items-center gap-4 px-6 py-3">
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="truncate font-medium text-sm">{entry.title ?? entry.url}</span>
+              <span className="truncate font-mono text-muted-foreground text-xs">{entry.id}</span>
+            </div>
+            <span className="shrink-0 text-muted-foreground text-sm tabular-nums">
+              <span className="sr-only">{t("jobs.entries.length")} </span>
+              {entry.durationSec === undefined ? "—" : formatDuration(entry.durationSec)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </SectionCard>
+  );
+}
+
+/** The command's own output, read only once asked for: it can run to megabytes. */
+function TechnicalLog({ id, running }: { readonly id: string; readonly running: boolean }) {
+  const t = useT();
+  const content = useId();
+  const [open, setOpen] = useState(false);
+  const { data, error, isFetching, refetch } = useQuery({
+    queryKey: ["jobs", id, "log"],
+    queryFn: async ({ signal }) =>
+      new Response(await stream("GET /api/local/jobs/:id/log", { params: { id }, signal })).text(),
+    enabled: open,
+    refetchInterval: open && running ? 5000 : false,
+  });
+  return (
+    <SectionCard
+      title={t("jobs.stderr.title")}
+      description={t("jobs.stderr.description")}
+      action={
+        <>
+          {open && (
+            <Button variant="ghost" size="sm" onClick={() => refetch()} disabled={isFetching}>
+              <RefreshCwIcon className={isFetching ? "animate-spin" : undefined} />
+              {t("jobs.stderr.refresh")}
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            aria-expanded={open}
+            aria-controls={open ? content : undefined}
+            onClick={() => setOpen(!open)}
+          >
+            <ChevronDownIcon className={open ? "rotate-180" : undefined} />
+            {t(open ? "jobs.stderr.hide" : "jobs.stderr.show")}
+          </Button>
+        </>
+      }
+    >
+      {open &&
+        (error ? (
+          <p id={content} className="text-destructive text-sm">
+            {t(errorKey(error))}
+          </p>
+        ) : (
+          <pre
+            id={content}
+            className={cn(
+              FLUSH,
+              "max-h-96 overflow-auto whitespace-pre-wrap break-words bg-muted/40 px-6 py-4 font-mono text-xs leading-relaxed",
+            )}
+          >
+            {data === undefined
+              ? t("jobs.stderr.loading")
+              : data.trim() === ""
+                ? t("jobs.stderr.empty")
+                : data.slice(-LOG_TAIL_CHARS)}
+          </pre>
+        ))}
+    </SectionCard>
   );
 }
 
 function NotFound() {
   const t = useT();
   return (
-    <div className="flex flex-col items-start gap-4">
-      <p className="text-muted-foreground">{t("jobs.notFound")}</p>
-      <Button variant="outline" asChild>
-        <Link to="/jobs">{t("jobs.back")}</Link>
-      </Button>
+    <EmptyState
+      icon={<SearchXIcon />}
+      title={t("jobs.notFound.title")}
+      description={t("jobs.notFound.body")}
+      action={
+        <Button variant="outline" asChild>
+          <Link to="/jobs">
+            <ArrowLeftIcon />
+            {t("jobs.back")}
+          </Link>
+        </Button>
+      }
+    />
+  );
+}
+
+function DetailSkeleton() {
+  return (
+    <div className="flex flex-col gap-8">
+      <div className="flex flex-col gap-4">
+        <Skeleton className="h-5 w-20" />
+        <Skeleton className="h-9 w-56" />
+        <Skeleton className="h-4 w-full max-w-md" />
+      </div>
+      <SectionCardSkeleton rows={1} footer={false} />
+      <SectionCardSkeleton rows={1} footer={false} />
     </div>
   );
 }
 
 export function JobDetail({ id }: { readonly id: string }) {
   const t = useT();
-  const lang = useLang();
-  const navigate = useNavigate();
   const { data: job, error } = useQuery(jobQuery(id));
   const events = useJobEvents(id);
-  const resume = useResumeJob();
-  const [stderrOpen, setStderrOpen] = useState(false);
   const [endedWhenShown, setEndedWhenShown] = useState<boolean | null>(null);
   if (job && endedWhenShown === null) setEndedWhenShown(job.status !== "running");
 
   // An id the server never minted is refused before it is looked up.
   if (error instanceof ApiError && (error.status === 404 || error.status === 400)) {
-    return <NotFound />;
+    return (
+      <div className="flex flex-col gap-8">
+        <BackLink />
+        <NotFound />
+      </div>
+    );
   }
   if (error) {
     return (
@@ -154,186 +401,41 @@ export function JobDetail({ id }: { readonly id: string }) {
       </Alert>
     );
   }
-  if (!job) {
-    return (
-      <div className="flex flex-col gap-4">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-40" />
-      </div>
-    );
-  }
+  if (!job) return <DetailSkeleton />;
 
   const outcome = shownOutcome(job, events.ended, endedWhenShown ?? false);
-  const summary = runSummary(events.view, job.command);
-  const cost = summary?.costUsd ?? costSoFar(events.view) ?? job.costUsd;
-  // A job resumes once: its rerun is the one to resume after that.
-  const resumable =
-    !job.ephemeral &&
-    job.resumedBy === null &&
-    (outcome === "interrupted" ||
-      outcome === "cancelled" ||
-      outcome === "failed" ||
-      outcome === "crashed");
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-3">
-        <Button variant="ghost" size="sm" className="self-start" asChild>
-          <Link to="/jobs">
-            <ArrowLeftIcon />
-            {t("jobs.back")}
-          </Link>
-        </Button>
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="font-heading font-semibold text-2xl">
-            {t(`jobs.command.${job.command}`)}
-          </h1>
-          <OutcomeBadge outcome={outcome} />
-          <div className="ml-auto flex gap-2">
-            <CancelJobButton job={job} />
-            {resumable && (
-              <Button
-                size="sm"
-                disabled={resume.isPending}
-                onClick={() =>
-                  resume.mutate(job.id, {
-                    onSuccess: (next) => {
-                      if (next.id !== job.id) navigate(`/jobs/${encodeURIComponent(next.id)}`);
-                    },
-                  })
-                }
-              >
-                <PlayIcon />
-                {t("jobs.resume")}
-              </Button>
-            )}
-          </div>
-        </div>
-        <p className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground text-sm">
-          <span>
-            {t("jobs.meta.persona")}{" "}
-            <Link
-              to={studioPath(job.persona)}
-              className="text-foreground underline-offset-4 hover:underline"
-            >
-              {job.persona}
-            </Link>
-          </span>
-          <span>
-            {t("jobs.meta.started")} {formatDateTime(job.startedAt, lang)}
-          </span>
-          <span className="tabular-nums">
-            {t("jobs.meta.duration")}{" "}
-            <Elapsed start={job.startedAt} end={job.endedAt} ticking={job.status === "running"} />
-          </span>
-          {cost !== null && cost !== undefined && (
-            <span className="tabular-nums">
-              {t(summary ? "jobs.meta.cost" : "jobs.meta.costSoFar")} {formatUsd(cost, lang)}
-            </span>
-          )}
-          {summary?.costSource === "unpriced" && <span>{t("jobs.meta.unpriced")}</span>}
-        </p>
-        <Options options={job.options} />
-        {(job.resumedFrom || job.resumedBy) && (
-          <p className="flex flex-wrap gap-x-4 text-muted-foreground text-sm">
-            {job.resumedFrom && (
-              <Link
-                to={`/jobs/${encodeURIComponent(job.resumedFrom)}`}
-                className="underline-offset-4 hover:underline"
-              >
-                {t("jobs.resumedFrom")}
-              </Link>
-            )}
-            {job.resumedBy && (
-              <Link
-                to={`/jobs/${encodeURIComponent(job.resumedBy)}`}
-                className="underline-offset-4 hover:underline"
-              >
-                {t("jobs.resumedBy")}
-              </Link>
-            )}
-          </p>
-        )}
+    <div className="flex flex-col gap-8">
+      <div className="flex flex-col gap-4">
+        <BackLink />
+        <PageHeader
+          title={t(`jobs.command.${job.command}`)}
+          badges={<OutcomeBadge outcome={outcome} />}
+          description={t(`jobs.about.${job.command}`)}
+        />
       </div>
 
-      {stopOffer(job) === "earlier-run" && (
-        <Alert>
-          <AlertTitle>{t("jobs.earlierRun.title")}</AlertTitle>
-          <AlertDescription>{t("jobs.earlierRun.body")}</AlertDescription>
-        </Alert>
-      )}
-      {outcome === "interrupted" && (
-        <Alert>
-          <AlertTitle>{t("jobs.interrupted.title")}</AlertTitle>
-          <AlertDescription>{t("jobs.interrupted.body")}</AlertDescription>
-        </Alert>
-      )}
-      {outcome === "cancelled" && !job.ephemeral && (
-        <Alert>
-          <AlertTitle>{t("jobs.cancelled.title")}</AlertTitle>
-          <AlertDescription>{t("jobs.cancelled.body")}</AlertDescription>
-        </Alert>
-      )}
-      {outcome === "crashed" && (
-        <Alert variant="destructive">
-          <AlertTitle>{t("jobs.crashed.title")}</AlertTitle>
-          <AlertDescription>
-            <p>{t("jobs.crashed.body")}</p>
-            {job.stderrTail.trim() !== "" && (
-              <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-words font-mono text-xs">
-                {job.stderrTail}
-              </pre>
-            )}
-          </AlertDescription>
-        </Alert>
-      )}
-      {outcome === "failed" && (
-        <Alert variant="destructive">
-          <AlertTitle>{t("jobs.failed.title")}</AlertTitle>
-          <AlertDescription>
-            <Failures view={events.view} job={job} />
-          </AlertDescription>
-        </Alert>
-      )}
+      <Overview job={job} outcome={outcome} events={events} />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("jobs.stages.title")}</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-6">
-          {events.view.stages.length === 0 ? (
-            <p className="text-muted-foreground text-sm">
-              {outcome === "running" ? t("jobs.stages.waiting") : t("jobs.stages.none")}
-            </p>
-          ) : (
-            <StageList view={events.view} />
-          )}
-          {outcome === "running" && <RunningItems view={events.view} />}
-        </CardContent>
-      </Card>
+      <SectionCard title={t("jobs.stages.title")}>
+        {events.view.stages.length === 0 ? (
+          <p className="text-muted-foreground text-sm">
+            {outcome === "running" ? t("jobs.stages.waiting") : t("jobs.stages.none")}
+          </p>
+        ) : (
+          <StageList view={events.view} />
+        )}
+        {outcome === "running" && <RunningItems view={events.view} />}
+      </SectionCard>
 
       {job.command === "expand" && <Entries view={events.view} />}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("jobs.log.title")}</CardTitle>
-          <CardDescription>{t("jobs.log.description")}</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <JobLog view={events.view} />
-          <Collapsible open={stderrOpen} onOpenChange={setStderrOpen}>
-            <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="sm">
-                <ChevronDownIcon className={stderrOpen ? "rotate-180" : undefined} />
-                {t("jobs.stderr.title")}
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="pt-2">
-              {stderrOpen && <StderrLog id={job.id} running={job.status === "running"} />}
-            </CollapsibleContent>
-          </Collapsible>
-        </CardContent>
-      </Card>
+      <SectionCard title={t("jobs.log.title")} description={t("jobs.log.description")}>
+        <JobLog view={events.view} className={cn(FLUSH, "max-h-[28rem] px-6 py-4")} />
+      </SectionCard>
+
+      <TechnicalLog id={job.id} running={job.status === "running"} />
     </div>
   );
 }

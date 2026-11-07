@@ -1,7 +1,11 @@
-// The settings page's key list: credentials.json's keys, never shown back once saved.
-import { type FormEvent, useState } from "react";
+// The settings page's keys: credentials.json's, never shown back once saved. Each card saves only
+// the keys typed into it.
+import { LockIcon } from "lucide-react";
+import { type FormEvent, type ReactNode, useState } from "react";
+import { Link } from "react-router";
 import { toast } from "sonner";
 import { ErrorAlert } from "@/components/error-alert";
+import { SectionCard, SectionCardSkeleton } from "@/components/section-card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -12,28 +16,37 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import { FieldGroup, FieldLegend, FieldSet } from "@/components/ui/field";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Spinner } from "@/components/ui/spinner";
 import { type ApiError, asApiError } from "@/lib/api";
-import { useT } from "@/lib/i18n";
+import { rich, useT } from "@/lib/i18n";
 import { CHECK_OF, OPTIONAL, REQUIRED } from "./credentials";
 import { KeyField } from "./key-field";
+import { SaveActions } from "./settings-card";
 import { useKeys } from "./use-keys";
 
-export function CredentialsEditor() {
+interface KeysCardProps {
+  readonly title: ReactNode;
+  readonly description: ReactNode;
+  readonly names: readonly string[];
+  /** The sign-up link and credit note under each key. */
+  readonly pages?: boolean;
+}
+
+function KeysCard({ title, description, names, pages = false }: KeysCardProps) {
   const t = useT();
   const keys = useKeys();
   const [failure, setFailure] = useState<ApiError | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
 
-  if (keys.credentials.isPending) return <Skeleton className="h-40 w-full" />;
+  if (keys.credentials.isPending) return <SectionCardSkeleton rows={names.length} />;
   if (keys.credentials.isError) {
-    return <ErrorAlert error={keys.credentials.error} />;
+    return (
+      <SectionCard title={title} description={description}>
+        <ErrorAlert error={keys.credentials.error} />
+      </SectionCard>
+    );
   }
 
-  const dirty = Object.values(keys.typed).some((value) => value.trim() !== "");
+  const dirty = names.some((name) => (keys.typed[name] ?? "").trim() !== "");
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -57,38 +70,43 @@ export function CredentialsEditor() {
     }
   }
 
-  const field = (name: string, pages: boolean) => (
-    <KeyField
-      key={name}
-      name={name}
-      keys={keys}
-      pages={pages}
-      removable
-      onRemove={() => setRemoving(name)}
-    />
-  );
-
   return (
-    <form className="flex flex-col gap-6" onSubmit={submit} autoComplete="off">
-      <p className="text-muted-foreground text-sm">{t("settings.credentials.intro")}</p>
-      <FieldSet>
-        <FieldLegend>{t("settings.credentials.required")}</FieldLegend>
-        <FieldGroup>{REQUIRED.map((name) => field(name, true))}</FieldGroup>
-      </FieldSet>
-      <FieldSet>
-        <FieldLegend>{t("settings.credentials.optional")}</FieldLegend>
-        <p className="-mt-2 text-muted-foreground text-sm">
-          {t("settings.credentials.optionalBody")}
-        </p>
-        <FieldGroup>{OPTIONAL.map((name) => field(name, false))}</FieldGroup>
-      </FieldSet>
-      {failure && <ErrorAlert error={failure} />}
-      <div>
-        <Button type="submit" disabled={!dirty || keys.saving}>
-          {keys.saving && <Spinner />}
-          {t("settings.credentials.save")}
-        </Button>
-      </div>
+    <form onSubmit={submit} autoComplete="off">
+      <SectionCard
+        title={title}
+        description={description}
+        note={
+          <span className="flex items-start gap-2">
+            <LockIcon className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+            {t("settings.credentials.note")}
+          </span>
+        }
+        actions={
+          <SaveActions
+            dirty={dirty}
+            pending={keys.saving}
+            label={t("settings.credentials.save")}
+            onDiscard={() => {
+              keys.discard();
+              setFailure(null);
+            }}
+          />
+        }
+      >
+        <div className="flex flex-col gap-7">
+          {names.map((name) => (
+            <KeyField
+              key={name}
+              name={name}
+              keys={keys}
+              pages={pages}
+              removable
+              onRemove={() => setRemoving(name)}
+            />
+          ))}
+        </div>
+        {failure && <ErrorAlert error={failure} />}
+      </SectionCard>
 
       <AlertDialog open={removing !== null} onOpenChange={(open) => !open && setRemoving(null)}>
         <AlertDialogContent>
@@ -113,5 +131,26 @@ export function CredentialsEditor() {
         </AlertDialogContent>
       </AlertDialog>
     </form>
+  );
+}
+
+export function CredentialsEditor() {
+  const t = useT();
+  return (
+    <>
+      <KeysCard
+        title={t("settings.credentials.required")}
+        description={t("settings.credentials.requiredBody")}
+        names={REQUIRED}
+        pages
+      />
+      <KeysCard
+        title={t("settings.credentials.optional")}
+        description={rich(t("settings.credentials.optionalBody"), {
+          providers: <Link to="/settings?tab=providers">{t("settings.nav.providers")}</Link>,
+        })}
+        names={OPTIONAL}
+      />
+    </>
   );
 }

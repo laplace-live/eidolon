@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { InfoIcon } from "lucide-react";
 import { useState } from "react";
 import { ErrorAlert } from "@/components/error-alert";
 import { personasQuery, settingsQuery } from "@/components/settings-form/queries";
@@ -7,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { VoicePicker } from "@/components/voice-picker";
 import { type ApiError, asApiError, type Voice } from "@/lib/api";
-import { useT } from "@/lib/i18n";
+import { rich, useT } from "@/lib/i18n";
+import { addAvatar } from "./avatar";
 import type { VoiceTarget } from "./persona-step";
 import {
   activatePersona,
@@ -17,12 +19,13 @@ import {
   saveVoice,
 } from "./personas";
 import { StepCard } from "./step-card";
+import { inheritedValue, ownValue } from "./wizard";
 
 const VOICE = "voice.voiceId";
 
 /**
  * Picks a public Fish voice, then commits the persona step: saves an existing persona's voice and
- * makes her active, or creates the new one with it.
+ * makes her active, or creates the new one with it, and her avatar.
  */
 export function VoiceStep({
   target,
@@ -45,9 +48,11 @@ export function VoiceStep({
   const [failure, setFailure] = useState<ApiError | null>(null);
 
   const row = settings.data?.settings.find((candidate) => candidate.path === VOICE);
-  const current = typeof row?.value === "string" && row.value !== "" ? row.value : null;
+  const current = ownValue(row);
+  // The environment's voice, which she keeps unless one is picked for her.
+  const inherited = existing ? inheritedValue(row) : null;
   const name = existing ? existing.name : target.kind === "create" ? target.draft.name : "";
-  const ready = chosen !== null || (existing !== null && current !== null);
+  const ready = chosen !== null || (existing !== null && (current ?? inherited) !== null);
 
   async function next() {
     setBusy(true);
@@ -57,6 +62,7 @@ export function VoiceStep({
       if (target.kind === "create") {
         if (!chosen) return;
         persona = created ?? (await createPersona(target.draft, chosen.id));
+        if (created === null && target.avatar) persona = await addAvatar(persona, target.avatar);
         setCreated(persona);
       } else {
         persona = target.persona;
@@ -85,12 +91,21 @@ export function VoiceStep({
         </Button>
       }
     >
-      {row?.envOverride && (
+      {inherited !== null && row && (
         <Alert>
-          <AlertDescription>{t("settings.form.envOverride", { env: row.env })}</AlertDescription>
+          <InfoIcon />
+          <AlertDescription>
+            {rich(t("setup.voice.inherited", { name }), {
+              env: <code className="font-mono text-foreground">{row.env}</code>,
+            })}
+          </AlertDescription>
         </Alert>
       )}
-      <VoicePicker value={chosen?.id ?? current} onChange={setChosen} disabled={busy} />
+      <VoicePicker
+        value={chosen?.id ?? current ?? inherited}
+        onChange={setChosen}
+        disabled={busy}
+      />
       {failure && <ErrorAlert error={failure} />}
     </StepCard>
   );

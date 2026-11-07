@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { FORCE_STOP_AFTER_MS, forceStopIn, stopOffer, stoppingSince } from "./stopping";
+import { FORCE_STOP_AFTER_MS, forceStopIn, showsStop, stopOffer, stoppingSince } from "./stopping";
 
 test("force stop waits 20 s from when the page first saw the job stopping", () => {
   const since = stoppingSince("job-a", 1_000);
@@ -23,5 +23,16 @@ test("only a job this server spawned is offered Cancel, then Force stop", () => 
   expect(stopOffer({ status: "running", stopping: false, signalable: false })).toBe("earlier-run");
   for (const status of ["succeeded", "failed", "cancelled", "interrupted"] as const) {
     expect(stopOffer({ status, stopping: false, signalable: false })).toBeNull();
+  }
+});
+
+test("a job stopping when the server restarted still shows it is stopping", () => {
+  expect(showsStop({ status: "running", stopping: false, signalable: true })).toBe(true);
+  expect(showsStop({ status: "running", stopping: true, signalable: true })).toBe(true);
+  // The stop the earlier server sent on its way out: nothing to press, but it says so.
+  expect(showsStop({ status: "running", stopping: true, signalable: false })).toBe(true);
+  expect(showsStop({ status: "running", stopping: false, signalable: false })).toBe(false);
+  for (const status of ["succeeded", "failed", "cancelled", "interrupted"] as const) {
+    expect(showsStop({ status, stopping: false, signalable: true })).toBe(false);
   }
 });

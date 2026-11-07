@@ -1,16 +1,9 @@
 import { InfoIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { ApiError, errorKey, type PersonaSummary, type PersonaText } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 export function LoadError({ error }: { readonly error: unknown }) {
   const t = useT();
@@ -25,6 +18,29 @@ export function LoadError({ error }: { readonly error: unknown }) {
   );
 }
 
+/** A quiet line of context inside a card, such as where a file is saved. */
+export function Hint({
+  icon,
+  children,
+  className,
+}: {
+  readonly icon?: ReactNode;
+  readonly children: ReactNode;
+  readonly className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "inline-links flex items-start gap-2.5 rounded-lg bg-muted/60 px-3 py-2.5 text-muted-foreground text-sm [&_svg]:mt-0.5 [&_svg]:size-4 [&_svg]:shrink-0",
+        className,
+      )}
+    >
+      {icon ?? <InfoIcon />}
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
+
 /** A built-in persona's file is read from the template until the first save copies it. */
 export function SourceNote({
   source,
@@ -35,33 +51,5 @@ export function SourceNote({
 }) {
   const t = useT();
   if (source !== "template") return null;
-  return (
-    <p className="flex items-start gap-2 text-muted-foreground text-xs">
-      <InfoIcon className="mt-px size-3.5 shrink-0" />
-      {t("studio.source.template", { name: persona.name })}
-    </p>
-  );
-}
-
-export function Section({
-  title,
-  description,
-  action,
-  children,
-}: {
-  readonly title: string;
-  readonly description?: ReactNode;
-  readonly action?: ReactNode;
-  readonly children: ReactNode;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        {description && <CardDescription>{description}</CardDescription>}
-        {action && <CardAction>{action}</CardAction>}
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">{children}</CardContent>
-    </Card>
-  );
+  return <Hint>{t("studio.source.template", { name: persona.name })}</Hint>;
 }

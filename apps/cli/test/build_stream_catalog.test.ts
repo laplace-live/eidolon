@@ -106,7 +106,7 @@ describe("buildStreamCatalogMain", () => {
     expect(await buildStreamCatalogMain(["--persona=milky-green"], io.io)).toBe(2);
     expect(io.stderr()).toEndWith(
       "laplace-build-stream-catalog: error: LANCEDB_PATH is set in the environment; " +
-        "pass --db-path to write persona milky-green's index.\n",
+        "pass --db-path or set her knowledge.index to write persona milky-green's index.\n",
     );
   });
 

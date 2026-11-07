@@ -34,7 +34,7 @@ export function BotText({ runs }: { readonly runs: readonly BotRun[] }) {
           key={run.start}
           title={run.text}
           className={cn(
-            "mr-1 inline-block max-w-64 truncate rounded-md bg-background/70 px-1.5 align-bottom text-xs text-muted-foreground italic",
+            "mr-1 inline-block max-w-64 truncate rounded-md bg-card/70 px-1.5 align-bottom text-xs text-muted-foreground italic",
             run.pending && "opacity-60",
           )}
         >

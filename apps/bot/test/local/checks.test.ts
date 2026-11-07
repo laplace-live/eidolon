@@ -312,6 +312,7 @@ describe("fish", () => {
         { FISH_API_KEY: "k", FISH_VOICE_ID: VOICE },
       );
       expect(verdict(outcome.result)).toEqual([true, "ok", [code]]);
+      expect(outcome.result.warnings[0]?.message).toStartWith("The persona's voice ");
       expect(outcome.voice).toEqual({ id: VOICE, ok: false });
     }
     const unsure = await check(
@@ -320,6 +321,29 @@ describe("fish", () => {
       { FISH_API_KEY: "k", FISH_VOICE_ID: VOICE },
     );
     expect(unsure.voice).toEqual({ id: VOICE, ok: null });
+  });
+
+  test("a voice she inherits from the environment says so", async () => {
+    for (const [status, code, message] of [
+      [404, "voice-unknown", "The voice she inherits from FISH_VOICE_ID isn't one Fish has"],
+      [
+        403,
+        "voice-private",
+        "The voice she inherits from FISH_VOICE_ID belongs to another Fish account",
+      ],
+    ] as const) {
+      const fake = fakeFetch({
+        [FISH_CREDIT]: json(200, { credit: "1" }),
+        [FISH_VOICE]: json(status, {}),
+      });
+      const settings = { FISH_API_KEY: "k", FISH_VOICE_ID: VOICE };
+      const outcome = await checkProvider(
+        "fish",
+        undefined,
+        deps(fake.fetch, settings, ["FISH_VOICE_ID"]),
+      );
+      expect(outcome.result.warnings).toEqual([{ code, message }]);
+    }
   });
 
   test("401 is an invalid key", async () => {

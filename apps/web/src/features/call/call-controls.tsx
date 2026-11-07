@@ -44,7 +44,7 @@ function MessageInput({
         disabled={disabled}
         autoComplete="off"
         enterKeyHint="send"
-        className="h-9"
+        className="h-9 bg-card"
       />
       <Button
         type="submit"
@@ -66,7 +66,7 @@ export function CallControls({ call, name }: { readonly call: Call; readonly nam
 
   if (phase.name === "idle" || phase.name === "ended") {
     return (
-      <div className="flex justify-center px-4 py-4">
+      <div className="flex justify-center px-4 py-4 sm:px-6">
         <Button size="lg" onClick={call.start}>
           <PhoneIcon data-icon="inline-start" />
           {phase.name === "ended" ? t("call.again") : t("call.start", { name })}
@@ -78,7 +78,7 @@ export function CallControls({ call, name }: { readonly call: Call; readonly nam
   const live = phase.name === "live";
   const micLabel = t(call.micOn ? "call.mic.mute" : "call.mic.unmute");
   return (
-    <div className="flex items-center gap-2 px-4 py-3">
+    <div className="flex items-center gap-2 px-4 py-4 sm:px-6">
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
@@ -98,12 +98,13 @@ export function CallControls({ call, name }: { readonly call: Call; readonly nam
       <Button
         variant="destructive"
         size="lg"
-        className="shrink-0"
+        className="shrink-0 max-sm:w-9 max-sm:px-0"
         disabled={phase.name === "ending"}
         onClick={call.hangUp}
       >
-        <PhoneOffIcon data-icon="inline-start" />
-        {t("call.hangUp")}
+        <PhoneOffIcon />
+        {/* On a phone the text box needs the width; the name stays for screen readers. */}
+        <span className="max-sm:sr-only">{t("call.hangUp")}</span>
       </Button>
     </div>
   );
@@ -121,11 +122,11 @@ export function MicPill({ call }: { readonly call: Call }) {
       className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center"
     >
       {(muted || listening) && (
-        <span className="flex items-center gap-1.5 rounded-full bg-background/90 px-3 py-1 text-xs text-muted-foreground shadow-sm ring-1 ring-foreground/10">
+        <span className="flex items-center gap-1.5 rounded-full border bg-card px-3 py-1 text-muted-foreground text-xs shadow-sm">
           {muted ? (
             <MicOffIcon className="size-3.5" />
           ) : (
-            <span className="size-2 animate-pulse rounded-full bg-primary" />
+            <span className="size-2 animate-pulse rounded-full bg-success" />
           )}
           {t(muted ? "call.muted" : "call.listening")}
         </span>

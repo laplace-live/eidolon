@@ -321,9 +321,10 @@ A persona is a folder: `persona.yaml` (her identity and the settings she
 changes), `prompt.md` (the system prompt, re-read on every connection),
 `glossary.toml`, and `references/`. The repository ships 明前奶绿's under
 `personas/milky-green/`; your own copy under `~/.laplace/eidolon/personas/`
-overrides it file by file. Settings layer as code defaults < `settings.yaml` <
-`persona.yaml` < the environment, with keys in `credentials.json`; every field
-is in [`docs/personas.md`](docs/personas.md). For richer detail beyond the
+overrides it file by file. The install's settings layer as code defaults <
+`settings.yaml` < the environment, a persona's as code defaults < the environment
+< her `persona.yaml`, with keys in `credentials.json`; every field is in
+[`docs/personas.md`](docs/personas.md#layers). For richer detail beyond the
 always-on system prompt, add atomic facts, one per line, to the persona's fact
 files in `~/.laplace/eidolon/sources/<id>/facts/` and re-run
 `bun run laplace-ingest-facts`.

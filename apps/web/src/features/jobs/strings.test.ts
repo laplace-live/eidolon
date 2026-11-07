@@ -51,6 +51,7 @@ const UNITS: Record<CountedUnit, null> = { chunks: null, rows: null, files: null
 
 const keys = [
   ...JOB_COMMANDS.map((command) => `command.${command}`),
+  ...JOB_COMMANDS.map((command) => `about.${command}`),
   ...Object.keys(STAGES).map((stage) => `stage.${stage}`),
   ...Object.keys(OUTCOMES).map((outcome) => `status.${outcome}`),
   ...Object.keys(STAGE_STATUSES).map((status) => `stageStatus.${status}`),

@@ -6,28 +6,37 @@ import { monogram } from "./monogram";
 import { avatarSrc, useAvatarVersion } from "./version";
 
 const SIZES = {
+  xs: ["size-6", "text-[0.625rem]"],
   sm: ["size-8", "text-xs"],
-  md: ["size-12", "text-base"],
-  lg: ["size-20", "text-2xl"],
-  xl: ["size-28", "text-3xl"],
+  md: ["size-10", "text-sm"],
+  lg: ["size-16", "text-xl"],
+  xl: ["size-24", "text-3xl"],
 } as const;
 
+export type PersonaAvatarSize = keyof typeof SIZES;
+
 export interface PersonaAvatarProps {
-  readonly persona: { readonly id: string; readonly name: string; readonly shortName: string };
-  readonly size?: keyof typeof SIZES;
+  readonly persona: {
+    readonly id: string;
+    readonly name: string;
+    readonly shortName: string;
+    /** False skips the request a missing picture would answer with a 404. */
+    readonly avatar?: boolean;
+  };
+  /** xs 24 px, sm 32, md 40, lg 64, xl 96. */
+  readonly size?: PersonaAvatarSize;
   readonly className?: string;
 }
 
+/** Decorative: it always sits beside her name, which it would only repeat to a screen reader. */
 export function PersonaAvatar({ persona, size = "md", className }: PersonaAvatarProps) {
   const [box, text] = SIZES[size];
   const version = useAvatarVersion(persona.id);
   return (
-    <Avatar className={cn(box, className)}>
-      <AvatarImage
-        key={`${persona.id}:${version}`}
-        src={avatarSrc(persona.id, version)}
-        alt={persona.name}
-      />
+    <Avatar className={cn(box, className)} aria-hidden>
+      {persona.avatar !== false && (
+        <AvatarImage key={`${persona.id}:${version}`} src={avatarSrc(persona.id, version)} alt="" />
+      )}
       <AvatarFallback className={cn("font-medium", text)}>
         {monogram(persona.shortName || persona.name)}
       </AvatarFallback>

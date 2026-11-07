@@ -159,7 +159,19 @@ describe("GET status", () => {
       ok: null,
     });
     setEnv("FISH_VOICE_ID", "fedcba9876543210fedcba9876543210");
-    expect(buildStatus(app, deps).persona.voice.source).toBe("env");
+    reinstallSettings(app);
+    expect(buildStatus(app, deps).persona.voice).toEqual({
+      id: "0123456789abcdef0123456789abcdef",
+      source: "persona",
+      ok: null,
+    });
+    write("personas/milky-green/persona.yaml", "{}\n");
+    reinstallSettings(app);
+    expect(buildStatus(app, deps).persona.voice).toEqual({
+      id: "fedcba9876543210fedcba9876543210",
+      source: "env",
+      ok: null,
+    });
   });
 
   test("the voice's source is the installed settings', so a poll reads no settings file", () => {
@@ -209,6 +221,8 @@ describe("GET status", () => {
     expect(buildStatus(app, deps).persona.voice.ok).toBeNull();
     await until(() => buildStatus(app, deps).persona.voice.ok === false);
     expect(asked).toEqual(["https://api.fish.audio/model/0123456789abcdef0123456789abcdef"]);
+    // The voice she inherits, which the page offers to replace with her own.
+    expect(buildStatus(app, deps).persona.voice.source).toBe("env");
   });
 
   test("a voice's answer belongs to the key that asked: another key asks again", async () => {

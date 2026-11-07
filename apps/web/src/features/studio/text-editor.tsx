@@ -1,5 +1,5 @@
 // A monospace editor for a persona's text files: a counter, Save and Revert, and a guard against
-// leaving the page with edits unsaved.
+// leaving the page with edits unsaved. The caller lays its parts out, in a card or a sheet.
 import { type KeyboardEvent, type ReactNode, useEffect, useId, useState } from "react";
 import { useBeforeUnload, useBlocker } from "react-router";
 import {
@@ -70,6 +70,16 @@ function UnsavedGuard({ dirty }: { readonly dirty: boolean }) {
   );
 }
 
+/** What TextEditor hands its layout. */
+export interface EditorParts {
+  /** The labelled textarea. */
+  readonly area: ReactNode;
+  /** Its counts, and whether it has unsaved edits: a footer's note. */
+  readonly status: ReactNode;
+  /** `actions`, then Revert while there are edits, then Save: a footer's actions. */
+  readonly buttons: ReactNode;
+}
+
 export interface TextEditorProps {
   /** The text as saved. */
   readonly value: string;
@@ -83,11 +93,11 @@ export interface TextEditorProps {
   /** Keeps Save off, as while a new file has no name, without locking the text. */
   readonly saveDisabled?: boolean;
   readonly onDirtyChange?: (dirty: boolean) => void;
-  /** Buttons beside Save. */
+  /** Buttons before Revert and Save. */
   readonly actions?: ReactNode;
-  /** Shown under the editor, such as a parser's errors. */
-  readonly children?: ReactNode;
-  readonly className?: string;
+  /** The textarea grows to fill its flex column instead of a fixed share of the window. */
+  readonly fill?: boolean;
+  readonly children: (parts: EditorParts) => ReactNode;
 }
 
 export function TextEditor({
@@ -100,8 +110,8 @@ export function TextEditor({
   saveDisabled = false,
   onDirtyChange,
   actions,
+  fill = false,
   children,
-  className,
 }: TextEditorProps) {
   const t = useT();
   const lang = useLang();
@@ -139,8 +149,8 @@ export function TextEditor({
     }
   }
 
-  return (
-    <div className={cn("flex flex-col gap-2", className)}>
+  const area = (
+    <>
       <Label htmlFor={id} className="sr-only">
         {label}
       </Label>
@@ -152,42 +162,54 @@ export function TextEditor({
         placeholder={placeholder}
         disabled={disabled}
         spellCheck={false}
-        className="field-sizing-fixed h-[60vh] min-h-64 resize-y font-mono text-sm leading-relaxed"
-      />
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <span className="text-muted-foreground text-xs tabular-nums">
-          {t("studio.editor.counts", {
-            chars: formatCount(counts.chars, lang),
-            lines: formatCount(counts.lines, lang),
-          })}
-        </span>
-        {dirty && (
-          <span className="text-amber-700 text-xs dark:text-amber-400">
-            {t("studio.editor.unsaved")}
-          </span>
+        className={cn(
+          "field-sizing-fixed min-h-64 font-mono text-sm leading-relaxed",
+          fill ? "flex-1 resize-none" : "h-[60vh] resize-y",
         )}
-        <div className="ml-auto flex flex-wrap gap-2">
-          {actions}
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!dirty || saving}
-            onClick={() => setDraft(value)}
-          >
-            {t("studio.editor.revert")}
-          </Button>
-          <Button
-            size="sm"
-            disabled={!dirty || saving || disabled || saveDisabled}
-            onClick={() => void save()}
-          >
-            {saving && <Spinner />}
-            {t("studio.editor.save")}
-          </Button>
-        </div>
-      </div>
-      {children}
+      />
+    </>
+  );
+
+  const status = (
+    <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <span className="tabular-nums">
+        {t("studio.editor.counts", {
+          chars: formatCount(counts.chars, lang),
+          lines: formatCount(counts.lines, lang),
+        })}
+      </span>
+      {dirty && (
+        <span className="flex items-center gap-1.5 text-warning">
+          <span aria-hidden className="size-1.5 rounded-full bg-current" />
+          {t("studio.editor.unsaved")}
+        </span>
+      )}
+    </span>
+  );
+
+  const buttons = (
+    <>
+      {actions}
+      {dirty && (
+        <Button type="button" variant="ghost" disabled={saving} onClick={() => setDraft(value)}>
+          {t("studio.editor.revert")}
+        </Button>
+      )}
+      <Button
+        type="button"
+        disabled={!dirty || saving || disabled || saveDisabled}
+        onClick={() => void save()}
+      >
+        {saving && <Spinner />}
+        {t("studio.editor.save")}
+      </Button>
+    </>
+  );
+
+  return (
+    <>
+      {children({ area, status, buttons })}
       <UnsavedGuard dirty={dirty} />
-    </div>
+    </>
   );
 }

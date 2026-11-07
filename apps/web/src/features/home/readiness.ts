@@ -1,25 +1,20 @@
 // Home's readiness list: what calls and builds need, read from GET status, each with its fix.
-import type {
-  CheckProvider,
-  IndexTable,
-  MemoryStatus,
-  RequiredKey,
-  Status,
-  VoiceStatus,
-} from "@/lib/api";
+import type { CheckProvider, IndexTable, MemoryStatus, RequiredKey, Status } from "@/lib/api";
 import { formatCount, formatDateTime } from "@/lib/format";
 import type { Lang, Vars } from "@/lib/i18n";
 import { studioPath } from "@/lib/paths";
 
 export type Tone = "ok" | "info" | "warn" | "error";
 
+/** The action at the right of an item: its fix, or for a working voice, a change of it. */
 export type Fix =
   | { readonly kind: "link"; readonly to: string; readonly label: string }
-  | { readonly kind: "pick-voice" }
+  | { readonly kind: "pick-voice"; readonly label: string }
   | { readonly kind: "check"; readonly provider: Extract<CheckProvider, "fish" | "qdrant"> }
   | { readonly kind: "restart" };
 
 export interface Item {
+  /** Also names its label, `home.check.<id>`. */
   readonly id: string;
   readonly tone: Tone;
   /** A locale key, filled with `vars`. */
@@ -58,23 +53,33 @@ const PROVIDERS: Readonly<Record<RequiredKey, string>> = {
   FISH_API_KEY: "Fish Audio",
 };
 
-function voiceItem(voice: VoiceStatus): Item {
-  // FISH_VOICE_ID in the environment wins over persona.yaml: a voice picked here would do nothing.
-  const fromEnv = voice.source === "env";
-  const pick: Fix | undefined = fromEnv ? undefined : { kind: "pick-voice" };
-  if (voice.id === null)
-    return { id: "voice", tone: "error", text: "home.ready.voice.none", fix: pick };
+function voiceItem(persona: Status["persona"]): Item {
+  const { voice } = persona;
+  const inherited = voice.source === "env";
+  // An inherited voice is changed in her studio, which says where it comes from; her own, in place.
+  const pick = (label: string): Fix =>
+    inherited
+      ? { kind: "link", to: studioPath(persona.id, "voice"), label }
+      : { kind: "pick-voice", label };
+  if (voice.id === null) {
+    return {
+      id: "voice",
+      tone: "error",
+      text: "home.ready.voice.none",
+      fix: pick("home.fix.pickVoice"),
+    };
+  }
   const vars = { id: voice.id };
   if (voice.ok === false) {
-    const text = fromEnv ? "home.ready.voice.badEnv" : "home.ready.voice.bad";
-    return { id: "voice", tone: "error", text, vars, fix: pick };
+    const text = inherited ? "home.ready.voice.badEnv" : "home.ready.voice.bad";
+    return { id: "voice", tone: "error", text, vars, fix: pick("home.fix.pickVoice") };
   }
   if (voice.ok === null) {
-    const fix: Fix = { kind: "check", provider: "fish" };
-    return { id: "voice", tone: "info", text: "home.ready.voice.unchecked", vars, fix };
+    const text = inherited ? "home.ready.voice.uncheckedEnv" : "home.ready.voice.unchecked";
+    return { id: "voice", tone: "info", text, vars, fix: { kind: "check", provider: "fish" } };
   }
-  const text = fromEnv ? "home.ready.voice.env" : "home.ready.voice.ok";
-  return { id: "voice", tone: "ok", text, vars };
+  const text = inherited ? "home.ready.voice.env" : "home.ready.voice.ok";
+  return { id: "voice", tone: "ok", text, vars, fix: pick("home.fix.changeVoice") };
 }
 
 function memoryItem(memory: MemoryStatus): Item {
@@ -166,7 +171,7 @@ export function readiness(status: Status, format: Formats): Item[] {
   } else {
     items.push({ id: "keys", tone: "ok", text: "home.ready.keys.ok" });
   }
-  items.push(voiceItem(status.persona.voice));
+  items.push(voiceItem(status.persona));
   items.push(memoryItem(status.memory));
   const table = (name: IndexTable["table"]) => status.index.tables.find((t) => t.table === name);
   items.push(indexItem("facts", table("persona_facts"), studio("knowledge"), format));
@@ -210,4 +215,12 @@ export function readiness(status: Status, format: Formats): Item[] {
     });
   }
   return items;
+}
+
+/** The list in a word: calls can't start, something wants a look, or all is well. */
+export type Verdict = "blocked" | "attention" | "ready";
+
+export function verdict(items: readonly Pick<Item, "tone">[]): Verdict {
+  if (items.some((item) => item.tone === "error")) return "blocked";
+  return items.some((item) => item.tone === "warn") ? "attention" : "ready";
 }

@@ -22,7 +22,7 @@ export interface CheckDeps {
   readonly fetch: typeof fetch;
   /** A setting or key as the bot reads it now. */
   readonly read: (name: string) => string | undefined;
-  /** A non-empty environment variable sets it, over the files. */
+  /** The environment's value is the one read: over the files, or one a persona inherits. */
   readonly fromEnv: (name: string) => boolean;
   readonly now: () => number;
 }
@@ -315,10 +315,13 @@ async function checkFish(deps: CheckDeps, key: string): Promise<FishVerdict> {
   const voiceId = deps.read("FISH_VOICE_ID");
   if (voiceId === undefined) return { ok: true, code: "ok", warnings, credit };
   const voice = await checkFishVoice(deps, voiceId, key);
+  const whose = deps.fromEnv("FISH_VOICE_ID")
+    ? "The voice she inherits from FISH_VOICE_ID"
+    : "The persona's voice";
   if (voice === "unknown") {
-    warnings.push(warning("voice-unknown", "Fish has no voice with the persona's voice id"));
+    warnings.push(warning("voice-unknown", `${whose} isn't one Fish has`));
   } else if (voice === "private") {
-    warnings.push(warning("voice-private", "The persona's voice belongs to another Fish account"));
+    warnings.push(warning("voice-private", `${whose} belongs to another Fish account`));
   }
   return { ok: true, code: "ok", warnings, credit, voice: { id: voiceId, ok: voiceOk(voice) } };
 }

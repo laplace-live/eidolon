@@ -78,14 +78,26 @@ Soniox heard no speech in: it counts as transcribed, so the audio isn't billed a
 
 ## Layers
 
-Code defaults < `settings.yaml` < `persona.yaml` < the environment. A non-empty environment
-variable always wins, so a deployment's env stays authoritative; a blank one (`KEY=` from a copied
-`.env.example`) counts as unset. Each setting maps to the variable that always configured it, and
-a file's value goes through the same reader as that variable would, with the same parsing and
-warnings.
+Each setting maps to the variable that always configured it, and a file's value goes through the
+same reader as that variable would, with the same parsing and warnings. A blank value, in the
+environment (`KEY=` from a copied `.env.example`) or in a file, counts as unset.
+
+- **The install's settings** (`settings.yaml`): code defaults < `settings.yaml` < the environment.
+  A deployment's environment stays authoritative.
+- **A persona's settings** (`persona.yaml`): code defaults < the local web app's own defaults <
+  the environment < her `persona.yaml`. What she sets is hers, whatever the environment says; the
+  environment's value is the default for every persona that leaves the setting unset. The local
+  app's one default is `memory.agentId`, her id.
+- **Voice styles go with the voice.** The environment's `FISH_VOICE_ID_<STYLE>` voices are moods of
+  the environment's `FISH_VOICE_ID`, so they skip a persona whose `voice.voiceId` is her own: she
+  has only the styles her `voice.styles` gives her. A persona without one keeps the environment's
+  styles, and a style her `voice.styles` names replaces the environment's of that name.
+
+Whenever it loads the settings, the bot logs each environment variable a persona's file overrides,
+by name. `EIDOLON_PERSONA`, which picks the persona, is an install setting: the environment's wins.
 
 Secrets never go in YAML. `credentials.json` holds them, keyed by their variable names, beneath the
-environment:
+environment, as the install's settings are:
 
 ```json
 { "OPENROUTER_API_KEY": "sk-or-…", "SONIOX_API_KEY": "…", "FISH_API_KEY": "…" }
@@ -237,14 +249,16 @@ the merged cookie jar back into `sources.cookiesFile`.
 ## Deploying a persona
 
 Mount a data home holding the persona's folder at `/data`, and configure the rest through the
-environment as before. What goes in that folder depends on where the persona comes from:
+environment as before: the environment sets what her `persona.yaml` leaves unset
+([layers](#layers)). What goes in that folder depends on where the persona comes from:
 
 - **A template persona**, one the repository ships under `personas/` (milky-green): its `index/`
   and `references/friends/` only. Its `prompt.md`, `persona.yaml`, `glossary.toml` and outfits
   come from the image, so each release brings the published ones. A copy on the server would
   override them file by file, and they are what the local web app's studio edits in your data
-  home, so copying them would ship those edits to production. Remove any that an earlier copy of
-  the whole folder left there.
+  home, so copying them would ship those edits to production; a copied `persona.yaml` would also
+  override the environment for every setting it sets, a voice included. Remove any that an
+  earlier copy of the whole folder left there.
 - **A persona of your own**: its whole `personas/<id>/` folder, the avatar at its root included.
 - **Never** `sources/`: the bot reads none of it.
 

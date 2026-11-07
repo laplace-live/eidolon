@@ -7,13 +7,16 @@ import {
   CircleSlashIcon,
   CircleXIcon,
   ClockIcon,
+  LanguagesIcon,
   ListPlusIcon,
 } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
+import { ListCard, ListRow } from "@/components/list";
+import { QuietBadge } from "@/components/quiet-badge";
+import { SectionCard } from "@/components/section-card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
@@ -26,6 +29,7 @@ import { formatBytes, formatCount, formatDuration } from "@/lib/format";
 import { useLang, useT } from "@/lib/i18n";
 import { EMPTY_JOB_VIEW, type JobView, jobOutcome, reduceJob, runSummary } from "@/lib/jobs";
 import { cn } from "@/lib/utils";
+import { Hint } from "./parts";
 import { estimateAudioBytes, knownIn, parseLinks, summarizeEntries, uniqueEntries } from "./videos";
 
 interface Failure {
@@ -63,9 +67,11 @@ const STATE_ICONS = {
   cancelled: CircleSlashIcon,
 } as const;
 
+/** Rows of a compact list, where a row is one line. */
+const COMPACT = "min-h-11 py-2";
+
 function CheckRow({ check }: { readonly check: Check }) {
   const t = useT();
-  const lang = useLang();
   const Icon = check.state === "running" ? null : STATE_ICONS[check.state];
   const reason =
     check.failure === null
@@ -73,49 +79,61 @@ function CheckRow({ check }: { readonly check: Check }) {
       : (reasonText(t, check.failure.code, check.failure.provider) ??
         t(check.failure.errorKey ?? "studio.videos.checkFailed"));
   return (
-    <li className="flex flex-col gap-0.5 text-sm">
-      <div className="flex items-center gap-2">
-        {Icon ? (
+    <ListRow
+      className={COMPACT}
+      leading={
+        Icon ? (
           <Icon
             className={cn(
-              "size-4 shrink-0",
-              check.state === "failed" ? "text-destructive" : "text-muted-foreground",
+              "size-4",
+              check.state === "failed" && "text-destructive",
+              check.state === "done" && "text-success",
             )}
           />
         ) : (
-          <Spinner className="shrink-0" />
-        )}
-        <span className="min-w-0 flex-1 truncate font-mono text-xs" title={check.url}>
+          <Spinner />
+        )
+      }
+      title={
+        <span className="block truncate font-mono font-normal text-xs" title={check.url}>
           {check.url}
         </span>
-        {check.entries.length > 0 && (
-          <span className="shrink-0 text-muted-foreground text-xs tabular-nums">
-            {t("studio.videos.checkFound", { count: formatCount(check.entries.length, lang) })}
+      }
+      description={
+        reason ? (
+          <span className="text-destructive text-xs">
+            {reason}
+            {check.failure?.detail && (
+              <span className="block break-words text-muted-foreground">
+                {check.failure.detail}
+              </span>
+            )}
           </span>
-        )}
-        {/* Link checks are kept only until the next one, so only the running one has a page. */}
-        {check.job && check.state === "running" && (
-          <Link
-            to={`/jobs/${encodeURIComponent(check.job)}`}
-            className="shrink-0 text-muted-foreground text-xs underline-offset-4 hover:underline"
-          >
-            {t("jobs.details")}
-          </Link>
-        )}
-      </div>
-      {reason && (
-        <p className="pl-6 text-destructive text-xs">
-          {reason}
-          {check.failure?.detail && (
-            <span className="block break-words text-muted-foreground">{check.failure.detail}</span>
+        ) : undefined
+      }
+      trailing={
+        <>
+          {check.entries.length > 0 && (
+            <span className="text-muted-foreground text-xs tabular-nums">
+              {t("studio.videos.checkFound", { count: check.entries.length })}
+            </span>
           )}
-        </p>
-      )}
-    </li>
+          {/* Link checks are kept only until the next one, so only the running one has a page. */}
+          {check.job && check.state === "running" && (
+            <Link
+              to={`/jobs/${encodeURIComponent(check.job)}`}
+              className="text-muted-foreground text-xs underline-offset-4 hover:text-foreground hover:underline"
+            >
+              {t("jobs.details")}
+            </Link>
+          )}
+        </>
+      }
+    />
   );
 }
 
-export function AddVideos({
+export function AddVideosCard({
   persona,
   videos,
   freeBytes,
@@ -250,9 +268,46 @@ export function AddVideos({
   const summary = summarizeEntries(fresh);
   const bytes = estimateAudioBytes(summary.durationSec);
   const tooBig = freeBytes !== null && bytes > freeBytes;
+  const previewing = entries.length > 0;
 
   return (
-    <div className="flex flex-col gap-4">
+    <SectionCard
+      title={t("studio.videos.addTitle")}
+      description={t("studio.videos.addHelp")}
+      actions={
+        <>
+          {checking && (
+            <Button variant="outline" onClick={stop}>
+              {t("studio.videos.stopCheck")}
+            </Button>
+          )}
+          {checks !== null && !checking && (
+            <Button variant="ghost" onClick={() => setChecks(null)}>
+              {t("studio.videos.clear")}
+            </Button>
+          )}
+          <Button
+            variant={previewing ? "outline" : "default"}
+            onClick={() => void checkLinks()}
+            disabled={checking || text.trim() === ""}
+          >
+            {checking && <Spinner />}
+            {t("studio.videos.check")}
+          </Button>
+          {previewing && (
+            <Button
+              onClick={() => add.mutate(entries.map((entry) => entry.url))}
+              disabled={checking || add.isPending || fresh.length === 0}
+            >
+              {add.isPending ? <Spinner /> : <ListPlusIcon />}
+              {fresh.length === 0
+                ? t("studio.videos.nothingNew")
+                : t("studio.videos.add", { count: fresh.length })}
+            </Button>
+          )}
+        </>
+      }
+    >
       <Field data-invalid={invalid.length > 0}>
         <FieldLabel htmlFor={id}>{t("studio.videos.links")}</FieldLabel>
         <Textarea
@@ -263,7 +318,7 @@ export function AddVideos({
           disabled={checking}
           spellCheck={false}
           rows={4}
-          className="font-mono text-xs"
+          className="font-mono md:text-[0.8125rem]"
         />
         {invalid.length > 0 ? (
           <FieldError>
@@ -280,77 +335,61 @@ export function AddVideos({
           <FieldDescription>{t("studio.videos.linksHelp")}</FieldDescription>
         )}
       </Field>
-      <div className="flex flex-wrap gap-2">
-        <Button onClick={() => void checkLinks()} disabled={checking || text.trim() === ""}>
-          {checking && <Spinner />}
-          {t("studio.videos.check")}
-        </Button>
-        {checking && (
-          <Button variant="outline" onClick={stop}>
-            {t("studio.videos.stopCheck")}
-          </Button>
-        )}
-        {checks !== null && !checking && (
-          <Button variant="ghost" onClick={() => setChecks(null)}>
-            {t("studio.videos.clear")}
-          </Button>
-        )}
-      </div>
+      <Hint icon={<LanguagesIcon />}>{t("studio.videos.scopeNote")}</Hint>
       {checks !== null && (
-        <ul className="flex flex-col gap-2 rounded-lg border p-3">
+        <ListCard label={t("studio.videos.checksLabel")}>
           {checks.map((check) => (
             <CheckRow key={check.url} check={check} />
           ))}
-        </ul>
+        </ListCard>
       )}
-      {entries.length > 0 && (
-        <div className="flex flex-col gap-3 rounded-lg border p-3">
-          <p className="font-medium text-sm">
-            {t("studio.videos.preview", {
-              count: formatCount(fresh.length, lang),
-              known: formatCount(entries.length - fresh.length, lang),
-            })}
-          </p>
-          <p className="text-muted-foreground text-sm">
-            {t("studio.videos.previewLength", { duration: formatDuration(summary.durationSec) })}
-            {summary.unknownDuration > 0 &&
-              ` ${t("studio.videos.previewUnknown", { count: summary.unknownDuration })}`}
-            {` ${t("studio.videos.previewDisk", {
-              size: formatBytes(bytes, lang),
-              free: freeBytes === null ? "?" : formatBytes(freeBytes, lang),
-            })}`}
-          </p>
+      {previewing && (
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <p className="font-medium text-sm">
+              {t("studio.videos.preview", {
+                count: fresh.length,
+                known: formatCount(entries.length - fresh.length, lang),
+              })}
+            </p>
+            <p className="text-muted-foreground text-sm">
+              {t("studio.videos.previewLength", { duration: formatDuration(summary.durationSec) })}
+              {summary.unknownDuration > 0 &&
+                ` ${t("studio.videos.previewUnknown", { count: summary.unknownDuration })}`}
+              {` ${t("studio.videos.previewDisk", {
+                size: formatBytes(bytes, lang),
+                free: freeBytes === null ? "?" : formatBytes(freeBytes, lang),
+              })}`}
+            </p>
+          </div>
           {tooBig && (
             <Alert variant="destructive">
               <AlertDescription>{t("studio.videos.diskShort")}</AlertDescription>
             </Alert>
           )}
-          <ul className="flex max-h-64 flex-col gap-1 overflow-auto text-sm">
+          <ListCard label={t("studio.videos.previewLabel")} className="max-h-80 overflow-y-auto">
             {entries.map((entry) => (
-              <li key={entry.id} className="flex items-center gap-2">
-                <span className="min-w-0 flex-1 truncate" title={entry.url}>
-                  {entry.title ?? entry.url}
-                </span>
-                {known(entry) && <Badge variant="outline">{t("studio.videos.alreadyAdded")}</Badge>}
-                <span className="shrink-0 text-muted-foreground text-xs tabular-nums">
-                  {entry.durationSec === undefined ? "—" : formatDuration(entry.durationSec)}
-                </span>
-              </li>
+              <ListRow
+                key={entry.id}
+                className={COMPACT}
+                title={
+                  <span className="block truncate font-normal" title={entry.url}>
+                    {entry.title ?? entry.url}
+                  </span>
+                }
+                trailing={
+                  <>
+                    {known(entry) && <QuietBadge>{t("studio.videos.alreadyAdded")}</QuietBadge>}
+                    <span className="w-14 text-right text-muted-foreground text-xs tabular-nums">
+                      {entry.durationSec === undefined ? "—" : formatDuration(entry.durationSec)}
+                    </span>
+                  </>
+                }
+              />
             ))}
-          </ul>
-          <div>
-            <Button
-              onClick={() => add.mutate(entries.map((entry) => entry.url))}
-              disabled={checking || add.isPending || fresh.length === 0}
-            >
-              {add.isPending ? <Spinner /> : <ListPlusIcon />}
-              {fresh.length === 0
-                ? t("studio.videos.nothingNew")
-                : t("studio.videos.add", { count: formatCount(fresh.length, lang) })}
-            </Button>
-          </div>
+          </ListCard>
         </div>
       )}
-    </div>
+    </SectionCard>
   );
 }

@@ -1,13 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ErrorAlert } from "@/components/error-alert";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { LargeDialogContent } from "@/components/large-dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { VoicePicker } from "@/components/voice-picker";
 import { refreshPersonas, saveVoice } from "@/features/setup/personas";
 import type { Voice } from "@/lib/api";
@@ -43,18 +38,17 @@ export function VoiceDialog({
         changeVoiceDialog(next, save.isPending, onOpenChange, () => save.reset())
       }
     >
-      <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{t("setup.voice.title")}</DialogTitle>
-          <DialogDescription>{t("setup.voice.stepBody", { name: persona.name })}</DialogDescription>
-        </DialogHeader>
+      <LargeDialogContent
+        title={t("setup.voice.title")}
+        description={t("setup.voice.stepBody", { name: persona.name })}
+      >
         <VoicePicker
           value={save.variables?.id ?? current}
           onChange={(voice) => save.mutate(voice)}
           disabled={save.isPending}
         />
         {save.isError && <ErrorAlert error={save.error} />}
-      </DialogContent>
+      </LargeDialogContent>
     </Dialog>
   );
 }

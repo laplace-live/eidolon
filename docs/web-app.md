@@ -162,7 +162,7 @@ terminal's log line that holds what went wrong, and the app shows it beside the 
 | --- | --- | --- |
 | Session | `POST session`, `GET session` | Trades a link code for the cookie and the proof; GET says whether the caller is signed in, or with `?probe=` proves this server holds the secret, for a second start |
 | Status | `GET status`, `POST restart` | Readiness, polled by the home page and never waiting on a remote probe; restart is refused during a call, or while one is connecting |
-| Settings | `GET settings?persona=`, `PUT settings` | Every `SETTINGS` row: the value the files give it and which file, and whether the environment overrides it; PUT `{scope, persona?, values}` is checked by kind, the time zone as an IANA zone, and written to `settings.yaml` or her `persona.yaml` |
+| Settings | `GET settings?persona=`, `PUT settings` | Every `SETTINGS` row: the value the files give it and which file, the environment's value, and whether that overrides the file's, as only an app row's does (a persona's own value wins, and without one she inherits the environment's); PUT `{scope, persona?, values}` is checked by kind, the time zone as an IANA zone, and written to `settings.yaml` or her `persona.yaml` |
 | Credentials | `GET`, `PUT credentials`, `POST credentials/check` | `{NAME: {set, source}}`, never a value; the check asks the provider about a typed or the saved key |
 | Personas | `GET`, `POST personas`, `PUT personas/active` | List, create (with a voice and a starter `prompt.md`), switch (refused during a call, or while one is connecting) |
 | Persona files | `GET`, `PUT personas/:id/{prompt,glossary,identity}` | Her copy in the data home, copied from the template on the first write; a glossary that doesn't parse isn't saved |
@@ -331,9 +331,10 @@ The table comes from the plan and follows the running job's item events as they 
 Both `load-env.ts` files, the server's and the CLI's, walk up from their folder to the first
 `.env` and apply it over the environment. In a git worktree, or any checkout inside another, that
 is the outer checkout's `.env`, with its keys and maybe its `EIDOLON_HOME`. `EIDOLON_NO_DOTENV=1`
-skips it: the process environment is all there is, with the data home's settings files beneath it
-as always. Jobs inherit the environment the server started with, the flag included, and the CLI's
-own `load-env.ts` applies the `.env` when the flag is unset. Use it for smoke tests and clean runs:
+skips it: the process environment is all there is, layered with the data home's settings files
+as always ([personas.md](personas.md#layers)). Jobs inherit the environment the server started
+with, the flag included, and the CLI's own `load-env.ts` applies the `.env` when the flag is
+unset. Use it for smoke tests and clean runs:
 
 ```bash
 EIDOLON_NO_DOTENV=1 EIDOLON_HOME=/tmp/eidolon-try bun run local

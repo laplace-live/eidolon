@@ -5,6 +5,7 @@
 import {
   activePersona,
   envOverride,
+  envVariable,
   isPlainObject,
   isValidTimeZone,
   pyStrip,
@@ -36,6 +37,9 @@ export function settingsOf(app: LocalApp, persona: string): SettingsResponse {
   const layers = readSettingsLayers(persona);
   const settings = SETTINGS.map((field): SettingRow => {
     const layer = layers.values.get(field.env);
+    // Not envOverride: that answers for the installed persona, and this may be another one.
+    const fromEnv = envVariable(field.env) ?? null;
+    const productionOnly = PRODUCTION_ONLY.test(field.path);
     return {
       path: field.path,
       env: field.env,
@@ -44,8 +48,10 @@ export function settingsOf(app: LocalApp, persona: string): SettingsResponse {
       title: field.title,
       value: layer?.raw ?? null,
       source: (layer?.source ?? "default") as SettingRow["source"],
-      envOverride: envOverride(field.env) !== undefined,
-      productionOnly: PRODUCTION_ONLY.test(field.path),
+      // A production-only row is hidden, so its value has no reader.
+      envValue: productionOnly ? null : fromEnv,
+      envOverride: field.scope === "app" && fromEnv !== null,
+      productionOnly,
       readOnly: READ_ONLY.has(field.path),
     };
   });

@@ -13,8 +13,7 @@ export type Control =
   | { readonly type: "paths"; readonly inPersona: boolean }
   | { readonly type: "select"; readonly options: readonly string[] }
   | { readonly type: "timezone" }
-  | { readonly type: "language" }
-  | { readonly type: "voice" };
+  | { readonly type: "language" };
 
 /** Fish Audio's TTS models; s1 retires on 2026-12-31. */
 export const FISH_MODELS = ["drama-3", "s2.1-pro", "s2.1-pro-free", "s2-pro", "s1"] as const;
@@ -35,7 +34,6 @@ export const COOKIE_BROWSERS = [
 
 const BY_PATH: Readonly<Record<string, Control>> = {
   "voice.model": { type: "select", options: FISH_MODELS },
-  "voice.voiceId": { type: "voice" },
   "selfie.quality": { type: "select", options: ["auto", "low", "medium", "high", "xhigh", "max"] },
   "sources.cookiesFromBrowser": { type: "select", options: COOKIE_BROWSERS },
   "identity.timezone": { type: "timezone" },
@@ -115,7 +113,6 @@ const INT = /^[+-]?\d+(?:_\d+)*$/;
 const FLOAT =
   /^[+-]?(?:\d+(?:_\d+)*(?:\.(?:\d+(?:_\d+)*)?)?|\.\d+(?:_\d+)*)(?:[eE][+-]?\d+(?:_\d+)*)?$/;
 const LANGUAGE = /^(?:[a-z]{2}|none)$/;
-const VOICE_ID = /^[0-9a-f]{32}$/;
 const URL_PREFIX = /^https?:\/\//;
 
 const ok = (value: unknown): Parsed => ({ ok: true, value });
@@ -208,8 +205,6 @@ export function parseDraft(draft: string, control: Control): Parsed {
       return isTimeZone(text) ? ok(text) : fail("settings.form.invalid.timezone");
     case "language":
       return LANGUAGE.test(text) ? ok(text) : fail("settings.form.invalid.language");
-    case "voice":
-      return VOICE_ID.test(text) ? ok(text) : fail("settings.form.invalid.voice");
     default:
       return ok(text);
   }
@@ -272,43 +267,12 @@ export function groupOf(path: string, scope: SettingScope): Group {
   return GROUP_OF[head] ?? "other";
 }
 
-/** Shown unfolded; every other row sits under Advanced. */
-export const BASIC: ReadonlySet<string> = new Set([
-  "local.viewerName",
-  "memory.qdrant.host",
-  "memory.qdrant.port",
-  "embeddings.model",
-  "embeddings.dim",
-  "sources.cookiesFromBrowser",
-  "identity.timezone",
-  "voice.voiceId",
-  "voice.model",
-  "mind.model",
-  "memory.searchLimit",
-  "knowledge.rerank.enabled",
-  "knowledge.gate.enabled",
-  "knowledge.facts.files",
-  "transcription.language",
-  "refine.model",
-  "selfie.model",
-  "selfie.quality",
-]);
-
-/** The scope's rows a local install uses, in the order of `paths` when given. */
-export function visibleRows(
-  rows: readonly SettingRow[],
-  scope: SettingScope,
-  paths?: readonly string[],
-): SettingRow[] {
-  const shown = rows.filter(
-    (row) => row.scope === scope && !row.productionOnly && !HIDDEN.has(row.path),
-  );
-  if (!paths) return shown;
-  const byPath = new Map(shown.map((row) => [row.path, row]));
-  return paths.flatMap((path) => byPath.get(path) ?? []);
+/** The scope's rows a local install uses. */
+export function visibleRows(rows: readonly SettingRow[], scope: SettingScope): SettingRow[] {
+  return rows.filter((row) => row.scope === scope && !row.productionOnly && !HIDDEN.has(row.path));
 }
 
-export interface Section {
+interface Section {
   readonly group: Group;
   readonly rows: readonly SettingRow[];
 }
@@ -321,14 +285,65 @@ function bySection(rows: readonly SettingRow[]): Section[] {
   })).filter((section) => section.rows.length > 0);
 }
 
-export function sections(rows: readonly SettingRow[]): {
-  readonly basic: Section[];
-  readonly advanced: Section[];
-} {
-  return {
-    basic: bySection(rows.filter((row) => BASIC.has(row.path))),
-    advanced: bySection(rows.filter((row) => !BASIC.has(row.path))),
-  };
+/** A SettingsCard line: one row's path, or the paths of rows shown side by side. */
+export type CardPath = string | readonly string[];
+
+export interface CardSection {
+  /** The legend over it: null when the card holds one group, or names its rows. */
+  readonly group: Group | null;
+  /** Each line is one row, or a few side by side. */
+  readonly lines: readonly (readonly SettingRow[])[];
+}
+
+/**
+ * A SettingsCard's rows: those `paths` names, in its order and lines, else every row of the scope
+ * the local app shows, by group. Rows in `exclude` are left out either way.
+ */
+export function cardSections(
+  rows: readonly SettingRow[],
+  scope: SettingScope,
+  paths?: readonly CardPath[],
+  exclude: readonly string[] = [],
+): CardSection[] {
+  const skipped = new Set(exclude);
+  const shown = visibleRows(rows, scope).filter((row) => !skipped.has(row.path));
+  if (paths) {
+    const byPath = new Map(shown.map((row) => [row.path, row]));
+    const lines = paths
+      .map((line) => (typeof line === "string" ? [line] : line).flatMap((p) => byPath.get(p) ?? []))
+      .filter((line) => line.length > 0);
+    return lines.length > 0 ? [{ group: null, lines }] : [];
+  }
+  const groups = bySection(shown);
+  return groups.map(({ group, rows: inGroup }) => ({
+    group: groups.length > 1 ? group : null,
+    lines: inGroup.map((row) => [row]),
+  }));
+}
+
+/**
+ * Where the value a row's field shows comes from, as its draft stands:
+ * - `locked`: an app row the environment sets, which wins over the file;
+ * - `readOnly`: shown, never written through the API;
+ * - `inherited`: a persona row she leaves unset, so the environment's value is hers;
+ * - `overrides`: her own value, which wins over the environment's;
+ * - `own`: the environment doesn't set it.
+ */
+export type Origin = "locked" | "readOnly" | "inherited" | "overrides" | "own";
+
+export function originOf(
+  row: Pick<SettingRow, "scope" | "envValue" | "envOverride" | "readOnly">,
+  draft: string,
+): Origin {
+  if (row.envOverride) return "locked";
+  if (row.readOnly) return "readOnly";
+  if (row.scope !== "persona" || row.envValue === null) return "own";
+  return strip(draft) === "" ? "inherited" : "overrides";
+}
+
+/** The environment's value as `control` shows it, or null when the environment sets none. */
+export function envDraft(row: Pick<SettingRow, "envValue">, control: Control): string | null {
+  return row.envValue === null ? null : draftOf(row.envValue, control);
 }
 
 /**

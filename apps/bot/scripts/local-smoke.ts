@@ -779,7 +779,7 @@ async function jobsPage(walk: Walk): Promise<void> {
   const { page } = walk;
   await page.goto(`${walk.origin}/jobs`);
   const link = page.getByRole("link", { name: t("en", "jobs.command.ingest-facts"), exact: true });
-  const row = page.locator("tr").filter({ has: link });
+  const row = page.getByRole("listitem").filter({ has: link });
   const listed = await shows(row.filter({ hasText: t("en", "jobs.status.succeeded") }));
   walk.checks.add(
     "jobs page",

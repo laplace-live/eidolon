@@ -25,6 +25,6 @@ test("paging stops when Fish says there is no more", () => {
 });
 
 test("a capped total shows with a plus", () => {
-  expect(totalLabel({ total: 42, totalIsExact: true })).toBe("42");
+  expect(totalLabel({ total: 42, totalIsExact: true })).toBe(42);
   expect(totalLabel({ total: 1000, totalIsExact: false })).toBe("1000+");
 });

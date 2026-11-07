@@ -2,10 +2,18 @@
 // replayed from their argv, the help as argparse lays it out, the defaults, the lock, --json, and
 // the index path checks. Every run happens in a temporary data home.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PROJECT_ROOT, resetSettings, sourceFolder } from "@eidolon/config";
+import { installSettings, PROJECT_ROOT, resetSettings, sourceFolder } from "@eidolon/config";
 import { acquireLock, embedCachePath, indexLockKey } from "@eidolon/ingest";
 import { resetEmbeddingClient } from "@eidolon/retrieval";
 import {
@@ -143,7 +151,7 @@ describe("ingestStreamsMain", () => {
     expect(await ingestStreamsMain(["--persona", "milky-green"], io.io)).toBe(2);
     expect(io.stderr()).toEndWith(
       "laplace-ingest-streams: error: LANCEDB_PATH is set in the environment; " +
-        "pass --db-path to write persona milky-green's index.\n",
+        "pass --db-path or set her knowledge.index to write persona milky-green's index.\n",
     );
     process.env.LANCEDB_PATH = "personas/milky-green/index";
     const template = captureIo();
@@ -151,6 +159,19 @@ describe("ingestStreamsMain", () => {
     expect(template.stderr()).toContain(
       "error: Refusing to write persona milky-green's index into the template folder " +
         `${join(PROJECT_ROOT, "personas/milky-green/index")}`,
+    );
+  });
+
+  test("her own knowledge.index wins over LANCEDB_PATH, with --persona spelled out too", () => {
+    process.env.LANCEDB_PATH = join(work, "elsewhere");
+    const folder = join(home, "personas", "milky-green");
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(join(folder, "persona.yaml"), "knowledge:\n  index: own-index\n");
+    // As load-env.ts does before a command runs.
+    installSettings();
+    expect(parseIngestStreamsArgs([]).dbPath).toBe(join(folder, "own-index"));
+    expect(parseIngestStreamsArgs(["--persona", "milky-green"]).dbPath).toBe(
+      join(folder, "own-index"),
     );
   });
 

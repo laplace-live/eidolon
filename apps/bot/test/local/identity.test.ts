@@ -214,18 +214,20 @@ describe("memories per persona", () => {
 
   test("an inactive persona's scope is its own", () => {
     expect(memoryScopeOf("beta")).toEqual({ userId: "0", agentId: "beta" });
-    write("personas/beta/persona.yaml", "memory:\n  agentId: shared\n");
-    expect(memoryScopeOf("beta")).toEqual({ userId: "0", agentId: "shared" });
     process.env.MEM0_AGENT_ID = "everyone";
     expect(memoryScopeOf("beta")).toEqual({ userId: "0", agentId: "everyone" });
+    write("personas/beta/persona.yaml", "memory:\n  agentId: shared\n");
+    expect(memoryScopeOf("beta")).toEqual({ userId: "0", agentId: "shared" });
   });
 
-  test("a persona's own memory.agentId, or the environment's, wins over the default", async () => {
+  test("the environment's memory.agentId wins over the default, and hers over both", async () => {
+    process.env.MEM0_AGENT_ID = "from-env";
+    installSettings();
+    expect((await callScope()).agentId).toBe("from-env");
     write("personas/alpha/persona.yaml", "memory:\n  agentId: shop\n");
     installSettings();
     expect((await callScope()).agentId).toBe("shop");
-    process.env.MEM0_AGENT_ID = "from-env";
-    expect((await callScope()).agentId).toBe("from-env");
+    expect(activeMemoryScope().agentId).toBe("shop");
   });
 
   test("memory off is 503 unavailable; a failing store is 503 or 502", async () => {

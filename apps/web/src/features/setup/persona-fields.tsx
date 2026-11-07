@@ -4,10 +4,11 @@ import { LanguagesIcon } from "lucide-react";
 import { useId, useState } from "react";
 import { TimeZoneList } from "@/components/settings-form/field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useT } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 import { type PersonaDraft, personaErrors, suggestPersonaId } from "./wizard";
 
 export interface PersonaFieldsProps {
@@ -58,7 +59,13 @@ export function PersonaFields({
 
   function field(
     key: keyof PersonaDraft,
-    options: { multiline?: boolean; mono?: boolean; list?: string; placeholder?: string } = {},
+    options: {
+      multiline?: boolean;
+      mono?: boolean;
+      list?: string;
+      placeholder?: string;
+      wide?: boolean;
+    } = {},
   ) {
     const error = errorOf(key);
     const help = `setup.persona.${key}.help`;
@@ -71,7 +78,7 @@ export function PersonaFields({
       onBlur: () => setLeft((seen) => new Set(seen).add(key)),
     };
     return (
-      <Field data-invalid={error !== null}>
+      <Field data-invalid={error !== null} className={cn(options.wide && "sm:col-span-2")}>
         <FieldLabel htmlFor={props.id}>{t(`setup.persona.${key}`)}</FieldLabel>
         {options.multiline ? (
           <Textarea {...props} rows={2} onChange={(event) => set(key, event.target.value)} />
@@ -92,14 +99,18 @@ export function PersonaFields({
   }
 
   return (
-    <FieldGroup>
+    <div className="grid items-start gap-x-5 gap-y-6 sm:grid-cols-2">
       {field("name", { placeholder: t("setup.persona.name.placeholder") })}
       {field("id", { mono: true, placeholder: "my-persona" })}
       {field("shortName")}
       {field("fans", { placeholder: "观众" })}
-      {field("summary", { multiline: true, placeholder: t("setup.persona.summary.placeholder") })}
+      {field("summary", {
+        multiline: true,
+        wide: true,
+        placeholder: t("setup.persona.summary.placeholder"),
+      })}
       {field("timezone", { list: zones })}
       <TimeZoneList id={zones} />
-    </FieldGroup>
+    </div>
   );
 }

@@ -56,7 +56,9 @@
   "voice.missing.title": "为{name}选择声音",
   "voice.missing.body": "通话需要一个声音。请先从 Fish Audio 的公开声音中选择一个。",
   "voice.pick": "选择声音",
-  "voice.unknown": "Fish Audio 找不到{name}的声音，通话可能没有声音。",
+  "voice.unknown": "Fish Audio 无法使用{name}的声音，通话可能没有声音。",
+  "voice.inheritedUnknown": "Fish Audio 无法使用{name}从 FISH_VOICE_ID 继承的声音，通话可能没有声音。",
+  "voice.inheritedHint": "为她选一个自己的声音：只对她生效，会覆盖环境变量里的声音。",
   "keys.missing.title": "请先添加 API 密钥",
   "keys.missing.body": "通话需要 Soniox、OpenRouter 和 Fish Audio 的密钥。",
   "keys.add": "添加密钥"

@@ -6,9 +6,9 @@ import { activePersona, dataHome, envOptional, envOverride, logger } from "@eido
 import { referenceCandidates } from "@eidolon/imagegen";
 import { download, which } from "@eidolon/ingest";
 import manifest from "../../package.json" with { type: "json" };
-import { REQUIRED_KEYS, type Status, type ValueSource, type YtDlpStatus } from "./api.ts";
+import { REQUIRED_KEYS, type Status, type VoiceStatus, type YtDlpStatus } from "./api.ts";
 import { checkFishVoice, checkQdrant, configuredQdrant, voiceOk } from "./checks.ts";
-import { indexStatus } from "./personas.ts";
+import { findAvatar, indexStatus } from "./personas.ts";
 import { restartTracker } from "./restart.ts";
 import type { LocalApp } from "./router.ts";
 
@@ -218,10 +218,10 @@ function freeBytes(): number | null {
 }
 
 /**
- * Where the active persona's voice comes from, read from what is installed: only her persona.yaml
- * sets FISH_VOICE_ID beneath the environment, so a status poll re-reads no settings file.
+ * Where the active persona's voice comes from, read from what is installed, so a status poll
+ * re-reads no settings file: the environment's applies only where her persona.yaml sets none.
  */
-function voiceSource(voiceId: string | null): ValueSource {
+function voiceSource(voiceId: string | null): VoiceStatus["source"] {
   if (envOverride("FISH_VOICE_ID") !== undefined) return "env";
   return voiceId === null ? "default" : "persona";
 }
@@ -274,6 +274,7 @@ export function buildStatus(app: LocalApp, deps: StatusDeps = defaultStatusDeps)
       id: persona.id,
       name: persona.identity.name,
       shortName: persona.identity.shortName,
+      avatar: findAvatar(persona.id) !== null,
       voice: {
         id: voiceId,
         source: voiceSource(voiceId),

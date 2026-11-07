@@ -1,6 +1,7 @@
 // Strings live in src/locales/<lang>/<feature>.json, each a flat map whose keys are reached as
 // `<feature>.<key>`: settings.json's "embeddings.model" is t("settings.embeddings.model").
-import { useMemo, useSyncExternalStore } from "react";
+import { createElement, Fragment, type ReactNode, useMemo, useSyncExternalStore } from "react";
+import { formatCount } from "./format";
 
 export const LANGS = ["en", "zh-CN"] as const;
 export type Lang = (typeof LANGS)[number];
@@ -63,9 +64,47 @@ export function format(text: string, vars?: Vars): string {
   });
 }
 
-/** The string in `lang`, else in English, else the key itself so a missing one shows. */
+/**
+ * A string whose `{name}` placeholders are React nodes, such as a variable's name in <code>: pass it
+ * `t(key)` with no vars, which leaves the placeholders as written.
+ */
+export function rich(text: string, nodes: Readonly<Record<string, ReactNode>>): ReactNode {
+  const parts = text.split(/\{(\w+)\}/g);
+  return createElement(
+    Fragment,
+    null,
+    ...parts.map((part, index) => (index % 2 === 0 ? part : (nodes[part] ?? `{${part}}`))),
+  );
+}
+
+/** CLDR's plural categories other than "other", which a string's base key stands for. */
+export const PLURAL_FORMS = ["zero", "one", "two", "few", "many"] as const;
+
+const pluralRules = new Map<Lang, Intl.PluralRules>();
+
+function pluralOf(lang: Lang, count: number): string {
+  let rules = pluralRules.get(lang);
+  if (rules === undefined) {
+    rules = new Intl.PluralRules(lang);
+    pluralRules.set(lang, rules);
+  }
+  return rules.select(count);
+}
+
+/**
+ * The string in `lang`, else in English, else the key itself so a missing one shows. A numeric
+ * `count` picks `<key>_<form>` where the language has one ("Add 1 video" beside "Add 2 videos"),
+ * and is written as the language writes numbers.
+ */
 export function translate(catalogs: Catalogs, lang: Lang, key: string, vars?: Vars): string {
-  return format(catalogs[lang][key] ?? catalogs.en[key] ?? key, vars);
+  const count = vars?.count;
+  if (typeof count !== "number")
+    return format(catalogs[lang][key] ?? catalogs.en[key] ?? key, vars);
+  const form = `${key}_${pluralOf(lang, count)}`;
+  const enForm = `${key}_${pluralOf("en", count)}`;
+  const text =
+    catalogs[lang][form] ?? catalogs[lang][key] ?? catalogs.en[enForm] ?? catalogs.en[key];
+  return format(text ?? key, { ...vars, count: formatCount(count, lang) });
 }
 
 const listeners = new Set<() => void>();

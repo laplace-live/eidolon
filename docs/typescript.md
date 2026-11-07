@@ -263,13 +263,14 @@ Deliberate, and not worth matching.
   `--language ''`, `--model ''`). Python sent a blank `EMBED_MODEL` as the model, and read
   `EMBED_DIM` at import, so a standalone run ignored `.env`; the port reads both when embedding
   starts.
-- **Writers write where the bot reads.** `--db-path` defaults to `LANCEDB_PATH` or
-  `knowledge.index` (a relative path against the repository root), else
+- **Writers write where the bot reads.** `--db-path` defaults to her `knowledge.index`, else
+  `LANCEDB_PATH` (a relative path against the repository root), else
   `<home>/personas/<id>/index`, and never inside a persona template; each writer logs the path
   first. Python's ingests ignored `LANCEDB_PATH`, and its catalog read it against the working
-  directory. With `--persona` spelled out, `LANCEDB_PATH` in the environment and no `--db-path`,
-  a writer exits 2 (`LANCEDB_PATH is set in the environment; pass --db-path to write persona
-  <id>'s index.`), since that path may be another persona's.
+  directory. With `--persona` spelled out, a `LANCEDB_PATH` from the environment that her
+  `knowledge.index` doesn't replace, and no `--db-path`, a writer exits 2 (`LANCEDB_PATH is set
+  in the environment; pass --db-path or set her knowledge.index to write persona <id>'s index.`),
+  since that path may be another persona's.
 - **Logs go to stderr**, in the TypeScript logger's format; the message texts are Python's. Stdout
   holds what Python printed, or with `--json` events only.
 - **`--json` reports [progress events](#progress-events)**, with a code for each failure it can

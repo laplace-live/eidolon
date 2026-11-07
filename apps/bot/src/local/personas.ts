@@ -18,9 +18,9 @@ import {
   dataHome,
   embedDim,
   envOptional,
-  envOverride,
   IDENTITY_DEFAULTS,
   isPlainObject,
+  layeredValue,
   personaHomeDir,
   personaIds,
   personaTemplateDir,
@@ -42,6 +42,7 @@ import {
 import type {
   FactFile,
   FactsResponse,
+  IdentityUpdate,
   IndexStatus,
   IndexTable,
   PersonaIdentityFields,
@@ -176,7 +177,7 @@ export function staysInPersona(id: string, value: string): boolean {
 
 /** Persona `id`'s value of a setting, as the bot would read it with her active. */
 export function personaSetting(id: string, env: string): string | undefined {
-  return envOverride(env) ?? readSettingsLayers(id).values.get(env)?.value ?? undefined;
+  return layeredValue(readSettingsLayers(id), env);
 }
 
 /** Her prompt file, relative to her folder: `prompt`, else prompt.md; null when it leaves it. */
@@ -212,10 +213,11 @@ export function readIdentityFields(id: string): PersonaIdentityFields {
 export const IDENTITY_FIELDS = ["name", "shortName", "fans", "summary", "timezone"] as const;
 
 /** Writes the identity fields into persona.yaml; "" removes one, so its default applies. */
-export function writeIdentityFields(id: string, fields: PersonaIdentityFields): void {
+export function writeIdentityFields(id: string, fields: IdentityUpdate): void {
   editPersonaYaml(id, (tree) => {
     for (const key of IDENTITY_FIELDS) {
-      setDotted(tree, `identity.${key}`, fields[key] === "" ? null : fields[key]);
+      const value = fields[key];
+      if (value !== undefined) setDotted(tree, `identity.${key}`, value === "" ? null : value);
     }
   });
 }

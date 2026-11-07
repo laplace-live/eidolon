@@ -194,18 +194,18 @@ describe("the plan cache", () => {
     expect((await post("/api/local/jobs", PLAN))[1].id).toBe(latest);
 
     const changes: [string, () => void][] = [
-      ["refine.model", () => writeFileSync(yaml, "refine:\n  model: other/refiner\n")],
-      [
-        "transcription.model",
-        () => writeFileSync(yaml, "refine:\n  model: other/refiner\ntranscription:\n  model: x\n"),
-      ],
-      ["knowledge.index", () => appendFileSync(yaml, "knowledge:\n  index: elsewhere\n")],
       [
         "REFINE_MODEL",
         () => {
           process.env.REFINE_MODEL = "from/env";
         },
       ],
+      ["refine.model", () => writeFileSync(yaml, "refine:\n  model: other/refiner\n")],
+      [
+        "transcription.model",
+        () => writeFileSync(yaml, "refine:\n  model: other/refiner\ntranscription:\n  model: x\n"),
+      ],
+      ["knowledge.index", () => appendFileSync(yaml, "knowledge:\n  index: elsewhere\n")],
     ];
     try {
       for (const [setting, change] of changes) {
@@ -216,6 +216,9 @@ describe("the plan cache", () => {
         expect((await post("/api/local/jobs", PLAN))[1].id).toBe(fresh.id);
         latest = fresh.id;
       }
+      // Her refine.model decides now: the environment's no longer reaches her plan.
+      process.env.REFINE_MODEL = "other/env";
+      expect((await post("/api/local/jobs", PLAN))[1].id).toBe(latest);
     } finally {
       delete process.env.REFINE_MODEL;
     }

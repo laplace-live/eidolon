@@ -18,6 +18,15 @@ export function stopOffer(
   return job.stopping ? "force-stop" : "cancel";
 }
 
+/**
+ * Whether a job shows CancelJobButton: to cancel or force-stop it, or, for an earlier server's job
+ * that is stopping, as a disabled "Stopping".
+ */
+export function showsStop(job: Pick<JobSnapshot, "status" | "stopping" | "signalable">): boolean {
+  const offer = stopOffer(job);
+  return offer === "cancel" || offer === "force-stop" || (offer === "earlier-run" && job.stopping);
+}
+
 const seen = new Map<string, number>();
 
 /** When this page first saw job `id` stopping. */

@@ -1,24 +1,27 @@
 import { useQuery } from "@tanstack/react-query";
+import { BookOpenIcon, TimerIcon, WorkflowIcon } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
+import { PersonaAvatar } from "@/components/avatar";
+import { EmptyState } from "@/components/empty-state";
+import { ListCard, ListRow } from "@/components/list";
+import { PageHeader } from "@/components/page-header";
+import { personasQuery } from "@/components/settings-form/queries";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { ApiError, errorKey, type JobSnapshot } from "@/lib/api";
+import { ApiError, errorKey, type JobSnapshot, type PersonaSummary } from "@/lib/api";
 import { formatDateTime, formatUsd } from "@/lib/format";
-import { type Lang, type Translate, useLang, useT } from "@/lib/i18n";
+import { type Translate, useLang, useT } from "@/lib/i18n";
 import { jobOutcome } from "@/lib/jobs";
-import { Elapsed, OutcomeBadge } from "./parts";
+import { studioPath } from "@/lib/paths";
+import { statusQuery } from "@/lib/query";
+import { CancelJobButton, Elapsed, OutcomeBadge, ResumeJobButton } from "./parts";
 import { jobsQuery } from "./queries";
+import { canResume } from "./resume";
+import { showsStop } from "./stopping";
 
 /** The stage a snapshot is on, as `Transcribe 3/10`. */
 function snapshotProgress(t: Translate, job: JobSnapshot): string {
@@ -29,61 +32,159 @@ function snapshotProgress(t: Translate, job: JobSnapshot): string {
   return stage.total === null ? name : `${name} ${finished}/${stage.total}`;
 }
 
-function JobRow({ job, lang }: { job: JobSnapshot; lang: Lang }) {
+/** Cancel while it runs, Resume once it stopped short; a list leaves Force stop to the job's page. */
+function RowAction({ job }: { readonly job: JobSnapshot }) {
+  if (showsStop(job)) return <CancelJobButton job={job} forceStop={false} />;
+  if (canResume(job, jobOutcome(job))) return <ResumeJobButton id={job.id} variant="outline" />;
+  return null;
+}
+
+function Dot() {
+  return (
+    <span aria-hidden className="text-muted-foreground/50">
+      ·
+    </span>
+  );
+}
+
+function JobRow({
+  job,
+  persona,
+  actions,
+}: {
+  readonly job: JobSnapshot;
+  readonly persona: Pick<PersonaSummary, "id" | "name" | "shortName">;
+  /** Some row has a button, so each keeps a column for one. */
+  readonly actions: boolean;
+}) {
+  const t = useT();
+  const lang = useLang();
+  const progress = snapshotProgress(t, job);
+  const started = formatDateTime(job.startedAt, lang);
+  const duration = (
+    <span className="inline-flex items-center gap-1 tabular-nums">
+      <TimerIcon aria-hidden className="size-3.5" />
+      <span className="sr-only">{t("jobs.meta.duration")} </span>
+      <Elapsed start={job.startedAt} end={job.endedAt} ticking={job.status === "running"} />
+    </span>
+  );
+  const cost = job.costUsd === null ? null : formatUsd(job.costUsd, lang);
+  return (
+    <ListRow
+      href={`/jobs/${encodeURIComponent(job.id)}`}
+      leading={<PersonaAvatar persona={persona} size="sm" />}
+      title={t(`jobs.command.${job.command}`)}
+      description={
+        <span className="flex flex-col gap-0.5">
+          <span className="flex flex-wrap items-center gap-x-1.5">
+            <span>{persona.name}</span>
+            {progress && (
+              <>
+                <Dot />
+                <span className="tabular-nums">{progress}</span>
+              </>
+            )}
+          </span>
+          <span className="flex flex-wrap items-center gap-x-3 md:hidden">
+            <time dateTime={job.startedAt}>{started}</time>
+            {duration}
+            {cost && <span className="tabular-nums">{cost}</span>}
+          </span>
+        </span>
+      }
+      trailing={
+        <>
+          <div className="md:w-36">
+            <OutcomeBadge outcome={jobOutcome(job)} />
+          </div>
+          <div className="hidden w-48 flex-col items-end gap-0.5 md:flex">
+            <time dateTime={job.startedAt} className="text-muted-foreground text-sm">
+              <span className="sr-only">{t("jobs.meta.started")} </span>
+              {started}
+            </time>
+            <span className="flex items-center gap-1.5 text-muted-foreground text-xs">
+              {duration}
+              {cost && (
+                <>
+                  <Dot />
+                  <span className="tabular-nums">
+                    <span className="sr-only">{t("jobs.meta.cost")} </span>
+                    {cost}
+                  </span>
+                </>
+              )}
+            </span>
+          </div>
+          {actions && (
+            <div className="flex justify-end md:w-28">
+              <RowAction job={job} />
+            </div>
+          )}
+        </>
+      }
+    />
+  );
+}
+
+function ListSkeleton() {
   const t = useT();
   return (
-    <TableRow>
-      <TableCell>
-        <Link
-          to={`/jobs/${encodeURIComponent(job.id)}`}
-          className="font-medium underline-offset-4 hover:underline"
+    <div className="overflow-hidden rounded-xl border bg-card" role="status" aria-busy="true">
+      <span className="sr-only">{t("common.loading")}</span>
+      {["a", "b", "c"].map((key) => (
+        <div
+          key={key}
+          className="flex min-h-16 items-center gap-4 border-b px-4 py-3 last:border-b-0 sm:px-6"
         >
-          {t(`jobs.command.${job.command}`)}
-        </Link>
-        <div className="text-muted-foreground text-xs">{job.persona}</div>
-      </TableCell>
-      <TableCell>
-        <OutcomeBadge outcome={jobOutcome(job)} />
-      </TableCell>
-      <TableCell className="text-muted-foreground tabular-nums">
-        {snapshotProgress(t, job)}
-      </TableCell>
-      <TableCell className="text-muted-foreground">{formatDateTime(job.startedAt, lang)}</TableCell>
-      <TableCell className="text-muted-foreground tabular-nums">
-        <Elapsed start={job.startedAt} end={job.endedAt} ticking={job.status === "running"} />
-      </TableCell>
-      <TableCell className="text-right tabular-nums">
-        {job.costUsd === null ? "—" : formatUsd(job.costUsd, lang)}
-      </TableCell>
-    </TableRow>
+          <Skeleton className="size-8 rounded-full" />
+          <div className="flex flex-1 flex-col gap-2">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-3.5 w-48" />
+          </div>
+          <Skeleton className="h-5 w-20 rounded-full" />
+        </div>
+      ))}
+    </div>
   );
 }
 
 export function JobsList() {
   const t = useT();
-  const lang = useLang();
   const { data: jobs, error, isPending } = useQuery(jobsQuery);
+  const { data: personas } = useQuery(personasQuery);
+  const { data: status } = useQuery(statusQuery);
   const [showEphemeral, setShowEphemeral] = useState(false);
 
   const shown = (jobs ?? [])
     .filter((job) => showEphemeral || !job.ephemeral)
     .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
   const hidden = (jobs ?? []).filter((job) => job.ephemeral).length;
+  const actions = shown.some((job) => job.status === "running" || canResume(job, jobOutcome(job)));
+  // A persona deleted since keeps her id, and a monogram of it.
+  const personaOf = (id: string) =>
+    personas?.personas.find((persona) => persona.id === id) ?? { id, name: id, shortName: "" };
+  const active = personas?.active ?? status?.persona.id;
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <h1 className="font-heading font-semibold text-2xl">{t("jobs.title")}</h1>
-          <p className="text-muted-foreground text-sm">{t("jobs.description")}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Switch id="jobs-ephemeral" checked={showEphemeral} onCheckedChange={setShowEphemeral} />
-          <Label htmlFor="jobs-ephemeral" className="text-sm">
-            {t("jobs.showEphemeral", { count: hidden })}
-          </Label>
-        </div>
-      </div>
+    <div className="flex flex-col gap-8">
+      <PageHeader
+        title={t("jobs.title")}
+        description={t("jobs.description")}
+        actions={
+          (hidden > 0 || showEphemeral) && (
+            <div className="flex items-center gap-2.5">
+              <Switch
+                id="jobs-ephemeral"
+                checked={showEphemeral}
+                onCheckedChange={setShowEphemeral}
+              />
+              <Label htmlFor="jobs-ephemeral" className="font-normal text-sm">
+                {t("jobs.showEphemeral", { count: hidden })}
+              </Label>
+            </div>
+          )
+        }
+      />
       {error && !(error instanceof ApiError && error.status === 401) && (
         <Alert variant="destructive">
           <AlertTitle>{t("jobs.loadFailed")}</AlertTitle>
@@ -93,36 +194,30 @@ export function JobsList() {
           </AlertDescription>
         </Alert>
       )}
-      {isPending && (
-        <div className="flex flex-col gap-2">
-          <Skeleton className="h-10" />
-          <Skeleton className="h-10" />
-          <Skeleton className="h-10" />
-        </div>
-      )}
+      {isPending && <ListSkeleton />}
       {jobs && shown.length === 0 && (
-        <p className="rounded-lg border border-dashed p-8 text-center text-muted-foreground text-sm">
-          {t("jobs.empty")}
-        </p>
+        <EmptyState
+          icon={<WorkflowIcon />}
+          title={t("jobs.empty.title")}
+          description={t("jobs.empty.body")}
+          action={
+            active !== undefined && (
+              <Button variant="outline" asChild>
+                <Link to={studioPath(active, "knowledge")}>
+                  <BookOpenIcon />
+                  {t("common.openStudio")}
+                </Link>
+              </Button>
+            )
+          }
+        />
       )}
       {shown.length > 0 && (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t("jobs.col.job")}</TableHead>
-              <TableHead>{t("jobs.col.status")}</TableHead>
-              <TableHead>{t("jobs.col.progress")}</TableHead>
-              <TableHead>{t("jobs.col.started")}</TableHead>
-              <TableHead>{t("jobs.col.duration")}</TableHead>
-              <TableHead className="text-right">{t("jobs.col.cost")}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {shown.map((job) => (
-              <JobRow key={job.id} job={job} lang={lang} />
-            ))}
-          </TableBody>
-        </Table>
+        <ListCard label={t("jobs.title")}>
+          {shown.map((job) => (
+            <JobRow key={job.id} job={job} persona={personaOf(job.persona)} actions={actions} />
+          ))}
+        </ListCard>
       )}
     </div>
   );

@@ -11,6 +11,7 @@ import {
   DEMO_PERSONA,
   EMPTY_PERSONA,
   firstStep,
+  inheritedValue,
   isNewInstall,
   memoryStepAction,
   nextStep,
@@ -59,6 +60,7 @@ function setting(path: string, extra: Partial<SettingRow> = {}): SettingRow {
     title: path,
     value: null,
     source: "default",
+    envValue: null,
     envOverride: false,
     productionOnly: false,
     readOnly: false,
@@ -95,6 +97,18 @@ describe("the new-install cookie default", () => {
     expect(cookieDefault(env, true)).toBeNull();
     expect(cookieDefault([], true)).toBeNull();
   });
+});
+
+test("a persona inherits the environment's value only while her file leaves it unset", () => {
+  const voice = (patch: Partial<SettingRow>) =>
+    setting("voice.voiceId", { env: "FISH_VOICE_ID", scope: "persona", ...patch });
+  expect(inheritedValue(voice({ envValue: "env-voice" }))).toBe("env-voice");
+  expect(inheritedValue(voice({ envValue: "env-voice", value: "" }))).toBe("env-voice");
+  expect(
+    inheritedValue(voice({ envValue: "env-voice", value: "hers", source: "persona" })),
+  ).toBeNull();
+  expect(inheritedValue(voice({}))).toBeNull();
+  expect(inheritedValue(undefined)).toBeNull();
 });
 
 describe("creating a persona", () => {

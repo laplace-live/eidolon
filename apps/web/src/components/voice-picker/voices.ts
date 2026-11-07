@@ -26,7 +26,12 @@ export function nextPage(
   return last.hasMore ? loaded + 1 : undefined;
 }
 
-/** "1000+" when Fish caps the count. */
-export function totalLabel(response: Pick<VoiceSearchResponse, "total" | "totalIsExact">): string {
-  return response.totalIsExact ? String(response.total) : `${response.total}+`;
+/**
+ * The count `setup.voice.total` takes: an exact one as a number, so "1 voice" reads right, and
+ * "1000+" when Fish caps it.
+ */
+export function totalLabel(
+  response: Pick<VoiceSearchResponse, "total" | "totalIsExact">,
+): number | string {
+  return response.totalIsExact ? response.total : `${response.total}+`;
 }
