@@ -19,7 +19,7 @@ import {
   saveVoice,
 } from "./personas";
 import { StepCard } from "./step-card";
-import { inheritedValue } from "./wizard";
+import { inheritedValue, ownValue } from "./wizard";
 
 const VOICE = "voice.voiceId";
 
@@ -48,7 +48,7 @@ export function VoiceStep({
   const [failure, setFailure] = useState<ApiError | null>(null);
 
   const row = settings.data?.settings.find((candidate) => candidate.path === VOICE);
-  const current = typeof row?.value === "string" && row.value !== "" ? row.value : null;
+  const current = ownValue(row);
   // The environment's voice, which she keeps unless one is picked for her.
   const inherited = existing ? inheritedValue(row) : null;
   const name = existing ? existing.name : target.kind === "create" ? target.draft.name : "";

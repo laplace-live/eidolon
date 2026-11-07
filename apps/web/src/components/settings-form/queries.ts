@@ -16,9 +16,14 @@ export async function refreshSettings(
   persona: string | undefined,
   response: SettingsResponse,
 ): Promise<void> {
-  queryClient.setQueryData(settingsQuery(persona).queryKey, response);
+  const saved = settingsQuery(persona).queryKey;
+  queryClient.setQueryData(saved, response);
   await Promise.all([
-    queryClient.invalidateQueries({ queryKey: ["settings"] }),
+    // Not the rows the answer just set, which would load again for nothing.
+    queryClient.invalidateQueries({
+      queryKey: ["settings"],
+      predicate: (query) => query.queryKey[1] !== saved[1],
+    }),
     queryClient.invalidateQueries({ queryKey: statusQuery.queryKey }),
   ]);
 }

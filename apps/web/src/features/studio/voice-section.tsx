@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VoicePicker } from "@/components/voice-picker";
 import { saveVoice } from "@/features/setup/personas";
+import { ownValue } from "@/features/setup/wizard";
 import type { PersonaSummary, SettingRow, Voice } from "@/lib/api";
 import { toastError } from "@/lib/feedback";
 import { rich, useT } from "@/lib/i18n";
@@ -32,10 +33,6 @@ import { personaQueries } from "./queries";
 import { CARD_PATHS } from "./sections";
 
 const [VOICE_PATH] = CARD_PATHS.voice;
-
-function fileValue(row: SettingRow | undefined): string | null {
-  return typeof row?.value === "string" && row.value !== "" ? row.value : null;
-}
 
 /** Whether Fish knows the voice: the server checks only the active persona's. */
 function useVoiceCheck(persona: string, voiceId: string | null): boolean | null {
@@ -59,7 +56,7 @@ function CurrentVoice({
   readonly row: SettingRow;
 }) {
   const t = useT();
-  const own = fileValue(row);
+  const own = ownValue(row);
   const inherited = row.envValue;
   const voiceId = own ?? inherited;
   const source = own !== null ? "own" : inherited !== null ? "inherited" : "none";
@@ -168,7 +165,7 @@ function VoiceCard({ persona }: { readonly persona: PersonaSummary }) {
   const query = settingsQuery(persona.id);
   const settings = useQuery(query);
   const row = settings.data?.settings.find((entry) => entry.path === VOICE_PATH);
-  const own = fileValue(row);
+  const own = ownValue(row);
 
   const pick = useMutation({
     mutationFn: (voice: Voice) => saveVoice(persona.id, voice.id),

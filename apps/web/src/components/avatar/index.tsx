@@ -3,7 +3,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { monogram } from "./monogram";
-import { avatarSrc, useAvatarVersion } from "./version";
+import { avatarSrc, loadsPicture, useAvatarVersion } from "./version";
 
 const SIZES = {
   xs: ["size-6", "text-[0.625rem]"],
@@ -20,7 +20,10 @@ export interface PersonaAvatarProps {
     readonly id: string;
     readonly name: string;
     readonly shortName: string;
-    /** False skips the request a missing picture would answer with a 404. */
+    /**
+     * False skips the request a missing picture would answer with a 404, until her picture changes
+     * on this page, which a flag read before the change doesn't know.
+     */
     readonly avatar?: boolean;
   };
   /** xs 24 px, sm 32, md 40, lg 64, xl 96. */
@@ -34,7 +37,7 @@ export function PersonaAvatar({ persona, size = "md", className }: PersonaAvatar
   const version = useAvatarVersion(persona.id);
   return (
     <Avatar className={cn(box, className)} aria-hidden>
-      {persona.avatar !== false && (
+      {loadsPicture(persona.avatar, version) && (
         <AvatarImage key={`${persona.id}:${version}`} src={avatarSrc(persona.id, version)} alt="" />
       )}
       <AvatarFallback className={cn("font-medium", text)}>

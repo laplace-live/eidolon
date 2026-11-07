@@ -72,7 +72,14 @@ export function ListRow({ leading, title, description, trailing, href, className
         )}
       </div>
       {trailing !== undefined && (
-        <div className="relative z-10 ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2 text-sm">
+        <div
+          className={cn(
+            "relative z-10 ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2 text-sm",
+            // Text there, such as a job's state and time, still opens the row.
+            href !== undefined &&
+              "pointer-events-none [&_a]:pointer-events-auto [&_button]:pointer-events-auto",
+          )}
+        >
           {trailing}
         </div>
       )}

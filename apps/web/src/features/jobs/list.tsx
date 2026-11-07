@@ -21,7 +21,7 @@ import { statusQuery } from "@/lib/query";
 import { CancelJobButton, Elapsed, OutcomeBadge, ResumeJobButton } from "./parts";
 import { jobsQuery } from "./queries";
 import { canResume } from "./resume";
-import { stopOffer } from "./stopping";
+import { showsStop } from "./stopping";
 
 /** The stage a snapshot is on, as `Transcribe 3/10`. */
 function snapshotProgress(t: Translate, job: JobSnapshot): string {
@@ -34,9 +34,7 @@ function snapshotProgress(t: Translate, job: JobSnapshot): string {
 
 /** Cancel while it runs, Resume once it stopped short; a list leaves Force stop to the job's page. */
 function RowAction({ job }: { readonly job: JobSnapshot }) {
-  if (job.stopping || stopOffer(job) === "cancel") {
-    return <CancelJobButton job={job} forceStop={false} />;
-  }
+  if (showsStop(job)) return <CancelJobButton job={job} forceStop={false} />;
   if (canResume(job, jobOutcome(job))) return <ResumeJobButton id={job.id} variant="outline" />;
   return null;
 }

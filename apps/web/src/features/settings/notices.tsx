@@ -41,7 +41,7 @@ function RestartBanner({ all }: { readonly all: boolean }) {
 }
 
 /** What the settings files hold that the bot ignores, in the server's English. */
-function FileWarnings({ warnings }: { readonly warnings: readonly string[] }) {
+export function FileWarnings({ warnings }: { readonly warnings: readonly string[] }) {
   const t = useT();
   return (
     <Collapsible className="overflow-hidden rounded-xl border bg-card">

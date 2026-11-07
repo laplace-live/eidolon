@@ -37,7 +37,7 @@ import {
 } from "./parts";
 import { jobQuery } from "./queries";
 import { canResume } from "./resume";
-import { stopOffer } from "./stopping";
+import { showsStop, stopOffer } from "./stopping";
 import { type JobEvents, useJobEvents } from "./use-job-events";
 
 /** How much of a long stderr log the page shows: its end, where a crash is. */
@@ -187,18 +187,17 @@ function Overview({
   } else if (resumable) {
     note = t(outcome === "cancelled" ? "jobs.cancelled.body" : "jobs.resumeNote");
   }
-  const actions =
-    offer === "cancel" || offer === "force-stop" ? (
-      <CancelJobButton job={job} size="default" />
-    ) : resumable ? (
-      <ResumeJobButton
-        id={job.id}
-        size="default"
-        onResumed={(next) => {
-          if (next.id !== job.id) navigate(`/jobs/${encodeURIComponent(next.id)}`);
-        }}
-      />
-    ) : undefined;
+  const actions = showsStop(job) ? (
+    <CancelJobButton job={job} size="default" />
+  ) : resumable ? (
+    <ResumeJobButton
+      id={job.id}
+      size="default"
+      onResumed={(next) => {
+        if (next.id !== job.id) navigate(`/jobs/${encodeURIComponent(next.id)}`);
+      }}
+    />
+  ) : undefined;
 
   return (
     <SectionCard tone={failed ? "danger" : "default"} note={note} actions={actions}>
