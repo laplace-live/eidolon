@@ -475,15 +475,7 @@ export function VideosSection({ persona }: { readonly persona: PersonaSummary })
         </Collapsible>
       </SectionCard>
 
-      {runJob && (
-        <JobCard
-          key={runJob.id}
-          job={runJob}
-          events={runEvents}
-          onEnded={onRunEnded}
-          className="bg-card"
-        />
-      )}
+      {runJob && <JobCard key={runJob.id} job={runJob} events={runEvents} onEnded={onRunEnded} />}
 
       <SectionCard
         title={t("studio.videos.tableTitle")}

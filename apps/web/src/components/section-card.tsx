@@ -2,6 +2,7 @@
 // the left and the card's actions on the right. Wrap a <form> around it so footer buttons submit it.
 import { type ReactNode, useId } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -16,7 +17,6 @@ export interface SectionCardProps {
   /** The footer's right side, such as Save. */
   readonly actions?: ReactNode;
   readonly tone?: "default" | "danger";
-  readonly id?: string;
   readonly className?: string;
   readonly children?: ReactNode;
 }
@@ -32,7 +32,6 @@ export function SectionCard({
   note,
   actions,
   tone = "default",
-  id,
   className,
   children,
 }: SectionCardProps) {
@@ -41,15 +40,8 @@ export function SectionCard({
   const header = title !== undefined || description !== undefined || action !== undefined;
   return (
     <section
-      id={id}
       aria-labelledby={title === undefined ? undefined : titleId}
-      data-tone={tone}
-      className={cn(
-        CARD,
-        "scroll-mt-[calc(var(--app-header-height)+1.5rem)]",
-        danger && "border-destructive/40",
-        className,
-      )}
+      className={cn(CARD, danger && "border-destructive/40", className)}
     >
       {(header || children !== undefined) && (
         <div className="flex flex-col gap-6 p-6">
@@ -62,7 +54,7 @@ export function SectionCard({
                   </h2>
                 )}
                 {description !== undefined && (
-                  <div className="text-muted-foreground text-sm">{description}</div>
+                  <div className="inline-links text-muted-foreground text-sm">{description}</div>
                 )}
               </div>
               {action !== undefined && (
@@ -74,21 +66,76 @@ export function SectionCard({
         </div>
       )}
       {(note !== undefined || actions !== undefined) && (
-        <footer
-          className={cn(
-            FOOTER,
-            danger && "border-destructive/30 bg-destructive/5 dark:bg-destructive/10",
-          )}
-        >
-          <div className="min-w-0 text-muted-foreground text-sm [&_a]:font-medium [&_a]:text-foreground [&_a]:underline-offset-4 [&_a:hover]:underline">
-            {note}
-          </div>
-          {actions !== undefined && (
-            <div className="ml-auto flex flex-wrap items-center justify-end gap-2">{actions}</div>
-          )}
-        </footer>
+        <SectionCardFooter note={note} actions={actions} tone={tone} />
       )}
     </section>
+  );
+}
+
+/** A card's footer strip: `note` on the left, `actions` on the right. A sheet's footer too. */
+export function SectionCardFooter({
+  note,
+  actions,
+  tone = "default",
+}: Pick<SectionCardProps, "note" | "actions" | "tone">) {
+  return (
+    <div
+      className={cn(
+        FOOTER,
+        tone === "danger" && "border-destructive/30 bg-destructive/5 dark:bg-destructive/10",
+      )}
+    >
+      <div className="inline-links min-w-0 text-muted-foreground text-sm">{note}</div>
+      {actions !== undefined && (
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">{actions}</div>
+      )}
+    </div>
+  );
+}
+
+export interface SectionCardColumn {
+  readonly id: string;
+  readonly label: ReactNode;
+  readonly className?: string;
+}
+
+/**
+ * A table edge to edge in a card's body, its lines meeting the card's sides. `last` when nothing
+ * follows it in the body, so its last row sits on the card's edge.
+ */
+export function SectionCardTable({
+  columns,
+  last = false,
+  children,
+}: {
+  readonly columns: readonly SectionCardColumn[];
+  readonly last?: boolean;
+  /** Its TableRows. */
+  readonly children: ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "-mx-6 border-t [&_td:first-child]:pl-6 [&_td:last-child]:pr-6 [&_th:first-child]:pl-6 [&_th:last-child]:pr-6",
+        last && "-mb-6",
+      )}
+    >
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-muted/40 hover:bg-muted/40">
+            {columns.map((column) => (
+              <TableHead
+                key={column.id}
+                className={cn("h-9 font-normal text-muted-foreground text-xs", column.className)}
+              >
+                {column.label}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>{children}</TableBody>
+      </Table>
+    </div>
   );
 }
 
@@ -111,12 +158,7 @@ export function SectionCardSkeleton({
           <Skeleton className="h-6 w-40" />
           <Skeleton className="h-4 w-full max-w-sm" />
         </div>
-        {Array.from({ length: rows }, (_, index) => `row-${index}`).map((key) => (
-          <div key={key} className="flex flex-col gap-2.5">
-            <Skeleton className="h-4 w-28" />
-            <Skeleton className="h-9 w-full max-w-md" />
-          </div>
-        ))}
+        <FieldSkeletons rows={rows} />
       </div>
       {footer && (
         <div className={FOOTER}>
@@ -125,5 +167,19 @@ export function SectionCardSkeleton({
         </div>
       )}
     </div>
+  );
+}
+
+/** Fields still loading: a label over an input, `rows` times. */
+export function FieldSkeletons({ rows }: { readonly rows: number }) {
+  return (
+    <>
+      {Array.from({ length: rows }, (_, index) => `row-${index}`).map((key) => (
+        <div key={key} className="flex flex-col gap-2.5">
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="h-9 w-full max-w-md" />
+        </div>
+      ))}
+    </>
   );
 }

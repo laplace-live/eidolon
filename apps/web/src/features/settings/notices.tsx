@@ -48,9 +48,7 @@ function FileWarnings({ warnings }: { readonly warnings: readonly string[] }) {
       <CollapsibleTrigger className="group flex min-h-14 w-full items-center gap-3.5 px-4 py-3 text-left text-sm outline-none transition-colors hover:bg-muted/40 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset sm:px-6">
         <TriangleAlertIcon className="size-4 shrink-0 text-warning" aria-hidden />
         <span className="flex-1 font-medium">
-          {warnings.length === 1
-            ? t("settings.warnings.one")
-            : t("settings.warnings.other", { count: warnings.length })}
+          {t("settings.warnings", { count: warnings.length })}
         </span>
         <ChevronDownIcon
           className="size-4 shrink-0 text-muted-foreground group-data-[state=open]:rotate-180"

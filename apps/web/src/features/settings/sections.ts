@@ -49,7 +49,7 @@ export const CARDS: Readonly<Record<Named, readonly CardSpec[]>> = {
 
 /** Every row a card names, which Advanced leaves out. */
 export const NAMED: readonly string[] = Object.values(CARDS).flatMap((cards) =>
-  cards.flatMap((card) => card.paths.flatMap((line) => (typeof line === "string" ? [line] : line))),
+  cards.flatMap((card) => card.paths.flat()),
 );
 
 export type Resolved = { readonly section: SectionId } | { readonly redirect: string };

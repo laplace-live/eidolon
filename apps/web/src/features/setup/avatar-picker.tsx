@@ -1,21 +1,14 @@
 import { ImagePlusIcon } from "lucide-react";
-import { type ChangeEvent, useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { monogram } from "@/components/avatar/monogram";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { FieldDescription, FieldError } from "@/components/ui/field";
-import {
-  IMAGE_EXTENSIONS,
-  IMAGE_TYPES,
-  imageProblem,
-  MAX_IMAGE_BYTES,
-  previewUrl,
-} from "@/features/studio/files";
+import { imageProblem, MAX_IMAGE_BYTES, previewUrl } from "@/features/studio/files";
+import { useFilePicker } from "@/features/studio/pictures";
 import { formatBytes } from "@/lib/format";
 import { useLang, useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-
-const ACCEPT = [...IMAGE_TYPES, ...IMAGE_EXTENSIONS].join(",");
 
 /**
  * A new persona's optional avatar, picked before she exists: a preview, which shows her monogram
@@ -36,7 +29,6 @@ export function AvatarPicker({
   const t = useT();
   const lang = useLang();
   const inputId = useId();
-  const input = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [problem, setProblem] = useState<"type" | "size" | null>(null);
 
@@ -46,17 +38,18 @@ export function AvatarPicker({
     if (objectUrl !== null) return () => URL.revokeObjectURL(objectUrl);
   }, [file]);
 
-  function picked(event: ChangeEvent<HTMLInputElement>) {
-    const chosen = event.target.files?.[0];
-    event.target.value = "";
-    if (chosen === undefined) return;
-    const refused = imageProblem(chosen);
-    setProblem(refused);
-    if (refused === null) onFile(chosen);
-  }
+  const picker = useFilePicker(
+    ([chosen]) => {
+      if (chosen === undefined) return;
+      const refused = imageProblem(chosen);
+      setProblem(refused);
+      if (refused === null) onFile(chosen);
+    },
+    false,
+    inputId,
+  );
 
   const letters = name.trim() === "" ? null : monogram(name);
-  const pick = () => input.current?.click();
   return (
     <fieldset className="flex min-w-0 items-center gap-5">
       <legend className="sr-only">
@@ -87,7 +80,13 @@ export function AvatarPicker({
           <span className="font-normal text-muted-foreground">{t("setup.avatar.optional")}</span>
         </span>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={pick}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={disabled}
+            onClick={picker.open}
+          >
             <ImagePlusIcon />
             {t(file ? "setup.avatar.replace" : "setup.avatar.upload")}
           </Button>
@@ -118,15 +117,7 @@ export function AvatarPicker({
           </FieldError>
         )}
       </div>
-      <input
-        ref={input}
-        id={inputId}
-        type="file"
-        accept={ACCEPT}
-        className="hidden"
-        disabled={disabled}
-        onChange={picked}
-      />
+      {picker.input}
     </fieldset>
   );
 }

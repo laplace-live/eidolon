@@ -5,14 +5,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
 import { ErrorAlert } from "@/components/error-alert";
-import { SectionCard } from "@/components/section-card";
+import { FieldSkeletons, SectionCard } from "@/components/section-card";
 import { Button } from "@/components/ui/button";
 import { FieldLegend, FieldSet } from "@/components/ui/field";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { call, type SettingRow, type SettingScope } from "@/lib/api";
 import { useT } from "@/lib/i18n";
-import { statusQuery } from "@/lib/query";
 import { cn } from "@/lib/utils";
 import {
   type CardPath,
@@ -23,7 +21,7 @@ import {
   REINDEX_PATHS,
 } from "./controls";
 import { SettingField } from "./field";
-import { personasQuery, settingsQuery } from "./queries";
+import { personasQuery, refreshSettings, settingsQuery } from "./queries";
 import { ReindexDialog } from "./reindex-dialog";
 
 export interface SettingsCardProps {
@@ -40,11 +38,8 @@ export interface SettingsCardProps {
   readonly exclude?: readonly string[];
   readonly title: ReactNode;
   readonly description?: ReactNode;
-  /** The footer's left side; where the values are saved when absent. */
-  readonly note?: ReactNode;
   /** At the right of the title. */
   readonly action?: ReactNode;
-  readonly id?: string;
   /** Under the fields, such as an alert about their values. */
   readonly children?: ReactNode;
   /** After a save the server accepted, with the values it saved. */
@@ -58,16 +53,15 @@ export function SettingsCard({
   exclude,
   title,
   description,
-  note,
   action,
-  id,
   children,
   onSaved,
 }: SettingsCardProps) {
   const t = useT();
   const queryClient = useQueryClient();
   const settings = useQuery(settingsQuery(persona));
-  const personas = useQuery(personasQuery);
+  // Only a persona's rows name her.
+  const personas = useQuery({ ...personasQuery, enabled: scope === "persona" });
   const [drafts, setDrafts] = useState<Readonly<Record<string, string>>>({});
   const [touched, setTouched] = useState<ReadonlySet<string>>(new Set());
   const [confirming, setConfirming] = useState<Record<string, unknown> | null>(null);
@@ -79,40 +73,28 @@ export function SettingsCard({
         body: { scope, persona: scope === "persona" ? owner : undefined, values },
       }),
     onSuccess: async (response, values) => {
-      queryClient.setQueryData(settingsQuery(persona).queryKey, response);
       setDrafts({});
       setTouched(new Set());
       toast.success(
         t(response.restartRequired ? "settings.form.savedRestart" : "settings.form.saved"),
       );
       onSaved?.(values);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["settings"] }),
-        queryClient.invalidateQueries({ queryKey: statusQuery.queryKey }),
-      ]);
+      await refreshSettings(queryClient, persona, response);
     },
   });
 
   const her = personas.data?.personas.find((entry) => entry.id === owner);
   const name = her ? her.shortName || her.name : (owner ?? "");
   const savedWhere =
-    note ??
-    (scope === "persona" ? t("settings.form.savedFor", { name }) : t("settings.form.savedForAll"));
-  const card = { id, title, description, action };
+    scope === "persona" ? t("settings.form.savedFor", { name }) : t("settings.form.savedForAll");
+  const card = { title, description, action };
 
   if (settings.isPending) {
     return (
       <SectionCard {...card} note={savedWhere}>
         <div className="flex flex-col gap-6" role="status" aria-busy="true">
           <span className="sr-only">{t("common.loading")}</span>
-          {Array.from({ length: Math.min(paths?.length ?? 3, 4) }, (_, line) => `line-${line}`).map(
-            (key) => (
-              <div key={key} className="flex flex-col gap-2.5">
-                <Skeleton className="h-4 w-28" />
-                <Skeleton className="h-9 w-full max-w-md" />
-              </div>
-            ),
-          )}
+          <FieldSkeletons rows={Math.min(paths?.length ?? 3, 4)} />
         </div>
       </SectionCard>
     );
@@ -188,17 +170,7 @@ export function SettingsCard({
         }
         actions={
           rows.length > 0 ? (
-            <>
-              {changed && (
-                <Button type="button" variant="ghost" disabled={save.isPending} onClick={discard}>
-                  {t("settings.form.discard")}
-                </Button>
-              )}
-              <Button type="submit" disabled={!changed || save.isPending}>
-                {save.isPending && <Spinner />}
-                {t("settings.form.save")}
-              </Button>
-            </>
+            <SaveActions dirty={changed} pending={save.isPending} onDiscard={discard} />
           ) : undefined
         }
       >
@@ -233,5 +205,39 @@ export function SettingsCard({
         }}
       />
     </form>
+  );
+}
+
+/**
+ * A form card's footer actions: Discard while there are changes, then Save, which submits the form
+ * around the card. Save's name is `settings.form.save` unless `label` names it.
+ */
+export function SaveActions({
+  dirty,
+  pending,
+  blocked = false,
+  label,
+  onDiscard,
+}: {
+  readonly dirty: boolean;
+  readonly pending: boolean;
+  /** Save stays off even with changes, such as while a required field is empty. */
+  readonly blocked?: boolean;
+  readonly label?: string;
+  readonly onDiscard: () => void;
+}) {
+  const t = useT();
+  return (
+    <>
+      {dirty && (
+        <Button type="button" variant="ghost" disabled={pending} onClick={onDiscard}>
+          {t("settings.form.discard")}
+        </Button>
+      )}
+      <Button type="submit" disabled={!dirty || blocked || pending}>
+        {pending && <Spinner />}
+        {label ?? t("settings.form.save")}
+      </Button>
+    </>
   );
 }

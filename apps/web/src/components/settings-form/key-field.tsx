@@ -6,7 +6,7 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { useId } from "react";
-import { Badge } from "@/components/ui/badge";
+import { QuietBadge } from "@/components/quiet-badge";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -139,10 +139,7 @@ export function KeyField({
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
         <div className="flex flex-wrap items-center gap-2">
           <FieldLabel htmlFor={id}>{t(`settings.credentials.${name}`)}</FieldLabel>
-          <Badge variant="outline" className="gap-1.5 font-normal text-muted-foreground">
-            <span aria-hidden className={cn("size-1.5 rounded-full", shown.dot)} />
-            {t(shown.key)}
-          </Badge>
+          <QuietBadge dot={shown.dot}>{t(shown.key)}</QuietBadge>
         </div>
         <code className="w-full font-mono text-muted-foreground text-xs sm:w-auto">{name}</code>
       </div>

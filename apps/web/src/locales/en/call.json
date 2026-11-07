@@ -52,7 +52,6 @@
   "botError.title": "{name} ran into an error",
   "botError.body": "The voice (Fish Audio) or the model (OpenRouter) reported a problem. Check their keys and credit in Settings.",
   "botError.count": "{count} errors this call",
-  "botError.count_one": "{count} error this call",
   "botError.dismiss": "Dismiss",
   "voice.missing.title": "Pick a voice for {name}",
   "voice.missing.body": "A call needs a voice. Pick one of Fish Audio's public voices first.",

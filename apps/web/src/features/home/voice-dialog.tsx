@@ -1,13 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ErrorAlert } from "@/components/error-alert";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { LargeDialogContent } from "@/components/large-dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { VoicePicker } from "@/components/voice-picker";
 import { refreshPersonas, saveVoice } from "@/features/setup/personas";
 import type { Voice } from "@/lib/api";
@@ -43,23 +38,17 @@ export function VoiceDialog({
         changeVoiceDialog(next, save.isPending, onOpenChange, () => save.reset())
       }
     >
-      {/* A grid track grows to fit the voice list's rows, past a phone's screen, unless held. */}
-      <DialogContent className="max-h-[90svh] grid-cols-[minmax(0,1fr)] gap-0 overflow-y-auto p-0 sm:max-w-2xl">
-        <DialogHeader className="border-b p-6">
-          <DialogTitle className="font-semibold text-xl tracking-tight">
-            {t("setup.voice.title")}
-          </DialogTitle>
-          <DialogDescription>{t("setup.voice.stepBody", { name: persona.name })}</DialogDescription>
-        </DialogHeader>
-        <div className="flex flex-col gap-6 p-6">
-          <VoicePicker
-            value={save.variables?.id ?? current}
-            onChange={(voice) => save.mutate(voice)}
-            disabled={save.isPending}
-          />
-          {save.isError && <ErrorAlert error={save.error} />}
-        </div>
-      </DialogContent>
+      <LargeDialogContent
+        title={t("setup.voice.title")}
+        description={t("setup.voice.stepBody", { name: persona.name })}
+      >
+        <VoicePicker
+          value={save.variables?.id ?? current}
+          onChange={(voice) => save.mutate(voice)}
+          disabled={save.isPending}
+        />
+        {save.isError && <ErrorAlert error={save.error} />}
+      </LargeDialogContent>
     </Dialog>
   );
 }

@@ -5,7 +5,6 @@
   "loadFailed": "Couldn't load the jobs",
   "empty.title": "No jobs yet",
   "empty.body": "They appear here when you index facts or add videos in a persona's studio.",
-  "empty.action": "Open the studio",
   "command.pipeline": "Video pipeline",
   "command.download": "Download",
   "command.expand": "Read link",

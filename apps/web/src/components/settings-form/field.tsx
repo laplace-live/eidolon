@@ -1,14 +1,5 @@
-import { LibraryIcon } from "lucide-react";
-import { type ReactNode, useId, useMemo, useState } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { type ReactNode, useId, useMemo } from "react";
+import { QuietBadge } from "@/components/quiet-badge";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
@@ -20,12 +11,19 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { VoicePicker } from "@/components/voice-picker";
 import type { SettingRow } from "@/lib/api";
 import { rich, type Translate, useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { catalogs } from "@/locales";
-import { type Control, controlFor, envDraft, optionsOf, originOf, timeZones } from "./controls";
+import {
+  type Control,
+  controlFor,
+  envDraft,
+  type Origin,
+  optionsOf,
+  originOf,
+  timeZones,
+} from "./controls";
 
 /** Every IANA time zone, as the suggestions of the input whose `list` is `id`. */
 export function TimeZoneList({ id }: { readonly id: string }) {
@@ -56,7 +54,6 @@ const WIDTH: Readonly<Record<Control["type"], string>> = {
   select: "sm:max-w-xs",
   path: "max-w-xl",
   paths: "max-w-xl",
-  voice: "max-w-xl",
   flag: "",
 };
 
@@ -65,13 +62,56 @@ function optionLabel(t: Translate, path: string, option: string): string {
   return hasString(key) ? t(key) : option;
 }
 
-/** A variable's name or value inside a help line. */
-function Code({ children }: { readonly children: ReactNode }) {
+/** A variable's name or value inside a line of text. */
+export function Code({ children }: { readonly children: ReactNode }) {
   return (
     <code className="wrap-anywhere rounded-sm bg-muted px-1 py-px font-mono text-[0.8125rem] text-foreground/80">
       {children}
     </code>
   );
+}
+
+/** Marks a value that comes from the environment. */
+export function EnvBadge() {
+  const t = useT();
+  return <QuietBadge>{t("settings.form.source.env")}</QuietBadge>;
+}
+
+/** A help line on where a row's value comes from; none when only the files set it. */
+export function OriginNote({
+  row,
+  origin,
+  personaName,
+}: {
+  readonly row: SettingRow;
+  readonly origin: Origin;
+  readonly personaName: string;
+}) {
+  const t = useT();
+  const env = <Code>{row.env}</Code>;
+  switch (origin) {
+    case "inherited":
+      return (
+        <FieldDescription>
+          {rich(t("settings.form.inherited"), {
+            env,
+            name: <span className="whitespace-nowrap">{personaName}</span>,
+          })}
+        </FieldDescription>
+      );
+    case "overrides":
+      return (
+        <FieldDescription>
+          {rich(t("settings.form.overrides"), { env, value: <Code>{row.envValue}</Code> })}
+        </FieldDescription>
+      );
+    case "locked":
+      return <FieldDescription>{rich(t("settings.form.envOverride"), { env })}</FieldDescription>;
+    case "readOnly":
+      return <FieldDescription>{rich(t("settings.form.readOnly"), { env })}</FieldDescription>;
+    case "own":
+      return null;
+  }
 }
 
 interface InputProps {
@@ -99,8 +139,6 @@ function ControlInput({
   onDraft,
 }: InputProps) {
   const t = useT();
-  const listId = useId();
-  const [browsing, setBrowsing] = useState(false);
   const width = fill ? undefined : WIDTH[control.type];
   // 16 px on a phone, where iOS zooms into smaller inputs. The generic "Default" is a word, not a
   // value: only an inherited value stays mono.
@@ -179,55 +217,6 @@ function ControlInput({
           onChange={(event) => onDraft(event.target.value)}
         />
       );
-    case "timezone":
-      return (
-        <>
-          <Input
-            {...common}
-            className={width}
-            list={listId}
-            value={draft}
-            onChange={(event) => onDraft(event.target.value)}
-          />
-          <TimeZoneList id={listId} />
-        </>
-      );
-    case "voice":
-      return (
-        <div className={cn("flex gap-2", width)}>
-          <Input
-            {...common}
-            className={mono}
-            value={draft}
-            onChange={(event) => onDraft(event.target.value)}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="lg"
-            disabled={locked}
-            onClick={() => setBrowsing(true)}
-          >
-            <LibraryIcon />
-            {t("settings.form.browseVoices")}
-          </Button>
-          <Dialog open={browsing} onOpenChange={setBrowsing}>
-            <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>{t("setup.voice.title")}</DialogTitle>
-                <DialogDescription>{t("setup.voice.body")}</DialogDescription>
-              </DialogHeader>
-              <VoicePicker
-                value={draft || null}
-                onChange={(voice) => {
-                  onDraft(voice.id);
-                  setBrowsing(false);
-                }}
-              />
-            </DialogContent>
-          </Dialog>
-        </div>
-      );
     default:
       return (
         <Input
@@ -284,7 +273,6 @@ export function SettingField({
   const origin = originOf(row, draft);
   const locked = disabled || origin === "locked" || origin === "readOnly";
   const help = `settings.help.${row.path}`;
-  const env = <Code>{row.env}</Code>;
   const limits =
     control.type === "integer" ? { min: control.min ?? "", max: control.max ?? "" } : undefined;
   return (
@@ -293,11 +281,7 @@ export function SettingField({
         <FieldLabel id={`${id}-label`} htmlFor={id}>
           {t(`settings.${row.path}`)}
         </FieldLabel>
-        {(origin === "locked" || origin === "inherited") && (
-          <Badge variant="outline" className="font-normal text-muted-foreground">
-            {t("settings.form.source.env")}
-          </Badge>
-        )}
+        {(origin === "locked" || origin === "inherited") && <EnvBadge />}
       </div>
       <ControlInput
         id={id}
@@ -312,25 +296,7 @@ export function SettingField({
         onDraft={onDraft}
       />
       {hasString(help) && <FieldDescription>{t(help)}</FieldDescription>}
-      {origin === "inherited" && (
-        <FieldDescription>
-          {rich(t("settings.form.inherited"), {
-            env,
-            name: <span className="whitespace-nowrap">{personaName}</span>,
-          })}
-        </FieldDescription>
-      )}
-      {origin === "overrides" && (
-        <FieldDescription>
-          {rich(t("settings.form.overrides"), { env, value: <Code>{row.envValue}</Code> })}
-        </FieldDescription>
-      )}
-      {origin === "locked" && (
-        <FieldDescription>{rich(t("settings.form.envOverride"), { env })}</FieldDescription>
-      )}
-      {origin === "readOnly" && (
-        <FieldDescription>{rich(t("settings.form.readOnly"), { env })}</FieldDescription>
-      )}
+      <OriginNote row={row} origin={origin} personaName={personaName} />
       {error && <FieldError>{t(error, limits)}</FieldError>}
     </Field>
   );

@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   AudioLinesIcon,
   BookOpenIcon,
@@ -14,20 +14,18 @@ import {
 } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 import { Link, Navigate, useParams } from "react-router";
-import { toast } from "sonner";
 import { PersonaAvatar } from "@/components/avatar";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { PersonaBadges } from "@/components/persona-badges";
 import { SectionCardSkeleton } from "@/components/section-card";
 import { SectionLayout } from "@/components/section-layout";
 import { personasQuery } from "@/components/settings-form/queries";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { activatePersona, refreshPersonas } from "@/features/setup/personas";
+import { useActivatePersona } from "@/features/setup/personas";
 import type { PersonaSummary } from "@/lib/api";
-import { toastError } from "@/lib/feedback";
 import { useT } from "@/lib/i18n";
 import { studioPath } from "@/lib/paths";
 import { AdvancedSection } from "./advanced-section";
@@ -40,6 +38,7 @@ import { PromptSection } from "./prompt-section";
 import { ReferencesSection } from "./references-section";
 import { isSection, SECTIONS, type SectionId } from "./sections";
 import { VideosSection } from "./videos-section";
+import { VoiceSection } from "./voice-section";
 
 const ICONS: Readonly<Record<SectionId, ReactNode>> = {
   identity: <UserRoundIcon />,
@@ -52,8 +51,6 @@ const ICONS: Readonly<Record<SectionId, ReactNode>> = {
   references: <ImagesIcon />,
   advanced: <SlidersHorizontalIcon />,
 };
-
-import { VoiceSection } from "./voice-section";
 
 const PANELS: Readonly<Record<SectionId, ComponentType<{ readonly persona: PersonaSummary }>>> = {
   identity: IdentitySection,
@@ -75,16 +72,7 @@ function Header({
   readonly active: boolean;
 }) {
   const t = useT();
-  const queryClient = useQueryClient();
-  const activate = useMutation({
-    mutationFn: () => activatePersona(persona.id),
-    onSuccess: async (personas) => {
-      queryClient.setQueryData(personasQuery.queryKey, personas);
-      toast.success(t("studio.activated", { name: persona.name }));
-      await refreshPersonas(queryClient);
-    },
-    onError: toastError,
-  });
+  const activate = useActivatePersona();
 
   return (
     <PageHeader
@@ -92,10 +80,7 @@ function Header({
       title={persona.name}
       badges={
         active || persona.template ? (
-          <>
-            {active && <Badge>{t("studio.active")}</Badge>}
-            {persona.template && <Badge variant="outline">{t("studio.builtIn")}</Badge>}
-          </>
+          <PersonaBadges active={active} builtIn={persona.template} />
         ) : undefined
       }
       description={<span className="font-mono">{persona.id}</span>}
@@ -108,7 +93,7 @@ function Header({
             </Link>
           </Button>
         ) : (
-          <Button disabled={activate.isPending} onClick={() => activate.mutate()}>
+          <Button disabled={activate.isPending} onClick={() => activate.mutate(persona.id)}>
             {activate.isPending && <Spinner />}
             {t("studio.activate")}
           </Button>

@@ -9,7 +9,7 @@ import type { PersonaRef } from "./personas";
  * Uploads `file` as her avatar. A refusal only toasts: she exists either way, and her studio can
  * take another picture.
  */
-export async function addAvatar(persona: PersonaRef, file: Blob): Promise<boolean> {
+export async function addAvatar(persona: PersonaRef, file: Blob): Promise<void> {
   try {
     await call("PUT /api/local/personas/:id/avatar", { params: { id: persona.id }, body: file });
   } catch (error) {
@@ -19,8 +19,7 @@ export async function addAvatar(persona: PersonaRef, file: Blob): Promise<boolea
         description: t(errorKey(error)),
       });
     }
-    return false;
+    return;
   }
   avatarChanged(persona.id);
-  return true;
 }

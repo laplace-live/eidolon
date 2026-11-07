@@ -134,6 +134,16 @@
   }
 }
 
+/* Links in muted text: the text's own color, underlined on hover. */
+@utility inline-links {
+  & a {
+    @apply font-medium text-foreground underline-offset-4;
+  }
+  & a:hover {
+    @apply underline;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

@@ -1,7 +1,6 @@
 // A page's sections: a nav beside the content on wide screens, a scroller above it on narrow ones.
 import { type ReactNode, useEffect, useRef } from "react";
 import { Link } from "react-router";
-import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export interface SectionNavItem {
@@ -16,13 +15,12 @@ export interface SectionLayoutProps {
   readonly nav: readonly SectionNavItem[];
   /** The id of the section shown. */
   readonly active: string;
-  /** The nav's accessible name; "Sections" when absent. */
-  readonly label?: string;
+  /** The nav's accessible name. */
+  readonly label: string;
   readonly children: ReactNode;
 }
 
 export function SectionLayout({ nav, active, label, children }: SectionLayoutProps) {
-  const t = useT();
   const root = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLElement>(null);
   const shown = useRef(active);
@@ -54,7 +52,7 @@ export function SectionLayout({ nav, active, label, children }: SectionLayoutPro
     >
       <nav
         ref={scroller}
-        aria-label={label ?? t("common.sections")}
+        aria-label={label}
         className="no-scrollbar -mx-4 flex gap-1 overflow-x-auto px-4 sm:-mx-6 sm:px-6 md:sticky md:top-[calc(var(--app-header-height)+2.5rem)] md:mx-0 md:flex-col md:overflow-visible md:px-0"
       >
         {nav.map((item) => {

@@ -4,20 +4,14 @@ import { CheckIcon, FilePlusIcon, FileTextIcon, PencilIcon, TriangleAlertIcon } 
 import { useCallback, useState } from "react";
 import { EmptyState } from "@/components/empty-state";
 import { ListCard, ListRow } from "@/components/list";
-import { SectionCard } from "@/components/section-card";
+import { QuietBadge } from "@/components/quiet-badge";
+import { SectionCard, SectionCardTable } from "@/components/section-card";
 import { SettingsCard } from "@/components/settings-form/settings-card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { TableCell, TableRow } from "@/components/ui/table";
 import { JobCard } from "@/features/jobs/parts";
 import { jobsQuery, useStartJob } from "@/features/jobs/queries";
 import type { FactFile, IndexTable, JobCommand, PersonaSummary } from "@/lib/api";
@@ -25,7 +19,6 @@ import { formatBytes, formatCount, formatDateTime } from "@/lib/format";
 import { useLang, useT } from "@/lib/i18n";
 import { latestJob, type Outcome } from "@/lib/jobs";
 import { statusQuery } from "@/lib/query";
-import { cn } from "@/lib/utils";
 import { FactSheet, type FactTarget } from "./facts-editor";
 import { factsHint, factsState, wasIndexed } from "./knowledge";
 import { LoadError } from "./parts";
@@ -80,11 +73,7 @@ function RunButton({
 function FactState({ file }: { readonly file: FactFile }) {
   const t = useT();
   if (!file.matched) {
-    return (
-      <Badge variant="outline" className="font-normal text-muted-foreground">
-        {t("studio.facts.notMatched")}
-      </Badge>
-    );
+    return <QuietBadge>{t("studio.facts.notMatched")}</QuietBadge>;
   }
   if (file.changed) {
     return (
@@ -220,9 +209,7 @@ function FactsCard({ persona }: { readonly persona: PersonaSummary }) {
           </AlertDescription>
         </Alert>
       )}
-      {factsJob && (
-        <JobCard key={factsJob.id} job={factsJob} onEnded={onEnded} className="bg-card" />
-      )}
+      {factsJob && <JobCard key={factsJob.id} job={factsJob} onEnded={onEnded} />}
       <FactSheet
         persona={persona.id}
         target={target}
@@ -244,9 +231,6 @@ function FactsCard({ persona }: { readonly persona: PersonaSummary }) {
   );
 }
 
-/** Edge to edge in its card, so its lines meet the card's sides like the footer's. */
-const EDGE = "first:pl-6 last:pr-6";
-
 function IndexTables({ persona }: { readonly persona: PersonaSummary }) {
   const t = useT();
   const lang = useLang();
@@ -258,62 +242,49 @@ function IndexTables({ persona }: { readonly persona: PersonaSummary }) {
       {index.data.tables.some((table) => table.stale) && (
         <p className="text-destructive text-sm">{t("studio.index.staleHelp")}</p>
       )}
-      {/* Last in the card's body, its last row sits on the footer's border. */}
-      <div className="-mx-6 -mb-6 border-t">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/40 hover:bg-muted/40">
-              {(["table", "rows", "builtAt", "model"] as const).map((column) => (
-                <TableHead
-                  key={column}
-                  className={cn(EDGE, "h-9 font-normal text-muted-foreground text-xs")}
-                >
-                  {t(`studio.index.${column}`)}
-                </TableHead>
-              ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {index.data.tables.map((table) => (
-              <TableRow key={table.table} className="hover:bg-transparent">
-                <TableCell className={cn(EDGE, "py-3")}>
-                  <div className="font-medium">{t(`studio.index.${table.table}`)}</div>
-                  <div className="text-muted-foreground text-xs">
-                    {t("studio.index.builtBy", {
-                      job: t(`jobs.command.${BUILDS[table.table]}`),
-                    })}
-                  </div>
-                </TableCell>
-                <TableCell className={cn(EDGE, "tabular-nums")}>
-                  {table.rows === null ? (
-                    <Badge variant="outline" className="font-normal text-muted-foreground">
-                      {t("studio.index.notBuilt")}
-                    </Badge>
-                  ) : (
-                    formatCount(table.rows, lang)
-                  )}
-                </TableCell>
-                <TableCell className={cn(EDGE, "text-muted-foreground")}>
-                  {table.builtAt === null ? "—" : formatDateTime(table.builtAt, lang)}
-                </TableCell>
-                <TableCell className={EDGE}>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {table.model !== null ? (
-                      <span className="font-mono text-muted-foreground text-xs">
-                        {table.model}
-                        {table.dim !== null && ` · ${table.dim}`}
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                    {table.stale && <Badge variant="destructive">{t("studio.index.stale")}</Badge>}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+      <SectionCardTable
+        columns={(["table", "rows", "builtAt", "model"] as const).map((column) => ({
+          id: column,
+          label: t(`studio.index.${column}`),
+        }))}
+        last
+      >
+        {index.data.tables.map((table) => (
+          <TableRow key={table.table} className="hover:bg-transparent">
+            <TableCell className="py-3">
+              <div className="font-medium">{t(`studio.index.${table.table}`)}</div>
+              <div className="text-muted-foreground text-xs">
+                {t("studio.index.builtBy", {
+                  job: t(`jobs.command.${BUILDS[table.table]}`),
+                })}
+              </div>
+            </TableCell>
+            <TableCell className="tabular-nums">
+              {table.rows === null ? (
+                <QuietBadge>{t("studio.index.notBuilt")}</QuietBadge>
+              ) : (
+                formatCount(table.rows, lang)
+              )}
+            </TableCell>
+            <TableCell className="text-muted-foreground">
+              {table.builtAt === null ? "—" : formatDateTime(table.builtAt, lang)}
+            </TableCell>
+            <TableCell>
+              <div className="flex flex-wrap items-center gap-2">
+                {table.model !== null ? (
+                  <span className="font-mono text-muted-foreground text-xs">
+                    {table.model}
+                    {table.dim !== null && ` · ${table.dim}`}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
+                {table.stale && <Badge variant="destructive">{t("studio.index.stale")}</Badge>}
+              </div>
+            </TableCell>
+          </TableRow>
+        ))}
+      </SectionCardTable>
     </>
   );
 }
@@ -356,9 +327,7 @@ function IndexCard({ persona }: { readonly persona: PersonaSummary }) {
         </>
       }
     >
-      {streamsJob && (
-        <JobCard key={streamsJob.id} job={streamsJob} onEnded={onEnded} className="bg-card" />
-      )}
+      {streamsJob && <JobCard key={streamsJob.id} job={streamsJob} onEnded={onEnded} />}
       <IndexTables persona={persona} />
     </SectionCard>
   );

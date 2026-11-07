@@ -72,8 +72,7 @@ export function AppShell() {
             className="flex shrink-0 items-center gap-2.5 rounded-md py-1 pr-1 font-semibold outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
           >
             <AppMark />
-            <span className="hidden tracking-tight sm:inline">{t("common.app.name")}</span>
-            <span className="sr-only sm:hidden">{t("common.app.name")}</span>
+            <span className="sr-only tracking-tight sm:not-sr-only">{t("common.app.name")}</span>
           </Link>
           <Divider />
           <PersonaSwitcher />

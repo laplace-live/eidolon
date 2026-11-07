@@ -8,12 +8,16 @@ import { toastError } from "@/lib/feedback";
 import { formatBytes } from "@/lib/format";
 import { type Lang, t as translate } from "@/lib/i18n";
 import { statusQuery } from "@/lib/query";
-import { IMAGE_EXTENSIONS, IMAGE_TYPES, imageProblem, MAX_IMAGE_BYTES, nameProblem } from "./files";
+import {
+  IMAGE_ACCEPT,
+  IMAGE_EXTENSIONS,
+  imageProblem,
+  MAX_IMAGE_BYTES,
+  nameProblem,
+} from "./files";
 import { personaQueries } from "./queries";
 
 type PictureKind = ReferenceKind | "avatar";
-
-const ACCEPT = [...IMAGE_TYPES, ...IMAGE_EXTENSIONS].join(",");
 
 /** Why `file` can't be uploaded as `name`, in the viewer's language; null when it can. */
 export function uploadProblem(file: File, name: string, lang: Lang): string | null {
@@ -27,8 +31,11 @@ export function uploadProblem(file: File, name: string, lang: Lang): string | nu
     : translate("studio.references.badName", { name });
 }
 
-/** A hidden file input of the picture types, and a way to open it from any button. */
-export function useFilePicker(onFiles: (files: File[]) => void, multiple = false) {
+/**
+ * A hidden file input of the picture types, and a way to open it from any button; `id` lets a
+ * label open it too.
+ */
+export function useFilePicker(onFiles: (files: File[]) => void, multiple = false, id?: string) {
   const input = useRef<HTMLInputElement>(null);
   function picked(event: ChangeEvent<HTMLInputElement>) {
     const files = [...(event.target.files ?? [])];
@@ -39,8 +46,9 @@ export function useFilePicker(onFiles: (files: File[]) => void, multiple = false
     input: (
       <input
         ref={input}
+        id={id}
         type="file"
-        accept={ACCEPT}
+        accept={IMAGE_ACCEPT}
         multiple={multiple}
         className="hidden"
         onChange={picked}
@@ -66,7 +74,7 @@ function useChanged(persona: string, onDone?: () => void) {
       queryClient.invalidateQueries({ queryKey: statusQuery.queryKey }),
       // Her list entry says whether she has an avatar, which the switcher and Home read.
       ...(kind === "avatar"
-        ? [queryClient.invalidateQueries({ queryKey: personasQuery.queryKey })]
+        ? [queryClient.invalidateQueries({ queryKey: personasQuery.queryKey, exact: true })]
         : []),
     ]);
   };

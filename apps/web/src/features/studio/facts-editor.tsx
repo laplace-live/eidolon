@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trash2Icon, XIcon } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 import { toast } from "sonner";
+import { SectionCardFooter } from "@/components/section-card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -60,7 +61,7 @@ function useSaveFact(persona: string) {
   });
 }
 
-/** The sheet's body, which scrolls, over a footer like a card's: status left, buttons right. */
+/** The sheet's body, which scrolls, over a card's footer: status left, buttons right. */
 function SheetLayout({
   parts,
   children,
@@ -74,10 +75,7 @@ function SheetLayout({
         {children}
         <div className="flex min-h-64 flex-1 flex-col">{parts.area}</div>
       </div>
-      <div className="flex min-h-14 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t bg-muted/50 px-6 py-3">
-        <div className="min-w-0 text-muted-foreground text-sm">{parts.status}</div>
-        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">{parts.buttons}</div>
-      </div>
+      <SectionCardFooter note={parts.status} actions={parts.buttons} />
     </>
   );
 }
@@ -292,7 +290,7 @@ export function FactSheet({
               variant="ghost"
               size="icon-sm"
               className="absolute top-5 right-5"
-              aria-label={t("studio.facts.close")}
+              aria-label={t("common.close")}
             >
               <XIcon />
             </Button>

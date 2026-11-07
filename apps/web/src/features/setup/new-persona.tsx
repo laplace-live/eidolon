@@ -2,17 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { toast } from "sonner";
 import { ErrorAlert } from "@/components/error-alert";
+import { LargeDialogContent } from "@/components/large-dialog";
 import { browserTimeZone } from "@/components/settings-form/controls";
 import { personasQuery } from "@/components/settings-form/queries";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogFooter } from "@/components/ui/dialog";
 import { Field, FieldError, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
@@ -82,68 +76,62 @@ export function NewPersonaDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !create.isPending && close(next)}>
-      {/* The grid's track and the voice fieldset would each grow to fit the voice list's rows,
-          past a phone's screen: both are held to the dialog's width. */}
-      <DialogContent className="max-h-[90svh] grid-cols-[minmax(0,1fr)] gap-0 overflow-y-auto p-0 sm:max-w-2xl">
-        <DialogHeader className="border-b p-6">
-          <DialogTitle className="font-semibold text-xl tracking-tight">
-            {t("setup.newPersona.title")}
-          </DialogTitle>
-          <DialogDescription>{t("setup.newPersona.body")}</DialogDescription>
-        </DialogHeader>
-        <div className="flex flex-col gap-6 p-6">
-          <MandarinNote />
-          <AvatarPicker
-            file={avatar}
-            onFile={setAvatar}
-            name={draft.shortName || draft.name}
-            disabled={create.isPending}
-          />
-          <PersonaFields
-            draft={draft}
-            onDraft={setDraft}
-            taken={taken}
-            showErrors={showErrors}
-            disabled={create.isPending}
-          />
-          <div className="border-t pt-6">
-            <FieldSet className="min-w-0">
-              <FieldLegend>{t("setup.newPersona.voice")}</FieldLegend>
-              <VoicePicker
-                value={voice?.id ?? null}
-                onChange={setVoice}
+      <LargeDialogContent
+        title={t("setup.newPersona.title")}
+        description={t("setup.newPersona.body")}
+        footer={
+          <DialogFooter className="sticky bottom-0 z-10 m-0 flex-row flex-wrap items-center justify-between gap-3 px-6 py-3 backdrop-blur-md">
+            <Field orientation="horizontal" className="w-auto">
+              <Switch
+                id={switchId}
+                checked={activate}
+                onCheckedChange={setActivate}
                 disabled={create.isPending}
               />
-              {showErrors && !voice && (
-                <FieldError>{t("setup.newPersona.voiceRequired")}</FieldError>
-              )}
-            </FieldSet>
-          </div>
-          {create.isError && <ErrorAlert error={create.error} />}
-        </div>
-        <DialogFooter className="sticky bottom-0 z-10 m-0 flex-row flex-wrap items-center justify-between gap-3 px-6 py-3 backdrop-blur-md">
-          <Field orientation="horizontal" className="w-auto">
-            <Switch
-              id={switchId}
-              checked={activate}
-              onCheckedChange={setActivate}
+              <FieldLabel htmlFor={switchId} className="font-normal">
+                {t("setup.newPersona.activate")}
+              </FieldLabel>
+            </Field>
+            <div className="ml-auto flex gap-2">
+              <Button variant="ghost" onClick={() => close(false)} disabled={create.isPending}>
+                {t("setup.cancel")}
+              </Button>
+              <Button onClick={submit} disabled={create.isPending}>
+                {create.isPending && <Spinner />}
+                {t("setup.newPersona.create")}
+              </Button>
+            </div>
+          </DialogFooter>
+        }
+      >
+        <MandarinNote />
+        <AvatarPicker
+          file={avatar}
+          onFile={setAvatar}
+          name={draft.shortName || draft.name}
+          disabled={create.isPending}
+        />
+        <PersonaFields
+          draft={draft}
+          onDraft={setDraft}
+          taken={taken}
+          showErrors={showErrors}
+          disabled={create.isPending}
+        />
+        <div className="border-t pt-6">
+          {/* A fieldset grows to fit the voice list's rows unless held to the dialog's width. */}
+          <FieldSet className="min-w-0">
+            <FieldLegend>{t("setup.newPersona.voice")}</FieldLegend>
+            <VoicePicker
+              value={voice?.id ?? null}
+              onChange={setVoice}
               disabled={create.isPending}
             />
-            <FieldLabel htmlFor={switchId} className="font-normal">
-              {t("setup.newPersona.activate")}
-            </FieldLabel>
-          </Field>
-          <div className="ml-auto flex gap-2">
-            <Button variant="ghost" onClick={() => close(false)} disabled={create.isPending}>
-              {t("setup.cancel")}
-            </Button>
-            <Button onClick={submit} disabled={create.isPending}>
-              {create.isPending && <Spinner />}
-              {t("setup.newPersona.create")}
-            </Button>
-          </div>
-        </DialogFooter>
-      </DialogContent>
+            {showErrors && !voice && <FieldError>{t("setup.newPersona.voiceRequired")}</FieldError>}
+          </FieldSet>
+        </div>
+        {create.isError && <ErrorAlert error={create.error} />}
+      </LargeDialogContent>
     </Dialog>
   );
 }

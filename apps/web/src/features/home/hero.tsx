@@ -60,7 +60,7 @@ export function Hero({
           <Button size="lg" variant="outline" asChild>
             <Link to={studioPath(persona.id)}>
               <BookOpenIcon />
-              {t("home.studio")}
+              {t("common.openStudio")}
             </Link>
           </Button>
           <Button size="lg" asChild>

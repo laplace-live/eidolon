@@ -3,7 +3,8 @@ import { AudioLinesIcon, CircleCheckIcon, CircleXIcon, TriangleAlertIcon } from 
 import { toast } from "sonner";
 import { ListCard, ListRow } from "@/components/list";
 import { SectionCard } from "@/components/section-card";
-import { settingsQuery } from "@/components/settings-form/queries";
+import { Code, EnvBadge } from "@/components/settings-form/field";
+import { refreshSettings, settingsQuery } from "@/components/settings-form/queries";
 import { SettingsCard } from "@/components/settings-form/settings-card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -17,17 +18,16 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VoicePicker } from "@/components/voice-picker";
 import { saveVoice } from "@/features/setup/personas";
-import { call, type PersonaSummary, type SettingRow, type Voice } from "@/lib/api";
+import type { PersonaSummary, SettingRow, Voice } from "@/lib/api";
 import { toastError } from "@/lib/feedback";
 import { rich, useT } from "@/lib/i18n";
 import { statusQuery } from "@/lib/query";
 import { CUE_MODEL, type CueClash, cueClash } from "./files";
-import { Code, LoadError } from "./parts";
+import { LoadError } from "./parts";
 import { personaQueries } from "./queries";
 import { CARD_PATHS } from "./sections";
 
@@ -44,6 +44,12 @@ function useVoiceCheck(persona: string, voiceId: string | null): boolean | null 
   return voice === null || voiceId === null || voice.id !== voiceId ? null : voice.ok;
 }
 
+const SOURCE_TITLE = {
+  own: "studio.voice.own",
+  inherited: "studio.voice.inheritedTitle",
+  none: "studio.voice.none",
+} as const;
+
 /** Her voice as it stands: her own, the one she inherits, or none. */
 function CurrentVoice({
   persona,
@@ -56,28 +62,24 @@ function CurrentVoice({
   const own = fileValue(row);
   const inherited = row.envValue;
   const voiceId = own ?? inherited;
+  const source = own !== null ? "own" : inherited !== null ? "inherited" : "none";
   const known = useVoiceCheck(persona.id, voiceId);
   // An inherited voice Fish refuses: the explanation says so, and what to do.
-  const broken = own === null && inherited !== null && known === false;
-  const name = persona.shortName || persona.name;
+  const broken = source === "inherited" && known === false;
   const env = <Code>{row.env}</Code>;
 
-  const title =
-    own !== null
-      ? t("studio.voice.own")
-      : inherited !== null
-        ? t("studio.voice.inheritedTitle")
-        : t("studio.voice.none");
+  const title = t(SOURCE_TITLE[source]);
   const explanation =
-    own !== null && inherited !== null
-      ? rich(t("settings.form.overrides"), { env, value: <Code>{inherited}</Code> })
-      : broken
-        ? rich(t("studio.voice.inheritedBroken"), { env })
-        : own === null && inherited !== null
-          ? rich(t("studio.voice.inherited"), { env, name })
-          : own === null
-            ? t("studio.voice.noneHelp")
-            : null;
+    source === "none"
+      ? t("studio.voice.noneHelp")
+      : source === "inherited"
+        ? rich(t(broken ? "studio.voice.inheritedBroken" : "studio.voice.inherited"), {
+            env,
+            name: persona.shortName || persona.name,
+          })
+        : inherited !== null
+          ? rich(t("settings.form.overrides"), { env, value: <Code>{inherited}</Code> })
+          : null;
 
   return (
     <ListCard>
@@ -90,11 +92,7 @@ function CurrentVoice({
         title={
           <span className="flex flex-wrap items-center gap-2">
             {title}
-            {own === null && inherited !== null && (
-              <Badge variant="outline" className="font-normal text-muted-foreground">
-                {t("settings.form.source.env")}
-              </Badge>
-            )}
+            {source === "inherited" && <EnvBadge />}
           </span>
         }
         description={
@@ -172,31 +170,19 @@ function VoiceCard({ persona }: { readonly persona: PersonaSummary }) {
   const row = settings.data?.settings.find((entry) => entry.path === VOICE_PATH);
   const own = fileValue(row);
 
-  async function refresh() {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["settings"] }),
-      queryClient.invalidateQueries({ queryKey: statusQuery.queryKey }),
-    ]);
-  }
-
   const pick = useMutation({
     mutationFn: (voice: Voice) => saveVoice(persona.id, voice.id),
     onSuccess: async (response, voice) => {
-      queryClient.setQueryData(query.queryKey, response);
       toast.success(t("studio.voice.saved", { title: voice.title }));
-      await refresh();
+      await refreshSettings(queryClient, persona.id, response);
     },
     onError: toastError,
   });
   const clear = useMutation({
-    mutationFn: () =>
-      call("PUT /api/local/settings", {
-        body: { scope: "persona", persona: persona.id, values: { [VOICE_PATH]: null } },
-      }),
+    mutationFn: () => saveVoice(persona.id, null),
     onSuccess: async (response) => {
-      queryClient.setQueryData(query.queryKey, response);
       toast.success(t("studio.voice.cleared", { name: persona.shortName || persona.name }));
-      await refresh();
+      await refreshSettings(queryClient, persona.id, response);
     },
     onError: toastError,
   });

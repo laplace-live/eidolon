@@ -14,9 +14,9 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import { ListCard, ListRow } from "@/components/list";
+import { QuietBadge } from "@/components/quiet-badge";
 import { SectionCard } from "@/components/section-card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
@@ -379,11 +379,7 @@ export function AddVideosCard({
                 }
                 trailing={
                   <>
-                    {known(entry) && (
-                      <Badge variant="outline" className="font-normal text-muted-foreground">
-                        {t("studio.videos.alreadyAdded")}
-                      </Badge>
-                    )}
+                    {known(entry) && <QuietBadge>{t("studio.videos.alreadyAdded")}</QuietBadge>}
                     <span className="w-14 text-right text-muted-foreground text-xs tabular-nums">
                       {entry.durationSec === undefined ? "—" : formatDuration(entry.durationSec)}
                     </span>

@@ -16,12 +16,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { type ApiError, asApiError } from "@/lib/api";
 import { rich, useT } from "@/lib/i18n";
 import { CHECK_OF, OPTIONAL, REQUIRED } from "./credentials";
 import { KeyField } from "./key-field";
+import { SaveActions } from "./settings-card";
 import { useKeys } from "./use-keys";
 
 interface KeysCardProps {
@@ -83,25 +82,15 @@ function KeysCard({ title, description, names, pages = false }: KeysCardProps) {
           </span>
         }
         actions={
-          <>
-            {dirty && (
-              <Button
-                type="button"
-                variant="ghost"
-                disabled={keys.saving}
-                onClick={() => {
-                  keys.discard();
-                  setFailure(null);
-                }}
-              >
-                {t("settings.form.discard")}
-              </Button>
-            )}
-            <Button type="submit" disabled={!dirty || keys.saving}>
-              {keys.saving && <Spinner />}
-              {t("settings.credentials.save")}
-            </Button>
-          </>
+          <SaveActions
+            dirty={dirty}
+            pending={keys.saving}
+            label={t("settings.credentials.save")}
+            onDiscard={() => {
+              keys.discard();
+              setFailure(null);
+            }}
+          />
         }
       >
         <div className="flex flex-col gap-7">
@@ -158,14 +147,7 @@ export function CredentialsEditor() {
       <KeysCard
         title={t("settings.credentials.optional")}
         description={rich(t("settings.credentials.optionalBody"), {
-          providers: (
-            <Link
-              to="/settings?tab=providers"
-              className="font-medium text-foreground underline-offset-4 hover:underline"
-            >
-              {t("settings.nav.providers")}
-            </Link>
-          ),
+          providers: <Link to="/settings?tab=providers">{t("settings.nav.providers")}</Link>,
         })}
         names={OPTIONAL}
       />

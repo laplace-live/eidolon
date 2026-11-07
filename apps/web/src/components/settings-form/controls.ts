@@ -13,8 +13,7 @@ export type Control =
   | { readonly type: "paths"; readonly inPersona: boolean }
   | { readonly type: "select"; readonly options: readonly string[] }
   | { readonly type: "timezone" }
-  | { readonly type: "language" }
-  | { readonly type: "voice" };
+  | { readonly type: "language" };
 
 /** Fish Audio's TTS models; s1 retires on 2026-12-31. */
 export const FISH_MODELS = ["drama-3", "s2.1-pro", "s2.1-pro-free", "s2-pro", "s1"] as const;
@@ -35,7 +34,6 @@ export const COOKIE_BROWSERS = [
 
 const BY_PATH: Readonly<Record<string, Control>> = {
   "voice.model": { type: "select", options: FISH_MODELS },
-  "voice.voiceId": { type: "voice" },
   "selfie.quality": { type: "select", options: ["auto", "low", "medium", "high", "xhigh", "max"] },
   "sources.cookiesFromBrowser": { type: "select", options: COOKIE_BROWSERS },
   "identity.timezone": { type: "timezone" },
@@ -115,7 +113,6 @@ const INT = /^[+-]?\d+(?:_\d+)*$/;
 const FLOAT =
   /^[+-]?(?:\d+(?:_\d+)*(?:\.(?:\d+(?:_\d+)*)?)?|\.\d+(?:_\d+)*)(?:[eE][+-]?\d+(?:_\d+)*)?$/;
 const LANGUAGE = /^(?:[a-z]{2}|none)$/;
-const VOICE_ID = /^[0-9a-f]{32}$/;
 const URL_PREFIX = /^https?:\/\//;
 
 const ok = (value: unknown): Parsed => ({ ok: true, value });
@@ -208,8 +205,6 @@ export function parseDraft(draft: string, control: Control): Parsed {
       return isTimeZone(text) ? ok(text) : fail("settings.form.invalid.timezone");
     case "language":
       return LANGUAGE.test(text) ? ok(text) : fail("settings.form.invalid.language");
-    case "voice":
-      return VOICE_ID.test(text) ? ok(text) : fail("settings.form.invalid.voice");
     default:
       return ok(text);
   }
@@ -272,21 +267,12 @@ export function groupOf(path: string, scope: SettingScope): Group {
   return GROUP_OF[head] ?? "other";
 }
 
-/** The scope's rows a local install uses, in the order of `paths` when given. */
-export function visibleRows(
-  rows: readonly SettingRow[],
-  scope: SettingScope,
-  paths?: readonly string[],
-): SettingRow[] {
-  const shown = rows.filter(
-    (row) => row.scope === scope && !row.productionOnly && !HIDDEN.has(row.path),
-  );
-  if (!paths) return shown;
-  const byPath = new Map(shown.map((row) => [row.path, row]));
-  return paths.flatMap((path) => byPath.get(path) ?? []);
+/** The scope's rows a local install uses. */
+export function visibleRows(rows: readonly SettingRow[], scope: SettingScope): SettingRow[] {
+  return rows.filter((row) => row.scope === scope && !row.productionOnly && !HIDDEN.has(row.path));
 }
 
-export interface Section {
+interface Section {
   readonly group: Group;
   readonly rows: readonly SettingRow[];
 }

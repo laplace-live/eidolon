@@ -58,7 +58,7 @@ function readerSplit(variable: string): string[] {
 describe("the control for each kind", () => {
   test("every SETTINGS row gets one that writes a value its kind's reader accepts", () => {
     const allowed: Record<string, readonly string[]> = {
-      string: ["text", "select", "timezone", "language", "voice"],
+      string: ["text", "select", "timezone", "language"],
       int: ["integer"],
       float: ["number"],
       flag: ["flag"],
@@ -250,17 +250,12 @@ describe("the other controls", () => {
     expect(parseDraft("", flag)).toEqual({ ok: true, value: null });
   });
 
-  test("time zones, language hints and voice ids", () => {
+  test("time zones and language hints", () => {
     expect(parseDraft("Asia/Shanghai", control("identity.timezone")).ok).toBe(true);
     expect(parseDraft("Mars/Olympus", control("identity.timezone")).ok).toBe(false);
     expect(parseDraft("zh", control("transcription.language")).ok).toBe(true);
     expect(parseDraft("none", control("transcription.language")).ok).toBe(true);
     expect(parseDraft("zh-CN", control("transcription.language")).ok).toBe(false);
-    const voice = control("voice.voiceId");
-    expect(parseDraft("7f92f8afb8ec43bf81429cc1c9199cb1", voice).ok).toBe(true);
-    expect(parseDraft("https://fish.audio/m/7f92f8afb8ec43bf81429cc1c9199cb1", voice).ok).toBe(
-      false,
-    );
   });
 
   test("text is stripped, and blank removes the key", () => {
@@ -296,9 +291,6 @@ describe("layout", () => {
     expect(app.some((path) => path.startsWith("mcp."))).toBe(false);
     expect(app).toContain("local.viewerName");
     expect(app.every((path) => field(path).scope === "app")).toBe(true);
-    expect(
-      visibleRows(rows, "persona", ["voice.model", "nope", "prompt"]).map((r) => r.path),
-    ).toEqual(["voice.model", "prompt"]);
   });
 });
 

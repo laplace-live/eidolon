@@ -14,8 +14,9 @@ import {
   originOf,
   strip,
 } from "@/components/settings-form/controls";
-import { TimeZoneList } from "@/components/settings-form/field";
-import { settingsQuery } from "@/components/settings-form/queries";
+import { OriginNote, TimeZoneList } from "@/components/settings-form/field";
+import { refreshSettings, settingsQuery } from "@/components/settings-form/queries";
+import { SaveActions } from "@/components/settings-form/settings-card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,11 +35,11 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { call, type PersonaIdentityFields, type PersonaSummary, type SettingRow } from "@/lib/api";
 import { toastError } from "@/lib/feedback";
-import { rich, useLang, useT } from "@/lib/i18n";
+import { useLang, useT } from "@/lib/i18n";
 import { statusQuery } from "@/lib/query";
 import { useNow } from "@/lib/use-now";
 import { cn } from "@/lib/utils";
-import { Code, LoadError } from "./parts";
+import { LoadError } from "./parts";
 import { draggingFiles, uploadProblem, useFilePicker, useRemove, useUpload } from "./pictures";
 import { personaQueries } from "./queries";
 import { CARD_PATHS } from "./sections";
@@ -53,12 +54,6 @@ function fieldsOf(identity: PersonaIdentityFields): Fields {
     fans: identity.fans,
     summary: identity.summary,
   };
-}
-
-/** The footer's note: whose file a card writes. */
-function useSavedFor(persona: PersonaSummary): string {
-  const t = useT();
-  return t("settings.form.savedFor", { name: persona.shortName || persona.name });
 }
 
 function RemoveAvatar({
@@ -186,7 +181,6 @@ function IdentityCard({
   const t = useT();
   const queryClient = useQueryClient();
   const formId = useId();
-  const savedFor = useSavedFor(persona);
   const saved = fieldsOf(identity);
   const [draft, setDraft] = useState<Fields>(saved);
   const dirty = FIELDS.some((key) => draft[key] !== saved[key]);
@@ -263,26 +257,16 @@ function IdentityCard({
           missing ? (
             <span className="text-destructive">{t("studio.identity.missing")}</span>
           ) : (
-            savedFor
+            t("settings.form.savedFor", { name: persona.shortName || persona.name })
           )
         }
         actions={
-          <>
-            {dirty && (
-              <Button
-                type="button"
-                variant="ghost"
-                disabled={save.isPending}
-                onClick={() => setDraft(saved)}
-              >
-                {t("settings.form.discard")}
-              </Button>
-            )}
-            <Button type="submit" disabled={!dirty || missing || save.isPending}>
-              {save.isPending && <Spinner />}
-              {t("studio.identity.save")}
-            </Button>
-          </>
+          <SaveActions
+            dirty={dirty}
+            pending={save.isPending}
+            blocked={missing}
+            onDiscard={() => setDraft(saved)}
+          />
         }
       >
         <div className="grid gap-6 sm:grid-cols-2">
@@ -330,7 +314,6 @@ function TimeZoneForm({
   const queryClient = useQueryClient();
   const id = useId();
   const listId = useId();
-  const savedFor = useSavedFor(persona);
   const name = persona.shortName || persona.name;
   const [draft, setDraft] = useState(() => draftOf(row.value, controlFor(row)));
   const [touched, setTouched] = useState(false);
@@ -339,7 +322,6 @@ function TimeZoneForm({
   const shownError = touched ? error : null;
   const changed = error !== null || row.path in values;
   const origin = originOf(row, draft);
-  const env = <Code>{row.env}</Code>;
   // The zone the draft gives her: her own, else the one she inherits.
   const zone = strip(draft) || row.envValue;
   const browser = browserTimeZone();
@@ -350,7 +332,6 @@ function TimeZoneForm({
         body: { scope: "persona", persona: persona.id, values: { [row.path]: value } },
       }),
     onSuccess: async (response, value) => {
-      queryClient.setQueryData(settingsQuery(persona.id).queryKey, response);
       // The identity card sends the zone back with every save, so it must hold this one.
       queryClient.setQueryData(personaQueries(persona.id).identity.queryKey, (identity) =>
         identity === undefined
@@ -360,10 +341,7 @@ function TimeZoneForm({
       toast.success(
         t(response.restartRequired ? "settings.form.savedRestart" : "settings.form.saved"),
       );
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["settings"] }),
-        queryClient.invalidateQueries({ queryKey: statusQuery.queryKey }),
-      ]);
+      await refreshSettings(queryClient, persona.id, response);
     },
     onError: toastError,
   });
@@ -383,29 +361,18 @@ function TimeZoneForm({
           touched && error !== null ? (
             <span className="text-destructive">{t("settings.form.fixErrors")}</span>
           ) : (
-            savedFor
+            t("settings.form.savedFor", { name })
           )
         }
         actions={
-          <>
-            {changed && (
-              <Button
-                type="button"
-                variant="ghost"
-                disabled={save.isPending}
-                onClick={() => {
-                  setDraft(draftOf(row.value, controlFor(row)));
-                  setTouched(false);
-                }}
-              >
-                {t("settings.form.discard")}
-              </Button>
-            )}
-            <Button type="submit" disabled={!changed || save.isPending}>
-              {save.isPending && <Spinner />}
-              {t("studio.identity.save")}
-            </Button>
-          </>
+          <SaveActions
+            dirty={changed}
+            pending={save.isPending}
+            onDiscard={() => {
+              setDraft(draftOf(row.value, controlFor(row)));
+              setTouched(false);
+            }}
+          />
         }
       >
         <Field data-invalid={shownError !== null} onBlur={() => setTouched(true)}>
@@ -447,19 +414,7 @@ function TimeZoneForm({
           ) : (
             zone !== null && isTimeZone(zone) && <ZoneClock zone={zone} />
           )}
-          {origin === "inherited" && (
-            <FieldDescription>
-              {rich(t("settings.form.inherited"), {
-                env,
-                name: <span className="whitespace-nowrap">{name}</span>,
-              })}
-            </FieldDescription>
-          )}
-          {origin === "overrides" && (
-            <FieldDescription>
-              {rich(t("settings.form.overrides"), { env, value: <Code>{row.envValue}</Code> })}
-            </FieldDescription>
-          )}
+          <OriginNote row={row} origin={origin} personaName={name} />
         </Field>
       </SectionCard>
     </form>

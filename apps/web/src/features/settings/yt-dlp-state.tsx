@@ -1,9 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { CircleXIcon } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { QuietBadge } from "@/components/quiet-badge";
 import { useT } from "@/lib/i18n";
 import { statusQuery } from "@/lib/query";
-import { cn } from "@/lib/utils";
 
 /** Which yt-dlp downloads use, as the status found it. */
 export function YtDlpBadge() {
@@ -21,12 +20,7 @@ export function YtDlpBadge() {
       : ytDlp.state === "installs-on-first-download"
         ? ["bg-muted-foreground/40", t("settings.ytDlp.onFirstDownload")]
         : ["bg-destructive", t("settings.ytDlp.unavailable")];
-  return (
-    <Badge variant="outline" className="gap-1.5 font-normal text-muted-foreground">
-      <span aria-hidden className={cn("size-1.5 rounded-full", dot)} />
-      {text}
-    </Badge>
-  );
+  return <QuietBadge dot={dot}>{text}</QuietBadge>;
 }
 
 /** Why no yt-dlp can run, in the server's English. */

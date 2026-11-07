@@ -473,7 +473,7 @@ export interface SettingsFiles {
 /** Which file a value comes from; `default` when none sets it. */
 export type SettingSource = "default" | "app" | "persona" | "credentials";
 
-/** One variable as the settings files hold it, beneath the environment. */
+/** One variable as the settings files hold it. */
 export interface LayeredSetting {
   readonly source: SettingSource;
   /** As the variable would spell it; null when unset, or when the file's value is the wrong kind. */

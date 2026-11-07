@@ -1,6 +1,7 @@
 // Strings live in src/locales/<lang>/<feature>.json, each a flat map whose keys are reached as
 // `<feature>.<key>`: settings.json's "embeddings.model" is t("settings.embeddings.model").
 import { createElement, Fragment, type ReactNode, useMemo, useSyncExternalStore } from "react";
+import { formatCount } from "./format";
 
 export const LANGS = ["en", "zh-CN"] as const;
 export type Lang = (typeof LANGS)[number];
@@ -80,7 +81,6 @@ export function rich(text: string, nodes: Readonly<Record<string, ReactNode>>): 
 export const PLURAL_FORMS = ["zero", "one", "two", "few", "many"] as const;
 
 const pluralRules = new Map<Lang, Intl.PluralRules>();
-const countFormats = new Map<Lang, Intl.NumberFormat>();
 
 function pluralOf(lang: Lang, count: number): string {
   let rules = pluralRules.get(lang);
@@ -89,15 +89,6 @@ function pluralOf(lang: Lang, count: number): string {
     pluralRules.set(lang, rules);
   }
   return rules.select(count);
-}
-
-function formatCountIn(lang: Lang, count: number): string {
-  let format = countFormats.get(lang);
-  if (format === undefined) {
-    format = new Intl.NumberFormat(lang);
-    countFormats.set(lang, format);
-  }
-  return format.format(count);
 }
 
 /**
@@ -113,7 +104,7 @@ export function translate(catalogs: Catalogs, lang: Lang, key: string, vars?: Va
   const enForm = `${key}_${pluralOf("en", count)}`;
   const text =
     catalogs[lang][form] ?? catalogs[lang][key] ?? catalogs.en[enForm] ?? catalogs.en[key];
-  return format(text ?? key, { ...vars, count: formatCountIn(lang, count) });
+  return format(text ?? key, { ...vars, count: formatCount(count, lang) });
 }
 
 const listeners = new Set<() => void>();

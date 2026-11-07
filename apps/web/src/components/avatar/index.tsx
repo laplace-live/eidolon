@@ -25,24 +25,15 @@ export interface PersonaAvatarProps {
   };
   /** xs 24 px, sm 32, md 40, lg 64, xl 96. */
   readonly size?: PersonaAvatarSize;
-  /**
-   * What a screen reader says for it. Without one it is decorative, as beside her name, where it
-   * would only repeat it.
-   */
-  readonly alt?: string;
   readonly className?: string;
 }
 
-export function PersonaAvatar({ persona, size = "md", alt, className }: PersonaAvatarProps) {
+/** Decorative: it always sits beside her name, which it would only repeat to a screen reader. */
+export function PersonaAvatar({ persona, size = "md", className }: PersonaAvatarProps) {
   const [box, text] = SIZES[size];
   const version = useAvatarVersion(persona.id);
   return (
-    <Avatar
-      className={cn(box, className)}
-      role={alt ? "img" : undefined}
-      aria-label={alt || undefined}
-      aria-hidden={alt ? undefined : true}
-    >
+    <Avatar className={cn(box, className)} aria-hidden>
       {persona.avatar !== false && (
         <AvatarImage key={`${persona.id}:${version}`} src={avatarSrc(persona.id, version)} alt="" />
       )}

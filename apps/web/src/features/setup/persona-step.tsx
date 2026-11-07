@@ -3,6 +3,7 @@ import { CheckIcon, PlusIcon } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 import { PersonaAvatar } from "@/components/avatar";
 import { ErrorAlert } from "@/components/error-alert";
+import { PersonaBadges } from "@/components/persona-badges";
 import { SectionCardSkeleton } from "@/components/section-card";
 import { browserTimeZone, parseDraft } from "@/components/settings-form/controls";
 import { personasQuery, settingsQuery } from "@/components/settings-form/queries";
@@ -199,7 +200,7 @@ export function PersonaStep({
             onSelect={() => setChoice("current")}
             leading={<PersonaAvatar persona={current} size="md" />}
             title={current.name}
-            badge={<Badge>{t("setup.persona.active")}</Badge>}
+            badge={<PersonaBadges active />}
             body={t("setup.persona.keepBody")}
           />
         )}

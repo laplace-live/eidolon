@@ -8,6 +8,8 @@ export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
 export const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
 export const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp"] as const;
+/** A file input's `accept` for a picture. */
+export const IMAGE_ACCEPT = [...IMAGE_TYPES, ...IMAGE_EXTENSIONS].join(",");
 export const FACT_EXTENSIONS = [".txt"] as const;
 
 const NAME = /^[^/\\:\p{Cc}]{1,128}$/u;

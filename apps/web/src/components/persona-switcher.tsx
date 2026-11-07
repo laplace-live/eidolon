@@ -1,10 +1,9 @@
 // The header's persona menu: who calls reach, switched in place. In a studio it follows the switch
 // to the same section of the newly active persona's.
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { BookOpenIcon, ChevronsUpDownIcon, PlusIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { Link, useMatch, useNavigate } from "react-router";
-import { toast } from "sonner";
 import { PersonaAvatar } from "@/components/avatar";
 import { personasQuery } from "@/components/settings-form/queries";
 import { Button } from "@/components/ui/button";
@@ -20,8 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Spinner } from "@/components/ui/spinner";
 import { NewPersonaDialog } from "@/features/setup/new-persona";
-import { activatePersona, refreshPersonas } from "@/features/setup/personas";
-import { toastError } from "@/lib/feedback";
+import { useActivatePersona } from "@/features/setup/personas";
 import { useT } from "@/lib/i18n";
 import { studioPath } from "@/lib/paths";
 import { statusQuery } from "@/lib/query";
@@ -30,7 +28,6 @@ export function PersonaSwitcher() {
   const t = useT();
   const navigate = useNavigate();
   const studio = useMatch("/personas/:id/:tab?");
-  const queryClient = useQueryClient();
   const status = useQuery(statusQuery);
   const personas = useQuery(personasQuery);
   const [creating, setCreating] = useState(false);
@@ -38,16 +35,8 @@ export function PersonaSwitcher() {
   // first field loses focus at once, which shows its error before anything was typed.
   const openingDialog = useRef(false);
 
-  const activate = useMutation({
-    mutationFn: activatePersona,
-    onSuccess: async (response, id) => {
-      queryClient.setQueryData(personasQuery.queryKey, response);
-      const chosen = response.personas.find((persona) => persona.id === id);
-      toast.success(t("common.switcher.activated", { name: chosen?.name ?? id }));
-      if (studio && studio.params.id !== id) navigate(studioPath(id, studio.params.tab));
-      await refreshPersonas(queryClient);
-    },
-    onError: toastError,
+  const activate = useActivatePersona((id) => {
+    if (studio && studio.params.id !== id) navigate(studioPath(id, studio.params.tab));
   });
 
   const activeId = personas.data?.active ?? status.data?.persona.id;
@@ -109,12 +98,12 @@ export function PersonaSwitcher() {
             }}
           >
             <PlusIcon />
-            {t("common.switcher.new")}
+            {t("common.persona.new")}
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <Link to={studioPath(activeId)}>
               <BookOpenIcon />
-              {t("common.switcher.studio")}
+              {t("common.openStudio")}
             </Link>
           </DropdownMenuItem>
         </DropdownMenuContent>

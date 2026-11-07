@@ -1,17 +1,15 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { PlusIcon } from "lucide-react";
 import { Link } from "react-router";
-import { toast } from "sonner";
 import { PersonaAvatar } from "@/components/avatar";
 import { ErrorAlert } from "@/components/error-alert";
+import { PersonaBadges } from "@/components/persona-badges";
 import { personasQuery } from "@/components/settings-form/queries";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { activatePersona, refreshPersonas } from "@/features/setup/personas";
+import { useActivatePersona } from "@/features/setup/personas";
 import type { PersonaSummary } from "@/lib/api";
-import { toastError } from "@/lib/feedback";
 import { useT } from "@/lib/i18n";
 import { studioPath } from "@/lib/paths";
 import { cn } from "@/lib/utils";
@@ -45,12 +43,7 @@ function PersonaCard({
           >
             {persona.name}
           </Link>
-          {active && <Badge className="shrink-0">{t("home.personas.active")}</Badge>}
-          {persona.template && (
-            <Badge variant="outline" className="shrink-0">
-              {t("home.personas.builtIn")}
-            </Badge>
-          )}
+          <PersonaBadges active={active} builtIn={persona.template} />
         </div>
         <span className="truncate font-mono text-muted-foreground text-xs">{persona.id}</span>
       </div>
@@ -80,18 +73,8 @@ export function PersonaGrid({
   readonly onNew: () => void;
 }) {
   const t = useT();
-  const queryClient = useQueryClient();
   const personas = useQuery(personasQuery);
-  const activate = useMutation({
-    mutationFn: activatePersona,
-    onSuccess: async (response, id) => {
-      queryClient.setQueryData(personasQuery.queryKey, response);
-      const chosen = response.personas.find((persona) => persona.id === id);
-      toast.success(t("home.personas.activated", { name: chosen?.name ?? id }));
-      await refreshPersonas(queryClient);
-    },
-    onError: toastError,
-  });
+  const activate = useActivatePersona();
 
   if (personas.isPending) {
     return (
@@ -128,7 +111,7 @@ export function PersonaGrid({
             <PlusIcon className="size-5" />
           </span>
           <span className="flex min-w-0 flex-col gap-1">
-            <span className="font-medium text-foreground">{t("home.personas.new")}</span>
+            <span className="font-medium text-foreground">{t("common.persona.new")}</span>
             <span className="text-sm">{t("home.personas.newBody")}</span>
           </span>
         </button>

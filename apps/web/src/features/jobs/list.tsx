@@ -207,7 +207,7 @@ export function JobsList() {
               <Button variant="outline" asChild>
                 <Link to={studioPath(active, "knowledge")}>
                   <BookOpenIcon />
-                  {t("jobs.empty.action")}
+                  {t("common.openStudio")}
                 </Link>
               </Button>
             )

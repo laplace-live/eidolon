@@ -18,15 +18,6 @@ export function LoadError({ error }: { readonly error: unknown }) {
   );
 }
 
-/** A variable's name or value inside a line of text. */
-export function Code({ children }: { readonly children: ReactNode }) {
-  return (
-    <code className="wrap-anywhere rounded-sm bg-muted px-1 py-px font-mono text-[0.8125rem] text-foreground/80">
-      {children}
-    </code>
-  );
-}
-
 /** A quiet line of context inside a card, such as where a file is saved. */
 export function Hint({
   icon,
@@ -40,7 +31,7 @@ export function Hint({
   return (
     <div
       className={cn(
-        "flex items-start gap-2.5 rounded-lg bg-muted/60 px-3 py-2.5 text-muted-foreground text-sm [&_a]:font-medium [&_a]:text-foreground [&_a]:underline-offset-4 [&_a:hover]:underline [&_svg]:mt-0.5 [&_svg]:size-4 [&_svg]:shrink-0",
+        "inline-links flex items-start gap-2.5 rounded-lg bg-muted/60 px-3 py-2.5 text-muted-foreground text-sm [&_svg]:mt-0.5 [&_svg]:size-4 [&_svg]:shrink-0",
         className,
       )}
     >

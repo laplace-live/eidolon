@@ -5,7 +5,6 @@
   "loadFailed": "无法加载任务",
   "empty.title": "还没有任务",
   "empty.body": "在人设工作室里索引资料或添加视频后，任务会出现在这里。",
-  "empty.action": "打开工作室",
   "command.pipeline": "视频流水线",
   "command.download": "下载",
   "command.expand": "读取链接",

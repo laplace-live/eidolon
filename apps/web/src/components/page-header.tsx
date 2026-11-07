@@ -38,11 +38,7 @@ export function PageHeader({
         </div>
         {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
       </div>
-      {children && (
-        <div className="text-muted-foreground text-sm [&_a]:font-medium [&_a]:text-foreground [&_a]:underline-offset-4 [&_a:hover]:underline">
-          {children}
-        </div>
-      )}
+      {children && <div className="inline-links text-muted-foreground text-sm">{children}</div>}
     </header>
   );
 }

@@ -35,14 +35,7 @@ const ICONS: Readonly<Record<SectionId, ReactNode>> = {
 /** A card's description; `{keys}` in it links to that section. */
 function describe(t: Translate, key: string): ReactNode {
   return rich(t(key), {
-    keys: (
-      <Link
-        to="?tab=keys"
-        className="font-medium text-foreground underline-offset-4 hover:underline"
-      >
-        {t("settings.nav.keys")}
-      </Link>
-    ),
+    keys: <Link to="?tab=keys">{t("settings.nav.keys")}</Link>,
   });
 }
 

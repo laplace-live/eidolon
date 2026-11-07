@@ -71,7 +71,7 @@ export function DoneStep({
           <Button variant="outline" asChild>
             <Link to={studioPath(active.id)}>
               <BookOpenIcon />
-              {t("setup.done.openStudio")}
+              {t("common.openStudio")}
             </Link>
           </Button>
         </div>

@@ -528,7 +528,6 @@ export function JobCard({
   events: followed,
   title,
   onEnded,
-  className,
 }: {
   readonly job: JobSnapshot;
   /** Its events, when the page follows them already: a second stream would cost a connection. */
@@ -536,7 +535,6 @@ export function JobCard({
   /** What to call it; the command's name by default. */
   readonly title?: string;
   readonly onEnded?: (outcome: Outcome) => void;
-  readonly className?: string;
 }) {
   const t = useT();
   const lang = useLang();
@@ -550,7 +548,7 @@ export function JobCard({
   const note = outcome === "running" ? null : endNote(t, events.view, job, outcome);
 
   return (
-    <div className={cn("flex flex-col gap-3 rounded-lg border p-3", className)}>
+    <div className="flex flex-col gap-3 rounded-lg border bg-card p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium text-sm">{title ?? t(`jobs.command.${job.command}`)}</span>
         <OutcomeBadge outcome={outcome} />
