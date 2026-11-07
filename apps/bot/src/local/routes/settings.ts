@@ -38,7 +38,8 @@ export function settingsOf(app: LocalApp, persona: string): SettingsResponse {
   const settings = SETTINGS.map((field): SettingRow => {
     const layer = layers.values.get(field.env);
     // Not envOverride: that answers for the installed persona, and this may be another one.
-    const envValue = envVariable(field.env) ?? null;
+    const fromEnv = envVariable(field.env) ?? null;
+    const productionOnly = PRODUCTION_ONLY.test(field.path);
     return {
       path: field.path,
       env: field.env,
@@ -47,9 +48,10 @@ export function settingsOf(app: LocalApp, persona: string): SettingsResponse {
       title: field.title,
       value: layer?.raw ?? null,
       source: (layer?.source ?? "default") as SettingRow["source"],
-      envValue,
-      envOverride: field.scope === "app" && envValue !== null,
-      productionOnly: PRODUCTION_ONLY.test(field.path),
+      // A production-only row is hidden, so its value has no reader.
+      envValue: productionOnly ? null : fromEnv,
+      envOverride: field.scope === "app" && fromEnv !== null,
+      productionOnly,
       readOnly: READ_ONLY.has(field.path),
     };
   });

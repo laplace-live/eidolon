@@ -647,6 +647,8 @@ export type SettingDefaults = (persona: PersonaSettings) => Readonly<Record<stri
 
 let installed: LoadedSettings | null = null;
 let defaults: SettingDefaults | null = null;
+/** The persona and variables installSettings last reported ignoring. */
+let reported = "";
 
 function fileLayer(loaded: LoadedSettings): ReadonlyMap<string, string> {
   if (defaults === null) return loaded.values;
@@ -661,11 +663,17 @@ function fileLayer(loaded: LoadedSettings): ReadonlyMap<string, string> {
 export function installSettings(): LoadedSettings {
   installed = loadSettings();
   setFileLayer(fileLayer(installed), installed.owned);
-  for (const name of installed.owned) {
-    if (envVariable(name) === undefined) continue;
-    const setting = SETTINGS.find((field) => field.env === name);
-    const why = setting === undefined ? "has her own voice" : `sets ${setting.path}`;
-    logger.info(`${name} from the environment is ignored: persona ${installed.persona.id} ${why}`);
+  const id = installed.persona.id;
+  const ignored = [...installed.owned].filter((name) => envVariable(name) !== undefined);
+  // The local app reinstalls on every save: say it once, until the persona or the list changes.
+  const report = `${id}\0${ignored.join(",")}`;
+  if (report !== reported) {
+    reported = report;
+    for (const name of ignored) {
+      const setting = SETTINGS.find((field) => field.env === name);
+      const why = setting === undefined ? "has her own voice" : `sets ${setting.path}`;
+      logger.info(`${name} from the environment is ignored: persona ${id} ${why}`);
+    }
   }
   return installed;
 }
@@ -705,5 +713,6 @@ export function fillPersonaText(text: string, values: Readonly<Record<string, st
 /** Forgets what was loaded; the next lookup reads the files again. For tests and reloads. */
 export function resetSettings(): void {
   installed = null;
+  reported = "";
   setFileLayer(new Map(), new Set());
 }

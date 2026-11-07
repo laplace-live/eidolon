@@ -243,7 +243,10 @@ export interface SettingRow {
   /** The file's own value; null when no file sets it. */
   readonly value: unknown;
   readonly source: "default" | "app" | "persona";
-  /** The environment's non-empty value of `env`, or null. Settings hold no secrets. */
+  /**
+   * The environment's non-empty value of `env`, or null; always null for a production-only row,
+   * which the local app hides. Settings hold no secrets.
+   */
   readonly envValue: string | null;
   /**
    * The environment's value is used instead of the file's: an app row with envValue set. A persona

@@ -137,6 +137,7 @@ describe("GET settings", () => {
       ["FISH_VOICE_ID", "env-voice"],
       ["OPENROUTER_MODEL", "env/chat"],
       ["FISH_MODEL", ""],
+      ["WEBRTC_TURN_USERNAME", "turn-user"],
     ] as const) {
       process.env[name] = value;
       touched.push(name);
@@ -169,6 +170,12 @@ describe("GET settings", () => {
       envOverride: false,
     });
     expect(row(answer, "voice.model")).toMatchObject({ envValue: null, envOverride: false });
+    // A production-only row is hidden in the local app, so its value isn't sent.
+    expect(row(answer, "network.turnUsername")).toMatchObject({
+      productionOnly: true,
+      envValue: null,
+      envOverride: true,
+    });
     expect(envOptional("FISH_VOICE_ID")).toBe("her-voice");
 
     // Not the installed persona: what milky-green's file decides is no answer for her.

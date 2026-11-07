@@ -335,7 +335,7 @@ describe("a persona's own settings over the environment", () => {
     expect(layeredValue(green, "FISH_VOICE_ID_GENTLE")).toBe("env-gentle");
   });
 
-  test("each install logs the environment variables it ignores, by name only", () => {
+  test("an install logs the environment variables it ignores, by name only, once until they change", () => {
     setEnv("FISH_VOICE_ID", "env-voice");
     setEnv("FISH_VOICE_ID_GENTLE", "env-gentle");
     setEnv("REFINE_MODEL", "");
@@ -354,7 +354,17 @@ describe("a persona's own settings over the environment", () => {
     readSettingsLayers("milky-green");
     envOptional("FISH_VOICE_ID");
     expect(infos).toEqual(lines);
+    // A reinstall that ignores the same ones, as every save in the local app makes, says nothing.
     installSettings();
-    expect(infos).toEqual([...lines, ...lines]);
+    expect(infos).toEqual(lines);
+    setEnv("REFINE_MODEL", "env/refiner");
+    installSettings();
+    // Now it ignores one more, so it says the list again.
+    expect(infos).toEqual([
+      ...lines,
+      lines[0],
+      "REFINE_MODEL from the environment is ignored: persona milky-green sets refine.model",
+      lines[1],
+    ]);
   });
 });

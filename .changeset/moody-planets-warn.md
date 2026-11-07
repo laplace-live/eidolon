@@ -3,4 +3,4 @@
 "@laplace.live/eidolon": minor
 ---
 
-fix: A persona's own settings now win over the environment, so she keeps the voice you pick
+feat: Persona settings now override environment variables, which become her defaults
