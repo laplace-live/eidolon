@@ -92,21 +92,22 @@ export function hasDeliveryCues(prompt: string): boolean {
 }
 
 /**
- * Why the voice model may speak a prompt's cues as words: the model the bot reads is set and isn't
- * CUE_MODEL, or the environment sets it, whose value the settings API never shows.
+ * Why the voice model may speak a prompt's cues as words: the model she reads isn't CUE_MODEL. It
+ * is her persona.yaml's (`model`), else the one she inherits from the environment (`env`).
  */
 export type CueClash =
   | { readonly kind: "model"; readonly model: string }
-  | { readonly kind: "env"; readonly env: string };
+  | { readonly kind: "env"; readonly env: string; readonly model: string };
 
-/** The clash between voice.model's row, read layer by layer, and a prompt; null when none. */
+/** The clash between voice.model's row and a prompt; null when none. */
 export function cueClash(
-  row: Pick<SettingRow, "env" | "value" | "envOverride"> | undefined,
+  row: Pick<SettingRow, "env" | "value" | "envValue"> | undefined,
   prompt: string | undefined,
 ): CueClash | null {
   if (row === undefined || prompt === undefined || !hasDeliveryCues(prompt)) return null;
-  if (row.envOverride) return { kind: "env", env: row.env };
-  const model = typeof row.value === "string" ? row.value.trim() : "";
-  // Unset, the bot's default model applies, which the built-in prompts are written for.
-  return model !== "" && model !== CUE_MODEL ? { kind: "model", model } : null;
+  const own = typeof row.value === "string" ? row.value.trim() : "";
+  const model = own || (row.envValue?.trim() ?? "");
+  // Neither sets one: the bot's default applies, which the built-in prompts are written for.
+  if (model === "" || model === CUE_MODEL) return null;
+  return own === "" ? { kind: "env", env: row.env, model } : { kind: "model", model };
 }

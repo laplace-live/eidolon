@@ -106,27 +106,30 @@ test("a prompt that teaches delivery cues is told apart from one that doesn't", 
 
 describe("the voice model against the prompt's cues", () => {
   const cues = "用 `[温柔地安慰]` 这样的提示。";
-  const row = { env: "FISH_MODEL", value: null as unknown, envOverride: false };
+  const row = { env: "FISH_MODEL", value: null as unknown, envValue: null as string | null };
 
   test("persona.yaml's model, when it isn't the one that acts on cues", () => {
     expect(cueClash({ ...row, value: "s2-pro" }, cues)).toEqual({ kind: "model", model: "s2-pro" });
     expect(cueClash({ ...row, value: CUE_MODEL }, cues)).toBeNull();
   });
 
-  test("the environment wins over the file, and the API doesn't show its value", () => {
-    expect(cueClash({ ...row, envOverride: true }, cues)).toEqual({
+  test("the environment's model, which she inherits only while her file sets none", () => {
+    expect(cueClash({ ...row, envValue: "s1" }, cues)).toEqual({
       kind: "env",
       env: "FISH_MODEL",
+      model: "s1",
     });
-    expect(cueClash({ ...row, value: CUE_MODEL, envOverride: true }, cues)).toEqual({
-      kind: "env",
-      env: "FISH_MODEL",
+    expect(cueClash({ ...row, envValue: CUE_MODEL }, cues)).toBeNull();
+    expect(cueClash({ ...row, value: CUE_MODEL, envValue: "s1" }, cues)).toBeNull();
+    expect(cueClash({ ...row, value: "s2-pro", envValue: CUE_MODEL }, cues)).toEqual({
+      kind: "model",
+      model: "s2-pro",
     });
   });
 
   test("unset, the default applies; and a prompt without cues clashes with nothing", () => {
     expect(cueClash(row, cues)).toBeNull();
-    expect(cueClash({ ...row, value: "s2-pro", envOverride: true }, "说话简短。")).toBeNull();
+    expect(cueClash({ ...row, value: "s2-pro", envValue: "s1" }, "说话简短。")).toBeNull();
     expect(cueClash(undefined, cues)).toBeNull();
     expect(cueClash({ ...row, value: "s2-pro" }, undefined)).toBeNull();
   });
