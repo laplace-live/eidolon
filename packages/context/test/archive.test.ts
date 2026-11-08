@@ -694,6 +694,20 @@ describe("a question about when, or how often, gets the catalog's timeline", () 
     expect(recall).toContain("「健身环」");
   });
 
+  for (const query of [
+    "那你上次玩塞尔达是什么时候？",
+    "how long has it been since you played fall guys",
+  ]) {
+    test(`a line naming what the catalog lacks never borrows the earlier topic: ${query}`, async () => {
+      const { recall } = await ask(query, GateDecision.settled(TIMELINE), [
+        "你上次玩健身环是什么时候？",
+        "八月三十号呀",
+      ]);
+      expect(recall).not.toContain("「健身环」");
+      expect(recall).toContain(String(RECALL_HIT.summary));
+    });
+  }
+
   test("a short follow-up keeps its own topic over the earlier line's", async () => {
     const { recall } = await ask("健身环呢？", GateDecision.settled(TIMELINE), [
       "你上次玩糖豆人是什么时候？",

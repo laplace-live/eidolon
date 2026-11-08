@@ -212,6 +212,20 @@ function appendExtras(lines: string[], extras: Record<string, unknown>): void {
   }
 }
 
+// What a timeline follow-up says besides its topic: pointers, time words, its verbs and particles.
+// Whatever else a line holds may be a topic the catalog lacks.
+const FOLLOWUP_WORDS = new RegExp(
+  "(?:那|这)(?:个|款|首|部)?(?:游戏|歌|曲子|节目)?|上一次|上次|上回|最近一次|最后一次|第一次|头一次|" +
+    "最早|多长时间|多久|好久|什么时候|啥时候|哪一天|哪天|几号|几月|多少次|几次|一共|总共|直播|" +
+    "你|我|它|她|他|还|又|再|是|的|了|吗|呢|吧|啊|呀|过|没|玩|播|唱|打|聊|开|看|见|提|说|" +
+    String.raw`[\s\p{P}]`,
+  "gu",
+);
+
+function isBareFollowup(text: string | undefined): boolean {
+  return text !== undefined && text.replace(FOLLOWUP_WORDS, "") === "";
+}
+
 // A broadcast with at least this many scenes naming a topic reads as one she spent on it; one or
 // two usually just mention it.
 const TIMELINE_MAIN_SCENES = 3;
@@ -445,10 +459,12 @@ export class StreamArchive implements ContextProvider {
     signal?: AbortSignal,
   ): Promise<boolean> {
     if (!decision?.asksTimeline) return false;
-    // Each line alone, newest first: 那上次玩是什么时候 leaves its topic in the line before, and
-    // folding lines together would mix in topics the question isn't about.
+    // Each line alone, so earlier topics never mix in. Only a bare follow-up like 那上次玩是什么时候
+    // borrows the line before's topic; a line that names something the catalog lacks must not.
+    const [latest, before] = recentUserTexts(context.getMessages(), 2);
     let timeline: Timeline | null = null;
-    for (const text of recentUserTexts(context.getMessages(), 2)) {
+    for (const text of [latest, isBareFollowup(latest) ? before : undefined]) {
+      if (text === undefined) continue;
       timeline = await raceAbort(this.#catalog.timeline(text), signal);
       signal?.throwIfAborted();
       if (timeline !== null) break;

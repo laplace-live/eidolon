@@ -90,6 +90,13 @@ listed broadcast. A recall scoped to dates (上周, 3月5号) keeps its scope. T
 the search returns, so a slow or failed gate leaves the chunks as before. The
 facts search still runs.
 
+The topic comes from the viewer's latest line alone. A bare follow-up, a line
+of nothing but pointers, time words, verbs and particles such as 那上次玩是什么时候,
+takes it from the viewer's line before. A line that names something the
+catalog lacks, 塞尔达 or "fall guys", keeps the search's chunks rather than
+answer with the earlier topic. Follow-ups after a timeline resolve against
+every broadcast its block names, the first included.
+
 It can't tell playing a game from talking about it: a game she finished years
 ago but still brings up reads as recent. Viewers aren't topics, so it can't
 answer when a viewer last sent an SC. What else the archive can't answer yet is
