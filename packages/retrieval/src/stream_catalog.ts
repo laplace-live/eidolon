@@ -4,7 +4,9 @@ import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { cpLen, errorText, logger, pyCompare, pyRepr, pyStr } from "@eidolon/config";
 import type { IsoDate } from "./civil_date.ts";
+import { OccurrenceIndex, type Timeline } from "./occurrences.ts";
 import { clip } from "./py.ts";
+import { Slicer } from "./slicer.ts";
 
 export const CATALOG_FILENAME = "stream_catalog.json";
 export const CATALOG_VERSION = 1;
@@ -176,20 +178,6 @@ interface Layout {
 }
 
 const UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
-// Measured on the 30 MB catalog: 2 ms slices keep the worst event-loop stall near 5 ms (two
-// slices can run back to back), against ~45 ms for one JSON.parse, at the same ~65 ms wall time.
-const SLICE_MS = 2;
-
-/** Yields to the event loop once the current slice has run for SLICE_MS. */
-class Slicer {
-  #deadline = performance.now() + SLICE_MS;
-
-  async tick(): Promise<void> {
-    if (performance.now() < this.#deadline) return;
-    await new Promise<void>((resolveTurn) => setImmediate(resolveTurn));
-    this.#deadline = performance.now() + SLICE_MS;
-  }
-}
 
 /**
  * Element boundaries of the top-level `broadcasts` array, scanned in slices, or null when the
@@ -310,6 +298,9 @@ function isMissingFile(error: unknown): boolean {
   return (error as { code?: unknown } | null)?.code === "ENOENT";
 }
 
+// One occurrence index per parsed catalog, shared by every session's instance like the parse.
+const occurrenceIndexes = new WeakMap<readonly Broadcast[], Promise<OccurrenceIndex>>();
+
 /** Process-wide parsed cache keyed by (path, mtime, size); the 30 MB parse never blocks audio. */
 export class StreamCatalog {
   readonly path: string;
@@ -372,11 +363,29 @@ export class StreamCatalog {
   async recent(n = 3): Promise<Broadcast[]> {
     return (await this.broadcasts()).slice(0, Math.max(0, n));
   }
+
+  /** The current parse's occurrence index, built once per parse. */
+  async occurrences(): Promise<OccurrenceIndex> {
+    await this.broadcasts();
+    // The parse itself keys the shared index: broadcasts() returns a copy.
+    const parse = this.#broadcasts;
+    let index = occurrenceIndexes.get(parse);
+    if (index === undefined) {
+      index = OccurrenceIndex.build(parse);
+      occurrenceIndexes.set(parse, index);
+    }
+    return index;
+  }
+
+  /** The broadcasts naming the topics `query` contains, newest first; null if it contains none. */
+  async timeline(query: string): Promise<Timeline | null> {
+    return (await this.occurrences()).timeline(query);
+  }
 }
 
-/** Parses the catalog into the process-wide cache; apps/bot calls it at boot. */
+/** Parses and indexes the catalog into the process-wide caches; apps/bot calls it at boot. */
 export async function warmStreamCatalog(dbPath: string): Promise<void> {
-  await new StreamCatalog(dbPath).broadcasts();
+  await new StreamCatalog(dbPath).occurrences();
 }
 
 function mostCommon<T>(counts: Map<T, number>): [T, number][] {

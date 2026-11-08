@@ -63,7 +63,8 @@ describe("RetrievalGateProcessor with context's RetrievalGate", () => {
     const decisions = (down as Frame[]).map((f) => f.metadata[GATE_FRAME_KEY] as GateDecision);
     expect(decisions[0]).toBe(decisions[1] as GateDecision);
     expect(decisions[2]).not.toBe(decisions[0] as GateDecision);
-    expect(await Promise.all(decisions.map((d) => d.value()))).toEqual([false, false, true]);
+    const verdicts = await Promise.all(decisions.map((d) => d.value()));
+    expect(verdicts.map((v) => v?.retrieve)).toEqual([false, false, true]);
     expect(bodies).toHaveLength(2);
     expect(bodies[0]?.model).toBe(DEFAULT_GATE_MODEL);
   });

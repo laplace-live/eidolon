@@ -30,12 +30,15 @@ export {
   type GateQuestions,
   type GateState,
   type GateTurn,
+  type GateVerdict,
   gateQuestions,
   gateState,
   gateStreamer,
   RetrievalGate,
   type RetrievalGateOptions,
   retrievalGateFromEnv,
+  TIMELINE_QUESTIONS,
+  TIMELINE_THRESHOLD,
   unlessSkipped,
 } from "./gate.ts";
 export {

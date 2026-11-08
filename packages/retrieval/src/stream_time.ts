@@ -71,9 +71,11 @@ const FOLLOWUP = new PyPattern(
     `|同一(?:周|天|场直播)|再前一周`,
   "i",
 );
+// 第二次 alone or 第二次直播 picks a listed broadcast, but 第一次玩X asks when she first played X.
 const ORDINAL_FOLLOWUP = new PyPattern(
   String.raw`\b(?:the\s+)?(?P<en>first|second|third|\d+(?:st|nd|rd|th))\s+` +
-    String.raw`(?:stream|broadcast)\b|第(?P<zh>[一二三四五六七八九十]|\d{1,2})(?:场|次)(?:直播)?`,
+    String.raw`(?:stream|broadcast)\b|第(?P<zh>[一二三四五六七八九十]|\d{1,2})` +
+    `(?:场(?:直播)?|次(?:直播|(?=$|[^一-鿿]|[呢吧吗啊呀])))`,
   "i",
 );
 const ELABORATION = new PyPattern(

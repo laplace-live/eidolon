@@ -1,0 +1,1010 @@
+{
+ "model": [
+  "typesafe/jev-1.14-20261014"
+ ],
+ "threshold": 0.7,
+ "latency_ms": {
+  "p50": 392,
+  "max": 1560
+ },
+ "sets": {
+  "dev": {
+   "timeline_kept": "18/18",
+   "other_below": "19/19",
+   "lowest_timeline_score": 0.8,
+   "highest_other_score": 0.6,
+   "timeline_turns_retrieved": "18/18"
+  },
+  "heldout": {
+   "timeline_kept": "12/12",
+   "other_below": "14/14",
+   "lowest_timeline_score": 0.72,
+   "highest_other_score": 0.53,
+   "timeline_turns_retrieved": "12/12"
+  },
+  "all": {
+   "timeline_kept": "30/30",
+   "other_below": "33/33",
+   "lowest_timeline_score": 0.72,
+   "highest_other_score": 0.6,
+   "timeline_turns_retrieved": "30/30"
+  }
+ },
+ "turns": [
+  {
+   "set": "dev",
+   "timeline": true,
+   "text": "你上次播鬼武者是什么时候？",
+   "score": 0.97,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.68,
+    "her_past": 0.97,
+    "named_thing": 0.57,
+    "last_time": 0.97,
+    "first_time": 0.19,
+    "how_often": 0.22
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": true,
+   "text": "你上次玩健身环是什么时候？",
+   "score": 0.98,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.93,
+    "her_past": 0.97,
+    "named_thing": 0.37,
+    "last_time": 0.98,
+    "first_time": 0.1,
+    "how_often": 0.4
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": true,
+   "text": "你什么时候玩的糖豆人？",
+   "score": 0.88,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.86,
+    "her_past": 0.79,
+    "named_thing": 0.39,
+    "last_time": 0.88,
+    "first_time": 0.66,
+    "how_often": 0.12
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": true,
+   "text": "你最后一次玩黑神话悟空是哪天？",
+   "score": 0.98,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.9,
+    "her_past": 0.96,
+    "named_thing": 0.39,
+    "last_time": 0.98,
+    "first_time": 0.03,
+    "how_often": 0.08
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": true,
+   "text": "你上次直播玩健身环是哪天？",
+   "score": 0.98,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.77,
+    "her_past": 0.98,
+    "named_thing": 0.28,
+    "last_time": 0.98,
+    "first_time": 0.12,
+    "how_often": 0.06
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": true,
+   "text": "你好久没唱周杰伦了吧，上回唱是啥时候？",
+   "score": 0.98,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.89,
+    "her_past": 0.98,
+    "named_thing": 0.29,
+    "last_time": 0.98,
+    "first_time": 0.13,
+    "how_often": 0.33
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": true,
+   "text": "健身环你多久没玩了？",
+   "score": 0.96,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.89,
+    "her_past": 0.85,
+    "named_thing": 0.48,
+    "last_time": 0.96,
+    "first_time": 0.09,
+    "how_often": 0.79
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": true,
+   "text": "你最近一次唱晴天是什么时候？",
+   "score": 0.98,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.86,
+    "her_past": 0.97,
+    "named_thing": 0.51,
+    "last_time": 0.98,
+    "first_time": 0.05,
+    "how_often": 0.16
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": true,
+   "text": "你上回说坚果生病是哪天来着？",
+   "score": 0.8,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.88,
+    "her_past": 0.98,
+    "named_thing": 0.38,
+    "last_time": 0.8,
+    "first_time": 0.13,
+    "how_often": 0.03
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": true,
+   "text": "你第一次玩博德之门是什么时候？",
+   "score": 0.98,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.91,
+    "her_past": 0.94,
+    "named_thing": 0.45,
+    "last_time": 0.72,
+    "first_time": 0.98,
+    "how_often": 0.09
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": true,
+   "text": "你玩过几次糖豆人？",
+   "score": 0.97,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.92,
+    "her_past": 0.89,
+    "named_thing": 0.52,
+    "last_time": 0.42,
+    "first_time": 0.1,
+    "how_often": 0.97
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": true,
+   "text": "When did you last play Ring Fit on stream?",
+   "score": 0.98,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.86,
+    "her_past": 0.97,
+    "named_thing": 0.4,
+    "last_time": 0.98,
+    "first_time": 0.05,
+    "how_often": 0.21
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": true,
+   "text": "…那上次玩是什么时候？",
+   "score": 0.97,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.9,
+    "her_past": 0.97,
+    "named_thing": 0.12,
+    "last_time": 0.97,
+    "first_time": 0.09,
+    "how_often": 0.12
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": true,
+   "text": "你最早什么时候开始玩恐怖游戏的",
+   "score": 0.98,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.95,
+    "her_past": 0.96,
+    "named_thing": 0.14,
+    "last_time": 0.46,
+    "first_time": 0.98,
+    "how_often": 0.07
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": true,
+   "text": "你一共唱过几次孤勇者",
+   "score": 0.98,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.91,
+    "her_past": 0.97,
+    "named_thing": 0.52,
+    "last_time": 0.23,
+    "first_time": 0.09,
+    "how_often": 0.98
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": true,
+   "text": "上次看你打生化危机还是去年吧，是几月来着",
+   "score": 0.98,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.63,
+    "her_past": 0.98,
+    "named_thing": 0.32,
+    "last_time": 0.98,
+    "first_time": 0.26,
+    "how_often": 0.12
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": true,
+   "text": "你多久没开歌回了",
+   "score": 0.94,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.86,
+    "her_past": 0.96,
+    "named_thing": 0.08,
+    "last_time": 0.94,
+    "first_time": 0.09,
+    "how_often": 0.87
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": true,
+   "text": "你第一次见到坚果是什么时候",
+   "score": 0.9,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.95,
+    "her_past": 0.97,
+    "named_thing": 0.56,
+    "last_time": 0.21,
+    "first_time": 0.9,
+    "how_often": 0.04
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": false,
+   "text": "你上次直播聊了什么？",
+   "score": 0.2,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.38,
+    "her_past": 0.98,
+    "named_thing": 0.09,
+    "last_time": 0.2,
+    "first_time": 0.03,
+    "how_often": 0.05
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": false,
+   "text": "上次直播你玩的什么游戏？",
+   "score": 0.23,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.6,
+    "her_past": 0.98,
+    "named_thing": 0.15,
+    "last_time": 0.23,
+    "first_time": 0.03,
+    "how_often": 0.05
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": false,
+   "text": "最近一次直播几点下播的？",
+   "score": 0.44,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.63,
+    "her_past": 0.97,
+    "named_thing": 0.08,
+    "last_time": 0.44,
+    "first_time": 0.02,
+    "how_often": 0.05
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": false,
+   "text": "你2026年5月9号说了什么？",
+   "score": 0.22,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.36,
+    "her_past": 0.97,
+    "named_thing": 0.15,
+    "last_time": 0.22,
+    "first_time": 0.07,
+    "how_often": 0.05
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": false,
+   "text": "你昨天播了什么？",
+   "score": 0.32,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.5,
+    "her_past": 0.98,
+    "named_thing": 0.1,
+    "last_time": 0.32,
+    "first_time": 0.03,
+    "how_often": 0.08
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": false,
+   "text": "上周你玩了什么游戏？",
+   "score": 0.6,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.82,
+    "her_past": 0.98,
+    "named_thing": 0.12,
+    "last_time": 0.6,
+    "first_time": 0.03,
+    "how_often": 0.11
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": false,
+   "text": "你喜欢吃纳豆吗？",
+   "score": 0.02,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.97,
+    "her_past": 0.11,
+    "named_thing": 0.4,
+    "last_time": 0.02,
+    "first_time": 0.01,
+    "how_often": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": false,
+   "text": "坚果是什么品种的猫？",
+   "score": 0.02,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.87,
+    "her_past": 0.44,
+    "named_thing": 0.93,
+    "last_time": 0.02,
+    "first_time": 0.01,
+    "how_often": 0.01
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": false,
+   "text": "你是不是说过你不敢去网吧？",
+   "score": 0.22,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.95,
+    "her_past": 0.95,
+    "named_thing": 0.19,
+    "last_time": 0.22,
+    "first_time": 0.07,
+    "how_often": 0.1
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": false,
+   "text": "鬼武者好玩吗？",
+   "score": 0.03,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.33,
+    "her_past": 0.25,
+    "named_thing": 0.76,
+    "last_time": 0.03,
+    "first_time": 0.02,
+    "how_often": 0.03
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": false,
+   "text": "你下次什么时候播鬼武者？",
+   "score": 0.08,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.66,
+    "her_past": 0.26,
+    "named_thing": 0.33,
+    "last_time": 0.08,
+    "first_time": 0.03,
+    "how_often": 0.03
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": false,
+   "text": "我什么时候能看到你玩健身环？",
+   "score": 0.32,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.64,
+    "her_past": 0.15,
+    "named_thing": 0.26,
+    "last_time": 0.1,
+    "first_time": 0.32,
+    "how_often": 0.03
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": false,
+   "text": "你今天几点下播？",
+   "score": 0.04,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.73,
+    "her_past": 0.06,
+    "named_thing": 0.05,
+    "last_time": 0.04,
+    "first_time": 0.02,
+    "how_often": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": false,
+   "text": "我上次去日本玩是去年",
+   "score": 0.1,
+   "retrieve": false,
+   "nouls": {
+    "about_her": 0.1,
+    "her_past": 0.09,
+    "named_thing": 0.03,
+    "last_time": 0.1,
+    "first_time": 0.03,
+    "how_often": 0.06
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": false,
+   "text": "我今天加班好累啊",
+   "score": 0.02,
+   "retrieve": false,
+   "nouls": {
+    "about_her": 0.04,
+    "her_past": 0.03,
+    "named_thing": 0.02,
+    "last_time": 0.02,
+    "first_time": 0.01,
+    "how_often": 0.01
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": false,
+   "text": "哈哈哈，好吧",
+   "score": 0.02,
+   "retrieve": false,
+   "nouls": {
+    "about_her": 0.07,
+    "her_past": 0.05,
+    "named_thing": 0.03,
+    "last_time": 0.02,
+    "first_time": 0.02,
+    "how_often": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": false,
+   "text": "你还记得来个圣光吗？",
+   "score": 0.39,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.59,
+    "her_past": 0.82,
+    "named_thing": 0.25,
+    "last_time": 0.39,
+    "first_time": 0.14,
+    "how_often": 0.16
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": false,
+   "text": "你上次说的那个游戏叫什么来着",
+   "score": 0.18,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.31,
+    "her_past": 0.97,
+    "named_thing": 0.6,
+    "last_time": 0.18,
+    "first_time": 0.03,
+    "how_often": 0.02
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": false,
+   "text": "你玩健身环的时候最喜欢哪个关卡",
+   "score": 0.04,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.95,
+    "her_past": 0.84,
+    "named_thing": 0.42,
+    "last_time": 0.03,
+    "first_time": 0.02,
+    "how_often": 0.04
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": null,
+   "text": "你玩过健身环吗？",
+   "score": 0.14,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.91,
+    "her_past": 0.59,
+    "named_thing": 0.6,
+    "last_time": 0.07,
+    "first_time": 0.03,
+    "how_often": 0.14
+   }
+  },
+  {
+   "set": "dev",
+   "timeline": null,
+   "text": "你最近还玩健身环吗",
+   "score": 0.7,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.95,
+    "her_past": 0.92,
+    "named_thing": 0.57,
+    "last_time": 0.7,
+    "first_time": 0.02,
+    "how_often": 0.42
+   }
+  },
+  {
+   "set": "heldout",
+   "timeline": true,
+   "text": "鬼武者你是哪天通关的",
+   "score": 0.72,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.5,
+    "her_past": 0.73,
+    "named_thing": 0.52,
+    "last_time": 0.72,
+    "first_time": 0.26,
+    "how_often": 0.08
+   }
+  },
+  {
+   "set": "heldout",
+   "timeline": true,
+   "text": "你上一次开歌回是什么时候呀",
+   "score": 0.95,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.81,
+    "her_past": 0.98,
+    "named_thing": 0.11,
+    "last_time": 0.95,
+    "first_time": 0.08,
+    "how_often": 0.2
+   }
+  },
+  {
+   "set": "heldout",
+   "timeline": true,
+   "text": "上次连麦露露是什么时候",
+   "score": 0.9,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.58,
+    "her_past": 0.97,
+    "named_thing": 0.46,
+    "last_time": 0.9,
+    "first_time": 0.14,
+    "how_often": 0.17
+   }
+  },
+  {
+   "set": "heldout",
+   "timeline": true,
+   "text": "你多久没玩糖豆人了",
+   "score": 0.98,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.9,
+    "her_past": 0.9,
+    "named_thing": 0.34,
+    "last_time": 0.98,
+    "first_time": 0.06,
+    "how_often": 0.78
+   }
+  },
+  {
+   "set": "heldout",
+   "timeline": true,
+   "text": "你第一次直播是哪一年",
+   "score": 0.97,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.83,
+    "her_past": 0.98,
+    "named_thing": 0.12,
+    "last_time": 0.13,
+    "first_time": 0.97,
+    "how_often": 0.06
+   }
+  },
+  {
+   "set": "heldout",
+   "timeline": true,
+   "text": "你播过几次博德之门啊",
+   "score": 0.97,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.88,
+    "her_past": 0.97,
+    "named_thing": 0.4,
+    "last_time": 0.64,
+    "first_time": 0.16,
+    "how_often": 0.97
+   }
+  },
+  {
+   "set": "heldout",
+   "timeline": true,
+   "text": "好久没见你玩恐怖游戏了 上次是什么时候",
+   "score": 0.98,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.85,
+    "her_past": 0.97,
+    "named_thing": 0.13,
+    "last_time": 0.98,
+    "first_time": 0.14,
+    "how_often": 0.28
+   }
+  },
+  {
+   "set": "heldout",
+   "timeline": true,
+   "text": "你最后一次提到坚果生病是什么时候",
+   "score": 0.97,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.91,
+    "her_past": 0.97,
+    "named_thing": 0.45,
+    "last_time": 0.97,
+    "first_time": 0.05,
+    "how_often": 0.1
+   }
+  },
+  {
+   "set": "heldout",
+   "timeline": true,
+   "text": "how long has it been since you played fall guys",
+   "score": 0.98,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.86,
+    "her_past": 0.95,
+    "named_thing": 0.32,
+    "last_time": 0.98,
+    "first_time": 0.12,
+    "how_often": 0.12
+   }
+  },
+  {
+   "set": "heldout",
+   "timeline": true,
+   "text": "你上回打黑神话是几号",
+   "score": 0.97,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.82,
+    "her_past": 0.97,
+    "named_thing": 0.29,
+    "last_time": 0.97,
+    "first_time": 0.3,
+    "how_often": 0.12
+   }
+  },
+  {
+   "set": "heldout",
+   "timeline": true,
+   "text": "…最近一次是啥时候",
+   "score": 0.97,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.86,
+    "her_past": 0.96,
+    "named_thing": 0.1,
+    "last_time": 0.97,
+    "first_time": 0.03,
+    "how_often": 0.17
+   }
+  },
+  {
+   "set": "heldout",
+   "timeline": true,
+   "text": "来个圣光上次给你发SC是什么时候",
+   "score": 0.8,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.59,
+    "her_past": 0.94,
+    "named_thing": 0.27,
+    "last_time": 0.8,
+    "first_time": 0.2,
+    "how_often": 0.27
+   }
+  },
+  {
+   "set": "heldout",
+   "timeline": false,
+   "text": "上次直播你几点开的播",
+   "score": 0.53,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.77,
+    "her_past": 0.98,
+    "named_thing": 0.08,
+    "last_time": 0.53,
+    "first_time": 0.09,
+    "how_often": 0.06
+   }
+  },
+  {
+   "set": "heldout",
+   "timeline": false,
+   "text": "上次直播都聊了些啥",
+   "score": 0.16,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.22,
+    "her_past": 0.98,
+    "named_thing": 0.07,
+    "last_time": 0.16,
+    "first_time": 0.03,
+    "how_often": 0.05
+   }
+  },
+  {
+   "set": "heldout",
+   "timeline": false,
+   "text": "你上周三播了什么",
+   "score": 0.27,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.59,
+    "her_past": 0.98,
+    "named_thing": 0.11,
+    "last_time": 0.27,
+    "first_time": 0.03,
+    "how_often": 0.09
+   }
+  },
+  {
+   "set": "heldout",
+   "timeline": false,
+   "text": "你最喜欢哪个游戏",
+   "score": 0.02,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.96,
+    "her_past": 0.39,
+    "named_thing": 0.14,
+    "last_time": 0.02,
+    "first_time": 0.02,
+    "how_often": 0.02
+   }
+  },
+  {
+   "set": "heldout",
+   "timeline": false,
+   "text": "你什么时候生日",
+   "score": 0.04,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.86,
+    "her_past": 0.55,
+    "named_thing": 0.11,
+    "last_time": 0.03,
+    "first_time": 0.04,
+    "how_often": 0.03
+   }
+  },
+  {
+   "set": "heldout",
+   "timeline": false,
+   "text": "你下周还播黑神话吗",
+   "score": 0.06,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.73,
+    "her_past": 0.36,
+    "named_thing": 0.48,
+    "last_time": 0.06,
+    "first_time": 0.02,
+    "how_often": 0.03
+   }
+  },
+  {
+   "set": "heldout",
+   "timeline": false,
+   "text": "我第一次看你直播是2022年",
+   "score": 0.15,
+   "retrieve": false,
+   "nouls": {
+    "about_her": 0.24,
+    "her_past": 0.29,
+    "named_thing": 0.04,
+    "last_time": 0.14,
+    "first_time": 0.15,
+    "how_often": 0.04
+   }
+  },
+  {
+   "set": "heldout",
+   "timeline": false,
+   "text": "你觉得糖豆人好玩吗",
+   "score": 0.02,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.77,
+    "her_past": 0.09,
+    "named_thing": 0.68,
+    "last_time": 0.02,
+    "first_time": 0.02,
+    "how_often": 0.02
+   }
+  },
+  {
+   "set": "heldout",
+   "timeline": false,
+   "text": "晚上吃什么好呢",
+   "score": 0.02,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.52,
+    "her_past": 0.03,
+    "named_thing": 0.04,
+    "last_time": 0.02,
+    "first_time": 0.01,
+    "how_often": 0.01
+   }
+  },
+  {
+   "set": "heldout",
+   "timeline": false,
+   "text": "你记得我吗",
+   "score": 0.05,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.46,
+    "her_past": 0.82,
+    "named_thing": 0.09,
+    "last_time": 0.03,
+    "first_time": 0.02,
+    "how_often": 0.05
+   }
+  },
+  {
+   "set": "heldout",
+   "timeline": false,
+   "text": "你上次说要减肥，减了吗",
+   "score": 0.16,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.95,
+    "her_past": 0.97,
+    "named_thing": 0.1,
+    "last_time": 0.16,
+    "first_time": 0.03,
+    "how_often": 0.1
+   }
+  },
+  {
+   "set": "heldout",
+   "timeline": false,
+   "text": "鬼武者打到哪了",
+   "score": 0.19,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.2,
+    "her_past": 0.46,
+    "named_thing": 0.44,
+    "last_time": 0.19,
+    "first_time": 0.05,
+    "how_often": 0.04
+   }
+  },
+  {
+   "set": "heldout",
+   "timeline": false,
+   "text": "你什么时候下播",
+   "score": 0.04,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.49,
+    "her_past": 0.06,
+    "named_thing": 0.04,
+    "last_time": 0.04,
+    "first_time": 0.04,
+    "how_often": 0.02
+   }
+  },
+  {
+   "set": "heldout",
+   "timeline": false,
+   "text": "3月5号那场你唱了什么歌",
+   "score": 0.22,
+   "retrieve": true,
+   "nouls": {
+    "about_her": 0.62,
+    "her_past": 0.98,
+    "named_thing": 0.3,
+    "last_time": 0.22,
+    "first_time": 0.04,
+    "how_often": 0.04
+   }
+  }
+ ]
+}

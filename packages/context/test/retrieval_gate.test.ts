@@ -7,12 +7,14 @@ import {
   GATE_QUESTIONS,
   GATE_URL,
   GateDecision,
+  type GateVerdict,
   gateQuestions,
   gateState,
   PersonaFacts,
   RetrievalGate,
   retrievalGateFromEnv,
   StreamArchive,
+  TIMELINE_QUESTIONS,
   unlessSkipped,
 } from "../src/index.ts";
 import {
@@ -28,6 +30,8 @@ import {
 } from "./helpers.ts";
 
 const HIT: SearchRow[] = [{ text: "喜欢奶茶", date: "2026-09-01", stream_date: "2026-09-01" }];
+const RETRIEVE: GateVerdict = { retrieve: true, timeline: false };
+const SKIP: GateVerdict = { retrieve: false, timeline: false };
 
 let logs: { records: LogRecord[]; restore: () => void };
 beforeEach(() => {
@@ -73,14 +77,19 @@ function gateWith(fetch: FakeFetch, options: { timeoutSec?: number } = {}): Retr
   });
 }
 
-function answering(score: (body: Record<string, any>) => unknown, bodies: unknown[] = []) {
+function answering(
+  score: (body: Record<string, any>, name: string) => unknown,
+  bodies: unknown[] = [],
+) {
   return async (_url: string, init: RequestInit): Promise<Response> => {
     const body = JSON.parse(String(init.body));
     bodies.push(body);
-    const noul = score(body);
     return Response.json({
       answers: Object.fromEntries(
-        Object.keys(body.questions).map((name) => [name, { type: "noul", noul }]),
+        Object.keys(body.questions).map((name) => [
+          name,
+          { type: "noul", noul: score(body, name) },
+        ]),
       ),
     });
   };
@@ -102,31 +111,31 @@ function settledOf(promise: Promise<unknown>): () => boolean {
 describe("unlessSkipped (tests/test_retrieval_gate.py)", () => {
   test("test_skip_before_the_search_finishes_cancels_it", async () => {
     const search = new SlowSearch();
-    const verdict = deferred<boolean | undefined>();
+    const verdict = deferred<GateVerdict | undefined>();
     const pending = unlessSkipped(GateDecision.of(verdict.promise), search.run);
     await ticks();
     expect(search.started).toBe(true);
-    verdict.resolve(false);
+    verdict.resolve(SKIP);
     expect(await pending).toEqual([]);
     await ticks();
     expect(search.cancelled).toBe(true);
   });
 
   test("test_search_that_beats_the_gate_is_kept", async () => {
-    const never = GateDecision.of(new Promise<boolean>(() => {}));
+    const never = GateDecision.of(new Promise<GateVerdict>(() => {}));
     expect(await unlessSkipped(never, async () => HIT)).toEqual(HIT);
   });
 
   test("test_settled_skip_never_starts_the_search", async () => {
     const search = new SlowSearch();
-    expect(await unlessSkipped(GateDecision.settled(false), search.run)).toEqual([]);
+    expect(await unlessSkipped(GateDecision.settled(SKIP), search.run)).toEqual([]);
     expect(search.started).toBe(false);
   });
 
-  for (const verdict of [true, undefined]) {
-    test(`test_retrieve_or_a_swallowed_failure_waits_for_the_search[${verdict}]`, async () => {
+  for (const verdict of [RETRIEVE, undefined]) {
+    test(`test_retrieve_or_a_swallowed_failure_waits_for_the_search[${verdict?.retrieve}]`, async () => {
       const search = new SlowSearch();
-      const decided = deferred<boolean | undefined>();
+      const decided = deferred<GateVerdict | undefined>();
       const pending = unlessSkipped(GateDecision.of(decided.promise), search.run);
       const done = settledOf(pending);
       await ticks();
@@ -178,7 +187,8 @@ describe("gateState and the gate (tests/test_retrieval_gate.py)", () => {
     gate.attach(context.getMessages(), frames[2] as Record<string, unknown>);
     const decisions = frames.map((frame) => frame[GATE_FRAME_KEY] as GateDecision);
     expect(decisions[0]).toBe(decisions[1] as GateDecision);
-    expect(await Promise.all(decisions.map((d) => d.value()))).toEqual([false, false, true]);
+    const verdicts = await Promise.all(decisions.map((d) => d.value()));
+    expect(verdicts.map((v) => v?.retrieve)).toEqual([false, false, true]);
     expect(bodies).toHaveLength(2);
     expect(bodies[0]?.model).toBe(DEFAULT_GATE_MODEL);
   });
@@ -187,7 +197,7 @@ describe("gateState and the gate (tests/test_retrieval_gate.py)", () => {
     const gate = gateWith(async () => new Response(null, { status: 503 }));
     const metadata: Record<string, unknown> = {};
     gate.attach([{ role: "user", content: "哈哈哈哈" }], metadata);
-    expect(await (metadata[GATE_FRAME_KEY] as GateDecision).value()).toBe(true);
+    expect(await (metadata[GATE_FRAME_KEY] as GateDecision).value()).toEqual(RETRIEVE);
   });
 
   test("test_both_tiers_search_only_turns_the_gate_lets_through", async () => {
@@ -204,7 +214,9 @@ describe("gateState and the gate (tests/test_retrieval_gate.py)", () => {
       ["你最喜欢吃什么呀？", true],
     ] as const) {
       const context = new FakeContext([{ role: "user", content: text }]);
-      const metadata = { [GATE_FRAME_KEY]: GateDecision.settled(verdict) };
+      const metadata = {
+        [GATE_FRAME_KEY]: GateDecision.settled({ retrieve: verdict, timeline: false }),
+      };
       await archive.onContext(turnOf(context, metadata));
       await facts.onContext(turnOf(context, metadata));
     }
@@ -264,7 +276,7 @@ describe("RetrievalGate.decide", () => {
       requests.push({ url, init });
       return answering(() => 0.9)(url, init);
     });
-    expect(await gate.decide(state)).toBe(true);
+    expect((await gate.decide(state)).retrieve).toBe(true);
     const [request] = requests;
     expect(request?.url).toBe(GATE_URL);
     expect(request?.init.method).toBe("POST");
@@ -279,8 +291,15 @@ describe("RetrievalGate.decide", () => {
     const body = JSON.parse(String(request?.init.body));
     expect(Object.keys(body)).toEqual(["model", "state", "questions"]);
     expect(body.state).toEqual(state);
-    expect(Object.keys(body.questions)).toEqual(["about_her", "her_past", "named_thing"]);
-    expect(body.questions).toEqual(gateQuestions());
+    expect(Object.keys(body.questions)).toEqual([
+      "about_her",
+      "her_past",
+      "named_thing",
+      "last_time",
+      "first_time",
+      "how_often",
+    ]);
+    expect(body.questions).toEqual({ ...gateQuestions(), ...TIMELINE_QUESTIONS });
     expect(body.questions.about_her.instructions).toBe(
       "Is the viewer's latest message asking about the streamer herself — her preferences, " +
         "opinions, habits, abilities, body, family, pets, friends, relationships, backstory, " +
@@ -294,39 +313,51 @@ describe("RetrievalGate.decide", () => {
       calls++;
       return new Response("{}");
     });
-    expect(await gate.decide(null)).toBe(true);
+    expect(await gate.decide(null)).toEqual(RETRIEVE);
     expect(calls).toBe(0);
   });
 
   test("the threshold is inclusive", async () => {
-    expect(await gateWith(answering(() => 0.3)).decide(state)).toBe(true);
-    expect(await gateWith(answering(() => 0.2999)).decide(state)).toBe(false);
+    expect((await gateWith(answering(() => 0.3)).decide(state)).retrieve).toBe(true);
+    expect((await gateWith(answering(() => 0.2999)).decide(state)).retrieve).toBe(false);
     const info = logs.records.find((r) => r.level === "INFO")?.message;
     expect(info).toMatch(
-      /^Retrieval gate: retrieve query='你家有宠物吗？' \(score=0\.30, \d+ ms\)$/,
+      /^Retrieval gate: retrieve query='你家有宠物吗？' \(score=0\.30, timeline=0\.30, \d+ ms\)$/,
     );
   });
 
   test("the score is the highest noul of the three", async () => {
-    let n = 0;
-    const scores = [0.1, 0.5, 0.2];
-    const gate = gateWith(async () =>
-      Response.json({
-        answers: Object.fromEntries(
-          Object.keys(GATE_QUESTIONS).map((name) => [name, { noul: scores[n++] }]),
-        ),
-      }),
-    );
-    expect(await gate.decide(state)).toBe(true);
+    const nouls: Record<string, number> = { about_her: 0.1, her_past: 0.5, named_thing: 0.2 };
+    const gate = gateWith(answering((_body, name) => nouls[name] ?? 0.9));
+    expect((await gate.decide(state)).retrieve).toBe(true);
     expect(logs.records.at(-1)?.message).toContain("(score=0.50, ");
   });
 
+  test("the timeline questions decide the timeline alone, at 0.7 inclusive", async () => {
+    const scoring = (gateScore: number, timelineScore: number) =>
+      answering((_body, name) =>
+        Object.hasOwn(TIMELINE_QUESTIONS, name) ? timelineScore : gateScore,
+      );
+    expect(await gateWith(scoring(0.9, 0.7)).decide(state)).toEqual({
+      retrieve: true,
+      timeline: true,
+    });
+    expect(logs.records.at(-1)?.message).toMatch(
+      /^Retrieval gate: retrieve \+ timeline query='你家有宠物吗？' \(score=0\.90, timeline=0\.70, /,
+    );
+    expect(await gateWith(scoring(0.9, 0.6999)).decide(state)).toEqual(RETRIEVE);
+    expect(await gateWith(scoring(0.1, 0.9)).decide(state)).toEqual({
+      retrieve: false,
+      timeline: true,
+    });
+  });
+
   test("numeric strings and booleans count as Python float() reads them", async () => {
-    expect(await gateWith(answering(() => " 0.9 ")).decide(state)).toBe(true);
-    expect(await gateWith(answering(() => true)).decide(state)).toBe(true);
-    expect(await gateWith(answering(() => "1_0e-2")).decide(state)).toBe(false);
+    expect((await gateWith(answering(() => " 0.9 ")).decide(state)).retrieve).toBe(true);
+    expect((await gateWith(answering(() => true)).decide(state)).retrieve).toBe(true);
+    expect((await gateWith(answering(() => "1_0e-2")).decide(state)).retrieve).toBe(false);
     // NaN never compares >= 0.3, so Python skipped; parity keeps it.
-    expect(await gateWith(answering(() => "nan")).decide(state)).toBe(false);
+    expect((await gateWith(answering(() => "nan")).decide(state)).retrieve).toBe(false);
     expect(warnings()).toEqual([]);
   });
 
@@ -352,7 +383,7 @@ describe("RetrievalGate.decide", () => {
   ];
   for (const [name, fetch] of failures) {
     test(`fails open on ${name}`, async () => {
-      expect(await gateWith(fetch).decide(state)).toBe(true);
+      expect((await gateWith(fetch).decide(state)).retrieve).toBe(true);
       expect(warnings()).toHaveLength(1);
       expect(warnings()[0]).toStartWith("Retrieval gate failed open: ");
     });
@@ -366,7 +397,7 @@ describe("RetrievalGate.decide", () => {
         }),
       { timeoutSec: 0.05 },
     );
-    expect(await gate.decide(state)).toBe(true);
+    expect((await gate.decide(state)).retrieve).toBe(true);
     expect(warnings()[0]).toBe(
       "Retrieval gate failed open: TimeoutError('The operation timed out.')",
     );
@@ -408,7 +439,7 @@ describe("RetrievalGate.forTurn", () => {
       calls++;
       return Response.json({});
     });
-    expect(await gate.forTurn([{ role: "system", content: "x" }]).value()).toBe(true);
+    expect(await gate.forTurn([{ role: "system", content: "x" }]).value()).toEqual(RETRIEVE);
     expect(calls).toBe(0);
   });
 });
@@ -467,21 +498,21 @@ describe("unlessSkipped", () => {
   });
 
   test("a search that fails first propagates even when a skip follows", async () => {
-    const verdict = deferred<boolean | undefined>();
+    const verdict = deferred<GateVerdict | undefined>();
     const failure = new Error("lancedb down");
     const pending = unlessSkipped(GateDecision.of(verdict.promise), async () => {
       throw failure;
     });
     await ticks();
-    verdict.resolve(false);
+    verdict.resolve(SKIP);
     await expect(pending).rejects.toBe(failure);
   });
 
   test("a skip that settles after the search finished keeps the result", async () => {
-    const verdict = deferred<boolean | undefined>();
+    const verdict = deferred<GateVerdict | undefined>();
     const decision = GateDecision.of(verdict.promise);
     const result = await unlessSkipped(decision, async () => HIT);
-    verdict.resolve(false);
+    verdict.resolve(SKIP);
     await decision.whenSettled;
     expect(result).toEqual(HIT);
     expect(decision.saidSkip).toBe(true);
@@ -500,10 +531,10 @@ describe("unlessSkipped", () => {
     process.on("unhandledRejection", onUnhandled);
     try {
       const search = new SlowSearch();
-      const verdict = deferred<boolean | undefined>();
+      const verdict = deferred<GateVerdict | undefined>();
       const pending = unlessSkipped(GateDecision.of(verdict.promise), search.run);
       await ticks();
-      verdict.resolve(false);
+      verdict.resolve(SKIP);
       expect(await pending).toEqual([]);
       await new Promise((resolve) => setTimeout(resolve, 10));
       expect(search.cancelled).toBe(true);
@@ -524,16 +555,30 @@ describe("GateDecision", () => {
   });
 
   test("only an explicit false skips", async () => {
-    for (const verdict of [undefined, true]) {
+    for (const verdict of [undefined, RETRIEVE]) {
       const decision = GateDecision.of(Promise.resolve(verdict));
       await decision.whenSettled;
       expect(decision.saidSkip).toBe(false);
     }
-    const skip = GateDecision.of(Promise.resolve(false));
+    const skip = GateDecision.of(Promise.resolve(SKIP));
     expect(skip.saidSkip).toBe(false);
     await skip.whenSettled;
     expect(skip.saidSkip).toBe(true);
-    expect(GateDecision.settled(false).saidSkip).toBe(true);
+    expect(GateDecision.settled(SKIP).saidSkip).toBe(true);
     expect(GateDecision.settled(undefined).done).toBe(true);
+  });
+
+  test("asks for a timeline only once settled with one", async () => {
+    const verdict = deferred<GateVerdict | undefined>();
+    const decision = GateDecision.of(verdict.promise);
+    expect(decision.asksTimeline).toBe(false);
+    verdict.resolve({ retrieve: true, timeline: true });
+    await decision.whenSettled;
+    expect(decision.asksTimeline).toBe(true);
+    expect(GateDecision.settled(RETRIEVE).asksTimeline).toBe(false);
+    expect(GateDecision.settled(undefined).asksTimeline).toBe(false);
+    const failed = GateDecision.of(Promise.reject(new Error("task failed")));
+    await failed.whenSettled;
+    expect(failed.asksTimeline).toBe(false);
   });
 });

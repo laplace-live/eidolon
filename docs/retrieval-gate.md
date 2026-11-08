@@ -24,6 +24,12 @@ the past, or who or what a specific named thing is. Any answer at or above
 0.3 means retrieve. Jev reads questions literally, so each one asks a single
 thing and the code combines them.
 
+The same request asks three more questions, kept out of that score: does the
+viewer ask when she last did something, when she first did it, or how many
+times. Any of them at or above 0.7 marks the turn as a timeline question, and
+the archive answers it from the catalog instead of the three most similar
+chunks ([stream-recall.md](stream-recall.md#when-she-last-did-something)).
+
 ## Racing, never waiting
 
 The archive starts its search without waiting for the gate, and
@@ -66,6 +72,10 @@ turns fell below the threshold, every one about her cat or her shop, such
 as 坚果会咬电线吗 and 花店现在还营业吗. TypeSafe documents lower accuracy on
 CJK text than on English, so measure before trusting a change.
 
+Re-measured on 2026-11-07, when `~typesafe/jev-latest` answered as jev-1.14,
+the gate still kept all 93 recall turns, the lowest at 0.65. It skipped 66 of
+the 92 chit-chat turns, against 72 on jev-1.13.
+
 ## Changing it
 
 Re-run `uv run python docs/benchmarks/2026-09-19-retrieval-gate/decisions.py`
@@ -73,7 +83,13 @@ after touching the questions, the state, the threshold, or
 `RETRIEVAL_GATE_MODEL`. It exits non-zero if any labeled recall turn would
 be skipped. `~typesafe/jev-latest` follows new Jev releases, which can move
 the calibration the threshold relies on; pin `typesafe/jev-1.13` to hold it.
-`RETRIEVAL_GATE_ENABLED=false` restores searching on every turn.
+`RETRIEVAL_GATE_ENABLED=false` restores searching on every turn, and turns
+timeline answers off with it.
+
+After touching the timeline questions or `TIMELINE_THRESHOLD`, re-run
+`bun docs/benchmarks/2026-11-07-timeline-question/score.ts`. It exits
+non-zero if any labeled turn lands on the wrong side of the threshold.
 
 Live before/after calls and their method are in the
-[benchmark](benchmarks/2026-09-19-retrieval-gate/README.md).
+[benchmark](benchmarks/2026-09-19-retrieval-gate/README.md); the timeline
+questions' are in [their own](benchmarks/2026-11-07-timeline-question/README.md).

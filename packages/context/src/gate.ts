@@ -78,6 +78,33 @@ export function gateQuestions(): GateQuestions {
   return questions;
 }
 
+// Asked in the same request, outside the skip score: whether the viewer asks when, or how often,
+// she did something, which only the catalog's timeline answers. On jev-1.14 all 30 labeled timeline
+// turns scored 0.72 or more and all 33 others 0.60 or less, and asking them moved the gate's own
+// scores by at most 0.05. docs/benchmarks/2026-11-07-timeline-question
+export const TIMELINE_QUESTIONS = {
+  last_time: {
+    type: "noul",
+    instructions:
+      "Does the viewer's latest message ask when the streamer last did, played, sang, or " +
+      "talked about a specific thing, or how long ago that was?",
+  },
+  first_time: {
+    type: "noul",
+    instructions:
+      "Does the viewer's latest message ask when the streamer did something for the first " +
+      "time, such as when she first played, sang, or talked about it?",
+  },
+  how_often: {
+    type: "noul",
+    instructions:
+      "Does the viewer's latest message ask how many times or how often the streamer has done " +
+      "something in the past?",
+  },
+} as const;
+
+export const TIMELINE_THRESHOLD = 0.7;
+
 // The previous user line and the reply to it, so "它几岁了？" keeps its subject.
 const EARLIER_TURNS = 2;
 
@@ -113,14 +140,24 @@ export function gateState(messages: readonly unknown[]): GateState | null {
   };
 }
 
+/** Jev's answers for one turn. */
+export interface GateVerdict {
+  /** Whether the LanceDB tiers search at all. */
+  readonly retrieve: boolean;
+  /** Whether the viewer asks when, or how often, the streamer did something. */
+  readonly timeline: boolean;
+}
+
+const FAIL_OPEN: GateVerdict = Object.freeze({ retrieve: true, timeline: false });
+
 /** One turn's verdict, readable synchronously once settled. Never rejects. */
 export class GateDecision {
   #done = false;
-  #verdict: boolean | undefined;
-  /** Resolves (never rejects) once settled; `done` and `saidSkip` are current by then. */
+  #verdict: GateVerdict | undefined;
+  /** Resolves (never rejects) once settled; every getter is current by then. */
   readonly whenSettled: Promise<void>;
 
-  private constructor(pending: PromiseLike<boolean | undefined> | null, verdict?: boolean) {
+  private constructor(pending: PromiseLike<GateVerdict | undefined> | null, verdict?: GateVerdict) {
     if (pending === null) {
       this.#settle(verdict);
       this.whenSettled = Promise.resolve();
@@ -132,17 +169,17 @@ export class GateDecision {
     }
   }
 
-  /** A rejection or a non-boolean settles as undefined: retrieve. */
-  static of(verdict: PromiseLike<boolean | undefined>): GateDecision {
+  /** A rejection settles as undefined: retrieve. */
+  static of(verdict: PromiseLike<GateVerdict | undefined>): GateDecision {
     return new GateDecision(verdict);
   }
 
-  static settled(verdict: boolean | undefined): GateDecision {
+  static settled(verdict: GateVerdict | undefined): GateDecision {
     return new GateDecision(null, verdict);
   }
 
-  #settle(verdict: unknown): void {
-    this.#verdict = typeof verdict === "boolean" ? verdict : undefined;
+  #settle(verdict: GateVerdict | undefined): void {
+    this.#verdict = verdict;
     this.#done = true;
   }
 
@@ -151,13 +188,17 @@ export class GateDecision {
   }
 
   // A failed decision settles undefined, as Pipecat's task wrapper returned None for one, so
-  // only an explicit false skips.
+  // only an explicit `retrieve: false` skips.
   get saidSkip(): boolean {
-    return this.#done && this.#verdict === false;
+    return this.#verdict?.retrieve === false;
   }
 
-  /** The verdict once settled: true/false, or undefined for a failed decision. */
-  async value(): Promise<boolean | undefined> {
+  get asksTimeline(): boolean {
+    return this.#verdict?.timeline === true;
+  }
+
+  /** The verdict once settled, or undefined for a failed decision. */
+  async value(): Promise<GateVerdict | undefined> {
     await this.whenSettled;
     return this.#verdict;
   }
@@ -193,11 +234,12 @@ export class RetrievalGate {
     this.#timeoutSec = options.timeoutSec ?? GATE_TIMEOUT_SEC;
   }
 
-  /** One POST; any failure resolves true (fail open) with a warning. A null state asks nothing. */
-  async decide(state: GateState | null): Promise<boolean> {
-    if (state === null) return true;
+  /** One POST; any failure retrieves without a timeline (fail open). A null state asks nothing. */
+  async decide(state: GateState | null): Promise<GateVerdict> {
+    if (state === null) return FAIL_OPEN;
     const started = performance.now();
     let score: number;
+    let timelineScore: number;
     try {
       const post = this.#fetch;
       // The connection must outlive the gap between turns: with httpx's 5 s keep-alive, turns
@@ -206,7 +248,11 @@ export class RetrievalGate {
       const response = await post(this.#url, {
         method: "POST",
         headers: this.#headers,
-        body: JSON.stringify({ model: this.model, state, questions: gateQuestions() }),
+        body: JSON.stringify({
+          model: this.model,
+          state,
+          questions: { ...gateQuestions(), ...TIMELINE_QUESTIONS },
+        }),
         // httpx follows no redirects, so a 3xx failed open there too.
         redirect: "manual",
         signal: AbortSignal.timeout(this.#timeoutSec * 1000),
@@ -217,18 +263,24 @@ export class RetrievalGate {
           httpxStatusMessage(response, this.#url, { statusLineOnly: true }),
         );
       }
-      score = scoreOf(await response.json());
+      const body: unknown = await response.json();
+      score = maxNoul(body, Object.keys(GATE_QUESTIONS));
+      timelineScore = maxNoul(body, Object.keys(TIMELINE_QUESTIONS));
     } catch (error) {
       logger.warning(`Retrieval gate failed open: ${errorRepr(error)}`);
-      return true;
+      return FAIL_OPEN;
     }
-    const needed = score >= GATE_THRESHOLD;
+    const verdict = {
+      retrieve: score >= GATE_THRESHOLD,
+      timeline: timelineScore >= TIMELINE_THRESHOLD,
+    };
     logger.info(
-      `Retrieval gate: ${needed ? "retrieve" : "skip"} ` +
+      `Retrieval gate: ${verdict.retrieve ? "retrieve" : "skip"}` +
+        `${verdict.timeline ? " + timeline" : ""} ` +
         `query=${pyRepr(state.viewer_latest_message)} (score=${pyFixed(score, 2)}, ` +
-        `${pyFixed(performance.now() - started, 0)} ms)`,
+        `timeline=${pyFixed(timelineScore, 2)}, ${pyFixed(performance.now() - started, 0)} ms)`,
     );
-    return needed;
+    return verdict;
   }
 
   /**
@@ -327,10 +379,10 @@ function subscript(container: unknown, key: string): unknown {
 }
 
 // Python's max() keeps the first of equal or unordered values, so a NaN noul only wins first.
-function scoreOf(body: unknown): number {
+function maxNoul(body: unknown, names: readonly string[]): number {
   const answers = subscript(body, "answers");
   let score: number | undefined;
-  for (const name of Object.keys(GATE_QUESTIONS)) {
+  for (const name of names) {
     const noul = pyFloat(subscript(subscript(answers, name), "noul"));
     if (score === undefined || noul > score) score = noul;
   }

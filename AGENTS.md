@@ -91,7 +91,8 @@ a row here and writing the prose there — not a new section in this file.**
 | changesets, the version PR, tags, or publishing the npm package (`apps/eidolon`) | [releasing.md](docs/releasing.md) |
 | any env var — all 50-odd are documented there | `.env.example` |
 | Soniox's per-project vocabulary glossary | `personas/milky-green/glossary.toml` |
-| broadcast overviews, date-scoped recall, or the archive lookup tool | [stream-recall.md](docs/stream-recall.md) |
+| broadcast overviews, date-scoped recall, the archive lookup tool, or when she last did something | [stream-recall.md](docs/stream-recall.md) |
+| recalling a viewer or a particular SC, and recall's other gaps (design only, unbuilt) | [recall-gaps.md](docs/recall-gaps.md) |
 | the `take_selfie` tool, image generation, or `/api/selfie` | [selfies.md](docs/selfies.md) |
 | the retrieval gate, or why a turn skipped LanceDB | [retrieval-gate.md](docs/retrieval-gate.md) |
 | anything under `apps/` or `packages/` (the TypeScript bot) | [typescript.md](docs/typescript.md) |
@@ -179,6 +180,7 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | the bot's pipeline, the transport, or a monkey-patch | boot the bot and hold a real call (`bun apps/bot/scripts/e2e-call.ts --text`, or `--audio`) — none of this is unit-testable |
 | `image_generation.py` | `uv run laplace-generate-image` against a real reference — it shares `generate()` with the bot, so a successful render is the check. Billed per image |
 | `retrieval_gate.py`'s questions, state, or threshold, or `RETRIEVAL_GATE_MODEL` | `uv run python docs/benchmarks/2026-09-19-retrieval-gate/decisions.py` — exits non-zero if any labeled turn that needs recall would be skipped |
+| the gate's timeline questions or `TIMELINE_THRESHOLD` (`packages/context/src/gate.ts`) | `bun docs/benchmarks/2026-11-07-timeline-question/score.ts` — exits non-zero if any labeled turn lands on the wrong side of the threshold |
 | `prompt.md`'s 表演提示 markup, or `FISH_MODEL` | `uv run python docs/benchmarks/2026-10-17-drama-3-markup/render.py` (add `--model` for another model) — any `leaked` entry in its results means markup is read aloud. Billed per character |
 | `mem0_local.py`, `memory_service.py`, or `memory_admin.py` | `docker compose up qdrant`, then round-trip a real store → search → delete. No test covers Mem0; it needs a live vector store and an embedding key |
 | an env var | document it in `.env.example` in the same commit |
@@ -257,6 +259,9 @@ module that owns it.
   the `raddr` scrub. Each one's failure mode is in [typescript.md](docs/typescript.md).
 - **Python is the behavioral spec until it is retired.** A golden fixture that fails
   means the port drifted; fix the port, not the fixture.
+- **New features go into the TypeScript bot only.** Python is frozen as the rollback
+  image until it is deleted, so the spec covers what both already do; a test that
+  pins Python's old behavior changes with the feature, as the timeline's did.
 - **Run `bun test` from the repository root only.** Elsewhere `bunfig.toml`'s preload is
   skipped and the data home is the real one, so a test file that deletes in it imports
   `packages/config/test/isolated-guard.ts` first, and `isolated-guard.test.ts` enforces that.
@@ -327,6 +332,13 @@ module that owns it.
   the bot runs. Keep it that way. The first two reach it via
   `retriever.LanceRetriever`, which adds only the table handle and the
   stale-reopen retry — never scoring.
+- **Similarity search can't answer occurrence questions.** It hands the LLM the
+  3 chunks most like the viewer's words, whatever their dates, and its query
+  never says who the viewer is. "When did you last play X" and "how often" go
+  through `StreamCatalog.timeline`, which the gate's timeline questions switch
+  on; "do you remember my SC" has no lookup yet. A bigger `top_k`, another
+  reranker or another vector store won't get there
+  ([recall-gaps.md](docs/recall-gaps.md)).
 
 ### The persona
 

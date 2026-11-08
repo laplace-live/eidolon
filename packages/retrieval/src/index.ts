@@ -58,6 +58,7 @@ export {
   vectorSearch,
 } from "./hybrid.ts";
 export { JiebaTokenizer } from "./jieba.ts";
+export { type Occurrence, OccurrenceIndex, type Timeline } from "./occurrences.ts";
 export { clip, PyPattern, pyInt, pyRegexSource } from "./py.ts";
 export {
   buildQueryText,

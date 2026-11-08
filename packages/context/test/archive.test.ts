@@ -7,6 +7,7 @@ import type { Broadcast, SearchRow, StreamScope } from "@eidolon/retrieval";
 import {
   GATE_FRAME_KEY,
   GateDecision,
+  type GateVerdict,
   OVERVIEW_FRAME_KEY,
   PersonaFacts,
   RECALL_PREFIX,
@@ -21,6 +22,7 @@ import {
   FakeContext,
   FakeRetriever,
   MemoryCatalog,
+  RECALL_HIT,
   TODAY,
   ticks,
   turnOf,
@@ -142,7 +144,10 @@ describe("archive → facts replays Python's pipeline", () => {
         } else {
           const metadata: Record<string, unknown> = {};
           if (step.frame.decision !== null) {
-            metadata[GATE_FRAME_KEY] = GateDecision.settled(step.frame.decision);
+            metadata[GATE_FRAME_KEY] = GateDecision.settled({
+              retrieve: step.frame.decision,
+              timeline: false,
+            });
           }
           for (const provider of [archive, facts]) {
             try {
@@ -594,6 +599,106 @@ describe("recall_streams scopes and replies", () => {
     expect(retriever.calls).toEqual([
       { query: "ASMR", candidates: 15, topK: 3, datePrefilter: false, where: null },
     ]);
+  });
+});
+
+describe("a question about when, or how often, gets the catalog's timeline", () => {
+  const TIMELINE: GateVerdict = { retrieve: true, timeline: true };
+  const RETRIEVE: GateVerdict = { retrieve: true, timeline: false };
+
+  function day(date: string, scenes: [string, string[]][]): Broadcast {
+    return {
+      ...broadcast(date),
+      scenes: scenes.map(([heading, topics], i) => ({
+        id: `${date}-BV1abc_p1::00${i}`,
+        streamId: `${date}-BV1abc_p1`,
+        heading,
+        summary: "",
+        topics,
+        chunkType: "commentary",
+        refined: true,
+        timestamp: "",
+      })),
+    };
+  }
+
+  async function ask(query: string, decision: GateDecision | null) {
+    const retriever = new FakeRetriever();
+    const catalog = new MemoryCatalog([
+      day("2026-09-08", [["读SC", ["读SC"]]]),
+      day("2026-09-05", [
+        ["健身环第一关", ["健身环"]],
+        ["健身环第二关", ["健身环"]],
+        ["健身环打卡", ["健身环"]],
+      ]),
+      day("2026-08-20", [["聊到健身环", ["健身环"]]]),
+    ]);
+    const archive = new StreamArchive({ retriever, catalog, timeZone: "UTC", today: () => TODAY });
+    // Offered whenever a catalog exists, as in production; it routes some questions to a hint.
+    await archive.recallTool();
+    const context = new FakeContext([{ role: "user", content: query }]);
+    const enhanced = await archive.enhance(context, query, decision);
+    const recall = context.contents().find((c) => c.startsWith(RECALL_PREFIX)) ?? "";
+    return { archive, retriever, enhanced, recall };
+  }
+
+  test("replaces the topical search's chunks", async () => {
+    const { archive, retriever, enhanced, recall } = await ask(
+      "你上次玩健身环是什么时候？",
+      GateDecision.settled(TIMELINE),
+    );
+    expect(enhanced).toBe(false);
+    expect(retriever.calls).toHaveLength(1);
+    expect(recall).toContain("「健身环」");
+    expect(recall).toContain("共2场提到。");
+    expect(recall).toContain("- 2026-09-05，3段：健身环第一关；健身环第二关\n");
+    expect(recall).toContain("最近一场多段的是 2026-09-05，3段");
+    expect(recall).toContain("最早一场是 2026-08-20，1段：聊到健身环");
+    expect(recall).not.toContain(String(RECALL_HIT.summary));
+    expect(archive.lastWasArchive).toBe(true);
+    expect(archive.recall.selectedScope?.streamIds).toEqual([
+      "2026-09-05-BV1abc",
+      "2026-08-20-BV1abc",
+    ]);
+  });
+
+  test("replaces a 上次 recall scoped to the newest broadcast", async () => {
+    const { retriever, recall } = await ask(
+      "你上次直播玩健身环是哪天？",
+      GateDecision.settled(TIMELINE),
+    );
+    expect(retriever.calls[0]?.where).toBe("stream_id IN ('2026-09-08-BV1abc_p1')");
+    expect(recall).toContain("「健身环」");
+    expect(recall).not.toContain("查询范围");
+  });
+
+  test("answers when she first did something", async () => {
+    const { recall } = await ask("你第一次玩健身环是什么时候？", GateDecision.settled(TIMELINE));
+    expect(recall).toContain("「健身环」");
+    expect(recall).toContain("最早一场是 2026-08-20，1段：聊到健身环");
+  });
+
+  test("leaves a recall scoped to dates alone", async () => {
+    const { recall } = await ask("你上周直播玩健身环了吗？", GateDecision.settled(TIMELINE));
+    expect(recall).toContain("查询范围");
+    expect(recall).not.toContain("「健身环」");
+  });
+
+  for (const [name, decision] of [
+    ["no timeline in the verdict", GateDecision.settled(RETRIEVE)],
+    ["a verdict still pending", GateDecision.of(new Promise<GateVerdict>(() => {}))],
+    ["no gate", null],
+  ] as const) {
+    test(`keeps the chunks with ${name}`, async () => {
+      const { recall } = await ask("你上次玩健身环是什么时候？", decision);
+      expect(recall).toContain(String(RECALL_HIT.summary));
+      expect(recall).not.toContain("「健身环」");
+    });
+  }
+
+  test("keeps the chunks when the question names no topic the catalog has", async () => {
+    const { recall } = await ask("你上次玩那个游戏是什么时候？", GateDecision.settled(TIMELINE));
+    expect(recall).toContain(String(RECALL_HIT.summary));
   });
 });
 
