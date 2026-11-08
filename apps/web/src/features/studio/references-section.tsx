@@ -1,5 +1,8 @@
 // Pictures: the outfits selfies redraw, the friends she can take one with, and how selfies are
 // drawn. Her avatar is on Profile.
+
+import { ph } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { ImagePlusIcon, ImagesIcon, Trash2Icon, UserPlusIcon, UsersIcon } from "lucide-react";
 import { type DragEvent, type FormEvent, type ReactNode, useEffect, useId, useState } from "react";
@@ -21,8 +24,8 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { type PersonaSummary, type ReferenceImage, type ReferenceKind, url } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
-import { useLang, useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { useLang } from "@/locales/i18n";
 import { previewable, previewUrl, renamed, stemOf } from "./files";
 import { LoadError } from "./parts";
 import { draggingFiles, uploadProblem, useFilePicker, useRemove, useUpload } from "./pictures";
@@ -50,7 +53,7 @@ function ImageGrid({
   readonly removing: boolean;
   readonly onRemove: (image: ReferenceImage) => void;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const lang = useLang();
   return (
     <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
@@ -74,7 +77,7 @@ function ImageGrid({
                   SHAPE[kind],
                 )}
               >
-                {t("studio.references.noPreview")}
+                {t`No preview: only PNG, JPEG and WebP are shown here. Selfies still use it.`}
               </div>
             )}
             <div className="flex items-start gap-1">
@@ -83,9 +86,7 @@ function ImageGrid({
                   {kind === "friends" ? stemOf(image.name) : image.name}
                 </p>
                 <p className="text-muted-foreground text-xs">
-                  {image.source === "template"
-                    ? t("studio.references.builtIn")
-                    : formatBytes(image.size, lang)}
+                  {image.source === "template" ? t`Built in` : formatBytes(image.size, lang)}
                 </p>
               </div>
               {image.source === "own" && (
@@ -93,7 +94,10 @@ function ImageGrid({
                   variant="ghost"
                   size="icon-sm"
                   className="-mt-0.5 -mr-1.5 text-muted-foreground"
-                  aria-label={t("studio.references.remove", { name: image.name })}
+                  aria-label={t({
+                    message: `Remove ${ph({ name: image.name })}`,
+                    context: "picture",
+                  })}
                   disabled={removing}
                   onClick={() => onRemove(image)}
                 >
@@ -205,7 +209,7 @@ function FriendDialog({
   readonly onUpload: (file: File, name: string) => void;
   readonly onClose: () => void;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const lang = useLang();
   const id = useId();
   const [name, setName] = useState("");
@@ -230,8 +234,8 @@ function FriendDialog({
       <DialogContent>
         <form className="flex flex-col gap-5" onSubmit={submit}>
           <DialogHeader>
-            <DialogTitle>{t("studio.references.friendTitle")}</DialogTitle>
-            <DialogDescription>{t("studio.references.friendHelp")}</DialogDescription>
+            <DialogTitle>{t`Add a Friend`}</DialogTitle>
+            <DialogDescription>{t`The picture is saved under their name, which is how she knows who it is.`}</DialogDescription>
           </DialogHeader>
           {preview && (
             <img
@@ -241,7 +245,7 @@ function FriendDialog({
             />
           )}
           <Field data-invalid={problem !== null}>
-            <FieldLabel htmlFor={id}>{t("studio.references.friendName")}</FieldLabel>
+            <FieldLabel htmlFor={id}>{t`Their Name`}</FieldLabel>
             <Input
               id={id}
               value={name}
@@ -258,11 +262,11 @@ function FriendDialog({
           </Field>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
-              {t("studio.references.cancel")}
+              {t`Cancel`}
             </Button>
             <Button type="submit" disabled={uploading || name.trim() === "" || problem !== null}>
               {uploading && <Spinner />}
-              {t("studio.references.upload")}
+              {t`Upload`}
             </Button>
           </DialogFooter>
         </form>
@@ -272,7 +276,7 @@ function FriendDialog({
 }
 
 export function ReferencesSection({ persona }: { readonly persona: PersonaSummary }) {
-  const t = useT();
+  const { t } = useLingui();
   const lang = useLang();
   const references = useQuery(personaQueries(persona.id).references);
   // Bumped after each change, so pictures under an unchanged name load again.
@@ -293,7 +297,7 @@ export function ReferencesSection({ persona }: { readonly persona: PersonaSummar
       }
       try {
         await upload.mutateAsync({ kind: "outfits", name, file });
-        toast.success(t("studio.references.uploaded", { name }));
+        toast.success(t`${name} uploaded.`);
       } catch {
         // useUpload's onError said why.
       }
@@ -305,8 +309,8 @@ export function ReferencesSection({ persona }: { readonly persona: PersonaSummar
       scope="persona"
       persona={persona.id}
       paths={CARD_PATHS.selfie}
-      title={t("studio.references.selfieTitle")}
-      description={t("studio.references.selfieHelp")}
+      title={t`Selfies`}
+      description={t`The image model and how selfies are drawn.`}
     />
   );
 
@@ -332,18 +336,22 @@ export function ReferencesSection({ persona }: { readonly persona: PersonaSummar
   return (
     <>
       <PicturesCard
-        title={t("studio.references.outfitsTitle")}
-        description={t("studio.references.outfitsHelp")}
-        note={persona.template ? t("studio.references.local", { name: persona.name }) : undefined}
-        addLabel={t("studio.references.add")}
+        title={t`Outfits`}
+        description={t`What she looks like in selfies. Each selfie redraws one outfit, picked by the hour.`}
+        note={
+          persona.template
+            ? t`Outfits you add stay on this computer: deploying ${ph({ name: persona.name })} copies only her friends' pictures.`
+            : undefined
+        }
+        addLabel={t`Add Pictures`}
         addIcon={<ImagePlusIcon />}
         empty={
           outfits.length > 0
             ? null
             : {
                 icon: <ImagesIcon />,
-                title: t("studio.references.outfitsEmptyTitle"),
-                body: t("studio.references.outfitsEmpty"),
+                title: t`No outfits yet`,
+                body: t`She can't take selfies without one. Add a picture of her, or drop one here.`,
               }
         }
         multiple
@@ -360,17 +368,17 @@ export function ReferencesSection({ persona }: { readonly persona: PersonaSummar
         />
       </PicturesCard>
       <PicturesCard
-        title={t("studio.references.friendsTitle")}
-        description={t("studio.references.friendsHelp")}
-        addLabel={t("studio.references.addFriend")}
+        title={t`Friends`}
+        description={t`People she can take a selfie with: one picture each, named after them.`}
+        addLabel={t`Add a Friend`}
         addIcon={<UserPlusIcon />}
         empty={
           friends.length > 0
             ? null
             : {
                 icon: <UsersIcon />,
-                title: t("studio.references.friendsEmptyTitle"),
-                body: t("studio.references.friendsEmpty"),
+                title: t`No friends yet`,
+                body: t`Add a picture of someone she can take a selfie with, or drop one here.`,
               }
         }
         multiple={false}
@@ -397,7 +405,7 @@ export function ReferencesSection({ persona }: { readonly persona: PersonaSummar
             {
               onSuccess: () => {
                 setFriend(null);
-                toast.success(t("studio.references.uploaded", { name }));
+                toast.success(t`${name} uploaded.`);
               },
             },
           )

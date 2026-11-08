@@ -1,9 +1,9 @@
+import { useLingui } from "@lingui/react/macro";
 import { MicIcon, MicOffIcon, PhoneIcon, PhoneOffIcon, SendHorizontalIcon } from "lucide-react";
 import { type FormEvent, type KeyboardEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useT } from "@/lib/i18n";
 import type { Call } from "./use-call";
 
 function MessageInput({
@@ -15,7 +15,7 @@ function MessageInput({
   readonly name: string;
   readonly onSend: (text: string) => void;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const [text, setText] = useState("");
 
   function submit(event: FormEvent) {
@@ -32,7 +32,7 @@ function MessageInput({
     }
   }
 
-  const placeholder = t("call.input.placeholder", { name });
+  const placeholder = t`Type a message to ${name}`;
   return (
     <form className="flex min-w-0 flex-1 items-center gap-2" onSubmit={submit}>
       <Input
@@ -51,7 +51,7 @@ function MessageInput({
         variant="outline"
         size="icon-lg"
         disabled={disabled || text.trim() === ""}
-        aria-label={t("call.input.send")}
+        aria-label={t`Send`}
       >
         <SendHorizontalIcon />
       </Button>
@@ -61,7 +61,7 @@ function MessageInput({
 
 /** Call, or once in a call: the mic, the text box and the hang-up. */
 export function CallControls({ call, name }: { readonly call: Call; readonly name: string }) {
-  const t = useT();
+  const { t } = useLingui();
   const { phase } = call;
 
   if (phase.name === "idle" || phase.name === "ended") {
@@ -69,14 +69,14 @@ export function CallControls({ call, name }: { readonly call: Call; readonly nam
       <div className="flex justify-center px-4 py-4 sm:px-6">
         <Button size="lg" onClick={call.start}>
           <PhoneIcon data-icon="inline-start" />
-          {phase.name === "ended" ? t("call.again") : t("call.start", { name })}
+          {phase.name === "ended" ? t`Call Again` : t`Call ${name}`}
         </Button>
       </div>
     );
   }
 
   const live = phase.name === "live";
-  const micLabel = t(call.micOn ? "call.mic.mute" : "call.mic.unmute");
+  const micLabel = call.micOn ? t`Mute your mic` : t`Unmute your mic`;
   return (
     <div className="flex items-center gap-2 px-4 py-4 sm:px-6">
       <Tooltip>
@@ -104,7 +104,7 @@ export function CallControls({ call, name }: { readonly call: Call; readonly nam
       >
         <PhoneOffIcon />
         {/* On a phone the text box needs the width; the name stays for screen readers. */}
-        <span className="max-sm:sr-only">{t("call.hangUp")}</span>
+        <span className="max-sm:sr-only">{t`Hang Up`}</span>
       </Button>
     </div>
   );
@@ -112,7 +112,7 @@ export function CallControls({ call, name }: { readonly call: Call; readonly nam
 
 /** Over the transcript's foot during a call: that the bot hears the viewer, or can't. */
 export function MicPill({ call }: { readonly call: Call }) {
-  const t = useT();
+  const { t } = useLingui();
   const live = call.phase.name === "live";
   const muted = live && !call.micOn;
   const listening = live && call.micOn && call.userSpeaking;
@@ -128,7 +128,7 @@ export function MicPill({ call }: { readonly call: Call }) {
           ) : (
             <span className="size-2 animate-pulse rounded-full bg-success" />
           )}
-          {t(muted ? "call.muted" : "call.listening")}
+          {muted ? t`Your mic is muted` : t`Listening…`}
         </span>
       )}
     </div>

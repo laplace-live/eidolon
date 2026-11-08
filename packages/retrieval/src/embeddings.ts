@@ -2,11 +2,7 @@
 // come from the same model and dimension as the offline ingest's, or they aren't comparable.
 import {
   cpSlice,
-  DEFAULT_EMBED_BASE_URL,
-  DEFAULT_EMBED_MODEL,
   embedDim,
-  envOptional,
-  envStr,
   extractCostUsd,
   isJsonObject,
   logger,
@@ -21,6 +17,13 @@ import {
   retryDelaySeconds,
   shouldRetry,
 } from "@eidolon/config";
+import {
+  hasKey,
+  missingKey,
+  reportUsage,
+  type Selection,
+  selectRequired,
+} from "@eidolon/providers";
 
 // Fallback per-model embedding prices, USD per 1M tokens.
 //
@@ -123,6 +126,8 @@ export interface EmbeddingClientOptions {
   baseUrl: string;
   apiKey: string;
   headers?: Record<string, string>;
+  /** Sends OpenRouter's `usage` request field, which other APIs refuse as unknown. */
+  openrouter?: boolean;
   fetch?: typeof fetch;
   sleep?: (seconds: number) => Promise<void>;
   random?: () => number;
@@ -148,6 +153,7 @@ export class EmbeddingClient {
   readonly baseUrl: string;
   readonly #apiKey: string;
   readonly #headers: Record<string, string>;
+  readonly #openrouter: boolean;
   readonly #fetch: typeof fetch | null;
   readonly #sleep: (seconds: number) => Promise<void>;
   readonly #random: () => number;
@@ -158,6 +164,7 @@ export class EmbeddingClient {
     this.baseUrl = options.baseUrl;
     this.#apiKey = options.apiKey;
     this.#headers = { ...(options.headers ?? {}) };
+    this.#openrouter = options.openrouter ?? true;
     this.#fetch = options.fetch ?? null;
     this.#sleep = options.sleep ?? ((seconds) => Bun.sleep(seconds * 1000));
     this.#random = options.random ?? Math.random;
@@ -179,7 +186,7 @@ export class EmbeddingClient {
       model,
       dimensions,
       encoding_format: "float",
-      usage: { include: true },
+      ...(this.#openrouter ? { usage: { include: true } } : {}),
     };
     let body: Record<string, unknown> | null = null;
     let lastError = "unknown";
@@ -301,27 +308,30 @@ export class EmbeddingClient {
   }
 }
 
-let defaultClient: EmbeddingClient | null = null;
+let defaultClient: { client: EmbeddingClient; provider: string } | null = null;
+
+/** The embedding provider and model the install uses now: `embeddings.provider`, else OpenRouter. */
+export function embeddingSelection(): Selection {
+  return selectRequired("embeddings");
+}
 
 /**
- * The process's client, built from env on first use. Without a key it throws, and caches nothing,
- * so the check repeats per call.
+ * The process's client, built from the settings on first use. Without a key it throws, and
+ * caches nothing, so the check repeats per call.
  */
 export function defaultEmbeddingClient(): EmbeddingClient {
-  if (defaultClient !== null) return defaultClient;
-  const apiKey = envOptional("EMBED_API_KEY") ?? envOptional("OPENROUTER_API_KEY");
-  if (apiKey === undefined) {
-    throw new Error(
-      "Embeddings need an API key. Set OPENROUTER_API_KEY (reused " +
-        "from the LLM config) or EMBED_API_KEY for a different provider.",
-    );
-  }
-  defaultClient = new EmbeddingClient({
-    baseUrl: envStr("EMBED_BASE_URL", DEFAULT_EMBED_BASE_URL),
-    apiKey,
-    headers: openrouterHeaders(),
+  if (defaultClient !== null) return defaultClient.client;
+  const selection = selectRequired("embeddings");
+  if (!hasKey(selection)) throw missingKey(selection);
+  const openrouter = selection.provider.id === "openrouter";
+  const client = new EmbeddingClient({
+    baseUrl: selection.baseUrl as string,
+    apiKey: selection.apiKey ?? "",
+    headers: openrouter ? openrouterHeaders() : {},
+    openrouter,
   });
-  return defaultClient;
+  defaultClient = { client, provider: selection.provider.id };
+  return client;
 }
 
 /** Forgets the default client, so the next call reads the env again. */
@@ -335,18 +345,36 @@ export interface EmbedOptions {
   signal?: AbortSignal;
 }
 
-/** Empty input makes no request. `model` defaults to EMBED_MODEL, `dimensions` to EMBED_DIM. */
+/**
+ * Empty input makes no request. `model` defaults to the embeddings role's (EMBED_MODEL),
+ * `dimensions` to EMBED_DIM.
+ */
 export async function embedTextsWithUsage(
   texts: readonly string[],
   options: EmbedOptions = {},
 ): Promise<[number[][], EmbeddingUsage]> {
   if (texts.length === 0) return [[], new EmbeddingUsage()];
-  const model = options.model || envStr("EMBED_MODEL", DEFAULT_EMBED_MODEL);
+  const client = defaultEmbeddingClient();
+  const model = options.model || embeddingSelection().model;
   const dimensions = options.dimensions || embedDim();
-  return defaultEmbeddingClient().embedWithUsage(texts, {
+  const result = await client.embedWithUsage(texts, {
     model,
     dimensions,
     ...(options.signal ? { signal: options.signal } : {}),
+  });
+  reportEmbedding(model, result[1]);
+  return result;
+}
+
+/** Records one embedding request's usage with the install's embedding provider. */
+export function reportEmbedding(model: string, usage: EmbeddingUsage): void {
+  reportUsage({
+    role: "embeddings",
+    provider: defaultClient?.provider ?? embeddingSelection().provider.id,
+    model,
+    units: { inputTokens: usage.totalTokens },
+    costUsd: usage.costSource === "openrouter" ? usage.costUsd : null,
+    estimatedUsd: usage.costSource === "estimate" ? usage.costUsd : null,
   });
 }
 

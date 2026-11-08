@@ -1,9 +1,9 @@
+import { useLingui } from "@lingui/react/macro";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 import { call } from "@/lib/api";
 import { toastError } from "@/lib/feedback";
-import { useT } from "@/lib/i18n";
 
 const WAIT_MS = 60_000;
 const POLL_MS = 1000;
@@ -30,7 +30,7 @@ async function cameBack(): Promise<boolean> {
 
 /** POST restart, which stops running jobs, then waits for the supervisor's new server. */
 export function useRestart() {
-  const t = useT();
+  const { t } = useLingui();
   const queryClient = useQueryClient();
   const [restarting, setRestarting] = useState(false);
 
@@ -40,9 +40,9 @@ export function useRestart() {
       await call("POST /api/local/restart");
       if (await cameBack()) {
         await queryClient.invalidateQueries();
-        toast.success(t("settings.restart.done"));
+        toast.success(t`Eidolon restarted.`);
       } else {
-        toast.error(t("settings.restart.timeout"));
+        toast.error(t`Eidolon didn't come back. Start it again from the terminal.`);
       }
     } catch (error) {
       toastError(error);

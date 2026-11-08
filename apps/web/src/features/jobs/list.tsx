@@ -1,3 +1,5 @@
+import { ph } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { BookOpenIcon, TimerIcon, WorkflowIcon } from "lucide-react";
 import { useState } from "react";
@@ -12,22 +14,25 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import { ApiError, errorKey, type JobSnapshot, type PersonaSummary } from "@/lib/api";
+import { ApiError, type JobSnapshot, type PersonaSummary } from "@/lib/api";
 import { formatDateTime, formatUsd } from "@/lib/format";
-import { type Translate, useLang, useT } from "@/lib/i18n";
 import { jobOutcome } from "@/lib/jobs";
+import { errorMessage } from "@/lib/labels";
 import { studioPath } from "@/lib/paths";
 import { statusQuery } from "@/lib/query";
+import { useLang } from "@/locales/i18n";
+import { stageName } from "./describe";
+import { COMMAND_LABELS } from "./labels";
 import { CancelJobButton, Elapsed, OutcomeBadge, ResumeJobButton } from "./parts";
 import { jobsQuery } from "./queries";
 import { canResume } from "./resume";
 import { showsStop } from "./stopping";
 
 /** The stage a snapshot is on, as `Transcribe 3/10`. */
-function snapshotProgress(t: Translate, job: JobSnapshot): string {
+function snapshotProgress(job: JobSnapshot): string {
   const stage = job.stages.at(-1);
   if (!stage) return "";
-  const name = t(`jobs.stage.${stage.stage}`);
+  const name = stageName(stage.stage);
   const finished = stage.done + stage.failed + stage.skipped;
   return stage.total === null ? name : `${name} ${finished}/${stage.total}`;
 }
@@ -57,14 +62,14 @@ function JobRow({
   /** Some row has a button, so each keeps a column for one. */
   readonly actions: boolean;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const lang = useLang();
-  const progress = snapshotProgress(t, job);
+  const progress = snapshotProgress(job);
   const started = formatDateTime(job.startedAt, lang);
   const duration = (
     <span className="inline-flex items-center gap-1 tabular-nums">
       <TimerIcon aria-hidden className="size-3.5" />
-      <span className="sr-only">{t("jobs.meta.duration")} </span>
+      <span className="sr-only">{t`Duration`} </span>
       <Elapsed start={job.startedAt} end={job.endedAt} ticking={job.status === "running"} />
     </span>
   );
@@ -73,7 +78,7 @@ function JobRow({
     <ListRow
       href={`/jobs/${encodeURIComponent(job.id)}`}
       leading={<PersonaAvatar persona={persona} size="sm" />}
-      title={t(`jobs.command.${job.command}`)}
+      title={t(COMMAND_LABELS[job.command])}
       description={
         <span className="flex flex-col gap-0.5">
           <span className="flex flex-wrap items-center gap-x-1.5">
@@ -99,7 +104,7 @@ function JobRow({
           </div>
           <div className="hidden w-48 flex-col items-end gap-0.5 md:flex">
             <time dateTime={job.startedAt} className="text-muted-foreground text-sm">
-              <span className="sr-only">{t("jobs.meta.started")} </span>
+              <span className="sr-only">{t`Started`} </span>
               {started}
             </time>
             <span className="flex items-center gap-1.5 text-muted-foreground text-xs">
@@ -108,7 +113,7 @@ function JobRow({
                 <>
                   <Dot />
                   <span className="tabular-nums">
-                    <span className="sr-only">{t("jobs.meta.cost")} </span>
+                    <span className="sr-only">{t`Cost`} </span>
                     {cost}
                   </span>
                 </>
@@ -127,10 +132,10 @@ function JobRow({
 }
 
 function ListSkeleton() {
-  const t = useT();
+  const { t } = useLingui();
   return (
     <div className="overflow-hidden rounded-xl border bg-card" role="status" aria-busy="true">
-      <span className="sr-only">{t("common.loading")}</span>
+      <span className="sr-only">{t`Loading…`}</span>
       {["a", "b", "c"].map((key) => (
         <div
           key={key}
@@ -149,7 +154,7 @@ function ListSkeleton() {
 }
 
 export function JobsList() {
-  const t = useT();
+  const { t } = useLingui();
   const { data: jobs, error, isPending } = useQuery(jobsQuery);
   const { data: personas } = useQuery(personasQuery);
   const { data: status } = useQuery(statusQuery);
@@ -168,8 +173,8 @@ export function JobsList() {
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
-        title={t("jobs.title")}
-        description={t("jobs.description")}
+        title={t`Jobs`}
+        description={t`The offline work that builds each persona's knowledge. A job keeps running when you close this page.`}
         actions={
           (hidden > 0 || showEphemeral) && (
             <div className="flex items-center gap-2.5">
@@ -179,7 +184,7 @@ export function JobsList() {
                 onCheckedChange={setShowEphemeral}
               />
               <Label htmlFor="jobs-ephemeral" className="font-normal text-sm">
-                {t("jobs.showEphemeral", { count: hidden })}
+                {t`Show Plans and Link Checks (${ph({ count: hidden })})`}
               </Label>
             </div>
           )
@@ -187,9 +192,9 @@ export function JobsList() {
       />
       {error && !(error instanceof ApiError && error.status === 401) && (
         <Alert variant="destructive">
-          <AlertTitle>{t("jobs.loadFailed")}</AlertTitle>
+          <AlertTitle>{t`Couldn't load the jobs`}</AlertTitle>
           <AlertDescription>
-            {t(errorKey(error))}
+            {t(errorMessage(error))}
             {error instanceof ApiError && <span className="block text-xs">{error.message}</span>}
           </AlertDescription>
         </Alert>
@@ -198,14 +203,14 @@ export function JobsList() {
       {jobs && shown.length === 0 && (
         <EmptyState
           icon={<WorkflowIcon />}
-          title={t("jobs.empty.title")}
-          description={t("jobs.empty.body")}
+          title={t`No jobs yet`}
+          description={t`They appear here when you index facts or add videos in a persona's studio.`}
           action={
             active !== undefined && (
               <Button variant="outline" asChild>
                 <Link to={studioPath(active, "knowledge")}>
                   <BookOpenIcon />
-                  {t("common.openStudio")}
+                  {t`Open the Studio`}
                 </Link>
               </Button>
             )
@@ -213,7 +218,7 @@ export function JobsList() {
         />
       )}
       {shown.length > 0 && (
-        <ListCard label={t("jobs.title")}>
+        <ListCard label={t`Jobs`}>
           {shown.map((job) => (
             <JobRow key={job.id} job={job} persona={personaOf(job.persona)} actions={actions} />
           ))}

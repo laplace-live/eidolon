@@ -166,9 +166,7 @@ describe("makeReranker", () => {
 
   test("no key means RRF", () => {
     expect(makeReranker()).toBeNull();
-    expect(messages(records, "INFO")[0]).toStartWith(
-      "Neither RERANK_API_KEY nor OPENROUTER_API_KEY is set",
-    );
+    expect(messages(records, "INFO")[0]).toStartWith("OPENROUTER_API_KEY is not set");
   });
 
   test("RERANK_API_KEY wins, and blank model and base URL take the defaults", async () => {

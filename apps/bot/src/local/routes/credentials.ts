@@ -15,7 +15,7 @@ import { type CheckDeps, checkProvider } from "../checks.ts";
 import { localError, localJson, readJson } from "../responses.ts";
 import { reinstallSettings } from "../restart.ts";
 import type { LocalApp, LocalRouteSpec } from "../router.ts";
-import { recordQdrant, recordVoice } from "../status.ts";
+import { fishVoiceKey, recordQdrant, recordVoice } from "../status.ts";
 import { writeDataFile } from "../write.ts";
 
 /** A key's longest plausible length; anything longer is a paste gone wrong. */
@@ -27,7 +27,7 @@ export function credentialsPath(): string {
 }
 
 /** credentials.json's object, `{}` when there is none, or null when it doesn't parse as one. */
-function savedCredentials(): Record<string, unknown> | null {
+export function savedCredentials(): Record<string, unknown> | null {
   let text: string;
   try {
     text = readFileSync(credentialsPath(), "utf8");
@@ -56,11 +56,35 @@ export function credentialStates(): CredentialsResponse {
   return states;
 }
 
+/** credentials.json to write into, or the 409 refusing to write over a file that doesn't parse. */
+export function writableCredentials(): Record<string, unknown> | Response {
+  const saved = savedCredentials();
+  if (saved !== null) return saved;
+  logger.warning(`${credentialsPath()} is not valid JSON; saving keys waits until it is`);
+  return localError(
+    409,
+    "conflict",
+    "credentials.json isn't valid JSON; fix or delete it, then save again",
+  );
+}
+
 /** A key or address as typed: one line, trimmed; null for anything else. */
-function typedValue(value: unknown): string | null {
+export function typedValue(value: unknown): string | null {
   if (typeof value !== "string" || value.length > MAX_KEY_CHARS) return null;
   const trimmed = value.trim();
   return trimmed === "" || CONTROL.test(trimmed) ? null : trimmed;
+}
+
+/** Writes credentials.json, mode 0600: known keys in their usual order, then the rest untouched. */
+export function writeCredentials(saved: Readonly<Record<string, unknown>>): void {
+  const ordered: Record<string, unknown> = {};
+  for (const name of CREDENTIALS) {
+    if (name in saved) ordered[name] = saved[name];
+  }
+  for (const [name, value] of Object.entries(saved)) {
+    if (!(name in ordered)) ordered[name] = value;
+  }
+  writeDataFile(credentialsPath(), `${JSON.stringify(ordered, null, 2)}\n`, { secret: true });
 }
 
 export interface CredentialsDeps {
@@ -98,28 +122,13 @@ export function credentialsRoutes(
           }
           updates.push([name, key]);
         }
-        const saved = savedCredentials();
-        if (saved === null) {
-          logger.warning(`${credentialsPath()} is not valid JSON; saving keys waits until it is`);
-          return localError(
-            409,
-            "conflict",
-            "credentials.json isn't valid JSON; fix or delete it, then save again",
-          );
-        }
+        const saved = writableCredentials();
+        if (saved instanceof Response) return saved;
         for (const [name, key] of updates) {
           if (key === null) delete saved[name];
           else saved[name] = key;
         }
-        // Known keys in their usual order, then anything else the file held, untouched.
-        const ordered: Record<string, unknown> = {};
-        for (const name of CREDENTIALS) {
-          if (name in saved) ordered[name] = saved[name];
-        }
-        for (const [name, value] of Object.entries(saved)) {
-          if (!(name in ordered)) ordered[name] = value;
-        }
-        writeDataFile(credentialsPath(), `${JSON.stringify(ordered, null, 2)}\n`, { secret: true });
+        writeCredentials(saved);
         reinstallSettings(app);
         return localJson(200, credentialStates());
       },
@@ -142,7 +151,7 @@ export function credentialsRoutes(
           return localError(400, "bad-request", "The value to check is one line of text");
         }
         // The key a check of the saved one reads, which its answer about the voice is for.
-        const fishKey = envOptional("FISH_API_KEY");
+        const fishKey = fishVoiceKey();
         const outcome = await checkProvider(provider as CheckProvider, typed, {
           ...deps.check,
           read: envOptional,

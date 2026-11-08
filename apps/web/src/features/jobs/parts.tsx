@@ -1,5 +1,8 @@
 // Pieces the job pages and the studio share: a job's state, its stages, its log, its buttons, and a
 // compact card for a job the studio started.
+
+import { ph, plural, t } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import {
   CircleCheckIcon,
@@ -38,7 +41,6 @@ import {
   formatDateTime,
   formatDuration,
 } from "@/lib/format";
-import { type Lang, type Translate, useLang, useT } from "@/lib/i18n";
 import {
   currentStage,
   failedItems,
@@ -55,7 +57,9 @@ import {
 } from "@/lib/jobs";
 import { useNow } from "@/lib/use-now";
 import { cn } from "@/lib/utils";
+import { type Lang, useLang } from "@/locales/i18n";
 import { describeEvent, reasonText, stageName, type Tone } from "./describe";
+import { COMMAND_LABELS, countedText, OUTCOME_TEXT, STAGE_STATUS_TEXT } from "./labels";
 import { jobQuery, useCancelJob, useForceStopJob, useResumeJob } from "./queries";
 import { forceStopIn, stopOffer, stoppingSince } from "./stopping";
 import { type JobEvents, useJobEvents } from "./use-job-events";
@@ -94,41 +98,42 @@ const OUTCOME_CLASS: Record<Outcome, string> = {
 };
 
 export function OutcomeBadge({ outcome }: { readonly outcome: Outcome }) {
-  const t = useT();
+  const { t } = useLingui();
   const Icon = OUTCOME_ICONS[outcome];
   return (
     <Badge variant="outline" className={OUTCOME_CLASS[outcome]}>
       <Icon className={cn(outcome === "running" && "animate-spin text-muted-foreground")} />
-      {t(`jobs.status.${outcome}`)}
+      {t(OUTCOME_TEXT[outcome])}
     </Badge>
   );
 }
 
-export function progressText(t: Translate, lang: Lang, progress: Progress): string {
+export function progressText(lang: Lang, progress: Progress): string {
   if (progress.unit === "percent") return `${Math.round(progress.done)}%`;
   if (progress.unit === "bytes") {
     const done = formatBytes(progress.done, lang);
     return progress.total === null
       ? done
-      : t("jobs.progress.of", { done, total: formatBytes(progress.total, lang) });
+      : t`${done} of ${ph({ total: formatBytes(progress.total, lang) })}`;
   }
-  return t(`jobs.progress.${progress.unit}`, {
-    done: formatCount(progress.done, lang),
-    total: progress.total === null ? "?" : formatCount(progress.total, lang),
-  });
+  return countedText(
+    progress.unit,
+    formatCount(progress.done, lang),
+    progress.total === null ? "?" : formatCount(progress.total, lang),
+  );
 }
 
-function stageCounts(t: Translate, lang: Lang, stage: StageView): string {
+function stageCounts(lang: Lang, stage: StageView): string {
   const parts: string[] = [];
   const finished = stage.done + stage.skipped + stage.failed + stage.cancelled;
   if (stage.total !== null && stage.items > 0) {
-    parts.push(t("jobs.progress.items", { done: finished, total: stage.total }));
+    parts.push(t`${ph({ done: finished })} of ${ph({ total: stage.total })}`);
   }
   if (stage.progress !== null && (stage.items === 0 || finished >= (stage.total ?? 0))) {
-    parts.push(progressText(t, lang, stage.progress));
+    parts.push(progressText(lang, stage.progress));
   }
-  if (stage.skipped > 0) parts.push(t("jobs.progress.skipped", { count: stage.skipped }));
-  if (stage.failed > 0) parts.push(t("jobs.progress.failed", { count: stage.failed }));
+  if (stage.skipped > 0) parts.push(t`${ph({ count: stage.skipped })} skipped`);
+  if (stage.failed > 0) parts.push(t`${ph({ count: stage.failed })} failed`);
   return parts.join(" · ");
 }
 
@@ -169,13 +174,13 @@ const STAGE_ICON_CLASS: Record<StageView["status"], string> = {
 };
 
 export function StageRow({ stage }: { readonly stage: StageView }) {
-  const t = useT();
+  const { t } = useLingui();
   const lang = useLang();
   // A cancelled stage's "Cancelled." would only repeat its status.
   const reason =
     stage.status === "cancelled" && stage.code === "cancelled"
       ? null
-      : reasonText(t, stage.code, stage.provider);
+      : reasonText(stage.code, stage.provider);
   const Icon = STAGE_ICONS[stage.status];
   const running = stage.status === "start";
   const failed = stage.status === "failed";
@@ -189,9 +194,9 @@ export function StageRow({ stage }: { readonly stage: StageView }) {
       <Icon aria-hidden className={cn("mt-0.5 size-4 shrink-0", STAGE_ICON_CLASS[stage.status])} />
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-sm">
-          <span className="font-medium">{stageName(t, stage.stage)}</span>
+          <span className="font-medium">{stageName(stage.stage)}</span>
           <span className="text-muted-foreground text-xs tabular-nums">
-            {[t(`jobs.stageStatus.${stage.status}`), stageCounts(t, lang, stage)]
+            {[t(STAGE_STATUS_TEXT[stage.status]), stageCounts(lang, stage)]
               .filter(Boolean)
               .join(" · ")}
           </span>
@@ -219,7 +224,6 @@ export function StageList({ view }: { readonly view: JobView }) {
 }
 
 function ItemRow({ item }: { readonly item: ItemView }) {
-  const t = useT();
   const lang = useLang();
   const fraction =
     item.progress === null
@@ -241,7 +245,7 @@ function ItemRow({ item }: { readonly item: ItemView }) {
           {item.item}
         </span>
         <span className="shrink-0 text-muted-foreground tabular-nums">
-          {item.progress === null ? stageName(t, item.stage) : progressText(t, lang, item.progress)}
+          {item.progress === null ? stageName(item.stage) : progressText(lang, item.progress)}
         </span>
       </div>
       <Bar fraction={fraction === null ? null : Math.min(1, fraction)} running />
@@ -257,7 +261,7 @@ export function RunningItems({
   readonly view: JobView;
   readonly limit?: number;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const running = runningItems(view);
   if (running.length === 0) return null;
   return (
@@ -267,7 +271,7 @@ export function RunningItems({
       ))}
       {running.length > limit && (
         <p className="text-muted-foreground text-xs">
-          {t("jobs.items.more", { count: running.length - limit })}
+          {t`and ${ph({ count: running.length - limit })} more`}
         </p>
       )}
     </div>
@@ -276,7 +280,7 @@ export function RunningItems({
 
 /** The run's failures: each failed item, else the failures its summary lists. */
 export function Failures({ view, job }: { readonly view: JobView; readonly job: JobRecord }) {
-  const t = useT();
+  const { t } = useLingui();
   const failed = failedItems(view);
   const listed = failed.length === 0 ? (runSummary(view, job.command)?.failures ?? []) : [];
   if (failed.length === 0 && listed.length === 0) return null;
@@ -286,7 +290,7 @@ export function Failures({ view, job }: { readonly view: JobView; readonly job: 
         <li key={`${item.stage}:${item.item}`} className="flex flex-col gap-0.5">
           <span className="break-all font-mono text-xs">{item.item}</span>
           <span className="text-destructive">
-            {reasonText(t, item.code, item.provider) ?? t("jobs.item.failed")}
+            {reasonText(item.code, item.provider) ?? t`failed`}
           </span>
           {item.message && (
             <span className="whitespace-pre-wrap break-words text-muted-foreground text-xs">
@@ -315,7 +319,7 @@ export function JobLog({
   readonly view: JobView;
   readonly className?: string;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const box = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
   // A line's number in the whole log, which stays its own as earlier lines are dropped.
@@ -341,9 +345,9 @@ export function JobLog({
       )}
     >
       {view.logDropped > 0 && (
-        <p className="text-muted-foreground">{t("jobs.log.dropped", { count: view.logDropped })}</p>
+        <p className="text-muted-foreground">{t`${plural(ph({ count: view.logDropped }), { one: `# earlier line isn't shown.`, other: `# earlier lines aren't shown.` })}`}</p>
       )}
-      {view.log.length === 0 && <p className="text-muted-foreground">{t("jobs.log.empty")}</p>}
+      {view.log.length === 0 && <p className="text-muted-foreground">{t`Nothing reported yet.`}</p>}
       {lines.map(({ line, n }) => (
         <LogRow key={n} line={line} />
       ))}
@@ -353,9 +357,9 @@ export function JobLog({
 
 /** One log line; a line keeps its object as events arrive, so only new ones are described. */
 const LogRow = memo(function LogRow({ line }: { readonly line: LogLine }) {
-  const t = useT();
+  // The language is part of what it renders, so a switch re-renders it too.
   const lang = useLang();
-  const described = describeEvent(t, lang, line.event);
+  const described = describeEvent(lang, line.event);
   return (
     <div className="flex gap-3">
       <span className="shrink-0 select-none text-muted-foreground tabular-nums">
@@ -373,7 +377,7 @@ type ButtonSize = "sm" | "default";
 
 /** Shown once a cancelled job has had FORCE_STOP_AFTER_MS to exit and hasn't. */
 function ForceStopButton({ id, size }: { readonly id: string; readonly size: ButtonSize }) {
-  const t = useT();
+  const { t } = useLingui();
   const force = useForceStopJob();
   const [since] = useState(() => stoppingSince(id, Date.now()));
   const [ready, setReady] = useState(() => forceStopIn(since, Date.now()) === 0);
@@ -388,18 +392,18 @@ function ForceStopButton({ id, size }: { readonly id: string; readonly size: But
       <AlertDialogTrigger asChild>
         <Button variant="destructive" size={size} disabled={force.isPending}>
           <OctagonXIcon />
-          {t("jobs.forceStop.button")}
+          {t`Force Stop`}
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{t("jobs.forceStop.title")}</AlertDialogTitle>
-          <AlertDialogDescription>{t("jobs.forceStop.body")}</AlertDialogDescription>
+          <AlertDialogTitle>{t`Force this job to stop?`}</AlertDialogTitle>
+          <AlertDialogDescription>{t`It still hasn't stopped since you cancelled it. Force Stop ends it at once, without letting it finish what it is writing: an index it was building can be left half built, so run that job again afterwards.`}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>{t("jobs.forceStop.wait")}</AlertDialogCancel>
+          <AlertDialogCancel>{t`Keep Waiting`}</AlertDialogCancel>
           <AlertDialogAction variant="destructive" onClick={() => force.mutate(id)}>
-            {t("jobs.forceStop.confirm")}
+            {t`Force Stop`}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -421,7 +425,7 @@ export function CancelJobButton({
   /** Offers Force stop once a cancel has had its time; a list leaves that to the job's page. */
   readonly forceStop?: boolean;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const cancel = useCancelJob();
   const offer = stopOffer(job);
   if (job.stopping) {
@@ -429,7 +433,7 @@ export function CancelJobButton({
       <>
         <Button variant="outline" size={size} disabled>
           <LoaderCircleIcon className="animate-spin" />
-          {t("jobs.cancel.stopping")}
+          {t`Stopping…`}
         </Button>
         {forceStop && offer === "force-stop" && <ForceStopButton id={job.id} size={size} />}
       </>
@@ -441,18 +445,18 @@ export function CancelJobButton({
       <AlertDialogTrigger asChild>
         <Button variant="outline" size={size} disabled={cancel.isPending}>
           <SquareIcon />
-          {t("jobs.cancel.button")}
+          {t`Cancel`}
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{t("jobs.cancel.title")}</AlertDialogTitle>
-          <AlertDialogDescription>{t("jobs.cancel.body")}</AlertDialogDescription>
+          <AlertDialogTitle>{t`Cancel this job?`}</AlertDialogTitle>
+          <AlertDialogDescription>{t`What it already finished is kept, so resuming it later picks up where it stopped.`}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>{t("jobs.cancel.keep")}</AlertDialogCancel>
+          <AlertDialogCancel>{t`Keep Running`}</AlertDialogCancel>
           <AlertDialogAction variant="destructive" onClick={() => cancel.mutate(job.id)}>
-            {t("jobs.cancel.confirm")}
+            {t`Cancel Job`}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -472,7 +476,7 @@ export function ResumeJobButton({
   readonly size?: ButtonSize;
   readonly onResumed?: (rerun: JobSnapshot) => void;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const resume = useResumeJob();
   return (
     <Button
@@ -482,7 +486,7 @@ export function ResumeJobButton({
       onClick={() => resume.mutate(id, { onSuccess: onResumed })}
     >
       {resume.isPending ? <LoaderCircleIcon className="animate-spin" /> : <PlayIcon />}
-      {t("jobs.resume")}
+      {t`Resume`}
     </Button>
   );
 }
@@ -509,13 +513,13 @@ function useOnEnded(
 }
 
 /** One line on why a finished job didn't succeed. */
-function endNote(t: Translate, view: JobView, job: JobSnapshot, outcome: Outcome): string | null {
+function endNote(view: JobView, job: JobSnapshot, outcome: Outcome): string | null {
   if (outcome === "crashed") return job.stderrTail.trim().split("\n").at(-1) ?? null;
   if (outcome !== "failed") return null;
   const item = failedItems(view)[0];
-  if (item) return reasonText(t, item.code, item.provider) ?? item.message;
+  if (item) return reasonText(item.code, item.provider) ?? item.message;
   const stage = view.stages.find((entry) => entry.status === "failed");
-  if (stage) return reasonText(t, stage.code, stage.provider) ?? stage.message;
+  if (stage) return reasonText(stage.code, stage.provider) ?? stage.message;
   return runSummary(view, job.command)?.failures?.[0]?.error ?? null;
 }
 
@@ -536,7 +540,7 @@ export function JobCard({
   readonly title?: string;
   readonly onEnded?: (outcome: Outcome) => void;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const lang = useLang();
   const { data: job = initial } = useQuery({ ...jobQuery(initial.id), initialData: initial });
   const own = useJobEvents(followed ? null : initial.id);
@@ -545,23 +549,23 @@ export function JobCard({
   const outcome = shownOutcome(job, events.ended, endedWhenShown);
   useOnEnded(job.status, outcome, onEnded);
   const stage = currentStage(events.view);
-  const note = outcome === "running" ? null : endNote(t, events.view, job, outcome);
+  const note = outcome === "running" ? null : endNote(events.view, job, outcome);
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border bg-card p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-medium text-sm">{title ?? t(`jobs.command.${job.command}`)}</span>
+        <span className="font-medium text-sm">{title ?? t(COMMAND_LABELS[job.command])}</span>
         <OutcomeBadge outcome={outcome} />
         <span className="text-muted-foreground text-xs">{formatDateTime(job.startedAt, lang)}</span>
         <div className="ml-auto flex items-center gap-1">
           <CancelJobButton job={job} />
           <Button variant="ghost" size="sm" asChild>
-            <Link to={`/jobs/${encodeURIComponent(job.id)}`}>{t("jobs.details")}</Link>
+            <Link to={`/jobs/${encodeURIComponent(job.id)}`}>{t`Details`}</Link>
           </Button>
         </div>
       </div>
       {stopOffer(job) === "earlier-run" && (
-        <p className="text-muted-foreground text-xs">{t("jobs.earlierRun.body")}</p>
+        <p className="text-muted-foreground text-xs">{t`An earlier run of Eidolon started this job, so this one can't stop it. It will finish on its own, or be marked interrupted.`}</p>
       )}
       {outcome === "running" && stage && <StageRow stage={stage} />}
       {outcome === "running" && <RunningItems view={events.view} limit={4} />}

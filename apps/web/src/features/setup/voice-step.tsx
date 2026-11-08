@@ -1,3 +1,4 @@
+import { Trans, useLingui } from "@lingui/react/macro";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { InfoIcon } from "lucide-react";
 import { useState } from "react";
@@ -8,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { VoicePicker } from "@/components/voice-picker";
 import { type ApiError, asApiError, type Voice } from "@/lib/api";
-import { rich, useT } from "@/lib/i18n";
 import { addAvatar } from "./avatar";
 import type { VoiceTarget } from "./persona-step";
 import {
@@ -36,7 +36,7 @@ export function VoiceStep({
   readonly onBack: () => void;
   readonly onDone: (persona: PersonaRef) => void;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const queryClient = useQueryClient();
   const existing = target.kind === "existing" ? target.persona : null;
   const settings = useQuery({ ...settingsQuery(existing?.id), enabled: existing !== null });
@@ -52,6 +52,7 @@ export function VoiceStep({
   // The environment's voice, which she keeps unless one is picked for her.
   const inherited = existing ? inheritedValue(row) : null;
   const name = existing ? existing.name : target.kind === "create" ? target.draft.name : "";
+  const env = row?.env ?? "";
   const ready = chosen !== null || (existing !== null && (current ?? inherited) !== null);
 
   async function next() {
@@ -80,14 +81,14 @@ export function VoiceStep({
 
   return (
     <StepCard
-      title={t("setup.voice.title")}
-      description={t("setup.voice.stepBody", { name })}
+      title={t`Pick a Voice`}
+      description={t`How ${name} sounds. Search Fish Audio's public voices and play a sample before you pick one.`}
       onBack={onBack}
       busy={busy}
       footer={
         <Button onClick={() => void next()} disabled={busy || !ready}>
           {busy && <Spinner />}
-          {t(target.kind === "create" ? "setup.voice.create" : "setup.next")}
+          {target.kind === "create" ? t`Create Her` : t`Continue`}
         </Button>
       }
     >
@@ -95,9 +96,10 @@ export function VoiceStep({
         <Alert>
           <InfoIcon />
           <AlertDescription>
-            {rich(t("setup.voice.inherited", { name }), {
-              env: <code className="font-mono text-foreground">{row.env}</code>,
-            })}
+            <Trans>
+              {name} inherits <code className="font-mono text-foreground">{env}</code> from the
+              environment. Continue to keep it, or pick a voice of her own: it applies to her alone.
+            </Trans>
           </AlertDescription>
         </Alert>
       )}

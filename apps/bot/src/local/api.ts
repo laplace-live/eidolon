@@ -13,6 +13,12 @@ export const LOCAL_ROUTES = [
   "GET /api/local/credentials",
   "PUT /api/local/credentials",
   "POST /api/local/credentials/check",
+  "GET /api/local/accounts",
+  "POST /api/local/accounts",
+  "POST /api/local/accounts/check",
+  "PUT /api/local/accounts/:id",
+  "DELETE /api/local/accounts/:id",
+  "GET /api/local/accounts/:id/models",
   "GET /api/local/personas",
   "POST /api/local/personas",
   "PUT /api/local/personas/active",
@@ -45,6 +51,7 @@ export const LOCAL_ROUTES = [
   "POST /api/local/jobs/:id/resume",
   "GET /api/local/memories",
   "DELETE /api/local/memories",
+  "GET /api/local/usage",
 ] as const satisfies readonly (keyof LocalApi)[];
 
 export type LocalRoute = (typeof LOCAL_ROUTES)[number];
@@ -78,6 +85,8 @@ export const ERROR_CODES = [
   "read-only-setting",
   "invalid-path",
   "unknown-credential",
+  "unknown-account",
+  "account-in-use",
   "invalid-file-name",
   "template-file",
   "invalid-toml",
@@ -142,20 +151,122 @@ export interface SessionProbe {
   readonly proof: string;
 }
 
-/** The keys a call cannot start without. */
-export const REQUIRED_KEYS = ["SONIOX_API_KEY", "OPENROUTER_API_KEY", "FISH_API_KEY"] as const;
-export type RequiredKey = (typeof REQUIRED_KEYS)[number];
+/** An account the active persona's calls need, and whether its key is set. */
+export interface KeyStatus {
+  /** The account's id. */
+  readonly account: string;
+  /** Its name, as Settings shows it. */
+  readonly name: string;
+  /** Its provider's catalog id. */
+  readonly provider: string;
+  /** The roles it serves: hearing, mind, voice, realtime. */
+  readonly roles: readonly string[];
+  readonly set: boolean;
+}
+
+/** Where an account's key, API base or setting comes from. */
+export type AccountValueSource = "account" | "env" | "credentials" | "settings" | "default";
+
+/** A value an account has, and which layer gives it; the key's never goes out. */
+export interface AccountValue {
+  /** null for the key, and wherever nothing sets it. */
+  readonly value: string | null;
+  readonly source: AccountValueSource | null;
+}
+
+/** A persona role, or the install's embeddings, that names an account in a settings file. */
+export interface AccountUse {
+  /** null for the install's settings.yaml. */
+  readonly persona: string | null;
+  readonly role: string;
+}
+
+export interface AccountView {
+  readonly id: string;
+  /** Its provider's catalog id. */
+  readonly provider: string;
+  readonly name: string;
+  /** Its id is its provider's: the provider's variables configure it too. */
+  readonly isDefault: boolean;
+  /** credentials.json holds it. */
+  readonly saved: boolean;
+  readonly key: AccountValue;
+  readonly baseUrl: AccountValue;
+  /** The provider's own settings, by field key. */
+  readonly options: Readonly<Record<string, AccountValue>>;
+  readonly uses: readonly AccountUse[];
+  /** The active persona's calls run on it. */
+  readonly needed: boolean;
+}
+
+export interface AccountsResponse {
+  readonly accounts: readonly AccountView[];
+}
+
+/**
+ * POST accounts adds one, PUT accounts/:id edits one. A field left out keeps its value; null
+ * removes it. The key never comes back.
+ */
+export interface AccountUpdate {
+  readonly name?: string | null;
+  readonly apiKey?: string | null;
+  readonly baseUrl?: string | null;
+  readonly options?: Readonly<Record<string, string | null>>;
+}
+
+export interface AccountCreate extends AccountUpdate {
+  /** The catalog id of its provider. */
+  readonly provider: string;
+}
+
+/** POST accounts/check: a saved account, or a provider with what was typed for a new one. */
+export interface AccountCheckRequest {
+  readonly account?: string;
+  readonly provider?: string;
+  readonly apiKey?: string;
+  readonly baseUrl?: string;
+}
+
+/** GET accounts/:id/models: what the provider lists for one kind of model. */
+export interface ModelsQuery {
+  readonly category: string;
+}
+
+export interface ModelsResponse {
+  /**
+   * `ok` with the provider's list; `unlisted` where it has none; `no-key` while the account has
+   * no key; `refused` when the provider refused that key; `failed` when it didn't answer, with its
+   * reason in English.
+   */
+  readonly status: "ok" | "unlisted" | "no-key" | "refused" | "failed";
+  readonly models: readonly { readonly id: string; readonly name?: string }[];
+  readonly message?: string;
+}
+
+/** A role a call runs on, as her settings fill it. */
+export interface CallRole {
+  readonly role: string;
+  /** null when the settings name no provider Eidolon knows. */
+  readonly provider: string | null;
+  readonly model: string | null;
+  /** What is wrong with the settings, in English: an unknown provider, a missing model. */
+  readonly problem: string | null;
+}
 
 export interface VoiceStatus {
-  /** FISH_VOICE_ID as the bot reads it; null when unset (a call needs one). */
+  /** The voice as the bot reads it (TTS_VOICE_ID, or Fish's FISH_VOICE_ID); null when unset. */
   readonly id: string | null;
   /**
-   * "persona" when her persona.yaml sets the voice, even with FISH_VOICE_ID in the environment;
-   * "env" when she inherits the environment's; "default" when neither sets one.
+   * "persona" when her persona.yaml sets the voice, even with one in the environment; "env" when
+   * she inherits the environment's; "default" when neither sets one.
    */
   readonly source: "default" | "persona" | "env";
-  /** Whether Fish knows the voice: null until checked. False with source "env": an inherited one. */
+  /** Whether Fish knows the voice: null until checked, and for another provider's voice. */
   readonly ok: boolean | null;
+  /** The voice provider's catalog id; null when her settings name none Eidolon knows. */
+  readonly provider: string | null;
+  /** The account that speaks for her, whose key a check of the voice uses. */
+  readonly account: string | null;
 }
 
 export interface IndexTable {
@@ -206,7 +317,10 @@ export interface Status {
   readonly restartRequired: boolean;
   /** Only the MCP server keeps what it read at boot, such as which persona's index it serves. */
   readonly mcpRestartRequired: boolean;
-  readonly keys: Readonly<Record<RequiredKey, boolean>>;
+  /** The keys her calls need, one per account. */
+  readonly keys: readonly KeyStatus[];
+  /** Whether a realtime model runs her calls, and the roles they run on. */
+  readonly call: { readonly realtime: boolean; readonly roles: readonly CallRole[] };
   readonly persona: {
     readonly id: string;
     readonly name: string;
@@ -244,10 +358,13 @@ export interface SettingRow {
   readonly value: unknown;
   readonly source: "default" | "app" | "persona";
   /**
-   * The environment's non-empty value of `env`, or null; always null for a production-only row,
-   * which the local app hides. Settings hold no secrets.
+   * The environment's non-empty value of `env`, or of the provider-named variable that set it
+   * before (`envName`), or null: always for a production-only row, which the local app hides, and
+   * for a value that belongs to another provider than hers. Settings hold no secrets.
    */
   readonly envValue: string | null;
+  /** The variable `envValue` comes from: `env`, or its provider-named predecessor. */
+  readonly envName: string | null;
   /**
    * The environment's value is used instead of the file's: an app row with envValue set. A persona
    * row is never overridden: her file wins, and without a file value the environment's is the
@@ -289,6 +406,10 @@ export type CredentialsResponse = Readonly<Record<string, CredentialState>>;
 /** PUT credentials: a value to save, or null to remove it from credentials.json. */
 export type CredentialsUpdate = Readonly<Record<string, string | null>>;
 
+/**
+ * What a check can ask about: a role's endpoint and key (`embeddings`, `rerank`, `refine`),
+ * Qdrant, or a provider's key by its catalog id.
+ */
 export const CHECK_PROVIDERS = [
   "soniox",
   "openrouter",
@@ -297,6 +418,20 @@ export const CHECK_PROVIDERS = [
   "rerank",
   "refine",
   "qdrant",
+  "openai",
+  "anthropic",
+  "google",
+  "deepseek",
+  "xai",
+  "qwen",
+  "moonshot",
+  "zhipu",
+  "openai-compatible",
+  "elevenlabs",
+  "deepgram",
+  "cartesia",
+  "minimax",
+  "cohere",
 ] as const;
 
 export type CheckProvider = (typeof CHECK_PROVIDERS)[number];
@@ -578,7 +713,13 @@ export interface JobOptions {
 }
 
 /** The settings a plan reads besides her files: the models it prices and the index it checks. */
-export const PLAN_SETTINGS = ["transcription.model", "refine.model", "knowledge.index"] as const;
+export const PLAN_SETTINGS = [
+  "transcription.provider",
+  "transcription.model",
+  "refine.provider",
+  "refine.model",
+  "knowledge.index",
+] as const;
 
 /** POST jobs: a command for one persona. An unknown key, or a string starting with `-`, is a 400. */
 export type JobRequest = {
@@ -719,6 +860,12 @@ export interface LocalApi {
   "GET /api/local/credentials": Endpoint<undefined, CredentialsResponse>;
   "PUT /api/local/credentials": Endpoint<CredentialsUpdate, CredentialsResponse>;
   "POST /api/local/credentials/check": Endpoint<CheckRequest, CheckResult>;
+  "GET /api/local/accounts": Endpoint<undefined, AccountsResponse>;
+  "POST /api/local/accounts": Endpoint<AccountCreate, AccountView>;
+  "POST /api/local/accounts/check": Endpoint<AccountCheckRequest, CheckResult>;
+  "PUT /api/local/accounts/:id": Endpoint<AccountUpdate, AccountView>;
+  "DELETE /api/local/accounts/:id": Endpoint<undefined, Ok>;
+  "GET /api/local/accounts/:id/models": Endpoint<undefined, ModelsResponse, ModelsQuery>;
   "GET /api/local/personas": Endpoint<undefined, PersonasResponse>;
   "POST /api/local/personas": Endpoint<CreatePersonaRequest, PersonaSummary>;
   "PUT /api/local/personas/active": Endpoint<ActivePersonaRequest, PersonasResponse>;
@@ -751,4 +898,56 @@ export interface LocalApi {
   "POST /api/local/jobs/:id/resume": Endpoint<undefined, JobSnapshot>;
   "GET /api/local/memories": Endpoint<undefined, MemoriesResponse, MemoriesQuery>;
   "DELETE /api/local/memories": Endpoint<undefined, Ok, MemoriesQuery>;
+  "GET /api/local/usage": Endpoint<undefined, UsageSummary, UsageQuery>;
+}
+
+/** One day's spend for one persona, role and model, summed. */
+export interface UsageRow {
+  /** The local calendar day of the machine that keeps the ledger, YYYY-MM-DD. */
+  readonly day: string;
+  readonly persona: string;
+  readonly provider: string;
+  readonly category: string;
+  readonly role: string;
+  readonly model: string;
+  /** Records summed: a request each, or a batch of a call's audio or speech. */
+  readonly records: number;
+  /** USD, reported and estimated together. */
+  readonly costUsd: number;
+  /** The part of `costUsd` that is the catalog's estimate, not the provider's figure. */
+  readonly estimatedUsd: number;
+  /** Records no price covers, whose usage is counted but not costed. */
+  readonly unpriced: number;
+  readonly inputTokens: number;
+  readonly cachedTokens: number;
+  readonly outputTokens: number;
+  readonly characters: number;
+  readonly audioSeconds: number;
+  readonly images: number;
+}
+
+export interface UsageSummary {
+  /** The range asked for, ms since the epoch; null for unbounded. */
+  readonly from: number | null;
+  readonly to: number | null;
+  /** Whose rows these are; null for every persona. */
+  readonly persona: string | null;
+  readonly rows: readonly UsageRow[];
+  /** Every persona with a record in the ledger, whatever the filter. */
+  readonly personas: readonly string[];
+  /** Every provider with a record in the ledger, whatever the filter. */
+  readonly providers: readonly string[];
+  /** The ledger's file; `recording` is false when it can't be opened, so nothing is recorded. */
+  readonly path: string;
+  readonly recording: boolean;
+}
+
+/** GET usage: the ledger's spend in a range, for one persona or all. */
+export interface UsageQuery {
+  /** ms since the epoch, inclusive; the ledger's start when absent. */
+  readonly from?: number;
+  /** ms since the epoch, exclusive; now when absent. */
+  readonly to?: number;
+  /** Every persona's when absent. */
+  readonly persona?: string;
 }

@@ -1,0 +1,4381 @@
+msgid ""
+msgstr ""
+"POT-Creation-Date: 2026-11-08 06:44-0800\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: @lingui/cli\n"
+"Language: zh-Hans\n"
+
+#: src/features/usage/spend-chart.tsx
+#: src/features/usage/tables.tsx
+#: src/lib/labels.ts
+msgctxt "list separator"
+msgid ", "
+msgstr "、"
+
+#: src/features/setup/avatar-picker.tsx
+msgid "(optional)"
+msgstr "（可选）"
+
+#: src/features/usage/tables.tsx
+msgid "{amount} min of audio"
+msgstr "{amount} 分钟音频"
+
+#: src/features/usage/route.tsx
+#: src/features/usage/tables.tsx
+msgid "{amount} of it is estimated from list prices."
+msgstr "其中 {amount} 是按标价估算的。"
+
+#: src/features/studio/text-editor.tsx
+msgid "{chars} characters · {lines} lines"
+msgstr "{chars} 个字符 · {lines} 行"
+
+#: src/features/usage/tables.tsx
+msgid "{count, plural, one {{amount} character} other {{amount} characters}}"
+msgstr "{count, plural, other {{amount} 字符}}"
+
+#: src/features/usage/tables.tsx
+msgid "{count, plural, one {{amount} token} other {{amount} tokens}}"
+msgstr "{count, plural, other {{amount} token}}"
+
+#: src/features/studio/videos-section.tsx
+msgid "{count, plural, one {# batch is waiting; this downloads it.} other {# batches are waiting; this downloads the oldest first.}}"
+msgstr "{count, plural, other {有 # 个批次在等待；会先下载最早的那个。}}"
+
+#: src/features/studio/videos-section.tsx
+msgid "{count, plural, one {# downloaded video has no upload date, so it waits until you give one in the table below.} other {# downloaded videos have no upload date, so they wait until you give one in the table below.}}"
+msgstr "{count, plural, other {有 # 个已下载的视频没有上传日期，会一直等到你在下面的表格里填上日期。}}"
+
+#: src/features/jobs/parts.tsx
+msgid "{count, plural, one {# earlier line isn't shown.} other {# earlier lines aren't shown.}}"
+msgstr "{count, plural, other {更早的 # 行未显示。}}"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "{count, plural, one {# file changed since the last index.} other {# files changed since the last index.}}"
+msgstr "{count, plural, other {上次索引后有 # 个文件改动过。}}"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "{count, plural, one {# file was removed since the last index.} other {# files were removed since the last index.}}"
+msgstr "{count, plural, other {上次索引后有 # 个文件被移除。}}"
+
+#: src/features/usage/tables.tsx
+msgid "{count, plural, one {# image} other {# images}}"
+msgstr "{count, plural, other {# 张图片}}"
+
+#: src/features/studio/add-videos.tsx
+msgid "{count, plural, one {# new video ({known} already added)} other {# new videos ({known} already added)}}"
+msgstr "{count, plural, other {# 个新视频（{known} 个已添加过）}}"
+
+#: src/features/usage/route.tsx
+msgid "{count, plural, one {# request has no price, so it isn't counted.} other {# requests have no price, so they aren't counted.}}"
+msgstr "{count, plural, other {# 个请求没有价格，未计入花费。}}"
+
+#: src/features/studio/videos-section.tsx
+msgid "{count, plural, one {# video can't be priced yet: its length is known only once it downloads.} other {# videos can't be priced yet: their length is known only once they download.}}"
+msgstr "{count, plural, other {有 # 个视频暂时无法估价：下载之后才知道时长。}}"
+
+#: src/features/studio/videos-section.tsx
+msgid "{count, plural, one {# video isn't in the estimate.} other {# videos aren't in the estimate.}}"
+msgstr "{count, plural, other {有 # 个视频不在估价内。}}"
+
+#: src/features/studio/add-videos.tsx
+msgid "{count, plural, one {# video} other {# videos}}"
+msgstr "{count, plural, other {# 个视频}}"
+
+#: src/components/voice-picker/index.tsx
+msgid "{count, plural, one {# voice} other {# voices}}"
+msgstr "{count, plural, other {共 # 个声音}}"
+
+#: src/features/studio/add-videos.tsx
+msgid "{count, plural, one {Add # video} other {Add # videos}}"
+msgstr "{count, plural, other {添加 # 个视频}}"
+
+#: src/features/studio/add-videos.tsx
+msgid "{count, plural, one {Added # video in a new batch; {known} were listed already.} other {Added # videos in a new batch; {known} were listed already.}}"
+msgstr "{count, plural, other {已在新批次中添加 # 个视频；{known} 个之前已经列过。}}"
+
+#: src/features/studio/add-videos.tsx
+msgid "{count, plural, one {Added # video in a new batch.} other {Added # videos in a new batch.}}"
+msgstr "{count, plural, other {已在新批次中添加 # 个视频。}}"
+
+#: src/features/studio/videos-section.tsx
+msgid "{count, plural, one {Download # video} other {Download # videos}}"
+msgstr "{count, plural, other {下载 # 个视频}}"
+
+#: src/features/studio/videos-section.tsx
+msgid "{count, plural, one {ffmpeg isn't installed, and # video is over 5 hours, which needs it to be transcribed.} other {ffmpeg isn't installed, and # videos are over 5 hours, which need it to be transcribed.}}"
+msgstr "{count, plural, other {未安装 ffmpeg，而有 # 个视频超过 5 小时，转写它们需要 ffmpeg。}}"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "{count, plural, one {Her index still has facts from # removed file} other {Her index still has facts from # removed files}}"
+msgstr "{count, plural, other {她的索引里还有 # 个已移除文件的资料}}"
+
+#: src/features/studio/videos-section.tsx
+msgid "{count, plural, one {Index # video} other {Index # videos}}"
+msgstr "{count, plural, other {索引 # 个视频}}"
+
+#: src/features/studio/videos-section.tsx
+msgid "{count, plural, one {Refine # chunk} other {Refine # chunks}}"
+msgstr "{count, plural, other {整理 # 段}}"
+
+#: src/features/settings/notices.tsx
+msgid "{count, plural, one {The settings files have # problem Eidolon ignores} other {The settings files have # problems Eidolon ignores}}"
+msgstr "{count, plural, other {设置文件中有 # 处问题，Eidolon 已忽略}}"
+
+#: src/features/home/memory-panel.tsx
+msgid "{count, plural, one {This deletes the # memory {name} keeps of you, for good. Other personas keep theirs.} other {This deletes all # memories {name} keeps of you, for good. Other personas keep theirs.}}"
+msgstr "{count, plural, other {这会永久删除{name}关于你的全部 # 条记忆。其他人设的记忆不受影响。}}"
+
+#: src/features/studio/videos-section.tsx
+msgid "{count, plural, one {Transcribe # video} other {Transcribe # videos}}"
+msgstr "{count, plural, other {转写 # 个视频}}"
+
+#: src/features/call/call-notices.tsx
+msgid "{count} errors this call"
+msgstr "本次通话共 {count} 个错误"
+
+#: src/features/jobs/parts.tsx
+msgid "{count} failed"
+msgstr "失败 {count} 项"
+
+#: src/features/jobs/parts.tsx
+msgid "{count} skipped"
+msgstr "跳过 {count} 项"
+
+#: src/features/usage/tables.tsx
+msgid "{count} unpriced"
+msgstr "{count} 个未计价"
+
+#: src/features/jobs/parts.tsx
+msgid "{done} of {total}"
+msgstr "{done} / {total}"
+
+#: src/features/jobs/labels.ts
+msgid "{done} of {total} chunks"
+msgstr "{done} / {total} 段"
+
+#: src/features/jobs/labels.ts
+msgid "{done} of {total} files"
+msgstr "{done} / {total} 个文件"
+
+#: src/features/jobs/labels.ts
+msgid "{done} of {total} rows"
+msgstr "{done} / {total} 行"
+
+#: src/features/home/readiness-labels.ts
+msgid "{free} free on the data home's disk."
+msgstr "数据目录所在磁盘剩余 {free}。"
+
+#: src/features/usage/tables.tsx
+msgid "{input} tokens in · {output} out"
+msgstr "输入 {input} token · 输出 {output}"
+
+#: src/features/studio/voice-section.tsx
+msgid "{model} doesn't perform every delivery cue"
+msgstr "{model} 不能演绎所有表演提示"
+
+#: src/features/studio/voice-section.tsx
+msgid "{model}, which she inherits from {env}, doesn't perform every delivery cue"
+msgstr "她从 {env} 继承的 {model} 不能演绎所有表演提示"
+
+#: src/components/settings-form/account-key-field.tsx
+msgid "{name} API Key"
+msgstr "{name} API 密钥"
+
+#: src/features/setup/new-persona.tsx
+msgid "{name} created."
+msgstr "已创建{name}。"
+
+#: src/features/studio/facts-editor.tsx
+msgid "{name} deleted."
+msgstr "{name} 已删除。"
+
+#: src/features/studio/facts-editor.tsx
+msgid "{name} exists already."
+msgstr "{name} 已经存在。"
+
+#: src/features/home/memory-panel.tsx
+msgid "{name} forgot you."
+msgstr "{name}已经忘记你了。"
+
+#: src/features/setup/voice-step.tsx
+msgid "{name} inherits <0>{env}</0> from the environment. Continue to keep it, or pick a voice of her own: it applies to her alone."
+msgstr "{name}继承了环境变量 <0>{env}</0> 的声音。继续即可保留它；也可以为她选择自己的声音，只对她生效。"
+
+#: src/features/setup/personas.ts
+msgid "{name} is now the active persona."
+msgstr "当前人设已切换为{name}。"
+
+#: src/features/call/transcript-view.tsx
+msgid "{name} is thinking…"
+msgstr "{name}正在思考…"
+
+#: src/features/studio/pictures.tsx
+msgid "{name} isn't a usable file name. Rename the file without / \\ or :, so that it doesn't start with a dot."
+msgstr "{name} 不能用作文件名。请重命名文件，不要包含 / \\ 或 :，也不要以点开头。"
+
+#: src/features/studio/voice-section.tsx
+msgid "{name} now speaks with the environment's voice."
+msgstr "{name}现在使用环境变量里的声音。"
+
+#: src/features/call/call-notices.tsx
+msgid "{name} ran into an error"
+msgstr "{name}遇到了错误"
+
+#: src/features/call/call-page.tsx
+msgid "{name} remembers your conversations between calls."
+msgstr "{name}会在通话之间记住你们聊过的内容。"
+
+#: src/features/settings/accounts-card.tsx
+msgid "{name} removed."
+msgstr "已删除{name}。"
+
+#: src/features/settings/account-dialog.tsx
+#: src/features/studio/facts-editor.tsx
+msgid "{name} saved."
+msgstr "{name} 已保存。"
+
+#: src/features/studio/route.tsx
+msgid "{name} ships with Eidolon. Your edits are saved in your data home, and the original stays as it is."
+msgstr "{name}是 Eidolon 自带的人设。你的修改保存在数据目录里，原始文件保持不变。"
+
+#: src/features/call/call-page.tsx
+msgid "{name} speaks first once the call connects."
+msgstr "接通后{name}会先开口。"
+
+#: src/features/home/memory-panel.tsx
+msgid "{name} starts remembering you from your next call."
+msgstr "从下一次通话开始，{name}会记住你。"
+
+#: src/features/studio/references-section.tsx
+msgid "{name} uploaded."
+msgstr "{name} 已上传。"
+
+#: src/features/setup/avatar.ts
+msgid "{name} was created, but her avatar didn't upload. Add it in her studio."
+msgstr "已创建{name}，但头像没有上传成功。可以在她的工作室里添加。"
+
+#: src/features/call/call-page.tsx
+msgid "{name}'s models need fixing"
+msgstr "{name}的模型设置需要修改"
+
+#: src/features/studio/route.tsx
+msgid "{name}'s Studio"
+msgstr "{name}的工作室"
+
+#: src/features/settings/accounts-card.tsx
+msgid "{owner}: {roles}"
+msgstr "{owner}：{roles}"
+
+#: src/components/settings-form/model-picker.tsx
+msgid "{provider} doesn't list its models here: type the model id."
+msgstr "{provider} 不提供模型列表：请直接填写模型 ID。"
+
+#: src/features/home/readiness-labels.ts
+msgid "{provider} needs a voice for her, so calls can't start."
+msgstr "{provider} 需要为她指定声音，否则无法开始通话。"
+
+#: src/features/studio/models-section.tsx
+msgid "{provider} Realtime Model"
+msgstr "{provider} 实时语音模型"
+
+#: src/components/settings-form/model-picker.tsx
+msgid "{provider} refused this account's key: check it in Settings → Providers, or type the model id."
+msgstr "{provider} 拒绝了这个账号的密钥：请到「设置 → 服务商」检查，或直接填写模型 ID。"
+
+#: src/features/home/readiness-labels.ts
+msgid "{provider} speaks with voice {id}."
+msgstr "使用 {provider} 的声音 {id}。"
+
+#: src/features/jobs/describe.ts
+msgid "{provider}: {reason}"
+msgstr "{provider}：{reason}"
+
+#: src/components/settings-form/model-picker.tsx
+msgid "{provider}'s Models"
+msgstr "{provider} 的模型"
+
+#: src/features/studio/voice-section.tsx
+msgid "{provider}'s realtime model speaks for her"
+msgstr "由 {provider} 的实时语音模型替她说话"
+
+#: src/features/home/readiness-labels.ts
+msgid "{rows} indexed, built {date}."
+msgstr "已索引 {rows} 条，构建于 {date}。"
+
+#: src/features/home/readiness-labels.ts
+msgid "{rows} passages, built {date}."
+msgstr "{rows} 段，构建于 {date}。"
+
+#: src/features/studio/videos-section.tsx
+msgid "{size} free on the data home's disk."
+msgstr "数据目录所在的磁盘可用 {size}。"
+
+#: src/features/jobs/labels.ts
+msgid "{stage} cancelled"
+msgstr "{stage}已取消"
+
+#: src/features/jobs/describe.ts
+msgid "{stage} cancelled after {duration}"
+msgstr "{stage}已取消，用时 {duration}"
+
+#: src/features/jobs/describe.ts
+msgid "{stage} completed in {duration}"
+msgstr "{stage}完成，用时 {duration}"
+
+#: src/features/jobs/describe.ts
+msgid "{stage} ended with failures after {duration}"
+msgstr "{stage}结束，有失败项，用时 {duration}"
+
+#: src/features/jobs/labels.ts
+msgid "{stage} failed"
+msgstr "{stage}失败"
+
+#: src/features/jobs/labels.ts
+msgid "{stage} finished"
+msgstr "{stage}完成"
+
+#: src/features/jobs/labels.ts
+msgid "{stage} skipped"
+msgstr "{stage}已跳过"
+
+#: src/features/jobs/describe.ts
+msgid "{stage} started"
+msgstr "{stage}开始"
+
+#: src/features/jobs/describe.ts
+msgid "{stage} started: {total} to go"
+msgstr "{stage}开始：共 {total} 项"
+
+#: src/features/studio/video-table.tsx
+msgid "{stage}…"
+msgstr "{stage}中…"
+
+#: src/features/studio/video-table.tsx
+msgid "{total} videos, {finished} finished"
+msgstr "共 {total} 个视频，已完成 {finished} 个"
+
+#: src/features/studio/video-table.tsx
+msgid "{video} has no upload date, which the stream archive orders by. Give the day it was streamed to transcribe it."
+msgstr "{video} 没有上传日期，而直播回放按日期排列。填上直播的日期就能转写它。"
+
+#: src/features/usage/route.tsx
+msgid "12 Months"
+msgstr "12 个月"
+
+#: src/features/studio/facts-editor.tsx
+msgid "2024-05-01 她说……"
+msgstr "2024-05-01 她说……"
+
+#: src/features/usage/route.tsx
+msgid "30 Days"
+msgstr "30 天"
+
+#: src/features/studio/voice-section.tsx
+msgid "32-character voice ID"
+msgstr "32 位声音 ID"
+
+#: src/features/usage/route.tsx
+msgid "7 Days"
+msgstr "7 天"
+
+#: src/features/usage/route.tsx
+msgid "90 Days"
+msgstr "90 天"
+
+#: src/features/studio/facts-editor.tsx
+msgid "A .txt file; .txt is added when you leave it out."
+msgstr "一个 .txt 文件；不写扩展名时会自动加上 .txt。"
+
+#: src/components/settings-form/check-labels.ts
+msgid "A budget this key falls under is used up."
+msgstr "这个密钥所属的预算已用完。"
+
+#: src/features/home/route.tsx
+msgid "A call is in progress: switch personas after it ends."
+msgstr "正在通话中：请在通话结束后切换人设。"
+
+#: src/lib/labels.ts
+msgid "A call is in progress. Hang up first."
+msgstr "通话正在进行，请先挂断。"
+
+#: src/features/call/call-page.tsx
+msgid "A call needs a key for each provider she uses. Missing: {names}."
+msgstr "通话需要她所用的每个服务商的密钥。缺少：{names}。"
+
+#: src/features/call/call-page.tsx
+msgid "A call needs a voice. Pick one for her first."
+msgstr "通话需要一个声音。请先为她选一个。"
+
+#: src/features/studio/voice-section.tsx
+msgid "A call needs one: pick her voice below."
+msgstr "通话需要声音：请在下面为她选一个。"
+
+#: src/features/setup/persona-step.tsx
+msgid "A Chinese VTuber who runs a little flower shop with her cat. She comes with her prompt and outfits, ready to call."
+msgstr "一位和猫咪一起经营小花店的中文虚拟主播。自带提示词和服装，马上就能通话。"
+
+#: src/components/settings-form/labels.ts
+msgid "A cookies.txt for yt-dlp, which writes the merged cookies back into it."
+msgstr "供 yt-dlp 使用的 cookies.txt，yt-dlp 会把合并后的 Cookie 写回这个文件。"
+
+#: src/features/studio/voice-section.tsx
+msgid "A Fish voice ID is 32 characters of 0–9 and a–f."
+msgstr "Fish 的声音 ID 由 32 个 0–9 和 a–f 的字符组成。"
+
+#: src/lib/labels.ts
+msgid "A job option isn't valid."
+msgstr "任务选项无效。"
+
+#: src/components/locked-screen.tsx
+msgid "A link works for 10 minutes."
+msgstr "链接在 10 分钟内有效。"
+
+#: src/components/voice-picker/index.tsx
+msgid "A name or a style, e.g. 温柔"
+msgstr "名字或风格，例如 温柔"
+
+#: src/components/settings-form/labels.ts
+msgid "A path can't contain a comma."
+msgstr "路径中不能包含逗号。"
+
+#: src/lib/labels.ts
+msgid "A path must be relative and stay inside the persona's folder."
+msgstr "路径必须是相对路径，并位于人设文件夹内。"
+
+#: src/features/setup/persona-fields.tsx
+#: src/lib/labels.ts
+msgid "A persona id uses lowercase letters, digits, - and _, and starts with a letter or digit."
+msgstr "人设 ID 只能使用小写字母、数字、- 和 _，并以字母或数字开头。"
+
+#: src/features/settings/accounts-card.tsx
+msgid "A persona uses this account: pick another for her first."
+msgstr "有人设在使用这个账号：请先为她换一个。"
+
+#: src/features/setup/persona-fields.tsx
+#: src/lib/labels.ts
+msgid "A persona with that id already exists."
+msgstr "已存在相同 ID 的人设。"
+
+#: src/features/setup/avatar-picker.tsx
+msgid "A PNG, JPEG or WebP image, up to {max}. Without one, her avatar shows her initials."
+msgstr "PNG、JPEG 或 WebP 图片，最大 {max}。不上传时，头像显示她的简称。"
+
+#: src/features/call/transcript-view.tsx
+msgid "A selfie from {name}"
+msgstr "{name}发来的自拍"
+
+#: src/lib/labels.ts
+msgid "A service Eidolon relies on failed. Try again later."
+msgstr "Eidolon 依赖的服务出错了，请稍后再试。"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "A table built with another embedding model or size than the settings now name can't be searched. Run its job again."
+msgstr "用与当前设置不同的嵌入模型或维度建立的表无法检索。请重新运行对应的任务。"
+
+#: src/features/studio/add-videos.tsx
+msgid "About {duration} in all."
+msgstr "总时长约 {duration}。"
+
+#: src/components/persona-badges.tsx
+msgid "Active"
+msgstr "当前"
+
+#: src/components/settings-form/labels.ts
+msgid "Active Persona"
+msgstr "当前人设"
+
+#: src/components/persona-switcher.tsx
+msgid "Active Persona: {name}"
+msgstr "当前人设：{name}"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Add a .txt file of what she knows about herself, then index it. Files matching {patterns} are indexed."
+msgstr "添加一个记录她自身信息的 .txt 文件，然后建立索引。符合 {patterns} 的文件会被索引。"
+
+#: src/features/settings/account-dialog.tsx
+msgid "Add a {provider} Account"
+msgstr "添加 {provider} 账号"
+
+#: src/features/studio/references-section.tsx
+msgid "Add a Friend"
+msgstr "添加朋友"
+
+#: src/features/studio/references-section.tsx
+msgid "Add a picture of someone she can take a selfie with, or drop one here."
+msgstr "添加一张可以和她一起自拍的人的图片，或者拖到这里。"
+
+#: src/features/settings/account-dialog.tsx
+msgid "Add a Provider"
+msgstr "添加服务商"
+
+#: src/features/settings/account-dialog.tsx
+msgid "Add Account"
+msgstr "添加账号"
+
+#: src/components/settings-form/account-key-field.tsx
+msgid "Add credit"
+msgstr "充值"
+
+#: src/features/setup/keys-step.tsx
+msgid "Add every key above to continue."
+msgstr "请填写上面的全部密钥后再继续。"
+
+#: src/features/home/readiness-labels.ts
+msgid "Add Facts"
+msgstr "添加资料"
+
+#: src/features/call/call-page.tsx
+#: src/features/home/readiness-labels.ts
+msgid "Add Keys"
+msgstr "添加密钥"
+
+#: src/features/studio/video-table.tsx
+msgid "Add links above, and each video is listed here with where it stands."
+msgstr "在上面添加链接，每个视频都会列在这里，并显示它的进度。"
+
+#: src/features/home/readiness-labels.ts
+msgid "Add Outfits"
+msgstr "添加服装"
+
+#: src/features/studio/references-section.tsx
+msgid "Add Pictures"
+msgstr "添加图片"
+
+#: src/features/settings/accounts-card.tsx
+msgid "Add Provider"
+msgstr "添加服务商"
+
+#: src/features/settings/accounts-card.tsx
+msgid "Add the providers you have keys for, then pick them in a persona's studio."
+msgstr "添加你有密钥的服务商，然后在人设工作室里选用。"
+
+#: src/components/settings-form/model-picker.tsx
+msgid "Add this account's key to see its models; until then, type a model id."
+msgstr "为这个账号添加密钥后即可看到它的模型；在此之前请直接填写模型 ID。"
+
+#: src/features/home/readiness-labels.ts
+#: src/features/studio/add-videos.tsx
+msgid "Add Videos"
+msgstr "添加视频"
+
+#: src/features/call/call-page.tsx
+msgid "Add your API keys first"
+msgstr "请先添加 API 密钥"
+
+#: src/features/settings/route.tsx
+#: src/features/studio/advanced-section.tsx
+#: src/features/studio/route.tsx
+#: src/features/studio/videos-section.tsx
+msgid "Advanced"
+msgstr "高级"
+
+#: src/features/jobs/detail.tsx
+msgid "All Jobs"
+msgstr "全部任务"
+
+#: src/features/studio/add-videos.tsx
+msgid "All of these videos are listed already."
+msgstr "这些视频都已经列过了。"
+
+#: src/features/usage/route.tsx
+msgid "All Personas"
+msgstr "所有人设"
+
+#: src/features/usage/route.tsx
+msgid "All Time"
+msgstr "全部"
+
+#: src/features/call/call-notices.tsx
+msgid "Allow microphone access for this page in your browser's site settings, then call again."
+msgstr "请在浏览器的网站设置中允许此页面使用麦克风，然后再次呼叫。"
+
+#: src/components/settings-form/labels.ts
+msgid "Allowed Browser Origins"
+msgstr "允许的浏览器来源"
+
+#: src/features/studio/add-videos.tsx
+msgid "Already added"
+msgstr "已添加"
+
+#: src/lib/labels.ts
+msgid "An account a persona uses can't be removed: pick another for her first."
+msgstr "人设正在使用的账号无法删除：请先为她换一个账号。"
+
+#: src/features/jobs/labels.ts
+msgid "An API key this step needs isn't set, so nothing was sent."
+msgstr "这一步需要的 API 密钥未设置，未发送任何请求。"
+
+#: src/features/studio/identity-section.tsx
+msgid "An avatar is optional but recommended."
+msgstr "头像不是必需的，但建议设置一个。"
+
+#: src/features/jobs/detail.tsx
+#: src/features/jobs/parts.tsx
+msgid "An earlier run of Eidolon started this job, so this one can't stop it. It will finish on its own, or be marked interrupted."
+msgstr "这个任务是之前运行的 Eidolon 启动的，现在的 Eidolon 无法停止它。它会自行完成，或被标记为已中断。"
+
+#: src/features/jobs/parts.tsx
+msgid "and {count} more"
+msgstr "还有 {count} 项"
+
+#: src/components/settings-form/labels.ts
+msgid "Anonymous Calls per Window"
+msgstr "匿名用户每个窗口的通话次数"
+
+#: src/components/settings-form/labels.ts
+msgid "Anonymous Window Seconds"
+msgstr "匿名限额窗口秒数"
+
+#: src/features/call/call-notices.tsx
+msgid "Another app is using your microphone. Close it, then call again."
+msgstr "其他应用正在使用麦克风。请先关闭它，然后再次呼叫。"
+
+#: src/features/jobs/labels.ts
+msgid "Another run is already working on this persona."
+msgstr "另一个任务正在处理这个人设。"
+
+#: src/components/voice-picker/index.tsx
+msgid "Any Language"
+msgstr "所有语言"
+
+#: src/features/settings/account-dialog.tsx
+msgid "API Base"
+msgstr "API 地址"
+
+#: src/features/settings/account-dialog.tsx
+msgid "API Base (Required)"
+msgstr "API 地址（必填）"
+
+#: src/features/settings/accounts-card.tsx
+msgid "API base: {url}"
+msgstr "API 地址：{url}"
+
+#: src/features/settings/account-dialog.tsx
+msgid "API Key"
+msgstr "API 密钥"
+
+#: src/features/settings/account-dialog.tsx
+msgid "API Key (If the Server Asks for One)"
+msgstr "API 密钥（服务器需要时填写）"
+
+#: src/features/home/readiness-labels.ts
+msgid "API Keys"
+msgstr "API 密钥"
+
+#: src/features/usage/route.tsx
+msgid "As each provider reported it."
+msgstr "均为服务商报告的金额。"
+
+#: src/components/settings-form/model-picker.tsx
+msgid "Asking the provider for its models…"
+msgstr "正在向服务商获取模型列表…"
+
+#: src/features/jobs/labels.ts
+msgid "Audio over 5 hours needs ffmpeg to split it. Install ffmpeg and try again."
+msgstr "超过 5 小时的音频需要 ffmpeg 来切分，请安装 ffmpeg 后重试。"
+
+#: src/features/setup/avatar-picker.tsx
+#: src/features/studio/identity-section.tsx
+msgid "Avatar"
+msgstr "头像"
+
+#: src/features/studio/identity-section.tsx
+msgid "Avatar removed."
+msgstr "头像已移除。"
+
+#: src/features/studio/identity-section.tsx
+msgid "Avatar saved."
+msgstr "头像已保存。"
+
+#: src/features/setup/step-card.tsx
+msgid "Back"
+msgstr "上一步"
+
+#: src/components/route-error.tsx
+#: src/features/studio/route.tsx
+msgid "Back to Home"
+msgstr "返回首页"
+
+#: src/features/studio/videos-section.tsx
+msgid "Billed"
+msgstr "收费"
+
+#: src/components/settings-form/model-picker.tsx
+msgid "Browse {provider}'s models"
+msgstr "浏览 {provider} 的模型"
+
+#: src/components/settings-form/labels.ts
+msgid "Browser to Read Cookies From"
+msgstr "读取 Cookie 的浏览器"
+
+#: src/features/call/call-notices.tsx
+msgid "Browsers allow the microphone only on secure pages. Open Eidolon at http://localhost or http://127.0.0.1."
+msgstr "浏览器只允许安全页面使用麦克风。请通过 http://localhost 或 http://127.0.0.1 打开 Eidolon。"
+
+#: src/features/home/readiness-labels.ts
+msgid "Build It"
+msgstr "生成"
+
+#: src/features/jobs/labels.ts
+msgid "Build Stream Catalog"
+msgstr "生成直播目录"
+
+#: src/features/jobs/labels.ts
+msgid "Builds the date-by-date overview of her broadcasts from the transcripts."
+msgstr "根据转写稿，按日期生成她的直播概览。"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Built"
+msgstr "建立时间"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Built by {job}"
+msgstr "由“{job}”建立"
+
+#: src/components/persona-badges.tsx
+#: src/features/studio/references-section.tsx
+msgid "Built in"
+msgstr "内置"
+
+#: src/features/home/readiness-labels.ts
+msgid "Built with other embedding settings: build it again."
+msgstr "是用其他嵌入设置构建的，需要重新构建。"
+
+#: src/features/home/readiness-labels.ts
+msgid "Built, but the broadcast overview isn't."
+msgstr "已构建，但直播概览还没有生成。"
+
+#: src/features/usage/route.tsx
+msgid "By Model"
+msgstr "按模型"
+
+#: src/features/usage/route.tsx
+msgid "By Persona"
+msgstr "按人设"
+
+#: src/features/usage/route.tsx
+msgid "By Provider"
+msgstr "按服务商"
+
+#: src/components/app-shell.tsx
+#: src/features/call/call-page.tsx
+msgid "Call"
+msgstr "通话"
+
+#: src/features/call/call-controls.tsx
+#: src/features/home/hero.tsx
+#: src/features/setup/done-step.tsx
+msgid "Call {name}"
+msgstr "呼叫{name}"
+
+#: src/features/studio/route.tsx
+msgctxt "studio header"
+msgid "Call {name}"
+msgstr "和{name}通话"
+
+#: src/features/call/call-page.tsx
+msgid "Call {name} to start talking. You can speak or type."
+msgstr "呼叫{name}即可开始聊天，可以说话，也可以打字。"
+
+#: src/features/call/call-controls.tsx
+msgid "Call Again"
+msgstr "再次呼叫"
+
+#: src/features/call/call-page.tsx
+msgid "Call ended"
+msgstr "通话已结束"
+
+#: src/features/call/call-page.tsx
+msgid "Call ended · {duration}"
+msgstr "通话已结束 · {duration}"
+
+#: src/features/setup/stepper.tsx
+msgid "Call her"
+msgstr "开始通话"
+
+#: src/features/call/call-page.tsx
+msgid "Calling…"
+msgstr "正在呼叫…"
+
+#: src/features/home/readiness-labels.ts
+msgid "Calls"
+msgstr "通话"
+
+#: src/features/settings/notices.tsx
+msgid "Calls already use what you saved; only the MCP server keeps what it read at start until a restart."
+msgstr "通话已经在使用新保存的设置，只有 MCP 服务在重启前仍沿用启动时读取的设置。"
+
+#: src/features/home/readiness-labels.ts
+msgid "Calls can't start until this setting is fixed."
+msgstr "修正这项设置之前无法开始通话。"
+
+#: src/features/home/hero.tsx
+msgid "Calls can't start yet"
+msgstr "还无法通话"
+
+#: src/features/setup/keys-step.tsx
+msgid "Calls fail with a key the provider refuses. Fix the keys marked above, or continue and fix them later in Settings."
+msgstr "服务商拒绝的密钥会导致通话失败。请修正上面标出的密钥，或先继续，稍后在设置中修改。"
+
+#: src/features/home/memory-panel.tsx
+msgid "Calls go on without memory meanwhile."
+msgstr "在此期间通话照常进行，只是没有记忆。"
+
+#: src/features/jobs/detail.tsx
+msgid "Can't be stopped from here"
+msgstr "无法在这里停止"
+
+#: src/lib/labels.ts
+msgid "Can't reach Eidolon. Check that it's still running in the terminal."
+msgstr "无法连接 Eidolon，请确认它仍在终端中运行。"
+
+#: src/components/settings-form/reindex-dialog.tsx
+#: src/features/jobs/parts.tsx
+#: src/features/settings/accounts-card.tsx
+#: src/features/setup/new-persona.tsx
+#: src/features/studio/references-section.tsx
+#: src/features/studio/video-table.tsx
+msgid "Cancel"
+msgstr "取消"
+
+#: src/features/jobs/parts.tsx
+msgid "Cancel Job"
+msgstr "取消任务"
+
+#: src/features/jobs/parts.tsx
+msgid "Cancel this job?"
+msgstr "取消这个任务？"
+
+#: src/features/jobs/labels.ts
+msgid "cancelled"
+msgstr "已取消"
+
+#: src/features/jobs/labels.ts
+msgid "Cancelled"
+msgstr "已取消"
+
+#: src/features/jobs/labels.ts
+msgid "Cancelled."
+msgstr "已取消。"
+
+#: src/features/studio/videos-section.tsx
+msgid "Change"
+msgstr "更改"
+
+#: src/features/home/readiness-labels.ts
+msgctxt "voice"
+msgid "Change"
+msgstr "更换"
+
+#: src/components/settings-form/reindex-dialog.tsx
+msgid "Change the embedding model?"
+msgstr "要更换嵌入模型吗？"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Changed"
+msgstr "有改动"
+
+#: src/components/settings-form/labels.ts
+msgid "Changing it means building every persona's index again and a new memory collection."
+msgstr "更换后需要重新构建每个人设的索引，并使用新的记忆集合。"
+
+#: src/components/settings-form/labels.ts
+msgid "Changing it means building every persona's knowledge index again."
+msgstr "更换后需要重新构建每个人设的知识索引。"
+
+#: src/features/usage/route.tsx
+msgid "Chart"
+msgstr "图表"
+
+#: src/lib/labels.ts
+msgid "Chat"
+msgstr "对话"
+
+#: src/components/settings-form/labels.ts
+#: src/features/home/readiness-labels.ts
+msgid "Chat Model"
+msgstr "对话模型"
+
+#: src/components/settings-form/labels.ts
+msgid "Chat Provider"
+msgstr "对话服务商"
+
+#: src/components/settings-form/account-key-field.tsx
+#: src/features/home/readiness-labels.ts
+#: src/features/home/readiness-list.tsx
+#: src/features/settings/account-dialog.tsx
+#: src/features/settings/accounts-card.tsx
+msgid "Check"
+msgstr "检查"
+
+#: src/features/setup/memory-step.tsx
+msgid "Check and Save"
+msgstr "检查并保存"
+
+#: src/features/setup/memory-step.tsx
+msgid "Check and Turn On"
+msgstr "检查并开启"
+
+#: src/components/settings-form/check-labels.ts
+msgid "Check failed"
+msgstr "检查未通过"
+
+#: src/features/setup/memory-step.tsx
+msgid "Check it below. Already running Qdrant here? Just check its address."
+msgstr "然后在下面检查。如果本机已经在运行 Qdrant，直接检查它的地址即可。"
+
+#: src/features/studio/add-videos.tsx
+msgid "Check Links"
+msgstr "检查链接"
+
+#: src/components/settings-form/check-labels.ts
+msgid "Check passed"
+msgstr "检查通过"
+
+#: src/features/home/memory-panel.tsx
+msgid "Check the Address"
+msgstr "检查地址"
+
+#: src/features/call/call-notices.tsx
+msgid "Check your microphone, then call again."
+msgstr "请检查麦克风，然后再次呼叫。"
+
+#: src/components/voice-picker/index.tsx
+msgid "Chinese"
+msgstr "中文"
+
+#: src/components/voice-picker/index.tsx
+msgid "Choose"
+msgstr "选择"
+
+#: src/features/studio/voice-section.tsx
+msgid "Choosing a voice saves it for {name}."
+msgstr "选中的声音会立即保存到{name}的设置中。"
+
+#: src/components/voice-picker/index.tsx
+msgid "Chosen"
+msgstr "已选择"
+
+#: src/features/jobs/labels.ts
+msgid "Cleans up her transcripts with the refine model."
+msgstr "用整理模型清理她的转写稿。"
+
+#: src/features/studio/add-videos.tsx
+msgid "Clear"
+msgstr "清空"
+
+#: src/components/settings-form/labels.ts
+msgid "Client IP Header"
+msgstr "客户端 IP 请求头"
+
+#: src/components/ui/dialog.tsx
+#: src/components/ui/sheet.tsx
+#: src/features/studio/facts-editor.tsx
+msgid "Close"
+msgstr "关闭"
+
+#: src/components/settings-form/labels.ts
+msgid "Cloudflare TURN Key ID"
+msgstr "Cloudflare TURN 密钥 ID"
+
+#: src/features/call/call-notices.tsx
+msgid "Connect a microphone, then call again."
+msgstr "请连接麦克风，然后再次呼叫。"
+
+#: src/features/setup/memory-step.tsx
+#: src/features/setup/persona-step.tsx
+#: src/features/setup/voice-step.tsx
+msgid "Continue"
+msgstr "继续"
+
+#: src/features/setup/keys-step.tsx
+msgid "Continue Anyway"
+msgstr "仍然继续"
+
+#: src/features/call/transcript-view.tsx
+msgid "Conversation"
+msgstr "对话"
+
+#: src/features/studio/videos-section.tsx
+msgid "Cookies"
+msgstr "Cookie"
+
+#: src/features/studio/videos-section.tsx
+msgid "Cookies come from {browser}."
+msgstr "Cookie 从 {browser} 读取。"
+
+#: src/features/studio/videos-section.tsx
+msgid "Cookies come from Chrome, the default."
+msgstr "Cookie 从 Chrome 读取（默认）。"
+
+#: src/features/studio/videos-section.tsx
+msgid "Cookies come from the file {file}."
+msgstr "Cookie 来自文件 {file}。"
+
+#: src/components/settings-form/labels.ts
+msgid "Cookies File"
+msgstr "Cookie 文件"
+
+#: src/features/setup/copy-command.tsx
+msgid "Copy the Command"
+msgstr "复制命令"
+
+#: src/features/jobs/detail.tsx
+#: src/features/jobs/list.tsx
+msgid "Cost"
+msgstr "费用"
+
+#: src/features/jobs/detail.tsx
+msgid "Cost So Far"
+msgstr "目前费用"
+
+#: src/features/call/call-notices.tsx
+msgid "Couldn't connect the call."
+msgstr "无法接通通话。"
+
+#: src/features/call/call-notices.tsx
+msgid "Couldn't get the connection settings for the call."
+msgstr "无法获取通话的连接设置。"
+
+#: src/components/settings-form/model-picker.tsx
+msgid "Couldn't list the models ({reason}): type the model id."
+msgstr "无法获取模型列表（{reason}）：请直接填写模型 ID。"
+
+#: src/features/jobs/detail.tsx
+#: src/features/jobs/list.tsx
+msgid "Couldn't load the jobs"
+msgstr "无法加载任务"
+
+#: src/features/studio/parts.tsx
+msgid "Couldn't load this"
+msgstr "加载失败"
+
+#: src/components/settings-form/check-labels.ts
+msgid "Couldn't reach the provider."
+msgstr "无法连接到服务商。"
+
+#: src/features/setup/new-persona.tsx
+msgid "Create"
+msgstr "创建"
+
+#: src/features/setup/voice-step.tsx
+msgid "Create Her"
+msgstr "创建人设"
+
+#: src/features/setup/persona-step.tsx
+msgid "Create Your Own"
+msgstr "创建自己的人设"
+
+#: src/components/settings-form/check-result.tsx
+msgid "Credit left: {amount}"
+msgstr "剩余余额：{amount}"
+
+#: src/components/voice-picker/index.tsx
+msgid "Current voice:"
+msgstr "当前声音："
+
+#: src/components/preferences.tsx
+msgid "Dark"
+msgstr "深色"
+
+#: src/features/usage/spend-chart.tsx
+msgid "Day"
+msgstr "日期"
+
+#: src/lib/labels.ts
+msgid "Decision Models"
+msgstr "决策模型"
+
+#: src/components/settings-form/field.tsx
+#: src/components/settings-form/labels.ts
+#: src/components/settings-form/model-picker.tsx
+#: src/features/studio/identity-section.tsx
+msgid "Default"
+msgstr "默认"
+
+#: src/components/settings-form/field.tsx
+#: src/components/settings-form/model-picker.tsx
+msgid "Default ({value})"
+msgstr "默认（{value}）"
+
+#: src/components/settings-form/field.tsx
+msgid "Default (comma-separated)"
+msgstr "默认（用逗号分隔）"
+
+#: src/components/settings-form/labels.ts
+msgid "Default 6333."
+msgstr "默认 6333。"
+
+#: src/components/settings-form/labels.ts
+msgid "Default eidolon_memories. A new embedding dimension needs a new collection."
+msgstr "默认 eidolon_memories。更换嵌入维度时需要使用新的集合。"
+
+#: src/components/settings-form/labels.ts
+msgid "Default mem0/history.db in the data home."
+msgstr "默认为数据目录中的 mem0/history.db。"
+
+#: src/components/settings-form/labels.ts
+msgid "Default Opus Bitrate"
+msgstr "默认 Opus 码率"
+
+#: src/features/studio/facts-editor.tsx
+msgid "Delete"
+msgstr "删除"
+
+#: src/features/studio/facts-editor.tsx
+msgid "Delete {name}?"
+msgstr "删除 {name}？"
+
+#: src/features/setup/persona-step.tsx
+msgid "demo"
+msgstr "演示"
+
+#: src/features/jobs/parts.tsx
+#: src/features/studio/add-videos.tsx
+msgid "Details"
+msgstr "详情"
+
+#: src/components/settings-form/settings-card.tsx
+msgid "Discard"
+msgstr "放弃修改"
+
+#: src/features/studio/text-editor.tsx
+msgid "Discard Changes"
+msgstr "放弃修改"
+
+#: src/features/home/readiness-labels.ts
+msgid "Disk Space"
+msgstr "磁盘空间"
+
+#: src/features/call/call-notices.tsx
+msgid "Dismiss"
+msgstr "关闭"
+
+#: src/features/jobs/labels.ts
+msgid "done"
+msgstr "完成"
+
+#: src/features/jobs/labels.ts
+#: src/features/setup/stepper.tsx
+msgid "Done"
+msgstr "完成"
+
+#: src/features/jobs/labels.ts
+msgctxt "job status"
+msgid "Done"
+msgstr "已完成"
+
+#: src/features/jobs/labels.ts
+#: src/features/studio/videos-section.tsx
+msgid "Download"
+msgstr "下载"
+
+#: src/components/settings-form/labels.ts
+#: src/features/settings/route.tsx
+msgid "Downloads"
+msgstr "下载"
+
+#: src/features/settings/route.tsx
+msgid "Downloads her videos. A video behind a login needs your cookies, read from a browser or a cookies.txt."
+msgstr "负责下载她的视频。需要登录才能观看的视频要用到你的 Cookie，可以从浏览器读取，也可以用 cookies.txt。"
+
+#: src/features/jobs/labels.ts
+msgid "Downloads the audio of her videos with yt-dlp."
+msgstr "用 yt-dlp 下载她的视频的音频。"
+
+#: src/features/studio/videos-section.tsx
+msgid "Downloads use no cookies."
+msgstr "下载时不使用 Cookie。"
+
+#: src/features/jobs/labels.ts
+msgid "Downloads, transcribes, refines and indexes her videos. Each step skips what's already done."
+msgstr "下载、转写、整理并索引她的视频。每一步都会跳过已经完成的部分。"
+
+#: src/features/jobs/detail.tsx
+#: src/features/jobs/list.tsx
+msgid "Duration"
+msgstr "用时"
+
+#: src/features/setup/persona-fields.tsx
+msgid "e.g. A Chinese VTuber who streams on Bilibili and loves cats"
+msgstr "例如 A Chinese VTuber who streams on Bilibili and loves cats"
+
+#: src/features/setup/persona-fields.tsx
+msgid "e.g. 明前奶绿"
+msgstr "例如 明前奶绿"
+
+#: src/lib/labels.ts
+msgid "Each link must be a full http or https URL."
+msgstr "每个链接都必须是完整的 http 或 https 网址。"
+
+#: src/features/usage/route.tsx
+msgid "Each model, and the task it did for her."
+msgstr "每个模型，以及它为她承担的任务。"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Edit"
+msgstr "编辑"
+
+#: src/features/settings/account-dialog.tsx
+#: src/features/settings/accounts-card.tsx
+#: src/features/studio/knowledge-section.tsx
+msgid "Edit {name}"
+msgstr "编辑 {name}"
+
+#: src/features/home/route.tsx
+msgid "Eidolon {version}"
+msgstr "Eidolon {version}"
+
+#: src/lib/labels.ts
+msgid "Eidolon answers only at localhost or 127.0.0.1. Open it at one of those."
+msgstr "Eidolon 只响应 localhost 或 127.0.0.1，请通过其中之一打开。"
+
+#: src/features/setup/keys-step.tsx
+msgid "Eidolon calls paid services with your own keys: by default Soniox hears you, OpenRouter thinks and Fish Audio speaks. Each needs credit on its account."
+msgstr "Eidolon 用你自己的密钥调用付费服务：默认由 Soniox 负责听，OpenRouter 负责思考，Fish Audio 负责说话。每个账户都需要有余额。"
+
+#: src/features/usage/route.tsx
+msgid "Eidolon can't write its usage ledger at <0>{path}</0>. Set <1>EIDOLON_USAGE_DB</1> to a file it can write, then restart."
+msgstr "Eidolon 无法写入用量记录文件 <0>{path}</0>。请把 <1>EIDOLON_USAGE_DB</1> 设为可写入的文件，然后重启。"
+
+#: src/features/settings/restart-button.tsx
+msgid "Eidolon couldn't list its jobs. A restart interrupts any that still run; you can resume each from its page once Eidolon is back."
+msgstr "Eidolon 没能列出任务。重启会中断所有还在运行的任务，Eidolon 恢复后可以在各自的任务页面继续。"
+
+#: src/features/settings/restart.ts
+msgid "Eidolon didn't come back. Start it again from the terminal."
+msgstr "Eidolon 没有重新启动。请在终端里再次启动它。"
+
+#: src/lib/labels.ts
+msgid "Eidolon doesn't use that key."
+msgstr "Eidolon 不使用这个密钥。"
+
+#: src/features/call/call-notices.tsx
+msgid "Eidolon ended the call."
+msgstr "Eidolon 结束了通话。"
+
+#: src/lib/labels.ts
+msgid "Eidolon has no such provider account."
+msgstr "没有这个服务商账号。"
+
+#: src/lib/labels.ts
+msgid "Eidolon hit an internal error. The terminal has the details."
+msgstr "Eidolon 发生内部错误，详情请查看终端。"
+
+#: src/components/settings-form/labels.ts
+msgid "Eidolon installs and updates its own yt-dlp unless this is set."
+msgstr "未设置时，Eidolon 会自行安装并更新 yt-dlp。"
+
+#: src/features/jobs/detail.tsx
+msgid "Eidolon keeps the last 50 jobs."
+msgstr "Eidolon 只保留最近 50 个任务。"
+
+#: src/features/settings/restart.ts
+msgid "Eidolon restarted."
+msgstr "Eidolon 已重启。"
+
+#: src/lib/labels.ts
+msgid "Eidolon sent a reply this page couldn't read."
+msgstr "Eidolon 返回了此页面无法读取的响应。"
+
+#: src/features/jobs/detail.tsx
+msgid "Eidolon stopped while this job ran"
+msgstr "任务运行期间 Eidolon 停止了"
+
+#: src/features/setup/persona-fields.tsx
+msgid "Eidolon uses that word itself. Pick another id."
+msgstr "Eidolon 自己要用这个词，请换一个 ID。"
+
+#: src/features/jobs/labels.ts
+msgid "Embedding API"
+msgstr "嵌入 API"
+
+#: src/components/settings-form/labels.ts
+msgid "Embedding API Base"
+msgstr "嵌入 API 地址"
+
+#: src/components/settings-form/labels.ts
+msgid "Embedding Dimension"
+msgstr "嵌入维度"
+
+#: src/components/settings-form/labels.ts
+#: src/features/studio/knowledge-section.tsx
+msgid "Embedding Model"
+msgstr "嵌入模型"
+
+#: src/components/settings-form/labels.ts
+msgid "Embedding Provider"
+msgstr "嵌入服务商"
+
+#: src/features/settings/route.tsx
+#: src/lib/labels.ts
+msgid "Embeddings"
+msgstr "嵌入"
+
+#: src/components/settings-form/labels.ts
+msgid "Empty keeps each persona's memories of you apart, under her own id."
+msgstr "留空时每个人设用自己的 ID 分开保存对你的记忆。"
+
+#: src/features/setup/persona-fields.tsx
+msgid "Empty uses 观众."
+msgstr "留空则使用「观众」。"
+
+#: src/features/home/readiness-labels.ts
+msgid "Ended with an error ({when})."
+msgstr "因错误结束（{when}）。"
+
+#: src/components/voice-picker/index.tsx
+msgctxt "voice language"
+msgid "English"
+msgstr "英文"
+
+#: src/components/settings-form/model-picker.tsx
+msgid "Enter a model id"
+msgstr "请填写模型 ID"
+
+#: src/components/settings-form/labels.ts
+msgid "Enter a number, such as 0.5."
+msgstr "请输入数字，例如 0.5。"
+
+#: src/components/settings-form/labels.ts
+msgid "Enter a whole number."
+msgstr "请输入整数。"
+
+#: src/components/settings-form/field.tsx
+msgid "environment"
+msgstr "环境变量"
+
+#: src/features/studio/video-table.tsx
+msgid "Estimate"
+msgstr "估价"
+
+#: src/features/studio/videos-section.tsx
+msgid "Estimated Total"
+msgstr "预计总计"
+
+#: src/features/studio/videos-section.tsx
+msgid "Estimates come from price tables or past runs, and leave out indexing's embedding cost."
+msgstr "估价来自价格表或以往的运行，不含索引的嵌入费用。"
+
+#: src/features/usage/route.tsx
+msgid "Estimates use each model's list price, promotions included; your provider's bill is the final word. Recorded in <0>{path}</0>."
+msgstr "估算按各模型的标价（含限时优惠）计算，最终以服务商的账单为准。记录保存在 <0>{path}</0>。"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Every file is indexed as it is now."
+msgstr "会按每个文件现在的内容建立索引。"
+
+#: src/features/settings/accounts-card.tsx
+msgid "Every persona"
+msgstr "所有人设"
+
+#: src/components/settings-form/reindex-dialog.tsx
+msgid "Every persona's knowledge index needs to be built again, and memory needs a new Qdrant collection: memories kept so far are lost."
+msgstr "每个人设的知识索引都需要重新构建，记忆也需要新的 Qdrant 集合：目前保存的记忆会丢失。"
+
+#: src/features/settings/route.tsx
+msgid "Every persona's memories of you live in Qdrant, and each change to them is logged to a SQLite file."
+msgstr "所有人设对你的记忆都保存在 Qdrant 中，每次改动都会记录到一个 SQLite 文件里。"
+
+#: src/features/studio/videos-section.tsx
+msgid "Every video is downloaded."
+msgstr "所有视频都已下载。"
+
+#: src/features/settings/route.tsx
+msgid "Everything the other sections don't show. Most installs never change these."
+msgstr "其他分区没有列出的设置。大多数情况下无需修改。"
+
+#: src/features/studio/models-section.tsx
+msgid "Experimental, and not yet tried in a real call."
+msgstr "实验性功能，尚未在真实通话中验证。"
+
+#: src/components/settings-form/labels.ts
+msgid "Fact Candidates"
+msgstr "资料候选条数"
+
+#: src/components/settings-form/labels.ts
+msgid "Fact Files"
+msgstr "资料文件"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Fact files hold what she knows about herself, one fact per line. Indexing them uses the embedding API, which bills a little."
+msgstr "资料文件记录她了解的关于自己的事，每行一条。索引资料会调用嵌入 API，产生少量费用。"
+
+#: src/components/settings-form/labels.ts
+msgid "Fact Subject Pattern"
+msgstr "资料主语匹配规则"
+
+#: src/features/home/readiness-labels.ts
+#: src/features/studio/knowledge-section.tsx
+msgid "Facts"
+msgstr "资料"
+
+#: src/features/studio/facts-editor.tsx
+msgctxt "fact file contents"
+msgid "Facts"
+msgstr "资料内容"
+
+#: src/features/studio/facts-editor.tsx
+msgid "facts.txt"
+msgstr "资料.txt"
+
+#: src/features/jobs/labels.ts
+#: src/features/jobs/parts.tsx
+#: src/features/studio/video-table.tsx
+msgid "failed"
+msgstr "失败"
+
+#: src/features/jobs/labels.ts
+msgid "Failed"
+msgstr "失败"
+
+#: src/features/studio/identity-section.tsx
+msgid "Fans"
+msgstr "粉丝称呼"
+
+#: src/features/home/readiness-labels.ts
+msgid "ffmpeg"
+msgstr "ffmpeg"
+
+#: src/features/studio/videos-section.tsx
+msgid "ffmpeg is installed."
+msgstr "已安装 ffmpeg。"
+
+#: src/features/studio/videos-section.tsx
+msgid "ffmpeg isn't installed. Only videos over 5 hours need it."
+msgstr "未安装 ffmpeg。只有超过 5 小时的视频才需要它。"
+
+#: src/features/studio/facts-editor.tsx
+msgid "File Name"
+msgstr "文件名"
+
+#: src/features/call/call-notices.tsx
+msgid "Fish Audio can't use {name}'s voice, so calls may have no sound."
+msgstr "Fish Audio 无法使用{name}的声音，通话可能没有声音。"
+
+#: src/features/home/readiness-labels.ts
+msgid "Fish Audio can't use her voice ({id}): it is private or gone."
+msgstr "Fish Audio 无法使用她的声音（{id}）：它是私有的或已不存在。"
+
+#: src/features/call/call-notices.tsx
+msgid "Fish Audio can't use the voice {name} inherits from the environment, so calls may have no sound."
+msgstr "Fish Audio 无法使用{name}从环境变量继承的声音，通话可能没有声音。"
+
+#: src/features/studio/voice-section.tsx
+msgid "Fish Audio can't use the voice she inherits from <0>{env}</0>. Pick her own below."
+msgstr "Fish Audio 用不了她从 <0>{env}</0> 继承的声音。请在下面为她选一个。"
+
+#: src/components/settings-form/labels.ts
+msgid "Fish Audio's drama-3 performs every delivery cue in her prompt. With other models, Eidolon takes out the cues they can't read before they're spoken."
+msgstr "Fish Audio 的 drama-3 会演绎提示词里的所有表演提示。换用其他模型时，Eidolon 会在朗读前删掉它读不懂的提示。"
+
+#: src/components/settings-form/check-labels.ts
+msgid "Fish doesn't know this persona's voice. Pick another."
+msgstr "Fish 找不到这个人设的声音，请另选一个。"
+
+#: src/features/studio/voice-section.tsx
+msgid "Fish doesn't know this voice"
+msgstr "Fish 上找不到这个声音"
+
+#: src/features/studio/voice-section.tsx
+msgid "Fish has this voice"
+msgstr "Fish 上有这个声音"
+
+#: src/components/settings-form/settings-card.tsx
+#: src/features/studio/identity-section.tsx
+msgid "Fix the highlighted values first."
+msgstr "请先修正标出的值。"
+
+#: src/features/studio/voice-section.tsx
+msgid "For a voice the search can't find, such as a private one of your Fish account: copy its ID from its page on fish.audio."
+msgstr "用于搜索不到的声音，比如你 Fish 账号里的私有声音：在 fish.audio 上该声音的页面复制它的 ID。"
+
+#: src/features/jobs/parts.tsx
+msgid "Force Stop"
+msgstr "强制停止"
+
+#: src/features/jobs/parts.tsx
+msgid "Force this job to stop?"
+msgstr "强制停止这个任务？"
+
+#: src/features/home/memory-panel.tsx
+msgid "Forget"
+msgstr "忘记"
+
+#: src/features/home/memory-panel.tsx
+msgid "Forget Everything"
+msgstr "全部忘记"
+
+#: src/features/jobs/describe.ts
+msgid "Found {title}"
+msgstr "找到 {title}"
+
+#: src/features/setup/route.tsx
+msgid "Four short steps: your keys, who you'll talk to, her voice, and memory."
+msgstr "四个简单步骤：你的密钥、聊天对象、她的声音和记忆。"
+
+#: src/features/studio/videos-section.tsx
+msgid "Free"
+msgstr "免费"
+
+#: src/features/studio/videos-section.tsx
+msgid "Free: only yt-dlp runs."
+msgstr "免费：只运行 yt-dlp。"
+
+#: src/features/studio/references-section.tsx
+msgid "Friends"
+msgstr "朋友"
+
+#: src/components/settings-form/account-key-field.tsx
+#: src/features/settings/accounts-card.tsx
+msgid "From the environment"
+msgstr "来自环境变量"
+
+#: src/features/settings/route.tsx
+msgid "General"
+msgstr "通用"
+
+#: src/components/settings-form/account-key-field.tsx
+msgid "Get a key"
+msgstr "获取密钥"
+
+#: src/features/call/call-page.tsx
+msgid "Getting your microphone ready…"
+msgstr "正在准备麦克风…"
+
+#: src/features/setup/done-step.tsx
+msgid "Give her facts, videos and outfits in the studio, so she knows who she is."
+msgstr "在工作室里为她添加资料、视频和服装，让她知道自己是谁。"
+
+#: src/features/studio/glossary-section.tsx
+#: src/features/studio/route.tsx
+msgid "Glossary"
+msgstr "词汇表"
+
+#: src/features/studio/glossary-section.tsx
+msgid "Glossary saved, but it doesn't parse yet."
+msgstr "词汇表已保存，但目前还无法解析。"
+
+#: src/features/studio/glossary-section.tsx
+msgid "Glossary saved."
+msgstr "词汇表已保存。"
+
+#: src/features/setup/done-step.tsx
+msgid "Go to Home"
+msgstr "前往首页"
+
+#: src/lib/labels.ts
+msgid "Group ID"
+msgstr "Group ID"
+
+#: src/features/call/call-controls.tsx
+msgid "Hang Up"
+msgstr "挂断"
+
+#: src/features/call/call-page.tsx
+msgid "Hanging up…"
+msgstr "正在挂断…"
+
+#: src/features/studio/identity-section.tsx
+msgid "Her avatar is built in. Upload one to use your own instead."
+msgstr "她有内置头像。上传一张即可换成你自己的。"
+
+#: src/features/setup/persona-fields.tsx
+msgid "Her clock, for the date and time she knows. Starts as yours."
+msgstr "她的时钟，决定她知道的日期和时间。默认与你相同。"
+
+#: src/features/studio/identity-section.tsx
+msgid "Her clock: the date and time she knows during a call."
+msgstr "她的时钟：通话时她所知道的日期和时间。"
+
+#: src/features/studio/identity-section.tsx
+msgid "Her full name, as the prompts say it."
+msgstr "她的全名，提示词里会这样称呼她。"
+
+#: src/features/studio/models-section.tsx
+msgid "Her knowledge, archive and memories reach the model from the transcript of what you said, so they can trail a quick reply."
+msgstr "她的知识、直播存档和记忆要根据你说话的转写才能提供给模型，可能赶不上很快的回复。"
+
+#: src/features/setup/persona-fields.tsx
+msgid "Her Name"
+msgstr "她的名字"
+
+#: src/features/home/persona-grid.tsx
+msgid "Her own name, prompt and voice."
+msgstr "全新的名字、提示词和声音。"
+
+#: src/features/studio/voice-section.tsx
+msgid "Her own voice"
+msgstr "她自己的声音"
+
+#: src/features/studio/voice-section.tsx
+msgid "Her own voice is removed from her settings, and she speaks with the one {env} sets: {value}."
+msgstr "她自己的声音会从设置中移除，之后她会使用 {env} 设置的声音：{value}。"
+
+#: src/features/home/readiness-labels.ts
+msgid "Her own voice works with Fish Audio."
+msgstr "她自己的声音可以在 Fish Audio 使用。"
+
+#: src/features/home/readiness-labels.ts
+msgid "Her providers take no key."
+msgstr "她用的服务商都不需要密钥。"
+
+#: src/features/studio/advanced-section.tsx
+msgid "Her settings the other sections don't show: where her prompt and index live, and the ids Mem0 files her memories under."
+msgstr "其他部分没有显示的设置：她的提示词和索引存放在哪里，以及 Mem0 归档她的记忆所用的 id。"
+
+#: src/features/setup/new-persona.tsx
+msgid "Her Voice"
+msgstr "她的声音"
+
+#: src/features/home/readiness-labels.ts
+msgid "Her voice ({id}) hasn't been checked with Fish Audio yet."
+msgstr "她的声音（{id}）尚未经过 Fish Audio 检查。"
+
+#: src/features/jobs/detail.tsx
+msgid "Hide"
+msgstr "隐藏"
+
+#: src/components/settings-form/labels.ts
+msgid "Higher costs more and takes longer while you wait in the call."
+msgstr "画质越高越贵，通话中等待的时间也越长。"
+
+#: src/components/app-shell.tsx
+msgid "Home"
+msgstr "首页"
+
+#: src/features/home/voice-dialog.tsx
+#: src/features/setup/voice-step.tsx
+msgid "How {name} sounds. Search Fish Audio's public voices and play a sample before you pick one."
+msgstr "{name}的声音。搜索 Fish Audio 的公开声音，试听样本后再选择。"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "How a call searches what she knows: how many candidates each index offers, the reranker that orders them, and the gate that skips the search when a turn isn't about her."
+msgstr "通话时如何检索她知道的事：每个索引提供多少候选、给候选排序的重排模型，以及在话题与她无关时跳过检索的门控。"
+
+#: src/features/studio/videos-section.tsx
+msgid "How her videos become transcripts: the language and model Soniox transcribes with, and the model that refines them, with how many chunks it works on at once."
+msgstr "她的视频如何变成转写稿：Soniox 转写用的语言和模型，以及整理转写稿的模型和它同时处理的段数。"
+
+#: src/features/settings/account-dialog.tsx
+msgid "How Settings and the studio list it, such as “OpenAI (work)”."
+msgstr "在设置和工作室中显示的名字，例如“OpenAI（工作）”。"
+
+#: src/features/setup/stepper.tsx
+msgid "How she sounds"
+msgstr "她的声音"
+
+#: src/features/studio/models-section.tsx
+msgid "How She Talks"
+msgstr "通话方式"
+
+#: src/features/setup/persona-fields.tsx
+msgid "ID"
+msgstr "ID"
+
+#: src/features/studio/identity-section.tsx
+msgid "Identity"
+msgstr "身份"
+
+#: src/features/studio/identity-section.tsx
+msgid "Identity saved."
+msgstr "身份已保存。"
+
+#: src/lib/labels.ts
+msgid "Images"
+msgstr "图片"
+
+#: src/features/call/call-page.tsx
+msgid "In a call · {duration}"
+msgstr "通话中 · {duration}"
+
+#: src/features/setup/persona-fields.tsx
+msgid "In her own language; prompts use it as written."
+msgstr "用她自己的语言填写，提示词会原样使用。"
+
+#: src/features/home/readiness-labels.ts
+msgid "In progress: {count}."
+msgstr "进行中：{count}。"
+
+#: src/features/usage/route.tsx
+msgid "in the last 12 months"
+msgstr "近 12 个月"
+
+#: src/features/usage/route.tsx
+msgid "in the last 30 days"
+msgstr "近 30 天"
+
+#: src/features/usage/route.tsx
+msgid "in the last 7 days"
+msgstr "近 7 天"
+
+#: src/features/usage/route.tsx
+msgid "in the last 90 days"
+msgstr "近 90 天"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Index"
+msgstr "索引"
+
+#: src/features/jobs/labels.ts
+#: src/features/studio/knowledge-section.tsx
+msgid "Index Facts"
+msgstr "索引资料"
+
+#: src/features/jobs/labels.ts
+#: src/features/studio/knowledge-section.tsx
+msgid "Index Streams"
+msgstr "索引直播"
+
+#: src/features/studio/knowledge-section.tsx
+#: src/features/studio/video-table.tsx
+msgid "Indexed"
+msgstr "已索引"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Indexed files match {patterns}"
+msgstr "会被索引的文件：{patterns}"
+
+#: src/features/jobs/labels.ts
+msgid "Indexes her fact files: what she knows about herself."
+msgstr "索引她的资料文件：她对自己的了解。"
+
+#: src/features/jobs/labels.ts
+msgid "Indexes her stream transcripts, so she can recall past broadcasts."
+msgstr "索引她的直播转写稿，让她能回忆过去的直播。"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Indexing"
+msgstr "建立索引"
+
+#: src/components/settings-form/field.tsx
+msgid "Inherited from <0>{env}</0> in the environment. A value set here overrides it for <1>{name}</1> alone."
+msgstr "继承自环境变量 <0>{env}</0>。在这里设置一个值，就只为<1>{name}</1>覆盖它。"
+
+#: src/features/studio/voice-section.tsx
+msgid "Inherited from <0>{env}</0> in the environment. Picking a voice here overrides it for {name} alone."
+msgstr "继承自环境变量 <0>{env}</0>。在这里选一个声音，就只为{name}覆盖它。"
+
+#: src/features/home/readiness-labels.ts
+msgid "Inherited from the environment, and works with Fish Audio."
+msgstr "继承自环境变量，可以在 Fish Audio 上使用。"
+
+#: src/features/setup/memory-step.tsx
+msgid "Install Docker Desktop, or Docker Engine on Linux, and start it."
+msgstr "安装并启动 Docker Desktop（Linux 上为 Docker Engine）。"
+
+#: src/features/studio/videos-section.tsx
+msgid "Install it yourself with brew install yt-dlp or pip install yt-dlp, and Eidolon uses the one on your PATH."
+msgstr "可以自己用 brew install yt-dlp 或 pip install yt-dlp 安装，Eidolon 会使用 PATH 中的那个。"
+
+#: src/features/settings/yt-dlp-state.tsx
+msgid "Installed"
+msgstr "已安装"
+
+#: src/features/home/readiness-labels.ts
+msgid "Installed."
+msgstr "已安装。"
+
+#: src/features/home/readiness-labels.ts
+msgid "Installs itself on the first download."
+msgstr "会在第一次下载时自动安装。"
+
+#: src/features/settings/yt-dlp-state.tsx
+msgid "Installs on the first download"
+msgstr "首次下载时安装"
+
+#: src/features/jobs/labels.ts
+msgid "Interrupted"
+msgstr "已中断"
+
+#: src/features/setup/memory-step.tsx
+msgid "It answers only on this machine, keeps its data in a Docker volume and restarts with Docker."
+msgstr "它只在本机应答，数据保存在 Docker 卷中，并随 Docker 自动重启。"
+
+#: src/features/jobs/detail.tsx
+msgid "It ended before reporting a result. The end of its technical log usually says why."
+msgstr "它在报告结果之前就结束了。技术日志的末尾通常会说明原因。"
+
+#: src/features/jobs/detail.tsx
+msgid "It keeps running when you close this page."
+msgstr "关闭这个页面，任务也会继续运行。"
+
+#: src/features/jobs/parts.tsx
+msgid "It still hasn't stopped since you cancelled it. Force Stop ends it at once, without letting it finish what it is writing: an index it was building can be left half built, so run that job again afterwards."
+msgstr "取消之后它仍然没有停下。强制停止会立刻结束它，不等它写完手头的内容：正在构建的索引可能只完成一半，之后请重新运行那个任务。"
+
+#: src/features/jobs/detail.tsx
+msgid "It stops once it has finished what it is writing."
+msgstr "写完手头的内容后，它就会停止。"
+
+#: src/features/studio/identity-section.tsx
+msgid "It's {time} for her now."
+msgstr "她那里现在是{time}。"
+
+#: src/features/settings/accounts-card.tsx
+msgid "Its key and settings are deleted from credentials.json. A key the environment sets stays."
+msgstr "它的密钥和设置会从 credentials.json 中删除。环境变量设置的密钥不受影响。"
+
+#: src/features/settings/account-dialog.tsx
+msgid "Its key goes only to {provider}, and stays on this machine."
+msgstr "密钥只会发送给 {provider}，并且只保存在这台电脑上。"
+
+#: src/features/studio/video-table.tsx
+msgid "Its length is unknown until it downloads."
+msgstr "下载之前不知道它的时长。"
+
+#: src/components/voice-picker/index.tsx
+msgid "Japanese"
+msgstr "日文"
+
+#: src/components/app-shell.tsx
+#: src/features/jobs/list.tsx
+msgid "Jobs"
+msgstr "任务"
+
+#: src/features/studio/text-editor.tsx
+msgid "Keep Editing"
+msgstr "继续编辑"
+
+#: src/features/studio/voice-section.tsx
+msgid "Keep Hers"
+msgstr "保留她的"
+
+#: src/features/studio/facts-editor.tsx
+#: src/features/studio/identity-section.tsx
+msgid "Keep It"
+msgstr "保留"
+
+#: src/features/jobs/parts.tsx
+msgid "Keep Running"
+msgstr "继续运行"
+
+#: src/features/setup/persona-step.tsx
+msgid "Keep talking to her."
+msgstr "继续和她聊天。"
+
+#: src/features/home/memory-panel.tsx
+msgid "Keep Them"
+msgstr "保留"
+
+#: src/features/settings/restart-button.tsx
+msgid "Keep Them Running"
+msgstr "继续运行"
+
+#: src/features/jobs/parts.tsx
+msgid "Keep Waiting"
+msgstr "继续等待"
+
+#: src/components/settings-form/check-labels.ts
+msgid "Key accepted"
+msgstr "密钥可用"
+
+#: src/features/settings/account-dialog.tsx
+msgid "Key removed."
+msgstr "密钥已删除。"
+
+#: src/features/setup/stepper.tsx
+msgid "Keys"
+msgstr "密钥"
+
+#: src/features/settings/accounts-card.tsx
+msgid "Keys are saved in credentials.json, readable only by you, and never shown again."
+msgstr "密钥保存在 credentials.json 中，只有你能读取，保存后不会再显示。"
+
+#: src/features/setup/keys-step.tsx
+msgid "Keys stay on this machine, readable only by you."
+msgstr "密钥只保存在这台电脑上，只有你能读取。"
+
+#: src/components/settings-form/labels.ts
+#: src/features/studio/route.tsx
+msgid "Knowledge"
+msgstr "知识"
+
+#: src/components/settings-form/labels.ts
+msgid "Knowledge Index"
+msgstr "知识索引"
+
+#: src/components/preferences.tsx
+msgid "Language"
+msgstr "语言"
+
+#: src/components/settings-form/labels.ts
+msgid "LAPLACE Workers URL"
+msgstr "LAPLACE Workers 地址"
+
+#: src/features/home/readiness-labels.ts
+msgid "Last Call"
+msgstr "上一次通话"
+
+#: src/features/settings/account-dialog.tsx
+msgid "Leave it empty for the provider's own API, or point it at a proxy or another region."
+msgstr "留空即使用服务商自己的 API，也可以指向代理或其他区域。"
+
+#: src/features/setup/route.tsx
+msgid "Leave Setup"
+msgstr "退出设置"
+
+#: src/features/studio/text-editor.tsx
+msgid "Leave without saving?"
+msgstr "不保存就离开？"
+
+#: src/features/jobs/detail.tsx
+#: src/features/studio/video-table.tsx
+msgid "Length"
+msgstr "时长"
+
+#: src/components/preferences.tsx
+msgid "Light"
+msgstr "浅色"
+
+#: src/features/settings/restart-button.tsx
+msgid "Link checks and plans don't resume: run them again afterwards."
+msgstr "链接检查和规划不会继续，之后请重新运行。"
+
+#: src/components/locked-screen.tsx
+msgid "Link from the Terminal"
+msgstr "终端里的链接"
+
+#: src/features/studio/add-videos.tsx
+msgid "Links"
+msgstr "链接"
+
+#: src/features/studio/add-videos.tsx
+msgid "Links Checked"
+msgstr "已检查的链接"
+
+#: src/features/call/call-controls.tsx
+msgid "Listening…"
+msgstr "正在聆听…"
+
+#: src/components/section-card.tsx
+#: src/components/settings-form/settings-card.tsx
+#: src/features/jobs/detail.tsx
+#: src/features/jobs/list.tsx
+#: src/features/studio/route.tsx
+msgid "Loading…"
+msgstr "加载中…"
+
+#: src/features/jobs/detail.tsx
+msgid "Log"
+msgstr "日志"
+
+#: src/components/settings-form/labels.ts
+msgid "Login Cache Seconds"
+msgstr "登录缓存秒数"
+
+#: src/features/studio/videos-section.tsx
+msgid "macOS: brew install ffmpeg · Windows: winget install ffmpeg · Linux: your package manager's ffmpeg."
+msgstr "macOS：brew install ffmpeg · Windows：winget install ffmpeg · Linux：用包管理器安装 ffmpeg。"
+
+#: src/components/app-shell.tsx
+msgid "Main"
+msgstr "主导航"
+
+#: src/features/home/memory-panel.tsx
+msgid "Make {name} forget you?"
+msgstr "让{name}忘记你？"
+
+#: src/features/studio/route.tsx
+msgid "Make Active"
+msgstr "设为当前人设"
+
+#: src/features/home/persona-grid.tsx
+msgctxt "persona card"
+msgid "Make Active"
+msgstr "设为当前"
+
+#: src/components/settings-form/labels.ts
+msgid "MCP Allowed Hosts"
+msgstr "MCP 允许的主机"
+
+#: src/components/settings-form/labels.ts
+msgid "MCP Anonymous Calls per Window"
+msgstr "MCP 匿名用户每个窗口的调用次数"
+
+#: src/components/settings-form/labels.ts
+msgid "MCP Logged-in Calls per Window"
+msgstr "MCP 登录用户每个窗口的调用次数"
+
+#: src/components/settings-form/labels.ts
+msgid "MCP Window Seconds"
+msgstr "MCP 限额窗口秒数"
+
+#: src/components/settings-form/labels.ts
+msgid "Mem0 Agent ID"
+msgstr "Mem0 agent ID"
+
+#: src/components/settings-form/labels.ts
+msgid "Mem0 History Database"
+msgstr "Mem0 历史数据库"
+
+#: src/components/settings-form/labels.ts
+msgid "Mem0 Run ID"
+msgstr "Mem0 run ID"
+
+#: src/components/settings-form/labels.ts
+msgid "Memories per Turn"
+msgstr "每轮检索的记忆条数"
+
+#: src/features/home/memory-panel.tsx
+msgid "Memories: {count}"
+msgstr "共 {count} 条记忆"
+
+#: src/components/settings-form/labels.ts
+#: src/features/home/readiness-labels.ts
+#: src/features/settings/route.tsx
+#: src/features/setup/stepper.tsx
+#: src/features/studio/models-section.tsx
+#: src/lib/labels.ts
+msgid "Memory"
+msgstr "记忆"
+
+#: src/features/setup/memory-step.tsx
+msgid "Memory (Optional)"
+msgstr "记忆（可选）"
+
+#: src/components/settings-form/labels.ts
+msgid "Memory Extraction Model"
+msgstr "记忆提取模型"
+
+#: src/components/settings-form/labels.ts
+msgid "Memory Extraction Provider"
+msgstr "记忆提取服务商"
+
+#: src/features/home/memory-panel.tsx
+msgid "Memory is off, so she forgets you after every call. It needs Qdrant, a database you run in Docker on this machine. Run this once in a terminal, then turn memory on:"
+msgstr "记忆已关闭，每次通话后她都会忘记你。记忆需要 Qdrant，一个在本机用 Docker 运行的数据库。在终端里运行一次这条命令，然后开启记忆："
+
+#: src/features/studio/models-section.tsx
+msgid "Memory is off: it needs a Qdrant host, which you set in <0>Settings</0>."
+msgstr "记忆功能未开启：它需要一个 Qdrant 主机，请在<0>设置</0>中设置。"
+
+#: src/components/settings-form/labels.ts
+msgid "Memory is on while this is set. Use 127.0.0.1 for the Docker container setup shows."
+msgstr "设置后记忆功能开启。使用设置向导中的 Docker 容器时填 127.0.0.1。"
+
+#: src/features/setup/memory-step.tsx
+msgid "Memory is on."
+msgstr "记忆已开启。"
+
+#: src/features/call/call-page.tsx
+msgid "Memory needs Qdrant. Set it up in Settings so {name} remembers your calls."
+msgstr "记忆功能需要 Qdrant。在设置中配置后，{name}就能记住你们的通话。"
+
+#: src/features/call/call-page.tsx
+msgid "Memory off"
+msgstr "记忆已关闭"
+
+#: src/features/call/call-page.tsx
+msgid "Memory on"
+msgstr "记忆已开启"
+
+#: src/components/settings-form/labels.ts
+msgid "Memory Score Threshold"
+msgstr "记忆相关度阈值"
+
+#: src/features/studio/route.tsx
+msgid "Mind"
+msgstr "思维"
+
+#: src/features/home/readiness-labels.ts
+msgid "Missing: {names}. Calls can't start without them."
+msgstr "缺少：{names}。没有它们无法开始通话。"
+
+#: src/features/usage/tables.tsx
+msgid "Model"
+msgstr "模型"
+
+#: src/components/settings-form/labels.ts
+#: src/features/studio/models-section.tsx
+msgid "Models"
+msgstr "模型"
+
+#: src/features/usage/spend-chart.tsx
+msgid "Month"
+msgstr "月份"
+
+#: src/features/call/call-controls.tsx
+msgid "Mute your mic"
+msgstr "关闭麦克风"
+
+#: src/features/settings/account-dialog.tsx
+msgid "Name"
+msgstr "名称"
+
+#: src/features/studio/identity-section.tsx
+msgctxt "persona's name"
+msgid "Name"
+msgstr "名字"
+
+#: src/components/settings-form/labels.ts
+msgid "Name patterns for the files in her facts folder, comma-separated. Default *.txt."
+msgstr "她的资料文件夹中文件名的匹配规则，用逗号分隔。默认 *.txt。"
+
+#: src/features/studio/glossary-section.tsx
+msgid "Names and terms Soniox should hear right when it transcribes this persona's videos: her name, her fans', recurring topics. It is TOML in the shape of Soniox's StructuredContext, and videos transcribed after you save use it."
+msgstr "Soniox 转写这个人设的视频时应当听准的名字和词：她的名字、粉丝称呼、常聊的话题。格式是 Soniox StructuredContext 形式的 TOML，保存之后转写的视频会使用它。"
+
+#: src/features/setup/persona-fields.tsx
+msgid "Names her folder: lowercase letters, digits, - and _. It can't change later."
+msgstr "用作她的文件夹名：小写字母、数字、- 和 _。创建后不能修改。"
+
+#: src/lib/labels.ts
+msgid "Needs API credit, which is separate from a fish.audio membership; new accounts start at $0."
+msgstr "需要 API 余额，与 fish.audio 会员无关；新账户余额为 $0。"
+
+#: src/features/home/hero.tsx
+msgid "Needs attention"
+msgstr "需要处理"
+
+#: src/lib/labels.ts
+msgid "Needs credit on the account; calls and transcription bill per minute of audio."
+msgstr "账户需要有余额，通话和转写按音频分钟计费。"
+
+#: src/features/studio/video-table.tsx
+msgid "Needs ffmpeg"
+msgstr "需要 ffmpeg"
+
+#: src/lib/labels.ts
+msgid "Needs prepaid credit."
+msgstr "需要预付余额。"
+
+#: src/features/studio/facts-editor.tsx
+msgid "New Fact File"
+msgstr "新建资料文件"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "New File"
+msgstr "新建文件"
+
+#: src/components/persona-switcher.tsx
+#: src/features/home/persona-grid.tsx
+#: src/features/setup/new-persona.tsx
+msgid "New Persona"
+msgstr "新建人设"
+
+#: src/features/settings/accounts-card.tsx
+msgid "No accounts yet"
+msgstr "还没有账号"
+
+#: src/components/settings-form/check-labels.ts
+msgid "No API credit, and the voice model is a paid one. Add credit on fish.audio."
+msgstr "没有 API 余额，而当前声音模型需要付费。请在 fish.audio 充值。"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "No fact files yet"
+msgstr "还没有资料文件"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "No file is left for indexing to read, and it keeps her old facts until it has one. Add a fact file, then index facts again so she forgets these:"
+msgstr "现在没有可供索引读取的文件，而索引在读到新文件之前会保留旧的资料。请先添加一个资料文件，再重新索引，她就会忘掉这些："
+
+#: src/features/studio/knowledge-section.tsx
+msgid "No file matches the patterns, so there is nothing to index."
+msgstr "没有文件符合规则，没有可索引的内容。"
+
+#: src/features/studio/references-section.tsx
+msgid "No friends yet"
+msgstr "还没有朋友"
+
+#: src/features/home/readiness-labels.ts
+msgid "No index yet: she knows only her prompt."
+msgstr "还没有索引：她只知道提示词里的内容。"
+
+#: src/features/jobs/list.tsx
+msgid "No jobs yet"
+msgstr "还没有任务"
+
+#: src/components/settings-form/account-key-field.tsx
+#: src/features/settings/accounts-card.tsx
+msgid "No key"
+msgstr "没有密钥"
+
+#: src/features/settings/accounts-card.tsx
+msgid "No key: calls need one"
+msgstr "没有密钥：通话需要"
+
+#: src/features/home/memory-panel.tsx
+msgid "No memories yet"
+msgstr "还没有记忆"
+
+#: src/features/call/call-notices.tsx
+msgid "No microphone found"
+msgstr "未找到麦克风"
+
+#: src/components/settings-form/model-picker.tsx
+msgid "No model by that name."
+msgstr "没有这个名字的模型。"
+
+#: src/features/home/readiness-labels.ts
+msgid "No outfit references, so she can't take selfies."
+msgstr "没有服装参考图，她无法自拍。"
+
+#: src/features/studio/references-section.tsx
+msgid "No outfits yet"
+msgstr "还没有服装"
+
+#: src/features/studio/references-section.tsx
+msgid "No preview: only PNG, JPEG and WebP are shown here. Selfies still use it."
+msgstr "无法预览：这里只显示 PNG、JPEG 和 WebP 图片。自拍仍会用到它。"
+
+#: src/features/settings/account-dialog.tsx
+msgid "No provider by that name."
+msgstr "没有这个名字的服务商。"
+
+#: src/components/settings-form/check-labels.ts
+msgid "No Qdrant address is set."
+msgstr "尚未设置 Qdrant 地址。"
+
+#: src/components/voice-picker/index.tsx
+msgid "No sample"
+msgstr "无样本"
+
+#: src/features/studio/video-table.tsx
+msgid "No speech"
+msgstr "没有语音"
+
+#: src/features/jobs/labels.ts
+msgid "No speech was heard in this audio."
+msgstr "音频中没有识别到语音。"
+
+#: src/features/usage/route.tsx
+msgid "No spending was recorded {during}. Calls, video jobs and MCP searches record theirs here as they run."
+msgstr "{during}没有花费记录。通话、视频任务和 MCP 检索运行时会在这里记录花费。"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "No stream catalog yet."
+msgstr "还没有直播目录。"
+
+#: src/features/studio/video-table.tsx
+msgid "No upload date"
+msgstr "没有上传日期"
+
+#: src/features/studio/video-table.tsx
+msgid "No videos yet"
+msgstr "还没有视频"
+
+#: src/features/studio/voice-section.tsx
+msgid "No voice yet"
+msgstr "还没有声音"
+
+#: src/components/voice-picker/index.tsx
+msgid "No voices match."
+msgstr "没有匹配的声音。"
+
+#: src/components/settings-form/labels.ts
+msgid "None"
+msgstr "不使用"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Not built"
+msgstr "尚未建立"
+
+#: src/features/home/readiness-labels.ts
+msgid "Not built yet: she can't recall past broadcasts."
+msgstr "还没有构建：她无法回忆过去的直播。"
+
+#: src/features/studio/video-table.tsx
+msgid "Not downloaded"
+msgstr "未下载"
+
+#: src/features/setup/keys-step.tsx
+msgid "Not every key passed its check"
+msgstr "部分密钥没有通过检查"
+
+#: src/features/call/call-page.tsx
+msgid "Not in a call"
+msgstr "未在通话"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Not indexed"
+msgstr "不会被索引"
+
+#: src/features/home/readiness-labels.ts
+msgid "Not installed. Only videos over 5 hours need it: brew install ffmpeg, apt install ffmpeg or winget install ffmpeg."
+msgstr "未安装。只有超过 5 小时的视频需要它：brew install ffmpeg、apt install ffmpeg 或 winget install ffmpeg。"
+
+#: src/features/studio/videos-section.tsx
+msgid "Not Now"
+msgstr "暂不运行"
+
+#: src/features/studio/glossary-section.tsx
+msgid "Not saved: this glossary doesn't parse"
+msgstr "未保存：词汇表无法解析"
+
+#: src/features/call/transcript-view.tsx
+msgid "Not sent"
+msgstr "未发送"
+
+#: src/components/settings-form/check-labels.ts
+msgid "Nothing answers there. Is the container running?"
+msgstr "该地址没有应答。容器在运行吗？"
+
+#: src/features/studio/videos-section.tsx
+msgid "Nothing is left to transcribe, refine or index."
+msgstr "没有需要转写、整理或索引的内容。"
+
+#: src/features/studio/add-videos.tsx
+msgid "Nothing New to Add"
+msgstr "没有可添加的新视频"
+
+#: src/features/usage/route.tsx
+msgid "Nothing recorded"
+msgstr "没有记录"
+
+#: src/features/jobs/parts.tsx
+msgid "Nothing reported yet."
+msgstr "还没有任何报告。"
+
+#: src/components/settings-form/check-labels.ts
+msgid "Nothing to check: no key is saved."
+msgstr "没有可检查的内容：尚未保存密钥。"
+
+#: src/components/settings-form/settings-card.tsx
+msgid "Nothing to set here."
+msgstr "这里没有可设置的项。"
+
+#: src/features/usage/spend-chart.tsx
+msgid "Nothing was spent in this range."
+msgstr "这段时间没有花费。"
+
+#: src/components/settings-form/field.tsx
+#: src/components/settings-form/labels.ts
+msgid "Off"
+msgstr "关"
+
+#: src/features/home/readiness-labels.ts
+msgid "Off: she won't remember you between calls."
+msgstr "已关闭：她不会在多次通话之间记得你。"
+
+#: src/components/settings-form/labels.ts
+msgid "Off: Three Models"
+msgstr "关闭：使用三个模型"
+
+#: src/components/settings-form/field.tsx
+#: src/components/settings-form/labels.ts
+msgid "On"
+msgstr "开"
+
+#: src/features/home/readiness-labels.ts
+msgid "On: she remembers you from one call to the next."
+msgstr "已开启：她会在多次通话之间记得你。"
+
+#: src/features/studio/identity-section.tsx
+msgid "One English sentence about her. The retrieval gate reads it to tell when a question is about her."
+msgstr "用一句英文介绍她。检索门控会读它，来判断问题是不是关于她的。"
+
+#: src/features/studio/facts-editor.tsx
+msgid "One fact per line. A line may start with a date, such as 2024-05-01 or 2024年5月1日."
+msgstr "每行一条资料。行首可以写日期，比如 2024-05-01 或 2024年5月1日。"
+
+#: src/features/studio/add-videos.tsx
+msgid "One link per line."
+msgstr "每行一个链接。"
+
+#: src/components/settings-form/labels.ts
+msgid "One model hears, thinks and speaks, in place of the three. Experimental."
+msgstr "用一个同时负责听、思考和说话的模型代替三个模型。实验性功能。"
+
+#: src/features/studio/voice-section.tsx
+msgid "One of {provider}'s voices."
+msgstr "{provider} 提供的声音之一。"
+
+#: src/features/call/call-notices.tsx
+msgid "One of her providers reported a problem. Check its key and credit in Settings."
+msgstr "她用的某个服务商报告了问题。请在设置中检查它的密钥和余额。"
+
+#: src/components/settings-form/labels.ts
+msgid "One per line, relative to her folder."
+msgstr "每行一个，相对于她的文件夹。"
+
+#: src/features/home/readiness-labels.ts
+msgid "Only {free} free on the data home's disk. Downloaded audio takes a lot of space."
+msgstr "数据目录所在磁盘只剩 {free}。下载的音频会占用大量空间。"
+
+#: src/components/locked-screen.tsx
+msgid "Open"
+msgstr "打开"
+
+#: src/components/locked-screen.tsx
+msgid "Open Eidolon from Your Terminal"
+msgstr "请从终端打开 Eidolon"
+
+#: src/features/call/call-page.tsx
+#: src/features/home/readiness-labels.ts
+msgid "Open Her Models"
+msgstr "打开模型设置"
+
+#: src/features/home/route.tsx
+msgid "Open one's studio to build her up, or make another the one your calls reach."
+msgstr "打开人设的工作室来完善她，或把另一个人设设为通话对象。"
+
+#: src/components/persona-switcher.tsx
+#: src/features/home/hero.tsx
+#: src/features/jobs/list.tsx
+#: src/features/setup/done-step.tsx
+msgid "Open the Studio"
+msgstr "打开工作室"
+
+#: src/features/studio/video-table.tsx
+msgid "Open the Video's Page"
+msgstr "打开视频页面"
+
+#: src/components/settings-form/labels.ts
+msgid "OpenAI API Base"
+msgstr "OpenAI API 地址"
+
+#: src/components/settings-form/labels.ts
+msgid "OpenRouter API Base"
+msgstr "OpenRouter API 地址"
+
+#: src/components/settings-form/labels.ts
+msgid "OpenRouter App Name"
+msgstr "OpenRouter 应用名称"
+
+#: src/components/settings-form/labels.ts
+msgid "OpenRouter App URL"
+msgstr "OpenRouter 应用网址"
+
+#: src/features/setup/stepper.tsx
+msgid "Optional"
+msgstr "可选"
+
+#: src/features/home/memory-panel.tsx
+msgid "Optional: calls work without it."
+msgstr "可选：没有它也能通话。"
+
+#: src/features/jobs/detail.tsx
+msgid "Options"
+msgstr "选项"
+
+#: src/components/settings-form/labels.ts
+msgid "Opus Bitrate: Best"
+msgstr "Opus 码率：最佳"
+
+#: src/components/settings-form/labels.ts
+msgid "Opus Bitrate: Low"
+msgstr "Opus 码率：低"
+
+#: src/components/settings-form/labels.ts
+msgid "Opus Bitrate: Lowest"
+msgstr "Opus 码率：最低"
+
+#: src/components/settings-form/labels.ts
+msgid "Opus Bitrate: Medium"
+msgstr "Opus 码率：中等"
+
+#: src/features/studio/voice-section.tsx
+msgid "Or Use a Voice by Its ID"
+msgstr "或按 ID 使用声音"
+
+#: src/components/settings-form/labels.ts
+#: src/features/usage/route.tsx
+#: src/features/usage/spend-chart.tsx
+msgid "Other"
+msgstr "其他"
+
+#: src/features/settings/account-dialog.tsx
+msgid "Other Provider"
+msgstr "换个服务商"
+
+#: src/features/home/readiness-labels.ts
+msgid "Outfit references: {count}."
+msgstr "服装参考图：{count} 张。"
+
+#: src/features/studio/references-section.tsx
+msgid "Outfits"
+msgstr "服装"
+
+#: src/features/studio/references-section.tsx
+msgid "Outfits you add stay on this computer: deploying {name} copies only her friends' pictures."
+msgstr "你添加的服装只保存在这台电脑上：部署{name}时只会复制她朋友的图片。"
+
+#: src/components/settings-form/field.tsx
+#: src/features/studio/voice-section.tsx
+msgid "Overrides <0>{env}</0> in the environment, which sets <1>{value}</1>."
+msgstr "覆盖了环境变量 <0>{env}</0>，它设为 <1>{value}</1>。"
+
+#: src/features/jobs/detail.tsx
+msgid "Part of the cost couldn't be priced."
+msgstr "部分费用无法估价。"
+
+#: src/components/settings-form/account-key-field.tsx
+#: src/features/settings/account-dialog.tsx
+msgid "Paste a new key to replace it"
+msgstr "粘贴新密钥即可替换"
+
+#: src/components/settings-form/account-key-field.tsx
+#: src/features/settings/account-dialog.tsx
+msgid "Paste the key"
+msgstr "粘贴密钥"
+
+#: src/features/studio/add-videos.tsx
+msgid "Paste video links, or the link of a playlist, series or channel. Each link is checked first, so you see what it holds before anything downloads."
+msgstr "粘贴视频链接，或者播放列表、合集、频道的链接。每个链接都会先检查，下载之前就能看到里面有什么。"
+
+#: src/features/studio/references-section.tsx
+msgid "People she can take a selfie with: one picture each, named after them."
+msgstr "可以和她一起自拍的人：每人一张图片，以名字命名。"
+
+#: src/components/settings-form/labels.ts
+#: src/features/jobs/detail.tsx
+#: src/features/setup/persona-step.tsx
+#: src/features/setup/stepper.tsx
+#: src/features/usage/route.tsx
+#: src/features/usage/tables.tsx
+msgid "Persona"
+msgstr "人设"
+
+#: src/components/persona-switcher.tsx
+msgid "Personas"
+msgstr "人设"
+
+#: src/features/setup/persona-fields.tsx
+msgid "Personas speak Mandarin, and the videos you build one from should be Mandarin streams."
+msgstr "人设使用普通话交流，用来构建人设的视频也应当是普通话直播。"
+
+#: src/features/setup/avatar-picker.tsx
+msgid "Pick a PNG, JPEG or WebP image."
+msgstr "请选择 PNG、JPEG 或 WebP 图片。"
+
+#: src/features/call/call-notices.tsx
+#: src/features/call/call-page.tsx
+#: src/features/home/readiness-labels.ts
+#: src/features/home/voice-dialog.tsx
+#: src/features/setup/voice-step.tsx
+msgid "Pick a Voice"
+msgstr "选择声音"
+
+#: src/features/call/call-page.tsx
+msgid "Pick a voice for {name}"
+msgstr "为{name}选择声音"
+
+#: src/features/setup/new-persona.tsx
+msgid "Pick a voice for her."
+msgstr "请为她选择一个声音。"
+
+#: src/features/call/call-notices.tsx
+msgid "Pick her own voice: it overrides the environment's for her alone."
+msgstr "为她选一个自己的声音：只对她生效，会覆盖环境变量里的声音。"
+
+#: src/components/settings-form/labels.ts
+msgid "Pick one the provider lists, or type any model id it serves."
+msgstr "可以从服务商列出的模型中选择，也可以填写它提供的任意模型 ID。"
+
+#: src/features/settings/account-dialog.tsx
+msgid "Pick the provider this account is with. You can add more than one of a provider."
+msgstr "选择这个账号所属的服务商。同一个服务商可以添加多个账号。"
+
+#: src/features/setup/keys-step.tsx
+msgid "Pick who hears, thinks and speaks for her from the accounts you have. Add another provider's account under <0>Providers</0>, then choose it here or in her studio."
+msgstr "从已有的账号中选择由谁为她听、思考和说话。在「<0>服务商</0>」中添加其他服务商的账号，然后在这里或她的工作室中选用。"
+
+#: src/features/studio/route.tsx
+msgid "Pictures"
+msgstr "图片"
+
+#: src/features/studio/pictures.tsx
+msgid "Pictures can be up to {max}."
+msgstr "图片最大 {max}。"
+
+#: src/features/studio/pictures.tsx
+msgid "Pictures must be PNG, JPEG or WebP."
+msgstr "图片必须是 PNG、JPEG 或 WebP 格式。"
+
+#: src/features/jobs/labels.ts
+msgid "Pipeline"
+msgstr "流水线"
+
+#: src/features/jobs/labels.ts
+msgid "Plan"
+msgstr "规划"
+
+#: src/features/studio/videos-section.tsx
+msgid "Plan Again"
+msgstr "重新规划"
+
+#: src/features/call/call-notices.tsx
+msgid "Play"
+msgstr "播放"
+
+#: src/features/studio/route.tsx
+msgid "Profile"
+msgstr "基本信息"
+
+#: src/features/jobs/detail.tsx
+msgid "Progress"
+msgstr "进度"
+
+#: src/features/studio/prompt-section.tsx
+#: src/features/studio/route.tsx
+msgid "Prompt"
+msgstr "提示词"
+
+#: src/features/studio/prompt-section.tsx
+msgid "Prompt saved."
+msgstr "提示词已保存。"
+
+#: src/features/usage/tables.tsx
+msgid "Provider"
+msgstr "服务商"
+
+#: src/features/settings/accounts-card.tsx
+msgid "Provider Accounts"
+msgstr "服务商账号"
+
+#: src/components/settings-form/labels.ts
+#: src/features/settings/route.tsx
+msgid "Providers"
+msgstr "服务商"
+
+#: src/components/settings-form/labels.ts
+msgid "Public Deployment"
+msgstr "公开部署"
+
+#: src/components/settings-form/labels.ts
+msgid "Qdrant Collection"
+msgstr "Qdrant 集合"
+
+#: src/components/settings-form/labels.ts
+#: src/features/setup/memory-step.tsx
+msgid "Qdrant Host"
+msgstr "Qdrant 主机"
+
+#: src/components/settings-form/check-labels.ts
+msgid "Qdrant is answering."
+msgstr "Qdrant 正常应答。"
+
+#: src/components/settings-form/check-labels.ts
+msgid "Qdrant is still starting. Try again in a few seconds."
+msgstr "Qdrant 仍在启动，请几秒后再试。"
+
+#: src/features/call/call-page.tsx
+msgid "Qdrant isn't answering, so {name} won't remember this call."
+msgstr "Qdrant 没有响应，{name}不会记住这次通话。"
+
+#: src/features/home/readiness-labels.ts
+msgid "Qdrant isn't answering, so memory is off for now."
+msgstr "Qdrant 没有应答，记忆暂时不可用。"
+
+#: src/features/home/memory-panel.tsx
+msgid "Qdrant isn't answering, so she can't remember or recall anything for now. Start Docker, or start Qdrant if it isn't running:"
+msgstr "Qdrant 没有应答，她暂时既记不住也想不起任何事。请启动 Docker；如果 Qdrant 没有运行，用这条命令启动它："
+
+#: src/components/settings-form/labels.ts
+#: src/features/setup/memory-step.tsx
+msgid "Qdrant Port"
+msgstr "Qdrant 端口"
+
+#: src/features/usage/route.tsx
+msgid "Range"
+msgstr "时间范围"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Re-index needed"
+msgstr "需要重新索引"
+
+#: src/features/jobs/labels.ts
+msgid "Read Link"
+msgstr "读取链接"
+
+#: src/features/home/readiness-list.tsx
+#: src/features/home/route.tsx
+msgid "Readiness"
+msgstr "准备情况"
+
+#: src/features/studio/videos-section.tsx
+msgid "Reading the persona's sources…"
+msgstr "正在读取人设的素材……"
+
+#: src/features/jobs/labels.ts
+msgid "Reads a playlist, channel or series link and lists the videos in it."
+msgstr "读取播放列表、频道或合集链接，列出其中的视频。"
+
+#: src/features/home/hero.tsx
+msgid "Ready for calls"
+msgstr "可以通话"
+
+#: src/components/settings-form/labels.ts
+#: src/features/home/readiness-labels.ts
+msgid "Realtime Model"
+msgstr "实时语音模型"
+
+#: src/components/settings-form/labels.ts
+msgid "Realtime Provider"
+msgstr "实时语音服务商"
+
+#: src/lib/labels.ts
+msgid "Realtime Voice"
+msgstr "实时语音"
+
+#: src/components/settings-form/labels.ts
+msgctxt "realtime model's voice"
+msgid "Realtime Voice"
+msgstr "实时语音的声音"
+
+#: src/features/home/readiness-labels.ts
+msgid "Rebuild"
+msgstr "重新构建"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Rebuild Catalog"
+msgstr "重建目录"
+
+#: src/features/jobs/labels.ts
+msgid "Refine"
+msgstr "转写整理"
+
+#: src/features/jobs/labels.ts
+msgid "Refine API"
+msgstr "转写整理 API"
+
+#: src/components/settings-form/labels.ts
+msgid "Refine API Base"
+msgstr "转写整理 API 地址"
+
+#: src/components/settings-form/labels.ts
+msgid "Refine Concurrency"
+msgstr "转写整理并发数"
+
+#: src/components/settings-form/labels.ts
+msgid "Refine Model"
+msgstr "转写整理模型"
+
+#: src/components/settings-form/labels.ts
+msgid "Refine Provider"
+msgstr "转写整理服务商"
+
+#: src/features/jobs/labels.ts
+msgid "Refine Transcripts"
+msgstr "整理转写稿"
+
+#: src/features/studio/video-table.tsx
+msgid "Refined {done}/{total}"
+msgstr "已整理 {done}/{total}"
+
+#: src/features/home/memory-panel.tsx
+#: src/features/jobs/detail.tsx
+msgid "Refresh"
+msgstr "刷新"
+
+#: src/components/settings-form/labels.ts
+msgid "Relative to her folder. Default prompt.md."
+msgstr "相对于她的文件夹。默认 prompt.md。"
+
+#: src/features/setup/avatar-picker.tsx
+#: src/features/studio/identity-section.tsx
+msgid "Remove"
+msgstr "移除"
+
+#: src/features/settings/accounts-card.tsx
+msgctxt "delete an account"
+msgid "Remove"
+msgstr "删除"
+
+#: src/features/settings/accounts-card.tsx
+msgid "Remove {name}"
+msgstr "删除{name}"
+
+#: src/features/studio/references-section.tsx
+msgctxt "picture"
+msgid "Remove {name}"
+msgstr "移除 {name}"
+
+#: src/features/settings/accounts-card.tsx
+msgid "Remove {name}?"
+msgstr "删除{name}吗？"
+
+#: src/features/studio/identity-section.tsx
+msgid "Remove her avatar?"
+msgstr "移除她的头像？"
+
+#: src/features/settings/account-dialog.tsx
+msgid "Remove Key"
+msgstr "删除密钥"
+
+#: src/features/setup/avatar-picker.tsx
+msgid "Replace"
+msgstr "更换"
+
+#: src/features/studio/identity-section.tsx
+msgid "Replace Her Avatar"
+msgstr "更换她的头像"
+
+#: src/features/usage/tables.tsx
+msgid "Requests"
+msgstr "请求数"
+
+#: src/features/setup/persona-fields.tsx
+msgid "Required."
+msgstr "必填。"
+
+#: src/components/settings-form/labels.ts
+msgid "Rerank Results"
+msgstr "对结果重排序"
+
+#: src/components/settings-form/labels.ts
+msgid "Reranker API Base"
+msgstr "重排序 API 地址"
+
+#: src/components/settings-form/labels.ts
+msgid "Reranker Model"
+msgstr "重排序模型"
+
+#: src/components/settings-form/labels.ts
+msgid "Reranker Provider"
+msgstr "重排序服务商"
+
+#: src/lib/labels.ts
+msgid "Reranking"
+msgstr "重排序"
+
+#: src/components/settings-form/labels.ts
+msgid "Reranking costs about $0.002 per search."
+msgstr "每次检索重排序约花费 $0.002。"
+
+#: src/features/jobs/detail.tsx
+msgid "Reruns an earlier job"
+msgstr "重新运行了之前的任务"
+
+#: src/features/home/readiness-labels.ts
+#: src/features/settings/notices.tsx
+#: src/features/settings/restart-button.tsx
+msgid "Restart"
+msgstr "重启"
+
+#: src/features/settings/restart-button.tsx
+msgid "Restart and interrupt running jobs?"
+msgstr "重启并中断正在运行的任务？"
+
+#: src/features/settings/notices.tsx
+msgid "Restart to apply saved settings"
+msgstr "重启后已保存的设置才会生效"
+
+#: src/features/settings/restart-button.tsx
+msgid "Restarting interrupts these jobs. What they finished is kept, and you can resume each from its page once Eidolon is back."
+msgstr "重启会中断这些任务。已经完成的部分会保留，Eidolon 恢复后可以在各自的任务页面继续。"
+
+#: src/features/settings/restart-button.tsx
+msgid "Restarting…"
+msgstr "正在重启…"
+
+#: src/features/jobs/parts.tsx
+msgid "Resume"
+msgstr "继续"
+
+#: src/features/jobs/detail.tsx
+msgid "Resume runs it again, and every stage skips the work it already finished."
+msgstr "点“继续”会重新运行，每个阶段都会跳过已经完成的部分。"
+
+#: src/features/jobs/detail.tsx
+msgid "Resumed by a later job"
+msgstr "已由之后的任务继续"
+
+#: src/components/settings-form/labels.ts
+#: src/lib/labels.ts
+msgid "Retrieval Gate"
+msgstr "检索门控"
+
+#: src/components/settings-form/labels.ts
+msgid "Retrieval Gate Model"
+msgstr "检索门控模型"
+
+#: src/components/settings-form/labels.ts
+msgid "Retrieval Gate Provider"
+msgstr "检索门控服务商"
+
+#: src/features/studio/text-editor.tsx
+msgid "Revert"
+msgstr "还原"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Rows"
+msgstr "行数"
+
+#: src/features/studio/videos-section.tsx
+msgid "Run"
+msgstr "运行"
+
+#: src/features/setup/memory-step.tsx
+msgid "Run this once in a terminal:"
+msgstr "在终端里运行一次这条命令："
+
+#: src/features/studio/videos-section.tsx
+msgid "Run, about {usd}"
+msgstr "运行，约 {usd}"
+
+#: src/features/jobs/labels.ts
+msgid "Running"
+msgstr "运行中"
+
+#: src/features/jobs/labels.ts
+msgctxt "job stage"
+msgid "Running"
+msgstr "进行中"
+
+#: src/components/settings-form/labels.ts
+msgid "s1 (Retires 2026-12-31)"
+msgstr "s1（2026-12-31 停用）"
+
+#: src/components/settings-form/labels.ts
+msgid "s2.1-pro-free (Free, under Fair Use)"
+msgstr "s2.1-pro-free（免费，限合理使用）"
+
+#: src/components/settings-form/field.tsx
+msgid "Same as {role} ({value})"
+msgstr "与{role}相同（{value}）"
+
+#: src/components/settings-form/settings-card.tsx
+#: src/features/settings/account-dialog.tsx
+#: src/features/studio/text-editor.tsx
+msgid "Save"
+msgstr "保存"
+
+#: src/features/setup/keys-step.tsx
+msgid "Save and Continue"
+msgstr "保存并继续"
+
+#: src/components/settings-form/reindex-dialog.tsx
+msgid "Save Anyway"
+msgstr "仍然保存"
+
+#: src/components/settings-form/account-key-field.tsx
+#: src/features/settings/accounts-card.tsx
+msgid "Saved"
+msgstr "已保存"
+
+#: src/components/settings-form/settings-card.tsx
+#: src/features/studio/identity-section.tsx
+msgid "Saved for {name}"
+msgstr "保存到{name}的设置中"
+
+#: src/features/home/readiness-labels.ts
+msgid "Saved for {names}."
+msgstr "已保存：{names}。"
+
+#: src/components/settings-form/settings-card.tsx
+msgid "Saved for every persona"
+msgstr "保存到所有人设共用的设置中"
+
+#: src/features/setup/keys-step.tsx
+msgid "Saved for the active persona. Claude, DeepSeek and others work through your OpenRouter key or with their own."
+msgstr "保存到当前人设的设置中。Claude、DeepSeek 等模型既可以通过你的 OpenRouter 密钥使用，也可以用它们自己的密钥。"
+
+#: src/features/settings/account-dialog.tsx
+msgid "Saved in credentials.json under the provider's own variable; saving a new one moves it into this account."
+msgstr "以服务商自己的变量名保存在 credentials.json 中；保存新密钥后会移入这个账号。"
+
+#: src/features/home/readiness-labels.ts
+msgid "Saved settings wait for a restart."
+msgstr "已保存的设置需要重启后生效。"
+
+#: src/components/settings-form/settings-card.tsx
+#: src/features/studio/identity-section.tsx
+msgid "Saved. Restart Eidolon to apply it."
+msgstr "已保存。重启 Eidolon 后生效。"
+
+#: src/components/settings-form/settings-card.tsx
+msgid "Saving clears {fields}, which belonged to the old provider."
+msgstr "保存后会清除 {fields}，它们属于原来的服务商。"
+
+#: src/components/settings-form/labels.ts
+msgid "Scene Types Left Out of the Index"
+msgstr "不纳入索引的场景类型"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Search"
+msgstr "检索"
+
+#: src/components/settings-form/model-picker.tsx
+msgid "Search models"
+msgstr "搜索模型"
+
+#: src/features/settings/account-dialog.tsx
+msgid "Search providers"
+msgstr "搜索服务商"
+
+#: src/components/voice-picker/index.tsx
+msgid "Search Voices"
+msgstr "搜索声音"
+
+#: src/components/settings-form/labels.ts
+msgid "Selfie Aspect Ratio"
+msgstr "自拍宽高比"
+
+#: src/components/settings-form/labels.ts
+msgid "Selfie Lifetime"
+msgstr "自拍保留时长"
+
+#: src/components/settings-form/labels.ts
+msgid "Selfie Model"
+msgstr "自拍模型"
+
+#: src/components/settings-form/labels.ts
+msgid "Selfie Provider"
+msgstr "自拍服务商"
+
+#: src/components/settings-form/labels.ts
+msgid "Selfie Quality"
+msgstr "自拍画质"
+
+#: src/components/settings-form/labels.ts
+msgid "Selfie References"
+msgstr "自拍参考图"
+
+#: src/components/settings-form/labels.ts
+msgid "Selfie Timeout"
+msgstr "自拍超时"
+
+#: src/components/settings-form/labels.ts
+#: src/features/home/readiness-labels.ts
+#: src/features/studio/references-section.tsx
+#: src/lib/labels.ts
+msgid "Selfies"
+msgstr "自拍"
+
+#: src/features/call/call-controls.tsx
+msgid "Send"
+msgstr "发送"
+
+#: src/components/settings-form/labels.ts
+msgid "Sends embeddings to an endpoint of your own, such as a proxy, instead of the provider's API."
+msgstr "把嵌入请求发到你自己的地址（例如代理），而不是服务商的 API。"
+
+#: src/components/settings-form/labels.ts
+msgid "Sends reranking to an endpoint of your own instead of the provider's API."
+msgstr "把重排序请求发到你自己的地址，而不是服务商的 API。"
+
+#: src/components/settings-form/labels.ts
+msgid "Sends transcript refinement to an endpoint of your own instead of the provider's API."
+msgstr "把转写整理请求发到你自己的地址，而不是服务商的 API。"
+
+#: src/features/settings/account-dialog.tsx
+msgid "Set by {env} in settings.yaml; a value saved here replaces it."
+msgstr "由 settings.yaml 中的 {env} 设置；在这里保存的值会替代它。"
+
+#: src/features/settings/account-dialog.tsx
+msgid "Set by {env} in the environment, which wins over a value saved here."
+msgstr "由环境变量 {env} 设置，它优先于这里保存的值。"
+
+#: src/features/setup/memory-step.tsx
+#: src/features/setup/persona-step.tsx
+msgid "Set by {env} in the environment, which wins over the value saved here. Change it there."
+msgstr "由环境变量 {env} 决定，它优先于这里保存的值。请在环境中修改。"
+
+#: src/components/settings-form/field.tsx
+msgid "Set by <0>{env}</0> in the environment, which wins over the value saved here. Change it there."
+msgstr "由环境变量 <0>{env}</0> 决定，它优先于这里保存的值。请在环境中修改。"
+
+#: src/features/studio/video-table.tsx
+msgid "Set Date"
+msgstr "填写日期"
+
+#: src/features/home/readiness-labels.ts
+msgid "Set Her Voice"
+msgstr "设置声音"
+
+#: src/components/settings-form/account-key-field.tsx
+#: src/features/settings/account-dialog.tsx
+msgid "Set in the environment"
+msgstr "已在环境变量中设置"
+
+#: src/features/setup/route.tsx
+msgid "Set Up Eidolon"
+msgstr "开始使用 Eidolon"
+
+#: src/features/home/readiness-labels.ts
+msgid "Set up, but Qdrant hasn't been checked yet."
+msgstr "已设置，但尚未检查 Qdrant。"
+
+#: src/components/app-shell.tsx
+#: src/features/settings/route.tsx
+msgid "Settings"
+msgstr "设置"
+
+#: src/features/settings/route.tsx
+msgid "Settings for {name} alone, such as her voice and chat model, are in <0>her studio</0>."
+msgstr "只属于{name}的设置（例如声音和对话模型）在<0>她的工作室</0>中。"
+
+#: src/components/settings-form/settings-card.tsx
+#: src/features/studio/identity-section.tsx
+msgid "Settings saved."
+msgstr "设置已保存。"
+
+#: src/features/settings/route.tsx
+msgid "Settings Sections"
+msgstr "设置分区"
+
+#: src/features/setup/route.tsx
+msgid "Setup"
+msgstr "设置向导"
+
+#: src/features/setup/stepper.tsx
+msgid "Setup Steps"
+msgstr "设置步骤"
+
+#: src/features/usage/tables.tsx
+msgid "Share"
+msgstr "占比"
+
+#: src/features/studio/models-section.tsx
+msgid "She can't switch voice styles during a call."
+msgstr "通话中无法切换声音风格。"
+
+#: src/features/studio/references-section.tsx
+msgid "She can't take selfies without one. Add a picture of her, or drop one here."
+msgstr "没有服装，她就不能自拍。添加一张她的图片，或者拖到这里。"
+
+#: src/features/home/readiness-labels.ts
+msgid "She has no voice yet, so calls can't start."
+msgstr "她还没有声音，所以无法开始通话。"
+
+#: src/features/home/readiness-labels.ts
+msgid "She inherits a voice from the environment ({id}), which hasn't been checked with Fish Audio yet."
+msgstr "她从环境变量继承了声音（{id}），还没有用 Fish Audio 检查过。"
+
+#: src/features/studio/identity-section.tsx
+msgid "She needs a name and a short name."
+msgstr "她需要名字和简称。"
+
+#: src/features/home/memory-panel.tsx
+msgid "She picks these up in your calls, and only she reads them: each persona remembers on her own."
+msgstr "这些是她在你们的通话里记下的，只有她会读到：每个人设各记各的。"
+
+#: src/features/studio/models-section.tsx
+msgid "She speaks in one of the realtime model's own voices, not the voice picked for her."
+msgstr "她会使用实时语音模型自带的声音，而不是为她选的声音。"
+
+#: src/features/studio/add-videos.tsx
+msgid "She speaks Mandarin, so add Mandarin streams. For audio in another language, set it under Transcription below."
+msgstr "她说普通话，所以请添加普通话直播。如果音频是其他语言，请在下方的转写里设置。"
+
+#: src/components/voice-picker/index.tsx
+msgid "She speaks Mandarin, so the search starts among Chinese voices."
+msgstr "她说普通话，所以默认搜索中文声音。"
+
+#: src/features/setup/new-persona.tsx
+msgid "She starts with a Chinese prompt skeleton in her name; build her up in the studio."
+msgstr "她会从一份写好名字的中文提示词框架开始，之后在工作室里完善。"
+
+#: src/features/setup/persona-step.tsx
+msgid "She uses it in calls. Leave it empty and she won't use a name."
+msgstr "她会在通话中这样称呼你。留空则她不使用称呼。"
+
+#: src/features/setup/persona-fields.tsx
+#: src/features/studio/identity-section.tsx
+msgid "Short Name"
+msgstr "简称"
+
+#: src/features/jobs/detail.tsx
+msgid "Show"
+msgstr "显示"
+
+#: src/features/studio/video-table.tsx
+msgid "Show {count} More"
+msgstr "再显示 {count} 个"
+
+#: src/features/home/memory-panel.tsx
+msgid "Show All {count}"
+msgstr "显示全部 {count} 条"
+
+#: src/features/studio/video-table.tsx
+msgid "Show Finished"
+msgstr "显示已完成的"
+
+#: src/components/voice-picker/index.tsx
+msgid "Show More"
+msgstr "显示更多"
+
+#: src/features/jobs/list.tsx
+msgid "Show Plans and Link Checks ({count})"
+msgstr "显示规划和链接检查（{count}）"
+
+#: src/components/settings-form/field.tsx
+msgid "Shown only: set it in settings.yaml or with <0>{env}</0>."
+msgstr "仅供查看：请在 settings.yaml 中或用 <0>{env}</0> 设置。"
+
+#: src/features/usage/route.tsx
+msgid "since recording began"
+msgstr "开始记录以来"
+
+#: src/features/setup/memory-step.tsx
+msgid "Skip"
+msgstr "跳过"
+
+#: src/components/app-shell.tsx
+msgid "Skip to content"
+msgstr "跳到正文"
+
+#: src/features/jobs/labels.ts
+msgid "skipped"
+msgstr "跳过"
+
+#: src/features/jobs/labels.ts
+msgid "Skipped"
+msgstr "已跳过"
+
+#: src/components/settings-form/labels.ts
+msgid "Skips the knowledge search on turns that don't ask about her."
+msgstr "对话内容与她无关时跳过知识检索。"
+
+#: src/features/jobs/detail.tsx
+msgid "Some of the work failed"
+msgstr "部分工作失败了"
+
+#: src/features/settings/notices.tsx
+msgid "Some saved settings are read only when Eidolon starts or when memory first runs. Restarting interrupts running jobs, and can't happen during a call."
+msgstr "有些设置只在 Eidolon 启动或记忆功能首次运行时读取。重启会中断正在运行的任务，通话进行中无法重启。"
+
+#: src/features/studio/videos-section.tsx
+msgid "Some videos need a signed-in browser's cookies. Reading a browser's cookies may ask for your password (the macOS Keychain), and yt-dlp writes the cookies it used back into a cookies file."
+msgstr "有些视频需要已登录浏览器的 Cookie。读取浏览器 Cookie 时可能会要求输入密码（macOS 钥匙串），而 yt-dlp 会把用过的 Cookie 写回 Cookie 文件。"
+
+#: src/components/settings-form/check-labels.ts
+msgid "Something answers there, but it isn't Qdrant."
+msgstr "该地址有服务应答，但不是 Qdrant。"
+
+#: src/components/route-error.tsx
+#: src/features/call/call-page.tsx
+msgid "Something went wrong"
+msgstr "出了点问题"
+
+#: src/lib/labels.ts
+msgid "Something went wrong."
+msgstr "出了点问题。"
+
+#: src/features/jobs/labels.ts
+msgid "Soniox"
+msgstr "Soniox"
+
+#: src/features/studio/videos-section.tsx
+msgid "Soniox allows up to {max} at once per account."
+msgstr "Soniox 每个账户最多同时转写 {max} 个。"
+
+#: src/components/settings-form/check-labels.ts
+msgid "Soniox rejected this key. A key from an EU, Japan or India project doesn't work either: Eidolon supports US projects only."
+msgstr "Soniox 拒绝了这个密钥。欧盟、日本或印度项目的密钥同样无法使用：Eidolon 只支持美国项目。"
+
+#: src/features/studio/videos-section.tsx
+msgid "Soniox transcribes the audio, the refine model cleans up each transcript, and the embedding API indexes it. Each step skips what's already done."
+msgstr "Soniox 转写音频，整理模型清理每份转写稿，嵌入 API 建立索引。每一步都会跳过已经完成的部分。"
+
+#: src/features/home/readiness-labels.ts
+#: src/lib/labels.ts
+msgid "Speech Recognition"
+msgstr "语音识别"
+
+#: src/components/settings-form/labels.ts
+msgid "Speech Recognition Model"
+msgstr "语音识别模型"
+
+#: src/components/settings-form/labels.ts
+msgid "Speech Recognition Provider"
+msgstr "语音识别服务商"
+
+#: src/features/usage/tables.tsx
+msgid "Spend"
+msgstr "花费"
+
+#: src/features/usage/route.tsx
+msgid "Spend and usage per provider, the costliest first."
+msgstr "各服务商的花费和用量，花费最多的在前。"
+
+#: src/features/usage/route.tsx
+msgid "Spend per day"
+msgstr "每日花费"
+
+#: src/features/usage/route.tsx
+msgid "Spend per month"
+msgstr "每月花费"
+
+#: src/features/usage/route.tsx
+msgid "Spent by {name} {during}"
+msgstr "{name}{during}的花费"
+
+#: src/features/usage/route.tsx
+msgid "Spent by all personas {during}"
+msgstr "所有人设{during}的花费"
+
+#: src/components/settings-form/labels.ts
+msgid "Spoken Language"
+msgstr "通话语言"
+
+#: src/features/usage/route.tsx
+msgid "Stacked by provider."
+msgstr "按服务商堆叠。"
+
+#: src/features/studio/videos-section.tsx
+msgid "Start the billed run?"
+msgstr "开始收费的运行？"
+
+#: src/features/setup/persona-step.tsx
+msgid "Start with the demo persona, or create your own and build her up later in the studio."
+msgstr "可以先用演示人设，也可以创建自己的人设，之后在工作室里慢慢完善。"
+
+#: src/features/jobs/labels.ts
+msgid "started"
+msgstr "开始"
+
+#: src/features/jobs/detail.tsx
+#: src/features/jobs/list.tsx
+msgid "Started"
+msgstr "开始于"
+
+#: src/features/jobs/detail.tsx
+msgid "Starting…"
+msgstr "正在启动…"
+
+#: src/features/setup/persona-step.tsx
+msgid "Starts with a Chinese prompt skeleton in her name. Add facts, videos and outfits in the studio."
+msgstr "从一份写好她名字的中文提示词框架开始。资料、视频和服装可以在工作室里添加。"
+
+#: src/features/studio/video-table.tsx
+msgid "State"
+msgstr "状态"
+
+#: src/features/call/transcript-view.tsx
+msgid "Still waiting for {name}. If nothing comes, say it again."
+msgstr "还在等{name}回应。如果一直没有回应，请再说一遍。"
+
+#: src/features/studio/add-videos.tsx
+msgid "Stop"
+msgstr "停止"
+
+#: src/features/jobs/labels.ts
+msgid "Stopped unexpectedly"
+msgstr "意外停止"
+
+#: src/features/jobs/parts.tsx
+msgid "Stopping…"
+msgstr "正在停止…"
+
+#: src/features/settings/route.tsx
+msgid "Storage"
+msgstr "存储"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Stream Archive"
+msgstr "直播回放"
+
+#: src/features/home/readiness-labels.ts
+msgctxt "readiness check"
+msgid "Stream Archive"
+msgstr "直播回放库"
+
+#: src/components/settings-form/labels.ts
+msgid "Stream Candidates"
+msgstr "直播回放候选条数"
+
+#: src/features/jobs/labels.ts
+msgid "Stream Catalog"
+msgstr "直播目录"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Stream catalog built {time}."
+msgstr "直播目录建立于 {time}。"
+
+#: src/features/studio/video-table.tsx
+msgid "Stream Date"
+msgstr "直播日期"
+
+#: src/features/studio/video-table.tsx
+msgid "Streamed"
+msgstr "直播日期"
+
+#: src/components/app-shell.tsx
+msgid "Studio"
+msgstr "工作室"
+
+#: src/components/settings-form/labels.ts
+msgid "STUN URL"
+msgstr "STUN 地址"
+
+#: src/features/setup/persona-fields.tsx
+#: src/features/studio/identity-section.tsx
+msgid "Summary"
+msgstr "简介"
+
+#: src/features/setup/new-persona.tsx
+msgid "Switch to Her Now"
+msgstr "立即切换到她"
+
+#: src/components/preferences.tsx
+msgid "System"
+msgstr "跟随系统"
+
+#: src/features/studio/prompt-section.tsx
+msgid "System Prompt"
+msgstr "系统提示词"
+
+#: src/components/settings-form/labels.ts
+msgid "System Prompt File"
+msgstr "系统提示词文件"
+
+#: src/features/usage/route.tsx
+msgid "Table"
+msgstr "表格"
+
+#: src/features/studio/knowledge-section.tsx
+msgctxt "index storage"
+msgid "Table"
+msgstr "表"
+
+#: src/features/settings/accounts-card.tsx
+msgid "Takes no key"
+msgstr "不需要密钥"
+
+#: src/features/home/hero.tsx
+msgid "Talking to"
+msgstr "正在和她聊天"
+
+#: src/features/usage/tables.tsx
+msgid "Task"
+msgstr "任务"
+
+#: src/features/jobs/detail.tsx
+msgid "Technical Log"
+msgstr "技术日志"
+
+#: src/features/studio/glossary-section.tsx
+msgid "terms = [\"奶绿\", \"奶糖花\"]"
+msgstr "terms = [\"奶绿\", \"奶糖花\"]"
+
+#: src/lib/labels.ts
+msgid "That action isn't supported here."
+msgstr "此处不支持该操作。"
+
+#: src/lib/labels.ts
+msgid "That conflicts with what changed meanwhile. Reload and try again."
+msgstr "内容已发生变化，请刷新后重试。"
+
+#: src/lib/labels.ts
+msgid "That doesn't exist."
+msgstr "内容不存在。"
+
+#: src/lib/labels.ts
+msgid "That file name isn't allowed."
+msgstr "不允许使用该文件名。"
+
+#: src/lib/labels.ts
+msgid "That file type isn't supported."
+msgstr "不支持该文件类型。"
+
+#: src/features/setup/avatar-picker.tsx
+msgid "That image is over {max}."
+msgstr "这张图片超过了 {max}。"
+
+#: src/components/locked-screen.tsx
+msgid "That isn't an Eidolon link."
+msgstr "这不是 Eidolon 的链接。"
+
+#: src/lib/labels.ts
+msgid "That job can't be resumed."
+msgstr "该任务无法继续执行。"
+
+#: src/lib/labels.ts
+msgid "That job doesn't exist."
+msgstr "没有这种任务。"
+
+#: src/lib/labels.ts
+msgid "That job isn't running."
+msgstr "该任务未在运行。"
+
+#: src/components/locked-screen.tsx
+msgid "That link has expired or isn't valid. A link works for 10 minutes: run the same command again for a fresh one."
+msgstr "链接已过期或无效。链接在 10 分钟内有效，再运行一次相同的命令即可获取新链接。"
+
+#: src/lib/labels.ts
+msgid "That link has expired. Run the same command again for a fresh one."
+msgstr "链接已过期，再运行一次相同的命令即可获取新链接。"
+
+#: src/lib/labels.ts
+msgid "That service isn't available right now."
+msgstr "该服务暂时不可用。"
+
+#: src/lib/labels.ts
+msgid "That setting doesn't exist."
+msgstr "没有这项设置。"
+
+#: src/lib/labels.ts
+msgid "That value isn't valid for this setting."
+msgstr "这项设置的值无效。"
+
+#: src/features/studio/voice-section.tsx
+msgid "The {provider} voice she speaks with, by its id. Find one in {provider}'s <0>voice library</0>."
+msgstr "她说话所用的 {provider} 声音 ID。可以在 {provider} 的<0>声音库</0>中查找。"
+
+#: src/features/settings/accounts-card.tsx
+msgid "The account couldn't be removed."
+msgstr "无法删除这个账号。"
+
+#: src/components/settings-form/check-labels.ts
+msgid "The account has no credit left."
+msgstr "账户余额已用完。"
+
+#: src/features/settings/accounts-card.tsx
+msgid "The accounts Eidolon calls, each with its own key and API base. Add as many of one provider as you have; a persona picks which account does each part of her work in her studio."
+msgstr "Eidolon 调用的账号，每个都有自己的密钥和 API 地址。同一个服务商可以添加多个账号；每个人设在她的工作室里选择用哪个账号做哪件事。"
+
+#: src/features/home/readiness-labels.ts
+msgid "The archive is built."
+msgstr "回放库已构建。"
+
+#: src/components/settings-form/labels.ts
+msgid "The browser whose cookies yt-dlp uses for videos behind a login. Reading them may ask for your Keychain password."
+msgstr "yt-dlp 下载需要登录的视频时读取哪个浏览器的 Cookie。读取时可能会要求输入钥匙串密码。"
+
+#: src/features/call/call-notices.tsx
+msgid "The call ended after 5 minutes of silence."
+msgstr "5 分钟没有说话，通话已自动结束。"
+
+#: src/features/call/call-notices.tsx
+msgid "The call failed on Eidolon's side."
+msgstr "Eidolon 这边出错，通话失败。"
+
+#: src/components/settings-form/check-result.tsx
+msgid "The check couldn't run."
+msgstr "无法执行检查。"
+
+#: src/features/call/call-notices.tsx
+msgid "The connection dropped."
+msgstr "连接已断开。"
+
+#: src/features/studio/models-section.tsx
+msgid "The delivery cues in her prompt aren't performed: she's told to put them in her voice instead."
+msgstr "提示词里的表演提示不会被演绎：模型会被要求直接用声音表达。"
+
+#: src/features/jobs/labels.ts
+msgid "The disk is full."
+msgstr "磁盘空间已满。"
+
+#: src/components/settings-form/account-key-field.tsx
+msgid "The environment's key wins over one saved here."
+msgstr "环境变量中的密钥优先于这里保存的密钥。"
+
+#: src/features/studio/voice-section.tsx
+msgid "The environment's voice"
+msgstr "环境变量里的声音"
+
+#: src/features/studio/facts-editor.tsx
+msgid "The file is removed from your data home. Facts already indexed stay until you index again."
+msgstr "文件会从数据目录中删除。已经索引的资料会保留到下次索引。"
+
+#: src/lib/labels.ts
+msgid "The file is too large."
+msgstr "文件太大。"
+
+#: src/features/studio/voice-section.tsx
+msgid "The Fish Audio voice she speaks with. Search the public voices, listen to a sample, and pick one."
+msgstr "她说话用的 Fish Audio 声音。搜索公开声音，试听样本，然后选一个。"
+
+#: src/features/studio/videos-section.tsx
+msgid "The free space on the data home's disk is unknown."
+msgstr "无法得知数据目录所在磁盘的可用空间。"
+
+#: src/lib/labels.ts
+msgid "The glossary isn't valid TOML."
+msgstr "词汇表不是有效的 TOML。"
+
+#: src/features/studio/references-section.tsx
+msgid "The image model and how selfies are drawn."
+msgstr "画自拍用的图像模型和画法。"
+
+#: src/features/home/readiness-labels.ts
+msgid "The index is built."
+msgstr "索引已构建。"
+
+#: src/components/settings-form/check-labels.ts
+msgid "The key expires within 14 days."
+msgstr "密钥将在 14 天内过期。"
+
+#: src/components/settings-form/check-labels.ts
+msgid "The key has expired."
+msgstr "密钥已过期。"
+
+#: src/components/settings-form/check-labels.ts
+msgid "The key isn't allowed to do this. Check its permissions and budget."
+msgstr "这个密钥没有权限执行该操作。请检查它的权限和预算。"
+
+#: src/components/settings-form/check-labels.ts
+msgid "The key works but can't list models. Make sure it may use real-time and async transcription and upload files."
+msgstr "密钥可用，但无法列出模型。请确认它有实时转写、异步转写和文件上传权限。"
+
+#: src/components/settings-form/check-labels.ts
+msgid "The key's own spending limit is used up."
+msgstr "这个密钥自身的消费上限已用完。"
+
+#: src/components/settings-form/labels.ts
+msgid "The language of her videos as a two-letter code, or none. Default zh."
+msgstr "她的视频所用语言的两字母代码，或 none。默认 zh。"
+
+#: src/components/settings-form/labels.ts
+msgid "The language you speak in calls, as a two-letter code. Default zh."
+msgstr "你在通话中说的语言，用两个字母的代码表示。默认 zh。"
+
+#: src/components/settings-form/labels.ts
+msgid "The largest allowed value is {max}."
+msgstr "最大值为 {max}。"
+
+#: src/features/studio/videos-section.tsx
+msgid "The last download failed on cookies. Pick another browser, a cookies file or none, then download again."
+msgstr "上次下载因 Cookie 失败。请换一个浏览器、改用 Cookie 文件或不使用 Cookie，然后重新下载。"
+
+#: src/features/studio/add-videos.tsx
+msgid "The length of {count} of them is unknown."
+msgstr "其中 {count} 个时长未知。"
+
+#: src/features/studio/add-videos.tsx
+msgid "The link couldn't be read."
+msgstr "无法读取这个链接。"
+
+#: src/features/settings/notices.tsx
+msgid "The MCP server still serves the old settings"
+msgstr "MCP 服务仍在使用旧设置"
+
+#: src/features/home/readiness-labels.ts
+msgid "The MCP server still serves the settings it started with."
+msgstr "MCP 服务仍在使用启动时的设置。"
+
+#: src/features/call/call-notices.tsx
+msgid "The microphone isn't available here"
+msgstr "此处无法使用麦克风"
+
+#: src/features/studio/models-section.tsx
+msgid "The model and voice {name} talks with. Her speech recognition, chat and voice settings don't apply while it's on."
+msgstr "{name}通话所用的模型和声音。开启后，她的语音识别、对话和声音设置都不再生效。"
+
+#: src/features/jobs/list.tsx
+msgid "The offline work that builds each persona's knowledge. A job keeps running when you close this page."
+msgstr "为各个人设构建知识的离线工作。关闭这个页面，任务也会继续运行。"
+
+#: src/features/studio/identity-section.tsx
+msgid "The picture is deleted from her folder, and her initials show in its place."
+msgstr "图片会从她的文件夹中删除，之后改为显示她名字的文字头像。"
+
+#: src/features/studio/references-section.tsx
+msgid "The picture is saved under their name, which is how she knows who it is."
+msgstr "图片会以对方的名字保存，她就是靠这个认出是谁的。"
+
+#: src/features/studio/videos-section.tsx
+msgid "The plan couldn't be made. Its job page has the details."
+msgstr "无法完成规划。详情请看它的任务页面。"
+
+#: src/features/jobs/labels.ts
+msgid "The provider account is out of credit."
+msgstr "服务商账户余额不足。"
+
+#: src/features/settings/route.tsx
+msgid "The provider and model that turn facts, transcripts and memories into vectors for search. Every persona's index is built with them."
+msgstr "把资料、转写和记忆变成向量以供检索的服务商和模型。每个人设的索引都用它们构建。"
+
+#: src/components/settings-form/check-labels.ts
+msgid "The provider couldn't find what the check asked for."
+msgstr "服务商找不到检查所请求的内容。"
+
+#: src/components/settings-form/check-labels.ts
+msgid "The provider doesn't list the model in your settings."
+msgstr "服务商没有列出设置中的模型。"
+
+#: src/components/settings-form/check-labels.ts
+msgid "The provider is busy. Try again in a minute."
+msgstr "服务商繁忙，请一分钟后再试。"
+
+#: src/features/jobs/labels.ts
+msgid "The provider is limiting requests. Try again later."
+msgstr "服务商正在限制请求频率，请稍后再试。"
+
+#: src/features/jobs/labels.ts
+msgid "The provider refused the API key."
+msgstr "服务商拒绝了 API 密钥。"
+
+#: src/components/settings-form/check-labels.ts
+msgid "The provider rejected this key."
+msgstr "服务商拒绝了这个密钥。"
+
+#: src/components/settings-form/check-labels.ts
+msgid "The provider sent an answer the check doesn't recognize."
+msgstr "服务商返回了无法识别的结果。"
+
+#: src/features/jobs/labels.ts
+msgid "The request got no answer. Check the network connection."
+msgstr "请求没有收到响应，请检查网络连接。"
+
+#: src/features/call/call-notices.tsx
+#: src/lib/labels.ts
+msgid "The request was refused."
+msgstr "请求被拒绝。"
+
+#: src/lib/labels.ts
+msgid "The request wasn't valid JSON."
+msgstr "请求不是有效的 JSON。"
+
+#: src/lib/labels.ts
+msgid "The request wasn't valid."
+msgstr "请求无效。"
+
+#: src/features/jobs/labels.ts
+msgid "The site refused yt-dlp, usually because it is out of date."
+msgstr "网站拒绝了 yt-dlp 的请求，通常是因为 yt-dlp 版本过旧。"
+
+#: src/components/settings-form/labels.ts
+msgid "The smallest allowed value is {min}."
+msgstr "最小值为 {min}。"
+
+#: src/features/studio/prompt-section.tsx
+msgid "The system prompt: who she is, how she talks and the rules she keeps. Calls that start after you save use it."
+msgstr "系统提示词：她是谁、怎么说话、要遵守哪些规则。保存之后开始的通话会使用它。"
+
+#: src/features/jobs/detail.tsx
+msgid "The technical log is empty."
+msgstr "技术日志是空的。"
+
+#: src/features/studio/voice-section.tsx
+msgid "The voice below applies only when she talks with three models. Her realtime voice is set under <0>Mind</0>."
+msgstr "下面的声音只在使用三个模型通话时生效。她的实时语音声音在「<0>思维</0>」中设置。"
+
+#: src/components/settings-form/check-labels.ts
+msgid "The voice model s1 retires on 2026-12-31. Switch to drama-3."
+msgstr "声音模型 s1 将于 2026-12-31 停用，请改用 drama-3。"
+
+#: src/features/home/readiness-labels.ts
+msgid "The voice she inherits from the environment ({id}) isn't usable on Fish Audio. Pick her own."
+msgstr "她从环境变量继承的声音（{id}）在 Fish Audio 上不可用。请为她选一个自己的声音。"
+
+#: src/features/studio/add-videos.tsx
+msgid "Their audio needs about {size}; {free} is free."
+msgstr "音频约需 {size}；可用空间 {free}。"
+
+#: src/features/studio/references-section.tsx
+msgid "Their Name"
+msgstr "名字"
+
+#: src/components/preferences.tsx
+msgid "Theme"
+msgstr "主题"
+
+#: src/features/studio/route.tsx
+msgid "There is no persona called {id}."
+msgstr "没有名为 {id} 的人设。"
+
+#: src/lib/labels.ts
+msgid "There is no persona with that id."
+msgstr "没有这个 ID 的人设。"
+
+#: src/features/jobs/detail.tsx
+msgid "There is no such job"
+msgstr "没有这个任务"
+
+#: src/lib/labels.ts
+msgid "There is no such job."
+msgstr "没有这个任务。"
+
+#: src/features/studio/add-videos.tsx
+msgid "There may not be enough free space for this audio. Free some space first, or add fewer videos."
+msgstr "可用空间可能不够存放这些音频。请先腾出空间，或者少添加一些视频。"
+
+#: src/features/studio/add-videos.tsx
+msgid "These lines aren't http or https links:"
+msgstr "这些行不是 http 或 https 链接："
+
+#: src/features/studio/videos-section.tsx
+msgid "These videos come from your own URL lists, which only laplace-pipeline in a terminal downloads."
+msgstr "这些视频来自你自己的 URL 列表，只能在终端里用 laplace-pipeline 下载。"
+
+#: src/features/jobs/list.tsx
+msgid "They appear here when you index facts or add videos in a persona's studio."
+msgstr "在人设工作室里索引资料或添加视频后，任务会出现在这里。"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "They were deleted, or no longer match the patterns. Index facts again so she forgets them:"
+msgstr "这些文件已被删除，或不再符合规则。重新索引资料，她就会忘掉它们："
+
+#: src/features/studio/videos-section.tsx
+msgid "This bills your Soniox, OpenRouter and embedding accounts: about {usd} by the estimate."
+msgstr "这会向你的 Soniox、OpenRouter 和嵌入服务账户收费：按估价约 {usd}。"
+
+#: src/components/settings-form/check-result.tsx
+msgid "This checked the key from the environment, which wins over the one saved here."
+msgstr "检查的是环境变量中的密钥，它优先于这里保存的密钥。"
+
+#: src/lib/labels.ts
+msgid "This file ships with Eidolon and can't be changed or deleted."
+msgstr "该文件随 Eidolon 提供，无法修改或删除。"
+
+#: src/features/studio/glossary-section.tsx
+msgid "This glossary doesn't parse"
+msgstr "词汇表无法解析"
+
+#: src/features/studio/parts.tsx
+msgid "This is {name}'s built-in file. Saving keeps your copy in your data home and leaves the original unchanged."
+msgstr "这是{name}的内置文件。保存后会在数据目录里生成你自己的副本，原始文件保持不变。"
+
+#: src/components/settings-form/check-labels.ts
+msgid "This is a management key, which can't run models. Create a regular API key."
+msgstr "这是管理密钥，不能调用模型。请创建普通 API 密钥。"
+
+#: src/features/studio/identity-section.tsx
+msgid "This is her avatar, on the call page and in the persona switcher. Click it to upload one from your files, or drop a picture on it."
+msgstr "这是她的头像，显示在通话页面和人设切换菜单里。点击头像即可从文件中上传，也可以把图片拖到上面。"
+
+#: src/features/jobs/detail.tsx
+msgid "This job reported no progress."
+msgstr "这个任务没有报告进度。"
+
+#: src/features/jobs/detail.tsx
+msgid "This job stopped without finishing"
+msgstr "任务没有完成就停止了"
+
+#: src/components/settings-form/check-labels.ts
+msgid "This OpenRouter account never bought credits, so paid models will fail."
+msgstr "这个 OpenRouter 账户从未充值，付费模型会调用失败。"
+
+#: src/components/route-error.tsx
+msgid "This page doesn't exist."
+msgstr "页面不存在。"
+
+#: src/features/call/call-notices.tsx
+#: src/lib/labels.ts
+msgid "This page isn't signed in. Open the link from the terminal."
+msgstr "此页面尚未登录，请打开终端里的链接。"
+
+#: src/components/locked-screen.tsx
+msgid "This page needs the link Eidolon printed in the terminal where it is running. Open that link, or paste it here."
+msgstr "需要使用运行 Eidolon 的终端里打印的链接。请打开那个链接，或把它粘贴到这里。"
+
+#: src/lib/labels.ts
+msgid "This page's sign-in isn't complete. Open the link from the terminal."
+msgstr "此页面的登录不完整，请打开终端里的链接。"
+
+#: src/features/studio/prompt-section.tsx
+msgid "This persona has no prompt yet. Write one and save it."
+msgstr "这个人设还没有提示词。写一份并保存吧。"
+
+#: src/components/settings-form/check-labels.ts
+msgid "This persona's voice belongs to another account. Pick a public one."
+msgstr "这个人设的声音属于其他账户，请选择公开的声音。"
+
+#: src/features/call/selfie-image.tsx
+msgid "This photo has expired"
+msgstr "这张照片已经过期了"
+
+#: src/features/studio/voice-section.tsx
+msgid "This prompt teaches delivery cues, such as [whispering] or paired tags, which only {model} performs in full. Eidolon takes out the ones this model can't read, so it never speaks them, but her delivery is plainer. Pick {model} for the whole performance."
+msgstr "这份提示词教了表演提示，比如 [whispering] 或成对的标签，只有 {model} 能完整演绎。Eidolon 会删掉当前模型读不懂的提示，不会把它们念出来，但她的表现会平淡一些。想要完整的表演，请选 {model}。"
+
+#: src/components/settings-form/check-labels.ts
+msgid "This provider offers nothing to check a key against, so it wasn't verified."
+msgstr "这个服务商没有提供检查密钥的方式，因此未能验证。"
+
+#: src/components/settings-form/check-labels.ts
+msgid "This Qdrant wants an API key, which Eidolon doesn't support."
+msgstr "这个 Qdrant 需要 API 密钥，Eidolon 不支持。"
+
+#: src/components/settings-form/check-labels.ts
+msgid "This Qdrant's version is more than one minor release away from the one Eidolon is built for."
+msgstr "这个 Qdrant 的版本与 Eidolon 使用的版本相差超过一个次版本。"
+
+#: src/lib/labels.ts
+msgid "This setting can't be changed here."
+msgstr "这项设置无法在此修改。"
+
+#: src/features/jobs/labels.ts
+msgid "This video has no upload date, so it can't be placed among the streams."
+msgstr "该视频没有上传日期，无法归入直播记录。"
+
+#: src/features/studio/models-section.tsx
+msgid "Three models take turns to hear you, think and speak for {name}. A realtime model does all three in one session, and can answer sooner."
+msgstr "默认由三个模型依次为{name}听、思考和说话。实时语音模型在一个会话里包办这三件事，回复可能更快。"
+
+#: src/components/settings-form/labels.ts
+#: src/features/setup/persona-fields.tsx
+#: src/features/studio/identity-section.tsx
+msgid "Time Zone"
+msgstr "时区"
+
+#: src/features/studio/video-table.tsx
+msgid "To index"
+msgstr "待索引"
+
+#: src/features/studio/video-table.tsx
+msgid "To transcribe"
+msgstr "待转写"
+
+#: src/features/usage/spend-chart.tsx
+msgid "Total"
+msgstr "合计"
+
+#: src/features/jobs/labels.ts
+#: src/features/studio/video-table.tsx
+msgid "Transcribe"
+msgstr "转写"
+
+#: src/features/studio/videos-section.tsx
+msgid "Transcribe, Refine and Index"
+msgstr "转写、整理和索引"
+
+#: src/features/studio/video-table.tsx
+msgid "Transcribing bills your Soniox account."
+msgstr "转写会向你的 Soniox 账户收费。"
+
+#: src/lib/labels.ts
+msgid "Transcript Refinement"
+msgstr "转写整理"
+
+#: src/features/studio/video-table.tsx
+msgid "Transcript unreadable"
+msgstr "转写稿无法读取"
+
+#: src/features/studio/videos-section.tsx
+#: src/lib/labels.ts
+msgid "Transcription"
+msgstr "转写"
+
+#: src/components/settings-form/labels.ts
+msgid "Transcription Language"
+msgstr "转写语言"
+
+#: src/components/settings-form/labels.ts
+msgid "Transcription Model"
+msgstr "转写模型"
+
+#: src/components/settings-form/labels.ts
+msgid "Transcription Provider"
+msgstr "转写服务商"
+
+#: src/features/studio/videos-section.tsx
+msgid "Transcriptions at Once"
+msgstr "同时转写数"
+
+#: src/components/route-error.tsx
+#: src/features/home/memory-panel.tsx
+msgid "Try Again"
+msgstr "重试"
+
+#: src/components/settings-form/labels.ts
+msgid "TURN Credential Lifetime"
+msgstr "TURN 凭据有效期"
+
+#: src/features/home/readiness-labels.ts
+msgid "Turn On"
+msgstr "开启"
+
+#: src/features/home/memory-panel.tsx
+msgid "Turn On Memory"
+msgstr "开启记忆"
+
+#: src/components/settings-form/labels.ts
+msgid "TURN URL"
+msgstr "TURN 地址"
+
+#: src/components/settings-form/labels.ts
+msgid "TURN Username"
+msgstr "TURN 用户名"
+
+#: src/features/jobs/labels.ts
+msgid "Turns a video's audio into a transcript with Soniox."
+msgstr "用 Soniox 把视频的音频转写成文字稿。"
+
+#: src/features/call/call-controls.tsx
+msgid "Type a message to {name}"
+msgstr "给{name}发消息"
+
+#: src/features/settings/yt-dlp-state.tsx
+msgid "Unavailable"
+msgstr "不可用"
+
+#: src/features/home/readiness-labels.ts
+msgid "Unavailable, so videos can't be downloaded. Install it with brew install yt-dlp or pip install yt-dlp: Eidolon then uses the one on your PATH."
+msgstr "不可用，无法下载视频。可以用 brew install yt-dlp 或 pip install yt-dlp 安装，Eidolon 会使用 PATH 中的版本。"
+
+#: src/features/call/call-controls.tsx
+msgid "Unmute your mic"
+msgstr "打开麦克风"
+
+#: src/features/studio/text-editor.tsx
+msgid "Unsaved changes"
+msgstr "有未保存的修改"
+
+#: src/features/setup/avatar-picker.tsx
+#: src/features/studio/references-section.tsx
+msgid "Upload"
+msgstr "上传"
+
+#: src/features/studio/identity-section.tsx
+msgid "Upload an Avatar"
+msgstr "上传头像"
+
+#: src/components/app-shell.tsx
+#: src/components/settings-form/labels.ts
+#: src/features/usage/route.tsx
+#: src/features/usage/tables.tsx
+msgid "Usage"
+msgstr "用量"
+
+#: src/features/usage/route.tsx
+msgid "Usage isn't being recorded"
+msgstr "没有在记录用量"
+
+#: src/components/settings-form/labels.ts
+msgid "Usage Ledger"
+msgstr "用量记录"
+
+#: src/components/settings-form/model-picker.tsx
+msgid "Use “{model}”"
+msgstr "使用“{model}”"
+
+#: src/features/studio/identity-section.tsx
+msgid "Use {zone}"
+msgstr "使用 {zone}"
+
+#: src/components/settings-form/labels.ts
+msgid "Use a path relative to the persona's folder that stays inside it."
+msgstr "请使用相对于人设文件夹、且不离开该文件夹的路径。"
+
+#: src/features/studio/facts-editor.tsx
+msgid "Use a plain file name ending in .txt, without / \\ or :, that doesn't start with a dot."
+msgstr "请使用以 .txt 结尾的普通文件名，不含 / \\ 或 :，也不要以点开头。"
+
+#: src/components/settings-form/labels.ts
+#: src/features/setup/persona-fields.tsx
+msgid "Use a time zone name such as Asia/Shanghai."
+msgstr "请使用时区名称，例如 Asia/Shanghai。"
+
+#: src/components/settings-form/labels.ts
+msgid "Use a two-letter language code such as zh, or none."
+msgstr "请使用两个字母的语言代码，例如 zh，或填写 none。"
+
+#: src/features/studio/voice-section.tsx
+msgid "Use It"
+msgstr "改用"
+
+#: src/features/setup/keys-step.tsx
+msgid "Use Other Providers (Optional)"
+msgstr "使用其他服务商（可选）"
+
+#: src/features/studio/voice-section.tsx
+msgid "Use the Environment's Voice"
+msgstr "改用环境变量里的声音"
+
+#: src/features/studio/voice-section.tsx
+msgid "Use the environment's voice for {name}?"
+msgstr "让{name}改用环境变量里的声音？"
+
+#: src/features/studio/voice-section.tsx
+msgid "Use This Voice"
+msgstr "使用这个声音"
+
+#: src/components/settings-form/account-key-field.tsx
+msgid "Used for: {roles}."
+msgstr "用于：{roles}。"
+
+#: src/features/settings/yt-dlp-state.tsx
+msgid "Version {tag}"
+msgstr "版本 {tag}"
+
+#: src/features/home/readiness-labels.ts
+msgid "Version {tag} is installed."
+msgstr "已安装 {tag} 版本。"
+
+#: src/features/studio/video-table.tsx
+msgid "Video"
+msgstr "视频"
+
+#: src/features/jobs/labels.ts
+msgid "Video Pipeline"
+msgstr "视频流水线"
+
+#: src/features/studio/route.tsx
+#: src/features/studio/videos-section.tsx
+msgid "Videos"
+msgstr "视频"
+
+#: src/components/settings-form/labels.ts
+msgid "Videos and Transcripts"
+msgstr "视频与转写"
+
+#: src/features/studio/add-videos.tsx
+msgid "Videos Found"
+msgstr "找到的视频"
+
+#: src/features/jobs/detail.tsx
+msgid "Videos Found ({count})"
+msgstr "找到的视频（{count}）"
+
+#: src/features/usage/route.tsx
+msgid "View"
+msgstr "视图"
+
+#: src/components/settings-form/labels.ts
+#: src/features/home/readiness-labels.ts
+#: src/features/setup/stepper.tsx
+#: src/features/studio/route.tsx
+#: src/features/studio/voice-section.tsx
+#: src/lib/labels.ts
+msgid "Voice"
+msgstr "声音"
+
+#: src/components/voice-picker/index.tsx
+msgid "Voice Language"
+msgstr "声音语言"
+
+#: src/components/settings-form/labels.ts
+#: src/features/home/readiness-labels.ts
+msgid "Voice Model"
+msgstr "声音模型"
+
+#: src/components/settings-form/labels.ts
+#: src/features/studio/voice-section.tsx
+msgid "Voice Provider"
+msgstr "声音服务商"
+
+#: src/features/studio/voice-section.tsx
+msgid "Voice set to {id}."
+msgstr "已把声音设为 {id}。"
+
+#: src/features/studio/voice-section.tsx
+msgid "Voice set to {title}."
+msgstr "声音已设为{title}。"
+
+#: src/features/home/voice-dialog.tsx
+msgid "Voice set to {voice}."
+msgstr "声音已设为{voice}。"
+
+#: src/features/call/call-page.tsx
+msgid "Waiting for {name} to answer…"
+msgstr "等待{name}接听…"
+
+#: src/features/home/memory-panel.tsx
+msgid "What {name} Remembers"
+msgstr "{name}的记忆"
+
+#: src/features/home/memory-panel.tsx
+msgid "What {name} Remembers about You"
+msgstr "{name}记得的关于你的事"
+
+#: src/features/home/route.tsx
+msgid "What calls and builds need, and how to fix what's missing."
+msgstr "通话和构建所需的一切，以及缺少时的解决办法。"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "What calls search: her facts and her stream archive. Each table is rebuilt by its own job."
+msgstr "通话时检索的内容：她的资料和直播回放。每张表由各自的任务重建。"
+
+#: src/features/studio/models-section.tsx
+msgid "What changes with {provider}"
+msgstr "换用 {provider} 后的变化"
+
+#: src/features/usage/route.tsx
+msgid "What each provider has cost, as calls, video jobs and MCP searches on this machine recorded it."
+msgstr "各服务商的花费，由这台电脑上的通话、视频任务和 MCP 检索记录。"
+
+#: src/features/settings/route.tsx
+msgid "What every persona knows about you."
+msgstr "所有人设都知道的关于你的信息。"
+
+#: src/features/jobs/parts.tsx
+msgid "What it already finished is kept, so resuming it later picks up where it stopped."
+msgstr "已经完成的部分会保留，之后继续时会从停下的地方接着做。"
+
+#: src/features/setup/persona-fields.tsx
+msgid "What prompts shorten her name to, and her avatar's letters. Empty uses her name."
+msgstr "提示词中对她名字的简称，也是头像上显示的字。留空则使用全名。"
+
+#: src/features/studio/identity-section.tsx
+msgid "What she calls her viewers."
+msgstr "她怎么称呼观众。"
+
+#: src/features/setup/persona-fields.tsx
+msgid "What She Calls Viewers"
+msgstr "她对观众的称呼"
+
+#: src/components/settings-form/labels.ts
+msgid "What she calls you in calls. Leave it empty and she uses no name."
+msgstr "她在通话中对你的称呼。留空则她不使用称呼。"
+
+#: src/features/studio/references-section.tsx
+msgid "What she looks like in selfies. Each selfie redraws one outfit, picked by the hour."
+msgstr "她在自拍里的样子。每张自拍会按时段挑一套服装来画。"
+
+#: src/features/studio/models-section.tsx
+msgid "What she remembers about you from one call to the next: the model that writes memories down, and how many she recalls each turn."
+msgstr "她在一次次通话之间记住的关于你的事：记录记忆用的模型，以及每轮对话回想多少条。"
+
+#: src/features/studio/identity-section.tsx
+msgid "What she's called for short. Her initials come from it."
+msgstr "她的简称。文字头像也取自这里。"
+
+#: src/features/setup/persona-step.tsx
+msgid "What should she call you?"
+msgstr "她该怎么称呼你？"
+
+#: src/features/jobs/detail.tsx
+msgid "What the command printed. Its end usually says why a job stopped."
+msgstr "命令输出的内容。末尾通常会说明任务为什么停止。"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "What the index jobs read: which of her fact files, the pattern that names her in them, and the scene types left out of her stream archive. Index again after a change."
+msgstr "索引任务读取的内容：她的哪些资料文件、资料里指代她的规则，以及直播回放中不收录的场景类型。修改后请重新索引。"
+
+#: src/features/jobs/detail.tsx
+msgid "What the job reported, newest at the bottom."
+msgstr "任务报告的内容，最新的在最下面。"
+
+#: src/features/studio/video-table.tsx
+msgid "When was it streamed?"
+msgstr "这场直播是哪天？"
+
+#: src/components/settings-form/labels.ts
+msgid "Where calls and jobs record what they spend. Default usage.db in the data home."
+msgstr "通话和任务记录花费的位置。默认为数据目录中的 usage.db。"
+
+#: src/features/studio/videos-section.tsx
+msgid "Where each video stands by the latest plan, and what the running job is doing."
+msgstr "按最近一次规划显示每个视频的进度，以及正在运行的任务在做什么。"
+
+#: src/features/studio/voice-section.tsx
+msgid "Which provider and model read her lines."
+msgstr "由哪个服务商的哪个模型朗读她的台词。"
+
+#: src/features/studio/models-section.tsx
+msgid "Who hears you and who thinks for her: a provider and a model each. She speaks with the voice set under <0>Voice</0>."
+msgstr "由谁听你说话、由谁替她思考：各选一个服务商和模型。她说话用的声音在「<0>声音</0>」中设置。"
+
+#: src/features/setup/keys-step.tsx
+msgid "Who Hears, Thinks and Speaks"
+msgstr "由谁来听、思考和说话"
+
+#: src/features/studio/identity-section.tsx
+msgid "Who she is, as the built-in prompts and the call page name her. Write the names in her language."
+msgstr "她是谁：内置提示词和通话页面会这样称呼她。名字请用她的语言填写。"
+
+#: src/features/setup/persona-fields.tsx
+msgid "Who she is, in one English sentence. It tells the knowledge search which questions are about her."
+msgstr "用一句英文介绍她是谁。知识检索据此判断哪些问题是在问她。"
+
+#: src/features/setup/persona-step.tsx
+msgid "Who will you talk to?"
+msgstr "你想和谁聊天？"
+
+#: src/features/setup/stepper.tsx
+msgid "Who you'll talk to"
+msgstr "你的聊天对象"
+
+#: src/features/setup/memory-step.tsx
+msgid "With memory on, she remembers you from one call to the next. It needs Qdrant, a database you run in Docker on this machine. Skip it and everything else still works."
+msgstr "开启记忆后，她会在多次通话之间记得你。这需要在本机用 Docker 运行 Qdrant 数据库。跳过也不影响其他功能。"
+
+#: src/features/jobs/labels.ts
+msgid "Works out what the video pipeline would do and what it would cost, without running it."
+msgstr "估算视频流水线会做什么、要花多少钱，但不会真正运行。"
+
+#: src/components/settings-form/labels.ts
+#: src/features/settings/route.tsx
+msgid "You"
+msgstr "你"
+
+#: src/features/call/transcript-view.tsx
+msgctxt "call transcript speaker"
+msgid "You"
+msgstr "我"
+
+#: src/features/setup/done-step.tsx
+msgid "You're all set"
+msgstr "设置完成"
+
+#: src/features/setup/keys-step.tsx
+msgid "Your API Keys"
+msgstr "你的 API 密钥"
+
+#: src/features/call/call-notices.tsx
+msgid "Your browser is holding back {name}'s voice."
+msgstr "浏览器暂停了{name}的声音。"
+
+#: src/features/settings/route.tsx
+msgid "Your keys and the settings every persona shares."
+msgstr "你的密钥，以及所有人设共用的设置。"
+
+#: src/features/setup/done-step.tsx
+msgid "Your keys, persona and voice are saved."
+msgstr "你的密钥、人设和声音都已保存。"
+
+#: src/features/call/call-controls.tsx
+msgid "Your mic is muted"
+msgstr "麦克风已关闭"
+
+#: src/features/call/call-notices.tsx
+msgid "Your microphone didn't start"
+msgstr "麦克风未能启动"
+
+#: src/features/call/call-notices.tsx
+msgid "Your microphone is blocked"
+msgstr "麦克风被禁用"
+
+#: src/features/call/call-notices.tsx
+msgid "Your microphone is in use"
+msgstr "麦克风正被占用"
+
+#: src/components/settings-form/labels.ts
+msgid "Your Name"
+msgstr "你的称呼"
+
+#: src/features/setup/persona-step.tsx
+msgid "Your name or nickname"
+msgstr "你的名字或昵称"
+
+#: src/features/home/route.tsx
+msgid "Your Personas"
+msgstr "你的人设"
+
+#: src/features/setup/stepper.tsx
+msgid "Your providers"
+msgstr "你的服务商"
+
+#: src/features/settings/account-dialog.tsx
+msgid "Your server's OpenAI-compatible base, such as http://127.0.0.1:1234/v1."
+msgstr "你的服务器的 OpenAI 兼容地址，例如 http://127.0.0.1:1234/v1。"
+
+#: src/features/studio/text-editor.tsx
+msgid "Your unsaved changes will be lost."
+msgstr "未保存的修改将会丢失。"
+
+#: src/features/home/readiness-labels.ts
+#: src/features/jobs/labels.ts
+#: src/features/settings/route.tsx
+msgid "yt-dlp"
+msgstr "yt-dlp"
+
+#: src/features/studio/videos-section.tsx
+msgid "yt-dlp {tag} is installed."
+msgstr "已安装 yt-dlp {tag}。"
+
+#: src/components/settings-form/labels.ts
+msgid "yt-dlp Binary"
+msgstr "yt-dlp 程序"
+
+#: src/features/jobs/labels.ts
+#: src/features/studio/videos-section.tsx
+msgid "yt-dlp couldn't read the browser's cookies, or the site asked for them."
+msgstr "yt-dlp 无法读取浏览器的 Cookie，或网站要求提供 Cookie。"
+
+#: src/features/studio/videos-section.tsx
+msgid "yt-dlp downloads each video's audio into your data home. Nothing is billed."
+msgstr "yt-dlp 会把每个视频的音频下载到数据目录里。不产生费用。"
+
+#: src/features/studio/videos-section.tsx
+msgid "yt-dlp installs itself on the first download."
+msgstr "第一次下载时会自动安装 yt-dlp。"
+
+#: src/features/studio/videos-section.tsx
+msgid "yt-dlp is unavailable: {reason}"
+msgstr "yt-dlp 不可用：{reason}"
+
+#: src/features/jobs/labels.ts
+msgid "yt-dlp isn't installed and couldn't be installed."
+msgstr "找不到 yt-dlp，也无法自动安装。"
+
+#: src/features/studio/prompt-section.tsx
+msgid "你是……"
+msgstr "你是……"

@@ -1,0 +1,4381 @@
+msgid ""
+msgstr ""
+"POT-Creation-Date: 2026-11-08 06:44-0800\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: @lingui/cli\n"
+"Language: en\n"
+
+#: src/features/usage/spend-chart.tsx
+#: src/features/usage/tables.tsx
+#: src/lib/labels.ts
+msgctxt "list separator"
+msgid ", "
+msgstr ", "
+
+#: src/features/setup/avatar-picker.tsx
+msgid "(optional)"
+msgstr "(optional)"
+
+#: src/features/usage/tables.tsx
+msgid "{amount} min of audio"
+msgstr "{amount} min of audio"
+
+#: src/features/usage/route.tsx
+#: src/features/usage/tables.tsx
+msgid "{amount} of it is estimated from list prices."
+msgstr "{amount} of it is estimated from list prices."
+
+#: src/features/studio/text-editor.tsx
+msgid "{chars} characters · {lines} lines"
+msgstr "{chars} characters · {lines} lines"
+
+#: src/features/usage/tables.tsx
+msgid "{count, plural, one {{amount} character} other {{amount} characters}}"
+msgstr "{count, plural, one {{amount} character} other {{amount} characters}}"
+
+#: src/features/usage/tables.tsx
+msgid "{count, plural, one {{amount} token} other {{amount} tokens}}"
+msgstr "{count, plural, one {{amount} token} other {{amount} tokens}}"
+
+#: src/features/studio/videos-section.tsx
+msgid "{count, plural, one {# batch is waiting; this downloads it.} other {# batches are waiting; this downloads the oldest first.}}"
+msgstr "{count, plural, one {# batch is waiting; this downloads it.} other {# batches are waiting; this downloads the oldest first.}}"
+
+#: src/features/studio/videos-section.tsx
+msgid "{count, plural, one {# downloaded video has no upload date, so it waits until you give one in the table below.} other {# downloaded videos have no upload date, so they wait until you give one in the table below.}}"
+msgstr "{count, plural, one {# downloaded video has no upload date, so it waits until you give one in the table below.} other {# downloaded videos have no upload date, so they wait until you give one in the table below.}}"
+
+#: src/features/jobs/parts.tsx
+msgid "{count, plural, one {# earlier line isn't shown.} other {# earlier lines aren't shown.}}"
+msgstr "{count, plural, one {# earlier line isn't shown.} other {# earlier lines aren't shown.}}"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "{count, plural, one {# file changed since the last index.} other {# files changed since the last index.}}"
+msgstr "{count, plural, one {# file changed since the last index.} other {# files changed since the last index.}}"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "{count, plural, one {# file was removed since the last index.} other {# files were removed since the last index.}}"
+msgstr "{count, plural, one {# file was removed since the last index.} other {# files were removed since the last index.}}"
+
+#: src/features/usage/tables.tsx
+msgid "{count, plural, one {# image} other {# images}}"
+msgstr "{count, plural, one {# image} other {# images}}"
+
+#: src/features/studio/add-videos.tsx
+msgid "{count, plural, one {# new video ({known} already added)} other {# new videos ({known} already added)}}"
+msgstr "{count, plural, one {# new video ({known} already added)} other {# new videos ({known} already added)}}"
+
+#: src/features/usage/route.tsx
+msgid "{count, plural, one {# request has no price, so it isn't counted.} other {# requests have no price, so they aren't counted.}}"
+msgstr "{count, plural, one {# request has no price, so it isn't counted.} other {# requests have no price, so they aren't counted.}}"
+
+#: src/features/studio/videos-section.tsx
+msgid "{count, plural, one {# video can't be priced yet: its length is known only once it downloads.} other {# videos can't be priced yet: their length is known only once they download.}}"
+msgstr "{count, plural, one {# video can't be priced yet: its length is known only once it downloads.} other {# videos can't be priced yet: their length is known only once they download.}}"
+
+#: src/features/studio/videos-section.tsx
+msgid "{count, plural, one {# video isn't in the estimate.} other {# videos aren't in the estimate.}}"
+msgstr "{count, plural, one {# video isn't in the estimate.} other {# videos aren't in the estimate.}}"
+
+#: src/features/studio/add-videos.tsx
+msgid "{count, plural, one {# video} other {# videos}}"
+msgstr "{count, plural, one {# video} other {# videos}}"
+
+#: src/components/voice-picker/index.tsx
+msgid "{count, plural, one {# voice} other {# voices}}"
+msgstr "{count, plural, one {# voice} other {# voices}}"
+
+#: src/features/studio/add-videos.tsx
+msgid "{count, plural, one {Add # video} other {Add # videos}}"
+msgstr "{count, plural, one {Add # video} other {Add # videos}}"
+
+#: src/features/studio/add-videos.tsx
+msgid "{count, plural, one {Added # video in a new batch; {known} were listed already.} other {Added # videos in a new batch; {known} were listed already.}}"
+msgstr "{count, plural, one {Added # video in a new batch; {known} were listed already.} other {Added # videos in a new batch; {known} were listed already.}}"
+
+#: src/features/studio/add-videos.tsx
+msgid "{count, plural, one {Added # video in a new batch.} other {Added # videos in a new batch.}}"
+msgstr "{count, plural, one {Added # video in a new batch.} other {Added # videos in a new batch.}}"
+
+#: src/features/studio/videos-section.tsx
+msgid "{count, plural, one {Download # video} other {Download # videos}}"
+msgstr "{count, plural, one {Download # video} other {Download # videos}}"
+
+#: src/features/studio/videos-section.tsx
+msgid "{count, plural, one {ffmpeg isn't installed, and # video is over 5 hours, which needs it to be transcribed.} other {ffmpeg isn't installed, and # videos are over 5 hours, which need it to be transcribed.}}"
+msgstr "{count, plural, one {ffmpeg isn't installed, and # video is over 5 hours, which needs it to be transcribed.} other {ffmpeg isn't installed, and # videos are over 5 hours, which need it to be transcribed.}}"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "{count, plural, one {Her index still has facts from # removed file} other {Her index still has facts from # removed files}}"
+msgstr "{count, plural, one {Her index still has facts from # removed file} other {Her index still has facts from # removed files}}"
+
+#: src/features/studio/videos-section.tsx
+msgid "{count, plural, one {Index # video} other {Index # videos}}"
+msgstr "{count, plural, one {Index # video} other {Index # videos}}"
+
+#: src/features/studio/videos-section.tsx
+msgid "{count, plural, one {Refine # chunk} other {Refine # chunks}}"
+msgstr "{count, plural, one {Refine # chunk} other {Refine # chunks}}"
+
+#: src/features/settings/notices.tsx
+msgid "{count, plural, one {The settings files have # problem Eidolon ignores} other {The settings files have # problems Eidolon ignores}}"
+msgstr "{count, plural, one {The settings files have # problem Eidolon ignores} other {The settings files have # problems Eidolon ignores}}"
+
+#: src/features/home/memory-panel.tsx
+msgid "{count, plural, one {This deletes the # memory {name} keeps of you, for good. Other personas keep theirs.} other {This deletes all # memories {name} keeps of you, for good. Other personas keep theirs.}}"
+msgstr "{count, plural, one {This deletes the # memory {name} keeps of you, for good. Other personas keep theirs.} other {This deletes all # memories {name} keeps of you, for good. Other personas keep theirs.}}"
+
+#: src/features/studio/videos-section.tsx
+msgid "{count, plural, one {Transcribe # video} other {Transcribe # videos}}"
+msgstr "{count, plural, one {Transcribe # video} other {Transcribe # videos}}"
+
+#: src/features/call/call-notices.tsx
+msgid "{count} errors this call"
+msgstr "{count} errors this call"
+
+#: src/features/jobs/parts.tsx
+msgid "{count} failed"
+msgstr "{count} failed"
+
+#: src/features/jobs/parts.tsx
+msgid "{count} skipped"
+msgstr "{count} skipped"
+
+#: src/features/usage/tables.tsx
+msgid "{count} unpriced"
+msgstr "{count} unpriced"
+
+#: src/features/jobs/parts.tsx
+msgid "{done} of {total}"
+msgstr "{done} of {total}"
+
+#: src/features/jobs/labels.ts
+msgid "{done} of {total} chunks"
+msgstr "{done} of {total} chunks"
+
+#: src/features/jobs/labels.ts
+msgid "{done} of {total} files"
+msgstr "{done} of {total} files"
+
+#: src/features/jobs/labels.ts
+msgid "{done} of {total} rows"
+msgstr "{done} of {total} rows"
+
+#: src/features/home/readiness-labels.ts
+msgid "{free} free on the data home's disk."
+msgstr "{free} free on the data home's disk."
+
+#: src/features/usage/tables.tsx
+msgid "{input} tokens in · {output} out"
+msgstr "{input} tokens in · {output} out"
+
+#: src/features/studio/voice-section.tsx
+msgid "{model} doesn't perform every delivery cue"
+msgstr "{model} doesn't perform every delivery cue"
+
+#: src/features/studio/voice-section.tsx
+msgid "{model}, which she inherits from {env}, doesn't perform every delivery cue"
+msgstr "{model}, which she inherits from {env}, doesn't perform every delivery cue"
+
+#: src/components/settings-form/account-key-field.tsx
+msgid "{name} API Key"
+msgstr "{name} API Key"
+
+#: src/features/setup/new-persona.tsx
+msgid "{name} created."
+msgstr "{name} created."
+
+#: src/features/studio/facts-editor.tsx
+msgid "{name} deleted."
+msgstr "{name} deleted."
+
+#: src/features/studio/facts-editor.tsx
+msgid "{name} exists already."
+msgstr "{name} exists already."
+
+#: src/features/home/memory-panel.tsx
+msgid "{name} forgot you."
+msgstr "{name} forgot you."
+
+#: src/features/setup/voice-step.tsx
+msgid "{name} inherits <0>{env}</0> from the environment. Continue to keep it, or pick a voice of her own: it applies to her alone."
+msgstr "{name} inherits <0>{env}</0> from the environment. Continue to keep it, or pick a voice of her own: it applies to her alone."
+
+#: src/features/setup/personas.ts
+msgid "{name} is now the active persona."
+msgstr "{name} is now the active persona."
+
+#: src/features/call/transcript-view.tsx
+msgid "{name} is thinking…"
+msgstr "{name} is thinking…"
+
+#: src/features/studio/pictures.tsx
+msgid "{name} isn't a usable file name. Rename the file without / \\ or :, so that it doesn't start with a dot."
+msgstr "{name} isn't a usable file name. Rename the file without / \\ or :, so that it doesn't start with a dot."
+
+#: src/features/studio/voice-section.tsx
+msgid "{name} now speaks with the environment's voice."
+msgstr "{name} now speaks with the environment's voice."
+
+#: src/features/call/call-notices.tsx
+msgid "{name} ran into an error"
+msgstr "{name} ran into an error"
+
+#: src/features/call/call-page.tsx
+msgid "{name} remembers your conversations between calls."
+msgstr "{name} remembers your conversations between calls."
+
+#: src/features/settings/accounts-card.tsx
+msgid "{name} removed."
+msgstr "{name} removed."
+
+#: src/features/settings/account-dialog.tsx
+#: src/features/studio/facts-editor.tsx
+msgid "{name} saved."
+msgstr "{name} saved."
+
+#: src/features/studio/route.tsx
+msgid "{name} ships with Eidolon. Your edits are saved in your data home, and the original stays as it is."
+msgstr "{name} ships with Eidolon. Your edits are saved in your data home, and the original stays as it is."
+
+#: src/features/call/call-page.tsx
+msgid "{name} speaks first once the call connects."
+msgstr "{name} speaks first once the call connects."
+
+#: src/features/home/memory-panel.tsx
+msgid "{name} starts remembering you from your next call."
+msgstr "{name} starts remembering you from your next call."
+
+#: src/features/studio/references-section.tsx
+msgid "{name} uploaded."
+msgstr "{name} uploaded."
+
+#: src/features/setup/avatar.ts
+msgid "{name} was created, but her avatar didn't upload. Add it in her studio."
+msgstr "{name} was created, but her avatar didn't upload. Add it in her studio."
+
+#: src/features/call/call-page.tsx
+msgid "{name}'s models need fixing"
+msgstr "{name}'s models need fixing"
+
+#: src/features/studio/route.tsx
+msgid "{name}'s Studio"
+msgstr "{name}'s Studio"
+
+#: src/features/settings/accounts-card.tsx
+msgid "{owner}: {roles}"
+msgstr "{owner}: {roles}"
+
+#: src/components/settings-form/model-picker.tsx
+msgid "{provider} doesn't list its models here: type the model id."
+msgstr "{provider} doesn't list its models here: type the model id."
+
+#: src/features/home/readiness-labels.ts
+msgid "{provider} needs a voice for her, so calls can't start."
+msgstr "{provider} needs a voice for her, so calls can't start."
+
+#: src/features/studio/models-section.tsx
+msgid "{provider} Realtime Model"
+msgstr "{provider} Realtime Model"
+
+#: src/components/settings-form/model-picker.tsx
+msgid "{provider} refused this account's key: check it in Settings → Providers, or type the model id."
+msgstr "{provider} refused this account's key: check it in Settings → Providers, or type the model id."
+
+#: src/features/home/readiness-labels.ts
+msgid "{provider} speaks with voice {id}."
+msgstr "{provider} speaks with voice {id}."
+
+#: src/features/jobs/describe.ts
+msgid "{provider}: {reason}"
+msgstr "{provider}: {reason}"
+
+#: src/components/settings-form/model-picker.tsx
+msgid "{provider}'s Models"
+msgstr "{provider}'s Models"
+
+#: src/features/studio/voice-section.tsx
+msgid "{provider}'s realtime model speaks for her"
+msgstr "{provider}'s realtime model speaks for her"
+
+#: src/features/home/readiness-labels.ts
+msgid "{rows} indexed, built {date}."
+msgstr "{rows} indexed, built {date}."
+
+#: src/features/home/readiness-labels.ts
+msgid "{rows} passages, built {date}."
+msgstr "{rows} passages, built {date}."
+
+#: src/features/studio/videos-section.tsx
+msgid "{size} free on the data home's disk."
+msgstr "{size} free on the data home's disk."
+
+#: src/features/jobs/labels.ts
+msgid "{stage} cancelled"
+msgstr "{stage} cancelled"
+
+#: src/features/jobs/describe.ts
+msgid "{stage} cancelled after {duration}"
+msgstr "{stage} cancelled after {duration}"
+
+#: src/features/jobs/describe.ts
+msgid "{stage} completed in {duration}"
+msgstr "{stage} completed in {duration}"
+
+#: src/features/jobs/describe.ts
+msgid "{stage} ended with failures after {duration}"
+msgstr "{stage} ended with failures after {duration}"
+
+#: src/features/jobs/labels.ts
+msgid "{stage} failed"
+msgstr "{stage} failed"
+
+#: src/features/jobs/labels.ts
+msgid "{stage} finished"
+msgstr "{stage} finished"
+
+#: src/features/jobs/labels.ts
+msgid "{stage} skipped"
+msgstr "{stage} skipped"
+
+#: src/features/jobs/describe.ts
+msgid "{stage} started"
+msgstr "{stage} started"
+
+#: src/features/jobs/describe.ts
+msgid "{stage} started: {total} to go"
+msgstr "{stage} started: {total} to go"
+
+#: src/features/studio/video-table.tsx
+msgid "{stage}…"
+msgstr "{stage}…"
+
+#: src/features/studio/video-table.tsx
+msgid "{total} videos, {finished} finished"
+msgstr "{total} videos, {finished} finished"
+
+#: src/features/studio/video-table.tsx
+msgid "{video} has no upload date, which the stream archive orders by. Give the day it was streamed to transcribe it."
+msgstr "{video} has no upload date, which the stream archive orders by. Give the day it was streamed to transcribe it."
+
+#: src/features/usage/route.tsx
+msgid "12 Months"
+msgstr "12 Months"
+
+#: src/features/studio/facts-editor.tsx
+msgid "2024-05-01 她说……"
+msgstr "2024-05-01 她说……"
+
+#: src/features/usage/route.tsx
+msgid "30 Days"
+msgstr "30 Days"
+
+#: src/features/studio/voice-section.tsx
+msgid "32-character voice ID"
+msgstr "32-character voice ID"
+
+#: src/features/usage/route.tsx
+msgid "7 Days"
+msgstr "7 Days"
+
+#: src/features/usage/route.tsx
+msgid "90 Days"
+msgstr "90 Days"
+
+#: src/features/studio/facts-editor.tsx
+msgid "A .txt file; .txt is added when you leave it out."
+msgstr "A .txt file; .txt is added when you leave it out."
+
+#: src/components/settings-form/check-labels.ts
+msgid "A budget this key falls under is used up."
+msgstr "A budget this key falls under is used up."
+
+#: src/features/home/route.tsx
+msgid "A call is in progress: switch personas after it ends."
+msgstr "A call is in progress: switch personas after it ends."
+
+#: src/lib/labels.ts
+msgid "A call is in progress. Hang up first."
+msgstr "A call is in progress. Hang up first."
+
+#: src/features/call/call-page.tsx
+msgid "A call needs a key for each provider she uses. Missing: {names}."
+msgstr "A call needs a key for each provider she uses. Missing: {names}."
+
+#: src/features/call/call-page.tsx
+msgid "A call needs a voice. Pick one for her first."
+msgstr "A call needs a voice. Pick one for her first."
+
+#: src/features/studio/voice-section.tsx
+msgid "A call needs one: pick her voice below."
+msgstr "A call needs one: pick her voice below."
+
+#: src/features/setup/persona-step.tsx
+msgid "A Chinese VTuber who runs a little flower shop with her cat. She comes with her prompt and outfits, ready to call."
+msgstr "A Chinese VTuber who runs a little flower shop with her cat. She comes with her prompt and outfits, ready to call."
+
+#: src/components/settings-form/labels.ts
+msgid "A cookies.txt for yt-dlp, which writes the merged cookies back into it."
+msgstr "A cookies.txt for yt-dlp, which writes the merged cookies back into it."
+
+#: src/features/studio/voice-section.tsx
+msgid "A Fish voice ID is 32 characters of 0–9 and a–f."
+msgstr "A Fish voice ID is 32 characters of 0–9 and a–f."
+
+#: src/lib/labels.ts
+msgid "A job option isn't valid."
+msgstr "A job option isn't valid."
+
+#: src/components/locked-screen.tsx
+msgid "A link works for 10 minutes."
+msgstr "A link works for 10 minutes."
+
+#: src/components/voice-picker/index.tsx
+msgid "A name or a style, e.g. 温柔"
+msgstr "A name or a style, e.g. 温柔"
+
+#: src/components/settings-form/labels.ts
+msgid "A path can't contain a comma."
+msgstr "A path can't contain a comma."
+
+#: src/lib/labels.ts
+msgid "A path must be relative and stay inside the persona's folder."
+msgstr "A path must be relative and stay inside the persona's folder."
+
+#: src/features/setup/persona-fields.tsx
+#: src/lib/labels.ts
+msgid "A persona id uses lowercase letters, digits, - and _, and starts with a letter or digit."
+msgstr "A persona id uses lowercase letters, digits, - and _, and starts with a letter or digit."
+
+#: src/features/settings/accounts-card.tsx
+msgid "A persona uses this account: pick another for her first."
+msgstr "A persona uses this account: pick another for her first."
+
+#: src/features/setup/persona-fields.tsx
+#: src/lib/labels.ts
+msgid "A persona with that id already exists."
+msgstr "A persona with that id already exists."
+
+#: src/features/setup/avatar-picker.tsx
+msgid "A PNG, JPEG or WebP image, up to {max}. Without one, her avatar shows her initials."
+msgstr "A PNG, JPEG or WebP image, up to {max}. Without one, her avatar shows her initials."
+
+#: src/features/call/transcript-view.tsx
+msgid "A selfie from {name}"
+msgstr "A selfie from {name}"
+
+#: src/lib/labels.ts
+msgid "A service Eidolon relies on failed. Try again later."
+msgstr "A service Eidolon relies on failed. Try again later."
+
+#: src/features/studio/knowledge-section.tsx
+msgid "A table built with another embedding model or size than the settings now name can't be searched. Run its job again."
+msgstr "A table built with another embedding model or size than the settings now name can't be searched. Run its job again."
+
+#: src/features/studio/add-videos.tsx
+msgid "About {duration} in all."
+msgstr "About {duration} in all."
+
+#: src/components/persona-badges.tsx
+msgid "Active"
+msgstr "Active"
+
+#: src/components/settings-form/labels.ts
+msgid "Active Persona"
+msgstr "Active Persona"
+
+#: src/components/persona-switcher.tsx
+msgid "Active Persona: {name}"
+msgstr "Active Persona: {name}"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Add a .txt file of what she knows about herself, then index it. Files matching {patterns} are indexed."
+msgstr "Add a .txt file of what she knows about herself, then index it. Files matching {patterns} are indexed."
+
+#: src/features/settings/account-dialog.tsx
+msgid "Add a {provider} Account"
+msgstr "Add a {provider} Account"
+
+#: src/features/studio/references-section.tsx
+msgid "Add a Friend"
+msgstr "Add a Friend"
+
+#: src/features/studio/references-section.tsx
+msgid "Add a picture of someone she can take a selfie with, or drop one here."
+msgstr "Add a picture of someone she can take a selfie with, or drop one here."
+
+#: src/features/settings/account-dialog.tsx
+msgid "Add a Provider"
+msgstr "Add a Provider"
+
+#: src/features/settings/account-dialog.tsx
+msgid "Add Account"
+msgstr "Add Account"
+
+#: src/components/settings-form/account-key-field.tsx
+msgid "Add credit"
+msgstr "Add credit"
+
+#: src/features/setup/keys-step.tsx
+msgid "Add every key above to continue."
+msgstr "Add every key above to continue."
+
+#: src/features/home/readiness-labels.ts
+msgid "Add Facts"
+msgstr "Add Facts"
+
+#: src/features/call/call-page.tsx
+#: src/features/home/readiness-labels.ts
+msgid "Add Keys"
+msgstr "Add Keys"
+
+#: src/features/studio/video-table.tsx
+msgid "Add links above, and each video is listed here with where it stands."
+msgstr "Add links above, and each video is listed here with where it stands."
+
+#: src/features/home/readiness-labels.ts
+msgid "Add Outfits"
+msgstr "Add Outfits"
+
+#: src/features/studio/references-section.tsx
+msgid "Add Pictures"
+msgstr "Add Pictures"
+
+#: src/features/settings/accounts-card.tsx
+msgid "Add Provider"
+msgstr "Add Provider"
+
+#: src/features/settings/accounts-card.tsx
+msgid "Add the providers you have keys for, then pick them in a persona's studio."
+msgstr "Add the providers you have keys for, then pick them in a persona's studio."
+
+#: src/components/settings-form/model-picker.tsx
+msgid "Add this account's key to see its models; until then, type a model id."
+msgstr "Add this account's key to see its models; until then, type a model id."
+
+#: src/features/home/readiness-labels.ts
+#: src/features/studio/add-videos.tsx
+msgid "Add Videos"
+msgstr "Add Videos"
+
+#: src/features/call/call-page.tsx
+msgid "Add your API keys first"
+msgstr "Add your API keys first"
+
+#: src/features/settings/route.tsx
+#: src/features/studio/advanced-section.tsx
+#: src/features/studio/route.tsx
+#: src/features/studio/videos-section.tsx
+msgid "Advanced"
+msgstr "Advanced"
+
+#: src/features/jobs/detail.tsx
+msgid "All Jobs"
+msgstr "All Jobs"
+
+#: src/features/studio/add-videos.tsx
+msgid "All of these videos are listed already."
+msgstr "All of these videos are listed already."
+
+#: src/features/usage/route.tsx
+msgid "All Personas"
+msgstr "All Personas"
+
+#: src/features/usage/route.tsx
+msgid "All Time"
+msgstr "All Time"
+
+#: src/features/call/call-notices.tsx
+msgid "Allow microphone access for this page in your browser's site settings, then call again."
+msgstr "Allow microphone access for this page in your browser's site settings, then call again."
+
+#: src/components/settings-form/labels.ts
+msgid "Allowed Browser Origins"
+msgstr "Allowed Browser Origins"
+
+#: src/features/studio/add-videos.tsx
+msgid "Already added"
+msgstr "Already added"
+
+#: src/lib/labels.ts
+msgid "An account a persona uses can't be removed: pick another for her first."
+msgstr "An account a persona uses can't be removed: pick another for her first."
+
+#: src/features/jobs/labels.ts
+msgid "An API key this step needs isn't set, so nothing was sent."
+msgstr "An API key this step needs isn't set, so nothing was sent."
+
+#: src/features/studio/identity-section.tsx
+msgid "An avatar is optional but recommended."
+msgstr "An avatar is optional but recommended."
+
+#: src/features/jobs/detail.tsx
+#: src/features/jobs/parts.tsx
+msgid "An earlier run of Eidolon started this job, so this one can't stop it. It will finish on its own, or be marked interrupted."
+msgstr "An earlier run of Eidolon started this job, so this one can't stop it. It will finish on its own, or be marked interrupted."
+
+#: src/features/jobs/parts.tsx
+msgid "and {count} more"
+msgstr "and {count} more"
+
+#: src/components/settings-form/labels.ts
+msgid "Anonymous Calls per Window"
+msgstr "Anonymous Calls per Window"
+
+#: src/components/settings-form/labels.ts
+msgid "Anonymous Window Seconds"
+msgstr "Anonymous Window Seconds"
+
+#: src/features/call/call-notices.tsx
+msgid "Another app is using your microphone. Close it, then call again."
+msgstr "Another app is using your microphone. Close it, then call again."
+
+#: src/features/jobs/labels.ts
+msgid "Another run is already working on this persona."
+msgstr "Another run is already working on this persona."
+
+#: src/components/voice-picker/index.tsx
+msgid "Any Language"
+msgstr "Any Language"
+
+#: src/features/settings/account-dialog.tsx
+msgid "API Base"
+msgstr "API Base"
+
+#: src/features/settings/account-dialog.tsx
+msgid "API Base (Required)"
+msgstr "API Base (Required)"
+
+#: src/features/settings/accounts-card.tsx
+msgid "API base: {url}"
+msgstr "API base: {url}"
+
+#: src/features/settings/account-dialog.tsx
+msgid "API Key"
+msgstr "API Key"
+
+#: src/features/settings/account-dialog.tsx
+msgid "API Key (If the Server Asks for One)"
+msgstr "API Key (If the Server Asks for One)"
+
+#: src/features/home/readiness-labels.ts
+msgid "API Keys"
+msgstr "API Keys"
+
+#: src/features/usage/route.tsx
+msgid "As each provider reported it."
+msgstr "As each provider reported it."
+
+#: src/components/settings-form/model-picker.tsx
+msgid "Asking the provider for its models…"
+msgstr "Asking the provider for its models…"
+
+#: src/features/jobs/labels.ts
+msgid "Audio over 5 hours needs ffmpeg to split it. Install ffmpeg and try again."
+msgstr "Audio over 5 hours needs ffmpeg to split it. Install ffmpeg and try again."
+
+#: src/features/setup/avatar-picker.tsx
+#: src/features/studio/identity-section.tsx
+msgid "Avatar"
+msgstr "Avatar"
+
+#: src/features/studio/identity-section.tsx
+msgid "Avatar removed."
+msgstr "Avatar removed."
+
+#: src/features/studio/identity-section.tsx
+msgid "Avatar saved."
+msgstr "Avatar saved."
+
+#: src/features/setup/step-card.tsx
+msgid "Back"
+msgstr "Back"
+
+#: src/components/route-error.tsx
+#: src/features/studio/route.tsx
+msgid "Back to Home"
+msgstr "Back to Home"
+
+#: src/features/studio/videos-section.tsx
+msgid "Billed"
+msgstr "Billed"
+
+#: src/components/settings-form/model-picker.tsx
+msgid "Browse {provider}'s models"
+msgstr "Browse {provider}'s models"
+
+#: src/components/settings-form/labels.ts
+msgid "Browser to Read Cookies From"
+msgstr "Browser to Read Cookies From"
+
+#: src/features/call/call-notices.tsx
+msgid "Browsers allow the microphone only on secure pages. Open Eidolon at http://localhost or http://127.0.0.1."
+msgstr "Browsers allow the microphone only on secure pages. Open Eidolon at http://localhost or http://127.0.0.1."
+
+#: src/features/home/readiness-labels.ts
+msgid "Build It"
+msgstr "Build It"
+
+#: src/features/jobs/labels.ts
+msgid "Build Stream Catalog"
+msgstr "Build Stream Catalog"
+
+#: src/features/jobs/labels.ts
+msgid "Builds the date-by-date overview of her broadcasts from the transcripts."
+msgstr "Builds the date-by-date overview of her broadcasts from the transcripts."
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Built"
+msgstr "Built"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Built by {job}"
+msgstr "Built by {job}"
+
+#: src/components/persona-badges.tsx
+#: src/features/studio/references-section.tsx
+msgid "Built in"
+msgstr "Built in"
+
+#: src/features/home/readiness-labels.ts
+msgid "Built with other embedding settings: build it again."
+msgstr "Built with other embedding settings: build it again."
+
+#: src/features/home/readiness-labels.ts
+msgid "Built, but the broadcast overview isn't."
+msgstr "Built, but the broadcast overview isn't."
+
+#: src/features/usage/route.tsx
+msgid "By Model"
+msgstr "By Model"
+
+#: src/features/usage/route.tsx
+msgid "By Persona"
+msgstr "By Persona"
+
+#: src/features/usage/route.tsx
+msgid "By Provider"
+msgstr "By Provider"
+
+#: src/components/app-shell.tsx
+#: src/features/call/call-page.tsx
+msgid "Call"
+msgstr "Call"
+
+#: src/features/call/call-controls.tsx
+#: src/features/home/hero.tsx
+#: src/features/setup/done-step.tsx
+msgid "Call {name}"
+msgstr "Call {name}"
+
+#: src/features/studio/route.tsx
+msgctxt "studio header"
+msgid "Call {name}"
+msgstr "Call {name}"
+
+#: src/features/call/call-page.tsx
+msgid "Call {name} to start talking. You can speak or type."
+msgstr "Call {name} to start talking. You can speak or type."
+
+#: src/features/call/call-controls.tsx
+msgid "Call Again"
+msgstr "Call Again"
+
+#: src/features/call/call-page.tsx
+msgid "Call ended"
+msgstr "Call ended"
+
+#: src/features/call/call-page.tsx
+msgid "Call ended · {duration}"
+msgstr "Call ended · {duration}"
+
+#: src/features/setup/stepper.tsx
+msgid "Call her"
+msgstr "Call her"
+
+#: src/features/call/call-page.tsx
+msgid "Calling…"
+msgstr "Calling…"
+
+#: src/features/home/readiness-labels.ts
+msgid "Calls"
+msgstr "Calls"
+
+#: src/features/settings/notices.tsx
+msgid "Calls already use what you saved; only the MCP server keeps what it read at start until a restart."
+msgstr "Calls already use what you saved; only the MCP server keeps what it read at start until a restart."
+
+#: src/features/home/readiness-labels.ts
+msgid "Calls can't start until this setting is fixed."
+msgstr "Calls can't start until this setting is fixed."
+
+#: src/features/home/hero.tsx
+msgid "Calls can't start yet"
+msgstr "Calls can't start yet"
+
+#: src/features/setup/keys-step.tsx
+msgid "Calls fail with a key the provider refuses. Fix the keys marked above, or continue and fix them later in Settings."
+msgstr "Calls fail with a key the provider refuses. Fix the keys marked above, or continue and fix them later in Settings."
+
+#: src/features/home/memory-panel.tsx
+msgid "Calls go on without memory meanwhile."
+msgstr "Calls go on without memory meanwhile."
+
+#: src/features/jobs/detail.tsx
+msgid "Can't be stopped from here"
+msgstr "Can't be stopped from here"
+
+#: src/lib/labels.ts
+msgid "Can't reach Eidolon. Check that it's still running in the terminal."
+msgstr "Can't reach Eidolon. Check that it's still running in the terminal."
+
+#: src/components/settings-form/reindex-dialog.tsx
+#: src/features/jobs/parts.tsx
+#: src/features/settings/accounts-card.tsx
+#: src/features/setup/new-persona.tsx
+#: src/features/studio/references-section.tsx
+#: src/features/studio/video-table.tsx
+msgid "Cancel"
+msgstr "Cancel"
+
+#: src/features/jobs/parts.tsx
+msgid "Cancel Job"
+msgstr "Cancel Job"
+
+#: src/features/jobs/parts.tsx
+msgid "Cancel this job?"
+msgstr "Cancel this job?"
+
+#: src/features/jobs/labels.ts
+msgid "cancelled"
+msgstr "cancelled"
+
+#: src/features/jobs/labels.ts
+msgid "Cancelled"
+msgstr "Cancelled"
+
+#: src/features/jobs/labels.ts
+msgid "Cancelled."
+msgstr "Cancelled."
+
+#: src/features/studio/videos-section.tsx
+msgid "Change"
+msgstr "Change"
+
+#: src/features/home/readiness-labels.ts
+msgctxt "voice"
+msgid "Change"
+msgstr "Change"
+
+#: src/components/settings-form/reindex-dialog.tsx
+msgid "Change the embedding model?"
+msgstr "Change the embedding model?"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Changed"
+msgstr "Changed"
+
+#: src/components/settings-form/labels.ts
+msgid "Changing it means building every persona's index again and a new memory collection."
+msgstr "Changing it means building every persona's index again and a new memory collection."
+
+#: src/components/settings-form/labels.ts
+msgid "Changing it means building every persona's knowledge index again."
+msgstr "Changing it means building every persona's knowledge index again."
+
+#: src/features/usage/route.tsx
+msgid "Chart"
+msgstr "Chart"
+
+#: src/lib/labels.ts
+msgid "Chat"
+msgstr "Chat"
+
+#: src/components/settings-form/labels.ts
+#: src/features/home/readiness-labels.ts
+msgid "Chat Model"
+msgstr "Chat Model"
+
+#: src/components/settings-form/labels.ts
+msgid "Chat Provider"
+msgstr "Chat Provider"
+
+#: src/components/settings-form/account-key-field.tsx
+#: src/features/home/readiness-labels.ts
+#: src/features/home/readiness-list.tsx
+#: src/features/settings/account-dialog.tsx
+#: src/features/settings/accounts-card.tsx
+msgid "Check"
+msgstr "Check"
+
+#: src/features/setup/memory-step.tsx
+msgid "Check and Save"
+msgstr "Check and Save"
+
+#: src/features/setup/memory-step.tsx
+msgid "Check and Turn On"
+msgstr "Check and Turn On"
+
+#: src/components/settings-form/check-labels.ts
+msgid "Check failed"
+msgstr "Check failed"
+
+#: src/features/setup/memory-step.tsx
+msgid "Check it below. Already running Qdrant here? Just check its address."
+msgstr "Check it below. Already running Qdrant here? Just check its address."
+
+#: src/features/studio/add-videos.tsx
+msgid "Check Links"
+msgstr "Check Links"
+
+#: src/components/settings-form/check-labels.ts
+msgid "Check passed"
+msgstr "Check passed"
+
+#: src/features/home/memory-panel.tsx
+msgid "Check the Address"
+msgstr "Check the Address"
+
+#: src/features/call/call-notices.tsx
+msgid "Check your microphone, then call again."
+msgstr "Check your microphone, then call again."
+
+#: src/components/voice-picker/index.tsx
+msgid "Chinese"
+msgstr "Chinese"
+
+#: src/components/voice-picker/index.tsx
+msgid "Choose"
+msgstr "Choose"
+
+#: src/features/studio/voice-section.tsx
+msgid "Choosing a voice saves it for {name}."
+msgstr "Choosing a voice saves it for {name}."
+
+#: src/components/voice-picker/index.tsx
+msgid "Chosen"
+msgstr "Chosen"
+
+#: src/features/jobs/labels.ts
+msgid "Cleans up her transcripts with the refine model."
+msgstr "Cleans up her transcripts with the refine model."
+
+#: src/features/studio/add-videos.tsx
+msgid "Clear"
+msgstr "Clear"
+
+#: src/components/settings-form/labels.ts
+msgid "Client IP Header"
+msgstr "Client IP Header"
+
+#: src/components/ui/dialog.tsx
+#: src/components/ui/sheet.tsx
+#: src/features/studio/facts-editor.tsx
+msgid "Close"
+msgstr "Close"
+
+#: src/components/settings-form/labels.ts
+msgid "Cloudflare TURN Key ID"
+msgstr "Cloudflare TURN Key ID"
+
+#: src/features/call/call-notices.tsx
+msgid "Connect a microphone, then call again."
+msgstr "Connect a microphone, then call again."
+
+#: src/features/setup/memory-step.tsx
+#: src/features/setup/persona-step.tsx
+#: src/features/setup/voice-step.tsx
+msgid "Continue"
+msgstr "Continue"
+
+#: src/features/setup/keys-step.tsx
+msgid "Continue Anyway"
+msgstr "Continue Anyway"
+
+#: src/features/call/transcript-view.tsx
+msgid "Conversation"
+msgstr "Conversation"
+
+#: src/features/studio/videos-section.tsx
+msgid "Cookies"
+msgstr "Cookies"
+
+#: src/features/studio/videos-section.tsx
+msgid "Cookies come from {browser}."
+msgstr "Cookies come from {browser}."
+
+#: src/features/studio/videos-section.tsx
+msgid "Cookies come from Chrome, the default."
+msgstr "Cookies come from Chrome, the default."
+
+#: src/features/studio/videos-section.tsx
+msgid "Cookies come from the file {file}."
+msgstr "Cookies come from the file {file}."
+
+#: src/components/settings-form/labels.ts
+msgid "Cookies File"
+msgstr "Cookies File"
+
+#: src/features/setup/copy-command.tsx
+msgid "Copy the Command"
+msgstr "Copy the Command"
+
+#: src/features/jobs/detail.tsx
+#: src/features/jobs/list.tsx
+msgid "Cost"
+msgstr "Cost"
+
+#: src/features/jobs/detail.tsx
+msgid "Cost So Far"
+msgstr "Cost So Far"
+
+#: src/features/call/call-notices.tsx
+msgid "Couldn't connect the call."
+msgstr "Couldn't connect the call."
+
+#: src/features/call/call-notices.tsx
+msgid "Couldn't get the connection settings for the call."
+msgstr "Couldn't get the connection settings for the call."
+
+#: src/components/settings-form/model-picker.tsx
+msgid "Couldn't list the models ({reason}): type the model id."
+msgstr "Couldn't list the models ({reason}): type the model id."
+
+#: src/features/jobs/detail.tsx
+#: src/features/jobs/list.tsx
+msgid "Couldn't load the jobs"
+msgstr "Couldn't load the jobs"
+
+#: src/features/studio/parts.tsx
+msgid "Couldn't load this"
+msgstr "Couldn't load this"
+
+#: src/components/settings-form/check-labels.ts
+msgid "Couldn't reach the provider."
+msgstr "Couldn't reach the provider."
+
+#: src/features/setup/new-persona.tsx
+msgid "Create"
+msgstr "Create"
+
+#: src/features/setup/voice-step.tsx
+msgid "Create Her"
+msgstr "Create Her"
+
+#: src/features/setup/persona-step.tsx
+msgid "Create Your Own"
+msgstr "Create Your Own"
+
+#: src/components/settings-form/check-result.tsx
+msgid "Credit left: {amount}"
+msgstr "Credit left: {amount}"
+
+#: src/components/voice-picker/index.tsx
+msgid "Current voice:"
+msgstr "Current voice:"
+
+#: src/components/preferences.tsx
+msgid "Dark"
+msgstr "Dark"
+
+#: src/features/usage/spend-chart.tsx
+msgid "Day"
+msgstr "Day"
+
+#: src/lib/labels.ts
+msgid "Decision Models"
+msgstr "Decision Models"
+
+#: src/components/settings-form/field.tsx
+#: src/components/settings-form/labels.ts
+#: src/components/settings-form/model-picker.tsx
+#: src/features/studio/identity-section.tsx
+msgid "Default"
+msgstr "Default"
+
+#: src/components/settings-form/field.tsx
+#: src/components/settings-form/model-picker.tsx
+msgid "Default ({value})"
+msgstr "Default ({value})"
+
+#: src/components/settings-form/field.tsx
+msgid "Default (comma-separated)"
+msgstr "Default (comma-separated)"
+
+#: src/components/settings-form/labels.ts
+msgid "Default 6333."
+msgstr "Default 6333."
+
+#: src/components/settings-form/labels.ts
+msgid "Default eidolon_memories. A new embedding dimension needs a new collection."
+msgstr "Default eidolon_memories. A new embedding dimension needs a new collection."
+
+#: src/components/settings-form/labels.ts
+msgid "Default mem0/history.db in the data home."
+msgstr "Default mem0/history.db in the data home."
+
+#: src/components/settings-form/labels.ts
+msgid "Default Opus Bitrate"
+msgstr "Default Opus Bitrate"
+
+#: src/features/studio/facts-editor.tsx
+msgid "Delete"
+msgstr "Delete"
+
+#: src/features/studio/facts-editor.tsx
+msgid "Delete {name}?"
+msgstr "Delete {name}?"
+
+#: src/features/setup/persona-step.tsx
+msgid "demo"
+msgstr "demo"
+
+#: src/features/jobs/parts.tsx
+#: src/features/studio/add-videos.tsx
+msgid "Details"
+msgstr "Details"
+
+#: src/components/settings-form/settings-card.tsx
+msgid "Discard"
+msgstr "Discard"
+
+#: src/features/studio/text-editor.tsx
+msgid "Discard Changes"
+msgstr "Discard Changes"
+
+#: src/features/home/readiness-labels.ts
+msgid "Disk Space"
+msgstr "Disk Space"
+
+#: src/features/call/call-notices.tsx
+msgid "Dismiss"
+msgstr "Dismiss"
+
+#: src/features/jobs/labels.ts
+msgid "done"
+msgstr "done"
+
+#: src/features/jobs/labels.ts
+#: src/features/setup/stepper.tsx
+msgid "Done"
+msgstr "Done"
+
+#: src/features/jobs/labels.ts
+msgctxt "job status"
+msgid "Done"
+msgstr "Done"
+
+#: src/features/jobs/labels.ts
+#: src/features/studio/videos-section.tsx
+msgid "Download"
+msgstr "Download"
+
+#: src/components/settings-form/labels.ts
+#: src/features/settings/route.tsx
+msgid "Downloads"
+msgstr "Downloads"
+
+#: src/features/settings/route.tsx
+msgid "Downloads her videos. A video behind a login needs your cookies, read from a browser or a cookies.txt."
+msgstr "Downloads her videos. A video behind a login needs your cookies, read from a browser or a cookies.txt."
+
+#: src/features/jobs/labels.ts
+msgid "Downloads the audio of her videos with yt-dlp."
+msgstr "Downloads the audio of her videos with yt-dlp."
+
+#: src/features/studio/videos-section.tsx
+msgid "Downloads use no cookies."
+msgstr "Downloads use no cookies."
+
+#: src/features/jobs/labels.ts
+msgid "Downloads, transcribes, refines and indexes her videos. Each step skips what's already done."
+msgstr "Downloads, transcribes, refines and indexes her videos. Each step skips what's already done."
+
+#: src/features/jobs/detail.tsx
+#: src/features/jobs/list.tsx
+msgid "Duration"
+msgstr "Duration"
+
+#: src/features/setup/persona-fields.tsx
+msgid "e.g. A Chinese VTuber who streams on Bilibili and loves cats"
+msgstr "e.g. A Chinese VTuber who streams on Bilibili and loves cats"
+
+#: src/features/setup/persona-fields.tsx
+msgid "e.g. 明前奶绿"
+msgstr "e.g. 明前奶绿"
+
+#: src/lib/labels.ts
+msgid "Each link must be a full http or https URL."
+msgstr "Each link must be a full http or https URL."
+
+#: src/features/usage/route.tsx
+msgid "Each model, and the task it did for her."
+msgstr "Each model, and the task it did for her."
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Edit"
+msgstr "Edit"
+
+#: src/features/settings/account-dialog.tsx
+#: src/features/settings/accounts-card.tsx
+#: src/features/studio/knowledge-section.tsx
+msgid "Edit {name}"
+msgstr "Edit {name}"
+
+#: src/features/home/route.tsx
+msgid "Eidolon {version}"
+msgstr "Eidolon {version}"
+
+#: src/lib/labels.ts
+msgid "Eidolon answers only at localhost or 127.0.0.1. Open it at one of those."
+msgstr "Eidolon answers only at localhost or 127.0.0.1. Open it at one of those."
+
+#: src/features/setup/keys-step.tsx
+msgid "Eidolon calls paid services with your own keys: by default Soniox hears you, OpenRouter thinks and Fish Audio speaks. Each needs credit on its account."
+msgstr "Eidolon calls paid services with your own keys: by default Soniox hears you, OpenRouter thinks and Fish Audio speaks. Each needs credit on its account."
+
+#: src/features/usage/route.tsx
+msgid "Eidolon can't write its usage ledger at <0>{path}</0>. Set <1>EIDOLON_USAGE_DB</1> to a file it can write, then restart."
+msgstr "Eidolon can't write its usage ledger at <0>{path}</0>. Set <1>EIDOLON_USAGE_DB</1> to a file it can write, then restart."
+
+#: src/features/settings/restart-button.tsx
+msgid "Eidolon couldn't list its jobs. A restart interrupts any that still run; you can resume each from its page once Eidolon is back."
+msgstr "Eidolon couldn't list its jobs. A restart interrupts any that still run; you can resume each from its page once Eidolon is back."
+
+#: src/features/settings/restart.ts
+msgid "Eidolon didn't come back. Start it again from the terminal."
+msgstr "Eidolon didn't come back. Start it again from the terminal."
+
+#: src/lib/labels.ts
+msgid "Eidolon doesn't use that key."
+msgstr "Eidolon doesn't use that key."
+
+#: src/features/call/call-notices.tsx
+msgid "Eidolon ended the call."
+msgstr "Eidolon ended the call."
+
+#: src/lib/labels.ts
+msgid "Eidolon has no such provider account."
+msgstr "Eidolon has no such provider account."
+
+#: src/lib/labels.ts
+msgid "Eidolon hit an internal error. The terminal has the details."
+msgstr "Eidolon hit an internal error. The terminal has the details."
+
+#: src/components/settings-form/labels.ts
+msgid "Eidolon installs and updates its own yt-dlp unless this is set."
+msgstr "Eidolon installs and updates its own yt-dlp unless this is set."
+
+#: src/features/jobs/detail.tsx
+msgid "Eidolon keeps the last 50 jobs."
+msgstr "Eidolon keeps the last 50 jobs."
+
+#: src/features/settings/restart.ts
+msgid "Eidolon restarted."
+msgstr "Eidolon restarted."
+
+#: src/lib/labels.ts
+msgid "Eidolon sent a reply this page couldn't read."
+msgstr "Eidolon sent a reply this page couldn't read."
+
+#: src/features/jobs/detail.tsx
+msgid "Eidolon stopped while this job ran"
+msgstr "Eidolon stopped while this job ran"
+
+#: src/features/setup/persona-fields.tsx
+msgid "Eidolon uses that word itself. Pick another id."
+msgstr "Eidolon uses that word itself. Pick another id."
+
+#: src/features/jobs/labels.ts
+msgid "Embedding API"
+msgstr "Embedding API"
+
+#: src/components/settings-form/labels.ts
+msgid "Embedding API Base"
+msgstr "Embedding API Base"
+
+#: src/components/settings-form/labels.ts
+msgid "Embedding Dimension"
+msgstr "Embedding Dimension"
+
+#: src/components/settings-form/labels.ts
+#: src/features/studio/knowledge-section.tsx
+msgid "Embedding Model"
+msgstr "Embedding Model"
+
+#: src/components/settings-form/labels.ts
+msgid "Embedding Provider"
+msgstr "Embedding Provider"
+
+#: src/features/settings/route.tsx
+#: src/lib/labels.ts
+msgid "Embeddings"
+msgstr "Embeddings"
+
+#: src/components/settings-form/labels.ts
+msgid "Empty keeps each persona's memories of you apart, under her own id."
+msgstr "Empty keeps each persona's memories of you apart, under her own id."
+
+#: src/features/setup/persona-fields.tsx
+msgid "Empty uses 观众."
+msgstr "Empty uses 观众."
+
+#: src/features/home/readiness-labels.ts
+msgid "Ended with an error ({when})."
+msgstr "Ended with an error ({when})."
+
+#: src/components/voice-picker/index.tsx
+msgctxt "voice language"
+msgid "English"
+msgstr "English"
+
+#: src/components/settings-form/model-picker.tsx
+msgid "Enter a model id"
+msgstr "Enter a model id"
+
+#: src/components/settings-form/labels.ts
+msgid "Enter a number, such as 0.5."
+msgstr "Enter a number, such as 0.5."
+
+#: src/components/settings-form/labels.ts
+msgid "Enter a whole number."
+msgstr "Enter a whole number."
+
+#: src/components/settings-form/field.tsx
+msgid "environment"
+msgstr "environment"
+
+#: src/features/studio/video-table.tsx
+msgid "Estimate"
+msgstr "Estimate"
+
+#: src/features/studio/videos-section.tsx
+msgid "Estimated Total"
+msgstr "Estimated Total"
+
+#: src/features/studio/videos-section.tsx
+msgid "Estimates come from price tables or past runs, and leave out indexing's embedding cost."
+msgstr "Estimates come from price tables or past runs, and leave out indexing's embedding cost."
+
+#: src/features/usage/route.tsx
+msgid "Estimates use each model's list price, promotions included; your provider's bill is the final word. Recorded in <0>{path}</0>."
+msgstr "Estimates use each model's list price, promotions included; your provider's bill is the final word. Recorded in <0>{path}</0>."
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Every file is indexed as it is now."
+msgstr "Every file is indexed as it is now."
+
+#: src/features/settings/accounts-card.tsx
+msgid "Every persona"
+msgstr "Every persona"
+
+#: src/components/settings-form/reindex-dialog.tsx
+msgid "Every persona's knowledge index needs to be built again, and memory needs a new Qdrant collection: memories kept so far are lost."
+msgstr "Every persona's knowledge index needs to be built again, and memory needs a new Qdrant collection: memories kept so far are lost."
+
+#: src/features/settings/route.tsx
+msgid "Every persona's memories of you live in Qdrant, and each change to them is logged to a SQLite file."
+msgstr "Every persona's memories of you live in Qdrant, and each change to them is logged to a SQLite file."
+
+#: src/features/studio/videos-section.tsx
+msgid "Every video is downloaded."
+msgstr "Every video is downloaded."
+
+#: src/features/settings/route.tsx
+msgid "Everything the other sections don't show. Most installs never change these."
+msgstr "Everything the other sections don't show. Most installs never change these."
+
+#: src/features/studio/models-section.tsx
+msgid "Experimental, and not yet tried in a real call."
+msgstr "Experimental, and not yet tried in a real call."
+
+#: src/components/settings-form/labels.ts
+msgid "Fact Candidates"
+msgstr "Fact Candidates"
+
+#: src/components/settings-form/labels.ts
+msgid "Fact Files"
+msgstr "Fact Files"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Fact files hold what she knows about herself, one fact per line. Indexing them uses the embedding API, which bills a little."
+msgstr "Fact files hold what she knows about herself, one fact per line. Indexing them uses the embedding API, which bills a little."
+
+#: src/components/settings-form/labels.ts
+msgid "Fact Subject Pattern"
+msgstr "Fact Subject Pattern"
+
+#: src/features/home/readiness-labels.ts
+#: src/features/studio/knowledge-section.tsx
+msgid "Facts"
+msgstr "Facts"
+
+#: src/features/studio/facts-editor.tsx
+msgctxt "fact file contents"
+msgid "Facts"
+msgstr "Facts"
+
+#: src/features/studio/facts-editor.tsx
+msgid "facts.txt"
+msgstr "facts.txt"
+
+#: src/features/jobs/labels.ts
+#: src/features/jobs/parts.tsx
+#: src/features/studio/video-table.tsx
+msgid "failed"
+msgstr "failed"
+
+#: src/features/jobs/labels.ts
+msgid "Failed"
+msgstr "Failed"
+
+#: src/features/studio/identity-section.tsx
+msgid "Fans"
+msgstr "Fans"
+
+#: src/features/home/readiness-labels.ts
+msgid "ffmpeg"
+msgstr "ffmpeg"
+
+#: src/features/studio/videos-section.tsx
+msgid "ffmpeg is installed."
+msgstr "ffmpeg is installed."
+
+#: src/features/studio/videos-section.tsx
+msgid "ffmpeg isn't installed. Only videos over 5 hours need it."
+msgstr "ffmpeg isn't installed. Only videos over 5 hours need it."
+
+#: src/features/studio/facts-editor.tsx
+msgid "File Name"
+msgstr "File Name"
+
+#: src/features/call/call-notices.tsx
+msgid "Fish Audio can't use {name}'s voice, so calls may have no sound."
+msgstr "Fish Audio can't use {name}'s voice, so calls may have no sound."
+
+#: src/features/home/readiness-labels.ts
+msgid "Fish Audio can't use her voice ({id}): it is private or gone."
+msgstr "Fish Audio can't use her voice ({id}): it is private or gone."
+
+#: src/features/call/call-notices.tsx
+msgid "Fish Audio can't use the voice {name} inherits from the environment, so calls may have no sound."
+msgstr "Fish Audio can't use the voice {name} inherits from the environment, so calls may have no sound."
+
+#: src/features/studio/voice-section.tsx
+msgid "Fish Audio can't use the voice she inherits from <0>{env}</0>. Pick her own below."
+msgstr "Fish Audio can't use the voice she inherits from <0>{env}</0>. Pick her own below."
+
+#: src/components/settings-form/labels.ts
+msgid "Fish Audio's drama-3 performs every delivery cue in her prompt. With other models, Eidolon takes out the cues they can't read before they're spoken."
+msgstr "Fish Audio's drama-3 performs every delivery cue in her prompt. With other models, Eidolon takes out the cues they can't read before they're spoken."
+
+#: src/components/settings-form/check-labels.ts
+msgid "Fish doesn't know this persona's voice. Pick another."
+msgstr "Fish doesn't know this persona's voice. Pick another."
+
+#: src/features/studio/voice-section.tsx
+msgid "Fish doesn't know this voice"
+msgstr "Fish doesn't know this voice"
+
+#: src/features/studio/voice-section.tsx
+msgid "Fish has this voice"
+msgstr "Fish has this voice"
+
+#: src/components/settings-form/settings-card.tsx
+#: src/features/studio/identity-section.tsx
+msgid "Fix the highlighted values first."
+msgstr "Fix the highlighted values first."
+
+#: src/features/studio/voice-section.tsx
+msgid "For a voice the search can't find, such as a private one of your Fish account: copy its ID from its page on fish.audio."
+msgstr "For a voice the search can't find, such as a private one of your Fish account: copy its ID from its page on fish.audio."
+
+#: src/features/jobs/parts.tsx
+msgid "Force Stop"
+msgstr "Force Stop"
+
+#: src/features/jobs/parts.tsx
+msgid "Force this job to stop?"
+msgstr "Force this job to stop?"
+
+#: src/features/home/memory-panel.tsx
+msgid "Forget"
+msgstr "Forget"
+
+#: src/features/home/memory-panel.tsx
+msgid "Forget Everything"
+msgstr "Forget Everything"
+
+#: src/features/jobs/describe.ts
+msgid "Found {title}"
+msgstr "Found {title}"
+
+#: src/features/setup/route.tsx
+msgid "Four short steps: your keys, who you'll talk to, her voice, and memory."
+msgstr "Four short steps: your keys, who you'll talk to, her voice, and memory."
+
+#: src/features/studio/videos-section.tsx
+msgid "Free"
+msgstr "Free"
+
+#: src/features/studio/videos-section.tsx
+msgid "Free: only yt-dlp runs."
+msgstr "Free: only yt-dlp runs."
+
+#: src/features/studio/references-section.tsx
+msgid "Friends"
+msgstr "Friends"
+
+#: src/components/settings-form/account-key-field.tsx
+#: src/features/settings/accounts-card.tsx
+msgid "From the environment"
+msgstr "From the environment"
+
+#: src/features/settings/route.tsx
+msgid "General"
+msgstr "General"
+
+#: src/components/settings-form/account-key-field.tsx
+msgid "Get a key"
+msgstr "Get a key"
+
+#: src/features/call/call-page.tsx
+msgid "Getting your microphone ready…"
+msgstr "Getting your microphone ready…"
+
+#: src/features/setup/done-step.tsx
+msgid "Give her facts, videos and outfits in the studio, so she knows who she is."
+msgstr "Give her facts, videos and outfits in the studio, so she knows who she is."
+
+#: src/features/studio/glossary-section.tsx
+#: src/features/studio/route.tsx
+msgid "Glossary"
+msgstr "Glossary"
+
+#: src/features/studio/glossary-section.tsx
+msgid "Glossary saved, but it doesn't parse yet."
+msgstr "Glossary saved, but it doesn't parse yet."
+
+#: src/features/studio/glossary-section.tsx
+msgid "Glossary saved."
+msgstr "Glossary saved."
+
+#: src/features/setup/done-step.tsx
+msgid "Go to Home"
+msgstr "Go to Home"
+
+#: src/lib/labels.ts
+msgid "Group ID"
+msgstr "Group ID"
+
+#: src/features/call/call-controls.tsx
+msgid "Hang Up"
+msgstr "Hang Up"
+
+#: src/features/call/call-page.tsx
+msgid "Hanging up…"
+msgstr "Hanging up…"
+
+#: src/features/studio/identity-section.tsx
+msgid "Her avatar is built in. Upload one to use your own instead."
+msgstr "Her avatar is built in. Upload one to use your own instead."
+
+#: src/features/setup/persona-fields.tsx
+msgid "Her clock, for the date and time she knows. Starts as yours."
+msgstr "Her clock, for the date and time she knows. Starts as yours."
+
+#: src/features/studio/identity-section.tsx
+msgid "Her clock: the date and time she knows during a call."
+msgstr "Her clock: the date and time she knows during a call."
+
+#: src/features/studio/identity-section.tsx
+msgid "Her full name, as the prompts say it."
+msgstr "Her full name, as the prompts say it."
+
+#: src/features/studio/models-section.tsx
+msgid "Her knowledge, archive and memories reach the model from the transcript of what you said, so they can trail a quick reply."
+msgstr "Her knowledge, archive and memories reach the model from the transcript of what you said, so they can trail a quick reply."
+
+#: src/features/setup/persona-fields.tsx
+msgid "Her Name"
+msgstr "Her Name"
+
+#: src/features/home/persona-grid.tsx
+msgid "Her own name, prompt and voice."
+msgstr "Her own name, prompt and voice."
+
+#: src/features/studio/voice-section.tsx
+msgid "Her own voice"
+msgstr "Her own voice"
+
+#: src/features/studio/voice-section.tsx
+msgid "Her own voice is removed from her settings, and she speaks with the one {env} sets: {value}."
+msgstr "Her own voice is removed from her settings, and she speaks with the one {env} sets: {value}."
+
+#: src/features/home/readiness-labels.ts
+msgid "Her own voice works with Fish Audio."
+msgstr "Her own voice works with Fish Audio."
+
+#: src/features/home/readiness-labels.ts
+msgid "Her providers take no key."
+msgstr "Her providers take no key."
+
+#: src/features/studio/advanced-section.tsx
+msgid "Her settings the other sections don't show: where her prompt and index live, and the ids Mem0 files her memories under."
+msgstr "Her settings the other sections don't show: where her prompt and index live, and the ids Mem0 files her memories under."
+
+#: src/features/setup/new-persona.tsx
+msgid "Her Voice"
+msgstr "Her Voice"
+
+#: src/features/home/readiness-labels.ts
+msgid "Her voice ({id}) hasn't been checked with Fish Audio yet."
+msgstr "Her voice ({id}) hasn't been checked with Fish Audio yet."
+
+#: src/features/jobs/detail.tsx
+msgid "Hide"
+msgstr "Hide"
+
+#: src/components/settings-form/labels.ts
+msgid "Higher costs more and takes longer while you wait in the call."
+msgstr "Higher costs more and takes longer while you wait in the call."
+
+#: src/components/app-shell.tsx
+msgid "Home"
+msgstr "Home"
+
+#: src/features/home/voice-dialog.tsx
+#: src/features/setup/voice-step.tsx
+msgid "How {name} sounds. Search Fish Audio's public voices and play a sample before you pick one."
+msgstr "How {name} sounds. Search Fish Audio's public voices and play a sample before you pick one."
+
+#: src/features/studio/knowledge-section.tsx
+msgid "How a call searches what she knows: how many candidates each index offers, the reranker that orders them, and the gate that skips the search when a turn isn't about her."
+msgstr "How a call searches what she knows: how many candidates each index offers, the reranker that orders them, and the gate that skips the search when a turn isn't about her."
+
+#: src/features/studio/videos-section.tsx
+msgid "How her videos become transcripts: the language and model Soniox transcribes with, and the model that refines them, with how many chunks it works on at once."
+msgstr "How her videos become transcripts: the language and model Soniox transcribes with, and the model that refines them, with how many chunks it works on at once."
+
+#: src/features/settings/account-dialog.tsx
+msgid "How Settings and the studio list it, such as “OpenAI (work)”."
+msgstr "How Settings and the studio list it, such as “OpenAI (work)”."
+
+#: src/features/setup/stepper.tsx
+msgid "How she sounds"
+msgstr "How she sounds"
+
+#: src/features/studio/models-section.tsx
+msgid "How She Talks"
+msgstr "How She Talks"
+
+#: src/features/setup/persona-fields.tsx
+msgid "ID"
+msgstr "ID"
+
+#: src/features/studio/identity-section.tsx
+msgid "Identity"
+msgstr "Identity"
+
+#: src/features/studio/identity-section.tsx
+msgid "Identity saved."
+msgstr "Identity saved."
+
+#: src/lib/labels.ts
+msgid "Images"
+msgstr "Images"
+
+#: src/features/call/call-page.tsx
+msgid "In a call · {duration}"
+msgstr "In a call · {duration}"
+
+#: src/features/setup/persona-fields.tsx
+msgid "In her own language; prompts use it as written."
+msgstr "In her own language; prompts use it as written."
+
+#: src/features/home/readiness-labels.ts
+msgid "In progress: {count}."
+msgstr "In progress: {count}."
+
+#: src/features/usage/route.tsx
+msgid "in the last 12 months"
+msgstr "in the last 12 months"
+
+#: src/features/usage/route.tsx
+msgid "in the last 30 days"
+msgstr "in the last 30 days"
+
+#: src/features/usage/route.tsx
+msgid "in the last 7 days"
+msgstr "in the last 7 days"
+
+#: src/features/usage/route.tsx
+msgid "in the last 90 days"
+msgstr "in the last 90 days"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Index"
+msgstr "Index"
+
+#: src/features/jobs/labels.ts
+#: src/features/studio/knowledge-section.tsx
+msgid "Index Facts"
+msgstr "Index Facts"
+
+#: src/features/jobs/labels.ts
+#: src/features/studio/knowledge-section.tsx
+msgid "Index Streams"
+msgstr "Index Streams"
+
+#: src/features/studio/knowledge-section.tsx
+#: src/features/studio/video-table.tsx
+msgid "Indexed"
+msgstr "Indexed"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Indexed files match {patterns}"
+msgstr "Indexed files match {patterns}"
+
+#: src/features/jobs/labels.ts
+msgid "Indexes her fact files: what she knows about herself."
+msgstr "Indexes her fact files: what she knows about herself."
+
+#: src/features/jobs/labels.ts
+msgid "Indexes her stream transcripts, so she can recall past broadcasts."
+msgstr "Indexes her stream transcripts, so she can recall past broadcasts."
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Indexing"
+msgstr "Indexing"
+
+#: src/components/settings-form/field.tsx
+msgid "Inherited from <0>{env}</0> in the environment. A value set here overrides it for <1>{name}</1> alone."
+msgstr "Inherited from <0>{env}</0> in the environment. A value set here overrides it for <1>{name}</1> alone."
+
+#: src/features/studio/voice-section.tsx
+msgid "Inherited from <0>{env}</0> in the environment. Picking a voice here overrides it for {name} alone."
+msgstr "Inherited from <0>{env}</0> in the environment. Picking a voice here overrides it for {name} alone."
+
+#: src/features/home/readiness-labels.ts
+msgid "Inherited from the environment, and works with Fish Audio."
+msgstr "Inherited from the environment, and works with Fish Audio."
+
+#: src/features/setup/memory-step.tsx
+msgid "Install Docker Desktop, or Docker Engine on Linux, and start it."
+msgstr "Install Docker Desktop, or Docker Engine on Linux, and start it."
+
+#: src/features/studio/videos-section.tsx
+msgid "Install it yourself with brew install yt-dlp or pip install yt-dlp, and Eidolon uses the one on your PATH."
+msgstr "Install it yourself with brew install yt-dlp or pip install yt-dlp, and Eidolon uses the one on your PATH."
+
+#: src/features/settings/yt-dlp-state.tsx
+msgid "Installed"
+msgstr "Installed"
+
+#: src/features/home/readiness-labels.ts
+msgid "Installed."
+msgstr "Installed."
+
+#: src/features/home/readiness-labels.ts
+msgid "Installs itself on the first download."
+msgstr "Installs itself on the first download."
+
+#: src/features/settings/yt-dlp-state.tsx
+msgid "Installs on the first download"
+msgstr "Installs on the first download"
+
+#: src/features/jobs/labels.ts
+msgid "Interrupted"
+msgstr "Interrupted"
+
+#: src/features/setup/memory-step.tsx
+msgid "It answers only on this machine, keeps its data in a Docker volume and restarts with Docker."
+msgstr "It answers only on this machine, keeps its data in a Docker volume and restarts with Docker."
+
+#: src/features/jobs/detail.tsx
+msgid "It ended before reporting a result. The end of its technical log usually says why."
+msgstr "It ended before reporting a result. The end of its technical log usually says why."
+
+#: src/features/jobs/detail.tsx
+msgid "It keeps running when you close this page."
+msgstr "It keeps running when you close this page."
+
+#: src/features/jobs/parts.tsx
+msgid "It still hasn't stopped since you cancelled it. Force Stop ends it at once, without letting it finish what it is writing: an index it was building can be left half built, so run that job again afterwards."
+msgstr "It still hasn't stopped since you cancelled it. Force Stop ends it at once, without letting it finish what it is writing: an index it was building can be left half built, so run that job again afterwards."
+
+#: src/features/jobs/detail.tsx
+msgid "It stops once it has finished what it is writing."
+msgstr "It stops once it has finished what it is writing."
+
+#: src/features/studio/identity-section.tsx
+msgid "It's {time} for her now."
+msgstr "It's {time} for her now."
+
+#: src/features/settings/accounts-card.tsx
+msgid "Its key and settings are deleted from credentials.json. A key the environment sets stays."
+msgstr "Its key and settings are deleted from credentials.json. A key the environment sets stays."
+
+#: src/features/settings/account-dialog.tsx
+msgid "Its key goes only to {provider}, and stays on this machine."
+msgstr "Its key goes only to {provider}, and stays on this machine."
+
+#: src/features/studio/video-table.tsx
+msgid "Its length is unknown until it downloads."
+msgstr "Its length is unknown until it downloads."
+
+#: src/components/voice-picker/index.tsx
+msgid "Japanese"
+msgstr "Japanese"
+
+#: src/components/app-shell.tsx
+#: src/features/jobs/list.tsx
+msgid "Jobs"
+msgstr "Jobs"
+
+#: src/features/studio/text-editor.tsx
+msgid "Keep Editing"
+msgstr "Keep Editing"
+
+#: src/features/studio/voice-section.tsx
+msgid "Keep Hers"
+msgstr "Keep Hers"
+
+#: src/features/studio/facts-editor.tsx
+#: src/features/studio/identity-section.tsx
+msgid "Keep It"
+msgstr "Keep It"
+
+#: src/features/jobs/parts.tsx
+msgid "Keep Running"
+msgstr "Keep Running"
+
+#: src/features/setup/persona-step.tsx
+msgid "Keep talking to her."
+msgstr "Keep talking to her."
+
+#: src/features/home/memory-panel.tsx
+msgid "Keep Them"
+msgstr "Keep Them"
+
+#: src/features/settings/restart-button.tsx
+msgid "Keep Them Running"
+msgstr "Keep Them Running"
+
+#: src/features/jobs/parts.tsx
+msgid "Keep Waiting"
+msgstr "Keep Waiting"
+
+#: src/components/settings-form/check-labels.ts
+msgid "Key accepted"
+msgstr "Key accepted"
+
+#: src/features/settings/account-dialog.tsx
+msgid "Key removed."
+msgstr "Key removed."
+
+#: src/features/setup/stepper.tsx
+msgid "Keys"
+msgstr "Keys"
+
+#: src/features/settings/accounts-card.tsx
+msgid "Keys are saved in credentials.json, readable only by you, and never shown again."
+msgstr "Keys are saved in credentials.json, readable only by you, and never shown again."
+
+#: src/features/setup/keys-step.tsx
+msgid "Keys stay on this machine, readable only by you."
+msgstr "Keys stay on this machine, readable only by you."
+
+#: src/components/settings-form/labels.ts
+#: src/features/studio/route.tsx
+msgid "Knowledge"
+msgstr "Knowledge"
+
+#: src/components/settings-form/labels.ts
+msgid "Knowledge Index"
+msgstr "Knowledge Index"
+
+#: src/components/preferences.tsx
+msgid "Language"
+msgstr "Language"
+
+#: src/components/settings-form/labels.ts
+msgid "LAPLACE Workers URL"
+msgstr "LAPLACE Workers URL"
+
+#: src/features/home/readiness-labels.ts
+msgid "Last Call"
+msgstr "Last Call"
+
+#: src/features/settings/account-dialog.tsx
+msgid "Leave it empty for the provider's own API, or point it at a proxy or another region."
+msgstr "Leave it empty for the provider's own API, or point it at a proxy or another region."
+
+#: src/features/setup/route.tsx
+msgid "Leave Setup"
+msgstr "Leave Setup"
+
+#: src/features/studio/text-editor.tsx
+msgid "Leave without saving?"
+msgstr "Leave without saving?"
+
+#: src/features/jobs/detail.tsx
+#: src/features/studio/video-table.tsx
+msgid "Length"
+msgstr "Length"
+
+#: src/components/preferences.tsx
+msgid "Light"
+msgstr "Light"
+
+#: src/features/settings/restart-button.tsx
+msgid "Link checks and plans don't resume: run them again afterwards."
+msgstr "Link checks and plans don't resume: run them again afterwards."
+
+#: src/components/locked-screen.tsx
+msgid "Link from the Terminal"
+msgstr "Link from the Terminal"
+
+#: src/features/studio/add-videos.tsx
+msgid "Links"
+msgstr "Links"
+
+#: src/features/studio/add-videos.tsx
+msgid "Links Checked"
+msgstr "Links Checked"
+
+#: src/features/call/call-controls.tsx
+msgid "Listening…"
+msgstr "Listening…"
+
+#: src/components/section-card.tsx
+#: src/components/settings-form/settings-card.tsx
+#: src/features/jobs/detail.tsx
+#: src/features/jobs/list.tsx
+#: src/features/studio/route.tsx
+msgid "Loading…"
+msgstr "Loading…"
+
+#: src/features/jobs/detail.tsx
+msgid "Log"
+msgstr "Log"
+
+#: src/components/settings-form/labels.ts
+msgid "Login Cache Seconds"
+msgstr "Login Cache Seconds"
+
+#: src/features/studio/videos-section.tsx
+msgid "macOS: brew install ffmpeg · Windows: winget install ffmpeg · Linux: your package manager's ffmpeg."
+msgstr "macOS: brew install ffmpeg · Windows: winget install ffmpeg · Linux: your package manager's ffmpeg."
+
+#: src/components/app-shell.tsx
+msgid "Main"
+msgstr "Main"
+
+#: src/features/home/memory-panel.tsx
+msgid "Make {name} forget you?"
+msgstr "Make {name} forget you?"
+
+#: src/features/studio/route.tsx
+msgid "Make Active"
+msgstr "Make Active"
+
+#: src/features/home/persona-grid.tsx
+msgctxt "persona card"
+msgid "Make Active"
+msgstr "Make Active"
+
+#: src/components/settings-form/labels.ts
+msgid "MCP Allowed Hosts"
+msgstr "MCP Allowed Hosts"
+
+#: src/components/settings-form/labels.ts
+msgid "MCP Anonymous Calls per Window"
+msgstr "MCP Anonymous Calls per Window"
+
+#: src/components/settings-form/labels.ts
+msgid "MCP Logged-in Calls per Window"
+msgstr "MCP Logged-in Calls per Window"
+
+#: src/components/settings-form/labels.ts
+msgid "MCP Window Seconds"
+msgstr "MCP Window Seconds"
+
+#: src/components/settings-form/labels.ts
+msgid "Mem0 Agent ID"
+msgstr "Mem0 Agent ID"
+
+#: src/components/settings-form/labels.ts
+msgid "Mem0 History Database"
+msgstr "Mem0 History Database"
+
+#: src/components/settings-form/labels.ts
+msgid "Mem0 Run ID"
+msgstr "Mem0 Run ID"
+
+#: src/components/settings-form/labels.ts
+msgid "Memories per Turn"
+msgstr "Memories per Turn"
+
+#: src/features/home/memory-panel.tsx
+msgid "Memories: {count}"
+msgstr "Memories: {count}"
+
+#: src/components/settings-form/labels.ts
+#: src/features/home/readiness-labels.ts
+#: src/features/settings/route.tsx
+#: src/features/setup/stepper.tsx
+#: src/features/studio/models-section.tsx
+#: src/lib/labels.ts
+msgid "Memory"
+msgstr "Memory"
+
+#: src/features/setup/memory-step.tsx
+msgid "Memory (Optional)"
+msgstr "Memory (Optional)"
+
+#: src/components/settings-form/labels.ts
+msgid "Memory Extraction Model"
+msgstr "Memory Extraction Model"
+
+#: src/components/settings-form/labels.ts
+msgid "Memory Extraction Provider"
+msgstr "Memory Extraction Provider"
+
+#: src/features/home/memory-panel.tsx
+msgid "Memory is off, so she forgets you after every call. It needs Qdrant, a database you run in Docker on this machine. Run this once in a terminal, then turn memory on:"
+msgstr "Memory is off, so she forgets you after every call. It needs Qdrant, a database you run in Docker on this machine. Run this once in a terminal, then turn memory on:"
+
+#: src/features/studio/models-section.tsx
+msgid "Memory is off: it needs a Qdrant host, which you set in <0>Settings</0>."
+msgstr "Memory is off: it needs a Qdrant host, which you set in <0>Settings</0>."
+
+#: src/components/settings-form/labels.ts
+msgid "Memory is on while this is set. Use 127.0.0.1 for the Docker container setup shows."
+msgstr "Memory is on while this is set. Use 127.0.0.1 for the Docker container setup shows."
+
+#: src/features/setup/memory-step.tsx
+msgid "Memory is on."
+msgstr "Memory is on."
+
+#: src/features/call/call-page.tsx
+msgid "Memory needs Qdrant. Set it up in Settings so {name} remembers your calls."
+msgstr "Memory needs Qdrant. Set it up in Settings so {name} remembers your calls."
+
+#: src/features/call/call-page.tsx
+msgid "Memory off"
+msgstr "Memory off"
+
+#: src/features/call/call-page.tsx
+msgid "Memory on"
+msgstr "Memory on"
+
+#: src/components/settings-form/labels.ts
+msgid "Memory Score Threshold"
+msgstr "Memory Score Threshold"
+
+#: src/features/studio/route.tsx
+msgid "Mind"
+msgstr "Mind"
+
+#: src/features/home/readiness-labels.ts
+msgid "Missing: {names}. Calls can't start without them."
+msgstr "Missing: {names}. Calls can't start without them."
+
+#: src/features/usage/tables.tsx
+msgid "Model"
+msgstr "Model"
+
+#: src/components/settings-form/labels.ts
+#: src/features/studio/models-section.tsx
+msgid "Models"
+msgstr "Models"
+
+#: src/features/usage/spend-chart.tsx
+msgid "Month"
+msgstr "Month"
+
+#: src/features/call/call-controls.tsx
+msgid "Mute your mic"
+msgstr "Mute your mic"
+
+#: src/features/settings/account-dialog.tsx
+msgid "Name"
+msgstr "Name"
+
+#: src/features/studio/identity-section.tsx
+msgctxt "persona's name"
+msgid "Name"
+msgstr "Name"
+
+#: src/components/settings-form/labels.ts
+msgid "Name patterns for the files in her facts folder, comma-separated. Default *.txt."
+msgstr "Name patterns for the files in her facts folder, comma-separated. Default *.txt."
+
+#: src/features/studio/glossary-section.tsx
+msgid "Names and terms Soniox should hear right when it transcribes this persona's videos: her name, her fans', recurring topics. It is TOML in the shape of Soniox's StructuredContext, and videos transcribed after you save use it."
+msgstr "Names and terms Soniox should hear right when it transcribes this persona's videos: her name, her fans', recurring topics. It is TOML in the shape of Soniox's StructuredContext, and videos transcribed after you save use it."
+
+#: src/features/setup/persona-fields.tsx
+msgid "Names her folder: lowercase letters, digits, - and _. It can't change later."
+msgstr "Names her folder: lowercase letters, digits, - and _. It can't change later."
+
+#: src/lib/labels.ts
+msgid "Needs API credit, which is separate from a fish.audio membership; new accounts start at $0."
+msgstr "Needs API credit, which is separate from a fish.audio membership; new accounts start at $0."
+
+#: src/features/home/hero.tsx
+msgid "Needs attention"
+msgstr "Needs attention"
+
+#: src/lib/labels.ts
+msgid "Needs credit on the account; calls and transcription bill per minute of audio."
+msgstr "Needs credit on the account; calls and transcription bill per minute of audio."
+
+#: src/features/studio/video-table.tsx
+msgid "Needs ffmpeg"
+msgstr "Needs ffmpeg"
+
+#: src/lib/labels.ts
+msgid "Needs prepaid credit."
+msgstr "Needs prepaid credit."
+
+#: src/features/studio/facts-editor.tsx
+msgid "New Fact File"
+msgstr "New Fact File"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "New File"
+msgstr "New File"
+
+#: src/components/persona-switcher.tsx
+#: src/features/home/persona-grid.tsx
+#: src/features/setup/new-persona.tsx
+msgid "New Persona"
+msgstr "New Persona"
+
+#: src/features/settings/accounts-card.tsx
+msgid "No accounts yet"
+msgstr "No accounts yet"
+
+#: src/components/settings-form/check-labels.ts
+msgid "No API credit, and the voice model is a paid one. Add credit on fish.audio."
+msgstr "No API credit, and the voice model is a paid one. Add credit on fish.audio."
+
+#: src/features/studio/knowledge-section.tsx
+msgid "No fact files yet"
+msgstr "No fact files yet"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "No file is left for indexing to read, and it keeps her old facts until it has one. Add a fact file, then index facts again so she forgets these:"
+msgstr "No file is left for indexing to read, and it keeps her old facts until it has one. Add a fact file, then index facts again so she forgets these:"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "No file matches the patterns, so there is nothing to index."
+msgstr "No file matches the patterns, so there is nothing to index."
+
+#: src/features/studio/references-section.tsx
+msgid "No friends yet"
+msgstr "No friends yet"
+
+#: src/features/home/readiness-labels.ts
+msgid "No index yet: she knows only her prompt."
+msgstr "No index yet: she knows only her prompt."
+
+#: src/features/jobs/list.tsx
+msgid "No jobs yet"
+msgstr "No jobs yet"
+
+#: src/components/settings-form/account-key-field.tsx
+#: src/features/settings/accounts-card.tsx
+msgid "No key"
+msgstr "No key"
+
+#: src/features/settings/accounts-card.tsx
+msgid "No key: calls need one"
+msgstr "No key: calls need one"
+
+#: src/features/home/memory-panel.tsx
+msgid "No memories yet"
+msgstr "No memories yet"
+
+#: src/features/call/call-notices.tsx
+msgid "No microphone found"
+msgstr "No microphone found"
+
+#: src/components/settings-form/model-picker.tsx
+msgid "No model by that name."
+msgstr "No model by that name."
+
+#: src/features/home/readiness-labels.ts
+msgid "No outfit references, so she can't take selfies."
+msgstr "No outfit references, so she can't take selfies."
+
+#: src/features/studio/references-section.tsx
+msgid "No outfits yet"
+msgstr "No outfits yet"
+
+#: src/features/studio/references-section.tsx
+msgid "No preview: only PNG, JPEG and WebP are shown here. Selfies still use it."
+msgstr "No preview: only PNG, JPEG and WebP are shown here. Selfies still use it."
+
+#: src/features/settings/account-dialog.tsx
+msgid "No provider by that name."
+msgstr "No provider by that name."
+
+#: src/components/settings-form/check-labels.ts
+msgid "No Qdrant address is set."
+msgstr "No Qdrant address is set."
+
+#: src/components/voice-picker/index.tsx
+msgid "No sample"
+msgstr "No sample"
+
+#: src/features/studio/video-table.tsx
+msgid "No speech"
+msgstr "No speech"
+
+#: src/features/jobs/labels.ts
+msgid "No speech was heard in this audio."
+msgstr "No speech was heard in this audio."
+
+#: src/features/usage/route.tsx
+msgid "No spending was recorded {during}. Calls, video jobs and MCP searches record theirs here as they run."
+msgstr "No spending was recorded {during}. Calls, video jobs and MCP searches record theirs here as they run."
+
+#: src/features/studio/knowledge-section.tsx
+msgid "No stream catalog yet."
+msgstr "No stream catalog yet."
+
+#: src/features/studio/video-table.tsx
+msgid "No upload date"
+msgstr "No upload date"
+
+#: src/features/studio/video-table.tsx
+msgid "No videos yet"
+msgstr "No videos yet"
+
+#: src/features/studio/voice-section.tsx
+msgid "No voice yet"
+msgstr "No voice yet"
+
+#: src/components/voice-picker/index.tsx
+msgid "No voices match."
+msgstr "No voices match."
+
+#: src/components/settings-form/labels.ts
+msgid "None"
+msgstr "None"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Not built"
+msgstr "Not built"
+
+#: src/features/home/readiness-labels.ts
+msgid "Not built yet: she can't recall past broadcasts."
+msgstr "Not built yet: she can't recall past broadcasts."
+
+#: src/features/studio/video-table.tsx
+msgid "Not downloaded"
+msgstr "Not downloaded"
+
+#: src/features/setup/keys-step.tsx
+msgid "Not every key passed its check"
+msgstr "Not every key passed its check"
+
+#: src/features/call/call-page.tsx
+msgid "Not in a call"
+msgstr "Not in a call"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Not indexed"
+msgstr "Not indexed"
+
+#: src/features/home/readiness-labels.ts
+msgid "Not installed. Only videos over 5 hours need it: brew install ffmpeg, apt install ffmpeg or winget install ffmpeg."
+msgstr "Not installed. Only videos over 5 hours need it: brew install ffmpeg, apt install ffmpeg or winget install ffmpeg."
+
+#: src/features/studio/videos-section.tsx
+msgid "Not Now"
+msgstr "Not Now"
+
+#: src/features/studio/glossary-section.tsx
+msgid "Not saved: this glossary doesn't parse"
+msgstr "Not saved: this glossary doesn't parse"
+
+#: src/features/call/transcript-view.tsx
+msgid "Not sent"
+msgstr "Not sent"
+
+#: src/components/settings-form/check-labels.ts
+msgid "Nothing answers there. Is the container running?"
+msgstr "Nothing answers there. Is the container running?"
+
+#: src/features/studio/videos-section.tsx
+msgid "Nothing is left to transcribe, refine or index."
+msgstr "Nothing is left to transcribe, refine or index."
+
+#: src/features/studio/add-videos.tsx
+msgid "Nothing New to Add"
+msgstr "Nothing New to Add"
+
+#: src/features/usage/route.tsx
+msgid "Nothing recorded"
+msgstr "Nothing recorded"
+
+#: src/features/jobs/parts.tsx
+msgid "Nothing reported yet."
+msgstr "Nothing reported yet."
+
+#: src/components/settings-form/check-labels.ts
+msgid "Nothing to check: no key is saved."
+msgstr "Nothing to check: no key is saved."
+
+#: src/components/settings-form/settings-card.tsx
+msgid "Nothing to set here."
+msgstr "Nothing to set here."
+
+#: src/features/usage/spend-chart.tsx
+msgid "Nothing was spent in this range."
+msgstr "Nothing was spent in this range."
+
+#: src/components/settings-form/field.tsx
+#: src/components/settings-form/labels.ts
+msgid "Off"
+msgstr "Off"
+
+#: src/features/home/readiness-labels.ts
+msgid "Off: she won't remember you between calls."
+msgstr "Off: she won't remember you between calls."
+
+#: src/components/settings-form/labels.ts
+msgid "Off: Three Models"
+msgstr "Off: Three Models"
+
+#: src/components/settings-form/field.tsx
+#: src/components/settings-form/labels.ts
+msgid "On"
+msgstr "On"
+
+#: src/features/home/readiness-labels.ts
+msgid "On: she remembers you from one call to the next."
+msgstr "On: she remembers you from one call to the next."
+
+#: src/features/studio/identity-section.tsx
+msgid "One English sentence about her. The retrieval gate reads it to tell when a question is about her."
+msgstr "One English sentence about her. The retrieval gate reads it to tell when a question is about her."
+
+#: src/features/studio/facts-editor.tsx
+msgid "One fact per line. A line may start with a date, such as 2024-05-01 or 2024年5月1日."
+msgstr "One fact per line. A line may start with a date, such as 2024-05-01 or 2024年5月1日."
+
+#: src/features/studio/add-videos.tsx
+msgid "One link per line."
+msgstr "One link per line."
+
+#: src/components/settings-form/labels.ts
+msgid "One model hears, thinks and speaks, in place of the three. Experimental."
+msgstr "One model hears, thinks and speaks, in place of the three. Experimental."
+
+#: src/features/studio/voice-section.tsx
+msgid "One of {provider}'s voices."
+msgstr "One of {provider}'s voices."
+
+#: src/features/call/call-notices.tsx
+msgid "One of her providers reported a problem. Check its key and credit in Settings."
+msgstr "One of her providers reported a problem. Check its key and credit in Settings."
+
+#: src/components/settings-form/labels.ts
+msgid "One per line, relative to her folder."
+msgstr "One per line, relative to her folder."
+
+#: src/features/home/readiness-labels.ts
+msgid "Only {free} free on the data home's disk. Downloaded audio takes a lot of space."
+msgstr "Only {free} free on the data home's disk. Downloaded audio takes a lot of space."
+
+#: src/components/locked-screen.tsx
+msgid "Open"
+msgstr "Open"
+
+#: src/components/locked-screen.tsx
+msgid "Open Eidolon from Your Terminal"
+msgstr "Open Eidolon from Your Terminal"
+
+#: src/features/call/call-page.tsx
+#: src/features/home/readiness-labels.ts
+msgid "Open Her Models"
+msgstr "Open Her Models"
+
+#: src/features/home/route.tsx
+msgid "Open one's studio to build her up, or make another the one your calls reach."
+msgstr "Open one's studio to build her up, or make another the one your calls reach."
+
+#: src/components/persona-switcher.tsx
+#: src/features/home/hero.tsx
+#: src/features/jobs/list.tsx
+#: src/features/setup/done-step.tsx
+msgid "Open the Studio"
+msgstr "Open the Studio"
+
+#: src/features/studio/video-table.tsx
+msgid "Open the Video's Page"
+msgstr "Open the Video's Page"
+
+#: src/components/settings-form/labels.ts
+msgid "OpenAI API Base"
+msgstr "OpenAI API Base"
+
+#: src/components/settings-form/labels.ts
+msgid "OpenRouter API Base"
+msgstr "OpenRouter API Base"
+
+#: src/components/settings-form/labels.ts
+msgid "OpenRouter App Name"
+msgstr "OpenRouter App Name"
+
+#: src/components/settings-form/labels.ts
+msgid "OpenRouter App URL"
+msgstr "OpenRouter App URL"
+
+#: src/features/setup/stepper.tsx
+msgid "Optional"
+msgstr "Optional"
+
+#: src/features/home/memory-panel.tsx
+msgid "Optional: calls work without it."
+msgstr "Optional: calls work without it."
+
+#: src/features/jobs/detail.tsx
+msgid "Options"
+msgstr "Options"
+
+#: src/components/settings-form/labels.ts
+msgid "Opus Bitrate: Best"
+msgstr "Opus Bitrate: Best"
+
+#: src/components/settings-form/labels.ts
+msgid "Opus Bitrate: Low"
+msgstr "Opus Bitrate: Low"
+
+#: src/components/settings-form/labels.ts
+msgid "Opus Bitrate: Lowest"
+msgstr "Opus Bitrate: Lowest"
+
+#: src/components/settings-form/labels.ts
+msgid "Opus Bitrate: Medium"
+msgstr "Opus Bitrate: Medium"
+
+#: src/features/studio/voice-section.tsx
+msgid "Or Use a Voice by Its ID"
+msgstr "Or Use a Voice by Its ID"
+
+#: src/components/settings-form/labels.ts
+#: src/features/usage/route.tsx
+#: src/features/usage/spend-chart.tsx
+msgid "Other"
+msgstr "Other"
+
+#: src/features/settings/account-dialog.tsx
+msgid "Other Provider"
+msgstr "Other Provider"
+
+#: src/features/home/readiness-labels.ts
+msgid "Outfit references: {count}."
+msgstr "Outfit references: {count}."
+
+#: src/features/studio/references-section.tsx
+msgid "Outfits"
+msgstr "Outfits"
+
+#: src/features/studio/references-section.tsx
+msgid "Outfits you add stay on this computer: deploying {name} copies only her friends' pictures."
+msgstr "Outfits you add stay on this computer: deploying {name} copies only her friends' pictures."
+
+#: src/components/settings-form/field.tsx
+#: src/features/studio/voice-section.tsx
+msgid "Overrides <0>{env}</0> in the environment, which sets <1>{value}</1>."
+msgstr "Overrides <0>{env}</0> in the environment, which sets <1>{value}</1>."
+
+#: src/features/jobs/detail.tsx
+msgid "Part of the cost couldn't be priced."
+msgstr "Part of the cost couldn't be priced."
+
+#: src/components/settings-form/account-key-field.tsx
+#: src/features/settings/account-dialog.tsx
+msgid "Paste a new key to replace it"
+msgstr "Paste a new key to replace it"
+
+#: src/components/settings-form/account-key-field.tsx
+#: src/features/settings/account-dialog.tsx
+msgid "Paste the key"
+msgstr "Paste the key"
+
+#: src/features/studio/add-videos.tsx
+msgid "Paste video links, or the link of a playlist, series or channel. Each link is checked first, so you see what it holds before anything downloads."
+msgstr "Paste video links, or the link of a playlist, series or channel. Each link is checked first, so you see what it holds before anything downloads."
+
+#: src/features/studio/references-section.tsx
+msgid "People she can take a selfie with: one picture each, named after them."
+msgstr "People she can take a selfie with: one picture each, named after them."
+
+#: src/components/settings-form/labels.ts
+#: src/features/jobs/detail.tsx
+#: src/features/setup/persona-step.tsx
+#: src/features/setup/stepper.tsx
+#: src/features/usage/route.tsx
+#: src/features/usage/tables.tsx
+msgid "Persona"
+msgstr "Persona"
+
+#: src/components/persona-switcher.tsx
+msgid "Personas"
+msgstr "Personas"
+
+#: src/features/setup/persona-fields.tsx
+msgid "Personas speak Mandarin, and the videos you build one from should be Mandarin streams."
+msgstr "Personas speak Mandarin, and the videos you build one from should be Mandarin streams."
+
+#: src/features/setup/avatar-picker.tsx
+msgid "Pick a PNG, JPEG or WebP image."
+msgstr "Pick a PNG, JPEG or WebP image."
+
+#: src/features/call/call-notices.tsx
+#: src/features/call/call-page.tsx
+#: src/features/home/readiness-labels.ts
+#: src/features/home/voice-dialog.tsx
+#: src/features/setup/voice-step.tsx
+msgid "Pick a Voice"
+msgstr "Pick a Voice"
+
+#: src/features/call/call-page.tsx
+msgid "Pick a voice for {name}"
+msgstr "Pick a voice for {name}"
+
+#: src/features/setup/new-persona.tsx
+msgid "Pick a voice for her."
+msgstr "Pick a voice for her."
+
+#: src/features/call/call-notices.tsx
+msgid "Pick her own voice: it overrides the environment's for her alone."
+msgstr "Pick her own voice: it overrides the environment's for her alone."
+
+#: src/components/settings-form/labels.ts
+msgid "Pick one the provider lists, or type any model id it serves."
+msgstr "Pick one the provider lists, or type any model id it serves."
+
+#: src/features/settings/account-dialog.tsx
+msgid "Pick the provider this account is with. You can add more than one of a provider."
+msgstr "Pick the provider this account is with. You can add more than one of a provider."
+
+#: src/features/setup/keys-step.tsx
+msgid "Pick who hears, thinks and speaks for her from the accounts you have. Add another provider's account under <0>Providers</0>, then choose it here or in her studio."
+msgstr "Pick who hears, thinks and speaks for her from the accounts you have. Add another provider's account under <0>Providers</0>, then choose it here or in her studio."
+
+#: src/features/studio/route.tsx
+msgid "Pictures"
+msgstr "Pictures"
+
+#: src/features/studio/pictures.tsx
+msgid "Pictures can be up to {max}."
+msgstr "Pictures can be up to {max}."
+
+#: src/features/studio/pictures.tsx
+msgid "Pictures must be PNG, JPEG or WebP."
+msgstr "Pictures must be PNG, JPEG or WebP."
+
+#: src/features/jobs/labels.ts
+msgid "Pipeline"
+msgstr "Pipeline"
+
+#: src/features/jobs/labels.ts
+msgid "Plan"
+msgstr "Plan"
+
+#: src/features/studio/videos-section.tsx
+msgid "Plan Again"
+msgstr "Plan Again"
+
+#: src/features/call/call-notices.tsx
+msgid "Play"
+msgstr "Play"
+
+#: src/features/studio/route.tsx
+msgid "Profile"
+msgstr "Profile"
+
+#: src/features/jobs/detail.tsx
+msgid "Progress"
+msgstr "Progress"
+
+#: src/features/studio/prompt-section.tsx
+#: src/features/studio/route.tsx
+msgid "Prompt"
+msgstr "Prompt"
+
+#: src/features/studio/prompt-section.tsx
+msgid "Prompt saved."
+msgstr "Prompt saved."
+
+#: src/features/usage/tables.tsx
+msgid "Provider"
+msgstr "Provider"
+
+#: src/features/settings/accounts-card.tsx
+msgid "Provider Accounts"
+msgstr "Provider Accounts"
+
+#: src/components/settings-form/labels.ts
+#: src/features/settings/route.tsx
+msgid "Providers"
+msgstr "Providers"
+
+#: src/components/settings-form/labels.ts
+msgid "Public Deployment"
+msgstr "Public Deployment"
+
+#: src/components/settings-form/labels.ts
+msgid "Qdrant Collection"
+msgstr "Qdrant Collection"
+
+#: src/components/settings-form/labels.ts
+#: src/features/setup/memory-step.tsx
+msgid "Qdrant Host"
+msgstr "Qdrant Host"
+
+#: src/components/settings-form/check-labels.ts
+msgid "Qdrant is answering."
+msgstr "Qdrant is answering."
+
+#: src/components/settings-form/check-labels.ts
+msgid "Qdrant is still starting. Try again in a few seconds."
+msgstr "Qdrant is still starting. Try again in a few seconds."
+
+#: src/features/call/call-page.tsx
+msgid "Qdrant isn't answering, so {name} won't remember this call."
+msgstr "Qdrant isn't answering, so {name} won't remember this call."
+
+#: src/features/home/readiness-labels.ts
+msgid "Qdrant isn't answering, so memory is off for now."
+msgstr "Qdrant isn't answering, so memory is off for now."
+
+#: src/features/home/memory-panel.tsx
+msgid "Qdrant isn't answering, so she can't remember or recall anything for now. Start Docker, or start Qdrant if it isn't running:"
+msgstr "Qdrant isn't answering, so she can't remember or recall anything for now. Start Docker, or start Qdrant if it isn't running:"
+
+#: src/components/settings-form/labels.ts
+#: src/features/setup/memory-step.tsx
+msgid "Qdrant Port"
+msgstr "Qdrant Port"
+
+#: src/features/usage/route.tsx
+msgid "Range"
+msgstr "Range"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Re-index needed"
+msgstr "Re-index needed"
+
+#: src/features/jobs/labels.ts
+msgid "Read Link"
+msgstr "Read Link"
+
+#: src/features/home/readiness-list.tsx
+#: src/features/home/route.tsx
+msgid "Readiness"
+msgstr "Readiness"
+
+#: src/features/studio/videos-section.tsx
+msgid "Reading the persona's sources…"
+msgstr "Reading the persona's sources…"
+
+#: src/features/jobs/labels.ts
+msgid "Reads a playlist, channel or series link and lists the videos in it."
+msgstr "Reads a playlist, channel or series link and lists the videos in it."
+
+#: src/features/home/hero.tsx
+msgid "Ready for calls"
+msgstr "Ready for calls"
+
+#: src/components/settings-form/labels.ts
+#: src/features/home/readiness-labels.ts
+msgid "Realtime Model"
+msgstr "Realtime Model"
+
+#: src/components/settings-form/labels.ts
+msgid "Realtime Provider"
+msgstr "Realtime Provider"
+
+#: src/lib/labels.ts
+msgid "Realtime Voice"
+msgstr "Realtime Voice"
+
+#: src/components/settings-form/labels.ts
+msgctxt "realtime model's voice"
+msgid "Realtime Voice"
+msgstr "Realtime Voice"
+
+#: src/features/home/readiness-labels.ts
+msgid "Rebuild"
+msgstr "Rebuild"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Rebuild Catalog"
+msgstr "Rebuild Catalog"
+
+#: src/features/jobs/labels.ts
+msgid "Refine"
+msgstr "Refine"
+
+#: src/features/jobs/labels.ts
+msgid "Refine API"
+msgstr "Refine API"
+
+#: src/components/settings-form/labels.ts
+msgid "Refine API Base"
+msgstr "Refine API Base"
+
+#: src/components/settings-form/labels.ts
+msgid "Refine Concurrency"
+msgstr "Refine Concurrency"
+
+#: src/components/settings-form/labels.ts
+msgid "Refine Model"
+msgstr "Refine Model"
+
+#: src/components/settings-form/labels.ts
+msgid "Refine Provider"
+msgstr "Refine Provider"
+
+#: src/features/jobs/labels.ts
+msgid "Refine Transcripts"
+msgstr "Refine Transcripts"
+
+#: src/features/studio/video-table.tsx
+msgid "Refined {done}/{total}"
+msgstr "Refined {done}/{total}"
+
+#: src/features/home/memory-panel.tsx
+#: src/features/jobs/detail.tsx
+msgid "Refresh"
+msgstr "Refresh"
+
+#: src/components/settings-form/labels.ts
+msgid "Relative to her folder. Default prompt.md."
+msgstr "Relative to her folder. Default prompt.md."
+
+#: src/features/setup/avatar-picker.tsx
+#: src/features/studio/identity-section.tsx
+msgid "Remove"
+msgstr "Remove"
+
+#: src/features/settings/accounts-card.tsx
+msgctxt "delete an account"
+msgid "Remove"
+msgstr "Remove"
+
+#: src/features/settings/accounts-card.tsx
+msgid "Remove {name}"
+msgstr "Remove {name}"
+
+#: src/features/studio/references-section.tsx
+msgctxt "picture"
+msgid "Remove {name}"
+msgstr "Remove {name}"
+
+#: src/features/settings/accounts-card.tsx
+msgid "Remove {name}?"
+msgstr "Remove {name}?"
+
+#: src/features/studio/identity-section.tsx
+msgid "Remove her avatar?"
+msgstr "Remove her avatar?"
+
+#: src/features/settings/account-dialog.tsx
+msgid "Remove Key"
+msgstr "Remove Key"
+
+#: src/features/setup/avatar-picker.tsx
+msgid "Replace"
+msgstr "Replace"
+
+#: src/features/studio/identity-section.tsx
+msgid "Replace Her Avatar"
+msgstr "Replace Her Avatar"
+
+#: src/features/usage/tables.tsx
+msgid "Requests"
+msgstr "Requests"
+
+#: src/features/setup/persona-fields.tsx
+msgid "Required."
+msgstr "Required."
+
+#: src/components/settings-form/labels.ts
+msgid "Rerank Results"
+msgstr "Rerank Results"
+
+#: src/components/settings-form/labels.ts
+msgid "Reranker API Base"
+msgstr "Reranker API Base"
+
+#: src/components/settings-form/labels.ts
+msgid "Reranker Model"
+msgstr "Reranker Model"
+
+#: src/components/settings-form/labels.ts
+msgid "Reranker Provider"
+msgstr "Reranker Provider"
+
+#: src/lib/labels.ts
+msgid "Reranking"
+msgstr "Reranking"
+
+#: src/components/settings-form/labels.ts
+msgid "Reranking costs about $0.002 per search."
+msgstr "Reranking costs about $0.002 per search."
+
+#: src/features/jobs/detail.tsx
+msgid "Reruns an earlier job"
+msgstr "Reruns an earlier job"
+
+#: src/features/home/readiness-labels.ts
+#: src/features/settings/notices.tsx
+#: src/features/settings/restart-button.tsx
+msgid "Restart"
+msgstr "Restart"
+
+#: src/features/settings/restart-button.tsx
+msgid "Restart and interrupt running jobs?"
+msgstr "Restart and interrupt running jobs?"
+
+#: src/features/settings/notices.tsx
+msgid "Restart to apply saved settings"
+msgstr "Restart to apply saved settings"
+
+#: src/features/settings/restart-button.tsx
+msgid "Restarting interrupts these jobs. What they finished is kept, and you can resume each from its page once Eidolon is back."
+msgstr "Restarting interrupts these jobs. What they finished is kept, and you can resume each from its page once Eidolon is back."
+
+#: src/features/settings/restart-button.tsx
+msgid "Restarting…"
+msgstr "Restarting…"
+
+#: src/features/jobs/parts.tsx
+msgid "Resume"
+msgstr "Resume"
+
+#: src/features/jobs/detail.tsx
+msgid "Resume runs it again, and every stage skips the work it already finished."
+msgstr "Resume runs it again, and every stage skips the work it already finished."
+
+#: src/features/jobs/detail.tsx
+msgid "Resumed by a later job"
+msgstr "Resumed by a later job"
+
+#: src/components/settings-form/labels.ts
+#: src/lib/labels.ts
+msgid "Retrieval Gate"
+msgstr "Retrieval Gate"
+
+#: src/components/settings-form/labels.ts
+msgid "Retrieval Gate Model"
+msgstr "Retrieval Gate Model"
+
+#: src/components/settings-form/labels.ts
+msgid "Retrieval Gate Provider"
+msgstr "Retrieval Gate Provider"
+
+#: src/features/studio/text-editor.tsx
+msgid "Revert"
+msgstr "Revert"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Rows"
+msgstr "Rows"
+
+#: src/features/studio/videos-section.tsx
+msgid "Run"
+msgstr "Run"
+
+#: src/features/setup/memory-step.tsx
+msgid "Run this once in a terminal:"
+msgstr "Run this once in a terminal:"
+
+#: src/features/studio/videos-section.tsx
+msgid "Run, about {usd}"
+msgstr "Run, about {usd}"
+
+#: src/features/jobs/labels.ts
+msgid "Running"
+msgstr "Running"
+
+#: src/features/jobs/labels.ts
+msgctxt "job stage"
+msgid "Running"
+msgstr "Running"
+
+#: src/components/settings-form/labels.ts
+msgid "s1 (Retires 2026-12-31)"
+msgstr "s1 (Retires 2026-12-31)"
+
+#: src/components/settings-form/labels.ts
+msgid "s2.1-pro-free (Free, under Fair Use)"
+msgstr "s2.1-pro-free (Free, under Fair Use)"
+
+#: src/components/settings-form/field.tsx
+msgid "Same as {role} ({value})"
+msgstr "Same as {role} ({value})"
+
+#: src/components/settings-form/settings-card.tsx
+#: src/features/settings/account-dialog.tsx
+#: src/features/studio/text-editor.tsx
+msgid "Save"
+msgstr "Save"
+
+#: src/features/setup/keys-step.tsx
+msgid "Save and Continue"
+msgstr "Save and Continue"
+
+#: src/components/settings-form/reindex-dialog.tsx
+msgid "Save Anyway"
+msgstr "Save Anyway"
+
+#: src/components/settings-form/account-key-field.tsx
+#: src/features/settings/accounts-card.tsx
+msgid "Saved"
+msgstr "Saved"
+
+#: src/components/settings-form/settings-card.tsx
+#: src/features/studio/identity-section.tsx
+msgid "Saved for {name}"
+msgstr "Saved for {name}"
+
+#: src/features/home/readiness-labels.ts
+msgid "Saved for {names}."
+msgstr "Saved for {names}."
+
+#: src/components/settings-form/settings-card.tsx
+msgid "Saved for every persona"
+msgstr "Saved for every persona"
+
+#: src/features/setup/keys-step.tsx
+msgid "Saved for the active persona. Claude, DeepSeek and others work through your OpenRouter key or with their own."
+msgstr "Saved for the active persona. Claude, DeepSeek and others work through your OpenRouter key or with their own."
+
+#: src/features/settings/account-dialog.tsx
+msgid "Saved in credentials.json under the provider's own variable; saving a new one moves it into this account."
+msgstr "Saved in credentials.json under the provider's own variable; saving a new one moves it into this account."
+
+#: src/features/home/readiness-labels.ts
+msgid "Saved settings wait for a restart."
+msgstr "Saved settings wait for a restart."
+
+#: src/components/settings-form/settings-card.tsx
+#: src/features/studio/identity-section.tsx
+msgid "Saved. Restart Eidolon to apply it."
+msgstr "Saved. Restart Eidolon to apply it."
+
+#: src/components/settings-form/settings-card.tsx
+msgid "Saving clears {fields}, which belonged to the old provider."
+msgstr "Saving clears {fields}, which belonged to the old provider."
+
+#: src/components/settings-form/labels.ts
+msgid "Scene Types Left Out of the Index"
+msgstr "Scene Types Left Out of the Index"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Search"
+msgstr "Search"
+
+#: src/components/settings-form/model-picker.tsx
+msgid "Search models"
+msgstr "Search models"
+
+#: src/features/settings/account-dialog.tsx
+msgid "Search providers"
+msgstr "Search providers"
+
+#: src/components/voice-picker/index.tsx
+msgid "Search Voices"
+msgstr "Search Voices"
+
+#: src/components/settings-form/labels.ts
+msgid "Selfie Aspect Ratio"
+msgstr "Selfie Aspect Ratio"
+
+#: src/components/settings-form/labels.ts
+msgid "Selfie Lifetime"
+msgstr "Selfie Lifetime"
+
+#: src/components/settings-form/labels.ts
+msgid "Selfie Model"
+msgstr "Selfie Model"
+
+#: src/components/settings-form/labels.ts
+msgid "Selfie Provider"
+msgstr "Selfie Provider"
+
+#: src/components/settings-form/labels.ts
+msgid "Selfie Quality"
+msgstr "Selfie Quality"
+
+#: src/components/settings-form/labels.ts
+msgid "Selfie References"
+msgstr "Selfie References"
+
+#: src/components/settings-form/labels.ts
+msgid "Selfie Timeout"
+msgstr "Selfie Timeout"
+
+#: src/components/settings-form/labels.ts
+#: src/features/home/readiness-labels.ts
+#: src/features/studio/references-section.tsx
+#: src/lib/labels.ts
+msgid "Selfies"
+msgstr "Selfies"
+
+#: src/features/call/call-controls.tsx
+msgid "Send"
+msgstr "Send"
+
+#: src/components/settings-form/labels.ts
+msgid "Sends embeddings to an endpoint of your own, such as a proxy, instead of the provider's API."
+msgstr "Sends embeddings to an endpoint of your own, such as a proxy, instead of the provider's API."
+
+#: src/components/settings-form/labels.ts
+msgid "Sends reranking to an endpoint of your own instead of the provider's API."
+msgstr "Sends reranking to an endpoint of your own instead of the provider's API."
+
+#: src/components/settings-form/labels.ts
+msgid "Sends transcript refinement to an endpoint of your own instead of the provider's API."
+msgstr "Sends transcript refinement to an endpoint of your own instead of the provider's API."
+
+#: src/features/settings/account-dialog.tsx
+msgid "Set by {env} in settings.yaml; a value saved here replaces it."
+msgstr "Set by {env} in settings.yaml; a value saved here replaces it."
+
+#: src/features/settings/account-dialog.tsx
+msgid "Set by {env} in the environment, which wins over a value saved here."
+msgstr "Set by {env} in the environment, which wins over a value saved here."
+
+#: src/features/setup/memory-step.tsx
+#: src/features/setup/persona-step.tsx
+msgid "Set by {env} in the environment, which wins over the value saved here. Change it there."
+msgstr "Set by {env} in the environment, which wins over the value saved here. Change it there."
+
+#: src/components/settings-form/field.tsx
+msgid "Set by <0>{env}</0> in the environment, which wins over the value saved here. Change it there."
+msgstr "Set by <0>{env}</0> in the environment, which wins over the value saved here. Change it there."
+
+#: src/features/studio/video-table.tsx
+msgid "Set Date"
+msgstr "Set Date"
+
+#: src/features/home/readiness-labels.ts
+msgid "Set Her Voice"
+msgstr "Set Her Voice"
+
+#: src/components/settings-form/account-key-field.tsx
+#: src/features/settings/account-dialog.tsx
+msgid "Set in the environment"
+msgstr "Set in the environment"
+
+#: src/features/setup/route.tsx
+msgid "Set Up Eidolon"
+msgstr "Set Up Eidolon"
+
+#: src/features/home/readiness-labels.ts
+msgid "Set up, but Qdrant hasn't been checked yet."
+msgstr "Set up, but Qdrant hasn't been checked yet."
+
+#: src/components/app-shell.tsx
+#: src/features/settings/route.tsx
+msgid "Settings"
+msgstr "Settings"
+
+#: src/features/settings/route.tsx
+msgid "Settings for {name} alone, such as her voice and chat model, are in <0>her studio</0>."
+msgstr "Settings for {name} alone, such as her voice and chat model, are in <0>her studio</0>."
+
+#: src/components/settings-form/settings-card.tsx
+#: src/features/studio/identity-section.tsx
+msgid "Settings saved."
+msgstr "Settings saved."
+
+#: src/features/settings/route.tsx
+msgid "Settings Sections"
+msgstr "Settings Sections"
+
+#: src/features/setup/route.tsx
+msgid "Setup"
+msgstr "Setup"
+
+#: src/features/setup/stepper.tsx
+msgid "Setup Steps"
+msgstr "Setup Steps"
+
+#: src/features/usage/tables.tsx
+msgid "Share"
+msgstr "Share"
+
+#: src/features/studio/models-section.tsx
+msgid "She can't switch voice styles during a call."
+msgstr "She can't switch voice styles during a call."
+
+#: src/features/studio/references-section.tsx
+msgid "She can't take selfies without one. Add a picture of her, or drop one here."
+msgstr "She can't take selfies without one. Add a picture of her, or drop one here."
+
+#: src/features/home/readiness-labels.ts
+msgid "She has no voice yet, so calls can't start."
+msgstr "She has no voice yet, so calls can't start."
+
+#: src/features/home/readiness-labels.ts
+msgid "She inherits a voice from the environment ({id}), which hasn't been checked with Fish Audio yet."
+msgstr "She inherits a voice from the environment ({id}), which hasn't been checked with Fish Audio yet."
+
+#: src/features/studio/identity-section.tsx
+msgid "She needs a name and a short name."
+msgstr "She needs a name and a short name."
+
+#: src/features/home/memory-panel.tsx
+msgid "She picks these up in your calls, and only she reads them: each persona remembers on her own."
+msgstr "She picks these up in your calls, and only she reads them: each persona remembers on her own."
+
+#: src/features/studio/models-section.tsx
+msgid "She speaks in one of the realtime model's own voices, not the voice picked for her."
+msgstr "She speaks in one of the realtime model's own voices, not the voice picked for her."
+
+#: src/features/studio/add-videos.tsx
+msgid "She speaks Mandarin, so add Mandarin streams. For audio in another language, set it under Transcription below."
+msgstr "She speaks Mandarin, so add Mandarin streams. For audio in another language, set it under Transcription below."
+
+#: src/components/voice-picker/index.tsx
+msgid "She speaks Mandarin, so the search starts among Chinese voices."
+msgstr "She speaks Mandarin, so the search starts among Chinese voices."
+
+#: src/features/setup/new-persona.tsx
+msgid "She starts with a Chinese prompt skeleton in her name; build her up in the studio."
+msgstr "She starts with a Chinese prompt skeleton in her name; build her up in the studio."
+
+#: src/features/setup/persona-step.tsx
+msgid "She uses it in calls. Leave it empty and she won't use a name."
+msgstr "She uses it in calls. Leave it empty and she won't use a name."
+
+#: src/features/setup/persona-fields.tsx
+#: src/features/studio/identity-section.tsx
+msgid "Short Name"
+msgstr "Short Name"
+
+#: src/features/jobs/detail.tsx
+msgid "Show"
+msgstr "Show"
+
+#: src/features/studio/video-table.tsx
+msgid "Show {count} More"
+msgstr "Show {count} More"
+
+#: src/features/home/memory-panel.tsx
+msgid "Show All {count}"
+msgstr "Show All {count}"
+
+#: src/features/studio/video-table.tsx
+msgid "Show Finished"
+msgstr "Show Finished"
+
+#: src/components/voice-picker/index.tsx
+msgid "Show More"
+msgstr "Show More"
+
+#: src/features/jobs/list.tsx
+msgid "Show Plans and Link Checks ({count})"
+msgstr "Show Plans and Link Checks ({count})"
+
+#: src/components/settings-form/field.tsx
+msgid "Shown only: set it in settings.yaml or with <0>{env}</0>."
+msgstr "Shown only: set it in settings.yaml or with <0>{env}</0>."
+
+#: src/features/usage/route.tsx
+msgid "since recording began"
+msgstr "since recording began"
+
+#: src/features/setup/memory-step.tsx
+msgid "Skip"
+msgstr "Skip"
+
+#: src/components/app-shell.tsx
+msgid "Skip to content"
+msgstr "Skip to content"
+
+#: src/features/jobs/labels.ts
+msgid "skipped"
+msgstr "skipped"
+
+#: src/features/jobs/labels.ts
+msgid "Skipped"
+msgstr "Skipped"
+
+#: src/components/settings-form/labels.ts
+msgid "Skips the knowledge search on turns that don't ask about her."
+msgstr "Skips the knowledge search on turns that don't ask about her."
+
+#: src/features/jobs/detail.tsx
+msgid "Some of the work failed"
+msgstr "Some of the work failed"
+
+#: src/features/settings/notices.tsx
+msgid "Some saved settings are read only when Eidolon starts or when memory first runs. Restarting interrupts running jobs, and can't happen during a call."
+msgstr "Some saved settings are read only when Eidolon starts or when memory first runs. Restarting interrupts running jobs, and can't happen during a call."
+
+#: src/features/studio/videos-section.tsx
+msgid "Some videos need a signed-in browser's cookies. Reading a browser's cookies may ask for your password (the macOS Keychain), and yt-dlp writes the cookies it used back into a cookies file."
+msgstr "Some videos need a signed-in browser's cookies. Reading a browser's cookies may ask for your password (the macOS Keychain), and yt-dlp writes the cookies it used back into a cookies file."
+
+#: src/components/settings-form/check-labels.ts
+msgid "Something answers there, but it isn't Qdrant."
+msgstr "Something answers there, but it isn't Qdrant."
+
+#: src/components/route-error.tsx
+#: src/features/call/call-page.tsx
+msgid "Something went wrong"
+msgstr "Something went wrong"
+
+#: src/lib/labels.ts
+msgid "Something went wrong."
+msgstr "Something went wrong."
+
+#: src/features/jobs/labels.ts
+msgid "Soniox"
+msgstr "Soniox"
+
+#: src/features/studio/videos-section.tsx
+msgid "Soniox allows up to {max} at once per account."
+msgstr "Soniox allows up to {max} at once per account."
+
+#: src/components/settings-form/check-labels.ts
+msgid "Soniox rejected this key. A key from an EU, Japan or India project doesn't work either: Eidolon supports US projects only."
+msgstr "Soniox rejected this key. A key from an EU, Japan or India project doesn't work either: Eidolon supports US projects only."
+
+#: src/features/studio/videos-section.tsx
+msgid "Soniox transcribes the audio, the refine model cleans up each transcript, and the embedding API indexes it. Each step skips what's already done."
+msgstr "Soniox transcribes the audio, the refine model cleans up each transcript, and the embedding API indexes it. Each step skips what's already done."
+
+#: src/features/home/readiness-labels.ts
+#: src/lib/labels.ts
+msgid "Speech Recognition"
+msgstr "Speech Recognition"
+
+#: src/components/settings-form/labels.ts
+msgid "Speech Recognition Model"
+msgstr "Speech Recognition Model"
+
+#: src/components/settings-form/labels.ts
+msgid "Speech Recognition Provider"
+msgstr "Speech Recognition Provider"
+
+#: src/features/usage/tables.tsx
+msgid "Spend"
+msgstr "Spend"
+
+#: src/features/usage/route.tsx
+msgid "Spend and usage per provider, the costliest first."
+msgstr "Spend and usage per provider, the costliest first."
+
+#: src/features/usage/route.tsx
+msgid "Spend per day"
+msgstr "Spend per day"
+
+#: src/features/usage/route.tsx
+msgid "Spend per month"
+msgstr "Spend per month"
+
+#: src/features/usage/route.tsx
+msgid "Spent by {name} {during}"
+msgstr "Spent by {name} {during}"
+
+#: src/features/usage/route.tsx
+msgid "Spent by all personas {during}"
+msgstr "Spent by all personas {during}"
+
+#: src/components/settings-form/labels.ts
+msgid "Spoken Language"
+msgstr "Spoken Language"
+
+#: src/features/usage/route.tsx
+msgid "Stacked by provider."
+msgstr "Stacked by provider."
+
+#: src/features/studio/videos-section.tsx
+msgid "Start the billed run?"
+msgstr "Start the billed run?"
+
+#: src/features/setup/persona-step.tsx
+msgid "Start with the demo persona, or create your own and build her up later in the studio."
+msgstr "Start with the demo persona, or create your own and build her up later in the studio."
+
+#: src/features/jobs/labels.ts
+msgid "started"
+msgstr "started"
+
+#: src/features/jobs/detail.tsx
+#: src/features/jobs/list.tsx
+msgid "Started"
+msgstr "Started"
+
+#: src/features/jobs/detail.tsx
+msgid "Starting…"
+msgstr "Starting…"
+
+#: src/features/setup/persona-step.tsx
+msgid "Starts with a Chinese prompt skeleton in her name. Add facts, videos and outfits in the studio."
+msgstr "Starts with a Chinese prompt skeleton in her name. Add facts, videos and outfits in the studio."
+
+#: src/features/studio/video-table.tsx
+msgid "State"
+msgstr "State"
+
+#: src/features/call/transcript-view.tsx
+msgid "Still waiting for {name}. If nothing comes, say it again."
+msgstr "Still waiting for {name}. If nothing comes, say it again."
+
+#: src/features/studio/add-videos.tsx
+msgid "Stop"
+msgstr "Stop"
+
+#: src/features/jobs/labels.ts
+msgid "Stopped unexpectedly"
+msgstr "Stopped unexpectedly"
+
+#: src/features/jobs/parts.tsx
+msgid "Stopping…"
+msgstr "Stopping…"
+
+#: src/features/settings/route.tsx
+msgid "Storage"
+msgstr "Storage"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Stream Archive"
+msgstr "Stream Archive"
+
+#: src/features/home/readiness-labels.ts
+msgctxt "readiness check"
+msgid "Stream Archive"
+msgstr "Stream Archive"
+
+#: src/components/settings-form/labels.ts
+msgid "Stream Candidates"
+msgstr "Stream Candidates"
+
+#: src/features/jobs/labels.ts
+msgid "Stream Catalog"
+msgstr "Stream Catalog"
+
+#: src/features/studio/knowledge-section.tsx
+msgid "Stream catalog built {time}."
+msgstr "Stream catalog built {time}."
+
+#: src/features/studio/video-table.tsx
+msgid "Stream Date"
+msgstr "Stream Date"
+
+#: src/features/studio/video-table.tsx
+msgid "Streamed"
+msgstr "Streamed"
+
+#: src/components/app-shell.tsx
+msgid "Studio"
+msgstr "Studio"
+
+#: src/components/settings-form/labels.ts
+msgid "STUN URL"
+msgstr "STUN URL"
+
+#: src/features/setup/persona-fields.tsx
+#: src/features/studio/identity-section.tsx
+msgid "Summary"
+msgstr "Summary"
+
+#: src/features/setup/new-persona.tsx
+msgid "Switch to Her Now"
+msgstr "Switch to Her Now"
+
+#: src/components/preferences.tsx
+msgid "System"
+msgstr "System"
+
+#: src/features/studio/prompt-section.tsx
+msgid "System Prompt"
+msgstr "System Prompt"
+
+#: src/components/settings-form/labels.ts
+msgid "System Prompt File"
+msgstr "System Prompt File"
+
+#: src/features/usage/route.tsx
+msgid "Table"
+msgstr "Table"
+
+#: src/features/studio/knowledge-section.tsx
+msgctxt "index storage"
+msgid "Table"
+msgstr "Table"
+
+#: src/features/settings/accounts-card.tsx
+msgid "Takes no key"
+msgstr "Takes no key"
+
+#: src/features/home/hero.tsx
+msgid "Talking to"
+msgstr "Talking to"
+
+#: src/features/usage/tables.tsx
+msgid "Task"
+msgstr "Task"
+
+#: src/features/jobs/detail.tsx
+msgid "Technical Log"
+msgstr "Technical Log"
+
+#: src/features/studio/glossary-section.tsx
+msgid "terms = [\"奶绿\", \"奶糖花\"]"
+msgstr "terms = [\"奶绿\", \"奶糖花\"]"
+
+#: src/lib/labels.ts
+msgid "That action isn't supported here."
+msgstr "That action isn't supported here."
+
+#: src/lib/labels.ts
+msgid "That conflicts with what changed meanwhile. Reload and try again."
+msgstr "That conflicts with what changed meanwhile. Reload and try again."
+
+#: src/lib/labels.ts
+msgid "That doesn't exist."
+msgstr "That doesn't exist."
+
+#: src/lib/labels.ts
+msgid "That file name isn't allowed."
+msgstr "That file name isn't allowed."
+
+#: src/lib/labels.ts
+msgid "That file type isn't supported."
+msgstr "That file type isn't supported."
+
+#: src/features/setup/avatar-picker.tsx
+msgid "That image is over {max}."
+msgstr "That image is over {max}."
+
+#: src/components/locked-screen.tsx
+msgid "That isn't an Eidolon link."
+msgstr "That isn't an Eidolon link."
+
+#: src/lib/labels.ts
+msgid "That job can't be resumed."
+msgstr "That job can't be resumed."
+
+#: src/lib/labels.ts
+msgid "That job doesn't exist."
+msgstr "That job doesn't exist."
+
+#: src/lib/labels.ts
+msgid "That job isn't running."
+msgstr "That job isn't running."
+
+#: src/components/locked-screen.tsx
+msgid "That link has expired or isn't valid. A link works for 10 minutes: run the same command again for a fresh one."
+msgstr "That link has expired or isn't valid. A link works for 10 minutes: run the same command again for a fresh one."
+
+#: src/lib/labels.ts
+msgid "That link has expired. Run the same command again for a fresh one."
+msgstr "That link has expired. Run the same command again for a fresh one."
+
+#: src/lib/labels.ts
+msgid "That service isn't available right now."
+msgstr "That service isn't available right now."
+
+#: src/lib/labels.ts
+msgid "That setting doesn't exist."
+msgstr "That setting doesn't exist."
+
+#: src/lib/labels.ts
+msgid "That value isn't valid for this setting."
+msgstr "That value isn't valid for this setting."
+
+#: src/features/studio/voice-section.tsx
+msgid "The {provider} voice she speaks with, by its id. Find one in {provider}'s <0>voice library</0>."
+msgstr "The {provider} voice she speaks with, by its id. Find one in {provider}'s <0>voice library</0>."
+
+#: src/features/settings/accounts-card.tsx
+msgid "The account couldn't be removed."
+msgstr "The account couldn't be removed."
+
+#: src/components/settings-form/check-labels.ts
+msgid "The account has no credit left."
+msgstr "The account has no credit left."
+
+#: src/features/settings/accounts-card.tsx
+msgid "The accounts Eidolon calls, each with its own key and API base. Add as many of one provider as you have; a persona picks which account does each part of her work in her studio."
+msgstr "The accounts Eidolon calls, each with its own key and API base. Add as many of one provider as you have; a persona picks which account does each part of her work in her studio."
+
+#: src/features/home/readiness-labels.ts
+msgid "The archive is built."
+msgstr "The archive is built."
+
+#: src/components/settings-form/labels.ts
+msgid "The browser whose cookies yt-dlp uses for videos behind a login. Reading them may ask for your Keychain password."
+msgstr "The browser whose cookies yt-dlp uses for videos behind a login. Reading them may ask for your Keychain password."
+
+#: src/features/call/call-notices.tsx
+msgid "The call ended after 5 minutes of silence."
+msgstr "The call ended after 5 minutes of silence."
+
+#: src/features/call/call-notices.tsx
+msgid "The call failed on Eidolon's side."
+msgstr "The call failed on Eidolon's side."
+
+#: src/components/settings-form/check-result.tsx
+msgid "The check couldn't run."
+msgstr "The check couldn't run."
+
+#: src/features/call/call-notices.tsx
+msgid "The connection dropped."
+msgstr "The connection dropped."
+
+#: src/features/studio/models-section.tsx
+msgid "The delivery cues in her prompt aren't performed: she's told to put them in her voice instead."
+msgstr "The delivery cues in her prompt aren't performed: she's told to put them in her voice instead."
+
+#: src/features/jobs/labels.ts
+msgid "The disk is full."
+msgstr "The disk is full."
+
+#: src/components/settings-form/account-key-field.tsx
+msgid "The environment's key wins over one saved here."
+msgstr "The environment's key wins over one saved here."
+
+#: src/features/studio/voice-section.tsx
+msgid "The environment's voice"
+msgstr "The environment's voice"
+
+#: src/features/studio/facts-editor.tsx
+msgid "The file is removed from your data home. Facts already indexed stay until you index again."
+msgstr "The file is removed from your data home. Facts already indexed stay until you index again."
+
+#: src/lib/labels.ts
+msgid "The file is too large."
+msgstr "The file is too large."
+
+#: src/features/studio/voice-section.tsx
+msgid "The Fish Audio voice she speaks with. Search the public voices, listen to a sample, and pick one."
+msgstr "The Fish Audio voice she speaks with. Search the public voices, listen to a sample, and pick one."
+
+#: src/features/studio/videos-section.tsx
+msgid "The free space on the data home's disk is unknown."
+msgstr "The free space on the data home's disk is unknown."
+
+#: src/lib/labels.ts
+msgid "The glossary isn't valid TOML."
+msgstr "The glossary isn't valid TOML."
+
+#: src/features/studio/references-section.tsx
+msgid "The image model and how selfies are drawn."
+msgstr "The image model and how selfies are drawn."
+
+#: src/features/home/readiness-labels.ts
+msgid "The index is built."
+msgstr "The index is built."
+
+#: src/components/settings-form/check-labels.ts
+msgid "The key expires within 14 days."
+msgstr "The key expires within 14 days."
+
+#: src/components/settings-form/check-labels.ts
+msgid "The key has expired."
+msgstr "The key has expired."
+
+#: src/components/settings-form/check-labels.ts
+msgid "The key isn't allowed to do this. Check its permissions and budget."
+msgstr "The key isn't allowed to do this. Check its permissions and budget."
+
+#: src/components/settings-form/check-labels.ts
+msgid "The key works but can't list models. Make sure it may use real-time and async transcription and upload files."
+msgstr "The key works but can't list models. Make sure it may use real-time and async transcription and upload files."
+
+#: src/components/settings-form/check-labels.ts
+msgid "The key's own spending limit is used up."
+msgstr "The key's own spending limit is used up."
+
+#: src/components/settings-form/labels.ts
+msgid "The language of her videos as a two-letter code, or none. Default zh."
+msgstr "The language of her videos as a two-letter code, or none. Default zh."
+
+#: src/components/settings-form/labels.ts
+msgid "The language you speak in calls, as a two-letter code. Default zh."
+msgstr "The language you speak in calls, as a two-letter code. Default zh."
+
+#: src/components/settings-form/labels.ts
+msgid "The largest allowed value is {max}."
+msgstr "The largest allowed value is {max}."
+
+#: src/features/studio/videos-section.tsx
+msgid "The last download failed on cookies. Pick another browser, a cookies file or none, then download again."
+msgstr "The last download failed on cookies. Pick another browser, a cookies file or none, then download again."
+
+#: src/features/studio/add-videos.tsx
+msgid "The length of {count} of them is unknown."
+msgstr "The length of {count} of them is unknown."
+
+#: src/features/studio/add-videos.tsx
+msgid "The link couldn't be read."
+msgstr "The link couldn't be read."
+
+#: src/features/settings/notices.tsx
+msgid "The MCP server still serves the old settings"
+msgstr "The MCP server still serves the old settings"
+
+#: src/features/home/readiness-labels.ts
+msgid "The MCP server still serves the settings it started with."
+msgstr "The MCP server still serves the settings it started with."
+
+#: src/features/call/call-notices.tsx
+msgid "The microphone isn't available here"
+msgstr "The microphone isn't available here"
+
+#: src/features/studio/models-section.tsx
+msgid "The model and voice {name} talks with. Her speech recognition, chat and voice settings don't apply while it's on."
+msgstr "The model and voice {name} talks with. Her speech recognition, chat and voice settings don't apply while it's on."
+
+#: src/features/jobs/list.tsx
+msgid "The offline work that builds each persona's knowledge. A job keeps running when you close this page."
+msgstr "The offline work that builds each persona's knowledge. A job keeps running when you close this page."
+
+#: src/features/studio/identity-section.tsx
+msgid "The picture is deleted from her folder, and her initials show in its place."
+msgstr "The picture is deleted from her folder, and her initials show in its place."
+
+#: src/features/studio/references-section.tsx
+msgid "The picture is saved under their name, which is how she knows who it is."
+msgstr "The picture is saved under their name, which is how she knows who it is."
+
+#: src/features/studio/videos-section.tsx
+msgid "The plan couldn't be made. Its job page has the details."
+msgstr "The plan couldn't be made. Its job page has the details."
+
+#: src/features/jobs/labels.ts
+msgid "The provider account is out of credit."
+msgstr "The provider account is out of credit."
+
+#: src/features/settings/route.tsx
+msgid "The provider and model that turn facts, transcripts and memories into vectors for search. Every persona's index is built with them."
+msgstr "The provider and model that turn facts, transcripts and memories into vectors for search. Every persona's index is built with them."
+
+#: src/components/settings-form/check-labels.ts
+msgid "The provider couldn't find what the check asked for."
+msgstr "The provider couldn't find what the check asked for."
+
+#: src/components/settings-form/check-labels.ts
+msgid "The provider doesn't list the model in your settings."
+msgstr "The provider doesn't list the model in your settings."
+
+#: src/components/settings-form/check-labels.ts
+msgid "The provider is busy. Try again in a minute."
+msgstr "The provider is busy. Try again in a minute."
+
+#: src/features/jobs/labels.ts
+msgid "The provider is limiting requests. Try again later."
+msgstr "The provider is limiting requests. Try again later."
+
+#: src/features/jobs/labels.ts
+msgid "The provider refused the API key."
+msgstr "The provider refused the API key."
+
+#: src/components/settings-form/check-labels.ts
+msgid "The provider rejected this key."
+msgstr "The provider rejected this key."
+
+#: src/components/settings-form/check-labels.ts
+msgid "The provider sent an answer the check doesn't recognize."
+msgstr "The provider sent an answer the check doesn't recognize."
+
+#: src/features/jobs/labels.ts
+msgid "The request got no answer. Check the network connection."
+msgstr "The request got no answer. Check the network connection."
+
+#: src/features/call/call-notices.tsx
+#: src/lib/labels.ts
+msgid "The request was refused."
+msgstr "The request was refused."
+
+#: src/lib/labels.ts
+msgid "The request wasn't valid JSON."
+msgstr "The request wasn't valid JSON."
+
+#: src/lib/labels.ts
+msgid "The request wasn't valid."
+msgstr "The request wasn't valid."
+
+#: src/features/jobs/labels.ts
+msgid "The site refused yt-dlp, usually because it is out of date."
+msgstr "The site refused yt-dlp, usually because it is out of date."
+
+#: src/components/settings-form/labels.ts
+msgid "The smallest allowed value is {min}."
+msgstr "The smallest allowed value is {min}."
+
+#: src/features/studio/prompt-section.tsx
+msgid "The system prompt: who she is, how she talks and the rules she keeps. Calls that start after you save use it."
+msgstr "The system prompt: who she is, how she talks and the rules she keeps. Calls that start after you save use it."
+
+#: src/features/jobs/detail.tsx
+msgid "The technical log is empty."
+msgstr "The technical log is empty."
+
+#: src/features/studio/voice-section.tsx
+msgid "The voice below applies only when she talks with three models. Her realtime voice is set under <0>Mind</0>."
+msgstr "The voice below applies only when she talks with three models. Her realtime voice is set under <0>Mind</0>."
+
+#: src/components/settings-form/check-labels.ts
+msgid "The voice model s1 retires on 2026-12-31. Switch to drama-3."
+msgstr "The voice model s1 retires on 2026-12-31. Switch to drama-3."
+
+#: src/features/home/readiness-labels.ts
+msgid "The voice she inherits from the environment ({id}) isn't usable on Fish Audio. Pick her own."
+msgstr "The voice she inherits from the environment ({id}) isn't usable on Fish Audio. Pick her own."
+
+#: src/features/studio/add-videos.tsx
+msgid "Their audio needs about {size}; {free} is free."
+msgstr "Their audio needs about {size}; {free} is free."
+
+#: src/features/studio/references-section.tsx
+msgid "Their Name"
+msgstr "Their Name"
+
+#: src/components/preferences.tsx
+msgid "Theme"
+msgstr "Theme"
+
+#: src/features/studio/route.tsx
+msgid "There is no persona called {id}."
+msgstr "There is no persona called {id}."
+
+#: src/lib/labels.ts
+msgid "There is no persona with that id."
+msgstr "There is no persona with that id."
+
+#: src/features/jobs/detail.tsx
+msgid "There is no such job"
+msgstr "There is no such job"
+
+#: src/lib/labels.ts
+msgid "There is no such job."
+msgstr "There is no such job."
+
+#: src/features/studio/add-videos.tsx
+msgid "There may not be enough free space for this audio. Free some space first, or add fewer videos."
+msgstr "There may not be enough free space for this audio. Free some space first, or add fewer videos."
+
+#: src/features/studio/add-videos.tsx
+msgid "These lines aren't http or https links:"
+msgstr "These lines aren't http or https links:"
+
+#: src/features/studio/videos-section.tsx
+msgid "These videos come from your own URL lists, which only laplace-pipeline in a terminal downloads."
+msgstr "These videos come from your own URL lists, which only laplace-pipeline in a terminal downloads."
+
+#: src/features/jobs/list.tsx
+msgid "They appear here when you index facts or add videos in a persona's studio."
+msgstr "They appear here when you index facts or add videos in a persona's studio."
+
+#: src/features/studio/knowledge-section.tsx
+msgid "They were deleted, or no longer match the patterns. Index facts again so she forgets them:"
+msgstr "They were deleted, or no longer match the patterns. Index facts again so she forgets them:"
+
+#: src/features/studio/videos-section.tsx
+msgid "This bills your Soniox, OpenRouter and embedding accounts: about {usd} by the estimate."
+msgstr "This bills your Soniox, OpenRouter and embedding accounts: about {usd} by the estimate."
+
+#: src/components/settings-form/check-result.tsx
+msgid "This checked the key from the environment, which wins over the one saved here."
+msgstr "This checked the key from the environment, which wins over the one saved here."
+
+#: src/lib/labels.ts
+msgid "This file ships with Eidolon and can't be changed or deleted."
+msgstr "This file ships with Eidolon and can't be changed or deleted."
+
+#: src/features/studio/glossary-section.tsx
+msgid "This glossary doesn't parse"
+msgstr "This glossary doesn't parse"
+
+#: src/features/studio/parts.tsx
+msgid "This is {name}'s built-in file. Saving keeps your copy in your data home and leaves the original unchanged."
+msgstr "This is {name}'s built-in file. Saving keeps your copy in your data home and leaves the original unchanged."
+
+#: src/components/settings-form/check-labels.ts
+msgid "This is a management key, which can't run models. Create a regular API key."
+msgstr "This is a management key, which can't run models. Create a regular API key."
+
+#: src/features/studio/identity-section.tsx
+msgid "This is her avatar, on the call page and in the persona switcher. Click it to upload one from your files, or drop a picture on it."
+msgstr "This is her avatar, on the call page and in the persona switcher. Click it to upload one from your files, or drop a picture on it."
+
+#: src/features/jobs/detail.tsx
+msgid "This job reported no progress."
+msgstr "This job reported no progress."
+
+#: src/features/jobs/detail.tsx
+msgid "This job stopped without finishing"
+msgstr "This job stopped without finishing"
+
+#: src/components/settings-form/check-labels.ts
+msgid "This OpenRouter account never bought credits, so paid models will fail."
+msgstr "This OpenRouter account never bought credits, so paid models will fail."
+
+#: src/components/route-error.tsx
+msgid "This page doesn't exist."
+msgstr "This page doesn't exist."
+
+#: src/features/call/call-notices.tsx
+#: src/lib/labels.ts
+msgid "This page isn't signed in. Open the link from the terminal."
+msgstr "This page isn't signed in. Open the link from the terminal."
+
+#: src/components/locked-screen.tsx
+msgid "This page needs the link Eidolon printed in the terminal where it is running. Open that link, or paste it here."
+msgstr "This page needs the link Eidolon printed in the terminal where it is running. Open that link, or paste it here."
+
+#: src/lib/labels.ts
+msgid "This page's sign-in isn't complete. Open the link from the terminal."
+msgstr "This page's sign-in isn't complete. Open the link from the terminal."
+
+#: src/features/studio/prompt-section.tsx
+msgid "This persona has no prompt yet. Write one and save it."
+msgstr "This persona has no prompt yet. Write one and save it."
+
+#: src/components/settings-form/check-labels.ts
+msgid "This persona's voice belongs to another account. Pick a public one."
+msgstr "This persona's voice belongs to another account. Pick a public one."
+
+#: src/features/call/selfie-image.tsx
+msgid "This photo has expired"
+msgstr "This photo has expired"
+
+#: src/features/studio/voice-section.tsx
+msgid "This prompt teaches delivery cues, such as [whispering] or paired tags, which only {model} performs in full. Eidolon takes out the ones this model can't read, so it never speaks them, but her delivery is plainer. Pick {model} for the whole performance."
+msgstr "This prompt teaches delivery cues, such as [whispering] or paired tags, which only {model} performs in full. Eidolon takes out the ones this model can't read, so it never speaks them, but her delivery is plainer. Pick {model} for the whole performance."
+
+#: src/components/settings-form/check-labels.ts
+msgid "This provider offers nothing to check a key against, so it wasn't verified."
+msgstr "This provider offers nothing to check a key against, so it wasn't verified."
+
+#: src/components/settings-form/check-labels.ts
+msgid "This Qdrant wants an API key, which Eidolon doesn't support."
+msgstr "This Qdrant wants an API key, which Eidolon doesn't support."
+
+#: src/components/settings-form/check-labels.ts
+msgid "This Qdrant's version is more than one minor release away from the one Eidolon is built for."
+msgstr "This Qdrant's version is more than one minor release away from the one Eidolon is built for."
+
+#: src/lib/labels.ts
+msgid "This setting can't be changed here."
+msgstr "This setting can't be changed here."
+
+#: src/features/jobs/labels.ts
+msgid "This video has no upload date, so it can't be placed among the streams."
+msgstr "This video has no upload date, so it can't be placed among the streams."
+
+#: src/features/studio/models-section.tsx
+msgid "Three models take turns to hear you, think and speak for {name}. A realtime model does all three in one session, and can answer sooner."
+msgstr "Three models take turns to hear you, think and speak for {name}. A realtime model does all three in one session, and can answer sooner."
+
+#: src/components/settings-form/labels.ts
+#: src/features/setup/persona-fields.tsx
+#: src/features/studio/identity-section.tsx
+msgid "Time Zone"
+msgstr "Time Zone"
+
+#: src/features/studio/video-table.tsx
+msgid "To index"
+msgstr "To index"
+
+#: src/features/studio/video-table.tsx
+msgid "To transcribe"
+msgstr "To transcribe"
+
+#: src/features/usage/spend-chart.tsx
+msgid "Total"
+msgstr "Total"
+
+#: src/features/jobs/labels.ts
+#: src/features/studio/video-table.tsx
+msgid "Transcribe"
+msgstr "Transcribe"
+
+#: src/features/studio/videos-section.tsx
+msgid "Transcribe, Refine and Index"
+msgstr "Transcribe, Refine and Index"
+
+#: src/features/studio/video-table.tsx
+msgid "Transcribing bills your Soniox account."
+msgstr "Transcribing bills your Soniox account."
+
+#: src/lib/labels.ts
+msgid "Transcript Refinement"
+msgstr "Transcript Refinement"
+
+#: src/features/studio/video-table.tsx
+msgid "Transcript unreadable"
+msgstr "Transcript unreadable"
+
+#: src/features/studio/videos-section.tsx
+#: src/lib/labels.ts
+msgid "Transcription"
+msgstr "Transcription"
+
+#: src/components/settings-form/labels.ts
+msgid "Transcription Language"
+msgstr "Transcription Language"
+
+#: src/components/settings-form/labels.ts
+msgid "Transcription Model"
+msgstr "Transcription Model"
+
+#: src/components/settings-form/labels.ts
+msgid "Transcription Provider"
+msgstr "Transcription Provider"
+
+#: src/features/studio/videos-section.tsx
+msgid "Transcriptions at Once"
+msgstr "Transcriptions at Once"
+
+#: src/components/route-error.tsx
+#: src/features/home/memory-panel.tsx
+msgid "Try Again"
+msgstr "Try Again"
+
+#: src/components/settings-form/labels.ts
+msgid "TURN Credential Lifetime"
+msgstr "TURN Credential Lifetime"
+
+#: src/features/home/readiness-labels.ts
+msgid "Turn On"
+msgstr "Turn On"
+
+#: src/features/home/memory-panel.tsx
+msgid "Turn On Memory"
+msgstr "Turn On Memory"
+
+#: src/components/settings-form/labels.ts
+msgid "TURN URL"
+msgstr "TURN URL"
+
+#: src/components/settings-form/labels.ts
+msgid "TURN Username"
+msgstr "TURN Username"
+
+#: src/features/jobs/labels.ts
+msgid "Turns a video's audio into a transcript with Soniox."
+msgstr "Turns a video's audio into a transcript with Soniox."
+
+#: src/features/call/call-controls.tsx
+msgid "Type a message to {name}"
+msgstr "Type a message to {name}"
+
+#: src/features/settings/yt-dlp-state.tsx
+msgid "Unavailable"
+msgstr "Unavailable"
+
+#: src/features/home/readiness-labels.ts
+msgid "Unavailable, so videos can't be downloaded. Install it with brew install yt-dlp or pip install yt-dlp: Eidolon then uses the one on your PATH."
+msgstr "Unavailable, so videos can't be downloaded. Install it with brew install yt-dlp or pip install yt-dlp: Eidolon then uses the one on your PATH."
+
+#: src/features/call/call-controls.tsx
+msgid "Unmute your mic"
+msgstr "Unmute your mic"
+
+#: src/features/studio/text-editor.tsx
+msgid "Unsaved changes"
+msgstr "Unsaved changes"
+
+#: src/features/setup/avatar-picker.tsx
+#: src/features/studio/references-section.tsx
+msgid "Upload"
+msgstr "Upload"
+
+#: src/features/studio/identity-section.tsx
+msgid "Upload an Avatar"
+msgstr "Upload an Avatar"
+
+#: src/components/app-shell.tsx
+#: src/components/settings-form/labels.ts
+#: src/features/usage/route.tsx
+#: src/features/usage/tables.tsx
+msgid "Usage"
+msgstr "Usage"
+
+#: src/features/usage/route.tsx
+msgid "Usage isn't being recorded"
+msgstr "Usage isn't being recorded"
+
+#: src/components/settings-form/labels.ts
+msgid "Usage Ledger"
+msgstr "Usage Ledger"
+
+#: src/components/settings-form/model-picker.tsx
+msgid "Use “{model}”"
+msgstr "Use “{model}”"
+
+#: src/features/studio/identity-section.tsx
+msgid "Use {zone}"
+msgstr "Use {zone}"
+
+#: src/components/settings-form/labels.ts
+msgid "Use a path relative to the persona's folder that stays inside it."
+msgstr "Use a path relative to the persona's folder that stays inside it."
+
+#: src/features/studio/facts-editor.tsx
+msgid "Use a plain file name ending in .txt, without / \\ or :, that doesn't start with a dot."
+msgstr "Use a plain file name ending in .txt, without / \\ or :, that doesn't start with a dot."
+
+#: src/components/settings-form/labels.ts
+#: src/features/setup/persona-fields.tsx
+msgid "Use a time zone name such as Asia/Shanghai."
+msgstr "Use a time zone name such as Asia/Shanghai."
+
+#: src/components/settings-form/labels.ts
+msgid "Use a two-letter language code such as zh, or none."
+msgstr "Use a two-letter language code such as zh, or none."
+
+#: src/features/studio/voice-section.tsx
+msgid "Use It"
+msgstr "Use It"
+
+#: src/features/setup/keys-step.tsx
+msgid "Use Other Providers (Optional)"
+msgstr "Use Other Providers (Optional)"
+
+#: src/features/studio/voice-section.tsx
+msgid "Use the Environment's Voice"
+msgstr "Use the Environment's Voice"
+
+#: src/features/studio/voice-section.tsx
+msgid "Use the environment's voice for {name}?"
+msgstr "Use the environment's voice for {name}?"
+
+#: src/features/studio/voice-section.tsx
+msgid "Use This Voice"
+msgstr "Use This Voice"
+
+#: src/components/settings-form/account-key-field.tsx
+msgid "Used for: {roles}."
+msgstr "Used for: {roles}."
+
+#: src/features/settings/yt-dlp-state.tsx
+msgid "Version {tag}"
+msgstr "Version {tag}"
+
+#: src/features/home/readiness-labels.ts
+msgid "Version {tag} is installed."
+msgstr "Version {tag} is installed."
+
+#: src/features/studio/video-table.tsx
+msgid "Video"
+msgstr "Video"
+
+#: src/features/jobs/labels.ts
+msgid "Video Pipeline"
+msgstr "Video Pipeline"
+
+#: src/features/studio/route.tsx
+#: src/features/studio/videos-section.tsx
+msgid "Videos"
+msgstr "Videos"
+
+#: src/components/settings-form/labels.ts
+msgid "Videos and Transcripts"
+msgstr "Videos and Transcripts"
+
+#: src/features/studio/add-videos.tsx
+msgid "Videos Found"
+msgstr "Videos Found"
+
+#: src/features/jobs/detail.tsx
+msgid "Videos Found ({count})"
+msgstr "Videos Found ({count})"
+
+#: src/features/usage/route.tsx
+msgid "View"
+msgstr "View"
+
+#: src/components/settings-form/labels.ts
+#: src/features/home/readiness-labels.ts
+#: src/features/setup/stepper.tsx
+#: src/features/studio/route.tsx
+#: src/features/studio/voice-section.tsx
+#: src/lib/labels.ts
+msgid "Voice"
+msgstr "Voice"
+
+#: src/components/voice-picker/index.tsx
+msgid "Voice Language"
+msgstr "Voice Language"
+
+#: src/components/settings-form/labels.ts
+#: src/features/home/readiness-labels.ts
+msgid "Voice Model"
+msgstr "Voice Model"
+
+#: src/components/settings-form/labels.ts
+#: src/features/studio/voice-section.tsx
+msgid "Voice Provider"
+msgstr "Voice Provider"
+
+#: src/features/studio/voice-section.tsx
+msgid "Voice set to {id}."
+msgstr "Voice set to {id}."
+
+#: src/features/studio/voice-section.tsx
+msgid "Voice set to {title}."
+msgstr "Voice set to {title}."
+
+#: src/features/home/voice-dialog.tsx
+msgid "Voice set to {voice}."
+msgstr "Voice set to {voice}."
+
+#: src/features/call/call-page.tsx
+msgid "Waiting for {name} to answer…"
+msgstr "Waiting for {name} to answer…"
+
+#: src/features/home/memory-panel.tsx
+msgid "What {name} Remembers"
+msgstr "What {name} Remembers"
+
+#: src/features/home/memory-panel.tsx
+msgid "What {name} Remembers about You"
+msgstr "What {name} Remembers about You"
+
+#: src/features/home/route.tsx
+msgid "What calls and builds need, and how to fix what's missing."
+msgstr "What calls and builds need, and how to fix what's missing."
+
+#: src/features/studio/knowledge-section.tsx
+msgid "What calls search: her facts and her stream archive. Each table is rebuilt by its own job."
+msgstr "What calls search: her facts and her stream archive. Each table is rebuilt by its own job."
+
+#: src/features/studio/models-section.tsx
+msgid "What changes with {provider}"
+msgstr "What changes with {provider}"
+
+#: src/features/usage/route.tsx
+msgid "What each provider has cost, as calls, video jobs and MCP searches on this machine recorded it."
+msgstr "What each provider has cost, as calls, video jobs and MCP searches on this machine recorded it."
+
+#: src/features/settings/route.tsx
+msgid "What every persona knows about you."
+msgstr "What every persona knows about you."
+
+#: src/features/jobs/parts.tsx
+msgid "What it already finished is kept, so resuming it later picks up where it stopped."
+msgstr "What it already finished is kept, so resuming it later picks up where it stopped."
+
+#: src/features/setup/persona-fields.tsx
+msgid "What prompts shorten her name to, and her avatar's letters. Empty uses her name."
+msgstr "What prompts shorten her name to, and her avatar's letters. Empty uses her name."
+
+#: src/features/studio/identity-section.tsx
+msgid "What she calls her viewers."
+msgstr "What she calls her viewers."
+
+#: src/features/setup/persona-fields.tsx
+msgid "What She Calls Viewers"
+msgstr "What She Calls Viewers"
+
+#: src/components/settings-form/labels.ts
+msgid "What she calls you in calls. Leave it empty and she uses no name."
+msgstr "What she calls you in calls. Leave it empty and she uses no name."
+
+#: src/features/studio/references-section.tsx
+msgid "What she looks like in selfies. Each selfie redraws one outfit, picked by the hour."
+msgstr "What she looks like in selfies. Each selfie redraws one outfit, picked by the hour."
+
+#: src/features/studio/models-section.tsx
+msgid "What she remembers about you from one call to the next: the model that writes memories down, and how many she recalls each turn."
+msgstr "What she remembers about you from one call to the next: the model that writes memories down, and how many she recalls each turn."
+
+#: src/features/studio/identity-section.tsx
+msgid "What she's called for short. Her initials come from it."
+msgstr "What she's called for short. Her initials come from it."
+
+#: src/features/setup/persona-step.tsx
+msgid "What should she call you?"
+msgstr "What should she call you?"
+
+#: src/features/jobs/detail.tsx
+msgid "What the command printed. Its end usually says why a job stopped."
+msgstr "What the command printed. Its end usually says why a job stopped."
+
+#: src/features/studio/knowledge-section.tsx
+msgid "What the index jobs read: which of her fact files, the pattern that names her in them, and the scene types left out of her stream archive. Index again after a change."
+msgstr "What the index jobs read: which of her fact files, the pattern that names her in them, and the scene types left out of her stream archive. Index again after a change."
+
+#: src/features/jobs/detail.tsx
+msgid "What the job reported, newest at the bottom."
+msgstr "What the job reported, newest at the bottom."
+
+#: src/features/studio/video-table.tsx
+msgid "When was it streamed?"
+msgstr "When was it streamed?"
+
+#: src/components/settings-form/labels.ts
+msgid "Where calls and jobs record what they spend. Default usage.db in the data home."
+msgstr "Where calls and jobs record what they spend. Default usage.db in the data home."
+
+#: src/features/studio/videos-section.tsx
+msgid "Where each video stands by the latest plan, and what the running job is doing."
+msgstr "Where each video stands by the latest plan, and what the running job is doing."
+
+#: src/features/studio/voice-section.tsx
+msgid "Which provider and model read her lines."
+msgstr "Which provider and model read her lines."
+
+#: src/features/studio/models-section.tsx
+msgid "Who hears you and who thinks for her: a provider and a model each. She speaks with the voice set under <0>Voice</0>."
+msgstr "Who hears you and who thinks for her: a provider and a model each. She speaks with the voice set under <0>Voice</0>."
+
+#: src/features/setup/keys-step.tsx
+msgid "Who Hears, Thinks and Speaks"
+msgstr "Who Hears, Thinks and Speaks"
+
+#: src/features/studio/identity-section.tsx
+msgid "Who she is, as the built-in prompts and the call page name her. Write the names in her language."
+msgstr "Who she is, as the built-in prompts and the call page name her. Write the names in her language."
+
+#: src/features/setup/persona-fields.tsx
+msgid "Who she is, in one English sentence. It tells the knowledge search which questions are about her."
+msgstr "Who she is, in one English sentence. It tells the knowledge search which questions are about her."
+
+#: src/features/setup/persona-step.tsx
+msgid "Who will you talk to?"
+msgstr "Who will you talk to?"
+
+#: src/features/setup/stepper.tsx
+msgid "Who you'll talk to"
+msgstr "Who you'll talk to"
+
+#: src/features/setup/memory-step.tsx
+msgid "With memory on, she remembers you from one call to the next. It needs Qdrant, a database you run in Docker on this machine. Skip it and everything else still works."
+msgstr "With memory on, she remembers you from one call to the next. It needs Qdrant, a database you run in Docker on this machine. Skip it and everything else still works."
+
+#: src/features/jobs/labels.ts
+msgid "Works out what the video pipeline would do and what it would cost, without running it."
+msgstr "Works out what the video pipeline would do and what it would cost, without running it."
+
+#: src/components/settings-form/labels.ts
+#: src/features/settings/route.tsx
+msgid "You"
+msgstr "You"
+
+#: src/features/call/transcript-view.tsx
+msgctxt "call transcript speaker"
+msgid "You"
+msgstr "You"
+
+#: src/features/setup/done-step.tsx
+msgid "You're all set"
+msgstr "You're all set"
+
+#: src/features/setup/keys-step.tsx
+msgid "Your API Keys"
+msgstr "Your API Keys"
+
+#: src/features/call/call-notices.tsx
+msgid "Your browser is holding back {name}'s voice."
+msgstr "Your browser is holding back {name}'s voice."
+
+#: src/features/settings/route.tsx
+msgid "Your keys and the settings every persona shares."
+msgstr "Your keys and the settings every persona shares."
+
+#: src/features/setup/done-step.tsx
+msgid "Your keys, persona and voice are saved."
+msgstr "Your keys, persona and voice are saved."
+
+#: src/features/call/call-controls.tsx
+msgid "Your mic is muted"
+msgstr "Your mic is muted"
+
+#: src/features/call/call-notices.tsx
+msgid "Your microphone didn't start"
+msgstr "Your microphone didn't start"
+
+#: src/features/call/call-notices.tsx
+msgid "Your microphone is blocked"
+msgstr "Your microphone is blocked"
+
+#: src/features/call/call-notices.tsx
+msgid "Your microphone is in use"
+msgstr "Your microphone is in use"
+
+#: src/components/settings-form/labels.ts
+msgid "Your Name"
+msgstr "Your Name"
+
+#: src/features/setup/persona-step.tsx
+msgid "Your name or nickname"
+msgstr "Your name or nickname"
+
+#: src/features/home/route.tsx
+msgid "Your Personas"
+msgstr "Your Personas"
+
+#: src/features/setup/stepper.tsx
+msgid "Your providers"
+msgstr "Your providers"
+
+#: src/features/settings/account-dialog.tsx
+msgid "Your server's OpenAI-compatible base, such as http://127.0.0.1:1234/v1."
+msgstr "Your server's OpenAI-compatible base, such as http://127.0.0.1:1234/v1."
+
+#: src/features/studio/text-editor.tsx
+msgid "Your unsaved changes will be lost."
+msgstr "Your unsaved changes will be lost."
+
+#: src/features/home/readiness-labels.ts
+#: src/features/jobs/labels.ts
+#: src/features/settings/route.tsx
+msgid "yt-dlp"
+msgstr "yt-dlp"
+
+#: src/features/studio/videos-section.tsx
+msgid "yt-dlp {tag} is installed."
+msgstr "yt-dlp {tag} is installed."
+
+#: src/components/settings-form/labels.ts
+msgid "yt-dlp Binary"
+msgstr "yt-dlp Binary"
+
+#: src/features/jobs/labels.ts
+#: src/features/studio/videos-section.tsx
+msgid "yt-dlp couldn't read the browser's cookies, or the site asked for them."
+msgstr "yt-dlp couldn't read the browser's cookies, or the site asked for them."
+
+#: src/features/studio/videos-section.tsx
+msgid "yt-dlp downloads each video's audio into your data home. Nothing is billed."
+msgstr "yt-dlp downloads each video's audio into your data home. Nothing is billed."
+
+#: src/features/studio/videos-section.tsx
+msgid "yt-dlp installs itself on the first download."
+msgstr "yt-dlp installs itself on the first download."
+
+#: src/features/studio/videos-section.tsx
+msgid "yt-dlp is unavailable: {reason}"
+msgstr "yt-dlp is unavailable: {reason}"
+
+#: src/features/jobs/labels.ts
+msgid "yt-dlp isn't installed and couldn't be installed."
+msgstr "yt-dlp isn't installed and couldn't be installed."
+
+#: src/features/studio/prompt-section.tsx
+msgid "你是……"
+msgstr "你是……"

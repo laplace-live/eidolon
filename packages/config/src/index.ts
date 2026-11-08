@@ -1,8 +1,15 @@
 export { abortableSleep, raceAbort } from "./abort.ts";
+export {
+  ACCOUNTS_KEY,
+  type AccountEntry,
+  accountProvider,
+  isAccountId,
+  parseAccounts,
+} from "./accounts.ts";
 export { daysInMonth, isLeap, ordinalToYmd, ymdToOrdinal } from "./calendar.ts";
 export { isValidTimeZone, personaTimeZone, type ZonedClock, zonedClock } from "./clock.ts";
 export { type DotenvEntry, findDotenv, loadDotenv, parseDotenv } from "./dotenv.ts";
-export { DEFAULT_EMBED_BASE_URL, DEFAULT_EMBED_MODEL, embedDim } from "./embed.ts";
+export { DEFAULT_EMBED_MODEL, embedDim } from "./embed.ts";
 export {
   envEntries,
   envFlag,
@@ -109,6 +116,7 @@ export {
   pyPathWithSuffix,
 } from "./pypath.ts";
 export {
+  accountEntries,
   activePersona,
   CREDENTIALS,
   fillPersonaText,

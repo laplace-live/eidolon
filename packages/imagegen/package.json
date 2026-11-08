@@ -6,6 +6,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@eidolon/config": "workspace:*"
+    "@eidolon/config": "workspace:*",
+    "@eidolon/providers": "workspace:*"
   }
 }

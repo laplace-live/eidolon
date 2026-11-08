@@ -1,5 +1,5 @@
+import { useLingui } from "@lingui/react/macro";
 import { Badge } from "@/components/ui/badge";
-import { useT } from "@/lib/i18n";
 
 /** Whether she is the persona calls reach, and whether she ships with Eidolon. */
 export function PersonaBadges({
@@ -9,11 +9,11 @@ export function PersonaBadges({
   readonly active: boolean;
   readonly builtIn?: boolean;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   return (
     <>
-      {active && <Badge>{t("common.persona.active")}</Badge>}
-      {builtIn && <Badge variant="outline">{t("common.persona.builtIn")}</Badge>}
+      {active && <Badge>{t`Active`}</Badge>}
+      {builtIn && <Badge variant="outline">{t`Built in`}</Badge>}
     </>
   );
 }

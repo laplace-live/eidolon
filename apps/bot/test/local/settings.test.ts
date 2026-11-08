@@ -176,7 +176,7 @@ describe("GET settings", () => {
       envValue: null,
       envOverride: true,
     });
-    expect(envOptional("FISH_VOICE_ID")).toBe("her-voice");
+    expect(envOptional("TTS_VOICE_ID")).toBe("her-voice");
 
     // Not the installed persona: what milky-green's file decides is no answer for her.
     const beta = await settings("beta");
@@ -247,7 +247,7 @@ describe("PUT settings", () => {
     expect(own.knowledge.facts.subject).toBe("明前奶[绿黑]");
     expect(own.voice).toEqual({ model: "s2-pro" });
     expect(own.knowledge.rerank).toEqual({ enabled: false });
-    expect(envOptional("FISH_MODEL")).toBe("s2-pro");
+    expect(envOptional("TTS_MODEL")).toBe("s2-pro");
   });
 
   test("an empty update writes nothing", async () => {
@@ -318,6 +318,70 @@ describe("PUT settings", () => {
       values: { "memory.searchThreshold": 0.25 },
     });
     expect(float.status).toBe(200);
+  });
+
+  test("a provider is one the catalog has for the role, saved by its id", async () => {
+    const provider = (values: Record<string, string>) =>
+      put({ scope: "persona", persona: "milky-green", values });
+    const refusals: Record<string, string>[] = [
+      { "mind.provider": "nobody" },
+      { "voice.provider": "deepseek" },
+    ];
+    for (const values of refusals) {
+      const refused = await provider(values);
+      expect([refused.status, refused.body.error.code]).toEqual([400, "invalid-setting"]);
+    }
+    expect((await provider({ "mind.provider": "DeepSeek" })).status).toBe(200);
+    expect(row(await settings("milky-green"), "mind.provider").value).toBe("deepseek");
+  });
+
+  test("the environment's model is hers only while its provider is", async () => {
+    for (const [name, value] of [
+      ["OPENROUTER_MODEL", "legacy/model"],
+      ["TTS_PROVIDER", "elevenlabs"],
+      ["TTS_VOICE_ID", "voice-1"],
+    ] as const) {
+      process.env[name] = value;
+      touched.push(name);
+    }
+    const before = await settings("milky-green");
+    expect(row(before, "mind.model")).toMatchObject({
+      envValue: "legacy/model",
+      envName: "OPENROUTER_MODEL",
+    });
+    expect(row(before, "voice.voiceId")).toMatchObject({
+      envValue: "voice-1",
+      envName: "TTS_VOICE_ID",
+    });
+    expect(
+      (
+        await put({
+          scope: "persona",
+          persona: "milky-green",
+          values: { "mind.provider": "openai" },
+        })
+      ).status,
+    ).toBe(200);
+    expect(row(await settings("milky-green"), "mind.model")).toMatchObject({
+      envValue: null,
+      envName: null,
+    });
+  });
+
+  test("an added account of the environment's provider inherits its model too", async () => {
+    process.env.FISH_MODEL = "s2-pro";
+    touched.push("FISH_MODEL");
+    for (const apiKey of ["fk-1", "fk-2"]) {
+      expect((await api("POST", "/accounts", { provider: "fish", apiKey })).status).toBe(201);
+    }
+    const voice = { "voice.provider": "fish-2" };
+    expect((await put({ scope: "persona", persona: "milky-green", values: voice })).status).toBe(
+      200,
+    );
+    expect(row(await settings("milky-green"), "voice.model")).toMatchObject({
+      envValue: "s2-pro",
+      envName: "FISH_MODEL",
+    });
   });
 
   test("the time zone is an IANA zone, as the identity editor requires", async () => {

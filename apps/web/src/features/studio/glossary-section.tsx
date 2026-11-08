@@ -1,3 +1,4 @@
+import { useLingui } from "@lingui/react/macro";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TriangleAlertIcon } from "lucide-react";
 import { useState } from "react";
@@ -7,13 +8,12 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, call, type PersonaSummary } from "@/lib/api";
 import { toastError } from "@/lib/feedback";
-import { useT } from "@/lib/i18n";
 import { LoadError, SourceNote } from "./parts";
 import { personaQueries } from "./queries";
 import { TextEditor } from "./text-editor";
 
 export function GlossarySection({ persona }: { readonly persona: PersonaSummary }) {
-  const t = useT();
+  const { t } = useLingui();
   const queryClient = useQueryClient();
   const query = personaQueries(persona.id).glossary;
   const glossary = useQuery(query);
@@ -25,8 +25,8 @@ export function GlossarySection({ persona }: { readonly persona: PersonaSummary 
     onSuccess: (saved) => {
       queryClient.setQueryData(query.queryKey, saved);
       setRefused(null);
-      if (saved.errors.length > 0) toast.warning(t("studio.glossary.savedWithErrors"));
-      else toast.success(t("studio.glossary.saved"));
+      if (saved.errors.length > 0) toast.warning(t`Glossary saved, but it doesn't parse yet.`);
+      else toast.success(t`Glossary saved.`);
     },
     onError: (error) => {
       if (error instanceof ApiError && error.code === "invalid-toml") setRefused(error.message);
@@ -34,7 +34,10 @@ export function GlossarySection({ persona }: { readonly persona: PersonaSummary 
     },
   });
   const errors = refused === null ? (glossary.data?.errors ?? []) : [refused];
-  const card = { title: t("studio.glossary.title"), description: t("studio.glossary.description") };
+  const card = {
+    title: t`Glossary`,
+    description: t`Names and terms Soniox should hear right when it transcribes this persona's videos: her name, her fans', recurring topics. It is TOML in the shape of Soniox's StructuredContext, and videos transcribed after you save use it.`,
+  };
 
   if (glossary.isPending) {
     return (
@@ -53,8 +56,8 @@ export function GlossarySection({ persona }: { readonly persona: PersonaSummary 
   return (
     <TextEditor
       value={glossary.data.text}
-      label={t("studio.glossary.label")}
-      placeholder={t("studio.glossary.placeholder")}
+      label={t`Glossary`}
+      placeholder={t`terms = ["奶绿", "奶糖花"]`}
       saving={save.isPending}
       onSave={async (text) => (await save.mutateAsync(text)).text}
     >
@@ -66,7 +69,9 @@ export function GlossarySection({ persona }: { readonly persona: PersonaSummary 
             <Alert variant="destructive">
               <TriangleAlertIcon />
               <AlertTitle>
-                {t(refused === null ? "studio.glossary.errors" : "studio.glossary.refused")}
+                {refused === null
+                  ? t`This glossary doesn't parse`
+                  : t`Not saved: this glossary doesn't parse`}
               </AlertTitle>
               <AlertDescription>
                 <ul className="flex flex-col gap-1">

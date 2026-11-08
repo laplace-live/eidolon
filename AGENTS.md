@@ -14,10 +14,12 @@ transport.input → STT → user_aggregator → RetrievalGate
     → Mem0 → StreamArchive → PersonaFacts → LLM → TTS → transport.output
 ```
 
-Soniox (STT), OpenRouter (LLM), and Fish Audio (TTS) are required. Everything
-else — Mem0, the reranker, the retrieval gate, both RAG indexes — degrades
-quietly when its key, table, or vector store is missing, so a fresh checkout
-runs.
+By default Soniox hears (STT), OpenRouter thinks (LLM) and Fish Audio speaks
+(TTS), and a call needs their keys; in the TypeScript bot each persona can fill
+any role with an account of another provider from the catalog in `packages/providers`.
+Everything else — Mem0, the reranker, the retrieval gate, both RAG indexes —
+degrades quietly when its key, table, or vector store is missing, so a fresh
+checkout runs.
 
 The runtime is TypeScript on Bun, built on pipedog (a TypeScript port of
 Pipecat), in `apps/` and `packages/`; production has run it
@@ -88,6 +90,7 @@ a row here and writing the prose there — not a new section in this file.**
 | settings files, credentials, the data home, a persona's folder or its sources | [personas.md](docs/personas.md) |
 | the offline chain (`packages/ingest` and its `laplace-*` commands) or their `--json` events | [typescript.md](docs/typescript.md#the-offline-chain) |
 | the local web app (`apps/web`, `apps/bot/src/local`): local mode, its API, jobs or security | [web-app.md](docs/web-app.md) |
+| a string the web app shows, its languages, or its `.po` catalogs | [web-app.md](docs/web-app.md#strings-and-languages) |
 | changesets, the version PR, tags, or publishing the npm package (`apps/eidolon`) | [releasing.md](docs/releasing.md) |
 | any env var — all 50-odd are documented there | `.env.example` |
 | Soniox's per-project vocabulary glossary | `personas/milky-green/glossary.toml` |
@@ -96,6 +99,7 @@ a row here and writing the prose there — not a new section in this file.**
 | the `take_selfie` tool, image generation, or `/api/selfie` | [selfies.md](docs/selfies.md) |
 | the retrieval gate, or why a turn skipped LanceDB | [retrieval-gate.md](docs/retrieval-gate.md) |
 | anything under `apps/` or `packages/` (the TypeScript bot) | [typescript.md](docs/typescript.md) |
+| a provider, an account, a role's provider or model, model lists, prices, realtime models, the usage ledger or the Usage page | [providers.md](docs/providers.md) |
 
 ## Commands
 
@@ -116,6 +120,7 @@ bun run local                          # the local entry; prints the link that s
 bun run dev:local                      # its server alone, under --watch; --no-open, or each reload opens a tab
 bun run dev:web                        # Vite on 127.0.0.1:5173, proxying to :7860; open /#<code>
 bun run build:web                      # apps/web/dist
+bun run i18n                           # extract the app's strings into apps/web/src/locales/*.po
 ```
 
 The offline chain, each command taking `--persona <id>` and working in that
@@ -185,7 +190,7 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | `mem0_local.py`, `memory_service.py`, or `memory_admin.py` | `docker compose up qdrant`, then round-trip a real store → search → delete. No test covers Mem0; it needs a live vector store and an embedding key |
 | an env var | document it in `.env.example` in the same commit |
 | anything under `apps/` or `packages/` | `bun run typecheck`, `bun run lint`, `bun run test`; for retrieval, the gate or the bot's pipeline, the TypeScript CLI or call that matches the Python row above |
-| anything under `apps/web` | the row above, whose typecheck also runs both `apps/web` tsconfigs, then `bun run build:web` |
+| anything under `apps/web` | the row above, whose typecheck also runs both `apps/web` tsconfigs, then `bun run build:web`; after changing a string, `bun run i18n` and its `msgstr` in `zh-Hans.po` |
 | local mode (`apps/bot/src/local`) | `bun test --no-env-file apps/bot/test/local` from the repository root, then `bun apps/bot/scripts/local-smoke.ts --headful`: a browser walk on a temporary data home that bills nothing |
 | `apps/eidolon`, or a file the package bundles or copies | the gates above, then `bun run pack:npm` and `bun apps/eidolon/scripts/ci-install-check.ts apps/eidolon/<tarball>`, which CI runs on Linux x64: it installs the tarball with npm, boots it on a temporary home, signs in, and stops it |
 
@@ -254,6 +259,23 @@ module that owns it.
   import `apps/bot/src/local/` (Biome and `boundaries.test.ts` hold it), and
   nothing but that separate entry turns it on: no flag, setting or env var,
   which a server's mounted `settings.yaml` could flip.
+- **No vendor SDK sends a request.** A provider is reached with `fetch`, through the
+  clients in `packages/providers`, and every request that bills reports it with
+  `reportUsage`, or the usage ledger misses it. `@eidolon/providers/catalog`
+  imports nothing: the web app bundles it.
+- **A model or voice belongs to its provider.** An environment `LLM_MODEL` applies
+  only while `LLM_PROVIDER` fills her mind, `OPENROUTER_MODEL` only while
+  OpenRouter does. The settings layers in `packages/config` apply it, so what
+  the bot reads and what the local app shows agree.
+- **A role names an account, not a provider.** A provider's id is its default
+  account, which its variables configure, so a server needs no file; any other
+  account (`openai-2`) is only in `credentials.json`'s `accounts`. Compare two
+  roles' owners by `accountProvider`, never by id.
+- **A model picker lists what the provider's API lists.** The catalog's models
+  carry prices and call-time fields, not choices; with no listing, the field is
+  free text. The exception is a closed offer (`openModels: false`, Fish's): it
+  has no listing and runs an id it doesn't know as another model, so it is a
+  choice among the catalog's.
 - **The werift patches in `packages/runtime/src/webrtc/handler.ts` are
   load-bearing** — no default STUN server, disconnect on DTLS close, relay-only,
   the `raddr` scrub. Each one's failure mode is in [typescript.md](docs/typescript.md).
@@ -265,6 +287,27 @@ module that owns it.
 - **Run `bun test` from the repository root only.** Elsewhere `bunfig.toml`'s preload is
   skipped and the data home is the real one, so a test file that deletes in it imports
   `packages/config/test/isolated-guard.ts` first, and `isolated-guard.test.ts` enforces that.
+- **The web app's strings are English source text in Lingui macros** (`apps/web`). A component
+  writes `` t`Save` `` with `t` from `useLingui()` (`@lingui/react/macro`); other code uses `t`
+  from `@lingui/core/macro`; a label looked up by code is a `msg` descriptor in a `*labels.ts`
+  module; a sentence with a link or `<code>` in it is a `<Trans>`. After changing one, run
+  `bun run i18n` and fill each new `msgstr` in `apps/web/src/locales/zh-Hans.po`; `catalog.test.ts`
+  fails on a missing translation or a dropped placeholder.
+- **A short label's English is Title Case; everything else is sentence case.** Buttons, menu
+  items, headings, setting names, tab and column labels and `aria-label`s capitalize every word but
+  articles, conjunctions and prepositions, whatever their length (`Add to Bookmarks`, `Hide until
+  Next Update`), and capitalize a phrasal verb's particle (`Turn On`). Tooltips, descriptions,
+  toasts, placeholders, errors and statuses are sentence case, and so is a heading phrased as a
+  sentence or a question. `title-case.test.ts` checks every label it can place. Renaming a string
+  orphans its translation: change its `msgid` in `zh-Hans.po` in the same pass, at every site that
+  shows it, before re-extracting.
+- **Never nest a `t` inside another `t`'s placeholder.** The native macro transform leaves the inner
+  one uncompiled, and it renders nothing
+  ([lingui/swc-plugin#284](https://github.com/lingui/swc-plugin/issues/284)): hoist it into a
+  variable.
+- **`bun test` has no macro transform, and a macro throws when it runs.** Keep macros out of the
+  modules tests import; a test that needs one stubs `@lingui/core/macro` with
+  `apps/web/src/test/lingui-macro.ts` in its own file, never in a bunfig preload.
 - **Never find a shipped file through `import.meta`.** The npm package runs bundles, where every
   module's folder is `dist/`. A file the code ships with (a template, the web build, jieba's
   data, an entry to spawn) resolves through `shippedPath` in `@eidolon/config`, under the

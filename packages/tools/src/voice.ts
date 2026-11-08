@@ -1,5 +1,5 @@
 // change_voice_style: when the viewer asks for a different voice (温柔一点, 换回原来的), the LLM
-// names a style and the session's Fish TTS switches to that style's reference id mid-call.
+// names a style and the session's TTS switches to that style's voice mid-call.
 import {
   activePersona,
   cpSlice,
@@ -11,14 +11,17 @@ import {
   sortedPy,
 } from "@eidolon/config";
 import type { LlmTool, ToolSchema } from "@eidolon/core";
+import {
+  LEGACY_VOICE_STYLE_PREFIX,
+  trySelect,
+  VOICE_STYLE_PREFIX,
+  voiceOf,
+} from "@eidolon/providers";
 
 export const VOICE_TOOL_NAME = "change_voice_style";
 
-/** FISH_VOICE_ID's style, the persona's own voice; the LLM passes it to switch back. */
+/** The persona's own voice's style; the LLM passes it to switch back. */
 export const DEFAULT_STYLE = "default";
-
-/** `FISH_VOICE_ID_GENTLE` becomes style `gentle`, `FISH_VOICE_ID_NAI_HEI` style `nai_hei`. */
-export const VOICE_ENV_PREFIX = "FISH_VOICE_ID_";
 
 // A style with no entry here still works; the LLM infers from the bare name.
 export const STYLE_HINTS: Readonly<Record<string, string>> = {
@@ -36,24 +39,35 @@ const description = (fans: string): string =>
   "不要主动切换，不要在打招呼时切换；只在用户表达想换声音时调用。" +
   "切换后用一两句话自然回应（『嗯，这样可以嘛』），不要照念工具名。";
 
-/** Style name → Fish Audio reference id: `default` from FISH_VOICE_ID, others FISH_VOICE_ID_<STYLE>. */
+/** Style name → the TTS provider's voice id: `default` the persona's voice, others its styles. */
 export type VoiceStyles = ReadonlyMap<string, string>;
 
 /**
- * Every configured voice, in environment order. A blank `FISH_VOICE_ID_GENTLE=` counts as "not
- * configured" rather than as an empty voice id.
+ * Every configured voice, in environment order: `TTS_VOICE_ID_GENTLE` becomes style `gentle`,
+ * and while Fish speaks, so does Fish's `FISH_VOICE_ID_GENTLE`, which the former overrides. A
+ * blank one counts as "not configured" rather than as an empty voice id.
  */
 export function loadVoiceStyles(
   env: Readonly<Record<string, string | undefined>> = Object.fromEntries(envEntries()),
 ): Map<string, string> {
+  const read = (name: string) => env[name] || undefined;
   const styles = new Map<string, string>();
-  const base = pyStrip(env.FISH_VOICE_ID ?? "");
+  // A voice provider that doesn't exist fails the call where its TTS is built.
+  const selection = trySelect("voice", read);
+  if (selection === null) return styles;
+  const base = voiceOf(selection, read);
   if (base) styles.set(DEFAULT_STYLE, base);
-  for (const [key, value] of Object.entries(env)) {
-    if (!key.startsWith(VOICE_ENV_PREFIX)) continue;
-    const cleaned = pyStrip(value ?? "");
-    const suffix = key.slice(VOICE_ENV_PREFIX.length).toLowerCase();
-    if (cleaned && suffix) styles.set(suffix, cleaned);
+  const prefixes =
+    selection.provider.id === "fish"
+      ? [LEGACY_VOICE_STYLE_PREFIX, VOICE_STYLE_PREFIX]
+      : [VOICE_STYLE_PREFIX];
+  for (const prefix of prefixes) {
+    for (const [key, value] of Object.entries(env)) {
+      if (!key.startsWith(prefix)) continue;
+      const cleaned = pyStrip(value ?? "");
+      const suffix = key.slice(prefix.length).toLowerCase();
+      if (cleaned && suffix) styles.set(suffix, cleaned);
+    }
   }
   return styles;
 }
@@ -87,7 +101,7 @@ export function voiceToolSchema(styles: VoiceStyles): ToolSchema {
 export function createVoiceTool(styles: VoiceStyles): LlmTool | null {
   const alternatives = alternativeStyleNames(styles);
   if (alternatives.length === 0) {
-    logger.info("[voice] Voice switching disabled (no FISH_VOICE_ID_<STYLE> env vars set).");
+    logger.info("[voice] Voice switching disabled (no TTS_VOICE_ID_<STYLE> voices set).");
     return null;
   }
   const schema = voiceToolSchema(styles);

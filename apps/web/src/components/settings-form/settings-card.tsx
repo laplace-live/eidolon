@@ -1,6 +1,9 @@
 // A card of SETTINGS rows with a Save of its own: the fields in the body, and in the footer where
 // they are saved, Discard and Save. It drafts and sends only its own rows, so cards on one page save
 // apart.
+
+import { ph } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
@@ -9,8 +12,10 @@ import { FieldSkeletons, SectionCard } from "@/components/section-card";
 import { Button } from "@/components/ui/button";
 import { FieldLegend, FieldSet } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
+import { accountsQuery } from "@/lib/accounts";
 import { call, type SettingRow, type SettingScope } from "@/lib/api";
-import { useT } from "@/lib/i18n";
+import { listOf } from "@/lib/labels";
+import { roleById } from "@/lib/providers";
 import { cn } from "@/lib/utils";
 import {
   type CardPath,
@@ -18,9 +23,14 @@ import {
   changes,
   controlFor,
   draftOf,
+  effectiveProvider,
+  effectiveProviderType,
+  fallbackModel,
+  orphanedByProvider,
   REINDEX_PATHS,
 } from "./controls";
 import { SettingField } from "./field";
+import { GROUP_LABELS, SETTING_TITLES } from "./labels";
 import { personasQuery, refreshSettings, settingsQuery } from "./queries";
 import { ReindexDialog } from "./reindex-dialog";
 
@@ -57,9 +67,10 @@ export function SettingsCard({
   children,
   onSaved,
 }: SettingsCardProps) {
-  const t = useT();
+  const { t } = useLingui();
   const queryClient = useQueryClient();
   const settings = useQuery(settingsQuery(persona));
+  const accounts = useQuery(accountsQuery).data?.accounts;
   // Only a persona's rows name her.
   const personas = useQuery({ ...personasQuery, enabled: scope === "persona" });
   const [drafts, setDrafts] = useState<Readonly<Record<string, string>>>({});
@@ -76,7 +87,7 @@ export function SettingsCard({
       setDrafts({});
       setTouched(new Set());
       toast.success(
-        t(response.restartRequired ? "settings.form.savedRestart" : "settings.form.saved"),
+        response.restartRequired ? t`Saved. Restart Eidolon to apply it.` : t`Settings saved.`,
       );
       onSaved?.(values);
       await refreshSettings(queryClient, persona, response);
@@ -85,15 +96,14 @@ export function SettingsCard({
 
   const her = personas.data?.personas.find((entry) => entry.id === owner);
   const name = her ? her.shortName || her.name : (owner ?? "");
-  const savedWhere =
-    scope === "persona" ? t("settings.form.savedFor", { name }) : t("settings.form.savedForAll");
+  const savedWhere = scope === "persona" ? t`Saved for ${name}` : t`Saved for every persona`;
   const card = { title, description, action };
 
   if (settings.isPending) {
     return (
       <SectionCard {...card} note={savedWhere}>
         <div className="flex flex-col gap-6" role="status" aria-busy="true">
-          <span className="sr-only">{t("common.loading")}</span>
+          <span className="sr-only">{t`Loading…`}</span>
           <FieldSkeletons rows={Math.min(paths?.length ?? 3, 4)} />
         </div>
       </SectionCard>
@@ -107,9 +117,22 @@ export function SettingsCard({
     );
   }
 
-  const sections = cardSections(settings.data.settings, scope, paths, exclude);
+  const all = settings.data.settings;
+  const sections = cardSections(all, scope, paths, exclude);
   const rows = sections.flatMap((section) => section.lines.flat());
-  const { values, errors } = changes(rows, drafts);
+  const edited = changes(rows, drafts);
+  const { errors } = edited;
+  // A model or voice belongs to its provider, in this card or another.
+  const cleared = orphanedByProvider(all, drafts, edited.values, accounts);
+  const clearedNames = listOf(
+    cleared.map((path) => (SETTING_TITLES[path] ? t(SETTING_TITLES[path]) : path)),
+  );
+  // Another embedding provider embeds with another model: every index is built again.
+  const embeddings = roleById("embeddings");
+  const reembeds =
+    effectiveProviderType(embeddings, all, {}, accounts) !==
+    effectiveProviderType(embeddings, all, drafts, accounts);
+  const values = { ...edited.values, ...Object.fromEntries(cleared.map((path) => [path, null])) };
   const invalid = Object.keys(errors).length > 0;
   const changed = invalid || Object.keys(values).length > 0;
   // A draft shows its error once the field was left or a save was tried, not on every keystroke.
@@ -119,7 +142,7 @@ export function SettingsCard({
     event.preventDefault();
     setTouched(new Set(Object.keys(drafts)));
     if (invalid || !changed) return;
-    if (REINDEX_PATHS.some((path) => path in values)) setConfirming(values);
+    if (reembeds || REINDEX_PATHS.some((path) => path in values)) setConfirming(values);
     else save.mutate(values);
   }
 
@@ -130,11 +153,25 @@ export function SettingsCard({
   }
 
   function field(row: SettingRow, fill: boolean) {
+    const control = controlFor(row);
+    // A model or voice row is for the provider filling its role; a provider row that follows
+    // another role shows that role's as its default.
+    const follows = control.type === "provider" ? control.role.follows : undefined;
+    const provider =
+      control.type === "model" || control.type === "voice"
+        ? effectiveProvider(control.role, all, drafts)
+        : follows !== undefined
+          ? effectiveProvider(roleById(follows), all, drafts)
+          : null;
     return (
       <SettingField
         key={row.path}
         row={row}
-        draft={drafts[row.path] ?? draftOf(row.value, controlFor(row))}
+        provider={provider}
+        fallbackModel={
+          control.type === "model" ? fallbackModel(control.role, all, drafts, accounts) : null
+        }
+        draft={drafts[row.path] ?? draftOf(row.value, control)}
         error={touched.has(row.path) ? (errors[row.path] ?? null) : null}
         onDraft={(draft) => setDrafts((current) => ({ ...current, [row.path]: draft }))}
         onBlur={() =>
@@ -163,7 +200,7 @@ export function SettingsCard({
         {...card}
         note={
           shownErrors.length > 0 ? (
-            <span className="text-destructive">{t("settings.form.fixErrors")}</span>
+            <span className="text-destructive">{t`Fix the highlighted values first.`}</span>
           ) : (
             savedWhere
           )
@@ -175,7 +212,7 @@ export function SettingsCard({
         }
       >
         {rows.length === 0 ? (
-          <p className="text-muted-foreground text-sm">{t("settings.form.empty")}</p>
+          <p className="text-muted-foreground text-sm">{t`Nothing to set here.`}</p>
         ) : (
           sections.map((section, index) =>
             section.group === null ? (
@@ -186,12 +223,17 @@ export function SettingsCard({
               // A fieldset draws its legend over its own top border, so the divider is outside it.
               <div key={section.group} className={cn(index > 0 && "border-t pt-6")}>
                 <FieldSet className="gap-6">
-                  <FieldLegend className="mb-4">{t(`settings.group.${section.group}`)}</FieldLegend>
+                  <FieldLegend className="mb-4">{t(GROUP_LABELS[section.group])}</FieldLegend>
                   {section.lines.map(line)}
                 </FieldSet>
               </div>
             ),
           )
+        )}
+        {cleared.length > 0 && (
+          <p className="text-muted-foreground text-sm">
+            {t`Saving clears ${ph({ fields: clearedNames })}, which belonged to the old provider.`}
+          </p>
         )}
         {children}
         {save.isError && <ErrorAlert error={save.error} />}
@@ -209,8 +251,8 @@ export function SettingsCard({
 }
 
 /**
- * A form card's footer actions: Discard while there are changes, then Save, which submits the form
- * around the card. Save's name is `settings.form.save` unless `label` names it.
+ * A form card's footer actions: Discard while there are changes, then Save (or what `label` names),
+ * which submits the form around the card.
  */
 export function SaveActions({
   dirty,
@@ -226,17 +268,17 @@ export function SaveActions({
   readonly label?: string;
   readonly onDiscard: () => void;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   return (
     <>
       {dirty && (
         <Button type="button" variant="ghost" disabled={pending} onClick={onDiscard}>
-          {t("settings.form.discard")}
+          {t`Discard`}
         </Button>
       )}
       <Button type="submit" disabled={!dirty || blocked || pending}>
         {pending && <Spinner />}
-        {label ?? t("settings.form.save")}
+        {label ?? t`Save`}
       </Button>
     </>
   );

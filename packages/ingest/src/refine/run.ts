@@ -21,6 +21,7 @@ import {
   pyTruthy,
   pyTypeName,
 } from "@eidolon/config";
+import { hasKey } from "@eidolon/providers";
 import { type Failure, failureOf, sharedFailure } from "../failure.ts";
 import { createLimiter, type Limiter } from "../limit.ts";
 import { canonicalPath } from "../paths.ts";
@@ -41,7 +42,7 @@ import {
   saveSidecar,
   transcriptPaths,
 } from "../streams.ts";
-import { refineApiKey, refineClient } from "./client.ts";
+import { refineClient, refineSelection } from "./client.ts";
 import { callLlmJson } from "./llm.ts";
 import {
   EXTRACT_USER_TEMPLATE,
@@ -664,14 +665,13 @@ export async function runRefine(options: RunRefineOptions): Promise<RefineRun> {
       options.print(report.text);
       return { kind: "dry-run", report, durationSec: clock() - started };
     }
-    const apiKey = refineApiKey();
-    if (apiKey === undefined) return { kind: "no-key" };
+    if (!hasKey(refineSelection())) return { kind: "no-key" };
     logger.info(
       `Refining ${streams.length} stream(s) with ${model} ` +
         `(concurrency=${options.concurrency}, force=${options.force ? "True" : "False"})`,
     );
     const report = await refineStreams(streams, {
-      client: refineClient(apiKey, { signal, fetch: options.fetch }),
+      client: refineClient({ signal, fetch: options.fetch }),
       model,
       concurrency: options.concurrency,
       force: options.force,

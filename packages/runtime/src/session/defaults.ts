@@ -17,7 +17,7 @@ import {
   voicePromptHint,
 } from "@eidolon/tools";
 import { onnxBackend } from "../audio.ts";
-import { createLlm, createStt, createTts } from "./services.ts";
+import { createLlm, createRealtime, createStt, createTts, isRealtime } from "./services.ts";
 import type { SessionDeps } from "./session.ts";
 
 /** pathlib's `Path.exists()`. */
@@ -31,6 +31,8 @@ async function pathExists(path: string): Promise<boolean> {
 }
 
 export const productionSessionDeps: SessionDeps = {
+  isRealtime,
+  createRealtime,
   createStt,
   createTts,
   createLlm,

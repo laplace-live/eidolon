@@ -1,11 +1,13 @@
+import { ph } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { ErrorAlert } from "@/components/error-alert";
 import { SectionCardSkeleton } from "@/components/section-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NewPersonaDialog } from "@/features/setup/new-persona";
-import { useLang, useT } from "@/lib/i18n";
 import { statusQuery } from "@/lib/query";
+import { useLang } from "@/locales/i18n";
 import { Hero } from "./hero";
 import { MemoryPanel } from "./memory-panel";
 import { PersonaGrid } from "./persona-grid";
@@ -34,7 +36,7 @@ function Loading() {
 }
 
 export function Component() {
-  const t = useT();
+  const { t } = useLingui();
   const lang = useLang();
   const formats = useMemo(() => formatsFor(lang), [lang]);
   const status = useQuery({ ...statusQuery, refetchInterval: POLL_MS });
@@ -54,13 +56,20 @@ export function Component() {
     <div className="flex flex-col gap-12">
       <Hero persona={persona} verdict={verdict(items)} />
 
-      <HomeSection title={t("home.ready.title")} description={t("home.ready.description")}>
+      <HomeSection
+        title={t`Readiness`}
+        description={t`What calls and builds need, and how to fix what's missing.`}
+      >
         <ReadinessList items={items} onPickVoice={() => setPickingVoice(true)} />
       </HomeSection>
 
       <HomeSection
-        title={t("home.personas.title")}
-        description={t(live ? "home.personas.inCall" : "home.personas.description")}
+        title={t`Your Personas`}
+        description={
+          live
+            ? t`A call is in progress: switch personas after it ends.`
+            : t`Open one's studio to build her up, or make another the one your calls reach.`
+        }
       >
         <PersonaGrid live={live} onNew={() => setCreating(true)} />
       </HomeSection>
@@ -68,7 +77,7 @@ export function Component() {
       <MemoryPanel key={persona.id} persona={persona} memory={status.data.memory} />
 
       <p className="text-muted-foreground text-xs">
-        {t("home.version", { version: status.data.version })}
+        {t`Eidolon ${ph({ version: status.data.version })}`}
       </p>
 
       <VoiceDialog

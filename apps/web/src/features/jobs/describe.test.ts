@@ -1,45 +1,41 @@
-import { expect, test } from "bun:test";
-import type { Vars } from "@/lib/i18n";
-import { describeEvent, reasonText } from "./describe";
+import { expect, mock, test } from "bun:test";
+import { linguiMacro } from "@/test/lingui-macro";
 
-// Keys and their values, so a test reads which string a line is built from.
-const t = (key: string, vars?: Vars) => (vars ? `${key}${JSON.stringify(vars)}` : key);
+mock.module("@lingui/core/macro", linguiMacro);
+const { describeEvent, reasonText, stageName } = await import("./describe");
 
-test("a code becomes its string, naming the provider it is about", () => {
-  expect(reasonText(t, null)).toBeNull();
-  expect(reasonText(t, "disk-full")).toBe("events.disk-full");
-  expect(reasonText(t, "auth-failed", "soniox")).toBe(
-    'jobs.reason.provider{"provider":"events.provider.soniox","reason":"events.auth-failed"}',
-  );
+test("a code becomes its sentence, naming the provider it is about", () => {
+  expect(reasonText(null)).toBeNull();
+  expect(reasonText("disk-full")).toBe("The disk is full.");
+  expect(reasonText("auth-failed", "soniox")).toBe("Soniox: The provider refused the API key.");
+});
+
+test("a stage the CLI may add later shows as its code", () => {
+  expect(stageName("refine")).toBe("Refine");
+  expect(stageName("translate")).toBe("translate");
 });
 
 test("a stage line says how many it goes through, and why it failed", () => {
-  const start = describeEvent(t, "en", {
+  const start = describeEvent("en", {
     type: "stage",
     stage: "download",
     status: "start",
     total: 3,
   });
-  expect(start).toEqual({
-    text: 'jobs.log.stageStartTotal{"stage":"jobs.stage.download","total":3}',
-    detail: null,
-    tone: "info",
-  });
-  const failed = describeEvent(t, "en", {
+  expect(start).toEqual({ text: "Download started: 3 to go", detail: null, tone: "info" });
+  const failed = describeEvent("en", {
     type: "stage",
     stage: "refine",
     status: "failed",
     code: "insufficient-credits",
     message: "HTTP 402",
   });
-  expect(failed.text).toBe(
-    'jobs.log.stage.failed{"stage":"jobs.stage.refine"} · events.insufficient-credits',
-  );
+  expect(failed.text).toBe("Refine failed · The provider account is out of credit.");
   expect([failed.detail, failed.tone]).toEqual(["HTTP 402", "error"]);
 });
 
 test("an item line carries its place, its reason, and the CLI's English only as detail", () => {
-  const line = describeEvent(t, "en", {
+  const line = describeEvent("en", {
     type: "item",
     stage: "transcribe",
     item: "a.m4a",
@@ -51,14 +47,14 @@ test("an item line carries its place, its reason, and the CLI's English only as 
     costUsd: 0.5,
   });
   expect(line).toEqual({
-    text: "[2/5] a.m4a: jobs.item.done · events.no-speech",
+    text: "[2/5] a.m4a: done · No speech was heard in this audio.",
     detail: "no speech · $0.50",
     tone: "ok",
   });
 });
 
 test("a summary says how the run ended and lists its failures", () => {
-  const line = describeEvent(t, "en", {
+  const line = describeEvent("en", {
     type: "summary",
     stage: "pipeline",
     ok: false,
@@ -67,7 +63,7 @@ test("a summary says how the run ended and lists its failures", () => {
     failures: [{ item: "transcribe", error: "2 files failed" }],
   });
   expect(line).toEqual({
-    text: 'jobs.log.summary.failed{"stage":"jobs.stage.pipeline","duration":"1:05"}',
+    text: "Pipeline ended with failures after 1:05",
     detail: "transcribe: 2 files failed",
     tone: "error",
   });

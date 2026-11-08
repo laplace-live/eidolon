@@ -180,8 +180,9 @@ test("main.ts loads .env before any other module is evaluated", async () => {
   expect(imports[0]).toBe('import "./load-env.ts";');
   expect(source).toContain("const argv = Bun.argv.slice(2);");
   expect(source).toContain(
-    "await runWithSignals(\n  (signal) => runCli(argv, { signal }),\n  process,\n  cleanupLimitMs(argv),\n);",
+    "runWithSignals((signal) => runCli(argv, { signal }), process, cleanupLimitMs(argv))",
   );
+  expect(source.indexOf("installUsageLedger();")).toBeLessThan(source.indexOf("runWithSignals("));
 });
 
 test("load-env.ts logs to stderr, then installs the settings for the persona --persona names", async () => {

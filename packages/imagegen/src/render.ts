@@ -7,6 +7,8 @@ import { type SelfieStore, selfieStore } from "./store.ts";
 
 export interface RenderSelfieOptions {
   readonly apiKey: string;
+  /** The images endpoint; OpenRouter's by default. */
+  readonly url?: string;
   readonly model: string;
   readonly aspectRatio: string;
   readonly quality: string;
@@ -45,6 +47,7 @@ export async function renderSelfie(options: RenderSelfieOptions): Promise<Selfie
     ].slice(0, MAX_REFERENCES);
     result = await generate({
       apiKey: options.apiKey,
+      ...(options.url === undefined ? {} : { url: options.url }),
       prompt: options.prompt,
       references,
       model: options.model || DEFAULT_IMAGE_MODEL,

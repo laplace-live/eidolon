@@ -1,36 +1,41 @@
+import { Trans, useLingui } from "@lingui/react/macro";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronRightIcon, LockIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router";
 import { ErrorAlert } from "@/components/error-alert";
-import { OPTIONAL, REQUIRED } from "@/components/settings-form/credentials";
-import { KeyField } from "@/components/settings-form/key-field";
+import { AccountKeyField } from "@/components/settings-form/account-key-field";
 import { settingsQuery } from "@/components/settings-form/queries";
 import { SettingsCard } from "@/components/settings-form/settings-card";
-import { useKeys } from "@/components/settings-form/use-keys";
+import { useAccountKeys } from "@/components/settings-form/use-account-keys";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { FieldGroup } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
+import { accountsQuery } from "@/lib/accounts";
 import { type ApiError, asApiError, call } from "@/lib/api";
-import { useT } from "@/lib/i18n";
+import { statusQuery } from "@/lib/query";
 import { StepCard } from "./step-card";
 import { cookieDefault, isNewInstall } from "./wizard";
 
-/** The rows another provider's key needs beside it. */
-const PROVIDER_SETTINGS = [
-  "embeddings.baseUrl",
-  ["embeddings.model", "embeddings.dim"],
-  "rerank.baseUrl",
-  "refine.baseUrl",
+/** The providers a call runs on, which decide the keys this step asks for. */
+const CALL_PROVIDERS = [
+  ["hearing.provider", "hearing.model"],
+  ["mind.provider", "mind.model"],
+  ["voice.provider", "voice.model"],
 ] as const;
 
-/** Keys for the three providers a call needs, with "use another provider" folded beneath. */
+/** Keys for the accounts a call needs, with "use other providers" folded beneath. */
 export function KeysStep({ onDone }: { readonly onDone: () => void }) {
-  const t = useT();
+  const { t } = useLingui();
   const queryClient = useQueryClient();
-  const keys = useKeys();
+  const keys = useAccountKeys();
   const settings = useQuery(settingsQuery());
+  const status = useQuery(statusQuery);
+  const accounts = useQuery(accountsQuery);
+  const needed = status.data?.keys ?? [];
+  const required = needed.map((key) => key.account);
   // Decided from the first answers: once the keys are saved, the install no longer looks new.
   const newInstall = useRef<boolean | null>(null);
   const [busy, setBusy] = useState(false);
@@ -39,10 +44,10 @@ export function KeysStep({ onDone }: { readonly onDone: () => void }) {
   const [checksFailed, setChecksFailed] = useState(false);
 
   useEffect(() => {
-    if (newInstall.current === null && settings.data && keys.credentials.data) {
-      newInstall.current = isNewInstall(settings.data.settings, keys.credentials.data);
+    if (newInstall.current === null && settings.data && accounts.data) {
+      newInstall.current = isNewInstall(settings.data.settings, accounts.data.accounts);
     }
-  }, [settings.data, keys.credentials.data]);
+  }, [settings.data, accounts.data]);
 
   async function next() {
     setBusy(true);
@@ -57,12 +62,13 @@ export function KeysStep({ onDone }: { readonly onDone: () => void }) {
         await call("PUT /api/local/settings", { body: { scope: "app", values: cookie } });
         await queryClient.invalidateQueries({ queryKey: ["settings"] });
       }
-      const { state } = await keys.save();
-      if (REQUIRED.some((name) => !state?.[name]?.set)) {
+      await keys.save();
+      const fresh = await queryClient.fetchQuery(statusQuery);
+      if (fresh.keys.some((key) => !key.set)) {
         setMissing(true);
         return;
       }
-      const outcomes = await Promise.all(REQUIRED.map((name) => keys.check(name)));
+      const outcomes = await Promise.all(required.map((account) => keys.check(account)));
       if (outcomes.every((outcome) => outcome?.result?.ok)) onDone();
       else setChecksFailed(true);
     } catch (error) {
@@ -74,32 +80,32 @@ export function KeysStep({ onDone }: { readonly onDone: () => void }) {
 
   return (
     <StepCard
-      title={t("setup.keys.title")}
-      description={t("setup.keys.body")}
+      title={t`Your API Keys`}
+      description={t`Eidolon calls paid services with your own keys: by default Soniox hears you, OpenRouter thinks and Fish Audio speaks. Each needs credit on its account.`}
       note={
         <span className="flex items-center gap-1.5">
           <LockIcon className="size-3.5 shrink-0" aria-hidden />
-          {t("setup.keys.note")}
+          {t`Keys stay on this machine, readable only by you.`}
         </span>
       }
       footer={
         <>
           {checksFailed && (
             <Button variant="ghost" onClick={onDone} disabled={busy}>
-              {t("setup.keys.continueAnyway")}
+              {t`Continue Anyway`}
             </Button>
           )}
-          <Button onClick={() => void next()} disabled={busy || keys.credentials.isPending}>
+          <Button onClick={() => void next()} disabled={busy || accounts.isPending}>
             {busy && <Spinner />}
-            {t("setup.keys.next")}
+            {t`Save and Continue`}
           </Button>
         </>
       }
     >
-      {keys.credentials.isError && <ErrorAlert error={keys.credentials.error} />}
+      {accounts.isError && <ErrorAlert error={accounts.error} />}
       <FieldGroup className="gap-7">
-        {REQUIRED.map((name) => (
-          <KeyField key={name} name={name} keys={keys} pages />
+        {needed.map((key) => (
+          <AccountKeyField key={key.account} need={key} keys={keys} />
         ))}
       </FieldGroup>
 
@@ -110,34 +116,36 @@ export function KeysStep({ onDone }: { readonly onDone: () => void }) {
             className="group -ml-2.5 w-fit text-muted-foreground hover:text-foreground aria-expanded:bg-transparent"
           >
             <ChevronRightIcon className="transition-transform group-data-[state=open]:rotate-90" />
-            {t("setup.keys.otherProviders")}
+            {t`Use Other Providers (Optional)`}
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent className="flex flex-col gap-6">
-          <p className="text-muted-foreground text-sm">{t("setup.keys.otherProvidersBody")}</p>
-          <FieldGroup className="gap-7">
-            {OPTIONAL.filter((name) => name !== "OPENAI_API_KEY").map((name) => (
-              <KeyField key={name} name={name} keys={keys} />
-            ))}
-          </FieldGroup>
+          <p className="inline-links text-muted-foreground text-sm">
+            <Trans>
+              Pick who hears, thinks and speaks for her from the accounts you have. Add another
+              provider's account under <Link to="/settings?tab=providers">Providers</Link>, then
+              choose it here or in her studio.
+            </Trans>
+          </p>
           <SettingsCard
-            scope="app"
-            paths={PROVIDER_SETTINGS}
-            title={<span className="block text-base">{t("setup.keys.providerSettings")}</span>}
-            description={t("setup.keys.providerSettingsBody")}
+            scope="persona"
+            paths={CALL_PROVIDERS}
+            title={<span className="block text-base">{t`Who Hears, Thinks and Speaks`}</span>}
+            description={t`Saved for the active persona. Claude, DeepSeek and others work through your OpenRouter key or with their own.`}
+            onSaved={() => void queryClient.invalidateQueries({ queryKey: statusQuery.queryKey })}
           />
         </CollapsibleContent>
       </Collapsible>
 
       {missing && (
         <Alert variant="destructive">
-          <AlertTitle>{t("setup.keys.missing")}</AlertTitle>
+          <AlertTitle>{t`Add every key above to continue.`}</AlertTitle>
         </Alert>
       )}
       {checksFailed && (
         <Alert>
-          <AlertTitle>{t("setup.keys.checksFailed")}</AlertTitle>
-          <AlertDescription>{t("setup.keys.checksFailedBody")}</AlertDescription>
+          <AlertTitle>{t`Not every key passed its check`}</AlertTitle>
+          <AlertDescription>{t`Calls fail with a key the provider refuses. Fix the keys marked above, or continue and fix them later in Settings.`}</AlertDescription>
         </Alert>
       )}
       {failure && <ErrorAlert error={failure} />}

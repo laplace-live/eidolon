@@ -1,7 +1,9 @@
+import "../../../packages/config/test/isolated-guard.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { dataHome, installSettings } from "@eidolon/config";
 import type { HybridSearchOptions, Reranker, SearchRow } from "@eidolon/retrieval";
 import {
   aggregate,
@@ -264,5 +266,22 @@ describe("pieces", () => {
     const reranker = namedReranker("rerank-v4.0-fast") as Reranker & { baseUrl: string };
     expect(reranker.modelName).toBe("rerank-v4.0-fast");
     expect(reranker.baseUrl).toBe("https://api.cohere.com/v1");
+  });
+
+  test("namedReranker takes the key the local app saved in OpenRouter's account", () => {
+    const credentials = join(dataHome(), "credentials.json");
+    mkdirSync(dataHome(), { recursive: true });
+    writeFileSync(
+      credentials,
+      JSON.stringify({ accounts: { openrouter: { provider: "openrouter", apiKey: "or-saved" } } }),
+      { mode: 0o600 },
+    );
+    installSettings();
+    try {
+      expect(namedReranker("m").modelName).toBe("m");
+    } finally {
+      rmSync(credentials, { force: true });
+      installSettings();
+    }
   });
 });

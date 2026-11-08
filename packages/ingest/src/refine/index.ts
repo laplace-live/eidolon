@@ -1,12 +1,11 @@
 // laplace-refine's library: the prompts and schemas, lenient JSON, the validators and scheduling.
 export {
   DEFAULT_BASE_URL,
-  DEFAULT_MODEL,
-  MISSING_API_KEY,
-  refineApiKey,
+  missingApiKey,
   refineClient,
   refineConcurrency,
   refineModel,
+  refineSelection,
 } from "./client.ts";
 export { parseFirstJsonValue, parseJsonLenient, sanitizeJsonText } from "./lenient_json.ts";
 export { callLlmJson, isApiError, type LlmCall } from "./llm.ts";

@@ -24,6 +24,10 @@ export function messages(records: readonly LogRecord[], level: LogRecord["level"
 // Keys a shell may carry that would point a test at a billed service.
 const ISOLATED = [
   "OPENROUTER_API_KEY",
+  "OPENROUTER_API_BASE",
+  "EMBED_PROVIDER",
+  "RERANK_PROVIDER",
+  "COHERE_API_KEY",
   "RERANK_API_KEY",
   "RERANK_ENABLED",
   "RERANK_MODEL",

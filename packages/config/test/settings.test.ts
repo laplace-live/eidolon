@@ -86,16 +86,16 @@ describe("with no files of the user's own", () => {
 
 describe("layers", () => {
   test("persona.yaml's value wins over the environment's, which she inherits without one", () => {
-    setEnv("FISH_MODEL", "drama-3-pro");
+    setEnv("TTS_MODEL", "drama-3-pro");
     installSettings();
-    expect(envStr("FISH_MODEL", "drama-3")).toBe("drama-3-pro");
-    setEnv("FISH_MODEL", "");
-    expect(envStr("FISH_MODEL", "drama-3")).toBe("drama-3");
+    expect(envStr("TTS_MODEL", "drama-3")).toBe("drama-3-pro");
+    setEnv("TTS_MODEL", "");
+    expect(envStr("TTS_MODEL", "drama-3")).toBe("drama-3");
     write("personas/milky-green/persona.yaml", "voice:\n  model: s2\n");
     installSettings();
-    expect(envStr("FISH_MODEL", "drama-3")).toBe("s2");
-    setEnv("FISH_MODEL", "drama-3-pro");
-    expect(envStr("FISH_MODEL", "drama-3")).toBe("s2");
+    expect(envStr("TTS_MODEL", "drama-3")).toBe("s2");
+    setEnv("TTS_MODEL", "drama-3-pro");
+    expect(envStr("TTS_MODEL", "drama-3")).toBe("s2");
   });
 
   test("settings.yaml holds the install's settings", () => {
@@ -175,7 +175,7 @@ describe("layers", () => {
     expect(envOptional("FACTS_FILES")).toBeUndefined();
     expect(envOptional("FACTS_SUBJECT")).toBe("小[绿黑]");
     expect(envOptional("INGEST_SKIP_TYPES")).toBe("karaoke,anime_audio");
-    expect(envOptional("SONIOX_ASYNC_MODEL")).toBe("stt-async-v4");
+    expect(envOptional("TRANSCRIBE_MODEL")).toBe("stt-async-v4");
     expect(envOptional("REFINE_MODEL")).toBe("some/model");
     expect(envInt("REFINE_CONCURRENCY", 8)).toBe(3);
     expect(envOptional("REFINE_BASE_URL")).toBe("https://example.test/v1");
@@ -185,15 +185,15 @@ describe("layers", () => {
     expect(warnings).toEqual([]);
   });
 
-  test("voice.styles become FISH_VOICE_ID_<STYLE>, visible to a scan of the environment", () => {
+  test("voice.styles become TTS_VOICE_ID_<STYLE>, visible to a scan of the environment", () => {
     write(
       "personas/milky-green/persona.yaml",
       "voice:\n  voiceId: base\n  styles:\n    gentle: soft-id\n",
     );
     installSettings();
     const entries = new Map(envEntries());
-    expect(entries.get("FISH_VOICE_ID")).toBe("base");
-    expect(entries.get("FISH_VOICE_ID_GENTLE")).toBe("soft-id");
+    expect(entries.get("TTS_VOICE_ID")).toBe("base");
+    expect(entries.get("TTS_VOICE_ID_GENTLE")).toBe("soft-id");
   });
 });
 

@@ -5,8 +5,18 @@ import { existsSync, statfsSync, statSync } from "node:fs";
 import { activePersona, dataHome, envOptional, envOverride, logger } from "@eidolon/config";
 import { referenceCandidates } from "@eidolon/imagegen";
 import { download, which } from "@eidolon/ingest";
+import {
+  accountsFor,
+  callRoles,
+  ProviderConfigError,
+  type RoleId,
+  type Selection,
+  select,
+  trySelect,
+  voiceOf,
+} from "@eidolon/providers";
 import manifest from "../../package.json" with { type: "json" };
-import { REQUIRED_KEYS, type Status, type VoiceStatus, type YtDlpStatus } from "./api.ts";
+import type { CallRole, Status, VoiceStatus, YtDlpStatus } from "./api.ts";
 import { checkFishVoice, checkQdrant, configuredQdrant, voiceOk } from "./checks.ts";
 import { findAvatar, indexStatus } from "./personas.ts";
 import { restartTracker } from "./restart.ts";
@@ -71,9 +81,15 @@ function voiceKey(voiceId: string, key: string): string {
   return `${voiceId}:${key}`;
 }
 
+/** The key her Fish voice speaks with, wherever it is saved; undefined for another provider's. */
+export function fishVoiceKey(): string | undefined {
+  const voice = trySelect("voice");
+  return voice?.provider.id === "fish" ? voice.apiKey : undefined;
+}
+
 /** Whether `key` is still the Fish key calls use: an answer for one replaced meanwhile is dropped. */
 function isFishKey(key: string): boolean {
-  return envOptional("FISH_API_KEY") === key;
+  return fishVoiceKey() === key;
 }
 
 /**
@@ -222,16 +238,51 @@ function freeBytes(): number | null {
  * re-reads no settings file: the environment's applies only where her persona.yaml sets none.
  */
 function voiceSource(voiceId: string | null): VoiceStatus["source"] {
-  if (envOverride("FISH_VOICE_ID") !== undefined) return "env";
+  if (envOverride("TTS_VOICE_ID") !== undefined) return "env";
+  if (envOptional("TTS_VOICE_ID") === undefined && envOverride("FISH_VOICE_ID") !== undefined) {
+    return "env";
+  }
   return voiceId === null ? "default" : "persona";
+}
+
+/** A role as the installed settings fill it, or what is wrong with them. */
+function callRole(role: RoleId): { role: CallRole; selection: Selection | null } {
+  try {
+    const selection = select(role);
+    return {
+      role: {
+        role,
+        provider: selection?.provider.id ?? null,
+        model: selection?.model ?? null,
+        problem: null,
+      },
+      selection,
+    };
+  } catch (error) {
+    if (!(error instanceof ProviderConfigError)) throw error;
+    return { role: { role, provider: null, model: null, problem: error.message }, selection: null };
+  }
+}
+
+/** The roles her calls run on; a realtime setting Eidolon can't use is the problem to report. */
+function statusRoles(): readonly RoleId[] {
+  try {
+    return callRoles();
+  } catch (error) {
+    if (error instanceof ProviderConfigError) return ["realtime"];
+    throw error;
+  }
 }
 
 export function buildStatus(app: LocalApp, deps: StatusDeps = defaultStatusDeps): Status {
   const state = stateOf(app);
   const persona = activePersona();
 
-  const voiceId = envOptional("FISH_VOICE_ID") ?? null;
-  const fishKey = envOptional("FISH_API_KEY");
+  const roles = statusRoles();
+  const call = roles.map(callRole);
+  const voiceRole = call.find((entry) => entry.role.role === "voice")?.selection ?? null;
+  const voiceId = voiceRole === null ? null : (voiceOf(voiceRole) ?? null);
+  const fishKey = voiceRole?.provider.id === "fish" ? voiceRole.apiKey : undefined;
   let voice: string | null = null;
   if (voiceId !== null && fishKey !== undefined) {
     voice = voiceKey(voiceId, fishKey);
@@ -267,9 +318,14 @@ export function buildStatus(app: LocalApp, deps: StatusDeps = defaultStatusDeps)
     version: manifest.version,
     restartRequired: changes.calls.length > 0,
     mcpRestartRequired: changes.mcp.length > 0,
-    keys: Object.fromEntries(
-      REQUIRED_KEYS.map((name) => [name, envOptional(name) !== undefined]),
-    ) as Status["keys"],
+    keys: accountsFor(roles).map(({ account, roles: served, set }) => ({
+      account: account.id,
+      name: account.name,
+      provider: account.provider.id,
+      roles: served,
+      set,
+    })),
+    call: { realtime: roles.includes("realtime"), roles: call.map((entry) => entry.role) },
     persona: {
       id: persona.id,
       name: persona.identity.name,
@@ -279,6 +335,8 @@ export function buildStatus(app: LocalApp, deps: StatusDeps = defaultStatusDeps)
         id: voiceId,
         source: voiceSource(voiceId),
         ok: voice === null ? null : (state.voices.get(voice)?.ok ?? null),
+        provider: voiceRole?.provider.id ?? null,
+        account: voiceRole?.account.id ?? null,
       },
     },
     index: indexStatus(persona.id),

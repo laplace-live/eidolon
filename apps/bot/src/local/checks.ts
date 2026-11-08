@@ -1,15 +1,22 @@
 // The provider checks behind POST credentials/check. A verdict comes from the HTTP status; a body
 // is read only for the fields a check names, and the provider's own wording is never shown. Every
 // endpoint here is free: listings, key lookups and the Fish wallet, never a model call.
+import { isPlainObject, pyParseInt, pyStrip } from "@eidolon/config";
 import {
-  DEFAULT_EMBED_BASE_URL,
-  DEFAULT_EMBED_MODEL,
-  isPlainObject,
-  pyParseInt,
-  pyStrip,
-} from "@eidolon/config";
-import { refine, transcribe } from "@eidolon/ingest";
-import { DEFAULT_RERANK_BASE_URL, DEFAULT_RERANK_MODEL } from "@eidolon/retrieval";
+  type KeyCheck,
+  LEGACY_VOICE_ENV,
+  type Provider,
+  providerById,
+  type RoleId,
+  roleById,
+  type Selection,
+  type Sources,
+  select,
+  takesKey,
+  trySelect,
+  VOICE_ENV,
+  voiceOf,
+} from "@eidolon/providers";
 import type {
   CheckCode,
   CheckProvider,
@@ -22,6 +29,8 @@ export interface CheckDeps {
   readonly fetch: typeof fetch;
   /** A setting or key as the bot reads it now. */
   readonly read: (name: string) => string | undefined;
+  /** What roles resolve from, accounts included; `read` alone where it is left out. */
+  readonly sources?: Sources;
   /** The environment's value is the one read: over the files, or one a persona inherits. */
   readonly fromEnv: (name: string) => boolean;
   readonly now: () => number;
@@ -38,7 +47,8 @@ const FISH_BILLING = "https://fish.audio/app/developers/billing/";
 const COHERE_CHECK_URL = "https://api.cohere.com/v1/check-api-key";
 
 /** Fish's TTS models; a misspelled one falls back to s2.1-pro without a word. */
-export const FISH_MODELS = ["drama-3", "s2.1-pro", "s2.1-pro-free", "s2-pro", "s1"] as const;
+export const FISH_MODELS: readonly string[] =
+  providerById("fish")?.offers.tts?.models.map((model) => model.id) ?? [];
 const FISH_FREE_MODEL = "s2.1-pro-free";
 const FISH_DEPRECATED_MODEL = "s1";
 
@@ -55,16 +65,24 @@ interface Answer {
   readonly body: unknown;
 }
 
-/** One GET or POST that never follows a redirect; a key goes only in the Authorization header. */
+/** One GET or POST that never follows a redirect; a key goes only in a header. */
 export async function ask(
   deps: Pick<CheckDeps, "fetch">,
   url: string,
-  options: { key?: string; method?: "GET" | "POST"; timeoutMs?: number } = {},
+  options: {
+    key?: string;
+    headers?: Readonly<Record<string, string>>;
+    method?: "GET" | "POST";
+    timeoutMs?: number;
+  } = {},
 ): Promise<Answer> {
   try {
     const response = await deps.fetch(url, {
       method: options.method ?? "GET",
-      headers: options.key === undefined ? {} : { authorization: `Bearer ${options.key}` },
+      headers: {
+        ...(options.key === undefined ? {} : { authorization: `Bearer ${options.key}` }),
+        ...options.headers,
+      },
       // A key never follows a redirect, and no endpoint here sends one.
       redirect: "manual",
       signal: AbortSignal.timeout(options.timeoutMs ?? CHECK_TIMEOUT_MS),
@@ -219,18 +237,6 @@ async function modelWarning(
   return [warning("unknown-model", `OpenRouter lists no model ${model} (${setting})`)];
 }
 
-/** Any other OpenAI-compatible base: GET {base}/models, where 404 or 405 can't tell. */
-async function checkCompatibleBase(deps: CheckDeps, key: string, base: string): Promise<Verdict> {
-  const answer = await ask(deps, `${trimSlash(base)}/models`, { key });
-  if (answer.status >= 200 && answer.status < 300) return { ok: true, code: "ok" };
-  if (answer.status === 401 || answer.status === 403) return fail("invalid-key");
-  if (answer.status === 404 || answer.status === 405) {
-    const note = "This provider has no model listing to check the key against";
-    return { ok: true, code: "ok", warnings: [warning("cannot-verify", note)] };
-  }
-  return fail(codeOf(answer.status));
-}
-
 async function checkCohere(deps: CheckDeps, key: string): Promise<Verdict> {
   const answer = await ask(deps, COHERE_CHECK_URL, { key, method: "POST" });
   if (answer.status === 200) {
@@ -240,8 +246,45 @@ async function checkCohere(deps: CheckDeps, key: string): Promise<Verdict> {
   return fail(answer.status === 498 ? "invalid-key" : codeOf(answer.status));
 }
 
-async function checkSoniox(deps: CheckDeps, key: string): Promise<Verdict> {
-  const answer = await ask(deps, SONIOX_MODELS_URL, { key });
+/** The headers a provider's key check sends its key in. */
+function keyHeaders(check: KeyCheck, key: string): Record<string, string> {
+  const auth =
+    check.auth === "bearer"
+      ? { authorization: `Bearer ${key}` }
+      : check.auth === "token"
+        ? { authorization: `Token ${key}` }
+        : { [check.auth]: key };
+  return { ...auth, ...check.headers };
+}
+
+/**
+ * A provider's own free check of a key at `base`, by default an OpenAI-compatible GET /models; 404
+ * or 405 can't tell.
+ */
+async function checkListing(
+  deps: CheckDeps,
+  key: string | undefined,
+  base: string,
+  check: KeyCheck = { path: "/models", auth: "bearer" },
+): Promise<Verdict> {
+  const answer = await ask(deps, `${trimSlash(base)}${check.path}`, {
+    headers: key === undefined ? {} : keyHeaders(check, key),
+  });
+  if (answer.status >= 200 && answer.status < 300) return { ok: true, code: "ok" };
+  if (answer.status === 401 || answer.status === 403) return fail("invalid-key");
+  if (answer.status === 404 || answer.status === 405) {
+    const note = "This provider has no listing to check the key against";
+    return { ok: true, code: "ok", warnings: [warning("cannot-verify", note)] };
+  }
+  return fail(codeOf(answer.status));
+}
+
+async function checkSoniox(
+  deps: CheckDeps,
+  key: string,
+  base: string = SONIOX_MODELS_URL.replace(/\/models$/, ""),
+): Promise<Verdict> {
+  const answer = await ask(deps, `${trimSlash(base)}/models`, { key });
   if (answer.status === 401) {
     return fail(
       "invalid-key",
@@ -258,13 +301,12 @@ async function checkSoniox(deps: CheckDeps, key: string): Promise<Verdict> {
   if (answer.status !== 200) return fail(codeOf(answer.status));
   const ids = listedIds(answer.body, "models");
   const warnings: CheckWarning[] = [];
-  for (const [setting, name, fallback] of [
-    // packages/runtime's default, which it doesn't export.
-    ["hearing.model", "SONIOX_MODEL", "stt-rt-v5"],
-    ["transcription.model", "SONIOX_ASYNC_MODEL", transcribe.DEFAULT_SONIOX_MODEL],
+  for (const [role, setting] of [
+    ["hearing", "hearing.model"],
+    ["transcription", "transcription.model"],
   ] as const) {
-    const model = deps.read(name) ?? fallback;
-    if (ids !== null && !ids.has(model)) {
+    const model = selected(role, deps)?.model;
+    if (model !== undefined && ids !== null && !ids.has(model)) {
       warnings.push(warning("unknown-model", `Soniox lists no model ${model} (${setting})`));
     }
   }
@@ -296,13 +338,22 @@ interface FishVerdict extends Verdict {
   readonly voice?: { readonly id: string; readonly ok: boolean | null };
 }
 
-async function checkFish(deps: CheckDeps, key: string): Promise<FishVerdict> {
+async function checkFish(
+  deps: CheckDeps,
+  key: string,
+  account: string = "fish",
+): Promise<FishVerdict> {
   const answer = await ask(deps, `${FISH_API}/wallet/self/api-credit`, { key });
   if (answer.status !== 200) return fail(codeOf(answer.status));
   const credit = numberOf(field(answer.body, "credit"));
-  const model = deps.read("FISH_MODEL") ?? "drama-3";
+  // Fish's own voice settings matter only while this account speaks for her.
+  const voiceRole = selected("voice", deps);
+  if (voiceRole?.provider.id !== "fish" || voiceRole.account.id !== account) {
+    return { ok: true, code: "ok", credit };
+  }
+  const model = voiceRole.model;
   const warnings: CheckWarning[] = [];
-  if (!(FISH_MODELS as readonly string[]).includes(model)) {
+  if (!FISH_MODELS.includes(model)) {
     warnings.push(warning("unknown-model", `Fish has no model ${model} (voice.model)`));
   } else if (model === FISH_DEPRECATED_MODEL) {
     warnings.push(warning("deprecated-model", "Fish retires s1 on 2026-12-31"));
@@ -312,12 +363,12 @@ async function checkFish(deps: CheckDeps, key: string): Promise<FishVerdict> {
       warning("no-credit", `The account has no API credit, and ${model} bills: ${FISH_BILLING}`),
     );
   }
-  const voiceId = deps.read("FISH_VOICE_ID");
+  const voiceId = voiceOf(voiceRole, deps.sources ?? deps.read);
   if (voiceId === undefined) return { ok: true, code: "ok", warnings, credit };
   const voice = await checkFishVoice(deps, voiceId, key);
-  const whose = deps.fromEnv("FISH_VOICE_ID")
-    ? "The voice she inherits from FISH_VOICE_ID"
-    : "The persona's voice";
+  const inherited = [VOICE_ENV, LEGACY_VOICE_ENV].find((name) => deps.fromEnv(name));
+  const whose =
+    inherited === undefined ? "The persona's voice" : `The voice she inherits from ${inherited}`;
   if (voice === "unknown") {
     warnings.push(warning("voice-unknown", `${whose} isn't one Fish has`));
   } else if (voice === "private") {
@@ -390,34 +441,58 @@ export async function checkQdrant(
   return { ok: true, code: "ok", message: `Qdrant ${String(version)} answers`, warnings };
 }
 
-/** The key a provider's check uses: its own, else OpenRouter's, which it falls back to. */
-const KEYS: Readonly<Record<Exclude<CheckProvider, "qdrant">, readonly [string, string?]>> = {
-  soniox: ["SONIOX_API_KEY"],
-  openrouter: ["OPENROUTER_API_KEY"],
-  fish: ["FISH_API_KEY"],
-  embeddings: ["EMBED_API_KEY", "OPENROUTER_API_KEY"],
-  rerank: ["RERANK_API_KEY", "OPENROUTER_API_KEY"],
-  refine: ["REFINE_API_KEY", "OPENROUTER_API_KEY"],
-};
+/** A role as the settings fill it now; undefined for one they leave off or name wrong. */
+function selected(role: RoleId, deps: Pick<CheckDeps, "read" | "sources">): Selection | undefined {
+  return trySelect(role, deps.sources ?? deps.read) ?? undefined;
+}
 
-/** Each OpenAI-compatible provider's base setting, its default, and the model to look up. */
-const BASES = {
-  embeddings: {
-    base: ["EMBED_BASE_URL", DEFAULT_EMBED_BASE_URL],
-    model: ["EMBED_MODEL", DEFAULT_EMBED_MODEL, "embeddings.model"],
-    listing: `${OPENROUTER_BASE}/embeddings/models`,
-  },
-  rerank: {
-    base: ["RERANK_BASE_URL", DEFAULT_RERANK_BASE_URL],
-    model: ["RERANK_MODEL", DEFAULT_RERANK_MODEL, "knowledge.rerank.model"],
-    listing: `${OPENROUTER_BASE}/models?output_modalities=rerank`,
-  },
-  refine: {
-    base: ["REFINE_BASE_URL", refine.DEFAULT_BASE_URL],
-    model: ["REFINE_MODEL", refine.DEFAULT_MODEL, "refine.model"],
-    listing: `${OPENROUTER_BASE}/models`,
-  },
-} as const;
+/** The roles a check asks about by their own key and endpoint, and OpenRouter's listing of each. */
+const ROLE_CHECKS = {
+  embeddings: `${OPENROUTER_BASE}/embeddings/models`,
+  rerank: `${OPENROUTER_BASE}/models?output_modalities=rerank`,
+  refine: `${OPENROUTER_BASE}/models`,
+} as const satisfies Partial<Record<RoleId, string>>;
+
+type RoleCheck = keyof typeof ROLE_CHECKS;
+
+const isRoleCheck = (provider: string): provider is RoleCheck =>
+  Object.hasOwn(ROLE_CHECKS, provider);
+
+/** A role's key, at the endpoint it calls: its provider's, or the one its own settings name. */
+async function checkRole(
+  role: RoleCheck,
+  value: string | undefined,
+  deps: CheckDeps,
+): Promise<CheckOutcome> {
+  let selection: Selection | null;
+  try {
+    selection = select(role, deps.sources ?? deps.read);
+  } catch (error) {
+    return { result: finish(fail("unexpected", (error as Error).message), false) };
+  }
+  if (selection === null) return { result: finish(fail("missing"), false) };
+  const own = roleById(role).keyEnv;
+  const envOverride = deps.fromEnv(own ?? selection.keyName ?? "");
+  const key = value ?? selection.apiKey;
+  if (key === undefined) return { result: finish(fail("missing"), envOverride) };
+  const base = selection.baseUrl ?? "";
+  let verdict: Verdict;
+  if (isOpenRouter(base)) {
+    verdict = await checkOpenRouterKey(deps, key, base);
+    if (verdict.ok) {
+      const path = `${roleById(role).path}.model`;
+      const extra = await modelWarning(deps, ROLE_CHECKS[role], selection.model, path);
+      verdict = { ...verdict, warnings: [...(verdict.warnings ?? []), ...extra] };
+    }
+  } else if (role === "rerank" && isCohere(base)) {
+    verdict = await checkCohere(deps, key);
+  } else if (selection.provider.check !== undefined) {
+    verdict = await checkListing(deps, key, base, selection.provider.check);
+  } else {
+    verdict = await checkListing(deps, key, base);
+  }
+  return { result: finish(verdict, envOverride) };
+}
 
 /** The outcome of a check, and for Fish what it learned of the persona's voice. */
 export interface CheckOutcome {
@@ -451,45 +526,74 @@ export async function checkProvider(
     const verdict = await checkQdrant(deps, address.host, address.port);
     return { result: finish(verdict, envOverride), qdrant: { ...address, ok: verdict.ok } };
   }
-  const [own, fallback] = KEYS[provider];
-  const envOverride = deps.fromEnv(own);
-  const key = value ?? deps.read(own) ?? (fallback === undefined ? undefined : deps.read(fallback));
-  if (key === undefined) return { result: finish(fail("missing"), envOverride) };
-  switch (provider) {
+  if (isRoleCheck(provider)) return checkRole(provider, value, deps);
+  const entry = providerById(provider);
+  const own = entry?.credential ?? null;
+  if (entry === undefined || own === null) return { result: finish(fail("missing"), false) };
+  const base =
+    (entry.baseUrlEnv === null ? undefined : deps.read(entry.baseUrlEnv)) ??
+    entry.baseUrl ??
+    undefined;
+  return checkAccount(
+    { provider: entry, apiKey: value ?? deps.read(own), baseUrl: base, account: entry.id },
+    deps,
+    deps.fromEnv(own),
+  );
+}
+
+/** The account a check asks about: its provider, and a key and API base typed or saved. */
+export interface CheckTarget {
+  readonly provider: Provider;
+  readonly apiKey: string | undefined;
+  readonly baseUrl: string | undefined;
+  /** Its id, for what a check of the voice's own Fish account learns of the voice. */
+  readonly account?: string;
+}
+
+/** An account's key, at its API base. A provider that takes no key is checked by its listing. */
+export async function checkAccount(
+  target: CheckTarget,
+  deps: CheckDeps,
+  envOverride: boolean,
+): Promise<CheckOutcome> {
+  const { provider, apiKey: key } = target;
+  const base = target.baseUrl;
+  if (key === undefined) {
+    if (takesKey(provider) || base === undefined) {
+      return { result: finish(fail("missing"), envOverride) };
+    }
+    return { result: finish(await checkListing(deps, undefined, base), envOverride) };
+  }
+  switch (provider.id) {
     case "soniox":
-      return { result: finish(await checkSoniox(deps, key), envOverride) };
+      return { result: finish(await checkSoniox(deps, key, base), envOverride) };
     case "fish": {
-      const verdict = await checkFish(deps, key);
+      const verdict = await checkFish(deps, key, target.account);
       return {
         result: finish(verdict, envOverride),
         ...(verdict.voice === undefined ? {} : { voice: verdict.voice }),
       };
     }
     case "openrouter": {
-      const base = deps.read("OPENROUTER_API_BASE") ?? OPENROUTER_BASE;
-      const verdict = isOpenRouter(base)
-        ? await checkOpenRouterKey(deps, key, base)
-        : await checkCompatibleBase(deps, key, base);
+      const at = base ?? OPENROUTER_BASE;
+      const verdict = isOpenRouter(at)
+        ? await checkOpenRouterKey(deps, key, at)
+        : await checkListing(deps, key, at);
       return { result: finish(verdict, envOverride) };
     }
+    case "cohere":
+      return { result: finish(await checkCohere(deps, key), envOverride) };
     default: {
-      const spec = BASES[provider];
-      const base = deps.read(spec.base[0]) ?? spec.base[1];
-      let verdict: Verdict;
-      if (isOpenRouter(base)) {
-        verdict = await checkOpenRouterKey(deps, key, base);
-        if (verdict.ok) {
-          const [setting, fallbackModel, path] = spec.model;
-          const model = deps.read(setting) ?? fallbackModel;
-          const extra = await modelWarning(deps, spec.listing, model, path);
-          verdict = { ...verdict, warnings: [...(verdict.warnings ?? []), ...extra] };
-        }
-      } else if (provider === "rerank" && isCohere(base)) {
-        verdict = await checkCohere(deps, key);
-      } else {
-        verdict = await checkCompatibleBase(deps, key, base);
+      if (provider.check === undefined || base === undefined) {
+        const note = `${provider.name} offers nothing to check the key against for free`;
+        const verdict: Verdict = {
+          ok: true,
+          code: "ok",
+          warnings: [warning("cannot-verify", note)],
+        };
+        return { result: finish(verdict, envOverride) };
       }
-      return { result: finish(verdict, envOverride) };
+      return { result: finish(await checkListing(deps, key, base, provider.check), envOverride) };
     }
   }
 }

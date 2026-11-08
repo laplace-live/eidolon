@@ -55,6 +55,7 @@ export {
   LOCAL_VIEWER_MID,
   loadPersona,
   type PersonaPrefixInput,
+  REALTIME_DELIVERY_LINE,
   RECENT_STREAM_DATES_N,
   STREAM_DATES_TTL_SEC,
   type Viewer,

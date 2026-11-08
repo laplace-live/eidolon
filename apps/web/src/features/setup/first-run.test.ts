@@ -1,8 +1,15 @@
 import { expect, test } from "bun:test";
 import { firstRunRedirect } from "./first-run";
 
-const ready = { keys: { SONIOX_API_KEY: true, OPENROUTER_API_KEY: true, FISH_API_KEY: true } };
-const missing = { keys: { ...ready.keys, FISH_API_KEY: false } };
+const key = (account: string, set: boolean) => ({
+  account,
+  name: account,
+  provider: account,
+  roles: [],
+  set,
+});
+const ready = { keys: [key("soniox", true), key("fish", true)] };
+const missing = { keys: [key("soniox", true), key("fish", false)] };
 
 test("with every key saved, no page redirects", () => {
   for (const path of ["/", "/call", "/setup", "/settings", "/jobs/x", "/personas/a/voice"]) {

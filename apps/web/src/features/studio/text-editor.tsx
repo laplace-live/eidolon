@@ -1,5 +1,8 @@
 // A monospace editor for a persona's text files: a counter, Save and Revert, and a guard against
 // leaving the page with edits unsaved. The caller lays its parts out, in a card or a sheet.
+
+import { ph } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { type KeyboardEvent, type ReactNode, useEffect, useId, useState } from "react";
 import { useBeforeUnload, useBlocker } from "react-router";
 import {
@@ -17,8 +20,8 @@ import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCount } from "@/lib/format";
-import { useLang, useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { useLang } from "@/locales/i18n";
 import { draftAfterSave, textCounts } from "./files";
 
 /** Asks whether to leave unsaved edits behind. */
@@ -31,7 +34,7 @@ export function LeaveDialog({
   readonly onStay: () => void;
   readonly onLeave: () => void;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   return (
     <AlertDialog
       open={open}
@@ -41,13 +44,13 @@ export function LeaveDialog({
     >
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{t("studio.editor.leaveTitle")}</AlertDialogTitle>
-          <AlertDialogDescription>{t("studio.editor.leaveBody")}</AlertDialogDescription>
+          <AlertDialogTitle>{t`Leave without saving?`}</AlertDialogTitle>
+          <AlertDialogDescription>{t`Your unsaved changes will be lost.`}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>{t("studio.editor.stay")}</AlertDialogCancel>
+          <AlertDialogCancel>{t`Keep Editing`}</AlertDialogCancel>
           <AlertDialogAction variant="destructive" onClick={onLeave}>
-            {t("studio.editor.leave")}
+            {t`Discard Changes`}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -113,7 +116,7 @@ export function TextEditor({
   fill = false,
   children,
 }: TextEditorProps) {
-  const t = useT();
+  const { t } = useLingui();
   const lang = useLang();
   const id = useId();
   const [base, setBase] = useState(value);
@@ -173,15 +176,12 @@ export function TextEditor({
   const status = (
     <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
       <span className="tabular-nums">
-        {t("studio.editor.counts", {
-          chars: formatCount(counts.chars, lang),
-          lines: formatCount(counts.lines, lang),
-        })}
+        {t`${ph({ chars: formatCount(counts.chars, lang) })} characters · ${ph({ lines: formatCount(counts.lines, lang) })} lines`}
       </span>
       {dirty && (
         <span className="flex items-center gap-1.5 text-warning">
           <span aria-hidden className="size-1.5 rounded-full bg-current" />
-          {t("studio.editor.unsaved")}
+          {t`Unsaved changes`}
         </span>
       )}
     </span>
@@ -192,7 +192,7 @@ export function TextEditor({
       {actions}
       {dirty && (
         <Button type="button" variant="ghost" disabled={saving} onClick={() => setDraft(value)}>
-          {t("studio.editor.revert")}
+          {t`Revert`}
         </Button>
       )}
       <Button
@@ -201,7 +201,7 @@ export function TextEditor({
         onClick={() => void save()}
       >
         {saving && <Spinner />}
-        {t("studio.editor.save")}
+        {t`Save`}
       </Button>
     </>
   );

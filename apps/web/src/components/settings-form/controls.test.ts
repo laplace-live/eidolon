@@ -7,18 +7,21 @@ import {
   SETTINGS,
   type SettingField,
 } from "@eidolon/config";
-import { FISH_MODELS as CHECKED_MODELS } from "../../../../bot/src/local/checks.ts";
 import type { SettingRow } from "../../lib/api";
+import { defaultModel, roleById } from "../../lib/providers";
 import {
   cardSections,
   changes,
   controlFor,
   draftOf,
+  effectiveProvider,
   envDraft,
+  fallbackModel,
   GROUPS,
   groupOf,
   optionsOf,
   originOf,
+  orphanedByProvider,
   parseDraft,
   REINDEX_PATHS,
   SPACE_CLASS,
@@ -32,6 +35,7 @@ function row(field: SettingField, extra: Partial<SettingRow> = {}): SettingRow {
     value: null,
     source: "default",
     envValue: null,
+    envName: null,
     envOverride: false,
     productionOnly: false,
     readOnly: false,
@@ -58,7 +62,7 @@ function readerSplit(variable: string): string[] {
 describe("the control for each kind", () => {
   test("every SETTINGS row gets one that writes a value its kind's reader accepts", () => {
     const allowed: Record<string, readonly string[]> = {
-      string: ["text", "select", "timezone", "language"],
+      string: ["text", "select", "timezone", "language", "provider", "model", "voice"],
       int: ["integer"],
       float: ["number"],
       flag: ["flag"],
@@ -73,12 +77,10 @@ describe("the control for each kind", () => {
   });
 
   test("known value sets are selects, and the path rule follows the scope", () => {
-    expect(control("voice.model")).toEqual({
-      type: "select",
-      options: ["drama-3", "s2.1-pro", "s2.1-pro-free", "s2-pro", "s1"],
-    });
-    // The models the server's Fish check accepts: the select offers no other.
-    expect(control("voice.model")).toMatchObject({ options: [...CHECKED_MODELS] });
+    expect(control("voice.model")).toEqual({ type: "model", role: roleById("voice") });
+    expect(control("voice.provider")).toEqual({ type: "provider", role: roleById("voice") });
+    expect(control("voice.voiceId")).toEqual({ type: "voice", role: roleById("voice") });
+
     expect(control("sources.cookiesFromBrowser").type).toBe("select");
     expect(control("selfie.quality").type).toBe("select");
     expect(control("knowledge.rerank.enabled")).toEqual({ type: "flag" });
@@ -86,6 +88,11 @@ describe("the control for each kind", () => {
     expect(control("memory.historyDb")).toEqual({ type: "path", inPersona: false });
     expect(control("selfie.references")).toEqual({ type: "paths", inPersona: true });
     expect(control("memory.qdrant.port")).toEqual({ type: "integer", min: 1, max: 65535 });
+    // A provider's API base shows the one it uses while unset.
+    expect(control("providers.openai.baseUrl")).toEqual({
+      type: "text",
+      placeholder: "https://api.openai.com/v1",
+    });
   });
 
   test("a select keeps a file's value that isn't one of its choices", () => {
@@ -264,6 +271,82 @@ describe("the other controls", () => {
       value: "~google/gemini-flash-latest",
     });
     expect(parseDraft("\u3000", { type: "text" })).toEqual({ ok: true, value: null });
+  });
+});
+
+describe("providers and the models they fill", () => {
+  const rows = (values: Record<string, string>, env: Record<string, string> = {}) =>
+    SETTINGS.map((setting) =>
+      row(setting, { value: values[setting.path] ?? null, envValue: env[setting.path] ?? null }),
+    );
+
+  test("a role's provider: the draft, her file, the environment, the one it follows, the default", () => {
+    const memory = roleById("memory");
+    expect(effectiveProvider(memory, rows({}), {})).toBe("openrouter");
+    expect(effectiveProvider(memory, rows({ "mind.provider": "deepseek" }), {})).toBe("deepseek");
+    expect(effectiveProvider(memory, rows({}, { "mind.provider": "anthropic" }), {})).toBe(
+      "anthropic",
+    );
+    const own = rows({ "mind.provider": "deepseek", "memory.provider": "OpenAI" });
+    expect(effectiveProvider(memory, own, {})).toBe("openai");
+    expect(effectiveProvider(memory, own, { "memory.provider": "" })).toBe("deepseek");
+    expect(effectiveProvider(roleById("realtime"), rows({}), {})).toBeNull();
+  });
+
+  test("memory unset takes her chat model while both use one provider, as the bot does", () => {
+    const memory = roleById("memory");
+    const chat = rows({ "mind.model": "anthropic/claude-sonnet-5.5" });
+    expect(fallbackModel(memory, chat, {}, [])).toBe("anthropic/claude-sonnet-5.5");
+    expect(fallbackModel(memory, chat, { "mind.model": "x-ai/grok-5" }, [])).toBe("x-ai/grok-5");
+    const elsewhere = rows({
+      "mind.model": "anthropic/claude-sonnet-5.5",
+      "memory.provider": "openai",
+    });
+    expect(fallbackModel(memory, elsewhere, {}, [])).toBe(defaultModel(memory, "openai"));
+    expect(fallbackModel(roleById("realtime"), rows({}), {}, [])).toBeNull();
+    expect(
+      fallbackModel(roleById("mind"), rows({ "mind.provider": "openai-compatible" }), {}, []),
+    ).toBeNull();
+  });
+});
+
+describe("a provider's models and voices go with it", () => {
+  const rows = (values: Record<string, string>) =>
+    SETTINGS.map((setting) => row(setting, { value: values[setting.path] ?? null }));
+
+  test("a new chat provider clears her chat model, and memory's while memory follows it", () => {
+    const hers = rows({ "mind.model": "x-ai/grok-5", "memory.model": "x-ai/grok-5-mini" });
+    const drafts = { "mind.provider": "anthropic" };
+    expect(orphanedByProvider(hers, drafts, drafts, [])).toEqual(["mind.model", "memory.model"]);
+    const own = rows({
+      "mind.model": "x-ai/grok-5",
+      "memory.provider": "openrouter",
+      "memory.model": "x-ai/grok-5-mini",
+    });
+    expect(orphanedByProvider(own, drafts, drafts, [])).toEqual(["mind.model"]);
+    expect(orphanedByProvider(hers, drafts, { ...drafts, "mind.model": "claude-x" }, [])).toEqual([
+      "memory.model",
+    ]);
+    expect(orphanedByProvider(hers, { "mind.provider": "openrouter" }, {}, [])).toEqual([]);
+  });
+
+  test("another account of the same provider keeps its models; one of another provider doesn't", () => {
+    const accounts = [
+      { id: "openrouter-2", provider: "openrouter" },
+      { id: "deepseek-work", provider: "deepseek" },
+    ];
+    const hers = rows({ "mind.model": "x-ai/grok-5" });
+    const second = { "mind.provider": "openrouter-2" };
+    expect(orphanedByProvider(hers, second, second, accounts)).toEqual([]);
+    const work = { "mind.provider": "deepseek-work" };
+    expect(orphanedByProvider(hers, work, work, accounts)).toEqual(["mind.model"]);
+    const memory = roleById("memory");
+    expect(fallbackModel(memory, rows({ "mind.provider": "openrouter-2" }), {}, accounts)).toBe(
+      defaultModel(memory, "openrouter"),
+    );
+    expect(fallbackModel(memory, rows({ "mind.provider": "deepseek-work" }), {}, accounts)).toBe(
+      defaultModel(memory, "deepseek"),
+    );
   });
 });
 

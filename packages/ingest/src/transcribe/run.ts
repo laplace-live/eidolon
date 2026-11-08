@@ -17,7 +17,6 @@ import {
   cpLen,
   cpSlice,
   envOptional,
-  envStr,
   errorText,
   logger,
   PyFloat,
@@ -34,6 +33,7 @@ import {
   resolvePersonaPath,
   sortedPy,
 } from "@eidolon/config";
+import { reportUsage, selectRequired } from "@eidolon/providers";
 import { failureOf } from "../failure.ts";
 import { writeTextAtomic } from "../paths.ts";
 import { noProgress, type RunOptions } from "../progress.ts";
@@ -223,7 +223,7 @@ export function listAudioFiles(vodsDir: string): string[] {
 
 /** The model a run uses unless told otherwise: the transcription.model setting, else the default. */
 export function configuredModel(): string {
-  return envStr("SONIOX_ASYNC_MODEL", DEFAULT_SONIOX_MODEL);
+  return selectRequired("transcription").model;
 }
 
 export const MISSING_API_KEY =
@@ -232,7 +232,7 @@ export const MISSING_API_KEY =
 
 /** SONIOX_API_KEY; undefined when it isn't set. */
 export function sonioxApiKey(): string | undefined {
-  return envOptional("SONIOX_API_KEY");
+  return selectRequired("transcription").apiKey;
 }
 
 /**
@@ -422,6 +422,13 @@ async function transcribe(options: TranscribeOptions): Promise<TranscribeResult>
         `No speech in ${name}: ${payloadFile} records that, so it isn't transcribed or billed again.`,
       );
     }
+    reportUsage({
+      role: "transcription",
+      provider: "soniox",
+      model,
+      units: { audioSeconds: outcome.durationSec },
+      estimatedUsd: estimateTranscribeUsd(outcome.durationSec, model),
+    });
     return {
       status: scenes.length > 0 ? "done" : "no-speech",
       streamId: id,

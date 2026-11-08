@@ -16,12 +16,14 @@ import {
   type LocalRouteSpec,
   localRoute,
 } from "./router.ts";
+import { accountsRoutes } from "./routes/accounts.ts";
 import { credentialsRoutes } from "./routes/credentials.ts";
 import { jobsRoutes } from "./routes/jobs.ts";
 import { memoriesRoutes } from "./routes/memories.ts";
 import { personasRoutes } from "./routes/personas.ts";
 import { settingsRoutes } from "./routes/settings.ts";
 import { statusRoutes } from "./routes/status.ts";
+import { usageRoutes } from "./routes/usage.ts";
 import { voicesRoutes } from "./routes/voices.ts";
 import { authenticator, sessionRoutes } from "./session.ts";
 import type { StaticSite } from "./static.ts";
@@ -33,10 +35,12 @@ export function localRouteModules(app: LocalApp): LocalRouteSpec[] {
     ...statusRoutes(app),
     ...settingsRoutes(app),
     ...credentialsRoutes(app),
+    ...accountsRoutes(app),
     ...personasRoutes(app),
     ...voicesRoutes(app),
     ...jobsRoutes(app),
     ...memoriesRoutes(app),
+    ...usageRoutes(),
   ];
 }
 

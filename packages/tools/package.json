@@ -8,6 +8,7 @@
   "dependencies": {
     "@eidolon/config": "workspace:*",
     "@eidolon/core": "workspace:*",
-    "@eidolon/imagegen": "workspace:*"
+    "@eidolon/imagegen": "workspace:*",
+    "@eidolon/providers": "workspace:*"
   }
 }

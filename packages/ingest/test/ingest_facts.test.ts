@@ -417,7 +417,7 @@ describe("ingestFactFiles", () => {
       type: "stage",
       status: "failed",
       code: "missing-credential",
-      message: expect.stringContaining("Embeddings need an API key"),
+      message: expect.stringContaining("OpenRouter needs an API key"),
     });
     expect(events.at(-1)).toMatchObject({ type: "summary", ok: false });
     expect(await tableState(join(work, "index"), "persona_facts")).toEqual(before);

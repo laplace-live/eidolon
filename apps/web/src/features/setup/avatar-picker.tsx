@@ -1,3 +1,5 @@
+import { ph } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { ImagePlusIcon } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { monogram } from "@/components/avatar/monogram";
@@ -7,8 +9,8 @@ import { FieldDescription, FieldError } from "@/components/ui/field";
 import { imageProblem, MAX_IMAGE_BYTES, previewUrl } from "@/features/studio/files";
 import { useFilePicker } from "@/features/studio/pictures";
 import { formatBytes } from "@/lib/format";
-import { useLang, useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { useLang } from "@/locales/i18n";
 
 /**
  * A new persona's optional avatar, picked before she exists: a preview, which shows her monogram
@@ -26,7 +28,7 @@ export function AvatarPicker({
   readonly name: string;
   readonly disabled?: boolean;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const lang = useLang();
   const inputId = useId();
   const [preview, setPreview] = useState<string | null>(null);
@@ -53,7 +55,7 @@ export function AvatarPicker({
   return (
     <fieldset className="flex min-w-0 items-center gap-5">
       <legend className="sr-only">
-        {t("setup.avatar.label")} {t("setup.avatar.optional")}
+        {t`Avatar`} {t`(optional)`}
       </legend>
       {/* A click on the preview picks too; the button beside it is the one keyboards reach. */}
       <label
@@ -76,8 +78,7 @@ export function AvatarPicker({
       </label>
       <div className="flex min-w-0 flex-col gap-2">
         <span aria-hidden className="font-medium text-sm leading-snug">
-          {t("setup.avatar.label")}{" "}
-          <span className="font-normal text-muted-foreground">{t("setup.avatar.optional")}</span>
+          {t`Avatar`} <span className="font-normal text-muted-foreground">{t`(optional)`}</span>
         </span>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -88,7 +89,7 @@ export function AvatarPicker({
             onClick={picker.open}
           >
             <ImagePlusIcon />
-            {t(file ? "setup.avatar.replace" : "setup.avatar.upload")}
+            {file ? t`Replace` : t`Upload`}
           </Button>
           {file && (
             <Button
@@ -101,19 +102,19 @@ export function AvatarPicker({
                 onFile(null);
               }}
             >
-              {t("setup.avatar.remove")}
+              {t`Remove`}
             </Button>
           )}
         </div>
         {problem === null ? (
           <FieldDescription>
-            {t("setup.avatar.help", { max: formatBytes(MAX_IMAGE_BYTES, lang) })}
+            {t`A PNG, JPEG or WebP image, up to ${ph({ max: formatBytes(MAX_IMAGE_BYTES, lang) })}. Without one, her avatar shows her initials.`}
           </FieldDescription>
         ) : (
           <FieldError>
             {problem === "type"
-              ? t("setup.avatar.badType")
-              : t("setup.avatar.tooLarge", { max: formatBytes(MAX_IMAGE_BYTES, lang) })}
+              ? t`Pick a PNG, JPEG or WebP image.`
+              : t`That image is over ${ph({ max: formatBytes(MAX_IMAGE_BYTES, lang) })}.`}
           </FieldError>
         )}
       </div>

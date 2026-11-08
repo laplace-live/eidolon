@@ -8,6 +8,7 @@
   "dependencies": {
     "@eidolon/config": "workspace:*",
     "@eidolon/core": "workspace:*",
+    "@eidolon/providers": "workspace:*",
     "@qdrant/js-client-rest": "1.19.0"
   }
 }

@@ -27,8 +27,9 @@ npx @laplace.live/eidolon
 ```
 
 That opens the local web app, which runs on your computer only: a wizard for your Soniox,
-OpenRouter and Fish Audio keys, the 明前奶绿 demo or a persona of your own built from her prompt,
-facts and stream videos, and a page to call her. The terminal prints the link that signs your
+OpenRouter and Fish Audio keys (or other providers' for a persona that uses them), the 明前奶绿
+demo or a persona of your own built from her prompt, facts and stream videos, a page to call her,
+and one that shows what each provider has cost. The terminal prints the link that signs your
 browser in. How it works, and how it stays out of a deployed bot, is in
 [`docs/web-app.md`](docs/web-app.md).
 
@@ -80,6 +81,12 @@ npm 12 runs no dependency's install script unless you allow it; leave onnxruntim
 Model IDs above are defaults. Every model the project runs — these three plus
 the embedding, reranker, and offline refinement models — is declared in one
 block at the top of [`.env.example`](.env.example); override any of them there.
+Each persona can fill any of these roles with another provider instead: Claude or
+DeepSeek on their own APIs or through OpenRouter, ElevenLabs, Cartesia or MiniMax
+for her voice, Deepgram for hearing, or an experimental realtime voice model. The
+local app keeps an account per key, several of one provider if you have them, and
+lists each provider's models as its API offers them
+([`docs/providers.md`](docs/providers.md)).
 
 No Daily, no telephony, no Pipecat Cloud — this repo is wired for self-hosting
 behind your own reverse proxy.

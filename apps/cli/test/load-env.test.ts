@@ -34,7 +34,7 @@ beforeAll(() => {
       'import { envEntries, envOptional } from "@eidolon/config";',
       "const scan = new Map(envEntries());",
       'console.log("settings=" + JSON.stringify({',
-      '  voice: envOptional("FISH_VOICE_ID") ?? null,',
+      '  voice: envOptional("TTS_VOICE_ID") ?? envOptional("FISH_VOICE_ID") ?? null,',
       '  gentle: envOptional("FISH_VOICE_ID_GENTLE") ?? null,',
       '  scanned: scan.get("FISH_VOICE_ID_GENTLE") ?? null,',
       '  refine: envOptional("REFINE_MODEL") ?? null,',

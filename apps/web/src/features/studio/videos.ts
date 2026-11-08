@@ -215,7 +215,9 @@ export function planTotals(videos: readonly PlanVideo[]): PlanTotals {
 
 /** The settings a plan reads besides her files, as the server keys its cached plans. */
 export const PLAN_SETTINGS: typeof PlanSettings = [
+  "transcription.provider",
   "transcription.model",
+  "refine.provider",
   "refine.model",
   "knowledge.index",
 ];

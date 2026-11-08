@@ -1,6 +1,6 @@
 // The setup wizard's steps, and what it decides from the API's answers.
 import { isTimeZone } from "@/components/settings-form/controls";
-import type { CreatePersonaRequest, CredentialsResponse, SettingRow, Status } from "@/lib/api";
+import type { AccountView, CreatePersonaRequest, SettingRow, Status } from "@/lib/api";
 
 export const STEPS = ["keys", "persona", "voice", "memory", "done"] as const;
 export type Step = (typeof STEPS)[number];
@@ -11,7 +11,7 @@ export function isStep(value: unknown): value is Step {
 
 /** Where the wizard opens: the keys while one is missing, else the step a link asked for. */
 export function firstStep(status: Pick<Status, "keys">, requested: string | null): Step {
-  if (Object.values(status.keys).includes(false)) return "keys";
+  if (status.keys.some((key) => !key.set)) return "keys";
   return isStep(requested) ? requested : "keys";
 }
 
@@ -31,11 +31,11 @@ export const COOKIE_SETTING = "sources.cookiesFromBrowser";
 /** Nothing in settings.yaml, the environment or any key store yet: this setup is the first. */
 export function isNewInstall(
   rows: readonly SettingRow[],
-  credentials: CredentialsResponse,
+  accounts: readonly Pick<AccountView, "key" | "saved">[],
 ): boolean {
   return (
     rows.every((row) => row.scope !== "app" || (row.source === "default" && !row.envOverride)) &&
-    Object.values(credentials).every((credential) => !credential.set)
+    accounts.every((account) => !account.saved && account.key.source === null)
   );
 }
 
@@ -73,6 +73,7 @@ export const PERSONA_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
 /** The admin API's literal path words, which the server refuses as ids: they would read as routes. */
 export const RESERVED_IDS: ReadonlySet<string> = new Set([
+  "accounts",
   "active",
   "api",
   "avatar",
@@ -88,6 +89,7 @@ export const RESERVED_IDS: ReadonlySet<string> = new Set([
   "local",
   "log",
   "memories",
+  "models",
   "personas",
   "prompt",
   "references",
@@ -97,6 +99,7 @@ export const RESERVED_IDS: ReadonlySet<string> = new Set([
   "session",
   "settings",
   "status",
+  "usage",
   "voices",
 ]);
 

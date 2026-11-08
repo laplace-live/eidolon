@@ -1,3 +1,5 @@
+import { ph } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { AudioLinesIcon, BrainIcon, KeyRoundIcon } from "lucide-react";
 import { type ReactNode, useCallback, useEffect } from "react";
@@ -8,8 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { errorKey, type MemoryStatus, type Status } from "@/lib/api";
-import { type Translate, useT } from "@/lib/i18n";
+import type { MemoryStatus, Status } from "@/lib/api";
+import { errorMessage, listOf } from "@/lib/labels";
 import { studioPath } from "@/lib/paths";
 import { statusQuery } from "@/lib/query";
 import { useNow } from "@/lib/use-now";
@@ -23,51 +25,45 @@ import { useCall } from "./use-call";
 
 type Persona = Status["persona"];
 
-function stateLine(phase: CallPhase, now: number, name: string, t: Translate): string {
+/** The call's state; only this line renders each second while the call runs. */
+function CallState({ phase, name }: { readonly phase: CallPhase; readonly name: string }) {
+  const { t } = useLingui();
+  const now = useNow(phase.name === "live" && phase.answeredAt !== null);
   switch (phase.name) {
     case "idle":
-      return t("call.state.idle");
+      return t`Not in a call`;
     case "starting":
-      return t("call.state.starting");
+      return t`Getting your microphone ready…`;
     case "connecting":
-      return t("call.state.connecting");
+      return t`Calling…`;
     case "live":
       return phase.answeredAt === null
-        ? t("call.state.ringing", { name })
-        : t("call.state.live", { duration: formatDuration(now - phase.answeredAt) });
+        ? t`Waiting for ${name} to answer…`
+        : t`In a call · ${ph({ duration: formatDuration(now - phase.answeredAt) })}`;
     case "ending":
-      return t("call.state.ending");
+      return t`Hanging up…`;
     case "ended":
       return phase.answeredAt === null
-        ? t("call.state.ended")
-        : t("call.state.endedAfter", {
-            duration: formatDuration(phase.endedAt - phase.answeredAt),
-          });
+        ? t`Call ended`
+        : t`Call ended · ${ph({ duration: formatDuration(phase.endedAt - phase.answeredAt) })}`;
   }
 }
 
-/** The call's state; only this line renders each second while the call runs. */
-function CallState({ phase, name }: { readonly phase: CallPhase; readonly name: string }) {
-  const t = useT();
-  const now = useNow(phase.name === "live" && phase.answeredAt !== null);
-  return stateLine(phase, now, name, t);
-}
-
 function MemoryChip({ memory, name }: { readonly memory: MemoryStatus; readonly name: string }) {
-  const t = useT();
+  const { t } = useLingui();
   const on = memory.configured && memory.reachable !== false;
   const hint = !memory.configured
-    ? t("call.memory.offHint", { name })
+    ? t`Memory needs Qdrant. Set it up in Settings so ${name} remembers your calls.`
     : memory.reachable === false
-      ? t("call.memory.downHint", { name })
-      : t("call.memory.onHint", { name });
+      ? t`Qdrant isn't answering, so ${name} won't remember this call.`
+      : t`${name} remembers your conversations between calls.`;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <Badge asChild variant={on ? "secondary" : "outline"}>
           <button type="button" className={cn("shrink-0", !on && "text-muted-foreground")}>
             <BrainIcon data-icon="inline-start" />
-            {t(on ? "call.memory.on" : "call.memory.off")}
+            {on ? t`Memory on` : t`Memory off`}
           </button>
         </Badge>
       </TooltipTrigger>
@@ -155,7 +151,7 @@ function Intro({
 }
 
 function CallRoom({ status, onEnded }: { readonly status: Status; readonly onEnded: () => void }) {
-  const t = useT();
+  const { t } = useLingui();
   const call = useCall();
   const { revalidate } = useRevalidator();
   const { phase } = call;
@@ -181,12 +177,12 @@ function CallRoom({ status, onEnded }: { readonly status: Status; readonly onEnd
   const answered = phase.name === "live" && phase.answeredAt !== null;
   const placeholder =
     phase.name === "idle" || phase.name === "ended"
-      ? t("call.transcript.empty", { name: short })
-      : t("call.transcript.waiting", { name: short });
+      ? t`Call ${ph({ name: short })} to start talking. You can speak or type.`
+      : t`${ph({ name: short })} speaks first once the call connects.`;
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col">
-      <h1 className="sr-only">{t("call.title")}</h1>
+      <h1 className="sr-only">{t`Call`}</h1>
       <Frame
         persona={persona}
         speaking={call.botSpeaking}
@@ -243,14 +239,14 @@ function Blocker({
   readonly icon: ReactNode;
   readonly action: string;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col">
-      <h1 className="sr-only">{t("call.title")}</h1>
+      <h1 className="sr-only">{t`Call`}</h1>
       <Frame
         persona={persona}
         speaking={false}
-        state={<span className="truncate">{t("call.state.idle")}</span>}
+        state={<span className="truncate">{t`Not in a call`}</span>}
         footer={
           <div className="flex justify-center px-4 py-4 sm:px-6">
             <Button size="lg" asChild>
@@ -275,7 +271,7 @@ function Blocker({
 }
 
 export function CallPage() {
-  const t = useT();
+  const { t } = useLingui();
   const { data: status, error, refetch } = useQuery(statusQuery);
   const onEnded = useCallback(() => void refetch(), [refetch]);
 
@@ -289,15 +285,17 @@ export function CallPage() {
     }
     return (
       <Alert variant="destructive" className="mx-auto max-w-lg">
-        <AlertTitle>{t("common.error.title")}</AlertTitle>
-        <AlertDescription>{t(errorKey(error))}</AlertDescription>
+        <AlertTitle>{t`Something went wrong`}</AlertTitle>
+        <AlertDescription>{t(errorMessage(error))}</AlertDescription>
       </Alert>
     );
   }
 
   const { persona } = status;
   const short = persona.shortName.trim() || persona.name;
-  if (Object.values(status.keys).includes(false)) {
+  const missing = status.keys.filter((key) => !key.set);
+  const names = listOf(missing.map((key) => key.name));
+  if (missing.length > 0) {
     return (
       <Blocker
         persona={persona}
@@ -306,24 +304,43 @@ export function CallPage() {
             <KeyRoundIcon className="size-9 text-muted-foreground" />
           </div>
         }
-        title={t("call.keys.missing.title")}
-        body={t("call.keys.missing.body")}
+        title={t`Add your API keys first`}
+        body={t`A call needs a key for each provider she uses. Missing: ${names}.`}
         to="/setup"
         icon={<KeyRoundIcon data-icon="inline-start" />}
-        action={t("call.keys.add")}
+        action={t`Add Keys`}
       />
     );
   }
-  if (persona.voice.id === null) {
+  const problem = status.call.roles.find((role) => role.problem !== null);
+  if (problem) {
+    return (
+      <Blocker
+        persona={persona}
+        media={
+          <div className="flex size-24 items-center justify-center rounded-full bg-muted">
+            <BrainIcon className="size-9 text-muted-foreground" />
+          </div>
+        }
+        title={t`${ph({ name: short })}'s models need fixing`}
+        body={problem.problem ?? ""}
+        to={studioPath(persona.id, "models")}
+        icon={<BrainIcon data-icon="inline-start" />}
+        action={t`Open Her Models`}
+      />
+    );
+  }
+  // A realtime model speaks in its own voice, so only a call with a voice role needs one.
+  if (persona.voice.id === null && !status.call.realtime) {
     return (
       <Blocker
         persona={persona}
         media={<Face persona={persona} size="xl" />}
-        title={t("call.voice.missing.title", { name: short })}
-        body={t("call.voice.missing.body")}
+        title={t`Pick a voice for ${ph({ name: short })}`}
+        body={t`A call needs a voice. Pick one for her first.`}
         to={studioPath(persona.id, "voice")}
         icon={<AudioLinesIcon data-icon="inline-start" />}
-        action={t("call.voice.pick")}
+        action={t`Pick a Voice`}
       />
     );
   }

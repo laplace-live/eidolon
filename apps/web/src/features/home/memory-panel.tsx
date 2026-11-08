@@ -1,3 +1,5 @@
+import { msg, ph, plural } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BrainIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -25,7 +27,7 @@ import { CopyCommand } from "@/features/setup/copy-command";
 import { QDRANT_COMMAND } from "@/features/setup/wizard";
 import { call, type MemoryStatus, type Status } from "@/lib/api";
 import { toastError } from "@/lib/feedback";
-import { useLang, useT } from "@/lib/i18n";
+import { useLang } from "@/locales/i18n";
 import { MEMORIES_SHOWN, memoryView, shownMemories } from "./memory";
 import { formatsFor } from "./readiness";
 import { HomeSection } from "./section";
@@ -39,6 +41,17 @@ function memoriesQuery(persona: string) {
   });
 }
 
+const VIEWS = {
+  off: {
+    body: msg`Memory is off, so she forgets you after every call. It needs Qdrant, a database you run in Docker on this machine. Run this once in a terminal, then turn memory on:`,
+    note: msg`Optional: calls work without it.`,
+  },
+  down: {
+    body: msg`Qdrant isn't answering, so she can't remember or recall anything for now. Start Docker, or start Qdrant if it isn't running:`,
+    note: msg`Calls go on without memory meanwhile.`,
+  },
+};
+
 function QdrantHelp({
   view,
   retrying,
@@ -48,29 +61,29 @@ function QdrantHelp({
   readonly retrying: boolean;
   readonly onRetry: () => void;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   return (
     <SectionCard
-      note={t(`home.memory.${view}Note`)}
+      note={t(VIEWS[view].note)}
       actions={
         view === "off" ? (
           <Button asChild>
-            <Link to="/setup?step=memory">{t("home.memory.setup")}</Link>
+            <Link to="/setup?step=memory">{t`Turn On Memory`}</Link>
           </Button>
         ) : (
           <>
             <Button variant="outline" asChild>
-              <Link to="/setup?step=memory">{t("home.memory.address")}</Link>
+              <Link to="/setup?step=memory">{t`Check the Address`}</Link>
             </Button>
             <Button disabled={retrying} onClick={onRetry}>
               {retrying && <Spinner />}
-              {t("home.memory.retry")}
+              {t`Try Again`}
             </Button>
           </>
         )
       }
     >
-      <p className="text-sm">{t(`home.memory.${view}`)}</p>
+      <p className="text-sm">{t(VIEWS[view].body)}</p>
       <CopyCommand command={QDRANT_COMMAND} />
     </SectionCard>
   );
@@ -87,26 +100,26 @@ function ForgetButton({
   readonly pending: boolean;
   readonly onForget: () => void;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
         <Button variant="outline" disabled={pending || count === 0}>
           {pending ? <Spinner /> : <Trash2Icon />}
-          {t("home.memory.forget")}
+          {t`Forget Everything`}
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{t("home.memory.forgetTitle", { name })}</AlertDialogTitle>
+          <AlertDialogTitle>{t`Make ${name} forget you?`}</AlertDialogTitle>
           <AlertDialogDescription>
-            {t("home.memory.forgetBody", { name, count })}
+            {t`${plural(count, { one: `This deletes the # memory ${name} keeps of you, for good. Other personas keep theirs.`, other: `This deletes all # memories ${name} keeps of you, for good. Other personas keep theirs.` })}`}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>{t("home.memory.forgetKeep")}</AlertDialogCancel>
+          <AlertDialogCancel>{t`Keep Them`}</AlertDialogCancel>
           <AlertDialogAction variant="destructive" onClick={onForget}>
-            {t("home.memory.forgetConfirm")}
+            {t`Forget`}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -122,7 +135,7 @@ export function MemoryPanel({
   readonly persona: Status["persona"];
   readonly memory: MemoryStatus;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const lang = useLang();
   const formats = useMemo(() => formatsFor(lang), [lang]);
   const queryClient = useQueryClient();
@@ -134,7 +147,7 @@ export function MemoryPanel({
     // Named rather than left to the server's active one, which another tab can switch meanwhile.
     mutationFn: () => call("DELETE /api/local/memories", { query: { persona: persona.id } }),
     onSuccess: async () => {
-      toast.success(t("home.memory.forgotten", { name }));
+      toast.success(t`${name} forgot you.`);
       await queryClient.invalidateQueries({ queryKey: query.queryKey });
     },
     onError: toastError,
@@ -146,15 +159,15 @@ export function MemoryPanel({
 
   return (
     <HomeSection
-      title={t("home.memory.title", { name })}
-      description={t("home.memory.description")}
+      title={t`What ${name} Remembers about You`}
+      description={t`She picks these up in your calls, and only she reads them: each persona remembers on her own.`}
       actions={
         view === "list" && (
           <>
             <Button
               variant="ghost"
               size="icon"
-              aria-label={t("home.memory.refresh")}
+              aria-label={t`Refresh`}
               disabled={list.isFetching}
               onClick={() => void list.refetch()}
             >
@@ -185,13 +198,13 @@ export function MemoryPanel({
         (memories.length === 0 ? (
           <EmptyState
             icon={<BrainIcon />}
-            title={t("home.memory.emptyTitle")}
-            description={t("home.memory.empty", { name })}
+            title={t`No memories yet`}
+            description={t`${name} starts remembering you from your next call.`}
           />
         ) : (
           <ListCard
-            label={t("home.memory.label", { name })}
-            header={t("home.memory.count", { count: formats.count(count) })}
+            label={t`What ${name} Remembers`}
+            header={t`Memories: ${ph({ count: formats.count(count) })}`}
           >
             {shown.map((entry) => {
               const when = entry.updated_at ?? entry.created_at;
@@ -207,7 +220,7 @@ export function MemoryPanel({
             {shown.length < memories.length && (
               <li className="flex justify-center px-4 py-2 sm:px-6">
                 <Button variant="ghost" size="sm" onClick={() => setAll(true)}>
-                  {t("home.memory.showAll", { count: formats.count(memories.length) })}
+                  {t`Show All ${ph({ count: formats.count(memories.length) })}`}
                 </Button>
               </li>
             )}

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { PROOF_HEADER } from "../../../bot/src/local/api.ts";
-import { ApiError, call, errorDetail, errorFrom, errorKey, stream, url } from "./api";
+import { ApiError, call, errorDetail, errorFrom, stream, url } from "./api";
 import { keepProof } from "./proof";
 
 afterEach(() => {
@@ -37,11 +37,6 @@ describe("errorFrom", () => {
     expect(errorDetail(new ApiError(404, "not-found", "No such route"))).toBe("No such route");
     expect(errorDetail(null)).toBeUndefined();
   });
-});
-
-test("errorKey names the locale string for a code, and a fallback for anything else", () => {
-  expect(errorKey(new ApiError(409, "call-active", "a call is live"))).toBe("errors.call-active");
-  expect(errorKey(new TypeError("x"))).toBe("errors.unknown");
 });
 
 describe("url", () => {

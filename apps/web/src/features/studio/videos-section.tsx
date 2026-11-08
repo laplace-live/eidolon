@@ -1,6 +1,8 @@
 // A persona's videos: add links, download them for free, see what transcribing, refining and
 // indexing them would cost, then run it. Every step is a job; the table follows the running one.
 import type { PlanVideo } from "@eidolon/ingest/progress";
+import { ph, plural } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDownIcon,
@@ -41,10 +43,10 @@ import { jobsQuery, useStartJob } from "@/features/jobs/queries";
 import { useJobEvents } from "@/features/jobs/use-job-events";
 import type { JobCommand, PersonaSummary, Status } from "@/lib/api";
 import { formatBytes, formatUsd } from "@/lib/format";
-import { useLang, useT } from "@/lib/i18n";
 import { latestJob, videoActivity } from "@/lib/jobs";
 import { statusQuery } from "@/lib/query";
 import { cn } from "@/lib/utils";
+import { useLang } from "@/locales/i18n";
 import { AddVideosCard } from "./add-videos";
 import { LoadError } from "./parts";
 import { personaQueries } from "./queries";
@@ -115,7 +117,7 @@ function ToolLine({
 
 /** Where downloads read cookies from, in words. */
 function useCookieSummary(): string {
-  const t = useT();
+  const { t } = useLingui();
   const settings = useQuery(settingsQuery());
   const rows = settings.data?.settings ?? [];
   // The environment wins over settings.yaml for these, as for every app setting.
@@ -125,11 +127,11 @@ function useCookieSummary(): string {
   };
   const browser = applied("sources.cookiesFromBrowser");
   const file = applied("sources.cookiesFile");
-  if (typeof file === "string" && file !== "") return t("studio.videos.cookiesFile", { file });
-  if (browser === "none") return t("studio.videos.cookiesNone");
+  if (typeof file === "string" && file !== "") return t`Cookies come from the file ${file}.`;
+  if (browser === "none") return t`Downloads use no cookies.`;
   return typeof browser === "string" && browser !== ""
-    ? t("studio.videos.cookiesBrowser", { browser })
-    : t("studio.videos.cookiesDefault");
+    ? t`Cookies come from ${browser}.`
+    : t`Cookies come from Chrome, the default.`;
 }
 
 function DownloadCard({
@@ -152,47 +154,53 @@ function DownloadCard({
   readonly downloadCount: number;
   readonly hint: string;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const lang = useLang();
   const cookies = useCookieSummary();
   const longOnes = videos.filter(needsFfmpeg).length;
   const ytDlp = status?.ytDlp;
   return (
     <SectionCard
-      title={<Priced title={t("studio.videos.downloadTitle")} price={t("studio.videos.free")} />}
-      description={t("studio.videos.downloadHelp")}
+      title={<Priced title={t`Download`} price={t`Free`} />}
+      description={t`yt-dlp downloads each video's audio into your data home. Nothing is billed.`}
       note={hint}
       actions={
         <Button onClick={() => onDownload?.()} disabled={busy || onDownload === null}>
           <DownloadIcon />
-          {t("studio.videos.download", { count: downloadCount })}
+          {t`${plural(ph({ count: downloadCount }), { one: `Download # video`, other: `Download # videos` })}`}
         </Button>
       }
     >
       {status && ytDlp && (
         <ul className="flex flex-col divide-y">
           {ytDlp.state === "installed" ? (
-            <ToolLine tone="ok">{t("studio.videos.ytdlpInstalled", { tag: ytDlp.tag })}</ToolLine>
+            <ToolLine tone="ok">{t`yt-dlp ${ph({ tag: ytDlp.tag })} is installed.`}</ToolLine>
           ) : ytDlp.state === "installs-on-first-download" ? (
-            <ToolLine tone="info">{t("studio.videos.ytdlpFirst")}</ToolLine>
+            <ToolLine tone="info">{t`yt-dlp installs itself on the first download.`}</ToolLine>
           ) : (
-            <ToolLine tone="error" hint={t("studio.videos.ytdlpManual")}>
-              {t("studio.videos.ytdlpUnavailable", { reason: ytDlp.reason })}
+            <ToolLine
+              tone="error"
+              hint={t`Install it yourself with brew install yt-dlp or pip install yt-dlp, and Eidolon uses the one on your PATH.`}
+            >
+              {t`yt-dlp is unavailable: ${ph({ reason: ytDlp.reason })}`}
             </ToolLine>
           )}
           {status.ffmpeg ? (
-            <ToolLine tone="ok">{t("studio.videos.ffmpegFound")}</ToolLine>
+            <ToolLine tone="ok">{t`ffmpeg is installed.`}</ToolLine>
           ) : (
-            <ToolLine tone={longOnes > 0 ? "error" : "info"} hint={t("studio.videos.ffmpegHint")}>
+            <ToolLine
+              tone={longOnes > 0 ? "error" : "info"}
+              hint={t`macOS: brew install ffmpeg · Windows: winget install ffmpeg · Linux: your package manager's ffmpeg.`}
+            >
               {longOnes > 0
-                ? t("studio.videos.ffmpegNeeded", { count: longOnes })
-                : t("studio.videos.ffmpegMissing")}
+                ? t`${plural(ph({ count: longOnes }), { one: `ffmpeg isn't installed, and # video is over 5 hours, which needs it to be transcribed.`, other: `ffmpeg isn't installed, and # videos are over 5 hours, which need it to be transcribed.` })}`
+                : t`ffmpeg isn't installed. Only videos over 5 hours need it.`}
             </ToolLine>
           )}
           <ToolLine tone="info" icon={<HardDriveIcon />}>
             {status.freeBytes === null
-              ? t("studio.videos.freeUnknown")
-              : t("studio.videos.freeSpace", { size: formatBytes(status.freeBytes, lang) })}
+              ? t`The free space on the data home's disk is unknown.`
+              : t`${ph({ size: formatBytes(status.freeBytes, lang) })} free on the data home's disk.`}
           </ToolLine>
           <ToolLine
             tone="info"
@@ -206,7 +214,7 @@ function DownloadCard({
                   aria-expanded={cookiesShown}
                   onClick={onCookies}
                 >
-                  {t("studio.videos.cookiesChange")}
+                  {t`Change`}
                   <ChevronDownIcon className={cn(cookiesShown && "rotate-180")} />
                 </Button>
               )
@@ -231,7 +239,7 @@ function RunPaid({
   readonly disabled: boolean;
   readonly onRun: () => void;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const lang = useLang();
   const amount = formatUsd(usd, lang);
   return (
@@ -239,20 +247,21 @@ function RunPaid({
       <AlertDialogTrigger asChild>
         <Button disabled={disabled}>
           <PlayIcon />
-          {t("studio.videos.run", { usd: amount })}
+          {t`Run, about ${ph({ usd: amount })}`}
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{t("studio.videos.runConfirmTitle")}</AlertDialogTitle>
+          <AlertDialogTitle>{t`Start the billed run?`}</AlertDialogTitle>
           <AlertDialogDescription>
-            {t("studio.videos.runConfirmBody", { usd: amount })}
-            {unpriced > 0 && ` ${t("studio.videos.runConfirmUnpriced", { count: unpriced })}`}
+            {t`This bills your Soniox, OpenRouter and embedding accounts: about ${ph({ usd: amount })} by the estimate.`}
+            {unpriced > 0 &&
+              ` ${t`${plural(ph({ count: unpriced }), { one: `# video isn't in the estimate.`, other: `# videos aren't in the estimate.` })}`}`}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>{t("studio.videos.runConfirmCancel")}</AlertDialogCancel>
-          <AlertDialogAction onClick={onRun}>{t("studio.videos.runConfirm")}</AlertDialogAction>
+          <AlertDialogCancel>{t`Not Now`}</AlertDialogCancel>
+          <AlertDialogAction onClick={onRun}>{t`Run`}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -280,7 +289,7 @@ function Cost({
 }
 
 export function VideosSection({ persona }: { readonly persona: PersonaSummary }) {
-  const t = useT();
+  const { t } = useLingui();
   const lang = useLang();
   const queryClient = useQueryClient();
   const concurrencyId = useId();
@@ -365,12 +374,12 @@ export function VideosSection({ persona }: { readonly persona: PersonaSummary })
         downloadCount={downloadCount}
         hint={
           totals.downloadPending === 0
-            ? t("studio.videos.nothingToDownload")
+            ? t`Every video is downloaded.`
             : pendingBatches.length === 0
-              ? t("studio.videos.notInBatch")
+              ? t`These videos come from your own URL lists, which only laplace-pipeline in a terminal downloads.`
               : pendingBatches.length > 1
-                ? t("studio.videos.batchesWaiting", { count: pendingBatches.length })
-                : t("studio.videos.downloadFree")
+                ? t`${plural(ph({ count: pendingBatches.length }), { one: `# batch is waiting; this downloads it.`, other: `# batches are waiting; this downloads the oldest first.` })}`
+                : t`Free: only yt-dlp runs.`
         }
       />
 
@@ -378,23 +387,23 @@ export function VideosSection({ persona }: { readonly persona: PersonaSummary })
         <SettingsCard
           scope="app"
           paths={COOKIE_PATHS}
-          title={t("studio.videos.cookiesTitle")}
-          description={t("studio.videos.cookiesHelp")}
+          title={t`Cookies`}
+          description={t`Some videos need a signed-in browser's cookies. Reading a browser's cookies may ask for your password (the macOS Keychain), and yt-dlp writes the cookies it used back into a cookies file.`}
         >
           {cookieTrouble && (
             <Alert variant="destructive">
               <TriangleAlertIcon />
-              <AlertTitle>{t("events.cookies-unavailable")}</AlertTitle>
-              <AlertDescription>{t("studio.videos.cookiesTrouble")}</AlertDescription>
+              <AlertTitle>{t`yt-dlp couldn't read the browser's cookies, or the site asked for them.`}</AlertTitle>
+              <AlertDescription>{t`The last download failed on cookies. Pick another browser, a cookies file or none, then download again.`}</AlertDescription>
             </Alert>
           )}
         </SettingsCard>
       )}
 
       <SectionCard
-        title={<Priced title={t("studio.videos.runTitle")} price={t("studio.videos.billed")} />}
-        description={t("studio.videos.runHelp")}
-        note={t("studio.videos.estimateNote")}
+        title={<Priced title={t`Transcribe, Refine and Index`} price={t`Billed`} />}
+        description={t`Soniox transcribes the audio, the refine model cleans up each transcript, and the embedding API indexes it. Each step skips what's already done.`}
+        note={t`Estimates come from price tables or past runs, and leave out indexing's embedding cost.`}
         actions={
           <RunPaid
             usd={usd}
@@ -405,56 +414,50 @@ export function VideosSection({ persona }: { readonly persona: PersonaSummary })
         }
       >
         {totals.paidWork === 0 ? (
-          <p className="text-muted-foreground text-sm">{t("studio.videos.nothingToRun")}</p>
+          <p className="text-muted-foreground text-sm">{t`Nothing is left to transcribe, refine or index.`}</p>
         ) : (
           <div className="flex flex-col gap-2">
             <dl className="flex flex-col divide-y text-sm">
               {totals.transcribePending > 0 && (
                 <Cost
-                  label={t("studio.videos.estimateTranscribe", {
-                    count: totals.transcribePending,
-                  })}
+                  label={t`${plural(ph({ count: totals.transcribePending }), { one: `Transcribe # video`, other: `Transcribe # videos` })}`}
                   amount={formatUsd(totals.transcribeUsd, lang)}
                 />
               )}
               {totals.refineChunks > 0 && (
                 <Cost
-                  label={t("studio.videos.estimateRefine", {
-                    count: totals.refineChunks,
-                  })}
+                  label={t`${plural(ph({ count: totals.refineChunks }), { one: `Refine # chunk`, other: `Refine # chunks` })}`}
                   amount={formatUsd(totals.refineUsd, lang)}
                 />
               )}
               {totals.unindexed > 0 && (
                 <Cost
-                  label={t("studio.videos.estimateIndex", {
-                    count: totals.unindexed,
-                  })}
+                  label={t`${plural(ph({ count: totals.unindexed }), { one: `Index # video`, other: `Index # videos` })}`}
                   amount="—"
                 />
               )}
-              <Cost label={t("studio.videos.estimateTotal")} amount={formatUsd(usd, lang)} strong />
+              <Cost label={t`Estimated Total`} amount={formatUsd(usd, lang)} strong />
             </dl>
             {totals.unpriced > 0 && (
               <p className="text-muted-foreground text-xs">
-                {t("studio.videos.estimateUnpriced", { count: totals.unpriced })}
+                {t`${plural(ph({ count: totals.unpriced }), { one: `# video can't be priced yet: its length is known only once it downloads.`, other: `# videos can't be priced yet: their length is known only once they download.` })}`}
               </p>
             )}
           </div>
         )}
         {totals.noDate > 0 && (
-          <p className="text-sm">{t("studio.videos.noDate", { count: totals.noDate })}</p>
+          <p className="text-sm">{t`${plural(ph({ count: totals.noDate }), { one: `# downloaded video has no upload date, so it waits until you give one in the table below.`, other: `# downloaded videos have no upload date, so they wait until you give one in the table below.` })}`}</p>
         )}
         <Collapsible open={advanced} onOpenChange={setAdvanced}>
           <CollapsibleTrigger asChild>
             <Button variant="ghost" size="sm" className="-ml-2.5 text-muted-foreground">
               <ChevronDownIcon className={cn(advanced && "rotate-180")} />
-              {t("studio.videos.advanced")}
+              {t`Advanced`}
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent className="pt-3">
             <Field>
-              <FieldLabel htmlFor={concurrencyId}>{t("studio.videos.concurrency")}</FieldLabel>
+              <FieldLabel htmlFor={concurrencyId}>{t`Transcriptions at Once`}</FieldLabel>
               <Input
                 id={concurrencyId}
                 type="number"
@@ -468,7 +471,7 @@ export function VideosSection({ persona }: { readonly persona: PersonaSummary })
                 className="max-w-24"
               />
               <FieldDescription>
-                {t("studio.videos.concurrencyHelp", { max: MAX_CONCURRENCY })}
+                {t`Soniox allows up to ${ph({ max: MAX_CONCURRENCY })} at once per account.`}
               </FieldDescription>
             </Field>
           </CollapsibleContent>
@@ -478,24 +481,24 @@ export function VideosSection({ persona }: { readonly persona: PersonaSummary })
       {runJob && <JobCard key={runJob.id} job={runJob} events={runEvents} onEnded={onRunEnded} />}
 
       <SectionCard
-        title={t("studio.videos.tableTitle")}
-        description={t("studio.videos.tableHelp")}
+        title={t`Videos`}
+        description={t`Where each video stands by the latest plan, and what the running job is doing.`}
         action={
           <Button variant="outline" size="sm" disabled={plan.refreshing} onClick={plan.refresh}>
             <RefreshCwIcon className={cn(plan.refreshing && "animate-spin")} />
-            {t("studio.videos.replan")}
+            {t`Plan Again`}
           </Button>
         }
       >
         {plan.refreshing && (
           <p className="flex items-center gap-2 text-muted-foreground text-sm">
             <Spinner />
-            {t("studio.videos.planning")}
+            {t`Reading the persona's sources…`}
           </p>
         )}
         {plan.failed && (
           <Alert variant="destructive">
-            <AlertDescription>{t("studio.videos.planFailed")}</AlertDescription>
+            <AlertDescription>{t`The plan couldn't be made. Its job page has the details.`}</AlertDescription>
           </Alert>
         )}
         {plan.error && <LoadError error={plan.error} />}
@@ -520,8 +523,8 @@ export function VideosSection({ persona }: { readonly persona: PersonaSummary })
         scope="persona"
         persona={persona.id}
         paths={CARD_PATHS.transcription}
-        title={t("studio.transcription.title")}
-        description={t("studio.transcription.description")}
+        title={t`Transcription`}
+        description={t`How her videos become transcripts: the language and model Soniox transcribes with, and the model that refines them, with how many chunks it works on at once.`}
         onSaved={(values) => {
           if (outdatesPlan(values)) plan.outdated();
         }}

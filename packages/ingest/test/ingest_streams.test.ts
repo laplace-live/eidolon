@@ -315,7 +315,7 @@ describe("ingestStreams", () => {
       );
       expect([report.ok, report.written]).toEqual([false, false]);
       expect(events.at(-2)).toMatchObject({ status: "failed", code: "missing-credential" });
-      expect(records.at(-1)?.[1]).toStartWith("Embeddings need an API key.");
+      expect(records.at(-1)?.[1]).toStartWith("OpenRouter needs an API key");
       expect(network).not.toHaveBeenCalled();
     } finally {
       network.mockRestore();

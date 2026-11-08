@@ -4,7 +4,6 @@ import { dirname, join } from "node:path";
 import { dataHome } from "@eidolon/config";
 import {
   buildMemoryConfig,
-  EMBED_KEY_MISSING,
   memorySearchSettingsFromEnv,
   qdrantHost,
   requireLlmKey,
@@ -54,15 +53,18 @@ describe("buildMemoryConfig", () => {
       vectorSize: 3072,
     });
     expect(config.embedder).toEqual({
+      provider: "openrouter",
       model: "google/gemini-embedding-2-preview",
       apiKey: "sk-or",
       baseUrl: "https://openrouter.ai/api/v1",
       dims: 3072,
     });
     expect(config.llm).toEqual({
+      provider: "openrouter",
       model: "~google/gemini-flash-latest",
       apiKey: "sk-or",
       baseUrl: "https://openrouter.ai/api/v1",
+      keyMissing: null,
     });
     expect(config.historyDbPath).toBe(join(dataHome(), "mem0", "history.db"));
   });
@@ -83,6 +85,7 @@ describe("buildMemoryConfig", () => {
     });
     const config = buildMemoryConfig();
     expect(config.embedder).toEqual({
+      provider: "openrouter",
       model: "m",
       apiKey: "sk-embed",
       baseUrl: "https://embed.example/v1",
@@ -92,11 +95,10 @@ describe("buildMemoryConfig", () => {
     expect(config.llm.apiKey).toBe("sk-or");
   });
 
-  test("no embedding key is mem0_local's error, verbatim", () => {
+  test("no embedding key names the key to set", () => {
     setEnv({ OPENROUTER_API_KEY: "", EMBED_API_KEY: "" });
-    expect(() => buildMemoryConfig()).toThrow(EMBED_KEY_MISSING);
-    expect(EMBED_KEY_MISSING).toBe(
-      "Self-hosted Mem0 needs an embedding API key. Set OPENROUTER_API_KEY (reused from the LLM config) or EMBED_API_KEY for a different provider.",
+    expect(() => buildMemoryConfig()).toThrow(
+      "OpenRouter needs an API key: set OPENROUTER_API_KEY in credentials.json or the environment, or EMBED_API_KEY for embeddings alone",
     );
   });
 
@@ -124,17 +126,20 @@ describe("buildMemoryConfig", () => {
 });
 
 describe("extraction LLM routing", () => {
-  test("OpenRouter whenever OPENROUTER_API_KEY is set, OPENROUTER_API_BASE overriding the base", () => {
+  test("the persona's chat provider, OPENROUTER_API_BASE overriding OpenRouter's base", () => {
     setEnv({ OPENROUTER_API_BASE: "https://proxy.example/v1", OPENAI_API_KEY: "sk-oa" });
     expect(buildMemoryConfig().llm).toMatchObject({
+      provider: "openrouter",
       apiKey: "sk-or",
       baseUrl: "https://proxy.example/v1",
     });
   });
 
-  test("otherwise OpenAI's key and base", () => {
-    setEnv({ OPENROUTER_API_KEY: "", EMBED_API_KEY: "sk-embed", OPENAI_API_KEY: "sk-oa" });
+  test("a provider of its own, with that provider's key and base", () => {
+    setEnv({ MEM0_LLM_PROVIDER: "openai", OPENAI_API_KEY: "sk-oa" });
     expect(buildMemoryConfig().llm).toMatchObject({
+      provider: "openai",
+      model: "gpt-6-luna",
       apiKey: "sk-oa",
       baseUrl: "https://api.openai.com/v1",
     });
@@ -142,12 +147,19 @@ describe("extraction LLM routing", () => {
     expect(buildMemoryConfig().llm.baseUrl).toBe("https://compat.example/v1");
   });
 
-  test("no key at all fails where the OpenAI client would be built", () => {
+  test("a provider that takes no key opens the extraction client without one", () => {
+    setEnv({ MEM0_LLM_PROVIDER: "ollama", EMBED_API_KEY: "sk-embed" });
+    const { llm } = buildMemoryConfig();
+    expect(llm.provider).toBe("ollama");
+    expect(requireLlmKey(llm)).toBe("");
+  });
+
+  test("no key fails where the extraction client would be built, naming the key", () => {
     setEnv({ OPENROUTER_API_KEY: "", EMBED_API_KEY: "sk-embed" });
     const { llm } = buildMemoryConfig();
     expect(llm.apiKey).toBeNull();
     expect(() => requireLlmKey(llm)).toThrow(
-      "The api_key client option must be set either by passing api_key to the client or by setting the OPENAI_API_KEY environment variable",
+      "OpenRouter needs an API key: set OPENROUTER_API_KEY in credentials.json or the environment",
     );
   });
 });

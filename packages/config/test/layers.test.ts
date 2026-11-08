@@ -94,9 +94,9 @@ describe("loadSettings", () => {
     expect(setValues(layers.values)).toEqual([
       ["EIDOLON_LOCAL_VIEWER_NAME", "小明"],
       ["EMBED_DIM", "768"],
-      ["FISH_VOICE_ID", "base"],
+      ["TTS_VOICE_ID", "base"],
       ["MEM0_AGENT_ID", "shop"],
-      ["FISH_VOICE_ID_GENTLE", "soft"],
+      ["TTS_VOICE_ID_GENTLE", "soft"],
       ["FISH_API_KEY", "fk"],
       ["SONIOX_API_KEY", "sk"],
     ]);
@@ -136,8 +136,8 @@ describe("readSettingsLayers", () => {
     write("personas/other/persona.yaml", "mind:\n  model: other/model\n");
     const other = readSettingsLayers("other");
     expect(other.files.persona).toBe(join(dataHome(), "personas", "other", "persona.yaml"));
-    expect(other.values.get("OPENROUTER_MODEL")?.value).toBe("other/model");
-    expect(readSettingsLayers("milky-green").values.get("OPENROUTER_MODEL")).toEqual(UNSET);
+    expect(other.values.get("LLM_MODEL")?.value).toBe("other/model");
+    expect(readSettingsLayers("milky-green").values.get("LLM_MODEL")).toEqual(UNSET);
   });
 
   test("a wrong kind keeps its layer and raw value, with no value, and warns only in the result", () => {
@@ -171,7 +171,7 @@ describe("setting defaults", () => {
   test("lie beneath the environment and her file, from the persona installed", () => {
     write("settings.yaml", "persona: other\n");
     write("personas/other/persona.yaml", "identity:\n  name: Other\n");
-    setSettingDefaults((persona) => ({ MEM0_AGENT_ID: persona.id, FISH_MODEL: "s1" }));
+    setSettingDefaults((persona) => ({ MEM0_AGENT_ID: persona.id, TTS_MODEL: "s1" }));
     installSettings();
     expect(envOptional("MEM0_AGENT_ID")).toBe("other");
     setEnv("MEM0_AGENT_ID", "from-env");
@@ -211,62 +211,62 @@ test("envOverride reads only a non-empty environment variable", () => {
 describe("a persona's own settings over the environment", () => {
   beforeEach(() => {
     for (const name of Object.keys(process.env)) {
-      if (name.startsWith("FISH_VOICE_ID")) setEnv(name, undefined);
+      if (/^(FISH|TTS)_VOICE_ID/.test(name)) setEnv(name, undefined);
     }
   });
 
   const voices = () => {
     const entries = new Map(envEntries());
     return {
-      voice: envOptional("FISH_VOICE_ID"),
-      gentle: envOptional("FISH_VOICE_ID_GENTLE"),
-      scanned: entries.get("FISH_VOICE_ID_GENTLE"),
+      voice: envOptional("TTS_VOICE_ID"),
+      gentle: envOptional("TTS_VOICE_ID_GENTLE"),
+      scanned: entries.get("TTS_VOICE_ID_GENTLE"),
     };
   };
 
-  test("her voice.voiceId wins over FISH_VOICE_ID", () => {
-    setEnv("FISH_VOICE_ID", "env-voice");
+  test("her voice.voiceId wins over TTS_VOICE_ID", () => {
+    setEnv("TTS_VOICE_ID", "env-voice");
     write("personas/milky-green/persona.yaml", "voice:\n  voiceId: her-voice\n");
     installSettings();
-    expect(envOptional("FISH_VOICE_ID")).toBe("her-voice");
-    expect(new Map(envEntries()).get("FISH_VOICE_ID")).toBe("her-voice");
-    expect(envOverride("FISH_VOICE_ID")).toBeUndefined();
-    expect(envVariable("FISH_VOICE_ID")).toBe("env-voice");
+    expect(envOptional("TTS_VOICE_ID")).toBe("her-voice");
+    expect(new Map(envEntries()).get("TTS_VOICE_ID")).toBe("her-voice");
+    expect(envOverride("TTS_VOICE_ID")).toBeUndefined();
+    expect(envVariable("TTS_VOICE_ID")).toBe("env-voice");
   });
 
-  test("without one, she inherits FISH_VOICE_ID", () => {
-    setEnv("FISH_VOICE_ID", "env-voice");
+  test("without one, she inherits TTS_VOICE_ID", () => {
+    setEnv("TTS_VOICE_ID", "env-voice");
     installSettings();
-    expect(envOptional("FISH_VOICE_ID")).toBe("env-voice");
-    expect(envOverride("FISH_VOICE_ID")).toBe("env-voice");
+    expect(envOptional("TTS_VOICE_ID")).toBe("env-voice");
+    expect(envOverride("TTS_VOICE_ID")).toBe("env-voice");
   });
 
   test("with her own voice, the environment's styles are gone, for a lookup and a scan", () => {
-    setEnv("FISH_VOICE_ID", "env-voice");
-    setEnv("FISH_VOICE_ID_GENTLE", "env-gentle");
-    setEnv("FISH_VOICE_ID_CALM", "");
+    setEnv("TTS_VOICE_ID", "env-voice");
+    setEnv("TTS_VOICE_ID_GENTLE", "env-gentle");
+    setEnv("TTS_VOICE_ID_CALM", "");
     write(
       "personas/milky-green/persona.yaml",
       "voice:\n  voiceId: her-voice\n  styles:\n    lively: her-lively\n",
     );
     installSettings();
     expect(voices()).toEqual({ voice: "her-voice", gentle: undefined, scanned: undefined });
-    expect(envRaw("FISH_VOICE_ID_GENTLE")).toBeUndefined();
-    expect(envRaw("FISH_VOICE_ID_CALM")).toBeUndefined();
-    expect(envOptional("FISH_VOICE_ID_LIVELY")).toBe("her-lively");
-    const styles = envEntries().filter(([name]) => name.startsWith("FISH_VOICE_ID_"));
-    expect(styles).toEqual([["FISH_VOICE_ID_LIVELY", "her-lively"]]);
+    expect(envRaw("TTS_VOICE_ID_GENTLE")).toBeUndefined();
+    expect(envRaw("TTS_VOICE_ID_CALM")).toBeUndefined();
+    expect(envOptional("TTS_VOICE_ID_LIVELY")).toBe("her-lively");
+    const styles = envEntries().filter(([name]) => name.startsWith("TTS_VOICE_ID_"));
+    expect(styles).toEqual([["TTS_VOICE_ID_LIVELY", "her-lively"]]);
   });
 
   test("without her own voice, the environment's styles apply beside the ones she sets", () => {
-    setEnv("FISH_VOICE_ID", "env-voice");
-    setEnv("FISH_VOICE_ID_GENTLE", "env-gentle");
-    setEnv("FISH_VOICE_ID_CALM", "env-calm");
+    setEnv("TTS_VOICE_ID", "env-voice");
+    setEnv("TTS_VOICE_ID_GENTLE", "env-gentle");
+    setEnv("TTS_VOICE_ID_CALM", "env-calm");
     write("personas/milky-green/persona.yaml", "voice:\n  styles:\n    calm: her-calm\n");
     installSettings();
     expect(voices()).toEqual({ voice: "env-voice", gentle: "env-gentle", scanned: "env-gentle" });
-    expect(envOptional("FISH_VOICE_ID_CALM")).toBe("her-calm");
-    expect(new Map(envEntries()).get("FISH_VOICE_ID_CALM")).toBe("her-calm");
+    expect(envOptional("TTS_VOICE_ID_CALM")).toBe("her-calm");
+    expect(new Map(envEntries()).get("TTS_VOICE_ID_CALM")).toBe("her-calm");
   });
 
   test("an app setting: the environment still wins over settings.yaml", () => {
@@ -279,8 +279,8 @@ describe("a persona's own settings over the environment", () => {
   });
 
   test("an empty or ill-typed value of hers decides nothing", () => {
-    setEnv("FISH_VOICE_ID", "env-voice");
-    setEnv("FISH_VOICE_ID_GENTLE", "env-gentle");
+    setEnv("TTS_VOICE_ID", "env-voice");
+    setEnv("TTS_VOICE_ID_GENTLE", "env-gentle");
     setEnv("FACTS_FILES", "env*.txt");
     setEnv("PERSONA_FILE", "/env/prompt.md");
     write(
@@ -295,8 +295,8 @@ describe("a persona's own settings over the environment", () => {
   });
 
   test("reinstalling for another persona recomputes what her file decides", () => {
-    setEnv("FISH_VOICE_ID", "env-voice");
-    setEnv("FISH_VOICE_ID_GENTLE", "env-gentle");
+    setEnv("TTS_VOICE_ID", "env-voice");
+    setEnv("TTS_VOICE_ID_GENTLE", "env-gentle");
     write("personas/alice/persona.yaml", "voice:\n  voiceId: alice-voice\n");
     write("personas/bob/persona.yaml", "identity:\n  name: Bob\n");
     write("settings.yaml", "persona: alice\n");
@@ -322,40 +322,114 @@ describe("a persona's own settings over the environment", () => {
   });
 
   test("readSettingsLayers names what any persona's file decides; layeredValue reads it", () => {
-    setEnv("FISH_VOICE_ID", "env-voice");
-    setEnv("FISH_VOICE_ID_GENTLE", "env-gentle");
-    setEnv("OPENROUTER_MODEL", "env/chat");
+    setEnv("TTS_VOICE_ID", "env-voice");
+    setEnv("TTS_VOICE_ID_GENTLE", "env-gentle");
+    setEnv("LLM_MODEL", "env/chat");
     write("personas/alice/persona.yaml", "voice:\n  voiceId: alice-voice\n");
     installSettings();
     const alice = readSettingsLayers("alice");
-    expect([...alice.owned]).toEqual(["FISH_VOICE_ID", "FISH_VOICE_ID_GENTLE"]);
-    expect(layeredValue(alice, "FISH_VOICE_ID")).toBe("alice-voice");
-    expect(layeredValue(alice, "FISH_VOICE_ID_GENTLE")).toBeUndefined();
-    expect(layeredValue(alice, "OPENROUTER_MODEL")).toBe("env/chat");
+    expect([...alice.owned]).toEqual(["TTS_VOICE_ID", "FISH_VOICE_ID", "TTS_VOICE_ID_GENTLE"]);
+    expect(layeredValue(alice, "TTS_VOICE_ID")).toBe("alice-voice");
+    expect(layeredValue(alice, "TTS_VOICE_ID_GENTLE")).toBeUndefined();
+    expect(layeredValue(alice, "LLM_MODEL")).toBe("env/chat");
     const green = readSettingsLayers("milky-green");
     expect([...green.owned]).toEqual(["PERSONA_TIMEZONE", "FACTS_FILES", "FACTS_SUBJECT"]);
-    expect(layeredValue(green, "FISH_VOICE_ID")).toBe("env-voice");
-    expect(layeredValue(green, "FISH_VOICE_ID_GENTLE")).toBe("env-gentle");
+    expect(layeredValue(green, "TTS_VOICE_ID")).toBe("env-voice");
+    expect(layeredValue(green, "TTS_VOICE_ID_GENTLE")).toBe("env-gentle");
+  });
+
+  test("a provider of her own drops the environment's model, voice and styles for it", () => {
+    setEnv("LLM_MODEL", "env/chat");
+    setEnv("OPENROUTER_MODEL", "env/legacy-chat");
+    setEnv("TTS_VOICE_ID", "env-voice");
+    setEnv("FISH_VOICE_ID", "env-fish-voice");
+    setEnv("FISH_VOICE_ID_GENTLE", "env-gentle");
+    setEnv("MEM0_LLM_MODEL", "env/memory");
+    write(
+      "personas/milky-green/persona.yaml",
+      "mind:\n  provider: anthropic\nvoice:\n  provider: elevenlabs\n",
+    );
+    installSettings();
+    for (const name of [
+      "LLM_MODEL",
+      "OPENROUTER_MODEL",
+      "TTS_VOICE_ID",
+      "FISH_VOICE_ID",
+      "FISH_VOICE_ID_GENTLE",
+      "MEM0_LLM_MODEL",
+    ]) {
+      expect(envOptional(name), name).toBeUndefined();
+    }
+    expect(envOptional("LLM_PROVIDER")).toBe("anthropic");
+    expect(infos).toContain(
+      "LLM_MODEL from the environment is ignored: persona milky-green sets mind.provider",
+    );
+    expect(infos).toContain(
+      "MEM0_LLM_MODEL from the environment is ignored: persona milky-green sets memory.provider",
+    );
+  });
+
+  test("naming the environment's own provider keeps what the environment sets for it", () => {
+    setEnv("OPENROUTER_MODEL", "env/legacy-chat");
+    setEnv("FISH_VOICE_ID", "env-fish-voice");
+    setEnv("FISH_VOICE_ID_GENTLE", "env-gentle");
+    write(
+      "personas/milky-green/persona.yaml",
+      "mind:\n  provider: openrouter\nvoice:\n  provider: fish\n",
+    );
+    installSettings();
+    expect(envOptional("OPENROUTER_MODEL")).toBe("env/legacy-chat");
+    expect(envOptional("FISH_VOICE_ID")).toBe("env-fish-voice");
+    expect(envOptional("FISH_VOICE_ID_GENTLE")).toBe("env-gentle");
+    // A hand-written file may spell the id as the provider does; it is the same provider.
+    write(
+      "personas/milky-green/persona.yaml",
+      "mind:\n  provider: OpenRouter\nvoice:\n  provider: Fish\n",
+    );
+    installSettings();
+    expect(envOptional("OPENROUTER_MODEL")).toBe("env/legacy-chat");
+    expect(envOptional("FISH_VOICE_ID_GENTLE")).toBe("env-gentle");
+  });
+
+  test("the environment's provider is what she compares hers with", () => {
+    setEnv("LLM_PROVIDER", "anthropic");
+    setEnv("LLM_MODEL", "claude-sonnet-5-5");
+    write("personas/milky-green/persona.yaml", "mind:\n  provider: anthropic\n");
+    installSettings();
+    expect(envOptional("LLM_MODEL")).toBe("claude-sonnet-5-5");
+    write("personas/milky-green/persona.yaml", "mind:\n  provider: openrouter\n");
+    installSettings();
+    expect(envOptional("LLM_MODEL")).toBeUndefined();
+  });
+
+  test("with her own voice, Fish's names for the environment's voices are gone too", () => {
+    setEnv("FISH_VOICE_ID", "env-fish-voice");
+    setEnv("FISH_VOICE_ID_GENTLE", "env-gentle");
+    write("personas/milky-green/persona.yaml", "voice:\n  voiceId: her-voice\n");
+    installSettings();
+    expect(envOptional("FISH_VOICE_ID")).toBeUndefined();
+    expect(envOptional("FISH_VOICE_ID_GENTLE")).toBeUndefined();
+    expect(envOptional("TTS_VOICE_ID")).toBe("her-voice");
   });
 
   test("an install logs the environment variables it ignores, by name only, once until they change", () => {
-    setEnv("FISH_VOICE_ID", "env-voice");
-    setEnv("FISH_VOICE_ID_GENTLE", "env-gentle");
+    setEnv("TTS_VOICE_ID", "env-voice");
+    setEnv("TTS_VOICE_ID_GENTLE", "env-gentle");
     setEnv("REFINE_MODEL", "");
-    setEnv("OPENROUTER_MODEL", "env/chat");
+    setEnv("LLM_MODEL", "env/chat");
     write(
       "personas/milky-green/persona.yaml",
       "voice:\n  voiceId: her-voice\nrefine:\n  model: her/refiner\n",
     );
     installSettings();
     const lines = [
-      "FISH_VOICE_ID from the environment is ignored: persona milky-green sets voice.voiceId",
-      "FISH_VOICE_ID_GENTLE from the environment is ignored: persona milky-green has her own voice",
+      "TTS_VOICE_ID from the environment is ignored: persona milky-green sets voice.voiceId",
+      "TTS_VOICE_ID_GENTLE from the environment is ignored: persona milky-green has her own voice",
     ];
     expect(infos).toEqual(lines);
     loadSettings();
     readSettingsLayers("milky-green");
-    envOptional("FISH_VOICE_ID");
+    envOptional("TTS_VOICE_ID");
     expect(infos).toEqual(lines);
     // A reinstall that ignores the same ones, as every save in the local app makes, says nothing.
     installSettings();

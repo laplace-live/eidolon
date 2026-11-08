@@ -432,7 +432,7 @@ describe("openMemoryProvider", () => {
     const e = engines();
     setEnv({ OPENROUTER_API_KEY: "", MEM0_SEARCH_LIMIT: "0" });
     await expect(openMemoryProvider({ userId: "1" }, e.shared)).rejects.toThrow(
-      "Self-hosted Mem0 needs an embedding API key",
+      "OpenRouter needs an API key",
     );
     setEnv({ OPENROUTER_API_KEY: "sk-or" });
     await expect(openMemoryProvider({ userId: "1" }, e.shared)).rejects.toThrow(RangeError);

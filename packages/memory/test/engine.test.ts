@@ -3,6 +3,7 @@
 // the clock and uuid4 pinned. Each replays here and must match call for call, row for row.
 import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
+import { setUsageSink, type UsageRecord } from "@eidolon/providers";
 import { MemoryEngine, openMemoryEngine, sortNewestFirst } from "../src/engine.ts";
 import { ADDITIVE_EXTRACTION_PROMPT, AGENT_CONTEXT_SUFFIX } from "../src/extraction-prompt.ts";
 import { HistoryStore } from "../src/history.ts";
@@ -288,12 +289,19 @@ describe("openMemoryEngine", () => {
   const config = (apiKey: string | null) => ({
     qdrant: { host: "h", port: 6333, collection: "c", vectorSize: 4 },
     embedder: {
+      provider: "openai-compatible",
       model: "embed-model",
       apiKey: "sk-embed",
       baseUrl: "https://embed.test/v1",
       dims: 4,
     },
-    llm: { model: "x/extractor", apiKey, baseUrl: "https://llm.test/v1" },
+    llm: {
+      provider: "openai-compatible",
+      model: "x/extractor",
+      apiKey,
+      baseUrl: "https://llm.test/v1",
+      keyMissing: apiKey === null ? "the memory key is missing" : null,
+    },
     historyDbPath: tempPath("history.db"),
   });
 
@@ -336,10 +344,45 @@ describe("openMemoryEngine", () => {
     ]);
   });
 
+  test("reports what extraction and embedding used, under the configured models", async () => {
+    const records: UsageRecord[] = [];
+    setUsageSink((record) => records.push(record));
+    try {
+      const fake = new FakeQdrant({ collections: [] });
+      const usage = { prompt_tokens: 7, completion_tokens: 2, total_tokens: 9 };
+      const fetch = (async (url: string, init: RequestInit) => {
+        const body = JSON.parse(init.body as string) as { input?: string[] };
+        if (url.endsWith("/embeddings")) {
+          return Response.json({
+            model: "unprefixed-embed",
+            data: (body.input ?? []).map((_, index) => ({ index, embedding: [1, 0, 0, 0] })),
+            usage: { prompt_tokens: 3, total_tokens: 3 },
+          });
+        }
+        return Response.json({
+          model: "x/extractor-2026",
+          choices: [{ message: { content: '{"memory": []}' } }],
+          usage,
+        });
+      }) as unknown as typeof globalThis.fetch;
+      const engine = await openMemoryEngine(config("sk-llm"), {
+        qdrantClient: fake.api,
+        http: { fetch },
+      });
+      await engine.add([{ role: "user", content: "hi" }], { scope: { userId: "1" }, metadata: {} });
+      expect(records.map((r) => [r.role, r.model, r.units.inputTokens])).toEqual([
+        ["embeddings", "embed-model", 3],
+        ["memory", "x/extractor-2026", 7],
+      ]);
+    } finally {
+      setUsageSink(null);
+    }
+  });
+
   test("a missing LLM key fails after the collection setup, in mem0's construction order", async () => {
     const fake = new FakeQdrant();
     await expect(openMemoryEngine(config(null), { qdrantClient: fake.api })).rejects.toThrow(
-      "The api_key client option must be set",
+      "the memory key is missing",
     );
     expect(fake.calls[0]).toEqual(["getCollections"]);
   });

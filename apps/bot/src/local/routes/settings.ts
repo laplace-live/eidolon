@@ -3,16 +3,19 @@
 // folder, and sources.ytDlp is never written here: either would let a page read files or run a
 // binary.
 import {
+  accountProvider,
   activePersona,
   envOverride,
   envVariable,
   isPlainObject,
   isValidTimeZone,
+  layeredValue,
   pyStrip,
   readSettingsLayers,
   SETTINGS,
   type SettingField,
 } from "@eidolon/config";
+import { accountOf, ROLES } from "@eidolon/providers";
 import type { SettingRow, SettingsResponse } from "../api.ts";
 import {
   editPersonaYaml,
@@ -33,13 +36,45 @@ const PRODUCTION_ONLY = /^(?:access\.|mcp\.|network\.|audio\.opus|providers\.ope
 const READ_ONLY = new Set(["sources.ytDlp"]);
 const CONTROL = /\p{Cc}/u;
 
+/**
+ * The environment's value for `field`, and which variable holds it: its own, or the provider-named
+ * one that set it before, while that provider fills the role. Not envOverride: that answers for the
+ * installed persona, and this may be another one.
+ */
+function environmentValue(
+  field: SettingField,
+  layers: ReturnType<typeof readSettingsLayers>,
+): { value: string; name: string } | null {
+  const own = envVariable(field.env);
+  if (own !== undefined) return { value: own, name: field.env };
+  const legacy = field.legacy;
+  if (legacy === undefined || field.provider === undefined) return null;
+  const provider = layeredValue(layers, field.provider) ?? PROVIDER_DEFAULTS.get(field.provider);
+  // An account stands for its provider, as the bot reads it.
+  const id = provider?.trim().toLowerCase();
+  if (id === undefined || accountProvider(id, layers.accounts) !== legacy.provider) return null;
+  const value = envVariable(legacy.env);
+  return value === undefined ? null : { value, name: legacy.env };
+}
+
+/** Each provider row's default, for a row that names none. */
+const PROVIDER_DEFAULTS = new Map(
+  SETTINGS.filter((field) => field.default !== undefined).map((field) => [
+    field.env,
+    field.default as string,
+  ]),
+);
+
 export function settingsOf(app: LocalApp, persona: string): SettingsResponse {
   const layers = readSettingsLayers(persona);
   const settings = SETTINGS.map((field): SettingRow => {
     const layer = layers.values.get(field.env);
-    // Not envOverride: that answers for the installed persona, and this may be another one.
-    const fromEnv = envVariable(field.env) ?? null;
     const productionOnly = PRODUCTION_ONLY.test(field.path);
+    // Hers decides a row whose environment value belongs to a provider she doesn't use.
+    const ignored = layers.owned.has(field.env) && (layer?.value ?? null) === null;
+    const fromEnv = ignored ? null : environmentValue(field, layers);
+    // A production-only row is hidden, so its value has no reader.
+    const shown = productionOnly ? null : fromEnv;
     return {
       path: field.path,
       env: field.env,
@@ -48,8 +83,8 @@ export function settingsOf(app: LocalApp, persona: string): SettingsResponse {
       title: field.title,
       value: layer?.raw ?? null,
       source: (layer?.source ?? "default") as SettingRow["source"],
-      // A production-only row is hidden, so its value has no reader.
-      envValue: productionOnly ? null : fromEnv,
+      envValue: shown?.value ?? null,
+      envName: shown?.name ?? null,
       envOverride: field.scope === "app" && fromEnv !== null,
       productionOnly,
       readOnly: READ_ONLY.has(field.path),
@@ -110,6 +145,15 @@ export function checkValue(field: SettingField, value: unknown, persona: string)
       if (!checked.ok || checked.value === null) return checked;
       if (field.env === "PERSONA_TIMEZONE" && !isValidTimeZone(checked.value as string)) {
         return invalid("The time zone is not an IANA zone name");
+      }
+      const role = ROLES.find((entry) => entry.providerEnv === field.env);
+      if (role !== undefined) {
+        // A provider's id names its default account; any other, an account credentials.json holds.
+        const account = accountOf((checked.value as string).toLowerCase());
+        if (account?.provider.offers[role.category] === undefined) {
+          return invalid(`Not an account Eidolon knows for ${role.label}`);
+        }
+        return { ok: true, value: account.id };
       }
       if (field.env !== "EIDOLON_PERSONA") return checked;
       const refused = personaRefusal(checked.value as string);

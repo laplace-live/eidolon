@@ -1,3 +1,5 @@
+import { ph } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { toast } from "sonner";
@@ -13,7 +15,6 @@ import { Switch } from "@/components/ui/switch";
 import { VoicePicker } from "@/components/voice-picker";
 import type { PersonaSummary, Voice } from "@/lib/api";
 import { toastError } from "@/lib/feedback";
-import { useT } from "@/lib/i18n";
 import { addAvatar } from "./avatar";
 import { AvatarPicker } from "./avatar-picker";
 import { MandarinNote, PersonaFields } from "./persona-fields";
@@ -30,7 +31,7 @@ export function NewPersonaDialog({
   readonly onOpenChange: (open: boolean) => void;
   readonly onCreated?: (persona: PersonaSummary) => void;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const switchId = useId();
   const queryClient = useQueryClient();
   const personas = useQuery(personasQuery);
@@ -45,7 +46,7 @@ export function NewPersonaDialog({
   const create = useMutation({
     mutationFn: ({ voiceId }: { voiceId: string }) => createPersona(draft, voiceId),
     onSuccess: async (made) => {
-      toast.success(t("setup.newPersona.created", { name: made.name }));
+      toast.success(t`${ph({ name: made.name })} created.`);
       const created = avatar ? await addAvatar(made, avatar) : made;
       if (activate) {
         // She exists either way; a refused switch (a call is live) only leaves her inactive.
@@ -77,8 +78,8 @@ export function NewPersonaDialog({
   return (
     <Dialog open={open} onOpenChange={(next) => !create.isPending && close(next)}>
       <LargeDialogContent
-        title={t("setup.newPersona.title")}
-        description={t("setup.newPersona.body")}
+        title={t`New Persona`}
+        description={t`She starts with a Chinese prompt skeleton in her name; build her up in the studio.`}
         footer={
           <DialogFooter className="sticky bottom-0 z-10 m-0 flex-row flex-wrap items-center justify-between gap-3 px-6 py-3 backdrop-blur-md">
             <Field orientation="horizontal" className="w-auto">
@@ -89,16 +90,16 @@ export function NewPersonaDialog({
                 disabled={create.isPending}
               />
               <FieldLabel htmlFor={switchId} className="font-normal">
-                {t("setup.newPersona.activate")}
+                {t`Switch to Her Now`}
               </FieldLabel>
             </Field>
             <div className="ml-auto flex gap-2">
               <Button variant="ghost" onClick={() => close(false)} disabled={create.isPending}>
-                {t("setup.cancel")}
+                {t`Cancel`}
               </Button>
               <Button onClick={submit} disabled={create.isPending}>
                 {create.isPending && <Spinner />}
-                {t("setup.newPersona.create")}
+                {t`Create`}
               </Button>
             </div>
           </DialogFooter>
@@ -121,13 +122,13 @@ export function NewPersonaDialog({
         <div className="border-t pt-6">
           {/* A fieldset grows to fit the voice list's rows unless held to the dialog's width. */}
           <FieldSet className="min-w-0">
-            <FieldLegend>{t("setup.newPersona.voice")}</FieldLegend>
+            <FieldLegend>{t`Her Voice`}</FieldLegend>
             <VoicePicker
               value={voice?.id ?? null}
               onChange={setVoice}
               disabled={create.isPending}
             />
-            {showErrors && !voice && <FieldError>{t("setup.newPersona.voiceRequired")}</FieldError>}
+            {showErrors && !voice && <FieldError>{t`Pick a voice for her.`}</FieldError>}
           </FieldSet>
         </div>
         {create.isError && <ErrorAlert error={create.error} />}

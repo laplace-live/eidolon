@@ -1,12 +1,14 @@
 import {
-  envOptional,
   envRaw,
+  extractCostUsd,
   httpxStatusMessage,
+  isPlainObject,
   logger,
   openrouterHeaders,
   pyRepr,
   pyStrip,
 } from "@eidolon/config";
+import { hasKey, reportUsage, select, type Units } from "@eidolon/providers";
 
 export const DEFAULT_RERANK_BASE_URL = "https://openrouter.ai/api/v1";
 export const DEFAULT_RERANK_MODEL = "cohere/rerank-4-fast";
@@ -47,6 +49,10 @@ export interface OpenRouterRerankerOptions {
   topN?: number | null;
   /** A trailing "/" is stripped. */
   baseUrl?: string;
+  /** Sends OpenRouter's attribution headers; on by default. */
+  openrouter?: boolean;
+  /** What each rerank used, and what it cost when the response says. */
+  onUsage?: (units: Units, reportedUsd: number | null) => void;
   fetch?: typeof fetch;
 }
 
@@ -75,9 +81,24 @@ function parseResults(payload: unknown, count: number): RerankResult[] {
   });
 }
 
+/** What a rerank response says it used: Cohere's billed units, OpenRouter's cost. */
+function rerankUsage(payload: unknown): { units: Units; reportedUsd: number | null } {
+  const body = isPlainObject(payload) ? payload : {};
+  const meta = isPlainObject(body.meta) ? body.meta : {};
+  const billed = isPlainObject(meta.billed_units) ? meta.billed_units : {};
+  const searches = typeof billed.search_units === "number" ? billed.search_units : 1;
+  const tokens = typeof billed.input_tokens === "number" ? billed.input_tokens : undefined;
+  const usage = isPlainObject(body.usage) ? body.usage : null;
+  const reported = usage === null ? null : extractCostUsd(usage);
+  return {
+    units: { searches, ...(tokens === undefined ? {} : { inputTokens: tokens }) },
+    reportedUsd: reported,
+  };
+}
+
 /**
  * Cohere's rerank models through OpenRouter's `/rerank` route. OpenRouter mirrors Cohere's rerank
- * request and response bodies, so `RERANK_BASE_URL=https://api.cohere.com/v1` works too.
+ * request and response bodies, so Cohere's own API takes the same calls.
  */
 export class OpenRouterReranker implements Reranker {
   readonly modelName: string;
@@ -85,6 +106,8 @@ export class OpenRouterReranker implements Reranker {
   readonly topN: number | null;
   readonly baseUrl: string;
   readonly #apiKey: string;
+  readonly #openrouter: boolean;
+  readonly #onUsage: OpenRouterRerankerOptions["onUsage"];
   readonly #fetch: typeof fetch | null;
 
   constructor(options: OpenRouterRerankerOptions) {
@@ -93,6 +116,8 @@ export class OpenRouterReranker implements Reranker {
     this.topN = options.topN ?? null;
     this.baseUrl = (options.baseUrl ?? DEFAULT_RERANK_BASE_URL).replace(/\/+$/, "");
     this.#apiKey = options.apiKey;
+    this.#openrouter = options.openrouter ?? true;
+    this.#onUsage = options.onUsage;
     this.#fetch = options.fetch ?? null;
   }
 
@@ -107,7 +132,7 @@ export class OpenRouterReranker implements Reranker {
     const init = {
       method: "POST",
       headers: {
-        ...openrouterHeaders(),
+        ...(this.#openrouter ? openrouterHeaders() : {}),
         Authorization: `Bearer ${this.#apiKey}`,
         "Content-Type": "application/json",
       },
@@ -140,7 +165,13 @@ export class OpenRouterReranker implements Reranker {
     if (response.status < 200 || response.status >= 300) {
       throw new Error(httpxStatusMessage(response, url, { anyLocation: true }));
     }
-    return parseResults(JSON.parse(new TextDecoder().decode(response.body)), documents.length);
+    const answer: unknown = JSON.parse(new TextDecoder().decode(response.body));
+    const results = parseResults(answer, documents.length);
+    if (this.#onUsage) {
+      const { units, reportedUsd } = rerankUsage(answer);
+      this.#onUsage(units, reportedUsd);
+    }
+    return results;
   }
 }
 
@@ -161,19 +192,38 @@ export function makeReranker(model?: string | null): Reranker | null {
     logger.info("RERANK_ENABLED is off — hybrid retrieval will use RRF fusion");
     return null;
   }
-  const apiKey = envOptional("RERANK_API_KEY") ?? envOptional("OPENROUTER_API_KEY");
-  if (apiKey === undefined) {
+  let selection: ReturnType<typeof select>;
+  try {
+    selection = select("rerank");
+  } catch (error) {
+    logger.warning(`Reranker off, hybrid retrieval will use RRF fusion: ${pyStrip(String(error))}`);
+    return null;
+  }
+  if (selection === null || !hasKey(selection)) {
     logger.info(
-      "Neither RERANK_API_KEY nor OPENROUTER_API_KEY is set — hybrid " +
-        "retrieval will use LanceDB's default RRF fusion (no " +
-        "cross-encoder rerank). For best precision at the current data " +
-        "scale, set OPENROUTER_API_KEY in .env.",
+      `${selection?.keyName ?? "The reranker's key"} is not set — hybrid retrieval will use ` +
+        "LanceDB's default RRF fusion (no cross-encoder rerank). For best precision at the " +
+        "current data scale, set it in credentials.json or the environment.",
     );
     return null;
   }
-  const modelName = model || envOptional("RERANK_MODEL") || DEFAULT_RERANK_MODEL;
-  const baseUrl = envOptional("RERANK_BASE_URL") ?? DEFAULT_RERANK_BASE_URL;
-  cached.reranker = new OpenRouterReranker({ apiKey, modelName, baseUrl });
+  const modelName = model || selection.model;
+  const baseUrl = selection.baseUrl as string;
+  const provider = selection.provider.id;
+  cached.reranker = new OpenRouterReranker({
+    apiKey: selection.apiKey as string,
+    modelName,
+    baseUrl,
+    openrouter: provider === "openrouter",
+    onUsage: (units, reportedUsd) =>
+      reportUsage({
+        role: "rerank",
+        provider,
+        model: modelName,
+        units,
+        costUsd: reportedUsd,
+      }),
+  });
   logger.info(`Reranker enabled: model=${pyRepr(modelName)} via ${baseUrl}`);
   return cached.reranker;
 }

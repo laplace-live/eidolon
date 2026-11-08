@@ -1,13 +1,12 @@
 // Self-hosted Mem0 configuration: the OSS engine runs in-process with Qdrant holding the vectors.
-// Fact extraction reuses the persona LLM through OpenRouter, and embeddings reuse retrieval's model
-// and dimension so one EMBED_MODEL / EMBED_DIM pair governs every vector this project writes.
-// Qdrant pins the collection's dimension at creation, so changing EMBED_DIM means dropping
-// MEM0_QDRANT_COLLECTION and letting viewers re-accumulate: old vectors are not comparable.
+// Fact extraction is the memory role's model (the persona's chat model unless she names another),
+// and embeddings reuse retrieval's model and dimension so one EMBED_MODEL / EMBED_DIM pair governs
+// every vector this project writes. Qdrant pins the collection's dimension at creation, so
+// changing EMBED_DIM means dropping MEM0_QDRANT_COLLECTION and letting viewers re-accumulate: old
+// vectors are not comparable.
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
-  DEFAULT_EMBED_BASE_URL,
-  DEFAULT_EMBED_MODEL,
   dataHome,
   embedDim,
   envFloat,
@@ -17,22 +16,18 @@ import {
   pyFloatRepr,
   pyStrip,
 } from "@eidolon/config";
+import { hasKey, missingKey, selectRequired } from "@eidolon/providers";
 import type { QdrantSettings } from "./qdrant.ts";
 
 export const DEFAULT_QDRANT_PORT = 6333;
 export const DEFAULT_COLLECTION = "eidolon_memories";
 /** Mem0's change log, under the data home: memories are per install, not per persona. */
 export const historyDbDefault = (): string => join(dataHome(), "mem0", "history.db");
-export const DEFAULT_LLM_MODEL = "~google/gemini-flash-latest";
 export const DEFAULT_SEARCH_LIMIT = 10;
 export const DEFAULT_SEARCH_THRESHOLD = 0.3;
 
-export const EMBED_KEY_MISSING =
-  "Self-hosted Mem0 needs an embedding API key. Set OPENROUTER_API_KEY (reused from the LLM config) or EMBED_API_KEY for a different provider.";
-const LLM_KEY_MISSING =
-  "The api_key client option must be set either by passing api_key to the client or by setting the OPENAI_API_KEY environment variable";
-
 export interface EmbedderSettings {
+  readonly provider: string;
   readonly model: string;
   readonly apiKey: string;
   readonly baseUrl: string;
@@ -40,10 +35,13 @@ export interface EmbedderSettings {
 }
 
 export interface LlmSettings {
+  readonly provider: string;
   readonly model: string;
-  /** null when neither OPENROUTER_API_KEY nor OPENAI_API_KEY is set; opening the engine fails. */
+  /** null when the memory role's key is unset; opening the engine fails. */
   readonly apiKey: string | null;
   readonly baseUrl: string;
+  /** Why opening it fails, when it would. */
+  readonly keyMissing: string | null;
 }
 
 export interface MemoryConfig {
@@ -63,17 +61,16 @@ export function qdrantHost(): string {
   return pyStrip(envRaw("MEM0_QDRANT_HOST") ?? "");
 }
 
-/** The LLM client mem0 picks on its own: OpenRouter whenever OPENROUTER_API_KEY is set. */
+/** The memory role: `memory.provider` and `memory.model`, else the persona's chat model. */
 function llmSettings(): LlmSettings {
-  const model =
-    envOptional("MEM0_LLM_MODEL") ?? envOptional("OPENROUTER_MODEL") ?? DEFAULT_LLM_MODEL;
-  const openrouterKey = envOptional("OPENROUTER_API_KEY");
-  if (openrouterKey) {
-    const baseUrl = envOptional("OPENROUTER_API_BASE") ?? "https://openrouter.ai/api/v1";
-    return { model, apiKey: openrouterKey, baseUrl };
-  }
-  const baseUrl = envOptional("OPENAI_BASE_URL") ?? "https://api.openai.com/v1";
-  return { model, apiKey: envOptional("OPENAI_API_KEY") ?? null, baseUrl };
+  const selection = selectRequired("memory");
+  return {
+    provider: selection.provider.id,
+    model: selection.model,
+    apiKey: selection.apiKey ?? null,
+    baseUrl: selection.baseUrl as string,
+    keyMissing: hasKey(selection) ? null : missingKey(selection).message,
+  };
 }
 
 /**
@@ -84,8 +81,8 @@ function llmSettings(): LlmSettings {
 export function buildMemoryConfig(): MemoryConfig {
   const host = qdrantHost();
   if (!host) throw new Error("MEM0_QDRANT_HOST is unset, so there is no vector store");
-  const embedApiKey = envOptional("EMBED_API_KEY") ?? envOptional("OPENROUTER_API_KEY");
-  if (!embedApiKey) throw new Error(EMBED_KEY_MISSING);
+  const embeddings = selectRequired("embeddings");
+  if (!hasKey(embeddings)) throw missingKey(embeddings);
   // bun:sqlite, like sqlite3, raises rather than create missing parents, and the history DB
   // lands under a mounted volume that starts empty.
   const historyDbPath = envOptional("MEM0_HISTORY_DB_PATH") ?? historyDbDefault();
@@ -103,9 +100,10 @@ export function buildMemoryConfig(): MemoryConfig {
       vectorSize: dims,
     },
     embedder: {
-      model: envOptional("EMBED_MODEL") ?? DEFAULT_EMBED_MODEL,
-      apiKey: embedApiKey,
-      baseUrl: envOptional("EMBED_BASE_URL") ?? DEFAULT_EMBED_BASE_URL,
+      provider: embeddings.provider.id,
+      model: embeddings.model,
+      apiKey: embeddings.apiKey ?? "",
+      baseUrl: embeddings.baseUrl as string,
       dims,
     },
     llm: llmSettings(),
@@ -113,10 +111,10 @@ export function buildMemoryConfig(): MemoryConfig {
   };
 }
 
-/** Throws where opening mem0's OpenAI client would: no key at all. */
+/** Throws where opening the extraction client would: the memory role's provider needs a key it lacks. */
 export function requireLlmKey(llm: LlmSettings): string {
-  if (llm.apiKey === null) throw new Error(LLM_KEY_MISSING);
-  return llm.apiKey;
+  if (llm.keyMissing !== null) throw new Error(llm.keyMissing);
+  return llm.apiKey ?? "";
 }
 
 function constraintError(

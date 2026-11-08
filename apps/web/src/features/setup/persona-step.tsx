@@ -1,3 +1,5 @@
+import { ph } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckIcon, PlusIcon } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
@@ -13,7 +15,6 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { type ApiError, asApiError, call } from "@/lib/api";
-import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { AvatarPicker } from "./avatar-picker";
 import { MandarinNote, PersonaFields } from "./persona-fields";
@@ -85,7 +86,7 @@ export function PersonaStep({
   readonly onBack: () => void;
   readonly onDone: (target: VoiceTarget) => void;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const nameId = useId();
   const queryClient = useQueryClient();
   const personas = useQuery(personasQuery);
@@ -155,43 +156,43 @@ export function PersonaStep({
 
   return (
     <StepCard
-      title={t("setup.persona.title")}
-      description={t("setup.persona.body")}
+      title={t`Who will you talk to?`}
+      description={t`Start with the demo persona, or create your own and build her up later in the studio.`}
       onBack={onBack}
       busy={busy}
       footer={
         <Button onClick={() => void next()} disabled={busy}>
           {busy && <Spinner />}
-          {t("setup.next")}
+          {t`Continue`}
         </Button>
       }
     >
       <Field className="max-w-md">
-        <FieldLabel htmlFor={nameId}>{t("setup.persona.viewerName")}</FieldLabel>
+        <FieldLabel htmlFor={nameId}>{t`What should she call you?`}</FieldLabel>
         <Input
           id={nameId}
           value={name}
-          placeholder={t("setup.persona.viewerNamePlaceholder")}
+          placeholder={t`Your name or nickname`}
           disabled={busy || nameRow?.envOverride}
           onChange={(event) => setViewerName(event.target.value)}
         />
         <FieldDescription>
           {nameRow?.envOverride
-            ? t("settings.form.envOverride", { env: nameRow.env })
-            : t("setup.persona.viewerNameHelp")}
+            ? t`Set by ${ph({ env: nameRow.env })} in the environment, which wins over the value saved here. Change it there.`
+            : t`She uses it in calls. Leave it empty and she won't use a name.`}
         </FieldDescription>
       </Field>
 
       <fieldset className="flex min-w-0 flex-col gap-3">
-        <legend className="sr-only">{t("setup.persona.choose")}</legend>
+        <legend className="sr-only">{t`Persona`}</legend>
         {demo && (
           <ChoiceCard
             selected={chosen === "demo"}
             onSelect={() => setChoice("demo")}
             leading={<PersonaAvatar persona={demo} size="md" />}
             title={demo.name}
-            badge={<Badge variant="outline">{t("setup.persona.demo")}</Badge>}
-            body={t("setup.persona.demoBody")}
+            badge={<Badge variant="outline">{t`demo`}</Badge>}
+            body={t`A Chinese VTuber who runs a little flower shop with her cat. She comes with her prompt and outfits, ready to call.`}
           />
         )}
         {current && (
@@ -201,7 +202,7 @@ export function PersonaStep({
             leading={<PersonaAvatar persona={current} size="md" />}
             title={current.name}
             badge={<PersonaBadges active />}
-            body={t("setup.persona.keepBody")}
+            body={t`Keep talking to her.`}
           />
         )}
         <ChoiceCard
@@ -212,8 +213,8 @@ export function PersonaStep({
               <PlusIcon className="size-4" />
             </span>
           }
-          title={t("setup.persona.create")}
-          body={t("setup.persona.createBody")}
+          title={t`Create Your Own`}
+          body={t`Starts with a Chinese prompt skeleton in her name. Add facts, videos and outfits in the studio.`}
         />
       </fieldset>
 

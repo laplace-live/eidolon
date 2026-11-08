@@ -9,6 +9,7 @@ const rows: SettingRow[] = SETTINGS.map((setting) => ({
   value: null,
   source: "default",
   envValue: null,
+  envName: null,
   envOverride: false,
   productionOnly: setting.path.startsWith("mcp."),
   readOnly: false,
@@ -36,33 +37,36 @@ describe("the cards", () => {
         .toSorted(),
     );
     expect(new Set(listed).size).toBe(listed.length);
-    expect(advanced).toContain("providers.openrouter.apiBase");
+    expect(advanced).toContain("providers.openrouter.appName");
+    // Edited as an account's API base: a file's value applies, but no card shows it.
+    expect(listed).not.toContain("providers.openrouter.apiBase");
   });
 
-  test("Qdrant's host and port, and the embedding model and dimension, sit side by side", () => {
+  test("Qdrant's host and port, and the embedding provider and model, sit side by side", () => {
     const lines = Object.values(CARDS).flatMap((section) =>
       section.flatMap((card) => card.paths.filter((line) => typeof line !== "string")),
     );
     expect(lines).toContainEqual(["memory.qdrant.host", "memory.qdrant.port"]);
-    expect(lines).toContainEqual(["embeddings.model", "embeddings.dim"]);
+    expect(lines).toContainEqual(["embeddings.provider", "embeddings.model"]);
   });
 });
 
 describe("?tab=", () => {
   const resolve = (query: string) => resolveSection(new URLSearchParams(query), "milky-green");
 
-  test("names a section, and Keys without one", () => {
-    expect(resolve("")).toEqual({ section: "keys" });
-    expect(resolve("tab=keys")).toEqual({ section: "keys" });
+  test("names a section, and Providers without one", () => {
+    expect(resolve("")).toEqual({ section: "providers" });
+    expect(resolve("tab=providers")).toEqual({ section: "providers" });
     expect(resolve("tab=memory")).toEqual({ section: "memory" });
     expect(resolve("tab=advanced")).toEqual({ section: "advanced" });
   });
 
-  test("the old General id and an unknown one lead to a section", () => {
+  test("the old General and Keys ids, and an unknown one, lead to a section", () => {
     expect(resolve("tab=app")).toEqual({ redirect: "?tab=general" });
     expect(resolve("tab=app&persona=ada")).toEqual({ redirect: "?tab=general" });
-    expect(resolve("tab=nope")).toEqual({ redirect: "?tab=keys" });
-    expect(resolve("tab=")).toEqual({ redirect: "?tab=keys" });
+    expect(resolve("tab=keys")).toEqual({ redirect: "?tab=providers" });
+    expect(resolve("tab=nope")).toEqual({ redirect: "?tab=providers" });
+    expect(resolve("tab=")).toEqual({ redirect: "?tab=providers" });
   });
 
   test("the old persona tab opens her own settings in the studio, the active one's by default", () => {

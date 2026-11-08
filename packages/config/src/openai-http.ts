@@ -20,6 +20,8 @@ export interface OpenAIClientOptions {
   readonly sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   /** The SDK's `default_headers`: sent with every request, over its own. */
   readonly headers?: Readonly<Record<string, string>>;
+  /** Sent in place of `Authorization: Bearer <key>`, for an API that takes its key otherwise. */
+  readonly authHeaders?: Readonly<Record<string, string>>;
   /** Aborts the request in flight and any retry wait; the call then rejects with its reason. */
   readonly signal?: AbortSignal;
 }
@@ -54,13 +56,13 @@ function statusError(status: number, text: string): Error {
 
 export class OpenAIClient implements JsonPoster {
   readonly #baseUrl: string;
-  readonly #apiKey: string;
   readonly #fetch: typeof fetch;
   readonly #maxRetries: number;
   readonly #timeoutMs: number;
   readonly #random: () => number;
   readonly #sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
   readonly #headers: Readonly<Record<string, string>>;
+  readonly #auth: Readonly<Record<string, string>>;
   readonly #signal: AbortSignal | undefined;
 
   constructor(
@@ -68,13 +70,16 @@ export class OpenAIClient implements JsonPoster {
     options: OpenAIClientOptions = {},
   ) {
     this.#baseUrl = settings.baseUrl.endsWith("/") ? settings.baseUrl : `${settings.baseUrl}/`;
-    this.#apiKey = settings.apiKey;
     this.#fetch = options.fetch ?? fetch;
     this.#maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
     this.#timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.#random = options.random ?? Math.random;
     this.#sleep = options.sleep ?? abortableSleep;
     this.#headers = options.headers ?? {};
+    // A local server may take no key at all.
+    this.#auth =
+      options.authHeaders ??
+      (settings.apiKey ? { Authorization: `Bearer ${settings.apiKey}` } : {});
     this.#signal = options.signal;
   }
 
@@ -92,7 +97,7 @@ export class OpenAIClient implements JsonPoster {
         response = await this.#fetch(url, {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${this.#apiKey}`,
+            ...this.#auth,
             "Content-Type": "application/json",
             Accept: "application/json",
             ...this.#headers,

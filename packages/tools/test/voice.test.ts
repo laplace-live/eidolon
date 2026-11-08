@@ -54,6 +54,38 @@ describe("loadVoiceStyles", () => {
     ]);
   });
 
+  test("TTS_VOICE_ID_<STYLE> overrides Fish's name for the same style", () => {
+    const styles = loadVoiceStyles({
+      TTS_VOICE_ID_GENTLE: "t",
+      FISH_VOICE_ID: "base",
+      FISH_VOICE_ID_GENTLE: "f",
+      FISH_VOICE_ID_CALM: "c",
+    });
+    expect([...styles]).toEqual([
+      ["default", "base"],
+      ["gentle", "t"],
+      ["calm", "c"],
+    ]);
+  });
+
+  test("Fish's names apply only while Fish speaks", () => {
+    const styles = loadVoiceStyles({
+      TTS_PROVIDER: "elevenlabs",
+      TTS_VOICE_ID: "eleven",
+      FISH_VOICE_ID: "fish",
+      FISH_VOICE_ID_GENTLE: "f",
+      TTS_VOICE_ID_CALM: "c",
+    });
+    expect([...styles]).toEqual([
+      ["default", "eleven"],
+      ["calm", "c"],
+    ]);
+  });
+
+  test("a voice provider Eidolon doesn't know has no styles; the call reports it", () => {
+    expect([...loadVoiceStyles({ TTS_PROVIDER: "nope", TTS_VOICE_ID_CALM: "c" })]).toEqual([]);
+  });
+
   test("reads process.env by default", () => {
     setEnv("FISH_VOICE_ID_EIDOLONTEST", " ref ");
     expect(loadVoiceStyles().get("eidolontest")).toBe("ref");
@@ -88,8 +120,8 @@ describe("createVoiceTool", () => {
     expect(createVoiceTool(new Map([["default", "a"]]))).toBeNull();
     expect(createVoiceTool(new Map())).toBeNull();
     expect(logLines(records)).toEqual([
-      "INFO [voice] Voice switching disabled (no FISH_VOICE_ID_<STYLE> env vars set).",
-      "INFO [voice] Voice switching disabled (no FISH_VOICE_ID_<STYLE> env vars set).",
+      "INFO [voice] Voice switching disabled (no TTS_VOICE_ID_<STYLE> voices set).",
+      "INFO [voice] Voice switching disabled (no TTS_VOICE_ID_<STYLE> voices set).",
     ]);
   });
 

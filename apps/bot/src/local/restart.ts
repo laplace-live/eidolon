@@ -4,11 +4,14 @@
 // reranker. Every other value applies from the next call once the settings are installed again.
 import {
   activePersona,
+  CREDENTIALS,
   envOptional,
   installSettings,
   pyStrip,
   resetSettings,
+  SETTINGS,
 } from "@eidolon/config";
+import { type Category, hasKey, PROVIDERS, type RoleId, trySelect } from "@eidolon/providers";
 import type { LocalApp } from "./router.ts";
 
 /** What keeps a value it read once. */
@@ -16,8 +19,53 @@ export type BootReader = "server" | "mcp" | "memory" | "retrieval";
 
 const READERS: readonly BootReader[] = ["server", "mcp", "memory", "retrieval"];
 
+/** Names a settings file or credentials.json may change while the server runs. */
+const FILED = new Set([...SETTINGS.map((setting) => setting.env), ...CREDENTIALS]);
+
+/**
+ * The keys and API bases of every provider that offers one of `categories`, where a file may set
+ * them; the environment's alone can't change before a restart.
+ */
+function providerVariables(categories: readonly Category[]): string[] {
+  return PROVIDERS.filter((p) => categories.some((category) => p.offers[category] !== undefined))
+    .flatMap((p) => [p.credential, p.baseUrlEnv])
+    .filter((name): name is string => name !== null && FILED.has(name));
+}
+
+/**
+ * Mem0's extraction may run on any chat provider and its embeddings on any embedding provider;
+ * retrieval embeds and reranks. Each keeps the key and base of whichever it was built with.
+ */
+const PROVIDER_READERS: Readonly<Record<string, readonly BootReader[]>> = (() => {
+  const readers: Record<string, BootReader[]> = {};
+  const keep = (names: readonly string[], reader: BootReader) => {
+    for (const name of names) {
+      const entry = readers[name] ?? [];
+      if (!entry.includes(reader)) entry.push(reader);
+      readers[name] = entry;
+    }
+  };
+  keep(providerVariables(["llm", "embedding"]), "memory");
+  keep(providerVariables(["embedding", "rerank"]), "retrieval");
+  return readers;
+})();
+
+/**
+ * The accounts a reader keeps, beside their variables: an account credentials.json holds changes
+ * no variable. Each is read as what a client is built with: the account, its API base and key.
+ */
+const ACCOUNT_READERS: Readonly<Record<string, readonly BootReader[]>> = {
+  "@memory": ["memory"],
+  "@embeddings": ["memory", "retrieval"],
+  "@rerank": ["retrieval"],
+};
+
 /** Every variable a reader keeps, with the readers that keep it. */
 export const BOOT_READ: Readonly<Record<string, readonly BootReader[]>> = {
+  ...PROVIDER_READERS,
+  ...ACCOUNT_READERS,
+  // The usage ledger opens at boot.
+  EIDOLON_USAGE_DB: ["server"],
   // At boot: CORS, the anonymous offer quota, ICE and the Opus presets.
   PIPECAT_ALLOWED_ORIGINS: ["server"],
   EIDOLON_ANON_RATE_LIMIT_PER_HOUR: ["server"],
@@ -51,20 +99,22 @@ export const BOOT_READ: Readonly<Record<string, readonly BootReader[]>> = {
   MEM0_QDRANT_PORT: ["memory"],
   MEM0_QDRANT_COLLECTION: ["memory"],
   MEM0_HISTORY_DB_PATH: ["memory"],
+  MEM0_LLM_PROVIDER: ["memory"],
   MEM0_LLM_MODEL: ["memory"],
-  OPENROUTER_MODEL: ["memory"],
-  OPENROUTER_API_BASE: ["memory"],
-  OPENAI_BASE_URL: ["memory"],
-  OPENAI_API_KEY: ["memory"],
+  // Memory extraction follows the persona's chat model unless it names its own.
+  LLM_PROVIDER: ["memory"],
+  LLM_MODEL: ["memory"],
+  EMBED_PROVIDER: ["memory", "retrieval"],
+  // Retrieval reads the model per query; only the Mem0 engine keeps it.
   EMBED_MODEL: ["memory"],
   EMBED_DIM: ["memory"],
   EMBED_BASE_URL: ["memory", "retrieval"],
   EMBED_API_KEY: ["memory", "retrieval"],
-  OPENROUTER_API_KEY: ["memory", "retrieval"],
   // Retrieval's embedding client and reranker.
   OPENROUTER_APP_NAME: ["retrieval"],
   OPENROUTER_APP_URL: ["retrieval"],
   RERANK_ENABLED: ["retrieval"],
+  RERANK_PROVIDER: ["retrieval"],
   RERANK_MODEL: ["retrieval"],
   RERANK_BASE_URL: ["retrieval"],
   RERANK_API_KEY: ["retrieval"],
@@ -81,22 +131,32 @@ export const LIVE_READ: readonly string[] = [
   "YT_DLP_COOKIES",
   "PERSONA_FILE",
   "PERSONA_TIMEZONE",
-  "FISH_MODEL",
-  "FISH_VOICE_ID",
-  "SONIOX_MODEL",
+  "STT_PROVIDER",
+  "STT_MODEL",
+  "STT_LANGUAGE",
+  "TTS_PROVIDER",
+  "TTS_MODEL",
+  "TTS_VOICE_ID",
+  "REALTIME_PROVIDER",
+  "REALTIME_MODEL",
+  "REALTIME_VOICE",
   "MEM0_SEARCH_LIMIT",
   "MEM0_SEARCH_THRESHOLD",
   "MEM0_AGENT_ID",
   "MEM0_RUN_ID",
   "RETRIEVAL_GATE_ENABLED",
+  "RETRIEVAL_GATE_PROVIDER",
   "RETRIEVAL_GATE_MODEL",
   "FACTS_FILES",
   "FACTS_SUBJECT",
   "INGEST_SKIP_TYPES",
-  "SONIOX_ASYNC_MODEL",
+  "TRANSCRIBE_PROVIDER",
+  "TRANSCRIBE_MODEL",
   "TRANSCRIBE_LANGUAGE",
+  "REFINE_PROVIDER",
   "REFINE_MODEL",
   "REFINE_CONCURRENCY",
+  "SELFIE_PROVIDER",
   "SELFIE_MODEL",
   "SELFIE_ASPECT_RATIO",
   "SELFIE_QUALITY",
@@ -106,12 +166,35 @@ export const LIVE_READ: readonly string[] = [
   "SONIOX_API_KEY",
   "FISH_API_KEY",
   "REFINE_API_KEY",
+  // Voice providers: a call reads them as it starts.
+  "ELEVENLABS_API_KEY",
+  "DEEPGRAM_API_KEY",
+  "CARTESIA_API_KEY",
+  "MINIMAX_API_KEY",
 ];
 
 type Read = (name: string) => string | undefined;
 
+/** Any key retrieval's embedding client or reranker may be built with. */
+const RETRIEVAL_KEYS: readonly string[] = [
+  "EMBED_API_KEY",
+  "RERANK_API_KEY",
+  ...PROVIDERS.filter((p) => p.offers.embedding !== undefined || p.offers.rerank !== undefined)
+    .map((p) => p.credential)
+    .filter((name): name is string => name !== null),
+];
+
+/** `@<role>`: the account a role's client is built with, while it has a key. */
+function accountRead(role: RoleId): string | undefined {
+  const selection = trySelect(role);
+  if (selection === null || !hasKey(selection)) return undefined;
+  const { account, baseUrl, apiKey, options } = selection;
+  return JSON.stringify([account.id, baseUrl ?? null, apiKey ?? null, options]);
+}
+
 /** What a reader acts on: for EIDOLON_PERSONA, the persona the files choose, even by default. */
 function effective(name: string): string | undefined {
+  if (name.startsWith("@")) return accountRead(name.slice(1) as RoleId);
   return name === "EIDOLON_PERSONA" ? activePersona().id : envOptional(name);
 }
 
@@ -124,7 +207,7 @@ const ARMED: Readonly<Record<BootReader, (read: Read) => boolean>> = {
   mcp: () => true,
   memory: (read) => pyStrip(read("MEM0_QDRANT_HOST") ?? "") !== "",
   retrieval: (read) =>
-    ["OPENROUTER_API_KEY", "EMBED_API_KEY", "RERANK_API_KEY"].some((name) => !!read(name)),
+    RETRIEVAL_KEYS.some((name) => !!read(name)) || !!read("@embeddings") || !!read("@rerank"),
 };
 
 export interface RestartChanges {

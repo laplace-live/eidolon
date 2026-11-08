@@ -9,11 +9,13 @@ import * as memory from "@eidolon/memory";
 import * as retrieval from "@eidolon/retrieval";
 import * as runtime from "@eidolon/runtime";
 import * as turn from "@eidolon/turn";
+import { installUsageLedger } from "@eidolon/usage";
 import * as mcp from "../mcp/index.ts";
 import { bootLocal } from "./boot.ts";
 
 // As in main.ts: Bun exits on an unhandled rejection, which would drop a live call.
 process.on("unhandledRejection", (reason) => logger.error("Unhandled rejection", reason));
+installUsageLedger();
 
 await bootLocal(Bun.argv.slice(2), {
   access,

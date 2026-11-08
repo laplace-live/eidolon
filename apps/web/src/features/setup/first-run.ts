@@ -5,7 +5,7 @@ const OPEN_BEFORE_KEYS = new Set(["/setup", "/settings"]);
 
 /** Where the root loader sends the viewer before any page renders, or null to stay. */
 export function firstRunRedirect(status: Pick<Status, "keys">, pathname: string): string | null {
-  const keysMissing = Object.values(status.keys).includes(false);
+  const keysMissing = status.keys.some((key) => !key.set);
   const page = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
   return keysMissing && !OPEN_BEFORE_KEYS.has(page) ? "/setup" : null;
 }

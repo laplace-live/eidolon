@@ -1,8 +1,17 @@
+import "../../../packages/config/test/isolated-guard.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PyFloat } from "@eidolon/config";
+import { dataHome, installSettings, PyFloat } from "@eidolon/config";
 import {
   ask,
   type GateRow,
@@ -186,6 +195,36 @@ test("the command ignores its arguments, as decisions.py does", async () => {
   });
   expect(code).toBe(0);
   expect(requests).toHaveLength(2);
+});
+
+test("a key the local app saved in OpenRouter's account asks Jev too", async () => {
+  const credentials = join(dataHome(), "credentials.json");
+  mkdirSync(dataHome(), { recursive: true });
+  writeFileSync(
+    credentials,
+    JSON.stringify({ accounts: { openrouter: { provider: "openrouter", apiKey: "sk-saved" } } }),
+    { mode: 0o600 },
+  );
+  installSettings();
+  try {
+    const turnsPath = join(work, "turns.toml");
+    copyFileSync(join(FIX, "gate/turns_one.toml"), turnsPath);
+    const { fetch, requests } = fakeJev(null);
+    const code = await gateDecisionsMain([], {
+      ...captureIo().io,
+      turnsPath,
+      outPath: join(work, "decisions.json"),
+      fetch,
+      now: steppingClock(),
+    });
+    expect([code, [...new Set(requests.map((request) => request.auth))]]).toEqual([
+      0,
+      ["Bearer sk-saved"],
+    ]);
+  } finally {
+    rmSync(credentials, { force: true });
+    installSettings();
+  }
 });
 
 test("a turn without text raises KeyError, as decisions.py's turn['text'] does", async () => {

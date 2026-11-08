@@ -1,3 +1,4 @@
+import { useLingui } from "@lingui/react/macro";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
@@ -12,9 +13,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { COMMAND_LABELS } from "@/features/jobs/labels";
 import { jobsQuery } from "@/features/jobs/queries";
 import type { JobSnapshot } from "@/lib/api";
-import { useT } from "@/lib/i18n";
 import { runningJobs } from "@/lib/jobs";
 import { useRestart } from "./restart";
 
@@ -29,12 +30,11 @@ export function RestartButton({
   variant = "default",
   size = "sm",
 }: {
-  /** A locale key. */
   readonly label: string;
   readonly variant?: "default" | "outline";
   readonly size?: "sm" | "default";
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const queryClient = useQueryClient();
   const { restart, restarting } = useRestart();
   const [checking, setChecking] = useState(false);
@@ -60,23 +60,23 @@ export function RestartButton({
         onClick={() => void begin()}
       >
         {(restarting || checking) && <Spinner />}
-        {t(restarting ? "settings.restart.waiting" : label)}
+        {restarting ? t`Restarting…` : label}
       </Button>
       <AlertDialog open={asking !== null} onOpenChange={(open) => !open && setAsking(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t("settings.restart.confirm.title")}</AlertDialogTitle>
+            <AlertDialogTitle>{t`Restart and interrupt running jobs?`}</AlertDialogTitle>
             <AlertDialogDescription>
-              {t(
-                asking?.jobs ? "settings.restart.confirm.body" : "settings.restart.confirm.unknown",
-              )}
+              {asking?.jobs
+                ? t`Restarting interrupts these jobs. What they finished is kept, and you can resume each from its page once Eidolon is back.`
+                : t`Eidolon couldn't list its jobs. A restart interrupts any that still run; you can resume each from its page once Eidolon is back.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {asking?.jobs && (
             <ul className="flex flex-col gap-1 text-sm">
               {asking.jobs.map((job) => (
                 <li key={job.id} className="flex flex-wrap gap-x-2">
-                  <span className="font-medium">{t(`jobs.command.${job.command}`)}</span>
+                  <span className="font-medium">{t(COMMAND_LABELS[job.command])}</span>
                   <span className="font-mono text-muted-foreground text-xs leading-5">
                     {job.persona}
                   </span>
@@ -86,13 +86,13 @@ export function RestartButton({
           )}
           {ephemeral && (
             <p className="text-muted-foreground text-xs">
-              {t("settings.restart.confirm.ephemeral")}
+              {t`Link checks and plans don't resume: run them again afterwards.`}
             </p>
           )}
           <AlertDialogFooter>
-            <AlertDialogCancel>{t("settings.restart.confirm.keep")}</AlertDialogCancel>
+            <AlertDialogCancel>{t`Keep Them Running`}</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={() => void restart()}>
-              {t("settings.restart.confirm.restart")}
+              {t`Restart`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

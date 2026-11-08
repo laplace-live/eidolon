@@ -55,7 +55,7 @@ export interface ToolCall {
 
 /** Side effects a tool may cause. Each resolves once its frame is queued in the pipeline. */
 export interface ToolEffects {
-  /** Switch the TTS voice (a Fish Audio reference id) for the rest of the session. */
+  /** Switch the TTS voice (the TTS provider's voice id) for the rest of the session. */
   switchVoice(referenceId: string): Promise<void>;
   /** Send an RTVI `server-message` with `data` to the client. */
   sendServerMessage(data: Readonly<Record<string, unknown>>): Promise<void>;

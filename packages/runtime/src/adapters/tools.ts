@@ -10,15 +10,22 @@ import type {
 import type { FrameProcessor } from "@pipedog/core/processors/frame_processor";
 import { RTVIServerMessageFrame } from "@pipedog/core/processors/frameworks/rtvi/frames";
 import type { FunctionCallParams, LLMService } from "@pipedog/core/services/llm_service";
-import { FishAudioTTSService } from "@pipedog/fish/tts";
+import { TTSSettings } from "@pipedog/core/services/settings";
+
+/** A settings delta of the TTS service's own class, the one its update applies. */
+function voiceDelta(tts: FrameProcessor, voice: string): TTSSettings {
+  const own = (tts.constructor as { Settings?: new (o: object) => TTSSettings }).Settings;
+  return new (own ?? TTSSettings)({ voice });
+}
 
 /** The session's LLM tools, advertised in the order they were registered. */
 export class SessionTools {
   readonly #llm: LLMService<any>;
-  readonly #tts: FrameProcessor;
+  readonly #tts: FrameProcessor | null;
   readonly #schemas: FunctionSchema[] = [];
 
-  constructor(llm: LLMService<any>, tts: FrameProcessor) {
+  /** `tts` is null under a realtime model, which no tool can switch the voice of. */
+  constructor(llm: LLMService<any>, tts: FrameProcessor | null) {
     this.#llm = llm;
     this.#tts = tts;
   }
@@ -77,13 +84,13 @@ export class SessionTools {
   // change reaches TTS and the server-message reaches the RTVI observer ahead of the result.
   #effects(params: FunctionCallParams): ToolEffects {
     return {
-      switchVoice: (referenceId) =>
-        params.llm.pushFrame(
-          new TTSUpdateSettingsFrame({
-            delta: new FishAudioTTSService.Settings({ voice: referenceId }),
-            service: this.#tts,
-          }),
-        ),
+      switchVoice: async (voice) => {
+        const tts = this.#tts;
+        if (tts === null) throw new Error("A realtime model's voice can't change mid-call");
+        await params.llm.pushFrame(
+          new TTSUpdateSettingsFrame({ delta: voiceDelta(tts, voice), service: tts }),
+        );
+      },
       sendServerMessage: (data) => params.llm.pushFrame(new RTVIServerMessageFrame({ data })),
     };
   }

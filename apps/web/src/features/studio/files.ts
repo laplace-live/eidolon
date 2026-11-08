@@ -1,7 +1,9 @@
 // The studio's checks on files before they reach the server, which checks them again: names,
 // image types and sizes, and what a prompt asks of the voice model.
+import { type AccountList, effectiveProviderType } from "@/components/settings-form/controls";
 import type { SettingRow } from "@/lib/api";
 import { parseMarkup } from "@/lib/markup";
+import { defaultModel, modelInfo, providerName, roleById } from "@/lib/providers";
 
 /** The server refuses larger uploads. */
 export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
@@ -14,7 +16,7 @@ export const FACT_EXTENSIONS = [".txt"] as const;
 
 const NAME = /^[^/\\:\p{Cc}]{1,128}$/u;
 
-/** The model that reads a prompt's delivery cues aloud as directions, not as words. */
+/** The model that reads all of a prompt's delivery cues as directions, not as words. */
 export const CUE_MODEL = "drama-3";
 
 export type NameProblem = "invalid" | "extension";
@@ -94,22 +96,31 @@ export function hasDeliveryCues(prompt: string): boolean {
 }
 
 /**
- * Why the voice model may speak a prompt's cues as words: the model she reads isn't CUE_MODEL. It
- * is her persona.yaml's (`model`), else the one she inherits from the environment (`env`).
+ * Why her voice model can't act on a prompt's cues, which Eidolon then takes out of what she says:
+ * the model she reads isn't CUE_MODEL. It is her persona.yaml's (`model`), the one she inherits from
+ * the environment (`env`), or her voice provider's default (`provider`).
  */
 export type CueClash =
   | { readonly kind: "model"; readonly model: string }
-  | { readonly kind: "env"; readonly env: string; readonly model: string };
+  | { readonly kind: "env"; readonly env: string; readonly model: string }
+  | { readonly kind: "provider"; readonly provider: string; readonly model: string };
 
-/** The clash between voice.model's row and a prompt; null when none. */
+/** The clash between her voice settings and a prompt; null when none. */
 export function cueClash(
-  row: Pick<SettingRow, "env" | "value" | "envValue"> | undefined,
+  rows: readonly SettingRow[] | undefined,
   prompt: string | undefined,
+  accounts: AccountList | undefined,
 ): CueClash | null {
-  if (row === undefined || prompt === undefined || !hasDeliveryCues(prompt)) return null;
-  const own = typeof row.value === "string" ? row.value.trim() : "";
-  const model = own || (row.envValue?.trim() ?? "");
-  // Neither sets one: the bot's default applies, which the built-in prompts are written for.
-  if (model === "" || model === CUE_MODEL) return null;
-  return own === "" ? { kind: "env", env: row.env, model } : { kind: "model", model };
+  if (rows === undefined || prompt === undefined || !hasDeliveryCues(prompt)) return null;
+  const role = roleById("voice");
+  const provider = effectiveProviderType(role, rows, {}, accounts);
+  if (provider === null) return null;
+  const row = rows.find((entry) => entry.path === "voice.model");
+  const own = typeof row?.value === "string" ? row.value.trim() : "";
+  const inherited = row?.envValue?.trim() ?? "";
+  const model = own || inherited || defaultModel(role, provider) || "";
+  if (modelInfo(provider, "tts", model)?.markup === "fish-drama") return null;
+  if (own !== "") return { kind: "model", model };
+  if (inherited !== "") return { kind: "env", env: row?.envName ?? row?.env ?? "", model };
+  return { kind: "provider", provider: providerName(provider), model };
 }

@@ -263,7 +263,7 @@ test("isQuotaError", () => {
 describe("default client from env", () => {
   test("without a key, every call throws and nothing is cached", async () => {
     const message =
-      "Embeddings need an API key. Set OPENROUTER_API_KEY (reused from the LLM config) or EMBED_API_KEY for a different provider.";
+      "OpenRouter needs an API key: set OPENROUTER_API_KEY in credentials.json or the environment, or EMBED_API_KEY for embeddings alone";
     expect(() => defaultEmbeddingClient()).toThrow(message);
     await expect(embedTexts(["a"])).rejects.toThrow(message);
     process.env.OPENROUTER_API_KEY = "k";
