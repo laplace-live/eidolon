@@ -26,7 +26,7 @@ import {
   sortedPy,
   sourceFolder,
 } from "@eidolon/config";
-import { accountOf, reportUsage } from "@eidolon/providers";
+import { accountOf, billingProvider, reportUsage } from "@eidolon/providers";
 import {
   DEFAULT_RERANK_BASE_URL,
   dbPathArgument,
@@ -297,12 +297,13 @@ export function namedReranker(model: string): Reranker {
         "is the same RRF for every 'model').",
     );
   }
+  const baseUrl = envOptional("RERANK_BASE_URL") ?? DEFAULT_RERANK_BASE_URL;
+  const provider = billingProvider("openrouter", baseUrl);
   return new OpenRouterReranker({
     modelName: model,
     apiKey,
-    baseUrl: envOptional("RERANK_BASE_URL") ?? DEFAULT_RERANK_BASE_URL,
-    onUsage: (units, costUsd) =>
-      reportUsage({ role: "rerank", provider: "openrouter", model, units, costUsd }),
+    baseUrl,
+    onUsage: (units, costUsd) => reportUsage({ role: "rerank", provider, model, units, costUsd }),
   });
 }
 

@@ -3,6 +3,7 @@
 // REFINE_BASE_URL still pointing it somewhere of its own.
 import { envInt, type JsonPoster, type OpenAIClientOptions } from "@eidolon/config";
 import {
+  billingProvider,
   chatPoster,
   missingKey,
   type Selection,
@@ -42,6 +43,6 @@ export function refineClient(
   return chatPoster(
     selection,
     { ...options, maxRetries: 4 },
-    usageHook("refine", selection.provider.id),
+    usageHook("refine", billingProvider(selection.provider.id, selection.baseUrl)),
   );
 }

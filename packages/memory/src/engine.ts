@@ -22,7 +22,7 @@ import {
   utcIsoDate,
   wallClockMicros,
 } from "@eidolon/config";
-import { jsonPoster, reportUsage, usageHook } from "@eidolon/providers";
+import { billingProvider, jsonPoster, reportUsage, usageHook } from "@eidolon/providers";
 import { type MemoryConfig, requireLlmKey } from "./config.ts";
 import { ADDITIVE_EXTRACTION_PROMPT, AGENT_CONTEXT_SUFFIX } from "./extraction-prompt.ts";
 import { type HistoryEntry, HistoryStore } from "./history.ts";
@@ -449,7 +449,7 @@ export async function openMemoryEngine(
     jsonPoster(embedding, options.http, (units, _model, reportedUsd) =>
       reportUsage({
         role: "embeddings",
-        provider: embedding.provider,
+        provider: billingProvider(embedding.provider, embedding.baseUrl),
         model: embedding.model,
         units,
         costUsd: reportedUsd,

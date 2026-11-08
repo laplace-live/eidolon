@@ -8,7 +8,7 @@ import {
   pyRepr,
   pyStrip,
 } from "@eidolon/config";
-import { hasKey, reportUsage, select, type Units } from "@eidolon/providers";
+import { billingProvider, hasKey, reportUsage, select, type Units } from "@eidolon/providers";
 
 export const DEFAULT_RERANK_BASE_URL = "https://openrouter.ai/api/v1";
 export const DEFAULT_RERANK_MODEL = "cohere/rerank-4-fast";
@@ -218,7 +218,7 @@ export function makeReranker(model?: string | null): Reranker | null {
     onUsage: (units, reportedUsd) =>
       reportUsage({
         role: "rerank",
-        provider,
+        provider: billingProvider(provider, baseUrl),
         model: modelName,
         units,
         costUsd: reportedUsd,

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
+  billingProvider,
   costOf,
   priceOf,
   reportUsage,
@@ -130,6 +131,19 @@ describe("usage records", () => {
       }),
     ).not.toThrow();
   });
+});
+
+test("spend is the provider's whose API the request went to, else the account's", () => {
+  expect(billingProvider("openrouter", "https://api.cohere.com/v1")).toBe("cohere");
+  expect(billingProvider("openrouter", "https://api.openai.com/v1/")).toBe("openai");
+  expect(billingProvider("openrouter", "https://openrouter.ai/api/v1")).toBe("openrouter");
+  expect(billingProvider("openrouter", "https://proxy.example/v1")).toBe("openrouter");
+  expect(billingProvider("openai-compatible", "http://localhost:11434/v1")).toBe("ollama");
+  expect(billingProvider("openai-compatible", "http://localhost:1234/v1")).toBe(
+    "openai-compatible",
+  );
+  expect(billingProvider("openrouter", undefined)).toBe("openrouter");
+  expect(billingProvider("openrouter", "not a url")).toBe("openrouter");
 });
 
 describe("stripMarkup", () => {

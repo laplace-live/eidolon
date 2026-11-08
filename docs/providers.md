@@ -200,7 +200,9 @@ bytes, seconds of audio, images, searches) through `reportUsage`. A call, a job 
 each run inside `withUsageScope`, so the code that spends needn't know who asked. A record's cost
 is, in order: what the provider's response says it billed (OpenRouter's `usage.cost`, the
 decisions API's), else the catalog's list price for that model on that day, promotions included,
-else the caller's own estimate, else none, and it is kept as `unpriced` with its usage.
+else the caller's own estimate, else none, and it is kept as `unpriced` with its usage. A record
+names the provider whose API the request reached, so a role's own base at another provider's API
+(`RERANK_BASE_URL` at Cohere's) is that provider's spend, priced from its models.
 
 `@eidolon/usage` keeps the records in SQLite, at `EIDOLON_USAGE_DB` or `<data home>/usage.db`, in
 WAL mode with a busy timeout, because the bot, the local app and every job's CLI write to one file.
@@ -229,4 +231,5 @@ worth doing:
   `EIDOLON_USAGE_DB` at a writable volume, such as the one holding `MEM0_HISTORY_DB_PATH`, and read
   it with `sqlite3`. For the Usage page, snapshot it with `sqlite3 <path> ".backup usage.db"` (a
   copy of the file alone can miss what its WAL holds), and put the snapshot in place of the local
-  data home's `usage.db` while neither the local app nor an offline command is running.
+  data home's `usage.db` while nothing that records to it runs: the local app, a bot or an offline
+  command.

@@ -49,6 +49,7 @@ export {
   voiceOf,
 } from "./resolve.ts";
 export {
+  billingProvider,
   type CostSource,
   reportUsage,
   setUsageSink,

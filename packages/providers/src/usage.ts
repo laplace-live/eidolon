@@ -3,7 +3,7 @@
 // scope that says which, so the code that spends needn't know who asked.
 import { AsyncLocalStorage } from "node:async_hooks";
 import { errorText, logger } from "@eidolon/config";
-import { type Category, providerById, type RoleId, roleById } from "./catalog.ts";
+import { type Category, PROVIDERS, providerById, type RoleId, roleById } from "./catalog.ts";
 import type { UsageHook } from "./http/chat.ts";
 import { costOf, priceOf, type Units } from "./pricing.ts";
 
@@ -95,6 +95,26 @@ export function usageRecord(report: UsageReport, at: number = Date.now()): Usage
     costUsd,
     costSource,
   };
+}
+
+function hostOf(url: string): string | null {
+  try {
+    return new URL(url).host;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Who bills requests to `baseUrl`, for the ledger: the provider whose own API it is on, since a
+ * role's own base (RERANK_BASE_URL at Cohere's) can point past its account's provider; else
+ * `provider`.
+ */
+export function billingProvider(provider: string, baseUrl: string | undefined): string {
+  const host = baseUrl === undefined ? null : hostOf(baseUrl);
+  if (host === null) return provider;
+  const own = PROVIDERS.find((entry) => entry.baseUrl !== null && hostOf(entry.baseUrl) === host);
+  return own?.id ?? provider;
 }
 
 /** The hook a client reports each response through, as `role`'s use of `provider`. */

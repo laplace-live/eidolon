@@ -18,6 +18,7 @@ import {
   shouldRetry,
 } from "@eidolon/config";
 import {
+  billingProvider,
   hasKey,
   missingKey,
   reportUsage,
@@ -330,7 +331,7 @@ export function defaultEmbeddingClient(): EmbeddingClient {
     headers: openrouter ? openrouterHeaders() : {},
     openrouter,
   });
-  defaultClient = { client, provider: selection.provider.id };
+  defaultClient = { client, provider: billedFor(selection) };
   return client;
 }
 
@@ -366,11 +367,14 @@ export async function embedTextsWithUsage(
   return result;
 }
 
+const billedFor = (selection: Selection): string =>
+  billingProvider(selection.provider.id, selection.baseUrl);
+
 /** Records one embedding request's usage with the install's embedding provider. */
 export function reportEmbedding(model: string, usage: EmbeddingUsage): void {
   reportUsage({
     role: "embeddings",
-    provider: defaultClient?.provider ?? embeddingSelection().provider.id,
+    provider: defaultClient?.provider ?? billedFor(embeddingSelection()),
     model,
     units: { inputTokens: usage.totalTokens },
     costUsd: usage.costSource === "openrouter" ? usage.costUsd : null,

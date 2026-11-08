@@ -269,7 +269,7 @@ describe("pieces", () => {
     expect(reranker.baseUrl).toBe("https://api.cohere.com/v1");
   });
 
-  test("namedReranker reports each rerank to the usage ledger", async () => {
+  test("namedReranker reports each rerank to the usage ledger, as the provider it went to", async () => {
     process.env.OPENROUTER_API_KEY = "or";
     const records: UsageRecord[] = [];
     setUsageSink((record) => records.push(record));
@@ -281,13 +281,18 @@ describe("pieces", () => {
       })) as unknown as typeof globalThis.fetch;
     try {
       await namedReranker("cohere/rerank-4-fast").rerank("q", ["a"]);
+      process.env.RERANK_BASE_URL = "https://api.cohere.com/v1";
+      await namedReranker("rerank-v4.0-fast").rerank("q", ["a"]);
     } finally {
       globalThis.fetch = blocked;
       setUsageSink(null);
     }
     expect(
       records.map(({ role, provider, model, costUsd }) => [role, provider, model, costUsd]),
-    ).toEqual([["rerank", "openrouter", "cohere/rerank-4-fast", 0.002]]);
+    ).toEqual([
+      ["rerank", "openrouter", "cohere/rerank-4-fast", 0.002],
+      ["rerank", "cohere", "rerank-v4.0-fast", 0.002],
+    ]);
   });
 
   test("namedReranker takes the key the local app saved in OpenRouter's account", () => {
