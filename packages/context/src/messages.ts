@@ -35,13 +35,19 @@ export function sameTurn(a: TurnKey | null, b: TurnKey): boolean {
 
 /** The last user message with string content, unstripped. */
 export function latestUserText(messages: readonly unknown[]): string | null {
-  for (let i = messages.length - 1; i >= 0; i--) {
+  return recentUserTexts(messages, 1)[0] ?? null;
+}
+
+/** The last `n` user messages with string content, newest first, unstripped. */
+export function recentUserTexts(messages: readonly unknown[], n: number): string[] {
+  const texts: string[] = [];
+  for (let i = messages.length - 1; i >= 0 && texts.length < n; i--) {
     const message = messages[i];
     if (isMessage(message) && message.role === "user" && typeof message.content === "string") {
-      return message.content;
+      texts.push(message.content);
     }
   }
-  return null;
+  return texts;
 }
 
 /**

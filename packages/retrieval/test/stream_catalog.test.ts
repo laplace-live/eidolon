@@ -19,6 +19,7 @@ import {
   clearCatalogCache,
   compactOverview,
   formatBroadcasts,
+  OccurrenceIndex,
   StreamCatalog,
   warmStreamCatalog,
 } from "../src/index.ts";
@@ -238,6 +239,61 @@ describe("loader edges", () => {
       reads.mockRestore();
     }
   });
+
+  test("every instance's timeline reads the one index warmStreamCatalog builds", async () => {
+    install("select");
+    const builds = spyOn(OccurrenceIndex, "build");
+    try {
+      await warmStreamCatalog(dir);
+      expect(builds).toHaveBeenCalledTimes(1);
+      const timeline = await new StreamCatalog(dir).timeline("你上次聊 Topic 0 是什么时候");
+      expect(timeline?.terms).toEqual(["topic 0"]);
+      expect(timeline?.occurrences.map((o) => o.broadcast.id)).toEqual([
+        "2026-09-09-BV1abc",
+        "2026-09-08-BV1abc",
+        "2026-09-07-BV1abc",
+      ]);
+      expect(builds).toHaveBeenCalledTimes(1);
+    } finally {
+      builds.mockRestore();
+    }
+  });
+
+  test("a topic the loader lets through as a number neither fails the warm nor the timeline", async () => {
+    const scene = (topics: unknown[]) => ({
+      id: "2026-09-09-BV1abc_p1::000",
+      stream_id: "2026-09-09-BV1abc_p1",
+      heading: "健身环打卡",
+      summary: "",
+      topics,
+      chunk_type: "commentary",
+      refined: true,
+    });
+    const broadcast = (day: string, topics: unknown[]) => ({
+      id: `${day}-BV1abc`,
+      stream_date: day,
+      stream_ids: [`${day}-BV1abc_p1`],
+      overview: "",
+      source_chunk_ids: [],
+      scenes: [scene(topics)],
+    });
+    writeFileSync(
+      join(dir, CATALOG_FILENAME),
+      JSON.stringify({
+        schema_version: 1,
+        broadcasts: [
+          broadcast("2026-09-09", [2026, "健身环"]),
+          broadcast("2026-09-08", ["健身环"]),
+        ],
+      }),
+    );
+    await warmStreamCatalog(dir);
+    const timeline = await new StreamCatalog(dir).timeline("你上次玩健身环是什么时候");
+    expect(timeline?.occurrences.map((o) => o.broadcast.id)).toEqual([
+      "2026-09-09-BV1abc",
+      "2026-09-08-BV1abc",
+    ]);
+  });
 });
 
 const realPath = join(REAL_INDEX, CATALOG_FILENAME);
@@ -264,6 +320,18 @@ describe("the committed catalog", () => {
       expect(differing.map((b) => b.id)).toEqual([]);
     },
   );
+
+  test.skipIf(realBytes === null)("indexes for timelines in slices", async () => {
+    const catalog = new StreamCatalog(REAL_INDEX);
+    await catalog.broadcasts();
+    const yields = spyOn(globalThis, "setImmediate");
+    try {
+      await catalog.occurrences();
+      expect(yields).toHaveBeenCalled();
+    } finally {
+      yields.mockRestore();
+    }
+  });
 
   test.skipIf(!sameAsGoldens)("formatBroadcasts of the newest seven matches Python", async () => {
     const broadcasts = await new StreamCatalog(REAL_INDEX).broadcasts();

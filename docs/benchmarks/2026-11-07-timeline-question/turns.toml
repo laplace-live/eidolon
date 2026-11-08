@@ -1,0 +1,274 @@
+# Labeled viewer turns for the gate's timeline questions; score.ts scores them.
+#
+# timeline = true  — the viewer asks when the streamer last or first did something, how long
+#                    ago that was, or how many times she has done it.
+# timeline = false — anything else, including questions about her latest broadcast, a dated
+#                    broadcast, the future, or what rather than when.
+# No label         — borderline; reported, never scored.
+#
+# set = "dev"     — used to choose the questions and the threshold.
+#       "heldout" — written with dev, before any of them were scored; scored once.
+#
+# `before` holds earlier turns, alternating viewer / streamer, oldest first.
+
+[[turn]]
+set = "dev"
+text = "你上次播鬼武者是什么时候？"
+timeline = true
+[[turn]]
+set = "dev"
+text = "你上次玩健身环是什么时候？"
+timeline = true
+[[turn]]
+set = "dev"
+text = "你什么时候玩的糖豆人？"
+timeline = true
+[[turn]]
+set = "dev"
+text = "你最后一次玩黑神话悟空是哪天？"
+timeline = true
+[[turn]]
+set = "dev"
+text = "你上次直播玩健身环是哪天？"
+timeline = true
+[[turn]]
+set = "dev"
+text = "你好久没唱周杰伦了吧，上回唱是啥时候？"
+timeline = true
+[[turn]]
+set = "dev"
+text = "健身环你多久没玩了？"
+timeline = true
+[[turn]]
+set = "dev"
+text = "你最近一次唱晴天是什么时候？"
+timeline = true
+[[turn]]
+set = "dev"
+text = "你上回说坚果生病是哪天来着？"
+timeline = true
+[[turn]]
+set = "dev"
+text = "你第一次玩博德之门是什么时候？"
+timeline = true
+[[turn]]
+set = "dev"
+text = "你玩过几次糖豆人？"
+timeline = true
+[[turn]]
+set = "dev"
+text = "When did you last play Ring Fit on stream?"
+timeline = true
+[[turn]]
+set = "dev"
+before = ["你最近还玩健身环吗", "最近没怎么玩啦，膝盖有点疼"]
+text = "那上次玩是什么时候？"
+timeline = true
+[[turn]]
+set = "dev"
+text = "你最早什么时候开始玩恐怖游戏的"
+timeline = true
+[[turn]]
+set = "dev"
+text = "你一共唱过几次孤勇者"
+timeline = true
+[[turn]]
+set = "dev"
+text = "上次看你打生化危机还是去年吧，是几月来着"
+timeline = true
+[[turn]]
+set = "dev"
+text = "你多久没开歌回了"
+timeline = true
+[[turn]]
+set = "dev"
+text = "你第一次见到坚果是什么时候"
+timeline = true
+[[turn]]
+set = "dev"
+text = "你上次直播聊了什么？"
+timeline = false
+[[turn]]
+set = "dev"
+text = "上次直播你玩的什么游戏？"
+timeline = false
+[[turn]]
+set = "dev"
+text = "最近一次直播几点下播的？"
+timeline = false
+[[turn]]
+set = "dev"
+text = "你2026年5月9号说了什么？"
+timeline = false
+[[turn]]
+set = "dev"
+text = "你昨天播了什么？"
+timeline = false
+[[turn]]
+set = "dev"
+text = "上周你玩了什么游戏？"
+timeline = false
+[[turn]]
+set = "dev"
+text = "你喜欢吃纳豆吗？"
+timeline = false
+[[turn]]
+set = "dev"
+text = "坚果是什么品种的猫？"
+timeline = false
+[[turn]]
+set = "dev"
+text = "你是不是说过你不敢去网吧？"
+timeline = false
+[[turn]]
+set = "dev"
+text = "鬼武者好玩吗？"
+timeline = false
+[[turn]]
+set = "dev"
+text = "你下次什么时候播鬼武者？"
+timeline = false
+[[turn]]
+set = "dev"
+text = "我什么时候能看到你玩健身环？"
+timeline = false
+[[turn]]
+set = "dev"
+text = "你今天几点下播？"
+timeline = false
+[[turn]]
+set = "dev"
+text = "我上次去日本玩是去年"
+timeline = false
+[[turn]]
+set = "dev"
+text = "我今天加班好累啊"
+timeline = false
+[[turn]]
+set = "dev"
+text = "哈哈哈，好吧"
+timeline = false
+[[turn]]
+set = "dev"
+text = "你还记得来个圣光吗？"
+timeline = false
+[[turn]]
+set = "dev"
+text = "你上次说的那个游戏叫什么来着"
+timeline = false
+[[turn]]
+set = "dev"
+text = "你玩健身环的时候最喜欢哪个关卡"
+timeline = false
+[[turn]]
+set = "dev"
+text = "你玩过健身环吗？"
+[[turn]]
+set = "dev"
+text = "你最近还玩健身环吗"
+
+[[turn]]
+set = "heldout"
+text = "鬼武者你是哪天通关的"
+timeline = true
+[[turn]]
+set = "heldout"
+text = "你上一次开歌回是什么时候呀"
+timeline = true
+[[turn]]
+set = "heldout"
+text = "上次连麦露露是什么时候"
+timeline = true
+[[turn]]
+set = "heldout"
+text = "你多久没玩糖豆人了"
+timeline = true
+[[turn]]
+set = "heldout"
+text = "你第一次直播是哪一年"
+timeline = true
+[[turn]]
+set = "heldout"
+text = "你播过几次博德之门啊"
+timeline = true
+[[turn]]
+set = "heldout"
+text = "好久没见你玩恐怖游戏了 上次是什么时候"
+timeline = true
+[[turn]]
+set = "heldout"
+text = "你最后一次提到坚果生病是什么时候"
+timeline = true
+[[turn]]
+set = "heldout"
+text = "how long has it been since you played fall guys"
+timeline = true
+[[turn]]
+set = "heldout"
+text = "你上回打黑神话是几号"
+timeline = true
+[[turn]]
+set = "heldout"
+before = ["你还玩糖豆人吗", "偶尔玩玩"]
+text = "最近一次是啥时候"
+timeline = true
+[[turn]]
+set = "heldout"
+text = "来个圣光上次给你发SC是什么时候"
+timeline = true
+[[turn]]
+set = "heldout"
+text = "上次直播你几点开的播"
+timeline = false
+[[turn]]
+set = "heldout"
+text = "上次直播都聊了些啥"
+timeline = false
+[[turn]]
+set = "heldout"
+text = "你上周三播了什么"
+timeline = false
+[[turn]]
+set = "heldout"
+text = "你最喜欢哪个游戏"
+timeline = false
+[[turn]]
+set = "heldout"
+text = "你什么时候生日"
+timeline = false
+[[turn]]
+set = "heldout"
+text = "你下周还播黑神话吗"
+timeline = false
+[[turn]]
+set = "heldout"
+text = "我第一次看你直播是2022年"
+timeline = false
+[[turn]]
+set = "heldout"
+text = "你觉得糖豆人好玩吗"
+timeline = false
+[[turn]]
+set = "heldout"
+text = "晚上吃什么好呢"
+timeline = false
+[[turn]]
+set = "heldout"
+text = "你记得我吗"
+timeline = false
+[[turn]]
+set = "heldout"
+text = "你上次说要减肥，减了吗"
+timeline = false
+[[turn]]
+set = "heldout"
+text = "鬼武者打到哪了"
+timeline = false
+[[turn]]
+set = "heldout"
+text = "你什么时候下播"
+timeline = false
+[[turn]]
+set = "heldout"
+text = "3月5号那场你唱了什么歌"
+timeline = false

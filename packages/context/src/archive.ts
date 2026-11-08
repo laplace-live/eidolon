@@ -24,6 +24,7 @@ import {
   addDays,
   type Broadcast,
   buildQueryText,
+  clip,
   decodeTopics,
   formatBroadcasts,
   hasStreamTimeReference,
@@ -32,6 +33,7 @@ import {
   isStreamFollowup,
   isStreamOverview,
   isStreamQuery,
+  type Occurrence,
   openStreamArchiveRetriever,
   type Retriever,
   type SearchRow,
@@ -39,10 +41,18 @@ import {
   type StreamScope,
   streamArchiveSearchParams,
   streamScope,
+  type Timeline,
 } from "@eidolon/retrieval";
 import { pyRstrip } from "./compat.ts";
 import { decisionOf, type GateDecision, unlessSkipped } from "./gate.ts";
-import { latestUserText, sameTurn, setBlock, type TurnKey, turnKeyOf } from "./messages.ts";
+import {
+  latestUserText,
+  recentUserTexts,
+  sameTurn,
+  setBlock,
+  type TurnKey,
+  turnKeyOf,
+} from "./messages.ts";
 import {
   OVERVIEW_FRAME_KEY,
   overviewText,
@@ -67,6 +77,7 @@ export const RECALL_HINT =
   `当前问题需要直播回忆。概览不足时调用 ${RECALL_TOOL_NAME} 确定场次并查找记录；` +
   "不要把不同时期的直播混在一起，也不要还没查询就说记不清。";
 export const CHUNK_SCOPE_LABEL = "刚才查到的直播片段";
+const TIMELINE_SCOPE_LABEL = "刚才查到的场次";
 export const RENDER_HEADER =
   "以下是已归档直播的记录，用来 ground 回复，不要照念，也不要主动念日期。";
 
@@ -201,6 +212,60 @@ function appendExtras(lines: string[], extras: Record<string, unknown>): void {
   }
 }
 
+// What a timeline follow-up is built from: pointers (那个游戏), pronouns, time and question words,
+// the verbs these questions use, particles. Two or more other characters in a row may name a topic
+// the catalog lacks, which must not borrow the earlier line's; a stray one (在, 碰) can't.
+const FOLLOWUP_CHARS = new RegExp(
+  "(?:那|这)(?:个|款|首|部)?(?:游戏|歌|曲子|节目|剧)|" +
+    "[那这个款首部它她他你我咱还又再是的了吗呢吧啊呀嘛过没在要会能就都也跟和给对么啥什哪怎" +
+    "时候次回最上一第早久几多少号天月年前后近来去曾经玩播唱打聊开看见提说" +
+    String.raw`\s\p{P}]`,
+  "gu",
+);
+
+function isBareFollowup(text: string | undefined): boolean {
+  return text !== undefined && !/\S{2}/u.test(text.replace(FOLLOWUP_CHARS, " "));
+}
+
+// A broadcast with at least this many scenes naming a topic reads as one she spent on it; one or
+// two usually just mention it.
+const TIMELINE_MAIN_SCENES = 3;
+const TIMELINE_SHOWN = 3;
+
+/**
+ * A timeline as the archive injects it, with the broadcasts it names in its order: the newest
+ * few, the newest with many scenes, the first, and the first with many.
+ */
+function renderTimeline(timeline: Timeline): { text: string; shown: Broadcast[] } {
+  const { occurrences } = timeline;
+  const entry = (occurrence: Occurrence) =>
+    `${occurrence.broadcast.streamDate}，${occurrence.scenes.length}段：` +
+    occurrence.scenes
+      .slice(0, 2)
+      .map((scene) => clip(scene.heading, 30))
+      .join("；");
+  const recent = occurrences.slice(0, TIMELINE_SHOWN);
+  const main = occurrences.filter((o) => o.scenes.length >= TIMELINE_MAIN_SCENES);
+  const first = occurrences.at(-1) as Occurrence;
+  const firstMain = main.at(-1);
+  const lines = [
+    `观众在问${timeline.terms.map((term) => `「${term}」`).join("和")}最近一次、第一次或一共几次的时间。` +
+      "下面是已归档录播里提到它的直播，从新到旧；段数是那场里提到它的片段数，" +
+      "多段通常是那天主要在做这件事，一两段多半只是聊到。归档不是完整的开播记录。",
+    `共${occurrences.length}场提到，其中${main.length}场多段。`,
+    ...recent.map((o) => `- ${entry(o)}`),
+    main[0] ? `最近一场多段的是 ${entry(main[0])}` : "这些场次都只有一两段，可能都只是聊到。",
+    `最早一场是 ${entry(first)}`,
+  ];
+  if (firstMain && firstMain !== first) lines.push(`最早一场多段的是 ${entry(firstMain)}`);
+  lines.push(
+    '被问到时间就直接说日期，像平时说话那样（比如"八月三十号"）；' +
+      '不是今年的带上年份（比如"二〇二二年十月"），不要换算成"前年"。',
+  );
+  const named = [...recent, main[0], first, firstMain].filter((o) => o !== undefined);
+  return { text: lines.join("\n"), shown: [...new Set(named.map((o) => o.broadcast))] };
+}
+
 /** One recall result as the archive injects it and recall_streams returns it. */
 export function renderRecallResult(result: RecallResult, chunkPrefix: string): string {
   const lines = [RENDER_HEADER];
@@ -217,6 +282,7 @@ export interface ArchiveCatalog extends RecallCatalog {
   recent(n?: number): Promise<Broadcast[]>;
   /** Whether stream_catalog.json exists, which alone is enough to offer recall_streams. */
   exists(): boolean;
+  timeline(query: string): Promise<Timeline | null>;
 }
 
 export interface StreamArchiveOptions {
@@ -332,6 +398,10 @@ export class StreamArchive implements ContextProvider {
     if (scope !== null && (archiveQuery || followup)) {
       const result = await this.recall.lookup(query, { scope, overview, signal });
       signal?.throwIfAborted();
+      // 上次 reads as "the newest broadcast" to the routing, but as "the last time" in 上次玩X.
+      if (scope.latest !== null && (await this.#answerTimeline(context, decision, signal))) {
+        return false;
+      }
       this.lastWasArchive = true;
       setBlock(context, RECALL_PREFIX, this.renderResult(result), position);
       logger.info(
@@ -356,6 +426,7 @@ export class StreamArchive implements ContextProvider {
       signal,
     );
     signal?.throwIfAborted();
+    if (await this.#answerTimeline(context, decision, signal)) return false;
     if (chunks.length > 0 && archiveQuery) {
       this.lastWasArchive = true;
       const parts = streamScope({
@@ -377,6 +448,44 @@ export class StreamArchive implements ContextProvider {
 
   renderResult(result: RecallResult): string {
     return renderRecallResult(result, this.params.systemPrompt);
+  }
+
+  /**
+   * Replaces the turn's recall with the catalog's timeline when the gate has already said the
+   * viewer asks when, or how often; it is read after the search, so it never waits on the gate.
+   */
+  async #answerTimeline(
+    context: ConversationContext,
+    decision: GateDecision | null,
+    signal?: AbortSignal,
+  ): Promise<boolean> {
+    if (!decision?.asksTimeline) return false;
+    // Each line alone, so earlier topics never mix in. Only a bare follow-up like 那上次玩是什么时候
+    // borrows the line before's topic; a line that names something the catalog lacks must not.
+    const [latest, before] = recentUserTexts(context.getMessages(), 2);
+    let timeline: Timeline | null = null;
+    for (const text of [latest, isBareFollowup(latest) ? before : undefined]) {
+      if (text === undefined) continue;
+      timeline = await raceAbort(this.#catalog.timeline(text), signal);
+      signal?.throwIfAborted();
+      if (timeline !== null) break;
+    }
+    if (timeline === null) return false;
+    const { text, shown } = renderTimeline(timeline);
+    this.lastWasArchive = true;
+    this.recall.remember(
+      recallResult({
+        scope: streamScope({ streamIds: shown.map((b) => b.id), label: TIMELINE_SCOPE_LABEL }),
+        overview: false,
+        broadcasts: shown,
+      }),
+    );
+    setBlock(context, RECALL_PREFIX, text, this.params.position);
+    logger.info(
+      `Archive timeline: terms=${pyRepr(timeline.terms)}, ` +
+        `broadcasts=${timeline.occurrences.length}, newest=${shown[0]?.streamDate}`,
+    );
+    return true;
   }
 
   #beginTurn(context: ConversationContext): boolean {

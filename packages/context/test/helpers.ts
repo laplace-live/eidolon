@@ -1,12 +1,14 @@
 import { consoleSink, type LogRecord, logger } from "@eidolon/config";
 import type { ContextTurn, ConversationContext, FrameMetadata } from "@eidolon/core";
-import type {
-  Broadcast,
-  IsoDate,
-  Retriever,
-  SearchOptions,
-  SearchRow,
-  StreamScope,
+import {
+  type Broadcast,
+  type IsoDate,
+  OccurrenceIndex,
+  type Retriever,
+  type SearchOptions,
+  type SearchRow,
+  type StreamScope,
+  type Timeline,
 } from "@eidolon/retrieval";
 import type { ArchiveCatalog } from "../src/index.ts";
 
@@ -74,6 +76,10 @@ export class MemoryCatalog implements ArchiveCatalog {
 
   exists(): boolean {
     return this.present;
+  }
+
+  async timeline(query: string): Promise<Timeline | null> {
+    return (await OccurrenceIndex.build(this.items)).timeline(query);
   }
 }
 
