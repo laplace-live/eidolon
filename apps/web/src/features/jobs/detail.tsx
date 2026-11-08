@@ -202,10 +202,7 @@ function Overview({
       />
     );
   } else if (resumable) {
-    note =
-      outcome === "cancelled"
-        ? t`Resume runs it again, and every stage skips the work it already finished.`
-        : t`Resume runs it again, and every stage skips the work it already finished.`;
+    note = t`Resume runs it again, and every stage skips the work it already finished.`;
   }
   const actions = showsStop(job) ? (
     <CancelJobButton job={job} size="default" />

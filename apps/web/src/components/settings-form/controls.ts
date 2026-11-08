@@ -104,7 +104,7 @@ export type AccountList = readonly { readonly id: string; readonly provider: str
  */
 export function effectiveProvider(
   role: Role,
-  rows: readonly Pick<SettingRow, "path" | "value" | "envValue">[],
+  rows: readonly Pick<SettingRow, "path" | "value" | "envValue" | "envOverride">[],
   drafts: Readonly<Record<string, string>>,
 ): string | null {
   const chosen = chosenValue(providerPath(role), rows, drafts);
@@ -113,14 +113,18 @@ export function effectiveProvider(
   return role.defaultProvider;
 }
 
-/** The value at `path` as the drafts stand: the draft, else her file's, else the environment's. */
+/**
+ * The value at `path` as the drafts stand: the draft, else her file's, else the environment's; an
+ * app row's environment value wins over its file's, as the bot reads it.
+ */
 function chosenValue(
   path: string,
-  rows: readonly Pick<SettingRow, "path" | "value" | "envValue">[],
+  rows: readonly Pick<SettingRow, "path" | "value" | "envValue" | "envOverride">[],
   drafts: Readonly<Record<string, string>>,
 ): string | null {
   const row = rows.find((candidate) => candidate.path === path);
   const draft = drafts[path];
+  if (draft === undefined && row?.envOverride && row.envValue) return strip(row.envValue);
   const own =
     draft !== undefined ? strip(draft) : typeof row?.value === "string" ? strip(row.value) : "";
   if (own !== "") return own;
@@ -130,7 +134,7 @@ function chosenValue(
 /** The provider of the account that fills `role` as the drafts stand: models and voices are its. */
 export function effectiveProviderType(
   role: Role,
-  rows: readonly Pick<SettingRow, "path" | "value" | "envValue">[],
+  rows: readonly Pick<SettingRow, "path" | "value" | "envValue" | "envOverride">[],
   drafts: Readonly<Record<string, string>>,
   accounts: AccountList | undefined,
 ): string | null {
@@ -143,7 +147,7 @@ export function effectiveProviderType(
  */
 export function fallbackModel(
   role: Role,
-  rows: readonly Pick<SettingRow, "path" | "value" | "envValue">[],
+  rows: readonly Pick<SettingRow, "path" | "value" | "envValue" | "envOverride">[],
   drafts: Readonly<Record<string, string>>,
   accounts: AccountList | undefined,
 ): string | null {
@@ -352,7 +356,7 @@ export const REINDEX_PATHS: readonly string[] = ["embeddings.model", "embeddings
 /** Rows the form never shows: the active persona switches through PUT personas/active instead. */
 const HIDDEN = new Set([
   "persona",
-  // Edited as an account's API base; a value a settings file sets here applies all the same.
+  // Edited as an account's API base. A role's own still applies while it uses OpenRouter's account.
   "providers.openrouter.apiBase",
   "providers.openai.baseUrl",
   "embeddings.baseUrl",

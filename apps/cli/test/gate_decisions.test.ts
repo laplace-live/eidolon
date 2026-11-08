@@ -11,7 +11,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { dataHome, installSettings, PyFloat } from "@eidolon/config";
+import { dataHome, installSettings, PyFloat, resetSettings } from "@eidolon/config";
+import { setUsageSink, type UsageRecord } from "@eidolon/providers";
 import {
   ask,
   type GateRow,
@@ -223,7 +224,7 @@ test("a key the local app saved in OpenRouter's account asks Jev too", async () 
     ]);
   } finally {
     rmSync(credentials, { force: true });
-    installSettings();
+    resetSettings();
   }
 });
 
@@ -245,4 +246,40 @@ test("a redirect is not followed and raises httpx's message", async () => {
       "Redirect location: 'https://example.com/next'\n" +
       "For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/302",
   );
+});
+
+test("each answer's usage goes into the ledger as the gate's", async () => {
+  const records: UsageRecord[] = [];
+  setUsageSink((record) => records.push(record));
+  try {
+    const answer = (async () =>
+      Response.json({
+        answers: { about_her: { noul: 0.7 } },
+        model: "typesafe/jev-1.14",
+        usage: { input_tokens: 120, output_tokens: 3, cost: 0.0002 },
+      })) as unknown as typeof globalThis.fetch;
+    await ask(
+      { text: "x" },
+      { model: "~typesafe/jev-latest", headers: {}, fetch: answer, now: () => 0 },
+    );
+    expect(
+      records.map(({ role, provider, model, units, costUsd }) => ({
+        role,
+        provider,
+        model,
+        units,
+        costUsd,
+      })),
+    ).toEqual([
+      {
+        role: "gate",
+        provider: "openrouter",
+        model: "typesafe/jev-1.14",
+        units: { inputTokens: 120, outputTokens: 3 },
+        costUsd: 0.0002,
+      },
+    ]);
+  } finally {
+    setUsageSink(null);
+  }
 });

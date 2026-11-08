@@ -15,7 +15,7 @@ import { type CheckDeps, checkProvider } from "../checks.ts";
 import { localError, localJson, readJson } from "../responses.ts";
 import { reinstallSettings } from "../restart.ts";
 import type { LocalApp, LocalRouteSpec } from "../router.ts";
-import { fishVoiceKey, recordQdrant, recordVoice } from "../status.ts";
+import { recordQdrant, recordVoice } from "../status.ts";
 import { writeDataFile } from "../write.ts";
 
 /** A key's longest plausible length; anything longer is a paste gone wrong. */
@@ -150,8 +150,9 @@ export function credentialsRoutes(
         if (typed === null) {
           return localError(400, "bad-request", "The value to check is one line of text");
         }
-        // The key a check of the saved one reads, which its answer about the voice is for.
-        const fishKey = fishVoiceKey();
+        // The key a check of the saved one reads; recordVoice keeps the answer only while her
+        // voice speaks with that key.
+        const fishKey = envOptional("FISH_API_KEY");
         const outcome = await checkProvider(provider as CheckProvider, typed, {
           ...deps.check,
           read: envOptional,

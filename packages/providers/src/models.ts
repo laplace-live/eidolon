@@ -60,7 +60,8 @@ const openaiData = (body: unknown) => named(rows(body, "data"), "id", "name");
 const OPENAI_KINDS: Partial<Record<Category, RegExp>> = {
   stt: /transcribe|whisper/,
   tts: /tts/,
-  realtime: /realtime/,
+  // gpt-realtime-whisper only hears: it is speech recognition, not a voice that answers.
+  realtime: /realtime(?!.*(whisper|transcribe))/,
   embedding: /embedding/,
 };
 const OPENAI_NOT_CHAT =

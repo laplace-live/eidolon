@@ -2,7 +2,7 @@
 // voice step, persona creation and the studio's voice tab use it. Search goes out without the key,
 // so it never takes a TTS slot from a live call; samples play only through <audio src>.
 
-import { msg, ph, plural } from "@lingui/core/macro";
+import { msg } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { CheckIcon, HeartIcon, SearchIcon } from "lucide-react";
@@ -30,7 +30,7 @@ import {
   nextPage,
   SEARCH_LANGUAGES,
   type SearchLanguage,
-  totalLabel,
+  voiceCount,
 } from "./voices";
 
 export interface VoicePickerProps {
@@ -167,11 +167,7 @@ export function VoicePicker({
         <EmptyState icon={<SearchIcon />} title={t`No voices match.`} />
       ) : (
         <>
-          {first && (
-            <p className="text-muted-foreground text-xs">
-              {t`${plural(ph({ count: totalLabel(first) }), { one: `# voice`, other: `# voices` })}`}
-            </p>
-          )}
+          {first && <p className="text-muted-foreground text-xs">{voiceCount(first)}</p>}
           <ul className="flex max-h-[28rem] flex-col divide-y overflow-y-auto rounded-xl border bg-card">
             {voices.map((voice) => (
               <VoiceRow

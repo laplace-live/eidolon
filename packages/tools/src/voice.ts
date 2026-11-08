@@ -1,6 +1,7 @@
 // change_voice_style: when the viewer asks for a different voice (温柔一点, 换回原来的), the LLM
 // names a style and the session's TTS switches to that style's voice mid-call.
 import {
+  accountEntries,
   activePersona,
   cpSlice,
   envEntries,
@@ -52,8 +53,9 @@ export function loadVoiceStyles(
 ): Map<string, string> {
   const read = (name: string) => env[name] || undefined;
   const styles = new Map<string, string>();
-  // A voice provider that doesn't exist fails the call where its TTS is built.
-  const selection = trySelect("voice", read);
+  // A voice provider that doesn't exist fails the call where its TTS is built. The role may name
+  // an account credentials.json adds, so those come along with the variables.
+  const selection = trySelect("voice", { read, env: read, accounts: accountEntries() });
   if (selection === null) return styles;
   const base = voiceOf(selection, read);
   if (base) styles.set(DEFAULT_STYLE, base);

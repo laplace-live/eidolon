@@ -2,6 +2,7 @@ import { ph, t } from "@lingui/core/macro";
 import { type QueryClient, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { personasQuery } from "@/components/settings-form/queries";
+import { accountsQuery } from "@/lib/accounts";
 import { call, type PersonaSummary, type PersonasResponse, type SettingsResponse } from "@/lib/api";
 import { toastError } from "@/lib/feedback";
 import { statusQuery } from "@/lib/query";
@@ -23,6 +24,8 @@ export async function refreshPersonas(
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: statusQuery.queryKey }),
     queryClient.invalidateQueries({ queryKey: ["settings"] }),
+    // Another active persona needs other accounts for her calls.
+    queryClient.invalidateQueries({ queryKey: accountsQuery.queryKey, exact: true }),
     list
       ? undefined
       : queryClient.invalidateQueries({ queryKey: personasQuery.queryKey, exact: true }),

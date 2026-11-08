@@ -23,8 +23,8 @@ let router: ReturnType<typeof createRouter> | undefined;
 const queryClient = createQueryClient(() => void router?.revalidate());
 router = createRouter({ queryClient, exchanged });
 
-// Rendered once the language's catalog is in, or failed to load: its strings then show in English.
-void dynamicActivate(initialLang()).finally(() => {
+// Rendered once a language is active: the viewer's, else English.
+void dynamicActivate(initialLang()).then(() => {
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
       <I18nProvider i18n={i18n}>

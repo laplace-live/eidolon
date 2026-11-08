@@ -133,13 +133,27 @@ function nameOf(raw: unknown): string | null | undefined {
   return name === null || name.length > MAX_NAME_CHARS ? undefined : name;
 }
 
+/**
+ * An API base: http or https, with no user, password, query or fragment. GET accounts shows the
+ * base, so a key typed into it would go back out.
+ */
 function baseOf(raw: string): string | null {
   try {
     const url = new URL(raw);
-    return url.protocol === "http:" || url.protocol === "https:" ? raw.replace(/\/+$/, "") : null;
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    if (url.username || url.password || url.search || url.hash) return null;
+    return raw.replace(/\/+$/, "");
   } catch {
     return null;
   }
+}
+
+/**
+ * Whether an account of `provider` can take an API base: where a variable moves its default's. The
+ * rest stream from hosts of their own, which a base wouldn't reach.
+ */
+function movesBase(provider: Provider): boolean {
+  return provider.baseUrlEnv !== null;
 }
 
 interface Changes {
@@ -169,6 +183,7 @@ function parseChanges(
     const raw = body.baseUrl === null ? null : typedValue(body.baseUrl);
     const base = raw === null ? null : baseOf(raw);
     if (body.baseUrl !== null && base === null) return bad("An API base is an http(s) URL");
+    if (base !== null && !movesBase(provider)) return bad(`${provider.name} takes no API base`);
     changes.baseUrl = base;
   }
   if (body.options !== undefined) {
@@ -349,6 +364,9 @@ export function accountsRoutes(app: LocalApp, deps: AccountsDeps = defaultDeps):
             : (baseOf(typedValue(value.baseUrl) ?? "") ?? null);
         if (typedKey === null || typedBase === null) {
           return localError(400, "bad-request", "A key is one line, and an API base a URL");
+        }
+        if (typedBase !== undefined && !movesBase(provider)) {
+          return localError(400, "bad-request", `${provider.name} takes no API base`);
         }
         const apiKey = typedKey ?? saved?.apiKey;
         const outcome = await checkAccount(

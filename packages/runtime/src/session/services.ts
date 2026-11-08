@@ -65,6 +65,14 @@ function spokenLanguage(): string | null {
   return language.trim().toLowerCase() === "none" ? null : language.trim();
 }
 
+/**
+ * The realtime WebSocket under an account's HTTP API base, where OpenAI's and xAI's APIs put it:
+ * `wss://api.openai.com/v1/realtime` for `https://api.openai.com/v1`, and a proxy's beside its own.
+ */
+function realtimeUrl(selection: Selection): string {
+  return `${(selection.baseUrl as string).replace(/\/+$/, "").replace(/^http/, "ws")}/realtime`;
+}
+
 export function createStt(): FrameProcessor {
   const selection = keyed("hearing");
   const { apiKey, model } = selection;
@@ -101,6 +109,7 @@ export function createStt(): FrameProcessor {
       return meterAudio(
         new OpenAIRealtimeSTTService({
           apiKey,
+          baseUrl: realtimeUrl(selection),
           settings: new OpenAIRealtimeSTTService.Settings({ model, language: spokenLanguage() }),
         }),
         selection,
@@ -382,6 +391,7 @@ export function createRealtime(systemInstruction: string): LLMService<any> {
       return meterRealtime(
         new OpenAIRealtimeLLMService({
           apiKey,
+          baseUrl: realtimeUrl(selection),
           settings: new OpenAIRealtimeLLMService.Settings({
             model,
             systemInstruction,
@@ -404,6 +414,7 @@ export function createRealtime(systemInstruction: string): LLMService<any> {
       return meterRealtime(
         new GrokRealtimeLLMService({
           apiKey,
+          baseUrl: realtimeUrl(selection),
           settings: new GrokRealtimeLLMService.Settings({
             model,
             systemInstruction,

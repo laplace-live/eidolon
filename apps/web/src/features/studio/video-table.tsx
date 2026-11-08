@@ -1,7 +1,7 @@
 // Every video the persona's sources know, as the plan last saw it, and what the running job is
 // doing to each meanwhile.
 import type { PlanVideo } from "@eidolon/ingest/progress";
-import { ph, t } from "@lingui/core/macro";
+import { ph, plural, t } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { ExternalLinkIcon, VideoIcon } from "lucide-react";
 import { type FormEvent, memo, useId, useState } from "react";
@@ -252,7 +252,7 @@ export function VideoTable({
     <>
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <p className="text-muted-foreground text-sm">
-          {t`${ph({ total: videos.length })} videos, ${finished} finished`}
+          {t`${plural(ph({ total: videos.length }), { one: `# video, ${finished} finished`, other: `# videos, ${finished} finished` })}`}
         </p>
         {finished > 0 && finished < videos.length && (
           <div className="flex items-center gap-2">

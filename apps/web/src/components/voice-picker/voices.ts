@@ -1,4 +1,5 @@
 // Fish Audio's public voice search as the picker pages and shows it.
+import { ph, plural, t } from "@lingui/core/macro";
 import type { VoiceSearchResponse } from "@/lib/api";
 
 /** Fish's language filter takes ISO 639-1 codes; "" searches every language. */
@@ -26,12 +27,10 @@ export function nextPage(
   return last.hasMore ? loaded + 1 : undefined;
 }
 
-/**
- * The count `setup.voice.total` takes: an exact one as a number, so "1 voice" reads right, and
- * "1000+" when Fish caps it.
- */
-export function totalLabel(
-  response: Pick<VoiceSearchResponse, "total" | "totalIsExact">,
-): number | string {
-  return response.totalIsExact ? response.total : `${response.total}+`;
+/** How many voices a search found: "1 voice", or "1,000+ voices" where Fish caps the count. */
+export function voiceCount(response: Pick<VoiceSearchResponse, "total" | "totalIsExact">): string {
+  const count = response.total;
+  return response.totalIsExact
+    ? t`${plural(ph({ count }), { one: "# voice", other: "# voices" })}`
+    : t`${plural(ph({ count }), { other: "#+ voices" })}`;
 }

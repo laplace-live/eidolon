@@ -83,7 +83,7 @@ msgstr "{count, plural, other {有 # 个视频不在估价内。}}"
 msgid "{count, plural, one {# video} other {# videos}}"
 msgstr "{count, plural, other {# 个视频}}"
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/voices.ts
 msgid "{count, plural, one {# voice} other {# voices}}"
 msgstr "{count, plural, other {共 # 个声音}}"
 
@@ -130,6 +130,10 @@ msgstr "{count, plural, other {这会永久删除{name}关于你的全部 # 条�
 #: src/features/studio/videos-section.tsx
 msgid "{count, plural, one {Transcribe # video} other {Transcribe # videos}}"
 msgstr "{count, plural, other {转写 # 个视频}}"
+
+#: src/components/voice-picker/voices.ts
+msgid "{count, plural, other {#+ voices}}"
+msgstr "{count, plural, other {共 #+ 个声音}}"
 
 #: src/features/call/call-notices.tsx
 msgid "{count} errors this call"
@@ -244,6 +248,10 @@ msgstr "{name}是 Eidolon 自带的人设。你的修改保存在数据目录里
 msgid "{name} speaks first once the call connects."
 msgstr "接通后{name}会先开口。"
 
+#: src/features/setup/voice-step.tsx
+msgid "{name} speaks through {provider}. Continue to keep her voice, or change it later in her studio."
+msgstr "{name}通过 {provider} 说话。继续即可保留她现在的声音，之后也可以在她的工作室里更换。"
+
 #: src/features/home/memory-panel.tsx
 msgid "{name} starts remembering you from your next call."
 msgstr "从下一次通话开始，{name}会记住你。"
@@ -353,8 +361,8 @@ msgid "{stage}…"
 msgstr "{stage}中…"
 
 #: src/features/studio/video-table.tsx
-msgid "{total} videos, {finished} finished"
-msgstr "共 {total} 个视频，已完成 {finished} 个"
+msgid "{total, plural, one {# video, {finished} finished} other {# videos, {finished} finished}}"
+msgstr "{total, plural, other {共 # 个视频，已完成 {finished} 个}}"
 
 #: src/features/studio/video-table.tsx
 msgid "{video} has no upload date, which the stream archive orders by. Give the day it was streamed to transcribe it."
@@ -1645,6 +1653,10 @@ msgstr "画质越高越贵，通话中等待的时间也越长。"
 #: src/components/app-shell.tsx
 msgid "Home"
 msgstr "首页"
+
+#: src/features/setup/voice-step.tsx
+msgid "How {name} sounds."
+msgstr "{name}的声音。"
 
 #: src/features/home/voice-dialog.tsx
 #: src/features/setup/voice-step.tsx

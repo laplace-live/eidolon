@@ -140,7 +140,11 @@ export interface Provider {
   readonly keyOptional?: boolean;
   /** The HTTP API base, for the offers that call one. */
   readonly baseUrl: string | null;
-  /** The variable that moves the default account's `baseUrl`: a proxy, another region, a server. */
+  /**
+   * The variable that moves the default account's `baseUrl`: a proxy, another region, a server.
+   * Null where nothing can move it, as for a provider that streams from hosts of its own, so its
+   * other accounts take no base either.
+   */
   readonly baseUrlEnv: string | null;
   /** Settings of its own an account carries. */
   readonly fields?: readonly ProviderField[];

@@ -2,7 +2,9 @@
 // reads, where the key is sent and where it never is. Nothing here reaches a network.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { afterEach, describe, expect, test } from "bun:test";
-import { resetSettings } from "@eidolon/config";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { dataHome, installSettings, resetSettings } from "@eidolon/config";
 import type { MemoryAdmin } from "@eidolon/memory";
 import memoryManifest from "../../../../packages/memory/package.json" with { type: "json" };
 import type { CheckProvider, CheckResult } from "../../src/local/api.ts";
@@ -613,5 +615,33 @@ describe("POST credentials/check", () => {
     // The answer is that key's: a key saved since hasn't been asked yet.
     process.env.FISH_API_KEY = "fk-saved-since";
     expect(buildStatus(app, { fetch: fake.fetch, now: Date.now }).persona.voice.ok).toBeNull();
+  });
+
+  test("an answer for the old variable's key isn't kept for the account's own", async () => {
+    touched.push("FISH_VOICE_ID");
+    process.env.FISH_VOICE_ID = VOICE;
+    const credentials = join(dataHome(), "credentials.json");
+    mkdirSync(dataHome(), { recursive: true });
+    writeFileSync(
+      credentials,
+      JSON.stringify({
+        FISH_API_KEY: "fk-old",
+        accounts: { fish: { provider: "fish", apiKey: "fk-saved" } },
+      }),
+      { mode: 0o600 },
+    );
+    installSettings();
+    try {
+      const fake = fakeFetch({
+        [FISH_CREDIT]: json(200, { credit: "1" }),
+        [FISH_VOICE]: json(404, {}),
+      });
+      expect((await route(fake.fetch)('{"provider":"fish"}')).status).toBe(200);
+      const noFetch = (async () => new Response(null)) as unknown as typeof fetch;
+      const status = buildStatus(app, { fetch: noFetch, now: Date.now });
+      expect(status.persona.voice.ok).toBeNull();
+    } finally {
+      rmSync(credentials, { force: true });
+    }
   });
 });

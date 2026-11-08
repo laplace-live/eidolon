@@ -24,6 +24,7 @@ import {
   GATE_URL,
   gateQuestions,
   gateState,
+  reportDecision,
 } from "@eidolon/context";
 import { accountOf } from "@eidolon/providers";
 import { type CliIo, printer, resolveIo } from "./io.ts";
@@ -151,6 +152,8 @@ export async function ask(turn: GateTurnSpec, options: AskOptions): Promise<Gate
     throw pyError("HTTPStatusError", httpxStatusMessage(response, GATE_URL));
   }
   const body = loadsPy(text);
+  // Plain numbers: loadsPy keeps a float a PyFloat, which the ledger would read as no cost.
+  reportDecision("openrouter", options.model, JSON.parse(text));
   const answers = subscript(body, "answers");
   if (!isPlainObject(answers)) throw pyError("AttributeError", "object has no attribute 'items'");
   const nouls: Record<string, PyNumber> = {};

@@ -73,7 +73,8 @@ describe("listModels", () => {
     };
     expect(await ids("llm")).toEqual(["gpt-6-luna"]);
     expect(await ids("tts")).toEqual(["gpt-4o-mini-tts"]);
-    expect(await ids("realtime")).toEqual(["gpt-realtime-2.1", "gpt-realtime-whisper"]);
+    expect(await ids("realtime")).toEqual(["gpt-realtime-2.1"]);
+    expect(await ids("stt")).toEqual(["gpt-realtime-whisper"]);
     expect(await ids("embedding")).toEqual(["text-embedding-3-large"]);
     expect(seen[0]?.url).toBe("https://proxy.example/v1/models");
     expect(seen[0]?.headers.get("authorization")).toBe("Bearer sk-w");

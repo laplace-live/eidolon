@@ -55,6 +55,11 @@ A default account is the one the environment configures, so a server needs no fi
 | Default account | its variable (`OPENAI_API_KEY`), then its entry's `apiKey`, then the same variable in `credentials.json` | its variable (`OPENAI_BASE_URL`), then its entry's `baseUrl`, then `settings.yaml` where a row holds it (OpenRouter's and OpenAI's), then the provider's own |
 | Added account | its entry's `apiKey` | its entry's `baseUrl`, then the provider's own |
 
+Only a provider with a base variable takes an API base. Soniox, Fish Audio, ElevenLabs, Deepgram
+and Cartesia stream from hosts of their own, which a base wouldn't move, and Cohere has no
+variable, so the app refuses a base for their accounts. OpenAI's and xAI's realtime connections
+follow the base: `https://proxy.example.com/v1` streams from `wss://proxy.example.com/v1/realtime`.
+
 A provider's own settings work the same way: MiniMax's group id is `MINIMAX_GROUP_ID` for the
 default account and `options.groupId` in an entry. The entries live in `credentials.json`, under
 `accounts` ([personas.md](personas.md#layers) has the file):
@@ -77,8 +82,10 @@ default account and `options.groupId` in an entry. The entries live in `credenti
 An id is lowercase letters, digits and dashes, and an entry under a provider's id must be that
 provider's. Saving a default account's key in the app moves it out of the variable it was saved
 under into the entry. `EMBED_API_KEY` with `EMBED_BASE_URL`, and rerank's and refine's, still move
-one role alone, over its account's. Removing an account a settings file names is refused
-(`account-in-use`) until no role names it.
+one role alone, but only on the route they moved before accounts: OpenRouter's own account, the
+role's default. A role on any other account uses that account's key and base, so a hidden override
+can't outlive picking one. Removing an account a settings file names is refused (`account-in-use`)
+until no role names it.
 
 Ollama takes no key and costs nothing; `openai-compatible` is any other server that speaks
 OpenAI's chat or embeddings API, which needs an API base and has no default model, so naming it
@@ -220,4 +227,6 @@ worth doing:
 - **Give the ledger a writable path** if production's spend should be recorded. The mounted data
   home is read-only, so the default path logs a warning and records nothing. Point
   `EIDOLON_USAGE_DB` at a writable volume, such as the one holding `MEM0_HISTORY_DB_PATH`, and read
-  it with `sqlite3`, or copy it over a local data home's `usage.db` for the Usage page.
+  it with `sqlite3`. For the Usage page, snapshot it with `sqlite3 <path> ".backup usage.db"` (a
+  copy of the file alone can miss what its WAL holds), and put the snapshot in place of the local
+  data home's `usage.db` while neither the local app nor an offline command is running.

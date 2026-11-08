@@ -82,7 +82,7 @@ function voiceKey(voiceId: string, key: string): string {
 }
 
 /** The key her Fish voice speaks with, wherever it is saved; undefined for another provider's. */
-export function fishVoiceKey(): string | undefined {
+function fishVoiceKey(): string | undefined {
   const voice = trySelect("voice");
   return voice?.provider.id === "fish" ? voice.apiKey : undefined;
 }

@@ -4,7 +4,7 @@
 import "../../../../packages/config/test/isolated-guard.ts";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   activePersona,
@@ -382,6 +382,38 @@ describe("PUT settings", () => {
       envValue: "s2-pro",
       envName: "FISH_MODEL",
     });
+  });
+
+  test("her voice styles go when her voice moves to another provider, not another account", async () => {
+    const yaml = join(personaHomeDir("milky-green"), "persona.yaml");
+    const save = (values: Record<string, string | null>) =>
+      put({ scope: "persona", persona: "milky-green", values });
+    /** Her voice on `provider`, with a style of its voices. */
+    const speaking = async (provider: string) => {
+      expect((await save({ "voice.provider": provider })).status).toBe(200);
+      const own = Bun.YAML.parse(readFileSync(yaml, "utf8")) as Record<string, any>;
+      own.voice = { ...own.voice, styles: { gentle: `${provider}-gentle` } };
+      writeFileSync(yaml, Bun.YAML.stringify(own));
+    };
+    const styles = () =>
+      (Bun.YAML.parse(readFileSync(yaml, "utf8")) as Record<string, any>).voice?.styles;
+    for (const apiKey of ["fk-1", "fk-2"]) {
+      expect((await api("POST", "/accounts", { provider: "fish", apiKey })).status).toBe(201);
+    }
+
+    await speaking("fish");
+    expect((await save({ "voice.provider": "fish-2" })).status).toBe(200);
+    expect(styles()).toEqual({ gentle: "fish-gentle" });
+    expect((await save({ "voice.provider": "openai" })).status).toBe(200);
+    expect(styles()).toBeUndefined();
+
+    // Without her own, she speaks through the default, Fish.
+    await speaking("openai");
+    expect((await save({ "voice.provider": null })).status).toBe(200);
+    expect(styles()).toBeUndefined();
+    await speaking("fish");
+    expect((await save({ "voice.provider": null })).status).toBe(200);
+    expect(styles()).toEqual({ gentle: "fish-gentle" });
   });
 
   test("the time zone is an IANA zone, as the identity editor requires", async () => {

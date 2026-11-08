@@ -15,7 +15,7 @@ import { DeepSeekLLMService } from "@pipedog/deepseek/llm";
 import { ElevenLabsTTSService } from "@pipedog/elevenlabs/tts";
 import { OpenAILLMService } from "@pipedog/openai/llm";
 import { OpenRouterLLMService } from "@pipedog/openrouter/llm";
-import { createLlm, createStt, createTts } from "../src/session/services.ts";
+import { createLlm, createRealtime, createStt, createTts } from "../src/session/services.ts";
 import { captureLogs, type LogCapture, setEnv } from "./support.ts";
 
 const KEYS = {
@@ -45,7 +45,11 @@ const KEYS = {
   CARTESIA_API_KEY: undefined,
   GEMINI_API_KEY: undefined,
   OPENAI_API_KEY: undefined,
+  OPENAI_BASE_URL: undefined,
   XAI_API_KEY: undefined,
+  XAI_BASE_URL: undefined,
+  REALTIME_PROVIDER: undefined,
+  REALTIME_MODEL: undefined,
   DASHSCOPE_API_KEY: undefined,
   MINIMAX_API_KEY: undefined,
   MINIMAX_GROUP_ID: undefined,
@@ -299,5 +303,23 @@ describe("createLlm", () => {
         false,
       ]);
     }
+  });
+});
+
+describe("realtime endpoints", () => {
+  test("follow the account's API base, as its HTTP requests do", () => {
+    setEnv({ STT_PROVIDER: "openai", OPENAI_API_KEY: "sk" });
+    expect((createStt() as any)._baseUrl).toBe("wss://api.openai.com/v1/realtime");
+    setEnv({ OPENAI_BASE_URL: "https://proxy.example/v1/" });
+    expect((createStt() as any)._baseUrl).toBe("wss://proxy.example/v1/realtime");
+
+    setEnv({ REALTIME_PROVIDER: "openai", OPENAI_BASE_URL: "http://127.0.0.1:8080/v1" });
+    expect((createRealtime("hi") as any).baseUrl).toBe(
+      "ws://127.0.0.1:8080/v1/realtime?model=gpt-realtime-2.1",
+    );
+    setEnv({ REALTIME_PROVIDER: "xai", XAI_API_KEY: "xk" });
+    expect((createRealtime("hi") as any).baseUrl).toBe("wss://api.x.ai/v1/realtime");
+    setEnv({ XAI_BASE_URL: "https://grok-proxy.example/v1" });
+    expect((createRealtime("hi") as any).baseUrl).toBe("wss://grok-proxy.example/v1/realtime");
   });
 });

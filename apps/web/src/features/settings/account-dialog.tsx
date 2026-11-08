@@ -266,7 +266,7 @@ export function AccountDialog({ open, account, onClose }: AccountDialogProps) {
                   )}
                 </Field>
               )}
-              {(provider.baseUrlEnv !== null || provider.baseUrl !== null) && (
+              {provider.baseUrlEnv !== null && (
                 <Field>
                   <FieldLabel htmlFor={ids.base}>
                     {needsBase ? t`API Base (Required)` : t`API Base`}

@@ -163,11 +163,14 @@ voice:
 
 `knowledge.gate.questions.<key>` replaces a retrieval-gate question's text (`about_her`, `her_past`,
 `named_thing`); 奶绿's pack tunes `about_her` for her shop. `voice.styles.<name>` adds a voice
-style, as `TTS_VOICE_ID_<NAME>` would. Paths resolve in the persona's folder, the user's copy
+style, as `TTS_VOICE_ID_<NAME>` would; the local app drops them when it saves her voice on another
+provider, whose voice ids they aren't. Paths resolve in the persona's folder, the user's copy
 first.
 
 Each role's `provider` picks one from [the catalog](providers.md#roles) and its `model` is that
 provider's id for it, the provider's default when unset; `realtime.provider` is off until set.
+Memory is the exception: unset, it takes her chat model while both use one provider, so changing
+`mind.model` changes what extracting memories does and costs too.
 `hearing.language` is the language viewers speak, as a two-letter code: Soniox detects it when it
 is unset, and the other providers use `transcription.language`, else `zh`.
 

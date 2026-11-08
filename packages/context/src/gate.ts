@@ -221,7 +221,8 @@ export function decisionsUrl(baseUrl: string): string {
   return `${baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "")}/alpha/decisions`;
 }
 
-function reportDecision(provider: string, model: string, body: unknown): void {
+/** Reports one Decisions answer's usage to the ledger, as the gate's role. */
+export function reportDecision(provider: string, model: string, body: unknown): void {
   const usage = isPlainObject(body) && isPlainObject(body.usage) ? body.usage : null;
   if (usage === null) return;
   const count = (value: unknown) => (typeof value === "number" && value > 0 ? value : 0);

@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { dataHome, installSettings } from "@eidolon/config";
+import { dataHome, installSettings, resetSettings } from "@eidolon/config";
+import { setUsageSink, type UsageRecord } from "@eidolon/providers";
 import type { HybridSearchOptions, Reranker, SearchRow } from "@eidolon/retrieval";
 import {
   aggregate,
@@ -268,6 +269,27 @@ describe("pieces", () => {
     expect(reranker.baseUrl).toBe("https://api.cohere.com/v1");
   });
 
+  test("namedReranker reports each rerank to the usage ledger", async () => {
+    process.env.OPENROUTER_API_KEY = "or";
+    const records: UsageRecord[] = [];
+    setUsageSink((record) => records.push(record));
+    const blocked = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      Response.json({
+        results: [{ index: 0, relevance_score: 0.9 }],
+        usage: { search_units: 1, cost: 0.002 },
+      })) as unknown as typeof globalThis.fetch;
+    try {
+      await namedReranker("cohere/rerank-4-fast").rerank("q", ["a"]);
+    } finally {
+      globalThis.fetch = blocked;
+      setUsageSink(null);
+    }
+    expect(
+      records.map(({ role, provider, model, costUsd }) => [role, provider, model, costUsd]),
+    ).toEqual([["rerank", "openrouter", "cohere/rerank-4-fast", 0.002]]);
+  });
+
   test("namedReranker takes the key the local app saved in OpenRouter's account", () => {
     const credentials = join(dataHome(), "credentials.json");
     mkdirSync(dataHome(), { recursive: true });
@@ -281,7 +303,7 @@ describe("pieces", () => {
       expect(namedReranker("m").modelName).toBe("m");
     } finally {
       rmSync(credentials, { force: true });
-      installSettings();
+      resetSettings();
     }
   });
 });

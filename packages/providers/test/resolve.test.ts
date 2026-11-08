@@ -180,6 +180,35 @@ describe("accounts", () => {
     accounts: new Map(accounts.map((account) => [account.id, account])),
   });
 
+  test("a role's own key and API base stay with its default provider's account", () => {
+    const overrides = {
+      OPENAI_API_KEY: "sk-own",
+      EMBED_API_KEY: "ek",
+      EMBED_BASE_URL: "https://embed.example/v1",
+    };
+    const other = select("embeddings", sources({ ...overrides, EMBED_PROVIDER: "openai" }));
+    expect(other).toMatchObject({
+      apiKey: "sk-own",
+      keyName: "OPENAI_API_KEY",
+      baseUrl: "https://api.openai.com/v1",
+    });
+    const work = entry("openrouter-2", { provider: "openrouter", apiKey: "or-work" });
+    const added = select(
+      "embeddings",
+      sources({ ...overrides, EMBED_PROVIDER: "openrouter-2" }, {}, [work]),
+    );
+    expect(added).toMatchObject({
+      apiKey: "or-work",
+      keyName: null,
+      baseUrl: "https://openrouter.ai/api/v1",
+    });
+    const keyless = select("embeddings", sources({ EMBED_PROVIDER: "openai" }));
+    if (keyless === null) throw new Error("no embeddings");
+    expect(missingKey(keyless).message).toBe(
+      "OpenAI needs an API key: set OPENAI_API_KEY in credentials.json or the environment",
+    );
+  });
+
   test("a second account of a provider fills a role with its own key, base and settings", () => {
     const work = entry("openai-work", {
       provider: "openai",

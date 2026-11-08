@@ -33,7 +33,7 @@ import {
   QUALITIES,
   referenceSources,
 } from "@eidolon/imagegen";
-import { hasKey, missingKey, trySelect } from "@eidolon/providers";
+import { hasKey, missingKey, reportUsage, trySelect } from "@eidolon/providers";
 import { ArgparseExit, INT, type ParserSpec, parseArgs } from "./argparse.ts";
 import { type CliIo, printer, reportExit, resolveIo } from "./io.ts";
 import { textwrapIndent } from "./py.ts";
@@ -235,6 +235,13 @@ export async function generateImageMain(
     io.stderr(`${error.message}\n`);
     return 1;
   }
+  reportUsage({
+    role: "selfie",
+    provider: selfie.provider.id,
+    model: args.model,
+    units: { images: result.images.length },
+    costUsd: result.costUsd,
+  });
 
   const base = pyPath(expandUser(args.out));
   mkdirSync(dirname(base), { recursive: true });

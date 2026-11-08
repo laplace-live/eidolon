@@ -36,6 +36,7 @@ export {
   gateStreamer,
   RetrievalGate,
   type RetrievalGateOptions,
+  reportDecision,
   retrievalGateFromEnv,
   TIMELINE_QUESTIONS,
   TIMELINE_THRESHOLD,

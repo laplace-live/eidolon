@@ -102,9 +102,12 @@ export function select(roleId: RoleId, read?: Read | Sources): Selection | null 
   if (model === null) {
     throw new ProviderConfigError(`${account.name} needs a model: set ${role.modelEnv}`);
   }
-  // A role's own key and API base win over its account's.
-  const roleKey = role.keyEnv === undefined ? undefined : clean(sources.read(role.keyEnv));
-  const roleBase = role.baseUrlEnv === undefined ? undefined : clean(sources.read(role.baseUrlEnv));
+  // A role's own key and API base move the one route it had before accounts, its default
+  // provider's own account; an account picked for it brings its own.
+  const own = account.id === role.defaultProvider;
+  const roleKey = own && role.keyEnv !== undefined ? clean(sources.read(role.keyEnv)) : undefined;
+  const roleBase =
+    own && role.baseUrlEnv !== undefined ? clean(sources.read(role.baseUrlEnv)) : undefined;
   const keyName =
     roleKey !== undefined
       ? (role.keyEnv as string)
@@ -177,12 +180,12 @@ export function missingKey(selection: Selection): ProviderConfigError {
       `The ${account.name} account has no API key: add it in Settings → Providers`,
     );
   }
-  const own =
-    role.keyEnv !== undefined && role.keyEnv !== keyName
+  const alone =
+    role.keyEnv !== undefined && role.keyEnv !== keyName && account.id === role.defaultProvider
       ? `, or ${role.keyEnv} for ${role.label} alone`
       : "";
   return new ProviderConfigError(
-    `${provider.name} needs an API key: set ${keyName} in credentials.json or the environment${own}`,
+    `${provider.name} needs an API key: set ${keyName} in credentials.json or the environment${alone}`,
   );
 }
 

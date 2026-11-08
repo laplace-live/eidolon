@@ -15,6 +15,7 @@ import {
   isNewInstall,
   memoryStepAction,
   nextStep,
+  otherVoiceProvider,
   PERSONA_ID,
   personaErrors,
   previousStep,
@@ -114,6 +115,19 @@ test("a persona inherits the environment's value only while her file leaves it u
   ).toBeNull();
   expect(inheritedValue(voice({}))).toBeNull();
   expect(inheritedValue(undefined)).toBeNull();
+});
+
+test("the voice step leaves a voice with a provider other than Fish as she has it", () => {
+  const provider = (patch: Partial<SettingRow>) =>
+    setting("voice.provider", { env: "TTS_PROVIDER", scope: "persona", ...patch });
+  const accounts = [{ id: "speech", provider: "openai" }];
+  expect(otherVoiceProvider([], undefined)).toBeNull();
+  expect(otherVoiceProvider([provider({ value: "fish", source: "persona" })], [])).toBeNull();
+  expect(otherVoiceProvider([provider({ value: "openai", source: "persona" })], [])).toBe("openai");
+  expect(otherVoiceProvider([provider({ value: "speech", source: "persona" })], accounts)).toBe(
+    "openai",
+  );
+  expect(otherVoiceProvider([provider({ envValue: "elevenlabs" })], [])).toBe("elevenlabs");
 });
 
 describe("creating a persona", () => {

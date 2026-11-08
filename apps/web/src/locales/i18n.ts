@@ -1,6 +1,6 @@
 // The UI's languages. Strings are English source text in Lingui macros; `<lang>.po` holds each
 // language's catalog, which the Vite plugin compiles when it is imported.
-import { i18n } from "@lingui/core";
+import { i18n, type Messages } from "@lingui/core";
 import { useLingui } from "@lingui/react";
 
 export const LANGS = ["en", "zh-Hans"] as const;
@@ -48,12 +48,26 @@ export function initialLang(): Lang {
   return detectLang(stored(), navigator.languages);
 }
 
-/** Loads `lang`'s catalog, on demand, and makes it the active language. */
+/**
+ * Loads `lang`'s catalog, on demand, and makes it the active language: English when it can't load,
+ * and with neither, English without a catalog, so the page renders rather than staying blank.
+ */
 export async function dynamicActivate(lang: Lang): Promise<void> {
-  const { messages } = await catalogs[lang]();
-  i18n.load(lang, messages);
-  i18n.activate(lang);
-  document.documentElement.lang = lang;
+  const [active, messages] = await loadCatalog(lang);
+  i18n.load(active, messages);
+  i18n.activate(active);
+  document.documentElement.lang = active;
+}
+
+async function loadCatalog(lang: Lang): Promise<[Lang, Messages]> {
+  for (const candidate of lang === "en" ? (["en"] as const) : ([lang, "en"] as const)) {
+    try {
+      return [candidate, (await catalogs[candidate]()).messages];
+    } catch {
+      // The next candidate, or none.
+    }
+  }
+  return ["en", {}];
 }
 
 /** Switches the UI to `lang` and remembers the choice in this browser. */

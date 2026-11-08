@@ -293,6 +293,15 @@ describe("providers and the models they fill", () => {
     expect(effectiveProvider(roleById("realtime"), rows({}), {})).toBeNull();
   });
 
+  test("an app row's environment value wins over its file's, as the bot reads it", () => {
+    const embeddings = rows({ "embeddings.provider": "google" }).map((setting) =>
+      setting.path === "embeddings.provider"
+        ? { ...setting, envValue: "openai", envOverride: true }
+        : setting,
+    );
+    expect(effectiveProvider(roleById("embeddings"), embeddings, {})).toBe("openai");
+  });
+
   test("memory unset takes her chat model while both use one provider, as the bot does", () => {
     const memory = roleById("memory");
     const chat = rows({ "mind.model": "anthropic/claude-sonnet-5.5" });

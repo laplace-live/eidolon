@@ -83,7 +83,7 @@ msgstr "{count, plural, one {# video isn't in the estimate.} other {# videos are
 msgid "{count, plural, one {# video} other {# videos}}"
 msgstr "{count, plural, one {# video} other {# videos}}"
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/voices.ts
 msgid "{count, plural, one {# voice} other {# voices}}"
 msgstr "{count, plural, one {# voice} other {# voices}}"
 
@@ -130,6 +130,10 @@ msgstr "{count, plural, one {This deletes the # memory {name} keeps of you, for 
 #: src/features/studio/videos-section.tsx
 msgid "{count, plural, one {Transcribe # video} other {Transcribe # videos}}"
 msgstr "{count, plural, one {Transcribe # video} other {Transcribe # videos}}"
+
+#: src/components/voice-picker/voices.ts
+msgid "{count, plural, other {#+ voices}}"
+msgstr "{count, plural, other {#+ voices}}"
 
 #: src/features/call/call-notices.tsx
 msgid "{count} errors this call"
@@ -244,6 +248,10 @@ msgstr "{name} ships with Eidolon. Your edits are saved in your data home, and t
 msgid "{name} speaks first once the call connects."
 msgstr "{name} speaks first once the call connects."
 
+#: src/features/setup/voice-step.tsx
+msgid "{name} speaks through {provider}. Continue to keep her voice, or change it later in her studio."
+msgstr "{name} speaks through {provider}. Continue to keep her voice, or change it later in her studio."
+
 #: src/features/home/memory-panel.tsx
 msgid "{name} starts remembering you from your next call."
 msgstr "{name} starts remembering you from your next call."
@@ -353,8 +361,8 @@ msgid "{stage}…"
 msgstr "{stage}…"
 
 #: src/features/studio/video-table.tsx
-msgid "{total} videos, {finished} finished"
-msgstr "{total} videos, {finished} finished"
+msgid "{total, plural, one {# video, {finished} finished} other {# videos, {finished} finished}}"
+msgstr "{total, plural, one {# video, {finished} finished} other {# videos, {finished} finished}}"
 
 #: src/features/studio/video-table.tsx
 msgid "{video} has no upload date, which the stream archive orders by. Give the day it was streamed to transcribe it."
@@ -1645,6 +1653,10 @@ msgstr "Higher costs more and takes longer while you wait in the call."
 #: src/components/app-shell.tsx
 msgid "Home"
 msgstr "Home"
+
+#: src/features/setup/voice-step.tsx
+msgid "How {name} sounds."
+msgstr "How {name} sounds."
 
 #: src/features/home/voice-dialog.tsx
 #: src/features/setup/voice-step.tsx

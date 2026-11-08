@@ -1,6 +1,11 @@
 // The setup wizard's steps, and what it decides from the API's answers.
-import { isTimeZone } from "@/components/settings-form/controls";
+import {
+  type AccountList,
+  effectiveProviderType,
+  isTimeZone,
+} from "@/components/settings-form/controls";
 import type { AccountView, CreatePersonaRequest, SettingRow, Status } from "@/lib/api";
+import { roleById } from "@/lib/providers";
 
 export const STEPS = ["keys", "persona", "voice", "memory", "done"] as const;
 export type Step = (typeof STEPS)[number];
@@ -66,6 +71,18 @@ export function inheritedValue(
 ): string | null {
   if (row === undefined || row.envValue === null) return null;
   return row.value === null || row.value === "" ? row.envValue : null;
+}
+
+/**
+ * The provider a persona speaks through when it isn't Fish Audio, whose library the voice step
+ * searches; null for Fish. Another provider's voice stays as she has it.
+ */
+export function otherVoiceProvider(
+  rows: readonly SettingRow[],
+  accounts: AccountList | undefined,
+): string | null {
+  const provider = effectiveProviderType(roleById("voice"), rows, {}, accounts);
+  return provider === null || provider === "fish" ? null : provider;
 }
 
 /** Ids become folder names, lock keys and --persona, so they stay lowercase ASCII. */

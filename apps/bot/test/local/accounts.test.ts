@@ -7,6 +7,7 @@ import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:f
 import { join } from "node:path";
 import { dataHome, installSettings, resetSettings } from "@eidolon/config";
 import type { MemoryAdmin } from "@eidolon/memory";
+import { providerById } from "@eidolon/providers";
 import type { AccountsResponse, CheckResult, ModelsResponse } from "../../src/local/api.ts";
 import type { LocalApp } from "../../src/local/router.ts";
 import { accountsRoutes } from "../../src/local/routes/accounts.ts";
@@ -191,11 +192,34 @@ describe("adding and editing accounts", () => {
     expect((await call("POST", "/accounts", { provider: "nope" })).status).toBe(400);
     for (const body of [
       { provider: "openai", baseUrl: "ftp://example" },
+      { provider: "openai", baseUrl: "https://user:sk-key@proxy.example/v1" },
+      { provider: "openai", baseUrl: "https://proxy.example/v1?key=sk-key" },
       { provider: "openai", name: "x".repeat(81) },
       { provider: "openai", apiKey: "a\nb" },
     ]) {
       expect([body, (await call("POST", "/accounts", body)).status]).toEqual([body, 400]);
     }
+  });
+
+  test("a provider that streams from hosts of its own takes no API base", async () => {
+    const call = api();
+    const base = "https://speech-proxy.example/v1";
+    for (const provider of ["soniox", "fish", "elevenlabs", "deepgram", "cartesia"]) {
+      const added = await call("POST", "/accounts", { provider, apiKey: "k", baseUrl: base });
+      expect([provider, added.status, added.body.error.message]).toEqual([
+        provider,
+        400,
+        `${providerById(provider)?.name} takes no API base`,
+      ]);
+      const checked = await call("POST", "/accounts/check", {
+        provider,
+        apiKey: "k",
+        baseUrl: base,
+      });
+      expect([provider, checked.status]).toEqual([provider, 400]);
+    }
+    expect((await call("POST", "/accounts", { provider: "soniox", apiKey: "k" })).status).toBe(201);
+    expect((await call("PUT", "/accounts/soniox", { baseUrl: base })).status).toBe(400);
   });
 });
 

@@ -1,4 +1,8 @@
+import "../../config/test/isolated-guard.ts";
 import { afterEach, describe, expect, test } from "bun:test";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { dataHome, installSettings, resetSettings } from "@eidolon/config";
 import {
   alternativeStyleNames,
   createVoiceTool,
@@ -45,6 +49,31 @@ describe("loadVoiceStyles", () => {
       ["gentle", "g2"],
       ["nai_hei", "nh"],
     ]);
+  });
+
+  test("a voice on an account credentials.json adds keeps its styles", () => {
+    const credentials = join(dataHome(), "credentials.json");
+    mkdirSync(dataHome(), { recursive: true });
+    writeFileSync(
+      credentials,
+      JSON.stringify({ accounts: { "fish-2": { provider: "fish", apiKey: "fk" } } }),
+      { mode: 0o600 },
+    );
+    installSettings();
+    try {
+      const styles = loadVoiceStyles({
+        TTS_PROVIDER: "fish-2",
+        TTS_VOICE_ID: "base",
+        TTS_VOICE_ID_GENTLE: "g",
+      });
+      expect([...styles]).toEqual([
+        ["default", "base"],
+        ["gentle", "g"],
+      ]);
+    } finally {
+      rmSync(credentials, { force: true });
+      resetSettings();
+    }
   });
 
   test("an unset or blank FISH_VOICE_ID leaves no default", () => {

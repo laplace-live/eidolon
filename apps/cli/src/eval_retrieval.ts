@@ -26,7 +26,7 @@ import {
   sortedPy,
   sourceFolder,
 } from "@eidolon/config";
-import { accountOf } from "@eidolon/providers";
+import { accountOf, reportUsage } from "@eidolon/providers";
 import {
   DEFAULT_RERANK_BASE_URL,
   dbPathArgument,
@@ -301,6 +301,8 @@ export function namedReranker(model: string): Reranker {
     modelName: model,
     apiKey,
     baseUrl: envOptional("RERANK_BASE_URL") ?? DEFAULT_RERANK_BASE_URL,
+    onUsage: (units, costUsd) =>
+      reportUsage({ role: "rerank", provider: "openrouter", model, units, costUsd }),
   });
 }
 

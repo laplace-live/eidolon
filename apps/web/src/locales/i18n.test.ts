@@ -1,5 +1,6 @@
-import { describe, expect, test } from "bun:test";
-import { detectLang } from "./i18n";
+import { describe, expect, mock, test } from "bun:test";
+import { i18n } from "@lingui/core";
+import { detectLang, dynamicActivate } from "./i18n";
 
 describe("detectLang", () => {
   test("a stored choice wins over the browser's languages", () => {
@@ -19,4 +20,19 @@ describe("detectLang", () => {
     expect(detectLang(null, ["ja-JP"])).toBe("en");
     expect(detectLang("fr", [])).toBe("en");
   });
+});
+
+test("a catalog that can't load falls back to English's", async () => {
+  mock.module("./zh-Hans.po", () => {
+    throw new Error("chunk failed to load");
+  });
+  mock.module("./en.po", () => ({ messages: { hello: "Hello" } }));
+  const root = { lang: "" };
+  Object.assign(globalThis, { document: { documentElement: root } });
+  try {
+    await dynamicActivate("zh-Hans");
+    expect([i18n.locale, root.lang, i18n._("hello")]).toEqual(["en", "en", "Hello"]);
+  } finally {
+    Reflect.deleteProperty(globalThis, "document");
+  }
 });

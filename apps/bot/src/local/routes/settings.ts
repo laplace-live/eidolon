@@ -15,7 +15,7 @@ import {
   SETTINGS,
   type SettingField,
 } from "@eidolon/config";
-import { accountOf, ROLES } from "@eidolon/providers";
+import { accountOf, ROLES, roleById } from "@eidolon/providers";
 import type { SettingRow, SettingsResponse } from "../api.ts";
 import {
   editPersonaYaml,
@@ -64,6 +64,29 @@ const PROVIDER_DEFAULTS = new Map(
     field.default as string,
   ]),
 );
+
+const VOICE_PROVIDER = roleById("voice").providerEnv;
+
+/** The provider her voice would use were her file's voice.provider `own`. */
+function voiceProvider(
+  own: string | null,
+  layers: ReturnType<typeof readSettingsLayers>,
+): string | undefined {
+  const id = (own ?? envVariable(VOICE_PROVIDER) ?? PROVIDER_DEFAULTS.get(VOICE_PROVIDER))
+    ?.trim()
+    .toLowerCase();
+  return id ? accountProvider(id, layers.accounts) : undefined;
+}
+
+/** Whether `changes` move her voice to another provider, whose voice ids her styles aren't. */
+function dropsVoiceStyles(changes: readonly [SettingField, unknown][], persona: string): boolean {
+  const change = changes.find(([field]) => field.env === VOICE_PROVIDER);
+  if (change === undefined) return false;
+  const layers = readSettingsLayers(persona);
+  const saved = layers.values.get(VOICE_PROVIDER);
+  const own = saved?.source === "persona" ? (saved.value ?? null) : null;
+  return voiceProvider(own, layers) !== voiceProvider(change[1] as string | null, layers);
+}
 
 export function settingsOf(app: LocalApp, persona: string): SettingsResponse {
   const layers = readSettingsLayers(persona);
@@ -261,8 +284,10 @@ export function settingsRoutes(app: LocalApp): LocalRouteSpec[] {
         // Nothing to write: a persona's first write would copy her template for no change.
         if (changes.length === 0) return localJson(200, settingsOf(app, persona));
 
+        const dropStyles = scope === "persona" && dropsVoiceStyles(changes, persona);
         const edit = (tree: Record<string, unknown>) => {
           for (const [field, value] of changes) setDotted(tree, field.path, value);
+          if (dropStyles) setDotted(tree, "voice.styles", null);
         };
         try {
           if (scope === "app") editSettingsYaml(edit);

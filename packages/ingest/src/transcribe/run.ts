@@ -391,6 +391,14 @@ async function transcribe(options: TranscribeOptions): Promise<TranscribeResult>
         ? await transcribeWhole(session, audio, durationSec)
         : await transcribeSliced(session, audio, slices, options.ffmpeg);
     unsaved = true;
+    // Billed once Soniox has transcribed it, whether or not it can be saved here.
+    reportUsage({
+      role: "transcription",
+      provider: "soniox",
+      model,
+      units: { audioSeconds: outcome.durationSec },
+      estimatedUsd: estimateTranscribeUsd(outcome.durationSec, model),
+    });
     // The payload first: it holds everything the transcript renders from, and the transcript
     // stays the mark of a finished stream.
     const scenes = groupSegmentsIntoScenes(outcome.segments, windowSec);
@@ -422,13 +430,6 @@ async function transcribe(options: TranscribeOptions): Promise<TranscribeResult>
         `No speech in ${name}: ${payloadFile} records that, so it isn't transcribed or billed again.`,
       );
     }
-    reportUsage({
-      role: "transcription",
-      provider: "soniox",
-      model,
-      units: { audioSeconds: outcome.durationSec },
-      estimatedUsd: estimateTranscribeUsd(outcome.durationSec, model),
-    });
     return {
       status: scenes.length > 0 ? "done" : "no-speech",
       streamId: id,
