@@ -90,11 +90,13 @@ listed broadcast. A recall scoped to dates (上周, 3月5号) keeps its scope. T
 the search returns, so a slow or failed gate leaves the chunks as before. The
 facts search still runs.
 
-The topic comes from the viewer's latest line alone. A bare follow-up, a line
-of nothing but pointers, time words, verbs and particles such as 那上次玩是什么时候,
-takes it from the viewer's line before. A line that names something the
-catalog lacks, 塞尔达 or "fall guys", keeps the search's chunks rather than
-answer with the earlier topic. Follow-ups after a timeline resolve against
+The topic comes from the viewer's latest line alone. A bare follow-up such as
+那上次玩是在什么时候 takes it from the viewer's line before: it is built from
+pointers (那个游戏), pronouns, time and question words, the verbs these
+questions use and particles, with at most a stray other character in between.
+Two other characters in a row may name something the catalog lacks, as 塞尔达
+or "fall guys" do, and that line keeps the search's chunks rather than answer
+with the earlier topic. Follow-ups after a timeline resolve against
 every broadcast its block names, the first included.
 
 It can't tell playing a game from talking about it: a game she finished years

@@ -686,13 +686,20 @@ describe("a question about when, or how often, gets the catalog's timeline", () 
     expect(recall).toContain("最早一场是 2026-08-20，1段：聊到健身环");
   });
 
-  test("a follow-up finds its topic in the viewer's line before it", async () => {
-    const { recall } = await ask("那上次玩是什么时候？", GateDecision.settled(TIMELINE), [
-      "你最近还玩健身环吗",
-      "最近没怎么玩啦",
-    ]);
-    expect(recall).toContain("「健身环」");
-  });
+  for (const query of [
+    "那上次玩是什么时候？",
+    "那上次玩是在什么时候？",
+    "最近一次是啥时候",
+    "那个游戏上次玩是几号",
+  ]) {
+    test(`a follow-up finds its topic in the viewer's line before it: ${query}`, async () => {
+      const { recall } = await ask(query, GateDecision.settled(TIMELINE), [
+        "你最近还玩健身环吗",
+        "最近没怎么玩啦",
+      ]);
+      expect(recall).toContain("「健身环」");
+    });
+  }
 
   for (const query of [
     "那你上次玩塞尔达是什么时候？",

@@ -212,18 +212,19 @@ function appendExtras(lines: string[], extras: Record<string, unknown>): void {
   }
 }
 
-// What a timeline follow-up says besides its topic: pointers, time words, its verbs and particles.
-// Whatever else a line holds may be a topic the catalog lacks.
-const FOLLOWUP_WORDS = new RegExp(
-  "(?:那|这)(?:个|款|首|部)?(?:游戏|歌|曲子|节目)?|上一次|上次|上回|最近一次|最后一次|第一次|头一次|" +
-    "最早|多长时间|多久|好久|什么时候|啥时候|哪一天|哪天|几号|几月|多少次|几次|一共|总共|直播|" +
-    "你|我|它|她|他|还|又|再|是|的|了|吗|呢|吧|啊|呀|过|没|玩|播|唱|打|聊|开|看|见|提|说|" +
-    String.raw`[\s\p{P}]`,
+// What a timeline follow-up is built from: pointers (那个游戏), pronouns, time and question words,
+// the verbs these questions use, particles. Two or more other characters in a row may name a topic
+// the catalog lacks, which must not borrow the earlier line's; a stray one (在, 碰) can't.
+const FOLLOWUP_CHARS = new RegExp(
+  "(?:那|这)(?:个|款|首|部)?(?:游戏|歌|曲子|节目|剧)|" +
+    "[那这个款首部它她他你我咱还又再是的了吗呢吧啊呀嘛过没在要会能就都也跟和给对么啥什哪怎" +
+    "时候次回最上一第早久几多少号天月年前后近来去曾经玩播唱打聊开看见提说" +
+    String.raw`\s\p{P}]`,
   "gu",
 );
 
 function isBareFollowup(text: string | undefined): boolean {
-  return text !== undefined && text.replace(FOLLOWUP_WORDS, "") === "";
+  return text !== undefined && !/\S{2}/u.test(text.replace(FOLLOWUP_CHARS, " "));
 }
 
 // A broadcast with at least this many scenes naming a topic reads as one she spent on it; one or
