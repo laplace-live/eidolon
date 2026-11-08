@@ -258,6 +258,42 @@ describe("loader edges", () => {
       builds.mockRestore();
     }
   });
+
+  test("a topic the loader lets through as a number neither fails the warm nor the timeline", async () => {
+    const scene = (topics: unknown[]) => ({
+      id: "2026-09-09-BV1abc_p1::000",
+      stream_id: "2026-09-09-BV1abc_p1",
+      heading: "健身环打卡",
+      summary: "",
+      topics,
+      chunk_type: "commentary",
+      refined: true,
+    });
+    const broadcast = (day: string, topics: unknown[]) => ({
+      id: `${day}-BV1abc`,
+      stream_date: day,
+      stream_ids: [`${day}-BV1abc_p1`],
+      overview: "",
+      source_chunk_ids: [],
+      scenes: [scene(topics)],
+    });
+    writeFileSync(
+      join(dir, CATALOG_FILENAME),
+      JSON.stringify({
+        schema_version: 1,
+        broadcasts: [
+          broadcast("2026-09-09", [2026, "健身环"]),
+          broadcast("2026-09-08", ["健身环"]),
+        ],
+      }),
+    );
+    await warmStreamCatalog(dir);
+    const timeline = await new StreamCatalog(dir).timeline("你上次玩健身环是什么时候");
+    expect(timeline?.occurrences.map((o) => o.broadcast.id)).toEqual([
+      "2026-09-09-BV1abc",
+      "2026-09-08-BV1abc",
+    ]);
+  });
 });
 
 const realPath = join(REAL_INDEX, CATALOG_FILENAME);

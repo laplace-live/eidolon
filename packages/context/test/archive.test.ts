@@ -622,7 +622,8 @@ describe("a question about when, or how often, gets the catalog's timeline", () 
     };
   }
 
-  async function ask(query: string, decision: GateDecision | null) {
+  /** `before` holds earlier turns, alternating viewer / streamer, oldest first. */
+  async function ask(query: string, decision: GateDecision | null, before: string[] = []) {
     const retriever = new FakeRetriever();
     const catalog = new MemoryCatalog([
       day("2026-09-08", [["读SC", ["读SC"]]]),
@@ -632,11 +633,18 @@ describe("a question about when, or how often, gets the catalog's timeline", () 
         ["健身环打卡", ["健身环"]],
       ]),
       day("2026-08-20", [["聊到健身环", ["健身环"]]]),
+      day("2026-07-15", [
+        ["糖豆人水友赛", ["糖豆人"]],
+        ["糖豆人决赛圈", ["糖豆人"]],
+      ]),
     ]);
     const archive = new StreamArchive({ retriever, catalog, timeZone: "UTC", today: () => TODAY });
     // Offered whenever a catalog exists, as in production; it routes some questions to a hint.
     await archive.recallTool();
-    const context = new FakeContext([{ role: "user", content: query }]);
+    const context = new FakeContext([
+      ...before.map((content, i) => ({ role: i % 2 === 0 ? "user" : "assistant", content })),
+      { role: "user", content: query },
+    ]);
     const enhanced = await archive.enhance(context, query, decision);
     const recall = context.contents().find((c) => c.startsWith(RECALL_PREFIX)) ?? "";
     return { archive, retriever, enhanced, recall };
@@ -650,7 +658,7 @@ describe("a question about when, or how often, gets the catalog's timeline", () 
     expect(enhanced).toBe(false);
     expect(retriever.calls).toHaveLength(1);
     expect(recall).toContain("「健身环」");
-    expect(recall).toContain("共2场提到。");
+    expect(recall).toContain("共2场提到，其中1场多段。");
     expect(recall).toContain("- 2026-09-05，3段：健身环第一关；健身环第二关\n");
     expect(recall).toContain("最近一场多段的是 2026-09-05，3段");
     expect(recall).toContain("最早一场是 2026-08-20，1段：聊到健身环");
@@ -676,6 +684,40 @@ describe("a question about when, or how often, gets the catalog's timeline", () 
     const { recall } = await ask("你第一次玩健身环是什么时候？", GateDecision.settled(TIMELINE));
     expect(recall).toContain("「健身环」");
     expect(recall).toContain("最早一场是 2026-08-20，1段：聊到健身环");
+  });
+
+  test("a follow-up finds its topic in the viewer's line before it", async () => {
+    const { recall } = await ask("那上次玩是什么时候？", GateDecision.settled(TIMELINE), [
+      "你最近还玩健身环吗",
+      "最近没怎么玩啦",
+    ]);
+    expect(recall).toContain("「健身环」");
+  });
+
+  test("a short follow-up keeps its own topic over the earlier line's", async () => {
+    const { recall } = await ask("健身环呢？", GateDecision.settled(TIMELINE), [
+      "你上次玩糖豆人是什么时候？",
+      "七月十五号呀",
+    ]);
+    expect(recall).toContain("「健身环」");
+    expect(recall).not.toContain("「糖豆人」");
+  });
+
+  test("a follow-up can reach every broadcast the timeline named, the first included", async () => {
+    const retriever = new FakeRetriever();
+    const catalog = new MemoryCatalog([
+      day("2026-09-05", [["健身环第一关", ["健身环"]]]),
+      day("2026-08-20", [["聊到健身环", ["健身环"]]]),
+      day("2026-08-10", [["健身环打卡", ["健身环"]]]),
+      day("2026-06-01", [["第一次玩健身环", ["健身环"]]]),
+    ]);
+    const archive = new StreamArchive({ retriever, catalog, timeZone: "UTC", today: () => TODAY });
+    const context = new FakeContext([{ role: "user", content: "你第一次玩健身环是什么时候？" }]);
+    await archive.enhance(context, "你第一次玩健身环是什么时候？", GateDecision.settled(TIMELINE));
+    context.add({ role: "assistant", content: "六月一号呀" });
+    context.add({ role: "user", content: "展开说说" });
+    await archive.enhance(context, "展开说说", GateDecision.settled(RETRIEVE));
+    expect(retriever.calls.at(-1)?.where).toContain("'2026-06-01-BV1abc_p1'");
   });
 
   test("leaves a recall scoped to dates alone", async () => {

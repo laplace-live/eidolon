@@ -238,8 +238,8 @@ export class RetrievalGate {
   async decide(state: GateState | null): Promise<GateVerdict> {
     if (state === null) return FAIL_OPEN;
     const started = performance.now();
+    let body: unknown;
     let score: number;
-    let timelineScore: number;
     try {
       const post = this.#fetch;
       // The connection must outlive the gap between turns: with httpx's 5 s keep-alive, turns
@@ -263,12 +263,18 @@ export class RetrievalGate {
           httpxStatusMessage(response, this.#url, { statusLineOnly: true }),
         );
       }
-      const body: unknown = await response.json();
+      body = await response.json();
       score = maxNoul(body, Object.keys(GATE_QUESTIONS));
-      timelineScore = maxNoul(body, Object.keys(TIMELINE_QUESTIONS));
     } catch (error) {
       logger.warning(`Retrieval gate failed open: ${errorRepr(error)}`);
       return FAIL_OPEN;
+    }
+    // A bad timeline answer only costs the timeline, never the skip.
+    let timelineScore = 0;
+    try {
+      timelineScore = maxNoul(body, Object.keys(TIMELINE_QUESTIONS));
+    } catch (error) {
+      logger.warning(`Retrieval gate's timeline answer unreadable: ${errorRepr(error)}`);
     }
     const verdict = {
       retrieve: score >= GATE_THRESHOLD,

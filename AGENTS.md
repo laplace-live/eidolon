@@ -332,12 +332,9 @@ module that owns it.
   the bot runs. Keep it that way. The first two reach it via
   `retriever.LanceRetriever`, which adds only the table handle and the
   stale-reopen retry — never scoring.
-- **Similarity search can't answer occurrence questions.** It hands the LLM the
-  3 chunks most like the viewer's words, whatever their dates, and its query
-  never says who the viewer is. "When did you last play X" and "how often" go
-  through `StreamCatalog.timeline`, which the gate's timeline questions switch
-  on; "do you remember my SC" has no lookup yet. A bigger `top_k`, another
-  reranker or another vector store won't get there
+- **Similarity search can't answer occurrence questions.** "When did you last
+  play X" and "how often" go through `StreamCatalog.timeline`; a bigger `top_k`,
+  another reranker or another vector store won't get there
   ([recall-gaps.md](docs/recall-gaps.md)).
 
 ### The persona

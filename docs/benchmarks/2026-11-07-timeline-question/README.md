@@ -38,8 +38,10 @@ broader "when did she do something" question scored 0.95 on
 最近一次直播几点下播的.
 
 Adding the three questions to the gate's call left its median latency where
-it was (376 against 382 ms on a 30-turn check) and moved the gate's own
-scores by at most 0.05, Jev's usual jitter between repeat calls.
+it was and moved the gate's own scores by at most 0.05, Jev's usual jitter
+between repeat calls. That was a separate 30-turn check asking each turn with
+and without them: 376 ms with the gate's three, 382 ms with all six. The
+65-turn run in `results.json` asks all six and recorded a 392 ms median.
 
 The held-out set's lowest timeline turn, 鬼武者你是哪天通关的, sat at 0.72,
 close to the threshold. A miss costs only what every such turn cost before:

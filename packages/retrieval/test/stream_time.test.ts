@@ -176,17 +176,21 @@ describe("tests/test_stream_time.py", () => {
     },
   );
 
-  test.each(["the second stream", "第二场直播", "第2次", "第二次呢", "第二次直播讲了什么"])(
-    "ordinal %p selects displayed order",
-    (query) => {
-      const prior = streamScope({ streamIds: ["BV3", "BV2", "BV1"] });
-      expect(isStreamFollowup(query)).toBe(true);
-      const scope = resolveStreamScope(query, { today: TODAY, previous: prior });
-      expect(scope).not.toBeNull();
-      expect(scope?.streamIds).toEqual(["BV2"]);
-      expect(resolveStreamScope(query, { today: TODAY })).toBeNull();
-    },
-  );
+  test.each([
+    "the second stream",
+    "第二场直播",
+    "第2次",
+    "第2次？",
+    "第二次呢",
+    "第二次直播讲了什么",
+  ])("ordinal %p selects displayed order", (query) => {
+    const prior = streamScope({ streamIds: ["BV3", "BV2", "BV1"] });
+    expect(isStreamFollowup(query)).toBe(true);
+    const scope = resolveStreamScope(query, { today: TODAY, previous: prior });
+    expect(scope).not.toBeNull();
+    expect(scope?.streamIds).toEqual(["BV2"]);
+    expect(resolveStreamScope(query, { today: TODAY })).toBeNull();
+  });
 
   test("ordinal cannot select an unlisted broadcast", () => {
     const prior = streamScope({ streamIds: ["BV1"] });

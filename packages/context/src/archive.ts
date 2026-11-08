@@ -45,7 +45,14 @@ import {
 } from "@eidolon/retrieval";
 import { pyRstrip } from "./compat.ts";
 import { decisionOf, type GateDecision, unlessSkipped } from "./gate.ts";
-import { latestUserText, sameTurn, setBlock, type TurnKey, turnKeyOf } from "./messages.ts";
+import {
+  latestUserText,
+  recentUserTexts,
+  sameTurn,
+  setBlock,
+  type TurnKey,
+  turnKeyOf,
+} from "./messages.ts";
 import {
   OVERVIEW_FRAME_KEY,
   overviewText,
@@ -210,8 +217,11 @@ function appendExtras(lines: string[], extras: Record<string, unknown>): void {
 const TIMELINE_MAIN_SCENES = 3;
 const TIMELINE_SHOWN = 3;
 
-/** A timeline as the archive injects it: the newest broadcasts, then the first, with scene counts. */
-function formatTimeline(timeline: Timeline): string {
+/**
+ * A timeline as the archive injects it, with the broadcasts it names in its order: the newest
+ * few, the newest with many scenes, the first, and the first with many.
+ */
+function renderTimeline(timeline: Timeline): { text: string; shown: Broadcast[] } {
   const { occurrences } = timeline;
   const entry = (occurrence: Occurrence) =>
     `${occurrence.broadcast.streamDate}，${occurrence.scenes.length}段：` +
@@ -219,6 +229,7 @@ function formatTimeline(timeline: Timeline): string {
       .slice(0, 2)
       .map((scene) => clip(scene.heading, 30))
       .join("；");
+  const recent = occurrences.slice(0, TIMELINE_SHOWN);
   const main = occurrences.filter((o) => o.scenes.length >= TIMELINE_MAIN_SCENES);
   const first = occurrences.at(-1) as Occurrence;
   const firstMain = main.at(-1);
@@ -226,8 +237,8 @@ function formatTimeline(timeline: Timeline): string {
     `观众在问${timeline.terms.map((term) => `「${term}」`).join("和")}最近一次、第一次或一共几次的时间。` +
       "下面是已归档录播里提到它的直播，从新到旧；段数是那场里提到它的片段数，" +
       "多段通常是那天主要在做这件事，一两段多半只是聊到。归档不是完整的开播记录。",
-    `共${occurrences.length}场提到。`,
-    ...occurrences.slice(0, TIMELINE_SHOWN).map((o) => `- ${entry(o)}`),
+    `共${occurrences.length}场提到，其中${main.length}场多段。`,
+    ...recent.map((o) => `- ${entry(o)}`),
     main[0] ? `最近一场多段的是 ${entry(main[0])}` : "这些场次都只有一两段，可能都只是聊到。",
     `最早一场是 ${entry(first)}`,
   ];
@@ -236,7 +247,8 @@ function formatTimeline(timeline: Timeline): string {
     '被问到时间就直接说日期，像平时说话那样（比如"八月三十号"）；' +
       '不是今年的带上年份（比如"二〇二二年十月"），不要换算成"前年"。',
   );
-  return lines.join("\n");
+  const named = [...recent, main[0], first, firstMain].filter((o) => o !== undefined);
+  return { text: lines.join("\n"), shown: [...new Set(named.map((o) => o.broadcast))] };
 }
 
 /** One recall result as the archive injects it and recall_streams returns it. */
@@ -372,7 +384,7 @@ export class StreamArchive implements ContextProvider {
       const result = await this.recall.lookup(query, { scope, overview, signal });
       signal?.throwIfAborted();
       // 上次 reads as "the newest broadcast" to the routing, but as "the last time" in 上次玩X.
-      if (scope.latest !== null && (await this.#answerTimeline(context, query, decision, signal))) {
+      if (scope.latest !== null && (await this.#answerTimeline(context, decision, signal))) {
         return false;
       }
       this.lastWasArchive = true;
@@ -399,7 +411,7 @@ export class StreamArchive implements ContextProvider {
       signal,
     );
     signal?.throwIfAborted();
-    if (await this.#answerTimeline(context, query, decision, signal)) return false;
+    if (await this.#answerTimeline(context, decision, signal)) return false;
     if (chunks.length > 0 && archiveQuery) {
       this.lastWasArchive = true;
       const parts = streamScope({
@@ -429,15 +441,20 @@ export class StreamArchive implements ContextProvider {
    */
   async #answerTimeline(
     context: ConversationContext,
-    query: string,
     decision: GateDecision | null,
     signal?: AbortSignal,
   ): Promise<boolean> {
     if (!decision?.asksTimeline) return false;
-    const timeline = await raceAbort(this.#catalog.timeline(query), signal);
-    signal?.throwIfAborted();
+    // Each line alone, newest first: 那上次玩是什么时候 leaves its topic in the line before, and
+    // folding lines together would mix in topics the question isn't about.
+    let timeline: Timeline | null = null;
+    for (const text of recentUserTexts(context.getMessages(), 2)) {
+      timeline = await raceAbort(this.#catalog.timeline(text), signal);
+      signal?.throwIfAborted();
+      if (timeline !== null) break;
+    }
     if (timeline === null) return false;
-    const shown = timeline.occurrences.slice(0, TIMELINE_SHOWN).map((o) => o.broadcast);
+    const { text, shown } = renderTimeline(timeline);
     this.lastWasArchive = true;
     this.recall.remember(
       recallResult({
@@ -446,7 +463,7 @@ export class StreamArchive implements ContextProvider {
         broadcasts: shown,
       }),
     );
-    setBlock(context, RECALL_PREFIX, formatTimeline(timeline), this.params.position);
+    setBlock(context, RECALL_PREFIX, text, this.params.position);
     logger.info(
       `Archive timeline: terms=${pyRepr(timeline.terms)}, ` +
         `broadcasts=${timeline.occurrences.length}, newest=${shown[0]?.streamDate}`,

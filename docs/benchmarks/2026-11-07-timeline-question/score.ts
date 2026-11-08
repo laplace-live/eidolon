@@ -61,6 +61,7 @@ async function ask(turn: Pick<Turn, "text" | "before">): Promise<Omit<Row, "set"
   const response = await fetch(GATE_URL, {
     method: "POST",
     headers,
+    signal: AbortSignal.timeout(20_000),
     body: JSON.stringify({
       model,
       state: gateState([...history, { role: "user", content: turn.text }]),

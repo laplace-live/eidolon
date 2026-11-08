@@ -35,7 +35,8 @@ chunks ([stream-recall.md](stream-recall.md#when-she-last-did-something)).
 The archive starts its search without waiting for the gate, and
 `unless_skipped` cancels that search only if the gate answers "skip" before
 the search finishes. A search that finishes first is kept, and an error, a
-timeout, or anything but an explicit `False` counts as retrieve. A recall
+timeout, or anything but an explicit `retrieve: false` counts as retrieve. A
+timeline answer the gate can't read costs only the timeline. A recall
 turn therefore costs what it did before, and a Jev outage costs a warning
 line per turn rather than latency. Awaiting the gate before searching would
 add its ~0.5 s to every recall turn instead. Persona facts run after the

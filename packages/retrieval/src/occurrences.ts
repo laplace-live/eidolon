@@ -36,13 +36,11 @@ export interface Timeline {
 
 interface Entry {
   readonly broadcast: Broadcast;
-  /** Per scene: its heading, summary and topics, lowercased. */
   readonly texts: readonly string[];
 }
 
 export class OccurrenceIndex {
   readonly #entries: readonly Entry[];
-  /** The lowercased topics at least MIN_TERM_SCENES scenes carry. */
   readonly #terms: readonly string[];
 
   private constructor(entries: readonly Entry[], terms: readonly string[]) {
@@ -58,7 +56,8 @@ export class OccurrenceIndex {
     for (const broadcast of broadcasts) {
       await slicer.tick();
       const texts = broadcast.scenes.map((scene) => {
-        const topics = scene.topics.map((topic) => topic.toLowerCase());
+        // The catalog loader doesn't check topic types, and a throw here would fail the boot warm.
+        const topics = scene.topics.map((topic) => String(topic).toLowerCase());
         for (const topic of new Set(topics)) counts.set(topic, (counts.get(topic) ?? 0) + 1);
         return `${scene.heading}\n${scene.summary}\n${topics.join("\n")}`.toLowerCase();
       });
@@ -92,7 +91,6 @@ export class OccurrenceIndex {
     return fewest;
   }
 
-  /** The known topics `query` contains, less any inside a longer one it contains. */
   #termsIn(query: string): string[] {
     const text = query.toLowerCase();
     const found = this.#terms.filter((term) => contains(text, term));

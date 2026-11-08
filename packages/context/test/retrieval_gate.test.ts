@@ -414,6 +414,19 @@ describe("RetrievalGate.decide", () => {
     await gateWith(async () => Response.json({ answers: {} })).decide(state);
     expect(warnings()[0]).toBe("Retrieval gate failed open: KeyError('about_her')");
   });
+
+  test("a missing timeline answer costs only the timeline, never the skip", async () => {
+    const onlyTheGates = async () =>
+      Response.json({
+        answers: Object.fromEntries(
+          Object.keys(GATE_QUESTIONS).map((name) => [name, { noul: 0.1 }]),
+        ),
+      });
+    expect(await gateWith(onlyTheGates).decide(state)).toEqual(SKIP);
+    expect(warnings()).toEqual([
+      "Retrieval gate's timeline answer unreadable: KeyError('last_time')",
+    ]);
+  });
 });
 
 describe("RetrievalGate.forTurn", () => {
