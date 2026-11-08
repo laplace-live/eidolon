@@ -200,6 +200,33 @@ describe("dotenv", () => {
     Bun.spawnSync(["mkdir", "-p", nested]);
     expect(findDotenv(nested)).toBe(join(root, ".env"));
   });
+
+  test("a linked worktree without a .env reads its main checkout's, wherever it lives", () => {
+    const root = mkdtempSync(join(tmpdir(), "eidolon-find-"));
+    const main = join(root, "Git", "repo");
+    const linked = join(main, ".git", "worktrees", "wt");
+    mkdirSync(linked, { recursive: true });
+    writeFileSync(join(linked, "commondir"), "../..\n");
+    writeFileSync(join(main, ".env"), "X=main\n");
+    const worktree = join(root, "workspaces", "repo", "wt");
+    const nested = join(worktree, "apps", "bot", "src");
+    mkdirSync(nested, { recursive: true });
+    writeFileSync(join(worktree, ".git"), `gitdir: ${linked}\n`);
+    expect(findDotenv(nested)).toBe(join(main, ".env"));
+
+    writeFileSync(join(worktree, ".env"), "X=own\n");
+    expect(findDotenv(nested)).toBe(join(worktree, ".env"));
+  });
+
+  test("a .git file without a main checkout behind it keeps walking up", () => {
+    const root = mkdtempSync(join(tmpdir(), "eidolon-find-"));
+    writeFileSync(join(root, ".env"), "X=above\n");
+    const submodule = join(root, "repo", "lib");
+    mkdirSync(join(root, "repo", ".git", "modules", "lib"), { recursive: true });
+    mkdirSync(submodule, { recursive: true });
+    writeFileSync(join(submodule, ".git"), "gitdir: ../.git/modules/lib\n");
+    expect(findDotenv(submodule)).toBe(join(root, ".env"));
+  });
 });
 
 describe("flags, raw values and paths", () => {

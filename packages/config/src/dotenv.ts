@@ -3,8 +3,8 @@
 // only \\ \' \" \a \b \f \n \r \t \v), ` #` comments, and `${VAR}` / `${VAR:-default}`
 // interpolation in every value, single-quoted ones included. A quoted value followed by anything
 // but a comment drops the whole line, as python-dotenv's "could not parse statement" does.
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 
 export interface DotenvEntry {
   key: string;
@@ -94,16 +94,38 @@ function interpolate(value: string, env: Record<string, string | undefined>): st
   });
 }
 
-/** The nearest `.env` at or above `startDir`, as python-dotenv's `find_dotenv` walks. */
+/**
+ * The nearest `.env` at or above `startDir`, as python-dotenv's `find_dotenv` walks. A linked git
+ * worktree without one of its own reads its main checkout's, wherever the worktree lives.
+ */
 export function findDotenv(startDir: string): string | null {
   let dir = startDir;
   for (;;) {
     const candidate = join(dir, ".env");
     if (existsSync(candidate)) return candidate;
+    const inherited = mainCheckoutDotenv(join(dir, ".git"));
+    if (inherited !== null) return inherited;
     const parent = dirname(dir);
     if (parent === dir) return null;
     dir = parent;
   }
+}
+
+/**
+ * A linked worktree's `.git` is a file, `gitdir: <main>/.git/worktrees/<name>`, and that folder's
+ * `commondir` leads back to `<main>/.git`. Submodules have the file but no `commondir`.
+ */
+function mainCheckoutDotenv(dotGit: string): string | null {
+  if (!statSync(dotGit, { throwIfNoEntry: false })?.isFile()) return null;
+  const gitdir = /^gitdir:\s*(.+?)\s*$/m.exec(readFileSync(dotGit, "utf8"))?.[1];
+  if (gitdir === undefined) return null;
+  const linked = resolve(dirname(dotGit), gitdir);
+  const commondir = join(linked, "commondir");
+  if (!existsSync(commondir)) return null;
+  const common = resolve(linked, readFileSync(commondir, "utf8").trim());
+  if (basename(common) !== ".git") return null;
+  const candidate = join(dirname(common), ".env");
+  return existsSync(candidate) ? candidate : null;
 }
 
 /**

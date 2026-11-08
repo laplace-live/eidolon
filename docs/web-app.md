@@ -329,8 +329,9 @@ The table comes from the plan and follows the running job's item events as they 
 ## Only the process environment: EIDOLON_NO_DOTENV
 
 Both `load-env.ts` files, the server's and the CLI's, walk up from their folder to the first
-`.env` and apply it over the environment. In a git worktree, or any checkout inside another, that
-is the outer checkout's `.env`, with its keys and maybe its `EIDOLON_HOME`. `EIDOLON_NO_DOTENV=1`
+`.env` and apply it over the environment. In a checkout inside another, that is the outer
+checkout's `.env`; a git worktree without a `.env` of its own reads its main checkout's, wherever
+the worktree lives. Either way it brings that checkout's keys and maybe its `EIDOLON_HOME`. `EIDOLON_NO_DOTENV=1`
 skips it: the process environment is all there is, layered with the data home's settings files
 as always ([personas.md](personas.md#layers)). Jobs inherit the environment the server started
 with, the flag included, and the CLI's own `load-env.ts` applies the `.env` when the flag is

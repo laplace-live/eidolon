@@ -248,8 +248,8 @@ module that owns it.
   other package must stay usable without a pipeline.
 - **`load-env.ts` is the only `.env` reader.** `bunfig.toml` sets `env = false`
   and tests pass `--no-env-file`; no module reads env at import. It walks up to
-  the first `.env`, which from a worktree is the outer checkout's, real keys
-  included; `EIDOLON_NO_DOTENV=1` skips it.
+  the first `.env`, and a git worktree without one, wherever it lives, reads
+  its main checkout's, real keys included; `EIDOLON_NO_DOTENV=1` skips it.
 - **Production never runs local mode.** `main.ts` and the code it loads never
   import `apps/bot/src/local/` (Biome and `boundaries.test.ts` hold it), and
   nothing but that separate entry turns it on: no flag, setting or env var,
