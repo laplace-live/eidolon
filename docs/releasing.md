@@ -35,8 +35,9 @@ packages` PR open. Its commit is `bun run version`:
 
 1. `changeset version` bumps `apps/bot/package.json` and `apps/eidolon/package.json`, adds each
    package's entry to its `CHANGELOG.md`, and deletes the changesets.
-2. `apps/bot/scripts/sync-version.ts` copies the version into `pyproject.toml`, `uv.lock`,
-   `laplace_eidolon/bot.py` and `packages/runtime/src/rtvi.ts`.
+2. `apps/bot/scripts/sync-version.ts` copies the version into `packages/runtime/src/rtvi.ts`,
+   and into the Python reference implementation's `pyproject.toml`, `uv.lock` and bot entry
+   point (AGENTS.md, "The Python").
 
 The PR runs the full CI. `bun.lock` keeps the old workspace versions until a later `bun install`
 rewrites them, which `--frozen-lockfile` tolerates.

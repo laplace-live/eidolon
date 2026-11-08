@@ -1,10 +1,10 @@
-// mem0's Qdrant vector store. Two bots share the collection during cutover, so points are written
-// exactly as mem0 writes them: one unnamed dense vector, no sparse vector.
+// mem0's Qdrant vector store. Points are written exactly as mem0 writes them, so mem0 reads the
+// same collection: one unnamed dense vector, no sparse vector.
 //
 // @qdrant/js-client-rest defaults differ from Python's qdrant-client: `delete` and
 // `createPayloadIndex` don't wait, `query` omits payloads, and requests time out after 300 s
-// instead of 5 s. Every call below states the Python behavior explicitly; `deleteAll` relies on
-// waited deletes, or its next scroll returns the batch it just deleted.
+// instead of 5 s. Every call below states qdrant-client's behavior explicitly; `deleteAll` relies
+// on waited deletes, or its next scroll returns the batch it just deleted.
 import { errorText, logger } from "@eidolon/config";
 import { QdrantClient } from "@qdrant/js-client-rest";
 
@@ -66,7 +66,7 @@ export class QdrantVectorStore {
   readonly #vectorSize: number;
 
   constructor(settings: QdrantSettings, client?: QdrantApi) {
-    // Python checks the server version in a background thread and only warns; so does this.
+    // qdrant-client checks the server version in a background thread and only warns; so does this.
     this.#client =
       client ??
       new QdrantClient({
@@ -94,9 +94,9 @@ export class QdrantVectorStore {
       }
     } else {
       // Vectors on disk rather than mmap'd into RAM: at 3072 dims the resident set otherwise grows
-      // with every viewer, on a box already running the bot itself. The bm25 slot stays empty
-      // (the Python bot has no sparse encoder installed), but without it mem0 warns that the
-      // collection predates hybrid search every time it opens it.
+      // with every viewer, on a box already running the bot itself. The bm25 slot stays empty, as
+      // no sparse vector is ever written, but without it mem0 warns that the collection predates
+      // hybrid search every time it opens it.
       await this.#client.createCollection(this.#collection, {
         vectors: { size: this.#vectorSize, distance: "Cosine", on_disk: true },
         sparse_vectors: { bm25: { modifier: "idf" } },

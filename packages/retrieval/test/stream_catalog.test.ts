@@ -1,5 +1,5 @@
-// The loader parts of tests/test_stream_catalog.py. The fixtures were written by the Python
-// build_catalog from that file's _write_part inputs; expected.json holds Python's outputs.
+// StreamCatalog over the fixture catalogs in fixtures/catalog; expected.json pins the formatted
+// text for them and for one snapshot of the real catalog.
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { createHash } from "node:crypto";
 import {
@@ -298,7 +298,7 @@ describe("loader edges", () => {
 
 const realPath = join(REAL_INDEX, CATALOG_FILENAME);
 const realBytes = existsSync(realPath) ? await Bun.file(realPath).bytes() : null;
-// Python's goldens were printed for one catalog; a re-ingest changes it.
+// expected.json's real_* values are for one snapshot of the catalog; a re-ingest changes it.
 const sameAsGoldens =
   realBytes !== null &&
   createHash("sha1").update(realBytes).digest("hex") === expected.real_catalog_sha1;

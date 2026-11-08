@@ -183,7 +183,7 @@ export interface GateDecisionsOptions extends Partial<CliIo> {
   readonly now?: () => number;
 }
 
-/** The decisions.json document, keys in Python's order. */
+/** The decisions.json document, keys in the committed file's order. */
 export function decisionsResult(rows: readonly GateRow[]): Record<string, unknown> {
   const latency = rows.map((r) => r.ms);
   if (latency.length === 0) throw pyError("StatisticsError", "no median for empty data");
@@ -247,7 +247,7 @@ export async function runGateDecisions(options: GateDecisionsOptions = {}): Prom
   return missed.length > 0 ? 1 : 0;
 }
 
-/** The `gate-decisions` command. decisions.py takes no arguments and ignores any it is given. */
+/** The `gate-decisions` command, which takes no arguments and ignores any it is given. */
 export function gateDecisionsMain(
   _argv: readonly string[],
   options: GateDecisionsOptions = {},

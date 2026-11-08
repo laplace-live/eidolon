@@ -1,6 +1,6 @@
-// fixtures/download/download.golden.json is what download.golden.py printed through Python's
-// tools/download.py and prepare_batch.py, with fake-yt-dlp.sh as yt-dlp; "<WORK>" stands for that
-// run's folder. The download tests here and in apps/cli replay its inputs.
+// fixtures/download/download.golden.json holds the download and batch outcomes for the inputs it
+// lists, with fake-yt-dlp.sh as yt-dlp; "<WORK>" stands for the run's folder. The download tests
+// here and in apps/cli replay its inputs.
 import { chmodSync, copyFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -100,7 +100,7 @@ export function readArgvLog(path: string): string[][] {
 }
 
 /**
- * Python's yt-dlp arguments with the port's additions: --ignore-config first, then, for the managed
+ * A golden argv plus what the download adds to it: --ignore-config first, then, for the managed
  * yt-dlp only, this Bun as YouTube's JavaScript runtime, and -- before the URL.
  */
 export function withPortArgs(python: readonly string[], managed = false): string[] {

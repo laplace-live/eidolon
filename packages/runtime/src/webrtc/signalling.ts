@@ -30,7 +30,7 @@ export interface SignallingServer {
    */
   patch(bodyText: string): Promise<SignallingResult>;
   readonly activeSessions: number;
-  /** Disconnects every peer, as the Python runner's lifespan shutdown did. */
+  /** Disconnects every peer; apps/bot calls it at shutdown. */
   close(): Promise<void>;
 }
 

@@ -495,7 +495,7 @@ describe("StreamRecall.select", () => {
     expect(ids(await recall.select(scope({ latest: 1 })))).toEqual(
       new Set(["2026-09-08-BV1abc", "2026-09-08-BV2def"]),
     );
-    // Python's quirk: "previous" is the second entry, so a shared newest date comes back again.
+    // "previous" is the second entry, so a shared newest date comes back again.
     expect(ids(await recall.select(scope({ latest: 2 })))).toEqual(
       new Set(["2026-09-08-BV1abc", "2026-09-08-BV2def"]),
     );

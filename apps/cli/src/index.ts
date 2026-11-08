@@ -1,4 +1,4 @@
-// The TS ports of the Python CLIs: the query side (laplace-search, laplace-eval-retrieval,
+// The laplace-* commands: the query side (laplace-search, laplace-eval-retrieval,
 // laplace-generate-image, the retrieval-gate benchmark) and the offline chain that builds an index.
 export {
   type ActionKind,

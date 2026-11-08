@@ -74,7 +74,7 @@ export interface AllowedOffer {
   readonly allowed: true;
   readonly user: UserContext;
   readonly token: string | null;
-  /** The parsed body, or null when it is not a JSON object (runtime answers as the runner did). */
+  /** The parsed body, or null when it is not a JSON object (runtime answers that with a 400). */
   readonly body: JsonObject | null;
   readonly requestData: JsonObject | null;
   readonly opusBitrateBps: number;
@@ -88,7 +88,7 @@ export interface RejectedOffer {
   readonly user: UserContext;
   readonly clientIp: string;
   readonly quota: RateLimitResult;
-  /** The 429, byte-identical to offer_middleware.py's. apps/bot adds CORS. */
+  /** The 429 anonQuotaExceededResponse builds. apps/bot adds CORS. */
   readonly response: Response;
 }
 

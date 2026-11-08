@@ -1,5 +1,5 @@
-// Captured from the Python runtime (image_generation.py, voice_switching.py) at fixed clocks and
-// inputs, so a drift in any prompt or tool text fails a test.
+// The voice and selfie tools' schemas, hints and calls at fixed inputs, so a drift in any prompt
+// or tool text fails a test.
 
 export const VOICE_SCHEMA_WIRE =
   '[{"type": "function", "function": {"name": "change_voice_style", "description": "切换主播声线风格。**只在奶糖花明确要求换声音时调用** —— 例如『声音温柔一点』『换个活泼的』『换回原来的声音』。不要主动切换，不要在打招呼时切换；只在用户表达想换声音时调用。切换后用一两句话自然回应（『嗯，这样可以嘛』），不要照念工具名。", "parameters": {"type": "object", "properties": {"style": {"type": "string", "description": "声线名称。`default` (默认/原来的/正常的声音); `gentle` (温柔/温和/轻柔/温暖/柔一点); `lively` (活泼/精神/有活力/欢快/明亮/营业声线); `nai_hei` (nai_hei)。", "enum": ["default", "gentle", "lively", "nai_hei"]}}, "required": ["style"]}}}]';

@@ -1,5 +1,4 @@
-// httpx's `Response.raise_for_status()` message, so a failed request greps the same as in the
-// Python bot's log.
+// httpx's `Response.raise_for_status()` message.
 
 const STATUS_CLASSES: Readonly<Record<number, string>> = {
   1: "Informational response",

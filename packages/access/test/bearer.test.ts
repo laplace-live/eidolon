@@ -8,7 +8,6 @@ import {
 } from "../src/index.ts";
 
 describe("extractBearerToken", () => {
-  // Each row was answered by Python's memory_admin._extract_bearer_token.
   const rows: [string | null | undefined, string | null][] = [
     [null, null],
     [undefined, null],

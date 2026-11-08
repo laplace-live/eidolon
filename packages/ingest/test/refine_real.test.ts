@@ -1,20 +1,14 @@
 // The real transcripts and sidecars under <EIDOLON_REAL_HOME>/sources/milky-green/streams, read
-// only. Python's side comes from fixtures/refine/real.py, run at test time through
-// `uv run --offline --no-sync`; its output is never committed. Each test skips when the data or uv
-// is absent, unless EIDOLON_REQUIRE_PARITY=1.
+// only. Each test skips when they are absent, unless EIDOLON_REQUIRE_PARITY=1.
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { activePersona, consoleSink, logger, OpenAIClient } from "@eidolon/config";
 import { iterStreams, loadSidecar, type ParsedStream, refine, saveSidecar } from "../src/index.ts";
 
 const STREAMS = join(process.env.EIDOLON_REAL_HOME ?? "", "sources/milky-green/streams");
 const REQUIRED = process.env.EIDOLON_REQUIRE_PARITY === "1";
-const REPO = join(import.meta.dir, "../../..");
-const SCRIPT = join(import.meta.dir, "fixtures/refine/real.py");
-const UV = Bun.which("uv");
 const HAVE_DATA = existsSync(STREAMS);
 const MODEL = "~google/gemini-pro-latest";
 
@@ -25,122 +19,136 @@ function realStreams(): ParsedStream[] {
   return parsed;
 }
 beforeAll(() => {
-  // Two log lines per chunk otherwise, and Python's are silenced too.
+  // Two log lines per chunk otherwise.
   logger.setSink();
 });
 afterAll(() => {
   logger.setSink(consoleSink);
 });
 
-async function python(...args: string[]): Promise<string> {
-  const proc = Bun.spawn(
-    [UV as string, "run", "--offline", "--no-sync", "python", SCRIPT, ...args],
-    {
-      cwd: REPO,
-      stdout: "pipe",
-      stderr: "pipe",
-    },
-  );
-  const [out, err, code] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  expect(code, err).toBe(0);
-  return out;
-}
-
-const sha256 = (text: string) => createHash("sha256").update(text, "utf8").digest("hex");
-
-test.skipIf((!HAVE_DATA || UV === null) && !REQUIRED)(
-  "every real chunk's pass-1 request body is the one refine.py sends (§7 5b)",
+test.skipIf(!HAVE_DATA && !REQUIRED)(
+  "every real chunk's pass-1 request goes out once, with the persona's extract prompt and the chunk",
   async () => {
     expect(HAVE_DATA, `no transcripts at ${STREAMS}`).toBe(true);
-    expect(UV, "uv is not on PATH").not.toBeNull();
-    const fromPython = new Map<string, string>();
-    for (const line of (await python("bodies", STREAMS, MODEL)).trimEnd().split("\n")) {
-      const [name, id, digest] = line.split("\t");
-      fromPython.set(`${name}\t${id}`, digest as string);
-    }
-
-    let body = "";
+    const bodies: string[] = [];
     const fake = async (_input: unknown, init?: RequestInit): Promise<Response> => {
-      body = init?.body as string;
-      return new Response('{"error": {"message": "parity test"}}', { status: 400 });
+      bodies.push(init?.body as string);
+      return new Response('{"error": {"message": "real-data test"}}', { status: 400 });
     };
     const client = new OpenAIClient(
-      { baseUrl: refine.DEFAULT_BASE_URL, apiKey: "parity-test" },
+      { baseUrl: refine.DEFAULT_BASE_URL, apiKey: "real-data-test" },
       { maxRetries: 4, fetch: fake as unknown as typeof fetch },
     );
     const prompts = refine.refinePrompts(activePersona().identity);
-    const fromTs = new Map<string, string>();
+    const responseFormat = JSON.stringify(prompts.extractResponseFormat);
+    let chunks = 0;
+    const differing: string[] = [];
     for (const parsed of realStreams()) {
-      const name = parsed.mdPath.slice(parsed.mdPath.lastIndexOf("/") + 1);
+      const name = basename(parsed.mdPath);
+      const context = refine.streamContext(parsed);
       for (const chunk of parsed.chunks) {
-        body = "";
+        bodies.length = 0;
         const outcome = await refine.refineChunk(client, MODEL, parsed, chunk, prompts);
         expect(outcome.refinement).toBeNull();
-        fromTs.set(`${name}\t${chunk.id}`, sha256(body));
+        chunks++;
+        const user = refine.fillTemplate(refine.EXTRACT_USER_TEMPLATE, {
+          context,
+          timestamp: refine.headingTimestamp(chunk.heading),
+          text: chunk.text,
+        });
+        const body =
+          bodies.length === 1
+            ? (JSON.parse(bodies[0] as string) as {
+                model?: unknown;
+                messages?: unknown;
+                response_format?: unknown;
+              })
+            : null;
+        const same =
+          body !== null &&
+          body.model === MODEL &&
+          JSON.stringify(body.response_format) === responseFormat &&
+          JSON.stringify(body.messages) ===
+            JSON.stringify([
+              { role: "system", content: prompts.extractSystem },
+              { role: "user", content: user },
+            ]);
+        if (!same) differing.push(`${name}\t${chunk.id}\t${bodies.length} request(s)`);
       }
     }
-
-    expect(fromTs.size).toBe(fromPython.size);
-    const differing = [...fromPython].filter(([key, digest]) => fromTs.get(key) !== digest);
     expect(differing.slice(0, 5)).toEqual([]);
-    expect(fromPython.size).toBeGreaterThan(50_000);
+    expect(chunks).toBeGreaterThan(50_000);
   },
   600_000,
 );
 
-test.skipIf((!HAVE_DATA || UV === null) && !REQUIRED)(
-  "every real sidecar refine loads saves back as refine.py saves it, byte for byte",
+test.skipIf(!HAVE_DATA && !REQUIRED)(
+  "every real sidecar refine loads saves back byte for byte, and a save it reloads saves the same",
   async () => {
     expect(HAVE_DATA, `no transcripts at ${STREAMS}`).toBe(true);
-    expect(UV, "uv is not on PATH").not.toBeNull();
-    const fromPython = new Map<string, [string, string]>();
-    for (const line of (await python("resave", STREAMS)).trimEnd().split("\n")) {
-      const [name, digest, same] = line.split("\t");
-      fromPython.set(name as string, [digest as string, same as string]);
-    }
     const out = mkdtempSync(join(tmpdir(), "refine-real-"));
-    const fromTs = new Map<string, [string, string]>();
+    let sidecars = 0;
+    const rewritten: string[] = [];
+    const unstable: string[] = [];
     try {
       for (const parsed of realStreams()) {
         if (!existsSync(parsed.sidecarPath)) continue;
-        const name = parsed.sidecarPath.slice(parsed.sidecarPath.lastIndexOf("/") + 1);
+        sidecars++;
+        const name = basename(parsed.sidecarPath);
         const copy = { ...parsed, sidecarPath: join(out, name) };
         saveSidecar(copy, loadSidecar(parsed));
-        const written = readFileSync(copy.sidecarPath);
+        const once = readFileSync(copy.sidecarPath);
+        saveSidecar(copy, loadSidecar(copy));
+        const twice = readFileSync(copy.sidecarPath);
         rmSync(copy.sidecarPath);
-        const same = written.equals(readFileSync(parsed.sidecarPath)) ? "1" : "0";
-        fromTs.set(name, [createHash("sha256").update(written).digest("hex"), same]);
+        if (!once.equals(readFileSync(parsed.sidecarPath))) rewritten.push(name);
+        if (!twice.equals(once)) unstable.push(name);
       }
       expect(readdirSync(out)).toEqual([]);
     } finally {
       rmSync(out, { recursive: true, force: true });
     }
-    expect(fromTs.size).toBe(fromPython.size);
-    const differing = [...fromPython].filter(
-      ([name, [digest]]) => fromTs.get(name)?.[0] !== digest,
-    );
-    expect(differing.slice(0, 5)).toEqual([]);
-    // A file refine.py didn't write last (one ends in a newline it never writes) changes for both.
-    const rewritten = [...fromPython].filter(([, [, same]]) => same === "0").length;
-    expect(rewritten).toBeLessThan(fromPython.size / 100);
-    expect(fromPython.size).toBeGreaterThan(1_000);
+    expect(unstable.slice(0, 5)).toEqual([]);
+    // A sidecar refine didn't write last (one ends in a newline it never writes) changes.
+    expect(rewritten.length).toBeLessThan(sidecars / 100);
+    expect(sidecars).toBeGreaterThan(1_000);
   },
   600_000,
 );
 
-test.skipIf((!HAVE_DATA || UV === null) && !REQUIRED)(
-  "the dry run over the real transcripts prints what refine.py's prints",
+test.skipIf(!HAVE_DATA && !REQUIRED)(
+  "the dry run over the real transcripts lists each one's new chunks and totals them",
   async () => {
     expect(HAVE_DATA, `no transcripts at ${STREAMS}`).toBe(true);
-    expect(UV, "uv is not on PATH").not.toBeNull();
-    for (const model of [MODEL, "~google/gemini-flash-latest"]) {
-      const expected = await python("dry-run", STREAMS, model);
-      expect((await refine.dryRun(realStreams(), model)).text).toBe(expected);
+    const streams = realStreams();
+    const rows: string[] = [];
+    let pending = 0;
+    let done = 0;
+    for (const parsed of streams) {
+      const work = refine.refineWork(parsed, loadSidecar(parsed));
+      pending += work.pending;
+      done += work.done;
+      const name = basename(parsed.mdPath);
+      rows.push(
+        work.pending === 0 ? `  ${name}: 0 new chunks` : `  ${name}: ${work.pending} chunks × 2`,
+      );
     }
+    for (const model of [MODEL, "~google/gemini-flash-latest"]) {
+      const report = await refine.dryRun(streams, model);
+      const listed = report.text
+        .split("\n")
+        .filter((line) => /^ {2}\S.*\.md: /.test(line))
+        .map((line) => line.replace(/ passes, ~.*$/, ""));
+      expect(listed).toEqual(rows);
+      expect([report.streams, report.chunks, report.skipped]).toEqual([
+        streams.length,
+        pending,
+        done,
+      ]);
+      expect(report.text).toContain(`\nEstimated total: ${pending} chunks (2 passes each), ~`);
+      expect(report.text.includes("not in local price table")).toBe(report.costUsd === null);
+    }
+    expect(streams.length).toBeGreaterThan(1_000);
   },
   600_000,
 );

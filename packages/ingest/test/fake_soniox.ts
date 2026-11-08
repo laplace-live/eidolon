@@ -1,5 +1,5 @@
 // A fake Soniox for the transcribe tests: an injected fetch that serves canned jobs (run.golden.json
-// holds the ones Python was served) and records every request. Fake ffprobe and ffmpeg too.
+// lists them) and records every request. Fake ffprobe and ffmpeg too.
 import { chmodSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 

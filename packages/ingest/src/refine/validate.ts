@@ -1,6 +1,6 @@
 // The passes' responses coerced into what the sidecar stores. The response schema constrains a
 // provider at decode time, but some ignore it, so every field goes through Python's str(), strip()
-// and int() as refine.py's validators do: a null viewer becomes "None", a float title "1.0".
+// and int(): a null viewer becomes "None", a float title "1.0".
 import {
   isPlainObject,
   PyFloat,
@@ -91,7 +91,7 @@ function pyInt(value: unknown): number | null {
   const number = value instanceof PyFloat ? value.value : value;
   if (typeof number !== "number") return null;
   if (Number.isNaN(number)) return null;
-  // Not a ValueError, so refine.py lets it fail the whole stream.
+  // Not a ValueError, so it fails the whole stream, not just the chunk.
   if (!Number.isFinite(number)) {
     throw pyError("OverflowError", "cannot convert float infinity to integer");
   }
@@ -119,7 +119,7 @@ const LIST_KEYS = [
   "key_quotes",
 ] as const;
 
-/** `_validate_extract`: every key present, empty rather than missing. */
+/** Pass 1's response with every key present, empty rather than missing. */
 export function validateExtract(raw: unknown): Extract {
   let payload = unwrapListPayload(raw);
   if (Array.isArray(payload)) {
@@ -199,7 +199,7 @@ export function validateExtract(raw: unknown): Extract {
 
 const CHUNK_TYPE_SET: ReadonlySet<string> = new Set(CHUNK_TYPES);
 
-/** `_validate_synthesis`: heading and summary required; an unknown chunk type is commentary. */
+/** Pass 2's response: heading and summary required; an unknown chunk type is commentary. */
 export function validateSynthesis(raw: unknown): Synthesis {
   let payload = unwrapListPayload(raw);
   // A split synthesis still carries the right heading and summary in its first item.

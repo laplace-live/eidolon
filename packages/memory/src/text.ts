@@ -80,7 +80,7 @@ export function parseExtraction(content: unknown): unknown {
     if (!text || !pyStrip(text)) return [];
     let parsed: unknown;
     // mem0's json.loads(strict=False): JSON.parse would reject the raw newlines models put inside
-    // strings, and drop those extractions on the TS side only.
+    // strings, and drop extractions mem0 keeps.
     try {
       parsed = pyJsonLoads(text);
     } catch (error) {

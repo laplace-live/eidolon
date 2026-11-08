@@ -217,8 +217,8 @@ describe("hybridSearch on an in-memory table", () => {
   });
 });
 
-// Written by Python's hybrid_search over stored row vectors (no embedding calls); a re-ingest
-// changes the tables' fingerprints and skips these.
+// fixtures/hybrid_parity.json pins hybrid search over stored row vectors (no embedding calls) on
+// one snapshot of the real tables; a re-ingest changes their fingerprints and skips these.
 const parity = await Bun.file(join(import.meta.dir, "fixtures", "hybrid_parity.json")).json();
 const real: Record<string, Table | null> = {
   persona_facts: await realTable("persona_facts"),

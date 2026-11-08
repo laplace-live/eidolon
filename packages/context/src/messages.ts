@@ -24,7 +24,7 @@ export function turnKeyOf(messages: readonly unknown[]): TurnKey {
       latest = message;
     }
   }
-  // Python's str(users[-1].get("content", "")): list content keys by its repr.
+  // The latest user content as Python's `str()` spells it: list content keys by its repr.
   const content = latest?.content;
   return { userCount, latestContent: content === undefined ? "" : pyStr(content) };
 }

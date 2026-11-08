@@ -1,6 +1,6 @@
-// fixtures/extract_users/golden.json is tools/extract_users.py's main() over the exports beside
-// it, with types 1 and 3 labelled gift and SC as the port labels them; fixtures/transcribe's
-// parser.golden.json is argparse running the port's parser.
+// fixtures/extract_users/golden.json holds laplace-extract-users' runs over the exports beside it,
+// types 1 and 3 labelled gift and SC; fixtures/transcribe's parser.golden.json holds argparse's
+// results for this command's parser.
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
 import { extractUsers } from "@eidolon/ingest";
@@ -71,7 +71,7 @@ test("every run prints Python's names on stdout and Python's report on stderr", 
     if (c.raised === null) {
       expect([c.argv, stderr]).toEqual([c.argv, c.stderr]);
     } else {
-      // A traceback in Python; the port's uncaught error prints its stack after the same lines.
+      // Uncaught: the golden's lines, then the error's stack, which names `raised`.
       expect(stderr.startsWith(c.stderr)).toBe(true);
       expect(stderr).toContain(c.raised);
     }

@@ -1,4 +1,4 @@
-// Expected values were printed by Python jieba 0.42.1 through laplace_eidolon.retrieval.
+// Expected jieba cuts were printed by Python jieba 0.42.1.
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -13,7 +13,7 @@ import {
 import { chunkFtsText, FTS_COLUMNS, factFtsText } from "./fts_text.ts";
 import { realTable } from "./helpers.ts";
 
-// [input, " ".join(cut_for_search), tokenize_zh, tokenize_zh_query]
+// [input, " ".join(cut_for_search), tokenizeZh, tokenizeZhQuery]
 const CASES: [string, string, string, string][] = [
   ["", "", "", ""],
   [" ", " ", "", ""],
@@ -90,7 +90,7 @@ const CASES: [string, string, string, string][] = [
   ["ａｂｃ１２３", "ａ ｂ ｃ １ ２ ３", "ａ ｂ ｃ １ ２ ３", "ａ ｂ ｃ １ ２ ３"],
 ];
 
-// Every query in data/eval/queries.toml, through tokenize_zh_query.
+// The retrieval eval's queries, through tokenizeZhQuery.
 const EVAL_QUERIES: [string, string][] = [
   ["你梦想是什么", "梦想"],
   ["坚果体重多少斤", "坚果 体重 斤"],

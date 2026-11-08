@@ -23,8 +23,8 @@ const AUDIO: AudioQualitySettings = {
 const FAN: UserContext = { mid: 12345678, uname: "奶绿粉丝", face: null, isLoggedIn: true };
 const IP = "203.0.113.7";
 
-// The bytes Python's offer middleware sent (json.dumps, ensure_ascii=False) and the ones its
-// Starlette preflight route sent (compact JSONResponse).
+// The offer's 429 bytes (json.dumps, ensure_ascii=False) and the preflight's (Starlette's compact
+// JSONResponse).
 const OFFER_429 = '{"error": "匿名用户每小时通话次数已达上限，请登录后再试", "retry_after": 3599}';
 const PREFLIGHT_429 =
   '{"ok":false,"anonymous":true,"error":"匿名用户每小时通话次数已达上限，请登录后再试",' +
@@ -164,8 +164,6 @@ describe("the Python oracle's offer and preflight sequence (quota 2)", () => {
     ).toMatchObject({ status: 429, body: OFFER_429 });
 
     expect(g.seenTokens).toEqual(["good", "bad", "good", "bad"]);
-    // Python's lines, except that the TS guard never rewrites a body, so the logged-in line
-    // drops `body_rewritten=…`.
     expect(logs.lines()).toEqual([
       "INFO|[offer-middleware] audioQuality='best' → Opus bitrate 192 kbps for this session",
       `DEBUG|[offer-rate-limit] Anonymous offer allowed for ip=${IP}; remaining=1/2`,
@@ -316,7 +314,6 @@ describe("body parsing", () => {
     expect(loginSyncTokenFrom(offerRequestData(parseOfferBody(bodyText)))).toBe("t\ufffdk");
   });
 
-  // Each row is what Python's _request_data and _extract_login_sync_token returned.
   const precedence: [string, unknown, JsonObject | null, string | null][] = [
     ["camelCase", { requestData: { loginSyncToken: "A" } }, { loginSyncToken: "A" }, "A"],
     ["snake_case", { request_data: { loginSyncToken: "B" } }, { loginSyncToken: "B" }, "B"],
@@ -356,7 +353,6 @@ describe("body parsing", () => {
     expect(deferred).toMatchObject({ allowed: true, user: FAN, quota: null });
   });
 
-  // Each row is what Python's _extract_login_sync_token returned for requestData.loginSyncToken.
   const tokens: [unknown, string | null][] = [
     [123, null],
     ["   ", null],

@@ -1,5 +1,5 @@
-// Keys, blobs and the file's schema are what Python's EmbedCache produced (write_golden.ts). The
-// real cache, which Python filled, is read in write_real.test.ts.
+// Keys, blobs and the file's schema are compared with the golden (write_golden.ts). The real cache
+// is read in write_real.test.ts.
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";

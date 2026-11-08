@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 
-/** The repository root, where Python's `PROJECT_ROOT` points. The Docker image keeps this layout. */
+/** The repository root. The Docker image keeps this layout. */
 export const PROJECT_ROOT = resolve(import.meta.dir, "../../..");
 
 /** `PROJECT_ROOT / value`, as pathlib joins: an absolute `value` stands alone. */

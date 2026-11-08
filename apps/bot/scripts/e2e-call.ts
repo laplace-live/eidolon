@@ -1,6 +1,6 @@
 // End-to-end call against a running bot through the /ai page's own client stack: Chrome,
 // @pipecat-ai/client-js and the small-webrtc transport. It touches only the public HTTP + WebRTC +
-// RTVI contract, so one run scores the Python bot and the TypeScript bot alike.
+// RTVI contract, so it can score any bot at `--base-url`, local or deployed.
 import { createHash } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";

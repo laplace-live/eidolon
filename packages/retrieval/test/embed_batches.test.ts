@@ -1,5 +1,5 @@
-// The scenarios, log lines and totals are Python's embed_in_batches and main_async with the
-// embedding call stubbed (write_golden.ts).
+// The golden's scenarios (write_golden.ts) pin each run's log lines, requests, vectors, usage,
+// cache and totals, with the embedding call stubbed.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

@@ -93,7 +93,7 @@ function resolver(
 }
 
 describe("parseValidateResponse", () => {
-  // Every row was answered by Python's _parse_response; [mid, uname, face, is_logged_in].
+  // The last column is the parsed context's [mid, uname, face, isLoggedIn].
   const rows: [string, unknown, [number | null, string | null, string | null, boolean]][] = [
     ["a string", "x", [null, null, null, false]],
     ["a list", [], [null, null, null, false]],

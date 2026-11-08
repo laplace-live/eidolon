@@ -12,10 +12,10 @@ import {
 import type { SonioxToken } from "./render.ts";
 
 export const SONIOX_API_BASE = "https://api.soniox.com/v1";
-// Python's httpx Timeout(600) is per phase, so a slow upload of a few hundred MB passes. Bun's
-// `timeout` is the same idle timer; AbortSignal.timeout would cap the whole upload instead.
+// An idle timeout, so a slow upload of a few hundred MB passes: Bun's `timeout` is an idle timer,
+// where AbortSignal.timeout would cap the whole upload instead.
 export const SONIOX_IDLE_TIMEOUT_MS = 600_000;
-/** The waits before each retry: about a minute of flakiness ridden out, as Python's poll loop did. */
+/** The waits before each retry: about a minute of flakiness ridden out. */
 export const RETRY_DELAYS_MS: readonly number[] = [1_000, 2_000, 4_000, 8_000, 16_000, 30_000];
 // Soniox's error reference calls request timeouts, rate limits and server errors retryable.
 const RETRY_STATUSES: ReadonlySet<number> = new Set([408, 429, 500, 502, 503, 504]);

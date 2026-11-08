@@ -89,8 +89,8 @@ const AUTH_DEFAULT_PER_HOUR = 120;
 const DEFAULT_WINDOW_SEC = 3600;
 const WINDOW_ENV = "EIDOLON_MCP_RATE_LIMIT_WINDOW_SEC";
 
-// Python's JSON parser rejects invalid UTF-8 and a leading BOM; a default decoder would replace
-// the one and strip the other.
+// Invalid UTF-8 and a leading BOM are parse errors; a default decoder would replace the one and
+// strip the other.
 const UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
 interface Deps {
@@ -137,8 +137,8 @@ function buildServer(deps: Deps, tier: CallerTier): McpServer {
   server.setRequestHandler(ListResourceTemplatesRequestSchema, () => ({ resourceTemplates: [] }));
   server.setRequestHandler(ListPromptsRequestSchema, () => ({ prompts: [] }));
   // tools/call is dispatched here rather than through setRequestHandler(CallToolRequestSchema),
-  // whose zod parse answers malformed params, and `arguments: null` (which Python reads as {}),
-  // with -32603 and the issue list.
+  // whose zod parse answers malformed params, and `arguments: null` (read here as {}), with
+  // -32603 and the issue list.
   server.fallbackRequestHandler = async (request) => {
     if (request.method !== "tools/call") {
       throw new JsonRpcError(-32601, "Method not found", request.method);
@@ -160,8 +160,8 @@ async function dispatch(
   tier: CallerTier,
 ): Promise<Response> {
   // The SDK's JSON-response mode still 406s unless Accept lists both application/json and
-  // text/event-stream, and its Content-Type parse rejects values the Python gates passed (e.g.
-  // `application/json, text/plain`). Both were checked by Python's rules already.
+  // text/event-stream, and its Content-Type parse rejects values handle()'s gates pass (e.g.
+  // `application/json, text/plain`). handle() has checked both already.
   const headers = new Headers(request.headers);
   headers.set("accept", "application/json, text/event-stream");
   headers.set("content-type", "application/json");
@@ -181,14 +181,14 @@ async function dispatch(
   }
 }
 
-/** The Python server's checks in its order, which decides the error a malformed request gets. */
+/** The checks run in this order, which decides the error a malformed request gets. */
 async function handle(request: Request, clientIp: string, deps: Deps): Promise<Response> {
   const body = await readBody(request);
   if (body === null) return bodyTooLargeResponse();
   const rejected = checkTransportSecurity(request, deps.allowlist);
   if (rejected !== null) return rejected;
   // No server-initiated message exists, so GET is 405, which the spec allows and the SDK client
-  // reads as "no SSE stream". Python held a stream open that nothing is ever written to.
+  // reads as "no SSE stream".
   if (request.method === "GET") {
     return jsonRpcErrorResponse(405, -32600, "Method Not Allowed", { allow: "POST" });
   }
@@ -218,9 +218,9 @@ async function handle(request: Request, clientIp: string, deps: Deps): Promise<R
   } catch {
     return jsonRpcErrorResponse(400, -32700, "Parse error: Invalid JSON");
   }
-  // Python accepts no batches; the SDK would run an array of up to 100 messages.
+  // No batches: the SDK would run an array of up to 100 messages.
   if (!isJsonObject(message)) return notAMessageResponse(message);
-  // Python resolved the tier before any check; here a rejected request costs no Workers call.
+  // The tier last, so a rejected request costs no Workers call.
   const tier = await resolveCallerTier(request.headers.get("authorization"), clientIp, deps);
   return dispatch(request, message, deps, tier);
 }

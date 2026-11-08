@@ -1,6 +1,5 @@
-// fixtures/transcribe/parser.golden.json is Python's argparse running the port's parser (its
-// `printed_by` says how); the runs are served packages/ingest's run.golden.json jobs, which Python's
-// transcribe.py was served.
+// fixtures/transcribe/parser.golden.json holds argparse's results for this command's parser; the
+// runs are served packages/ingest's run.golden.json jobs.
 import "../../../packages/config/test/isolated-guard.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";

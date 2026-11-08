@@ -74,8 +74,8 @@ const SYNTHESIZE_TEMPERATURE = 0.4;
 const SAVE_EVERY = 16;
 
 /**
- * `_stream_context`: the frontmatter line every chunk's prompts start with. Built the same way on
- * every run, so the prompt prefix stays byte-stable for the provider's prompt cache.
+ * The frontmatter line every chunk's prompts start with. Built the same way on every run, so the
+ * prompt prefix stays byte-stable for the provider's prompt cache.
  */
 export function streamContext(parsed: Pick<ParsedStream, "metadata">): string {
   const meta = parsed.metadata;
@@ -93,7 +93,7 @@ export function streamContext(parsed: Pick<ParsedStream, "metadata">): string {
   return parts.length > 0 ? parts.join("; ") : "(no frontmatter context)";
 }
 
-/** `_heading_timestamp`: "05:00" from "05:00 — 喂？", or the whole heading without an em dash. */
+/** "05:00" from "05:00 — 喂？", or the whole heading without an em dash. */
 export function headingTimestamp(heading: string): string {
   return pyStrip(partition(heading, "—")[0]);
 }
@@ -117,8 +117,8 @@ export interface ChunkOutcome {
 const direct: Limiter = (task) => task();
 
 /**
- * `_refine_one`: extract, validate, synthesize, validate, holding one of `limit`'s slots across
- * both passes. A failure is logged and gives a null refinement.
+ * Extract, validate, synthesize, validate, holding one of `limit`'s slots across both passes. A
+ * failure is logged and gives a null refinement.
  */
 export async function refineChunk(
   client: JsonPoster,
@@ -222,7 +222,7 @@ export interface RefineReport {
   readonly usage: Usage;
   readonly durationSec: number;
   readonly cancelled: boolean;
-  /** refine.py's exit 0: no stream crashed and no chunk failed. */
+  /** No stream crashed and no chunk failed: laplace-refine exits 0. */
   readonly ok: boolean;
 }
 
@@ -233,7 +233,7 @@ function isoSeconds(date: Date): string {
   return `${date.toISOString().slice(0, 19)}+00:00`;
 }
 
-/** The loaded sidecar as the dict refine.py assigns into, or Python's error for a non-dict. */
+/** The loaded sidecar as a dict to assign into, or Python's TypeError text for a non-dict. */
 function sidecarDict(sidecar: unknown): Record<string, unknown> {
   if (isPlainObject(sidecar)) return sidecar;
   throw pyError("TypeError", `'${pyTypeName(sidecar)}' object does not support item assignment`);
@@ -268,7 +268,7 @@ async function refineStream(
   const name = pyPathName(parsed.mdPath);
   const sidecar = sidecarDict(loadSidecar(parsed));
   // Under --force a checkpoint keeps each old record until its chunk is redone, so an interrupted
-  // run loses nothing; the final save holds the new records alone, as refine.py's does.
+  // run loses nothing; the final save holds the new records alone.
   let old: Record<string, unknown> | null = null;
   if (force) {
     old = isPlainObject(sidecar.chunks) ? sidecar.chunks : {};
@@ -401,8 +401,8 @@ async function refineStream(
     fail(error);
   };
 
-  // A crash leaves the chunks already in flight to finish, unread, before the next stream starts;
-  // refine.py leaves them running beside it.
+  // A crash leaves the chunks already in flight to finish, unread, before the next stream starts:
+  // streams never overlap.
   await Promise.all(
     todo.map((chunk) =>
       refineChunk(options.client, model, parsed, chunk, prompts, limit).then(onOutcome, onError),
@@ -454,9 +454,9 @@ function failureText(result: StreamResult): string | null {
 }
 
 /**
- * `main_async`'s loop: refines `streams` one at a time. A stream that crashes is logged and
- * counted as failed, and the run goes on. Once `signal` aborts, no chunk or stream starts, the
- * in-flight requests abort, and the stream in progress saves a checkpoint.
+ * Refines `streams` one at a time. A stream that crashes is logged and counted as failed, and the
+ * run goes on. Once `signal` aborts, no chunk or stream starts, the in-flight requests abort, and
+ * the stream in progress saves a checkpoint.
  */
 export async function refineStreams(
   streams: readonly ParsedStream[],
@@ -556,10 +556,10 @@ function itemEnd(result: StreamResult, position: StreamPosition): ProgressEvent 
 }
 
 /**
- * `_select_streams`: the transcripts named in `paths` (a missing one is logged and skipped), or
- * every `*.md` in `streamsDir`. All are parsed before any LLM call, so a transcript that won't
- * parse stops the run before it spends anything. One is parsed per turn of the event loop, and
- * once `signal` aborts the next turn throws its reason.
+ * The transcripts named in `paths` (a missing one is logged and skipped), or every `*.md` in
+ * `streamsDir`. All are parsed before any LLM call, so a transcript that won't parse stops the run
+ * before it spends anything. One is parsed per turn of the event loop, and once `signal` aborts the
+ * next turn throws its reason.
  */
 export async function selectStreams(
   paths: readonly string[],
@@ -603,7 +603,7 @@ export interface RunRefineOptions extends RunOptions {
   readonly concurrency: number;
   readonly force: boolean;
   readonly dryRun: boolean;
-  /** Receives what refine.py printed: the dry run's report, or the run's summary table. */
+  /** Receives the text for a reader: the dry run's report, or the run's summary table. */
   readonly print: (text: string) => void;
   /**
    * Called before a run that isn't a dry run reads its first transcript; returns the release.
@@ -617,7 +617,7 @@ export interface RunRefineOptions extends RunOptions {
 }
 
 /**
- * `main_async` after argument parsing, for laplace-refine and the pipeline's refine stage: selects
+ * A refine run after argument parsing, for laplace-refine and the pipeline's refine stage: selects
  * the transcripts, then estimates or refines them. A signal that stops the run before refining
  * ends in a cancelled stage and summary; the other ends before refining are the caller's to
  * report, since the command and the pipeline report them differently.

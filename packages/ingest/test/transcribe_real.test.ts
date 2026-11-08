@@ -1,7 +1,7 @@
-// The free parity oracle for transcription: every real .soniox.json with tokens re-renders to its
-// transcript byte for byte, the sliced ones included, from the payload alone. The transcripts were
-// rendered by tools/transcribe.py, so they are the golden; the skip rule must find each from its
-// audio. Each test skips when its data is absent, unless EIDOLON_REQUIRE_PARITY=1.
+// Transcription's free check: every real .soniox.json with tokens re-renders to its transcript
+// byte for byte, the sliced ones included, from the payload alone; the real transcripts are the
+// golden. The skip rule must find each from its audio. Each test skips when its data is absent,
+// unless EIDOLON_REQUIRE_PARITY=1.
 import { expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";

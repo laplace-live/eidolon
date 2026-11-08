@@ -50,7 +50,7 @@ interface Case {
 }
 
 const ROWS: Record<string, SearchRow[]> = (await Bun.file(`${FIX}/eval/rows.json`).json()).rows;
-// The Python fake clock's steps in seconds, here in milliseconds.
+// The fake clock's steps in milliseconds, which the goldens' timings follow.
 const STEPS = [125, 250, 500, 62.5, 1000];
 const goldens = await golden<Case[]>("eval_retrieval.json");
 
@@ -63,7 +63,7 @@ beforeEach(() => {
     OPENROUTER_API_KEY: undefined,
     RERANK_API_KEY: undefined,
     RERANK_BASE_URL: undefined,
-    // Python's default --db-path, which the goldens were recorded with.
+    // The --db-path the goldens were recorded with.
     LANCEDB_PATH: "data/lancedb",
   });
   logs = captureLogs();
@@ -74,7 +74,7 @@ afterEach(() => {
   rmSync(out, { recursive: true, force: true });
 });
 
-/** The fakes the Python oracle ran with: canned rows by (table, text, path), a stepping clock. */
+/** The fakes behind the goldens: canned rows by (table, text, path), a stepping clock. */
 function fakes(reranker: string | null) {
   const calls: unknown[][] = [];
   const embeds: string[] = [];

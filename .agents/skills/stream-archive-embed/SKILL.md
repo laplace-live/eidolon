@@ -48,8 +48,9 @@ The index the bot reads is `<home>/personas/milky-green/index/`, unless
   for embeddings. Preserve models, dimensions, filtering, caches, and provider
   configuration.
 - The tools lock what they write: a second pipeline for the persona, or a second
-  writer of its index, exits 1 naming the one running. The Python tools in
-  `laplace_eidolon/tools/` take no lock, so make sure none of them is running.
+  writer of its index, exits 1 naming the one running. Tools outside these
+  commands, the Python reference implementation's among them, take no lock, so
+  make sure none of them is writing.
 
 ## 2. Capture the complete series
 

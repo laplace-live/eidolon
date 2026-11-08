@@ -158,7 +158,7 @@ function isFile(path: string): boolean {
 }
 
 /**
- * Python's hint for a missing audio file: BLREC names are long and full of CJK, so a dropped `!!`
+ * The hint for a missing audio file: BLREC names are long and full of CJK, so a dropped `!!`
  * or `_1` is near-invisible; the siblings that nearly match are offered instead.
  */
 function reportMissingAudio(audio: string): void {

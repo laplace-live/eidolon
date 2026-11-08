@@ -1,8 +1,8 @@
-// Python `re` on str patterns, so patterns can be copied verbatim from the Python source. JS
-// differs on each: `\d` is any Nd digit, `\s` is `str.isspace()` (JS also matches U+FEFF but not
-// U+001C–U+001F or U+0085), `\w`/`\b` use Unicode word characters (CJK included), `.` excludes
-// only "\n", and `$` also matches before a trailing newline. Under re.MULTILINE, `^` and `$` see
-// only "\n" as a line break, where JS's `m` flag also breaks on "\r", U+2028 and U+2029.
+// Python `re` on str patterns. JS differs on each: `\d` is any Nd digit, `\s` is `str.isspace()`
+// (JS also matches U+FEFF but not U+001C–U+001F or U+0085), `\w`/`\b` use Unicode word characters
+// (CJK included), `.` excludes only "\n", and `$` also matches before a trailing newline. Under
+// re.MULTILINE, `^` and `$` see only "\n" as a line break, where JS's `m` flag also breaks on
+// "\r", U+2028 and U+2029.
 import { cpLen, cpSlice, PY_SPACE_CLASS, pyDigitValue, pyRepr } from "@eidolon/config";
 
 /** Python's flags as their inline letters: "i" re.IGNORECASE, "m" re.MULTILINE, "s" re.DOTALL. */

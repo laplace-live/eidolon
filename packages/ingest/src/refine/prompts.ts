@@ -1,6 +1,6 @@
-// The two passes' prompts and response schemas, tools/refine.py's text with the persona's names
-// filled in from her identity. For milky-green they hash to what refine.py sends (the spec's
-// Appendix B), so a provider's prefix cache and its outputs carry over.
+// The two passes' prompts and response schemas, with the persona's names filled in from her
+// identity. For milky-green their hashes are pinned in refine.test.ts, so a provider's prefix cache
+// and its outputs carry over.
 import type { PersonaIdentity } from "@eidolon/config";
 
 /** The names the prompts call the persona by. */
@@ -58,7 +58,7 @@ If a field doesn't apply, return an empty array. Output JSON ONLY:
 
 Output JSON only, no markdown, no preamble.`;
 
-// The sentence counts disagree ("12-20", then "8-15"); both are what refine.py sends.
+// The sentence counts disagree ("12-20", then "8-15"); both are part of the pinned hash.
 const SYNTHESIZE_SYSTEM_TEMPLATE = `You are an archivist creating a memory record for a Chinese-language Vtuber's
 long-term recall system.
 

@@ -106,7 +106,7 @@ function memoryItem(memory: MemoryStatus): Item {
   return { id: "memory", tone: "ok", text: "home.ready.memory.on" };
 }
 
-/** One index table; a table the Python tools built has no meta, so no row count. */
+/** One index table; a table built without its meta record has no row count. */
 function indexItem(
   id: "facts" | "streams",
   table: IndexTable | undefined,

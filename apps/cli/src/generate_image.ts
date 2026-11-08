@@ -48,7 +48,7 @@ const USAGE = `usage: laplace-generate-image [-h] [-i PATH_OR_URL] [-o OUT] [-n 
                               [prompt]
 `;
 
-// argparse refills the module docstring into one paragraph, Usage block and all.
+// argparse's default formatter refills the description into one paragraph, Usage block and all.
 const HELP = `${USAGE}
 Generate an image from a text prompt plus optional reference images. The bot's
 selfie tool and this script share one path — \`\`image_generation\`\` owns the
@@ -148,7 +148,10 @@ export function outPath(base: string, index: number, count: number, image: Gener
 
 export interface GenerateImageDeps extends Partial<CliIo> {
   readonly fetch?: typeof fetch;
-  /** The persona clock, read where Python reads it; the wall clock in PERSONA_TIMEZONE by default. */
+  /**
+   * The persona clock, read when choosing the outfit and again for the built-in prompt; the wall
+   * clock in PERSONA_TIMEZONE by default.
+   */
   readonly clock?: () => PersonaClock;
   /** The selfie-references directory; the bundled one by default. */
   readonly referencesRoot?: string;

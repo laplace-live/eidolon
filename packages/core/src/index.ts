@@ -32,7 +32,7 @@ export interface ContextProvider {
    * turn continues without this provider. An aborted turn rejects with `signal.reason`.
    */
   onContext(turn: ContextTurn): Promise<void>;
-  /** The error text for a rejection, worded as the Python service logged it. */
+  /** The error text for a rejection. */
   errorMessage(error: unknown): string;
 }
 

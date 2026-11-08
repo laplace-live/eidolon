@@ -25,9 +25,9 @@ export interface SearchOptions {
 
 export interface Retriever {
   /**
-   * Python `retriever.table is not None`: true iff open(), or a stale-handle reopen inside
-   * search(), holds a table. Never re-checks the filesystem; a table built later is seen by the
-   * next open() (per session for context, at restart for MCP), as in Python.
+   * True iff open(), or a stale-handle reopen inside search(), holds a table. Never re-checks the
+   * filesystem; a table built later is seen by the next open() (per session for context, at
+   * restart for MCP).
    */
   readonly hasTable: boolean;
   /** Resolves [] on every failure except an abort, which rejects with `signal.reason`. Hits omit `vector`. */

@@ -1,5 +1,5 @@
-// The embedding cache both ingests share, in the format Python's EmbedCache wrote: one SQLite table
-// of float32 vectors keyed by model, dimension and text, so every vector already paid for hits.
+// The embedding cache both ingests share: one SQLite table of float32 vectors keyed by model,
+// dimension and text, so every vector already paid for hits.
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
@@ -16,8 +16,7 @@ export function embedCacheKey(model: string, dim: number, text: string): string 
   return createHash("sha1").update(`${model}\0${dim}\0`, "utf8").update(text, "utf8").digest("hex");
 }
 
-// Typed arrays use the platform's byte order: little-endian wherever Bun runs, as numpy's
-// tobytes() was wherever Python ran.
+// Typed arrays use the platform's byte order: little-endian wherever Bun runs.
 function encodeVector(vector: ArrayLike<number>): Uint8Array {
   return new Uint8Array(Float32Array.from(vector).buffer);
 }
@@ -36,7 +35,7 @@ export class EmbedCache {
   constructor(path: string) {
     mkdirSync(dirname(path), { recursive: true });
     this.#db = new Database(path, { create: true });
-    // Python's sqlite3 waited up to 5 s for another writer's lock; bun:sqlite fails at once.
+    // bun:sqlite fails at once on another writer's lock; this waits up to 5 s for it.
     this.#db.exec("PRAGMA busy_timeout = 5000");
     this.#db.exec(
       "CREATE TABLE IF NOT EXISTS embed_cache (  key TEXT PRIMARY KEY,   vector BLOB NOT NULL)",

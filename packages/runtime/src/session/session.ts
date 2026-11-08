@@ -163,7 +163,7 @@ export interface Session {
   readonly processors: readonly FrameProcessor[];
 }
 
-/** bot.py's `run_bot` up to the worker: services, tools, prompt, providers, pipeline. */
+/** A session up to the worker: services, tools, prompt, providers, pipeline. */
 export async function buildSession(
   transport: BaseTransport,
   user: UserContext,

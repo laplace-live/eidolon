@@ -83,7 +83,7 @@ export function envStr(name: string, fallback: string): string {
   return envOptional(name) ?? fallback;
 }
 
-/** `env_int`: Python `int()` of the value, or `fallback` (with a warning) where it raises. */
+/** Python `int()` of the value, or `fallback` (with a warning) where it raises. */
 export function envInt(name: string, fallback: number): number {
   const raw = envOptional(name);
   if (raw === undefined) return fallback;
@@ -93,7 +93,7 @@ export function envInt(name: string, fallback: number): number {
   return fallback;
 }
 
-/** `env_float`: Python `float()` of the value, or `fallback` (with a warning) where it raises. */
+/** Python `float()` of the value, or `fallback` (with a warning) where it raises. */
 export function envFloat(name: string, fallback: number): number {
   const raw = envOptional(name);
   if (raw === undefined) return fallback;

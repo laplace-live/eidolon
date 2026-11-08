@@ -1,5 +1,5 @@
-// Captured from the Python runtime (image_generation.py, voice_switching.py) at fixed clocks and
-// inputs, so a drift in any prompt or tool text fails a test.
+// Selfie prompts, reference choices and encodings at fixed clocks and inputs, so a drift in any
+// of them fails a test.
 
 export const PROMPT_SOLO_0905 =
   "Turn the reference character into a casual selfie, drawn in classic 2D anime\nstyle.\n\nKeep unchanged: the character's face, hairstyle, hair color, eye color, and\noutfit design. The result has to read as the same character, not a lookalike.\n\nExactly one person is in the picture: the character in the single reference image. No second version of her, no one else.\n\nFraming: a phone selfie held at arm's length — camera slightly above eye\nlevel, head and shoulders filling the frame, eyes on the lens, relaxed\nnatural smile.\n\nRender: hand-drawn 2D anime, the look of a traditional cel animation frame.\nCrisp inked outlines of varying weight, flat color fills, hard-edged two-tone\ncel shading, glossy block highlights in the hair, classic anime eyes. No 3D,\nno photorealism, no physically based materials, no rendered textures.\n\nTime: it is mid-morning, about 09:05 local time. The light, the shadows, and the sky have to read as that\nhour.\n\nLight: bright clear daylight filling the room, drawn as simple cel shadow shapes from one clear direction,\nover a softly painted, uncluttered indoor background.\n\nNo text, watermarks, logos, UI overlays, or anyone beyond the people\ndescribed above.\n";
@@ -192,7 +192,7 @@ export const FILL_TIME_07: Record<string, [string, string]> = {
   ],
 };
 
-/** hour → select_outfit for each of OUTFIT_CASES */
+/** hour → selectOutfit for each of the selectOutfit test's `cases` */
 export const OUTFIT_TABLE: Record<string, string[][]> = {
   "4": [
     ["a/night.png"],
@@ -241,14 +241,14 @@ export const OUTFIT_TABLE: Record<string, string[][]> = {
   ],
 };
 
-/** load_reference(friends/七海Nana7mi.png): data-URL length, head and tail */
+/** loadReference(friends/七海Nana7mi.png): data-URL length, head and tail */
 export const FRIEND_REFERENCE = {
   length: 404022,
   head: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAagAAAQTCAYAAA",
   tail: "8Po1AAAAAElFTkSuQmCC",
 };
 
-/** GeneratedImage.suffix by media type */
+/** imageSuffix by media type */
 export const SUFFIXES: Record<string, string> = {
   "image/png": ".png",
   "image/jpeg": ".jpg",

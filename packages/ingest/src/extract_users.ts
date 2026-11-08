@@ -45,7 +45,7 @@ export function parseTypes(arg: string): Set<number> | null {
   return types;
 }
 
-/** The export isn't shaped as danmakus.com writes one; the message is Python's. */
+/** The export isn't shaped as danmakus.com writes one. */
 export class DanmakuShapeError extends Error {
   override name = "DanmakuShapeError";
 }

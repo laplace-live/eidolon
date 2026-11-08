@@ -1,6 +1,6 @@
-// The download library against the Python goldens in fixtures/download (see download_helpers.ts),
-// with fake-yt-dlp.sh as yt-dlp. Where the port differs on purpose, the test says so and applies
-// the difference to Python's output.
+// The download library against the goldens in fixtures/download (see download_helpers.ts), with
+// fake-yt-dlp.sh as yt-dlp. Where the library differs from a golden on purpose, the test says so
+// and applies the difference to the golden's output.
 import "../../config/test/isolated-guard.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
@@ -268,7 +268,7 @@ describe("downloadUrls against download_urls", () => {
     const logs = run.logs.map(([level, message]): [string, string] => [level, sub(message, dir)]);
     logs.splice(cookieError + 1, 0, ["WARNING", `    ${download.COOKIE_HINT}`]);
     expect(records).toEqual(logs);
-    // Python's summary keeps the first line of each error, so the hint doesn't reach it.
+    // The summary keeps the first line of each error, so the hint doesn't reach it.
     expect(download.downloadSummaryText({ ...report, durationSec: 0 }, vods)).toBe(
       sub(run.summary, dir),
     );
@@ -276,7 +276,7 @@ describe("downloadUrls against download_urls", () => {
 
   test("a bare id downloaded next to its parts is removed and fails the URL [AD]", async () => {
     const run = golden.runs.find((r) => r.name === "fallback") as RunGolden;
-    // Python kept BV1cccccccc1.m4a, a second copy of part 1, and counted the URL a success.
+    // In the golden, BV1cccccccc1.m4a, a second copy of part 1, stays and the URL succeeds.
     expect(run.new_files).toEqual(["BV1cccccccc1.m4a", "BV1dddddddd1.m4a"]);
     const { dir, vods, report, argv } = await replay(run);
     expect(argv).toEqual(run.argv.map((call) => withPortArgs(call.map((a) => sub(a, dir)))));

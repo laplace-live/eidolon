@@ -1,6 +1,5 @@
 // The app with real sibling pieces: @eidolon/access's CORS layer and offer guard, and
-// @eidolon/imagegen's selfie store. Expected headers were recorded from the Python stack (Starlette
-// CORSMiddleware, allow-all).
+// @eidolon/imagegen's selfie store. Expected headers are Starlette CORSMiddleware's, allow-all.
 import { afterEach, describe, expect, test } from "bun:test";
 import * as access from "@eidolon/access";
 import * as imagegen from "@eidolon/imagegen";

@@ -1,6 +1,6 @@
 // The HTTP surface of the bot for one Bun.serve: every route runs the same wrapper (CORS preflight,
-// HEAD rule, idle-timeout opt-out, logged 500, CORS), and everything else gets the Python bot's
-// 404 and 405 bodies.
+// HEAD rule, idle-timeout opt-out, logged 500, CORS), and everything else gets FastAPI's 404 and
+// 405 bodies.
 import { STATUS_CODES } from "node:http";
 import {
   type CorsPolicy,
@@ -86,7 +86,7 @@ function signallingResponse(result: SignallingResult): Response {
   return jsonResponse(result.status, result.body);
 }
 
-/** uvicorn's access line, which the Python bot printed for every request. */
+/** An access line in uvicorn's format, for every request. */
 export function logAccess(
   request: Request,
   server: RouteServer | undefined,
@@ -124,7 +124,7 @@ export function createBotApp(parts: BotAppParts): BotApp {
     }
     // Bun.serve cuts a request whose handler has written nothing for idleTimeout (default 10 s;
     // a 40 s handler got an empty reply at about 12 s). An offer can wait on a 10 s TURN mint
-    // plus a 10 s Workers validation, and uvicorn imposes no limit.
+    // plus a 10 s Workers validation.
     server.timeout(request, 0);
     let response: Response;
     try {
@@ -196,7 +196,7 @@ export function createBotApp(parts: BotAppParts): BotApp {
 
   const unrouted = (pathname: string): Response => {
     if (isDemoPath(pathname)) return new Response(null, { status: 404 });
-    // Python's MCP mount has its own router, which answers every deeper path with a plain-text 404.
+    // Every path under /mcp/ gets the plain-text 404 a mounted Starlette router sends.
     if (pathname.startsWith("/mcp/")) return plainText(404, "Not Found");
     const route = allowed.find(({ path }) => routeMatches(path, pathname));
     return route ? methodNotAllowed(route.allow) : notFound();

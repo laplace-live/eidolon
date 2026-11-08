@@ -14,7 +14,7 @@ import type { ArchiveCatalog } from "../src/index.ts";
 
 export const TODAY: IsoDate = "2026-09-09";
 
-/** A plain StreamScope with Python's defaults, for fixtures. */
+/** A plain StreamScope with empty defaults, for fixtures. */
 export function scope(init: Partial<StreamScope> = {}): StreamScope {
   return { startDate: null, endDate: null, latest: null, streamIds: [], label: "", ...init };
 }
@@ -35,7 +35,7 @@ export function broadcast(day: string, bv = "BV1abc", parts = 1): Broadcast {
   };
 }
 
-/** Python's StreamCatalog over an in-memory list: sorted (stream_date, id) descending. */
+/** A StreamCatalog over an in-memory list: sorted (stream_date, id) descending. */
 export class MemoryCatalog implements ArchiveCatalog {
   readonly path = "/nonexistent/stream_catalog.json";
   readonly items: Broadcast[];
@@ -93,7 +93,7 @@ export const RECALL_HIT: SearchRow = {
   stream_date: "2026-09-08",
 };
 
-/** Records each search as `{query, ...options}` without the signal, as Python's kwargs. */
+/** Records each search as `{query, ...options}` without the signal, as the goldens hold calls. */
 export class FakeRetriever implements Retriever {
   hasTable = true;
   readonly calls: Record<string, unknown>[] = [];
@@ -148,7 +148,7 @@ export class FakeContext implements ConversationContext {
     return all.filter((name) => !this.hidden.includes(name));
   }
 
-  /** String content of each message, as Python's `str(message.get("content", ""))`. */
+  /** String content of each message, "" when it has none. */
   contents(): string[] {
     return this.messages.map((message) =>
       String((message as Record<string, unknown>).content ?? ""),

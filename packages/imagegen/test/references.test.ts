@@ -44,7 +44,8 @@ function privateFriend(): string {
 
 afterEach(() => rmSync(join(dataHome(), "personas"), { recursive: true, force: true }));
 
-// The real image, for the encoding Python produced; present only on a machine holding the data.
+// The real friend image, whose data URL FRIEND_REFERENCE pins; present only on a machine holding
+// the data.
 const REAL_FRIEND = join(
   process.env.EIDOLON_REAL_HOME ?? "",
   "personas",

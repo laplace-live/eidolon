@@ -1,5 +1,5 @@
-// Fakes shared by the tests. FakeQdrant and FakePoster behave exactly like the fakes the Python
-// oracle drove mem0 with (fixtures/*.json), so a fixture case replays here unchanged.
+// Fakes shared by the tests. FakeQdrant and FakePoster behave exactly like the fakes mem0 ran
+// against to record fixtures/*.json, so a fixture case replays here unchanged.
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -161,7 +161,7 @@ export class FakePoster implements JsonPoster {
   }
 }
 
-/** The clock and uuid4 the oracle pinned: base + n·step microseconds, UUID(int=n). */
+/** The clock and uuid4 the fixtures pin: base + n·step microseconds, UUID(int=n). */
 export function pinned(base: number, step: number) {
   const state = { clockReads: 0, uuids: 0 };
   return {

@@ -97,7 +97,7 @@ function json(value: unknown): string {
 
 const PROBLEM_LEVELS = ["WARNING", "ERROR", "CRITICAL"];
 
-/** Python's recorded request, with the one documented departure: the port's larger token cap. */
+/** mem0's recorded request, with the one documented departure: this engine's larger token cap. */
 function withPortTokenCap(request: unknown): unknown {
   const body = { ...(request as Record<string, unknown>) };
   for (const key of ["max_tokens", "max_completion_tokens"]) {
@@ -135,7 +135,7 @@ describe("add replays mem0", () => {
         c.ok ? { ok: true, value: c.value } : { ok: false, error: c.error },
       );
       expect(logs.at(...PROBLEM_LEVELS)).toEqual(c.logs as [string, string][]);
-      // Stringified so payload key order is compared too: both bots write these points.
+      // Stringified so payload key order is compared too: these points must match mem0's exactly.
       expect(json(fake.calls)).toBe(json(c.qdrant));
       expect(json(poster.embedCalls)).toBe(json(c.embed));
       const chat = poster.chatCalls.map((call) => {
@@ -166,7 +166,7 @@ function seeded(points: Record<string, Payload>, scores: Record<string, number> 
 }
 
 describe("search replays mem0", () => {
-  // The Python case crashes in mem0's telemetry (`None.encode()`), which the port leaves out.
+  // trim_ids crashes mem0 in its telemetry (`None.encode()`), which this engine leaves out.
   for (const c of fixtures.search.filter((s) => s.name !== "trim_ids")) {
     test(c.name, async () => {
       const pins = pinned(1793678706123456, 1000001);

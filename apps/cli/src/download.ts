@@ -166,7 +166,7 @@ export async function downloadMain(
   }
   const { ns, persona } = parsed;
   const browserFlag = ns.cookies_from_browser as string | null;
-  // An explicit empty value means no browser, as Python's `or None` read it.
+  // An explicit empty value means no browser, not the default one.
   const cookiesFromBrowser =
     browserFlag === null ? download.defaultCookiesFromBrowser() : browserFlag || null;
   const cookiesFile = (ns.cookies as string | null) ?? download.defaultCookiesFile();
@@ -176,7 +176,7 @@ export async function downloadMain(
         `and writes the merged cookies back into ${cookiesFile}.`,
     );
   }
-  // An unbalanced quote throws here, before the list is read, as in Python.
+  // An unbalanced quote throws here, before the list is read.
   const extraArgs = download.shlexSplit((ns.yt_dlp_args as string) || "");
   const ytDlpOptions = { command: PROG, ...deps.ytDlpOptions };
 

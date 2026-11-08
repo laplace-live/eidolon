@@ -56,7 +56,7 @@ export interface YtDlpArgvOptions {
 }
 
 /**
- * `_build_yt_dlp_cmd`'s arguments, plus `--ignore-config` (a user config could move the files or
+ * yt-dlp's arguments for `url`: `--ignore-config` first (a user config could move the files or
  * drop the info.json the stream date comes from), the managed yt-dlp's JavaScript runtime for
  * YouTube, and `--` before the URL, so a list line starting with `-` is never read as an option.
  */

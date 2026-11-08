@@ -1,6 +1,6 @@
-// CPython 3.13's `ipaddress.ip_address(host).is_global`, with its ValueError read as false: the
-// Python bot's relay filter. The parser follows CPython's, which accepts zone ids `net.isIP`
-// refuses (spaces, non-ASCII).
+// CPython 3.13's `ipaddress.ip_address(host).is_global`, with its ValueError read as false,
+// decides which candidates a relay can reach. The parser follows CPython's, which accepts zone ids
+// `net.isIP` refuses (spaces, non-ASCII).
 
 const IPV4_OCTET = /^[0-9]{1,3}$/;
 const IPV6_HEXTET = /^[0-9A-Fa-f]{1,4}$/;

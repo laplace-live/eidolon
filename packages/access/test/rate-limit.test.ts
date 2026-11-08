@@ -138,8 +138,7 @@ describe("SlidingWindowQuota", () => {
     expect(refused.retryAfterSeconds).toBeLessThanOrEqual(60);
   });
 
-  // tests/test_mcp_server.py::test_anonymous_rate_limit_blocks_after_quota, at the quota seam
-  // MCP builds its tiers on.
+  // MCP's anonymous rate limit, at the quota seam MCP builds its tiers on.
   test("an anonymous tier of 2 refuses the third call", () => {
     const quota = new SlidingWindowQuota(2, 3600);
     expect([1, 2, 3].map(() => quota.tryConsume("203.0.113.9").allowed)).toEqual([

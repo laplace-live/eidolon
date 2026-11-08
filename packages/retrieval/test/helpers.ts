@@ -123,7 +123,7 @@ function fact(
   return { id, source, date, floor: Number(id.slice(1)), text, tokens, vector };
 }
 
-/** A fresh in-memory table with the whitespace FTS index the Python ingest builds. */
+/** A fresh in-memory table with the whitespace FTS index the ingest builds. */
 export async function memoryTable(rows: readonly FactRow[] = FACT_ROWS, name = "persona_facts") {
   const db = await lancedb.connect("memory://");
   const table = await db.createTable(

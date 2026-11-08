@@ -41,7 +41,6 @@ const chosen = (name: string, kbps: number) =>
   `INFO|[offer-middleware] audioQuality='${name}' → Opus bitrate ${kbps} kbps for this session`;
 
 describe("sessionBitrateFor", () => {
-  // Each row is what Python's _apply_session_audio_quality set and logged.
   const rows: [string, unknown, number, string[]][] = [
     ["absent", undefined, 96000, []],
     ["null", null, 96000, []],

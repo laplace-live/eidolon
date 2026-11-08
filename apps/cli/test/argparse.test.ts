@@ -37,10 +37,9 @@ function outcome(parse: () => Namespace): Omit<Case, "argv"> {
   }
 }
 
-// Python's --db-path defaults to data/lancedb; the port leaves it unset and opens the persona's
-// index (docs/typescript.md, accepted differences). [AD] Likewise --queries, whose default moved
-// from data/eval/queries.toml to the persona's sources in the data home. The goldens stay
-// Python's own output.
+// The goldens default --db-path to data/lancedb, where these commands leave it unset and open the
+// persona's index, and --queries to data/eval/queries.toml, where they read the eval set among the
+// persona's sources in the data home.
 const PYTHON_DEFAULTS: Record<string, string> = {
   db_path: "data/lancedb",
   queries: "data/eval/queries.toml",
@@ -131,7 +130,7 @@ describe("types", () => {
   });
 });
 
-// fixtures/goldens/argparse-features.json was printed by CPython 3.13 argparse for this parser:
+// fixtures/goldens/argparse-features.json pins Python 3.13 argparse's results for this parser:
 // paths (nargs="*", type=Path), --no-auto-slice (store_false, dest="auto_slice"), --files
 // (nargs="*"), --stages (a type raising ArgumentTypeError) and --out (type=Path).
 const FEATURES_USAGE = `usage: prog [-h] [--no-auto-slice] [--files [FILES ...]] [--stages STAGES]

@@ -1,7 +1,7 @@
-// Vector + FTS hybrid search over one table, fused the way the Python bot fused it.
-// LanceDB TS's native hybrid RRF ranks from 0 and breaks ties differently from the Python
-// RRFReranker the index was tuned with, so the legs run separately and fuse here. Omitting
-// _distance/_score from select() makes lance log a deprecation WARN per query.
+// Vector + FTS hybrid search over one table. LanceDB TS's native hybrid RRF ranks from 0 and breaks
+// ties differently from LanceDB Python's RRFReranker, which the index was tuned with, so the legs
+// run separately and fuse here. Omitting _distance/_score from select() makes lance log a
+// deprecation WARN per query.
 import { errorText, logger, raceAbort } from "@eidolon/config";
 import type { Table } from "@lancedb/lancedb";
 import { makeReranker, type Reranker } from "./rerank.ts";
@@ -126,7 +126,7 @@ export function rrfFuse(
     .map(({ row, score }) => scored(row, score));
 }
 
-/** Python's `results.slice(0, limit)[:final_k]`, where a limit <= 0 is no limit. */
+/** The first `candidates` rows, or all of them when it is <= 0, then the first `finalK`. */
 function window(rows: SearchRow[], candidates: number, finalK: number): SearchRow[] {
   return (candidates > 0 ? rows.slice(0, candidates) : rows).slice(0, finalK);
 }
@@ -159,7 +159,7 @@ export async function hybridSearch(
     // fusion we'd run with no reranker at all.
     try {
       const merged = mergeLegs(vectorRows, ftsRows);
-      // The query is the jieba token string, as Python sent it; documents are the raw column.
+      // The query is the jieba token string; documents are the raw column.
       const results = await reranker.rerank(
         tokens,
         merged.map((row) => row[reranker.column] ?? null),

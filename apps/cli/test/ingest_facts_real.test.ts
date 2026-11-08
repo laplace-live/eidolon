@@ -1,7 +1,7 @@
 // 奶绿's persona_facts rebuilt from her real fact files, through the command as a user runs it, and
-// compared with the table Python built. EIDOLON_REAL_HOME is only read: the index is written into a
-// temporary folder, and the embedding cache is cloned there, so a run that missed it would fail
-// rather than pay. Skips without the data, unless EIDOLON_REQUIRE_PARITY=1.
+// compared with the table in her real index. EIDOLON_REAL_HOME is only read: the index is written
+// into a temporary folder, and the embedding cache is cloned there, so a run that missed it would
+// fail rather than pay. Skips without the data, unless EIDOLON_REQUIRE_PARITY=1.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import {
   constants,
@@ -31,8 +31,8 @@ const REAL_INDEX = join(REAL_HOME, "personas", "milky-green", "index");
 const REAL_CACHE = join(REAL_HOME, "cache", "embed_cache.db");
 const REQUIRED = process.env.EIDOLON_REQUIRE_PARITY === "1";
 const DIM = 3072;
-// The order _resolve_files gave: each pattern's matches by code point (店 U+5E97 before 明 U+660E),
-// then the next pattern's.
+// The order resolveFactFiles gives: each pattern's matches by code point (店 U+5E97 before
+// 明 U+660E), then the next pattern's.
 const FILES = ["店长坚果设定集.txt", "明前奶绿设定集.txt", "明前奶绿事件集.txt"];
 
 async function realTable(): Promise<LanceTable | null> {

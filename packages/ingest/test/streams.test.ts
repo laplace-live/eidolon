@@ -1,6 +1,4 @@
-// fixtures/streams.golden.json and the sidecar text below were printed by CPython 3.13 through
-// laplace_eidolon.tools._streams, for the synthetic transcripts in fixtures/streams; the
-// readUploadDate outcomes by tools/pipeline.py's _read_upload_date.
+// fixtures/streams.golden.json holds each synthetic transcript in fixtures/streams as parsed.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

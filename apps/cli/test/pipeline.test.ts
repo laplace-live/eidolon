@@ -1,8 +1,8 @@
-// laplace-pipeline against Python's main(): golden.json's scenarios (see packages/ingest/test/
-// pipeline_helpers.ts) replayed through the TS command. Python ran its later stages as children,
-// faked there by exit code; here they run in this process, so each scenario gives them inputs
-// that end the same way: the fake Soniox, refine provider and embedding API, or a transcript the
-// catalog rejects.
+// laplace-pipeline over golden.json's main scenarios (see packages/ingest/test/
+// pipeline_helpers.ts). A scenario's `rc` sets the exit code of a later stage, or of one file's
+// transcribe; here the stages run in this process, so each scenario gives them inputs that end
+// the same way: the fake Soniox, refine provider and embedding API, or a transcript the catalog
+// rejects.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   chmodSync,
@@ -78,12 +78,12 @@ afterEach(() => {
 
 const RULE64 = "=".repeat(64);
 
-/** Python's summary text after the download block, from where the pipeline's own begins. */
+/** A golden's stdout from the pipeline's own summary on, past the download block's. */
 function pipelineBlock(stdout: string): string {
   return stdout.slice(stdout.indexOf(`\n${RULE64}\nPipeline Summary`));
 }
 
-/** The lines tools/pipeline.py and the in-process download logged, as opposed to later stages'. */
+/** The lines the pipeline and its in-process download log, as opposed to later stages'. */
 function own(message: string): boolean {
   return (
     /^(Pipeline stages|URL list not found|No URLs in|Refining: |Ingesting: )/.test(message) ||
@@ -92,7 +92,10 @@ function own(message: string): boolean {
   );
 }
 
-/** A golden log line as the port writes it: its stages run as commands, not Python modules. */
+/**
+ * A golden log line as this command writes it: each stage named by its `laplace-*` command, a
+ * failed transcribe by its error.
+ */
 function ported(message: string, transcribeError: string): string {
   return message
     .replace("<PYTHON> -m laplace_eidolon.tools.refine", "laplace-refine")
@@ -117,7 +120,7 @@ interface Run {
 
 /**
  * Replays the golden scenario `name`: its list, audio and transcripts, its argv (plus `extra`),
- * with fake-yt-dlp.sh as yt-dlp, and a data home of its own, as golden.py gave Python.
+ * with fake-yt-dlp.sh as yt-dlp, and a data home of its own.
  */
 async function scenario(
   name: string,
@@ -165,7 +168,7 @@ async function scenario(
   };
 }
 
-/** The scenario's logs as Python logged them, the port's differences applied. */
+/** The run's own log lines, against the golden's as `ported` rewrites them. */
 function expectOwnLogs(run: Run): void {
   const expected = run.golden.logs.map(([level, message]) => [
     level,
@@ -195,7 +198,7 @@ describe("argparse", () => {
   test("usage errors exit 2 with argparse's message", async () => {
     const cases: [string[], string][] = [
       [["x.txt", "--stages", "Refine, foo,ALL"], mainCase("bad-stages").stderr[0] as string],
-      // whisper is gone, so it is no longer one of the choices.
+      // The golden's choices include whisper, which this command doesn't offer.
       [
         ["x.txt", "--provider", "whisperx"],
         (mainCase("bad-provider").stderr[0] as string).replace(", whisper)", ")"),

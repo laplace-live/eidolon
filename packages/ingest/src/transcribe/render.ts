@@ -1,6 +1,6 @@
 // Soniox tokens become Whisper-length segments, segments become fixed-window scenes, and scenes
-// become the transcript's H2 sections, as tools/transcribe.py renders them. The .soniox.json keeps
-// every token, so a transcript re-renders from it without paying Soniox again.
+// become the transcript's H2 sections. The .soniox.json keeps every token, so a transcript
+// re-renders from it without paying Soniox again.
 import {
   cpLen,
   cpSlice,
@@ -49,10 +49,10 @@ function endsSentence(text: string): boolean {
 }
 
 /**
- * `_tokens_to_segments`: tokens joined bare (Soniox carries the spaces a language needs, and
- * joining with spaces would wreck Mandarin) until a sentence ends after at least MIN_SEGMENT_SEC,
- * or MAX_SEGMENT_SEC has passed. A token without timestamps is dropped, text and all. `shiftMs`
- * comes off every timestamp first, undoing a sliced run's shift.
+ * Tokens joined bare (Soniox carries the spaces a language needs, and joining with spaces would
+ * wreck Mandarin) until a sentence ends after at least MIN_SEGMENT_SEC, or MAX_SEGMENT_SEC has
+ * passed. A token without timestamps is dropped, text and all. `shiftMs` comes off every timestamp
+ * first, undoing a sliced run's shift.
  */
 export function tokensToSegments(tokens: Iterable<SonioxToken>, shiftMs = 0): Segment[] {
   const segments: Segment[] = [];
@@ -98,8 +98,8 @@ export function pyFloorDiv(v: number, w: number): number {
 }
 
 /**
- * `group_segments_into_scenes`: each segment joins the window it starts in, a scene starts at its
- * window's start, and empty windows are skipped.
+ * Each segment joins the window it starts in, a scene starts at its window's start, and empty
+ * windows are skipped.
  */
 export function groupSegmentsIntoScenes(
   segments: readonly Segment[],
@@ -127,7 +127,7 @@ export function groupSegmentsIntoScenes(
 
 const pad2 = (n: number): string => String(n).padStart(2, "0");
 
-/** `_format_ts`: `734.5` → `00:12:14`. */
+/** `734.5` → `00:12:14`. */
 export function formatTs(seconds: number): string {
   const total = Math.trunc(seconds);
   const h = Math.floor(total / 3600);
@@ -135,7 +135,7 @@ export function formatTs(seconds: number): string {
   return `${pad2(h)}:${pad2(Math.floor(rem / 60))}:${pad2(rem % 60)}`;
 }
 
-/** `_short_ts`: `HH:MM` past the first hour, else `MM:00`, so 60 s and one hour both read `01:00`. */
+/** `HH:MM` past the first hour, else `MM:00`, so 60 s and one hour both read `01:00`. */
 export function shortTs(seconds: number): string {
   const total = Math.trunc(seconds);
   const h = Math.floor(total / 3600);
@@ -143,7 +143,7 @@ export function shortTs(seconds: number): string {
   return h ? `${pad2(h)}:${pad2(m)}` : `${pad2(m)}:00`;
 }
 
-/** `_format_dur`: `42s`, `5m12s`, `1h23m`. */
+/** `42s`, `5m12s`, `1h23m`. */
 export function formatDur(seconds: number): string {
   const s = Math.trunc(Math.max(0, seconds));
   if (s < 60) return `${s}s`;
@@ -151,7 +151,7 @@ export function formatDur(seconds: number): string {
   return `${Math.floor(s / 3600)}h${pad2(Math.floor((s % 3600) / 60))}m`;
 }
 
-/** `_heading_hint`: the scene's first sentence, at most `maxChars` code points. */
+/** The scene's first sentence, at most `maxChars` code points. */
 export function headingHint(text: string, maxChars = 60): string {
   const collapsed = pyStrip(text.replace(SPACE_RUN, " "));
   if (!collapsed) return "(no transcript)";
@@ -164,7 +164,7 @@ export function headingHint(text: string, maxChars = 60): string {
   return sentence;
 }
 
-/** The frontmatter a transcript carries. Values are written unquoted, as Python wrote them. */
+/** The frontmatter a transcript carries, its values written unquoted. */
 export interface TranscriptMeta {
   readonly streamDate: string;
   readonly streamId: string;
@@ -174,7 +174,7 @@ export interface TranscriptMeta {
   readonly language: string | null;
 }
 
-/** `render_markdown`: the frontmatter, then one `## MM:00 — hint` section per scene. */
+/** The frontmatter, then one `## MM:00 — hint` section per scene. */
 export function renderMarkdown(meta: TranscriptMeta, scenes: readonly Scene[]): string {
   const lines = [
     "---",

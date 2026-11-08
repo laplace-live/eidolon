@@ -27,7 +27,7 @@ import {
 } from "../src/session/session.ts";
 import { captureLogs, FakeTransport, type LogCapture, PassThrough, until } from "./support.ts";
 
-// bot.py 787-792, byte for byte.
+// INTERRUPTED_EMPTY_TURN_PROMPT, byte for byte.
 const INTERRUPTED_PROMPT =
   "你刚才说话的时候，好像说了句什么，但没听清。" +
   "你的话在那儿被打断了，对话里只留下ta听到的部分，也可能一句都没听到。" +

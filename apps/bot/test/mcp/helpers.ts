@@ -1,4 +1,4 @@
-// Shared fixtures for the MCP tests: tests/test_mcp_server.py's fakes.
+// Shared fixtures for the MCP tests: canned hits, fake retrievers and the handler built over them.
 import { afterAll, beforeAll } from "bun:test";
 import { SlidingWindowQuota, type UserContext } from "@eidolon/access";
 import type { Retriever, SearchOptions, SearchRow } from "@eidolon/retrieval";

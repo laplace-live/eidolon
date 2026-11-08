@@ -96,7 +96,7 @@ export function dataUrl(mediaType: string, bytes: Uint8Array): string {
   return `data:${mediaType};base64,${bytes.toBase64()}`;
 }
 
-/** The OpenAI tool list the Python adapter sends, serialized as `json.dumps(ensure_ascii=False)`. */
+/** The OpenAI tool list as sent on the wire, serialized as `json.dumps(ensure_ascii=False)`. */
 export function wire(schema: ToolSchema): string {
   return pyJsonDumps(
     [

@@ -1,7 +1,7 @@
-// The ingest and the catalog against 奶绿's real transcripts in EIDOLON_REAL_HOME, from which
-// Python's tools built the index there. Everything real is read only: both are rebuilt into a
-// temporary folder, through a clone of the real embedding cache, and any embedding request fails
-// the run. Each test skips without the data, unless EIDOLON_REQUIRE_PARITY=1.
+// The ingest and the catalog against 奶绿's real transcripts in EIDOLON_REAL_HOME: each rebuilds
+// what the index there holds. Everything real is read only: both are rebuilt into a temporary
+// folder, through a clone of the real embedding cache, and any embedding request fails the run.
+// Each test skips without the data, unless EIDOLON_REQUIRE_PARITY=1.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import {
   constants,

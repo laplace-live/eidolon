@@ -94,7 +94,7 @@ export interface TranscribeStageReport {
   readonly cost: StageCost | null;
 }
 
-/** A stage that ends in an exit code, as refine's and ingest's child processes did. */
+/** The refine or ingest stage, which ends in an exit code. */
 export interface StageResult {
   readonly rc: number;
   readonly durationSec: number;
@@ -104,7 +104,7 @@ export interface StageResult {
 }
 
 export interface PipelineReport {
-  /** The stages asked for, in run order; Python's summary lists these, run or not. */
+  /** The stages asked for, in run order; the summary lists these, run or not. */
   readonly stages: readonly PipelineStage[];
   readonly download: download.DownloadReport | null;
   readonly transcribe: TranscribeStageReport | null;
@@ -114,7 +114,7 @@ export interface PipelineReport {
   /** --abort-on-error stopped the run after a stage's failure. */
   readonly aborted: boolean;
   readonly cancelled: boolean;
-  /** `PipelineSummary.successful()`, and not cancelled. */
+  /** No stage failed, and the run wasn't cancelled. */
   readonly ok: boolean;
   /** The batch's `.done.json`, when this run finished the batch. */
   readonly batchDone: string | null;
@@ -137,7 +137,7 @@ export interface PipelineOptions extends RunOptions {
   readonly dryRun?: boolean;
   /** Takes the index's lock for the ingest stage and returns its release; throws LockedError. */
   readonly holdIndex?: () => () => void;
-  /** Receives what Python printed, the stage summaries among it, in order. */
+  /** Receives the run's text for a reader, the stage summaries among it, in order. */
   readonly print?: (text: string) => void;
 
   readonly format?: string;
@@ -182,7 +182,7 @@ export interface PipelineOptions extends RunOptions {
 
 const RULE = "=".repeat(64);
 
-/** `print_pipeline_summary`'s text. */
+/** The summary laplace-pipeline prints after a run. */
 export function pipelineSummaryText(report: PipelineReport, vodsDir: string): string {
   const d = (seconds: number): string => `${pyFixed(seconds, 1)}s`;
   const flag = (stage: { readonly cancelled: boolean }): string =>
@@ -237,9 +237,9 @@ export function pipelineSummaryText(report: PipelineReport, vodsDir: string): st
 }
 
 /**
- * `main()` after parsing: the stages asked for, in order. A failed item is recorded and the run
- * goes on, unless --abort-on-error stops it after that stage. Once `signal` aborts, the stage in
- * progress stops and no other starts. Emits each stage's events, then the pipeline's summary.
+ * laplace-pipeline after parsing: the stages asked for, in order. A failed item is recorded and the
+ * run goes on, unless --abort-on-error stops it after that stage. Once `signal` aborts, the stage
+ * in progress stops and no other starts. Emits each stage's events, then the pipeline's summary.
  */
 export async function runPipeline(options: PipelineOptions): Promise<PipelineReport> {
   const emit = options.onProgress ?? noProgress;
@@ -253,7 +253,8 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRep
   let refineResult = null as StageResult | null;
   let ingestResult = null as StageResult | null;
   let aborted = false;
-  // Python's `_Abort`: no later stage starts, and the summary says why.
+  // A failure under --abort-on-error, or the signal, ends the run early: no later stage starts,
+  // and the summary says why.
   const halts = (failed: boolean): boolean => {
     if (options.abortOnError && failed) aborted = true;
     return aborted || signal?.aborted === true;
@@ -267,7 +268,7 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRep
             `(format=${pyRepr(options.format ?? download.DEFAULT_FORMAT)})`,
         );
       } else {
-        // Python's RuntimeError for a missing yt-dlp crashed the run; here only the stage fails.
+        // A missing yt-dlp fails only this stage: downloadUrls reports it rather than throwing.
         const report = await download.downloadUrls(options.urls, {
           vodsDir: options.vodsDir,
           format: options.format,
@@ -444,7 +445,7 @@ async function transcribeStage(options: PipelineOptions): Promise<TranscribeStag
     return finish("skipped");
   }
   emit({ type: "stage", stage: "transcribe", status: "start", total });
-  // Python made the folder on a dry run too; a dry run here writes nothing.
+  // A dry run writes nothing, not even the folder.
   if (!dryRun) mkdirSync(streamsDir, { recursive: true });
 
   const jobs: TranscribeJob[] = [];
@@ -464,7 +465,7 @@ async function transcribeStage(options: PipelineOptions): Promise<TranscribeStag
     try {
       status = transcribe.audioStatus(audio, streamsDir);
     } catch (error) {
-      // Python's run crashed on an info.json it couldn't decode, like an AppleDouble `._x.info.json`.
+      // An info.json that won't decode, like an AppleDouble `._x.info.json`, fails only its file.
       const message = `can't read ${pyPathName(infoJsonPath(audio))}: ${errorText(error)}`;
       logger.error(`${label} ${name}: ${message}`);
       failed.push({ audio, error: message });
@@ -508,7 +509,6 @@ async function transcribeStage(options: PipelineOptions): Promise<TranscribeStag
 
   const apiKey = transcribe.sonioxApiKey();
   if (!apiKey) {
-    // Each of Python's transcribe children failed on it in turn.
     const message = transcribe.MISSING_API_KEY;
     logger.error(message);
     for (const job of jobs) {
@@ -607,18 +607,18 @@ async function transcribeStage(options: PipelineOptions): Promise<TranscribeStag
   return finish(signal?.aborted ? "cancelled" : "done");
 }
 
-/** What Python logged for each child it started: the command that runs the same stage alone. */
+/** The command that runs the same stage alone, which the stage logs as it starts. */
 function commandLine(command: string, args: readonly (string | false)[]): string {
   return [command, ...args.filter((arg): arg is string => arg !== false)].join(" ");
 }
 
-/** What refine.py's main did with the pipeline's flags, in this process. */
+/** The refine stage: laplace-refine's run with the pipeline's flags, in this process. */
 async function refineStage(options: PipelineOptions): Promise<StageResult> {
   const emit = options.onProgress ?? noProgress;
   const { streamsDir } = options;
   const dryRun = options.dryRun ?? false;
   const started = performance.now();
-  // Python forwarded --model only when it was truthy, --concurrency whenever it was given.
+  // An empty --refine-model counts as not given; a --refine-concurrency of 0 still counts.
   const flagModel = options.refineModel || null;
   const flagConcurrency = options.refineConcurrency ?? null;
   const model = flagModel ?? refine.refineModel();
@@ -672,7 +672,7 @@ async function refineStage(options: PipelineOptions): Promise<StageResult> {
     case "cancelled":
       return result(1, true);
     case "unreadable":
-      // refine.py crashed on a transcript it couldn't parse.
+      // A transcript that won't parse fails the stage before anything is sent.
       logger.error(`Refine failed: ${errorText(run.error)}`, run.error);
       return fail(errorText(run.error));
     case "empty":
@@ -703,7 +703,7 @@ async function refineStage(options: PipelineOptions): Promise<StageResult> {
   }
 }
 
-/** ingest_streams.py, then build_stream_catalog.py when it succeeded and wasn't a dry run. */
+/** The ingest, then the stream catalog when the ingest succeeded and wasn't a dry run. */
 async function ingestStage(options: PipelineOptions): Promise<StageResult> {
   const emit = options.onProgress ?? noProgress;
   const { signal, streamsDir, dbPath } = options;
@@ -752,7 +752,7 @@ async function ingestStage(options: PipelineOptions): Promise<StageResult> {
         ? null
         : { usd: report.usage.costUsd, source: COST_SOURCES[report.usage.costSource] };
     if (!report.ok || dryRun) return result(report.ok ? 0 : 1, report.cancelled, cost);
-    // As Python passed it: the catalog's paths are relative to the streams folder as given.
+    // The streams folder as given, unresolved: the catalog's paths are relative to its parent.
     const built = await writeStreamCatalog({ streamsDir, dbPath, onProgress: emit, signal });
     return result(built.ok ? 0 : 1, built.cancelled, cost);
   } finally {
@@ -861,7 +861,7 @@ function videosOf(key: string, url: string, vods: Vods): string[] {
   return ids.length > 0 ? ids : [key];
 }
 
-/** A list's line, under the key prepare_batch gives it: a BV id, else the URL as written. */
+/** A list's line, under the key listKey gives it: a BV id, else the URL as written. */
 interface ListEntry {
   readonly url: string;
   readonly batch?: string;

@@ -1,5 +1,5 @@
 // laplace-ingest-facts' library: the persona_facts rows, one per line of the persona's fact files,
-// and the run that embeds them and rebuilds the table, as tools/ingest_facts.py did.
+// and the run that embeds them and rebuilds the table.
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -234,8 +234,8 @@ const DATE = new PyPattern(
 const matchEnd = (match: RegExpExecArray): number => match.index + match[0].length;
 
 /**
- * `_parse_line`: a fact line's ISO date ("" when undated), its 贴吧 floor (0 when none) and its
- * text, with the floor marker, a leading BV id and the date taken off, in that order.
+ * A fact line's ISO date ("" when undated), its 贴吧 floor (0 when none) and its text, with the
+ * floor marker, a leading BV id and the date taken off, in that order.
  */
 export function parseFactLine(raw: string): [date: string, floor: number, text: string] {
   let line = pyStrip(raw);
@@ -276,7 +276,7 @@ export function factPrefixPattern(subject: string): PyPattern {
   }
 }
 
-/** `_strip_persona_prefix`: a fact that is all prefix stays whole. */
+/** The fact without `prefix`; a fact that is all prefix stays whole. */
 export function stripFactPrefix(text: string, prefix: PyPattern): string {
   return prefix.sub("", text, { count: 1 }) || text;
 }
@@ -329,9 +329,9 @@ function readUtf8(path: string): string {
 }
 
 /**
- * `load_facts`: one row per line of `files`, in order. A line repeated anywhere keeps its first
- * occurrence, which keeps the earliest date of a fact that changed; a line shorter than
- * `minChars` once cleaned is dropped.
+ * One row per line of `files`, in order. A line repeated anywhere keeps its first occurrence,
+ * which keeps the earliest date of a fact that changed; a line shorter than `minChars` once
+ * cleaned is dropped.
  */
 export function loadFacts(files: readonly string[], options: LoadFactsOptions = {}): LoadedFacts {
   const { minChars = 4, stripPrefix = true, signal } = options;
@@ -486,10 +486,10 @@ function sampleLines(rows: readonly FactRow[]): string[] {
 export type FactsCounts = Record<(typeof SUMMARY_COUNTS)["ingest-facts"][number], number>;
 
 /**
- * `main_async` after argument parsing: reads the fact files, embeds what the cache lacks and
- * replaces the table, then records the build in `<table>.meta.json` beside it. The old table stays
- * until every vector is in hand. Never throws: a failure, or `signal` aborting before the old
- * table is dropped, ends in a report with `ok` false and a summary event.
+ * laplace-ingest-facts after argument parsing: reads the fact files, embeds what the cache lacks
+ * and replaces the table, then records the build in `<table>.meta.json` beside it. The old table
+ * stays until every vector is in hand. Never throws: a failure, or `signal` aborting before the
+ * old table is dropped, ends in a report with `ok` false and a summary event.
  */
 export async function ingestFactFiles(options: IngestFactsOptions): Promise<IngestFactsReport> {
   const emit = options.onProgress ?? noProgress;

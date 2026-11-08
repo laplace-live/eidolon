@@ -1,4 +1,4 @@
-// Goldens from pydantic-core under the Python venv (to_json and str(ValidationError)).
+// Goldens of pydantic-core's text: to_json and str(ValidationError).
 import { expect, test } from "bun:test";
 import { validationErrorText } from "@eidolon/config";
 import { envelopeText, pydanticFloat } from "../../src/mcp/pydantic.ts";

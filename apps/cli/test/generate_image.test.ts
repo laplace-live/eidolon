@@ -39,7 +39,7 @@ const REFS = join(FIX, "selfie-references");
 const goldens = await golden<Case[]>("generate_image.json");
 
 const b64 = (text: string) => Buffer.from(text).toString("base64");
-// What the Python oracle's fake transport answered.
+// The fake API's answers, by each case's `response`.
 const RESPONSES: Record<string, [number, unknown]> = {
   one: [200, { data: [{ b64_json: b64("P".repeat(1536)) }], usage: { cost: 0.04 } }],
   three: [
@@ -90,7 +90,7 @@ function filesUnder(dir: string, paths: Record<string, string>): Record<string, 
   return Object.fromEntries(Object.entries(files).sort());
 }
 
-/** Python swapped in a missing friends/ directory; here, a root holding only the outfits. */
+/** For a case with `friends_dir`: a references root holding only the outfits, no friends/. */
 function rootWithoutFriends(): string {
   const root = join(work, "refs-without-friends");
   mkdirSync(join(root, "outfits"), { recursive: true });

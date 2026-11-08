@@ -86,7 +86,7 @@ export function sessionBitrateFor(
   return bitrate;
 }
 
-/** The boot log line bot.py printed: `[WebRTC] Opus encoder bitrate: default …, presets …`. */
+/** The boot log line: `[WebRTC] Opus encoder bitrate: default …, presets …`. */
 export function describeOpusBitrates(settings: AudioQualitySettings): string {
   const presets = AUDIO_QUALITIES.map((name) => `${name}=${kbps(settings.presetsBps[name])}kbps`);
   return (

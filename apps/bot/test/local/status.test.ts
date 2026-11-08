@@ -398,7 +398,7 @@ describe("GET status", () => {
         dim: 3072,
         stale: false,
       },
-      // Built by the Python tools: no record to judge it by.
+      // Built without a meta record: nothing to judge it by.
       {
         table: "persona_facts",
         built: true,

@@ -1,5 +1,5 @@
-// laplace-download against tools/download.py's main(), replayed from the goldens in
-// packages/ingest/test/fixtures/download with fake-yt-dlp.sh as yt-dlp.
+// laplace-download, replayed from the goldens in packages/ingest/test/fixtures/download with
+// fake-yt-dlp.sh as yt-dlp.
 import "../../../packages/config/test/isolated-guard.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -61,7 +61,7 @@ describe("main() goldens", () => {
       );
       const expected = c.logs.map(([level, message]): [string, string] => [level, sub(message)]);
       if (c.name === "both-cookies") {
-        // [AD] Python's warning was wrong: yt-dlp loads both and writes the merged jar back.
+        // The golden's warning was wrong: yt-dlp loads both and writes the merged jar back.
         expected[0] = [
           "WARNING",
           `Cookies come from chrome and from ${dir}/c.txt: yt-dlp loads both, and writes the ` +

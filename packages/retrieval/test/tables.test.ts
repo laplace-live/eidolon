@@ -110,7 +110,7 @@ describe("search params", () => {
   test.each([
     ["", 30, 15],
     ["50", 50, 50],
-    // pydantic never validates a default_factory's output, so out-of-range values pass.
+    // Out-of-range values pass unvalidated.
     ["0", 0, 0],
     ["500", 500, 500],
   ])("CANDIDATES=%p", (value, facts, archive) => {

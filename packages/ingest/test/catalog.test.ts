@@ -47,7 +47,7 @@ describe("writeStreamCatalog", () => {
     test(`replays main's ${run.name} run: exit code, log lines and file`, async () => {
       const dbPath = argValue(run.argv, "--db-path");
       const cwd = process.cwd();
-      // `--streams-dir .` is relative to the folder Python ran in.
+      // The golden's run started in the streams folder, so `--streams-dir .` names it.
       if (run.name === "relative_dot") process.chdir(streams);
       let report: catalog.StreamCatalogReport;
       try {

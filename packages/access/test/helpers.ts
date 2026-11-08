@@ -10,7 +10,7 @@ export class LogCapture {
     });
   }
 
-  /** `LEVEL|message`, the layout the Python oracle printed. */
+  /** `LEVEL|message`, the layout the expected log lines use. */
   lines(): string[] {
     return this.records.map((r) => `${r.level}|${r.message}`);
   }

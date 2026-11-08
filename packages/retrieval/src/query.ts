@@ -75,7 +75,7 @@ export interface MessageLike {
  * The search query from recent user turns. A latest message of `shortThreshold` code points or
  * more is used alone; anything shorter gets up to `maxUserTurns` earlier user messages prepended,
  * oldest first. Assistant turns stay out even on short queries: their content drags retrieval
- * toward whatever the model rambled about. Skips non-object messages, where Python would raise.
+ * toward whatever the model rambled about. Skips non-object messages.
  */
 export function buildQueryText(
   messages: readonly unknown[] | null | undefined,

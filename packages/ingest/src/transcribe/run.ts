@@ -328,7 +328,7 @@ async function transcribe(options: TranscribeOptions): Promise<TranscribeResult>
   const model = options.model ?? DEFAULT_SONIOX_MODEL;
   const language = options.language === undefined ? DEFAULT_LANGUAGE : options.language || null;
   const windowSec = options.windowSec ?? DEFAULT_WINDOW_SEC;
-  // Both fail in Python too, but only after Soniox has been paid (the window) or with a traceback.
+  // Before anything is uploaded, so a bad hint or window costs nothing and fails with a message.
   if (language !== null && cpLen(language) !== 2) {
     throw new TranscribeError(
       `Soniox takes two-letter ISO 639-1 language hints, not ${pyRepr(language)}; ` +
@@ -690,7 +690,7 @@ async function runJob(
 }
 
 /**
- * A token as the Python SDK dumped it: its nine fields first, null where Soniox sent none, with
+ * A token as Soniox's Python SDK dumps it: its nine fields first, null where Soniox sent none, with
  * `confidence` a float; then whatever else Soniox sent, in Soniox's order.
  */
 export function dumpToken(token: SonioxToken): Record<string, unknown> {

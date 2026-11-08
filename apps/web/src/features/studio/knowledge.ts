@@ -13,7 +13,7 @@ export interface FactsState {
 
 /**
  * Whether a fact file is in the index, as far as the page can tell. A table without a build record
- * (built by the Python tools) lists no sources, so the server can't report it among `removed`.
+ * lists no sources, so the server can't report it among `removed`.
  */
 export function wasIndexed(
   file: Pick<FactFile, "matched" | "changed">,

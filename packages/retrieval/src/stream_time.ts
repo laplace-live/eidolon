@@ -1,5 +1,5 @@
-// Resolves common archive periods before the conversational model runs. The patterns are Python's,
-// verbatim, through PyPattern.
+// Resolves common archive periods before the conversational model runs. The patterns are Python
+// `re` syntax, run through PyPattern.
 import { cpSlice, pyStrip } from "@eidolon/config";
 import {
   addDays,
@@ -23,7 +23,6 @@ export interface StreamScope {
   readonly label: string;
 }
 
-/** A scope with the Python dataclass defaults filled in. */
 export function streamScope(init: Partial<StreamScope> = {}): StreamScope {
   return {
     startDate: init.startDate ?? null,
@@ -215,7 +214,7 @@ function numberValue(text: string): number {
   return CJK_DIGITS.get(text) ?? 0;
 }
 
-/** null where Python raises KeyError: IGNORECASE lets "ſeptember" match a month it can't look up. */
+/** null where IGNORECASE matched a month the table can't look up, such as "ſeptember". */
 function dateParts(match: RegExpExecArray): DateParts | null {
   const g = match.groups ?? {};
   if (g.iso_year) {
@@ -321,7 +320,7 @@ function explicitScope(query: string, today: IsoDate): [boolean, StreamScope | n
         endYear = yearOf(inferredDate(null, endMonth, endDay, today));
         startYear = endYear - crossesYear;
       }
-      // Python's `or`: a year of 0 falls back to today's year too.
+      // `||`, not `??`: a year of 0 falls back to today's year too.
       const start = isoDate(startYear || yearOf(today), startMonth, startDay);
       const end = isoDate(endYear || yearOf(today), endMonth, endDay);
       if (start > end || diffDays(start, end) > 366) return null;

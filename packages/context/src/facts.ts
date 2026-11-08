@@ -1,5 +1,5 @@
 // RAG over hand-compiled fan facts about the streamer, one line each. Unlike the archive's blocks,
-// a facts block is never replaced: one accumulates per enhanced turn, as in Python.
+// a facts block is never replaced: one accumulates per enhanced turn.
 import { cpLen, errorText, logger, pyRepr, pyStr, pyStrip, pyTruthy } from "@eidolon/config";
 import type { ContextProvider, ContextTurn, ConversationContext } from "@eidolon/core";
 import {

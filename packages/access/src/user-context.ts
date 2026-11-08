@@ -52,11 +52,11 @@ function midOf(raw: unknown): number | null {
   return null;
 }
 
-/** Python `_parse_response`: a validate-login-sync-v2 payload as a UserContext. */
+/** A validate-login-sync-v2 payload as a UserContext. */
 export function parseValidateResponse(payload: unknown): UserContext {
   if (!isJsonObject(payload)) return ANONYMOUS;
   // -101 = not logged in, 404 = token unknown, anything else = upstream error. The caller logs
-  // the raw code. Python's `!= 0` lets `false` through too.
+  // the raw code. A `false` code passes too, as Python's `False != 0` is false.
   const code = payload.code;
   if (code !== 0 && code !== false) return ANONYMOUS;
   const data = payload.data;

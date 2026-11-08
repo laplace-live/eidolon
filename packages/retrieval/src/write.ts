@@ -1,5 +1,5 @@
 // The write side of the two LanceDB tables: their Arrow schemas, and the drop-and-rebuild the
-// offline ingests run, which reproduces the tables and FTS index Python's ingests built.
+// offline ingests run.
 import { mkdirSync } from "node:fs";
 import { logger, pyPath, pyRepr } from "@eidolon/config";
 import * as lancedb from "@lancedb/lancedb";
@@ -30,7 +30,6 @@ function vectorField(dim: number): Field {
   return new Field("vector", new FixedSizeList(dim, new Field("item", new Float32(), true)), true);
 }
 
-/** The `persona_facts` columns, in Python's order. */
 export function personaFactsSchema(dim: number): Schema {
   return new Schema([
     utf8("id"),
@@ -43,7 +42,6 @@ export function personaFactsSchema(dim: number): Schema {
   ]);
 }
 
-/** The `stream_chunks` columns, in Python's order. */
 export function streamChunksSchema(dim: number): Schema {
   return new Schema([
     utf8("id"),
@@ -64,9 +62,9 @@ export function streamChunksSchema(dim: number): Schema {
   ]);
 }
 
-// `build_fts_index`'s index on `tokens`. Whitespace splitting and no stemming keep jieba's
-// boundaries; no lowercasing keeps BV ids and names case-distinct. Python set only those five; the
-// rest are lance's defaults its index was built with, pinned.
+// The FTS index on `tokens`. Whitespace splitting and no stemming keep jieba's boundaries; no
+// lowercasing keeps BV ids and names case-distinct. Only the first five are choices; the rest pin
+// lance's defaults the index was built with.
 const FTS_OPTIONS = {
   baseTokenizer: "whitespace",
   stem: false,

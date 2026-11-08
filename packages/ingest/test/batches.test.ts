@@ -1,5 +1,5 @@
-// batches.ts against prepare_batch.py's goldens (download_helpers.ts). Python's data/ is the
-// persona's lists/ here and data/auto-embed/ its lists/batches/.
+// batches.ts against the download golden's prepare cases (download_helpers.ts). The golden's data/
+// is the persona's lists/ here and data/auto-embed/ its lists/batches/.
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import {
   existsSync,
@@ -17,7 +17,7 @@ import { download } from "../src/index.ts";
 import { downloadGolden as golden, type PrepareGolden } from "./download_helpers.ts";
 
 const ARCHIVE_URL = "https://space.bilibili.com/2132180406/lists/2484684?type=series";
-// The generator's clock: 2026-09-08 10:02:09 in Los Angeles.
+// The golden's clock: 2026-09-08 10:02:09 in Los Angeles.
 const NOW = new Date("2026-09-08T17:02:09Z");
 
 let tz: string | undefined;
@@ -40,7 +40,7 @@ afterEach(() => {
   rmSync(work, { recursive: true, force: true });
 });
 
-/** Python's fixture path, where this layout keeps it. */
+/** A golden fixture's path, where this layout keeps it. */
 function moved(path: string): string {
   if (path.startsWith("data/auto-embed/")) return join(lists, "batches", path.slice(16));
   if (path.startsWith("data/")) return join(lists, path.slice(5));
@@ -57,7 +57,7 @@ function placeFixtures(c: PrepareGolden): void {
   }
 }
 
-/** Python's output with its paths moved into this layout. */
+/** The golden's text with its paths moved into this layout. */
 function relocate(text: string): string {
   return text
     .replaceAll("<WORK>/data/auto-embed/", `${lists}/batches/`)
@@ -82,7 +82,7 @@ describe("prepareBatch against prepare_batch.py", () => {
       }
       const expectedError =
         c.name === "no-baselines"
-          ? // [AD] The lists live in the persona's sources, which --persona picks, not --root.
+          ? // Not the golden's message: the lists are the persona's, which --persona picks.
             `No prepared URL lists found in ${lists}; check --persona`
           : c.error === null
             ? null

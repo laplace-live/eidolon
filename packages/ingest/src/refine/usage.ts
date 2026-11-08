@@ -78,7 +78,7 @@ function tokenCount(value: unknown): number {
   );
 }
 
-/** `_extract_usage`: a response's tokens and cost, reported, estimated, or neither. */
+/** A response's tokens and cost, reported, estimated, or neither. */
 export function extractUsage(response: unknown, model: string): Usage {
   const raw = isPlainObject(response) ? response.usage : undefined;
   const usage = isPlainObject(raw) ? raw : {};

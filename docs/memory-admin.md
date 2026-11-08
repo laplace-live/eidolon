@@ -38,16 +38,17 @@ pcClient.disconnect();
 
 ## Why this exists
 
-The bot writes long-term memories to Mem0 via Pipecat's `Mem0MemoryService`,
-keyed on `user_id = str(user.mid)` (the Bilibili UID from the validated
+The bot writes long-term memories to Mem0 through `packages/memory`'s engine,
+keyed on `user_id = String(user.mid)` (the Bilibili UID from the validated
 `loginSyncToken`). Each logged-in viewer has their own private namespace; the
 service auto-extracts memories from chat (e.g. "the user mentioned they're
 allergic to seafood") and surfaces them in future conversations.
 
 Mem0 is self-hosted: the engine runs in-process and stores its vectors in
 Qdrant, so these endpoints reach the same store the pipeline writes to
-rather than a hosted API. [`../laplace_eidolon/mem0_local.py`](../laplace_eidolon/mem0_local.py)
-holds the configuration both paths share.
+rather than a hosted API. `buildMemoryConfig()` in
+[`../packages/memory/src/config.ts`](../packages/memory/src/config.ts) holds the
+configuration both paths share.
 
 Some viewers will eventually want to:
 
@@ -231,9 +232,9 @@ in-call wipe to be invisible (we don't think it does).
 
 ## Related
 
-- [`../laplace_eidolon/memory_admin.py`](../laplace_eidolon/memory_admin.py) —
-  endpoint implementation + extensive inline rationale
-- [`../laplace_eidolon/user_context.py`](../laplace_eidolon/user_context.py) —
+- [`../apps/bot/src/memory-admin.ts`](../apps/bot/src/memory-admin.ts) — the two routes;
+  [`../packages/memory/src/admin.ts`](../packages/memory/src/admin.ts) — what they do to the store
+- [`../packages/access/src/user-context.ts`](../packages/access/src/user-context.ts) —
   shared token-validation cache
 - [`./frontend-loading-state.md`](./frontend-loading-state.md) — companion
   handover for surfacing pipeline state in the same client

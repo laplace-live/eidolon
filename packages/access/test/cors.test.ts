@@ -11,8 +11,8 @@ import {
 } from "../src/index.ts";
 import { EnvPatch, LogCapture } from "./helpers.ts";
 
-// Every expected status, body and header set below was recorded from Starlette's CORSMiddleware
-// configured as the Pipecat runner configures it, wrapped around the real offer middleware.
+// Every expected status, body and header set below is what Starlette's CORSMiddleware answers,
+// configured as the Pipecat runner configures it, in front of the offer guard.
 const ALL: CorsPolicy = { allowOrigins: [] };
 const LISTED: CorsPolicy = { allowOrigins: ["https://laplace.live"] };
 const LAPLACE = "https://laplace.live";
@@ -40,7 +40,7 @@ async function dump(response: Response | null) {
   };
 }
 
-// The stand-in /api/offer answer the oracle's app returned.
+// A stand-in /api/offer answer.
 function answer(): Response {
   return new Response('{"sdp":"answer","type":"answer","pc_id":"pc"}', {
     headers: { "content-type": "application/json" },
