@@ -161,9 +161,10 @@ terminal's log line that holds what went wrong, and the app shows it beside the 
 | Area | Routes | What |
 | --- | --- | --- |
 | Session | `POST session`, `GET session` | Trades a link code for the cookie and the proof; GET says whether the caller is signed in, or with `?probe=` proves this server holds the secret, for a second start |
-| Status | `GET status`, `POST restart` | Readiness, polled by the home page and never waiting on a remote probe; restart is refused during a call, or while one is connecting |
-| Settings | `GET settings?persona=`, `PUT settings` | Every `SETTINGS` row: the value the files give it and which file, the environment's value, and whether that overrides the file's, as only an app row's does (a persona's own value wins, and without one she inherits the environment's); PUT `{scope, persona?, values}` is checked by kind, the time zone as an IANA zone, and written to `settings.yaml` or her `persona.yaml` |
-| Credentials | `GET`, `PUT credentials`, `POST credentials/check` | `{NAME: {set, source}}`, never a value; the check asks the provider about a typed or the saved key |
+| Status | `GET status`, `POST restart` | Readiness, polled by the home page and never waiting on a remote probe: the keys her call roles need, each role's provider and model or what is wrong with them, her voice; restart is refused during a call, or while one is connecting |
+| Settings | `GET settings?persona=`, `PUT settings` | Every `SETTINGS` row: the value the files give it and which file, the environment's value and the variable it comes from, and whether that overrides the file's, as only an app row's does (a persona's own value wins, and without one she inherits the environment's, a model or voice only while the environment's provider is hers); PUT `{scope, persona?, values}` is checked by kind, a provider against the catalog, the time zone as an IANA zone, and written to `settings.yaml` or her `persona.yaml` |
+| Accounts | `GET`, `POST accounts`, `PUT`, `DELETE accounts/:id`, `POST accounts/check`, `GET accounts/:id/models?category=` | Every provider account: `credentials.json`'s, and each provider's default that the environment configures or her calls need, with where its key comes from and never the key, its API base and settings, and which settings name it; a new one takes its provider's id while that is free, else `<provider>-2` and on; an API base is refused for a provider without a base variable; DELETE is refused while a settings file names it; the check asks the provider about a typed or the saved key, where the catalog says how: a free listing, never a model call; models lists what the provider's API offers now ([providers.md](providers.md#model-lists)) |
+| Credentials | `GET`, `PUT credentials`, `POST credentials/check` | The secrets `credentials.json` keeps under variable names, `{NAME: {set, source}}`, never a value; the check is Qdrant's for the memory step and home |
 | Personas | `GET`, `POST personas`, `PUT personas/active` | List, create (with a voice and a starter `prompt.md`), switch (refused during a call, or while one is connecting) |
 | Persona files | `GET`, `PUT personas/:id/{prompt,glossary,identity}` | Her copy in the data home, copied from the template on the first write; a glossary that doesn't parse isn't saved |
 | Pictures | `personas/:id/references/:kind/:name`, `personas/:id/avatar` | Outfits and friends under `references/`, and the avatar, `avatar.*` at the root of her folder, where selfies never take it for an outfit; a template's pictures can't be deleted |
@@ -172,6 +173,7 @@ terminal's log line that holds what went wrong, and the app shows it beside the 
 | Voices | `GET voices/search?q=&language=&page=` | Fish Audio's public voices, searched without your key |
 | Jobs | `POST jobs`, `GET jobs`, `GET jobs/:id`, `…/events?after=`, `…/log`, `DELETE jobs/:id`, `POST jobs/:id/resume` | [Jobs](#jobs) |
 | Memories | `GET`, `DELETE memories?persona=` | One persona's memories of you |
+| Usage | `GET usage?from=&to=&persona=` | The usage ledger's spend summed by day, persona, provider, task and model, every persona and provider it knows, and whether it records at all ([providers.md](providers.md#usage-and-cost)) |
 
 The bot's own routes stay, behind the guard: `POST /api/offer` and `/api/offer/preflight` take
 the session and call as [the local viewer](#the-local-viewer-and-memory), with no quota;
@@ -208,6 +210,8 @@ switch, a `persona` setting or a restart sent meanwhile is refused `call-active`
 | `read-only-setting` | 400 | `sources.ytDlp` |
 | `invalid-path` | 400, 409 | A persona path that is absolute or leaves her folder; 409 when her saved `prompt` setting does |
 | `unknown-credential` | 400 | A name `credentials.json` doesn't take |
+| `unknown-account` | 404, 400 | No provider account has that id; 400 for a provider the catalog doesn't have |
+| `account-in-use` | 409 | Removing an account a persona's or the install's settings name |
 | `invalid-file-name` | 400 | A fact or picture name that isn't one plain segment with an allowed extension |
 | `template-file` | 409 | Deleting a picture the template ships |
 | `invalid-toml` | 400 | A glossary that doesn't parse |
@@ -341,6 +345,41 @@ unset. Use it for smoke tests and clean runs:
 EIDOLON_NO_DOTENV=1 EIDOLON_HOME=/tmp/eidolon-try bun run local
 ```
 
+## Strings and languages
+
+The app speaks English and 简体中文 (`zh-Hans`), through [Lingui](https://lingui.dev). Strings are
+the English source text, written inline in its macros: `` t`Save` `` from `useLingui()` in a
+component, `t` from `@lingui/core/macro` in other code, a `msg` descriptor for a label a code picks
+(`ROLE_LABELS`, `COMMAND_LABELS`, a `*labels.ts` module beside the feature), and `<Trans>` for a
+sentence with a link or `<code>` inside it. A label keyed by a union type (`Record<JobCommand, …>`)
+fails to compile when the union grows without it.
+
+`bun run i18n` (`lingui extract --clean`) writes every message into
+`apps/web/src/locales/en.po` and `zh-Hans.po`; each new one then needs its `msgstr` in
+`zh-Hans.po`, or it shows in English. A message's id is its English text, with any `context` that
+sets two meanings of one word apart (`t({ message: "Done", context: "job status" })`), so a reworded
+string loses its translation unless `zh-Hans.po` is changed with it. Nothing compiles the catalogs
+by hand: the Vite plugin turns `.po` imports into one chunk per language, and `locales/i18n.ts`
+loads the one in use before the first render. The language is the one the viewer last picked in
+this browser (`localStorage`'s `eidolon.lang`), else the first Chinese or English entry in the
+browser's languages, else English.
+
+`src/locales/catalog.test.ts` checks that both catalogs hold the same messages, none obsolete, and
+that every Chinese one has the English one's placeholders and tags.
+
+The English capitalizes as laplace-chat's does. A short label is Title Case, with articles,
+conjunctions and prepositions lowercased whatever their length and a phrasal verb's particle
+capitalized: a button, a menu item, a heading, a setting's name, a tab or column label, an
+`aria-label` (`Add Provider`, `Browser to Read Cookies From`, `Turn On Memory`). Everything else is
+sentence case: tooltips, descriptions, toasts, placeholders, errors, statuses, and a heading phrased
+as a sentence or a question (`Change the embedding model?`). `src/locales/title-case.test.ts` finds
+every label by where it is written, through `apps/web/scripts/title-case.ts`: the elements and props
+that take one, `label:` keys, and the `*_LABELS`, `*_TITLES` and `*_NAMES` maps, where an entry's
+`body`, `help`, `hint`, `note` or `description` is prose (a map of sentences or statuses is named
+otherwise: `EVENT_REASONS`, `OUTCOME_TEXT`). A heading phrased as a sentence with nothing in its
+text to say so is listed in the test. A module whose test can't avoid
+a macro stubs `@lingui/core/macro` with `src/test/lingui-macro.ts`, which gives the English text.
+
 ## The browser smoke test
 
 `bun apps/bot/scripts/local-smoke.ts` (`--headful` to watch it; headless Chrome is killed on some
@@ -352,11 +391,14 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
   key and no other token in web storage; the cookie alone refused `proof-missing`, and taken with
   the proof;
 - the wizard's keys step in English and 简体中文, with fake keys the providers refuse for free
-  (`--offline` saves them without the checks);
-- `credentials.json` at 0600, and no answer or log line holding a key;
+  (`--offline` saves them without the checks); it finds each string by its English source text, in
+  `zh-Hans.po` for the Chinese, so a string reworded without its catalog fails here;
+- an OpenAI-compatible account for a fake embeddings server, added and checked in Settings →
+  Providers, then picked for embeddings with a model from the server's own list;
+- `credentials.json` at 0600, each key in its account, and no answer or log line holding a key;
 - a saved prompt landing in the temporary home, with `personas/` byte-identical;
-- an `ingest-facts` job over two fact lines against a fake embeddings server, and the jobs page
-  showing it done;
+- an `ingest-facts` job over two fact lines against that server, with the model picked, and the
+  jobs page showing it done;
 
 then stops the server and deletes the home. It refuses to start when either `load-env.ts` would
 apply a `.env` or use another data home, and exits 0 when every check passes, else 1.

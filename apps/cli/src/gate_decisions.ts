@@ -24,7 +24,9 @@ import {
   GATE_URL,
   gateQuestions,
   gateState,
+  reportDecision,
 } from "@eidolon/context";
+import { accountOf } from "@eidolon/providers";
 import { type CliIo, printer, resolveIo } from "./io.ts";
 import { median, numOf, type PyNumber, quantilesExclusive } from "./py.ts";
 
@@ -150,6 +152,8 @@ export async function ask(turn: GateTurnSpec, options: AskOptions): Promise<Gate
     throw pyError("HTTPStatusError", httpxStatusMessage(response, GATE_URL));
   }
   const body = loadsPy(text);
+  // Plain numbers: loadsPy keeps a float a PyFloat, which the ledger would read as no cost.
+  reportDecision("openrouter", options.model, JSON.parse(text));
   const answers = subscript(body, "answers");
   if (!isPlainObject(answers)) throw pyError("AttributeError", "object has no attribute 'items'");
   const nouls: Record<string, PyNumber> = {};
@@ -204,7 +208,8 @@ export async function runGateDecisions(options: GateDecisionsOptions = {}): Prom
   const parsed = Bun.TOML.parse(readFileSync(turnsPath, "utf8")) as Record<string, unknown>;
   const turns = subscript(parsed, "turn") as GateTurnSpec[];
   const model = envOptional("RETRIEVAL_GATE_MODEL") ?? DEFAULT_GATE_MODEL;
-  const apiKey = envOptional("OPENROUTER_API_KEY");
+  // OpenRouter's own account: its variable, or the key the local app saved in it.
+  const apiKey = accountOf("openrouter")?.apiKey;
   if (apiKey === undefined) throw pyError("KeyError", "'OPENROUTER_API_KEY'");
   const askTurn = (turn: GateTurnSpec) =>
     ask(turn, {

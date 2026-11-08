@@ -1,6 +1,7 @@
 import type { AllowedOffer, UserContext } from "@eidolon/access";
 import { cpLen, errorText, logger, pyRepr } from "@eidolon/config";
 import type { ContextProvider, LlmTool } from "@eidolon/core";
+import { withUsageScope } from "@eidolon/providers";
 import { ingestHint, PERSONA_FACTS, STREAM_ARCHIVE } from "@eidolon/retrieval";
 import type { VoiceStyles } from "@eidolon/tools";
 import { rethrowIfCancelled } from "@pipedog/asyncio";
@@ -41,6 +42,9 @@ export interface SessionMemory extends ContextProvider {
 
 /** Everything a session takes from the other packages, so tests can stand in for any of it. */
 export interface SessionDeps {
+  /** One realtime model hears, thinks and speaks, in place of the three below. */
+  isRealtime(): boolean;
+  createRealtime(systemInstruction: string): LLMService<any>;
   createStt(): FrameProcessor;
   createTts(): FrameProcessor;
   createLlm(systemInstruction: string): LLMService<any>;
@@ -53,6 +57,7 @@ export interface SessionDeps {
     viewer: UserContext;
     voiceHint: string;
     selfieHint: string;
+    realtime?: boolean;
   }): Promise<string>;
   readonly interruptedEmptyTurnPrompt: string;
   buildGreetingKickoff(memories: readonly { readonly memory?: unknown }[]): string;
@@ -68,14 +73,16 @@ export interface SessionDeps {
 
 export interface PipelineParts {
   readonly input: FrameProcessor;
-  readonly stt: FrameProcessor;
+  /** null for a realtime model, which hears for itself. */
+  readonly stt: FrameProcessor | null;
   readonly user: FrameProcessor;
   readonly gate: FrameProcessor | null;
   readonly memory: FrameProcessor | null;
   readonly archive: FrameProcessor | null;
   readonly facts: FrameProcessor | null;
   readonly llm: FrameProcessor;
-  readonly tts: FrameProcessor;
+  /** null for a realtime model, which speaks for itself. */
+  readonly tts: FrameProcessor | null;
   readonly output: FrameProcessor;
   readonly assistant: FrameProcessor;
 }
@@ -95,7 +102,7 @@ export function assembleProcessors(parts: PipelineParts): FrameProcessor[] {
     parts.tts,
     parts.output,
     parts.assistant,
-  ];
+  ].filter((processor): processor is FrameProcessor => processor !== null);
 }
 
 async function optionalProvider<T>(
@@ -162,17 +169,20 @@ export async function buildSession(
   user: UserContext,
   deps: SessionDeps,
 ): Promise<Session> {
-  const stt = deps.createStt();
-  const tts = deps.createTts();
-  const styles = deps.loadVoiceStyles();
-  const voiceTool = deps.createVoiceTool(styles);
+  const realtime = deps.isRealtime();
+  const stt = realtime ? null : deps.createStt();
+  const tts = realtime ? null : deps.createTts();
+  const styles = realtime ? new Map<string, string>() : deps.loadVoiceStyles();
+  // A realtime model's voice is fixed for the session: there is nothing to switch to.
+  const voiceTool = realtime ? null : deps.createVoiceTool(styles);
   const selfieTool = deps.createSelfieTool();
   const systemInstruction = await deps.buildSystemInstruction({
     viewer: user,
     voiceHint: voiceTool ? deps.voicePromptHint(styles) : "",
     selfieHint: selfieTool ? deps.selfiePromptHint() : "",
+    ...(realtime ? { realtime: true } : {}),
   });
-  const llm = deps.createLlm(systemInstruction);
+  const llm = realtime ? deps.createRealtime(systemInstruction) : deps.createLlm(systemInstruction);
 
   const tools = new SessionTools(llm, tts);
   if (voiceTool) tools.register(voiceTool);
@@ -190,14 +200,21 @@ export async function buildSession(
 
   const context =
     tools.size > 0 ? new LLMContext({ tools: tools.toolsSchema() }) : new LLMContext();
-  const backend = await deps.audioBackend();
+  const emptyUserTurn = new EmptyUserTurnConfig({
+    interruptedPrompt: deps.interruptedEmptyTurnPrompt,
+  });
+  // A realtime model detects turns on its side and announces itself to the aggregator; a local
+  // VAD beside it would end every turn twice.
+  const backend = realtime ? null : await deps.audioBackend();
   const aggregators = new LLMContextAggregatorPair(context, {
     userParams: new LLMUserAggregatorParams({
-      vadAnalyzer: createVadAnalyzer(backend),
-      userTurnStrategies: createUserTurnStrategies(backend),
-      emptyUserTurn: new EmptyUserTurnConfig({
-        interruptedPrompt: deps.interruptedEmptyTurnPrompt,
-      }),
+      ...(backend === null
+        ? {}
+        : {
+            vadAnalyzer: createVadAnalyzer(backend),
+            userTurnStrategies: createUserTurnStrategies(backend),
+          }),
+      emptyUserTurn,
     }),
   });
 
@@ -262,6 +279,17 @@ export function installGreeting(
 
 /** One session on `transport`, until its worker finishes. Rejects if setup fails. */
 export async function runTransportSession(
+  transport: BaseTransport,
+  admission: Pick<AllowedOffer, "user" | "token" | "requestData">,
+  deps: SessionDeps,
+): Promise<void> {
+  // Everything the call spends is recorded against it, whichever task spends it.
+  return withUsageScope({ source: "call", session: crypto.randomUUID() }, () =>
+    runScopedSession(transport, admission, deps),
+  );
+}
+
+async function runScopedSession(
   transport: BaseTransport,
   admission: Pick<AllowedOffer, "user" | "token" | "requestData">,
   deps: SessionDeps,

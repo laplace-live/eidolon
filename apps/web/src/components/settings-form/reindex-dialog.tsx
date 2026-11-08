@@ -1,3 +1,4 @@
+import { useLingui } from "@lingui/react/macro";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -8,7 +9,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useT } from "@/lib/i18n";
 
 /** Asks before a save of REINDEX_PATHS, which costs every index and the memories kept so far. */
 export function ReindexDialog({
@@ -20,19 +20,17 @@ export function ReindexDialog({
   readonly onCancel: () => void;
   readonly onConfirm: () => void;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   return (
     <AlertDialog open={open} onOpenChange={(next) => !next && onCancel()}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{t("settings.form.reindex.title")}</AlertDialogTitle>
-          <AlertDialogDescription>{t("settings.form.reindex.body")}</AlertDialogDescription>
+          <AlertDialogTitle>{t`Change the embedding model?`}</AlertDialogTitle>
+          <AlertDialogDescription>{t`Every persona's knowledge index needs to be built again, and memory needs a new Qdrant collection: memories kept so far are lost.`}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>{t("settings.form.reindex.cancel")}</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm}>
-            {t("settings.form.reindex.confirm")}
-          </AlertDialogAction>
+          <AlertDialogCancel>{t`Cancel`}</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm}>{t`Save Anyway`}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

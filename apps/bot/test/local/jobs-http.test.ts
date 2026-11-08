@@ -183,7 +183,9 @@ describe("the plan cache", () => {
     expect(PLAN_VARIABLES.toSorted()).toEqual([
       "LANCEDB_PATH",
       "REFINE_MODEL",
-      "SONIOX_ASYNC_MODEL",
+      "REFINE_PROVIDER",
+      "TRANSCRIBE_MODEL",
+      "TRANSCRIBE_PROVIDER",
     ]);
     const yaml = join(dataHome(), "personas", "milky-green", "persona.yaml");
     mkdirSync(join(yaml, ".."), { recursive: true });
@@ -206,6 +208,15 @@ describe("the plan cache", () => {
         () => writeFileSync(yaml, "refine:\n  model: other/refiner\ntranscription:\n  model: x\n"),
       ],
       ["knowledge.index", () => appendFileSync(yaml, "knowledge:\n  index: elsewhere\n")],
+      [
+        "refine.provider",
+        () =>
+          writeFileSync(
+            yaml,
+            "refine:\n  model: other/refiner\n  provider: deepseek\ntranscription:\n  model: x\n" +
+              "knowledge:\n  index: elsewhere\n",
+          ),
+      ],
     ];
     try {
       for (const [setting, change] of changes) {

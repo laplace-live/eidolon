@@ -1,4 +1,5 @@
 import { describe, expect, spyOn, test } from "bun:test";
+import { setUsageSink, type UsageRecord } from "@eidolon/providers";
 import {
   DEFAULT_RERANK_BASE_URL,
   DEFAULT_RERANK_MODEL,
@@ -166,9 +167,7 @@ describe("makeReranker", () => {
 
   test("no key means RRF", () => {
     expect(makeReranker()).toBeNull();
-    expect(messages(records, "INFO")[0]).toStartWith(
-      "Neither RERANK_API_KEY nor OPENROUTER_API_KEY is set",
-    );
+    expect(messages(records, "INFO")[0]).toStartWith("OPENROUTER_API_KEY is not set");
   });
 
   test("RERANK_API_KEY wins, and blank model and base URL take the defaults", async () => {
@@ -188,6 +187,23 @@ describe("makeReranker", () => {
     await reranker.rerank("q", ["a"]);
     const init = network.mock.calls[0]?.[1] as RequestInit;
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer rerank-key");
+  });
+
+  test("spend at Cohere's own API goes into the ledger as Cohere's", async () => {
+    process.env.RERANK_API_KEY = "co";
+    process.env.RERANK_BASE_URL = "https://api.cohere.com/v2";
+    process.env.RERANK_MODEL = "rerank-v4.0-fast";
+    const records: UsageRecord[] = [];
+    setUsageSink((record) => records.push(record));
+    try {
+      env.network().mockImplementation((async () => ok([])) as unknown as typeof fetch);
+      await (makeReranker() as OpenRouterReranker).rerank("q", ["a"]);
+    } finally {
+      setUsageSink(null);
+    }
+    expect(records.map(({ provider, model }) => [provider, model])).toEqual([
+      ["cohere", "rerank-v4.0-fast"],
+    ]);
   });
 
   test("the first call fixes the reranker", () => {

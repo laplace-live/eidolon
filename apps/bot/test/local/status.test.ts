@@ -115,12 +115,35 @@ describe("GET status", () => {
       version: manifest.version,
       restartRequired: false,
       mcpRestartRequired: false,
-      keys: { SONIOX_API_KEY: false, OPENROUTER_API_KEY: false, FISH_API_KEY: false },
+      keys: [
+        { account: "soniox", name: "Soniox", provider: "soniox", roles: ["hearing"], set: false },
+        {
+          account: "openrouter",
+          name: "OpenRouter",
+          provider: "openrouter",
+          roles: ["mind"],
+          set: false,
+        },
+        { account: "fish", name: "Fish Audio", provider: "fish", roles: ["voice"], set: false },
+      ],
+      call: {
+        realtime: false,
+        roles: [
+          { role: "hearing", provider: "soniox", model: "stt-rt-v5", problem: null },
+          {
+            role: "mind",
+            provider: "openrouter",
+            model: "~google/gemini-flash-latest",
+            problem: null,
+          },
+          { role: "voice", provider: "fish", model: "drama-3", problem: null },
+        ],
+      },
       persona: {
         id: "milky-green",
         name: "明前奶绿",
         shortName: "奶绿",
-        voice: { id: null, source: "default", ok: null },
+        voice: { id: null, source: "default", ok: null, provider: "fish" },
       },
       index: {
         tables: [
@@ -148,15 +171,17 @@ describe("GET status", () => {
     reinstallSettings(app);
     const { deps } = fakeDeps({});
     const status = buildStatus(app, deps);
-    expect(status.keys).toEqual({
-      SONIOX_API_KEY: true,
-      OPENROUTER_API_KEY: false,
-      FISH_API_KEY: false,
-    });
+    expect(status.keys.map(({ account, set }) => [account, set])).toEqual([
+      ["soniox", true],
+      ["openrouter", false],
+      ["fish", false],
+    ]);
     expect(status.persona.voice).toEqual({
       id: "0123456789abcdef0123456789abcdef",
       source: "persona",
       ok: null,
+      provider: "fish",
+      account: "fish",
     });
     setEnv("FISH_VOICE_ID", "fedcba9876543210fedcba9876543210");
     reinstallSettings(app);
@@ -164,6 +189,8 @@ describe("GET status", () => {
       id: "0123456789abcdef0123456789abcdef",
       source: "persona",
       ok: null,
+      provider: "fish",
+      account: "fish",
     });
     write("personas/milky-green/persona.yaml", "{}\n");
     reinstallSettings(app);
@@ -171,6 +198,54 @@ describe("GET status", () => {
       id: "fedcba9876543210fedcba9876543210",
       source: "env",
       ok: null,
+      provider: "fish",
+      account: "fish",
+    });
+  });
+
+  test("a persona of her own providers needs their keys, and a realtime one needs one", () => {
+    setEnv("DEEPGRAM_API_KEY", "dg");
+    write(
+      "personas/milky-green/persona.yaml",
+      "hearing:\n  provider: deepgram\nmind:\n  provider: anthropic\nvoice:\n  provider: nope\n",
+    );
+    reinstallSettings(app);
+    const { deps } = fakeDeps({});
+    const status = buildStatus(app, deps);
+    expect(status.keys.map(({ account, set }) => [account, set])).toEqual([
+      ["deepgram", true],
+      ["anthropic", false],
+    ]);
+    expect(status.call.roles.at(-1)).toEqual({
+      role: "voice",
+      provider: null,
+      model: null,
+      problem: "TTS_PROVIDER=nope is no provider or account Eidolon knows",
+    });
+    expect(status.persona.voice.provider).toBeNull();
+    write("personas/milky-green/persona.yaml", "realtime:\n  provider: openai\n");
+    reinstallSettings(app);
+    const realtime = buildStatus(app, deps);
+    expect(realtime.call).toEqual({
+      realtime: true,
+      roles: [{ role: "realtime", provider: "openai", model: "gpt-realtime-2.1", problem: null }],
+    });
+    expect(realtime.keys).toEqual([
+      { account: "openai", name: "OpenAI", provider: "openai", roles: ["realtime"], set: false },
+    ]);
+    // A realtime provider that has no realtime model is what is wrong, not a failed poll.
+    write("personas/milky-green/persona.yaml", "realtime:\n  provider: openrouter\n");
+    reinstallSettings(app);
+    expect(buildStatus(app, deps).call).toEqual({
+      realtime: true,
+      roles: [
+        {
+          role: "realtime",
+          provider: null,
+          model: null,
+          problem: "OpenRouter offers no realtime voice model (REALTIME_PROVIDER)",
+        },
+      ],
     });
   });
 
@@ -187,6 +262,8 @@ describe("GET status", () => {
       id: "0123456789abcdef0123456789abcdef",
       source: "persona",
       ok: null,
+      provider: "fish",
+      account: "fish",
     });
   });
 
@@ -223,6 +300,21 @@ describe("GET status", () => {
     expect(asked).toEqual(["https://api.fish.audio/model/0123456789abcdef0123456789abcdef"]);
     // The voice she inherits, which the page offers to replace with her own.
     expect(buildStatus(app, deps).persona.voice.source).toBe("env");
+  });
+
+  test("a Fish key the app saved in its account gets the voice checked too", async () => {
+    setEnv("FISH_VOICE_ID", "0123456789abcdef0123456789abcdef");
+    const path = write(
+      "credentials.json",
+      JSON.stringify({ accounts: { fish: { provider: "fish", apiKey: "fk-saved" } } }),
+    );
+    chmodSync(path, 0o600);
+    reinstallSettings(app);
+    const { deps, asked } = fakeDeps({
+      "https://api.fish.audio/model/0123456789abcdef0123456789abcdef": () => json(404, {}),
+    });
+    await until(() => buildStatus(app, deps).persona.voice.ok === false);
+    expect(asked).toEqual(["https://api.fish.audio/model/0123456789abcdef0123456789abcdef"]);
   });
 
   test("a voice's answer belongs to the key that asked: another key asks again", async () => {

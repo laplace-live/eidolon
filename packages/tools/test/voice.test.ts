@@ -1,4 +1,8 @@
+import "../../config/test/isolated-guard.ts";
 import { afterEach, describe, expect, test } from "bun:test";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { dataHome, installSettings, resetSettings } from "@eidolon/config";
 import {
   alternativeStyleNames,
   createVoiceTool,
@@ -47,11 +51,68 @@ describe("loadVoiceStyles", () => {
     ]);
   });
 
+  test("a voice on an account credentials.json adds keeps its styles", () => {
+    const credentials = join(dataHome(), "credentials.json");
+    mkdirSync(dataHome(), { recursive: true });
+    writeFileSync(
+      credentials,
+      JSON.stringify({ accounts: { "fish-2": { provider: "fish", apiKey: "fk" } } }),
+      { mode: 0o600 },
+    );
+    installSettings();
+    try {
+      const styles = loadVoiceStyles({
+        TTS_PROVIDER: "fish-2",
+        TTS_VOICE_ID: "base",
+        TTS_VOICE_ID_GENTLE: "g",
+      });
+      expect([...styles]).toEqual([
+        ["default", "base"],
+        ["gentle", "g"],
+      ]);
+    } finally {
+      rmSync(credentials, { force: true });
+      resetSettings();
+    }
+  });
+
   test("an unset or blank FISH_VOICE_ID leaves no default", () => {
     expect([...loadVoiceStyles({ FISH_VOICE_ID_LIVELY: "l" })]).toEqual([["lively", "l"]]);
     expect([...loadVoiceStyles({ FISH_VOICE_ID: " ", FISH_VOICE_ID_LIVELY: "l" })]).toEqual([
       ["lively", "l"],
     ]);
+  });
+
+  test("TTS_VOICE_ID_<STYLE> overrides Fish's name for the same style", () => {
+    const styles = loadVoiceStyles({
+      TTS_VOICE_ID_GENTLE: "t",
+      FISH_VOICE_ID: "base",
+      FISH_VOICE_ID_GENTLE: "f",
+      FISH_VOICE_ID_CALM: "c",
+    });
+    expect([...styles]).toEqual([
+      ["default", "base"],
+      ["gentle", "t"],
+      ["calm", "c"],
+    ]);
+  });
+
+  test("Fish's names apply only while Fish speaks", () => {
+    const styles = loadVoiceStyles({
+      TTS_PROVIDER: "elevenlabs",
+      TTS_VOICE_ID: "eleven",
+      FISH_VOICE_ID: "fish",
+      FISH_VOICE_ID_GENTLE: "f",
+      TTS_VOICE_ID_CALM: "c",
+    });
+    expect([...styles]).toEqual([
+      ["default", "eleven"],
+      ["calm", "c"],
+    ]);
+  });
+
+  test("a voice provider Eidolon doesn't know has no styles; the call reports it", () => {
+    expect([...loadVoiceStyles({ TTS_PROVIDER: "nope", TTS_VOICE_ID_CALM: "c" })]).toEqual([]);
   });
 
   test("reads process.env by default", () => {
@@ -88,8 +149,8 @@ describe("createVoiceTool", () => {
     expect(createVoiceTool(new Map([["default", "a"]]))).toBeNull();
     expect(createVoiceTool(new Map())).toBeNull();
     expect(logLines(records)).toEqual([
-      "INFO [voice] Voice switching disabled (no FISH_VOICE_ID_<STYLE> env vars set).",
-      "INFO [voice] Voice switching disabled (no FISH_VOICE_ID_<STYLE> env vars set).",
+      "INFO [voice] Voice switching disabled (no TTS_VOICE_ID_<STYLE> voices set).",
+      "INFO [voice] Voice switching disabled (no TTS_VOICE_ID_<STYLE> voices set).",
     ]);
   });
 

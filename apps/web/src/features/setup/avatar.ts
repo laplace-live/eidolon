@@ -1,8 +1,10 @@
 // A new persona's optional avatar: checked as the studio checks pictures, uploaded once she exists.
+
+import { ph, t } from "@lingui/core/macro";
 import { toast } from "sonner";
 import { avatarChanged } from "@/components/avatar/version";
-import { ApiError, call, errorKey } from "@/lib/api";
-import { t } from "@/lib/i18n";
+import { ApiError, call } from "@/lib/api";
+import { errorMessage } from "@/lib/labels";
 import type { PersonaRef } from "./personas";
 
 /**
@@ -19,9 +21,12 @@ export async function addAvatar<P extends PersonaRef>(
   } catch (error) {
     // A 401 already sends the app to the locked screen.
     if (!(error instanceof ApiError && error.status === 401)) {
-      toast.error(t("setup.avatar.failed", { name: persona.name }), {
-        description: t(errorKey(error)),
-      });
+      toast.error(
+        t`${ph({ name: persona.name })} was created, but her avatar didn't upload. Add it in her studio.`,
+        {
+          description: t(errorMessage(error)),
+        },
+      );
     }
     return persona;
   }

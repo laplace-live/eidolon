@@ -3,24 +3,19 @@
 import type { CardPath } from "@/components/settings-form/controls";
 import { studioPath } from "@/lib/paths";
 
-export const SECTIONS = [
-  "keys",
-  "general",
-  "memory",
-  "providers",
-  "downloads",
-  "advanced",
-] as const;
+export const SECTIONS = ["providers", "general", "memory", "downloads", "advanced"] as const;
 export type SectionId = (typeof SECTIONS)[number];
 
+export type CardId = "you" | "storage" | "embeddings" | "ytDlp";
+
 export interface CardSpec {
-  /** Names its strings: `settings.card.<id>.title` and `.body`. */
-  readonly id: string;
+  /** Picks its title and description. */
+  readonly id: CardId;
   readonly paths: readonly CardPath[];
 }
 
-/** The sections whose cards name their rows; Keys has its own, and Advanced takes the rest. */
-type Named = Exclude<SectionId, "keys" | "advanced">;
+/** The sections whose cards name their rows; Advanced takes the rest. */
+type Named = Exclude<SectionId, "advanced">;
 
 /** The SettingsCards of each section, in order. */
 export const CARDS: Readonly<Record<Named, readonly CardSpec[]>> = {
@@ -35,9 +30,12 @@ export const CARDS: Readonly<Record<Named, readonly CardSpec[]>> = {
       ],
     },
   ],
+  // Beneath the accounts: the embedding model every persona's index shares.
   providers: [
-    { id: "embeddings", paths: [["embeddings.model", "embeddings.dim"], "embeddings.baseUrl"] },
-    { id: "endpoints", paths: ["rerank.baseUrl", "refine.baseUrl", "providers.openai.baseUrl"] },
+    {
+      id: "embeddings",
+      paths: [["embeddings.provider", "embeddings.model"], "embeddings.dim"],
+    },
   ],
   downloads: [
     {
@@ -65,10 +63,10 @@ function isSection(tab: string): tab is SectionId {
  */
 export function resolveSection(params: URLSearchParams, active: string): Resolved {
   const tab = params.get("tab");
-  if (tab === null) return { section: "keys" };
+  if (tab === null) return { section: "providers" };
   if (isSection(tab)) return { section: tab };
   if (tab === "persona") {
     return { redirect: studioPath(params.get("persona") || active, "advanced") };
   }
-  return { redirect: `?tab=${tab === "app" ? "general" : "keys"}` };
+  return { redirect: `?tab=${tab === "app" ? "general" : "providers"}` };
 }

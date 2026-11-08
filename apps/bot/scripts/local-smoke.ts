@@ -1,7 +1,7 @@
 // A browser walk through the local web app on a throwaway data home: sign-in, the wizard's keys step
-// in English and 简体中文, saved keys, a saved prompt, and a facts index built through the studio.
-// The keys are fake, so the providers refuse them for free, and the embeddings come from a fake
-// server, so nothing is billed. --call instead places a real call from the call page with the
+// in English and 简体中文, saved keys, an embeddings account added and picked in Settings, a saved
+// prompt, and a facts index built through the studio. The keys are fake, so the providers refuse
+// them for free, and the embeddings come from a fake server, so nothing is billed. --call instead places a real call from the call page with the
 // .env's keys, which bills them.
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import {
@@ -16,6 +16,7 @@ import {
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { CREDENTIALS, dataHome, envOptional, expandUser, SETTINGS } from "@eidolon/config";
+import { PROVIDERS } from "@eidolon/providers/catalog";
 import type { Subprocess } from "bun";
 import {
   type Browser,
@@ -107,43 +108,86 @@ function parseOptions(argv: readonly string[]): Options {
   return { headful: headful || call, offline, call, selfie };
 }
 
-type Lang = "en" | "zh-CN";
+type Lang = "en" | "zh-Hans";
 
-/** The web app's strings, keyed `<feature>.<key>` as its i18n loader merges them. */
-function loadStrings(lang: Lang): ReadonlyMap<string, string> {
-  const dir = join(ROOT, "apps/web/src/locales", lang);
-  const strings = new Map<string, string>();
-  for (const name of readdirSync(dir).filter((file) => file.endsWith(".json"))) {
-    const feature = name.slice(0, -".json".length);
-    const file = JSON.parse(readFileSync(join(dir, name), "utf8")) as Record<string, string>;
-    for (const [key, text] of Object.entries(file)) strings.set(`${feature}.${key}`, text);
+/** A .po catalog's messages, as `context\u0004message` → translation. */
+function loadCatalog(lang: Lang): ReadonlyMap<string, string> {
+  const messages = new Map<string, string>();
+  const unquote = (line: string): string => JSON.parse(line.slice(line.indexOf('"')));
+  let context = "";
+  let id: string | null = null;
+  let text: string | null = null;
+  let field: "context" | "id" | "text" = "id";
+  const flush = () => {
+    if (id) messages.set(`${context}\u0004${id}`, text ?? "");
+    context = "";
+    id = text = null;
+  };
+  const file = join(ROOT, "apps/web/src/locales", `${lang}.po`);
+  for (const line of readFileSync(file, "utf8").split("\n")) {
+    if (line.startsWith("msgctxt ")) {
+      flush();
+      context = unquote(line);
+      field = "context";
+    } else if (line.startsWith("msgid ")) {
+      if (field !== "context") flush();
+      id = unquote(line);
+      field = "id";
+    } else if (line.startsWith("msgstr ")) {
+      text = unquote(line);
+      field = "text";
+    } else if (line.startsWith('"')) {
+      if (field === "context") context += unquote(line);
+      else if (field === "id") id = (id ?? "") + unquote(line);
+      else text = (text ?? "") + unquote(line);
+    }
   }
-  return strings;
+  flush();
+  return messages;
 }
 
-const STRINGS: Readonly<Record<Lang, ReadonlyMap<string, string>>> = {
-  en: loadStrings("en"),
-  "zh-CN": loadStrings("zh-CN"),
+const CATALOGS: Readonly<Record<Lang, ReadonlyMap<string, string>>> = {
+  en: loadCatalog("en"),
+  "zh-Hans": loadCatalog("zh-Hans"),
 };
 
-/** A string with its `{name}` placeholders filled, as the app's i18n fills them. */
-function t(lang: Lang, key: string, vars: Readonly<Record<string, string>> = {}): string {
-  const text = STRINGS[lang].get(key);
-  if (text === undefined) throw new Error(`no ${lang} string ${key}`);
-  return text.replace(/\{(\w+)\}/g, (whole, name: string) => vars[name] ?? whole);
+/**
+ * `message`, the app's English source text, as `lang` shows it, its `{name}` placeholders filled.
+ * Throws for a message the app's catalog doesn't have, so a reworded string fails here first.
+ */
+function t(
+  lang: Lang,
+  message: string,
+  vars: Readonly<Record<string, string>> = {},
+  context = "",
+): string {
+  const text = CATALOGS[lang].get(`${context}\u0004${message}`);
+  if (text === undefined) throw new Error(`the ${lang} catalog has no message "${message}"`);
+  return (text || message).replace(/\{(\w+)\}/g, (whole, name: string) => vars[name] ?? whole);
 }
 
-/** What a check of a refused key shows: the provider's own string, else the shared one. */
-function refusedVerdict(lang: Lang, provider: string): string {
-  const own = `settings.check.${provider}.invalid-key`;
-  return STRINGS[lang].has(own) ? t(lang, own) : t(lang, "settings.check.invalid-key");
+/** What a check that ended in `code` shows: the provider's own sentence, else the shared one. */
+const VERDICTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  "invalid-key": {
+    soniox:
+      "Soniox rejected this key. A key from an EU, Japan or India project doesn't work either: Eidolon supports US projects only.",
+    default: "The provider rejected this key.",
+  },
+  ok: { default: "Key accepted" },
+};
+
+function verdict(lang: Lang, provider: string, code: string): string {
+  const texts = VERDICTS[code] ?? {};
+  return t(lang, texts[provider] ?? texts.default ?? code);
 }
 
-const REQUIRED: readonly (readonly [key: string, provider: string])[] = [
-  ["SONIOX_API_KEY", "soniox"],
-  ["OPENROUTER_API_KEY", "openrouter"],
-  ["FISH_API_KEY", "fish"],
-];
+/** The accounts a fresh install's calls need, each its provider's default. */
+const REQUIRED = ["soniox", "openrouter", "fish"] as const;
+/** The fake embeddings server's account: the first OpenAI-compatible one takes the provider's id. */
+const EMBED_ACCOUNT = "openai-compatible";
+const EMBED_ACCOUNT_NAME = "Local smoke embeddings";
+const FAKE_MODELS = ["fake-embedding-small", "fake-embedding-large"];
+const FAKE_MODEL = "fake-embedding-large";
 
 interface Check {
   readonly name: string;
@@ -205,25 +249,38 @@ function fakeVector(text: string, dimensions: number): number[] {
   return vector.map((value) => value / norm);
 }
 
-/** An OpenAI-compatible embeddings endpoint that answers the fake key only. */
+/** An OpenAI-compatible server, its embeddings and its model list, that answers the fake key only. */
 function fakeEmbeddings(key: string) {
-  const seen = { requests: 0, inputs: 0, refused: 0 };
+  const seen = { requests: 0, inputs: 0, refused: 0, listed: 0, models: new Set<string>() };
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
-      if (request.method !== "POST" || new URL(request.url).pathname !== "/v1/embeddings") {
+      const route = `${request.method} ${new URL(request.url).pathname}`;
+      if (route !== "POST /v1/embeddings" && route !== "GET /v1/models") {
         return new Response(null, { status: 404 });
       }
       if (request.headers.get("authorization") !== `Bearer ${key}`) {
         seen.refused++;
         return Response.json({ error: { message: "Invalid API key" } }, { status: 401 });
       }
-      const body = (await request.json()) as { input?: unknown; dimensions?: unknown };
+      if (route === "GET /v1/models") {
+        seen.listed++;
+        return Response.json({
+          object: "list",
+          data: FAKE_MODELS.map((id) => ({ id, object: "model", owned_by: "local-smoke" })),
+        });
+      }
+      const body = (await request.json()) as {
+        input?: unknown;
+        dimensions?: unknown;
+        model?: unknown;
+      };
       const inputs = (Array.isArray(body.input) ? body.input : [body.input]).map(String);
       const dimensions = typeof body.dimensions === "number" ? body.dimensions : 3072;
       seen.requests++;
       seen.inputs += inputs.length;
+      seen.models.add(String(body.model));
       return Response.json({
         object: "list",
         model: "fake",
@@ -247,7 +304,14 @@ type FakeEmbeddings = ReturnType<typeof fakeEmbeddings>;
  * opt-out.
  */
 function childEnv(home: string, dotenv = false): Record<string, string> {
-  const dropped = new Set<string>([...CREDENTIALS, ...SETTINGS.map((row) => row.env)]);
+  const dropped = new Set<string>([
+    ...CREDENTIALS,
+    ...SETTINGS.map((row) => row.env),
+    ...PROVIDERS.flatMap((provider) => [
+      ...(provider.baseUrlEnv === null ? [] : [provider.baseUrlEnv]),
+      ...(provider.fields ?? []).map((field) => field.env),
+    ]),
+  ]);
   const env: Record<string, string> = {};
   for (const [name, value] of Object.entries(process.env)) {
     if (value !== undefined && !dropped.has(name) && !name.startsWith("EIDOLON_")) {
@@ -508,15 +572,17 @@ interface Walk {
   readonly api: (method: string, path: string, body?: string) => Promise<Response>;
 }
 
-/** The field a key's input sits in, with its Check button and its verdict. */
-function keyField(page: Page, name: string): Locator {
-  return page.locator('[data-slot="field"]').filter({ has: page.locator(`input[name="${name}"]`) });
+/** The field an account's key sits in, with its Check button and its verdict. */
+function keyField(page: Page, account: string): Locator {
+  return page
+    .locator('[data-slot="field"]')
+    .filter({ has: page.locator(`input[name="${account}"]`) });
 }
 
 async function signIn(walk: Walk): Promise<void> {
   const { page } = walk;
   await page.goto(walk.link);
-  await page.getByText(t("en", "setup.keys.title"), { exact: true }).waitFor();
+  await page.getByText(t("en", "Your API Keys"), { exact: true }).waitFor();
   const url = new URL(page.url());
   const port = new URL(walk.origin).port;
   const cookie = (await walk.context.cookies(walk.origin)).find(
@@ -565,60 +631,45 @@ async function signIn(walk: Walk): Promise<void> {
   );
 }
 
-/** embeddings.baseUrl through the wizard's "use another provider" form, as a user would set it. */
-async function saveEmbeddingsBase(walk: Walk): Promise<void> {
-  const { page } = walk;
-  await page.getByRole("button", { name: t("en", "setup.keys.otherProviders") }).click();
-  await page
-    .getByLabel(t("en", "settings.embeddings.baseUrl"), { exact: true })
-    .fill(walk.embeddings.url);
-  const saved = page.waitForResponse(isPut(`${walk.origin}/api/local/settings`));
-  await page.getByRole("button", { name: t("en", "settings.form.save"), exact: true }).click();
-  const status = (await saved).status();
-  const yaml = readFileSync(join(walk.home, "settings.yaml"), "utf8");
-  const named = yaml.includes(walk.embeddings.url);
-  walk.checks.add(
-    "provider base",
-    status === 200 && named,
-    `PUT settings ${status}; settings.yaml ${named ? "names" : "lacks"} the fake embeddings server`,
-  );
-}
-
 /** The refused-key verdicts in `lang` that didn't show, with what showed instead. */
 async function missingVerdicts(page: Page, lang: Lang): Promise<string[]> {
   const missing: string[] = [];
-  for (const [name, provider] of REQUIRED) {
-    const status = keyField(page, name).getByRole("status");
-    if (!(await shows(status.filter({ hasText: refusedVerdict(lang, provider) }), 30_000))) {
-      missing.push(`${provider}: ${(await visibleText(status)) || "no verdict"}`);
+  for (const account of REQUIRED) {
+    const status = keyField(page, account).getByRole("status");
+    if (!(await shows(status.filter({ hasText: verdict(lang, account, "invalid-key") }), 30_000))) {
+      missing.push(`${account}: ${(await visibleText(status)) || "no verdict"}`);
     }
   }
   return missing;
 }
 
 async function switchLanguage(page: Page, from: Lang, to: Lang): Promise<void> {
-  await page.getByRole("button", { name: t(from, "common.language.label"), exact: true }).click();
-  await page.getByText(t(to, "setup.keys.title"), { exact: true }).waitFor();
+  await page.getByRole("button", { name: t(from, "Language"), exact: true }).click();
+  await page.getByText(t(to, "Your API Keys"), { exact: true }).waitFor();
 }
 
 /** The keys step in both languages; online, the providers check the fake keys. */
 async function keysStep(walk: Walk): Promise<void> {
   const { page, checks, keys } = walk;
-  await saveEmbeddingsBase(walk);
   if (walk.options.offline) {
-    await switchLanguage(page, "en", "zh-CN");
-    const response = await walk.api("PUT", "/api/local/credentials", JSON.stringify(keys));
+    await switchLanguage(page, "en", "zh-Hans");
+    const statuses: number[] = [];
+    for (const account of REQUIRED) {
+      const body = JSON.stringify({ apiKey: keys[account] });
+      statuses.push((await walk.api("PUT", `/api/local/accounts/${account}`, body)).status);
+    }
     checks.add(
       "keys",
-      response.ok,
-      `offline: the step shows in both languages; keys saved by PUT credentials (${response.status})`,
+      statuses.every((status) => status === 200),
+      `offline: the step shows in both languages; keys saved by PUT accounts (${statuses.join(", ")})`,
     );
   } else {
-    for (const [name] of REQUIRED) await page.locator(`input[name="${name}"]`).fill(keys[name]);
-    await page.locator('input[name="EMBED_API_KEY"]').fill(keys.EMBED_API_KEY);
-    for (const [name] of REQUIRED) {
-      await keyField(page, name)
-        .getByRole("button", { name: t("en", "settings.credentials.check"), exact: true })
+    for (const account of REQUIRED) {
+      await page.locator(`input[name="${account}"]`).fill(keys[account] as string);
+    }
+    for (const account of REQUIRED) {
+      await keyField(page, account)
+        .getByRole("button", { name: t("en", "Check"), exact: true })
         .click();
     }
     const english = await missingVerdicts(page, "en");
@@ -629,22 +680,29 @@ async function keysStep(walk: Walk): Promise<void> {
         ? "Soniox, OpenRouter and Fish refused the fake keys"
         : english.join("; "),
     );
-    await switchLanguage(page, "en", "zh-CN");
-    const chinese = await missingVerdicts(page, "zh-CN");
-    const saved = page.waitForResponse(isPut(`${walk.origin}/api/local/credentials`));
-    await page.getByRole("button", { name: t("zh-CN", "setup.keys.next"), exact: true }).click();
-    const status = (await saved).status();
+    await switchLanguage(page, "en", "zh-Hans");
+    const chinese = await missingVerdicts(page, "zh-Hans");
+    const saved = Promise.all(
+      REQUIRED.map((account) =>
+        page.waitForResponse(isPut(`${walk.origin}/api/local/accounts/${account}`)),
+      ),
+    );
+    await page
+      .getByRole("button", { name: t("zh-Hans", "Save and Continue"), exact: true })
+      .click();
+    const statuses = (await saved).map((response) => response.status());
     const refused = await shows(
-      page.getByText(t("zh-CN", "setup.keys.checksFailed"), { exact: true }),
+      page.getByText(t("zh-Hans", "Not every key passed its check"), { exact: true }),
       30_000,
     );
     checks.add(
-      "keys (zh-CN)",
-      chinese.length === 0 && status === 200 && refused,
+      "keys (zh-Hans)",
+      chinese.length === 0 && statuses.every((status) => status === 200) && refused,
       chinese.length > 0
         ? chinese.join("; ")
-        : `the verdicts in Chinese; ${t("zh-CN", "setup.keys.next")} saved the keys (${status}) ` +
-            `and ${refused ? "showed the rechecks failing" : "showed no failed recheck"}`,
+        : `the verdicts in Chinese; ${t("zh-Hans", "Save and Continue")} saved the keys ` +
+            `(${statuses.join(", ")}) and ` +
+            (refused ? "showed the rechecks failing" : "showed no failed recheck"),
     );
     const yaml = readFileSync(join(walk.home, "settings.yaml"), "utf8");
     checks.add(
@@ -653,37 +711,115 @@ async function keysStep(walk: Walk): Promise<void> {
       "a new install's first save sets sources.cookiesFromBrowser: none",
     );
   }
-  await switchLanguage(page, "zh-CN", "en");
+  await switchLanguage(page, "zh-Hans", "en");
+}
+
+/** An OpenAI-compatible account for the fake embeddings server, added and picked in Settings. */
+async function embeddingsAccount(walk: Walk): Promise<void> {
+  const { page, checks } = walk;
+  await page.goto(`${walk.origin}/settings?tab=providers`);
+  await page.getByRole("button", { name: t("en", "Add Provider"), exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByPlaceholder(t("en", "Search providers")).fill("compatible");
+  await dialog.getByRole("option", { name: /^OpenAI-compatible endpoint/ }).click();
+  await dialog.getByLabel(t("en", "Name"), { exact: true }).fill(EMBED_ACCOUNT_NAME);
+  await dialog
+    .getByLabel(t("en", "API Key (If the Server Asks for One)"), { exact: true })
+    .fill(walk.keys.embed as string);
+  await dialog
+    .getByLabel(t("en", "API Base (Required)"), { exact: true })
+    .fill(walk.embeddings.url);
+  await dialog.getByRole("button", { name: t("en", "Check"), exact: true }).click();
+  const shown = dialog.getByRole("status");
+  const passed = await shows(shown.filter({ hasText: verdict("en", EMBED_ACCOUNT, "ok") }), 15_000);
+  const added = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url() === `${walk.origin}/api/local/accounts`,
+  );
+  await dialog.getByRole("button", { name: t("en", "Add Account"), exact: true }).click();
+  const status = (await added).status();
+  const listed = await shows(page.getByText(EMBED_ACCOUNT_NAME, { exact: true }));
+  checks.add(
+    "add account",
+    passed && status === 201 && listed,
+    `the check ${passed ? "passed" : `showed ${(await visibleText(shown)) || "no verdict"}`}` +
+      `; POST accounts ${status}; Settings ${listed ? "lists" : "doesn't list"} it`,
+  );
+
+  const provider = page.getByLabel(t("en", "Embedding Provider"), { exact: true });
+  await provider.click();
+  await page.getByRole("option", { name: EMBED_ACCOUNT_NAME, exact: true }).click();
+  // The field is plain text until the account's list arrives.
+  const model = page.getByRole("combobox", {
+    name: t("en", "Embedding Model"),
+    exact: true,
+  });
+  const offered = await shows(model, 15_000);
+  if (offered) {
+    await model.click();
+    await page.getByRole("option", { name: FAKE_MODEL, exact: true }).click();
+  } else {
+    await page.getByLabel(t("en", "Embedding Model"), { exact: true }).fill(FAKE_MODEL);
+  }
+  const saved = page.waitForResponse(isPut(`${walk.origin}/api/local/settings`));
+  await page
+    .locator("form", { has: provider })
+    .getByRole("button", { name: t("en", "Save"), exact: true })
+    .click();
+  // Another embedding provider means every index is built again, which the page asks about first.
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: t("en", "Save Anyway"), exact: true })
+    .click();
+  const saveStatus = (await saved).status();
+  const yaml = Bun.YAML.parse(readFileSync(join(walk.home, "settings.yaml"), "utf8")) as {
+    embeddings?: { provider?: unknown; model?: unknown };
+  };
+  const picked =
+    yaml.embeddings?.provider === EMBED_ACCOUNT && yaml.embeddings.model === FAKE_MODEL;
+  checks.add(
+    "pick account",
+    offered && saveStatus === 200 && picked,
+    `the model list ${offered ? "offered the fake server's models" : "never showed"}` +
+      `; PUT settings ${saveStatus}; settings.yaml ` +
+      (picked ? `embeds with ${EMBED_ACCOUNT} and ${FAKE_MODEL}` : "names another embedder"),
+  );
 }
 
 async function credentialsAtRest(walk: Walk): Promise<void> {
   const path = join(walk.home, "credentials.json");
-  const stored = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
-  const names = Object.keys(walk.keys);
-  const saved = names.filter((name) => stored[name] === walk.keys[name]).length;
+  const stored = JSON.parse(readFileSync(path, "utf8")) as {
+    accounts?: Record<string, { apiKey?: unknown; baseUrl?: unknown } | undefined>;
+  };
+  const accounts = stored.accounts ?? {};
+  const saved = REQUIRED.filter((account) => accounts[account]?.apiKey === walk.keys[account]);
+  const embed = accounts[EMBED_ACCOUNT];
+  const pointed = embed?.apiKey === walk.keys.embed && embed?.baseUrl === walk.embeddings.url;
   walk.checks.add(
     "credentials.json",
-    mode(path) === 0o600 && saved === names.length,
-    `mode ${modeOf(path)}; ${saved} of ${names.length} keys as typed`,
+    mode(path) === 0o600 && saved.length === REQUIRED.length && pointed,
+    `mode ${modeOf(path)}; ${saved.length} of ${REQUIRED.length} keys as typed; the embeddings ` +
+      `account ${pointed ? "has its key and API base" : "lacks its key or API base"}`,
   );
   // Error answers are where an echo would hide: a parser's message, an unknown name.
+  await walk.api("GET", "/api/local/accounts");
+  await walk.api("PUT", "/api/local/accounts/soniox", `{"apiKey": "${walk.keys.soniox}"`);
+  const unknown = JSON.stringify({ provider: "not-a-provider", apiKey: walk.keys.fish });
+  await walk.api("POST", "/api/local/accounts", unknown);
+  await walk.api("POST", "/api/local/accounts/check", unknown);
   await walk.api("GET", "/api/local/credentials");
   await walk.api(
     "PUT",
     "/api/local/credentials",
-    `{"SONIOX_API_KEY": "${walk.keys.SONIOX_API_KEY}"`,
-  );
-  await walk.api(
-    "PUT",
-    "/api/local/credentials",
-    JSON.stringify({ NOT_A_CREDENTIAL: walk.keys.FISH_API_KEY }),
+    JSON.stringify({ NOT_A_CREDENTIAL: walk.keys.openrouter }),
   );
 }
 
 async function savePrompt(walk: Walk, templates: string): Promise<void> {
   const { page } = walk;
   await page.goto(`${walk.origin}/personas/${PERSONA}/prompt`);
-  const editor = page.getByLabel(t("en", "studio.prompt.label"), { exact: true });
+  const editor = page.getByLabel(t("en", "System Prompt"), { exact: true });
   const text = await poll(
     () => editor.inputValue(),
     (value) => value.length > 0,
@@ -692,7 +828,7 @@ async function savePrompt(walk: Walk, templates: string): Promise<void> {
   const marker = `<!-- local-smoke ${randomBytes(4).toString("hex")} -->`;
   await editor.fill(`${text.trimEnd()}\n\n${marker}\n`);
   const saved = page.waitForResponse(isPut(`${walk.origin}/api/local/personas/${PERSONA}/prompt`));
-  await page.getByRole("button", { name: t("en", "studio.editor.save"), exact: true }).click();
+  await page.getByRole("button", { name: t("en", "Save"), exact: true }).click();
   const status = (await saved).status();
   const own = join(walk.home, "personas", PERSONA, "prompt.md");
   const landed = existsSync(own) && readFileSync(own, "utf8").includes(marker);
@@ -708,17 +844,17 @@ async function savePrompt(walk: Walk, templates: string): Promise<void> {
 async function indexFacts(walk: Walk): Promise<void> {
   const { page, checks } = walk;
   await page.goto(`${walk.origin}/personas/${PERSONA}/knowledge`);
-  await page.getByRole("button", { name: t("en", "studio.facts.new"), exact: true }).click();
-  await page.getByPlaceholder(t("en", "studio.facts.newNamePlaceholder")).fill(FACT_FILE);
+  await page.getByRole("button", { name: t("en", "New File"), exact: true }).click();
+  await page.getByPlaceholder(t("en", "facts.txt")).fill(FACT_FILE);
   const lines = `${FACT_LINES.join("\n")}\n`;
-  await page.getByPlaceholder(t("en", "studio.facts.placeholder")).fill(lines);
+  await page.getByPlaceholder(t("en", "2024-05-01 她说……")).fill(lines);
   const saved = page.waitForResponse(
     (response) =>
       response.request().method() === "PUT" &&
       decodeURIComponent(new URL(response.url()).pathname) ===
         `/api/local/personas/${PERSONA}/facts/${FACT_FILE}`,
   );
-  await page.getByRole("button", { name: t("en", "studio.editor.save"), exact: true }).click();
+  await page.getByRole("button", { name: t("en", "Save"), exact: true }).click();
   const status = (await saved).status();
   const file = join(walk.home, "sources", PERSONA, "facts", FACT_FILE);
   const written = existsSync(file) && readFileSync(file, "utf8") === lines;
@@ -732,7 +868,7 @@ async function indexFacts(walk: Walk): Promise<void> {
     (response) =>
       response.request().method() === "POST" && response.url() === `${walk.origin}/api/local/jobs`,
   );
-  await page.getByRole("button", { name: t("en", "studio.facts.ingest"), exact: true }).click();
+  await page.getByRole("button", { name: t("en", "Index Facts"), exact: true }).click();
   const job = (await (await started).json()) as JobSnapshot;
   const ended = await poll(
     async () => (await (await walk.api("GET", `/api/local/jobs/${job.id}`)).json()) as JobSnapshot,
@@ -744,21 +880,24 @@ async function indexFacts(walk: Walk): Promise<void> {
     ? (JSON.parse(readFileSync(metaPath, "utf8")) as { rows?: unknown })
     : {};
   const { seen } = walk.embeddings;
+  const models = [...seen.models].join(", ") || "none";
   checks.add(
     "ingest-facts",
     ended.status === "succeeded" &&
       meta.rows === FACT_LINES.length &&
       seen.refused === 0 &&
-      seen.inputs >= FACT_LINES.length,
+      seen.inputs >= FACT_LINES.length &&
+      models === FAKE_MODEL,
     `job ${ended.status}, ${String(meta.rows ?? "no")} rows indexed; the fake embeddings server ` +
-      `took ${seen.inputs} texts in ${seen.requests} request(s) and refused ${seen.refused}` +
+      `took ${seen.inputs} texts in ${seen.requests} request(s) for ${models} and refused ` +
+      `${seen.refused}` +
       (ended.status === "succeeded" ? "" : `; ${ended.stderrTail.trim().split("\n").at(-1) ?? ""}`),
   );
 
   const card = page
-    .getByText(t("en", "jobs.command.ingest-facts"), { exact: true })
+    .getByText(t("en", "Index Facts"), { exact: true })
     .locator("xpath=..")
-    .filter({ hasText: t("en", "jobs.status.succeeded") });
+    .filter({ hasText: t("en", "Done", {}, "job status") });
   const finished = await shows(card);
   const jobs = join(walk.home, "jobs");
   const outputs = [".ndjson", ".log"].map((ext) => modeOf(join(jobs, `${job.id}${ext}`)));
@@ -778,14 +917,14 @@ async function indexFacts(walk: Walk): Promise<void> {
 async function jobsPage(walk: Walk): Promise<void> {
   const { page } = walk;
   await page.goto(`${walk.origin}/jobs`);
-  const link = page.getByRole("link", { name: t("en", "jobs.command.ingest-facts"), exact: true });
+  const link = page.getByRole("link", { name: t("en", "Index Facts"), exact: true });
   const row = page.getByRole("listitem").filter({ has: link });
-  const listed = await shows(row.filter({ hasText: t("en", "jobs.status.succeeded") }));
+  const listed = await shows(row.filter({ hasText: t("en", "Done", {}, "job status") }));
   walk.checks.add(
     "jobs page",
     listed,
     listed
-      ? `lists ${t("en", "jobs.command.ingest-facts")} as ${t("en", "jobs.status.succeeded")}`
+      ? `lists ${t("en", "Index Facts")} as ${t("en", "Done", {}, "job status")}`
       : (await visibleText(row)) || "no row",
   );
 }
@@ -804,12 +943,12 @@ async function smoke(options: Options): Promise<Checks> {
   const { home } = run;
   const id = randomBytes(4).toString("hex");
   const keys: Record<string, string> = {
-    SONIOX_API_KEY: `not-a-real-key-soniox-${id}`,
-    OPENROUTER_API_KEY: `not-a-real-key-openrouter-${id}`,
-    FISH_API_KEY: `not-a-real-key-fish-${id}`,
-    EMBED_API_KEY: `not-a-real-key-embed-${id}`,
+    soniox: `not-a-real-key-soniox-${id}`,
+    openrouter: `not-a-real-key-openrouter-${id}`,
+    fish: `not-a-real-key-fish-${id}`,
+    embed: `not-a-real-key-embed-${id}`,
   };
-  const embeddings = fakeEmbeddings(keys.EMBED_API_KEY);
+  const embeddings = fakeEmbeddings(keys.embed as string);
   run.defer(embeddings.stop);
   const env = childEnv(home);
   try {
@@ -873,9 +1012,10 @@ async function smoke(options: Options): Promise<Checks> {
       (await checks.step("sign-in", () => signIn(walk))) &&
       (await checks.step("keys", () => keysStep(walk)))
     ) {
+      const embedder = await checks.step("embeddings account", () => embeddingsAccount(walk));
       await checks.step("credentials.json", () => credentialsAtRest(walk));
       await checks.step("prompt", () => savePrompt(walk, templates));
-      if (await checks.step("ingest-facts", () => indexFacts(walk))) {
+      if (embedder && (await checks.step("ingest-facts", () => indexFacts(walk)))) {
         await checks.step("jobs page", () => jobsPage(walk));
       }
     }
@@ -1230,7 +1370,7 @@ async function alerts(page: Page): Promise<string> {
 }
 
 function messageBox(view: CallView): Locator {
-  const name = t("en", "call.input.placeholder", { name: view.short });
+  const name = t("en", "Type a message to {name}", { name: view.short });
   return view.page.getByRole("textbox", { name, exact: true });
 }
 
@@ -1428,15 +1568,15 @@ function markup(view: CallView): void {
 
 async function hangUp(view: CallView): Promise<void> {
   const { page, checks } = view;
-  const ended = t("en", "call.state.ended");
+  const ended = t("en", "Call ended");
   const stateLine = page.getByText(new RegExp(`^${escapeRegExp(ended)}`)).first();
-  const again = page.getByRole("button", { name: t("en", "call.again"), exact: true });
+  const again = page.getByRole("button", { name: t("en", "Call Again"), exact: true });
   if (await again.isVisible()) {
     checks.add("hang-up", false, `the call had already ended: ${await alerts(page)}`);
     return;
   }
   const clicked = Date.now();
-  await page.getByRole("button", { name: t("en", "call.hangUp"), exact: true }).click();
+  await page.getByRole("button", { name: t("en", "Hang Up"), exact: true }).click();
   const shown = await waitFor(
     async () => (await again.isVisible()) && (await stateLine.isVisible()),
     15_000,
@@ -1447,18 +1587,18 @@ async function hangUp(view: CallView): Promise<void> {
     shown !== null,
     shown === null
       ? `no "${ended}" within 15 s: ${await alerts(page)}`
-      : `"${await stateLine.innerText()}" and ${t("en", "call.again")} ` +
-          `${seconds(shown - clicked)} after ${t("en", "call.hangUp")}`,
+      : `"${await stateLine.innerText()}" and ${t("en", "Call Again")} ` +
+          `${seconds(shown - clicked)} after ${t("en", "Hang Up")}`,
   );
 }
 
 async function converse(view: CallView, options: Options): Promise<void> {
   const { page, checks, log } = view;
   const box = messageBox(view);
-  const again = page.getByRole("button", { name: t("en", "call.again"), exact: true });
+  const again = page.getByRole("button", { name: t("en", "Call Again"), exact: true });
   log.calledAt = Date.now();
   await page
-    .getByRole("button", { name: t("en", "call.start", { name: view.short }), exact: true })
+    .getByRole("button", { name: t("en", "Call {name}", { name: view.short }), exact: true })
     .click();
   // The box shows, disabled, from the click on; a call that fails offers Call again instead.
   const open = async () =>
@@ -1483,7 +1623,7 @@ async function converse(view: CallView, options: Options): Promise<void> {
   }
   markup(view);
   const errors = log.rtvi.filter((event) => event.type === "error");
-  const botError = t("en", "call.botError.title", { name: view.short });
+  const botError = t("en", "{name} ran into an error", { name: view.short });
   const shown = await page.getByText(botError, { exact: true }).isVisible();
   checks.add(
     "bot errors",
@@ -1509,9 +1649,7 @@ async function readiness(server: Server, options: Options, checks: Checks): Prom
     (s) => (!s.memory.configured || s.memory.reachable !== null) && s.persona.voice.ok !== null,
     10_000,
   );
-  const missing = Object.entries(status.keys)
-    .filter(([, set]) => !set)
-    .map(([name]) => name);
+  const missing = status.keys.filter((key) => !key.set).map((key) => key.name);
   const { persona, memory } = status;
   const ready =
     persona.id === PERSONA &&
@@ -1610,7 +1748,7 @@ async function callSmoke(options: Options): Promise<Checks> {
     // The link code works on any path: the page trades it for the cookie and drops the fragment.
     await page.goto(`${server.origin}/call${new URL(server.link).hash}`);
     const start = page.getByRole("button", {
-      name: t("en", "call.start", { name: short }),
+      name: t("en", "Call {name}", { name: short }),
       exact: true,
     });
     const opened = await shows(start);
@@ -1619,13 +1757,13 @@ async function callSmoke(options: Options): Promise<Checks> {
       "call page",
       opened && url.pathname === "/call" && url.hash === "",
       `signed in on ${url.pathname}${url.hash ? " with the fragment left" : ""}; ` +
-        (opened ? `${t("en", "call.start", { name: short })} shows` : await alerts(page)),
+        (opened ? `${t("en", "Call {name}", { name: short })} shows` : await alerts(page)),
     );
     if (opened) {
       const labels: Labels = {
-        you: `${t("en", "call.you")}: `,
+        you: `${t("en", "You", {}, "call transcript speaker")}: `,
         bot: `${short}: `,
-        expired: t("en", "call.selfie.expired"),
+        expired: t("en", "This photo has expired"),
       };
       const watch = new TranscriptWatch(page, labels);
       const view: CallView = {
@@ -1647,7 +1785,11 @@ async function callSmoke(options: Options): Promise<Checks> {
       for (const [i, line] of watch.lines.entries()) {
         const at = `+${seconds(watch.shownAt[i]! - log.calledAt)}`.padStart(9);
         const who =
-          line.kind === "you" ? t("en", "call.you") : line.kind === "bot" ? short : "selfie";
+          line.kind === "you"
+            ? t("en", "You", {}, "call transcript speaker")
+            : line.kind === "bot"
+              ? short
+              : "selfie";
         const text =
           line.kind !== "selfie"
             ? line.text

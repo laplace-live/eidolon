@@ -13,13 +13,31 @@ const healthy: Status = {
   version: "1.0.0",
   restartRequired: false,
   mcpRestartRequired: false,
-  keys: { SONIOX_API_KEY: true, OPENROUTER_API_KEY: true, FISH_API_KEY: true },
+  keys: [
+    { account: "soniox", name: "Soniox", provider: "soniox", roles: ["hearing"], set: true },
+    {
+      account: "openrouter",
+      name: "OpenRouter",
+      provider: "openrouter",
+      roles: ["mind"],
+      set: true,
+    },
+    { account: "fish", name: "Fish Audio", provider: "fish", roles: ["voice"], set: true },
+  ],
+  call: {
+    realtime: false,
+    roles: [
+      { role: "hearing", provider: "soniox", model: "stt-rt-v4", problem: null },
+      { role: "mind", provider: "openrouter", model: "m", problem: null },
+      { role: "voice", provider: "fish", model: "drama-3", problem: null },
+    ],
+  },
   persona: {
     id: "milky-green",
     name: "明前奶绿",
     shortName: "奶绿",
     avatar: false,
-    voice: { id: "a".repeat(32), source: "persona", ok: true },
+    voice: { id: "a".repeat(32), source: "persona", ok: true, provider: "fish", account: "fish" },
   },
   index: {
     tables: [
@@ -82,11 +100,18 @@ test("a healthy install is all ok, in a fixed order, and only her voice offers a
   expect(verdict(items)).toBe("ready");
 });
 
-test("a missing key names its provider and links to setup", () => {
-  const status = {
+/** `healthy` with the keys named unset. */
+function without(...accounts: string[]): Status {
+  return {
     ...healthy,
-    keys: { ...healthy.keys, FISH_API_KEY: false, SONIOX_API_KEY: false },
+    keys: healthy.keys.map((key) =>
+      accounts.includes(key.account) ? { ...key, set: false } : key,
+    ),
   };
+}
+
+test("a missing key names its provider and links to setup", () => {
+  const status = without("fish", "soniox");
   expect(item(status, "keys")).toEqual({
     id: "keys",
     tone: "error",
@@ -120,11 +145,11 @@ describe("the voice", () => {
   test("unchecked offers the Fish check, and says whether she inherits it", () => {
     expect(item(voice({ ok: null }), "voice")).toMatchObject({
       text: "home.ready.voice.unchecked",
-      fix: { kind: "check", provider: "fish" },
+      fix: { kind: "check", target: { account: "fish" } },
     });
     expect(item(voice({ source: "env", ok: null }), "voice")).toMatchObject({
       text: "home.ready.voice.uncheckedEnv",
-      fix: { kind: "check", provider: "fish" },
+      fix: { kind: "check", target: { account: "fish" } },
     });
   });
 
@@ -144,11 +169,67 @@ describe("the voice", () => {
   });
 });
 
+test("saved keys name their providers; a persona whose providers take none needs none", () => {
+  expect(item(healthy, "keys")).toMatchObject({
+    tone: "ok",
+    text: "home.ready.keys.ok",
+    vars: { names: "Soniox, OpenRouter, Fish Audio" },
+  });
+  expect(item({ ...healthy, keys: [] }, "keys")?.text).toBe("home.ready.keys.none");
+});
+
+test("a role her settings can't fill blocks calls, and links to her models", () => {
+  const roles = healthy.call.roles.map((role) =>
+    role.role === "mind" ? { ...role, provider: null, model: null, problem: "no model" } : role,
+  );
+  expect(item({ ...healthy, call: { ...healthy.call, roles } }, "models-mind")).toEqual({
+    id: "models-mind",
+    tone: "error",
+    text: "home.ready.models.problem",
+    detail: "no model",
+    fix: { kind: "link", to: "/personas/milky-green/models", label: "home.fix.models" },
+  });
+});
+
+test("another provider's voice is its own to know; a realtime call has no voice item", () => {
+  const voice = (id: string | null): Status => ({
+    ...healthy,
+    persona: {
+      ...healthy.persona,
+      voice: {
+        id,
+        source: id === null ? "default" : "persona",
+        ok: null,
+        provider: "elevenlabs",
+        account: "elevenlabs",
+      },
+    },
+  });
+  expect(item(voice("v1"), "voice")).toMatchObject({
+    tone: "ok",
+    text: "home.ready.voice.provider",
+    vars: { provider: "ElevenLabs", id: "v1" },
+  });
+  expect(item(voice(null), "voice")).toMatchObject({
+    tone: "error",
+    text: "home.ready.voice.providerNone",
+    fix: { kind: "link", to: "/personas/milky-green/voice", label: "home.fix.voice" },
+  });
+  const realtime: Status = {
+    ...healthy,
+    call: {
+      realtime: true,
+      roles: [{ role: "realtime", provider: "openai", model: "gpt-realtime-2.1", problem: null }],
+    },
+  };
+  expect(item(realtime, "voice")).toBeUndefined();
+});
+
 test("the verdict: an error blocks calls, a warning wants a look, information is fine", () => {
   expect(verdict([{ tone: "ok" }, { tone: "info" }])).toBe("ready");
   expect(verdict([{ tone: "info" }, { tone: "warn" }])).toBe("attention");
   expect(verdict([{ tone: "warn" }, { tone: "error" }, { tone: "ok" }])).toBe("blocked");
-  const noKeys = { ...healthy, keys: { ...healthy.keys, FISH_API_KEY: false } };
+  const noKeys = without("fish");
   expect(verdict(readiness(noKeys, plain))).toBe("blocked");
   expect(verdict(readiness({ ...healthy, freeBytes: 2e9 }, plain))).toBe("attention");
 });
@@ -162,7 +243,7 @@ test("memory off links to the wizard's memory step; down or unchecked offers a c
   });
   expect(memory({ configured: true, reachable: false })).toMatchObject({
     tone: "warn",
-    fix: { kind: "check", provider: "qdrant" },
+    fix: { kind: "check", target: "qdrant" },
   });
   expect(memory({ configured: true, reachable: null })?.tone).toBe("info");
 });
@@ -239,7 +320,7 @@ test("a restart only the MCP server needs is information, not a warning", () => 
 
 test("studio paths encode the id, and formats follow the language", () => {
   expect(studioPath("a b", "voice")).toBe("/personas/a%20b/voice");
-  const zh = formatsFor("zh-CN");
+  const zh = formatsFor("zh-Hans");
   expect(formatsFor("en").bytes(12.34e9)).toBe("12.3 GB");
   expect(zh.count(12345)).toBe("12,345");
   expect(zh.date("not a date")).toBe("not a date");

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { setUsageSink, type UsageRecord } from "@eidolon/providers";
 import {
   DEFAULT_EMBED_MODEL,
   defaultEmbeddingClient,
@@ -263,7 +264,7 @@ test("isQuotaError", () => {
 describe("default client from env", () => {
   test("without a key, every call throws and nothing is cached", async () => {
     const message =
-      "Embeddings need an API key. Set OPENROUTER_API_KEY (reused from the LLM config) or EMBED_API_KEY for a different provider.";
+      "OpenRouter needs an API key: set OPENROUTER_API_KEY in credentials.json or the environment, or EMBED_API_KEY for embeddings alone";
     expect(() => defaultEmbeddingClient()).toThrow(message);
     await expect(embedTexts(["a"])).rejects.toThrow(message);
     process.env.OPENROUTER_API_KEY = "k";
@@ -291,5 +292,24 @@ describe("default client from env", () => {
       model: DEFAULT_EMBED_MODEL,
       dimensions: 3072,
     });
+  });
+
+  test("spend at another provider's API, through EMBED_BASE_URL, is that provider's", async () => {
+    process.env.EMBED_API_KEY = "sk-openai";
+    process.env.EMBED_BASE_URL = "https://api.openai.com/v1";
+    process.env.EMBED_MODEL = "text-embedding-3-large";
+    const records: UsageRecord[] = [];
+    setUsageSink((record) => records.push(record));
+    try {
+      env
+        .network()
+        .mockImplementation((async () => Response.json(vectors([9]))) as unknown as typeof fetch);
+      await embedTexts(["q"]);
+    } finally {
+      setUsageSink(null);
+    }
+    expect(records.map(({ provider, model }) => [provider, model])).toEqual([
+      ["openai", "text-embedding-3-large"],
+    ]);
   });
 });

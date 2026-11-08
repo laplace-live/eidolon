@@ -167,9 +167,10 @@
                       "@eidolon/*",
                       "@eidolon/**",
                       "!@eidolon/ingest/progress",
-                      "!@eidolon/cli/job"
+                      "!@eidolon/cli/job",
+                      "!@eidolon/providers/catalog"
                     ],
-                    "message": "The web app imports only the import-free leaves @eidolon/ingest/progress and @eidolon/cli/job, with `import type`; it gets everything else from the admin API."
+                    "message": "The web app imports only the import-free leaves: @eidolon/ingest/progress and @eidolon/cli/job with `import type`, and the provider catalog @eidolon/providers/catalog; it gets everything else from the admin API."
                   },
                   {
                     "group": ["**/src/**", "!**/bot/src/local/api.ts"],

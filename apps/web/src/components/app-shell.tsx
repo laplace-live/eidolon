@@ -1,10 +1,10 @@
+import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { useRef } from "react";
 import { Link, matchPath, Outlet, useLocation } from "react-router";
 import { AppMark } from "@/components/app-mark";
 import { PersonaSwitcher } from "@/components/persona-switcher";
 import { LanguageSwitch, ThemeMenu } from "@/components/preferences";
-import { useT } from "@/lib/i18n";
 import { studioPath } from "@/lib/paths";
 import { statusQuery } from "@/lib/query";
 import { cn } from "@/lib/utils";
@@ -40,19 +40,20 @@ function Divider() {
 }
 
 export function AppShell() {
-  const t = useT();
+  const { t } = useLingui();
   const { pathname } = useLocation();
   const { data: status } = useQuery(statusQuery);
   const main = useRef<HTMLElement>(null);
   // The studio opens on the active persona; it stays lit on any persona's.
   const tabs: readonly Tab[] = [
-    { to: "/", label: "common.nav.home", end: true },
-    { to: "/call", label: "common.nav.call" },
+    { to: "/", label: t`Home`, end: true },
+    { to: "/call", label: t`Call` },
     ...(status
-      ? [{ to: studioPath(status.persona.id), label: "common.nav.studio", section: "/personas/" }]
+      ? [{ to: studioPath(status.persona.id), label: t`Studio`, section: "/personas/" }]
       : []),
-    { to: "/jobs", label: "common.nav.jobs" },
-    { to: "/settings", label: "common.nav.settings" },
+    { to: "/jobs", label: t`Jobs` },
+    { to: "/usage", label: t`Usage` },
+    { to: "/settings", label: t`Settings` },
   ];
 
   return (
@@ -62,7 +63,7 @@ export function AppShell() {
         onClick={() => main.current?.focus()}
         className="sr-only font-medium text-sm focus:not-sr-only focus:fixed focus:top-3 focus:left-4 focus:z-50 focus:rounded-md focus:bg-card focus:px-3 focus:py-2 focus:shadow-md focus:outline-none focus:ring-[3px] focus:ring-ring/50"
       >
-        {t("common.skip")}
+        {t`Skip to content`}
       </button>
       {/* The bottom line is an inset shadow so the active tab's underline, inside the scroller, covers it. */}
       <header className="sticky top-0 z-40 bg-background/80 shadow-[inset_0_-1px_0_0_var(--border)] backdrop-blur-md">
@@ -72,7 +73,7 @@ export function AppShell() {
             className="flex shrink-0 items-center gap-2.5 rounded-md py-1 pr-1 font-semibold outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
           >
             <AppMark />
-            <span className="sr-only tracking-tight sm:not-sr-only">{t("common.app.name")}</span>
+            <span className="sr-only tracking-tight sm:not-sr-only">Eidolon</span>
           </Link>
           <Divider />
           <PersonaSwitcher />
@@ -81,12 +82,12 @@ export function AppShell() {
             <ThemeMenu />
           </div>
         </div>
-        <nav aria-label={t("common.nav.label")} className="mx-auto w-full max-w-6xl px-4 sm:px-6">
+        <nav aria-label={t`Main`} className="mx-auto w-full max-w-6xl px-4 sm:px-6">
           <ul className="no-scrollbar -mx-3 flex h-12 items-stretch overflow-x-auto">
             {tabs.map((tab) => {
               const current = lit(tab, pathname);
               return (
-                <li key={tab.label} className="flex">
+                <li key={tab.to} className="flex">
                   <Link
                     to={tab.to}
                     aria-current={current ? "page" : undefined}
@@ -97,7 +98,7 @@ export function AppShell() {
                     )}
                   >
                     <span className="rounded-md px-2 py-1.5 transition-colors group-hover:bg-muted group-focus-visible:ring-[3px] group-focus-visible:ring-ring/50">
-                      {t(tab.label)}
+                      {tab.label}
                     </span>
                   </Link>
                 </li>

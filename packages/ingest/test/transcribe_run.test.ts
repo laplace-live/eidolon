@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { consoleSink, type LogRecord, logger } from "@eidolon/config";
+import { setUsageSink, type UsageRecord } from "@eidolon/providers";
 import { type ProgressEvent, transcribe } from "../src/index.ts";
 import {
   type FakeJob,
@@ -307,6 +308,22 @@ describe("Soniox failures", () => {
     expect(logs).toContainEqual([
       "WARNING",
       "Kept Soniox transcription t1: its transcript couldn't be saved",
+    ]);
+  });
+
+  test("a transcript that can't be saved still goes into the usage ledger", async () => {
+    const outDir = join(work, "streams");
+    mkdirSync(join(outDir, "2026-01-02-a.soniox.json", "x"), { recursive: true });
+    const records: UsageRecord[] = [];
+    setUsageSink((record) => records.push(record));
+    try {
+      const { promise } = await run([job("t1", SPEECH)], {});
+      await expect(promise).rejects.toThrow();
+    } finally {
+      setUsageSink(null);
+    }
+    expect(records.map(({ role, provider }) => [role, provider])).toEqual([
+      ["transcription", "soniox"],
     ]);
   });
 

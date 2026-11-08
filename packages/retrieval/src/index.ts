@@ -3,7 +3,7 @@
 // stream-catalog helpers the archive's recall builds on. Also their write side, for the offline
 // ingests: the schemas, the table rebuild, and the embedding cache and batches.
 
-export { DEFAULT_EMBED_BASE_URL, DEFAULT_EMBED_MODEL, embedDim } from "@eidolon/config";
+export { DEFAULT_EMBED_MODEL, embedDim } from "@eidolon/config";
 export type { Table as LanceTable } from "@lancedb/lancedb";
 export type { Schema as ArrowSchema } from "apache-arrow";
 export {
@@ -41,6 +41,7 @@ export {
   type EmbeddingClientOptions,
   EmbeddingUsage,
   type EmbedOptions,
+  embeddingSelection,
   embedTexts,
   embedTextsWithUsage,
   isQuotaError,

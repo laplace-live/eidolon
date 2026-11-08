@@ -2,7 +2,9 @@
 // reads, where the key is sent and where it never is. Nothing here reaches a network.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { afterEach, describe, expect, test } from "bun:test";
-import { resetSettings } from "@eidolon/config";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { dataHome, installSettings, resetSettings } from "@eidolon/config";
 import type { MemoryAdmin } from "@eidolon/memory";
 import memoryManifest from "../../../../packages/memory/package.json" with { type: "json" };
 import type { CheckProvider, CheckResult } from "../../src/local/api.ts";
@@ -31,18 +33,21 @@ type Reply = Response | (() => Response) | "network-error";
 /** Answers by `<METHOD> <url>` prefix, longest first; records every request. */
 function fakeFetch(replies: Record<string, Reply>) {
   const sent: Sent[] = [];
+  /** Every request's headers, beside `sent`, for a key sent other than as a bearer. */
+  const heard: Headers[] = [];
   const keys = Object.keys(replies).sort((a, b) => b.length - a.length);
   const fetchImpl = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = String(input);
     const method = init.method ?? "GET";
     const headers = new Headers(init.headers);
     sent.push({ method, url, authorization: headers.get("authorization") });
+    heard.push(headers);
     const key = keys.find((k) => `${method} ${url}`.startsWith(k));
     const reply = key === undefined ? "network-error" : replies[key];
     if (reply === "network-error" || reply === undefined) throw new TypeError("fetch failed");
     return typeof reply === "function" ? reply() : reply.clone();
   }) as typeof fetch;
-  return { fetch: fetchImpl, sent };
+  return { fetch: fetchImpl, sent, heard };
 }
 
 const json = (status: number, body: unknown) =>
@@ -66,10 +71,10 @@ async function check(
   replies: Record<string, Reply>,
   settings: Record<string, string> = {},
   value?: string,
-): Promise<CheckOutcome & { sent: Sent[] }> {
+): Promise<CheckOutcome & { sent: Sent[]; heard: Headers[] }> {
   const fake = fakeFetch(replies);
   const outcome = await checkProvider(provider, value, deps(fake.fetch, settings));
-  return { ...outcome, sent: fake.sent };
+  return { ...outcome, sent: fake.sent, heard: fake.heard };
 }
 
 const verdict = (result: CheckResult): unknown[] => [
@@ -85,6 +90,55 @@ const MODELS = json(200, {
     { id: "stt-rt-preview", aliased_model_id: "stt-rt-v6" },
     { id: "stt-async-v5", aliased_model_id: null },
   ],
+});
+
+describe("a provider the catalog says how to check", () => {
+  test("Anthropic's key goes in x-api-key, with the API version, to its model listing", async () => {
+    const outcome = await check(
+      "anthropic",
+      { "GET https://api.anthropic.com/v1/models": json(200, { data: [] }) },
+      { ANTHROPIC_API_KEY: "sk-ant" },
+    );
+    expect(verdict(outcome.result)).toEqual([true, "ok", []]);
+    expect(outcome.sent[0]?.authorization).toBeNull();
+    expect(outcome.heard[0]?.get("x-api-key")).toBe("sk-ant");
+    expect(outcome.heard[0]?.get("anthropic-version")).toBe("2026-10-21");
+  });
+
+  test("401 is an invalid key, and a moved API base is checked where it points", async () => {
+    const refused = await check(
+      "deepseek",
+      { "GET https://api.deepseek.com/models": json(401, {}) },
+      { DEEPSEEK_API_KEY: "k" },
+    );
+    expect(verdict(refused.result)).toEqual([false, "invalid-key", []]);
+    const proxied = await check(
+      "deepseek",
+      { "GET https://proxy.example/v1/models": json(200, { data: [] }) },
+      { DEEPSEEK_API_KEY: "k", DEEPSEEK_BASE_URL: "https://proxy.example/v1/" },
+    );
+    expect(verdict(proxied.result)).toEqual([true, "ok", []]);
+    expect(proxied.sent.map((sent) => [sent.url, sent.authorization])).toEqual([
+      ["https://proxy.example/v1/models", "Bearer k"],
+    ]);
+  });
+
+  test("a provider with no free check passes, saying it can't tell", async () => {
+    const outcome = await check("minimax", {}, { MINIMAX_API_KEY: "k" });
+    expect(verdict(outcome.result)).toEqual([true, "ok", ["cannot-verify"]]);
+    expect(outcome.sent).toEqual([]);
+  });
+
+  test("an endpoint of your own needs its base before its key can be checked", async () => {
+    const outcome = await check("openai-compatible", {}, { OPENAI_COMPATIBLE_API_KEY: "k" });
+    expect(verdict(outcome.result)).toEqual([true, "ok", ["cannot-verify"]]);
+    const listed = await check(
+      "openai-compatible",
+      { "GET http://127.0.0.1:1234/v1/models": json(200, { data: [] }) },
+      { OPENAI_COMPATIBLE_API_KEY: "k", OPENAI_COMPATIBLE_BASE_URL: "http://127.0.0.1:1234/v1" },
+    );
+    expect(verdict(listed.result)).toEqual([true, "ok", []]);
+  });
 });
 
 describe("soniox", () => {
@@ -551,9 +605,43 @@ describe("POST credentials/check", () => {
     const response = await route(fake.fetch)('{"provider":"fish"}');
     expect(response.status).toBe(200);
     const status = buildStatus(app, { fetch: fake.fetch, now: Date.now });
-    expect(status.persona.voice).toEqual({ id: VOICE, source: "env", ok: false });
+    expect(status.persona.voice).toEqual({
+      id: VOICE,
+      source: "env",
+      ok: false,
+      provider: "fish",
+      account: "fish",
+    });
     // The answer is that key's: a key saved since hasn't been asked yet.
     process.env.FISH_API_KEY = "fk-saved-since";
     expect(buildStatus(app, { fetch: fake.fetch, now: Date.now }).persona.voice.ok).toBeNull();
+  });
+
+  test("an answer for the old variable's key isn't kept for the account's own", async () => {
+    touched.push("FISH_VOICE_ID");
+    process.env.FISH_VOICE_ID = VOICE;
+    const credentials = join(dataHome(), "credentials.json");
+    mkdirSync(dataHome(), { recursive: true });
+    writeFileSync(
+      credentials,
+      JSON.stringify({
+        FISH_API_KEY: "fk-old",
+        accounts: { fish: { provider: "fish", apiKey: "fk-saved" } },
+      }),
+      { mode: 0o600 },
+    );
+    installSettings();
+    try {
+      const fake = fakeFetch({
+        [FISH_CREDIT]: json(200, { credit: "1" }),
+        [FISH_VOICE]: json(404, {}),
+      });
+      expect((await route(fake.fetch)('{"provider":"fish"}')).status).toBe(200);
+      const noFetch = (async () => new Response(null)) as unknown as typeof fetch;
+      const status = buildStatus(app, { fetch: noFetch, now: Date.now });
+      expect(status.persona.voice.ok).toBeNull();
+    } finally {
+      rmSync(credentials, { force: true });
+    }
   });
 });

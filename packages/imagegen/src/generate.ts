@@ -48,6 +48,8 @@ export interface Generation {
 
 export interface GenerateOptions {
   readonly apiKey: string;
+  /** The images endpoint; OpenRouter's by default. */
+  readonly url?: string;
   readonly prompt: string;
   readonly references?: readonly ReferenceImage[] | null;
   readonly model?: string;
@@ -113,7 +115,7 @@ export async function generate(options: GenerateOptions): Promise<Generation> {
   let status: number;
   let text: string;
   try {
-    const response = await (options.fetch ?? fetch)(OPENROUTER_IMAGES_URL, {
+    const response = await (options.fetch ?? fetch)(options.url ?? OPENROUTER_IMAGES_URL, {
       method: "POST",
       headers,
       body,

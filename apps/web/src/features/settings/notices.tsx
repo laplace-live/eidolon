@@ -1,15 +1,16 @@
+import { ph, plural } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDownIcon, RotateCcwIcon, TriangleAlertIcon } from "lucide-react";
 import { settingsQuery } from "@/components/settings-form/queries";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { useT } from "@/lib/i18n";
 import { statusQuery } from "@/lib/query";
 import { cn } from "@/lib/utils";
 import { RestartButton } from "./restart-button";
 
 /** A saved value that waits for a restart; MCP-only staleness is said to be just that. */
 function RestartBanner({ all }: { readonly all: boolean }) {
-  const t = useT();
+  const { t } = useLingui();
   return (
     <div
       role="alert"
@@ -26,15 +27,19 @@ function RestartBanner({ all }: { readonly all: boolean }) {
         </span>
         <div className="flex min-w-0 flex-col gap-0.5 pt-1.5 text-sm">
           <p className="font-medium leading-5">
-            {t(all ? "settings.restart.title" : "settings.restart.mcpTitle")}
+            {all
+              ? t`Restart to apply saved settings`
+              : t`The MCP server still serves the old settings`}
           </p>
           <p className="text-muted-foreground">
-            {t(all ? "settings.restart.body" : "settings.restart.mcpBody")}
+            {all
+              ? t`Some saved settings are read only when Eidolon starts or when memory first runs. Restarting interrupts running jobs, and can't happen during a call.`
+              : t`Calls already use what you saved; only the MCP server keeps what it read at start until a restart.`}
           </p>
         </div>
       </div>
       <div className="ml-auto">
-        <RestartButton label="settings.restart.button" size="default" />
+        <RestartButton label={t`Restart`} size="default" />
       </div>
     </div>
   );
@@ -42,13 +47,13 @@ function RestartBanner({ all }: { readonly all: boolean }) {
 
 /** What the settings files hold that the bot ignores, in the server's English. */
 export function FileWarnings({ warnings }: { readonly warnings: readonly string[] }) {
-  const t = useT();
+  const { t } = useLingui();
   return (
     <Collapsible className="overflow-hidden rounded-xl border bg-card">
       <CollapsibleTrigger className="group flex min-h-14 w-full items-center gap-3.5 px-4 py-3 text-left text-sm outline-none transition-colors hover:bg-muted/40 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset sm:px-6">
         <TriangleAlertIcon className="size-4 shrink-0 text-warning" aria-hidden />
         <span className="flex-1 font-medium">
-          {t("settings.warnings", { count: warnings.length })}
+          {t`${plural(ph({ count: warnings.length }), { one: `The settings files have # problem Eidolon ignores`, other: `The settings files have # problems Eidolon ignores` })}`}
         </span>
         <ChevronDownIcon
           className="size-4 shrink-0 text-muted-foreground group-data-[state=open]:rotate-180"

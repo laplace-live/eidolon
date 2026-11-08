@@ -1,9 +1,9 @@
+import { useLingui } from "@lingui/react/macro";
 import { cn } from "cn";
 import { XIcon } from "lucide-react";
 import { Dialog as SheetPrimitive } from "radix-ui";
 import type * as React from "react";
 import { Button } from "@/components/ui/button";
-import { useT } from "@/lib/i18n";
 
 function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />;
@@ -47,7 +47,7 @@ function SheetContent({
   side?: "top" | "right" | "bottom" | "left";
   showCloseButton?: boolean;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   return (
     <SheetPortal>
       <SheetOverlay />
@@ -65,7 +65,7 @@ function SheetContent({
           <SheetPrimitive.Close data-slot="sheet-close" asChild>
             <Button variant="ghost" className="absolute top-3 right-3" size="icon-sm">
               <XIcon />
-              <span className="sr-only">{t("common.close")}</span>
+              <span className="sr-only">{t`Close`}</span>
             </Button>
           </SheetPrimitive.Close>
         )}

@@ -1,6 +1,6 @@
+import { useLingui } from "@lingui/react/macro";
 import { HourglassIcon } from "lucide-react";
 import { memo, type ReactNode, useEffect, useMemo, useRef } from "react";
-import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { BotText } from "./bot-text";
 import { SelfieImage } from "./selfie-image";
@@ -18,7 +18,7 @@ import type { WaitState } from "./watchdog";
 const PINNED_SLACK_PX = 48;
 
 function UserBubble({ entry }: { readonly entry: UserEntry }) {
-  const t = useT();
+  const { t } = useLingui();
   const { said, hearing } = userText(entry);
   return (
     <div className="flex flex-col items-end gap-1">
@@ -28,11 +28,13 @@ function UserBubble({ entry }: { readonly entry: UserEntry }) {
           entry.failed && "opacity-60",
         )}
       >
-        <span className="sr-only">{t("call.you")}: </span>
+        <span className="sr-only">
+          {t({ message: `You`, context: "call transcript speaker" })}:{" "}
+        </span>
         {said}
         {hearing && <span className="italic opacity-70">{hearing}</span>}
       </div>
-      {entry.failed && <span className="text-destructive text-xs">{t("call.input.failed")}</span>}
+      {entry.failed && <span className="text-destructive text-xs">{t`Not sent`}</span>}
     </div>
   );
 }
@@ -56,10 +58,10 @@ const EntryView = memo(function EntryView({
   readonly entry: Entry;
   readonly name: string;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   if (entry.kind === "user") return <UserBubble entry={entry} />;
   if (entry.kind === "bot") return <BotBubble entry={entry} name={name} />;
-  const alt = t("call.selfie.alt", { name });
+  const alt = t`A selfie from ${name}`;
   return (
     <div className="flex flex-wrap gap-2">
       {entry.paths.map((path) => (
@@ -102,7 +104,7 @@ export function TranscriptView({
   /** Kept out of the log, which holds only the conversation's lines. */
   readonly intro: ReactNode;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const pinnedRef = useRef(true);
@@ -125,7 +127,7 @@ export function TranscriptView({
       <div
         ref={scrollRef}
         role="log"
-        aria-label={t("call.transcript.label")}
+        aria-label={t`Conversation`}
         onScroll={(event) => {
           // Only scrolling up lets go: the event for a scroll to the bottom can arrive after more
           // lines did, and would read as the viewer leaving the bottom.
@@ -140,14 +142,14 @@ export function TranscriptView({
           {transcript.entries.map((entry) => (
             <EntryView key={entry.id} entry={entry} name={name} />
           ))}
-          {wait.thinking && !wait.stuck && <Thinking label={t("call.thinking", { name })} />}
+          {wait.thinking && !wait.stuck && <Thinking label={t`${name} is thinking…`} />}
           {wait.stuck && (
             <p
               role="status"
               className="flex items-center justify-center gap-1.5 text-center text-muted-foreground text-xs"
             >
               <HourglassIcon className="size-3.5 shrink-0" />
-              {t("call.stuck", { name })}
+              {t`Still waiting for ${name}. If nothing comes, say it again.`}
             </p>
           )}
         </div>

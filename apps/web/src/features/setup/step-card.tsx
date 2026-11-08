@@ -1,8 +1,8 @@
+import { useLingui } from "@lingui/react/macro";
 import { ArrowLeftIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { SectionCard } from "@/components/section-card";
 import { Button } from "@/components/ui/button";
-import { useT } from "@/lib/i18n";
 
 export interface StepCardProps {
   readonly title: string;
@@ -26,7 +26,7 @@ export function StepCard({
   note,
   busy,
 }: StepCardProps) {
-  const t = useT();
+  const { t } = useLingui();
   return (
     <SectionCard
       title={title}
@@ -35,7 +35,7 @@ export function StepCard({
         onBack ? (
           <Button variant="ghost" className="-ml-2.5" onClick={onBack} disabled={busy}>
             <ArrowLeftIcon />
-            {t("setup.back")}
+            {t`Back`}
           </Button>
         ) : (
           note

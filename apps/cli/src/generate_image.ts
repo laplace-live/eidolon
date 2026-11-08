@@ -4,7 +4,6 @@
 import { mkdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import {
-  envOptional,
   expandUser,
   pyFixed,
   pyPath,
@@ -34,6 +33,7 @@ import {
   QUALITIES,
   referenceSources,
 } from "@eidolon/imagegen";
+import { hasKey, missingKey, reportUsage, trySelect } from "@eidolon/providers";
 import { ArgparseExit, INT, type ParserSpec, parseArgs } from "./argparse.ts";
 import { type CliIo, printer, reportExit, resolveIo } from "./io.ts";
 import { textwrapIndent } from "./py.ts";
@@ -171,11 +171,17 @@ export async function generateImageMain(
     throw error;
   }
 
-  const apiKey = envOptional("OPENROUTER_API_KEY");
-  if (!apiKey) {
-    io.stderr("OPENROUTER_API_KEY is unset.\n");
+  // The selfie role's account, as the bot's take_selfie tool uses it.
+  const selfie = trySelect("selfie");
+  if (selfie === null || !hasKey(selfie)) {
+    io.stderr(
+      selfie !== null && selfie.keyName === null
+        ? `${missingKey(selfie).message}\n`
+        : `${selfie?.keyName ?? "OPENROUTER_API_KEY"} is unset.\n`,
+    );
     return 1;
   }
+  const apiKey = selfie.apiKey as string;
 
   const friends = args.friend ?? [];
   const missing = friends.filter((name) => !knownFriends.has(name));
@@ -215,6 +221,7 @@ export async function generateImageMain(
     const references = sources.map((source) => loadReference(source));
     result = await generate({
       apiKey,
+      url: `${(selfie.baseUrl as string).replace(/\/+$/, "")}/images`,
       prompt,
       references,
       model: args.model,
@@ -228,6 +235,13 @@ export async function generateImageMain(
     io.stderr(`${error.message}\n`);
     return 1;
   }
+  reportUsage({
+    role: "selfie",
+    provider: selfie.provider.id,
+    model: args.model,
+    units: { images: result.images.length },
+    costUsd: result.costUsd,
+  });
 
   const base = pyPath(expandUser(args.out));
   mkdirSync(dirname(base), { recursive: true });

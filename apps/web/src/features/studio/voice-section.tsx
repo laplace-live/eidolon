@@ -1,9 +1,13 @@
+import { msg, ph } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AudioLinesIcon, CircleCheckIcon, CircleXIcon, TriangleAlertIcon } from "lucide-react";
 import { type FormEvent, useId, useState } from "react";
+import { Link } from "react-router";
 import { toast } from "sonner";
 import { ListCard, ListRow } from "@/components/list";
 import { SectionCard } from "@/components/section-card";
+import { effectiveProviderType } from "@/components/settings-form/controls";
 import { Code, EnvBadge } from "@/components/settings-form/field";
 import { refreshSettings, settingsQuery } from "@/components/settings-form/queries";
 import { SettingsCard } from "@/components/settings-form/settings-card";
@@ -26,9 +30,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { VoicePicker } from "@/components/voice-picker";
 import { saveVoice } from "@/features/setup/personas";
 import { ownValue } from "@/features/setup/wizard";
+import { accountsQuery } from "@/lib/accounts";
 import type { PersonaSummary, SettingRow, Voice } from "@/lib/api";
 import { toastError } from "@/lib/feedback";
-import { rich, useT } from "@/lib/i18n";
+import { studioPath } from "@/lib/paths";
+import { providerById, providerName, roleById } from "@/lib/providers";
 import { statusQuery } from "@/lib/query";
 import { CUE_MODEL, type CueClash, cueClash } from "./files";
 import { LoadError } from "./parts";
@@ -48,7 +54,7 @@ function VoiceById({
   readonly disabled: boolean;
   readonly onUse: (id: string) => void;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const inputId = useId();
   const [draft, setDraft] = useState("");
   const [invalid, setInvalid] = useState(false);
@@ -66,13 +72,13 @@ function VoiceById({
 
   return (
     <form className="flex flex-col gap-2" onSubmit={submit} noValidate>
-      <Label htmlFor={inputId}>{t("studio.voice.byId.label")}</Label>
+      <Label htmlFor={inputId}>{t`Or Use a Voice by Its ID`}</Label>
       <div className="flex max-w-xl gap-2">
         <Input
           id={inputId}
           className="font-mono text-xs"
           value={draft}
-          placeholder={t("studio.voice.byId.placeholder")}
+          placeholder={t`32-character voice ID`}
           autoComplete="off"
           spellCheck={false}
           aria-invalid={invalid}
@@ -88,14 +94,16 @@ function VoiceById({
           size="lg"
           disabled={disabled || draft.trim() === ""}
         >
-          {t("studio.voice.byId.use")}
+          {t`Use This Voice`}
         </Button>
       </div>
       <p
         id={`${inputId}-help`}
         className={invalid ? "text-destructive text-sm" : "text-muted-foreground text-sm"}
       >
-        {t(invalid ? "studio.voice.byId.invalid" : "studio.voice.byId.help")}
+        {invalid
+          ? t`A Fish voice ID is 32 characters of 0–9 and a–f.`
+          : t`For a voice the search can't find, such as a private one of your Fish account: copy its ID from its page on fish.audio.`}
       </p>
     </form>
   );
@@ -109,9 +117,9 @@ function useVoiceCheck(persona: string, voiceId: string | null): boolean | null 
 }
 
 const SOURCE_TITLE = {
-  own: "studio.voice.own",
-  inherited: "studio.voice.inheritedTitle",
-  none: "studio.voice.none",
+  own: msg`Her own voice`,
+  inherited: msg`The environment's voice`,
+  none: msg`No voice yet`,
 } as const;
 
 /** Her voice as it stands: her own, the one she inherits, or none. */
@@ -122,7 +130,7 @@ function CurrentVoice({
   readonly persona: PersonaSummary;
   readonly row: SettingRow;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const own = ownValue(row);
   const inherited = row.envValue;
   const voiceId = own ?? inherited;
@@ -130,20 +138,30 @@ function CurrentVoice({
   const known = useVoiceCheck(persona.id, voiceId);
   // An inherited voice Fish refuses: the explanation says so, and what to do.
   const broken = source === "inherited" && known === false;
-  const env = <Code>{row.env}</Code>;
+  const env = row.env;
+  const name = persona.shortName || persona.name;
+  const value = inherited;
 
   const title = t(SOURCE_TITLE[source]);
   const explanation =
-    source === "none"
-      ? t("studio.voice.noneHelp")
-      : source === "inherited"
-        ? rich(t(broken ? "studio.voice.inheritedBroken" : "studio.voice.inherited"), {
-            env,
-            name: persona.shortName || persona.name,
-          })
-        : inherited !== null
-          ? rich(t("settings.form.overrides"), { env, value: <Code>{inherited}</Code> })
-          : null;
+    source === "none" ? (
+      t`A call needs one: pick her voice below.`
+    ) : source === "inherited" ? (
+      broken ? (
+        <Trans>
+          Fish Audio can't use the voice she inherits from <Code>{env}</Code>. Pick her own below.
+        </Trans>
+      ) : (
+        <Trans>
+          Inherited from <Code>{env}</Code> in the environment. Picking a voice here overrides it
+          for {name} alone.
+        </Trans>
+      )
+    ) : value !== null ? (
+      <Trans>
+        Overrides <Code>{env}</Code> in the environment, which sets <Code>{value}</Code>.
+      </Trans>
+    ) : null;
 
   return (
     <ListCard>
@@ -173,12 +191,12 @@ function CurrentVoice({
           known === true ? (
             <span className="flex items-center gap-1.5 text-success">
               <CircleCheckIcon className="size-4" />
-              {t("studio.voice.known")}
+              {t`Fish has this voice`}
             </span>
           ) : known === false && !broken ? (
             <span className="flex items-center gap-1.5 text-destructive">
               <CircleXIcon className="size-4" />
-              {t("studio.voice.unknown")}
+              {t`Fish doesn't know this voice`}
             </span>
           ) : undefined
         }
@@ -198,28 +216,26 @@ function UseEnvVoice({
   readonly disabled: boolean;
   readonly onConfirm: () => void;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
         <Button variant="outline" disabled={disabled}>
-          {t("studio.voice.useEnv")}
+          {t`Use the Environment's Voice`}
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>
-            {t("studio.voice.useEnvTitle", { name: persona.shortName || persona.name })}
+            {t`Use the environment's voice for ${ph({ name: persona.shortName || persona.name })}?`}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {t("studio.voice.useEnvBody", { env: row.env, value: row.envValue ?? "" })}
+            {t`Her own voice is removed from her settings, and she speaks with the one ${ph({ env: row.env })} sets: ${ph({ value: row.envValue ?? "" })}.`}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>{t("studio.voice.useEnvCancel")}</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm}>
-            {t("studio.voice.useEnvConfirm")}
-          </AlertDialogAction>
+          <AlertDialogCancel>{t`Keep Hers`}</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm}>{t`Use It`}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -227,7 +243,7 @@ function UseEnvVoice({
 }
 
 function VoiceCard({ persona }: { readonly persona: PersonaSummary }) {
-  const t = useT();
+  const { t } = useLingui();
   const queryClient = useQueryClient();
   const query = settingsQuery(persona.id);
   const settings = useQuery(query);
@@ -237,7 +253,7 @@ function VoiceCard({ persona }: { readonly persona: PersonaSummary }) {
   const pick = useMutation({
     mutationFn: (voice: Voice) => saveVoice(persona.id, voice.id),
     onSuccess: async (response, voice) => {
-      toast.success(t("studio.voice.saved", { title: voice.title }));
+      toast.success(t`Voice set to ${ph({ title: voice.title })}.`);
       await refreshSettings(queryClient, persona.id, response);
     },
     onError: toastError,
@@ -245,7 +261,7 @@ function VoiceCard({ persona }: { readonly persona: PersonaSummary }) {
   const byId = useMutation({
     mutationFn: (id: string) => saveVoice(persona.id, id),
     onSuccess: async (response, id) => {
-      toast.success(t("studio.voice.savedId", { id }));
+      toast.success(t`Voice set to ${id}.`);
       await refreshSettings(queryClient, persona.id, response);
     },
     onError: toastError,
@@ -253,7 +269,9 @@ function VoiceCard({ persona }: { readonly persona: PersonaSummary }) {
   const clear = useMutation({
     mutationFn: () => saveVoice(persona.id, null),
     onSuccess: async (response) => {
-      toast.success(t("studio.voice.cleared", { name: persona.shortName || persona.name }));
+      toast.success(
+        t`${ph({ name: persona.shortName || persona.name })} now speaks with the environment's voice.`,
+      );
       await refreshSettings(queryClient, persona.id, response);
     },
     onError: toastError,
@@ -262,9 +280,9 @@ function VoiceCard({ persona }: { readonly persona: PersonaSummary }) {
 
   return (
     <SectionCard
-      title={t("studio.voice.title")}
-      description={t("studio.voice.description")}
-      note={t("studio.voice.note", { name: persona.shortName || persona.name })}
+      title={t`Voice`}
+      description={t`The Fish Audio voice she speaks with. Search the public voices, listen to a sample, and pick one.`}
+      note={t`Choosing a voice saves it for ${ph({ name: persona.shortName || persona.name })}.`}
       actions={
         row !== undefined && own !== null && row.envValue !== null ? (
           <UseEnvVoice
@@ -291,43 +309,94 @@ function VoiceCard({ persona }: { readonly persona: PersonaSummary }) {
 }
 
 function CueAlert({ clash }: { readonly clash: CueClash }) {
-  const t = useT();
+  const { t } = useLingui();
+  const title =
+    clash.kind === "env"
+      ? t`${ph({ model: clash.model })}, which she inherits from ${ph({ env: clash.env })}, doesn't perform every delivery cue`
+      : t`${ph({ model: clash.model })} doesn't perform every delivery cue`;
   return (
-    <Alert variant="destructive">
+    <Alert>
       <TriangleAlertIcon />
-      <AlertTitle>
-        {clash.kind === "model"
-          ? t("studio.voice.cueClash.title", { model: clash.model })
-          : t("studio.voice.cueEnv.title", { model: clash.model, env: clash.env })}
-      </AlertTitle>
-      <AlertDescription>
-        {t(clash.kind === "model" ? "studio.voice.cueClash.body" : "studio.voice.cueEnv.body", {
-          model: CUE_MODEL,
-        })}
-      </AlertDescription>
+      <AlertTitle>{title}</AlertTitle>
+      <AlertDescription>{t`This prompt teaches delivery cues, such as [whispering] or paired tags, which only ${ph({ model: CUE_MODEL })} performs in full. Eidolon takes out the ones this model can't read, so it never speaks them, but her delivery is plainer. Pick ${ph({ model: CUE_MODEL })} for the whole performance.`}</AlertDescription>
     </Alert>
   );
 }
 
+/** A provider other than Fish: its voice by id, or from its fixed set. */
+function ProviderVoiceCard({
+  persona,
+  provider,
+}: {
+  readonly persona: PersonaSummary;
+  readonly provider: string;
+}) {
+  const { t } = useLingui();
+  const voices = providerById(provider)?.offers.tts?.voices;
+  const library = voices?.kind === "id" ? voices.libraryUrl : null;
+  return (
+    <SettingsCard
+      scope="persona"
+      persona={persona.id}
+      paths={CARD_PATHS.voice}
+      title={t`Voice`}
+      description={
+        library ? (
+          <Trans>
+            The {ph({ provider: providerName(provider) })} voice she speaks with, by its id. Find
+            one in {ph({ provider: providerName(provider) })}'s{" "}
+            <a href={library} target="_blank" rel="noreferrer noopener">
+              voice library
+            </a>
+            .
+          </Trans>
+        ) : (
+          t`One of ${ph({ provider: providerName(provider) })}'s voices.`
+        )
+      }
+    />
+  );
+}
+
 export function VoiceSection({ persona }: { readonly persona: PersonaSummary }) {
-  const t = useT();
+  const { t } = useLingui();
   const settings = useQuery(settingsQuery(persona.id));
   const prompt = useQuery(personaQueries(persona.id).prompt);
-  const [modelPath] = CARD_PATHS.voiceModel;
-  const modelRow = settings.data?.settings.find((row) => row.path === modelPath);
-  const clash = cueClash(modelRow, prompt.data?.text);
+  const accounts = useQuery(accountsQuery).data?.accounts;
+  const rows = settings.data?.settings;
+  const clash = cueClash(rows, prompt.data?.text, accounts);
+  const provider = rows ? effectiveProviderType(roleById("voice"), rows, {}, accounts) : "fish";
+  const realtime = rows ? effectiveProviderType(roleById("realtime"), rows, {}, accounts) : null;
   return (
     <>
-      <VoiceCard persona={persona} />
+      {realtime !== null && (
+        <Alert>
+          <AudioLinesIcon />
+          <AlertTitle>
+            {t`${ph({ provider: providerName(realtime) })}'s realtime model speaks for her`}
+          </AlertTitle>
+          <AlertDescription>
+            <Trans>
+              The voice below applies only when she talks with three models. Her realtime voice is
+              set under <Link to={studioPath(persona.id, "models")}>Mind</Link>.
+            </Trans>
+          </AlertDescription>
+        </Alert>
+      )}
       <SettingsCard
         scope="persona"
         persona={persona.id}
-        paths={CARD_PATHS.voiceModel}
-        title={t("studio.voice.modelTitle")}
-        description={t("studio.voice.modelHelp")}
+        paths={CARD_PATHS.voiceProvider}
+        title={t`Voice Provider`}
+        description={t`Which provider and model read her lines.`}
       >
         {clash && <CueAlert clash={clash} />}
       </SettingsCard>
+      {provider === "fish" || provider === null ? (
+        <VoiceCard persona={persona} />
+      ) : (
+        <ProviderVoiceCard persona={persona} provider={provider} />
+      )}
     </>
   );
 }

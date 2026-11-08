@@ -1,4 +1,7 @@
 // Profile: her avatar, who she is, and her clock.
+
+import { msg, ph } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CameraIcon, LocateFixedIcon } from "lucide-react";
 import { type FormEvent, useId, useMemo, useState } from "react";
@@ -15,6 +18,7 @@ import {
   strip,
 } from "@/components/settings-form/controls";
 import { OriginNote, TimeZoneList } from "@/components/settings-form/field";
+import { INVALID_MESSAGES } from "@/components/settings-form/labels";
 import { refreshSettings, settingsQuery } from "@/components/settings-form/queries";
 import { SaveActions } from "@/components/settings-form/settings-card";
 import {
@@ -41,16 +45,35 @@ import {
   type SettingRow,
 } from "@/lib/api";
 import { toastError } from "@/lib/feedback";
-import { useLang, useT } from "@/lib/i18n";
 import { statusQuery } from "@/lib/query";
 import { useNow } from "@/lib/use-now";
 import { cn } from "@/lib/utils";
+import { useLang } from "@/locales/i18n";
 import { LoadError } from "./parts";
 import { draggingFiles, uploadProblem, useFilePicker, useRemove, useUpload } from "./pictures";
 import { personaQueries } from "./queries";
 import { CARD_PATHS } from "./sections";
 
 const FIELDS = ["name", "shortName", "fans", "summary"] as const;
+
+const FIELD_LABELS = {
+  name: {
+    label: msg({ message: "Name", context: "persona's name" }),
+    help: msg`Her full name, as the prompts say it.`,
+  },
+  shortName: {
+    label: msg`Short Name`,
+    help: msg`What she's called for short. Her initials come from it.`,
+  },
+  fans: {
+    label: msg`Fans`,
+    help: msg`What she calls her viewers.`,
+  },
+  summary: {
+    label: msg`Summary`,
+    help: msg`One English sentence about her. The retrieval gate reads it to tell when a question is about her.`,
+  },
+} satisfies Record<(typeof FIELDS)[number], unknown>;
 type Fields = Readonly<Record<(typeof FIELDS)[number], string>>;
 
 function fieldsOf(identity: PersonaIdentityFields): Fields {
@@ -69,23 +92,23 @@ function RemoveAvatar({
   readonly disabled: boolean;
   readonly onRemove: () => void;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
         <Button variant="outline" disabled={disabled}>
-          {t("studio.avatar.remove")}
+          {t`Remove`}
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{t("studio.avatar.removeTitle")}</AlertDialogTitle>
-          <AlertDialogDescription>{t("studio.avatar.removeBody")}</AlertDialogDescription>
+          <AlertDialogTitle>{t`Remove her avatar?`}</AlertDialogTitle>
+          <AlertDialogDescription>{t`The picture is deleted from her folder, and her initials show in its place.`}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>{t("studio.avatar.keep")}</AlertDialogCancel>
+          <AlertDialogCancel>{t`Keep It`}</AlertDialogCancel>
           <AlertDialogAction variant="destructive" onClick={onRemove}>
-            {t("studio.avatar.remove")}
+            {t`Remove`}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -94,7 +117,7 @@ function RemoveAvatar({
 }
 
 function AvatarCard({ persona }: { readonly persona: PersonaSummary }) {
-  const t = useT();
+  const { t } = useLingui();
   const lang = useLang();
   const references = useQuery(personaQueries(persona.id).references);
   const avatar = references.data?.avatar ?? null;
@@ -114,14 +137,14 @@ function AvatarCard({ persona }: { readonly persona: PersonaSummary }) {
     }
     upload.mutate(
       { kind: "avatar", name: file.name, file },
-      { onSuccess: () => toast.success(t("studio.avatar.saved")) },
+      { onSuccess: () => toast.success(t`Avatar saved.`) },
     );
   }
 
   return (
     <SectionCard
-      title={t("studio.avatar.title")}
-      description={t("studio.avatar.description")}
+      title={t`Avatar`}
+      description={t`This is her avatar, on the call page and in the persona switcher. Click it to upload one from your files, or drop a picture on it.`}
       action={
         <>
           {picker.input}
@@ -129,7 +152,7 @@ function AvatarCard({ persona }: { readonly persona: PersonaSummary }) {
             type="button"
             onClick={picker.open}
             disabled={busy}
-            aria-label={t(avatar ? "studio.avatar.replace" : "studio.avatar.upload")}
+            aria-label={avatar ? t`Replace Her Avatar` : t`Upload an Avatar`}
             onDragOver={(event) => {
               if (!draggingFiles(event)) return;
               event.preventDefault();
@@ -159,7 +182,11 @@ function AvatarCard({ persona }: { readonly persona: PersonaSummary }) {
           </button>
         </>
       }
-      note={t(avatar?.source === "template" ? "studio.avatar.builtIn" : "studio.avatar.note")}
+      note={
+        avatar?.source === "template"
+          ? t`Her avatar is built in. Upload one to use your own instead.`
+          : t`An avatar is optional but recommended.`
+      }
       actions={
         avatar?.source === "own" ? (
           <RemoveAvatar
@@ -167,7 +194,7 @@ function AvatarCard({ persona }: { readonly persona: PersonaSummary }) {
             onRemove={() =>
               remove.mutate(
                 { kind: "avatar", name: avatar.name },
-                { onSuccess: () => toast.success(t("studio.avatar.removed")) },
+                { onSuccess: () => toast.success(t`Avatar removed.`) },
               )
             }
           />
@@ -184,7 +211,7 @@ function IdentityCard({
   readonly persona: PersonaSummary;
   readonly identity: PersonaIdentityFields;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const queryClient = useQueryClient();
   const formId = useId();
   const saved = fieldsOf(identity);
@@ -198,7 +225,7 @@ function IdentityCard({
     onSuccess: async (next) => {
       queryClient.setQueryData(personaQueries(persona.id).identity.queryKey, next);
       setDraft(fieldsOf(next));
-      toast.success(t("studio.identity.saved"));
+      toast.success(t`Identity saved.`);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["personas"], exact: true }),
         queryClient.invalidateQueries({ queryKey: statusQuery.queryKey }),
@@ -226,7 +253,7 @@ function IdentityCard({
     const onChange = (value: string) => setDraft((current) => ({ ...current, [key]: value }));
     return (
       <Field key={key} data-invalid={empty}>
-        <FieldLabel htmlFor={id}>{t(`studio.identity.${key}`)}</FieldLabel>
+        <FieldLabel htmlFor={id}>{t(FIELD_LABELS[key].label)}</FieldLabel>
         {key === "summary" ? (
           <Textarea
             id={id}
@@ -247,7 +274,7 @@ function IdentityCard({
             disabled={save.isPending}
           />
         )}
-        <FieldDescription>{t(`studio.identity.${key}Help`)}</FieldDescription>
+        <FieldDescription>{t(FIELD_LABELS[key].help)}</FieldDescription>
       </Field>
     );
   }
@@ -255,13 +282,13 @@ function IdentityCard({
   return (
     <form onSubmit={submit} noValidate>
       <SectionCard
-        title={t("studio.identity.title")}
-        description={t("studio.identity.description")}
+        title={t`Identity`}
+        description={t`Who she is, as the built-in prompts and the call page name her. Write the names in her language.`}
         note={
           missing ? (
-            <span className="text-destructive">{t("studio.identity.missing")}</span>
+            <span className="text-destructive">{t`She needs a name and a short name.`}</span>
           ) : (
-            t("settings.form.savedFor", { name: persona.shortName || persona.name })
+            t`Saved for ${ph({ name: persona.shortName || persona.name })}`
           )
         }
         actions={
@@ -286,7 +313,7 @@ function IdentityCard({
 
 /** What time it is for her, ticking, in a zone the browser knows. */
 function ZoneClock({ zone }: { readonly zone: string }) {
-  const t = useT();
+  const { t } = useLingui();
   const lang = useLang();
   const now = useNow(true);
   const format = useMemo(
@@ -302,7 +329,7 @@ function ZoneClock({ zone }: { readonly zone: string }) {
   );
   return (
     <FieldDescription className="tabular-nums">
-      {t("studio.timezone.now", { time: format.format(now) })}
+      {t`It's ${ph({ time: format.format(now) })} for her now.`}
     </FieldDescription>
   );
 }
@@ -314,7 +341,7 @@ function TimeZoneForm({
   readonly persona: PersonaSummary;
   readonly row: SettingRow;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const queryClient = useQueryClient();
   const id = useId();
   const listId = useId();
@@ -343,7 +370,7 @@ function TimeZoneForm({
           : { ...identity, timezone: typeof value === "string" ? value : "" },
       );
       toast.success(
-        t(response.restartRequired ? "settings.form.savedRestart" : "settings.form.saved"),
+        response.restartRequired ? t`Saved. Restart Eidolon to apply it.` : t`Settings saved.`,
       );
       await refreshSettings(queryClient, persona.id, response);
     },
@@ -359,13 +386,13 @@ function TimeZoneForm({
   return (
     <form onSubmit={submit} noValidate>
       <SectionCard
-        title={t("studio.timezone.title")}
-        description={t("studio.timezone.description")}
+        title={t`Time Zone`}
+        description={t`Her clock: the date and time she knows during a call.`}
         note={
           touched && error !== null ? (
-            <span className="text-destructive">{t("settings.form.fixErrors")}</span>
+            <span className="text-destructive">{t`Fix the highlighted values first.`}</span>
           ) : (
-            t("settings.form.savedFor", { name })
+            t`Saved for ${name}`
           )
         }
         actions={
@@ -382,7 +409,7 @@ function TimeZoneForm({
         <Field data-invalid={shownError !== null} onBlur={() => setTouched(true)}>
           {/* The card's title names the field. */}
           <FieldLabel htmlFor={id} className="sr-only">
-            {t("studio.timezone.title")}
+            {t`Time Zone`}
           </FieldLabel>
           <div className="flex flex-wrap items-center gap-2">
             <Input
@@ -390,7 +417,7 @@ function TimeZoneForm({
               list={listId}
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
-              placeholder={row.envValue ?? t("settings.form.default")}
+              placeholder={row.envValue ?? t`Default`}
               aria-invalid={shownError !== null}
               autoComplete="off"
               spellCheck={false}
@@ -409,12 +436,14 @@ function TimeZoneForm({
                 onClick={() => setDraft(browser)}
               >
                 <LocateFixedIcon />
-                {t("studio.timezone.useBrowser", { zone: browser })}
+                {t`Use ${ph({ zone: browser })}`}
               </Button>
             )}
           </div>
           {shownError !== null ? (
-            <FieldError>{t(shownError)}</FieldError>
+            <FieldError>
+              {INVALID_MESSAGES[shownError] ? t(INVALID_MESSAGES[shownError]) : shownError}
+            </FieldError>
           ) : (
             zone !== null && isTimeZone(zone) && <ZoneClock zone={zone} />
           )}
@@ -426,14 +455,14 @@ function TimeZoneForm({
 }
 
 function TimeZoneCard({ persona }: { readonly persona: PersonaSummary }) {
-  const t = useT();
+  const { t } = useLingui();
   const settings = useQuery(settingsQuery(persona.id));
   const [path] = CARD_PATHS.timezone;
   const row = settings.data?.settings.find((entry) => entry.path === path);
   if (settings.isPending) return <SectionCardSkeleton rows={1} />;
   if (settings.isError || row === undefined) {
     return (
-      <SectionCard title={t("studio.timezone.title")}>
+      <SectionCard title={t`Time Zone`}>
         <LoadError error={settings.error} />
       </SectionCard>
     );

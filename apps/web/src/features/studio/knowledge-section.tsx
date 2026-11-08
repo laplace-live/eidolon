@@ -1,4 +1,7 @@
 // Knowledge: her fact files, the index calls search, and how it is built and searched.
+
+import { msg, ph, plural, t } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckIcon, FilePlusIcon, FileTextIcon, PencilIcon, TriangleAlertIcon } from "lucide-react";
 import { useCallback, useState } from "react";
@@ -12,13 +15,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TableCell, TableRow } from "@/components/ui/table";
+import { COMMAND_LABELS } from "@/features/jobs/labels";
 import { JobCard } from "@/features/jobs/parts";
 import { jobsQuery, useStartJob } from "@/features/jobs/queries";
 import type { FactFile, IndexTable, JobCommand, PersonaSummary } from "@/lib/api";
 import { formatBytes, formatCount, formatDateTime } from "@/lib/format";
-import { useLang, useT } from "@/lib/i18n";
 import { latestJob, type Outcome } from "@/lib/jobs";
 import { statusQuery } from "@/lib/query";
+import { useLang } from "@/locales/i18n";
 import { FactSheet, type FactTarget } from "./facts-editor";
 import { factsHint, factsState, wasIndexed } from "./knowledge";
 import { LoadError } from "./parts";
@@ -31,6 +35,26 @@ const BUILDS: Record<IndexTable["table"], JobCommand> = {
   persona_facts: "ingest-facts",
   stream_chunks: "ingest-streams",
 };
+
+const TABLE_NAMES = {
+  persona_facts: msg`Facts`,
+  stream_chunks: msg`Stream Archive`,
+} satisfies Record<IndexTable["table"], unknown>;
+
+/** The line beside "Index facts". */
+function hintText(hint: ReturnType<typeof factsHint>): string {
+  const count = hint.vars?.count ?? 0;
+  switch (hint.key) {
+    case "studio.facts.nothingMatched":
+      return t`No file matches the patterns, so there is nothing to index.`;
+    case "studio.facts.changedCount":
+      return t`${plural(count, { one: "# file changed since the last index.", other: "# files changed since the last index." })}`;
+    case "studio.facts.goneCount":
+      return t`${plural(count, { one: "# file was removed since the last index.", other: "# files were removed since the last index." })}`;
+    default:
+      return t`Every file is indexed as it is now.`;
+  }
+}
 
 /** Refreshes what a finished ingest changed. */
 function useIngestEnded(persona: string) {
@@ -71,27 +95,27 @@ function RunButton({
 }
 
 function FactState({ file }: { readonly file: FactFile }) {
-  const t = useT();
+  const { t } = useLingui();
   if (!file.matched) {
-    return <QuietBadge>{t("studio.facts.notMatched")}</QuietBadge>;
+    return <QuietBadge>{t`Not indexed`}</QuietBadge>;
   }
   if (file.changed) {
     return (
       <Badge variant="outline" className="border-warning/40 font-normal text-warning">
-        {t("studio.facts.changed")}
+        {t`Changed`}
       </Badge>
     );
   }
   return (
     <span className="flex items-center gap-1 text-muted-foreground">
       <CheckIcon className="size-3.5" />
-      {t("studio.facts.indexed")}
+      {t`Indexed`}
     </span>
   );
 }
 
 function FactsCard({ persona }: { readonly persona: PersonaSummary }) {
-  const t = useT();
+  const { t } = useLingui();
   const lang = useLang();
   const facts = useQuery(personaQueries(persona.id).facts);
   const index = useQuery(personaQueries(persona.id).index);
@@ -138,22 +162,22 @@ function FactsCard({ persona }: { readonly persona: PersonaSummary }) {
   const newFile = (variant: "default" | "outline") => (
     <Button variant={variant} onClick={() => open({ kind: "new" })}>
       <FilePlusIcon />
-      {t("studio.facts.new")}
+      {t`New File`}
     </Button>
   );
 
   return (
     <SectionCard
-      title={t("studio.facts.title")}
-      description={t("studio.facts.description")}
+      title={t`Facts`}
+      description={t`Fact files hold what she knows about herself, one fact per line. Indexing them uses the embedding API, which bills a little.`}
       // One New file button at a time: the empty state carries it while there are no files.
       action={files.length > 0 ? newFile("outline") : undefined}
-      note={facts.data ? t(hint.key, hint.vars) : undefined}
+      note={facts.data ? hintText(hint) : undefined}
       actions={
         <RunButton
           persona={persona.id}
           command="ingest-facts"
-          label={t("studio.facts.ingest")}
+          label={t`Index Facts`}
           running={factsJob?.status === "running"}
           variant="default"
         />
@@ -165,12 +189,12 @@ function FactsCard({ persona }: { readonly persona: PersonaSummary }) {
         (files.length === 0 ? (
           <EmptyState
             icon={<FileTextIcon />}
-            title={t("studio.facts.emptyTitle")}
-            description={t("studio.facts.emptyBody", { patterns })}
+            title={t`No fact files yet`}
+            description={t`Add a .txt file of what she knows about herself, then index it. Files matching ${patterns} are indexed.`}
             action={newFile("default")}
           />
         ) : (
-          <ListCard header={t("studio.facts.patterns", { patterns })}>
+          <ListCard header={t`Indexed files match ${patterns}`}>
             {files.map((file) => (
               <ListRow
                 key={file.name}
@@ -187,11 +211,11 @@ function FactsCard({ persona }: { readonly persona: PersonaSummary }) {
                     <Button
                       variant="ghost"
                       size="sm"
-                      aria-label={t("studio.facts.editName", { name: file.name })}
+                      aria-label={t`Edit ${ph({ name: file.name })}`}
                       onClick={() => open({ kind: "file", name: file.name })}
                     >
                       <PencilIcon />
-                      {t("studio.facts.edit")}
+                      {t`Edit`}
                     </Button>
                   </>
                 }
@@ -202,9 +226,13 @@ function FactsCard({ persona }: { readonly persona: PersonaSummary }) {
       {state.gone.length > 0 && (
         <Alert>
           <TriangleAlertIcon />
-          <AlertTitle>{t("studio.facts.goneTitle", { count: state.gone.length })}</AlertTitle>
+          <AlertTitle>{t`${plural(ph({ count: state.gone.length }), { one: `Her index still has facts from # removed file`, other: `Her index still has facts from # removed files` })}`}</AlertTitle>
           <AlertDescription>
-            <p>{t(state.matched > 0 ? "studio.facts.goneBody" : "studio.facts.goneEmpty")}</p>
+            <p>
+              {state.matched > 0
+                ? t`They were deleted, or no longer match the patterns. Index facts again so she forgets them:`
+                : t`No file is left for indexing to read, and it keeps her old facts until it has one. Add a fact file, then index facts again so she forgets these:`}
+            </p>
             <p className="break-all font-mono text-xs">{state.gone.join(", ")}</p>
           </AlertDescription>
         </Alert>
@@ -232,36 +260,37 @@ function FactsCard({ persona }: { readonly persona: PersonaSummary }) {
 }
 
 function IndexTables({ persona }: { readonly persona: PersonaSummary }) {
-  const t = useT();
+  const { t } = useLingui();
   const lang = useLang();
   const index = useQuery(personaQueries(persona.id).index);
+  const builder = (table: IndexTable["table"]) => t(COMMAND_LABELS[BUILDS[table]]);
   if (index.isPending) return <Skeleton className="h-28 rounded-xl" />;
   if (index.isError) return <LoadError error={index.error} />;
   return (
     <>
       {index.data.tables.some((table) => table.stale) && (
-        <p className="text-destructive text-sm">{t("studio.index.staleHelp")}</p>
+        <p className="text-destructive text-sm">{t`A table built with another embedding model or size than the settings now name can't be searched. Run its job again.`}</p>
       )}
       <SectionCardTable
-        columns={(["table", "rows", "builtAt", "model"] as const).map((column) => ({
-          id: column,
-          label: t(`studio.index.${column}`),
-        }))}
+        columns={[
+          { id: "table", label: t({ message: "Table", context: "index storage" }) },
+          { id: "rows", label: t`Rows` },
+          { id: "builtAt", label: t`Built` },
+          { id: "model", label: t`Embedding Model` },
+        ]}
         last
       >
         {index.data.tables.map((table) => (
           <TableRow key={table.table} className="hover:bg-transparent">
             <TableCell className="py-3">
-              <div className="font-medium">{t(`studio.index.${table.table}`)}</div>
+              <div className="font-medium">{t(TABLE_NAMES[table.table])}</div>
               <div className="text-muted-foreground text-xs">
-                {t("studio.index.builtBy", {
-                  job: t(`jobs.command.${BUILDS[table.table]}`),
-                })}
+                {t`Built by ${ph({ job: builder(table.table) })}`}
               </div>
             </TableCell>
             <TableCell className="tabular-nums">
               {table.rows === null ? (
-                <QuietBadge>{t("studio.index.notBuilt")}</QuietBadge>
+                <QuietBadge>{t`Not built`}</QuietBadge>
               ) : (
                 formatCount(table.rows, lang)
               )}
@@ -279,7 +308,7 @@ function IndexTables({ persona }: { readonly persona: PersonaSummary }) {
                 ) : (
                   <span className="text-muted-foreground">—</span>
                 )}
-                {table.stale && <Badge variant="destructive">{t("studio.index.stale")}</Badge>}
+                {table.stale && <Badge variant="destructive">{t`Re-index needed`}</Badge>}
               </div>
             </TableCell>
           </TableRow>
@@ -290,7 +319,7 @@ function IndexTables({ persona }: { readonly persona: PersonaSummary }) {
 }
 
 function IndexCard({ persona }: { readonly persona: PersonaSummary }) {
-  const t = useT();
+  const { t } = useLingui();
   const lang = useLang();
   const index = useQuery(personaQueries(persona.id).index);
   const { data: jobs } = useQuery(jobsQuery);
@@ -301,27 +330,27 @@ function IndexCard({ persona }: { readonly persona: PersonaSummary }) {
 
   return (
     <SectionCard
-      title={t("studio.index.title")}
-      description={t("studio.index.description")}
+      title={t`Index`}
+      description={t`What calls search: her facts and her stream archive. Each table is rebuilt by its own job.`}
       note={
         catalog === undefined
           ? undefined
           : catalog === null
-            ? t("studio.index.noCatalog")
-            : t("studio.index.catalog", { time: formatDateTime(catalog, lang) })
+            ? t`No stream catalog yet.`
+            : t`Stream catalog built ${ph({ time: formatDateTime(catalog, lang) })}.`
       }
       actions={
         <>
           <RunButton
             persona={persona.id}
             command="build-stream-catalog"
-            label={t("studio.index.buildCatalog")}
+            label={t`Rebuild Catalog`}
             running={running}
           />
           <RunButton
             persona={persona.id}
             command="ingest-streams"
-            label={t("studio.index.ingestStreams")}
+            label={t`Index Streams`}
             running={running}
           />
         </>
@@ -334,7 +363,7 @@ function IndexCard({ persona }: { readonly persona: PersonaSummary }) {
 }
 
 export function KnowledgeSection({ persona }: { readonly persona: PersonaSummary }) {
-  const t = useT();
+  const { t } = useLingui();
   return (
     <>
       <FactsCard persona={persona} />
@@ -343,15 +372,15 @@ export function KnowledgeSection({ persona }: { readonly persona: PersonaSummary
         scope="persona"
         persona={persona.id}
         paths={CARD_PATHS.indexing}
-        title={t("studio.indexing.title")}
-        description={t("studio.indexing.description")}
+        title={t`Indexing`}
+        description={t`What the index jobs read: which of her fact files, the pattern that names her in them, and the scene types left out of her stream archive. Index again after a change.`}
       />
       <SettingsCard
         scope="persona"
         persona={persona.id}
         paths={CARD_PATHS.search}
-        title={t("studio.search.title")}
-        description={t("studio.search.description")}
+        title={t`Search`}
+        description={t`How a call searches what she knows: how many candidates each index offers, the reranker that orders them, and the gate that skips the search when a turn isn't about her.`}
       />
     </>
   );

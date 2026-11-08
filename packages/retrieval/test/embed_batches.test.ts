@@ -169,8 +169,8 @@ test("a fully cached run needs no key; a miss without one fails as Python did", 
   await expect(
     embedInBatches(["a", "b"], { batchSize: 64, noun: "chunks", cache, dim: 2 }),
   ).rejects.toThrow(
-    "Embeddings need an API key. Set OPENROUTER_API_KEY (reused from the LLM config) or " +
-      "EMBED_API_KEY for a different provider.",
+    "OpenRouter needs an API key: set OPENROUTER_API_KEY in credentials.json or the " +
+      "environment, or EMBED_API_KEY for embeddings alone",
   );
   cache.close();
 });

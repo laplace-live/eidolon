@@ -1,10 +1,11 @@
+import { msg, ph } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { BookOpenIcon, PhoneIcon } from "lucide-react";
 import { Link } from "react-router";
 import { PersonaAvatar } from "@/components/avatar";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import type { Status } from "@/lib/api";
-import { useT } from "@/lib/i18n";
 import { studioPath } from "@/lib/paths";
 import { cn } from "@/lib/utils";
 import type { Verdict } from "./readiness";
@@ -15,13 +16,19 @@ const DOT: Readonly<Record<Verdict, string>> = {
   blocked: "bg-destructive",
 };
 
+const VERDICT_TEXT = {
+  ready: msg`Ready for calls`,
+  attention: msg`Needs attention`,
+  blocked: msg`Calls can't start yet`,
+} satisfies Record<Verdict, unknown>;
+
 /** The readiness list in a word, after a dot of its color. */
 export function VerdictLabel({ verdict }: { readonly verdict: Verdict }) {
-  const t = useT();
+  const { t } = useLingui();
   return (
     <span className="flex items-center gap-1.5">
       <span aria-hidden className={cn("size-2 shrink-0 rounded-full", DOT[verdict])} />
-      {t(`home.verdict.${verdict}`)}
+      {t(VERDICT_TEXT[verdict])}
     </span>
   );
 }
@@ -34,14 +41,14 @@ export function Hero({
   readonly persona: Status["persona"];
   readonly verdict: Verdict;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   return (
     <PageHeader
       leading={<PersonaAvatar persona={persona} size="xl" />}
       title={
         <>
           <span className="mb-1 block font-medium text-muted-foreground text-sm tracking-normal">
-            {t("home.persona.active")}
+            {t`Talking to`}
           </span>
           {persona.name}
         </>
@@ -60,13 +67,13 @@ export function Hero({
           <Button size="lg" variant="outline" asChild>
             <Link to={studioPath(persona.id)}>
               <BookOpenIcon />
-              {t("common.openStudio")}
+              {t`Open the Studio`}
             </Link>
           </Button>
           <Button size="lg" asChild>
             <Link to="/call">
               <PhoneIcon />
-              {t("home.call", { name: persona.shortName || persona.name })}
+              {t`Call ${ph({ name: persona.shortName || persona.name })}`}
             </Link>
           </Button>
         </>

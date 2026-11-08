@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { DEFAULT_PERSONA, IDENTITY_DEFAULTS, PROJECT_ROOT } from "@eidolon/config";
 import { LOCAL_ROUTES } from "../../../../bot/src/local/api.ts";
-import type { CredentialsResponse, SettingRow } from "../../lib/api";
+import type { SettingRow } from "../../lib/api";
 import {
   cookieDefault,
   createRequest,
@@ -15,6 +15,7 @@ import {
   isNewInstall,
   memoryStepAction,
   nextStep,
+  otherVoiceProvider,
   PERSONA_ID,
   personaErrors,
   previousStep,
@@ -27,7 +28,10 @@ import {
 } from "./wizard";
 
 const keys = (fish: boolean) => ({
-  keys: { SONIOX_API_KEY: true, OPENROUTER_API_KEY: true, FISH_API_KEY: fish },
+  keys: [
+    { account: "soniox", name: "Soniox", provider: "soniox", roles: ["hearing"], set: true },
+    { account: "fish", name: "Fish Audio", provider: "fish", roles: ["voice"], set: fish },
+  ],
 });
 
 describe("steps", () => {
@@ -61,6 +65,7 @@ function setting(path: string, extra: Partial<SettingRow> = {}): SettingRow {
     value: null,
     source: "default",
     envValue: null,
+    envName: null,
     envOverride: false,
     productionOnly: false,
     readOnly: false,
@@ -68,7 +73,8 @@ function setting(path: string, extra: Partial<SettingRow> = {}): SettingRow {
   };
 }
 
-const none: CredentialsResponse = { SONIOX_API_KEY: { set: false, source: null } };
+/** The accounts a fresh home lists: the ones her calls need, without a key. */
+const none = [{ saved: false, key: { value: null, source: null } }];
 const fresh = [
   setting("sources.cookiesFromBrowser"),
   setting("voice.voiceId", { scope: "persona", source: "persona", value: "x" }),
@@ -83,7 +89,7 @@ describe("the new-install cookie default", () => {
   test("any saved setting, environment value or key makes the install an existing one", () => {
     const saved = [...fresh, setting("local.viewerName", { source: "app", value: "Ann" })];
     const fromEnv = [...fresh, setting("memory.qdrant.host", { envOverride: true })];
-    const withKey: CredentialsResponse = { SONIOX_API_KEY: { set: true, source: "env" } };
+    const withKey = [{ saved: false, key: { value: null, source: "env" as const } }];
     expect(isNewInstall(saved, none)).toBe(false);
     expect(isNewInstall(fromEnv, none)).toBe(false);
     expect(isNewInstall(fresh, withKey)).toBe(false);
@@ -109,6 +115,19 @@ test("a persona inherits the environment's value only while her file leaves it u
   ).toBeNull();
   expect(inheritedValue(voice({}))).toBeNull();
   expect(inheritedValue(undefined)).toBeNull();
+});
+
+test("the voice step leaves a voice with a provider other than Fish as she has it", () => {
+  const provider = (patch: Partial<SettingRow>) =>
+    setting("voice.provider", { env: "TTS_PROVIDER", scope: "persona", ...patch });
+  const accounts = [{ id: "speech", provider: "openai" }];
+  expect(otherVoiceProvider([], undefined)).toBeNull();
+  expect(otherVoiceProvider([provider({ value: "fish", source: "persona" })], [])).toBeNull();
+  expect(otherVoiceProvider([provider({ value: "openai", source: "persona" })], [])).toBe("openai");
+  expect(otherVoiceProvider([provider({ value: "speech", source: "persona" })], accounts)).toBe(
+    "openai",
+  );
+  expect(otherVoiceProvider([provider({ envValue: "elevenlabs" })], [])).toBe("elevenlabs");
 });
 
 describe("creating a persona", () => {

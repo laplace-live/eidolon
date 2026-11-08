@@ -1,10 +1,13 @@
 // Amounts, sizes, counts and times, written for the viewer's language.
-import type { Lang } from "@/lib/i18n";
+import type { Lang } from "@/locales/i18n";
 
 const formats = new Map<string, Intl.NumberFormat | Intl.DateTimeFormat>();
 
 /** Building an Intl formatter costs far more than using one, and a job's log formats hundreds. */
-function cached<F extends Intl.NumberFormat | Intl.DateTimeFormat>(key: string, make: () => F): F {
+export function cached<F extends Intl.NumberFormat | Intl.DateTimeFormat>(
+  key: string,
+  make: () => F,
+): F {
   let format = formats.get(key) as F | undefined;
   if (format === undefined) {
     format = make();
@@ -21,6 +24,47 @@ export function formatUsd(usd: number, lang: Lang): string {
   );
   if (usd > 0 && usd < 0.01) return `< ${format.format(0.01)}`;
   return format.format(usd);
+}
+
+/** US dollars as usage adds up: to the cent, or to two significant digits under a cent. */
+export function formatSpend(usd: number, lang: Lang): string {
+  if (usd > 0 && usd < 0.01) {
+    const small = cached(
+      `spend:${lang}`,
+      () =>
+        new Intl.NumberFormat(lang, {
+          style: "currency",
+          currency: "USD",
+          maximumSignificantDigits: 2,
+        }),
+    );
+    return small.format(usd);
+  }
+  return formatUsd(usd, lang);
+}
+
+/** US dollars with exactly `decimals` places, for an axis whose ticks share them. */
+export function formatUsdTick(usd: number, decimals: number, lang: Lang): string {
+  const format = cached(
+    `usdTick:${lang}:${decimals}`,
+    () =>
+      new Intl.NumberFormat(lang, {
+        style: "currency",
+        currency: "USD",
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+      }),
+  );
+  return format.format(usd);
+}
+
+/** A count in short form: 1.2K, 3.4M, and 1.2万 in Chinese. */
+export function formatCompact(count: number, lang: Lang): string {
+  const format = cached(
+    `compact:${lang}`,
+    () => new Intl.NumberFormat(lang, { notation: "compact", maximumFractionDigits: 1 }),
+  );
+  return format.format(count);
 }
 
 /** `1:02:03`, or `4:05` under an hour. */

@@ -1,3 +1,4 @@
+import "../../../packages/config/test/isolated-guard.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   copyFileSync,
@@ -8,9 +9,13 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { dataHome, installSettings, resetSettings } from "@eidolon/config";
+import { DEFAULT_IMAGE_MODEL } from "@eidolon/imagegen";
+import { setUsageSink, type UsageRecord } from "@eidolon/providers";
 import { generateImageMain, outPath } from "../src/index.ts";
 import { blockNetwork, captureIo, FIX, golden, placehold, setEnv, substitute } from "./helpers.ts";
 
@@ -167,4 +172,70 @@ test("the built-in prompt reads the persona clock where Python does", async () =
   });
   expect(reads).toEqual(["clock", "clock"]);
   expect(io.stdout()).toContain("Time: it is late night, about 23:59 local time.");
+});
+
+test("a key the local app saved in OpenRouter's account works as the variable does", async () => {
+  const credentials = join(dataHome(), "credentials.json");
+  mkdirSync(dataHome(), { recursive: true });
+  writeFileSync(
+    credentials,
+    JSON.stringify({ accounts: { openrouter: { provider: "openrouter", apiKey: "sk-saved" } } }),
+    { mode: 0o600 },
+  );
+  installSettings();
+  try {
+    const auth: string[] = [];
+    const io = captureIo();
+    const code = await generateImageMain(["-o", join(work, "x.png")], {
+      ...io.io,
+      referencesRoot: REFS,
+      fetch: (async (_url: string, init: RequestInit) => {
+        auth.push((init.headers as Record<string, string>).Authorization as string);
+        return new Response(JSON.stringify(RESPONSES.one?.[1]), { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+    expect([code, auth]).toEqual([0, ["Bearer sk-saved"]]);
+  } finally {
+    rmSync(credentials, { force: true });
+    resetSettings();
+  }
+});
+
+test("each render goes into the usage ledger as a selfie, before its files are written", async () => {
+  process.env.OPENROUTER_API_KEY = "sk-test";
+  const records: UsageRecord[] = [];
+  setUsageSink((record) => records.push(record));
+  try {
+    // A file where the output's folder should be, so writing the image fails.
+    writeFileSync(join(work, "blocked"), "");
+    const io = captureIo();
+    const code = await generateImageMain(["-o", join(work, "blocked", "x.png")], {
+      ...io.io,
+      referencesRoot: REFS,
+      fetch: (async () =>
+        new Response(JSON.stringify(RESPONSES.one?.[1]), {
+          status: 200,
+        })) as unknown as typeof fetch,
+    }).catch(() => "threw");
+    expect(code).toBe("threw");
+    expect(
+      records.map(({ role, provider, model, units, costUsd }) => ({
+        role,
+        provider,
+        model,
+        units,
+        costUsd,
+      })),
+    ).toEqual([
+      {
+        role: "selfie",
+        provider: "openrouter",
+        model: DEFAULT_IMAGE_MODEL,
+        units: { images: 1 },
+        costUsd: 0.04,
+      },
+    ]);
+  } finally {
+    setUsageSink(null);
+  }
 });

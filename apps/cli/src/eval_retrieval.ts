@@ -26,6 +26,7 @@ import {
   sortedPy,
   sourceFolder,
 } from "@eidolon/config";
+import { accountOf, billingProvider, reportUsage } from "@eidolon/providers";
 import {
   DEFAULT_RERANK_BASE_URL,
   dbPathArgument,
@@ -288,7 +289,7 @@ type Resolved = Required<Omit<EvalDeps, keyof CliIo>>;
 
 /** Bypasses makeReranker's process cache so each model is measured on its own. */
 export function namedReranker(model: string): Reranker {
-  const apiKey = envOptional("RERANK_API_KEY") ?? envOptional("OPENROUTER_API_KEY");
+  const apiKey = envOptional("RERANK_API_KEY") ?? accountOf("openrouter")?.apiKey;
   if (!apiKey) {
     throw new Error(
       "--rerank-models requires RERANK_API_KEY or OPENROUTER_API_KEY " +
@@ -296,10 +297,13 @@ export function namedReranker(model: string): Reranker {
         "is the same RRF for every 'model').",
     );
   }
+  const baseUrl = envOptional("RERANK_BASE_URL") ?? DEFAULT_RERANK_BASE_URL;
+  const provider = billingProvider("openrouter", baseUrl);
   return new OpenRouterReranker({
     modelName: model,
     apiKey,
-    baseUrl: envOptional("RERANK_BASE_URL") ?? DEFAULT_RERANK_BASE_URL,
+    baseUrl,
+    onUsage: (units, costUsd) => reportUsage({ role: "rerank", provider, model, units, costUsd }),
   });
 }
 

@@ -1,17 +1,19 @@
+import { ph } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { InfoIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { ApiError, errorKey, type PersonaSummary, type PersonaText } from "@/lib/api";
-import { useT } from "@/lib/i18n";
+import { ApiError, type PersonaSummary, type PersonaText } from "@/lib/api";
+import { errorMessage } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 
 export function LoadError({ error }: { readonly error: unknown }) {
-  const t = useT();
+  const { t } = useLingui();
   return (
     <Alert variant="destructive">
-      <AlertTitle>{t("studio.loadFailed")}</AlertTitle>
+      <AlertTitle>{t`Couldn't load this`}</AlertTitle>
       <AlertDescription>
-        {t(errorKey(error))}
+        {t(errorMessage(error))}
         {error instanceof ApiError && <span className="block text-xs">{error.message}</span>}
       </AlertDescription>
     </Alert>
@@ -49,7 +51,9 @@ export function SourceNote({
   readonly source: PersonaText["source"];
   readonly persona: PersonaSummary;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   if (source !== "template") return null;
-  return <Hint>{t("studio.source.template", { name: persona.name })}</Hint>;
+  return (
+    <Hint>{t`This is ${ph({ name: persona.name })}'s built-in file. Saving keeps your copy in your data home and leaves the original unchanged.`}</Hint>
+  );
 }

@@ -1,7 +1,7 @@
 // The admin API at /api/local, typed by its wire types in apps/bot/src/local/api.ts, which the SPA
 // reaches only through this module. Calls are same-origin with the session cookie and its proof; a
-// failure is an ApiError whose `code` the UI shows as t(errorKey(error)), keeping `message` as
-// detail only.
+// failure is an ApiError whose `code` the UI shows as errorMessage(error) in lib/labels.ts, keeping
+// `message` as detail only.
 import type { ErrorCode, LocalApi, Raw } from "../../../bot/src/local/api.ts";
 import { proofHeaders } from "./proof";
 
@@ -51,11 +51,6 @@ export async function errorFrom(response: Response): Promise<ApiError> {
     typeof error.message === "string" ? error.message : `HTTP ${response.status}`,
     typeof error.id === "string" ? error.id : null,
   );
-}
-
-/** The locale key that names an error for the viewer. */
-export function errorKey(error: unknown): string {
-  return `errors.${error instanceof ApiError ? error.code : "unknown"}`;
 }
 
 /** The server's English for an error, with the id of its log line when it has one. */

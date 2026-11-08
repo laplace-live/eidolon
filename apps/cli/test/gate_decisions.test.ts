@@ -1,8 +1,18 @@
+import "../../../packages/config/test/isolated-guard.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PyFloat } from "@eidolon/config";
+import { dataHome, installSettings, PyFloat, resetSettings } from "@eidolon/config";
+import { setUsageSink, type UsageRecord } from "@eidolon/providers";
 import {
   ask,
   type GateRow,
@@ -188,6 +198,36 @@ test("the command ignores its arguments, as decisions.py does", async () => {
   expect(requests).toHaveLength(2);
 });
 
+test("a key the local app saved in OpenRouter's account asks Jev too", async () => {
+  const credentials = join(dataHome(), "credentials.json");
+  mkdirSync(dataHome(), { recursive: true });
+  writeFileSync(
+    credentials,
+    JSON.stringify({ accounts: { openrouter: { provider: "openrouter", apiKey: "sk-saved" } } }),
+    { mode: 0o600 },
+  );
+  installSettings();
+  try {
+    const turnsPath = join(work, "turns.toml");
+    copyFileSync(join(FIX, "gate/turns_one.toml"), turnsPath);
+    const { fetch, requests } = fakeJev(null);
+    const code = await gateDecisionsMain([], {
+      ...captureIo().io,
+      turnsPath,
+      outPath: join(work, "decisions.json"),
+      fetch,
+      now: steppingClock(),
+    });
+    expect([code, [...new Set(requests.map((request) => request.auth))]]).toEqual([
+      0,
+      ["Bearer sk-saved"],
+    ]);
+  } finally {
+    rmSync(credentials, { force: true });
+    resetSettings();
+  }
+});
+
 test("a turn without text raises KeyError, as decisions.py's turn['text'] does", async () => {
   const options = { model: "m", headers: {}, fetch: fakeJev(null).fetch, now: () => 0 };
   await expect(ask({ set: "dev" } as never, options)).rejects.toThrow("'text'");
@@ -206,4 +246,40 @@ test("a redirect is not followed and raises httpx's message", async () => {
       "Redirect location: 'https://example.com/next'\n" +
       "For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/302",
   );
+});
+
+test("each answer's usage goes into the ledger as the gate's", async () => {
+  const records: UsageRecord[] = [];
+  setUsageSink((record) => records.push(record));
+  try {
+    const answer = (async () =>
+      Response.json({
+        answers: { about_her: { noul: 0.7 } },
+        model: "typesafe/jev-1.14",
+        usage: { input_tokens: 120, output_tokens: 3, cost: 0.0002 },
+      })) as unknown as typeof globalThis.fetch;
+    await ask(
+      { text: "x" },
+      { model: "~typesafe/jev-latest", headers: {}, fetch: answer, now: () => 0 },
+    );
+    expect(
+      records.map(({ role, provider, model, units, costUsd }) => ({
+        role,
+        provider,
+        model,
+        units,
+        costUsd,
+      })),
+    ).toEqual([
+      {
+        role: "gate",
+        provider: "openrouter",
+        model: "typesafe/jev-1.14",
+        units: { inputTokens: 120, outputTokens: 3 },
+        costUsd: 0.0002,
+      },
+    ]);
+  } finally {
+    setUsageSink(null);
+  }
 });

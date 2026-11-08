@@ -687,9 +687,11 @@ async function refineStage(options: PipelineOptions): Promise<StageResult> {
       return result(0);
     case "dry-run":
       return result(0);
-    case "no-key":
-      logger.error(refine.MISSING_API_KEY);
-      return fail(refine.MISSING_API_KEY, "missing-credential");
+    case "no-key": {
+      const message = refine.missingApiKey();
+      logger.error(message);
+      return fail(message, "missing-credential");
+    }
     case "done": {
       const { report } = run;
       const spent = report.results.some((r) => r.chunksSucceeded + r.chunksFailed > 0);

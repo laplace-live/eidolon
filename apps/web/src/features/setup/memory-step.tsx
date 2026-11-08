@@ -1,19 +1,21 @@
+import { ph } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CircleCheckIcon } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 import { ErrorAlert } from "@/components/error-alert";
 import { SectionCardSkeleton } from "@/components/section-card";
+import type { CheckOutcome } from "@/components/settings-form/check-result";
+import { CheckResultView } from "@/components/settings-form/check-result";
 import { controlFor, draftOf, parseDraft } from "@/components/settings-form/controls";
-import { CheckResultView } from "@/components/settings-form/key-field";
+import { INVALID_MESSAGES } from "@/components/settings-form/labels";
 import { settingsQuery } from "@/components/settings-form/queries";
-import type { CheckOutcome } from "@/components/settings-form/use-keys";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { type ApiError, asApiError, call } from "@/lib/api";
-import { useT } from "@/lib/i18n";
 import { statusQuery } from "@/lib/query";
 import { CopyCommand } from "./copy-command";
 import { StepCard } from "./step-card";
@@ -28,7 +30,7 @@ import {
 
 const HOST = "memory.qdrant.host";
 const PORT = "memory.qdrant.port";
-const PORT_CONTROL = controlFor({ path: PORT, kind: "int", scope: "app" });
+const PORT_CONTROL = controlFor({ path: PORT, env: "MEM0_QDRANT_PORT", kind: "int", scope: "app" });
 
 function Instruction({ n, children }: { readonly n: number; readonly children: ReactNode }) {
   return (
@@ -52,7 +54,7 @@ export function MemoryStep({
   readonly onBack: () => void;
   readonly onDone: () => void;
 }) {
-  const t = useT();
+  const { t, i18n } = useLingui();
   const hostId = useId();
   const portId = useId();
   const queryClient = useQueryClient();
@@ -122,22 +124,22 @@ export function MemoryStep({
 
   return (
     <StepCard
-      title={t("setup.memory.title")}
-      description={t("setup.memory.body")}
+      title={t`Memory (Optional)`}
+      description={t`With memory on, she remembers you from one call to the next. It needs Qdrant, a database you run in Docker on this machine. Skip it and everything else still works.`}
       onBack={onBack}
       busy={busy}
       footer={
         action === "next" ? (
-          <Button onClick={onDone}>{t("setup.next")}</Button>
+          <Button onClick={onDone}>{t`Continue`}</Button>
         ) : (
           <>
             {/* Once memory is on, going on keeps the address it runs on. */}
             <Button variant="ghost" onClick={onDone} disabled={busy}>
-              {t(on ? "setup.next" : "setup.memory.skip")}
+              {on ? t`Continue` : t`Skip`}
             </Button>
             <Button onClick={() => void checkAndSave()} disabled={busy || typed === null}>
               {busy && <Spinner />}
-              {t(on ? "setup.memory.recheck" : "setup.memory.check")}
+              {on ? t`Check and Save` : t`Check and Turn On`}
             </Button>
           </>
         )
@@ -146,24 +148,28 @@ export function MemoryStep({
       {on && (
         <Alert>
           <CircleCheckIcon className="text-success" />
-          <AlertTitle>{t("setup.memory.on")}</AlertTitle>
+          <AlertTitle>{t`Memory is on.`}</AlertTitle>
         </Alert>
       )}
       <ol className="flex flex-col gap-5 text-sm">
-        <Instruction n={1}>{t("setup.memory.docker")}</Instruction>
+        <Instruction
+          n={1}
+        >{t`Install Docker Desktop, or Docker Engine on Linux, and start it.`}</Instruction>
         <Instruction n={2}>
           <div className="flex flex-col gap-2.5">
-            {t("setup.memory.run")}
+            {t`Run this once in a terminal:`}
             <CopyCommand command={QDRANT_COMMAND} />
-            <span className="text-muted-foreground text-xs">{t("setup.memory.runNote")}</span>
+            <span className="text-muted-foreground text-xs">{t`It answers only on this machine, keeps its data in a Docker volume and restarts with Docker.`}</span>
           </div>
         </Instruction>
-        <Instruction n={3}>{t("setup.memory.checkHint")}</Instruction>
+        <Instruction
+          n={3}
+        >{t`Check it below. Already running Qdrant here? Just check its address.`}</Instruction>
       </ol>
 
       <div className="grid max-w-xl gap-4 sm:grid-cols-[1fr_8rem]">
         <Field>
-          <FieldLabel htmlFor={hostId}>{t("settings.memory.qdrant.host")}</FieldLabel>
+          <FieldLabel htmlFor={hostId}>{t`Qdrant Host`}</FieldLabel>
           <Input
             id={hostId}
             value={hostText}
@@ -178,7 +184,7 @@ export function MemoryStep({
           />
         </Field>
         <Field data-invalid={!portParsed.ok}>
-          <FieldLabel htmlFor={portId}>{t("settings.memory.qdrant.port")}</FieldLabel>
+          <FieldLabel htmlFor={portId}>{t`Qdrant Port`}</FieldLabel>
           <Input
             id={portId}
             value={portText}
@@ -191,12 +197,18 @@ export function MemoryStep({
               setOutcome(null);
             }}
           />
-          {!portParsed.ok && <FieldError>{t(portParsed.error, { min: 1, max: 65535 })}</FieldError>}
+          {!portParsed.ok && (
+            <FieldError>
+              {INVALID_MESSAGES[portParsed.error]
+                ? i18n._({ ...INVALID_MESSAGES[portParsed.error], values: { min: 1, max: 65535 } })
+                : portParsed.error}
+            </FieldError>
+          )}
         </Field>
       </div>
       {fromEnv && (
         <FieldDescription>
-          {t("settings.form.envOverride", { env: hostRow?.env ?? "MEM0_QDRANT_HOST" })}
+          {t`Set by ${ph({ env: hostRow?.env ?? "MEM0_QDRANT_HOST" })} in the environment, which wins over the value saved here. Change it there.`}
         </FieldDescription>
       )}
 

@@ -2,9 +2,20 @@
 // it back from the file exactly as from the variable: @eidolon/config's asEnvValue joins a list
 // with "," and resolves each path, and the readers split on "," and strip Python whitespace.
 import type { SettingKind, SettingRow, SettingScope } from "@/lib/api";
+import {
+  defaultModel,
+  PROVIDERS,
+  providerOfAccount,
+  ROLES,
+  type Role,
+  roleById,
+  roleOfModelEnv,
+  roleOfProviderEnv,
+} from "@/lib/providers";
 
 export type Control =
-  | { readonly type: "text" }
+  /** `placeholder`: what applies while it is empty, where that is a value, such as an API base. */
+  | { readonly type: "text"; readonly placeholder?: string }
   | { readonly type: "integer"; readonly min?: number; readonly max?: number }
   | { readonly type: "number" }
   | { readonly type: "flag" }
@@ -13,10 +24,13 @@ export type Control =
   | { readonly type: "paths"; readonly inPersona: boolean }
   | { readonly type: "select"; readonly options: readonly string[] }
   | { readonly type: "timezone" }
-  | { readonly type: "language" };
-
-/** Fish Audio's TTS models; s1 retires on 2026-12-31. */
-export const FISH_MODELS = ["drama-3", "s2.1-pro", "s2.1-pro-free", "s2-pro", "s1"] as const;
+  | { readonly type: "language" }
+  /** Which provider fills a role: the catalog's that offer what it needs. */
+  | { readonly type: "provider"; readonly role: Role }
+  /** A role's model, suggested from its provider's. */
+  | { readonly type: "model"; readonly role: Role }
+  /** A voice: a provider's fixed set, or its id. */
+  | { readonly type: "voice"; readonly role: Role };
 
 /** The browsers yt-dlp's --cookies-from-browser reads, and `none` for no cookies. */
 export const COOKIE_BROWSERS = [
@@ -33,7 +47,9 @@ export const COOKIE_BROWSERS = [
 ] as const;
 
 const BY_PATH: Readonly<Record<string, Control>> = {
-  "voice.model": { type: "select", options: FISH_MODELS },
+  "voice.voiceId": { type: "voice", role: roleById("voice") },
+  "realtime.voice": { type: "voice", role: roleById("realtime") },
+  "hearing.language": { type: "language" },
   "selfie.quality": { type: "select", options: ["auto", "low", "medium", "high", "xhigh", "max"] },
   "sources.cookiesFromBrowser": { type: "select", options: COOKIE_BROWSERS },
   "identity.timezone": { type: "timezone" },
@@ -62,8 +78,122 @@ function byKind(kind: SettingKind, scope: SettingScope): Control {
   }
 }
 
-export function controlFor(row: Pick<SettingRow, "path" | "kind" | "scope">): Control {
-  return BY_PATH[row.path] ?? byKind(row.kind, row.scope);
+export function controlFor(row: Pick<SettingRow, "path" | "env" | "kind" | "scope">): Control {
+  const own = BY_PATH[row.path];
+  if (own !== undefined) return own;
+  const base = PROVIDERS.find((provider) => provider.baseUrlEnv === row.env)?.baseUrl;
+  if (base) return { type: "text", placeholder: base };
+  const provider = roleOfProviderEnv(row.env);
+  if (provider !== undefined) return { type: "provider", role: provider };
+  const model = roleOfModelEnv(row.env);
+  if (model !== undefined) return { type: "model", role: model };
+  return byKind(row.kind, row.scope);
+}
+
+/** The settings path holding a role's provider. */
+function providerPath(role: Role): string {
+  return `${role.path}.provider`;
+}
+
+/** The accounts as the pages know them: an id, and the provider it stands for. */
+export type AccountList = readonly { readonly id: string; readonly provider: string }[];
+
+/**
+ * The account that fills `role` as the drafts stand: the draft, else her file's, else the
+ * environment's, else the one it follows, else its provider's default; null when nothing turns it on.
+ */
+export function effectiveProvider(
+  role: Role,
+  rows: readonly Pick<SettingRow, "path" | "value" | "envValue" | "envOverride">[],
+  drafts: Readonly<Record<string, string>>,
+): string | null {
+  const chosen = chosenValue(providerPath(role), rows, drafts);
+  if (chosen !== null) return chosen.toLowerCase();
+  if (role.follows !== undefined) return effectiveProvider(roleById(role.follows), rows, drafts);
+  return role.defaultProvider;
+}
+
+/**
+ * The value at `path` as the drafts stand: the draft, else her file's, else the environment's; an
+ * app row's environment value wins over its file's, as the bot reads it.
+ */
+function chosenValue(
+  path: string,
+  rows: readonly Pick<SettingRow, "path" | "value" | "envValue" | "envOverride">[],
+  drafts: Readonly<Record<string, string>>,
+): string | null {
+  const row = rows.find((candidate) => candidate.path === path);
+  const draft = drafts[path];
+  if (draft === undefined && row?.envOverride && row.envValue) return strip(row.envValue);
+  const own =
+    draft !== undefined ? strip(draft) : typeof row?.value === "string" ? strip(row.value) : "";
+  if (own !== "") return own;
+  return row?.envValue ? strip(row.envValue) : null;
+}
+
+/** The provider of the account that fills `role` as the drafts stand: models and voices are its. */
+export function effectiveProviderType(
+  role: Role,
+  rows: readonly Pick<SettingRow, "path" | "value" | "envValue" | "envOverride">[],
+  drafts: Readonly<Record<string, string>>,
+  accounts: AccountList | undefined,
+): string | null {
+  return providerOfAccount(effectiveProvider(role, rows, drafts), accounts);
+}
+
+/**
+ * The model `role` gets while she names none, as the drafts stand: the followed role's while both
+ * use one provider, as the bot resolves it, else the provider's default; null when it needs one.
+ */
+export function fallbackModel(
+  role: Role,
+  rows: readonly Pick<SettingRow, "path" | "value" | "envValue" | "envOverride">[],
+  drafts: Readonly<Record<string, string>>,
+  accounts: AccountList | undefined,
+): string | null {
+  const provider = effectiveProviderType(role, rows, drafts, accounts);
+  if (provider === null) return null;
+  if (role.follows !== undefined) {
+    const followed = roleById(role.follows);
+    if (effectiveProviderType(followed, rows, drafts, accounts) === provider) {
+      return (
+        chosenValue(`${followed.path}.model`, rows, drafts) ??
+        fallbackModel(followed, rows, drafts, accounts)
+      );
+    }
+  }
+  return defaultModel(role, provider);
+}
+
+/** The paths whose values belong to `role`'s provider: they go when it changes. */
+function dependentsOf(role: Role): string[] {
+  const dependents = [`${role.path}.model`];
+  if (role.id === "voice") dependents.push("voice.voiceId");
+  if (role.id === "realtime") dependents.push("realtime.voice");
+  return dependents;
+}
+
+/**
+ * What a save of `saving` leaves behind: the model and voice of every role whose provider the
+ * drafts change, a role that follows another one's included, unless the save sets them itself.
+ */
+export function orphanedByProvider(
+  rows: readonly SettingRow[],
+  drafts: Readonly<Record<string, string>>,
+  saving: Readonly<Record<string, unknown>>,
+  accounts: AccountList | undefined,
+): string[] {
+  const cleared: string[] = [];
+  for (const role of ROLES) {
+    // Another account of the same provider takes the same models and voices.
+    const before = effectiveProviderType(role, rows, {}, accounts);
+    if (before === effectiveProviderType(role, rows, drafts, accounts)) continue;
+    for (const path of dependentsOf(role)) {
+      const dependent = rows.find((candidate) => candidate.path === path);
+      if (dependent?.value != null && !(path in saving)) cleared.push(path);
+    }
+  }
+  return cleared;
 }
 
 /** Python's `str.isspace()` set, which the readers strip from each item. */
@@ -217,11 +347,22 @@ export function optionsOf(control: Control & { type: "select" }, current: string
   return options;
 }
 
-/** Changing either needs every index re-ingested and a new memory collection. */
+/**
+ * Changing either needs every index re-ingested and a new memory collection, as does another
+ * embedding provider; another account of the same one doesn't.
+ */
 export const REINDEX_PATHS: readonly string[] = ["embeddings.model", "embeddings.dim"];
 
 /** Rows the form never shows: the active persona switches through PUT personas/active instead. */
-const HIDDEN = new Set(["persona"]);
+const HIDDEN = new Set([
+  "persona",
+  // Edited as an account's API base. A role's own still applies while it uses OpenRouter's account.
+  "providers.openrouter.apiBase",
+  "providers.openai.baseUrl",
+  "embeddings.baseUrl",
+  "rerank.baseUrl",
+  "refine.baseUrl",
+]);
 
 export const GROUPS = [
   "you",
@@ -234,6 +375,7 @@ export const GROUPS = [
   "selfie",
   "providers",
   "sources",
+  "usage",
   "production",
   "other",
 ] as const;
@@ -247,6 +389,7 @@ const GROUP_OF: Readonly<Record<string, Group>> = {
   prompt: "persona",
   hearing: "models",
   mind: "models",
+  realtime: "models",
   memory: "memory",
   knowledge: "knowledge",
   transcription: "videos",
@@ -255,6 +398,7 @@ const GROUP_OF: Readonly<Record<string, Group>> = {
   embeddings: "providers",
   rerank: "providers",
   sources: "sources",
+  usage: "usage",
   access: "production",
   network: "production",
   audio: "production",

@@ -11,6 +11,7 @@ import * as memory from "@eidolon/memory";
 import * as retrieval from "@eidolon/retrieval";
 import * as runtime from "@eidolon/runtime";
 import * as turn from "@eidolon/turn";
+import { installUsageLedger } from "@eidolon/usage";
 import { parseBotArgs } from "./args.ts";
 import * as mcp from "./mcp/index.ts";
 import { shutdownHandler, startBotServer } from "./server.ts";
@@ -20,6 +21,7 @@ import { shutdownHandler, startBotServer } from "./server.ts";
 process.on("unhandledRejection", (reason) => logger.error("Unhandled rejection", reason));
 
 const args = parseBotArgs(Bun.argv.slice(2));
+installUsageLedger();
 const bot = await startBotServer(args, {
   access,
   imagegen,

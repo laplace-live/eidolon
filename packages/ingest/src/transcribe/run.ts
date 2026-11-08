@@ -17,7 +17,6 @@ import {
   cpLen,
   cpSlice,
   envOptional,
-  envStr,
   errorText,
   logger,
   PyFloat,
@@ -34,6 +33,7 @@ import {
   resolvePersonaPath,
   sortedPy,
 } from "@eidolon/config";
+import { reportUsage, selectRequired } from "@eidolon/providers";
 import { failureOf } from "../failure.ts";
 import { writeTextAtomic } from "../paths.ts";
 import { noProgress, type RunOptions } from "../progress.ts";
@@ -223,7 +223,7 @@ export function listAudioFiles(vodsDir: string): string[] {
 
 /** The model a run uses unless told otherwise: the transcription.model setting, else the default. */
 export function configuredModel(): string {
-  return envStr("SONIOX_ASYNC_MODEL", DEFAULT_SONIOX_MODEL);
+  return selectRequired("transcription").model;
 }
 
 export const MISSING_API_KEY =
@@ -232,7 +232,7 @@ export const MISSING_API_KEY =
 
 /** SONIOX_API_KEY; undefined when it isn't set. */
 export function sonioxApiKey(): string | undefined {
-  return envOptional("SONIOX_API_KEY");
+  return selectRequired("transcription").apiKey;
 }
 
 /**
@@ -391,6 +391,14 @@ async function transcribe(options: TranscribeOptions): Promise<TranscribeResult>
         ? await transcribeWhole(session, audio, durationSec)
         : await transcribeSliced(session, audio, slices, options.ffmpeg);
     unsaved = true;
+    // Billed once Soniox has transcribed it, whether or not it can be saved here.
+    reportUsage({
+      role: "transcription",
+      provider: "soniox",
+      model,
+      units: { audioSeconds: outcome.durationSec },
+      estimatedUsd: estimateTranscribeUsd(outcome.durationSec, model),
+    });
     // The payload first: it holds everything the transcript renders from, and the transcript
     // stays the mark of a finished stream.
     const scenes = groupSegmentsIntoScenes(outcome.segments, windowSec);

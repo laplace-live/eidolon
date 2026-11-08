@@ -14,6 +14,7 @@
     "app": "[ -f apps/web/dist/index.html ] || bun run build:web && bun apps/bot/src/local/main.ts --open",
     "dev:web": "bun run --cwd apps/web dev",
     "build:web": "bun run --cwd apps/web build",
+    "i18n": "bun run --cwd apps/web i18n",
     "build:npm": "bun apps/eidolon/scripts/build.ts",
     "pack:npm": "bun apps/eidolon/scripts/build.ts --pack",
     "laplace-search": "bun apps/cli/src/main.ts search",

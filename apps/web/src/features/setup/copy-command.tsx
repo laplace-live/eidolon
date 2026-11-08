@@ -1,11 +1,11 @@
+import { useLingui } from "@lingui/react/macro";
 import { CheckIcon, CopyIcon } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useT } from "@/lib/i18n";
 
 /** A terminal command with a copy button. */
 export function CopyCommand({ command }: { readonly command: string }) {
-  const t = useT();
+  const { t } = useLingui();
   const [copied, setCopied] = useState(false);
   return (
     <div className="flex items-start gap-2 rounded-lg border bg-muted/50 p-3">
@@ -15,7 +15,7 @@ export function CopyCommand({ command }: { readonly command: string }) {
       <Button
         variant="ghost"
         size="icon-sm"
-        aria-label={t("setup.memory.copy")}
+        aria-label={t`Copy the Command`}
         onClick={() => {
           void navigator.clipboard.writeText(command).then(() => setCopied(true));
         }}

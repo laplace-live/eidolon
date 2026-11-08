@@ -39,7 +39,7 @@ set `EIDOLON_HOME=/data`.
 ```text
 <data home>/
   settings.yaml         the install's settings
-  credentials.json      API keys and tokens, mode 0600
+  credentials.json      provider accounts, API keys and tokens, mode 0600
   personas/<id>/        the user's own persona folders
   sources/<id>/         what builds a persona's index (below); never deployed
   cache/embed_cache.db  the embedding cache every persona shares; its key holds the model
@@ -88,24 +88,43 @@ environment (`KEY=` from a copied `.env.example`) or in a file, counts as unset.
   the environment < her `persona.yaml`. What she sets is hers, whatever the environment says; the
   environment's value is the default for every persona that leaves the setting unset. The local
   app's one default is `memory.agentId`, her id.
-- **Voice styles go with the voice.** The environment's `FISH_VOICE_ID_<STYLE>` voices are moods of
-  the environment's `FISH_VOICE_ID`, so they skip a persona whose `voice.voiceId` is her own: she
-  has only the styles her `voice.styles` gives her. A persona without one keeps the environment's
-  styles, and a style her `voice.styles` names replaces the environment's of that name.
+- **A model or voice goes with its provider.** The environment's `LLM_MODEL` belongs to its
+  `LLM_PROVIDER`, and so on for every role ([providers.md](providers.md)): a persona whose file
+  picks another provider doesn't inherit it. The provider-named variables (`OPENROUTER_MODEL`,
+  `SONIOX_MODEL`, `FISH_MODEL`, `FISH_VOICE_ID`, `SONIOX_ASYNC_MODEL`) apply only while that
+  provider fills the role, and the neutral name wins where both are set.
+- **Voice styles go with the voice.** The environment's `TTS_VOICE_ID_<STYLE>` voices (Fish's
+  `FISH_VOICE_ID_<STYLE>`) are moods of the environment's voice, so they skip a persona whose
+  `voice.voiceId` is her own: she has only the styles her `voice.styles` gives her. A persona
+  without one keeps the environment's styles, and a style her `voice.styles` names replaces the
+  environment's of that name.
 
 Whenever it loads the settings, the bot logs each environment variable a persona's file overrides,
 by name. `EIDOLON_PERSONA`, which picks the persona, is an install setting: the environment's wins.
 
-Secrets never go in YAML. `credentials.json` holds them, keyed by their variable names, beneath the
-environment, as the install's settings are:
+Secrets never go in YAML. `credentials.json` holds them beneath the environment, as the install's
+settings are: the provider accounts under `accounts` (one per key, each with its API base and the
+provider's settings; [providers.md](providers.md#accounts)), and other secrets under their
+variable names:
 
 ```json
-{ "OPENROUTER_API_KEY": "sk-or-…", "SONIOX_API_KEY": "…", "FISH_API_KEY": "…" }
+{
+  "accounts": {
+    "openrouter": { "provider": "openrouter", "apiKey": "sk-or-…" },
+    "openai-2": { "provider": "openai", "name": "OpenAI (work)", "apiKey": "sk-…" }
+  },
+  "SONIOX_API_KEY": "…",
+  "FISH_API_KEY": "…"
+}
 ```
 
-The names it accepts: `SONIOX_API_KEY`, `OPENROUTER_API_KEY`, `FISH_API_KEY`, `RERANK_API_KEY`,
-`EMBED_API_KEY`, `REFINE_API_KEY`, `OPENAI_API_KEY`, `CLOUDFLARE_TURN_KEY_API_TOKEN`,
-`WEBRTC_TURN_CREDENTIAL`, `CF_WAF_BYPASS_TOKEN`.
+A provider's variable still keys its default account, below that account's entry; the local app
+moves it into the entry when it saves a new one. The names it accepts: each provider's key (`SONIOX_API_KEY`, `OPENROUTER_API_KEY`, `FISH_API_KEY`,
+`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `DEEPSEEK_API_KEY`, `XAI_API_KEY`,
+`DASHSCOPE_API_KEY`, `MOONSHOT_API_KEY`, `ZHIPU_API_KEY`, `OPENAI_COMPATIBLE_API_KEY`,
+`ELEVENLABS_API_KEY`, `DEEPGRAM_API_KEY`, `CARTESIA_API_KEY`, `MINIMAX_API_KEY`, `COHERE_API_KEY`),
+a role's own (`RERANK_API_KEY`, `EMBED_API_KEY`, `REFINE_API_KEY`), and production's
+(`CLOUDFLARE_TURN_KEY_API_TOKEN`, `WEBRTC_TURN_CREDENTIAL`, `CF_WAF_BYPASS_TOKEN`).
 
 The TypeScript offline tools read these files as the bot does, for the persona `--persona` names.
 The Python ones, kept until Python is retired, still take the environment only.
@@ -144,36 +163,57 @@ voice:
 
 `knowledge.gate.questions.<key>` replaces a retrieval-gate question's text (`about_her`, `her_past`,
 `named_thing`); 奶绿's pack tunes `about_her` for her shop. `voice.styles.<name>` adds a voice
-style, as `FISH_VOICE_ID_<NAME>` would. Paths resolve in the persona's folder, the user's copy
+style, as `TTS_VOICE_ID_<NAME>` would; the local app drops them when it saves her voice on another
+provider, whose voice ids they aren't. Paths resolve in the persona's folder, the user's copy
 first.
+
+Each role's `provider` picks one from [the catalog](providers.md#roles) and its `model` is that
+provider's id for it, the provider's default when unset; `realtime.provider` is off until set.
+Memory is the exception: unset, it takes her chat model while both use one provider, so changing
+`mind.model` changes what extracting memories does and costs too.
+`hearing.language` is the language viewers speak, as a two-letter code: Soniox detects it when it
+is unset, and the other providers use `transcription.language`, else `zh`.
 
 | Setting | Variable | Kind | What |
 | --- | --- | --- | --- |
 | `prompt` | `PERSONA_FILE` | path | System prompt file |
 | `identity.timezone` | `PERSONA_TIMEZONE` | string | Time zone |
-| `voice.model` | `FISH_MODEL` | string | Fish Audio model |
-| `voice.voiceId` | `FISH_VOICE_ID` | string | Voice |
-| `hearing.model` | `SONIOX_MODEL` | string | Soniox model |
-| `mind.model` | `OPENROUTER_MODEL` | string | Chat model |
+| `voice.provider` | `TTS_PROVIDER` | string | Voice provider |
+| `voice.model` | `TTS_MODEL` | string | Voice model |
+| `voice.voiceId` | `TTS_VOICE_ID` | string | Voice |
+| `hearing.provider` | `STT_PROVIDER` | string | Speech recognition provider |
+| `hearing.model` | `STT_MODEL` | string | Speech recognition model |
+| `hearing.language` | `STT_LANGUAGE` | string | Spoken language |
+| `mind.provider` | `LLM_PROVIDER` | string | Chat provider |
+| `mind.model` | `LLM_MODEL` | string | Chat model |
+| `realtime.provider` | `REALTIME_PROVIDER` | string | Realtime provider |
+| `realtime.model` | `REALTIME_MODEL` | string | Realtime model |
+| `realtime.voice` | `REALTIME_VOICE` | string | Realtime voice |
 | `memory.searchLimit` | `MEM0_SEARCH_LIMIT` | int | Memories per turn |
 | `memory.searchThreshold` | `MEM0_SEARCH_THRESHOLD` | float | Memory score threshold |
 | `memory.agentId` | `MEM0_AGENT_ID` | string | Mem0 agent id |
 | `memory.runId` | `MEM0_RUN_ID` | string | Mem0 run id |
+| `memory.provider` | `MEM0_LLM_PROVIDER` | string | Memory extraction provider |
 | `memory.model` | `MEM0_LLM_MODEL` | string | Memory extraction model |
 | `knowledge.index` | `LANCEDB_PATH` | path | Knowledge index |
 | `knowledge.factsCandidates` | `PERSONA_FACTS_CANDIDATES` | int | Fact candidates |
 | `knowledge.archiveCandidates` | `STREAM_ARCHIVE_CANDIDATES` | int | Stream candidates |
 | `knowledge.rerank.enabled` | `RERANK_ENABLED` | flag | Rerank results |
+| `knowledge.rerank.provider` | `RERANK_PROVIDER` | string | Reranker provider |
 | `knowledge.rerank.model` | `RERANK_MODEL` | string | Reranker model |
 | `knowledge.gate.enabled` | `RETRIEVAL_GATE_ENABLED` | flag | Retrieval gate |
+| `knowledge.gate.provider` | `RETRIEVAL_GATE_PROVIDER` | string | Retrieval gate provider |
 | `knowledge.gate.model` | `RETRIEVAL_GATE_MODEL` | string | Retrieval gate model |
 | `knowledge.facts.files` | `FACTS_FILES` | list | Fact files |
 | `knowledge.facts.subject` | `FACTS_SUBJECT` | string | Fact subject pattern |
 | `knowledge.archive.skipTypes` | `INGEST_SKIP_TYPES` | list | Scene types left out of the index |
-| `transcription.model` | `SONIOX_ASYNC_MODEL` | string | Transcription model |
+| `transcription.provider` | `TRANSCRIBE_PROVIDER` | string | Transcription provider |
+| `transcription.model` | `TRANSCRIBE_MODEL` | string | Transcription model |
 | `transcription.language` | `TRANSCRIBE_LANGUAGE` | string | Transcription language |
+| `refine.provider` | `REFINE_PROVIDER` | string | Refine provider |
 | `refine.model` | `REFINE_MODEL` | string | Refine model |
 | `refine.concurrency` | `REFINE_CONCURRENCY` | int | Refine concurrency |
+| `selfie.provider` | `SELFIE_PROVIDER` | string | Selfie provider |
 | `selfie.model` | `SELFIE_MODEL` | string | Selfie model |
 | `selfie.aspectRatio` | `SELFIE_ASPECT_RATIO` | string | Selfie aspect ratio |
 | `selfie.quality` | `SELFIE_QUALITY` | string | Selfie quality |
@@ -230,7 +270,8 @@ The install's settings, for every persona. Paths resolve in the data home.
 | `providers.openrouter.apiBase` | `OPENROUTER_API_BASE` | string | OpenRouter API base |
 | `providers.openrouter.appName` | `OPENROUTER_APP_NAME` | string | OpenRouter app name |
 | `providers.openrouter.appUrl` | `OPENROUTER_APP_URL` | string | OpenRouter app URL |
-| `providers.openai.baseUrl` | `OPENAI_BASE_URL` | string | OpenAI-compatible base URL |
+| `providers.openai.baseUrl` | `OPENAI_BASE_URL` | string | OpenAI API base |
+| `embeddings.provider` | `EMBED_PROVIDER` | string | Embedding provider |
 | `embeddings.model` | `EMBED_MODEL` | string | Embedding model |
 | `embeddings.dim` | `EMBED_DIM` | int | Embedding dimension |
 | `embeddings.baseUrl` | `EMBED_BASE_URL` | string | Embedding API base |
@@ -239,12 +280,16 @@ The install's settings, for every persona. Paths resolve in the data home.
 | `sources.ytDlp` | `YT_DLP_PATH` | path | yt-dlp binary |
 | `sources.cookiesFromBrowser` | `YT_DLP_COOKIES_FROM_BROWSER` | string | Browser to read cookies from |
 | `sources.cookiesFile` | `YT_DLP_COOKIES` | path | Cookies file |
+| `usage.db` | `EIDOLON_USAGE_DB` | path | Usage ledger |
 
 `local.viewerName` is what the persona calls you in the local web app's calls; the bot that
 `bun run start` and the Docker image run never reads it.
 `sources.ytDlp` replaces the yt-dlp the tools install and update under `<data home>/bin/`.
 `sources.cookiesFromBrowser` defaults to `chrome`; `none` reads no browser's cookies. yt-dlp writes
-the merged cookie jar back into `sources.cookiesFile`.
+the merged cookie jar back into `sources.cookiesFile`. `usage.db` is the SQLite file every call, job
+and MCP search records its spend in (default `<data home>/usage.db`; [providers.md](providers.md#usage-and-cost)).
+Each `providers.<id>` base moves that provider's API, for a proxy or another region; blank uses its
+own.
 
 ## Deploying a persona
 

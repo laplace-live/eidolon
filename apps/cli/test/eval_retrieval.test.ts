@@ -1,7 +1,10 @@
+import "../../../packages/config/test/isolated-guard.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { dataHome, installSettings, resetSettings } from "@eidolon/config";
+import { setUsageSink, type UsageRecord } from "@eidolon/providers";
 import type { HybridSearchOptions, Reranker, SearchRow } from "@eidolon/retrieval";
 import {
   aggregate,
@@ -264,5 +267,48 @@ describe("pieces", () => {
     const reranker = namedReranker("rerank-v4.0-fast") as Reranker & { baseUrl: string };
     expect(reranker.modelName).toBe("rerank-v4.0-fast");
     expect(reranker.baseUrl).toBe("https://api.cohere.com/v1");
+  });
+
+  test("namedReranker reports each rerank to the usage ledger, as the provider it went to", async () => {
+    process.env.OPENROUTER_API_KEY = "or";
+    const records: UsageRecord[] = [];
+    setUsageSink((record) => records.push(record));
+    const blocked = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      Response.json({
+        results: [{ index: 0, relevance_score: 0.9 }],
+        usage: { search_units: 1, cost: 0.002 },
+      })) as unknown as typeof globalThis.fetch;
+    try {
+      await namedReranker("cohere/rerank-4-fast").rerank("q", ["a"]);
+      process.env.RERANK_BASE_URL = "https://api.cohere.com/v1";
+      await namedReranker("rerank-v4.0-fast").rerank("q", ["a"]);
+    } finally {
+      globalThis.fetch = blocked;
+      setUsageSink(null);
+    }
+    expect(
+      records.map(({ role, provider, model, costUsd }) => [role, provider, model, costUsd]),
+    ).toEqual([
+      ["rerank", "openrouter", "cohere/rerank-4-fast", 0.002],
+      ["rerank", "cohere", "rerank-v4.0-fast", 0.002],
+    ]);
+  });
+
+  test("namedReranker takes the key the local app saved in OpenRouter's account", () => {
+    const credentials = join(dataHome(), "credentials.json");
+    mkdirSync(dataHome(), { recursive: true });
+    writeFileSync(
+      credentials,
+      JSON.stringify({ accounts: { openrouter: { provider: "openrouter", apiKey: "or-saved" } } }),
+      { mode: 0o600 },
+    );
+    installSettings();
+    try {
+      expect(namedReranker("m").modelName).toBe("m");
+    } finally {
+      rmSync(credentials, { force: true });
+      resetSettings();
+    }
   });
 });

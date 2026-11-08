@@ -16,6 +16,8 @@ Bun workspaces, one package per subsystem. Dependencies point down this list; no
 | --- | --- | --- |
 | `packages/core` | the extension contracts: `ContextProvider`, `LlmTool`, `ConversationContext` | — |
 | `packages/config` | `.env` loading (python-dotenv rules), env readers (`env_int` rules), settings and the data home, the logger, Python-compat helpers, the OpenAI-compatible HTTP client, the persona clock | `env.py`, `openrouter.py` |
+| `packages/providers` | the provider catalog and the roles a persona fills with it, resolving a role's provider, model and key, the fetch clients that stand in for vendor SDKs, prices and usage reports ([providers.md](providers.md)) | `openrouter.py`'s cost extraction |
+| `packages/usage` | the usage ledger: SQLite records of what each request cost, and their sums | — |
 | `packages/access` | `loginSyncToken` validation, quotas, client IP, CORS, the `/api/offer` guard, audio quality | `user_context.py`, `rate_limit.py`, `offer_middleware.py`, `audio_quality.py` |
 | `packages/turn` | Cloudflare TURN credentials, ICE plans, relay-only candidate rules | `bot.py`'s ICE code |
 | `packages/retrieval` | the LanceDB read path: jieba (pure TS, same dictionary), hybrid search, RRF and the reranker, stream dates and the catalog; and its write side: the Arrow schemas, `writeTable`, `EmbedCache`, `embedInBatches` | `retrieval.py`, `retriever.py`, `embeddings.py` |
@@ -189,6 +191,12 @@ into a failure. `refine_real` and `pipeline_real` also run Python through `uv` a
 - **`@eidolon/ingest` stays out of the bot image.** Biome forbids importing it under `apps/bot/**`
   and the other packages, because `docker.yml` skips the image build for changes to `apps/cli/**`
   and `packages/ingest/**`. Lift both together, or the image ships without a change it runs.
+- **No vendor SDK sends a request.** `packages/providers` has fetch clients for OpenAI-compatible
+  chat and Anthropic's Messages API, and `packages/runtime` hands them to pipedog's services in
+  place of the SDK clients they would build. A new service gets one too, or bills behind the
+  usage ledger's back.
+- **`@eidolon/providers/catalog` imports nothing.** The web app bundles it for its provider and
+  model pickers; a test keeps it import-free, and Biome lets the web app import it alone.
 - **`bunfig.toml` turns Bun's own `.env` loader off.** `load-env.ts`, the first import of each
   entry point, is the only reader, with python-dotenv's rules. Bun's loader would expand bare
   `$VAR` and read `.env.local`, which the Python bot never did. Tests run with `--no-env-file`.
@@ -226,6 +234,10 @@ into a failure. `refine_real` and `pipeline_real` also run Python through `uv` a
 Deliberate, and not worth matching.
 
 ### The bot and the query commands
+
+- The bot reads each role's provider and model from the neutral variables (`LLM_PROVIDER`,
+  `LLM_MODEL`, …) and reads the provider-named ones only while that provider fills the role; the
+  Python bot reads only the provider-named ones, and has one provider per role.
 
 - `PATCH /api/offer` with a malformed body answers 400, where FastAPI answered 422.
 - `/`, `/client` and `/start` (the Pipecat demo and its session API) are not served.

@@ -13,7 +13,6 @@ export {
   DEFAULT_STYLE,
   loadVoiceStyles,
   STYLE_HINTS,
-  VOICE_ENV_PREFIX,
   VOICE_TOOL_NAME,
   type VoiceStyles,
   voicePromptHint,

@@ -10,6 +10,7 @@ import {
   pyStrip,
   sortedPy,
 } from "@eidolon/config";
+import { hasKey, trySelect } from "@eidolon/providers";
 import { ImageGenError } from "./errors.ts";
 import { imageMediaType } from "./mime.ts";
 import { AFTER_DARK, ambience, type PersonaClock, personaClock } from "./prompt.ts";
@@ -146,12 +147,18 @@ export function loadReferences(options: ReferenceOptions = {}): ReferenceImage[]
   return referenceSources(options).map((source) => loadReference(source));
 }
 
+/** The selfie role names a provider Eidolon knows, and its key is set. */
+function selfieKeyed(): boolean {
+  const selection = trySelect("selfie");
+  return selection !== null && hasKey(selection);
+}
+
 /**
  * A key and an outfit that exists, without paying to encode it. The media type goes unchecked, so
  * a non-image path passes here and still fails `loadReferences`.
  */
 export function isSelfieConfigured(options: ReferenceOptions = {}): boolean {
-  if (!envOptional("OPENROUTER_API_KEY")) return false;
+  if (!selfieKeyed()) return false;
   const sources = referenceSources(options);
   return (
     sources.length > 0 &&

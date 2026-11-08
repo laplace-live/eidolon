@@ -1,3 +1,5 @@
+import { msg, ph, t } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import {
   CircleAlertIcon,
   InfoIcon,
@@ -11,7 +13,6 @@ import { Link } from "react-router";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import type { Status } from "@/lib/api";
-import { type Translate, useT } from "@/lib/i18n";
 import { studioPath } from "@/lib/paths";
 import { cn } from "@/lib/utils";
 import type { MicProblem } from "./media";
@@ -26,35 +27,80 @@ interface Ending {
   readonly error: boolean;
 }
 
-function micEnding(problem: MicProblem, t: Translate): Ending {
+const MIC_PROBLEMS = {
+  denied: {
+    title: msg`Your microphone is blocked`,
+    body: msg`Allow microphone access for this page in your browser's site settings, then call again.`,
+  },
+  busy: {
+    title: msg`Your microphone is in use`,
+    body: msg`Another app is using your microphone. Close it, then call again.`,
+  },
+  missing: {
+    title: msg`No microphone found`,
+    body: msg`Connect a microphone, then call again.`,
+  },
+  insecure: {
+    title: msg`The microphone isn't available here`,
+    body: msg`Browsers allow the microphone only on secure pages. Open Eidolon at http://localhost or http://127.0.0.1.`,
+  },
+  unknown: {
+    title: msg`Your microphone didn't start`,
+    body: msg`Check your microphone, then call again.`,
+  },
+} satisfies Record<MicProblem, unknown>;
+
+function micEnding(problem: MicProblem): Ending {
   return {
-    title: t(`call.mic.${problem}.title`),
-    detail: t(`call.mic.${problem}.body`),
+    title: t(MIC_PROBLEMS[problem].title),
+    detail: t(MIC_PROBLEMS[problem].body),
     error: true,
   };
 }
 
 /** Why the call ended, unless the viewer hung up; a session failure the bot recorded wins. */
-function endingOf(end: CallEnd, sessionError: string | null, t: Translate): Ending | null {
+function endingOf(end: CallEnd, sessionError: string | null): Ending | null {
   if (end.kind === "hung-up") return null;
-  if (end.kind === "mic") return micEnding(end.problem, t);
-  if (end.kind === "silence") return { title: t("call.ended.silence"), error: false };
+  if (end.kind === "mic") return micEnding(end.problem);
+  if (end.kind === "silence")
+    return { title: t`The call ended after 5 minutes of silence.`, error: false };
   if (sessionError !== null && (end.kind === "connect" || end.kind === "dropped")) {
-    return { title: t("call.ended.failed"), detail: sessionError, verbatim: true, error: true };
+    return {
+      title: t`The call failed on Eidolon's side.`,
+      detail: sessionError,
+      verbatim: true,
+      error: true,
+    };
   }
   if (end.kind === "ice") {
-    return { title: t("call.ended.ice"), detail: end.detail, verbatim: true, error: true };
+    return {
+      title: t`Couldn't get the connection settings for the call.`,
+      detail: end.detail,
+      verbatim: true,
+      error: true,
+    };
   }
   if (end.kind === "dropped") {
-    return { title: t(end.byBot ? "call.ended.byBot" : "call.ended.dropped"), error: true };
+    return {
+      title: end.byBot ? t`Eidolon ended the call.` : t`The connection dropped.`,
+      error: true,
+    };
   }
   if (end.status === 401) {
-    return { title: t("call.ended.connect"), detail: t("errors.unauthorized"), error: true };
+    return {
+      title: t`Couldn't connect the call.`,
+      detail: t`This page isn't signed in. Open the link from the terminal.`,
+      error: true,
+    };
   }
   if (end.status === 403) {
-    return { title: t("call.ended.connect"), detail: t("errors.forbidden"), error: true };
+    return {
+      title: t`Couldn't connect the call.`,
+      detail: t`The request was refused.`,
+      error: true,
+    };
   }
-  return { title: t("call.ended.connect"), detail: end.detail, verbatim: true, error: true };
+  return { title: t`Couldn't connect the call.`, detail: end.detail, verbatim: true, error: true };
 }
 
 const TONE_ICON_CLASS = {
@@ -142,14 +188,14 @@ export function CallNotices({
   /** The persona's short name. */
   readonly name: string;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const { phase, botError } = call;
   const { voice } = status.persona;
   const ended = phase.name === "ended" ? phase : null;
   const end =
-    ended && endingOf(ended.end, sessionErrorSince(status.lastSessionError, ended.startedAt), t);
+    ended && endingOf(ended.end, sessionErrorSince(status.lastSessionError, ended.startedAt));
   const inCall = phase.name === "connecting" || phase.name === "live";
-  const mic = call.micProblem !== null && inCall ? micEnding(call.micProblem, t) : null;
+  const mic = call.micProblem !== null && inCall ? micEnding(call.micProblem) : null;
 
   if (!end && !mic && !botError && !call.audioBlocked && voice.ok !== false) return null;
   return (
@@ -160,10 +206,10 @@ export function CallNotices({
         <Notice
           icon={Volume2Icon}
           tone="info"
-          title={t("call.audio.blocked", { name })}
+          title={t`Your browser is holding back ${name}'s voice.`}
           action={
             <Button size="sm" onClick={call.playAudio}>
-              {t("call.audio.play")}
+              {t`Play`}
             </Button>
           }
         />
@@ -172,17 +218,17 @@ export function CallNotices({
         <Notice
           icon={TriangleAlertIcon}
           tone="error"
-          title={t("call.botError.title", { name })}
+          title={t`${name} ran into an error`}
           onDismiss={call.dismissBotError}
-          dismissLabel={t("call.botError.dismiss")}
+          dismissLabel={t`Dismiss`}
         >
           <span className="flex flex-col gap-1">
-            <span>{t("call.botError.body")}</span>
+            <span>{t`One of her providers reported a problem. Check its key and credit in Settings.`}</span>
             {botError.message && (
               <span className="break-words font-mono text-xs">{botError.message}</span>
             )}
             {botError.count > 1 && (
-              <span className="text-xs">{t("call.botError.count", { count: botError.count })}</span>
+              <span className="text-xs">{t`${ph({ count: botError.count })} errors this call`}</span>
             )}
           </span>
         </Notice>
@@ -193,16 +239,18 @@ export function CallNotices({
           tone="warning"
           title={
             voice.source === "env"
-              ? t("call.voice.inheritedUnknown", { name })
-              : t("call.voice.unknown", { name })
+              ? t`Fish Audio can't use the voice ${name} inherits from the environment, so calls may have no sound.`
+              : t`Fish Audio can't use ${name}'s voice, so calls may have no sound.`
           }
           action={
             <Button size="sm" variant="outline" asChild>
-              <Link to={studioPath(status.persona.id, "voice")}>{t("call.voice.pick")}</Link>
+              <Link to={studioPath(status.persona.id, "voice")}>{t`Pick a Voice`}</Link>
             </Button>
           }
         >
-          {voice.source === "env" ? t("call.voice.inheritedHint") : undefined}
+          {voice.source === "env"
+            ? t`Pick her own voice: it overrides the environment's for her alone.`
+            : undefined}
         </Notice>
       )}
     </div>

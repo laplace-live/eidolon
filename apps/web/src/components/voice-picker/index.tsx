@@ -1,6 +1,9 @@
 // Searches Fish Audio's public voices (GET voices/search) and previews their samples: the wizard's
 // voice step, persona creation and the studio's voice tab use it. Search goes out without the key,
 // so it never takes a TTS slot from a live call; samples play only through <audio src>.
+
+import { msg } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { CheckIcon, HeartIcon, SearchIcon } from "lucide-react";
 import { type SyntheticEvent, useEffect, useId, useRef, useState } from "react";
@@ -20,7 +23,6 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { call, type Voice } from "@/lib/api";
-import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_SEARCH_LANGUAGE,
@@ -28,7 +30,7 @@ import {
   nextPage,
   SEARCH_LANGUAGES,
   type SearchLanguage,
-  totalLabel,
+  voiceCount,
 } from "./voices";
 
 export interface VoicePickerProps {
@@ -42,6 +44,12 @@ export interface VoicePickerProps {
 
 const DEBOUNCE_MS = 350;
 const ANY = "any";
+const LANGUAGE_NAMES = {
+  zh: msg`Chinese`,
+  en: msg({ message: "English", context: "voice language" }),
+  ja: msg`Japanese`,
+  "": msg`Any Language`,
+} satisfies Record<SearchLanguage, unknown>;
 
 function useDebounced(value: string): string {
   const [settled, setSettled] = useState(value);
@@ -58,7 +66,7 @@ export function VoicePicker({
   disabled = false,
   hideCurrent = false,
 }: VoicePickerProps) {
-  const t = useT();
+  const { t } = useLingui();
   const searchId = useId();
   const [text, setText] = useState("");
   const [language, setLanguage] = useState<SearchLanguage>(DEFAULT_SEARCH_LANGUAGE);
@@ -96,7 +104,7 @@ export function VoicePicker({
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
         <div className="flex flex-1 flex-col gap-1.5">
-          <Label htmlFor={searchId}>{t("setup.voice.search")}</Label>
+          <Label htmlFor={searchId}>{t`Search Voices`}</Label>
           <InputGroup>
             <InputGroupAddon>
               <SearchIcon />
@@ -105,7 +113,7 @@ export function VoicePicker({
               id={searchId}
               value={text}
               onChange={(event) => setText(event.target.value)}
-              placeholder={t("setup.voice.searchPlaceholder")}
+              placeholder={t`A name or a style, e.g. 温柔`}
               disabled={disabled}
               autoComplete="off"
             />
@@ -121,23 +129,23 @@ export function VoicePicker({
           onValueChange={(next) => setLanguage(next === ANY ? "" : (next as SearchLanguage))}
           disabled={disabled}
         >
-          <SelectTrigger className="w-full sm:w-40" aria-label={t("setup.voice.language")}>
+          <SelectTrigger className="w-full sm:w-40" aria-label={t`Voice Language`}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {SEARCH_LANGUAGES.map((code) => (
               <SelectItem key={code || ANY} value={code || ANY}>
-                {t(`setup.voice.language.${code || ANY}`)}
+                {t(LANGUAGE_NAMES[code])}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
-      <p className="text-muted-foreground text-xs">{t("setup.voice.mandarin")}</p>
+      <p className="text-muted-foreground text-xs">{t`She speaks Mandarin, so the search starts among Chinese voices.`}</p>
 
       {value !== null && !chosenShown && !hideCurrent && (
         <p className="text-sm">
-          {t("setup.voice.current")} <code className="font-mono text-xs">{value}</code>
+          {t`Current voice:`} <code className="font-mono text-xs">{value}</code>
         </p>
       )}
 
@@ -156,14 +164,10 @@ export function VoicePicker({
           ))}
         </div>
       ) : voices.length === 0 && !search.isError ? (
-        <EmptyState icon={<SearchIcon />} title={t("setup.voice.none")} />
+        <EmptyState icon={<SearchIcon />} title={t`No voices match.`} />
       ) : (
         <>
-          {first && (
-            <p className="text-muted-foreground text-xs">
-              {t("setup.voice.total", { count: totalLabel(first) })}
-            </p>
-          )}
+          {first && <p className="text-muted-foreground text-xs">{voiceCount(first)}</p>}
           <ul className="flex max-h-[28rem] flex-col divide-y overflow-y-auto rounded-xl border bg-card">
             {voices.map((voice) => (
               <VoiceRow
@@ -183,7 +187,7 @@ export function VoicePicker({
               disabled={search.isFetchingNextPage}
             >
               {search.isFetchingNextPage && <Spinner />}
-              {t("setup.voice.more")}
+              {t`Show More`}
             </Button>
           )}
         </>
@@ -201,7 +205,7 @@ interface VoiceRowProps {
 }
 
 function VoiceRow({ voice, chosen, disabled, onChoose, onPlay }: VoiceRowProps) {
-  const t = useT();
+  const { t } = useLingui();
   const cover = httpsOnly(voice.coverUrl);
   const sample = voice.samples.map((s) => httpsOnly(s.audioUrl)).find((src) => src !== null);
   return (
@@ -255,7 +259,7 @@ function VoiceRow({ voice, chosen, disabled, onChoose, onPlay }: VoiceRowProps) 
             className="h-8 w-56 max-w-full"
           />
         ) : (
-          <span className="text-muted-foreground text-xs">{t("setup.voice.noPreview")}</span>
+          <span className="text-muted-foreground text-xs">{t`No sample`}</span>
         )}
         <Button
           size="sm"
@@ -265,7 +269,7 @@ function VoiceRow({ voice, chosen, disabled, onChoose, onPlay }: VoiceRowProps) 
           onClick={onChoose}
         >
           {chosen && <CheckIcon />}
-          {t(chosen ? "setup.voice.chosen" : "setup.voice.choose")}
+          {chosen ? t`Chosen` : t`Choose`}
         </Button>
       </div>
     </li>

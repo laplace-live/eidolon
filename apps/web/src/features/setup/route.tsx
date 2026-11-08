@@ -1,3 +1,4 @@
+import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router";
@@ -5,7 +6,6 @@ import { AppMark } from "@/components/app-mark";
 import { PageHeader } from "@/components/page-header";
 import { LanguageSwitch, ThemeMenu } from "@/components/preferences";
 import { Button } from "@/components/ui/button";
-import { useT } from "@/lib/i18n";
 import { statusQuery } from "@/lib/query";
 import { DoneStep } from "./done-step";
 import { KeysStep } from "./keys-step";
@@ -18,7 +18,7 @@ import { firstStep, nextStep, previousStep, type Step } from "./wizard";
 
 /** The first-run wizard: keys, persona, voice, memory, then the call. `?step=` opens a later one. */
 export function Component() {
-  const t = useT();
+  const { t } = useLingui();
   const [params] = useSearchParams();
   const status = useQuery(statusQuery);
   const [step, setStep] = useState<Step>(() =>
@@ -27,7 +27,7 @@ export function Component() {
   const [target, setTarget] = useState<VoiceTarget | null>(null);
   const [persona, setPersona] = useState<PersonaRef | null>(null);
   const [created, setCreated] = useState(false);
-  const keysReady = status.data ? !Object.values(status.data.keys).includes(false) : false;
+  const keysReady = status.data ? status.data.keys.every((key) => key.set) : false;
 
   const back = () => setStep((current) => previousStep(current) ?? current);
   const forward = () => setStep(nextStep);
@@ -42,18 +42,18 @@ export function Component() {
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center gap-2.5 px-4 sm:px-6">
           <span className="flex shrink-0 items-center gap-2.5 font-semibold">
             <AppMark />
-            <span className="tracking-tight">{t("common.app.name")}</span>
+            <span className="tracking-tight">Eidolon</span>
           </span>
           <span aria-hidden className="hidden text-lg text-muted-foreground/40 sm:inline">
             /
           </span>
           <span className="hidden truncate text-muted-foreground text-sm sm:inline">
-            {t("setup.crumb")}
+            {t`Setup`}
           </span>
           <div className="ml-auto flex shrink-0 items-center gap-1">
             {keysReady && (
               <Button variant="ghost" size="sm" asChild>
-                <Link to="/">{t("setup.leave")}</Link>
+                <Link to="/">{t`Leave Setup`}</Link>
               </Button>
             )}
             <LanguageSwitch />
@@ -62,7 +62,10 @@ export function Component() {
         </div>
       </header>
       <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-10 sm:px-6">
-        <PageHeader title={t("setup.title")} description={t("setup.body")} />
+        <PageHeader
+          title={t`Set Up Eidolon`}
+          description={t`Four short steps: your keys, who you'll talk to, her voice, and memory.`}
+        />
         <div className="grid items-start gap-8 md:grid-cols-[12rem_minmax(0,1fr)] md:gap-10">
           <Stepper step={step} />
           <div className="min-w-0">

@@ -23,23 +23,36 @@ export function isSection(value: string | undefined): value is SectionId {
 /** Each card's rows in order; an inner array puts its rows side by side. */
 export const CARD_PATHS = {
   timezone: ["identity.timezone"],
-  // The voice card's picker, not a settings field.
+  // Fish's voice card's picker, or another provider's voice field.
   voice: ["voice.voiceId"],
-  voiceModel: ["voice.model"],
-  models: ["mind.model", "hearing.model"],
-  memory: ["memory.model", ["memory.searchLimit", "memory.searchThreshold"]],
+  voiceProvider: [["voice.provider", "voice.model"]],
+  realtime: ["realtime.provider"],
+  realtimeModel: [["realtime.model", "realtime.voice"]],
+  models: [
+    ["hearing.provider", "hearing.model"],
+    "hearing.language",
+    ["mind.provider", "mind.model"],
+  ],
+  memory: [
+    ["memory.provider", "memory.model"],
+    ["memory.searchLimit", "memory.searchThreshold"],
+  ],
   indexing: ["knowledge.facts.files", "knowledge.facts.subject", "knowledge.archive.skipTypes"],
   search: [
     ["knowledge.factsCandidates", "knowledge.archiveCandidates"],
-    ["knowledge.rerank.enabled", "knowledge.rerank.model"],
-    ["knowledge.gate.enabled", "knowledge.gate.model"],
+    "knowledge.rerank.enabled",
+    ["knowledge.rerank.provider", "knowledge.rerank.model"],
+    "knowledge.gate.enabled",
+    ["knowledge.gate.provider", "knowledge.gate.model"],
   ],
   transcription: [
-    ["transcription.language", "transcription.model"],
-    ["refine.model", "refine.concurrency"],
+    ["transcription.provider", "transcription.model"],
+    "transcription.language",
+    ["refine.provider", "refine.model"],
+    "refine.concurrency",
   ],
   selfie: [
-    "selfie.model",
+    ["selfie.provider", "selfie.model"],
     ["selfie.quality", "selfie.aspectRatio"],
     ["selfie.timeoutSeconds", "selfie.ttlSeconds"],
     "selfie.references",

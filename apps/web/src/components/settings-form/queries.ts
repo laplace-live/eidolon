@@ -1,4 +1,5 @@
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
+import { accountsQuery } from "@/lib/accounts";
 import { call, type SettingsResponse } from "@/lib/api";
 import { statusQuery } from "@/lib/query";
 
@@ -25,13 +26,10 @@ export async function refreshSettings(
       predicate: (query) => query.queryKey[1] !== saved[1],
     }),
     queryClient.invalidateQueries({ queryKey: statusQuery.queryKey }),
+    // Which settings name an account decides whether it can be removed.
+    queryClient.invalidateQueries({ queryKey: accountsQuery.queryKey, exact: true }),
   ]);
 }
-
-export const credentialsQuery = queryOptions({
-  queryKey: ["credentials"],
-  queryFn: ({ signal }) => call("GET /api/local/credentials", { signal }),
-});
 
 export const personasQuery = queryOptions({
   queryKey: ["personas"],

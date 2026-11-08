@@ -11,6 +11,8 @@
     "@eidolon/context": "workspace:*",
     "@eidolon/imagegen": "workspace:*",
     "@eidolon/ingest": "workspace:*",
-    "@eidolon/retrieval": "workspace:*"
+    "@eidolon/providers": "workspace:*",
+    "@eidolon/retrieval": "workspace:*",
+    "@eidolon/usage": "workspace:*"
   }
 }

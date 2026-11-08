@@ -1,9 +1,10 @@
 // The settings card: a title, a description and the body, then a muted footer strip with a note on
 // the left and the card's actions on the right. Wrap a <form> around it so footer buttons submit it.
+
+import { useLingui } from "@lingui/react/macro";
 import { type ReactNode, useId } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export interface SectionCardProps {
@@ -149,10 +150,10 @@ export function SectionCardSkeleton({
   readonly footer?: boolean;
   readonly className?: string;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   return (
     <div className={cn(CARD, className)} role="status" aria-busy="true">
-      <span className="sr-only">{t("common.loading")}</span>
+      <span className="sr-only">{t`Loading…`}</span>
       <div className="flex flex-col gap-6 p-6">
         <div className="flex flex-col gap-2.5">
           <Skeleton className="h-6 w-40" />

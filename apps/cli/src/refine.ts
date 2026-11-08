@@ -230,7 +230,7 @@ export async function refineMain(argv: readonly string[], deps: RefineDeps = {})
       return 0;
     }
     case "no-key":
-      return refused(emit, "missing-credential", refine.MISSING_API_KEY);
+      return refused(emit, "missing-credential", refine.missingApiKey());
     case "done":
       return run.report.ok ? 0 : 1;
   }

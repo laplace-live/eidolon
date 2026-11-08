@@ -32,7 +32,10 @@ afterEach(() => {
 
 describe("BOOT_READ", () => {
   test("with LIVE_READ, names every setting and key exactly once", () => {
-    const listed = [...Object.keys(BOOT_READ), ...LIVE_READ];
+    // `@<role>` names the account a reader keeps for a role, which is no variable.
+    const listed = [...Object.keys(BOOT_READ), ...LIVE_READ].filter(
+      (name) => !name.startsWith("@"),
+    );
     expect(new Set(listed).size).toBe(listed.length);
     expect(listed.toSorted()).toEqual(
       [...SETTINGS.map((setting) => setting.env), ...CREDENTIALS].toSorted(),
@@ -44,12 +47,17 @@ describe("BOOT_READ", () => {
     // SharedEngine keeps the first engine it opens, so each of these needs a restart once used.
     const engine = (env: Record<string, string>) => {
       for (const name of [...SETTINGS.map((s) => s.env), ...CREDENTIALS]) setEnv(name, env[name]);
-      return JSON.stringify(buildMemoryConfig());
+      try {
+        return JSON.stringify(buildMemoryConfig());
+      } catch (error) {
+        // A setting that stops the engine from opening changes it too.
+        return String(error);
+      }
     };
     const memory = Object.entries(BOOT_READ)
       .filter(([, readers]) => readers.includes("memory"))
       .map(([name]) => name);
-    // OpenRouter's key, and then OpenAI's settings, which mem0 falls back to without it.
+    // OpenRouter's key, and then without it, which leaves the extraction key unset.
     for (const base of [
       { MEM0_QDRANT_HOST: "127.0.0.1", OPENROUTER_API_KEY: "or" },
       { MEM0_QDRANT_HOST: "127.0.0.1", EMBED_API_KEY: "embed", OPENAI_API_KEY: "oa" },
@@ -60,7 +68,9 @@ describe("BOOT_READ", () => {
           ? "7"
           : setting.endsWith("_PATH")
             ? join(dataHome(), "elsewhere", "history.db")
-            : "changed";
+            : setting.endsWith("_PROVIDER")
+              ? "openai"
+              : "changed";
         if (engine({ ...base, [setting]: value }) !== before) {
           expect([setting, memory.includes(setting)]).toEqual([setting, true]);
         }
@@ -112,6 +122,27 @@ describe("RestartTracker", () => {
     values.FISH_MODEL = "s2-pro";
     tracker.noteInstalled();
     expect(tracker.changes().calls.toSorted()).toEqual(["MEM0_QDRANT_PORT", "OPENROUTER_API_KEY"]);
+  });
+
+  test("an account in credentials.json is kept as its variables are", () => {
+    const save = (apiKey: string) => {
+      const path = join(dataHome(), "credentials.json");
+      mkdirSync(dataHome(), { recursive: true });
+      writeFileSync(
+        path,
+        JSON.stringify({ accounts: { openrouter: { provider: "openrouter", apiKey } } }),
+      );
+      resetSettings();
+      installSettings();
+    };
+    setEnv("MEM0_QDRANT_HOST", "127.0.0.1");
+    save("sk-first");
+    const tracker = new RestartTracker();
+    expect(tracker.changes()).toEqual({ calls: [], mcp: [] });
+    save("sk-rotated");
+    tracker.noteInstalled();
+    // Memory follows her chat account, and embeddings run on OpenRouter's too.
+    expect(tracker.changes().calls.toSorted()).toEqual(["@embeddings", "@memory", "@rerank"]);
   });
 
   test("an embedding model saved while memory is off needs no restart", () => {

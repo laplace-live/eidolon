@@ -1,25 +1,31 @@
 // Home's readiness list: what calls and builds need, read from GET status, each with its fix.
-import type { CheckProvider, IndexTable, MemoryStatus, RequiredKey, Status } from "@/lib/api";
+import type { IndexTable, MemoryStatus, Status } from "@/lib/api";
 import { formatCount, formatDateTime } from "@/lib/format";
-import type { Lang, Vars } from "@/lib/i18n";
 import { studioPath } from "@/lib/paths";
+import { providerName } from "@/lib/providers";
+import type { Lang } from "@/locales/i18n";
+import type { CheckId, FixCode, ReadyCode } from "./readiness-labels";
+
+/** The values a sentence fills its `{name}` placeholders with. */
+export type Values = Readonly<Record<string, string | number>>;
 
 export type Tone = "ok" | "info" | "warn" | "error";
 
 /** The action at the right of an item: its fix, or for a working voice, a change of it. */
 export type Fix =
-  | { readonly kind: "link"; readonly to: string; readonly label: string }
-  | { readonly kind: "pick-voice"; readonly label: string }
-  | { readonly kind: "check"; readonly provider: Extract<CheckProvider, "fish" | "qdrant"> }
+  | { readonly kind: "link"; readonly to: string; readonly label: FixCode }
+  | { readonly kind: "pick-voice"; readonly label: FixCode }
+  /** A check of her voice's account, or of Qdrant. */
+  | { readonly kind: "check"; readonly target: "qdrant" | { readonly account: string } }
   | { readonly kind: "restart" };
 
 export interface Item {
-  /** Also names its label, `home.check.<id>`. */
-  readonly id: string;
+  /** Also picks its title. */
+  readonly id: CheckId;
   readonly tone: Tone;
-  /** A locale key, filled with `vars`. */
-  readonly text: string;
-  readonly vars?: Vars;
+  /** Picks its sentence, filled with `vars`. */
+  readonly text: ReadyCode;
+  readonly vars?: Values;
   /** The server's English detail, shown as is. */
   readonly detail?: string;
   readonly fix?: Fix;
@@ -47,17 +53,19 @@ export function formatsFor(lang: Lang): Formats {
 /** Below this, home warns: a few videos' audio fills it. */
 export const LOW_DISK_BYTES = 10e9;
 
-const PROVIDERS: Readonly<Record<RequiredKey, string>> = {
-  SONIOX_API_KEY: "Soniox",
-  OPENROUTER_API_KEY: "OpenRouter",
-  FISH_API_KEY: "Fish Audio",
-};
-
 function voiceItem(persona: Status["persona"]): Item {
   const { voice } = persona;
+  // Only Fish's voices are looked up; another provider's voice is its own to know.
+  if (voice.provider !== "fish") {
+    const vars = { provider: providerName(voice.provider), id: voice.id ?? "" };
+    const fix: Fix = { kind: "link", to: studioPath(persona.id, "voice"), label: "home.fix.voice" };
+    return voice.id === null
+      ? { id: "voice", tone: "error", text: "home.ready.voice.providerNone", vars, fix }
+      : { id: "voice", tone: "ok", text: "home.ready.voice.provider", vars, fix };
+  }
   const inherited = voice.source === "env";
   // An inherited voice is changed in her studio, which says where it comes from; her own, in place.
-  const pick = (label: string): Fix =>
+  const pick = (label: FixCode): Fix =>
     inherited
       ? { kind: "link", to: studioPath(persona.id, "voice"), label }
       : { kind: "pick-voice", label };
@@ -76,7 +84,8 @@ function voiceItem(persona: Status["persona"]): Item {
   }
   if (voice.ok === null) {
     const text = inherited ? "home.ready.voice.uncheckedEnv" : "home.ready.voice.unchecked";
-    return { id: "voice", tone: "info", text, vars, fix: { kind: "check", provider: "fish" } };
+    const fix: Fix = { kind: "check", target: { account: voice.account ?? "fish" } };
+    return { id: "voice", tone: "info", text, vars, fix };
   }
   const text = inherited ? "home.ready.voice.env" : "home.ready.voice.ok";
   return { id: "voice", tone: "ok", text, vars, fix: pick("home.fix.changeVoice") };
@@ -87,7 +96,7 @@ function memoryItem(memory: MemoryStatus): Item {
     const fix: Fix = { kind: "link", to: "/setup?step=memory", label: "home.fix.memory" };
     return { id: "memory", tone: "info", text: "home.ready.memory.off", fix };
   }
-  const check: Fix = { kind: "check", provider: "qdrant" };
+  const check: Fix = { kind: "check", target: "qdrant" };
   if (memory.reachable === false) {
     return { id: "memory", tone: "warn", text: "home.ready.memory.down", fix: check };
   }
@@ -104,7 +113,7 @@ function indexItem(
   tab: string,
   format: Formats,
 ): Item {
-  const link = (label: string): Fix => ({ kind: "link", to: tab, label });
+  const link = (label: FixCode): Fix => ({ kind: "link", to: tab, label });
   if (!table?.built) {
     return { id, tone: "info", text: `home.ready.${id}.none`, fix: link(`home.fix.${id}`) };
   }
@@ -157,9 +166,22 @@ export function readiness(status: Status, format: Formats): Item[] {
     const vars = { count: status.activeCalls };
     items.push({ id: "call", tone: "info", text: "home.ready.inCall", vars });
   }
-  const missing = (Object.keys(status.keys) as RequiredKey[]).filter((key) => !status.keys[key]);
+  const problems = status.call.roles.filter((role) => role.problem !== null);
+  if (problems.length > 0) {
+    const fix: Fix = { kind: "link", to: studio("models"), label: "home.fix.models" };
+    for (const role of problems) {
+      items.push({
+        id: `models-${role.role}` as CheckId,
+        tone: "error",
+        text: "home.ready.models.problem",
+        detail: role.problem ?? undefined,
+        fix,
+      });
+    }
+  }
+  const missing = status.keys.filter((key) => !key.set);
   if (missing.length > 0) {
-    const names = missing.map((key) => PROVIDERS[key] ?? key).join(", ");
+    const names = missing.map((key) => key.name).join(", ");
     const fix: Fix = { kind: "link", to: "/setup", label: "home.fix.setup" };
     items.push({
       id: "keys",
@@ -168,10 +190,13 @@ export function readiness(status: Status, format: Formats): Item[] {
       vars: { names },
       fix,
     });
+  } else if (status.keys.length === 0) {
+    items.push({ id: "keys", tone: "ok", text: "home.ready.keys.none" });
   } else {
-    items.push({ id: "keys", tone: "ok", text: "home.ready.keys.ok" });
+    const names = status.keys.map((key) => key.name).join(", ");
+    items.push({ id: "keys", tone: "ok", text: "home.ready.keys.ok", vars: { names } });
   }
-  items.push(voiceItem(status.persona));
+  if (!status.call.realtime) items.push(voiceItem(status.persona));
   items.push(memoryItem(status.memory));
   const table = (name: IndexTable["table"]) => status.index.tables.find((t) => t.table === name);
   items.push(indexItem("facts", table("persona_facts"), studio("knowledge"), format));

@@ -71,7 +71,17 @@ export interface PersonaPrefixInput {
   /** Pre-rendered tool hint lines; "" when the tool isn't offered. */
   readonly voiceHint?: string;
   readonly selfieHint?: string;
+  /** A realtime model voices her replies itself, so no cue is ever stripped before it speaks. */
+  readonly realtime?: boolean;
 }
+
+/**
+ * Realtime models speak what they write, cues included: this overrides a prompt that teaches a
+ * TTS's delivery cues.
+ */
+export const REALTIME_DELIVERY_LINE =
+  "你的话由实时语音模型直接说出来：不要写方括号或尖括号里的表演提示，" +
+  "情绪、笑声和语气直接用声音表达。";
 
 /**
  * The preamble prepended to prompt.md. The 不要主动念 lines are load-bearing: without them the
@@ -121,6 +131,7 @@ export function buildPersonaPrefix(input: PersonaPrefixInput): string {
 
   if (input.voiceHint) lines.push(input.voiceHint);
   if (input.selfieHint) lines.push(input.selfieHint);
+  if (input.realtime) lines.push(REALTIME_DELIVERY_LINE);
   return `${lines.join("\n")}\n\n`;
 }
 
@@ -214,6 +225,8 @@ export async function buildSystemInstruction(input: {
   /** Pre-rendered tool hint lines; "" when the tool isn't offered. */
   voiceHint: string;
   selfieHint: string;
+  /** The call runs on a realtime model. */
+  realtime?: boolean;
   /** Defaults to config's personaTimeZone(). */
   timeZone?: string;
   now?: Date;
@@ -230,6 +243,7 @@ export async function buildSystemInstruction(input: {
     recentStreamDates,
     voiceHint: input.voiceHint,
     selfieHint: input.selfieHint,
+    ...(input.realtime ? { realtime: true } : {}),
   });
   return prefix + (await loadPersona());
 }

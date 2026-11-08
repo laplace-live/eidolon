@@ -4,13 +4,21 @@
   "type": "module",
   "scripts": {
     "dev": "bunx --bun vite",
-    "build": "bunx --bun vite build"
+    "build": "bunx --bun vite build",
+    "i18n": "lingui extract --clean"
   },
   "devDependencies": {
+    "@babel/parser": "7.29.9",
     "@eidolon/config": "workspace:*",
     "@eidolon/ingest": "workspace:*",
+    "@eidolon/providers": "workspace:*",
     "@fontsource-variable/geist": "5.3.0",
     "@hookform/resolvers": "6.0.0",
+    "@lingui/cli": "6.10.1",
+    "@lingui/core": "6.10.1",
+    "@lingui/format-po": "6.10.1",
+    "@lingui/react": "6.10.1",
+    "@lingui/vite-plugin": "6.10.1",
     "@pipecat-ai/client-js": "1.16.0",
     "@pipecat-ai/small-webrtc-transport": "1.11.2",
     "@tailwindcss/vite": "4.3.3",

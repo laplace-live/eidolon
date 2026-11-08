@@ -24,10 +24,12 @@ COPY packages/core/package.json packages/core/
 COPY packages/imagegen/package.json packages/imagegen/
 COPY packages/ingest/package.json packages/ingest/
 COPY packages/memory/package.json packages/memory/
+COPY packages/providers/package.json packages/providers/
 COPY packages/retrieval/package.json packages/retrieval/
 COPY packages/runtime/package.json packages/runtime/
 COPY packages/tools/package.json packages/tools/
 COPY packages/turn/package.json packages/turn/
+COPY packages/usage/package.json packages/usage/
 
 # onnxruntime-node's postinstall stays blocked (Bun runs no untrusted lifecycle
 # scripts): on linux/x64 it downloads the CUDA execution provider, and the CPU

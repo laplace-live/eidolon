@@ -7,7 +7,6 @@ import {
   errorText,
   isPlainObject,
   logger,
-  OpenAIClient,
   type OpenAIClientOptions,
   pyError,
   pyFloatRepr,
@@ -23,6 +22,7 @@ import {
   utcIsoDate,
   wallClockMicros,
 } from "@eidolon/config";
+import { billingProvider, jsonPoster, reportUsage, usageHook } from "@eidolon/providers";
 import { type MemoryConfig, requireLlmKey } from "./config.ts";
 import { ADDITIVE_EXTRACTION_PROMPT, AGENT_CONTEXT_SUFFIX } from "./extraction-prompt.ts";
 import { type HistoryEntry, HistoryStore } from "./history.ts";
@@ -442,17 +442,28 @@ export async function openMemoryEngine(
   config: MemoryConfig,
   options: { readonly qdrantClient?: QdrantApi; readonly http?: OpenAIClientOptions } = {},
 ): Promise<MemoryEngine> {
+  const { embedder: embedding, llm: chat } = config;
   const embedder = new OpenAICompatibleEmbedder(
-    config.embedder,
-    new OpenAIClient(config.embedder, options.http),
+    embedding,
+    // The configured model, as retrieval records it: OpenRouter answers with the id unprefixed.
+    jsonPoster(embedding, options.http, (units, _model, reportedUsd) =>
+      reportUsage({
+        role: "embeddings",
+        provider: billingProvider(embedding.provider, embedding.baseUrl),
+        model: embedding.model,
+        units,
+        costUsd: reportedUsd,
+      }),
+    ),
   );
   const store = new QdrantVectorStore(config.qdrant, options.qdrantClient);
   await store.ensureCollection();
-  const llmClient = new OpenAIClient(
-    { baseUrl: config.llm.baseUrl, apiKey: requireLlmKey(config.llm) },
+  const llmClient = jsonPoster(
+    { provider: chat.provider, baseUrl: chat.baseUrl, apiKey: requireLlmKey(chat) },
     options.http,
+    usageHook("memory", chat.provider),
   );
-  const llm = new OpenAICompatibleChat(config.llm.model, llmClient);
+  const llm = new OpenAICompatibleChat(chat.model, llmClient);
   const history = new HistoryStore(config.historyDbPath);
   return new MemoryEngine({ store, embedder, llm, history });
 }

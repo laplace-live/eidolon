@@ -1,3 +1,4 @@
+import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { PlusIcon } from "lucide-react";
 import { Link } from "react-router";
@@ -10,7 +11,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { useActivatePersona } from "@/features/setup/personas";
 import type { PersonaSummary } from "@/lib/api";
-import { useT } from "@/lib/i18n";
 import { studioPath } from "@/lib/paths";
 import { cn } from "@/lib/utils";
 
@@ -31,7 +31,7 @@ function PersonaCard({
   readonly locked: boolean;
   readonly onActivate: () => void;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   return (
     <li className={cn(CARD, "bg-card hover:bg-muted/40")}>
       <PersonaAvatar persona={persona} size="lg" />
@@ -56,7 +56,7 @@ function PersonaCard({
           onClick={onActivate}
         >
           {activating && <Spinner />}
-          {t("home.personas.activate")}
+          {t({ message: `Make Active`, context: "persona card" })}
         </Button>
       )}
     </li>
@@ -72,7 +72,7 @@ export function PersonaGrid({
   readonly live: boolean;
   readonly onNew: () => void;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const personas = useQuery(personasQuery);
   const activate = useActivatePersona();
 
@@ -111,8 +111,8 @@ export function PersonaGrid({
             <PlusIcon className="size-5" />
           </span>
           <span className="flex min-w-0 flex-col gap-1">
-            <span className="font-medium text-foreground">{t("common.persona.new")}</span>
-            <span className="text-sm">{t("home.personas.newBody")}</span>
+            <span className="font-medium text-foreground">{t`New Persona`}</span>
+            <span className="text-sm">{t`Her own name, prompt and voice.`}</span>
           </span>
         </button>
       </li>

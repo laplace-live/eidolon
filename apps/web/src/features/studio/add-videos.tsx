@@ -1,6 +1,9 @@
 // Adding videos: each link becomes an `expand` job that lists the videos behind it, one link at a
 // time, then a preview, and on confirm a new batch.
 import type { EventCode, PlanVideo, PlaylistEntry, Provider } from "@eidolon/ingest/progress";
+import type { MessageDescriptor } from "@lingui/core";
+import { ph, plural } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   CircleCheckIcon,
@@ -23,20 +26,21 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { reasonText } from "@/features/jobs/describe";
 import { followJob, refreshJob } from "@/features/jobs/use-job-events";
-import { ApiError, type BatchResponse, call, errorKey } from "@/lib/api";
+import { ApiError, type BatchResponse, call } from "@/lib/api";
 import { toastError } from "@/lib/feedback";
 import { formatBytes, formatCount, formatDuration } from "@/lib/format";
-import { useLang, useT } from "@/lib/i18n";
 import { EMPTY_JOB_VIEW, type JobView, jobOutcome, reduceJob, runSummary } from "@/lib/jobs";
+import { errorMessage } from "@/lib/labels";
 import { cn } from "@/lib/utils";
+import { useLang } from "@/locales/i18n";
 import { Hint } from "./parts";
 import { estimateAudioBytes, knownIn, parseLinks, summarizeEntries, uniqueEntries } from "./videos";
 
 interface Failure {
   readonly code: EventCode | null;
   readonly provider: Provider | null;
-  /** The locale key of a request that failed before the job could say why. */
-  readonly errorKey: string | null;
+  /** Why a request failed before the job could say. */
+  readonly error: MessageDescriptor | null;
   /** The CLI's or the server's English, shown as detail. */
   readonly detail: string | null;
 }
@@ -55,7 +59,7 @@ function failureOf(view: JobView, stderrTail: string): Failure {
   return {
     code: stage?.code ?? null,
     provider: stage?.provider ?? null,
-    errorKey: null,
+    error: null,
     detail: stage?.message ?? listed ?? (stderrTail.trim().split("\n").at(-1) || null),
   };
 }
@@ -71,13 +75,13 @@ const STATE_ICONS = {
 const COMPACT = "min-h-11 py-2";
 
 function CheckRow({ check }: { readonly check: Check }) {
-  const t = useT();
+  const { t } = useLingui();
   const Icon = check.state === "running" ? null : STATE_ICONS[check.state];
   const reason =
     check.failure === null
       ? null
-      : (reasonText(t, check.failure.code, check.failure.provider) ??
-        t(check.failure.errorKey ?? "studio.videos.checkFailed"));
+      : (reasonText(check.failure.code, check.failure.provider) ??
+        (check.failure.error ? t(check.failure.error) : t`The link couldn't be read.`));
   return (
     <ListRow
       className={COMPACT}
@@ -115,7 +119,7 @@ function CheckRow({ check }: { readonly check: Check }) {
         <>
           {check.entries.length > 0 && (
             <span className="text-muted-foreground text-xs tabular-nums">
-              {t("studio.videos.checkFound", { count: check.entries.length })}
+              {t`${plural(ph({ count: check.entries.length }), { one: `# video`, other: `# videos` })}`}
             </span>
           )}
           {/* Link checks are kept only until the next one, so only the running one has a page. */}
@@ -124,7 +128,7 @@ function CheckRow({ check }: { readonly check: Check }) {
               to={`/jobs/${encodeURIComponent(check.job)}`}
               className="text-muted-foreground text-xs underline-offset-4 hover:text-foreground hover:underline"
             >
-              {t("jobs.details")}
+              {t`Details`}
             </Link>
           )}
         </>
@@ -145,7 +149,7 @@ export function AddVideosCard({
   readonly freeBytes: number | null;
   readonly onAdded: (result: BatchResponse) => void;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const lang = useLang();
   const id = useId();
   const queryClient = useQueryClient();
@@ -215,7 +219,7 @@ export function AddVideosCard({
           failure: {
             code: null,
             provider: null,
-            errorKey: errorKey(error),
+            error: errorMessage(error),
             detail: error instanceof ApiError ? error.message : null,
           },
         });
@@ -248,12 +252,12 @@ export function AddVideosCard({
     mutationFn: (urls: readonly string[]) =>
       call("POST /api/local/personas/:id/batches", { params: { id: persona }, body: { urls } }),
     onSuccess: (result) => {
-      if (result.batch === null) toast.info(t("studio.videos.allKnown"));
+      if (result.batch === null) toast.info(t`All of these videos are listed already.`);
       else {
         toast.success(
           result.known > 0
-            ? t("studio.videos.addedSome", { count: result.count, known: result.known })
-            : t("studio.videos.added", { count: result.count }),
+            ? t`${plural(ph({ count: result.count }), { one: `Added # video in a new batch; ${ph({ known: result.known })} were listed already.`, other: `Added # videos in a new batch; ${ph({ known: result.known })} were listed already.` })}`
+            : t`${plural(ph({ count: result.count }), { one: `Added # video in a new batch.`, other: `Added # videos in a new batch.` })}`,
         );
       }
       setChecks(null);
@@ -272,18 +276,18 @@ export function AddVideosCard({
 
   return (
     <SectionCard
-      title={t("studio.videos.addTitle")}
-      description={t("studio.videos.addHelp")}
+      title={t`Add Videos`}
+      description={t`Paste video links, or the link of a playlist, series or channel. Each link is checked first, so you see what it holds before anything downloads.`}
       actions={
         <>
           {checking && (
             <Button variant="outline" onClick={stop}>
-              {t("studio.videos.stopCheck")}
+              {t`Stop`}
             </Button>
           )}
           {checks !== null && !checking && (
             <Button variant="ghost" onClick={() => setChecks(null)}>
-              {t("studio.videos.clear")}
+              {t`Clear`}
             </Button>
           )}
           <Button
@@ -292,7 +296,7 @@ export function AddVideosCard({
             disabled={checking || text.trim() === ""}
           >
             {checking && <Spinner />}
-            {t("studio.videos.check")}
+            {t`Check Links`}
           </Button>
           {previewing && (
             <Button
@@ -301,20 +305,22 @@ export function AddVideosCard({
             >
               {add.isPending ? <Spinner /> : <ListPlusIcon />}
               {fresh.length === 0
-                ? t("studio.videos.nothingNew")
-                : t("studio.videos.add", { count: fresh.length })}
+                ? t`Nothing New to Add`
+                : t`${plural(ph({ count: fresh.length }), { one: `Add # video`, other: `Add # videos` })}`}
             </Button>
           )}
         </>
       }
     >
       <Field data-invalid={invalid.length > 0}>
-        <FieldLabel htmlFor={id}>{t("studio.videos.links")}</FieldLabel>
+        <FieldLabel htmlFor={id}>{t`Links`}</FieldLabel>
         <Textarea
           id={id}
           value={text}
           onChange={(event) => setText(event.target.value)}
-          placeholder={t("studio.videos.linksPlaceholder")}
+          placeholder={
+            "https://www.bilibili.com/video/BV…\nhttps://www.youtube.com/playlist?list=…"
+          }
           disabled={checking}
           spellCheck={false}
           rows={4}
@@ -322,7 +328,7 @@ export function AddVideosCard({
         />
         {invalid.length > 0 ? (
           <FieldError>
-            {t("studio.videos.invalidLinks")}
+            {t`These lines aren't http or https links:`}
             <ul className="mt-1 font-mono text-xs">
               {invalid.map((line) => (
                 <li key={line} className="truncate">
@@ -332,12 +338,14 @@ export function AddVideosCard({
             </ul>
           </FieldError>
         ) : (
-          <FieldDescription>{t("studio.videos.linksHelp")}</FieldDescription>
+          <FieldDescription>{t`One link per line.`}</FieldDescription>
         )}
       </Field>
-      <Hint icon={<LanguagesIcon />}>{t("studio.videos.scopeNote")}</Hint>
+      <Hint
+        icon={<LanguagesIcon />}
+      >{t`She speaks Mandarin, so add Mandarin streams. For audio in another language, set it under Transcription below.`}</Hint>
       {checks !== null && (
-        <ListCard label={t("studio.videos.checksLabel")}>
+        <ListCard label={t`Links Checked`}>
           {checks.map((check) => (
             <CheckRow key={check.url} check={check} />
           ))}
@@ -347,27 +355,21 @@ export function AddVideosCard({
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1">
             <p className="font-medium text-sm">
-              {t("studio.videos.preview", {
-                count: fresh.length,
-                known: formatCount(entries.length - fresh.length, lang),
-              })}
+              {t`${plural(ph({ count: fresh.length }), { one: `# new video (${ph({ known: formatCount(entries.length - fresh.length, lang) })} already added)`, other: `# new videos (${ph({ known: formatCount(entries.length - fresh.length, lang) })} already added)` })}`}
             </p>
             <p className="text-muted-foreground text-sm">
-              {t("studio.videos.previewLength", { duration: formatDuration(summary.durationSec) })}
+              {t`About ${ph({ duration: formatDuration(summary.durationSec) })} in all.`}
               {summary.unknownDuration > 0 &&
-                ` ${t("studio.videos.previewUnknown", { count: summary.unknownDuration })}`}
-              {` ${t("studio.videos.previewDisk", {
-                size: formatBytes(bytes, lang),
-                free: freeBytes === null ? "?" : formatBytes(freeBytes, lang),
-              })}`}
+                ` ${t`The length of ${ph({ count: summary.unknownDuration })} of them is unknown.`}`}
+              {` ${t`Their audio needs about ${ph({ size: formatBytes(bytes, lang) })}; ${ph({ free: freeBytes === null ? "?" : formatBytes(freeBytes, lang) })} is free.`}`}
             </p>
           </div>
           {tooBig && (
             <Alert variant="destructive">
-              <AlertDescription>{t("studio.videos.diskShort")}</AlertDescription>
+              <AlertDescription>{t`There may not be enough free space for this audio. Free some space first, or add fewer videos.`}</AlertDescription>
             </Alert>
           )}
-          <ListCard label={t("studio.videos.previewLabel")} className="max-h-80 overflow-y-auto">
+          <ListCard label={t`Videos Found`} className="max-h-80 overflow-y-auto">
             {entries.map((entry) => (
               <ListRow
                 key={entry.id}
@@ -379,7 +381,7 @@ export function AddVideosCard({
                 }
                 trailing={
                   <>
-                    {known(entry) && <QuietBadge>{t("studio.videos.alreadyAdded")}</QuietBadge>}
+                    {known(entry) && <QuietBadge>{t`Already added`}</QuietBadge>}
                     <span className="w-14 text-right text-muted-foreground text-xs tabular-nums">
                       {entry.durationSec === undefined ? "—" : formatDuration(entry.durationSec)}
                     </span>

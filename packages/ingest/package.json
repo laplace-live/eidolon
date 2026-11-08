@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@eidolon/config": "workspace:*",
+    "@eidolon/providers": "workspace:*",
     "@eidolon/retrieval": "workspace:*"
   }
 }

@@ -1,6 +1,8 @@
 // Every video the persona's sources know, as the plan last saw it, and what the running job is
 // doing to each meanwhile.
 import type { PlanVideo } from "@eidolon/ingest/progress";
+import { ph, plural, t } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { ExternalLinkIcon, VideoIcon } from "lucide-react";
 import { type FormEvent, memo, useId, useState } from "react";
 import { EmptyState } from "@/components/empty-state";
@@ -20,11 +22,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { TableCell, TableRow } from "@/components/ui/table";
-import { reasonText } from "@/features/jobs/describe";
+import { reasonText, stageName } from "@/features/jobs/describe";
+import { ITEM_STATUS_WORDS } from "@/features/jobs/labels";
 import { progressText } from "@/features/jobs/parts";
 import { formatDuration, formatUsd } from "@/lib/format";
-import { type Lang, type Translate, useLang, useT } from "@/lib/i18n";
 import type { ItemView } from "@/lib/jobs";
+import { type Lang, useLang } from "@/locales/i18n";
 import { hasPaidWork, isFinished, needsFfmpeg } from "./videos";
 
 /** Rows shown before "Show more". */
@@ -32,54 +35,50 @@ const PAGE = 100;
 
 type Tone = "default" | "secondary" | "destructive" | "outline";
 
-function planState(t: Translate, video: PlanVideo): { label: string; tone: Tone } {
-  if (video.download === "pending")
-    return { label: t("studio.table.notDownloaded"), tone: "outline" };
-  if (video.transcribe === "no-date")
-    return { label: t("studio.table.noDate"), tone: "destructive" };
-  if (video.transcribe === "no-speech")
-    return { label: t("studio.table.noSpeech"), tone: "secondary" };
-  if (video.transcribe === "pending")
-    return { label: t("studio.table.toTranscribe"), tone: "outline" };
-  if (video.refine === null) return { label: t("studio.table.unreadable"), tone: "destructive" };
+function planState(video: PlanVideo): { text: string; tone: Tone } {
+  if (video.download === "pending") return { text: t`Not downloaded`, tone: "outline" };
+  if (video.transcribe === "no-date") return { text: t`No upload date`, tone: "destructive" };
+  if (video.transcribe === "no-speech") return { text: t`No speech`, tone: "secondary" };
+  if (video.transcribe === "pending") return { text: t`To transcribe`, tone: "outline" };
+  if (video.refine === null) return { text: t`Transcript unreadable`, tone: "destructive" };
   if (video.refine.done < video.refine.chunks) {
     return {
-      label: t("studio.table.toRefine", { done: video.refine.done, total: video.refine.chunks }),
+      text: t`Refined ${ph({ done: video.refine.done })}/${ph({ total: video.refine.chunks })}`,
       tone: "outline",
     };
   }
-  if (!video.indexed) return { label: t("studio.table.toIndex"), tone: "outline" };
-  return { label: t("studio.table.indexed"), tone: "secondary" };
+  if (!video.indexed) return { text: t`To index`, tone: "outline" };
+  return { text: t`Indexed`, tone: "secondary" };
 }
 
-function liveState(t: Translate, lang: Lang, item: ItemView): { label: string; tone: Tone } {
-  const stage = t(`jobs.stage.${item.stage}`);
+function liveState(lang: Lang, item: ItemView): { text: string; tone: Tone } {
+  const stage = stageName(item.stage);
   if (item.status === "start") {
-    const progress = item.progress === null ? null : progressText(t, lang, item.progress);
+    const progress = item.progress === null ? null : progressText(lang, item.progress);
     return {
-      label: progress === null ? t("studio.table.working", { stage }) : `${stage} · ${progress}`,
+      text: progress === null ? t`${stage}…` : `${stage} · ${progress}`,
       tone: "default",
     };
   }
   if (item.status === "failed") {
     return {
-      label: `${stage}: ${reasonText(t, item.code, item.provider) ?? t("jobs.item.failed")}`,
+      text: `${stage}: ${reasonText(item.code, item.provider) ?? t`failed`}`,
       tone: "destructive",
     };
   }
-  return { label: `${stage}: ${t(`jobs.item.${item.status}`)}`, tone: "secondary" };
+  return { text: `${stage}: ${t(ITEM_STATUS_WORDS[item.status])}`, tone: "secondary" };
 }
 
 /** A link out, only to an https: page. */
 function SourceLink({ url }: { readonly url: string | undefined }) {
-  const t = useT();
+  const { t } = useLingui();
   if (url === undefined || !url.startsWith("https://")) return null;
   return (
     <a
       href={url}
       target="_blank"
       rel="noreferrer noopener"
-      aria-label={t("studio.table.open")}
+      aria-label={t`Open the Video's Page`}
       className="text-muted-foreground hover:text-foreground"
     >
       <ExternalLinkIcon className="size-3.5" />
@@ -99,7 +98,7 @@ function DateDialog({
   readonly onClose: () => void;
   readonly onTranscribe: (video: PlanVideo, date: string) => void;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const id = useId();
   const [date, setDate] = useState("");
   function submit(event: FormEvent) {
@@ -111,13 +110,13 @@ function DateDialog({
       <DialogContent>
         <form className="flex flex-col gap-4" onSubmit={submit}>
           <DialogHeader>
-            <DialogTitle>{t("studio.table.dateTitle")}</DialogTitle>
+            <DialogTitle>{t`When was it streamed?`}</DialogTitle>
             <DialogDescription>
-              {t("studio.table.dateHelp", { video: video?.title ?? video?.id ?? "" })}
+              {t`${ph({ video: video?.title ?? video?.id ?? "" })} has no upload date, which the stream archive orders by. Give the day it was streamed to transcribe it.`}
             </DialogDescription>
           </DialogHeader>
           <Field>
-            <FieldLabel htmlFor={id}>{t("studio.table.dateLabel")}</FieldLabel>
+            <FieldLabel htmlFor={id}>{t`Stream Date`}</FieldLabel>
             <Input
               id={id}
               type="date"
@@ -126,14 +125,14 @@ function DateDialog({
               required
               className="w-48"
             />
-            <FieldDescription>{t("studio.table.dateBilled")}</FieldDescription>
+            <FieldDescription>{t`Transcribing bills your Soniox account.`}</FieldDescription>
           </Field>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
-              {t("studio.references.cancel")}
+              {t`Cancel`}
             </Button>
             <Button type="submit" disabled={busy || date === ""}>
-              {t("studio.table.dateSubmit")}
+              {t`Transcribe`}
             </Button>
           </DialogFooter>
         </form>
@@ -157,9 +156,9 @@ const VideoRow = memo(function VideoRow({
   readonly busy: boolean;
   readonly onSetDate: (video: PlanVideo) => void;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const lang = useLang();
-  const state = live ? liveState(t, lang, live) : planState(t, video);
+  const state = live ? liveState(lang, live) : planState(video);
   const usd = (video.estimate.transcribeUsd ?? 0) + (video.estimate.refineUsd ?? 0);
   const unpriced = video.estimate.basis === "unpriced" && hasPaidWork(video);
   return (
@@ -180,23 +179,26 @@ const VideoRow = memo(function VideoRow({
         {video.durationSec === undefined ? "—" : formatDuration(video.durationSec)}
         {!ffmpeg && needsFfmpeg(video) && (
           <Badge variant="destructive" className="ml-2">
-            {t("studio.table.needsFfmpeg")}
+            {t`Needs ffmpeg`}
           </Badge>
         )}
       </TableCell>
       <TableCell>
         <div className="flex flex-wrap items-center gap-1.5">
-          <Badge variant={state.tone}>{state.label}</Badge>
+          <Badge variant={state.tone}>{state.text}</Badge>
           {!live && video.transcribe === "no-date" && video.download === "done" && (
             <Button variant="link" size="xs" disabled={busy} onClick={() => onSetDate(video)}>
-              {t("studio.table.setDate")}
+              {t`Set Date`}
             </Button>
           )}
         </div>
       </TableCell>
       <TableCell className="text-right tabular-nums">
         {unpriced ? (
-          <span className="text-muted-foreground" title={t("studio.table.unpriced")}>
+          <span
+            className="text-muted-foreground"
+            title={t`Its length is unknown until it downloads.`}
+          >
             ?
           </span>
         ) : usd > 0 ? (
@@ -225,7 +227,7 @@ export function VideoTable({
   readonly busy: boolean;
   readonly onTranscribe: (video: PlanVideo, date: string) => void;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const switchId = useId();
   const finished = videos.filter(isFinished).length;
   const [showFinished, setShowFinished] = useState(false);
@@ -239,8 +241,8 @@ export function VideoTable({
     return (
       <EmptyState
         icon={<VideoIcon />}
-        title={t("studio.table.emptyTitle")}
-        description={t("studio.table.empty")}
+        title={t`No videos yet`}
+        description={t`Add links above, and each video is listed here with where it stands.`}
       />
     );
   }
@@ -250,23 +252,25 @@ export function VideoTable({
     <>
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <p className="text-muted-foreground text-sm">
-          {t("studio.table.counts", { total: videos.length, finished })}
+          {t`${plural(ph({ total: videos.length }), { one: `# video, ${finished} finished`, other: `# videos, ${finished} finished` })}`}
         </p>
         {finished > 0 && finished < videos.length && (
           <div className="flex items-center gap-2">
             <Switch id={switchId} checked={showFinished} onCheckedChange={setShowFinished} />
             <Label htmlFor={switchId} className="font-normal text-sm">
-              {t("studio.table.showFinished")}
+              {t`Show Finished`}
             </Label>
           </div>
         )}
       </div>
       <SectionCardTable
-        columns={(["video", "date", "length", "state", "estimate"] as const).map((column) => ({
-          id: column,
-          label: t(`studio.table.${column}`),
-          className: column === "estimate" ? "text-right" : undefined,
-        }))}
+        columns={[
+          { id: "video", label: t`Video` },
+          { id: "date", label: t`Streamed` },
+          { id: "length", label: t`Length` },
+          { id: "state", label: t`State` },
+          { id: "estimate", label: t`Estimate`, className: "text-right" },
+        ]}
         last={!more}
       >
         {shown.slice(0, limit).map((video) => (
@@ -282,7 +286,7 @@ export function VideoTable({
       </SectionCardTable>
       {more && (
         <Button variant="outline" className="self-center" onClick={() => setLimit(limit + PAGE)}>
-          {t("studio.table.more", { count: shown.length - limit })}
+          {t`Show ${ph({ count: shown.length - limit })} More`}
         </Button>
       )}
       <DateDialog

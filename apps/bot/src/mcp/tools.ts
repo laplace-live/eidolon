@@ -8,6 +8,7 @@ import {
   pyStrRepr,
   validationErrorText,
 } from "@eidolon/config";
+import { withUsageScope } from "@eidolon/providers";
 import { decodeTopics, type Retriever, type SearchRow, scoreOf } from "@eidolon/retrieval";
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { envelopeText } from "./pydantic.ts";
@@ -142,7 +143,10 @@ async function search(tool: SearchTool, query: string, tier: CallerTier): Promis
     );
   }
   if (!tool.retriever.hasTable) return { count: 0, results: [], note: tool.missingNote };
-  const results = (await tool.retriever.search(query, tool.params)).map((hit) => tool.project(hit));
+  const hits = await withUsageScope({ source: "mcp" }, () =>
+    tool.retriever.search(query, tool.params),
+  );
+  const results = hits.map((hit) => tool.project(hit));
   return { count: results.length, results };
 }
 

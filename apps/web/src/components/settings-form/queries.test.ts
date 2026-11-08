@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { QueryClient } from "@tanstack/react-query";
+import { accountsQuery, modelsQuery } from "@/lib/accounts";
 import type { SettingsResponse } from "@/lib/api";
 import { statusQuery } from "@/lib/query";
 import { refreshSettings, settingsQuery } from "./queries";
@@ -20,6 +21,9 @@ test("a save's answer becomes her rows, and every other persona's rows and the s
   };
   for (const key of Object.values(keys)) client.setQueryData(key, rows("before"));
   client.setQueryData(statusQuery.queryKey, {} as never);
+  client.setQueryData(accountsQuery.queryKey, { accounts: [] });
+  const models = modelsQuery("openrouter", "llm").queryKey;
+  client.setQueryData(models, { status: "ok", models: [] });
 
   const answer = rows("alice");
   await refreshSettings(client, "alice", answer);
@@ -30,4 +34,7 @@ test("a save's answer becomes her rows, and every other persona's rows and the s
   expect(client.getQueryState(keys.active)?.isInvalidated).toBe(true);
   expect(client.getQueryState(keys.other)?.isInvalidated).toBe(true);
   expect(client.getQueryState(statusQuery.queryKey)?.isInvalidated).toBe(true);
+  // Which settings name an account decides whether it can be removed; its model lists stay.
+  expect(client.getQueryState(accountsQuery.queryKey)?.isInvalidated).toBe(true);
+  expect(client.getQueryState(models)?.isInvalidated).toBe(false);
 });

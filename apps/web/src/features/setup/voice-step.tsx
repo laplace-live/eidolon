@@ -1,3 +1,5 @@
+import { ph } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { InfoIcon } from "lucide-react";
 import { useState } from "react";
@@ -7,8 +9,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { VoicePicker } from "@/components/voice-picker";
+import { accountsQuery } from "@/lib/accounts";
 import { type ApiError, asApiError, type Voice } from "@/lib/api";
-import { rich, useT } from "@/lib/i18n";
+import { providerName } from "@/lib/providers";
 import { addAvatar } from "./avatar";
 import type { VoiceTarget } from "./persona-step";
 import {
@@ -19,13 +22,14 @@ import {
   saveVoice,
 } from "./personas";
 import { StepCard } from "./step-card";
-import { inheritedValue, ownValue } from "./wizard";
+import { inheritedValue, otherVoiceProvider, ownValue } from "./wizard";
 
 const VOICE = "voice.voiceId";
 
 /**
  * Picks a public Fish voice, then commits the persona step: saves an existing persona's voice and
- * makes her active, or creates the new one with it, and her avatar.
+ * makes her active, or creates the new one with it, and her avatar. A persona who speaks through
+ * another provider keeps her voice.
  */
 export function VoiceStep({
   target,
@@ -36,11 +40,12 @@ export function VoiceStep({
   readonly onBack: () => void;
   readonly onDone: (persona: PersonaRef) => void;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const queryClient = useQueryClient();
   const existing = target.kind === "existing" ? target.persona : null;
   const settings = useQuery({ ...settingsQuery(existing?.id), enabled: existing !== null });
   const personas = useQuery(personasQuery);
+  const accounts = useQuery(accountsQuery);
   const [chosen, setChosen] = useState<Voice | null>(null);
   // Kept so a retry after a refused switch doesn't create her twice.
   const [created, setCreated] = useState<PersonaRef | null>(null);
@@ -52,7 +57,13 @@ export function VoiceStep({
   // The environment's voice, which she keeps unless one is picked for her.
   const inherited = existing ? inheritedValue(row) : null;
   const name = existing ? existing.name : target.kind === "create" ? target.draft.name : "";
-  const ready = chosen !== null || (existing !== null && (current ?? inherited) !== null);
+  const env = row?.env ?? "";
+  const other =
+    existing && settings.data
+      ? otherVoiceProvider(settings.data.settings, accounts.data?.accounts)
+      : null;
+  const ready =
+    other !== null || chosen !== null || (existing !== null && (current ?? inherited) !== null);
 
   async function next() {
     setBusy(true);
@@ -80,32 +91,46 @@ export function VoiceStep({
 
   return (
     <StepCard
-      title={t("setup.voice.title")}
-      description={t("setup.voice.stepBody", { name })}
+      title={t`Pick a Voice`}
+      description={
+        other === null
+          ? t`How ${name} sounds. Search Fish Audio's public voices and play a sample before you pick one.`
+          : t`How ${name} sounds.`
+      }
       onBack={onBack}
       busy={busy}
       footer={
         <Button onClick={() => void next()} disabled={busy || !ready}>
           {busy && <Spinner />}
-          {t(target.kind === "create" ? "setup.voice.create" : "setup.next")}
+          {target.kind === "create" ? t`Create Her` : t`Continue`}
         </Button>
       }
     >
-      {inherited !== null && row && (
+      {other !== null ? (
         <Alert>
           <InfoIcon />
           <AlertDescription>
-            {rich(t("setup.voice.inherited", { name }), {
-              env: <code className="font-mono text-foreground">{row.env}</code>,
-            })}
+            {t`${name} speaks through ${ph({ provider: providerName(other) })}. Continue to keep her voice, or change it later in her studio.`}
           </AlertDescription>
         </Alert>
+      ) : inherited !== null && row ? (
+        <Alert>
+          <InfoIcon />
+          <AlertDescription>
+            <Trans>
+              {name} inherits <code className="font-mono text-foreground">{env}</code> from the
+              environment. Continue to keep it, or pick a voice of her own: it applies to her alone.
+            </Trans>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {other === null && (
+        <VoicePicker
+          value={chosen?.id ?? current ?? inherited}
+          onChange={setChosen}
+          disabled={busy}
+        />
       )}
-      <VoicePicker
-        value={chosen?.id ?? current ?? inherited}
-        onChange={setChosen}
-        disabled={busy}
-      />
       {failure && <ErrorAlert error={failure} />}
     </StepCard>
   );

@@ -1,5 +1,8 @@
 // The header's persona menu: who calls reach, switched in place. In a studio it follows the switch
 // to the same section of the newly active persona's.
+
+import { ph } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { BookOpenIcon, ChevronsUpDownIcon, PlusIcon } from "lucide-react";
 import { useRef, useState } from "react";
@@ -20,12 +23,11 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { NewPersonaDialog } from "@/features/setup/new-persona";
 import { useActivatePersona } from "@/features/setup/personas";
-import { useT } from "@/lib/i18n";
 import { studioPath } from "@/lib/paths";
 import { statusQuery } from "@/lib/query";
 
 export function PersonaSwitcher() {
-  const t = useT();
+  const { t } = useLingui();
   const navigate = useNavigate();
   const studio = useMatch("/personas/:id/:tab?");
   const status = useQuery(statusQuery);
@@ -52,7 +54,7 @@ export function PersonaSwitcher() {
           <Button
             variant="ghost"
             className="min-w-0 max-w-[60vw] gap-2 px-1.5 sm:max-w-64"
-            aria-label={t("common.switcher.label", { name: active.name })}
+            aria-label={t`Active Persona: ${ph({ name: active.name })}`}
           >
             <PersonaAvatar persona={active} size="xs" />
             <span className="truncate font-medium">{active.name}</span>
@@ -73,7 +75,7 @@ export function PersonaSwitcher() {
             setCreating(true);
           }}
         >
-          <DropdownMenuLabel>{t("common.switcher.heading")}</DropdownMenuLabel>
+          <DropdownMenuLabel>{t`Personas`}</DropdownMenuLabel>
           <DropdownMenuRadioGroup
             value={activeId}
             onValueChange={(id) => {
@@ -99,12 +101,12 @@ export function PersonaSwitcher() {
             }}
           >
             <PlusIcon />
-            {t("common.persona.new")}
+            {t`New Persona`}
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <Link to={studioPath(activeId)}>
               <BookOpenIcon />
-              {t("common.openStudio")}
+              {t`Open the Studio`}
             </Link>
           </DropdownMenuItem>
         </DropdownMenuContent>

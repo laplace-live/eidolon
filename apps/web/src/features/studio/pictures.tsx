@@ -1,4 +1,6 @@
 // Her pictures: the avatar at the root of her folder, outfits and friends under references/.
+
+import { ph, t } from "@lingui/core/macro";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type ChangeEvent, type DragEvent, useRef } from "react";
 import { avatarChanged } from "@/components/avatar/version";
@@ -6,8 +8,8 @@ import { personasQuery } from "@/components/settings-form/queries";
 import { call, type ReferenceKind } from "@/lib/api";
 import { toastError } from "@/lib/feedback";
 import { formatBytes } from "@/lib/format";
-import { type Lang, t as translate } from "@/lib/i18n";
 import { statusQuery } from "@/lib/query";
+import type { Lang } from "@/locales/i18n";
 import {
   IMAGE_ACCEPT,
   IMAGE_EXTENSIONS,
@@ -22,13 +24,13 @@ type PictureKind = ReferenceKind | "avatar";
 /** Why `file` can't be uploaded as `name`, in the viewer's language; null when it can. */
 export function uploadProblem(file: File, name: string, lang: Lang): string | null {
   const image = imageProblem(file);
-  if (image === "type") return translate("studio.references.badType");
+  if (image === "type") return t`Pictures must be PNG, JPEG or WebP.`;
   if (image === "size") {
-    return translate("studio.references.tooLarge", { max: formatBytes(MAX_IMAGE_BYTES, lang) });
+    return t`Pictures can be up to ${ph({ max: formatBytes(MAX_IMAGE_BYTES, lang) })}.`;
   }
   return nameProblem(name, IMAGE_EXTENSIONS) === null
     ? null
-    : translate("studio.references.badName", { name });
+    : t`${name} isn't a usable file name. Rename the file without / \\ or :, so that it doesn't start with a dot.`;
 }
 
 /**

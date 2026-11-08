@@ -1,15 +1,39 @@
+import { msg } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { CheckIcon } from "lucide-react";
-import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { STEPS, type Step } from "./wizard";
 
+const STEP_LABELS = {
+  keys: {
+    label: msg`Keys`,
+    hint: msg`Your providers`,
+  },
+  persona: {
+    label: msg`Persona`,
+    hint: msg`Who you'll talk to`,
+  },
+  voice: {
+    label: msg`Voice`,
+    hint: msg`How she sounds`,
+  },
+  memory: {
+    label: msg`Memory`,
+    hint: msg`Optional`,
+  },
+  done: {
+    label: msg`Done`,
+    hint: msg`Call her`,
+  },
+} satisfies Record<Step, unknown>;
+
 /** Where the wizard is: a column of steps beside the card, a row of them above it on a phone. */
 export function Stepper({ step }: { readonly step: Step }) {
-  const t = useT();
+  const { t } = useLingui();
   const at = STEPS.indexOf(step);
   return (
     <ol
-      aria-label={t("setup.steps")}
+      aria-label={t`Setup Steps`}
       className="flex items-center gap-2 md:sticky md:top-24 md:flex-col md:items-stretch md:gap-0"
     >
       {STEPS.map((name, index) => {
@@ -48,10 +72,10 @@ export function Stepper({ step }: { readonly step: Step }) {
                   done && "md:text-foreground",
                 )}
               >
-                {t(`setup.step.${name}`)}
+                {t(STEP_LABELS[name].label)}
               </span>
               <span className="hidden text-muted-foreground text-xs md:block">
-                {t(`setup.step.${name}.hint`)}
+                {t(STEP_LABELS[name].hint)}
               </span>
             </span>
             {!last && (

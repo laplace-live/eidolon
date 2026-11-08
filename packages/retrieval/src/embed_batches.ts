@@ -1,12 +1,14 @@
 // Embeds a run's texts as Python's embed_in_batches did for both ingests: cache hits first, then
 // the misses one request at a time, each batch written through to the cache, with its log lines.
-import { DEFAULT_EMBED_MODEL, embedDim, envStr, logger, pyFixed } from "@eidolon/config";
+import { embedDim, logger, pyFixed } from "@eidolon/config";
 import type { EmbedCache } from "./embed_cache.ts";
 import {
   type CostSource,
   defaultEmbeddingClient,
   type EmbeddingClient,
   EmbeddingUsage,
+  embeddingSelection,
+  reportEmbedding,
 } from "./embeddings.ts";
 
 // Cache hits are read a window at a time and copied straight into the result, so a whole stream
@@ -67,7 +69,7 @@ export async function embedInBatches(
   options: EmbedInBatchesOptions,
 ): Promise<EmbedReport> {
   const { batchSize, noun, cache, signal } = options;
-  const model = options.model ?? envStr("EMBED_MODEL", DEFAULT_EMBED_MODEL);
+  const model = options.model ?? embeddingSelection().model;
   const dim = options.dim ?? embedDim();
   signal?.throwIfAborted();
   const vectors = new Float32Array(texts.length * dim);
@@ -130,6 +132,7 @@ export async function embedInBatches(
       batch.map((row) => [texts[row] as string, vectors.subarray(row * dim, (row + 1) * dim)]),
     );
     usage.add(batchUsage);
+    reportEmbedding(model, batchUsage);
     const done = Math.min(start + batchSize, misses.length);
     logger.info(
       `Embedded ${done}/${misses.length} ${noun} (${batchUsage.totalTokens} tokens` +

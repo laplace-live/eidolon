@@ -1,3 +1,6 @@
+import type { MessageDescriptor } from "@lingui/core";
+import { msg, ph } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import {
   AudioLinesIcon,
@@ -26,7 +29,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { useActivatePersona } from "@/features/setup/personas";
 import type { PersonaSummary } from "@/lib/api";
-import { useT } from "@/lib/i18n";
 import { studioPath } from "@/lib/paths";
 import { AdvancedSection } from "./advanced-section";
 import { GlossarySection } from "./glossary-section";
@@ -39,6 +41,18 @@ import { ReferencesSection } from "./references-section";
 import { isSection, SECTIONS, type SectionId } from "./sections";
 import { VideosSection } from "./videos-section";
 import { VoiceSection } from "./voice-section";
+
+const SECTION_LABELS: Readonly<Record<SectionId, MessageDescriptor>> = {
+  identity: msg`Profile`,
+  prompt: msg`Prompt`,
+  voice: msg`Voice`,
+  models: msg`Mind`,
+  knowledge: msg`Knowledge`,
+  videos: msg`Videos`,
+  glossary: msg`Glossary`,
+  references: msg`Pictures`,
+  advanced: msg`Advanced`,
+};
 
 const ICONS: Readonly<Record<SectionId, ReactNode>> = {
   identity: <UserRoundIcon />,
@@ -71,7 +85,7 @@ function Header({
   readonly persona: PersonaSummary;
   readonly active: boolean;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const activate = useActivatePersona();
 
   return (
@@ -89,27 +103,32 @@ function Header({
           <Button asChild>
             <Link to="/call">
               <PhoneIcon />
-              {t("studio.call", { name: persona.shortName || persona.name })}
+              {t({
+                message: `Call ${ph({ name: persona.shortName || persona.name })}`,
+                context: "studio header",
+              })}
             </Link>
           </Button>
         ) : (
           <Button disabled={activate.isPending} onClick={() => activate.mutate(persona.id)}>
             {activate.isPending && <Spinner />}
-            {t("studio.activate")}
+            {t`Make Active`}
           </Button>
         )
       }
     >
-      {persona.template ? t("studio.builtInHelp", { name: persona.name }) : undefined}
+      {persona.template
+        ? t`${ph({ name: persona.name })} ships with Eidolon. Your edits are saved in your data home, and the original stays as it is.`
+        : undefined}
     </PageHeader>
   );
 }
 
 function Loading() {
-  const t = useT();
+  const { t } = useLingui();
   return (
     <div className="flex flex-col gap-8" role="status" aria-busy="true">
-      <span className="sr-only">{t("common.loading")}</span>
+      <span className="sr-only">{t`Loading…`}</span>
       <div className="flex items-center gap-6">
         <Skeleton className="size-16 rounded-full" />
         <div className="flex flex-col gap-2.5">
@@ -130,7 +149,7 @@ function Loading() {
 }
 
 export function Component() {
-  const t = useT();
+  const { t } = useLingui();
   const { id = "", tab } = useParams();
   const personas = useQuery(personasQuery);
 
@@ -144,10 +163,10 @@ export function Component() {
     return (
       <EmptyState
         icon={<UserRoundXIcon />}
-        title={t("studio.notFound", { id })}
+        title={t`There is no persona called ${id}.`}
         action={
           <Button variant="outline" asChild>
-            <Link to="/">{t("common.error.home")}</Link>
+            <Link to="/">{t`Back to Home`}</Link>
           </Button>
         }
       />
@@ -162,12 +181,12 @@ export function Component() {
       <SectionLayout
         nav={SECTIONS.map((section) => ({
           id: section,
-          label: t(`studio.section.${section}`),
+          label: t(SECTION_LABELS[section]),
           href: studioPath(persona.id, section),
           icon: ICONS[section],
         }))}
         active={current}
-        label={t("studio.sections", { name: persona.shortName || persona.name })}
+        label={t`${ph({ name: persona.shortName || persona.name })}'s Studio`}
       >
         {/* The key starts a section afresh for another persona. */}
         <Panel key={persona.id} persona={persona} />

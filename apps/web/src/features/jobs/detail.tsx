@@ -1,3 +1,5 @@
+import { ph } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeftIcon,
@@ -19,12 +21,14 @@ import { personasQuery } from "@/components/settings-form/queries";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ApiError, errorKey, type JobSnapshot, stream } from "@/lib/api";
+import { ApiError, type JobSnapshot, stream } from "@/lib/api";
 import { formatDateTime, formatDuration, formatUsd } from "@/lib/format";
-import { useLang, useT } from "@/lib/i18n";
 import { costSoFar, type JobView, type Outcome, runSummary, shownOutcome } from "@/lib/jobs";
+import { errorMessage } from "@/lib/labels";
 import { studioPath } from "@/lib/paths";
 import { cn } from "@/lib/utils";
+import { useLang } from "@/locales/i18n";
+import { COMMAND_ABOUT, COMMAND_LABELS } from "./labels";
 import {
   CancelJobButton,
   Elapsed,
@@ -47,14 +51,14 @@ const LOG_TAIL_CHARS = 200_000;
 const FLUSH = "-mx-6 -mb-6 rounded-none border-0 border-t";
 
 function BackLink() {
-  const t = useT();
+  const { t } = useLingui();
   return (
     <Link
       to="/jobs"
       className="inline-flex items-center gap-1.5 self-start rounded-md text-muted-foreground text-sm outline-none transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
     >
       <ArrowLeftIcon className="size-4" />
-      {t("jobs.back")}
+      {t`All Jobs`}
     </Link>
   );
 }
@@ -77,11 +81,11 @@ function Meta({
 }
 
 function Options({ options }: { readonly options: JobSnapshot["options"] }) {
-  const t = useT();
+  const { t } = useLingui();
   const entries = Object.entries(options);
   if (entries.length === 0) return null;
   return (
-    <Meta label={t("jobs.meta.options")} className="col-span-full">
+    <Meta label={t`Options`} className="col-span-full">
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 font-normal text-xs">
         {entries.map(([key, value]) => (
           <div key={key} className="contents">
@@ -106,7 +110,7 @@ function Failure({
   readonly outcome: Outcome;
   readonly view: JobView;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   if (outcome !== "failed" && outcome !== "crashed") return null;
   const crashed = outcome === "crashed";
   const Icon = crashed ? TriangleAlertIcon : CircleXIcon;
@@ -116,9 +120,11 @@ function Failure({
       <div className="flex min-w-0 flex-1 flex-col gap-3">
         <div className="flex flex-col gap-1">
           <p className="font-medium text-destructive text-sm">
-            {t(crashed ? "jobs.crashed.title" : "jobs.failed.title")}
+            {crashed ? t`This job stopped without finishing` : t`Some of the work failed`}
           </p>
-          {crashed && <p className="text-muted-foreground text-sm">{t("jobs.crashed.body")}</p>}
+          {crashed && (
+            <p className="text-muted-foreground text-sm">{t`It ended before reporting a result. The end of its technical log usually says why.`}</p>
+          )}
         </div>
         {crashed ? (
           job.stderrTail.trim() !== "" && (
@@ -157,7 +163,7 @@ function Overview({
   readonly outcome: Outcome;
   readonly events: JobEvents;
 }) {
-  const t = useT();
+  const { t } = useLingui();
   const lang = useLang();
   const navigate = useNavigate();
   const { data: personas } = useQuery(personasQuery);
@@ -174,18 +180,29 @@ function Overview({
 
   let note: ReactNode;
   if (offer === "earlier-run") {
-    note = <Note title={t("jobs.earlierRun.title")} body={t("jobs.earlierRun.body")} />;
+    note = (
+      <Note
+        title={t`Can't be stopped from here`}
+        body={t`An earlier run of Eidolon started this job, so this one can't stop it. It will finish on its own, or be marked interrupted.`}
+      />
+    );
   } else if (offer !== null) {
-    note = t(job.stopping ? "jobs.note.stopping" : "jobs.note.running");
+    note = job.stopping
+      ? t`It stops once it has finished what it is writing.`
+      : t`It keeps running when you close this page.`;
   } else if (outcome === "interrupted") {
     note = (
       <Note
-        title={t("jobs.interrupted.title")}
-        body={resumable ? t("jobs.interrupted.body") : undefined}
+        title={t`Eidolon stopped while this job ran`}
+        body={
+          resumable
+            ? t`Resume runs it again, and every stage skips the work it already finished.`
+            : undefined
+        }
       />
     );
   } else if (resumable) {
-    note = t(outcome === "cancelled" ? "jobs.cancelled.body" : "jobs.resumeNote");
+    note = t`Resume runs it again, and every stage skips the work it already finished.`;
   }
   const actions = showsStop(job) ? (
     <CancelJobButton job={job} size="default" />
@@ -205,7 +222,7 @@ function Overview({
       <dl
         className={cn("grid grid-cols-2 gap-x-6 gap-y-5 lg:grid-cols-4", failed && "border-t pt-6")}
       >
-        <Meta label={t("jobs.meta.persona")}>
+        <Meta label={t`Persona`}>
           <Link
             to={studioPath(job.persona)}
             className="inline-flex max-w-full items-center gap-2 rounded-sm underline-offset-4 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
@@ -214,21 +231,21 @@ function Overview({
             <span className="truncate">{persona.name}</span>
           </Link>
         </Meta>
-        <Meta label={t("jobs.meta.started")}>
+        <Meta label={t`Started`}>
           <time dateTime={job.startedAt}>{formatDateTime(job.startedAt, lang)}</time>
         </Meta>
-        <Meta label={t("jobs.meta.duration")}>
+        <Meta label={t`Duration`}>
           <span className="tabular-nums">
             <Elapsed start={job.startedAt} end={job.endedAt} ticking={job.status === "running"} />
           </span>
         </Meta>
-        <Meta label={t(summary ? "jobs.meta.cost" : "jobs.meta.costSoFar")}>
+        <Meta label={summary ? t`Cost` : t`Cost So Far`}>
           <span className="tabular-nums">
             {cost === null || cost === undefined ? "—" : formatUsd(cost, lang)}
           </span>
           {summary?.costSource === "unpriced" && (
             <span className="block font-normal text-muted-foreground text-xs">
-              {t("jobs.meta.unpriced")}
+              {t`Part of the cost couldn't be priced.`}
             </span>
           )}
         </Meta>
@@ -242,7 +259,7 @@ function Overview({
               className="inline-flex items-center gap-1.5 text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
             >
               <HistoryIcon aria-hidden className="size-4" />
-              {t("jobs.resumedFrom")}
+              {t`Reruns an earlier job`}
             </Link>
           )}
           {job.resumedBy && (
@@ -251,7 +268,7 @@ function Overview({
               className="inline-flex items-center gap-1.5 text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
             >
               <CornerDownRightIcon aria-hidden className="size-4" />
-              {t("jobs.resumedBy")}
+              {t`Resumed by a later job`}
             </Link>
           )}
         </div>
@@ -261,10 +278,10 @@ function Overview({
 }
 
 function Entries({ view }: { readonly view: JobView }) {
-  const t = useT();
+  const { t } = useLingui();
   if (view.entries.length === 0) return null;
   return (
-    <SectionCard title={t("jobs.entries.title", { count: view.entries.length })}>
+    <SectionCard title={t`Videos Found (${ph({ count: view.entries.length })})`}>
       <ul className={cn(FLUSH, "divide-y")}>
         {view.entries.map((entry) => (
           <li key={`${entry.id}:${entry.url}`} className="flex items-center gap-4 px-6 py-3">
@@ -273,7 +290,7 @@ function Entries({ view }: { readonly view: JobView }) {
               <span className="truncate font-mono text-muted-foreground text-xs">{entry.id}</span>
             </div>
             <span className="shrink-0 text-muted-foreground text-sm tabular-nums">
-              <span className="sr-only">{t("jobs.entries.length")} </span>
+              <span className="sr-only">{t`Length`} </span>
               {entry.durationSec === undefined ? "—" : formatDuration(entry.durationSec)}
             </span>
           </li>
@@ -285,7 +302,7 @@ function Entries({ view }: { readonly view: JobView }) {
 
 /** The command's own output, read only once asked for: it can run to megabytes. */
 function TechnicalLog({ id, running }: { readonly id: string; readonly running: boolean }) {
-  const t = useT();
+  const { t } = useLingui();
   const content = useId();
   const [open, setOpen] = useState(false);
   const { data, error, isFetching, refetch } = useQuery({
@@ -297,14 +314,14 @@ function TechnicalLog({ id, running }: { readonly id: string; readonly running: 
   });
   return (
     <SectionCard
-      title={t("jobs.stderr.title")}
-      description={t("jobs.stderr.description")}
+      title={t`Technical Log`}
+      description={t`What the command printed. Its end usually says why a job stopped.`}
       action={
         <>
           {open && (
             <Button variant="ghost" size="sm" onClick={() => refetch()} disabled={isFetching}>
               <RefreshCwIcon className={isFetching ? "animate-spin" : undefined} />
-              {t("jobs.stderr.refresh")}
+              {t`Refresh`}
             </Button>
           )}
           <Button
@@ -315,7 +332,7 @@ function TechnicalLog({ id, running }: { readonly id: string; readonly running: 
             onClick={() => setOpen(!open)}
           >
             <ChevronDownIcon className={open ? "rotate-180" : undefined} />
-            {t(open ? "jobs.stderr.hide" : "jobs.stderr.show")}
+            {open ? t`Hide` : t`Show`}
           </Button>
         </>
       }
@@ -323,7 +340,7 @@ function TechnicalLog({ id, running }: { readonly id: string; readonly running: 
       {open &&
         (error ? (
           <p id={content} className="text-destructive text-sm">
-            {t(errorKey(error))}
+            {t(errorMessage(error))}
           </p>
         ) : (
           <pre
@@ -334,9 +351,9 @@ function TechnicalLog({ id, running }: { readonly id: string; readonly running: 
             )}
           >
             {data === undefined
-              ? t("jobs.stderr.loading")
+              ? t`Loading…`
               : data.trim() === ""
-                ? t("jobs.stderr.empty")
+                ? t`The technical log is empty.`
                 : data.slice(-LOG_TAIL_CHARS)}
           </pre>
         ))}
@@ -345,17 +362,17 @@ function TechnicalLog({ id, running }: { readonly id: string; readonly running: 
 }
 
 function NotFound() {
-  const t = useT();
+  const { t } = useLingui();
   return (
     <EmptyState
       icon={<SearchXIcon />}
-      title={t("jobs.notFound.title")}
-      description={t("jobs.notFound.body")}
+      title={t`There is no such job`}
+      description={t`Eidolon keeps the last 50 jobs.`}
       action={
         <Button variant="outline" asChild>
           <Link to="/jobs">
             <ArrowLeftIcon />
-            {t("jobs.back")}
+            {t`All Jobs`}
           </Link>
         </Button>
       }
@@ -378,7 +395,7 @@ function DetailSkeleton() {
 }
 
 export function JobDetail({ id }: { readonly id: string }) {
-  const t = useT();
+  const { t } = useLingui();
   const { data: job, error } = useQuery(jobQuery(id));
   const events = useJobEvents(id);
   const [endedWhenShown, setEndedWhenShown] = useState<boolean | null>(null);
@@ -396,8 +413,8 @@ export function JobDetail({ id }: { readonly id: string }) {
   if (error) {
     return (
       <Alert variant="destructive">
-        <AlertTitle>{t("jobs.loadFailed")}</AlertTitle>
-        <AlertDescription>{t(errorKey(error))}</AlertDescription>
+        <AlertTitle>{t`Couldn't load the jobs`}</AlertTitle>
+        <AlertDescription>{t(errorMessage(error))}</AlertDescription>
       </Alert>
     );
   }
@@ -410,18 +427,18 @@ export function JobDetail({ id }: { readonly id: string }) {
       <div className="flex flex-col gap-4">
         <BackLink />
         <PageHeader
-          title={t(`jobs.command.${job.command}`)}
+          title={t(COMMAND_LABELS[job.command])}
           badges={<OutcomeBadge outcome={outcome} />}
-          description={t(`jobs.about.${job.command}`)}
+          description={t(COMMAND_ABOUT[job.command])}
         />
       </div>
 
       <Overview job={job} outcome={outcome} events={events} />
 
-      <SectionCard title={t("jobs.stages.title")}>
+      <SectionCard title={t`Progress`}>
         {events.view.stages.length === 0 ? (
           <p className="text-muted-foreground text-sm">
-            {outcome === "running" ? t("jobs.stages.waiting") : t("jobs.stages.none")}
+            {outcome === "running" ? t`Starting…` : t`This job reported no progress.`}
           </p>
         ) : (
           <StageList view={events.view} />
@@ -431,7 +448,7 @@ export function JobDetail({ id }: { readonly id: string }) {
 
       {job.command === "expand" && <Entries view={events.view} />}
 
-      <SectionCard title={t("jobs.log.title")} description={t("jobs.log.description")}>
+      <SectionCard title={t`Log`} description={t`What the job reported, newest at the bottom.`}>
         <JobLog view={events.view} className={cn(FLUSH, "max-h-[28rem] px-6 py-4")} />
       </SectionCard>
 

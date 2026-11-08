@@ -1,9 +1,8 @@
-// take_selfie: the persona redraws her reference image through OpenRouter's image route, and the
-// picture reaches the viewer's screen as an RTVI server message carrying its URL.
+// take_selfie: the persona redraws her reference image through the selfie role's image route, and
+// the picture reaches the viewer's screen as an RTVI server message carrying its URL.
 import {
   activePersona,
   envInt,
-  envOptional,
   envStr,
   logger,
   pyPathName,
@@ -14,7 +13,6 @@ import {
 import type { LlmTool, ToolResult, ToolSchema } from "@eidolon/core";
 import {
   buildSelfiePrompt,
-  DEFAULT_IMAGE_MODEL,
   friendSources,
   ImageGenError,
   isSelfieConfigured,
@@ -27,6 +25,7 @@ import {
   renderSelfie,
   type SelfieStore,
 } from "@eidolon/imagegen";
+import { hasKey, ProviderConfigError, reportUsage, select } from "@eidolon/providers";
 
 export const SELFIE_TOOL_NAME = "take_selfie";
 
@@ -78,15 +77,24 @@ export interface SelfieToolOptions {
 }
 
 /**
- * The tool, or null when OPENROUTER_API_KEY is empty, no outfit resolves, or the outfit can't be
- * encoded. Reads the SELFIE_* settings once, as each session starts.
+ * The tool, or null when the selfie role's key is empty, no outfit resolves, or the outfit can't
+ * be encoded. Reads the SELFIE_* settings once, as each session starts.
  */
 export function createSelfieTool(options: SelfieToolOptions = {}): LlmTool | null {
-  const apiKey = envOptional("OPENROUTER_API_KEY");
-  if (!apiKey) {
-    logger.info("[selfie] Disabled: OPENROUTER_API_KEY is unset.");
+  let selection: ReturnType<typeof select>;
+  try {
+    selection = select("selfie");
+  } catch (error) {
+    if (!(error instanceof ProviderConfigError)) throw error;
+    logger.warning(`[selfie] Disabled: ${error.message}`);
     return null;
   }
+  if (selection === null || !hasKey(selection)) {
+    logger.info(`[selfie] Disabled: ${selection?.keyName ?? "the selfie key"} is unset.`);
+    return null;
+  }
+  const apiKey = selection.apiKey as string;
+  const provider = selection.provider.id;
   const root = options.root;
   const clock = personaClock(options.now?.());
   const sources = referenceSources({ root, clock });
@@ -106,7 +114,8 @@ export function createSelfieTool(options: SelfieToolOptions = {}): LlmTool | nul
   }
   const settings = {
     apiKey,
-    model: envStr("SELFIE_MODEL", DEFAULT_IMAGE_MODEL),
+    url: `${(selection.baseUrl as string).replace(/\/+$/, "")}/images`,
+    model: selection.model,
     aspectRatio: envStr("SELFIE_ASPECT_RATIO", "3:4"),
     quality: envStr("SELFIE_QUALITY", "auto"),
     ttlSeconds: envInt("SELFIE_TTL_SECONDS", 600),
@@ -165,6 +174,13 @@ export function createSelfieTool(options: SelfieToolOptions = {}): LlmTool | nul
         logger.warning(`[selfie] ${result.error}`);
         return { ok: false, error: result.error };
       }
+      reportUsage({
+        role: "selfie",
+        provider,
+        model: settings.model,
+        units: { images: result.urls.length },
+        costUsd: result.costUsd,
+      });
       if (result.urls.length === 0) return { ok: false, error: "no image" };
       await effects.sendServerMessage({ type: "selfie", urls: [...result.urls] });
       return { ok: true, count: result.urls.length };

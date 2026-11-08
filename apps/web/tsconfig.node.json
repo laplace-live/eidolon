@@ -3,6 +3,13 @@
   "compilerOptions": {
     "types": ["bun"]
   },
-  "include": ["vite.config.ts", "*.test.ts", "src/**/*.test.ts"],
+  "include": [
+    "vite.config.ts",
+    "lingui.config.ts",
+    "scripts/*.ts",
+    "*.test.ts",
+    "src/**/*.test.ts",
+    "src/types/*.d.ts"
+  ],
   "exclude": []
 }

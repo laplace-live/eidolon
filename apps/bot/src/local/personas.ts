@@ -14,10 +14,8 @@ import {
 import { basename, isAbsolute, join, resolve } from "node:path";
 import {
   activePersona,
-  DEFAULT_EMBED_MODEL,
   dataHome,
   embedDim,
-  envOptional,
   IDENTITY_DEFAULTS,
   isPlainObject,
   layeredValue,
@@ -32,6 +30,7 @@ import {
 } from "@eidolon/config";
 import { REFERENCE_EXTENSIONS } from "@eidolon/imagegen";
 import { indexMetaPath, ingestFacts } from "@eidolon/ingest";
+import { trySelect } from "@eidolon/providers";
 import {
   CATALOG_FILENAME,
   INDEX_DIR,
@@ -444,6 +443,11 @@ export function catalogBuiltAt(dir: string): string | null {
   }
 }
 
+/** The embedding model an index built now records; null when the settings name none to use. */
+function currentEmbedModel(): string | null {
+  return trySelect("embeddings")?.model ?? null;
+}
+
 function tableStatus(dir: string, table: IndexTable["table"]): IndexTable {
   const built = existsSync(join(dir, `${table}.lance`));
   const meta = built ? readJsonObject(indexMetaPath(dir, table)) : null;
@@ -458,9 +462,7 @@ function tableStatus(dir: string, table: IndexTable["table"]): IndexTable {
     builtAt: string(meta?.builtAt),
     model,
     dim,
-    stale:
-      meta !== null &&
-      (model !== (envOptional("EMBED_MODEL") ?? DEFAULT_EMBED_MODEL) || dim !== embedDim()),
+    stale: meta !== null && (model !== currentEmbedModel() || dim !== embedDim()),
   };
 }
 

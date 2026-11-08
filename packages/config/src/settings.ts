@@ -1,11 +1,12 @@
 // The settings layers. The install's: code defaults < settings.yaml < the environment. A persona's:
-// code defaults < the local app's derived defaults < the environment < her persona.yaml, and the
-// environment's FISH_VOICE_ID_<STYLE> voices skip a persona with her own voice. Secrets come from
-// credentials.json or the environment, never YAML. Every setting maps to the variable that always
-// configured it, and the env readers consult this layer, so a value parses and warns exactly as it
-// would from the environment.
+// code defaults < the local app's derived defaults < the environment < her persona.yaml. The
+// environment's model and voice settings belong to the environment's provider, so they skip a
+// persona who picks another, and its voice styles skip one with her own voice. Secrets come from
+// credentials.json or the environment, never YAML. Every setting maps to one variable, and the env
+// readers consult this layer, so a value parses and warns exactly as it would from the environment.
 import { readFileSync, statSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
+import { ACCOUNTS_KEY, type AccountEntry, accountProvider, parseAccounts } from "./accounts.ts";
 import { envVariable, setFileLayer } from "./env.ts";
 import { DEFAULT_PERSONA, dataHome, personaDirs, personaIds, resolvePersonaPath } from "./home.ts";
 import { logger } from "./logger.ts";
@@ -22,7 +23,17 @@ export interface SettingField {
   readonly scope: SettingScope;
   readonly kind: SettingKind;
   readonly title: string;
+  /** A provider row's value when nothing sets it, unless it follows another. */
+  readonly default?: string;
+  /** A provider row that, unset, takes this provider row's value. */
+  readonly follows?: string;
+  /** The provider row whose provider this value is for: a model, a voice. */
+  readonly provider?: string;
+  /** A provider-named variable that also sets this, read while that provider fills the role. */
+  readonly legacy?: { readonly env: string; readonly provider: string };
 }
+
+type FieldOptions = Pick<SettingField, "default" | "follows" | "provider" | "legacy">;
 
 const field = (
   scope: SettingScope,
@@ -30,7 +41,8 @@ const field = (
   env: string,
   kind: SettingKind,
   title: string,
-): SettingField => ({ path, env, scope, kind, title });
+  options: FieldOptions = {},
+): SettingField => ({ path, env, scope, kind, title, ...options });
 
 /** Every setting a YAML file may hold, in the order the web settings show them. */
 export const SETTINGS: readonly SettingField[] = [
@@ -141,14 +153,13 @@ export const SETTINGS: readonly SettingField[] = [
     "OpenRouter app name",
   ),
   field("app", "providers.openrouter.appUrl", "OPENROUTER_APP_URL", "string", "OpenRouter app URL"),
-  field(
-    "app",
-    "providers.openai.baseUrl",
-    "OPENAI_BASE_URL",
-    "string",
-    "OpenAI-compatible base URL",
-  ),
-  field("app", "embeddings.model", "EMBED_MODEL", "string", "Embedding model"),
+  field("app", "providers.openai.baseUrl", "OPENAI_BASE_URL", "string", "OpenAI API base"),
+  field("app", "embeddings.provider", "EMBED_PROVIDER", "string", "Embedding provider", {
+    default: "openrouter",
+  }),
+  field("app", "embeddings.model", "EMBED_MODEL", "string", "Embedding model", {
+    provider: "EMBED_PROVIDER",
+  }),
   field("app", "embeddings.dim", "EMBED_DIM", "int", "Embedding dimension"),
   field("app", "embeddings.baseUrl", "EMBED_BASE_URL", "string", "Embedding API base"),
   field("app", "rerank.baseUrl", "RERANK_BASE_URL", "string", "Reranker API base"),
@@ -162,13 +173,43 @@ export const SETTINGS: readonly SettingField[] = [
     "Browser to read cookies from",
   ),
   field("app", "sources.cookiesFile", "YT_DLP_COOKIES", "path", "Cookies file"),
+  field("app", "usage.db", "EIDOLON_USAGE_DB", "path", "Usage ledger"),
 
   field("persona", "prompt", "PERSONA_FILE", "path", "System prompt file"),
   field("persona", "identity.timezone", "PERSONA_TIMEZONE", "string", "Time zone"),
-  field("persona", "voice.model", "FISH_MODEL", "string", "Fish Audio model"),
-  field("persona", "voice.voiceId", "FISH_VOICE_ID", "string", "Voice"),
-  field("persona", "hearing.model", "SONIOX_MODEL", "string", "Soniox model"),
-  field("persona", "mind.model", "OPENROUTER_MODEL", "string", "Chat model"),
+  field("persona", "voice.provider", "TTS_PROVIDER", "string", "Voice provider", {
+    default: "fish",
+  }),
+  field("persona", "voice.model", "TTS_MODEL", "string", "Voice model", {
+    provider: "TTS_PROVIDER",
+    legacy: { env: "FISH_MODEL", provider: "fish" },
+  }),
+  field("persona", "voice.voiceId", "TTS_VOICE_ID", "string", "Voice", {
+    provider: "TTS_PROVIDER",
+    legacy: { env: "FISH_VOICE_ID", provider: "fish" },
+  }),
+  field("persona", "hearing.provider", "STT_PROVIDER", "string", "Speech recognition provider", {
+    default: "soniox",
+  }),
+  field("persona", "hearing.model", "STT_MODEL", "string", "Speech recognition model", {
+    provider: "STT_PROVIDER",
+    legacy: { env: "SONIOX_MODEL", provider: "soniox" },
+  }),
+  field("persona", "hearing.language", "STT_LANGUAGE", "string", "Spoken language"),
+  field("persona", "mind.provider", "LLM_PROVIDER", "string", "Chat provider", {
+    default: "openrouter",
+  }),
+  field("persona", "mind.model", "LLM_MODEL", "string", "Chat model", {
+    provider: "LLM_PROVIDER",
+    legacy: { env: "OPENROUTER_MODEL", provider: "openrouter" },
+  }),
+  field("persona", "realtime.provider", "REALTIME_PROVIDER", "string", "Realtime provider"),
+  field("persona", "realtime.model", "REALTIME_MODEL", "string", "Realtime model", {
+    provider: "REALTIME_PROVIDER",
+  }),
+  field("persona", "realtime.voice", "REALTIME_VOICE", "string", "Realtime voice", {
+    provider: "REALTIME_PROVIDER",
+  }),
   field("persona", "memory.searchLimit", "MEM0_SEARCH_LIMIT", "int", "Memories per turn"),
   field(
     "persona",
@@ -179,7 +220,12 @@ export const SETTINGS: readonly SettingField[] = [
   ),
   field("persona", "memory.agentId", "MEM0_AGENT_ID", "string", "Mem0 agent id"),
   field("persona", "memory.runId", "MEM0_RUN_ID", "string", "Mem0 run id"),
-  field("persona", "memory.model", "MEM0_LLM_MODEL", "string", "Memory extraction model"),
+  field("persona", "memory.provider", "MEM0_LLM_PROVIDER", "string", "Memory extraction provider", {
+    follows: "LLM_PROVIDER",
+  }),
+  field("persona", "memory.model", "MEM0_LLM_MODEL", "string", "Memory extraction model", {
+    provider: "MEM0_LLM_PROVIDER",
+  }),
   field("persona", "knowledge.index", "LANCEDB_PATH", "path", "Knowledge index"),
   field(
     "persona",
@@ -196,14 +242,30 @@ export const SETTINGS: readonly SettingField[] = [
     "Stream candidates",
   ),
   field("persona", "knowledge.rerank.enabled", "RERANK_ENABLED", "flag", "Rerank results"),
-  field("persona", "knowledge.rerank.model", "RERANK_MODEL", "string", "Reranker model"),
+  field("persona", "knowledge.rerank.provider", "RERANK_PROVIDER", "string", "Reranker provider", {
+    default: "openrouter",
+  }),
+  field("persona", "knowledge.rerank.model", "RERANK_MODEL", "string", "Reranker model", {
+    provider: "RERANK_PROVIDER",
+  }),
   field("persona", "knowledge.gate.enabled", "RETRIEVAL_GATE_ENABLED", "flag", "Retrieval gate"),
+  field(
+    "persona",
+    "knowledge.gate.provider",
+    "RETRIEVAL_GATE_PROVIDER",
+    "string",
+    "Retrieval gate provider",
+    { default: "openrouter" },
+  ),
   field(
     "persona",
     "knowledge.gate.model",
     "RETRIEVAL_GATE_MODEL",
     "string",
     "Retrieval gate model",
+    {
+      provider: "RETRIEVAL_GATE_PROVIDER",
+    },
   ),
   field("persona", "knowledge.facts.files", "FACTS_FILES", "list", "Fact files"),
   field("persona", "knowledge.facts.subject", "FACTS_SUBJECT", "string", "Fact subject pattern"),
@@ -214,7 +276,20 @@ export const SETTINGS: readonly SettingField[] = [
     "list",
     "Scene types left out of the index",
   ),
-  field("persona", "transcription.model", "SONIOX_ASYNC_MODEL", "string", "Transcription model"),
+  field(
+    "persona",
+    "transcription.provider",
+    "TRANSCRIBE_PROVIDER",
+    "string",
+    "Transcription provider",
+    {
+      default: "soniox",
+    },
+  ),
+  field("persona", "transcription.model", "TRANSCRIBE_MODEL", "string", "Transcription model", {
+    provider: "TRANSCRIBE_PROVIDER",
+    legacy: { env: "SONIOX_ASYNC_MODEL", provider: "soniox" },
+  }),
   field(
     "persona",
     "transcription.language",
@@ -222,9 +297,19 @@ export const SETTINGS: readonly SettingField[] = [
     "string",
     "Transcription language",
   ),
-  field("persona", "refine.model", "REFINE_MODEL", "string", "Refine model"),
+  field("persona", "refine.provider", "REFINE_PROVIDER", "string", "Refine provider", {
+    default: "openrouter",
+  }),
+  field("persona", "refine.model", "REFINE_MODEL", "string", "Refine model", {
+    provider: "REFINE_PROVIDER",
+  }),
   field("persona", "refine.concurrency", "REFINE_CONCURRENCY", "int", "Refine concurrency"),
-  field("persona", "selfie.model", "SELFIE_MODEL", "string", "Selfie model"),
+  field("persona", "selfie.provider", "SELFIE_PROVIDER", "string", "Selfie provider", {
+    default: "openrouter",
+  }),
+  field("persona", "selfie.model", "SELFIE_MODEL", "string", "Selfie model", {
+    provider: "SELFIE_PROVIDER",
+  }),
   field("persona", "selfie.aspectRatio", "SELFIE_ASPECT_RATIO", "string", "Selfie aspect ratio"),
   field("persona", "selfie.quality", "SELFIE_QUALITY", "string", "Selfie quality"),
   field("persona", "selfie.ttlSeconds", "SELFIE_TTL_SECONDS", "int", "Selfie lifetime"),
@@ -232,19 +317,34 @@ export const SETTINGS: readonly SettingField[] = [
   field("persona", "selfie.references", "SELFIE_REFERENCE_IMAGES", "paths", "Selfie references"),
 ];
 
-/** `voice.styles.<name>` sets `FISH_VOICE_ID_<NAME>`. */
+/** `voice.styles.<name>` sets `TTS_VOICE_ID_<NAME>`. */
 const VOICE_STYLES_PATH = "voice.styles";
-const VOICE_STYLE_PREFIX = "FISH_VOICE_ID_";
+const VOICE_STYLE_PREFIX = "TTS_VOICE_ID_";
+/** The environment's style variables: these, and Fish's names for them. */
+const ENV_STYLE_PREFIXES = [VOICE_STYLE_PREFIX, "FISH_VOICE_ID_"];
 
 /** The keys credentials.json may hold: the variables that carry secrets. */
 export const CREDENTIALS: readonly string[] = [
   "SONIOX_API_KEY",
   "OPENROUTER_API_KEY",
   "FISH_API_KEY",
+  "OPENAI_API_KEY",
+  "ANTHROPIC_API_KEY",
+  "GEMINI_API_KEY",
+  "DEEPSEEK_API_KEY",
+  "XAI_API_KEY",
+  "DASHSCOPE_API_KEY",
+  "MOONSHOT_API_KEY",
+  "ZHIPU_API_KEY",
+  "OPENAI_COMPATIBLE_API_KEY",
+  "ELEVENLABS_API_KEY",
+  "DEEPGRAM_API_KEY",
+  "CARTESIA_API_KEY",
+  "MINIMAX_API_KEY",
+  "COHERE_API_KEY",
   "RERANK_API_KEY",
   "EMBED_API_KEY",
   "REFINE_API_KEY",
-  "OPENAI_API_KEY",
   "CLOUDFLARE_TURN_KEY_API_TOKEN",
   "WEBRTC_TURN_CREDENTIAL",
   "CF_WAF_BYPASS_TOKEN",
@@ -488,15 +588,18 @@ export interface SettingsLayers {
   readonly persona: string;
   readonly files: SettingsFiles;
   /**
-   * Every SETTINGS variable in its order, then the FISH_VOICE_ID_<STYLE> variables the persona's
+   * Every SETTINGS variable in its order, then the TTS_VOICE_ID_<STYLE> variables the persona's
    * voice.styles adds, then every credential: credentials.json's in its order, the rest unset.
    */
   readonly values: ReadonlyMap<string, LayeredSetting>;
   /**
    * The variables her persona.yaml decides, whatever the environment says: those it gives a value,
-   * and with her own voice every FISH_VOICE_ID_<STYLE> in the environment.
+   * a model or voice whose provider she picks otherwise than the environment does, and with her
+   * own voice every voice style in the environment.
    */
   readonly owned: ReadonlySet<string>;
+  /** credentials.json's provider accounts, by id. */
+  readonly accounts: ReadonlyMap<string, AccountEntry>;
   /** What loadSettings would log about these files, in its order. */
   readonly warnings: readonly string[];
 }
@@ -507,8 +610,31 @@ interface ReadLayers {
   readonly id: string;
   readonly persona: Tree;
   readonly values: Map<string, LayeredSetting>;
+  readonly accounts: ReadonlyMap<string, AccountEntry>;
   readonly owned: ReadonlySet<string>;
+  /** Why her persona.yaml decides each owned variable, as the log says it. */
+  readonly why: ReadonlyMap<string, string>;
   readonly files: SettingsFiles;
+}
+
+const BY_ENV: ReadonlyMap<string, SettingField> = new Map(SETTINGS.map((s) => [s.env, s]));
+
+/**
+ * The provider a provider row names: her persona.yaml's when `files` holds her values, else the
+ * environment's, else the row it follows, else its default.
+ */
+function providerValue(
+  env: string,
+  files: ReadonlyMap<string, LayeredSetting> | null,
+): string | undefined {
+  const setting = BY_ENV.get(env);
+  // Provider ids are case-blind, as the resolver reads them: `Fish` is `fish`.
+  const hers = files?.get(env)?.value?.trim().toLowerCase();
+  if (hers) return hers;
+  const fromEnv = process.env[env]?.trim().toLowerCase();
+  if (fromEnv) return fromEnv;
+  if (setting?.follows !== undefined) return providerValue(setting.follows, files);
+  return setting?.default;
 }
 
 /** The one reader behind loadSettings and readSettingsLayers; `chosen` null picks the active persona. */
@@ -517,6 +643,13 @@ function readLayers(chosen: string | null, warn: Warn): ReadLayers {
   const settingsPath = join(home, "settings.yaml");
   const credentialsPath = join(home, "credentials.json");
   const app = readTree(settingsPath, settingsPath, warn);
+  // Before parsing: a file that fails to parse can still hold real keys.
+  warnIfShared(credentialsPath, warn);
+  const credentials = readTree(credentialsPath, credentialsPath, warn);
+  const accounts = parseAccounts(credentials[ACCOUNTS_KEY], credentialsPath, warn);
+  // An account stands for its provider, whose models and voices it shares.
+  const providerOf = (value: string | undefined) =>
+    value === undefined ? undefined : accountProvider(value, accounts);
   const id = chosen ?? choosePersona(app);
   const personaPath = resolvePersonaPath(id, "persona.yaml");
   const persona = readTree(personaPath, personaPath, warn);
@@ -560,10 +693,33 @@ function readLayers(chosen: string | null, warn: Warn): ReadLayers {
       }
     }
   }
+  const why = new Map<string, string>();
+  for (const name of owned) why.set(name, `sets ${BY_ENV.get(name)?.path ?? VOICE_STYLES_PATH}`);
+  for (const setting of SETTINGS) {
+    if (setting.scope !== "persona") continue;
+    const own = owned.has(setting.env);
+    // The environment's model or voice is for its own provider, which isn't the one she picks.
+    const other =
+      !own &&
+      setting.provider !== undefined &&
+      providerOf(providerValue(setting.provider, values)) !==
+        providerOf(providerValue(setting.provider, null));
+    if (other) {
+      owned.add(setting.env);
+      why.set(setting.env, `sets ${BY_ENV.get(setting.provider as string)?.path}`);
+    }
+    if ((own || other) && setting.legacy) {
+      owned.add(setting.legacy.env);
+      why.set(setting.legacy.env, why.get(setting.env) as string);
+    }
+  }
   // The environment's styles are another voice's moods: with her own voice they'd switch to it.
-  if (owned.has("FISH_VOICE_ID")) {
+  if (owned.has("TTS_VOICE_ID")) {
     for (const name of Object.keys(process.env)) {
-      if (name.startsWith(VOICE_STYLE_PREFIX)) owned.add(name);
+      if (ENV_STYLE_PREFIXES.some((prefix) => name.startsWith(prefix)) && !owned.has(name)) {
+        owned.add(name);
+        why.set(name, "has her own voice");
+      }
     }
   }
   for (const [scope, tree, label] of [
@@ -575,10 +731,8 @@ function readLayers(chosen: string | null, warn: Warn): ReadLayers {
     }
   }
 
-  // Before parsing: a file that fails to parse can still hold real keys.
-  warnIfShared(credentialsPath, warn);
-  const credentials = readTree(credentialsPath, credentialsPath, warn);
   for (const [name, secret] of Object.entries(credentials)) {
+    if (name === ACCOUNTS_KEY) continue;
     if (!CREDENTIALS.includes(name)) {
       warn(`Ignoring ${name} in ${credentialsPath}: not a credential`);
     } else if (typeof secret === "string" && secret) {
@@ -594,7 +748,9 @@ function readLayers(chosen: string | null, warn: Warn): ReadLayers {
     id,
     persona,
     values,
+    accounts,
     owned,
+    why,
     files: { home, settings: settingsPath, credentials: credentialsPath, persona: personaPath },
   };
 }
@@ -606,7 +762,14 @@ function readLayers(chosen: string | null, warn: Warn): ReadLayers {
 export function readSettingsLayers(personaId: string): SettingsLayers {
   const warnings: string[] = [];
   const read = readLayers(personaId, (message) => warnings.push(message));
-  return { persona: read.id, files: read.files, values: read.values, owned: read.owned, warnings };
+  return {
+    persona: read.id,
+    files: read.files,
+    values: read.values,
+    accounts: read.accounts,
+    owned: read.owned,
+    warnings,
+  };
 }
 
 /**
@@ -622,8 +785,12 @@ export interface LoadedSettings {
   readonly persona: PersonaSettings;
   /** Variable name → value, as the files set them. */
   readonly values: ReadonlyMap<string, string>;
+  /** credentials.json's provider accounts, by id. */
+  readonly accounts: ReadonlyMap<string, AccountEntry>;
   /** As SettingsLayers' owned. */
   readonly owned: ReadonlySet<string>;
+  /** Why her persona.yaml decides each owned variable. */
+  readonly why: ReadonlyMap<string, string>;
   readonly files: SettingsFiles;
 }
 
@@ -639,7 +806,9 @@ export function loadSettings(): LoadedSettings {
       gateQuestions: readGateQuestions(read.persona, read.files.persona),
     },
     values,
+    accounts: read.accounts,
     owned: read.owned,
+    why: read.why,
     files: read.files,
   };
 }
@@ -672,8 +841,7 @@ export function installSettings(): LoadedSettings {
   if (report !== reported) {
     reported = report;
     for (const name of ignored) {
-      const setting = SETTINGS.find((field) => field.env === name);
-      const why = setting === undefined ? "has her own voice" : `sets ${setting.path}`;
+      const why = installed.why.get(name) ?? "has her own voice";
       logger.info(`${name} from the environment is ignored: persona ${id} ${why}`);
     }
   }
@@ -693,6 +861,12 @@ export function setSettingDefaults(derive: SettingDefaults | null): void {
 export function activePersona(): PersonaSettings {
   installed ??= loadSettings();
   return installed.persona;
+}
+
+/** credentials.json's provider accounts as installed, by id. */
+export function accountEntries(): ReadonlyMap<string, AccountEntry> {
+  installed ??= loadSettings();
+  return installed.accounts;
 }
 
 /** The active persona's file or folder at `rel` (see resolvePersonaPath). */

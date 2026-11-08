@@ -1,5 +1,8 @@
-import { expect, test } from "bun:test";
-import { httpsOnly, nextPage, totalLabel } from "./voices";
+import { expect, mock, test } from "bun:test";
+import { linguiMacro } from "@/test/lingui-macro";
+
+mock.module("@lingui/core/macro", linguiMacro);
+const { httpsOnly, nextPage, voiceCount } = await import("./voices");
 
 test("only https URLs load", () => {
   expect(httpsOnly("https://platform.r2.fish.audio/task/x.mp3")).toBe(
@@ -24,7 +27,8 @@ test("paging stops when Fish says there is no more", () => {
   expect(nextPage({ hasMore: false }, 3)).toBeUndefined();
 });
 
-test("a capped total shows with a plus", () => {
-  expect(totalLabel({ total: 42, totalIsExact: true })).toBe(42);
-  expect(totalLabel({ total: 1000, totalIsExact: false })).toBe("1000+");
+test("a capped total counts as a number, with a plus", () => {
+  expect(voiceCount({ total: 1, totalIsExact: true })).toBe("1 voice");
+  expect(voiceCount({ total: 42, totalIsExact: true })).toBe("42 voices");
+  expect(voiceCount({ total: 1000, totalIsExact: false })).toBe("1,000+ voices");
 });

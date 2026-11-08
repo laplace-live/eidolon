@@ -520,8 +520,8 @@ describe("--json", () => {
       const io = captureIo();
       expect(await refineMain(["--json", "--streams-dir", streams], io.io)).toBe(1);
       const message =
-        "Refinement needs an API key. Set OPENROUTER_API_KEY (reused from the LLM config) or " +
-        "REFINE_API_KEY for a different provider.";
+        "OpenRouter needs an API key: set OPENROUTER_API_KEY in credentials.json or the " +
+        "environment, or REFINE_API_KEY for refinement alone";
       expect(logs.records).toEqual([["ERROR", message]]);
       expect(events(io.stdout())).toEqual([
         {

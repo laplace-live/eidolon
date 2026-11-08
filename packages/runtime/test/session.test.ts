@@ -78,6 +78,10 @@ interface Calls {
 function fakeDeps(overrides: Partial<SessionDeps> = {}): { deps: SessionDeps; calls: Calls } {
   const calls: Calls = { prompts: [], gates: 0, memoryUsers: [], opened: [] };
   const deps: SessionDeps = {
+    isRealtime: () => false,
+    createRealtime: () => {
+      throw new Error("realtime is off");
+    },
     createStt: () => new PassThrough("stt"),
     createTts: () => new PassThrough("tts"),
     createLlm: (systemInstruction) =>
@@ -326,6 +330,45 @@ describe("buildSession", () => {
     const session = await buildSession(new FakeTransport(), ANONYMOUS, deps);
     expect(session.tools.size).toBe(0);
     expect(session.context.tools instanceof ToolsSchema).toBe(false);
+  });
+
+  test("a realtime model hears and speaks for itself: no STT, TTS, VAD or voice switching", async () => {
+    let built = "";
+    const { deps, calls } = fakeDeps({
+      dbPathExists: async () => true,
+      isRealtime: () => true,
+      createRealtime: (systemInstruction) => {
+        built = systemInstruction;
+        return new OpenRouterLLMService({
+          apiKey: "test-key",
+          settings: new OpenRouterLLMService.Settings({ systemInstruction }),
+        });
+      },
+      createStt: () => {
+        throw new Error("no STT under a realtime model");
+      },
+      createTts: () => {
+        throw new Error("no TTS under a realtime model");
+      },
+      createVoiceTool: () => tool("change_voice_style"),
+      createSelfieTool: () => tool("take_selfie"),
+      openArchive: async () => archive(tool("recall_streams")),
+      audioBackend: async () => {
+        throw new Error("no local VAD under a realtime model");
+      },
+    });
+    const session = await buildSession(new FakeTransport(), VIEWER, deps);
+    expect(built).toBe("persona prompt");
+    expect(calls.prompts).toEqual([
+      { viewer: VIEWER, voiceHint: "", selfieHint: "SELFIE HINT", realtime: true },
+    ]);
+    expect(toolNames(session.context)).toEqual(["take_selfie", "recall_streams"]);
+    const names = session.processors.map((p) => p.name);
+    expect(names).not.toContain("stt");
+    expect(names).not.toContain("tts");
+    const params = (session.processors[1] as any)._params;
+    expect(params.vadAnalyzer ?? null).toBeNull();
+    expect(params.emptyUserTurn.interruptedPrompt).toBe(INTERRUPTED_PROMPT);
   });
 
   test("the user aggregator: Silero VAD, explicit Smart Turn, the Chinese empty-turn prompt", async () => {

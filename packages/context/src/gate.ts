@@ -4,8 +4,9 @@
 import {
   activePersona,
   envFlag,
-  envOptional,
+  extractCostUsd,
   httpxStatusMessage,
+  isPlainObject,
   logger,
   openrouterHeaders,
   pyError,
@@ -18,6 +19,7 @@ import {
   raceAbort,
 } from "@eidolon/config";
 import type { FrameMetadata } from "@eidolon/core";
+import { hasKey, reportUsage, trySelect } from "@eidolon/providers";
 import { errorRepr } from "./compat.ts";
 import { isMessage, sameTurn, type TurnKey, turnKeyOf } from "./messages.ts";
 
@@ -208,13 +210,36 @@ export interface RetrievalGateOptions {
   readonly apiKey: string;
   readonly model?: string;
   readonly url?: string;
+  /** Whose Decisions API it calls, for the usage ledger. */
+  readonly provider?: string;
   readonly fetch?: typeof fetch;
   readonly timeoutSec?: number;
+}
+
+/** OpenRouter's Decisions route sits beside its v1 API, not under it. */
+export function decisionsUrl(baseUrl: string): string {
+  return `${baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "")}/alpha/decisions`;
+}
+
+/** Reports one Decisions answer's usage to the ledger, as the gate's role. */
+export function reportDecision(provider: string, model: string, body: unknown): void {
+  const usage = isPlainObject(body) && isPlainObject(body.usage) ? body.usage : null;
+  if (usage === null) return;
+  const count = (value: unknown) => (typeof value === "number" && value > 0 ? value : 0);
+  const served = isPlainObject(body) && typeof body.model === "string" ? body.model : model;
+  reportUsage({
+    role: "gate",
+    provider,
+    model: served,
+    units: { inputTokens: count(usage.input_tokens), outputTokens: count(usage.output_tokens) },
+    costUsd: extractCostUsd(usage),
+  });
 }
 
 /** Attaches one Jev decision per user turn to every context frame of that turn. */
 export class RetrievalGate {
   readonly model: string;
+  readonly #provider: string;
   readonly #headers: Record<string, string>;
   readonly #url: string;
   readonly #fetch: typeof fetch;
@@ -224,6 +249,7 @@ export class RetrievalGate {
 
   constructor(options: RetrievalGateOptions) {
     this.model = options.model ?? DEFAULT_GATE_MODEL;
+    this.#provider = options.provider ?? "openrouter";
     this.#headers = {
       ...openrouterHeaders(),
       Authorization: `Bearer ${options.apiKey}`,
@@ -264,6 +290,7 @@ export class RetrievalGate {
         );
       }
       body = await response.json();
+      reportDecision(this.#provider, this.model, body);
       score = maxNoul(body, Object.keys(GATE_QUESTIONS));
     } catch (error) {
       logger.warning(`Retrieval gate failed open: ${errorRepr(error)}`);
@@ -308,17 +335,24 @@ export class RetrievalGate {
   }
 }
 
-/** null when OPENROUTER_API_KEY is unset or the gate is disabled. */
+/** null when the gate's key is unset, its settings name no decision model, or it is disabled. */
 export function retrievalGateFromEnv(): RetrievalGate | null {
   if (!envFlag("RETRIEVAL_GATE_ENABLED", true)) {
     logger.info("RETRIEVAL_GATE_ENABLED is off — every turn searches both LanceDB tiers");
     return null;
   }
-  const apiKey = envOptional("OPENROUTER_API_KEY");
-  if (!apiKey) return null;
-  const model = envOptional("RETRIEVAL_GATE_MODEL") ?? DEFAULT_GATE_MODEL;
+  const selection = trySelect("gate", undefined, (error) =>
+    logger.warning(`Retrieval gate off: ${error.message}`),
+  );
+  if (selection === null || !hasKey(selection)) return null;
+  const { model, provider } = selection;
   logger.info(`Retrieval gate enabled: model=${pyRepr(model)}`);
-  return new RetrievalGate({ apiKey, model });
+  return new RetrievalGate({
+    apiKey: selection.apiKey as string,
+    model,
+    provider: provider.id,
+    url: decisionsUrl(selection.baseUrl as string),
+  });
 }
 
 /** The decision a frame carries, or null when no gate ran. */
