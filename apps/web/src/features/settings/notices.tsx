@@ -33,7 +33,7 @@ function RestartBanner({ all }: { readonly all: boolean }) {
           </p>
           <p className="text-muted-foreground">
             {all
-              ? t`Some saved settings are read only when Eidolon starts or when memory first runs. Restarting interrupts running jobs, and can't happen during a call.`
+              ? t`Some saved settings are read only when Eidolon starts or runs its first search. Restarting interrupts running jobs, and can't happen during a call.`
               : t`Calls already use what you saved; only the MCP server keeps what it read at start until a restart.`}
           </p>
         </div>

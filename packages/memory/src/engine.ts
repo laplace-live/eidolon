@@ -468,10 +468,14 @@ export async function openMemoryEngine(
   return new MemoryEngine({ store, embedder, llm, history });
 }
 
-/** The process's one engine: only a successful open is kept, and concurrent callers share one. */
+/**
+ * One engine per configuration, so each persona extracts with her own memory model: only a
+ * successful open is kept, and concurrent callers with one configuration share one open. The keys
+ * hold API keys, so they never leave this object.
+ */
 export class SharedEngine {
-  #engine: MemoryEngine | null = null;
-  #opening: Promise<MemoryEngine> | null = null;
+  readonly #engines = new Map<string, MemoryEngine>();
+  readonly #opening = new Map<string, Promise<MemoryEngine>>();
   readonly #open: (config: MemoryConfig) => Promise<MemoryEngine>;
 
   constructor(open: (config: MemoryConfig) => Promise<MemoryEngine> = openMemoryEngine) {
@@ -480,16 +484,22 @@ export class SharedEngine {
 
   /** `fresh` is true when this call (or the one it joined) just ran the collection setup. */
   async get(config: MemoryConfig): Promise<{ engine: MemoryEngine; fresh: boolean }> {
-    if (this.#engine) return { engine: this.#engine, fresh: false };
-    this.#opening ??= this.#open(config)
-      .then((engine) => {
-        this.#engine = engine;
-        return engine;
-      })
-      .finally(() => {
-        this.#opening = null;
-      });
-    return { engine: await this.#opening, fresh: true };
+    const key = JSON.stringify(config);
+    const engine = this.#engines.get(key);
+    if (engine) return { engine, fresh: false };
+    let opening = this.#opening.get(key);
+    if (opening === undefined) {
+      opening = this.#open(config)
+        .then((opened) => {
+          this.#engines.set(key, opened);
+          return opened;
+        })
+        .finally(() => {
+          this.#opening.delete(key);
+        });
+      this.#opening.set(key, opening);
+    }
+    return { engine: await opening, fresh: true };
   }
 }
 

@@ -3238,8 +3238,8 @@ msgid "Some of the work failed"
 msgstr "Some of the work failed"
 
 #: src/features/settings/notices.tsx
-msgid "Some saved settings are read only when Eidolon starts or when memory first runs. Restarting interrupts running jobs, and can't happen during a call."
-msgstr "Some saved settings are read only when Eidolon starts or when memory first runs. Restarting interrupts running jobs, and can't happen during a call."
+msgid "Some saved settings are read only when Eidolon starts or runs its first search. Restarting interrupts running jobs, and can't happen during a call."
+msgstr "Some saved settings are read only when Eidolon starts or runs its first search. Restarting interrupts running jobs, and can't happen during a call."
 
 #: src/features/studio/videos-section.tsx
 msgid "Some videos need a signed-in browser's cookies. Reading a browser's cookies may ask for your password (the macOS Keychain), and yt-dlp writes the cookies it used back into a cookies file."

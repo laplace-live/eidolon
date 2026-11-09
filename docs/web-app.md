@@ -249,8 +249,8 @@ docker run -d --name eidolon-qdrant --restart unless-stopped -p 127.0.0.1:6333:6
 Keep the tag in step with `docker-compose.yml`'s; if compose's `qdrant` already answers on 6333,
 use it instead. The step checks an address (127.0.0.1:6333 unless you change it) and saves it as
 `memory.qdrant.host` and `memory.qdrant.port` only when Qdrant answers; once memory is on, an
-edited address is checked and saved the same way. The first address needs no restart; a later
-change does.
+edited address is checked and saved the same way. No address needs a restart: the next call opens
+memory at the saved one.
 
 ## Jobs
 

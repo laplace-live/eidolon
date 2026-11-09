@@ -1,13 +1,22 @@
-// BOOT_READ is complete over every setting and key, covers the whole Mem0 engine SharedEngine
-// keeps, and arms each reader only once it can have read; POST restart asks the supervisor for a
+// BOOT_READ is complete over every setting and key and keeps no persona's setting for calls, and
+// the tracker arms each reader only once it can have read; POST restart asks the supervisor for a
 // new server.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { CREDENTIALS, dataHome, installSettings, resetSettings, SETTINGS } from "@eidolon/config";
+import {
+  CREDENTIALS,
+  dataHome,
+  installSettings,
+  resetSettings,
+  SETTINGS,
+  withPersona,
+} from "@eidolon/config";
 import type { MemoryAdmin } from "@eidolon/memory";
+import { makeReranker, resetRerankerCache } from "@eidolon/retrieval";
 import { buildMemoryConfig } from "../../../../packages/memory/src/config.ts";
+import { type MemoryEngine, SharedEngine } from "../../../../packages/memory/src/engine.ts";
 import { BOOT_READ, LIVE_READ, RestartTracker } from "../../src/local/restart.ts";
 import type { LocalApp } from "../../src/local/router.ts";
 import { statusRoutes } from "../../src/local/routes/status.ts";
@@ -20,6 +29,12 @@ function setEnv(name: string, value: string | undefined): void {
   else process.env[name] = value;
 }
 
+function write(rel: string, text: string): void {
+  const path = join(dataHome(), rel);
+  mkdirSync(join(path, ".."), { recursive: true });
+  writeFileSync(path, text);
+}
+
 afterEach(() => {
   for (const [name, value] of saved) {
     if (value === undefined) delete process.env[name];
@@ -27,6 +42,7 @@ afterEach(() => {
   }
   saved.clear();
   resetSettings();
+  resetRerankerCache();
   rmSync(dataHome(), { recursive: true, force: true });
 });
 
@@ -43,39 +59,46 @@ describe("BOOT_READ", () => {
     for (const readers of Object.values(BOOT_READ)) expect(readers.length).toBeGreaterThan(0);
   });
 
-  test("keeps every variable the first Mem0 engine is built from", () => {
-    // SharedEngine keeps the first engine it opens, so each of these needs a restart once used.
-    const engine = (env: Record<string, string>) => {
-      for (const name of [...SETTINGS.map((s) => s.env), ...CREDENTIALS]) setEnv(name, env[name]);
-      try {
-        return JSON.stringify(buildMemoryConfig());
-      } catch (error) {
-        // A setting that stops the engine from opening changes it too.
-        return String(error);
-      }
-    };
-    const memory = Object.entries(BOOT_READ)
-      .filter(([, readers]) => readers.includes("memory"))
-      .map(([name]) => name);
-    // OpenRouter's key, and then without it, which leaves the extraction key unset.
-    for (const base of [
-      { MEM0_QDRANT_HOST: "127.0.0.1", OPENROUTER_API_KEY: "or" },
-      { MEM0_QDRANT_HOST: "127.0.0.1", EMBED_API_KEY: "embed", OPENAI_API_KEY: "oa" },
-    ] as Record<string, string>[]) {
-      const before = engine(base);
-      for (const setting of [...SETTINGS.map((s) => s.env), ...CREDENTIALS]) {
-        const value = /PORT|DIM/.test(setting)
-          ? "7"
-          : setting.endsWith("_PATH")
-            ? join(dataHome(), "elsewhere", "history.db")
-            : setting.endsWith("_PROVIDER")
-              ? "openai"
-              : "changed";
-        if (engine({ ...base, [setting]: value }) !== before) {
-          expect([setting, memory.includes(setting)]).toEqual([setting, true]);
-        }
-      }
-    }
+  test("keeps no persona's setting for calls, which may run as any persona", () => {
+    // Only the MCP server serves the persona installed at boot.
+    const kept = SETTINGS.filter((setting) => setting.scope === "persona")
+      .map((setting) => setting.env)
+      .filter((name) => (BOOT_READ[name] ?? []).some((reader) => reader !== "mcp"));
+    expect(kept).toEqual([]);
+  });
+
+  test("two personas get their own Mem0 engine and reranker, as LIVE_READ says", async () => {
+    write(
+      "personas/alice/persona.yaml",
+      "memory:\n  model: alice/memory\nknowledge:\n  rerank:\n    model: alice/rerank\n",
+    );
+    write(
+      "personas/bob/persona.yaml",
+      "memory:\n  model: bob/memory\nknowledge:\n  rerank:\n    model: bob/rerank\n",
+    );
+    setEnv("MEM0_QDRANT_HOST", "127.0.0.1");
+    setEnv("OPENROUTER_API_KEY", "or");
+    installSettings();
+    const engines = new SharedEngine(
+      async (config) => ({ model: config.llm.model }) as unknown as MemoryEngine,
+    );
+    const open = (id: string) =>
+      withPersona(id, async () => {
+        const { engine } = await engines.get(buildMemoryConfig());
+        await Bun.sleep(1);
+        return { engine, reranker: makeReranker() };
+      });
+    const [alice, bob, again] = await Promise.all([open("alice"), open("bob"), open("alice")]);
+    expect([alice.engine, bob.engine]).toEqual([
+      { model: "alice/memory" },
+      { model: "bob/memory" },
+    ] as unknown as MemoryEngine[]);
+    expect([alice.reranker?.modelName, bob.reranker?.modelName]).toEqual([
+      "alice/rerank",
+      "bob/rerank",
+    ]);
+    expect(again.engine).toBe(alice.engine);
+    expect(again.reranker).toBe(alice.reranker);
   });
 });
 
@@ -107,7 +130,7 @@ describe("RestartTracker", () => {
     expect(tracker.changes()).toEqual({ calls: ["OPENROUTER_API_KEY"], mcp: [] });
   });
 
-  test("the wizard's first keys and Qdrant need no restart; later changes do", () => {
+  test("the wizard's first keys need no restart; a rotated embedding key does", () => {
     const { values, tracker } = tracked({});
     values.OPENROUTER_API_KEY = "sk-first";
     values.SONIOX_API_KEY = "s";
@@ -121,7 +144,7 @@ describe("RestartTracker", () => {
     values.MEM0_QDRANT_PORT = "6334";
     values.FISH_MODEL = "s2-pro";
     tracker.noteInstalled();
-    expect(tracker.changes().calls.toSorted()).toEqual(["MEM0_QDRANT_PORT", "OPENROUTER_API_KEY"]);
+    expect(tracker.changes().calls).toEqual(["OPENROUTER_API_KEY"]);
   });
 
   test("an account in credentials.json is kept as its variables are", () => {
@@ -135,21 +158,30 @@ describe("RestartTracker", () => {
       resetSettings();
       installSettings();
     };
-    setEnv("MEM0_QDRANT_HOST", "127.0.0.1");
     save("sk-first");
     const tracker = new RestartTracker();
     expect(tracker.changes()).toEqual({ calls: [], mcp: [] });
     save("sk-rotated");
     tracker.noteInstalled();
-    // Memory follows her chat account, and embeddings run on OpenRouter's too.
-    expect(tracker.changes().calls.toSorted()).toEqual(["@embeddings", "@memory", "@rerank"]);
+    // Embeddings run on OpenRouter's account; memory and the reranker build theirs anew.
+    expect(tracker.changes().calls).toEqual(["@embeddings"]);
   });
 
-  test("an embedding model saved while memory is off needs no restart", () => {
-    const { values, tracker } = tracked({ OPENROUTER_API_KEY: "k" });
-    values.EMBED_MODEL = "other/model";
+  test("what memory and the reranker are built from needs no restart", () => {
+    const { values, tracker } = tracked({ OPENROUTER_API_KEY: "k", MEM0_QDRANT_HOST: "a" });
+    for (const name of [
+      "MEM0_QDRANT_HOST",
+      "MEM0_QDRANT_COLLECTION",
+      "MEM0_LLM_MODEL",
+      "EMBED_MODEL",
+      "EMBED_DIM",
+      "RERANK_MODEL",
+      "RERANK_API_KEY",
+      "COHERE_API_KEY",
+    ]) {
+      values[name] = "changed";
+    }
     tracker.noteInstalled();
-    // Retrieval reads the model per query; only the Mem0 engine keeps it, and memory is off.
     expect(tracker.changes()).toEqual({ calls: [], mcp: [] });
   });
 

@@ -310,9 +310,9 @@ export interface MemoryStatus {
 export interface Status {
   readonly version: string;
   /**
-   * A setting or credential that calls read once changed since: at boot, or when memory or
-   * retrieval first ran. It stays set until POST restart, even if the value is set back: a
-   * reader may hold the changed one.
+   * A setting or credential that calls read once changed since: at boot, or when retrieval first
+   * embedded. It stays set until POST restart, even if the value is set back: a reader may hold
+   * the changed one.
    */
   readonly restartRequired: boolean;
   /** Only the MCP server keeps what it read at boot, such as which persona's index it serves. */

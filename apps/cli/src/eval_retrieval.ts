@@ -287,7 +287,7 @@ export interface EvalDeps extends Partial<CliIo> {
 
 type Resolved = Required<Omit<EvalDeps, keyof CliIo>>;
 
-/** Bypasses makeReranker's process cache so each model is measured on its own. */
+/** A reranker for `model`, even where the settings select another one or switch reranking off. */
 export function namedReranker(model: string): Reranker {
   const apiKey = envOptional("RERANK_API_KEY") ?? accountOf("openrouter")?.apiKey;
   if (!apiKey) {
