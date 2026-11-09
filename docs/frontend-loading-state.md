@@ -18,11 +18,24 @@ toggle a "thinking…" indicator between them. Start it on the turn's end rather
 `BotLlmStarted`, which fires only after the context providers' searches, so a slow retrieval
 would show nothing.
 
+A turn with no words runs no LLM, so nothing would end the indicator. The final transcript
+arrives before `UserStoppedSpeaking`, so start the indicator only for a turn that has one.
+Clear it when the next turn starts or the call ends.
+
 ```ts
 import { PipecatClient, RTVIEvent } from "@pipecat-ai/client-js";
 
-pcClient.on(RTVIEvent.UserStoppedSpeaking, () => setIsThinking(true));
+let heard = false;
+pcClient.on(RTVIEvent.UserStartedSpeaking, () => {
+  heard = false;
+  setIsThinking(false);
+});
+pcClient.on(RTVIEvent.UserTranscript, (data) => {
+  if (data.final && data.text.trim()) heard = true;
+});
+pcClient.on(RTVIEvent.UserStoppedSpeaking, () => setIsThinking(heard));
 pcClient.on(RTVIEvent.BotLlmStopped, () => setIsThinking(false));
+pcClient.on(RTVIEvent.Disconnected, () => setIsThinking(false));
 ```
 
 That alone solves the "backend is taking too long, give me feedback" problem. If you want a richer
