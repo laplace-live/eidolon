@@ -46,7 +46,7 @@ const PART_SUFFIX = new PyPattern(String.raw`_p\d+$`);
 const PART_NUMBER = new PyPattern(String.raw`_p(\d+)$`);
 const TIMESTAMP = new PyPattern(String.raw`\d{1,3}:\d{2}(?::\d{2})?`);
 
-/** `_broadcast_id`: the date and BV id the parts of one broadcast share. */
+/** The date and BV id the parts of one broadcast share. */
 export function broadcastId(streamId: string, streamDate: string): string {
   const bv = BV.search(streamId);
   const base = bv ? bv[0] : PART_SUFFIX.sub("", streamId);
@@ -59,7 +59,7 @@ function partNumber(streamId: string): number {
   return match ? pyInt(match[1] as string) : 0;
 }
 
-/** `_part_order`: by part number, so `_p10` follows `_p2`, then by id. */
+/** By part number, so `_p10` follows `_p2`, then by id. */
 function byPart(a: { readonly streamId: string }, b: { readonly streamId: string }): number {
   return partNumber(a.streamId) - partNumber(b.streamId) || pyCompare(a.streamId, b.streamId);
 }
@@ -161,8 +161,8 @@ async function groupBroadcasts(
 }
 
 /**
- * `build_catalog`'s broadcasts, from every transcript in `streamsDir`. `source_paths` are relative
- * to the folder's parent as given, unresolved. Throws when there is no transcript.
+ * The broadcasts of every transcript in `streamsDir`. `source_paths` are relative to the folder's
+ * parent as given, unresolved. Throws when there is no transcript.
  */
 export function buildCatalog(streamsDir: string, options: RunOptions = {}): Promise<Catalog> {
   return groupBroadcasts(streamsDir, transcriptPaths(streamsDir), options);
@@ -228,8 +228,8 @@ export interface StreamCatalogReport {
 }
 
 /**
- * `main`: builds the catalog and replaces `<dbPath>/stream_catalog.json` in one rename. A failed
- * (and logged) or cancelled run leaves the old file and resolves with `ok` false.
+ * Builds the catalog and replaces `<dbPath>/stream_catalog.json` in one rename. A failed (and
+ * logged) or cancelled run leaves the old file and resolves with `ok` false.
  */
 export async function writeStreamCatalog(
   options: StreamCatalogOptions,

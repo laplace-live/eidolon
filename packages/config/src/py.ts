@@ -1,8 +1,8 @@
-// Python text semantics the TS port must reproduce byte for byte: `repr`, `str`, truthiness,
-// `str.strip`/`str.split` whitespace, code-point lengths, `sorted()` order, `json.dumps` and
-// f-string `.Nf` rounding. JS defaults differ on each: `trim()` strips U+FEFF but not U+001C–U+001F
-// or U+0085, `.length` counts UTF-16 units, `sort()` compares UTF-16 units, and `toFixed` rounds
-// exact binary ties up where Python rounds them to even.
+// Python text semantics, byte for byte: `repr`, `str`, truthiness, `str.strip`/`str.split`
+// whitespace, code-point lengths, `sorted()` order, `json.dumps` and f-string `.Nf` rounding. JS
+// defaults differ on each: `trim()` strips U+FEFF but not U+001C–U+001F or U+0085, `.length`
+// counts UTF-16 units, `sort()` compares UTF-16 units, and `toFixed` rounds exact binary ties up
+// where Python rounds them to even.
 //
 // JS has one number type, so an integral number always prints as a Python int ("2", never "2.0").
 // Where the Python value is a float, use pyFloatRepr, or wrap it in a PyFloat inside a structure.

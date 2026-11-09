@@ -1,5 +1,5 @@
-// Embeds a run's texts as Python's embed_in_batches did for both ingests: cache hits first, then
-// the misses one request at a time, each batch written through to the cache, with its log lines.
+// Embeds a run's texts for both ingests: cache hits first, then the misses one request at a time,
+// each batch written through to the cache.
 import { embedDim, logger, pyFixed } from "@eidolon/config";
 import type { EmbedCache } from "./embed_cache.ts";
 import {
@@ -23,7 +23,7 @@ export interface EmbedProgress {
 }
 
 export interface EmbedInBatchesOptions {
-  /** Texts per request: Python sent 64 stream chunks or 96 facts. */
+  /** Texts per request. */
   readonly batchSize: number;
   /** What the log lines count: "chunks" or "facts". */
   readonly noun: string;
@@ -81,7 +81,7 @@ export async function embedInBatches(
     for (let start = 0; start < texts.length; start += LOOKUP_WINDOW) {
       const window = texts.slice(start, start + LOOKUP_WINDOW);
       for (const [i, vector] of cache.getMany(model, dim, window)) {
-        // Python cached a provider's wrong-size vectors before its table write failed on them.
+        // EmbedCache stores any size; a cached vector of another size is a miss, then replaced.
         if (vector.length !== dim) continue;
         vectors.set(vector, (start + i) * dim);
         hit[start + i] = 1;

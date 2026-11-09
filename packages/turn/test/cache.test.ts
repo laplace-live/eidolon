@@ -19,8 +19,8 @@ const minted = (ttl: number, refresh: number): string =>
 blockNetwork();
 const logs = captureLogs();
 
-// Recorded from bot.py's own _get_cloudflare_ice on a fake clock. Each row: clock, what the mint
-// returns (null: HTTP 500), fetches made, what get() returned, the INFO line's refresh seconds.
+// The credential cache on a fake clock, per TTL. Each row: clock, what the mint returns (null:
+// HTTP 500), fetches made, what get() returned, the INFO line's refresh seconds.
 type Step = readonly [number, string | null, number, string | null, number | null];
 const PYTHON_TRACE: Readonly<Record<number, readonly Step[]>> = {
   3600: [

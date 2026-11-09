@@ -230,7 +230,7 @@ export function benchmarkMeanMs(bench: RerankerBenchmark): number {
   return bench.rerankMs.length > 0 ? mean(bench.rerankMs) : 0;
 }
 
-/** Parses queries.toml. Throws FileNotFoundError / ValueError with the Python messages. */
+/** Parses queries.toml. Throws FileNotFoundError / ValueError with a message naming the file. */
 export function loadQueries(path: string): EvalQuery[] {
   const shown = pyPath(path);
   if (!existsSync(path)) throw pyError("FileNotFoundError", `Queries file not found: ${shown}`);
@@ -481,7 +481,7 @@ export function printPerQueryBreakdown(
   }
 }
 
-/** The `--save` blob, with Python's float/int split kept for a byte-stable file. */
+/** The `--save` blob: recall and MRR stay floats (`1.0`), counts ints, for a byte-stable file. */
 export function toJsonBlob(
   perTable: ReadonlyMap<string, ReadonlyMap<string, ModeReport>>,
 ): Record<string, unknown> {

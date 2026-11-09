@@ -124,7 +124,7 @@ two accounts of one provider share their models.
 The variables that named a provider before roles had providers still work, but only while that
 provider fills the role: `SONIOX_MODEL` (hearing), `OPENROUTER_MODEL` (mind), `FISH_MODEL` and
 `FISH_VOICE_ID` (voice), `FISH_VOICE_ID_<STYLE>` (voice styles) and `SONIOX_ASYNC_MODEL`
-(transcription). The neutral name wins where both are set. The Python bot reads only these.
+(transcription). The neutral name wins where both are set.
 
 One model can be reached two ways. Claude runs on an OpenRouter account as
 `anthropic/claude-sonnet-5.5`, or on an Anthropic account as `claude-sonnet-5-5`. On OpenRouter
@@ -223,9 +223,9 @@ and a role that names a provider names that account. A second account of one pro
 in the mounted data home's `credentials.json`, which the environment can't express. Two things are
 worth doing:
 
-- **Keep the provider-named variables while the Python rollback image exists.** It reads only
-  those, so a role moved to another provider with the neutral names would roll back to the old
-  defaults. Once Python is retired, `SONIOX_MODEL` can become `STT_MODEL`, and so on.
+- **Keep the provider-named variables while production keeps `eidolon-python` as its rollback
+  image.** That image reads only those, so a role moved to another provider with the neutral
+  names would roll back to the old defaults.
 - **Give the ledger a writable path** if production's spend should be recorded. The mounted data
   home is read-only, so the default path logs a warning and records nothing. Point
   `EIDOLON_USAGE_DB` at a writable volume, such as the one holding `MEM0_HISTORY_DB_PATH`, and read

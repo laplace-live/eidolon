@@ -1,7 +1,6 @@
-// fixtures/refine/vectors.golden.json is what fixtures/refine/vectors.golden.py printed through
-// tools/refine.py for the inputs it lists (`uv run --offline --no-sync python` from the repository
-// root, then formatted by Biome). The hashes are the refine spec's Appendix B, taken from
-// refine.py's constants.
+// fixtures/refine/vectors.golden.json holds what the validators, lenient JSON, the stream context
+// and the usage accounting make of the inputs it lists. The hashes below pin milky-green's prompts
+// and response schemas.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -468,7 +467,7 @@ describe("refineStreams", () => {
     expect(client.calls.some((c) => /第[234]段/.test(c.user))).toBe(false);
     expect(y?.chunksSucceeded).toBe(1);
     expect(records).toContainEqual(["ERROR", "  ✗ x.md: Unexpected token"]);
-    // Nothing is saved for the crashed stream, as refine.py saves nothing.
+    // Nothing is saved for the crashed stream.
     expect(readdirSync(work).sort()).toEqual(["x.md", "y.md", "y.refined.json"]);
     expect(report.ok).toBe(false);
   });

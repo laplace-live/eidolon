@@ -34,7 +34,7 @@ export function missingApiKey(): string {
   return missingKey(refineSelection()).message;
 }
 
-/** The client refine.py built, for the refine role's provider, reporting what each call used. */
+/** A refine run's client, for the refine role's provider, reporting what each call used. */
 export function refineClient(
   options: Pick<OpenAIClientOptions, "signal" | "fetch"> = {},
 ): JsonPoster {

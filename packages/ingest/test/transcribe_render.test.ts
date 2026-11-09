@@ -1,5 +1,5 @@
-// fixtures/transcribe/render.golden.json was printed by CPython through tools/transcribe.py and the
-// soniox SDK (its `printed_by` names the versions), for the synthetic inputs it lists.
+// fixtures/transcribe/render.golden.json holds the rendering's outputs (timestamps, segments,
+// scenes, markdown, token dumps) for the synthetic inputs it lists.
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { loadsPy, PyFloat, pyJsonDumps } from "@eidolon/config";

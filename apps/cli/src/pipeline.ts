@@ -61,7 +61,7 @@ const USAGE = `usage: laplace-pipeline [-h] [--stages STAGES] [--vods-dir VODS_D
                         [url_list]
 `;
 
-/** `_parse_stages`: "all" or "" is every stage; the rest, comma-separated, in run order. */
+/** "all" or "" is every stage; the rest, comma-separated, in run order. */
 export const STAGES: ArgType<pipeline.PipelineStage[]> = {
   name: "_parse_stages",
   parse(text: string): pipeline.PipelineStage[] {
@@ -288,7 +288,7 @@ export interface PipelineDeps extends CommandDeps {
   readonly now?: () => Date;
 }
 
-/** `_split_extra_args`: an unbalanced quote throws, as shlex's ValueError did. */
+/** An unbalanced quote throws shlex's ValueError. */
 function splitExtraArgs(raw: string): string[] {
   const text = pyStrip(raw);
   return text ? download.shlexSplit(text) : [];
@@ -337,7 +337,7 @@ export async function pipelineMain(
   // With --json, stdout carries only events.
   const human = json ? io.stderr : io.stdout;
   const browser = ns.cookies_from_browser as string | null;
-  // An explicit empty value means no browser, as Python's `or None` read it.
+  // An explicit empty value means no browser, not the default one.
   const cookiesFromBrowser =
     browser === null ? download.defaultCookiesFromBrowser() : browser || null;
   const cookiesFile = (ns.cookies as string | null) ?? download.defaultCookiesFile();

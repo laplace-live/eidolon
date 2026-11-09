@@ -1,7 +1,7 @@
-# Comment and docstring policy
+# Comment policy
 
-**Audience:** anyone editing Python in this repo, human or agent.
-**Scope:** what earns a comment, what earns a docstring, what is banned, and
+**Audience:** anyone editing the TypeScript in this repo, human or agent.
+**Scope:** what earns a comment, what earns a JSDoc block, what is banned, and
 how to verify a prose-only sweep didn't change behavior.
 
 `AGENTS.md` carries the short form. This is the long one, with the worked
@@ -11,9 +11,9 @@ examples that make the line concrete.
 
 ## Why the bar is this high
 
-This codebase previously carried ~34% prose by line, most of it explaining its
-own structure back to itself. That prose is expensive twice: it rots silently,
-and it buries the handful of comments that genuinely matter.
+This codebase once carried ~34% prose by line, most of it explaining its own
+structure back to itself. That prose is expensive twice: it rots silently, and
+it buries the handful of comments that genuinely matter.
 
 ## The test
 
@@ -28,125 +28,123 @@ and it buries the handful of comments that genuinely matter.
 
 The dividing line: **a comment about something outside this repo can be a
 paragraph. A comment about this repo's own structure gets one sentence, or
-nothing.** Every keeper here cites LanceDB, the OpenAI SDK, mem0,
-python-dotenv, or a benchmark. Every deleted essay explained our own module
-boundaries to ourselves.
+nothing.** Every keeper below cites LanceDB, an upstream SDK, mem0, pipedog,
+or a benchmark. Every deleted essay explained our own module boundaries to
+ourselves.
 
-Assume the reader knows Python and can read the code beneath the comment.
+Assume the reader knows TypeScript and can read the code beneath the comment.
 Explain *why*, never *what*.
 
-## Docstrings
+## JSDoc
 
-One-line summary. Add `Args:`/`Returns:` only for a parameter whose contract
-isn't obvious from its name and type. Self-evident functions get no docstring
-at all — `sidecar_path()` returning `self.md_path.with_suffix(".refined.json")`
-does not need prose.
+A one-line `/** … */` summary on an export whose purpose the name and
+signature don't already say. No `@param` or `@returns` tags: the signature
+carries the types. A parameter whose contract isn't obvious from its name and
+type gets a clause in the summary; an interface field gets its own `/** … */`
+line. Self-evident functions get none — a function returning
+`stem + ".refined.json"` does not need prose.
 
-Plain prose, Google-style sections. Double-backtick literals are fine.
-
-```python
-def hybrid_search(table, query, ...) -> list[dict]:
-    """Run a vector + FTS hybrid query, optionally reranked.
-
-    Args:
-        prefilter: forced ``True`` — post-filtering silently returns fewer
-            than top-k at our scale.
-    """
+```ts
+export interface ChunkOutcome {
+  readonly chunk: StreamChunk;
+  /** Null when a pass failed; the chunk stays unrefined and the next run retries it. */
+  readonly refinement: Refinement | null;
+}
 ```
 
-**One exception, and it matters:** the docstrings on `@mcp.tool()`-decorated
-functions in `mcp_server.py` are not prose. FastMCP ships them to the model as
-the tool's `description` field, so they are live API surface — editing one
-changes runtime behavior. Same for the `Field(description=...)` strings. Leave
-them alone unless you intend to change what the model sees.
-
-Pydantic *attribute* docstrings (a bare string under a field) are the
-opposite: `use_attribute_docstrings` is off, so they never reach the JSON
-schema and are inert. Trim them like any other comment.
+**Tool descriptions are not prose.** The MCP tools' descriptions and schemas
+(`toolDefinitions()` in `apps/bot/src/mcp/tools.ts`) and each `LlmTool`'s
+`schema` go to a model as written, so editing one changes runtime behavior.
+They are string literals, not comments, so a comment sweep must not touch them
+and the check below catches it if one does.
 
 ## Banned
 
-- **Banner dividers.** No `# ─────` or `# -----` blocks. Especially not
-  `# Main` above `def main()`.
-- **RST section headers** (`Why this exists` + `-----` underline) and Sphinx
-  roles (`:func:`, `:mod:`, `:class:`). Nothing here builds Sphinx docs.
-- **`What lives here:` indexes.** The `def` statements are the index, and they
-  don't go stale.
+- **Banner dividers.** No `// ─────` or `// -----` blocks. Especially not
+  `// Main` above `function main()`.
+- **`What lives here:` indexes.** The `export` statements are the index, and
+  they don't go stale.
 - **`Why X and not Y` sections.** Especially arguing against an alternative
   nobody proposed.
 - **Changelog narration** — `we used to`, `earlier revisions`, `the old X`,
   `(verified 2026-05)`. Git owns this.
-- **`Usage::` shell transcripts** in module docstrings. That's `--help` and
-  README territory.
+- **Usage transcripts** in module headers. That's `--help` and README
+  territory.
 - **Commented-out code.** Delete it.
 - **Upstream line numbers, versions, and endpoint paths** —
-  `aiortc/codecs/opus.py:34`, `mem0ai 1.0.11`, `POST /v2/memories/`. These rot
-  on the next bump, and a stale one is worse than nothing: the mem0 comments
-  here pinned both a version and a path, and by the time anyone looked, the SDK
-  was on 2.0.12 POSTing to `/v3/`. State the durable behavior — "takes the id
-  only inside `filters`" — and name the symbol.
+  `@pipedog/core/dist/services/llm_service.js:125`, `mem0ai 1.0.11`,
+  `POST /v2/memories/`. These rot on the next bump, and a stale one is worse
+  than nothing: the mem0 comments here once pinned both a version and a path,
+  and by the time anyone looked, the SDK was on 2.0.12 POSTing to `/v3/`.
+  State the durable behavior — "takes the id only inside `filters`" — and name
+  the symbol.
 - **Repeating yourself across files.** Explain it once, at the place that owns
   the behavior.
-- **Tutorial comments** on stdlib or well-known framework behavior.
+- **Tutorial comments** on the standard library or well-known framework
+  behavior.
 
-Never touch functional directives (`# type: ignore`, `# noqa`, `# pragma: no
-cover`), `TODO`/`FIXME`/`HACK` notes, or license headers. When cleaning
-comments, change only comments — never code.
+Never touch directives (`// @ts-expect-error`, `// biome-ignore`), `TODO`/`FIXME`
+notes, or license headers. When cleaning comments, change only comments —
+never code.
 
 ## Worked examples
 
-Keep — cites an external system, with a link:
+Keep — cites an external system, with a link (`packages/retrieval/src/tokenize.ts`):
 
-```python
-# LanceDB 0.30.x ships no CJK tokenizer; pre-tokenizing at both ingest
-# and query time is the official workaround.
-# https://github.com/lancedb/lancedb/issues/2168
+```ts
+// LanceDB ships no CJK tokenizer; pre-tokenizing at both ingest and query time is the official
+// workaround. https://github.com/lancedb/lancedb/issues/2168
 ```
 
-Keep — a trap, where removing the argument breaks everything quietly:
+Keep — a trap, where removing the field breaks everything quietly
+(`packages/retrieval/src/embeddings.ts`):
 
-```python
-# encoding_format="float" is required for non-OpenAI providers: the SDK
-# defaults to base64, and providers that don't honour that contract
-# round-trip an empty response ("No embedding data received").
+```ts
+// encoding_format "float" is always sent: providers that mishandle base64 round-trip an empty
+// response.
 ```
 
-Keep — a measured number, unrecoverable from the code:
+Keep — a measured number, unrecoverable from the code
+(`packages/ingest/src/ingest_facts.ts`):
 
-```python
-# Stripping the 贴吧 floor prefix lifts vector-only MRR 0.833 → 0.925,
-# rescuing 你梦想是什么 from a total miss. With the Cohere reranker on,
-# the gap closes to zero.
+```ts
+/**
+ * The prefix `stripFactPrefix` removes: `subject`, an optional reporting verb, and punctuation.
+ * About 95% of 奶绿's facts open "明前奶绿声称…", and that shared prefix pulled every vector into
+ * one cluster; leaving it out of the embedding lifted vector-only MRR from 0.833 to 0.925.
+ */
 ```
 
 Delete — this repo narrating its own layout:
 
-```python
-# Why this exists separately from ``embeddings.py``: that module owns the
-# embedding HTTP client (write path). This one composes search-side
-# operations (read path). Keeping them split mirrors the
-# write-vectors / read-and-rank divide.
+```ts
+// Why this module exists separately from embeddings.ts: that one owns the embedding HTTP
+// client (the write path). This one composes search-side operations (the read path). Keeping
+// them split mirrors the write-vectors / read-and-rank divide.
 ```
 
-Compress — 67 lines of root-cause narration become the 4 that act:
+Compress — root-cause narration down to the lines that act
+(`packages/memory/src/provider.ts`):
 
-```python
-"""Mem0 wrapper that drops messages without string content.
-
-Pipecat's aggregator emits ``{"role": "assistant", "tool_calls": [...]}``
-with no ``content``. Mem0's API 400s on it, then rejects every later turn
-in the session — silently ending long-term memory.
-"""
+```ts
+/**
+ * Pipecat records `{"role": "assistant", "tool_calls": [...]}` with no `content` on every tool
+ * call, and mem0 rejects a whole batch over one such message. It stays in the cumulative context,
+ * so the filter runs on every store; a batch that filters down to nothing skips the call.
+ */
 ```
 
 ## Verifying a comment-only sweep
 
 Editing prose across many files at once is easy to get subtly wrong. Prove you
-didn't: parse each file before and after, strip every bare string-literal
-statement, and compare `ast.dump()`. Comments never enter the AST, so an
-identical tree means only prose moved. Do this instead of re-reading the diff
-and hoping.
+didn't: tokenize each changed file before and after with TypeScript's own
+scanner, as its parser drives it (so regular expressions, template strings and
+JSX text come out as single tokens), drop the comments, and compare the two
+token streams, each token with whether a line break precedes it. Comments never
+become tokens, but a line break inside one can still end a statement
+(`return /*\n*/ value` returns nothing, `return /* c */ value` returns `value`),
+so identical streams, breaks included, mean only prose moved. Do this instead of
+re-reading the diff and hoping.
 
-Two things that check will not catch, because they are real API surface: the
-`@mcp.tool()` docstrings noted above, and a stale claim that was already wrong
-before you touched it. Both showed up in the last sweep.
+One thing that check will not catch: a stale claim that was already wrong
+before you touched it.

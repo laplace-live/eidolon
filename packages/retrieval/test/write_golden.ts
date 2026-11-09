@@ -1,5 +1,5 @@
-// fixtures/write_side.golden.json is what fixtures/write_side.golden.py printed through Python's
-// EmbedCache, embed_in_batches, write_table and main_async; its printed_by names the versions.
+// fixtures/write_side.golden.json pins the write side: the embedding cache's keys, blobs and file,
+// the batch-embedding scenarios and totals, and each table's schema, rows, FTS index and versions.
 import { join } from "node:path";
 import type { DataType, Field } from "apache-arrow";
 import type { ArrowSchema, CostSource } from "../src/index.ts";
@@ -52,7 +52,7 @@ export function fakeVector(text: string): number[] {
   let sum = 0;
   for (const c of text) sum += c.codePointAt(0) as number;
   const base = sum % 97;
-  // Python negates an int, which has no -0.
+  // `0 - base`, never `-base`: the golden holds 0 where `-base` would give -0.
   return [base / 7, (0 - base) / 3, 0.1 * base, 1 / (base + 3)];
 }
 

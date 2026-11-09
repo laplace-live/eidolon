@@ -1,5 +1,5 @@
-// Transcripts and their sidecars, as tools/_streams.py reads and writes them. Refine, the ingest
-// and the catalog all parse through here, so a chunk id means the same scene to each of them.
+// Reading and writing transcripts and their sidecars. Refine, the ingest and the catalog all
+// parse through here, so a chunk id means the same scene to each of them.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import {
   cpLen,
@@ -83,9 +83,9 @@ export interface ParsedStream {
   readonly mdPath: string;
   readonly streamId: string;
   /**
-   * The frontmatter through YAML 1.2 (Bun), where Python read YAML 1.1. What YAML 1.1 types
+   * The frontmatter through YAML 1.2 (Bun), not PyYAML's YAML 1.1. What YAML 1.1 types
    * implicitly comes out differently: booleans like yes/no/on/off, timestamps, sexagesimal and
-   * octal numbers, `1_000`, `1e3` and `1.0`. A non-string key, which crashes Python, parses.
+   * octal numbers, `1_000`, `1e3` and `1.0`. A non-string key such as `2021` parses as a string.
    */
   readonly metadata: Readonly<Record<string, unknown>>;
   readonly chunks: readonly StreamChunk[];
@@ -96,11 +96,11 @@ export interface ParsedStream {
 // re.MULTILINE `\s+` can cross into the next line, so "##" alone heads the next line's text, and
 // `$` backs off to just before a newline: a match can end on one.
 const H2 = new PyPattern(String.raw`^##\s+(.+?)\s*$`, "m");
-// python-frontmatter's YAML and JSON handlers (no TOML: the toml package isn't installed).
+// python-frontmatter's YAML and JSON handlers; no TOML.
 const YAML_BOUNDARY = new PyPattern(String.raw`^-{3,}\s*$`, "m");
 const JSON_BOUNDARY = new PyPattern(String.raw`^(?:\{|\})$`, "m");
 
-/** `split_into_chunks`: the H2 sections with text; whatever precedes the first H2 is dropped. */
+/** The H2 sections with text; whatever precedes the first H2 is dropped. */
 export function splitIntoChunks(body: string): { heading: string; text: string }[] {
   const chunks: { heading: string; text: string }[] = [];
   const matches = H2.finditer(body);
@@ -139,7 +139,7 @@ function readUtf8(path: string): string {
   return UTF8.decode(readFileSync(path));
 }
 
-/** `parse_stream`: a transcript's frontmatter and chunks, with ids that stay stable across runs. */
+/** A transcript's frontmatter and chunks, with ids that stay stable across runs. */
 export function parseStream(mdPath: string): ParsedStream {
   const path = pyPath(mdPath);
   // Text mode's universal newlines.
@@ -162,8 +162,8 @@ export function parseStream(mdPath: string): ParsedStream {
 }
 
 /**
- * `iter_streams`' listing: every `*.md` directly in `streamsDir` (dotfiles too, case-sensitive),
- * in file-name order, which the date prefix makes chronological. [] when the folder doesn't exist.
+ * Every `*.md` directly in `streamsDir` (dotfiles too, case-sensitive), in file-name order, which
+ * the date prefix makes chronological. [] when the folder doesn't exist.
  */
 export function transcriptPaths(streamsDir: string): string[] {
   let names: string[];
@@ -178,7 +178,7 @@ export function transcriptPaths(streamsDir: string): string[] {
   );
 }
 
-/** `iter_streams`: every transcript in `streamsDir`, parsed, in file-name order. */
+/** Every transcript in `streamsDir`, parsed, in file-name order. */
 export function iterStreams(streamsDir: string): ParsedStream[] {
   return transcriptPaths(streamsDir).map(parseStream);
 }
@@ -202,8 +202,8 @@ export function emptySidecar(streamId: string): Record<string, unknown> {
 }
 
 /**
- * `load_sidecar`: the `.refined.json` as Python's json.loads returns it (floats as PyFloat), or the
- * empty sidecar when it is missing or not JSON, so a corrupt one is overwritten at the next save.
+ * The `.refined.json` as Python's json.loads returns it (floats as PyFloat), or the empty sidecar
+ * when it is missing or not JSON, so a corrupt one is overwritten at the next save.
  */
 export function loadSidecar(parsed: ParsedStream): unknown {
   if (!existsSync(parsed.sidecarPath)) return emptySidecar(parsed.streamId);
@@ -217,9 +217,9 @@ export function loadSidecar(parsed: ParsedStream): unknown {
 }
 
 /**
- * `save_sidecar`: `json.dumps(data, ensure_ascii=False, indent=2)`, written to a temporary file
- * beside the sidecar and renamed over it, so a reader never sees half a file. Wrap every float
- * Python would write as `1.0` in PyFloat.
+ * `json.dumps(data, ensure_ascii=False, indent=2)`, written to a temporary file beside the sidecar
+ * and renamed over it, so a reader never sees half a file. Wrap every float Python would write as
+ * `1.0` in PyFloat.
  */
 export function saveSidecar(parsed: ParsedStream, data: unknown): void {
   writeTextAtomic(parsed.sidecarPath, pyJsonDumps(data, { ensureAscii: false, indent: 2 }));

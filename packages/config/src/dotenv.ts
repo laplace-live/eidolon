@@ -1,8 +1,8 @@
-// python-dotenv's parser, so one .env file means the same thing to the Python and TS bots:
-// `export` prefixes, single-quoted keys, quoted values that may span lines (double quotes decode
-// only \\ \' \" \a \b \f \n \r \t \v), ` #` comments, and `${VAR}` / `${VAR:-default}`
-// interpolation in every value, single-quoted ones included. A quoted value followed by anything
-// but a comment drops the whole line, as python-dotenv's "could not parse statement" does.
+// python-dotenv's parser: `export` prefixes, single-quoted keys, quoted values that may span lines
+// (double quotes decode only \\ \' \" \a \b \f \n \r \t \v), ` #` comments, and `${VAR}` /
+// `${VAR:-default}` interpolation in every value, single-quoted ones included. A quoted value
+// followed by anything but a comment drops the whole line, as python-dotenv's "could not parse
+// statement" does.
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 

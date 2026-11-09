@@ -1,6 +1,5 @@
-// A persona's URL lists and batches (the skill's prepare_batch.py): new videos go into a new batch
-// under lists/batches/ holding only what no list has yet, and a batch without its .done.json is
-// still pending.
+// A persona's URL lists and batches: new videos go into a new batch under lists/batches/ holding
+// only what no list has yet, and a batch without its .done.json is still pending.
 import {
   closeSync,
   existsSync,
@@ -150,9 +149,9 @@ function isBilibiliHost(hostname: string): boolean {
 }
 
 /**
- * What a list line stands for: the BV id of a BV id or a www.bilibili.com/bilibili.com video URL
- * (prepare_batch.py's rule), an http(s) URL of another site as written, else null. Bilibili's
- * other hosts (m., space., b23.tv) stay null, as prepare_batch.py rejected them.
+ * What a list line stands for: the BV id of a BV id or a www.bilibili.com/bilibili.com video URL,
+ * an http(s) URL of another site as written, else null. Bilibili's other hosts (m., space.,
+ * b23.tv) stay null.
  */
 export function listKey(value: string): string | null {
   if (BV_ID.test(value)) return value;
@@ -168,9 +167,9 @@ export function listKey(value: string): string | null {
 }
 
 /**
- * `read_ids`: the keys (listKey) of a list's lines, each once in first-seen order, skipping
- * blanks and `#` comments. Throws ValueError `<path>:<line>: expected a BV ID or Bilibili video
- * URL` at the first line that names neither.
+ * The keys (listKey) of a list's lines, each once in first-seen order, skipping blanks and `#`
+ * comments. Throws ValueError `<path>:<line>: expected a BV ID or Bilibili video URL` at the
+ * first line that names neither.
  */
 export function readIds(path: string): string[] {
   const ids = new Set<string>();
@@ -303,7 +302,7 @@ export function writeBatch(
   return path;
 }
 
-/** What laplace-prepare-batch prints: prepare_batch.py's result, keys in its order. */
+/** What laplace-prepare-batch prints, its keys in this order. */
 export interface PrepareBatchResult {
   readonly captured_count: number;
   readonly known_count: number;
@@ -323,9 +322,8 @@ export interface PrepareBatchOptions {
 }
 
 /**
- * `prepare_batch`: checks that `capture` holds exactly `expectedCount` distinct videos, then writes
- * the ones no list under `listsDir` has yet into a new batch (unless dry-run). Throws ValueError
- * or an OSError with prepare_batch.py's message.
+ * Checks that `capture` holds exactly `expectedCount` distinct videos, then writes the ones no list
+ * under `listsDir` has yet into a new batch (unless dry-run). Throws a ValueError or an OSError.
  */
 export function prepareBatch(
   listsDir: string,

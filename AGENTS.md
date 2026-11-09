@@ -15,22 +15,20 @@ transport.input → STT → user_aggregator → RetrievalGate
 ```
 
 By default Soniox hears (STT), OpenRouter thinks (LLM) and Fish Audio speaks
-(TTS), and a call needs their keys; in the TypeScript bot each persona can fill
-any role with an account of another provider from the catalog in `packages/providers`.
+(TTS), and a call needs their keys; each persona can fill any role with an
+account of another provider from the catalog in `packages/providers`.
 Everything else — Mem0, the reranker, the retrieval gate, both RAG indexes —
 degrades quietly when its key, table, or vector store is missing, so a fresh
 checkout runs.
 
-The runtime is TypeScript on Bun, built on pipedog (a TypeScript port of
-Pipecat), in `apps/` and `packages/`; production has run it
-(`ghcr.io/laplace-live/eidolon`) since 2026-11-04. The offline chain is
-TypeScript too: `packages/ingest`, run through the `laplace-*` commands in
-`apps/cli`. The original Pipecat runtime in `laplace_eidolon/` stays, as the
-`eidolon-python` rollback image, until it is retired, and its offline tools
-(`laplace_eidolon/tools/`) with it, as the spec the port is checked against.
-Both runtimes read the same LanceDB and Qdrant collection. The local web app and
-the offline commands also ship as the npm package `@laplace.live/eidolon`
-(`apps/eidolon`), which runs them, bundled, on the Bun it installs.
+The bot is TypeScript on Bun, built on pipedog (a TypeScript port of Pipecat),
+in `apps/` and `packages/`; production has run it (`ghcr.io/laplace-live/eidolon`)
+since 2026-11-04. The offline chain is TypeScript too: `packages/ingest`, run
+through the `laplace-*` commands in `apps/cli`. The local web app and the
+offline commands also ship as the npm package `@laplace.live/eidolon`
+(`apps/eidolon`), which runs them, bundled, on the Bun it installs. The original
+Python runtime is in the repo too, for human readers only; agents never touch it
+([The Python](#the-python)).
 
 ## Repository layout
 
@@ -43,36 +41,17 @@ apps/eidolon/         the npm package @laplace.live/eidolon: a Node launcher, an
                       bundles the local app and the CLI with the web app, templates and jieba
 packages/             subsystems, one Bun workspace package each (docs/typescript.md);
                       packages/ingest is the offline chain
-laplace_eidolon/      the Python runtime (rollback only) and its offline chain (the spec)
-  bot.py                pipeline + Starlette app; the process entry point
-  offer_middleware.py   rate limit, body normalization, preflight for /api/offer
-  user_context.py       loginSyncToken → UserContext via the Workers helper API
-  audio_quality.py      per-session Opus bitrate from the offer's audioQuality
-  persona_facts.py      RAG FrameProcessor over hand-compiled fan facts
-  stream_archive.py     RAG FrameProcessor over refined stream transcripts
-  retriever.py          one LanceDB table: handle, stale-reopen, search
-  retrieval.py          hybrid search — vector + jieba FTS + optional rerank
-  retrieval_gate.py     Jev decides per turn whether both RAG services search
-  embeddings.py         embedding client, LanceDB table access, disk cache
-  voice_switching.py    the change_voice_style LLM tool and its styles
-  image_generation.py   the take_selfie LLM tool, its prompt, and /api/selfie
-  mcp_server.py         public read-only MCP server mounted at /mcp
-  mem0_local.py         self-hosted Mem0 config — embedded engine over Qdrant
-  memory_service.py     Mem0 subclass · memory_admin.py serves /api/memories
-  rate_limit.py         per-IP sliding-window quota · env.py numeric env vars
-  openrouter.py         attribution headers + usage-cost extraction
-  tools/                the Python offline chain, one console script per stage
+laplace_eidolon/      the Python, with tests/: for human readers only ("The Python" under Rules)
 personas/<id>/        a persona's template: persona.yaml, prompt.md (the system
                       prompt), glossary.toml, references/outfits/ (what take_selfie
                       redraws, one used per render). Her index, friends/ and
                       sources live in the data home, ~/.laplace/eidolon
                       (docs/personas.md)
 data/                 local only, never committed: generated/ (laplace-generate-image)
-streams/, vods/       empty: the Python tools' old defaults. A persona's sources are in
+streams/, vods/       empty and unused; a persona's sources are in
                       ~/.laplace/eidolon/sources/<id>/
 .agents/skills/       agent skills; stream-archive-embed syncs new stream replays
 docs/                 the topics too large to inline here
-tests/                pytest — no network, no LanceDB
 ```
 
 ## Where to look
@@ -82,7 +61,7 @@ a row here and writing the prose there — not a new section in this file.**
 
 | You're touching | Read first |
 | --- | --- |
-| a comment or a docstring, anywhere | [comments.md](docs/comments.md) |
+| a comment, anywhere | [comments.md](docs/comments.md) |
 | `/api/memories`, or wiping a viewer's memories | [memory-admin.md](docs/memory-admin.md) |
 | RTVI events the web client listens for | [frontend-loading-state.md](docs/frontend-loading-state.md) |
 | per-viewer affection / XP tiers (design only, unbuilt) | [affection-system.md](docs/affection-system.md) |
@@ -98,7 +77,7 @@ a row here and writing the prose there — not a new section in this file.**
 | recalling a viewer or a particular SC, and recall's other gaps (design only, unbuilt) | [recall-gaps.md](docs/recall-gaps.md) |
 | the `take_selfie` tool, image generation, or `/api/selfie` | [selfies.md](docs/selfies.md) |
 | the retrieval gate, or why a turn skipped LanceDB | [retrieval-gate.md](docs/retrieval-gate.md) |
-| anything under `apps/` or `packages/` (the TypeScript bot) | [typescript.md](docs/typescript.md) |
+| anything under `apps/` or `packages/` | [typescript.md](docs/typescript.md) |
 | a provider, an account, a role's provider or model, model lists, prices, realtime models, the usage ledger or the Usage page | [providers.md](docs/providers.md) |
 
 ## Commands
@@ -146,50 +125,23 @@ bun run build:npm                      # stages it in apps/eidolon/pack/: bundle
 bun run pack:npm                       # stages it, then packs apps/eidolon/laplace.live-eidolon-<version>.tgz
 ```
 
-The Python side:
-
-```bash
-uv sync                                # runtime deps
-uv sync --extra tools                  # + faster-whisper, soniox (offline only)
-uv run python -m laplace_eidolon.bot   # the Python bot on :7860 — NOT a console script
-
-uv run ruff check .                    # lint — import sorting only, line length 100
-uv run pyright                         # types
-uv run pytest                          # tests
-docker compose up --build              # Python bot + Qdrant; --profile ts adds the TS bot on :7861
-```
-
-The Python bot is deliberately not a `laplace-*` console script: Pipecat's runner
-discovers `bot()` through `sys.modules["__main__"]`, which a generated launcher
-doesn't satisfy. Everything under `tools/` is one, named like its TypeScript
-command (`uv run laplace-pipeline`, …). Those are the spec the port is checked
-against, and still default to the checkout's `data/`, `streams/` and `vods/`,
-which no longer hold any sources. Two exist only in Python:
-
-```bash
-uv run laplace-export-mem0       # dump a pre-migration Mem0 cloud account to JSON
-uv run laplace-import-mem0       # load that dump into a Qdrant; idempotent, resumable
-```
-
 ### Which checks to run
 
 Match the gate to the surface you touched; don't reflexively run everything.
 
 | You changed | Run |
 | --- | --- |
-| any Python file | `uv run ruff check .` and `uv run pyright` |
-| `mcp_server.py`, `rate_limit.py`, or `user_context.py` | `uv run pytest` — the suite covers the MCP mount and its quotas, nothing else |
 | retrieval, tokenization, chunking, `top_k`, or `candidates` | `bun run laplace-eval-retrieval --compare ~/.laplace/eidolon/sources/<id>/eval/baseline.json`. A quality claim without a number is not a claim |
 | an ingest, `EMBED_MODEL`, or `EMBED_DIM` | re-run **both** ingests (`bun run laplace-ingest-streams`, `laplace-ingest-facts`) into the persona's `index/`, then copy it to each server's mounted data home with the rsync in [personas.md](docs/personas.md#deploying-a-persona) |
-| anything under `packages/ingest`, an offline command in `apps/cli`, or the write side of `packages/retrieval` | the gates below, then the stage's real-data test with `EIDOLON_REQUIRE_PARITY=1 bun test --no-env-file <file>`: `packages/ingest/test/*_real.test.ts` (streams, download, transcribe, refine, ingest_streams, pipeline), `apps/cli/test/ingest_facts_real.test.ts`, `packages/retrieval/test/write_real.test.ts`. They are free and only read `~/.laplace/eidolon` (`EIDOLON_REAL_HOME`); refine's and the pipeline's need `uv`. Without the variable a missing corpus skips silently |
-| the bot's pipeline, the transport, or a monkey-patch | boot the bot and hold a real call (`bun apps/bot/scripts/e2e-call.ts --text`, or `--audio`) — none of this is unit-testable |
-| `image_generation.py` | `uv run laplace-generate-image` against a real reference — it shares `generate()` with the bot, so a successful render is the check. Billed per image |
-| `retrieval_gate.py`'s questions, state, or threshold, or `RETRIEVAL_GATE_MODEL` | `uv run python docs/benchmarks/2026-09-19-retrieval-gate/decisions.py` — exits non-zero if any labeled turn that needs recall would be skipped |
+| anything under `packages/ingest`, an offline command in `apps/cli`, or the write side of `packages/retrieval` | the gates below, then the stage's real-data test with `EIDOLON_REQUIRE_PARITY=1 bun test --no-env-file <file>`: `packages/ingest/test/*_real.test.ts` (streams, download, transcribe, refine, ingest_streams, pipeline), `apps/cli/test/ingest_facts_real.test.ts`, `packages/retrieval/test/write_real.test.ts`. They are free and only read `~/.laplace/eidolon` (`EIDOLON_REAL_HOME`). Without the variable a missing corpus skips silently |
+| the bot's pipeline, the transport, or the werift patches | boot the bot and hold a real call (`bun apps/bot/scripts/e2e-call.ts --text`, or `--audio`) — none of this is unit-testable |
+| `packages/imagegen` or the `take_selfie` tool | `bun run laplace-generate-image` against a real reference — it shares `generate()` with the bot, so a successful render is the check. Billed per image |
+| the gate's recall questions, state, or threshold (`packages/context/src/gate.ts`), or `RETRIEVAL_GATE_MODEL` | `bun run gate-decisions` — re-scores the labeled turns of `docs/benchmarks/2026-09-19-retrieval-gate/` into its `decisions.json`, and exits non-zero if any turn that needs recall would be skipped. About $0.002 of gate calls |
 | the gate's timeline questions or `TIMELINE_THRESHOLD` (`packages/context/src/gate.ts`) | `bun docs/benchmarks/2026-11-07-timeline-question/score.ts` — exits non-zero if any labeled turn lands on the wrong side of the threshold |
-| `prompt.md`'s 表演提示 markup, or `FISH_MODEL` | `uv run python docs/benchmarks/2026-10-17-drama-3-markup/render.py` (add `--model` for another model) — any `leaked` entry in its results means markup is read aloud. Billed per character |
-| `mem0_local.py`, `memory_service.py`, or `memory_admin.py` | `docker compose up qdrant`, then round-trip a real store → search → delete. No test covers Mem0; it needs a live vector store and an embedding key |
+| `prompt.md`'s 表演提示 markup, or `FISH_MODEL` | no scripted check exists ([the 2026-10-17 benchmark](docs/benchmarks/2026-10-17-drama-3-markup/README.md) records what drama-3 does with each kind). Hold a real call, `bun apps/bot/scripts/e2e-call.ts --text "<a question her reply would mark up>" --headful`, and listen: a direction or a tag spoken aloud is a leak. Billed per character |
+| `packages/memory`, or `/api/memories` (`apps/bot/src/memory-admin.ts`) | `docker compose up qdrant`, then round-trip a real `add` → `search` → `deleteAll` through `openMemoryEngine(buildMemoryConfig())`. The tests fake Qdrant and both model calls, so only a live run proves the wire format; it needs an embedding key and an LLM key |
 | an env var | document it in `.env.example` in the same commit |
-| anything under `apps/` or `packages/` | `bun run typecheck`, `bun run lint`, `bun run test`; for retrieval, the gate or the bot's pipeline, the TypeScript CLI or call that matches the Python row above |
+| anything under `apps/` or `packages/` | `bun run typecheck`, `bun run lint`, `bun run test`; for retrieval, the gate or the bot's pipeline, also the row above that names it |
 | anything under `apps/web` | the row above, whose typecheck also runs both `apps/web` tsconfigs, then `bun run build:web`; after changing a string, `bun run i18n` and its `msgstr` in `zh-Hans.po` |
 | local mode (`apps/bot/src/local`) | `bun test --no-env-file apps/bot/test/local` from the repository root, then `bun apps/bot/scripts/local-smoke.ts --headful`: a browser walk on a temporary data home that bills nothing |
 | `apps/eidolon`, or a file the package bundles or copies | the gates above, then `bun run pack:npm` and `bun apps/eidolon/scripts/ci-install-check.ts apps/eidolon/<tarball>`, which CI runs on Linux x64: it installs the tarball with npm, boots it on a temporary home, signs in, and stops it |
@@ -199,53 +151,53 @@ Match the gate to the surface you touched; don't reflexively run everything.
 Things you would break without being told. How any of it *works* is in the
 module that owns it.
 
+### The Python
+
+**The Python is for human readers only.**
+
+- **What it covers:** `laplace_eidolon/`, `tests/`, `pyproject.toml`, `uv.lock` and every `*.py`
+  file (benchmark scripts and old golden generators included). They are the original Pipecat
+  runtime and its tools, kept as a reference for other users.
+- **What agents never do with it:** read, run, edit, port from or cite any of it, or use it to
+  decide how the TypeScript behaves. The TypeScript and its own tests are the only source of truth;
+  a golden fixture is the TypeScript's record, updated when behavior changes on purpose.
+- **The one exception:** release automation, not you, writes the version into `pyproject.toml`,
+  `uv.lock` and `bot.py`.
+
+`.claude/settings.json` denies Claude Code those paths and every command that starts with `uv`,
+`python` or `pytest`, and `no_python.test.ts` (`apps/cli/test`) fails when TypeScript spawns the
+Python, or this file or `docs/*.md` names it or a command that runs it outside this section and
+the layout's one line.
+
 ### Runtime
 
-- **Optional dependencies fail open, never loud.** Mem0, both RAG services, the
-  reranker, the retrieval gate, and the LanceDB tables are each wrapped in a
-  try/except that logs and continues. A new optional tier follows that shape
-  or it breaks fresh checkouts.
+- **Optional dependencies fail open, never loud.** Mem0, both RAG providers, the
+  reranker, the retrieval gate, and the LanceDB tables each log their failure
+  and carry on without it: `packages/runtime/src/session/session.ts` opens the
+  optional tiers that way, the gate's failure retrieves anyway, and a failed
+  rerank falls back to RRF. A new optional tier follows that shape or it breaks
+  fresh checkouts.
 - **The retrieval gate may cancel a search, never delay one.**
-  `unless_skipped` starts the search at once and drops it only if Jev answers
-  "skip" first. Awaiting the gate before searching would add its ~0.5 s to
-  every recall turn, and its whole timeout to every turn while Jev is down.
-- **`load_dotenv(override=True)` runs before any other import that reads
-  `os.getenv`.** Module-level constants evaluate at import time, so a deferred
-  load pins them to their fallbacks. This is why `bot.py` has imports below
-  statements, and why it is exempt from `from __future__ import annotations`.
-- **An empty env var is not unset.** python-dotenv parses `KEY=` as `""`, so
-  `int(os.getenv("X", "60"))` crashes on a plain `.env.example` copy. Every
-  numeric env read goes through `env.env_int` / `env.env_float`; for strings
-  use `os.getenv("X") or "default"`.
-- **Pure ASGI middleware, never `BaseHTTPMiddleware`.** Starlette's version
-  doesn't catch `BaseException`, so a client disconnect surfaces as a 500, and
-  its response hard-codes `background = None`, silently dropping the background
-  task that actually starts the bot. `repro_no_response.py` reproduces both.
-- **Pipecat exposes no seam for ICE servers or Opus bitrate**, so `bot.py`
-  monkey-patches `SmallWebRTCConnection.__init__` and `OpusEncoder.__init__` at
-  import. Both are load-bearing; the per-session bitrate reaches the encoder
-  through a `ContextVar` set in the offer middleware.
-- **With TURN configured, the server gathers relay candidates only** — a third
-  monkey-patch, on `aiortc.rtcicetransport.connection_kwargs`. It keeps the
-  origin's IP out of every SDP, which the Cloudflare proxy cannot do because
-  media never traverses it. `TransportPolicy.RELAY` suppresses only the host
-  candidate, so the patch also drops the STUN server; restoring it re-exposes
-  the origin through a server-reflexive candidate.
-- **`install_mcp` is not idempotent** — it wraps the app lifespan, and a second
-  call makes `session_manager.run()` raise at startup. Same for
-  `install_offer_middleware`, `install_memory_admin`, and
-  `install_selfie_route`: once each, at startup.
-- **`OpenRouterImageGenService` must never go in the pipeline.** The
-  `ImageGenService` base it inherits generates an image from every `TextFrame`
-  it sees, and this pipeline streams one per sentence into TTS — adding it to
-  `Pipeline([...])` bills an image per sentence spoken. The `take_selfie`
-  handler calls `run_image_gen` directly instead. See
-  [selfies.md](docs/selfies.md).
+  `unlessSkipped` (`packages/context/src/gate.ts`) starts the search at once and
+  drops it only if Jev answers "skip" first. Awaiting the gate before searching
+  would add its ~0.5 s to every recall turn, and its whole timeout to every turn
+  while Jev is down.
+- **An empty env var is not unset.** `.env` parses `KEY=` as `""`, so
+  `Number(process.env.X ?? "60")` reads a plain `.env.example` copy's blank `X`
+  as 0. Read env through `envInt`, `envFloat`, `envStr` or `envOptional`
+  (`packages/config/src/env.ts`), which treat blank as unset.
+- **No image service goes in the pipeline.** pipedog's `ImageGenService`
+  generates an image from every `TextFrame` it sees, and this pipeline streams
+  one per sentence into TTS — in the pipeline it would bill an image per
+  sentence spoken. The `take_selfie` tool (`packages/tools/src/selfie.ts`) calls
+  `renderSelfie`, and through it `generate()` from `@eidolon/imagegen`, directly
+  instead. See [selfies.md](docs/selfies.md).
 - **The persona's reference images are mutually exclusive outfits — exactly
   one reaches a render.** Hand the model two and it draws two of her: a group
-  selfie with one friend came back with three people in frame. `select_outfit`
-  picks one by the hour, behind `reference_sources`, the choke point the bot
-  and `laplace-generate-image` share.
+  selfie with one friend came back with three people in frame. `selectOutfit`
+  picks one by the hour, behind `referenceSources`
+  (`packages/imagegen/src/references.ts`), the choke point the bot and
+  `laplace-generate-image` share.
 
 ### The TypeScript bot
 
@@ -279,11 +231,6 @@ module that owns it.
 - **The werift patches in `packages/runtime/src/webrtc/handler.ts` are
   load-bearing** — no default STUN server, disconnect on DTLS close, relay-only,
   the `raddr` scrub. Each one's failure mode is in [typescript.md](docs/typescript.md).
-- **Python is the behavioral spec until it is retired.** A golden fixture that fails
-  means the port drifted; fix the port, not the fixture.
-- **New features go into the TypeScript bot only.** Python is frozen as the rollback
-  image until it is deleted, so the spec covers what both already do; a test that
-  pins Python's old behavior changes with the feature, as the timeline's did.
 - **Run `bun test` from the repository root only.** Elsewhere `bunfig.toml`'s preload is
   skipped and the data home is the real one, so a test file that deletes in it imports
   `packages/config/test/isolated-guard.ts` first, and `isolated-guard.test.ts` enforces that.
@@ -329,19 +276,20 @@ module that owns it.
 
 ### Identity and quotas
 
-- **Never trust token presence — always `resolve_user_context`.** An
-  unvalidated string would let anyone skip the anonymous quota and spawn a full
-  STT+LLM+TTS pipeline per probe. Validation fails open to anonymous, and every
-  caller shares one 60s TTL cache.
-- **Branch on `UserContext.is_logged_in`, never on field truthiness.** `face` is
+- **Never trust token presence — always `resolveUserContext`**
+  (`packages/access/src/user-context.ts`). An unvalidated string would let
+  anyone skip the anonymous quota and spawn a full STT+LLM+TTS pipeline per
+  probe. Validation fails open to anonymous, and every caller shares one 60s
+  TTL cache.
+- **Branch on `UserContext.isLoggedIn`, never on field truthiness.** `face` is
   legitimately absent for some logged-in viewers.
 - **Anonymous viewers skip Mem0 entirely** rather than sharing a `default-user`
   bucket, where their memories would cross-pollute every other conversation.
-- **Mem0 is self-hosted and runs embedded, not as a service.** `MemoryClient`
-  cannot reach it: it demands a cloud key and validates it against a
-  `/v1/ping/` only the platform serves. Every caller — the pipeline and
-  `/api/memories` alike — builds its engine from
-  `mem0_local.build_local_config()`, so a new one does too.
+- **Mem0 is self-hosted and runs embedded, not as a service.** `packages/memory`
+  is its own engine over Qdrant, writing mem0's payloads and `history.db`; no
+  mem0 platform client can reach it. Every caller — the pipeline's
+  `openMemoryProvider` and `/api/memories`' `createMemoryAdmin` alike — builds
+  its engine from `buildMemoryConfig()`, so a new one does too.
 - **Behind a proxy, set `EIDOLON_REAL_IP_HEADER`** or every caller rate-limits
   as the proxy's single IP.
 
@@ -354,9 +302,10 @@ module that owns it.
   and pins its dimension at creation, so it also needs a new
   `MEM0_QDRANT_COLLECTION` — and viewers' memories do not survive that.
 - **FTS runs over the jieba-tokenized `tokens` column, never raw text.** LanceDB
-  ships no CJK tokenizer, so both ingests populate `tokens` and every
-  query goes through `retrieval.tokenize_zh_query`. Stopwords are stripped from
-  queries only — stripping them from the index collapses BM25.
+  ships no CJK tokenizer, so both ingests fill `tokens` with `tokenizeZh` and
+  every query goes through `tokenizeZhQuery` (`packages/retrieval/src/tokenize.ts`).
+  Stopwords are stripped from queries only — stripping them from the index
+  collapses BM25.
 - **A persona's index is never committed.** It lives in the data home
   (`personas/<id>/index/`), and a deployment mounts it at `/data`; the images
   carry only the templates. A re-ingest reaches production by copying the index
@@ -370,27 +319,29 @@ module that owns it.
   rebuilds the whole `stream_chunks` table from every transcript in `streams/`,
   so a transcript missing there drops its stream from the index
   ([personas.md](docs/personas.md#a-personas-sources)).
-- **`retrieval.py` is the one search path.** The bot, the MCP server, and
-  `laplace-eval-retrieval` all go through it, so what the eval scores is what
-  the bot runs. Keep it that way. The first two reach it via
-  `retriever.LanceRetriever`, which adds only the table handle and the
-  stale-reopen retry — never scoring.
+- **`hybridSearch` (`packages/retrieval/src/hybrid.ts`) is the one search
+  path.** The bot, the MCP server, `laplace-search` and `laplace-eval-retrieval`
+  all go through it, so what the eval scores is what the bot runs. Keep it that
+  way. All but the eval reach it via `LanceRetriever` (`retriever.ts`), which
+  adds only the table handle and the stale-handle reopen — never scoring.
 - **Similarity search can't answer occurrence questions.** "When did you last
-  play X" and "how often" go through `StreamCatalog.timeline`; a bigger `top_k`,
-  another reranker or another vector store won't get there
+  play X" and "how often" go through `StreamCatalog.timeline`
+  (`packages/retrieval/src/stream_catalog.ts`); a bigger `top_k`, another
+  reranker or another vector store won't get there
   ([recall-gaps.md](docs/recall-gaps.md)).
 
 ### The persona
 
-- **Persona edits go in `prompt.md` and `persona.yaml`, not in code.** `_build_persona_prefix`
-  layers only per-session facts on top — current date, viewer name, recent
-  stream dates, available voice styles.
-- **The Chinese prompt text is load-bearing.** The 不要主动念 lines are what stop
-  the model narrating the clock and reading UIDs aloud, and the wording tracks
-  `prompt.md`'s vocabulary. Don't paraphrase it in passing.
-- **`change_voice_style` is named once, as `_TOOL_NAME` in
-  `voice_switching.py`.** It reaches the prompt through `persona_prefix_hint`,
-  not through `prompt.md` — rename it in that one place.
+- **Persona edits go in `prompt.md` and `persona.yaml`, not in code.** `buildPersonaPrefix`
+  (`packages/context/src/persona.ts`) layers only per-session facts on top — current
+  date, viewer name, recent stream dates, the voice and selfie tools' hints.
+- **The Chinese prompt text is load-bearing.** The 不要主动念 lines in
+  `buildPersonaPrefix` are what stop the model narrating the clock and reading
+  UIDs aloud, and the wording tracks `prompt.md`'s vocabulary. Don't paraphrase
+  it in passing.
+- **`change_voice_style` is named once, as `VOICE_TOOL_NAME` in
+  `packages/tools/src/voice.ts`.** It reaches the prompt through
+  `voicePromptHint`, not through `prompt.md` — rename it in that one place.
 - **Settings come in layers:** an app setting is code defaults < `settings.yaml`
   < the environment, a persona's is code defaults < the environment < her
   `persona.yaml`, and the environment's `FISH_VOICE_ID_<STYLE>` voices skip a
@@ -405,7 +356,7 @@ module that owns it.
 ### Shipping a change
 
 - **Every user-facing change ships with a changeset in the same commit** — add
-  it yourself, unasked, for the Python and the TypeScript bot alike:
+  it yourself, unasked:
   `bunx changeset add --minor laplace-eidolon,@laplace.live/eidolon -m "feat: Remember a viewer's nickname"`.
   `--minor` for features and substantial behavior changes, `--patch` for fixes
   and small changes. Start with `feat:`/`fix:`/`perf:`/`chore:`, then one
@@ -425,8 +376,8 @@ module that owns it.
 - **Never bump a version, push a release tag, hand-edit `CHANGELOG.md`, or
   publish to npm.** Merging the Release workflow's version PR bumps
   `apps/bot/package.json` and `apps/eidolon/package.json`, copies the version
-  into `pyproject.toml`, `uv.lock`, `bot.py` and `rtvi.ts`
-  (`apps/bot/scripts/sync-version.ts`), and tags `laplace-eidolon@<version>`,
+  into `packages/runtime/src/rtvi.ts`, and into the Python's files as "The
+  Python" allows (`apps/bot/scripts/sync-version.ts`), and tags `laplace-eidolon@<version>`,
   which builds the image tagged `<version>`, `<major>.<minor>` and `<major>`,
   and `@laplace.live/eidolon@<version>`. That run publishes the npm package while
   the `NPM_PUBLISH` variable is `true`; only its one-time setup is done by hand
@@ -437,18 +388,10 @@ module that owns it.
   you're shipping the guard, not a fix. Same for indirection and config knobs:
   no second caller, no abstraction.
 - **Upstream-dependency bugs get a citation comment, not a silent workaround.**
-- **`@mcp.tool()` docstrings and `Field(description=...)` strings are live API
-  surface** — FastMCP ships them to the model. Editing one changes runtime
-  behavior. See [comments.md](docs/comments.md).
-
-### Style
-
-- `from __future__ import annotations` at the top of every module. The
-  exceptions are `bot.py` and the two `__init__.py` files.
-- PEP 604/585 syntax: `str | None`, `dict[str, Any]`, `list[float]`.
-- Type hints on everything. They carry the load that docstrings otherwise would.
-- Line length 100. Ruff enforces import sorting and pyflakes
-  (`select = ["I", "F"]`) and nothing else, so the rest is on you.
+- **Tool descriptions are live API surface.** The MCP tools' descriptions and
+  schemas (`toolDefinitions()` in `apps/bot/src/mcp/tools.ts`) and each
+  `LlmTool`'s `schema` (`packages/tools`) go to a model as written: editing one
+  changes runtime behavior. See [comments.md](docs/comments.md).
 
 ## Comments
 
@@ -462,11 +405,11 @@ worked keep/delete examples, in [comments.md](docs/comments.md).
 - **The dividing line:** a comment about something outside this repo can be a
   paragraph; one about this repo's own structure gets a sentence, or nothing.
 - **Banned:** banner dividers, `What lives here:` indexes, `Why X and not Y`
-  sections, changelog narration (`we used to`, `the old X`), `Usage::`
-  transcripts, commented-out code, pinned upstream versions and endpoint paths,
-  tutorial comments on stdlib behavior.
-- **Never touch** `# type: ignore`, `# noqa`, `TODO`/`FIXME`, or license
-  headers. When cleaning comments, change only comments.
+  sections, changelog narration (`we used to`, `the old X`), usage transcripts,
+  commented-out code, pinned upstream versions and endpoint paths, tutorial
+  comments on standard-library or framework behavior.
+- **Never touch** `// @ts-expect-error`, `// biome-ignore`, `TODO`/`FIXME`, or
+  license headers. When cleaning comments, change only comments.
 
 ## Editing these instructions
 

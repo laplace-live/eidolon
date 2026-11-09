@@ -1,6 +1,6 @@
-// fixtures/ingest_facts/golden.json is what fixtures/ingest_facts/golden.py printed through
-// tools/ingest_facts.py: line parsing, the prefix strip, pathlib's glob, load_facts. The CLI's
-// tests replay its main() runs; these cover the library alone, and what Python never had.
+// fixtures/ingest_facts/golden.json holds what line parsing, the prefix strip, pathlib's glob and
+// fact loading make of the inputs it lists. The CLI's tests replay its command runs; these cover
+// the library alone, and what the golden doesn't.
 import "../../config/test/isolated-guard.ts";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
@@ -123,12 +123,12 @@ function writeFiles(dir: string, files: Record<string, string>): void {
   for (const [name, text] of Object.entries(files)) writeFileSync(join(dir, name), text, "utf8");
 }
 
-/** Python's fake_vector, as float64 values the cache and the table round to float32. */
+/** The golden's stub vector, as float64 values the cache and the table round to float32. */
 function fakeVector(text: string): number[] {
   let sum = 0;
   for (const ch of text) sum += ch.codePointAt(0) as number;
   const base = sum % 97;
-  // Python's -base is an int, so a 0 divides to 0.0, never -0.0.
+  // `0 - base`, not `-base`: for a base of 0 the golden holds 0.0, never -0.0.
   return [base / 7, (0 - base) / 3, 0.1 * base, 1 / (base + 3)];
 }
 

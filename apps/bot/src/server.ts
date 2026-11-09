@@ -140,8 +140,8 @@ export async function startBotServer(args: BotArgs, deps: BotDeps): Promise<BotS
   };
 }
 
-// uvicorn binds every address `localhost` resolves to; Bun.serve binds only the first (::1 on
-// macOS), which would refuse a client that dials 127.0.0.1.
+// Every address `localhost` resolves to: Bun.serve binds only the first (::1 on macOS), which
+// would refuse a client that dials 127.0.0.1.
 async function bindAddresses(host: string): Promise<string[]> {
   if (host !== "localhost") return [host];
   const found = await lookup(host, { all: true });

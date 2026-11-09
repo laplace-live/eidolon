@@ -74,8 +74,8 @@ function errorMessage(text: string): string {
   return pyStr(pyTruthy(error) ? error : body);
 }
 
-// What Python's `for row in data` does with a truthy JSON value: a string or an object iterates
-// to no rows, while a number or a boolean raises TypeError.
+// A truthy `data` that isn't a list: a string or an object yields no image rows, and a number or a
+// boolean raises the TypeError Python raises iterating one.
 function rowsOf(data: unknown): unknown[] {
   if (typeof data === "number" || typeof data === "boolean") {
     const type = typeof data === "boolean" ? "bool" : Number.isInteger(data) ? "int" : "float";

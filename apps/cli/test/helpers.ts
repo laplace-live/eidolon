@@ -1,5 +1,5 @@
-// The goldens under fixtures/goldens are the Python CLIs' own output for the same fixtures and
-// fakes these tests use; "<FIX>" stands for this fixtures directory.
+// The goldens under fixtures/goldens hold each command's expected output for the fixtures and fakes
+// these tests use; "<FIX>" stands for this fixtures directory.
 import { afterAll, beforeAll } from "bun:test";
 import { join } from "node:path";
 import { consoleSink, type LogLevel, type LogRecord, logger, setLogLevel } from "@eidolon/config";

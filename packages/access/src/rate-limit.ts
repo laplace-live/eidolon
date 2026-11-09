@@ -99,10 +99,10 @@ export const ANON_OFFER_DEFAULT_WINDOW_SEC = 3600;
 let anonQuota: SlidingWindowQuota | undefined;
 
 /**
- * Python ANON_QUOTA: EIDOLON_ANON_RATE_LIMIT_PER_HOUR (5) per EIDOLON_ANON_RATE_LIMIT_WINDOW_SEC
- * (3600), clamped. A process singleton built on first call (after the .env load); the default
- * quota of both admitOffer and preflightOffer. apps/bot logs its values in the
- * `[offer-middleware] Installed …` line.
+ * EIDOLON_ANON_RATE_LIMIT_PER_HOUR (5) per EIDOLON_ANON_RATE_LIMIT_WINDOW_SEC (3600), clamped. A
+ * process singleton built on first call (after the .env load); the default quota of both
+ * admitOffer and preflightOffer. apps/bot logs its values in the `[offer-middleware] Installed …`
+ * line.
  */
 export function anonOfferQuota(): SlidingWindowQuota {
   anonQuota ??= quotaFromEnv(

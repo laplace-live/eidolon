@@ -59,7 +59,8 @@ options:
 
 const COMMAND = "laplace-refine";
 
-// Python's asyncio.Semaphore(0) hangs the run and a negative one crashes every stream.
+// A usage error up front: createLimiter throws on fewer than 1 slot only once a stream has chunks
+// to refine.
 export const CONCURRENCY: ArgType<number> = {
   name: "int",
   parse(text: string): number {

@@ -1,6 +1,6 @@
 // Python 3.13 argparse's parsing rules for the flags these CLIs declare, so a command line parses,
-// or fails with the same message and exit code, as it does under the Python CLI. Usage and help
-// are Python's own text at 80 columns.
+// or fails with argparse's message and exit code. Usage and help are argparse's own text at 80
+// columns.
 import {
   activePersona,
   cpLen,
@@ -13,7 +13,7 @@ import {
 } from "@eidolon/config";
 import { fromIsoformat, type IsoDate } from "@eidolon/retrieval";
 
-/** An argparse `type=`: `parse` throws on a value the Python callable rejects. */
+/** An argparse `type=` callable: `parse` throws on a value it rejects. */
 export interface ArgType<T> {
   /** The callable's `__name__`, as argparse's "invalid <name> value" message shows it. */
   readonly name: string;

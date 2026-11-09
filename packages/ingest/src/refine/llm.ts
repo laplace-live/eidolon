@@ -1,5 +1,5 @@
-// One chat completion that must come back as JSON, with refine.py's one retry: a response cut off
-// at max_tokens is asked again with double the budget.
+// One chat completion that must come back as JSON, with one retry: a response cut off at
+// max_tokens is asked again with double the budget.
 import {
   cpLen,
   cpSlice,
@@ -61,9 +61,9 @@ function firstChoice(response: unknown): { content: unknown; finishReason: unkno
 }
 
 /**
- * `_call_llm_json`: the parsed JSON and what the calls cost, or null and the cost when the call
- * failed or its body wouldn't parse. API errors are logged and give null, the error third; any
- * other error, an aborted run's included, propagates.
+ * The parsed JSON and what the calls cost, or null and the cost when the call failed or its body
+ * wouldn't parse. API errors are logged and give null, the error third; any other error, an
+ * aborted run's included, propagates.
  */
 export async function callLlmJson(
   client: JsonPoster,
@@ -81,7 +81,6 @@ export async function callLlmJson(
   for (let attempt = 0; attempt < 2; attempt++) {
     let response: unknown;
     try {
-      // The OpenAI SDK's key order, so the body is byte for byte what refine.py sends.
       response = await client.post("chat/completions", {
         messages: [
           { role: "system", content: call.system },

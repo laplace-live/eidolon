@@ -40,8 +40,8 @@ to interpret or clarify.
 
 Recap questions read the matching catalog records directly and skip archive
 embedding, reranking, and persona-fact retrieval. Questions about a particular
-topic within a period use the existing `LanceRetriever` and `retrieval.py`
-hybrid search with a metadata prefilter. Mem0 remains unchanged for logged-in
+topic within a period use the existing `LanceRetriever` and `hybridSearch`
+with a metadata prefilter. Mem0 remains unchanged for logged-in
 viewers. Catalog files are cached across sessions and refresh when the file
 changes; loading runs off the audio event loop.
 
@@ -106,7 +106,7 @@ in [recall-gaps.md](recall-gaps.md).
 
 ## Validation
 
-`uv run laplace-search --recall --today 2026-09-09 '你上周直播都播了什么？'`
+`bun run laplace-search --recall --today 2026-09-09 '你上周直播都播了什么？'`
 exercises the same overview lookup with a reproducible clock. Existing search
 output remains the default without `--recall`.
 

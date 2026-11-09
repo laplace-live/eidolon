@@ -1,5 +1,5 @@
-// The golden runs (see ingest_streams_golden.ts) replayed through the library, plus what Python
-// had no counterpart for: progress events, cancellation, the meta file and the skip-type settings.
+// The golden runs (see ingest_streams_golden.ts) replayed through the library, plus what the
+// golden doesn't cover: progress events, cancellation, the meta file and the skip-type settings.
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import {
   existsSync,

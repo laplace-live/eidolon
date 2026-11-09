@@ -65,7 +65,7 @@ export function defaultSkipTypes(): string {
   return value === "none" ? "" : value;
 }
 
-/** `_parse_skip_types`: comma-separated, each stripped, blanks dropped; "" drops nothing. */
+/** Comma-separated, each stripped, blanks dropped; "" drops nothing. */
 export function parseSkipTypes(raw: string): Set<string> {
   return new Set(
     raw
@@ -75,7 +75,7 @@ export function parseSkipTypes(raw: string): Set<string> {
   );
 }
 
-/** One stream_chunks row as load_streams builds it, by column name. */
+/** One stream_chunks row as loadStreams builds it, by column name. */
 export interface StreamRow {
   readonly id: string;
   readonly stream_id: string;
@@ -112,7 +112,7 @@ function joined(value: unknown): string {
 }
 
 /**
- * load_streams' loop body: `parsed`'s rows, appended to `rows`. Without `tokenize`, `tokens` stays
+ * loadStreams' loop body: `parsed`'s rows, appended to `rows`. Without `tokenize`, `tokens` stays
  * empty.
  */
 function appendRows(
@@ -175,7 +175,7 @@ function appendRows(
     });
     kept++;
   }
-  // With any chunk, the loop above has already thrown on a refined_map that isn't a dict.
+  // With any chunk, the loop above has already thrown on a refinedMap that isn't a dict.
   const refinedCount = parsed.chunks.filter((chunk) =>
     Object.hasOwn(refinedMap as object, chunk.id),
   ).length;
@@ -244,8 +244,8 @@ async function readRows(
 }
 
 /**
- * `load_streams`: one row per H2 section of every transcript in `streamsDir`, in file then
- * section order. `source_path` is relative to the folder's parent, so pass the folder resolved.
+ * One row per H2 section of every transcript in `streamsDir`, in file then section order.
+ * `source_path` is relative to the folder's parent, so pass the folder resolved.
  */
 export async function loadStreams(
   streamsDir: string,
@@ -302,10 +302,10 @@ export interface IngestStreamsReport {
 }
 
 /**
- * `main_async` after argument parsing: every transcript's rows, embedded (cache first), written
- * as the table, then recorded in `<table>.meta.json` beside it. Nothing is written until every row
- * has its vector, so a failed or cancelled run leaves the old table. Never throws: a failure ends
- * in a report with `ok` false, its summary event, and the error logged.
+ * laplace-ingest-streams after argument parsing: every transcript's rows, embedded (cache first),
+ * written as the table, then recorded in `<table>.meta.json` beside it. Nothing is written until
+ * every row has its vector, so a failed or cancelled run leaves the old table. Never throws: a
+ * failure ends in a report with `ok` false, its summary event, and the error logged.
  */
 export async function ingestStreams(options: IngestStreamsOptions): Promise<IngestStreamsReport> {
   const emit = options.onProgress ?? noProgress;

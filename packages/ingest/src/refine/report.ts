@@ -21,7 +21,7 @@ const lines = (rows: readonly string[]): string => rows.map((row) => `${row}\n`)
 const tokenPair = (usage: Usage): string =>
   `${rjust(String(usage.promptTokens), 6)}/${rjust(String(usage.completionTokens), 6)}`;
 
-/** `print_run_summary`: the per-file table and the run's totals. */
+/** The run's summary: the per-file table and the run's totals. */
 export function formatRunSummary(
   results: readonly StreamResult[],
   model: string,
@@ -132,7 +132,7 @@ function priceOf(model: string, tokensIn: number, tokensOut: number): number | n
 }
 
 export interface DryRunReport {
-  /** `_dry_run_report`'s text. */
+  /** The report as printed. */
   readonly text: string;
   readonly streams: number;
   /** Chunks the run would refine, and those it would skip. */
@@ -145,9 +145,9 @@ export interface DryRunReport {
 }
 
 /**
- * `_dry_run_report`: what refining `streams` with `model` would take, without spending any. A turn
- * of the event loop follows each sidecar read, and once `signal` aborts it throws its reason, so a
- * signal sent during any read, the last one's included, stops the dry run before its report.
+ * What refining `streams` with `model` would take, without spending any. A turn of the event loop
+ * follows each sidecar read, and once `signal` aborts it throws its reason, so a signal sent during
+ * any read, the last one's included, stops the dry run before its report.
  */
 export async function dryRun(
   streams: readonly ParsedStream[],

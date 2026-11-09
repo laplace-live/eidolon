@@ -1,4 +1,4 @@
-// Expected outputs are argparse's, recorded from a Python parser with the runner's three flags.
+// Expected outputs are argparse's, for a parser with the runner's three flags.
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { BOT_USAGE, parseBotArgs } from "../src/args.ts";
 

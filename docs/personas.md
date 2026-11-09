@@ -126,8 +126,7 @@ moves it into the entry when it saves a new one. The names it accepts: each prov
 a role's own (`RERANK_API_KEY`, `EMBED_API_KEY`, `REFINE_API_KEY`), and production's
 (`CLOUDFLARE_TURN_KEY_API_TOKEN`, `WEBRTC_TURN_CREDENTIAL`, `CF_WAF_BYPASS_TOKEN`).
 
-The TypeScript offline tools read these files as the bot does, for the persona `--persona` names.
-The Python ones, kept until Python is retired, still take the environment only.
+The offline commands read these files as the bot does, for the persona `--persona` names.
 
 A misspelled key (`identity` and the gate questions included), a value of the wrong type, malformed
 YAML and a credentials file other users can read each log a warning; the bad value is ignored.
@@ -345,9 +344,9 @@ the image's value.
 
 ## Moving sources out of a checkout
 
-The Python tools kept a persona's sources in the checkout: `data/`, `streams/` and `vods/`, and
-the embedding cache in `data/embed_cache.db`. The TypeScript tools read them from the data home
-only. To move them, for a persona `<id>`, with nothing running that uses them:
+Sources once lived in the checkout: `data/`, `streams/` and `vods/`, and the embedding cache in
+`data/embed_cache.db`. The offline commands read them from the data home only. To move them, for
+a persona `<id>`, with nothing running that uses them:
 
 ```sh
 home=${EIDOLON_HOME:-$HOME/.laplace/eidolon}

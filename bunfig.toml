@@ -1,5 +1,5 @@
 # load-env.ts is the only .env reader, with python-dotenv's rules. Bun's own loader would run first,
-# expand bare $VAR, and read .env.local and .env.<NODE_ENV>, none of which the Python bot did.
+# expand bare $VAR, and read .env.local and .env.<NODE_ENV>, none of which those rules do.
 env = false
 
 [install]

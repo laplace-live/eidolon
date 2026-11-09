@@ -33,7 +33,7 @@ export function allowedOffer(input: OfferInput): AllowedOffer {
   };
 }
 
-/** The offer middleware's 429 as Python sent it: `json.dumps` separators, charset, Retry-After. */
+/** The offer middleware's 429: `json.dumps` separators, charset, Retry-After. */
 export function refusedOffer(input: OfferInput): RejectedOffer {
   const body = '{"error": "匿名用户每小时通话次数已达上限，请登录后再试", "retry_after": 3412}';
   return {

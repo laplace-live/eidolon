@@ -16,8 +16,7 @@ import { parseBotArgs } from "./args.ts";
 import * as mcp from "./mcp/index.ts";
 import { shutdownHandler, startBotServer } from "./server.ts";
 
-// Bun exits on an unhandled rejection, so one stray promise would drop every live call; Python's
-// event loop only logs it.
+// Bun exits on an unhandled rejection, so one stray promise would drop every live call.
 process.on("unhandledRejection", (reason) => logger.error("Unhandled rejection", reason));
 
 const args = parseBotArgs(Bun.argv.slice(2));

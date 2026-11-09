@@ -1,6 +1,6 @@
-// fixtures/transcribe/run.golden.json is tools/transcribe.py's main() run through the soniox SDK
-// against a fake Soniox serving the jobs it lists (its `printed_by` names the versions): the
-// requests Python made and the files it wrote. The TS run is served the same jobs.
+// fixtures/transcribe/run.golden.json holds transcription runs against a fake Soniox serving the
+// jobs it lists: the requests each run made and the files it wrote. The run here is served the
+// same jobs.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -56,7 +56,7 @@ afterEach(() => {
 
 const noSleep = async (): Promise<void> => {};
 
-/** The library options Python's flags in a golden scenario stand for. */
+/** The library options a golden scenario's command-line flags stand for. */
 function optionsFor(args: readonly string[]): Partial<transcribe.TranscribeOptions> {
   const options: Record<string, unknown> = {};
   for (let i = 0; i < args.length; i++) {
@@ -77,9 +77,9 @@ function setup(audioName: string, durationSec: number | null) {
 }
 
 /**
- * What Python's requests become in TS: the SDK's destroy fetched the transcription again before
- * deleting it, where TS already knows its file; and TS deletes only after writing the transcript,
- * so a sliced run's deletes all come last.
+ * A golden run's requests as this client makes them: the soniox SDK's destroy fetched each
+ * transcription again before deleting it, where this client already knows its file; and this
+ * client deletes only after writing the transcript, so a sliced run's deletes all come last.
  */
 function expectedRequests(python: readonly Recorded[]): Recorded[] {
   const out: Recorded[] = [];

@@ -64,7 +64,7 @@ describe("buildStreamCatalogMain", () => {
       const argv = run.argv.map((arg) => substitute(arg, paths));
       const db = argv[argv.indexOf("--db-path") + 1] as string;
       const cwd = process.cwd();
-      // `--streams-dir .` is relative to the folder Python ran in.
+      // `--streams-dir .` resolves against the working directory, here the streams folder.
       if (run.name === "relative_dot") process.chdir(streams);
       let code: number;
       try {

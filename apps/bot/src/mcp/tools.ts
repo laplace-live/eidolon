@@ -50,7 +50,7 @@ function definition(name: string, description: string): Tool {
   };
 }
 
-/** The Python server's tools/list, in its registration order, naming the active persona. */
+/** The tools/list result, naming the active persona. */
 export function toolDefinitions(): Tool[] {
   const { name } = activePersona().identity;
   return [
@@ -115,7 +115,7 @@ function errorResult(message: string): CallToolResult {
   return { content: [{ type: "text", text: message }], isError: true };
 }
 
-// The repr keeps peer-supplied text on one log line, as the Python SDK's %r does.
+// The repr keeps peer-supplied text on one log line.
 function failed(name: string, message: string): CallToolResult {
   logger.info(`[mcp] Tool ${pyStrRepr(name)} failed: ${pyStrRepr(message)}`);
   return errorResult(message);
@@ -150,7 +150,7 @@ async function search(tool: SearchTool, query: string, tier: CallerTier): Promis
   return { count: results.length, results };
 }
 
-/** The Python SDK's tools/call: unknown tool, argument validation, then the tool body. */
+/** tools/call in FastMCP's order: unknown tool, argument validation, then the tool body. */
 export async function callTool(
   tools: ReadonlyMap<string, SearchTool>,
   name: string,

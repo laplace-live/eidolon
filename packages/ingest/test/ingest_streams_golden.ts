@@ -1,9 +1,7 @@
-// fixtures/ingest_streams.golden.json is what fixtures/ingest_streams/golden.py printed through
-// tools/ingest_streams.py and tools/build_stream_catalog.py (its printed_by names the versions),
-// over the synthetic transcripts in fixtures/ingest_streams/inputs.json, with the embedding call
-// stubbed by the fake below. Logs and argv write "<STREAMS>" and "<TMP>" for the run's folders.
-// Reprint it with `uv run --offline --no-sync python packages/ingest/test/fixtures/ingest_streams/
-// golden.py > packages/ingest/test/fixtures/ingest_streams.golden.json`, then Biome-format it.
+// fixtures/ingest_streams.golden.json holds what the stream ingest and the catalog build make of
+// the synthetic transcripts in fixtures/ingest_streams/inputs.json (rows, logs, tables, files),
+// with the embedding call stubbed by the fake below. Logs and argv write "<STREAMS>" and "<TMP>"
+// for the run's folders.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -40,7 +38,7 @@ export interface IngestStreamsGolden {
   }[];
   readonly ingest: GoldenRun[];
   readonly catalog: GoldenRun[];
-  /** Each TS command's usage and help, as argparse lays them out. */
+  /** Each command's usage and help, as argparse lays them out. */
   readonly help: Record<"ingest_streams" | "build_stream_catalog", [string, string]>;
 }
 
@@ -64,16 +62,16 @@ export function materialize(set: "streams" | "bad_date", folder: string): string
   return folder;
 }
 
-/** The generator's stub vector, with the same float64 arithmetic. */
+/** The golden's stub vector, computed in float64. */
 function fakeVector(text: string): number[] {
   let sum = 0;
   for (const c of text) sum += c.codePointAt(0) as number;
   const base = sum % 97;
-  // Python negates an int, which has no -0.
+  // `0 - base`, not `-base`: for a base of 0 the golden holds 0.0, never -0.0.
   return [base / 7, (0 - base) / 3, 0.1 * base, 1 / (base + 3)];
 }
 
-/** The generator's stubbed embed_texts_with_usage; `calls` records each batch's size. */
+/** The golden's stubbed embedding call; `calls` records each batch's size. */
 export function fakeClient(calls: number[]): Pick<EmbeddingClient, "embedWithUsage"> {
   return {
     async embedWithUsage(texts, options) {

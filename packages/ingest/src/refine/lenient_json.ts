@@ -1,6 +1,6 @@
-// refine.py's last resort for a response body that strict `json.loads` refuses. Its error texts
-// reach the logs, and a parsed float keeps Python's `str()` (1.0), so this parses with the Python
-// scanner port rather than JSON.parse.
+// Refine's last resort for a response body that strict `json.loads` refuses. Its error texts reach
+// the logs, and a parsed float keeps Python's `str()` (1.0), so this parses with pyJsonLoads,
+// Python's JSON scanner, rather than JSON.parse.
 import { pyJsonLoads, pyLstrip, pyRawDecode } from "@eidolon/config";
 
 const STRICT = { strict: true, floats: true } as const;
@@ -51,9 +51,8 @@ export function parseFirstJsonValue(text: string): unknown {
 }
 
 /**
- * `_parse_json_lenient`: a strict parse, then each repair in turn. Returns the value and the
- * repair that worked (null for a clean parse), or null and the strict pass's error, which is the
- * one that points at the fault.
+ * A strict parse, then each repair in turn. Returns the value and the repair that worked (null for
+ * a clean parse), or null and the strict pass's error, which is the one that points at the fault.
  */
 export function parseJsonLenient(content: string): [unknown, string | null] {
   let strictError: Error;

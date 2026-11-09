@@ -32,7 +32,7 @@ function extraKeys(item: Readonly<Record<string, unknown>>, allowed: readonly st
   return sortedPy(Object.keys(item).filter((key) => !allowed.includes(key)));
 }
 
-/** What StructuredContext accepts; Python's SDK rejects anything else before the upload. */
+/** What StructuredContext accepts; Soniox's Python SDK rejects anything else before the upload. */
 function checkShape(path: string, ctx: SonioxContext): void {
   const fail = (what: string): Error =>
     new TranscribeError(`${path}: ${what}, as Soniox's StructuredContext requires.`);
@@ -59,9 +59,9 @@ function checkShape(path: string, ctx: SonioxContext): void {
 }
 
 /**
- * `_load_soniox_context_dict`: the glossary at `path` as Soniox's StructuredContext, in TOML order,
- * or null when context is off, the file is missing, or nothing in it has a value. Throws a
- * TranscribeError for a glossary Soniox would reject, before anything is uploaded.
+ * The glossary at `path` as Soniox's StructuredContext, in TOML order, or null when context is off,
+ * the file is missing, or nothing in it has a value. Throws a TranscribeError for a glossary Soniox
+ * would reject, before anything is uploaded.
  */
 export function loadContext(path: string | null): SonioxContext | null {
   if (path === null) return null;
@@ -131,7 +131,7 @@ export function loadContext(path: string | null): SonioxContext | null {
   return ctx;
 }
 
-/** `_summarize_soniox_context`: `6 general, 191 chars text, 122 terms`. */
+/** A one-line summary: `6 general, 191 chars text, 122 terms`. */
 export function summarizeContext(ctx: SonioxContext): string {
   const parts: string[] = [];
   const count = (value: unknown): number =>

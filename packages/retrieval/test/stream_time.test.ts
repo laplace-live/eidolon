@@ -1,4 +1,4 @@
-// tests/test_stream_time.py, case for case, then goldens printed by the Python module.
+// Scope resolution and query intent, then goldens that pin Unicode and calendar edge cases.
 import { describe, expect, test } from "bun:test";
 import {
   hasStreamTimeReference,
@@ -377,9 +377,9 @@ describe("Unicode and edge goldens", () => {
     ["这星期", ["2026-09-07", "2026-09-14"]],
     ["本星期", ["2026-09-07", "2026-09-14"]],
     ["上星期", ["2026-08-31", "2026-09-07"]],
-    // Python raises KeyError('ſep'): IGNORECASE matches the long s, the month table can't.
+    // IGNORECASE matches the long s; the month table doesn't, so there is no date.
     ["ſeptember 8", null],
-    // Python's `start_year or today.year` lets a year of 0 fall back to today's year.
+    // A year of 0 falls back to today's year.
     ["0000-09-01 to 0000-09-07", ["2026-09-01", "2026-09-08"]],
   ] as [string, Expected][])("%p", (query, expected) => {
     check(resolveStreamScope(query, { today: TODAY }), expected);

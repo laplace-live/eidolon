@@ -46,7 +46,7 @@ interface Stats {
 }
 
 const ANSWERS: Record<string, string> = await Bun.file(join(FIX, "gate/answers.json")).json();
-// The Python fake clock's steps in seconds, here in milliseconds.
+// The fake clock's steps in milliseconds, which the goldens' latencies follow.
 const STEPS = [460.9375, 250, 125, 527.34375, 0.9765625, 1500];
 const goldens = await golden<{ runs: Run[]; stats: Stats[] }>("gate_decisions.json");
 

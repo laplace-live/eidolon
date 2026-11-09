@@ -1,7 +1,6 @@
-// fixtures/download/download-real.golden.json is what download-real.golden.py printed through
-// read_url_list and prepare_batch.py's read_ids over the real URL lists: counts and hashes, no
-// URLs. Lists changed since are left out. These skip when the real data is absent, unless
-// EIDOLON_REQUIRE_PARITY=1. They only read the data home.
+// fixtures/download/download-real.golden.json holds what readUrlList and readIds make of each real
+// URL list: counts and hashes, no URLs. Lists changed since are left out. These skip when the real
+// data is absent, unless EIDOLON_REQUIRE_PARITY=1. They only read the data home.
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";

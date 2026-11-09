@@ -1,5 +1,5 @@
 // laplace-download's loop: one yt-dlp process per URL, in order, so one bad URL never stops the
-// rest; the run's report and the summary Python printed.
+// rest; the run's report and its printed summary.
 import { mkdirSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import { constants } from "node:os";
 import {
@@ -113,7 +113,7 @@ function isAudioFile(dir: string, name: string): boolean {
   }
 }
 
-/** `_audio_files_in`: the names of the regular files directly in `dir` with an audio suffix. */
+/** The names of the regular files directly in `dir` with an audio suffix. */
 export function audioFilesIn(dir: string): Set<string> {
   return new Set(listNames(dir).filter((name) => isAudioFile(dir, name)));
 }
@@ -190,8 +190,8 @@ async function runYtDlp(
 ): Promise<Outcome> {
   const events = opts.output === "events";
   const child = Bun.spawn([ytDlp.path, ...args], {
-    // Bun spawns with the environment the process started with unless told otherwise; Python's
-    // children saw what load_dotenv set, such as a proxy for yt-dlp.
+    // Bun spawns with the environment the process started with unless told otherwise; yt-dlp must
+    // see what the .env set, such as a proxy.
     env: process.env,
     stdin: "inherit",
     stdout: events ? "pipe" : "inherit",
@@ -235,7 +235,7 @@ export class YtDlpFailedError extends Error {
   }
 }
 
-/** Python's stderr tail: its last six lines, indented under the first. */
+/** The stderr a failure reports: its last six lines, indented under the first. */
 export function stderrTail(stderr: string): string {
   return splitlines(pyStrip(stderr)).slice(-6).join("\n    ") || "(no stderr captured)";
 }
@@ -258,9 +258,9 @@ function removeCreated(
 }
 
 /**
- * `download_urls`: runs yt-dlp on each URL in turn into `opts.vodsDir`, never stopping at a
- * failed one; the report carries each failure's stderr tail, or the error when there is no yt-dlp
- * to run. Once `opts.signal` aborts, no URL starts and the running one is stopped.
+ * Runs yt-dlp on each URL in turn into `opts.vodsDir`, never stopping at a failed one; the report
+ * carries each failure's stderr tail, or the error when there is no yt-dlp to run. Once
+ * `opts.signal` aborts, no URL starts and the running one is stopped.
  */
 export async function downloadUrls(
   urls: readonly string[],
@@ -463,7 +463,7 @@ export function downloadSummaryEvent(
   };
 }
 
-/** `print_summary`'s text: the block laplace-download and laplace-pipeline print after a download. */
+/** The block laplace-download and laplace-pipeline print after a download. */
 export function downloadSummaryText(report: DownloadReport, vodsDir: string): string {
   const rule = "=".repeat(60);
   const lines = [

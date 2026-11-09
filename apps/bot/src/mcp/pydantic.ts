@@ -1,5 +1,4 @@
-// The Python server's tool-result text comes from pydantic, so its exact output is reproduced here
-// for the JSON values an envelope can carry.
+// Tool-result text in pydantic's exact JSON form, for the JSON values an envelope can carry.
 
 /**
  * pydantic-core's float text. It differs from JS number text: fixed notation only for decimal
@@ -32,8 +31,8 @@ function encode(value: unknown, indent: string, key: string | null): string {
 }
 
 /**
- * `pydantic_core.to_json(envelope, indent=2)`, the text Python's SDK puts in a tool result. Every
- * number but a `score` is an int; scores are Python floats.
+ * `pydantic_core.to_json(envelope, indent=2)`, the text the MCP Python SDK puts in a tool result.
+ * Every number but a `score` is an int; scores are Python floats.
  */
 export function envelopeText(envelope: unknown): string {
   return encode(envelope, "", null);

@@ -1,6 +1,6 @@
-// The recall_streams wire contract. Arguments are validated as Python's pydantic RecallRequest
-// (lax mode, extra keys forbidden); the LLM reads `reason` when a call is rejected, so the error
-// text keeps pydantic's layout, and dates coerce the way pydantic-core's speedate parser does.
+// The recall_streams wire contract. Arguments validate as a pydantic model would (lax mode, extra
+// keys forbidden); the LLM reads `reason` when a call is rejected, so the error text keeps
+// pydantic's layout, and dates coerce the way pydantic-core's speedate parser does.
 import {
   cpLen,
   type PydanticLineError,

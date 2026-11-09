@@ -1,4 +1,3 @@
-// Expected values were printed by laplace_eidolon.retrieval.
 import { describe, expect, test } from "bun:test";
 import { buildQueryText, extractDateFilter } from "../src/index.ts";
 

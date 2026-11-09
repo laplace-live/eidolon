@@ -1,8 +1,7 @@
-// The Python server's HTTP-level checks, with its response bodies: TransportSecurityMiddleware,
-// RequestBodyLimitMiddleware and the streamable-HTTP transport's own gates.
+// The MCP endpoint's HTTP-level checks: a 4 MiB body limit, then the MCP Python SDK's
+// TransportSecurityMiddleware and streamable-HTTP transport gates, with their response bodies.
 import { logger, pyStrip, validationErrorText } from "@eidolon/config";
 
-/** RequestBodyLimitMiddleware's default. */
 const MAX_BODY_BYTES = 4 * 1024 * 1024;
 
 const MESSAGE_MODELS = ["JSONRPCRequest", "JSONRPCNotification", "JSONRPCResponse", "JSONRPCError"];
@@ -39,7 +38,7 @@ function isAllowed(value: string, allowed: readonly string[]): boolean {
 
 /**
  * Checked here, not through the SDK's `allowedHosts` option: that option is deprecated and answers
- * a bad Host with 403, where the Python server answers 421.
+ * a bad Host with 403, not TransportSecurityMiddleware's 421.
  */
 export function checkTransportSecurity(
   request: Request,

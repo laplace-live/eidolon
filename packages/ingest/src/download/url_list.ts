@@ -10,8 +10,8 @@ function readUtf8(path: string): string {
 }
 
 /**
- * `read_url_list`: every line, stripped, that is neither blank nor a `#` comment, in order and with
- * repeats. Throws FileNotFoundError "URL list not found: <path>" when `path` doesn't exist.
+ * Every line, stripped, that is neither blank nor a `#` comment, in order and with repeats. Throws
+ * FileNotFoundError "URL list not found: <path>" when `path` doesn't exist.
  */
 export function readUrlList(path: string): string[] {
   if (!existsSync(path)) throw pyError("FileNotFoundError", `URL list not found: ${path}`);

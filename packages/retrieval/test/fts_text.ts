@@ -1,4 +1,4 @@
-// The text the Python ingest tokenized into each table's `tokens` column, for the parity checks.
+// The text the ingest tokenizes into each table's `tokens` column, for the parity checks.
 import { pyStr } from "@eidolon/config";
 
 function decodedList(raw: unknown): unknown[] {
@@ -12,14 +12,13 @@ function decodedList(raw: unknown): unknown[] {
 
 const str = (value: unknown) => (typeof value === "string" ? value : "");
 
-/** persona_facts: ingest_facts.py tokenizes the stored text as is. */
+/** persona_facts: the stored text, as is. */
 export function factFtsText(row: Record<string, unknown>): string {
   return str(row.text);
 }
 
 /**
- * stream_chunks: ingest_streams.py tokenizes the refined fields when there are any, else the
- * heading and the raw transcript.
+ * stream_chunks: the refined fields when there are any, else the heading and the raw transcript.
  */
 export function chunkFtsText(row: Record<string, unknown>): string {
   const topics = decodedList(row.topics);

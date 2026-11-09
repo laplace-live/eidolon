@@ -1,7 +1,6 @@
-// The pipeline library against Python's tools/pipeline.py: the summary text, the transcribe
-// stage's planning and runs, the plan, and batches. fixtures/pipeline/golden.json holds Python's
-// side (pipeline_helpers.ts says how it was made); Soniox, the refine provider and the embedding
-// API are fakes.
+// The pipeline library against fixtures/pipeline/golden.json (see pipeline_helpers.ts): the
+// summary text, the transcribe stage's planning and runs, the plan, and batches. Soniox, the refine
+// provider and the embedding API are fakes.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   existsSync,
@@ -90,7 +89,7 @@ function base(overrides: Partial<pipeline.PipelineOptions> = {}): pipeline.Pipel
   };
 }
 
-/** Python's no-date hint names its module; the port names the command that runs it. */
+/** The golden's no-date hint, with the command the pipeline names in place of its module. */
 function portHint(message: string): string {
   return message.replace(
     /`tools\.transcribe (.*) --date YYYY-MM-DD`/,

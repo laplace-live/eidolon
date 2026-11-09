@@ -33,7 +33,7 @@ const goldens = await golden<Case[]>("search.json");
 let restoreEnv = () => {};
 let logs!: ReturnType<typeof captureLogs>;
 beforeEach(() => {
-  // Python's default --db-path, which the goldens were recorded with.
+  // The --db-path the goldens were recorded with.
   restoreEnv = setEnv({
     STREAM_ARCHIVE_CANDIDATES: undefined,
     PERSONA_TIMEZONE: undefined,
@@ -84,8 +84,8 @@ async function run(c: Case) {
   return { code, stdout: out.stdout(), stderr: out.stderr(), opened, calls };
 }
 
-// [AD] The missing-table hint names the TypeScript command and the persona; Python's goldens
-// keep their `uv run` line.
+// The missing-table hint names the `bun run` command and the persona; the goldens keep a `uv run`
+// line.
 const PYTHON_HINT = "Run `uv run laplace-ingest-streams` first.";
 const PORT_HINT = "Run `bun run laplace-ingest-streams --persona milky-green` first.";
 

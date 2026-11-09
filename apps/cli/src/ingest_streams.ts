@@ -149,7 +149,7 @@ export function parseIngestStreamsArgs(argv: readonly string[]): IngestStreamsAr
     streamsDir: (ns.streams_dir as string | null) ?? sourceFolder(persona, "streams"),
     dbPath: writerDbPath(spec, ns.db_path as string | null, personaFlag, persona),
     table: ns.table as string,
-    // `--skip-types ''` drops nothing, as in Python.
+    // `--skip-types ''` drops nothing; only an absent flag takes the default.
     skipTypes: ingestStreams.parseSkipTypes(ns.skip_types as string),
     dryRun: ns.dry_run as boolean,
     cachePath: ns.no_cache ? null : ((ns.cache_path as string | null) ?? embedCachePath()),

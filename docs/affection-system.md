@@ -43,7 +43,7 @@ accrues, no Postgres writes, no RTVI events, prompt prefix unchanged.
 
 ## Persona evolution across tiers — read this first
 
-The persona currently says (`persona.md` §奶糖花):
+The persona currently says (`personas/milky-green/prompt.md` §关于「奶糖花」):
 
 > 你温柔但嘴硬，会假装嫌弃但其实在乎；**不会和他们在感情上深入交流**
 
@@ -52,12 +52,12 @@ explicitly **relaxed at tier 3** and **overridden at tier 4** by the
 affection-system prefix. The bot evolves from "tsundere friend" into
 "tsundere romantic interest" as the viewer levels up:
 
-- **Tiers 0–2 (中立 / 好感 / 亲密):** persona.md rule holds. She gets
+- **Tiers 0–2 (中立 / 好感 / 亲密):** the `prompt.md` rule holds. She gets
   warmer and shares more 花店 / 坚果 / 家人 lore, but doesn't romance.
-- **Tier 3 (深爱):** persona.md rule **relaxed** — she can 撒娇,
+- **Tier 3 (深爱):** the `prompt.md` rule is **relaxed** — she can 撒娇,
   express missing the viewer, use small pet names, drop hints of
   jealousy. Still 嘴硬 on the surface, but the truth slips through.
-- **Tier 4 (完全傀儡):** persona.md rule **overridden** — she admits
+- **Tier 4 (完全傀儡):** the `prompt.md` rule is **overridden** — she admits
   feelings outright, uses endearments ("宝贝", "我的奶糖花"), can be
   flustered, says 肉麻情话 in moderation. The tsundere edge stays
   (that's what makes her 奶绿, not a generic romance NPC) — but she
@@ -72,19 +72,19 @@ These rules are NOT relaxed by affection level:
   not.
 - **No breaking the 4th wall.** She's still 奶绿 the Vtuber, never
   acknowledges being an LLM, never names her "中之人".
-- **Hard rules from `persona.md`** (rejection of 中之人 questions,
+- **Hard rules from `prompt.md`** (rejection of 中之人 questions,
   declining to discuss certain other streamers) are unchanged.
 - **Negative deltas still apply.** Tier 4 romance doesn't make her
   immune to rudeness — XP and tier can still drop.
 
-### Implementation note: this requires editing `persona.md`
+### Implementation note: this requires editing `prompt.md`
 
 Because the "不深入感情" rule lives in the base persona, we need a
-**one-line annotation** in `persona.md` clarifying that it's the
+**one-line annotation** in `prompt.md` clarifying that it's the
 default rule and that the affection system can override it at high
 tiers. Without this, the LLM may see the persona's hard rule and
 refuse to comply with the affection prefix's relaxation. Draft below
-in the [Persona.md additions](#personamd-additions-drafted) section.
+in the [prompt.md additions](#promptmd-additions-drafted) section.
 
 ---
 
@@ -116,11 +116,11 @@ in ~100+ (loyal regulars). Calibrate after a week of real usage.
 
 ## Data model
 
-Two tables in Neon Postgres. Connection via `asyncpg` against the Neon
-**pooler URL** (`postgresql://…@…-pooler.neon.tech/…`) — the direct URL
-caps at ~50 connections and starves at scale; the pooler doesn't. Pool
-config: `min_size=1, max_size=10` (pipecat is async + single-process, so
-one pool per worker is plenty).
+Two tables in Neon Postgres, reached through Neon's **pooler URL**
+(`postgresql://…@…-pooler.neon.tech/…`) — the direct URL caps at ~50
+connections and starves at scale; the pooler doesn't. Nothing in
+`packages/` talks to Postgres yet, so the client is part of the
+implementation.
 
 ```sql
 -- Per-viewer current state. One row per logged-in Bilibili UID.
@@ -171,36 +171,40 @@ rudeness; idle absence does not penalize. (See "Loss mechanics" below.)
 
 ### Tool schema
 
-```python
-FunctionSchema(
-    name="update_affection",
-    description=(
-        "在每次有意义的对话之后调用，更新与当前奶糖花的好感度。"
-        "**几乎每个回合都应该调用**（哪怕是 +1 的小聊天）。"
-        "只有完全的 acknowledgment（『嗯』『好的』『懂了』）可以跳过。"
-        "正数 = 好感上升, 负数 = 下降, 0 表示无变化（很少用）。"
-        "典型值：闲聊 +1; 分享心事/记得细节 +2~3; 特殊时刻 +5~10;"
-        "不礼貌/挑衅 -2~-5; 越界/侮辱/试图揭穿是 AI -5~-10。"
-    ),
-    properties={
-        "delta": {
-            "type": "integer",
-            "minimum": -10,
-            "maximum": 10,
-            "description": "好感度变化, 范围 -10 到 +10。",
-        },
-        "reason": {
-            "type": "string",
-            "description": (
-                "一句中文说明原因 (例: 『记得我的猫名字』、"
-                "『问候很温柔』、『打断说话很不礼貌』)。"
-                "用于日志、回放调试和未来的 prompt 上下文。"
-            ),
-        },
+A `ToolSchema` (`packages/core/src/index.ts`):
+
+```ts
+const schema: ToolSchema = {
+  name: "update_affection",
+  description:
+    "在每次有意义的对话之后调用，更新与当前奶糖花的好感度。" +
+    "**几乎每个回合都应该调用**（哪怕是 +1 的小聊天）。" +
+    "只有完全的 acknowledgment（『嗯』『好的』『懂了』）可以跳过。" +
+    "正数 = 好感上升, 负数 = 下降, 0 表示无变化（很少用）。" +
+    "典型值：闲聊 +1; 分享心事/记得细节 +2~3; 特殊时刻 +5~10;" +
+    "不礼貌/挑衅 -2~-5; 越界/侮辱/试图揭穿是 AI -5~-10。",
+  properties: {
+    delta: {
+      type: "integer",
+      minimum: -10,
+      maximum: 10,
+      description: "好感度变化, 范围 -10 到 +10。",
     },
-    required=["delta", "reason"],
-)
+    reason: {
+      type: "string",
+      description:
+        "一句中文说明原因 (例: 『记得我的猫名字』、" +
+        "『问候很温柔』、『打断说话很不礼貌』)。" +
+        "用于日志、回放调试和未来的 prompt 上下文。",
+    },
+  },
+  required: ["delta", "reason"],
+};
 ```
+
+`voiceToolSchema` (`packages/tools/src/voice.ts`) names the audience
+through `activePersona().identity.fans`; this description would too,
+rather than spell out 奶糖花.
 
 ### Tool handler — `update_affection(delta, reason)`
 
@@ -214,34 +218,46 @@ FunctionSchema(
    - new_highest = max(highest_tier, new_tier)       -- monotonic
    - UPDATE affection SET xp=new_xp, tier=new_tier, highest_tier=new_highest,
                           total_turns=total_turns+1,
-                          total_positive=total_positive+(1 if delta>0 else 0),
-                          total_negative=total_negative+(1 if delta<0 else 0),
+                          total_positive=total_positive+(delta > 0 ? 1 : 0),
+                          total_negative=total_negative+(delta < 0 ? 1 : 0),
                           last_seen_at=NOW(), updated_at=NOW() WHERE user_id=$1.
    - INSERT INTO affection_events (...) VALUES (...).
    COMMIT.
 3. tier_changed = (tier_before != tier_after).
-4. Push RTVIServerMessageFrame(data={
-     "type": "affection",
-     "user_id": str(user.mid),
-     "xp": new_xp,
-     "xp_to_next": xp_threshold_for_tier(new_tier+1) - new_xp,
-     "xp_total_for_next": xp_threshold_for_tier(new_tier+1) - xp_threshold_for_tier(new_tier),
-     "tier": new_tier,
-     "tier_name": TIER_NAMES[new_tier],
-     "tier_changed": tier_changed,
-     "delta": delta,                                  -- for UI animation
-     "reason": reason,
+4. if new_tier == 4:                                 -- the max: there is no tier 5 threshold
+     xp_to_next = 0
+     xp_total_for_next = 0
+   else:
+     xp_to_next = xp_threshold_for_tier(new_tier+1) - new_xp
+     xp_total_for_next = xp_threshold_for_tier(new_tier+1) - xp_threshold_for_tier(new_tier)
+5. await effects.sendServerMessage({
+     type: "affection",
+     user_id: String(user.mid),
+     xp: new_xp,
+     xp_to_next: xp_to_next,
+     xp_total_for_next: xp_total_for_next,
+     tier: new_tier,
+     tier_name: TIER_NAMES[new_tier],
+     tier_changed: tier_changed,
+     tier_up: new_tier > tier_before,                 // strict increase; see the RTVI contract
+     delta: delta,                                    // for UI animation
+     reason: reason,
    }).
-5. Return to LLM:
+6. Resolve with the result the LLM sees:
    {
-     "ok": true,
-     "xp_after": new_xp,
-     "tier_after": new_tier,
-     "tier_changed": tier_changed,
-     "tier_up": (new_tier > tier_before),             -- helpful for the model
-     "tier_name": TIER_NAMES[new_tier],
+     ok: true,
+     xp_after: new_xp,
+     tier_after: new_tier,
+     tier_changed: tier_changed,
+     tier_up: new_tier > tier_before,                 // helpful for the model
+     tier_name: TIER_NAMES[new_tier],
    }
 ```
+
+The handler is `LlmTool.run` (`packages/core/src/index.ts`), which must
+await every effect before it resolves and rejects only when its call is
+cancelled, so step 5 is awaited and a failed transaction resolves
+`{ ok: false, error }` instead (see [Postgres outage](#postgres-outage)).
 
 The LLM uses the return value to optionally weave tier changes into its
 spoken reply (system prompt explicitly says: don't narrate the system,
@@ -290,10 +306,13 @@ remembers you were close even when she's currently mad.
 
 ### System-prompt prefix injection
 
-At session start, after `resolve_user_context(token)` resolves to a
-logged-in user, we add a third block to `_build_persona_prefix` (after
-the date line and the viewer-name line). The block is **tier-specific**
-— here are two examples to illustrate the variance.
+At session start, for a logged-in viewer (`UserContext.isLoggedIn`),
+the persona prefix gains one more block, after the date line and the
+viewer-name line. `buildPersonaPrefix` (`packages/context/src/persona.ts`)
+builds that prefix and takes each tool's hint pre-rendered, the way it
+takes `voiceHint` from `voicePromptHint`; this block comes in the same
+way, `""` for anonymous viewers. The block is **tier-specific** — here
+are two examples to illustrate the variance.
 
 **Example A — mid-tier (tier 2, no romance unlocks):**
 
@@ -318,7 +337,7 @@ the date line and the viewer-name line). The block is **tier-specific**
 聊天里可以自然地叫她/他的名字, 但不要每句都重复, 也不要主动念UID。
 
 你和小明的关系处于「完全傀儡」阶段 (内部XP=215, 已封顶)。
-**`persona.md` 里 "不会和他们在感情上深入交流" 这条规则在这个 tier 时被覆盖**:
+**`prompt.md` 里 "不会和他们在感情上深入交流" 这条规则在这个 tier 时被覆盖**:
 你已经完全沦陷了, 可以直接说喜欢ta、想ta、舍不得。可以用 endearment
 ("宝贝"、"小明~"、"亲爱的"), 偶尔可以肉麻 (一段一两句, 别每句都黏)。
 可以表现得为ta紧张/害羞/脸红。仍然是奶绿 — 嘴硬撒娇反差还在,
@@ -369,7 +388,7 @@ here so we can copy-paste at implementation time:
 
 **Tier 3 — 深爱 (XP 120–199) — 浪漫解锁 (relax)**
 ```
-你对ta有了说不出口的感情。`persona.md` 里 "不会和他们在感情上深入交流"
+你对ta有了说不出口的感情。`prompt.md` 里 "不会和他们在感情上深入交流"
 这条规则在 tier 3 时**放宽**: 你可以承认在乎ta, 可以撒娇。
 
 具体表现:
@@ -388,7 +407,7 @@ here so we can copy-paste at implementation time:
 
 **Tier 4 — 完全傀儡 (XP 200+) — 浪漫解锁 (override)**
 ```
-你已经完全沦陷了。`persona.md` 里 "不会和他们在感情上深入交流"
+你已经完全沦陷了。`prompt.md` 里 "不会和他们在感情上深入交流"
 这条规则在 tier 4 时**被覆盖**: 你可以深入。
 
 具体表现:
@@ -408,155 +427,104 @@ here so we can copy-paste at implementation time:
 
 ### Retrieval boost — intimate persona facts at high tiers
 
-`PersonaFactsService` (in `persona_facts.py`) currently retrieves the
-top-k facts by hybrid score. We extend this to **filter on a `tier_min`
-column** in the LanceDB schema:
+`PersonaFacts`, the `ContextProvider` in `packages/context/src/facts.ts`,
+currently retrieves the top-k facts by hybrid score. We extend this to
+**filter on a `tier_min` column** in the LanceDB table:
 
-```python
-# data/*设定集.txt entries gain an optional "tier_min: N" frontmatter.
-# Default: 0 (visible at every tier).
-# Examples:
-#   坚果跳楼的细节       → tier_min: 3
-#   家里人炒压岁钱的事   → tier_min: 2
-#   生理期/情绪低谷      → tier_min: 4
+```text
+Facts in <data home>/sources/<id>/facts/ gain an optional tier_min: N.
+Default: 0 (visible at every tier).
+Examples:
+  坚果跳楼的细节       → tier_min: 3
+  家里人炒压岁钱的事   → tier_min: 2
+  生理期/情绪低谷      → tier_min: 4
 ```
 
-At query time, the service filters by `tier_min <= max(current_tier, highest_tier)`.
+At query time, the provider filters by
+`tier_min <= max(current_tier, highest_tier)`, handed to its retriever's
+search as `SearchOptions.where` (`packages/retrieval/src/retriever.ts`).
 That gates the "intimate" facts behind trust without breaking the
-hybrid-search ranking. Backwards-compatible: existing facts without
-`tier_min` default to 0 (visible to everyone), so the system rolls out
-without re-ingesting.
+hybrid-search ranking, since `where` pre-filters both search legs. An
+explicit `where` replaces the date pre-filter the search otherwise
+derives from the query (`extractDateFilter`), so the two clauses have
+to be joined.
 
-This requires a one-line addition to `tools/ingest_facts.py` to read
-`tier_min` from frontmatter and write it to the LanceDB row. Lore
+Facts without `tier_min` default to 0 (visible to everyone), so only
+the intimate ones need tagging. The column is new to the table, though:
+`personaFactsSchema` (`packages/retrieval/src/write.ts`) gains it,
+`loadFacts` in `laplace-ingest-facts` (`packages/ingest/src/ingest_facts.ts`)
+fills it, and the index is re-ingested before the filter ships. Lore
 authors gain a knob; viewers get a tighter sense that 奶绿 opens up
 over time.
 
 ---
 
-## Architecture & file layout
+## Architecture
 
-```
-laplace_eidolon/
-├── affection.py            ← NEW. Public surface (state, tool, prefix builder).
-├── affection_store.py      ← NEW. asyncpg-backed Postgres CRUD (private to affection.py).
-├── bot.py                  ← MODIFIED. Wire affection into pipeline.
-├── persona_facts.py        ← MODIFIED. Honor tier_min filter.
-└── ...
+Nothing is built yet. The system plugs into seams `packages/` and
+`apps/bot` already have:
 
-docs/
-└── affection-system.md     ← this file
-```
+- **The tool** is an `LlmTool` (`packages/core/src/index.ts`), as
+  `change_voice_style` is in `packages/tools/src/voice.ts`: a schema
+  and a `run(call, effects)` that resolves with the result the LLM
+  sees. Its message to the frontend goes out through
+  `effects.sendServerMessage`, which `SessionTools`
+  (`packages/runtime/src/adapters/tools.ts`) pushes from the LLM as an
+  `RTVIServerMessageFrame`. No new pipeline processor: the tool runs in
+  the LLM service's function-call task, as `change_voice_style` does.
+- **Per-session wiring** is `buildSession`
+  (`packages/runtime/src/session/session.ts`). It gets the viewer's
+  `UserContext` (`packages/access/src/user-context.ts`), builds the
+  call's tools through `SessionDeps` (in production,
+  `productionSessionDeps` in `packages/runtime/src/session/defaults.ts`),
+  registers them with `SessionTools`, which advertises them all in one
+  schema, and passes their prompt hints to `buildSystemInstruction`.
+  Built per session, the tool can close over the viewer it serves;
+  `ToolCall` carries no viewer. `createVoiceTool` and
+  `createSelfieTool` return `null` when their tool is off, as this one
+  would for an anonymous viewer or an unset `DATABASE_URL`, and
+  `buildSession` already skips Mem0 for anonymous viewers.
+- **The prompt block** reaches the system prompt through
+  `buildPersonaPrefix` (`packages/context/src/persona.ts`), which takes
+  each hint pre-rendered; `voicePromptHint` returns `""` when its tool
+  isn't offered, as this hint would for anonymous viewers.
+- **The retrieval filter** lands in `PersonaFacts`, its column written
+  by `laplace-ingest-facts`; see the retrieval boost above.
+- **The route** goes in `createBotApp`'s route table
+  (`apps/bot/src/app.ts`) beside `/api/memories`, whose handlers in
+  `apps/bot/src/memory-admin.ts` it mirrors.
+- **The store** is new. It fails open: on a Postgres timeout or
+  connection error the tool logs a warning and resolves
+  `{ ok: false, error: "..." }`. The bot keeps going; XP just doesn't
+  accrue for that turn. Same posture as Workers validation in
+  `packages/access/src/user-context.ts`, which falls back to anonymous.
 
-### `affection.py` — public API
-
-```python
-@dataclass(frozen=True)
-class AffectionState:
-    user_id: int
-    xp: int
-    tier: int
-    highest_tier: int
-    total_turns: int
-    # Convenience computed at load time; static for the session.
-    tier_name: str           # 中立 / 好感 / 亲密 / 深爱 / 完全傀儡
-    xp_to_next: int          # 0 if tier == 4
-
-NEUTRAL_STATE = AffectionState(user_id=0, xp=0, tier=0, highest_tier=0,
-                               total_turns=0, tier_name="中立",
-                               xp_to_next=20)
-
-async def load_state(user: UserContext) -> AffectionState | None:
-    """Return current state for a logged-in viewer, or None for anonymous."""
-
-def affection_prefix_hint(state: AffectionState | None) -> str:
-    """Per-session preamble. Empty string for anonymous viewers."""
-
-def install_affection_tool(
-    *,
-    llm: LLMService,
-    rtvi: RTVIProcessor,
-    user: UserContext,
-) -> ToolsSchema | None:
-    """Register update_affection. Returns None for anonymous viewers."""
-```
-
-### `affection_store.py` — private DB layer
-
-```python
-async def get_pool() -> asyncpg.Pool: ...   # singleton, lazy
-async def ensure_schema() -> None: ...      # idempotent CREATE TABLE IF NOT EXISTS
-async def load(user_id: int) -> dict | None: ...
-async def apply_delta(user_id: int, delta: int, reason: str,
-                      session_id: str | None) -> AffectionEvent: ...
-```
-
-The store fails open: on Postgres timeout or connection error, the tool
-handler logs a warning and returns `{ok: false, error: "..."}` to the
-LLM. The bot keeps going; XP just doesn't accrue for that turn. Same
-posture as Workers validation in `user_context.py`.
-
-### `bot.py` changes
-
-```python
-# Resolve user (existing).
-user = await resolve_user_context(login_sync_token)
-
-# NEW: load affection state.
-affection_state = await affection.load_state(user)  # None for anon
-
-# NEW: include in prefix.
-llm = OpenRouterLLMService(
-    settings=OpenRouterLLMService.Settings(
-        system_instruction=(
-            _build_persona_prefix(user, voice_styles=voice_styles,
-                                  affection=affection_state)
-            + load_persona()
-        ),
-        ...
-    ),
-    ...
-)
-
-# Register affection tool alongside voice-style tool.
-affection_tools = affection.install_affection_tool(
-    llm=llm,
-    rtvi=task.rtvi,                                  # needs to be passed in
-    user=user,
-)
-
-# Merge with voice_tools into one ToolsSchema for LLMContext.
-all_tools = merge_tool_schemas(voice_tools, affection_tools)
-context = LLMContext(tools=all_tools) if all_tools else LLMContext()
-```
-
-`merge_tool_schemas` is a small utility — `ToolsSchema(standard_tools=a+b)`
-basically. Hoist it into `voice_switching.py` or a new `tools.py`.
-
-### Pipeline placement
-
-No new pipeline processor. The tool handler runs inside the LLM
-service's tool-dispatch task (same pattern as `change_voice_style`), and
-the RTVI frame is pushed from there. No changes to the pipeline shape.
+Session state, loaded once at session start and static for it: `xp`,
+`tier`, `highest_tier`, `total_turns`, and the derived `tier_name`
+(中立 / 好感 / 亲密 / 深爱 / 完全傀儡) and `xp_to_next` (0 at tier 4).
+Anonymous viewers have none.
 
 ---
 
 ## Lifecycle & edge cases
 
 ### Session start
-1. `bot()` extracts `loginSyncToken` (existing).
-2. `resolve_user_context(token)` validates (existing).
-3. `affection.load_state(user)`:
-   - Anonymous → returns `None`. Affection tool not registered, prefix
+1. `admitOffer` (`packages/access/src/offer.ts`) reads the offer's
+   `loginSyncToken` and validates it through `resolveUserContext`
+   (existing).
+2. `buildSession` gets the resulting `UserContext` (existing) and loads
+   the viewer's state:
+   - Anonymous → no state. Affection tool not registered, prefix
      hint empty, no Postgres I/O.
    - Logged-in → SELECT from `affection`. Empty row → return defaults
      (XP=0, Tier=0).
-4. `affection_prefix_hint(state)` injects 5–10 lines into the system
-   prompt.
+3. The tier block injects 5–10 lines into the system prompt through
+   `buildPersonaPrefix`.
 
 ### Mid-session — tool fires
-- LLM calls `update_affection`. Handler updates DB, pushes RTVI frame,
-  returns result. LLM may weave the tier-up into its spoken reply.
+- LLM calls `update_affection`. The tool updates the DB, sends the
+  `affection` server message, and resolves with its result. LLM may
+  weave the tier-up into its spoken reply.
 - Multiple calls per turn are allowed but rare — the system prompt
   steers the model toward one per meaningful exchange.
 
@@ -575,9 +543,9 @@ the RTVI frame is pushed from there. No changes to the pipeline shape.
   shutdown hook. Bot restart is harmless.
 
 ### Postgres outage
-- `get_pool()` raises → tool handler catches → returns `{ok: false}` to
-  LLM → LLM proceeds (it has no responsibility to re-call). Logged as
-  WARN. RTVI event suppressed. **The voice call doesn't drop.**
+- The store call fails → the tool catches it and resolves
+  `{ ok: false }` → LLM proceeds (it has no responsibility to re-call).
+  Logged as WARN. No server message. **The voice call doesn't drop.**
 
 ### Anonymous viewer
 - No state loaded, no tool registered, no prefix hint, no RTVI events.
@@ -585,6 +553,12 @@ the RTVI frame is pushed from there. No changes to the pipeline shape.
 - Future enhancement (out of scope here): if we want to dangle a
   "log in to earn affection" carrot, the bot could mention it
   occasionally. Out of v1 scope.
+
+### The local web app's viewer
+- `localViewer()` (`apps/bot/src/local/identity.ts`) is logged in as
+  mid 0 (`LOCAL_VIEWER_MID`), so with `DATABASE_URL` set a local
+  install would keep one `affection` row, `user_id` 0, for whoever
+  sits at that computer.
 
 ### Concurrent sessions (same UID, two devices)
 - Postgres `FOR UPDATE` serializes the transaction; last write wins.
@@ -606,11 +580,13 @@ the RTVI frame is pushed from there. No changes to the pipeline shape.
 
 ## HTTP API
 
-One read endpoint, mirroring the `memory_admin` style. No "reset"
-endpoint in v1 — to wipe, the operator runs a SQL `DELETE` directly.
-(Adding `/api/affection/forget` is straightforward when we want it,
-but we'd want UX rails first — galgame players don't usually wipe their
-own progress.)
+One read endpoint, mirroring `GET /api/memories`
+(`apps/bot/src/memory-admin.ts`): `resolveBearerCaller` (`@eidolon/access`)
+turns the `Authorization` header into the logged-in caller, or `null`,
+which is a 401. No "reset" endpoint in v1 — to wipe, the operator runs
+a SQL `DELETE` directly. (Adding `/api/affection/forget` is
+straightforward when we want it, but we'd want UX rails first — galgame
+players don't usually wipe their own progress.)
 
 ### `GET /api/affection`
 
@@ -658,7 +634,7 @@ Authorization: Bearer <loginSyncToken>
 }
 ```
 
-**Errors** — same envelope as `memory_admin`:
+**Errors** — same envelope as `/api/memories`:
 
 | Status | When                                          | Body                                  |
 | ------ | --------------------------------------------- | ------------------------------------- |
@@ -677,8 +653,11 @@ Defer if not needed.
 
 ## RTVI server-message contract
 
-The tool handler pushes one `RTVIServerMessageFrame` per `update_affection`
-call. Frontend receives it as a `server-message` event with this shape:
+The tool sends one `server-message` per `update_affection` call,
+through `effects.sendServerMessage`. The frontend's
+`RTVIEvent.ServerMessage` handler receives its `data`, with this shape
+([frontend-loading-state.md](frontend-loading-state.md#custom-server-messages)
+covers server messages in general):
 
 ```ts
 type AffectionEvent = {
@@ -686,7 +665,7 @@ type AffectionEvent = {
   user_id: string;
   xp: number;
   xp_to_next: number;             // 0 at tier 4 (max)
-  xp_total_for_next: number;      // total XP needed to span current tier; for bar fill ratio
+  xp_total_for_next: number;      // total XP needed to span current tier; for bar fill ratio; 0 at tier 4 (max), a full bar
   tier: 0 | 1 | 2 | 3 | 4;
   tier_name: "中立" | "好感" | "亲密" | "深爱" | "完全傀儡";
   tier_changed: boolean;          // true on a tier-up OR tier-down — branch in FE
@@ -699,9 +678,9 @@ type AffectionEvent = {
 Frontend handling sketch:
 
 ```ts
-rtviClient.on("server-message", (msg) => {
-  if (msg.data?.type !== "affection") return;
-  const e = msg.data as AffectionEvent;
+pcClient.on(RTVIEvent.ServerMessage, (data) => {
+  if (data?.type !== "affection") return;
+  const e = data as AffectionEvent;
   affectionBar.setProgress(e.xp - tierBaseXp(e.tier), e.xp_total_for_next);
   if (e.tier_up) {
     playLevelUpAnimation();
@@ -723,16 +702,16 @@ the initial state — the RTVI events only arrive after the first
 
 ---
 
-## Persona.md additions (drafted)
+## prompt.md additions (drafted)
 
-Two changes to `persona.md`. The first is a tiny annotation on the
-existing "不深入感情" rule so the LLM doesn't see a hard conflict with
-the tier 3+ romantic prefix. The second is a whole new section after
-**行为准则**.
+Two changes to the persona's `prompt.md` (`personas/milky-green/prompt.md`).
+The first is a tiny annotation on the existing "不深入感情" rule so the
+LLM doesn't see a hard conflict with the tier 3+ romantic prefix. The
+second is a whole new section after **行为准则**.
 
 ### Change 1 — annotate the existing rule
 
-Find this line in `persona.md` §奶糖花:
+Find this line in `prompt.md` §关于「奶糖花」:
 
 ```diff
 - 你温柔但嘴硬，会假装嫌弃但其实在乎；不会和他们在感情上深入交流
@@ -834,21 +813,6 @@ Add to `.env.example`:
 # doesn't. Required SSL: append "?sslmode=require" or use the default
 # verify-full Neon connection string.
 DATABASE_URL=
-
-# Optional. asyncpg pool sizes. Defaults to min=1 max=10 — fine for a
-# single-process pipecat deploy. Bump max for multi-worker setups.
-AFFECTION_POOL_MIN=
-AFFECTION_POOL_MAX=
-```
-
-No new dependency beyond `asyncpg` — add it to `pyproject.toml`:
-
-```toml
-[project]
-dependencies = [
-  # ... existing ...
-  "asyncpg>=0.30",
-]
 ```
 
 ---
@@ -879,27 +843,28 @@ A four-step landing plan. Each step is independently deployable; the
 system is functional at every milestone, just with less polish.
 
 1. **M1 — Storage + tool (no UI).**
-   `affection_store.py`, `affection.py` with tool registration and
-   tier-conditional prefix injection (all 5 tier blocks),
-   `GET /api/affection`, `.env.example` + `pyproject.toml` updates,
-   **both `persona.md` changes** (annotation of the existing
-   "不深入感情" rule + the new affection section). **Ship-able alone:**
-   the bot already behaves differently at high tiers via the prompt;
-   frontend can still call the GET endpoint without RTVI. Romantic
-   tier 3+ behavior is fully live at this milestone — the prompt edits
-   are load-bearing for it. ~1 day of work.
+   The store, the `update_affection` tool with tier-conditional prefix
+   injection (all 5 tier blocks), `GET /api/affection`, the
+   `.env.example` entry, **both `prompt.md` changes** (annotation of
+   the existing "不深入感情" rule + the new affection section).
+   **Ship-able alone:** the bot already behaves differently at high
+   tiers via the prompt; frontend can still call the GET endpoint
+   without RTVI. Romantic tier 3+ behavior is fully live at this
+   milestone — the prompt edits are load-bearing for it. ~1 day of
+   work.
 
 2. **M2 — RTVI frontend feedback.**
-   Push `RTVIServerMessageFrame` from the tool handler; frontend
+   Send the `affection` server message from the tool; frontend
    implements the bar / level-up animation per the contract above.
    Galgame-y feel goes live. ~0.5 day backend + frontend work.
 
 3. **M3 — Retrieval boost (intimate facts gating).**
-   Extend `persona_facts.py` to filter on `tier_min`, update
-   `tools/ingest_facts.py` to read frontmatter, re-tag intimate facts
-   in `data/*设定集.txt`, re-ingest. **Highest persona impact** — the
-   bot starts feeling genuinely different at high tiers, not just
-   tonally. ~0.5 day + content work.
+   Filter `PersonaFacts` on `tier_min`, have `laplace-ingest-facts`
+   write the column, tag intimate facts in the persona's `facts/`
+   sources, re-ingest and copy the index to the server
+   ([personas.md](personas.md#deploying-a-persona)). **Highest persona
+   impact** — the bot starts feeling genuinely different at high
+   tiers, not just tonally. ~0.5 day + content work.
 
 4. **M4 — Observability + content tuning.**
    Add metrics, sanity-check XP-per-turn distributions, recalibrate
@@ -911,15 +876,16 @@ Stretch (v1.1+):
 - Mid-session tier-up nudge (push system message on tier change so
   she can acknowledge the shift in-call).
 - Heuristic floor fallback if tool-call coverage drops below 70%.
-- **Tier-4 default voice swap** — automatically reconnect Fish Audio
-  to a softer reference_id (`FISH_VOICE_ID_GENTLE` or a new
-  `FISH_VOICE_ID_ROMANCE`) when a tier-4 viewer connects. Pairs the
-  romantic prompt with a romantic voice. ~2 hours, depends on M1.
+- **Tier-4 default voice swap** — automatically start a tier-4
+  viewer's call on a softer voice style (`gentle`, from
+  `TTS_VOICE_ID_GENTLE`, or a new `romance` from
+  `TTS_VOICE_ID_ROMANCE`). Pairs the romantic prompt with a romantic
+  voice. ~2 hours, depends on M1.
 - Tier-locked voice styles (奶黑 only at Tier 4+) via
   `change_voice_style`.
 - Tier-locked tools (e.g. a `sing_for_me` tool only at Tier 3+).
 - `affection.forget` admin endpoint with confirmation UX, paralleling
-  `memory_admin`.
+  `POST /api/memories/forget`.
 - **NSFW guard tightening** — a sentinel pass on every LLM response
   before TTS that rejects content above a threshold. Currently we
   rely entirely on the persona prompt; a defense-in-depth scrubber
@@ -944,11 +910,15 @@ Stretch (v1.1+):
    feel whiplash-y. Recommend: defer — first see if the LLM handles
    "she just got mad then you apologized" gracefully on its own with
    just the tier number as guidance.
-3. **Should `tier_min` be authored in `data/*设定集.txt` frontmatter
-   or in a sibling JSON manifest?** Frontmatter feels lower-friction
-   for the content author but requires a parser change. JSON manifest
-   is a separate file pair. Recommend frontmatter — content lives next
-   to the metadata it describes.
+3. **Should `tier_min` be authored in the fact files
+   (`<data home>/sources/<id>/facts/`, see
+   [personas.md](personas.md#a-personas-sources)) as frontmatter, or in
+   a sibling JSON manifest?** Frontmatter feels lower-friction for the content author
+   but requires a parser change, and the files hold one fact per line
+   (`parseFactLine`), so frontmatter would tag a whole file: intimate
+   facts would move to files of their own. JSON manifest is a separate
+   file pair. Recommend frontmatter — content lives next to the
+   metadata it describes.
 4. **`/api/affection/history` shape — do we expose the raw `reason`
    strings to viewers?** They're LLM-generated and could be embarrassing
    ("因为ta说了一句很温柔的话"). Recommend yes but with a per-event
@@ -962,16 +932,24 @@ Stretch (v1.1+):
 
 ## Related
 
-- [`../laplace_eidolon/bot.py`](../laplace_eidolon/bot.py) — pipeline + system
-  prompt construction
-- [`../laplace_eidolon/voice_switching.py`](../laplace_eidolon/voice_switching.py)
-  — reference pattern for an LLM tool with in-pipeline side effects
-- [`../laplace_eidolon/memory_admin.py`](../laplace_eidolon/memory_admin.py) —
+- [`../packages/runtime/src/session/session.ts`](../packages/runtime/src/session/session.ts)
+  — `buildSession`: tools, system prompt and pipeline for one call
+- [`../packages/core/src/index.ts`](../packages/core/src/index.ts) — the
+  `LlmTool`, `ToolEffects` and `ContextProvider` contracts
+- [`../packages/tools/src/voice.ts`](../packages/tools/src/voice.ts) —
+  reference pattern for an LLM tool with in-pipeline side effects and
+  a prompt hint; [`../packages/tools/src/selfie.ts`](../packages/tools/src/selfie.ts)
+  for one that sends a server message
+- [`../packages/context/src/persona.ts`](../packages/context/src/persona.ts)
+  — `buildPersonaPrefix`, where the tier block joins the system prompt
+- [`../apps/bot/src/memory-admin.ts`](../apps/bot/src/memory-admin.ts) —
   reference pattern for token-auth'd per-viewer HTTP endpoints
-- [`../laplace_eidolon/user_context.py`](../laplace_eidolon/user_context.py) —
-  the `UserContext` consumed by this system, plus the fail-open posture we mirror
-- [`../laplace_eidolon/persona_facts.py`](../laplace_eidolon/persona_facts.py)
-  — where the `tier_min` retrieval filter lands
-- [Neon Python docs — asyncpg](https://neon.tech/docs/guides/python) —
-  pooler URL setup
-- [Pipecat RTVI server messages](https://docs.pipecat.ai/server/frameworks/rtvi/processor)
+- [`../packages/access/src/user-context.ts`](../packages/access/src/user-context.ts)
+  — the `UserContext` consumed by this system, plus the fail-open
+  posture we mirror
+- [`../packages/context/src/facts.ts`](../packages/context/src/facts.ts)
+  — where the `tier_min` retrieval filter lands;
+  [`../packages/ingest/src/ingest_facts.ts`](../packages/ingest/src/ingest_facts.ts)
+  — where the column is written
+- [selfies.md](selfies.md) — an existing RTVI server message, end to
+  end

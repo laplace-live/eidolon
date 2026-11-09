@@ -1,6 +1,6 @@
-// packages/ingest/test/fixtures/ingest_facts/golden.json holds tools/ingest_facts.py's main() runs
-// over synthetic fact files, printed by golden.py there with the embedding call stubbed. Each
-// replays here through ingestFactsMain, in order, over the same files, stub and EMBED_DIM.
+// packages/ingest/test/fixtures/ingest_facts/golden.json holds laplace-ingest-facts' runs over
+// synthetic fact files, with the embedding call stubbed. Each replays here through
+// ingestFactsMain, in order, over the same files, stub and EMBED_DIM.
 
 import { Database } from "bun:sqlite";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
@@ -83,7 +83,7 @@ afterEach(() => {
   resetEmbeddingClient();
 });
 
-/** golden.py's fake_vector and usage: a deterministic vector per text, tokens by code point. */
+/** The golden's embedding stub: a deterministic vector per text, tokens by code point. */
 function fakeClient(calls: Call[]) {
   return {
     async embedWithUsage(
@@ -96,7 +96,7 @@ function fakeClient(calls: Call[]) {
         let sum = 0;
         for (const ch of text) sum += ch.codePointAt(0) as number;
         const base = sum % 97;
-        // Python's -base is an int, so a 0 divides to 0.0, never -0.0.
+        // `0 - base`, not `-base`: for a base of 0 the golden's vectors hold 0.0, never -0.0.
         return [base / 7, (0 - base) / 3, 0.1 * base, 1 / (base + 3)];
       });
       return [
@@ -131,7 +131,7 @@ function utf8Column(table: unknown, name: string): string[] {
   );
 }
 
-/** golden.py's table_state: the row count, and digests of the rows as JSON and the vectors. */
+/** The golden's table state: the row count, and digests of the rows as JSON and the vectors. */
 async function tableState(dbPath: string, name: string): Promise<Scenario["state"]> {
   if (!existsSync(join(dbPath, `${name}.lance`))) return null;
   const table = (await openTable(dbPath, name)) as LanceTable;

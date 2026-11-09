@@ -1,4 +1,4 @@
-// Broadcast overviews from `stream_catalog.json`, which the offline Python chain writes. One parsed
+// Broadcast overviews from `stream_catalog.json`, which the offline chain writes. One parsed
 // copy per (path, mtime, size) is shared process-wide, so per-session instances never reparse.
 import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
@@ -89,7 +89,7 @@ function sceneFromJson(scene: unknown): BroadcastScene {
   };
 }
 
-/** `_broadcast_from_json`: throws on a missing required key, as Python does. */
+/** Throws on a missing required key. */
 export function broadcastFromJson(entry: unknown): Broadcast {
   const id = item(entry, "id") as string;
   const obj = entry as JsonObject;
@@ -226,8 +226,8 @@ async function scanLayout(bytes: Uint8Array, slicer: Slicer): Promise<Layout | n
 }
 
 /**
- * `_load_catalog`, parsed one broadcast at a time between yields: a single JSON.parse of the
- * whole file would stall every call's audio.
+ * Parsed one broadcast at a time between yields: a single JSON.parse of the whole file would stall
+ * every call's audio.
  */
 async function parseCatalog(path: string): Promise<readonly Broadcast[]> {
   const bytes = new Uint8Array(await Bun.file(path).arrayBuffer());
@@ -277,7 +277,7 @@ export function clearCatalogCache(): void {
   cache.clear();
 }
 
-// Python's process-wide _CATALOG_LOCK: one stamp check and load at a time, across instances.
+// Process-wide: one stamp check and load at a time, across instances.
 let lockTail: Promise<void> = Promise.resolve();
 
 async function withCatalogLock(fn: () => Promise<void>): Promise<void> {

@@ -1,5 +1,4 @@
-// Ports tests/test_mcp_server.py one to one (same names), then pins the Python server's observed
-// wire behavior that the port reproduces.
+// The MCP server's tools and tiers, then the wire behavior clients see, pinned byte for byte.
 import { describe, expect, test } from "bun:test";
 import { SlidingWindowQuota, type UserContext } from "@eidolon/access";
 import { type LogRecord, logger } from "@eidolon/config";

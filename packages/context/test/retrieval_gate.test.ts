@@ -46,7 +46,7 @@ function warnings(): string[] {
   return logs.records.filter((r) => r.level === "WARNING").map((r) => r.message);
 }
 
-/** Python's SlowSearch: blocks until released, and notices its cancellation. */
+/** A search that blocks until released, and notices its cancellation. */
 class SlowSearch {
   started = false;
   cancelled = false;
@@ -356,7 +356,7 @@ describe("RetrievalGate.decide", () => {
     expect((await gateWith(answering(() => " 0.9 ")).decide(state)).retrieve).toBe(true);
     expect((await gateWith(answering(() => true)).decide(state)).retrieve).toBe(true);
     expect((await gateWith(answering(() => "1_0e-2")).decide(state)).retrieve).toBe(false);
-    // NaN never compares >= 0.3, so Python skipped; parity keeps it.
+    // NaN never compares >= 0.3, so it reads as a skip.
     expect((await gateWith(answering(() => "nan")).decide(state)).retrieve).toBe(false);
     expect(warnings()).toEqual([]);
   });

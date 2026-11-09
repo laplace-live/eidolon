@@ -1,7 +1,6 @@
-// fixtures/streams-real.golden.json is what fixtures/streams-real.golden.py printed through
-// laplace_eidolon.tools._streams over the real transcripts: counts and hashes, no text. Transcripts
-// added since are left out. It skips when the transcripts it lists are absent or changed, unless
-// EIDOLON_REQUIRE_PARITY=1.
+// fixtures/streams-real.golden.json holds what parsing the real transcripts gives: counts and
+// hashes, no text. Transcripts added since are left out. It skips when the transcripts it lists
+// are absent or changed, unless EIDOLON_REQUIRE_PARITY=1.
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";

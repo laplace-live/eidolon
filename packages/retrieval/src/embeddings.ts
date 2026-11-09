@@ -55,8 +55,8 @@ export const EMBED_RETRY_BASE_DELAY = 1.0;
 export const MAX_EMBED_QUOTA_RETRIES = 10;
 export const EMBED_QUOTA_BACKOFF = 60.0;
 
-// The OpenAI SDK's transport policy, which the Python client ran under: 5 retries on connection
-// errors, timeouts, 408, 409, 429 and 5xx, a 600 s timeout, and Retry-After honoured up to 120 s.
+// The OpenAI SDK's transport policy with 5 retries: connection errors, timeouts, 408, 409, 429 and
+// 5xx are retried, the timeout is 600 s, and Retry-After is honoured up to 120 s.
 export const EMBED_HTTP_MAX_RETRIES = 5;
 export const EMBED_HTTP_TIMEOUT_SEC = 600;
 

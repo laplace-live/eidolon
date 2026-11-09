@@ -1,5 +1,5 @@
-// The schemas and the written tables are compared with what Python's build_arrow_schema and
-// write_table made of the same rows (write_golden.ts). The real tables are in write_real.test.ts.
+// The schemas, and the tables written from the golden's rows, are compared with the golden
+// (write_golden.ts). The real tables are in write_real.test.ts.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

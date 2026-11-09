@@ -1,6 +1,6 @@
-// The write side against 奶绿's real index and embedding cache in EIDOLON_REAL_HOME, which Python
-// built, read only: tables are rewritten into a temporary folder and the cache is cloned there.
-// Each test skips without the data, unless EIDOLON_REQUIRE_PARITY=1.
+// The write side against 奶绿's real index and embedding cache in EIDOLON_REAL_HOME, read only:
+// tables are rewritten into a temporary folder and the cache is cloned there. Each test skips
+// without the data, unless EIDOLON_REQUIRE_PARITY=1.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { constants, copyFileSync, existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -60,7 +60,7 @@ const manifests = (db: string, name: string) =>
 
 /**
  * Every FTS hit as `score id`, best first. Each index build fixes its own order for rows that tie
- * on score (two builds of the same rows, in Python or here, disagree), so ties sort by id.
+ * on score (two builds of the same rows disagree), so ties sort by id.
  */
 async function ftsHits(table: LanceTable, query: string): Promise<string[]> {
   const hits = await table.search(query, "fts", "tokens").limit(100_000).toArray();

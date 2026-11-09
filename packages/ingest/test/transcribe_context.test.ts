@@ -1,5 +1,5 @@
-// fixtures/transcribe/render.golden.json holds what tools/transcribe.py's glossary loader made of
-// each fixtures/transcribe/glossary/*.toml, and the create bodies the soniox SDK built.
+// fixtures/transcribe/render.golden.json holds what each fixtures/transcribe/glossary/*.toml loads
+// to, and the create bodies the soniox SDK built.
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
@@ -58,7 +58,7 @@ test("each glossary loads to Python's context, or fails before the upload as Pyt
   for (const c of golden.contexts) {
     const path = join(GLOSSARIES, `${c.name}.toml`);
     if (c.error_type !== undefined || c.sdk_accepts === false) {
-      // A TOMLDecodeError, an AttributeError or the SDK's ValidationError was a traceback.
+      // The golden's TOMLDecodeError, AttributeError or SDK ValidationError: a TranscribeError.
       const thrown = (() => {
         try {
           loadContext(path);

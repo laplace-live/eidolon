@@ -1,4 +1,4 @@
-// The response bytes Starlette and FastAPI produce for the Python bot, which clients already parse.
+// The response bytes Starlette and FastAPI produce, which clients already parse.
 
 /** Starlette `JSONResponse`: compact separators, raw UTF-8, `application/json` with no charset. */
 export function jsonResponse(

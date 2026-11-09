@@ -1,5 +1,5 @@
-// The Python server's HTTP-level answers, as observed through Starlette's TestClient: transport
-// security, method handling, the Accept/Content-Type gates, the body limit and envelope errors.
+// The MCP endpoint's HTTP-level answers: transport security, method handling, the
+// Accept/Content-Type gates, the body limit and envelope errors.
 import { describe, expect, test } from "bun:test";
 import { acceptsJson, isExactJsonContentType, parseAllowedHosts } from "../../src/mcp/http.ts";
 import type { McpHandler } from "../../src/mcp/index.ts";
@@ -48,7 +48,7 @@ describe("allowlist", () => {
     });
     expect(parseAllowedHosts(undefined)).toBeNull();
     expect(parseAllowedHosts("   ")).toBeNull();
-    // Non-blank but empty after the split keeps the check on, rejecting every Host, as in Python.
+    // Non-blank but empty after the split keeps the check on, rejecting every Host.
     expect(parseAllowedHosts(",")).toEqual({ hosts: [], origins: [] });
   });
 

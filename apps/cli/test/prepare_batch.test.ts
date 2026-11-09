@@ -1,5 +1,4 @@
-// laplace-prepare-batch against prepare_batch.py's main(), from the goldens in
-// packages/ingest/test/fixtures/download.
+// laplace-prepare-batch, replayed from the goldens in packages/ingest/test/fixtures/download.
 import "../../../packages/config/test/isolated-guard.ts";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
@@ -28,7 +27,7 @@ afterEach(() => {
   rmSync(sourceFolder("milky-green", "lists"), { recursive: true, force: true });
 });
 
-/** Python's prepared repository, laid out as the persona's lists. */
+/** The golden's prepared files, moved from their data/ layout into the persona's lists. */
 function prepareLists(lists: string): void {
   for (const [name, content] of Object.entries(golden.prepare_files)) {
     if (typeof content !== "string" || !name.startsWith("data/")) continue;
@@ -52,8 +51,7 @@ test("argparse errors are prepare_batch.py's", async () => {
   }
 });
 
-// prepare_batch.py under Python 3.13: a missing required argument is reported before an
-// unrecognized one.
+// argparse reports a missing required argument before an unrecognized one.
 test("a missing required argument outranks an unrecognized one, as in prepare_batch.py", async () => {
   for (const [argv, error] of [
     [["capture.txt", "extra"], "the following arguments are required: --expected-count"],

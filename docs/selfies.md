@@ -17,46 +17,44 @@ the set; every env var it reads is documented in `.env.example`.
 ```text
 viewer: "拍张自拍给我看看"
   → LLM calls take_selfie (no arguments)
-  → handler runs OpenRouterImageGenService.run_image_gen(built-in prompt)
+  → the tool runs renderSelfie(built-in prompt), which calls generate()
   → POST https://openrouter.ai/api/v1/images  { prompt, input_references }
   → bytes land in a TTL store, served at GET /api/selfie/<id>.png
-  → RTVIServerMessageFrame { type: "selfie", urls: [...] } → client
+  → RTVI server message { type: "selfie", urls: [...] } → client
   → the LLM gets { ok: true } and says something about it
 ```
 
-`image_generation.py` owns all of it. `laplace-generate-image` calls the same
-`generate()`, so what you probe from the CLI is what a viewer gets.
+`packages/imagegen` owns the prompt, the references, the request and the
+store; the tool itself is `packages/tools/src/selfie.ts`.
+`laplace-generate-image` calls the same `generate()`, so what you probe from
+the CLI is what a viewer gets.
 
-## Why the service is not in the pipeline
+## Why no image service is in the pipeline
 
-Pipecat's `ImageGenService` is the official base class, and
-`OpenRouterImageGenService` subclasses it in the ordinary way —
-`run_image_gen(prompt)` yielding one `URLImageRawFrame` per image.
-
-But its inherited `process_frame` generates an image from **every `TextFrame`
-it sees**, which is the right trigger for a prompt→image bot and exactly wrong
-here: this pipeline streams one `TextFrame` per sentence on the way to TTS.
-Adding the service to `Pipeline([...])` would bill an image per sentence
-spoken. So it is constructed but never placed; the tool handler drives
-`run_image_gen` directly. Keep it that way.
+pipedog's `ImageGenService` is the framework's base class for image
+generation: a subclass implements `runImageGen(prompt)`. But its inherited
+`processFrame` generates an image from **every `TextFrame` it sees**, which is
+the right trigger for a prompt→image bot and exactly wrong here: this pipeline
+streams one `TextFrame` per sentence on the way to TTS. An image service in
+the pipeline would bill an image per sentence spoken. So none is placed there;
+the tool calls `renderSelfie` directly. Keep it that way.
 
 ## Why the image travels as a URL
 
 The generated PNG is ~1 MB, ~1.4 MB once base64'd. RTVI messages ride the
 WebRTC data channel, whose SCTP messages are capped far below that, so an
 inline data URL would not arrive. Instead the bytes go in a process-local TTL
-store and the RTVI message carries only `/api/selfie/<id>.png`.
+store (`SelfieStore`, `packages/imagegen/src/store.ts`) and the RTVI message
+carries only `/api/selfie/<id>.png`.
 
 The id is the whole authorization — unguessable, single-purpose, and expiring
 — so the route needs no session of its own. The path is relative because the
 client is same-origin with `/api/offer`; nothing has to know the public
 hostname.
 
-The alternative was `video_out_enabled=True` on the transport, pushing the
-frame to a video track. That adds a video track to every call, including the
-ones that never ask for a photo, to deliver one still image. The frame the
-service yields is a real `URLImageRawFrame` with decoded pixels, so that route
-stays open if it is ever wanted.
+The alternative was a video track on the transport, pushing the image to it.
+That adds a video track to every call, including the ones that never ask for a
+photo, to deliver one still image.
 
 Because the store is process-local, a deployment that ever runs more than one
 worker needs shared storage here — a second worker will 404 on the first
@@ -64,16 +62,17 @@ worker's ids.
 
 ## Why the call is asynchronous
 
-`register_function(..., cancel_on_interruption=False)` makes the tool call
-asynchronous in Pipecat's sense: the LLM continues the conversation
-immediately rather than holding the turn, and the result is injected later as
-a developer message. A render takes ten-odd seconds, and a voice bot that goes
-silent that long sounds broken. The persona prompt tells it to say something
-like 等我一下 on the way out, and the schema description tells it not to read
-the URL aloud.
+The tool's `cancelOnInterruption: false` makes pipedog run the call
+asynchronously: the LLM continues the conversation immediately rather than
+holding the turn, and the result is injected later as a developer message. A
+render takes ten-odd seconds, and a voice bot that goes silent that long sounds
+broken. The persona prompt tells it to say something like 等我一下 on the way
+out, and the schema description tells it not to read the URL aloud.
 
-`timeout_secs` (`SELFIE_TIMEOUT_SECONDS`, 120 by default) bounds it. The httpx
-timeout behind it is deliberately much longer, for the CLI's benefit.
+`timeoutSecs` (`SELFIE_TIMEOUT_SECONDS`, 120 by default) bounds it. The
+request's own idle timeout (`IMAGE_REQUEST_IDLE_TIMEOUT_MS`, 600 s) is
+deliberately much longer, for the CLI's benefit: a max-quality render runs for
+minutes.
 
 ## The frontend side
 
@@ -98,11 +97,12 @@ RTVI event surface.
 
 ## The prompt
 
-`SELFIE_PROMPT` in `image_generation.py`, not `persona.md` — it describes a
-drawing, not the persona. It carries two slots, `{time}` and `{light}`, filled
-by `fill_time()` from the persona's timezone (`PERSONA_TIMEZONE`), so a selfie
-taken at 23:00 is lit by a lamp against a dark window. Substitution is
-`str.replace`, not `str.format`, so a brace in an edited prompt can't raise.
+`SELFIE_PROMPT` in `packages/imagegen/src/prompt.ts`, not `prompt.md` — it
+describes a drawing, not the persona. It carries two slots, `{time}` and
+`{light}`, filled by `fillTime()` from the persona's timezone
+(`PERSONA_TIMEZONE`), so a selfie taken at 23:00 is lit by a lamp against a
+dark window. Substitution is plain string replacement, never a template
+engine, so a brace in an edited prompt can't break it.
 
 ## Outfits are mutually exclusive
 
@@ -123,13 +123,14 @@ difference: given both, it reads the second as a second person. A group selfie
 with one friend came back with three people in frame, the extra one wearing the
 other outfit.
 
-So `select_outfit` lets exactly one through, and `reference_sources` is the only
-way to reach it — the bot and `laplace-generate-image` both go through there, so
-neither can put her in frame twice. The hour picks which: `night.png` during the
-hours `_AMBIENCE` calls `night` and `late night` (21:00–05:00), `day.png`
-otherwise, so the outfit and the light the prompt asks for agree. Selection
-happens per render, not at startup, or a bot booted in daylight would still be
-wearing the day outfit at 03:00.
+So `selectOutfit` lets exactly one through, and `referenceSources` is the only
+way to reach it (`packages/imagegen/src/references.ts`) — the bot and
+`laplace-generate-image` both go through there, so neither can put her in frame
+twice. The hour picks which: `night.png` during the hours `AMBIENCE` calls
+`night` and `late night` (21:00–05:00, `AFTER_DARK`), `day.png` otherwise, so
+the outfit and the light the prompt asks for agree. Selection happens per
+render, not at startup, or a bot booted in daylight would still be wearing the
+day outfit at 03:00.
 
 Adding a third outfit needs no code — it's selectable immediately, and `night`
 in the file name is the whole convention. Loose images sitting directly in
@@ -143,7 +144,7 @@ so the file names are for the code and for whoever reads this — only
 To force one, name it explicitly — that path bypasses the clock:
 
 ```bash
-uv run laplace-generate-image -i personas/milky-green/references/outfits/night.png
+bun run laplace-generate-image -i personas/milky-green/references/outfits/night.png
 ```
 
 ## Friends
@@ -151,7 +152,7 @@ uv run laplace-generate-image -i personas/milky-green/references/outfits/night.p
 `references/friends/` holds one image per person the persona can
 be photographed with, **named after them** — `七海Nana7mi.png` becomes the
 enum value `七海Nana7mi`. Adding someone is dropping a file in; nothing else
-knows their name. `reference_sources()` reads `outfits/` and never this
+knows their name. `referenceSources()` reads `outfits/` and never this
 directory, so friends can't leak into a solo shot.
 
 The tool takes a `with_friends` array whose enum is exactly those names, and
@@ -161,16 +162,16 @@ dropped with a warning rather than reaching the prompt, since there would be
 no reference image to draw that person from.
 
 Naming anyone also moves the scene outdoors: a group selfie in the persona's
-own room reads as odd, so `build_selfie_prompt` swaps `{setting}` and takes
-the hour's *outdoor* lighting from `_AMBIENCE` instead of its indoor one.
+own room reads as odd, so `buildSelfiePrompt` swaps `{setting}` and takes
+the hour's *outdoor* lighting from `AMBIENCE` instead of its indoor one.
 The friends' references are appended after the persona's own, which is the
 order the prompt tells the model to expect.
 
 To see what a change actually produces, without a WebRTC call:
 
 ```bash
-uv run laplace-generate-image -o /tmp/out.png
-uv run laplace-generate-image --friend 七海Nana7mi -o /tmp/group.png
+bun run laplace-generate-image -o /tmp/out.png
+bun run laplace-generate-image --friend 七海Nana7mi -o /tmp/group.png
 ```
 
 With no arguments it uses the same bundled references and the same built-in

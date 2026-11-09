@@ -1,6 +1,5 @@
-// mem0's additive-extraction system prompts, byte for byte: the Python bot extracts with the
-// same text, and the tests pin both sha256 sums. Regenerate from `mem0.configs.prompts`;
-// never edit by hand (five lines end in a trailing space).
+// mem0's additive-extraction system prompts, byte for byte; the tests pin both sha256 sums.
+// Regenerate from `mem0.configs.prompts`; never edit by hand (five lines end in a trailing space).
 
 export const ADDITIVE_EXTRACTION_PROMPT = `
 

@@ -1,4 +1,4 @@
-// Routes `main.ts <command> [args]` to the TypeScript ports of the Python CLIs.
+// Routes `main.ts <command> [args]`, which every `laplace-*` script runs, to its command.
 import { pyRepr } from "@eidolon/config";
 import { CLEANUP_LIMIT_MS } from "@eidolon/ingest";
 import { buildStreamCatalogMain } from "./build_stream_catalog.ts";
@@ -18,7 +18,6 @@ import { transcribeMain } from "./transcribe.ts";
 
 type Command = (argv: readonly string[], deps: CommandDeps) => Promise<number>;
 
-/** Each command and the Python CLI it ports. */
 export const COMMANDS: Readonly<Record<string, Command>> = {
   search: searchMain,
   "eval-retrieval": evalRetrievalMain,
@@ -77,8 +76,8 @@ options:
 `;
 
 /**
- * Runs one command and resolves to the process exit code. An uncaught error is a Python
- * traceback's equivalent: its stack on stderr and exit 1.
+ * Runs one command and resolves to the process exit code. An uncaught error prints its stack on
+ * stderr and exits 1.
  */
 export async function runCli(argv: readonly string[], deps: CommandDeps = {}): Promise<number> {
   const io = resolveIo(deps);

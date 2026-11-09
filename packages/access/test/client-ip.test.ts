@@ -12,7 +12,7 @@ function headers(...entries: [string, string][]): Headers {
 }
 
 describe("resolveClientIp", () => {
-  // Each row was answered by Python's _resolve_client_ip_from_scope with the same raw headers.
+  // Each row: name, EIDOLON_REAL_IP_HEADER, raw headers, peer address, and the IP expected.
   const rows: [string, string | undefined, [string, string][], string | null, string][] = [
     [
       "unset ignores X-Forwarded-For",

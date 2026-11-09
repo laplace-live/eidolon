@@ -1,7 +1,6 @@
-// Pipecat's Mem0MemoryService, plus the Python bot's subclass (content-less messages dropped,
-// newest-first listing), as a context provider. On each context frame it searches with the latest
-// user message, inserts the hits as a `developer` message at position 1, and stores the
-// conversation in the background.
+// Pipecat's Mem0MemoryService, with content-less messages dropped and a newest-first listing, as a
+// context provider. On each context frame it searches with the latest user message, inserts the
+// hits as a `developer` message at position 1, and stores the conversation in the background.
 
 import {
   envOptional,
@@ -76,7 +75,7 @@ export class Mem0MemoryProvider implements MemoryProvider {
   async #enhance(turn: ContextTurn, query: string): Promise<void> {
     if (this.#lastQuery === query) return;
     this.#lastQuery = query;
-    // Python can't stop the search thread either: an interrupted turn just stops waiting for it.
+    // The engine's search can't be cancelled: an interrupted turn just stops waiting for it.
     const memories = await raceAbort(this.#retrieve(query, turn.signal), turn.signal);
     if (turn.signal.aborted) throw turn.signal.reason;
     if (!memories.length) return;
@@ -164,8 +163,8 @@ export async function openMemoryProvider(
 ): Promise<MemoryProvider> {
   const config = buildMemoryConfig();
   const search = memorySearchSettingsFromEnv();
-  // Python reruns the collection setup at every session start, so a dropped collection comes
-  // back and a Qdrant outage then costs only that session its memory.
+  // The collection setup reruns at every session start, so a dropped collection comes back and a
+  // Qdrant outage then costs only that session its memory.
   const { engine, fresh } = await engines.get(config);
   if (!fresh) await engine.ensureCollection();
   const agentId = envOptional("MEM0_AGENT_ID") ?? null;

@@ -274,8 +274,8 @@ export interface IndexTable {
   /** The table exists, whatever built it. */
   readonly built: boolean;
   /**
-   * From the table's `<table>.meta.json`: null without one, as for a table never built or one the
-   * Python tools built.
+   * From the table's `<table>.meta.json`: null without one, as for a table never built or one
+   * built without it.
    */
   readonly rows: number | null;
   readonly builtAt: string | null;

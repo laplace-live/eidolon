@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(/laplace_eidolon/**)",
+      "Read(/tests/**)",
+      "Read(/**/*.py)",
+      "Read(/pyproject.toml)",
+      "Read(/uv.lock)",
+      "Edit(/laplace_eidolon/**)",
+      "Edit(/tests/**)",
+      "Edit(/**/*.py)",
+      "Edit(/pyproject.toml)",
+      "Edit(/uv.lock)",
+      "Bash(uv*)",
+      "Bash(python*)",
+      "Bash(pytest*)"
+    ]
+  }
+}

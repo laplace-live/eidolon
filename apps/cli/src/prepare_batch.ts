@@ -1,5 +1,6 @@
-// laplace-prepare-batch: the skill's prepare_batch.py. Turns a complete archive capture into a new
-// batch of the videos no list has yet, after checking the capture against the archive's total.
+// laplace-prepare-batch, the stream-archive-embed skill's batch step: turns a complete archive
+// capture into a new batch of the videos no list has yet, after checking the capture against the
+// archive's total.
 import { pyJsonDumps } from "@eidolon/config";
 import { canonicalPath, download, sourceFolder } from "@eidolon/ingest";
 import {
@@ -56,7 +57,8 @@ options:
   ],
 };
 
-// What prepare_batch.py caught, `except (OSError, ValueError)`, by Python class name.
+// OSError and ValueError with their subclasses, by the names pyError gives them: the expected
+// failures, reported as their message alone; anything else keeps its stack.
 const REPORTED = new Set([
   "OSError",
   "FileNotFoundError",

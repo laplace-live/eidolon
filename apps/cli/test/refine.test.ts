@@ -1,7 +1,6 @@
-// fixtures/goldens/refine.json is what fixtures/refine/golden.py printed (`uv run --offline
-// --no-sync python` from the repository root, then formatted by Biome): tools/refine.py's
-// main_async over fixtures/refine/streams, answered by fixtures/refine/responses.json. Each
-// scenario replays here through refineMain with the same responses, clock and date.
+// fixtures/goldens/refine.json holds laplace-refine's runs over fixtures/refine/streams, answered
+// by fixtures/refine/responses.json. Each scenario replays here through refineMain with the same
+// responses, clock and date.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -100,7 +99,7 @@ function completion(entry: Canned): Response {
   return new Response(JSON.stringify(body), { status: entry.status, headers });
 }
 
-/** Records each request as golden.py does, and answers from `entries` in order. */
+/** Records each request as a golden's `requests` hold it, and answers from `entries` in order. */
 function cannedFetch(
   entries: readonly Canned[],
   seen: SeenRequest[],
@@ -147,7 +146,7 @@ beforeEach(() => {
   work = mkdtempSync(join(tmpdir(), "cli-refine-"));
   streams = join(work, "streams");
   cpSync(STREAMS, streams, { recursive: true });
-  // As golden.py writes it: not JSON, so refine starts the stream afresh.
+  // The goldens' runs start from this sidecar: not JSON, so refine starts the stream afresh.
   writeFileSync(join(streams, "2026-01-05-BV1ddddddddd.refined.json"), "{not json");
   logs = captureLogs();
   restoreEnv = setEnv({
@@ -180,9 +179,8 @@ const golden_ = await golden<{ printed_by: string; scenarios: Scenario[] }>("ref
 const COMPLETION = /^ {2}✓ /;
 
 /**
- * The completion lines, then the rest, each in order. Python logs a completion when asyncio gets
- * round to as_completed's consumer, so where those lines fall among the next chunk's own lines is
- * up to each runtime's scheduler.
+ * The completion lines, then the rest, each in order. Where a completion line falls among the next
+ * chunk's own lines is up to the scheduler.
  */
 function byKind(records: readonly (readonly string[])[]): [string[][], string[][]] {
   const done = records.filter(([, message]) => COMPLETION.test(message as string));

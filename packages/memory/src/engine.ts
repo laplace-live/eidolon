@@ -1,7 +1,7 @@
-// mem0's OSS engine as this deployment runs it. Without spaCy and fastembed in the Python
-// image, mem0's entity linking and BM25 never run: `text_lemmatized` is a copy of `data`, no
-// sparse vector is written, and search is dense cosine similarity behind a threshold. Writing
-// anything else would desync the points the two bots share.
+// mem0's OSS engine as it runs without spaCy and fastembed: entity linking and BM25 never run, so
+// `text_lemmatized` is a copy of `data`, no sparse vector is written, and search is dense cosine
+// similarity behind a threshold. Writing anything else would desync the points mem0 reads from the
+// same collection.
 import {
   type Clock,
   errorText,

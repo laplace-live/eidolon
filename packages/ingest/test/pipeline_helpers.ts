@@ -1,7 +1,7 @@
-// fixtures/pipeline/golden.json is what fixtures/pipeline/golden.py printed through Python's
-// tools/pipeline.py: "<WORK>" stands for a run's folder, "<HOME>" for its data home and "<PYTHON>"
-// for the interpreter. Fakes for what the pipeline's stages reach out to: Soniox, the refine
-// provider and the embedding API.
+// fixtures/pipeline/golden.json holds the pipeline's stage parsing, summaries, transcribe planning
+// and command runs for the inputs it lists: "<WORK>" stands for a run's folder, "<HOME>" for its
+// data home and "<PYTHON>" for the interpreter in a recorded command line. Fakes for what the
+// pipeline's stages reach out to: Soniox, the refine provider and the embedding API.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { consoleSink, type LogLevel, type LogRecord, logger } from "@eidolon/config";
@@ -63,7 +63,7 @@ export const pipelineGolden = JSON.parse(
   readFileSync(join(PIPELINE_FIXTURES, "golden.json"), "utf8"),
 ) as PipelineGolden;
 
-/** The golden's main() scenario named `name`. */
+/** The golden's command run named `name`. */
 export function mainCase(name: string): MainGolden {
   const found = pipelineGolden.main.find((scenario) => scenario.name === name);
   if (found === undefined) throw new Error(`no golden scenario ${name}`);
@@ -221,7 +221,7 @@ export function fakeEmbeddings(
   };
 }
 
-/** Durations as golden.py masks them. */
+/** Durations as the golden masks them. */
 export function maskDurations(text: string): string {
   return text.replace(/\(\d+\.\ds\)/g, "(<D>s)").replace(/(Duration: +)\d+\.\ds/g, "$1<D>s");
 }

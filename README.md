@@ -8,9 +8,13 @@ The bot is TypeScript on [Bun](https://bun.sh), built on
 [pipedog](https://github.com/polvallverdu/pipedog), a TypeScript port of
 [Pipecat](https://docs.pipecat.ai/); it lives in `apps/` and `packages/`, and
 has run production since 2026-11-04. The offline chain that builds its indexes
-is TypeScript too (`packages/ingest`). The original Pipecat bot
-(`laplace_eidolon/`) and its Python tools are kept, as a rollback image and as
-the spec the port is checked against, until they are retired.
+is TypeScript too (`packages/ingest`).
+
+The original Python implementation, a Pipecat bot and its offline tools, stays
+in `laplace_eidolon/` as a reference implementation, and CI still publishes it
+as `ghcr.io/laplace-live/eidolon-python`. It is no longer developed; how to run
+it, and how it differs, is in
+[`laplace_eidolon/README.md`](laplace_eidolon/README.md).
 
 ```
 transport.input → STT → user_aggregator → RetrievalGate
@@ -112,15 +116,8 @@ The bot serves no UI. The web client is LAPLACE's `/ai` page, whose settings
 take a custom backend URL such as `http://localhost:7860`; the local web app
 (`bun run app`) is a separate entry point with its own pages. To hold a scripted
 call instead, run `bun apps/bot/scripts/e2e-call.ts --text` (or `--audio`).
-How the port is laid out and what keeps it working is in
+How the bot is laid out and what keeps it working is in
 [`docs/typescript.md`](docs/typescript.md).
-
-The Python bot still runs, for comparison or rollback:
-
-```bash
-uv sync                                # runtime deps + laplace_eidolon package
-uv run python -m laplace_eidolon.bot   # the same API on localhost:7860
-```
 
 ## Building the RAG indexes (optional)
 
@@ -171,10 +168,7 @@ npm, each is `npx @laplace.live/eidolon <command>`, its name without the
 | `bun run gate-decisions`               | The retrieval gate benchmark (billed)                         |
 
 Each takes `--help` except `gate-decisions`, which takes no arguments and starts
-its billed run at once. The Python tools they port stay, as `uv run laplace-*`
-after `uv sync --extra tools`, until Python is retired; two exist only there:
-`laplace-export-mem0` and `laplace-import-mem0`, which move memories off Mem0's
-cloud into a Qdrant.
+its billed run at once.
 
 A server mounts its own copy of the data home, so a re-ingest reaches it by
 copying `index/` there. See [`docs/personas.md`](docs/personas.md).
@@ -223,7 +217,7 @@ CI publishes two images to GHCR, both tagged `edge`, `sha-…`, and per release
 | Image                                 | Dockerfile            | Runs                     |
 | ------------------------------------- | --------------------- | ------------------------ |
 | `ghcr.io/laplace-live/eidolon`        | `apps/bot/Dockerfile` | the TypeScript bot       |
-| `ghcr.io/laplace-live/eidolon-python` | `Dockerfile`          | the Python bot (rollback) |
+| `ghcr.io/laplace-live/eidolon-python` | `Dockerfile`          | the Python reference bot |
 
 Both listen on port `7860`, read the same `.env`, and keep Mem0's change log
 in `/app/data/mem0`. To build from this checkout instead:
@@ -246,9 +240,9 @@ Endpoints worth knowing:
 | `POST /api/memories/forget`                 | Wipe the caller's Mem0 memories (auth req.) |
 | `POST /mcp`                                 | Public MCP server (Streamable HTTP, read-only) |
 
-The TypeScript bot serves neither Pipecat's bundled demo UI (`/`, `/client`)
-nor its `/start` session API. The Python bot serves `/start`, and the demo UI
-only with `EIDOLON_PIPECAT_DEMO_ENABLED`.
+The TypeScript bot (the `eidolon` image) serves neither Pipecat's bundled demo
+UI (`/`, `/client`) nor its `/start` session API; the `eidolon-python` image
+serves `/start`, and the demo UI only with `EIDOLON_PIPECAT_DEMO_ENABLED`.
 
 A custom frontend talks to `POST /api/offer` directly, or uses
 [`@pipecat-ai/client-js`](https://www.npmjs.com/package/@pipecat-ai/client-js)
@@ -305,8 +299,8 @@ domain(s) so the DNS-rebinding Host check accepts requests; the proxy must pass
 - **Real client IP**: behind a proxy, set `EIDOLON_REAL_IP_HEADER` (e.g.
   `cf-connecting-ip`), or every viewer shares the proxy's anonymous quota.
 - **CORS**: `PIPECAT_ALLOWED_ORIGINS` takes a comma-separated list of the
-  origins allowed to call the bot; blank allows every origin. The Python bot
-  always allows every origin.
+  origins allowed to call the TypeScript bot; blank allows every origin. The
+  `eidolon-python` image always allows every origin.
 - **Persistent state**: viewers' long-term memories live in Qdrant, so its
   storage volume is the one thing a restart must not lose; Mem0's change log
   sits beside it. Both images read each persona's index and private references

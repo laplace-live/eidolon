@@ -1,5 +1,5 @@
 // A pure-TS port of jieba 0.42.1's `cut(HMM=True)` and `cut_for_search`, because BM25 only matches
-// when query tokens equal the `tokens` column the Python ingest wrote. `data/jieba/dict.txt` is the
+// when query tokens equal the ones jieba cut into the `tokens` column. `data/jieba/dict.txt` is the
 // package's own file, byte for byte; `hmm.json` is `json.dumps` of finalseg's prob_start,
 // prob_trans and prob_emit, whose shortest-repr floats parse back to the same doubles.
 import { readFileSync } from "node:fs";

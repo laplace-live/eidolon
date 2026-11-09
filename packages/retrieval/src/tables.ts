@@ -29,7 +29,10 @@ export function resolveDbPath(): string {
   return configured ? resolveProjectPath(configured) : personaPath(INDEX_DIR);
 }
 
-/** The CLIs' `--db-path` default: `LANCEDB_PATH` as written (they open it from the working directory, as Python's did), else the persona's index. */
+/**
+ * The CLIs' `--db-path` default: `LANCEDB_PATH` as written, which they open from the working
+ * directory, else the persona's index.
+ */
 export function dbPathArgument(): string {
   return envOptional("LANCEDB_PATH") ?? personaPath(INDEX_DIR);
 }
@@ -119,7 +122,7 @@ export interface SearchParams {
 /**
  * Facts are short enough to afford a wide net: 30 candidates (PERSONA_FACTS_CANDIDATES) is the
  * sweet spot at ~3k facts, and each fact is ~30 chars, so topK 8 stays cheap. Out-of-range values
- * pass through unvalidated, as pydantic never validates a `default_factory`'s output.
+ * pass through unvalidated.
  */
 export function personaFactsSearchParams(): SearchParams {
   return { candidates: envInt("PERSONA_FACTS_CANDIDATES", 30), topK: 8 };
@@ -128,7 +131,7 @@ export function personaFactsSearchParams(): SearchParams {
 /**
  * Stream chunks are ~50× a fact, so the reranker scores ~750× the bytes per query: 15 candidates
  * (STREAM_ARCHIVE_CANDIDATES) is where quality stops improving at ~30k chunks, and topK 3 keeps
- * the prompt from ballooning. Out-of-range values pass through unvalidated, as in Python.
+ * the prompt from ballooning. Out-of-range values pass through unvalidated.
  */
 export function streamArchiveSearchParams(): SearchParams {
   return { candidates: envInt("STREAM_ARCHIVE_CANDIDATES", 15), topK: 3 };
