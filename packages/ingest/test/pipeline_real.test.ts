@@ -2,9 +2,9 @@
 // human dry run and the plan `--dry-run --json` emits must agree on every audio file and every
 // chunk left to refine. Skips when the data is absent, unless EIDOLON_REQUIRE_PARITY=1.
 import { expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { iterStreams, pipeline, refine } from "../src/index.ts";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { basename, join } from "node:path";
+import { iterStreams, type ParsedStream, pipeline, refine } from "../src/index.ts";
 import { captureLogs } from "./pipeline_helpers.ts";
 
 const REAL = process.env.EIDOLON_REAL_HOME ?? "";
@@ -84,8 +84,9 @@ test.skipIf(!HAVE_DATA && !REQUIRED)(
     expect(logged("no-date")).toHaveLength(t.skippedNoDate);
 
     // The refine stage prints refine's own dry run over every transcript.
+    const streams = iterStreams(STREAMS);
     const text = printed.join("");
-    expect(text).toBe((await refine.dryRun(iterStreams(STREAMS), MODEL)).text);
+    expect(text).toBe((await refine.dryRun(streams, MODEL)).text);
 
     // The plan --dry-run --json emits: the same audio files in each state, the same chunks left
     // to refine.
@@ -111,28 +112,36 @@ test.skipIf(!HAVE_DATA && !REQUIRED)(
     );
     expect(toRefine).toBe(estimatedChunks(text));
 
-    // `indexed` reads the index's build record when it has one, else the catalog's stream ids.
+    // Indexed: the build record lists the transcript and its sidecar at their size and mtime now
+    // (a sidecar it doesn't list must not exist), or, without a record, the catalog has the stream.
     const recordPath = join(INDEX, "stream_chunks.meta.json");
+    let isIndexed: (stream: ParsedStream) => boolean;
     if (existsSync(recordPath)) {
       const record = JSON.parse(readFileSync(recordPath, "utf8")) as {
-        sources: { name: string }[];
+        sources: { name: string; size: number; mtime: string }[];
       };
-      const listed = new Set(record.sources.map((source) => source.name));
-      for (const video of transcribed) {
-        const name = `${video.uploadDate}-${video.id}.md`;
-        if (video.indexed) expect([name, listed.has(name)]).toEqual([name, true]);
-      }
-      expect(transcribed.some((video) => video.indexed)).toBe(true);
+      const listed = new Map(record.sources.map((source) => [source.name, source]));
+      const asListed = (path: string): boolean => {
+        const recorded = listed.get(basename(path));
+        if (!existsSync(path)) return recorded === undefined;
+        const { size, mtime } = statSync(path);
+        return recorded?.size === size && recorded.mtime === mtime.toISOString();
+      };
+      isIndexed = (stream) => asListed(stream.mdPath) && asListed(stream.sidecarPath);
     } else {
       const catalog = JSON.parse(readFileSync(join(INDEX, "stream_catalog.json"), "utf8")) as {
         broadcasts: { stream_ids: string[] }[];
       };
       const catalogued = new Set(catalog.broadcasts.flatMap((broadcast) => broadcast.stream_ids));
-      for (const video of transcribed) {
-        const id = `${video.uploadDate}-${video.id}`;
-        expect([id, video.indexed]).toEqual([id, catalogued.has(id)]);
-      }
+      isIndexed = (stream) => catalogued.has(stream.streamId);
     }
+    const byVideo = new Map(streams.map((stream) => [videoId(stream.mdPath), stream] as const));
+    const wrong = plan.videos.flatMap((video) => {
+      const stream = byVideo.get(video.id);
+      const expected = stream !== undefined && isIndexed(stream);
+      return video.indexed === expected ? [] : [`${video.id}: indexed ${video.indexed}`];
+    });
+    expect(wrong.slice(0, 5)).toEqual([]);
   },
   600_000,
 );
@@ -140,4 +149,9 @@ test.skipIf(!HAVE_DATA && !REQUIRED)(
 /** The transcripts the dry run's text lists, one line each. */
 function estimatedLines(text: string): number {
   return text.split("\n").filter((line) => /^ {2}\S.*\.md: /.test(line)).length;
+}
+
+/** The video a transcript belongs to: the stem of its name after the date. */
+function videoId(mdPath: string): string {
+  return basename(mdPath, ".md").replace(/^\d{4}-\d{2}-\d{2}-/, "");
 }

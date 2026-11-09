@@ -240,8 +240,9 @@ Endpoints worth knowing:
 | `POST /api/memories/forget`                 | Wipe the caller's Mem0 memories (auth req.) |
 | `POST /mcp`                                 | Public MCP server (Streamable HTTP, read-only) |
 
-The bot serves neither Pipecat's bundled demo UI (`/`, `/client`) nor its
-`/start` session API.
+The TypeScript bot (the `eidolon` image) serves neither Pipecat's bundled demo
+UI (`/`, `/client`) nor its `/start` session API; the `eidolon-python` image
+serves `/start`, and the demo UI only with `EIDOLON_PIPECAT_DEMO_ENABLED`.
 
 A custom frontend talks to `POST /api/offer` directly, or uses
 [`@pipecat-ai/client-js`](https://www.npmjs.com/package/@pipecat-ai/client-js)
@@ -298,7 +299,8 @@ domain(s) so the DNS-rebinding Host check accepts requests; the proxy must pass
 - **Real client IP**: behind a proxy, set `EIDOLON_REAL_IP_HEADER` (e.g.
   `cf-connecting-ip`), or every viewer shares the proxy's anonymous quota.
 - **CORS**: `PIPECAT_ALLOWED_ORIGINS` takes a comma-separated list of the
-  origins allowed to call the bot; blank allows every origin.
+  origins allowed to call the TypeScript bot; blank allows every origin. The
+  `eidolon-python` image always allows every origin.
 - **Persistent state**: viewers' long-term memories live in Qdrant, so its
   storage volume is the one thing a restart must not lose; Mem0's change log
   sits beside it. Both images read each persona's index and private references

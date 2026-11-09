@@ -12,14 +12,16 @@ or `apps/bot` changes.
 
 ## TL;DR
 
-The bot sends an RTVI `bot-llm-started` message the instant it dispatches the LLM request, and a
-matching `bot-llm-stopped` when the response stream ends. Listen for the corresponding JS events
-and toggle a "thinking…" indicator between them.
+The bot sends an RTVI `user-stopped-speaking` message the moment the user's turn ends, and
+`bot-llm-stopped` when the reply's LLM stream ends. Listen for the corresponding JS events and
+toggle a "thinking…" indicator between them. Start it on the turn's end rather than on
+`BotLlmStarted`, which fires only after the context providers' searches, so a slow retrieval
+would show nothing.
 
 ```ts
 import { PipecatClient, RTVIEvent } from "@pipecat-ai/client-js";
 
-pcClient.on(RTVIEvent.BotLlmStarted, () => setIsThinking(true));
+pcClient.on(RTVIEvent.UserStoppedSpeaking, () => setIsThinking(true));
 pcClient.on(RTVIEvent.BotLlmStopped, () => setIsThinking(false));
 ```
 

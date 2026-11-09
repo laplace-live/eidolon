@@ -89,6 +89,7 @@ test.skipIf(!HAVE_DATA && !REQUIRED)(
     const out = mkdtempSync(join(tmpdir(), "refine-real-"));
     let sidecars = 0;
     const rewritten: string[] = [];
+    const changed: string[] = [];
     const unstable: string[] = [];
     try {
       for (const parsed of realStreams()) {
@@ -101,7 +102,12 @@ test.skipIf(!HAVE_DATA && !REQUIRED)(
         saveSidecar(copy, loadSidecar(copy));
         const twice = readFileSync(copy.sidecarPath);
         rmSync(copy.sidecarPath);
-        if (!once.equals(readFileSync(parsed.sidecarPath))) rewritten.push(name);
+        const original = readFileSync(parsed.sidecarPath);
+        if (!once.equals(original)) {
+          rewritten.push(name);
+          const [after, before] = [once, original].map((bytes) => JSON.parse(bytes.toString()));
+          if (!Bun.deepEquals(after, before)) changed.push(name);
+        }
         if (!twice.equals(once)) unstable.push(name);
       }
       expect(readdirSync(out)).toEqual([]);
@@ -109,7 +115,9 @@ test.skipIf(!HAVE_DATA && !REQUIRED)(
       rmSync(out, { recursive: true, force: true });
     }
     expect(unstable.slice(0, 5)).toEqual([]);
-    // A sidecar refine didn't write last (one ends in a newline it never writes) changes.
+    // A sidecar refine didn't write last (one ends in a newline it never writes) is reformatted,
+    // its content kept.
+    expect(changed.slice(0, 5)).toEqual([]);
     expect(rewritten.length).toBeLessThan(sidecars / 100);
     expect(sidecars).toBeGreaterThan(1_000);
   },

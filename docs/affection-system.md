@@ -224,12 +224,18 @@ rather than spell out 奶糖花.
    - INSERT INTO affection_events (...) VALUES (...).
    COMMIT.
 3. tier_changed = (tier_before != tier_after).
-4. await effects.sendServerMessage({
+4. if new_tier == 4:                                 -- the max: there is no tier 5 threshold
+     xp_to_next = 0
+     xp_total_for_next = 0
+   else:
+     xp_to_next = xp_threshold_for_tier(new_tier+1) - new_xp
+     xp_total_for_next = xp_threshold_for_tier(new_tier+1) - xp_threshold_for_tier(new_tier)
+5. await effects.sendServerMessage({
      type: "affection",
      user_id: String(user.mid),
      xp: new_xp,
-     xp_to_next: xp_threshold_for_tier(new_tier+1) - new_xp,
-     xp_total_for_next: xp_threshold_for_tier(new_tier+1) - xp_threshold_for_tier(new_tier),
+     xp_to_next: xp_to_next,
+     xp_total_for_next: xp_total_for_next,
      tier: new_tier,
      tier_name: TIER_NAMES[new_tier],
      tier_changed: tier_changed,
@@ -237,7 +243,7 @@ rather than spell out 奶糖花.
      delta: delta,                                    // for UI animation
      reason: reason,
    }).
-5. Resolve with the result the LLM sees:
+6. Resolve with the result the LLM sees:
    {
      ok: true,
      xp_after: new_xp,
@@ -250,7 +256,7 @@ rather than spell out 奶糖花.
 
 The handler is `LlmTool.run` (`packages/core/src/index.ts`), which must
 await every effect before it resolves and rejects only when its call is
-cancelled, so step 4 is awaited and a failed transaction resolves
+cancelled, so step 5 is awaited and a failed transaction resolves
 `{ ok: false, error }` instead (see [Postgres outage](#postgres-outage)).
 
 The LLM uses the return value to optionally weave tier changes into its
@@ -659,7 +665,7 @@ type AffectionEvent = {
   user_id: string;
   xp: number;
   xp_to_next: number;             // 0 at tier 4 (max)
-  xp_total_for_next: number;      // total XP needed to span current tier; for bar fill ratio
+  xp_total_for_next: number;      // total XP needed to span current tier; for bar fill ratio; 0 at tier 4 (max), a full bar
   tier: 0 | 1 | 2 | 3 | 4;
   tier_name: "中立" | "好感" | "亲密" | "深爱" | "完全傀儡";
   tier_changed: boolean;          // true on a tier-up OR tier-down — branch in FE

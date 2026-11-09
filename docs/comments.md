@@ -140,8 +140,11 @@ Editing prose across many files at once is easy to get subtly wrong. Prove you
 didn't: tokenize each changed file before and after with TypeScript's own
 scanner, as its parser drives it (so regular expressions, template strings and
 JSX text come out as single tokens), drop the comments, and compare the two
-token streams. Comments never become tokens, so identical streams mean only
-prose moved. Do this instead of re-reading the diff and hoping.
+token streams, each token with whether a line break precedes it. Comments never
+become tokens, but a line break inside one can still end a statement
+(`return /*\n*/ value` returns nothing, `return /* c */ value` returns `value`),
+so identical streams, breaks included, mean only prose moved. Do this instead of
+re-reading the diff and hoping.
 
 One thing that check will not catch: a stale claim that was already wrong
 before you touched it.

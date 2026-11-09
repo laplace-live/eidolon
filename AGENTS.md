@@ -164,9 +164,10 @@ module that owns it.
 - **The one exception:** release automation, not you, writes the version into `pyproject.toml`,
   `uv.lock` and `bot.py`.
 
-`.claude/settings.json` denies Claude Code those paths and commands, and `no_python.test.ts`
-(`apps/cli/test`) fails when TypeScript spawns the Python or this file or `docs/*.md` names it
-outside this section and the layout's one line.
+`.claude/settings.json` denies Claude Code those paths and every command that starts with `uv`,
+`python` or `pytest`, and `no_python.test.ts` (`apps/cli/test`) fails when TypeScript spawns the
+Python, or this file or `docs/*.md` names it or a command that runs it outside this section and
+the layout's one line.
 
 ### Runtime
 

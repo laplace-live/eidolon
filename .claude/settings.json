@@ -11,10 +11,9 @@
       "Edit(/**/*.py)",
       "Edit(/pyproject.toml)",
       "Edit(/uv.lock)",
-      "Bash(uv:*)",
-      "Bash(python:*)",
-      "Bash(python3:*)",
-      "Bash(pytest:*)"
+      "Bash(uv*)",
+      "Bash(python*)",
+      "Bash(pytest*)"
     ]
   }
 }

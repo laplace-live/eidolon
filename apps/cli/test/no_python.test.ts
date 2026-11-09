@@ -1,22 +1,37 @@
 // The Python in this repository is for human readers only (AGENTS.md, "The Python"): no TypeScript
-// under apps/ or packages/ runs it, and no agent-facing doc names it outside that rule.
+// under apps/ or packages/ runs it, and no agent-facing doc names it or says how to run it outside
+// that rule.
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dir, "../../..");
 const SELF = relative(ROOT, import.meta.path);
-const COMMANDS = "uv|uvx|python|python3|pytest";
+/** uv, uvx, pytest, or python, versioned or not: `python3`, `python3.13`. */
+const COMMANDS = String.raw`(?:uvx?|pytest|python(?:\d+(?:\.\d+)*)?)(?![\w.-])`;
 /** A string that is one of the commands: `Bun.which("uv")`, `[UV, "run", "python", script]`. */
-const COMMAND_STRING = new RegExp(`(["'\`])(?:${COMMANDS})\\1`);
+const COMMAND_STRING = new RegExp(`(["'\`])${COMMANDS}\\1`);
 /** A Bun shell template that runs one. */
-const SHELL = new RegExp(`\\$\`\\s*(?:${COMMANDS})\\b`);
-const SPAWN = /\b(?:spawn|spawnSync|execFile|execFileSync|execSync|fork)\s*\(/g;
+const SHELL = new RegExp(`\\$\`\\s*${COMMANDS}`);
+const SPAWN = /\b(?:exec|execFile|execFileSync|execSync|fork|spawn|spawnSync)\s*\(/g;
 /** In a spawn's arguments: a `.py` path, or a command line that starts with one of the commands. */
-const PYTHON_ARGUMENT = new RegExp(`["'\`][^"'\`\\n]*[\\w-]\\.py\\b|["'\`](?:${COMMANDS})\\s`);
-/** The Python's package, or any `.py` file. */
-const NAMES_PYTHON = /laplace_eidolon|[\w*-]\.py\b/;
+const PYTHON_ARGUMENT = new RegExp(`["'\`][^"'\`\\n]*[\\w-]\\.py\\b|["'\`]${COMMANDS}\\s`);
+/** The Python's package, any `.py` file, or a command line that runs it. */
+const NAMES_PYTHON = new RegExp(
+  [
+    "laplace_eidolon",
+    String.raw`[\w*-]\.py\b`,
+    String.raw`\buv\s+(?:run|sync)\b`,
+    String.raw`\b(?:uvx|pytest)\b`,
+    String.raw`\bpython(?:\d+(?:\.\d+)*)?\s+-m\b`,
+    String.raw`\bpython3(?:\.\d+)*\s+\S`,
+  ].join("|"),
+);
 const SKIPPED_DIRS = new Set(["node_modules", "dist", "pack"]);
+const TRANSPILERS = {
+  ts: new Bun.Transpiler({ loader: "ts" }),
+  tsx: new Bun.Transpiler({ loader: "tsx" }),
+};
 
 function typescriptFiles(dir: string): string[] {
   const found: string[] = [];
@@ -39,6 +54,20 @@ function callArguments(code: string, open: number): string {
   return code.slice(open);
 }
 
+/** What in `source` runs the Python: a command string, a shell template, a spawn's argument. */
+function pythonRuns(source: string, loader: keyof typeof TRANSPILERS = "ts"): string[] {
+  // Transpiled, so comments and types are gone and only code is checked.
+  const code = TRANSPILERS[loader].transformSync(source);
+  const found: string[] = [];
+  const command = COMMAND_STRING.exec(code) ?? SHELL.exec(code);
+  if (command) found.push(command[0]);
+  for (const call of code.matchAll(SPAWN)) {
+    const named = PYTHON_ARGUMENT.exec(callArguments(code, call.index + call[0].length - 1));
+    if (named) found.push(`${call[0]}… ${named[0]}`);
+  }
+  return found;
+}
+
 /** The lines AGENTS.md may name the Python on: its rule, and the layout's one line. */
 function allowedAgentsLines(lines: readonly string[]): Set<number> {
   const allowed = new Set<number>();
@@ -54,23 +83,27 @@ function allowedAgentsLines(lines: readonly string[]): Set<number> {
 }
 
 describe("no TypeScript runs the Python", () => {
+  test("an exec, a versioned python and a uvx shell are flagged, a message that names it isn't", () => {
+    for (const source of [
+      `exec("uv run python x.py");`,
+      `spawn(["python3.13", "-c", "print(1)"]);`,
+      "await Bun.$`uvx ruff check .`;",
+    ]) {
+      expect([source, pythonRuns(source).length > 0]).toEqual([source, true]);
+    }
+    const message = `logger.warning("The Python is for human readers: uv run python bot.py");`;
+    expect(pythonRuns(message)).toEqual([]);
+  });
+
   test("nothing under apps/ or packages/ spawns uv, python or pytest, or hands a spawn a .py", () => {
-    const ts = new Bun.Transpiler({ loader: "ts" });
-    const tsx = new Bun.Transpiler({ loader: "tsx" });
     const offenders: string[] = [];
     const files = ["apps", "packages"].flatMap((dir) => typescriptFiles(join(ROOT, dir)));
     for (const file of files) {
       const path = relative(ROOT, file);
       if (path === SELF) continue;
-      // Transpiled, so comments and types are gone and only code is checked.
-      const code = (path.endsWith(".tsx") ? tsx : ts).transformSync(readFileSync(file, "utf8"));
-      const command = COMMAND_STRING.exec(code) ?? SHELL.exec(code);
-      if (command) offenders.push(`${path}: ${command[0]}`);
-      for (const call of code.matchAll(SPAWN)) {
-        const args = callArguments(code, call.index + call[0].length - 1);
-        const named = PYTHON_ARGUMENT.exec(args);
-        if (named) offenders.push(`${path}: ${call[0]}… ${named[0]}`);
-      }
+      const source = readFileSync(file, "utf8");
+      const runs = pythonRuns(source, path.endsWith(".tsx") ? "tsx" : "ts");
+      offenders.push(...runs.map((run) => `${path}: ${run}`));
     }
     expect(files.length).toBeGreaterThan(500);
     expect(offenders).toEqual([]);
@@ -78,6 +111,23 @@ describe("no TypeScript runs the Python", () => {
 });
 
 describe("no agent-facing doc names the Python", () => {
+  test("a run instruction is flagged, pyproject.toml and uv.lock aren't", () => {
+    for (const line of [
+      "uv run laplace-refine",
+      "uv sync --extra tools",
+      "uvx ruff check",
+      "run pytest",
+      "python -m venv .venv",
+      "python3 bot",
+      "python3.13 -c 1",
+    ]) {
+      expect([line, NAMES_PYTHON.test(line)]).toEqual([line, true]);
+    }
+    for (const line of ["writes `pyproject.toml` and `uv.lock`", "python-dotenv's rules"]) {
+      expect([line, NAMES_PYTHON.test(line)]).toEqual([line, false]);
+    }
+  });
+
   test("AGENTS.md names it only in its rule and its one layout line", () => {
     const lines = readFileSync(join(ROOT, "AGENTS.md"), "utf8").split("\n");
     const allowed = allowedAgentsLines(lines);
