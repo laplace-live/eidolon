@@ -21,15 +21,19 @@ import {
   withPersona,
 } from "../src/index.ts";
 
-const touched = new Set<string>();
+/** Each variable a test set, with the value it had before. */
+const touched = new Map<string, string | undefined>();
 function setEnv(name: string, value: string | undefined): void {
-  touched.add(name);
+  if (!touched.has(name)) touched.set(name, process.env[name]);
   if (value === undefined) delete process.env[name];
   else process.env[name] = value;
 }
 
 afterEach(() => {
-  for (const name of touched) delete process.env[name];
+  for (const [name, value] of touched) {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  }
   touched.clear();
   setSettingDefaults(null);
   resetSettings();

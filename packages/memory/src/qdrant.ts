@@ -97,10 +97,17 @@ export class QdrantVectorStore {
       // with every viewer, on a box already running the bot itself. The bm25 slot stays empty, as
       // no sparse vector is ever written, but without it mem0 warns that the collection predates
       // hybrid search every time it opens it.
-      await this.#client.createCollection(this.#collection, {
-        vectors: { size: this.#vectorSize, distance: "Cosine", on_disk: true },
-        sparse_vectors: { bm25: { modifier: "idf" } },
-      });
+      try {
+        await this.#client.createCollection(this.#collection, {
+          vectors: { size: this.#vectorSize, distance: "Cosine", on_disk: true },
+          sparse_vectors: { bm25: { modifier: "idf" } },
+        });
+      } catch (error) {
+        // Engines for two memory configurations can open one collection at once, and the other
+        // one may have created it since the check above.
+        const { collections: now } = await this.#client.getCollections();
+        if (!now.some((c) => c.name === this.#collection)) throw error;
+      }
     }
     for (const field_name of INDEXED_FIELDS) {
       try {
