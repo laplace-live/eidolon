@@ -161,4 +161,23 @@ describe("AudioOut", () => {
     }
     expect(sender.replaced).toBe(1);
   });
+
+  test("a pause between plays advances the timestamp by the time nothing was sent", async () => {
+    const sender = new FakeSender();
+    const out = new AudioOut(sender as unknown as RTCRtpSender, libopusWasmCodec);
+    const stop = out.play(new ToneSource(24_000), () => true);
+    await until(() => sender.sent.length >= 2, 4000);
+    stop();
+    const before = sender.sent.length;
+    const last = sender.sent[before - 1]!;
+    await Bun.sleep(300);
+    out.play(new ToneSource(24_000), () => true);
+    await until(() => sender.sent.length > before, 4000);
+    out.stop();
+    const next = sender.sent[before]!;
+    expect(next.rtp.header.sequenceNumber).toBe((last.rtp.header.sequenceNumber + 1) & 0xffff);
+    const ticks = (next.rtp.header.timestamp - last.rtp.header.timestamp) >>> 0;
+    expect(ticks).toBeGreaterThanOrEqual(300 * 48);
+    expect(ticks).toBeLessThanOrEqual((next.at - last.at) * 48 + 960);
+  });
 });

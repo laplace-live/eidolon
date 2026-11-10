@@ -32,6 +32,8 @@ export class AudioOut {
   readonly #timestampOffset = Math.floor(Math.random() * 2 ** 32);
   /** RTP clock units sent. */
   #timestamp = 0;
+  /** When the last packet went out (performance.now()), or null before the first. */
+  #lastSent: number | null = null;
   /** Bumped by every play() and stop(): a clock whose run is no longer current ends. */
   #run = 0;
 
@@ -73,6 +75,12 @@ export class AudioOut {
       let filled = 0;
       let pulled = 0;
       const start = performance.now();
+      // The time nothing was sent advances the RTP clock too: its timestamp follows the sampling
+      // clock whether or not a packet goes out (RFC 3550 §5.1).
+      if (this.#lastSent !== null && this.#run === run) {
+        const paused = start - this.#lastSent - PACKET_SECS * 1000;
+        if (paused > 0) this.#timestamp += Math.round((paused / 1000) * OPUS_RTP_CLOCK_RATE);
+      }
       while (this.#run === run) {
         if (pulled > 0) {
           // From the clock's start, so a stalled event loop catches up instead of drifting.
@@ -96,6 +104,7 @@ export class AudioOut {
   }
 
   #send(payload: Uint8Array): void {
+    this.#lastSent = performance.now();
     this.#sequenceNumber = (this.#sequenceNumber + 1) & 0xffff;
     const header = new RtpHeader({
       payloadType: this.#sender.codec?.payloadType ?? 0,
