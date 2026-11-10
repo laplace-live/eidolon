@@ -8,10 +8,12 @@ import { baseOf, type FetchOptions, record, send, upload } from "./shared.ts";
 export interface SonioxOptions extends FetchOptions {
   /** For tests: the wait between polls. */
   readonly sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+  /** For tests: how long each delete may take. */
+  readonly cleanupMs?: number;
 }
 
 const POLL_MS = 500;
-/** How long the deletes may take once the transcript is in, or the request has failed. */
+/** How long each delete may take once the transcript is in, or the request has failed. */
 const CLEANUP_TIMEOUT_MS = 10_000;
 
 async function body(response: Response): Promise<Record<string, unknown>> {
@@ -77,11 +79,15 @@ export async function sonioxTranscribe(
     };
   } finally {
     // Not awaited: the transcript doesn't wait two round trips for the deletes. Without the
-    // caller's signal, so a clip it abandoned is still deleted.
-    const cleanup = { ...options, signal: AbortSignal.timeout(CLEANUP_TIMEOUT_MS) };
+    // caller's signal, so a clip it abandoned is still deleted, and each with its own time, so
+    // one that hangs doesn't cancel the next.
     const paths = [...(job === null ? [] : [`/transcriptions/${job}`]), `/files/${file.id}`];
     void (async () => {
       for (const path of paths) {
+        const cleanup = {
+          ...options,
+          signal: AbortSignal.timeout(options.cleanupMs ?? CLEANUP_TIMEOUT_MS),
+        };
         try {
           await send(selection, `${base}${path}`, { method: "DELETE", headers: auth }, cleanup);
         } catch (error) {

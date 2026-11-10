@@ -207,13 +207,15 @@ provider's figure (MiniMax's) or counted from the MP3's frame headers.
 | OpenAI | `POST {base}/audio/transcriptions`, multipart, the file named `voice.<ext>` | `gpt-realtime-whisper`, which serves Realtime sessions alone, becomes `gpt-4o-transcribe` | Its length when `usage` is in seconds; token usage is reported as tokens |
 | Deepgram | `POST {base}/v1/listen?model=…&punctuate=true`, the raw clip | as set | `detect_language` without a hint; the length from `metadata.duration` |
 | ElevenLabs | `POST {base}/v1/speech-to-text`, multipart | `_realtime` dropped | `tag_audio_events: false`, so the transcript holds only words, as a call's does |
-| Soniox | Its async files API: upload, create a transcription, poll every 500 ms, fetch the transcript, then delete both | `stt-rt-*` becomes `stt-async-*` | Only `STT_LANGUAGE` becomes a hint, as in a call. The deletes run after the transcript is returned, without holding it up, and even when the request fails or is abandoned; a 404 is quiet. It is its own client: `@eidolon/ingest`'s never reaches the bot image |
+| Soniox | Its async files API: upload, create a transcription, poll every 500 ms, fetch the transcript, then delete both | `stt-rt-*` becomes `stt-async-*` | Only `STT_LANGUAGE` becomes a hint, as in a call. The deletes run after the transcript is returned, without holding it up, and even when the request fails or is abandoned, each with 10 s of its own; a 404 is quiet. It is its own client: `@eidolon/ingest`'s never reaches the bot image |
 
 Each request reports the clip's seconds, the provider's figure else the recorder's, under the
 hearing role, priced as the transcription role prices that model: Soniox's async models by the
 hour. A failed request is a `ProviderHttpError` (`httpError`), and a missing key or group id a
-`ProviderConfigError`. For a viewer's voice message, `POST voice` answers them `502
-upstream-failed` and `409 missing-key`; her voice reply goes as text after either.
+`ProviderConfigError`. A request that outlasts its time limit
+([chat.md](chat.md#the-clients)) fails with `<provider> didn't answer within <n> s`. For a viewer's
+voice message, `POST voice` answers them `502 upstream-failed` and `409 missing-key`; her
+voice reply goes as text after either.
 
 ## Realtime models
 

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { ProviderConfigError, ProviderHttpError, selectRequired } from "../../../src/index.ts";
 import { speechSupport, synthesize } from "../../../src/speech/batch/index.ts";
+import { synthesizeTimeoutMs } from "../../../src/speech/batch/synthesize.ts";
 import { FakeProvider, hex, mp3Frames, sources } from "./fake.ts";
 
 const fake = new FakeProvider();
@@ -249,6 +250,24 @@ describe("synthesize", () => {
     controller.abort(new Error("interrupted"));
     await expect(pending).rejects.toThrow("interrupted");
     expect(fake.usage).toEqual([]);
+  });
+
+  test("a provider that never answers fails within the time limit, and nothing is used", async () => {
+    fake.answer(() => new Promise<Response>(() => {}));
+    const pending = synthesize(voice({ FISH_API_KEY: "fk" }), "嗨", {
+      fetch: fake.fetch,
+      signal: new AbortController().signal,
+      timeoutMs: 50,
+    });
+    const error = await pending.catch((e: unknown) => e);
+    expect((error as Error).message).toBe("Fish Audio didn't answer within 0.05 s");
+    expect(fake.usage).toEqual([]);
+  });
+
+  test("the time limit grows with what is spoken, from 30 s to 2 minutes", () => {
+    expect(synthesizeTimeoutMs("嗨")).toBe(30_100);
+    expect(synthesizeTimeoutMs("嗨".repeat(200))).toBe(50_000);
+    expect(synthesizeTimeoutMs("嗨".repeat(2000))).toBe(120_000);
   });
 });
 

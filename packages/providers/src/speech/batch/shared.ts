@@ -1,5 +1,5 @@
 // What every batch speech request shares: the account's API base, one fetch that turns an error
-// status into a ProviderHttpError, and the spoken language a call would use.
+// status into a ProviderHttpError, a time limit, and the spoken language a call would use.
 import { envOptional, isPlainObject } from "@eidolon/config";
 import { httpError } from "../../http/errors.ts";
 import { ProviderConfigError, type Selection } from "../../resolve.ts";
@@ -8,6 +8,8 @@ export interface FetchOptions {
   readonly signal?: AbortSignal;
   /** For tests. */
   readonly fetch?: typeof fetch;
+  /** For tests: the time limit, in place of the one the clip's or text's size gives. */
+  readonly timeoutMs?: number;
 }
 
 export function baseOf(selection: Selection): string {
@@ -31,6 +33,30 @@ export async function send(
   });
   if (!response.ok) throw await httpError(selection.provider.name, response);
   return response;
+}
+
+/**
+ * `request`, run with `options`' signal also aborting after `ms` (or `options.timeoutMs`), so a
+ * provider that never answers fails as one that refused would, and doesn't hold the chat's queue.
+ */
+export async function withTimeLimit<O extends FetchOptions, T>(
+  selection: Selection,
+  ms: number,
+  options: O,
+  request: (options: O) => Promise<T>,
+): Promise<T> {
+  const limit = options.timeoutMs ?? ms;
+  const timeout = AbortSignal.timeout(limit);
+  const signal =
+    options.signal === undefined ? timeout : AbortSignal.any([options.signal, timeout]);
+  try {
+    return await request({ ...options, signal });
+  } catch (error) {
+    if (!timeout.aborted) throw error;
+    throw new Error(`${selection.provider.name} didn't answer within ${limit / 1000} s`, {
+      cause: error,
+    });
+  }
 }
 
 /**

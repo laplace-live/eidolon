@@ -384,6 +384,12 @@ pipedog; [providers.md](providers.md#voice-messages-batch-speech) has each provi
   The language hint is a call's (`STT_LANGUAGE`).
 - **`speechSupport(selection)`** says which of the two a role's provider offers. Every voice
   provider in the catalog synthesizes, and every hearing provider transcribes.
+- **Each has a time limit,** so a provider that never answers fails instead of holding the chat's
+  queue (`withTimeLimit`, `shared.ts`):
+  - **hearing a clip:** 30 s, and a second more for every two seconds of audio, at most 90 s, for
+    all of Soniox's requests together (`transcribeTimeoutMs`);
+  - **speaking a reply:** 30 s, and 0.1 s more for each character spoken, at most 2 minutes
+    (`synthesizeTimeoutMs`).
 
 The engine reaches them through `EngineDeps.speech` (`batchSpeech`), so tests stand in for both.
 
@@ -438,12 +444,12 @@ as `（听不清）`, and the page says no words could be heard in it.
 | What | What happens |
 | --- | --- |
 | Her voice role has no key, or no batch synthesis | `voice` and `auto` replies are text; the chat's settings sheet says so |
-| Synthesis or saving its audio fails | Her message is stored as text, then a `turn-failed` with `code: "voice-failed"`; the page shows a quiet **Sent as text** |
+| Synthesis or saving its audio fails, or synthesis outlasts its time limit | Her message is stored as text, then a `turn-failed` with `code: "voice-failed"`; the page shows a quiet **Sent as text** |
 | She is interrupted while she is spoken | Her words are stored as interrupted text, with no audio |
 | The director doesn't answer `voice_moment` within 2 s | `auto` replies are text |
 | A chat of one is interrupted while the director weighs her reply | The request is aborted. Her words so far are stored as interrupted text, after a `single` decision for text with no scores; with no words yet, nothing is stored |
 | The first persona's hearing role has no key | `POST voice` answers `409 missing-key`, and `GET chats/:id`'s `hearingRefusal` says why, which disables the microphone |
-| Her hearing provider fails | `POST voice` answers `502 upstream-failed`, and nothing is stored, so the recording can be sent again |
+| Her hearing provider fails, or outlasts its time limit | `POST voice` answers `502 upstream-failed`, and nothing is stored, so the recording can be sent again |
 
 ### Voice costs
 
@@ -484,7 +490,8 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
   it. Only stop, a new message, `DELETE` and the server's shutdown abort one. Shutdown waits up to
   2 s for what was said to be stored.
 - **A stop** waits its turn in the queue, so one that arrives while a send is still storing the
-  viewer's line, or hearing the viewer's clip, stops the reply that send starts.
+  viewer's line, or hearing the viewer's clip, stops the reply that send starts. Hearing's time
+  limit ([The clients](#the-clients)) bounds that wait.
 - **A selfie still rendering when its turn was interrupted** is the runner's until it ends, as
   `late` (step 8 above):
   - **Storing:** what it brings is numbered on from the log like any append. It always lands

@@ -20,7 +20,7 @@ import {
   Sends,
   type VoiceClip,
 } from "./stream";
-import { voiceReplies } from "./voice";
+import { afterAutoPlay, voiceReplies } from "./voice";
 
 type Open = (signal: AbortSignal) => AsyncIterable<ChatStreamLine>;
 
@@ -33,8 +33,11 @@ export interface ChatTurns {
   stop(): void;
   /** The seq of her voice message to play now on its own; null for none. */
   readonly autoPlay: number | null;
-  /** It played through, and the next waiting plays; or it stopped, and none of them does. */
-  autoPlayEnded(finished: boolean): void;
+  /**
+   * It played through or broke off, and the next waiting plays while the tab has the focus; or it
+   * was paused or refused, and none of them does.
+   */
+  autoPlayEnded(next: boolean): void;
 }
 
 export function useChat(id: string): ChatTurns {
@@ -94,7 +97,7 @@ export function useChat(id: string): ChatTurns {
             }
           } else if (line.type === "started" && reached) [turn, ended] = [line.turn, false];
           else if (line.type === "ended" && line.turn === turn) ended = true;
-          if (reached) dispatch(line);
+          if (reached) dispatch(line.type === "events" && key !== null ? { ...line, key } : line);
         }
       } catch (error) {
         broke = !controller.signal.aborted;
@@ -151,8 +154,9 @@ export function useChat(id: string): ChatTurns {
     [queryClient, id, follow],
   );
 
-  const autoPlayEnded = useCallback((finished: boolean) => {
-    setToPlay((waiting) => (finished ? waiting.slice(1) : []));
+  const autoPlayEnded = useCallback((next: boolean) => {
+    const focused = document.hasFocus();
+    setToPlay((waiting) => afterAutoPlay(waiting, next, focused));
   }, []);
 
   const stop = useCallback(() => {

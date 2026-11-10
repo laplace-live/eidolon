@@ -40,6 +40,29 @@ export function voiceReplies(events: readonly ChatEvent[]): number[] {
   );
 }
 
+/**
+ * The replies left to play on their own once the first stops: the rest, if `next` and the tab
+ * still has the focus, which it may have lost since they were queued; else none.
+ */
+export function afterAutoPlay(
+  waiting: readonly number[],
+  next: boolean,
+  focused: boolean,
+): readonly number[] {
+  return next && focused ? waiting.slice(1) : [];
+}
+
+/**
+ * Whether the next reply waiting plays after media event `type` on the one playing on its own;
+ * null while it plays on. Playing through pauses too, just before it ends. A clip that breaks off,
+ * its file lost or undecodable, is passed over like one played through.
+ */
+export function playsNextAfter(type: string, ended: boolean): boolean | null {
+  if (type === "ended" || type === "error") return true;
+  if (type === "pause") return ended ? null : false;
+  return null;
+}
+
 type Playable = Pick<HTMLMediaElement, "pause">;
 
 let playing: Playable | null = null;
@@ -53,4 +76,32 @@ export function claimPlayback(audio: Playable): void {
 /** `audio` stopped playing. */
 export function releasePlayback(audio: Playable): void {
   if (playing === audio) playing = null;
+}
+
+/**
+ * A recorder's requests for the microphone, one under way at a time. A cancel lets go of it, so
+ * its late answer, a grant or a refusal, never touches a start made since.
+ */
+export class MicRequests {
+  #issued = 0;
+  #pending: number | null = null;
+
+  /** A new request's id, or null while one is under way. */
+  begin(): number | null {
+    if (this.#pending !== null) return null;
+    this.#issued += 1;
+    this.#pending = this.#issued;
+    return this.#pending;
+  }
+
+  cancel(): void {
+    this.#pending = null;
+  }
+
+  /** Request `id` was answered: whether it is still wanted. Either way it is no longer under way. */
+  settle(id: number): boolean {
+    if (this.#pending !== id) return false;
+    this.#pending = null;
+    return true;
+  }
 }

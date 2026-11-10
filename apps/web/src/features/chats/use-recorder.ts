@@ -3,7 +3,7 @@ import { MAX_VOICE_MS } from "@eidolon/chat";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type MicProblem, micProblemOf } from "@/features/call/media";
 import type { VoiceClip } from "./stream";
-import { MIN_RECORDING_MS, recordingType } from "./voice";
+import { MIN_RECORDING_MS, MicRequests, recordingType } from "./voice";
 
 export type RecorderPhase = "idle" | "starting" | "recording";
 
@@ -53,15 +53,15 @@ export function useRecorder({
   const [phase, setPhase] = useState<RecorderPhase>("idle");
   const [elapsed, setElapsed] = useState(0);
   const take = useRef<Take | null>(null);
-  // A start under way; stop clears it, so a microphone granted after a cancel is let go at once.
-  const starting = useRef(false);
+  // Stop cancels a start under way, so a microphone granted after it is let go at once.
+  const requests = useRef(new MicRequests());
   const handlers = useRef({ onClip, onProblem });
   useEffect(() => {
     handlers.current = { onClip, onProblem };
   });
 
   const stop = useCallback((send: boolean) => {
-    starting.current = false;
+    requests.current.cancel();
     const current = take.current;
     take.current = null;
     setPhase("idle");
@@ -89,16 +89,16 @@ export function useRecorder({
   }, []);
 
   const start = useCallback(() => {
-    if (starting.current || take.current !== null) return;
-    starting.current = true;
+    if (take.current !== null) return;
+    const request = requests.current.begin();
+    if (request === null) return;
     setPhase("starting");
     navigator.mediaDevices.getUserMedia({ audio: true }).then(
       (stream) => {
-        if (!starting.current) {
+        if (!requests.current.settle(request)) {
           release(stream);
           return;
         }
-        starting.current = false;
         const type = recordingType((candidate) => MediaRecorder.isTypeSupported(candidate));
         let recorder: MediaRecorder;
         try {
@@ -123,8 +123,7 @@ export function useRecorder({
         setPhase("recording");
       },
       (error: unknown) => {
-        if (!starting.current) return;
-        starting.current = false;
+        if (!requests.current.settle(request)) return;
         setPhase("idle");
         handlers.current.onProblem(micProblemOf(error));
       },

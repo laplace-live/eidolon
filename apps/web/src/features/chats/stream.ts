@@ -59,8 +59,14 @@ export interface LiveState {
 
 export const IDLE: LiveState = { turn: null, pending: [], error: null, seen: 0, following: 0 };
 
+type Stored = Extract<ChatStreamLine, { readonly type: "events" }>;
+
 export type LiveAction =
-  | ChatStreamLine
+  | Exclude<ChatStreamLine, Stored>
+  | (Stored & {
+      /** The send whose stream carried them; absent for live. */
+      readonly key?: number;
+    })
   | {
       readonly type: "sending";
       readonly key: number;
@@ -88,11 +94,13 @@ function finishes(turn: LiveTurn, events: readonly ChatEvent[]): boolean {
 
 /**
  * `pending` without the lines `events` store: each the first sent before it with its text, or for
- * a voice message, the first voice message sent before it.
+ * a voice message, whose transcript can't be told before, the one sent by `key`, whose stream
+ * carried it. Live replays any send's, so it clears none.
  */
 function unstored(
   pending: readonly PendingLine[],
   events: readonly ChatEvent[],
+  key: number | undefined,
 ): readonly PendingLine[] {
   let left = pending;
   for (const event of events) {
@@ -101,7 +109,7 @@ function unstored(
     const stored = left.findIndex(
       (line) =>
         event.seq > line.after &&
-        (line.voice === undefined ? !voice && line.text === event.text : voice),
+        (line.voice === undefined ? !voice && line.text === event.text : voice && line.key === key),
     );
     if (stored >= 0) left = left.filter((_, i) => i !== stored);
   }
@@ -130,7 +138,7 @@ export function reduceLive(state: LiveState, action: LiveAction): LiveState {
     case "events":
       return {
         ...state,
-        pending: unstored(state.pending, action.events),
+        pending: unstored(state.pending, action.events, action.key),
         turn: state.turn !== null && finishes(state.turn, action.events) ? null : state.turn,
         seen: Math.max(state.seen, ...action.events.map((event) => event.seq)),
       };

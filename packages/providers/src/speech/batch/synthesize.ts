@@ -7,7 +7,14 @@ import { textUnits } from "../../pricing.ts";
 import { hasKey, missingKey, ProviderConfigError, type Selection, voiceOf } from "../../resolve.ts";
 import { reportUsage } from "../../usage.ts";
 import { mp3DurationMs } from "./mp3.ts";
-import { baseOf, type FetchOptions, record, send, spokenLanguage } from "./shared.ts";
+import {
+  baseOf,
+  type FetchOptions,
+  record,
+  send,
+  spokenLanguage,
+  withTimeLimit,
+} from "./shared.ts";
 
 export interface SynthesizeOptions extends FetchOptions {
   /** The voice for this reply alone, as her voice-style tool picks it; else her role's. */
@@ -210,6 +217,11 @@ const SYNTHESIZERS: Readonly<Record<string, (job: Job) => Promise<Speech>>> = {
   },
 };
 
+/** How long speaking a reply may take: 30 s, and 0.1 s more for each character, at most 2 minutes. */
+export function synthesizeTimeoutMs(text: string): number {
+  return Math.min(30_000 + [...text].length * 100, 120_000);
+}
+
 export function canSynthesize(selection: Selection): boolean {
   return selection.role.category === "tts" && Object.hasOwn(SYNTHESIZERS, selection.provider.id);
 }
@@ -231,12 +243,14 @@ export async function synthesize(
   const markup = modelInfo(selection.provider.id, "tts", selection.model)?.markup;
   const spoken = stripMarkup(text, markup).trim();
   if (spoken === "") throw new Error("Nothing to say: the reply holds no words to speak");
-  const speech = await run({
-    selection: selection as Job["selection"],
-    text: spoken,
-    voice: options.voice ?? voiceOf(selection),
-    options,
-  });
+  const speech = await withTimeLimit(selection, synthesizeTimeoutMs(spoken), options, (bounded) =>
+    run({
+      selection: selection as Job["selection"],
+      text: spoken,
+      voice: options.voice ?? voiceOf(selection),
+      options: bounded,
+    }),
+  );
   reportUsage({
     role: selection.role.id,
     provider: selection.provider.id,

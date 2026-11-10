@@ -3,7 +3,7 @@ import { envOptional } from "@eidolon/config";
 import { costOf, priceOf, type Units } from "../../pricing.ts";
 import { hasKey, missingKey, ProviderConfigError, type Selection } from "../../resolve.ts";
 import { reportUsage } from "../../usage.ts";
-import { baseMime, baseOf, record, send, spokenLanguage, upload } from "./shared.ts";
+import { baseMime, baseOf, record, send, spokenLanguage, upload, withTimeLimit } from "./shared.ts";
 import { type SonioxOptions, sonioxTranscribe } from "./soniox.ts";
 
 export interface AudioClip {
@@ -141,6 +141,17 @@ const TRANSCRIBERS: Readonly<Record<string, Transcriber>> = {
   },
 };
 
+/**
+ * How long hearing a clip may take, all its requests together: 30 s, and a second more for every
+ * two seconds of audio, at most 90 s. A clip of unknown length gets the most.
+ */
+export function transcribeTimeoutMs(durationMs: number | undefined): number {
+  return Math.min(
+    30_000 + Math.ceil((durationMs ?? Number.POSITIVE_INFINITY) / 2000) * 1000,
+    90_000,
+  );
+}
+
 export function canTranscribe(selection: Selection): boolean {
   return selection.role.category === "stt" && Object.hasOwn(TRANSCRIBERS, selection.provider.id);
 }
@@ -159,13 +170,19 @@ export async function transcribe(
   const model = transcriber.model?.(selection.model) ?? selection.model;
   const language =
     options.language !== undefined ? options.language : (transcriber.language ?? spokenLanguage)();
-  const heard = await transcriber.run({
-    selection: selection as Job["selection"],
-    audio,
-    model,
-    language,
+  const heard = await withTimeLimit(
+    selection,
+    transcribeTimeoutMs(audio.durationMs),
     options,
-  });
+    (bounded) =>
+      transcriber.run({
+        selection: selection as Job["selection"],
+        audio,
+        model,
+        language,
+        options: bounded,
+      }),
+  );
   const durationMs = heard.durationMs ?? audio.durationMs ?? null;
   const units: Units = {
     ...heard.units,
