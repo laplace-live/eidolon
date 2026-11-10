@@ -538,11 +538,13 @@ class RealtimeFloor {
 
   /** The caller's final transcript: her line, then her recall for the turn after. */
   #heardCaller(text: string): void {
+    const said = text.trim() !== "";
+    // Before the release: what the hold kept back goes after the caller's line.
+    if (said) this.#o.plan.log.append([this.#userLine(text, "call")]);
     this.#release();
-    if (text.trim() === "") return;
+    if (!said) return;
     this.#linesOwed.push(text);
     if (this.#active === null && !this.#speaking) this.#flushLines();
-    this.#o.plan.log.append([this.#userLine(text, "call")]);
     this.#recall(false);
   }
 

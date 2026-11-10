@@ -713,8 +713,8 @@ describe("runRealtimeCall", () => {
       "user-llm-text 在吗",
     ]);
     expect(messages(call)).toEqual([
-      ["persona", "好呀。", "call", false],
       ["user", "在吗", "call", false],
+      ["persona", "好呀。", "call", false],
     ]);
 
     await call.server({ type: "speech-started" }, { type: "speech-stopped" });

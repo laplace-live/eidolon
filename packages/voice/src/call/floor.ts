@@ -103,6 +103,8 @@ export class Floor {
   /** A group call's answer while it runs: between its turns, BOT is thinking with no reply. */
   #chain: Chain | null = null;
   #speaking = false;
+  /** The reply the speaker label named last. */
+  #labeled: string | null = null;
   /** Every reply whose turn hasn't ended, by id. */
   readonly #replies = new Map<string, Reply>();
   /** The Speaker's cursor last said it drained. */
@@ -684,6 +686,8 @@ export class Floor {
         emitter.segment(note.tag, note.text);
         return;
       case "unspoken":
+        // A reply in text alone never starts audio, so its label goes with its first words.
+        if (this.#labeled !== reply.id) this.#label(reply);
         emitter.unspokenSegment(note.text);
         return;
       case "tts-started":
@@ -745,12 +749,9 @@ export class Floor {
         const reply = this.#reply;
         if (reply === null || reply.id !== event.reply || reply.cut || this.#speaking) return;
         this.#speaking = true;
-        const { emitter, group } = this.#o;
         // On her first sample, so the label names whoever the caller hears.
-        if (group !== undefined) {
-          emitter.serverMessage(speakerLabel(reply.persona, group.nameOf(reply.persona)));
-        }
-        emitter.botStartedSpeaking();
+        this.#label(reply);
+        this.#o.emitter.botStartedSpeaking();
         this.#timed(reply, "speaking");
         return;
       }
@@ -771,6 +772,14 @@ export class Floor {
         this.#notes(reply);
       }
     }
+  }
+
+  /** On a group call, the server message naming whoever says `reply`. */
+  #label(reply: Reply): void {
+    const { group, emitter } = this.#o;
+    if (group === undefined) return;
+    this.#labeled = reply.id;
+    emitter.serverMessage(speakerLabel(reply.persona, group.nameOf(reply.persona)));
   }
 
   #stoppedSpeaking(): void {

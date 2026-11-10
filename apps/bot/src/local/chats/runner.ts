@@ -599,6 +599,7 @@ export class ChatRunner {
             text: event.text,
             modality: "call",
             ...(event.interrupted ? { interrupted: true } : {}),
+            ...(event.cutOff === undefined ? {} : { cutOff: event.cutOff }),
           },
         ]);
         stored.catch(failed);

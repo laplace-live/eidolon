@@ -29,7 +29,7 @@ export interface GroupFloor {
 
 /**
  * The server message a group call sends as each persona's audio starts, just before
- * `bot-started-speaking`: who is speaking now.
+ * `bot-started-speaking`, or before a reply in text alone's first words: who is speaking now.
  */
 export function speakerLabel(
   persona: ParticipantId,
