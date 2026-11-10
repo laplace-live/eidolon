@@ -24,6 +24,26 @@ describe("QdrantVectorStore sets what the JS client defaults differently", () =>
     ]);
   });
 
+  test("a collection another engine created between the check and the create is used", async () => {
+    const fake = new FakeQdrant({ collections: [] });
+    const created = fake.createCollection.bind(fake);
+    fake.createCollection = async (name, args) => {
+      await created(name, args);
+      fake.collections.push(name);
+      throw new Error("Conflict: Collection eidolon_memories already exists!");
+    };
+    await store(fake).ensureCollection();
+    expect(raw(fake, "createPayloadIndex")).toHaveLength(4);
+  });
+
+  test("a create that fails with no collection behind it still fails", async () => {
+    const fake = new FakeQdrant({ collections: [] });
+    fake.createCollection = async () => {
+      throw new Error("Bad Request");
+    };
+    await expect(store(fake).ensureCollection()).rejects.toThrow("Bad Request");
+  });
+
   test("payload indexes wait, and their failures are swallowed", async () => {
     const fake = new FakeQdrant({ fail: { create_payload_index: 4 } });
     await store(fake).ensureCollection();

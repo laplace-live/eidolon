@@ -19,6 +19,22 @@ const env = isolateEnv();
 const ok = (results: unknown) => Response.json({ results, meta: { billed_units: 1 } });
 const tooMany = () => new Response("{}", { status: 429, statusText: "Too Many Requests" });
 
+const ENV_NAMES = [
+  "OPENROUTER_API_KEY",
+  "RERANK_API_KEY",
+  "RERANK_BASE_URL",
+  "RERANK_ENABLED",
+  "RERANK_MODEL",
+] as const;
+const envBefore = new Map(ENV_NAMES.map((name) => [name, process.env[name]]));
+
+afterEach(() => {
+  for (const [name, value] of envBefore) {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  }
+});
+
 describe("OpenRouterReranker", () => {
   test("posts the Cohere body with OpenRouter attribution", async () => {
     const { fetch, calls } = fakeFetch([ok([{ index: 1, relevance_score: 0.9 }])]);
