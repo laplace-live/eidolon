@@ -314,7 +314,8 @@ export function notices(dist: readonly Bundled[], web: readonly Bundled[]): stri
   return [
     "# Third-party notices\n",
     "The bundles in dist/ and the web app in web/ include the packages below, each with its",
-    "license. NOTICE covers the data and the font the package ships.\n",
+    "license. NOTICE covers the code ported from pipedog, and the data and the font the package",
+    "ships.\n",
     "## dist/\n",
     ...sections(dist),
     "## web/\n",

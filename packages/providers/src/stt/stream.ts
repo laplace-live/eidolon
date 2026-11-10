@@ -41,6 +41,12 @@ export function pcmBytes(pcm: Int16Array): Uint8Array {
   return new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength);
 }
 
+const decoder = new TextDecoder();
+
+export function textOf(data: WsData): string {
+  return typeof data === "string" ? data : decoder.decode(data);
+}
+
 export function pcmBase64(pcm: Int16Array): string {
   return Buffer.from(pcm.buffer, pcm.byteOffset, pcm.byteLength).toString("base64");
 }
@@ -100,6 +106,8 @@ export abstract class SttBase implements SttStream {
 
   /** Sends `message()` whenever no audio has gone out for `idleMs`, checking every 5 s. */
   protected keepIdleAlive(idleMs: number, message: () => WsData): void {
+    // Closed while connecting: an abort listener added now would never clear the timer.
+    if (this.closing.signal.aborted) return;
     this.#audioAt = performance.now();
     const timer = setInterval(() => {
       if (!this.socket?.open || performance.now() - this.#audioAt < idleMs) return;

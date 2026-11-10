@@ -12,7 +12,7 @@ import type { Selection } from "../resolve.ts";
 import type { WsData } from "../ws.ts";
 import type { SttStream } from "./index.ts";
 import { elevenLabsLanguage } from "./language.ts";
-import { accountUrl, pcmBase64, WebsocketStt } from "./stream.ts";
+import { accountUrl, pcmBase64, textOf, WebsocketStt } from "./stream.ts";
 
 const ELEVENLABS_URL = "wss://api.elevenlabs.io/v1/speech-to-text/realtime";
 const SAMPLE_RATE = 16000;
@@ -87,7 +87,7 @@ class ElevenLabsStt extends WebsocketStt {
   }
 
   protected receive(data: WsData): boolean {
-    const text = typeof data === "string" ? data : new TextDecoder().decode(data);
+    const text = textOf(data);
     let message: { message_type?: unknown; text?: unknown; error?: unknown };
     try {
       message = JSON.parse(text);

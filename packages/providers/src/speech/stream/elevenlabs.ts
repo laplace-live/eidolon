@@ -8,6 +8,7 @@
 // utterance. Each message's alignment times its own chunk's characters from that chunk's start.
 import { isPlainObject, pyJsonDumps } from "@eidolon/config";
 import { voiceOf } from "../../resolve.ts";
+import { accountUrl } from "../../stt/stream.ts";
 import type { WsData } from "../../ws.ts";
 import { bytesOfBase64, PcmBytes } from "../pcm.ts";
 import type { SpeechStream, Utterance } from "./index.ts";
@@ -17,7 +18,6 @@ import {
   SocketLink,
   SpokenText,
   scrubbed,
-  socketUrl,
   within,
 } from "./shared.ts";
 import { WordTimeline } from "./timeline.ts";
@@ -53,7 +53,7 @@ class Connection {
       `${ELEVENLABS_URL}/v1/text-to-speech/${voice}/multi-stream-input` +
       `?model_id=${model}&output_format=pcm_${SAMPLE_RATE}&auto_mode=true`;
     this.link = new SocketLink({
-      url: socketUrl(stream.selection, url),
+      url: accountUrl(stream.selection, url),
       headers: { "xi-api-key": apiKey },
       signal: stream.signal,
       provider: "ElevenLabs",

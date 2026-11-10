@@ -333,8 +333,8 @@ files in `~/.laplace/eidolon/sources/<id>/facts/` and re-run
 ## License
 
 Eidolon is licensed under version 3 of the GNU Affero General Public License
-([`LICENSE`](LICENSE)). The third-party data it includes, jieba's dictionary and the Geist font,
-keeps its own licenses, in [`NOTICE`](NOTICE).
+([`LICENSE`](LICENSE)). The third-party code and data it includes, the code ported from pipedog,
+jieba's dictionary and the Geist font, keep their own licenses, in [`NOTICE`](NOTICE).
 
 ## References
 

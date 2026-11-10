@@ -218,6 +218,32 @@ test("keeps an idle socket alive every 5 s, and only once it has been idle 1 s",
   await stt.close();
 });
 
+test("a call that hangs up while it connects leaves no keepalive running", async () => {
+  const real = { set: globalThis.setInterval, clear: globalThis.clearInterval };
+  const running = new Set<ReturnType<typeof setInterval>>();
+  globalThis.setInterval = ((callback: () => void, ms: number) => {
+    const id = real.set(callback, ms);
+    running.add(id);
+    return id;
+  }) as unknown as typeof setInterval;
+  globalThis.clearInterval = ((id: ReturnType<typeof setInterval>) => {
+    running.delete(id);
+    real.clear(id);
+  }) as typeof clearInterval;
+  const call = new AbortController();
+  try {
+    const opening = open(call.signal);
+    call.abort();
+    await (await opening).close();
+  } finally {
+    globalThis.setInterval = real.set;
+    globalThis.clearInterval = real.clear;
+  }
+  const leaked = running.size;
+  for (const id of running) real.clear(id);
+  expect(leaked).toBe(0);
+});
+
 test("meters every second it is sent, and reports it once closed", async () => {
   const records: UsageRecord[] = [];
   setUsageSink((record) => records.push(record));

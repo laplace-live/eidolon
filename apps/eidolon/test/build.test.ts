@@ -143,6 +143,20 @@ describe("the third-party notices", () => {
     );
     expect(text.match(/^### /gm)?.length).toBe(dist.length);
   });
+
+  test("NOTICE, which the package ships, names every copyright a ported file's BSD-2 header does", () => {
+    const notice = readFileSync(join(ROOT, "NOTICE"), "utf8");
+    const holders = new Set<string>();
+    for (const file of new Bun.Glob("packages/*/src/**/*.ts").scanSync(ROOT)) {
+      const source = readFileSync(join(ROOT, file), "utf8");
+      if (!source.includes("SPDX-License-Identifier: BSD-2-Clause")) continue;
+      for (const [, line] of source.matchAll(/^\/\/ (Copyright \(c\) .+)$/gm)) {
+        holders.add(line as string);
+      }
+    }
+    expect(holders.size).toBeGreaterThan(0);
+    expect([...holders].filter((line) => !notice.includes(line))).toEqual([]);
+  });
 });
 
 describe("the published manifest", () => {

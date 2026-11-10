@@ -8,6 +8,7 @@
 // message that names its voice. Character timestamps count from the stream's start.
 import { isPlainObject, pyJsonDumps } from "@eidolon/config";
 import { voiceOf } from "../../resolve.ts";
+import { accountUrl } from "../../stt/stream.ts";
 import type { WsData } from "../../ws.ts";
 import { bytesOfBase64, PcmBytes } from "../pcm.ts";
 import type { SpeechStream, Utterance } from "./index.ts";
@@ -17,7 +18,6 @@ import {
   SocketLink,
   SpokenText,
   scrubbed,
-  socketUrl,
   speechLanguage,
 } from "./shared.ts";
 import { WordTimeline } from "./timeline.ts";
@@ -160,7 +160,7 @@ export class SonioxSpeech implements SpeechStream {
 
   #connect(): SocketLink {
     return new SocketLink({
-      url: socketUrl(this.selection, SONIOX_URL),
+      url: accountUrl(this.selection, SONIOX_URL),
       headers: { Authorization: `Bearer ${this.selection.apiKey}` },
       signal: this.#controller.signal,
       provider: "Soniox TTS",

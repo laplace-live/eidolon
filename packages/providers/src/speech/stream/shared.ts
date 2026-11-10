@@ -1,5 +1,5 @@
 // What the streaming speech clients share: the utterance's event queue, the text a segment sends,
-// where a socket goes, and a socket that queues what is sent before it opens.
+// and a socket that queues what is sent before it opens.
 import { AsyncQueue, errorText, logger } from "@eidolon/config";
 import { modelInfo } from "../../catalog.ts";
 import { stripMarkup } from "../../markup.ts";
@@ -51,13 +51,6 @@ export class SpokenText {
 export function speechLanguage(): string | null {
   const language = spokenLanguage();
   return language?.includes("-") ? (language.split("-")[0] as string).toLowerCase() : language;
-}
-
-/** `url`, pipedog's for the provider, under an account's own API base when it has one. */
-export function socketUrl(selection: Selection, url: string): string {
-  if (selection.account.baseSource !== "account" || selection.baseUrl === undefined) return url;
-  const { pathname, search } = new URL(url);
-  return `${selection.baseUrl.replace(/^http/, "ws").replace(/\/+$/, "")}${pathname}${search}`;
 }
 
 /** `text` with `secret` taken out, for an error a provider echoed it in. */

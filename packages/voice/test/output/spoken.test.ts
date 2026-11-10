@@ -48,6 +48,16 @@ describe("a voice that marks where each segment ends", () => {
     tracker.cursor(words(2, 6));
     expect(tracker.text()).toBe("你好。|[开心地] 今天<emphasis>天气</emphasis>不错");
   });
+
+  test("a voice that reads brackets was sent their letters, so they count", () => {
+    const tracker = new SpokenTracker("r1", join, "brackets");
+    tracker.say(1, "[开心] 你<emphasis>好</emphasis>今天。", 1, true);
+    tracker.cursor(segStart(1));
+    tracker.cursor(words(1, 3));
+    expect(tracker.text()).toBe("[开心] 你");
+    tracker.cursor(words(1, 4));
+    expect(tracker.text()).toBe("[开心] 你<emphasis>好");
+  });
 });
 
 describe("a voice that marks no boundaries (Fish)", () => {

@@ -12,7 +12,7 @@ import type { Selection } from "../resolve.ts";
 import type { WsConnection, WsData } from "../ws.ts";
 import type { SttStream } from "./index.ts";
 import { sonioxHints } from "./language.ts";
-import { accountUrl, isPermanent, pcmBytes, WebsocketStt } from "./stream.ts";
+import { accountUrl, isPermanent, pcmBytes, textOf, WebsocketStt } from "./stream.ts";
 
 const SONIOX_URL = "wss://stt-rt.soniox.com/transcribe-websocket";
 const KEEPALIVE = '{"type": "keepalive"}';
@@ -91,7 +91,7 @@ class SonioxStt extends WebsocketStt {
   }
 
   protected receive(data: WsData): boolean {
-    const text = typeof data === "string" ? data : new TextDecoder().decode(data);
+    const text = textOf(data);
     let content: {
       tokens?: readonly Token[];
       error_code?: unknown;

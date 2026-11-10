@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { SONIOX_URL, SonioxSpeech } from "../../src/speech/stream/soniox.ts";
+import { sonioxUrl } from "../../src/stt/soniox.ts";
+import { selectionAt as hearingAt } from "../stt/fake.ts";
 import {
   bytesOf,
   CLEAN_ENV,
@@ -41,6 +43,17 @@ const audio = (from: number, to: number) =>
 
 test("pipedog's URL for Soniox's own account", () => {
   expect(SONIOX_URL).toBe("wss://tts-rt.soniox.com/tts-websocket");
+});
+
+test("an account's API base moves her voice's socket to its origin, as it moves her hearing's", async () => {
+  fake = fakeServer();
+  const base = `${fake.base}/soniox`;
+  streams.push(new SonioxSpeech(selectionAt("soniox", base)));
+  const peer = await until(() => fake.peers[0]);
+  expect(peer.path).toBe("/tts-websocket");
+  expect(sonioxUrl(hearingAt("soniox", base))).toBe(
+    `${fake.base.replace(/^http/, "ws")}/transcribe-websocket`,
+  );
 });
 
 test("a stream per utterance, configured as today before its text; timestamps split the audio", async () => {

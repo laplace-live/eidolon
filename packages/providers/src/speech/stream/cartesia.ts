@@ -8,6 +8,7 @@
 // word timestamps count from the context's start.
 import { isPlainObject, pyJsonDumps } from "@eidolon/config";
 import { voiceOf } from "../../resolve.ts";
+import { accountUrl } from "../../stt/stream.ts";
 import type { WsData } from "../../ws.ts";
 import { bytesOfBase64, PcmBytes } from "../pcm.ts";
 import type { SpeechStream, Utterance } from "./index.ts";
@@ -17,7 +18,6 @@ import {
   SocketLink,
   SpokenText,
   scrubbed,
-  socketUrl,
   speechLanguage,
 } from "./shared.ts";
 import { WordTimeline } from "./timeline.ts";
@@ -164,7 +164,7 @@ export class CartesiaSpeech implements SpeechStream {
   #connect(): SocketLink {
     const { apiKey } = this.selection;
     return new SocketLink({
-      url: socketUrl(this.selection, CARTESIA_URL),
+      url: accountUrl(this.selection, CARTESIA_URL),
       headers: { "X-API-Key": apiKey, "Cartesia-Version": CARTESIA_VERSION },
       signal: this.#controller.signal,
       provider: "Cartesia",

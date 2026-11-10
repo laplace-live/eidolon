@@ -10,18 +10,12 @@
 // utterance rarely waits for a handshake.
 import { isPlainObject, logger } from "@eidolon/config";
 import { voiceOf } from "../../resolve.ts";
+import { accountUrl } from "../../stt/stream.ts";
 import type { WsData } from "../../ws.ts";
 import { PcmBytes } from "../pcm.ts";
 import type { SpeechStream, Utterance } from "./index.ts";
 import { packMsg, unpackMsg } from "./msgpack.ts";
-import {
-  AudioQueue,
-  type KeyedSelection,
-  SocketLink,
-  SpokenText,
-  scrubbed,
-  socketUrl,
-} from "./shared.ts";
+import { AudioQueue, type KeyedSelection, SocketLink, SpokenText, scrubbed } from "./shared.ts";
 
 export const FISH_URL = "wss://api.fish.audio/v1/tts/live";
 const SAMPLE_RATE = 44100;
@@ -35,7 +29,7 @@ class Session {
     this.voice = voice;
     const { apiKey, model } = stream.selection;
     this.link = new SocketLink({
-      url: socketUrl(stream.selection, FISH_URL),
+      url: accountUrl(stream.selection, FISH_URL),
       headers: { Authorization: `Bearer ${apiKey}`, model },
       signal: stream.signal,
       provider: "Fish Audio",

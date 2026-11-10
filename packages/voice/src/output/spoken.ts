@@ -1,13 +1,13 @@
 // What the listener heard of one reply, from the segments its voice was given and the Speaker's
 // cursor: a call stores this as her message, never what the mind streamed.
-import { CUES } from "@eidolon/providers";
+import { type Markup, unreadCues } from "@eidolon/providers";
 import type { CursorEvent, JoinSegments } from "../types.ts";
 
 const WORD = /[\p{L}\p{N}]/u;
 
-/** `text` through its `chars`-th letter or digit outside cues; cues before it stay. */
-function wordPrefix(text: string, chars: number): string {
-  const cues = [...text.matchAll(CUES)];
+/** `text` through its `chars`-th letter or digit outside `unread` cues; cues before it stay. */
+function wordPrefix(text: string, chars: number, unread: RegExp | null): string {
+  const cues = unread === null ? [] : [...text.matchAll(unread)];
   let cue = 0;
   let count = 0;
   for (let i = 0; i < text.length; ) {
@@ -29,7 +29,7 @@ interface Said {
   readonly utterance: number;
   readonly exact: boolean;
   heard: boolean;
-  /** Letters and digits outside cues played so far, from a word provider's timings. */
+  /** Letters and digits of the text the voice was sent played so far, from its word timings. */
   chars: number;
 }
 
@@ -42,10 +42,14 @@ export class SpokenTracker {
   readonly #playing = new Set<number>();
   #tail = "";
   #frozen = false;
+  /** The cues the voice was never sent, which its word counts skip. */
+  readonly #unread: RegExp | null;
 
-  constructor(reply: string, join: JoinSegments) {
+  /** `markup`: the cues the voice reads, as its model's catalog entry names them. */
+  constructor(reply: string, join: JoinSegments, markup?: Markup) {
     this.#reply = reply;
     this.#join = join;
+    this.#unread = unreadCues(markup);
   }
 
   /**
@@ -91,7 +95,7 @@ export class SpokenTracker {
       if (said.heard) parts.push(said.text);
       else {
         all = false;
-        if (said.chars > 0) parts.push(wordPrefix(said.text, said.chars));
+        if (said.chars > 0) parts.push(wordPrefix(said.text, said.chars, this.#unread));
       }
     }
     if (all && this.#tail) parts.push(this.#tail);

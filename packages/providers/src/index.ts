@@ -30,7 +30,7 @@ export {
   toAnthropicRequest,
 } from "./http/json.ts";
 export { type SseEvent, sseEvents } from "./http/sse.ts";
-export { CUES, stripMarkup } from "./markup.ts";
+export { stripMarkup, unreadCues } from "./markup.ts";
 export { Meter } from "./meter.ts";
 export { type ListedModel, listModels, type ModelListing } from "./models.ts";
 export { costOf, priceOf, textUnits, type Units } from "./pricing.ts";

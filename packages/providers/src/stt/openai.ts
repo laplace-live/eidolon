@@ -12,7 +12,7 @@ import type { Selection } from "../resolve.ts";
 import type { WsData } from "../ws.ts";
 import type { SttStream } from "./index.ts";
 import { openaiLanguage } from "./language.ts";
-import { pcmBase64, WebsocketStt } from "./stream.ts";
+import { pcmBase64, textOf, WebsocketStt } from "./stream.ts";
 
 const SAMPLE_RATE = 24000;
 const COMMIT = pyJsonDumps({ type: "input_audio_buffer.commit" });
@@ -80,7 +80,7 @@ class OpenAIStt extends WebsocketStt {
   protected receive(data: WsData): boolean {
     let event: ServerEvent;
     try {
-      event = JSON.parse(typeof data === "string" ? data : new TextDecoder().decode(data));
+      event = JSON.parse(textOf(data));
     } catch {
       logger.warning("Failed to parse WebSocket message");
       return true;
