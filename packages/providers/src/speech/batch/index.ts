@@ -5,6 +5,7 @@ import { canSynthesize } from "./synthesize.ts";
 import { canTranscribe } from "./transcribe.ts";
 
 export { mp3DurationMs } from "./mp3.ts";
+export { recordingDurationMs } from "./recording.ts";
 export { type Speech, type SynthesizeOptions, synthesize } from "./synthesize.ts";
 export {
   type AudioClip,

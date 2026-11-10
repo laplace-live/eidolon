@@ -34,6 +34,7 @@ import {
   type TurnRequest,
 } from "@eidolon/engine";
 import { ProviderConfigError } from "@eidolon/providers";
+import { recordingDurationMs } from "@eidolon/providers/speech-batch";
 import type { MethodRoutes, RouteServer } from "../app.ts";
 import { readBytes } from "../responses.ts";
 import { type BoundOffer, bindChatCall } from "./call.ts";
@@ -55,19 +56,35 @@ const MAX_TEXT = 4000;
 /** A window is at most 256 KB of events; this leaves room for the rest of the body. */
 const BODY_LIMIT = 1024 * 1024;
 const MAX_VOICE_BYTES = 10 * 1024 * 1024;
+/**
+ * How far past MAX_VOICE_MS a clip may measure: a recorder stopped at the limit by a timer (the web
+ * app's ticks every 200 ms) hands over a little more, and frames are counted whole.
+ */
+const VOICE_GRACE_MS = 1000;
 /** Control characters other than a tab or a line break. */
 const CONTROL_IN_TEXT = /(?![\t\n\r])\p{Cc}/u;
 /** What the browser is told when a reply fails; the log has the rest. */
 const REPLY_FAILED = "The reply failed";
 const VOICE_FAILED = "Her voice message couldn't be made, so she answered in text";
+const TOOL_FAILED = "The tool failed";
 
 /**
- * A turn-failed as the browser may see it. The engine records the provider's words, which can name
- * the provider, its account or its balance; the engine has logged them.
+ * An event as the browser may see it, and so as it is signed. A turn-failed holds the provider's
+ * words, and a failed tool's result can too (take_selfie's holds the image provider's), which can
+ * name the provider, its account or its balance: the engine has logged a turn's, this logs a tool's.
  */
-function told(draft: ChatEventDraft): ChatEventDraft {
-  if (draft.type !== "turn-failed") return draft;
-  return { ...draft, error: draft.code === "voice-failed" ? VOICE_FAILED : REPLY_FAILED };
+function told(chatId: string, draft: ChatEventDraft): ChatEventDraft {
+  if (draft.type === "turn-failed") {
+    return { ...draft, error: draft.code === "voice-failed" ? VOICE_FAILED : REPLY_FAILED };
+  }
+  if (draft.type === "tool-result" && (draft.result.ok === false || "error" in draft.result)) {
+    logger.warning(
+      `[chat] Chat ${chatId}: ${draft.persona}'s tool call ${draft.callId} failed: ` +
+        JSON.stringify(draft.result),
+    );
+    return { ...draft, result: { ok: false, error: TOOL_FAILED } };
+  }
+  return draft;
 }
 
 export interface ChatEndpointOptions {
@@ -214,7 +231,9 @@ async function relay(
     for await (const output of outputs) {
       if (output.type === "events" || output.type === "decision") {
         const events = await store.add(
-          output.type === "events" ? output.events.map(told) : [output],
+          output.type === "events"
+            ? output.events.map((event) => told(store.header.id, event))
+            : [output],
         );
         if (events.length > 0) send({ type: "events", events });
         continue;
@@ -400,6 +419,18 @@ export function createChatEndpoint(options: ChatEndpointOptions): ChatEndpoint {
     if (durationMs > MAX_VOICE_MS) {
       return chatError(413, "payload-too-large", "A voice message is at most 2 minutes");
     }
+    // The claim is the browser's; hearing bills for what the clip holds.
+    const measured = recordingDurationMs(audio.bytes, mime);
+    if (measured === null) {
+      return chatError(
+        400,
+        "bad-request",
+        "The voice message isn't a whole recording of Opus in WebM or Ogg, AAC in MP4, or MP3",
+      );
+    }
+    if (measured > MAX_VOICE_MS + VOICE_GRACE_MS) {
+      return chatError(413, "payload-too-large", "A voice message is at most 2 minutes");
+    }
     let window: unknown;
     try {
       window = JSON.parse(field("chat") ?? "null");
@@ -420,7 +451,7 @@ export function createChatEndpoint(options: ChatEndpointOptions): ChatEndpoint {
       message = await hearVoiceMessage(
         {
           chat,
-          clip: { bytes: audio.bytes, mime, durationMs },
+          clip: { bytes: audio.bytes, mime, durationMs: measured },
           signal: request.signal,
         },
         // The browser keeps the clip it recorded; the server names it and lets it go.

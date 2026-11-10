@@ -343,7 +343,7 @@ can call a persona from inside a chat it keeps. The offer's `requestData` carrie
 ```ts
 requestData: {
   loginSyncToken,             // as on any call
-  chat: { header, events },   // the chat's newest events, the call's own call-started last
+  chat: { header, events },   // as POST /api/chat/turn takes it, the call's own call-started last
   persona: "milky-green",     // one of the chat's personas, served by the endpoint
 }
 ```

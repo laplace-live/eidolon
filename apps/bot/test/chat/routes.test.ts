@@ -17,8 +17,9 @@ import {
 } from "@eidolon/access";
 import { CHAT_FORMAT, type ChatEvent, type ChatEventOf, type ChatHeader } from "@eidolon/chat";
 import { dataHome, resetSettings } from "@eidolon/config";
-import type { MindChunk } from "@eidolon/engine";
+import type { MindChunk, PersonaParts } from "@eidolon/engine";
 import { ProviderConfigError } from "@eidolon/providers";
+import { fixture, webmOpus } from "../../../../packages/providers/test/speech/batch/recordings.ts";
 import { type BotAccess, createBotApp } from "../../src/app.ts";
 import { ChatFiles } from "../../src/chat/files.ts";
 import {
@@ -414,6 +415,22 @@ describe("POST /api/chat/turn", () => {
     expect([record.minds.length, resolved.length]).toEqual([0, 0]);
   });
 
+  test("who is in the chat, and its settings, hold past the window's 120 events", async () => {
+    const { url, record } = start({ engine: { canSpeak: true } });
+    const state = [
+      { seq: 1, at: 1001, type: "participants", removed: [BEA] },
+      { seq: 2, at: 1002, type: "settings", replyMode: "voice" },
+    ];
+    const newer = Array.from({ length: 120 }, (_, i) => user(i + 3, "嗯"));
+    const lines = await linesOf(
+      await postTurn(url, { chat: { header: GROUP, events: [...state, ...newer] }, text: "在吗" }),
+    );
+    expect(record.decisions.map((d) => d.participants.map((p) => [p.id, p.replyMode]))).toEqual([
+      [[MILKY, "voice"]],
+    ]);
+    expect(eventsIn(lines).at(-1)).toMatchObject({ type: "message", modality: "voice" });
+  });
+
   test("a chain limit past 3 is cut to 3 hops", async () => {
     const { url, record } = start({
       engine: { choose: (input, call) => [input.participants[(call - 1) % 2]?.id as string] },
@@ -573,6 +590,54 @@ describe("POST /api/chat/turn", () => {
     expect(JSON.stringify(voice)).not.toContain("acct_42");
   });
 
+  test("a failed tool's result reaches the browser as a fixed sentence; the log keeps the rest", async () => {
+    const upstream = "gemini answered 402: no credit left on acct_42";
+    const tool = (
+      name: string,
+      result: Record<string, unknown>,
+    ): PersonaParts["tools"][number] => ({
+      schema: { name, description: "", properties: {}, required: [] },
+      cancelOnInterruption: true,
+      timeoutSecs: null,
+      run: async () => result,
+    });
+    const { url } = start({
+      engine: {
+        tools: [
+          tool("take_selfie", { ok: false, error: upstream }),
+          tool("recall_streams", { error: "直播查询未完成", reason: "lance: /data/index gone" }),
+          tool("change_voice_style", { ok: true, style: "soft" }),
+        ],
+        mind: (_request, call) =>
+          (async function* (): AsyncGenerator<MindChunk> {
+            if (call === 1) {
+              const calls = ["take_selfie", "recall_streams", "change_voice_style"].map(
+                (name, i) => ({ id: `c${i}`, name, arguments: {} }),
+              );
+              yield { type: "tool-calls", calls };
+            } else {
+              yield { type: "text", text: "拍不了" };
+            }
+            yield { type: "done", finishReason: "stop" };
+          })(),
+      },
+    });
+    const events = eventsIn(
+      await linesOf(await postTurn(url, { chat: { header: HEADER, events: [] }, text: "自拍" })),
+    );
+    const results = events.filter((event) => event.type === "tool-result");
+    expect(results.map((event) => [event.callId, event.result])).toEqual([
+      ["c0", { ok: false, error: "The tool failed" }],
+      ["c1", { ok: false, error: "The tool failed" }],
+      ["c2", { ok: true, style: "soft" }],
+    ]);
+    for (const event of results) expect(await signer.verify(CHAT_ID, event)).toBe(true);
+    expect(JSON.stringify(events)).not.toContain("acct_42");
+    expect(JSON.stringify(events)).not.toContain("/data/index");
+    expect(logs.lines().some((line) => line.includes(upstream))).toBe(true);
+    expect(logs.lines().some((line) => line.includes("lance: /data/index gone"))).toBe(true);
+  });
+
   test("a malformed request is refused before anyone is resolved or charged", async () => {
     const { url, record, resolved } = start({ quotas: quotas(0, 0) });
     const chat = { header: HEADER, events: [] };
@@ -671,7 +736,8 @@ describe("the chat quotas", () => {
 });
 
 describe("POST /api/chat/voice", () => {
-  const CLIP = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 1, 2, 3]);
+  // As Chrome's MediaRecorder wrote it; 1321 ms by its frames.
+  const CLIP = fixture("chrome.webm");
   const CLIP_NAME = `${new Bun.CryptoHasher("sha256").update(CLIP).digest("hex")}.webm`;
 
   function form(fields: Record<string, string | Blob>): FormData {
@@ -718,8 +784,9 @@ describe("POST /api/chat/voice", () => {
       ],
     });
     expect(eventsIn(lines).map((event) => event.type)).toEqual(["message", "decision", "message"]);
+    // Its own length, not the 1200 the browser claimed.
     expect(record.heard.map((clip) => [clip.mime, [...clip.bytes], clip.durationMs])).toEqual([
-      ["audio/webm;codecs=opus", [...CLIP], 1200],
+      ["audio/webm;codecs=opus", [...CLIP], 1321],
     ]);
     expect(record.minds[0]?.messages.slice(-2)).toEqual([
       { role: "user", content: "在吗" },
@@ -732,31 +799,42 @@ describe("POST /api/chat/voice", () => {
 
   test("a part's own Content-Type counts, before or after its name, with a quoted boundary", async () => {
     const { url, record } = start();
-    const body = [
-      "preamble",
-      "--b0und",
-      'Content-Disposition: form-data; name="chat"',
-      "",
-      chatField,
-      "--b0und",
-      "Content-Type: audio/ogg",
-      'Content-Disposition: form-data; name="audio"; filename="clip.webm"',
-      "",
-      "OggS",
-      "--b0und",
-      'Content-Disposition: form-data; name="durationMs"',
-      "",
-      "800",
-      "--b0und--",
-      "",
-    ].join("\r\n");
+    const ogg = fixture("ffmpeg.ogg");
+    const body = Buffer.concat([
+      Buffer.from(
+        [
+          "preamble",
+          "--b0und",
+          'Content-Disposition: form-data; name="chat"',
+          "",
+          chatField,
+          "--b0und",
+          "Content-Type: audio/ogg",
+          'Content-Disposition: form-data; name="audio"; filename="clip.webm"',
+          "",
+          "",
+        ].join("\r\n"),
+      ),
+      ogg,
+      Buffer.from(
+        [
+          "",
+          "--b0und",
+          'Content-Disposition: form-data; name="durationMs"',
+          "",
+          "800",
+          "--b0und--",
+          "",
+        ].join("\r\n"),
+      ),
+    ]);
     const response = await postVoice(url, body, {
       "content-type": 'multipart/form-data; boundary="b0und"',
     });
     expect(response.status).toBe(200);
     await response.text();
-    expect(record.heard.map((clip) => [clip.mime, new TextDecoder().decode(clip.bytes)])).toEqual([
-      ["audio/ogg", "OggS"],
+    expect(record.heard.map((clip) => [clip.mime, [...clip.bytes]])).toEqual([
+      ["audio/ogg", [...ogg]],
     ]);
   });
 
@@ -801,6 +879,30 @@ describe("POST /api/chat/voice", () => {
       [form({ chat: "{oops", audio: recording(), durationMs: "1000" }), {}, 400, "bad-json"],
       [form({ audio: recording(), durationMs: "1000" }), {}, 400, "bad-request"],
       ["--x\r\nno end", { "content-type": "multipart/form-data; boundary=x" }, 400, "bad-request"],
+      // Not a recording it can measure: bytes that aren't one, or another container than named.
+      [
+        form({
+          chat: chatField,
+          audio: blob("audio/webm", new Uint8Array([1, 2, 3])),
+          durationMs: "1000",
+        }),
+        {},
+        400,
+        "bad-request",
+      ],
+      [
+        form({ chat: chatField, audio: blob("audio/ogg"), durationMs: "1000" }),
+        {},
+        400,
+        "bad-request",
+      ],
+      // 2:30 of audio under a claimed second.
+      [
+        form({ chat: chatField, audio: blob("audio/webm", webmOpus(2500)), durationMs: "1000" }),
+        {},
+        413,
+        "payload-too-large",
+      ],
     ];
     for (const [body, headers, status, code] of cases) {
       const response = await postVoice(url, body, headers);
@@ -841,9 +943,11 @@ test("nothing a chat does is written to the data home", async () => {
   await linesOf(await postTurn(url, { chat: { header: HEADER, events: [] } }));
   const voice = new FormData();
   voice.append("chat", JSON.stringify({ header: HEADER, events: [user(1, "嗨")] }));
-  voice.append("audio", new Blob([new Uint8Array([1, 2])], { type: "audio/webm" }));
-  voice.append("durationMs", "500");
-  await linesOf(await fetch(`${url}/api/chat/voice`, { method: "POST", body: voice }));
+  voice.append("audio", new Blob([fixture("chrome.webm")], { type: "audio/webm" }));
+  voice.append("durationMs", "1300");
+  const heard = await fetch(`${url}/api/chat/voice`, { method: "POST", body: voice });
+  expect(heard.status).toBe(200);
+  await linesOf(heard);
   const settings = { seq: 1, at: 1001, type: "settings", replyMode: "voice" };
   await linesOf(
     await postTurn(url, { chat: { header: GROUP, events: [settings] }, text: "大家好" }),

@@ -25,6 +25,12 @@ function audioStart(bytes: Uint8Array): number {
 
 /** The length of an MPEG Layer III stream in ms, or null when `bytes` hold no frame of one. */
 export function mp3DurationMs(bytes: Uint8Array): number | null {
+  const { ms, frames } = mp3Frames(bytes);
+  return frames === 0 ? null : ms;
+}
+
+/** The Layer III frames at the start of `bytes`: their length in ms, and where the run of them ends. */
+export function mp3Frames(bytes: Uint8Array): { ms: number; frames: number; end: number } {
   let at = audioStart(bytes);
   let seconds = 0;
   let frames = 0;
@@ -44,5 +50,5 @@ export function mp3DurationMs(bytes: Uint8Array): number | null {
     frames++;
     at += length;
   }
-  return frames === 0 ? null : Math.round(seconds * 1000);
+  return { ms: Math.round(seconds * 1000), frames, end: at };
 }

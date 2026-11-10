@@ -12,6 +12,9 @@ import {
   type ChatEventOf,
   type ChatHeader,
   ChatStoreError,
+  chainLimitOf,
+  replyModeOf,
+  summarize,
 } from "@eidolon/chat";
 import { activePersona, dataHome, resetSettings } from "@eidolon/config";
 import {
@@ -221,6 +224,42 @@ describe("openChatWindow", () => {
     expect(logs.lines()).toEqual([
       `INFO [chat] Chat ${CHAT}: kept 120 of the request's 125 events (dropped 5 past the window)`,
     ]);
+  });
+
+  test("the chat's participants, title and settings count whatever the cut", async () => {
+    const header: ChatHeader = { ...HEADER, participants: ["milky-green", "bea"] };
+    const state: unknown[] = [
+      { seq: 1, at: 1001, type: "settings", replyMode: "voice", chainLimit: 2 },
+      user(2, "早"),
+      { seq: 3, at: 1003, type: "participants", added: ["cleo"], removed: ["bea"] },
+      { seq: 4, at: 1004, type: "title", title: "旧标题" },
+      { seq: 5, at: 1005, type: "participants", added: [7] },
+    ];
+    const newer = Array.from({ length: CHAT_WINDOW_EVENTS }, (_, i) => user(i + 6, "嗯"));
+    const store = await open([...state, ...newer], header);
+    const { events } = await store.read(CHAT);
+    expect(events.slice(0, 3)).toEqual([state[0], state[2], state[3]] as ChatEvent[]);
+    expect(events.slice(3)).toEqual(newer);
+    const summary = summarize(store.header, events);
+    expect([summary.participants, summary.title]).toEqual([["milky-green", "cleo"], "旧标题"]);
+    expect([chainLimitOf(events), replyModeOf(events)]).toEqual([2, "voice"]);
+    expect(logs.lines()).toEqual([
+      `WARNING [chat] Chat ${CHAT}: kept 123 of the request's 125 events ` +
+        "(dropped 1 past the window, 1 malformed)",
+    ]);
+  });
+
+  test("refuses a chat whose personas ever pass six, however far back", async () => {
+    const seven = ["b", "c", "d", "e", "f", "g"];
+    const events: unknown[] = [
+      { seq: 1, at: 1001, type: "participants", added: seven },
+      { seq: 2, at: 1002, type: "participants", removed: seven },
+      ...Array.from({ length: CHAT_WINDOW_EVENTS }, (_, i) => user(i + 3, "嗯")),
+    ];
+    expect(await openChatWindow({ header: HEADER, events }, signer)).toEqual({
+      ok: false,
+      message: "A chat holds 1 to 6 personas",
+    });
   });
 });
 

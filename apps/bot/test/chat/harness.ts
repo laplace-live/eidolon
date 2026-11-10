@@ -47,6 +47,8 @@ export interface FakeEngineOptions {
   readonly transcribe?: (clip: AudioClip) => Promise<{ text: string; durationMs: number | null }>;
   /** Her voice; default: `mp3:` and the text. */
   readonly synthesize?: (text: string) => Promise<void>;
+  /** Her tools; default: none. */
+  readonly tools?: PersonaParts["tools"];
 }
 
 /** An engine of fakes, saving files through the endpoint's own `saveAttachment`. */
@@ -70,6 +72,7 @@ export function fakeEngine(options: FakeEngineOptions = {}): {
     errorMessage: () => "",
   };
   let ids = 0;
+  const tools = options.tools ?? [];
   const engine = (saveAttachment: EngineDeps["saveAttachment"]): ChatDeps => ({
     createMind: () => ({
       stream(request: MindRequest): AsyncIterable<MindChunk> {
@@ -96,7 +99,7 @@ export function fakeEngine(options: FakeEngineOptions = {}): {
         systemInstruction: "SYSTEM",
         providers: [{ label: "Recall", provider: recall }],
         gate: null,
-        tools: [],
+        tools,
         memories: async () => [],
       };
     },

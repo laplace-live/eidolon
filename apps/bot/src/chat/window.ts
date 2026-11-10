@@ -160,12 +160,22 @@ type OpenedChat =
   | { readonly ok: true; readonly store: RequestChatStore }
   | { readonly ok: false; readonly message: string };
 
+/** What the chat is now: who is in it, its title and its settings. */
+function isStateEvent(raw: unknown): boolean {
+  return (
+    isJsonObject(raw) &&
+    (raw.type === "participants" || raw.type === "title" || raw.type === "settings")
+  );
+}
+
 /**
  * The request's chat, `{ header, events }` as the browser sent it, cut to the newest events that
- * fit. Each event the server signed is kept only while its `sig` verifies in this chat, and the
- * viewer's own only while well formed; context blocks never come back, and are dropped too. What is
- * dropped is counted in one log line, never answered: a tampered history just loses those lines.
- * Seqs carry on from the newest event sent, dropped or not, so the browser's log stays contiguous.
+ * fit, plus every participants, title and settings event before them, so the chat is what its
+ * whole log makes it. Each event the server signed is kept only while its `sig` verifies in this
+ * chat, and the viewer's own only while well formed; context blocks never come back, and are
+ * dropped too. What is dropped is counted in one log line, never answered: a tampered history just
+ * loses those lines. Seqs carry on from the newest event sent, dropped or not, so the browser's log
+ * stays contiguous.
  */
 export async function openChatWindow(
   chat: unknown,
@@ -177,11 +187,15 @@ export async function openChatWindow(
   if (header === null) return { ok: false, message: "chat.header is not a chat's header" };
   if (!Array.isArray(chat.events)) return { ok: false, message: "chat.events must be a list" };
   const window = newestThatFit(chat.events);
+  const state = chat.events.slice(0, chat.events.length - window.length).filter(isStateEvent);
   const kept: ChatEvent[] = [];
   const dropped = new Map<Dropped, number>();
   const drop = (why: Dropped) => dropped.set(why, (dropped.get(why) ?? 0) + 1);
+  // The state events before the cut are bounded only by the body, and summarize, which every turn
+  // runs, is quadratic in a growing list: a chat that ever holds more than six is refused here.
+  const participants = new Set(header.participants);
   let lastSeq = 0;
-  for (const raw of window) {
+  for (const raw of [...state, ...window]) {
     const seq = isJsonObject(raw) ? seqOf(raw.seq) : null;
     if (seq !== null) lastSeq = Math.max(lastSeq, seq);
     if (!isJsonObject(raw) || seq === null || typeof raw.type !== "string") {
@@ -215,9 +229,16 @@ export async function openChatWindow(
       drop("unordered");
       continue;
     }
+    if (event.type === "participants") {
+      for (const id of event.removed ?? []) participants.delete(id);
+      for (const id of event.added ?? []) participants.add(id);
+      if (participants.size > MAX_PARTICIPANTS) {
+        return { ok: false, message: `A chat holds 1 to ${MAX_PARTICIPANTS} personas` };
+      }
+    }
     kept.push(event);
   }
-  const cut = chat.events.length - window.length;
+  const cut = chat.events.length - window.length - state.length;
   if (dropped.size > 0 || cut > 0) {
     const counts = [
       ...(cut > 0 ? [`${cut} past the window`] : []),

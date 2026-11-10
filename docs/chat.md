@@ -387,7 +387,8 @@ pipedog; [providers.md](providers.md#voice-messages-batch-speech) has each provi
   perform. The voice is `voiceOf(selection)`, as a call picks it, unless her voice-style tool
   switched it for this reply.
 - **`transcribe(selection, { bytes, mime, durationMs? })`,** on a hearing role: the transcript,
-  trimmed and possibly empty, and the clip's length from the provider, else the recorder's clock.
+  trimmed and possibly empty, and the clip's length from the provider, else its `durationMs`: the
+  recorder's clock in the local app, the clip as measured in production.
   The language hint is a call's (`STT_LANGUAGE`).
 - **`speechSupport(selection)`** says which of the two a role's provider offers. Every voice
   provider in the catalog synthesizes, and every hearing provider transcribes.
@@ -747,7 +748,7 @@ temporary data home and find it unchanged.
 
 ```ts
 {
-  chat: { header: ChatHeader, events: ChatEvent[] }, // the chat's newest events, as stored
+  chat: { header: ChatHeader, events: ChatEvent[] }, // as stored: see The window
   text?: string,                                     // the viewer's line
   loginSyncToken?: string,
 }
@@ -767,6 +768,10 @@ temporary data home and find it unchanged.
   or for `voice-failed`, `Her voice message couldn't be made, so she answered in text`. The
   provider's own words, which can name its account, go to the log alone. An `error` line ends the
   stream only when the answer threw outside any turn.
+- **A tool that fails** reaches the browser as `{ "ok": false, "error": "The tool failed" }`: any
+  result with `ok: false` or an `error`, such as `take_selfie`'s, which holds the image provider's
+  words. The result as the tool gave it goes to the log. The fixed form is what is signed, so it is
+  what her later turns read back; a result that succeeded is sent as it is.
 - **A reader that goes away** aborts the reply: nothing is kept for it to come back to. There are
   no late tools: a selfie still rendering is cancelled with its turn.
 
@@ -775,17 +780,30 @@ temporary data home and find it unchanged.
 | Part | What it holds |
 | --- | --- |
 | `chat` | The window, as JSON, as `POST /api/chat/turn` takes it |
-| `audio` | The recording, a file part with its own `Content-Type`: `audio/webm`, `audio/ogg`, `audio/mp4` or `audio/mpeg`, codecs allowed, at most 10 MB. The part's type counts, never its filename |
-| `durationMs` | The recorder's clock: 1 to 120000 |
+| `audio` | The recording, a file part with its own `Content-Type`: Opus in `audio/webm` or `audio/ogg`, AAC in `audio/mp4`, or `audio/mpeg`, codecs allowed, at most 10 MB. The part's type counts, never its filename |
+| `durationMs` | The recorder's clock: 1 to 120000. Only checked: the server measures the clip |
 | `loginSyncToken` | Optional |
 
+- **The clip is measured from its bytes** before it is charged or heard (`recordingDurationMs`,
+  `packages/providers/src/speech/batch/recording.ts`), since hearing bills for what it holds,
+  whatever `durationMs` says:
+  - **its length** is the longest of every length its container states (block timecodes, a
+    page's granule position, `mvhd`, `mdhd`, `stts`, fragments) and the codec's frames counted,
+    which a decoder plays whatever the stated timing says;
+  - **what it takes:** the whole clip one container of a codec whose frames can be counted, which
+    is what browsers record: Opus in WebM (Chrome, Firefox, Safari from 18.4, with or without
+    sizes and a Duration, as a recorder with a timeslice writes it) or Ogg (Firefox), AAC in MP4
+    (Safari before 18.4), or MP3 frames. A byte past the container's end, where a decoder that
+    resyncs would read on, is refused too;
+  - **the limit** is 2 minutes plus a second, for a recorder stopped at the limit by a timer;
+  - **hearing** is given the measured length, never `durationMs`.
 - **The answer** is `POST /api/chat/turn`'s. Its first `events` line holds the viewer's voice
   message, with its transcript in `text` and an audio attachment named `<sha256>.<ext>`.
 - **The server doesn't keep the clip:** the browser keeps its recording, under that name.
 - **Errors:**
   - `415` for a body that isn't multipart, or a clip of another type;
-  - `400` for a missing or malformed part, or an empty clip;
-  - `413` past 10 MB or 2 minutes;
+  - `400` for a missing or malformed part, an empty clip, or one it can't measure;
+  - `413` past 10 MB, or 2 minutes claimed or measured;
   - `502 upstream-failed` when hearing fails;
   - `503 unavailable` while the first persona's hearing role has no key.
 - **Multipart, not a header,** because a window of 256 KB is past what proxies take in a header.
@@ -811,6 +829,11 @@ temporary data home and find it unchanged.
 - **The cut:** the newest 120 events that fit in 256 KB of JSON (`CHAT_WINDOW_EVENTS`,
   `CHAT_WINDOW_BYTES`). Older ones are dropped and counted in the log. A browser can send its whole
   log; the server keeps what fits.
+- **The chat's state is kept whatever the cut:** every `participants`, `title` and `settings`
+  event, outside the 120 and the 256 KB, so who is in the chat, its title and its settings are what
+  its whole log makes them. **The browser must send all of them,** however old, before its newest
+  events and in `seq` order. One that sends only its newest events brings back a persona the viewer
+  removed, drops one they added, and reverts the chat's reply mode and chain limit.
 - **The viewer's own events** are rebuilt from the fields a turn reads, and dropped when malformed:
   - messages, without their attachments: no turn reads the viewer's, and the browser keeps them;
   - `title`, `participants` and `settings`, a `chainLimit` past 3 read as 3;
@@ -819,7 +842,9 @@ temporary data home and find it unchanged.
 - **Context never comes back** ([below](#context-stays-on-the-server)); any that does is dropped.
 - **Order:** an event whose `seq` doesn't rise is dropped.
 - **The participants** after the window's `participants` events must be 1 to 6, each one served.
-  A browser could add anyone with an unsigned event, so the check is on every request.
+  A browser could add anyone with an unsigned event, so the check is on every request. A chat that
+  held more than 6 after any of them, however far back, is refused (`400`): the state events
+  past the cut are bounded only by the body, and the participants are folded on every turn.
 - **What it drops** is counted in one log line, a `WARNING` when anything failed its signature or
   was malformed. The browser is never told: a tampered history just loses those lines.
 - **Seqs** go on from the newest `seq` the browser sent, kept or not, so its log stays contiguous.
@@ -914,7 +939,9 @@ The browser's side is in
 ### Checks
 
 - `bun test --no-env-file apps/bot/test/chat packages/access/test/chat.test.ts
-  apps/bot/test/local/boundaries.test.ts apps/bot/test/local/production.test.ts`.
+  packages/providers/test/speech/batch/recording.test.ts apps/bot/test/local/boundaries.test.ts
+  apps/bot/test/local/production.test.ts`. The recordings measured are tones in
+  `packages/providers/test/speech/batch/fixtures/`, one as Chrome's MediaRecorder wrote it.
 - `apps/bot/test/chat/e2e.test.ts` boots `startBotServer` as `main.ts` does, with the secret, the
   real engine and her mind at a fake OpenRouter. A browser that keeps the chat greets, sends a
   line, calls her, rewrites one of her lines and sends another; she never reads the rewritten
