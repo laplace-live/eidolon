@@ -1,6 +1,9 @@
 // The twin harness's own logic on made-up sequences, no call needed: the invariants, how a run is
 // normalized and compared, and that each allowed.ts rule matches its difference and nothing else.
 import { describe, expect, test } from "bun:test";
+import { INTERRUPTED_EMPTY_TURN_PROMPT } from "@eidolon/context";
+import { type UsageRecord, usageRecord } from "@eidolon/providers";
+import type { FishSession } from "../fakes/fish.ts";
 import type { Received } from "../fakes/peer.ts";
 import type { ClientEvent } from "../fakes/realtime.ts";
 import { checkInvariants, type WireMessage } from "../invariants.ts";
@@ -302,6 +305,89 @@ describe("allowed.ts", () => {
     expect(rules({ pipedog, native })).toEqual(["D6"]);
     const other = capture("native", [], { conversation: say("你好。再会。") });
     expect(rules({ pipedog, native: other })).toEqual(["UNEXPLAINED"]);
+  });
+
+  const request = (content: string) => ({
+    path: "/chat/completions",
+    headers: {},
+    body: { messages: [{ role: "user", content }] },
+  });
+  const round = (text: string) => [
+    rtvi("bot-llm-started"),
+    rtvi("bot-llm-text", { text }),
+    rtvi("bot-llm-stopped"),
+  ];
+
+  test("D13 allows native's Fish text without the recovery's sentences, and no other sentence", () => {
+    const fish = (...flushed: string[]): FishSession => ({
+      path: "/v1/tts/live",
+      authorization: null,
+      model: null,
+      start: null,
+      request: null,
+      flushed,
+      stopped: true,
+    });
+    const asked = [rtvi("bot-ready"), ...round("你好。"), ...round("嗯。好的。")];
+    const pipedog = capture("pipedog", [...asked, ...round("好呀。")], {
+      mind: [request("开场"), request("问题"), request(INTERRUPTED_EMPTY_TURN_PROMPT)],
+      fish: [fish("你好。", "嗯。", "好的。", "好呀。")],
+    });
+    const native = (...flushed: string[]) =>
+      capture("native", asked, {
+        mind: [request("开场"), request("问题")],
+        fish: [fish(...flushed)],
+      });
+    const fishRule = (twin: Twin) =>
+      judge(twin).find((j) => j.difference.kind === "request" && j.difference.what === "fish text")
+        ?.rule?.id ?? "UNEXPLAINED";
+    const whole = { pipedog, native: native("你好。", "嗯。", "好的。") };
+    expect(new Set(rules(whole))).toEqual(new Set(["D13"]));
+    expect(fishRule(whole)).toBe("D13");
+    // An ordinary sentence lost on native's side is not the recovery's.
+    expect(fishRule({ pipedog, native: native("你好。", "嗯。") })).toBe("UNEXPLAINED");
+    expect(fishRule({ pipedog, native: native("你好。", "好的。") })).toBe("UNEXPLAINED");
+  });
+
+  test("D13 allows the recovery request's mind usage, and no ordinary request's", () => {
+    const mind = (records: number) =>
+      Array.from({ length: records }, () =>
+        usageRecord(
+          {
+            role: "mind",
+            provider: "openrouter",
+            model: "twin/mind-1",
+            units: { inputTokens: 100, outputTokens: 10 },
+          },
+          0,
+        ),
+      );
+    const asked = [rtvi("bot-ready"), ...round("你好。"), ...round("嗯。")];
+    const recovered = (usage: UsageRecord[]) =>
+      capture("pipedog", [...asked, ...round("好呀。")], {
+        mind: [request("开场"), request("问题"), request(INTERRUPTED_EMPTY_TURN_PROMPT)],
+        usage,
+      });
+    const pipedog = recovered(mind(3));
+    const native = (records: number) =>
+      capture("native", asked, { mind: [request("开场"), request("问题")], usage: mind(records) });
+    const usage = (twin: Twin) =>
+      judge(twin)
+        .filter((j) => j.difference.kind === "usage")
+        .map((j) => j.rule?.id ?? "UNEXPLAINED");
+    expect(usage({ pipedog, native: native(2) })).toEqual(["D13"]);
+    // An ordinary request's record lost on native's side is not the recovery's.
+    expect(usage({ pipedog, native: native(1) })).toContain("UNEXPLAINED");
+    expect(usage({ pipedog, native: native(0) })).toContain("UNEXPLAINED");
+    // Nor is a record of usage no request of native's reported.
+    const other = recovered([
+      ...mind(2),
+      usageRecord(
+        { role: "mind", provider: "openrouter", model: "twin/mind-2", units: { inputTokens: 1 } },
+        0,
+      ),
+    ]);
+    expect(usage({ pipedog: other, native: native(2) })).toEqual(["UNEXPLAINED"]);
   });
 
   test("D7 allows a sentence late only where native's segmenter waits for the round's end", () => {

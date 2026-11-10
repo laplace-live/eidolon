@@ -9,6 +9,8 @@ import { OpenAISpeech } from "./openai.ts";
 import type { KeyedSelection } from "./shared.ts";
 import { SonioxSpeech } from "./soniox.ts";
 
+export { SPEECH_STALL_MS, SPEECH_STALLED } from "./shared.ts";
+
 export interface SpeechStream {
   /** The rate its audio comes at; Fish 44100, the others 24000. */
   readonly sampleRate: number;

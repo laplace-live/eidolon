@@ -82,6 +82,27 @@ test("a Latin word counts from its first letter, across messages", async () => {
   ]);
 });
 
+test("a segment's first letter starts a word, though no space came between the segments", async () => {
+  const { line, events } = timeline();
+  line.say(1, "Hi.");
+  line.say(2, "Yo.");
+  line.chars(["H", "i", ".", "Y", "o", "."], [0, 1, 2, 3, 4, 5]);
+  line.audio(samples(0, 144));
+  expect(await events()).toEqual([
+    { kind: "pcm", seg: 1, pcm: range(0, 72) },
+    {
+      kind: "words",
+      seg: 1,
+      words: [{ chars: 2, startMs: 0 }],
+    },
+    { kind: "seg-end", seg: 1 },
+    { kind: "pcm", seg: 2, pcm: range(72, 144) },
+    { kind: "words", seg: 2, words: [{ chars: 2, startMs: 0 }] },
+    { kind: "seg-end", seg: 2 },
+    { kind: "end" },
+  ]);
+});
+
 test("a word spanning two segments credits both; letters past what was said cut nothing", async () => {
   const { line, events } = timeline();
   line.say(1, "ab");

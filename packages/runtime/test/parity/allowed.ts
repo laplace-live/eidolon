@@ -8,7 +8,7 @@ import { CHAT_WINDOW_MESSAGES } from "@eidolon/chat";
 import { INTERRUPTED_EMPTY_TURN_PROMPT } from "@eidolon/context";
 import type { Violation } from "./invariants.ts";
 import type { Capture, Difference, Engine, Normalized, Twin } from "./twin.ts";
-import { canonical, differences, normalizeRealtime, normalizeRtvi } from "./twin.ts";
+import { canonical, differences, normalizeRealtime, normalizeRtvi, usageKey } from "./twin.ts";
 
 export interface Allowance {
   /** D: the cascade's differences; E: a realtime call's (§9 of the contract). */
@@ -38,6 +38,9 @@ function cjkJoined(value: string): string {
   const chars = [...value];
   return chars.filter((c, i) => c !== " " || !(cjk(chars[i - 1]) || cjk(chars[i + 1]))).join("");
 }
+
+/** `value` without whitespace, which a TTS segment may trim from the reply's text. */
+const unspaced = (value: string): string => value.replace(/\s+/g, "");
 
 /** A message's text content, when it is one. */
 function contentOf(message: unknown): string | null {
@@ -205,20 +208,35 @@ function partOfRecovery(d: Difference, twin: Twin): boolean {
       if (d.what !== "fish text" || !Array.isArray(d.pipedog) || !Array.isArray(d.native)) {
         return false;
       }
-      // Her texts with the recovery's taken out are native's.
-      const extra = [...(d.pipedog as string[])];
+      // Native's texts are pipedog's in order, and what they leave out is what the recovery said.
+      const pipedog = d.pipedog as string[];
+      const omitted: string[] = [];
+      let from = 0;
       for (const said of d.native as string[]) {
-        const at = extra.indexOf(said);
+        const at = pipedog.indexOf(said, from);
         if (at === -1) return false;
-        extra.splice(0, at + 1);
+        omitted.push(...pipedog.slice(from, at));
+        from = at + 1;
       }
-      return true;
+      omitted.push(...pipedog.slice(from));
+      return unspaced(omitted.join("")) === unspaced(spoken.join(""));
     }
     case "realtime":
       return false;
     case "usage": {
       const own = usageOf(d.record);
-      if (own.role === "mind") return d.change === "pipedog-only";
+      if (own.role === "mind") {
+        // One record per recovery request at most, each the usage native's requests report: the
+        // twin's mind reports the same for every request.
+        if (d.change !== "pipedog-only") return false;
+        const records = differences(twin).filter(
+          (u) =>
+            u.kind === "usage" && u.change === "pipedog-only" && usageOf(u.record).role === "mind",
+        );
+        return (
+          records.length <= found.length && twin.native.usage.some((r) => usageKey(r) === d.record)
+        );
+      }
       if (own.role !== "voice" || own.characters === null) return false;
       // The call's one batched voice record: pipedog's counts what the recovery said too.
       const extra = spoken.reduce((n, s) => n + [...s].length, 0);

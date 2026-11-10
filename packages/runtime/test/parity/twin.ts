@@ -8,15 +8,7 @@ import "../../../config/test/isolated-guard.ts";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AllowedOffer } from "@eidolon/access";
-import {
-  CHAT_FORMAT,
-  CHAT_WINDOW_MESSAGES,
-  type ChatEvent,
-  type ChatEventDraft,
-  type ChatHeader,
-  stampEvents,
-  viewOf,
-} from "@eidolon/chat";
+import { CHAT_WINDOW_MESSAGES, viewOf } from "@eidolon/chat";
 import {
   activePersona,
   dataHome,
@@ -24,9 +16,8 @@ import {
   readPersonaIdentity,
   resetSettings,
 } from "@eidolon/config";
-import { type CallTurnRequest, type EngineDeps, runTurn } from "@eidolon/engine";
 import { setUsageSink, type UsageRecord } from "@eidolon/providers";
-import type { CallDeps } from "@eidolon/voice";
+import { type CallLog, memoryCallLog } from "@eidolon/voice";
 import { type Frame, LLMContextFrame } from "@pipedog/core/frames/frames";
 import type { LLMContext } from "@pipedog/core/processors/aggregators/llm_context";
 import type { FrameDirection } from "@pipedog/core/processors/frame_processor";
@@ -77,6 +68,10 @@ export interface Scenario {
     readonly dialect: RealtimeDialect;
     readonly replies?: readonly RealtimeReply[];
   };
+  /** The roles whose account has no API key. */
+  readonly keyless?: readonly (keyof typeof ACCOUNTS)[];
+  /** The call can't start: the caller's offer is answered, and nothing waits for it to connect. */
+  readonly failsToStart?: boolean;
   run(call: TwinCall): Promise<void>;
 }
 
@@ -119,17 +114,19 @@ const ACCOUNTS = { hearing: "soniox-twin", voice: "fish-twin", mind: "openrouter
  * The persona's roles filled by accounts at the fakes, in credentials.json, which every other
  * variable a call reads leaves alone. Returns what puts things back.
  */
-function useFakes(fakes: Fakes, env: Readonly<Record<string, string>>): () => void {
+function useFakes(fakes: Fakes, scenario: Pick<Scenario, "env" | "keyless">): () => void {
   const path = join(dataHome(), "credentials.json");
   const before = existsSync(path) ? readFileSync(path, "utf8") : null;
+  const key = (role: keyof typeof ACCOUNTS) =>
+    scenario.keyless?.includes(role) ? {} : { apiKey: "twin-key" };
   mkdirSync(dataHome(), { recursive: true, mode: 0o700 });
   writeFileSync(
     path,
     JSON.stringify({
       accounts: {
-        [ACCOUNTS.hearing]: { provider: "soniox", apiKey: "twin-key", baseUrl: fakes.soniox.base },
-        [ACCOUNTS.voice]: { provider: "fish", apiKey: "twin-key", baseUrl: fakes.fish.base },
-        [ACCOUNTS.mind]: { provider: "openrouter", apiKey: "twin-key", baseUrl: fakes.mind.base },
+        [ACCOUNTS.hearing]: { provider: "soniox", ...key("hearing"), baseUrl: fakes.soniox.base },
+        [ACCOUNTS.voice]: { provider: "fish", ...key("voice"), baseUrl: fakes.fish.base },
+        [ACCOUNTS.mind]: { provider: "openrouter", ...key("mind"), baseUrl: fakes.mind.base },
         ...(fakes.realtime === null
           ? {}
           : {
@@ -150,7 +147,7 @@ function useFakes(fakes: Fakes, env: Readonly<Record<string, string>>): () => vo
     LLM_MODEL: "twin/mind-1",
     TTS_VOICE_ID: "twin-voice",
     ...(fakes.realtime === null ? {} : { REALTIME_PROVIDER: `${fakes.realtime.dialect}-twin` }),
-    ...env,
+    ...scenario.env,
   };
   const saved = Object.keys(vars).map((name) => [name, process.env[name]] as const);
   Object.assign(process.env, vars);
@@ -193,34 +190,11 @@ function pipedogDeps(fakes: Fakes, seen: { context: LLMContext | null }): Sessio
   };
 }
 
-/** The native call on the fakes: production's deps, each turn's chat and the events it added kept. */
-function nativeDeps(seen: { chat: readonly ChatEvent[]; added: ChatEventDraft[] }): CallDeps {
-  async function* turn(request: CallTurnRequest, engine: EngineDeps) {
-    seen.chat = request.chat.events;
-    seen.added = [];
-    for await (const out of runTurn(request, engine)) {
-      if (out.type === "events") seen.added.push(...out.events);
-      yield out;
-    }
-  }
-  return { ...productionCallDeps, runTurn: turn as CallDeps["runTurn"] };
-}
-
-/** What she would see next: viewOf the native log as it ended. */
-function nativeConversation(seen: {
-  chat: readonly ChatEvent[];
-  added: readonly ChatEventDraft[];
-}): unknown[] {
-  if (seen.chat.length === 0 && seen.added.length === 0) return [];
-  const events = [...seen.chat, ...stampEvents(seen.added, seen.chat.at(-1)?.seq ?? 0, 0)];
-  const host = activePersona().id;
-  const header: ChatHeader = {
-    format: CHAT_FORMAT,
-    id: "twin",
-    createdAt: 0,
-    participants: [host],
-  };
-  return viewOf(header, events, host, {
+/** What she would see next: viewOf the native call's log as it ended. */
+function nativeConversation(log: CallLog | null): unknown[] {
+  if (log === null) return [];
+  const { header, events } = log.snapshot();
+  return viewOf(header, events, activePersona().id, {
     windowMessages: CHAT_WINDOW_MESSAGES,
     nameOf: (id) => readPersonaIdentity(id).name,
     viewerName: "",
@@ -241,18 +215,24 @@ export async function runOn(engine: VoiceEngine, scenario: Scenario): Promise<Ca
   const logs = captureLogs();
   const usage: UsageRecord[] = [];
   setUsageSink((record) => usage.push(record));
-  const restore = useFakes(fakes, scenario.env ?? {});
+  const restore = useFakes(fakes, scenario);
   const pipedogSeen: { context: LLMContext | null } = { context: null };
-  const nativeSeen: { chat: readonly ChatEvent[]; added: ChatEventDraft[] } = {
-    chat: [],
-    added: [],
-  };
+  let nativeLog: CallLog | null = null;
   const sessions: Promise<void>[] = [];
   const start = sessionStarter<SmallWebRTCConnection>(engine, {
     pipedog: (connection, admission) =>
       runSessionSafely(connection, admission, pipedogDeps(fakes, pipedogSeen)),
     native: (connection, admission) =>
-      runNativeSafely(pipedogCallTransport(connection), admission, nativeDeps(nativeSeen)),
+      runNativeSafely(
+        pipedogCallTransport(connection),
+        admission,
+        productionCallDeps,
+        undefined,
+        (header) => {
+          nativeLog = memoryCallLog(header);
+          return nativeLog;
+        },
+      ),
   });
   const server = createSignallingServerWith(
     { ice: { serverPlan: async () => ({ iceServers: [], relayOnly: false, turnUrl: null }) } },
@@ -269,7 +249,8 @@ export async function runOn(engine: VoiceEngine, scenario: Scenario): Promise<Ca
   let ended = false;
   let failed: string | null = null;
   try {
-    await peer.dial(server);
+    if (scenario.failsToStart) await peer.offer(server);
+    else await peer.dial(server);
     await scenario.run({ engine, peer, fakes });
   } catch (error) {
     failed = error instanceof Error ? error.message : String(error);
@@ -301,7 +282,7 @@ export async function runOn(engine: VoiceEngine, scenario: Scenario): Promise<Ca
     conversation:
       engine === "pipedog"
         ? (pipedogSeen.context?.getMessages() ?? [])
-        : nativeConversation(nativeSeen),
+        : nativeConversation(nativeLog),
     logs: logs.records,
     ended,
     failed,
@@ -602,7 +583,7 @@ function compareMessages(
 }
 
 /** How a usage record compares: the audio a recognizer heard follows the call's length. */
-function usageKey(record: UsageRecord): string {
+export function usageKey(record: UsageRecord): string {
   const { audioSeconds, ...units } = record.units as Record<string, unknown>;
   const heard = audioSeconds === undefined ? {} : { audioSeconds: Number(audioSeconds) > 0 };
   return json([record.role, record.provider, record.model, record.source, { ...units, ...heard }]);

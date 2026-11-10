@@ -72,6 +72,9 @@ class SonioxStt extends WebsocketStt {
   }
 
   protected override opened(socket: WsConnection): void {
+    // pipedog starts each connection's reading with an empty buffer: a dropped socket's unended
+    // final tokens are never sent.
+    this.#final = [];
     socket.send(this.#config);
   }
 

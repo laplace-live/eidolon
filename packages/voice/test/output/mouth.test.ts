@@ -469,6 +469,60 @@ describe("failures", () => {
     await settle();
     expect(h.clock.pending).toBe(0);
   });
+
+  test("a segment said after audio came owes audio of its own", async () => {
+    const h = harness();
+    const reply = h.begin();
+    reply.push("你好。");
+    reply.flush();
+    (h.speech.utterances[0] as FakeUtterance).pcm(1, 240);
+    await settle();
+    reply.push("今天好。");
+    reply.flush();
+    h.clock.advance(15_000);
+    h.take();
+    expect(h.notes.at(-1)).toBe("tts-error No speech audio arrived within 15 seconds");
+    reply.cancel();
+  });
+
+  test("once her speech has ended, 15 s without audio before its end is a tts-error note", async () => {
+    const stall = "tts-error No speech audio arrived within 15 seconds";
+    // Nothing after her speech ends; audio 10 s after it, then nothing; audio, then the end.
+    for (const after of ["nothing", "audio", "end"] as const) {
+      const h = harness();
+      const reply = h.begin();
+      reply.push("你好。");
+      reply.flush();
+      const utterance = h.speech.utterances[0] as FakeUtterance;
+      utterance.pcm(1, 240);
+      await settle();
+      const heard = reply.heard();
+      expect(utterance.ended).toBe(true);
+      if (after !== "nothing") {
+        h.clock.advance(10_000);
+        utterance.pcm(1, 240);
+        await settle();
+      }
+      h.clock.advance(14_999);
+      if (after === "end") {
+        utterance.segEnd(1);
+        utterance.finish();
+        await settle();
+        expect(h.clock.pending).toBe(0);
+        h.play(40);
+        expect(await heard).toEqual({ text: "你好。", complete: true });
+      } else {
+        h.take();
+        expect(h.notes).not.toContain(stall);
+        h.clock.advance(1);
+        h.take();
+        expect(h.notes.at(-1)).toBe(stall);
+        reply.cancel();
+        expect(await heard).toMatchObject({ complete: false });
+      }
+      expect(h.clock.pending).toBe(0);
+    }
+  });
 });
 
 describe("a reply without audio (send-text without audio_response)", () => {

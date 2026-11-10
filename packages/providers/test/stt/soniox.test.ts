@@ -142,6 +142,28 @@ test("a dropped socket is reconnected at once, and configured again", async () =
   await stt.close();
 });
 
+test("final tokens a dropped socket never ended are dropped with it, as pipedog drops them", async () => {
+  const stt = await open();
+  const events = watch(stt);
+  const first = await server.connection();
+  first.send({ tokens: [{ text: "你好", is_final: true }] });
+  await events.until((event) => event.type === "interim");
+  first.close(1011, "boom");
+  const second = await server.connection();
+  second.send({
+    tokens: [
+      { text: "再见", is_final: true },
+      { text: "<end>", is_final: true },
+    ],
+  });
+  await events.until((event) => event.type === "final");
+  expect(events.seen).toEqual([
+    { type: "interim", text: "你好" },
+    { type: "final", text: "再见", finalized: true },
+  ]);
+  await stt.close();
+});
+
 test("three drops in a row right after connecting are fatal", async () => {
   server.onOpen = (peer) => peer.close();
   const stt = await open();

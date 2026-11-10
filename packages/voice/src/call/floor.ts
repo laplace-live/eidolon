@@ -70,8 +70,13 @@ interface Reply {
   readonly startedAt: number;
   /** `bot-llm-started` went out without its `bot-llm-stopped`. */
   mindOpen: boolean;
-  /** Tool calls whose `llm-function-call-in-progress` waits for the round's `bot-llm-stopped`. */
-  readonly inProgress: string[];
+  /** A mind request's `error` went out: her turn's `turn-failed` repeats it. */
+  failed: boolean;
+  /**
+   * Tool calls whose `llm-function-call-in-progress` waits for the round's `bot-llm-stopped`, each
+   * with its `-stopped` if it has already ended.
+   */
+  readonly inProgress: { readonly callId: string; stopped?: { readonly cancelled: boolean } }[];
   /** `bot-tts-started` went out without its `bot-tts-stopped`. */
   ttsOpen: boolean;
   /** All her speech's audio has come, or her voice failed: once it plays out, she is done. */
@@ -351,6 +356,7 @@ export class Floor {
       speech,
       startedAt: this.#o.kit.clock.now(),
       mindOpen: false,
+      failed: false,
       inProgress: [],
       ttsOpen: false,
       spoken: false,
@@ -506,6 +512,12 @@ export class Floor {
       case "events":
         // Stored before anything else is done with it.
         plan.log.append(out.events);
+        // Row 18: a failure no mind request reported, as her parts or her mind not being made.
+        for (const event of out.events) {
+          if (event.type === "turn-failed" && !reply.failed && !reply.cut) {
+            emitter.error(event.error);
+          }
+        }
         return;
       case "decision":
         plan.log.append([out]);
@@ -521,8 +533,14 @@ export class Floor {
         } else if (reply.mindOpen) {
           reply.mindOpen = false;
           emitter.botLlmStopped();
-          for (const callId of reply.inProgress.splice(0)) emitter.toolInProgress(callId);
-          if (out.error !== undefined) emitter.error(out.error);
+          for (const { callId, stopped } of reply.inProgress.splice(0)) {
+            emitter.toolInProgress(callId);
+            if (stopped !== undefined) emitter.toolStopped(callId, stopped.cancelled);
+          }
+          if (out.error !== undefined) {
+            reply.failed = true;
+            emitter.error(out.error);
+          }
           reply.speech.flush();
         }
         return;
@@ -537,11 +555,16 @@ export class Floor {
           // pipedog reports a round's calls started as its response ends, and each in progress as
           // it runs, after that response's bot-llm-stopped.
           emitter.toolStarted();
-          if (reply.mindOpen) reply.inProgress.push(out.callId);
+          if (reply.mindOpen) reply.inProgress.push({ callId: out.callId });
           else emitter.toolInProgress(out.callId);
           if (!out.async) this.#syncToolsRunning++;
         } else {
-          emitter.toolStopped(out.callId, out.state === "cancelled");
+          // A call naming a tool she doesn't have ends before its round does; pipedog reports it
+          // in progress, then stopped.
+          const cancelled = out.state === "cancelled";
+          const pending = reply.inProgress.find((call) => call.callId === out.callId);
+          if (pending === undefined) emitter.toolStopped(out.callId, cancelled);
+          else pending.stopped = { cancelled };
           if (!out.async) this.#syncToolsRunning--;
         }
         return;
@@ -789,7 +812,7 @@ export class Floor {
       if (this.#speaking) emitter.botStoppedSpeaking();
     }
     reply.mindOpen = false;
-    // Cancelled before they ran: pipedog never reports them in progress.
+    // Cancelled before they ran: pipedog never reports them in progress, so no stop is owed.
     reply.inProgress.length = 0;
     reply.ttsOpen = false;
     reply.cut = true;

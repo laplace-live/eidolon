@@ -73,7 +73,8 @@ test("the runner stores each line and photo of the call, between its ends", asyn
   const speech = new FakeSpeech();
   const turns: FakeTurn[] = [];
   const deps = {
-    engine: {},
+    // The call makes her mind before it connects; the fake turns below answer for it.
+    engine: { createMind: () => ({ async *stream() {} }) },
     runTurn: (request: CallTurnRequest) => {
       const turn = new FakeTurn(request, `turn-${turns.length + 1}`);
       turns.push(turn);

@@ -78,7 +78,8 @@ test("each line and photo reaches the browser through the call, numbered on from
   const speech = new FakeSpeech();
   const turns: FakeTurn[] = [];
   const deps = {
-    engine: {},
+    // The call makes her mind before it connects; the fake turns below answer for it.
+    engine: { createMind: () => ({ async *stream() {} }) },
     runTurn: (request: CallTurnRequest) => {
       const turn = new FakeTurn(request, `turn-${turns.length + 1}`);
       turns.push(turn);

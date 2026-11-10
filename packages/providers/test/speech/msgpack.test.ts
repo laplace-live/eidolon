@@ -45,3 +45,14 @@ test("float32 reads; extension types, cut input and trailing bytes throw", () =>
   expect(() => unpackMsg(new Uint8Array([0xa3, 0x61]))).toThrow("truncated MessagePack");
   expect(() => unpackMsg(new Uint8Array([0xc0, 0xc0]))).toThrow("trailing bytes");
 });
+
+test("an array longer than its message throws before making room for it", () => {
+  // A 5-byte array32 that claims 100 million items: room for them would be 800 MB.
+  const before = process.memoryUsage().rss;
+  expect(() => unpackMsg(new Uint8Array([0xdd, 0x05, 0xf5, 0xe1, 0x00]))).toThrow(
+    "truncated MessagePack",
+  );
+  expect(process.memoryUsage().rss - before).toBeLessThan(100_000_000);
+  expect(() => unpackMsg(new Uint8Array([0x93, 0x01, 0x02]))).toThrow("truncated MessagePack");
+  expect(unpackMsg(new Uint8Array([0x92, 0x01, 0x02]))).toEqual([1, 2]);
+});

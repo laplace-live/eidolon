@@ -7,6 +7,7 @@ import { activePersona, envStr, errorText, logger, pyRepr, withPersona } from "@
 import { type ProviderId, select, selectRequired } from "@eidolon/providers";
 import {
   type CallDeps,
+  type CallLog,
   type CallTransport,
   type CloseReason,
   memoryCallLog,
@@ -152,20 +153,25 @@ const NO_SHUTDOWN = new AbortController().signal;
 /**
  * A call on the native engine, logged as pipedog's sessions start; bound to `binding`, it runs as
  * her and reports to its hooks as pipedog's sessions do. Never rejects: a call that can't start
- * logs `Bot session failed: …`, which the local app's status reads, and disconnects.
+ * logs `Bot session failed: …`, which the local app's status reads, and disconnects. `newLog`
+ * makes an unbound or single-persona call's log; the twin harness passes its own to read it at the
+ * end.
  */
 export async function runNativeSafely(
   transport: CallTransport,
   admission: Pick<AllowedOffer, "user" | "token" | "requestData">,
   deps: CallDeps,
   binding?: AnyCallBinding,
+  newLog: (header: ChatHeader) => CallLog = memoryCallLog,
 ): Promise<void> {
   let reason: CloseReason = "error";
   try {
     reason =
       binding === undefined
-        ? await runNative(transport, admission, deps)
-        : await withPersona(binding.persona, () => runNative(transport, admission, deps, binding));
+        ? await runNative(transport, admission, deps, newLog)
+        : await withPersona(binding.persona, () =>
+            runNative(transport, admission, deps, newLog, binding),
+          );
   } catch (error) {
     logger.error(`Bot session failed: ${errorText(error)}`, error);
     await transport.disconnect().catch((e: unknown) => {
@@ -180,6 +186,7 @@ async function runNative(
   transport: CallTransport,
   admission: Pick<AllowedOffer, "user" | "token" | "requestData">,
   deps: CallDeps,
+  newLog: (header: ChatHeader) => CallLog,
   binding?: AnyCallBinding,
 ): Promise<CloseReason> {
   logSessionStart(admission);
@@ -202,7 +209,7 @@ async function runNative(
       createdAt: Date.now(),
       participants: [host],
     };
-    const log = memoryCallLog(header);
+    const log = newLog(header);
     call =
       binding === undefined
         ? { log, transport, deps, close: () => {} }

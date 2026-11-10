@@ -33,7 +33,13 @@ afterEach(() => {
   setUsageSink(null);
 });
 
-function setup(o: { readonly greet?: boolean; readonly openStt?: CallDeps["openStt"] } = {}) {
+function setup(
+  o: {
+    readonly greet?: boolean;
+    readonly openStt?: CallDeps["openStt"];
+    readonly createMind?: EngineDeps["createMind"];
+  } = {},
+) {
   const transport = new FakeTransport();
   const stt = new FakeStt();
   const speech = new FakeSpeech();
@@ -45,7 +51,7 @@ function setup(o: { readonly greet?: boolean; readonly openStt?: CallDeps["openS
     return turn.lines;
   };
   const deps: CallDeps = {
-    engine: {} as EngineDeps,
+    engine: { createMind: o.createMind ?? (() => ({ async *stream() {} })) } as EngineDeps,
     runTurn: runTurn as unknown as CallDeps["runTurn"],
     openStt: o.openStt ?? (async () => stt),
     openSpeech: () => speech,
@@ -155,6 +161,26 @@ describe("runVoiceCall", () => {
     expect(logs).toContain("Bot session failed: Soniox needs an API key");
     expect(s.transport.disconnects).toBe(1);
     expect(s.transport.connected).toBe(false);
+    expect(s.speech.closed).toBe(true);
+  });
+
+  test("a mind role with no key fails the call before anything connects, as pipedog's session does", async () => {
+    let dialled = 0;
+    const s = setup({
+      createMind: () => {
+        throw new Error("OpenRouter needs an API key");
+      },
+      openStt: async () => {
+        dialled++;
+        throw new Error("the recognizer was dialled");
+      },
+    });
+    const reason = await runVoiceCall(s.transport, s.plan, s.deps, new AbortController().signal);
+    expect(reason).toBe("error");
+    expect(logs).toContain("Bot session failed: OpenRouter needs an API key");
+    expect(dialled).toBe(0);
+    expect(s.transport.connected).toBe(false);
+    expect(s.transport.disconnects).toBe(1);
     expect(s.speech.closed).toBe(true);
   });
 

@@ -189,6 +189,40 @@ test("cancel closes the session at once and opens the next", async () => {
   await until(() => fake.peers[1]?.received[0]);
 });
 
+test("barge-ins while sessions are still connecting abandon their handshakes", async () => {
+  // A server that takes connections and never answers the upgrade.
+  let connected = 0;
+  let open = 0;
+  const listener = Bun.listen({
+    hostname: "127.0.0.1",
+    port: 0,
+    socket: {
+      open: () => {
+        connected++;
+        open++;
+      },
+      close: () => {
+        open--;
+      },
+      data: () => {},
+    },
+  });
+  try {
+    const stream = new FishSpeech(selectionAt("fish", `http://127.0.0.1:${listener.port}`));
+    streams.push(stream);
+    await until(() => connected === 1);
+    for (const next of [2, 3, 4]) {
+      const utterance = stream.utterance(null);
+      utterance.say({ id: 1, text: "一。" });
+      utterance.cancel();
+      await until(() => connected === next);
+    }
+    await until(() => open === 1);
+  } finally {
+    listener.stop(true);
+  }
+});
+
 test("Fish's error finish and a refused key are errors that never carry the key", async () => {
   fake = fakeServer({
     onMessage: (peer, data) => {

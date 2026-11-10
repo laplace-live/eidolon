@@ -74,11 +74,25 @@ export class WordTimeline {
         continue;
       }
       const own = OWN_WORD.test(char);
-      if (own || this.#wordStart === null) this.#wordStart = at;
-      this.#credit(alnumCount(char), this.#wordStart);
+      const letters = alnumCount(char);
+      // Segments go without the spaces around them, so a segment's first letter starts a word.
+      if (own || this.#wordStart === null || (letters > 0 && this.#timedThrough())) {
+        this.#wordStart = at;
+      }
+      this.#credit(letters, this.#wordStart);
       if (own) this.#wordStart = null;
     }
     this.#settle();
+  }
+
+  /** Whether the segment being timed has all its letters, and another follows it. */
+  #timedThrough(): boolean {
+    const segment = this.#segments[this.#timing];
+    return (
+      segment !== undefined &&
+      segment.timed === segment.alnum &&
+      this.#segments[this.#timing + 1] !== undefined
+    );
   }
 
   /** Each word's start, in ms from the utterance's first sample. */
