@@ -26,17 +26,17 @@ export type VoiceEngine = "pipedog" | "native";
 
 let warnedAbout: string | null = null;
 
-/** EIDOLON_VOICE_ENGINE: pipedog unless it says native. Any other value warns once. */
+/** EIDOLON_VOICE_ENGINE: native unless it says pipedog, the rollback. Any other value warns once. */
 export function voiceEngineFromEnv(): VoiceEngine {
-  const value = envStr("EIDOLON_VOICE_ENGINE", "pipedog");
+  const value = envStr("EIDOLON_VOICE_ENGINE", "native");
   if (value === "pipedog" || value === "native") return value;
   if (warnedAbout !== value) {
     warnedAbout = value;
     logger.warning(
-      `EIDOLON_VOICE_ENGINE=${pyRepr(value)} is neither pipedog nor native; calls run on pipedog`,
+      `EIDOLON_VOICE_ENGINE=${pyRepr(value)} is neither pipedog nor native; calls run on native`,
     );
   }
-  return "pipedog";
+  return "native";
 }
 
 /**

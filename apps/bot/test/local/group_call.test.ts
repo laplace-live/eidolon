@@ -130,11 +130,16 @@ describe("the offer route", () => {
     const one = await runner.create([ANN]);
     const target = { chatId: id, persona: ANN, group: true };
 
+    process.env.EIDOLON_VOICE_ENGINE = "pipedog";
     expect((await runner.read(id)).groupCall).toBe(false);
     const off = await offerChatCall(runner, signalling, admission, target);
     expect(await refusal(off)).toEqual([400, "bad-request"]);
 
+    process.env.EIDOLON_VOICE_ENGINE = "";
+    expect((await runner.read(id)).groupCall).toBe(true);
     process.env.EIDOLON_VOICE_ENGINE = "native";
+    expect((await runner.read(id)).groupCall).toBe(true);
+    delete process.env.EIDOLON_VOICE_ENGINE;
     expect((await runner.read(id)).groupCall).toBe(true);
     expect((await runner.read(one)).groupCall).toBe(false);
     const alone = await offerChatCall(runner, signalling, admission, { ...target, chatId: one });
@@ -157,7 +162,6 @@ describe("the offer route", () => {
 
   test("a group offer binds the session to the whole chat, its call-started marked group", async () => {
     signalling.offers = [];
-    process.env.EIDOLON_VOICE_ENGINE = "native";
     const runner = new ChatRunner({ root: ROOT(), answer: silent });
     const id = await groupChat(runner);
     const answered = await offerChatCall(runner, signalling, admission, {

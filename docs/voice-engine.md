@@ -1,9 +1,10 @@
 # The native voice engine
 
-Calls run on pipedog's frame pipeline today. The native engine is eidolon's own loop around
-`@eidolon/engine`, so a call's turns run through the same engine, log format and `viewOf` as a text
-chat. It is experimental and off by default: `EIDOLON_VOICE_ENGINE=native` turns it on
-([The switch](#the-switch)). Clients need no change on either engine.
+The native engine is eidolon's own loop around `@eidolon/engine`, so a call's turns run through the
+same engine, log format and `viewOf` as a text chat. It answers every call by default;
+`EIDOLON_VOICE_ENGINE=pipedog` rolls calls back to pipedog's frame pipeline until pipedog is removed
+([The switch](#the-switch)). Clients need no change on either engine; [RTVI](#rtvi) lists what they
+see differently, and [frontend-loading-state.md](frontend-loading-state.md) tells them.
 
 ```text
 @eidolon/voice                  the loop: no pipedog, and only packages/runtime imports it
@@ -29,9 +30,9 @@ pipedog is never followed past that commit.
 
 ## The switch
 
-**`EIDOLON_VOICE_ENGINE`** is `pipedog`, the default, or `native` (`.env.example`).
+**`EIDOLON_VOICE_ENGINE`** is `native`, the default, or `pipedog`, the rollback (`.env.example`).
 - `createSignallingServer` reads it once, when the server is made, through `envStr`, so blank is
-  unset. Any other value logs one warning and runs pipedog.
+  unset. Any other value logs one warning and runs native.
 - It has no settings row: only the environment sets it.
 - **It picks the signalling server.** Under `pipedog`, every offer is a pipedog session on
   pipedog's SmallWebRTC transport, as before the switch existed. Under `native`, every offer is a
@@ -61,17 +62,19 @@ before ORT first loads. Both engines load the same two `.onnx` files, from piped
 
 ### Rolling it out
 
-1. **Local:** `EIDOLON_VOICE_ENGINE=native bun run local`, or `bun run dev`.
-2. **Canary:** set it in the server's `eidolon.env` and restart. Run the production e2e and
-   compare it with the last recorded run on pipedog. Rsync an index once and check that a recall
-   question still works, since the engine keeps a call's LanceDB handles after it ends (D16).
-   **Rollback:** unset it and restart; no image rollback.
-3. **The flip:** after 7 days of canary with no regression, the default becomes `native`, and
-   `pipedog` stays the rollback.
-4. **Deleting pipedog:** after another 14 days.
+1. **Local:** dogfooding on `bun run local` and `bun run dev` with `EIDOLON_VOICE_ENGINE=native`.
+2. **Canary:** `EIDOLON_VOICE_ENGINE=native` in the server's `eidolon.env`, and a restart. The
+   production e2e compared with the last recorded run on pipedog, and an index rsynced once with a
+   recall question checked after it, since the engine keeps a call's LanceDB handles after it ends
+   (D16).
+3. **The flip,** after 7 days of canary with no regression: the default is `native`.
+   **Rollback:** set `EIDOLON_VOICE_ENGINE=pipedog` in the server's `eidolon.env` and restart; no
+   image rollback.
+4. **Deleting pipedog:** after another 14 days on the default.
 
 Every change under `packages/` rebuilds `:edge` and restarts production, so merge in a quiet hour.
-The native code stays dormant there until the variable is set.
+Merging the flip moves every production call to native unless the server's `eidolon.env` says
+`pipedog`; a server that set `native` for the canary may drop it.
 
 ## The loop
 
@@ -495,25 +498,29 @@ Messages go out as `JSON.stringify` writes them, where pipedog's transport write
 
 ## Allowed differences
 
-Every difference between the engines must be one of these, each with what triggers it:
+Every difference between the engines must be one of these, each with what triggers it.
+
+**Sign-off:** the user signs off on these, on `allowed.ts`, and on what
+[frontend-loading-state.md](frontend-loading-state.md) tells clients of them, before the flip
+(G7) merges.
 
 | Id | Difference | Trigger |
 | --- | --- | --- |
 | D1 | a call's view is the last 60 messages | a call longer than 60 lines, or a call inside a chat whose window and lines pass 60 together |
-| D2 | no `user-llm-text` for the greeting or follow-ups | every call: today the kickoff prompt reaches the client |
+| D2 | no `user-llm-text` for the greeting or follow-ups | every call: on pipedog the kickoff prompt reaches the client |
 | D3 | no `metrics` | no client reads them |
-| D4 | `bot-tts-stopped` per reply and on a barge-in | Fish never sends it today: it waits for the 15 s context timeout |
-| D5 | `bot-stopped-speaking` at the audio's end | Fish today: 2.75–3.9 s late in 16 of 16 measured replies |
-| D6 | CJK-aware joins of the caller's and her segments | a pause Smart Turn judges incomplete gets `我想问 你…` today |
+| D4 | `bot-tts-stopped` per reply and on a barge-in | pipedog's Fish never sends it: it waits for the 15 s context timeout |
+| D5 | `bot-stopped-speaking` at the audio's end | pipedog's Fish: 2.75–3.9 s late in 16 of 16 measured replies |
+| D6 | CJK-aware joins of the caller's and her segments | a pause Smart Turn judges incomplete gets `我想问 你…` on pipedog |
 | D7 | the segmenter keeps closers, merges cue-only segments, never splits inside `[` | `他说：“我不去。\|”然后…`; a lone `</whisper>` gets no audio from Fish |
-| D8 | OpenAI's STT interims are cumulative | today the call page shows only the latest delta |
+| D8 | OpenAI's STT interims are cumulative | on pipedog the call page shows only the latest delta |
 | D9 | unsupported inbound types get `error-response` | no client sends them |
 | D10 | her audio pauses during `restart_pc` or a lost ping instead of being dropped | a reconnect mid-sentence |
 | D11 | an interrupted message keeps the sentences heard whole, Fish's too; pipedog's Fish kept every sentence said once her audio had started | a barge-in before her last sentence has played |
 | D12 | Fish's "completed" spread across the audio: each sentence new as its audio starts, completed as it ends, where pipedog reported all at her first audio. Required from G5 | every Fish reply: anything said meanwhile lands among her reports, which keep their order, and a reply cut off reports fewer sentences, so the later ones' segment ordinals run behind |
 | D13 | `interruptedBot` is exact | an empty turn within 3 s after Fish's audio ends |
 | D14 | no 15 s hold on a second reply in one turn | a follow-up after a tool call |
-| D15 | voices other than Fish keep her cues in the stored text | matches text chats; today the filtered text is stored |
+| D15 | voices other than Fish keep her cues in the stored text | matches text chats; pipedog stores the filtered text |
 | D16 | her parts (her LanceDB tables, the selfie tool) outlive the call, in the engine's cache of its last 32 chats | every native call |
 
 A realtime call's differences, each a fix of pipedog's realtime path:
@@ -616,8 +623,8 @@ spans, then the pass bar:
   once the server hears the caller, so its stops count until the caller's turn ends.
 
 ```bash
-bun run dev                                            # pipedog, on :7860
-EIDOLON_VOICE_ENGINE=native bun run dev --port 7861    # native
+EIDOLON_VOICE_ENGINE=pipedog bun run dev               # pipedog, on :7860
+bun run dev --port 7861                                # native, the default
 bun apps/bot/scripts/e2e-call.ts --barge-in --headful --engine pipedog --out a1.json
 bun apps/bot/scripts/e2e-call.ts --barge-in --headful --engine native \
   --base-url http://localhost:7861 --out b1.json

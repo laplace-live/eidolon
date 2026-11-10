@@ -16,11 +16,11 @@ export function groupCallRefusal(personas: readonly ParticipantId[]): GroupCallR
   if (personas.length < 2) {
     return { status: 400, code: "bad-request", message: "A group call needs two personas or more" };
   }
-  if (envStr("EIDOLON_VOICE_ENGINE", "pipedog") !== "native") {
+  if (envStr("EIDOLON_VOICE_ENGINE", "native") === "pipedog") {
     return {
       status: 400,
       code: "bad-request",
-      message: "Group calls need the native voice engine: set EIDOLON_VOICE_ENGINE=native",
+      message: "Group calls need the native voice engine: unset EIDOLON_VOICE_ENGINE=pipedog",
     };
   }
   const on = realtimeIn(personas);

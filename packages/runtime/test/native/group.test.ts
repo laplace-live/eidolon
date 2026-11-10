@@ -292,7 +292,7 @@ describe("who can join a group call", () => {
   });
 
   test("under pipedog, the server refuses a group call: it fails as it starts, and ends as an error", async () => {
-    const restore = setEnv({ EIDOLON_VOICE_ENGINE: undefined });
+    const restore = setEnv({ EIDOLON_VOICE_ENGINE: "pipedog" });
     const spy = spyOn(SmallWebRTCConnection.prototype, "initialize").mockImplementation(
       async function (this: SmallWebRTCConnection) {
         (this as unknown as { _answer: unknown })._answer = { sdp: "v=0\r\n", type: "answer" };
