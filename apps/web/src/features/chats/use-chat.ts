@@ -45,7 +45,7 @@ export interface ChatTurns {
   autoPlayEnded(next: boolean): void;
 }
 
-/** `calling`: this page holds a call in the chat, whose lines GET live carries as they are stored. */
+/** `calling`: a call is on in the chat, whose lines GET live carries as they are stored. */
 export function useChat(id: string, calling: boolean): ChatTurns {
   const queryClient = useQueryClient();
   const [live, dispatch] = useReducer(reduceLive, IDLE);

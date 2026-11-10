@@ -139,7 +139,13 @@ export function ChatView({
   const [callee, setCallee] = useState<ParticipantId | null>(null);
   const { phase } = call;
   const calling = phase.name !== "idle" && phase.name !== "ended";
-  const turns = useChat(id, calling);
+  // The server's word on a call in the chat, which another tab may hold.
+  const serverCall = useMemo(
+    () => (chat.data === undefined ? null : callOn(chat.data)),
+    [chat.data],
+  );
+  // Another tab's call is followed too, so its lines show and its end frees the composer.
+  const turns = useChat(id, calling || serverCall !== null);
   const [recordable] = useState(canRecord);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const events = chat.data?.events;
@@ -156,11 +162,6 @@ export function ChatView({
   const next = useMemo(() => nextUp(events ?? []), [events]);
   const chainLimit = useMemo(() => chainLimitOf(events ?? []), [events]);
   const replyMode = useMemo(() => replyModeOf(events ?? []), [events]);
-  // The server's word on a call in the chat, which another tab may hold.
-  const serverCall = useMemo(
-    () => (chat.data === undefined ? null : callOn(chat.data)),
-    [chat.data],
-  );
 
   // Status then says whether the bot recorded a failure.
   const ended = phase.name === "ended";

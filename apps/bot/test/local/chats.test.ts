@@ -1753,6 +1753,68 @@ describe("a call in a chat", () => {
     }
   });
 
+  test("queued behind a voice message when a delete comes, is refused: the delete wins", async () => {
+    process.env.SONIOX_API_KEY = "soniox-test";
+    try {
+      const id = await greeted();
+      hearing = async (request) => {
+        await aborted(request.signal);
+        throw request.signal.reason;
+      };
+      const posted = voice(id);
+      await until(() => heard.length === 1);
+      const dialled = server.offer(offerBody({ chatId: id, persona: PERSONA }));
+      await Bun.sleep(20);
+      const deleted = await server.call("DELETE", `/chats/${id}`);
+      expect([deleted.status, await deleted.json()]).toEqual([200, { ok: true }]);
+      expect((await posted).status).toBe(502);
+      expect(await errorCode(await dialled)).toEqual([404, "unknown-chat"]);
+      expect(offered).toEqual([]);
+      expect(existsSync(join(chatsRoot(), id))).toBe(false);
+    } finally {
+      delete process.env.SONIOX_API_KEY;
+    }
+  });
+
+  test("stopping a reply when a delete comes, is refused: the delete wins", async () => {
+    const id = await greeted();
+    const hold = deferred();
+    scripts.set("讲个故事", reply("从前有座山", { untilAborted: true, hold: hold.promise }));
+    const posted = new Lines(
+      await server.call("POST", `/chats/${id}/messages`, { text: "讲个故事" }),
+    );
+    await posted.until((line) => line.type === "delta");
+    const dialled = server.offer(offerBody({ chatId: id, persona: PERSONA }));
+    await until(() => requests.at(-1)?.signal.aborted === true);
+    const deleted = server.call("DELETE", `/chats/${id}`);
+    // The chat's cancel, which the delete aborts before it queues.
+    await until(() => requests.at(-1)?.late?.signal.aborted === true);
+    hold.resolve();
+    expect(await errorCode(await dialled)).toEqual([404, "unknown-chat"]);
+    const done = await deleted;
+    expect([done.status, await done.json()]).toEqual([200, { ok: true }]);
+    expect(offered).toEqual([]);
+    expect(existsSync(join(chatsRoot(), id))).toBe(false);
+  });
+
+  test("a delete refused during it cancels nothing: a voice message after it is heard", async () => {
+    process.env.SONIOX_API_KEY = "soniox-test";
+    try {
+      const id = await greeted();
+      const binding = await dial(id);
+      expect(await errorCode(await server.call("DELETE", `/chats/${id}`))).toEqual([
+        409,
+        "chat-in-call",
+      ]);
+      binding.onEnded("hangup");
+      await new Lines(await voice(id)).all();
+      expect(heard).toHaveLength(1);
+      expect(heard[0]?.signal.aborted).toBe(false);
+    } finally {
+      delete process.env.SONIOX_API_KEY;
+    }
+  });
+
   test("is refused unless it names a chat and one of its personas, and nothing is stored", async () => {
     persona("beta", "贝塔");
     const id = await greeted();

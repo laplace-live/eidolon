@@ -2011,6 +2011,17 @@ async function chatCallWalk(walk: Walk): Promise<void> {
   if (!said(told, "persona", CALL_TOLD_REPLY)) {
     throw new Error("her answer to the line typed before the call was never stored");
   }
+  // Open before the call, so only a refused send tells it of the call.
+  const tab = await walk.context.newPage();
+  await tab.goto(`${origin}/chats/${id}`);
+  const tabLog = tab.getByRole("log", { name: t("en", "Conversation"), exact: true });
+  const tabBox = tab.getByRole("textbox", {
+    name: t("en", "Message {name}", { name: short }),
+    exact: true,
+  });
+  if (!((await shows(tabBox, 15_000)) && (await tabBox.isEnabled()))) {
+    throw new Error("the second tab's composer never showed");
+  }
 
   const [minded, spoke, listened] = [chats.length, speech.length, listening.length];
   const logged = walk.serverLog().length;
@@ -2103,6 +2114,11 @@ async function chatCallWalk(walk: Walk): Promise<void> {
       `her hearing opened ${ear.length} session(s), streamed ${ear[0]?.appended ?? 0} chunks`,
   );
 
+  await tabBox.fill("在吗");
+  await tabBox.press("Enter");
+  const tabWaiting = tab.getByRole("textbox", { name: t("en", "In a call"), exact: true });
+  const tabLearned = (await shows(tabWaiting, 10_000)) && (await tabWaiting.isDisabled());
+
   await dock.getByRole("button", { name: t("en", "Hang Up"), exact: true }).click();
   const undocked = await dock
     .waitFor({ state: "hidden", timeout: 10_000 })
@@ -2120,6 +2136,16 @@ async function chatCallWalk(walk: Walk): Promise<void> {
     `^${escapeRegExp(t("en", "Call with {name} · {duration}", { name: short, duration: "\0" })).replace("\0", "\\d+:\\d{2}")}$`,
   );
   const timed = await shows(log.getByText(lasted), 10_000);
+  const tabBack = (await shows(tabBox, 10_000)) && (await tabBox.isEnabled());
+  const tabClosed = await shows(tabLog.getByText(t("en", "Call ended"), { exact: true }), 5_000);
+  await tab.close();
+  checks.add(
+    "chat call tab",
+    tabLearned && tabBack && tabClosed,
+    `a second tab open before the call ${tabLearned ? "learned of it" : "never learned of it"} ` +
+      `from a refused send; after the hang-up, without a reload, its composer ` +
+      `${tabBack ? "came back" : "stayed disabled"}, under ${tabClosed ? "a" : "no"} Call ended line`,
+  );
   const sent = await walk.api(
     "POST",
     `/api/local/chats/${id}/messages`,

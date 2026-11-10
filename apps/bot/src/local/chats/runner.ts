@@ -327,6 +327,9 @@ export class ChatRunner {
       if (chat.call !== null) throw new ChatInCall();
       if (!(await this.participants(id)).includes(persona)) throw new NotInChat();
       await this.#interrupt(chat);
+      // After the awaits: a delete that came during them has aborted the chat's tools and hearing,
+      // and removes the chat next.
+      if (chat.cancel.signal.aborted) throw new ChatStoreError("not-found", `No chat ${id}`);
       const call: ActiveCall = {
         id: Bun.randomUUIDv7(),
         persona,
@@ -397,7 +400,6 @@ export class ChatRunner {
     chat.live?.controller.abort();
     chat.cancel.abort();
     return this.#serial(chat, async () => {
-      if (chat.call !== null) throw new ChatInCall();
       await this.#interrupt(chat);
       await chat.appends;
       try {

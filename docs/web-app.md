@@ -350,6 +350,8 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
   - **What is said** arrives through `GET chats/:id/live` as call lines: messages with a small
     phone mark, her cut-off ones marked **Interrupted**, with no Why She Answered. The call's start
     and end are quiet centred lines, "Call with 奶绿 · 3:12" and "Call ended".
+  - **Another tab** that learns of the call from `ChatContents.call`, as a refused send rereads it,
+    follows it too, and gets its composer back when the call ends.
   - **Leaving the page,** or opening another chat, hangs up, as leaving `/call` does.
   - `/call` stays the standalone call to the active persona, with no chat.
 - **Spend:** a chat's requests are recorded in the usage ledger with `source: "chat"`.
