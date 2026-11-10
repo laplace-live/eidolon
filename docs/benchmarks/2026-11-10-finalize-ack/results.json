@@ -1,0 +1,981 @@
+{
+  "measuredAt": "2026-11-10T16:15:42.539Z",
+  "fake": false,
+  "persona": "milky-green",
+  "method": {
+    "frameMs": 20,
+    "budgetSeconds": 180,
+    "leadInMs": 1000,
+    "gapMs": {
+      "speech": 400,
+      "cough": 400,
+      "silence": 1000
+    },
+    "vadStopMs": 200,
+    "ackTimeoutMs": 5000,
+    "settleMs": 300,
+    "roomToneSigma": 60,
+    "coughLengthsMs": [
+      150,
+      200,
+      250,
+      300,
+      175,
+      225,
+      275
+    ],
+    "sayVoice": "Flo (Chinese (China mainland))",
+    "percentile": "nearest rank",
+    "capMarginMs": 1000,
+    "gateMs": 1500
+  },
+  "providers": [
+    {
+      "provider": "soniox",
+      "account": "soniox",
+      "model": "stt-rt-v6",
+      "language": null,
+      "skipped": null,
+      "connectMs": 846.3,
+      "audioSeconds": 175.38,
+      "costUsd": 0.005846,
+      "stopped": null,
+      "unmatchedAcks": 0,
+      "finalizes": [
+        {
+          "index": 0,
+          "case": "speech",
+          "label": "你好呀，好久不见。",
+          "at": 3.22,
+          "latencyMs": 304.9,
+          "lateMs": null,
+          "words": "你好呀，好久不见。",
+          "heard": true
+        },
+        {
+          "index": 1,
+          "case": "cough",
+          "label": "150 ms cough",
+          "at": 4.6,
+          "latencyMs": 298.7,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 2,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 6.4,
+          "latencyMs": 334.2,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 3,
+          "case": "speech",
+          "label": "今天天气怎么样？",
+          "at": 8.96,
+          "latencyMs": 311,
+          "lateMs": null,
+          "words": " 今天天气怎么样？",
+          "heard": true
+        },
+        {
+          "index": 4,
+          "case": "cough",
+          "label": "200 ms cough",
+          "at": 10.38,
+          "latencyMs": 314.6,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 5,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 12.2,
+          "latencyMs": 306.7,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 6,
+          "case": "speech",
+          "label": "我刚下班回来。",
+          "at": 14.46,
+          "latencyMs": 309,
+          "lateMs": null,
+          "words": " 我刚下班回来。",
+          "heard": true
+        },
+        {
+          "index": 7,
+          "case": "cough",
+          "label": "250 ms cough",
+          "at": 15.94,
+          "latencyMs": 305.5,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 8,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 17.76,
+          "latencyMs": 310.4,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 9,
+          "case": "speech",
+          "label": "你昨天直播玩的什么游戏？",
+          "at": 20.9,
+          "latencyMs": 346,
+          "lateMs": null,
+          "words": " 你昨天直播玩的什么游戏？",
+          "heard": true
+        },
+        {
+          "index": 10,
+          "case": "cough",
+          "label": "300 ms cough",
+          "at": 22.46,
+          "latencyMs": 328,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 11,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 24.3,
+          "latencyMs": 310.9,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 12,
+          "case": "speech",
+          "label": "晚上吃什么好呢？",
+          "at": 26.76,
+          "latencyMs": 314,
+          "lateMs": null,
+          "words": " 晚上吃什么好呢？",
+          "heard": true
+        },
+        {
+          "index": 13,
+          "case": "cough",
+          "label": "175 ms cough",
+          "at": 28.16,
+          "latencyMs": 296.5,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 14,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 29.96,
+          "latencyMs": 329.8,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 15,
+          "case": "speech",
+          "label": "给我唱首歌吧。",
+          "at": 32.32,
+          "latencyMs": 306.1,
+          "lateMs": null,
+          "words": " 给我唱首歌吧。",
+          "heard": true
+        },
+        {
+          "index": 16,
+          "case": "cough",
+          "label": "225 ms cough",
+          "at": 33.78,
+          "latencyMs": 304.3,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 17,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 35.6,
+          "latencyMs": 316.1,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 18,
+          "case": "speech",
+          "label": "坚果最近还好吗？",
+          "at": 38.08,
+          "latencyMs": 302.5,
+          "lateMs": null,
+          "words": " 坚果最近还好吗？",
+          "heard": true
+        },
+        {
+          "index": 19,
+          "case": "cough",
+          "label": "275 ms cough",
+          "at": 39.58,
+          "latencyMs": 272.8,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 20,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 41.36,
+          "latencyMs": 284.1,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 21,
+          "case": "speech",
+          "label": "我们下次什么时候见？",
+          "at": 44.08,
+          "latencyMs": 300.2,
+          "lateMs": null,
+          "words": " 我们下次什么时候见？",
+          "heard": true
+        },
+        {
+          "index": 22,
+          "case": "cough",
+          "label": "150 ms cough",
+          "at": 45.46,
+          "latencyMs": 271.1,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 23,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 47.24,
+          "latencyMs": 288.3,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 24,
+          "case": "speech",
+          "label": "你好呀，好久不见。",
+          "at": 50.06,
+          "latencyMs": 312.1,
+          "lateMs": null,
+          "words": " 你好呀，好久不见。",
+          "heard": true
+        },
+        {
+          "index": 25,
+          "case": "cough",
+          "label": "200 ms cough",
+          "at": 51.48,
+          "latencyMs": 290.5,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 26,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 53.28,
+          "latencyMs": 325.3,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 27,
+          "case": "speech",
+          "label": "今天天气怎么样？",
+          "at": 55.84,
+          "latencyMs": 315.2,
+          "lateMs": null,
+          "words": " 今天天气怎么样？",
+          "heard": true
+        },
+        {
+          "index": 28,
+          "case": "cough",
+          "label": "250 ms cough",
+          "at": 57.32,
+          "latencyMs": 279.1,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 29,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 59.12,
+          "latencyMs": 321.2,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 30,
+          "case": "speech",
+          "label": "我刚下班回来。",
+          "at": 61.4,
+          "latencyMs": 350.5,
+          "lateMs": null,
+          "words": " 我刚下班回来。",
+          "heard": true
+        },
+        {
+          "index": 31,
+          "case": "cough",
+          "label": "300 ms cough",
+          "at": 62.96,
+          "latencyMs": 336.1,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 32,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 64.8,
+          "latencyMs": 303.1,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 33,
+          "case": "speech",
+          "label": "你昨天直播玩的什么游戏？",
+          "at": 67.94,
+          "latencyMs": 338.6,
+          "lateMs": null,
+          "words": " 你昨天直播玩的什么游戏？",
+          "heard": true
+        },
+        {
+          "index": 34,
+          "case": "cough",
+          "label": "175 ms cough",
+          "at": 69.36,
+          "latencyMs": 283,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 35,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 71.16,
+          "latencyMs": 344.2,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 36,
+          "case": "speech",
+          "label": "晚上吃什么好呢？",
+          "at": 73.66,
+          "latencyMs": 379.9,
+          "lateMs": null,
+          "words": " 晚上吃什么好呢？",
+          "heard": true
+        },
+        {
+          "index": 37,
+          "case": "cough",
+          "label": "225 ms cough",
+          "at": 75.18,
+          "latencyMs": 278.5,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 38,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 76.96,
+          "latencyMs": 287.7,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 39,
+          "case": "speech",
+          "label": "给我唱首歌吧。",
+          "at": 79.28,
+          "latencyMs": 574.9,
+          "lateMs": null,
+          "words": " 给我唱首歌吧。",
+          "heard": true
+        },
+        {
+          "index": 40,
+          "case": "cough",
+          "label": "275 ms cough",
+          "at": 81.04,
+          "latencyMs": 911.5,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 41,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 83.46,
+          "latencyMs": 391.4,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 42,
+          "case": "speech",
+          "label": "坚果最近还好吗？",
+          "at": 86.02,
+          "latencyMs": 322.6,
+          "lateMs": null,
+          "words": " 坚果最近还好吗？",
+          "heard": true
+        },
+        {
+          "index": 43,
+          "case": "cough",
+          "label": "150 ms cough",
+          "at": 87.42,
+          "latencyMs": 298,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 44,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 89.22,
+          "latencyMs": 400.1,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 45,
+          "case": "speech",
+          "label": "我们下次什么时候见？",
+          "at": 92.06,
+          "latencyMs": 377.9,
+          "lateMs": null,
+          "words": " 我们下次什么时候见？",
+          "heard": true
+        },
+        {
+          "index": 46,
+          "case": "cough",
+          "label": "200 ms cough",
+          "at": 93.54,
+          "latencyMs": 299.7,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 47,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 95.34,
+          "latencyMs": 379,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 48,
+          "case": "speech",
+          "label": "你好呀，好久不见。",
+          "at": 98.24,
+          "latencyMs": 490.3,
+          "lateMs": null,
+          "words": " 你好呀，好久不见。",
+          "heard": true
+        },
+        {
+          "index": 49,
+          "case": "cough",
+          "label": "250 ms cough",
+          "at": 99.9,
+          "latencyMs": 271.5,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 50,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 101.68,
+          "latencyMs": 275,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 51,
+          "case": "speech",
+          "label": "今天天气怎么样？",
+          "at": 104.18,
+          "latencyMs": 308.4,
+          "lateMs": null,
+          "words": " 今天天气怎么样？",
+          "heard": true
+        },
+        {
+          "index": 52,
+          "case": "cough",
+          "label": "300 ms cough",
+          "at": 105.7,
+          "latencyMs": 269.5,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 53,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 107.48,
+          "latencyMs": 275.2,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 54,
+          "case": "speech",
+          "label": "我刚下班回来。",
+          "at": 109.7,
+          "latencyMs": 757.9,
+          "lateMs": null,
+          "words": " 我刚下班回来。",
+          "heard": true
+        },
+        {
+          "index": 55,
+          "case": "cough",
+          "label": "175 ms cough",
+          "at": 111.54,
+          "latencyMs": 492.1,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 56,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 113.54,
+          "latencyMs": 391.5,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 57,
+          "case": "speech",
+          "label": "你昨天直播玩的什么游戏？",
+          "at": 116.76,
+          "latencyMs": 354.4,
+          "lateMs": null,
+          "words": " 你昨天直播玩的什么游戏？",
+          "heard": true
+        },
+        {
+          "index": 58,
+          "case": "cough",
+          "label": "225 ms cough",
+          "at": 118.26,
+          "latencyMs": 391.3,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 59,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 120.16,
+          "latencyMs": 340.4,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 60,
+          "case": "speech",
+          "label": "晚上吃什么好呢？",
+          "at": 122.66,
+          "latencyMs": 382.1,
+          "lateMs": null,
+          "words": " 晚上吃什么好呢？",
+          "heard": true
+        },
+        {
+          "index": 61,
+          "case": "cough",
+          "label": "275 ms cough",
+          "at": 124.24,
+          "latencyMs": 894.7,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 62,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 126.64,
+          "latencyMs": 395.6,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 63,
+          "case": "speech",
+          "label": "给我唱首歌吧。",
+          "at": 129.06,
+          "latencyMs": 407.4,
+          "lateMs": null,
+          "words": " 给我唱首歌吧。",
+          "heard": true
+        },
+        {
+          "index": 64,
+          "case": "cough",
+          "label": "150 ms cough",
+          "at": 130.54,
+          "latencyMs": 362.2,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 65,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 132.42,
+          "latencyMs": 383,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 66,
+          "case": "speech",
+          "label": "坚果最近还好吗？",
+          "at": 134.98,
+          "latencyMs": 339.5,
+          "lateMs": null,
+          "words": " 坚果最近还好吗？",
+          "heard": true
+        },
+        {
+          "index": 67,
+          "case": "cough",
+          "label": "200 ms cough",
+          "at": 136.42,
+          "latencyMs": 405.6,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 68,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 138.34,
+          "latencyMs": 328.9,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 69,
+          "case": "speech",
+          "label": "我们下次什么时候见？",
+          "at": 141.1,
+          "latencyMs": 458.8,
+          "lateMs": null,
+          "words": " 我们下次什么时候见？",
+          "heard": true
+        },
+        {
+          "index": 70,
+          "case": "cough",
+          "label": "250 ms cough",
+          "at": 142.72,
+          "latencyMs": 318.8,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 71,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 144.54,
+          "latencyMs": 324.2,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 72,
+          "case": "speech",
+          "label": "你好呀，好久不见。",
+          "at": 147.4,
+          "latencyMs": 385.3,
+          "lateMs": null,
+          "words": " 你好呀，好久不见。",
+          "heard": true
+        },
+        {
+          "index": 73,
+          "case": "cough",
+          "label": "300 ms cough",
+          "at": 149,
+          "latencyMs": 328.2,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 74,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 150.84,
+          "latencyMs": 313.1,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 75,
+          "case": "speech",
+          "label": "今天天气怎么样？",
+          "at": 153.38,
+          "latencyMs": 423.9,
+          "lateMs": null,
+          "words": " 今天天气怎么样？",
+          "heard": true
+        },
+        {
+          "index": 76,
+          "case": "cough",
+          "label": "175 ms cough",
+          "at": 154.9,
+          "latencyMs": 282.2,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 77,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 156.7,
+          "latencyMs": 413.8,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 78,
+          "case": "speech",
+          "label": "我刚下班回来。",
+          "at": 159.06,
+          "latencyMs": 321.7,
+          "lateMs": null,
+          "words": " 我刚下班回来。",
+          "heard": true
+        },
+        {
+          "index": 79,
+          "case": "cough",
+          "label": "225 ms cough",
+          "at": 160.54,
+          "latencyMs": 369.3,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 80,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 162.42,
+          "latencyMs": 281.7,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 81,
+          "case": "speech",
+          "label": "你昨天直播玩的什么游戏？",
+          "at": 165.54,
+          "latencyMs": 359,
+          "lateMs": null,
+          "words": " 你昨天直播玩的什么游戏？",
+          "heard": true
+        },
+        {
+          "index": 82,
+          "case": "cough",
+          "label": "275 ms cough",
+          "at": 167.08,
+          "latencyMs": 324.2,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 83,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 168.92,
+          "latencyMs": 329.1,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 84,
+          "case": "speech",
+          "label": "晚上吃什么好呢？",
+          "at": 171.4,
+          "latencyMs": 394.3,
+          "lateMs": null,
+          "words": " 晚上吃什么好呢？",
+          "heard": true
+        },
+        {
+          "index": 85,
+          "case": "cough",
+          "label": "150 ms cough",
+          "at": 172.86,
+          "latencyMs": 313,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        },
+        {
+          "index": 86,
+          "case": "silence",
+          "label": "1000 ms of room tone",
+          "at": 174.68,
+          "latencyMs": 400.1,
+          "lateMs": null,
+          "words": "",
+          "heard": false
+        }
+      ],
+      "summary": {
+        "all": {
+          "count": 87,
+          "acknowledged": 87,
+          "never": 0,
+          "withWords": 29,
+          "p50": 324.2,
+          "p90": 413.8,
+          "p99": 911.5,
+          "max": 911.5
+        },
+        "speech": {
+          "count": 29,
+          "acknowledged": 29,
+          "never": 0,
+          "withWords": 29,
+          "p50": 346,
+          "p90": 490.3,
+          "p99": 757.9,
+          "max": 757.9
+        },
+        "cough": {
+          "count": 29,
+          "acknowledged": 29,
+          "never": 0,
+          "withWords": 0,
+          "p50": 305.5,
+          "p90": 492.1,
+          "p99": 911.5,
+          "max": 911.5
+        },
+        "silence": {
+          "count": 29,
+          "acknowledged": 29,
+          "never": 0,
+          "withWords": 0,
+          "p50": 325.3,
+          "p90": 400.1,
+          "p99": 413.8,
+          "max": 413.8
+        }
+      },
+      "verdict": {
+        "capMs": 1911.5,
+        "coughTurnMs": 1111.5,
+        "cappedTurnMs": 2111.5,
+        "gateReachable": true
+      }
+    },
+    {
+      "provider": "deepgram",
+      "account": null,
+      "model": null,
+      "language": null,
+      "skipped": "no Deepgram account has an API key",
+      "connectMs": null,
+      "audioSeconds": 0,
+      "costUsd": null,
+      "stopped": null,
+      "unmatchedAcks": 0,
+      "finalizes": [],
+      "summary": null,
+      "verdict": null
+    }
+  ]
+}
