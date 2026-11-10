@@ -16,8 +16,8 @@ import { errorRepr } from "./compat.ts";
 import { DecisionsClient, type DecisionsOptions, gateRoleDecisions, noulOf } from "./gate.ts";
 
 // Bars on Jev's nouls. With these, docs/benchmarks/2026-11-10-director decides all 100 of its
-// labelled lines right, and still does with any one bar moved: addressed from 0.4 to 0.63,
-// interest from 0.1 to 0.43, invites from 0.17 to 0.38.
+// labelled lines right, and in both its runs still does with any one bar moved: addressed from 0.4
+// to 0.61, interest from 0.1 to 0.43, invites from 0.17 to 0.33.
 export const ADDRESSED_THRESHOLD = 0.5;
 /** On interested × talkativeness. */
 export const INTEREST_THRESHOLD = 0.3;
@@ -27,11 +27,13 @@ export const HOP_STEP = 0.1;
 /** Off the interest of whoever spoke the persona line before, so two can't trade the floor. */
 export const JUST_SPOKE_PENALTY = 0.1;
 export const MAX_REPLIES_TO_USER = 2;
-// Bars on voice_moment for a persona whose reply mode is auto: placeholders until the benchmark's
-// voice_moment labels are scored. The lower one applies while the viewer's last line was a voice
-// message, so she leans toward answering in kind.
-export const VOICE_THRESHOLD = 0.7;
-export const VOICE_THRESHOLD_AFTER_VOICE = 0.4;
+// Bars on voice_moment for a persona whose reply mode is auto. With these, the second run of
+// docs/benchmarks/2026-11-10-director answers all 24 of its voice_moment labels in the right mode,
+// and still does with the first from 0.39 to 0.44, the second from 0.29 to 0.6. The second, kept
+// under the first, applies while the viewer's last line was a voice message, so she leans toward
+// answering in kind.
+export const VOICE_THRESHOLD = 0.42;
+export const VOICE_THRESHOLD_AFTER_VOICE = 0.35;
 // Jev answered in ~0.5 s on a warm connection and 1.3–1.4 s on a fresh TLS one
 // (docs/benchmarks/2026-09-19-retrieval-gate).
 export const DIRECTOR_TIMEOUT_SEC = 2;

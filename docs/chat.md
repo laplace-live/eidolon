@@ -400,13 +400,14 @@ logged.
 
 **`auto`** lets the director choose, with `voice_moment`, asked once per decision while some
 candidate is `auto`:
-- she answers in voice when its score is `VOICE_THRESHOLD` (0.7) or more;
-- the bar drops to `VOICE_THRESHOLD_AFTER_VOICE` (0.4) while the viewer's last line was a voice
+- she answers in voice when its score is `VOICE_THRESHOLD` (0.42) or more;
+- the bar drops to `VOICE_THRESHOLD_AFTER_VOICE` (0.35) while the viewer's last line was a voice
   message, so she leans toward answering in kind, on the chain's hops too;
 - with no score (no gate key, a timeout, a failure, or a fallback decision), `auto` is text.
 
-**Both bars are placeholders.** The director benchmark has 24 `voice_moment` labels and no
-scored run yet ([its README](benchmarks/2026-11-10-director/README.md#voice-moments)).
+**Both bars answer the director benchmark's 24 `voice_moment` labels in the right mode**
+([its README](benchmarks/2026-11-10-director/README.md#voice-moments)). The first sits in a narrow
+gap: a goodnight scored 0.44, and a question about tickets 0.38.
 
 **In a chat of one,** the director sends one Decisions request per viewer line with only
 `voice_moment`, while her mode is `auto`, her voice can speak and the gate role has a key. The
