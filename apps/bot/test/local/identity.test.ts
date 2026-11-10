@@ -4,9 +4,18 @@ import "../../../../packages/config/test/isolated-guard.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { dataHome, envOptional, installSettings, resetSettings } from "@eidolon/config";
+import {
+  activePersona,
+  dataHome,
+  envOptional,
+  installSettings,
+  resetSettings,
+  withPersona,
+} from "@eidolon/config";
 import { LOCAL_VIEWER_MID } from "@eidolon/context";
 import type { MemoryAdmin, MemorySummary } from "@eidolon/memory";
+import type { CallBinding } from "@eidolon/runtime";
+import type { ChatContents } from "../../src/local/api.ts";
 import {
   activeMemoryScope,
   LOCAL_MEMORY_USER,
@@ -258,5 +267,66 @@ describe("memories per persona", () => {
         true,
       );
     }
+  });
+});
+
+describe("a call in a chat", () => {
+  afterEach(() => {
+    delete process.env.OPENROUTER_API_KEY;
+  });
+
+  async function local(method: string, path: string, body?: unknown): Promise<Response> {
+    return fetch(`${booted.base}/api/local${path}`, {
+      method,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      headers: signedIn({ "Content-Type": "application/json" }),
+    });
+  }
+
+  test("binds to the chat the local API keeps, as her, with her memories, while another is active", async () => {
+    process.env.OPENROUTER_API_KEY = "sk-or-test";
+    const created = await local("POST", "/chats", { participants: ["alpha", "beta"] });
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+
+    await offer({ audioQuality: "medium", chatId: id, persona: "beta" });
+    const binding = booted.fakes.offers.at(-1)?.binding as CallBinding;
+    expect([binding.persona, binding.seedMessages]).toEqual(["beta", []]);
+    expect(activePersona().id).toBe("alpha");
+    // What the session, run as her, reads for Mem0: her scope, not the active persona's.
+    expect(withPersona(binding.persona, () => envOptional("MEM0_AGENT_ID"))).toBe(
+      memoryScopeOf("beta").agentId as string,
+    );
+    expect(memoryScopeOf("beta").agentId).toBe("beta");
+
+    binding.onTranscript({ role: "assistant", text: "喂？", interrupted: false });
+    const refused = await local("POST", `/chats/${id}/messages`, { text: "在吗" });
+    expect([refused.status, (await refused.json()).error.code]).toEqual([409, "chat-in-call"]);
+    binding.onEnded("hangup");
+
+    const deadline = Date.now() + 3000;
+    let contents: ChatContents;
+    for (;;) {
+      contents = (await (await local("GET", `/chats/${id}`)).json()) as ChatContents;
+      if (contents.call === null || Date.now() > deadline) break;
+      await Bun.sleep(5);
+    }
+    expect(contents.call).toBeNull();
+    expect(contents.events.map((event) => event.type)).toEqual([
+      "call-started",
+      "message",
+      "call-ended",
+    ]);
+    expect(contents.events[1]).toMatchObject({
+      speaker: { kind: "persona", id: "beta" },
+      text: "喂？",
+      modality: "call",
+    });
+  });
+
+  test("an offer without a chat is unbound, as before", async () => {
+    await offer({ audioQuality: "medium", persona: "beta" });
+    expect(booted.fakes.offers.map(({ binding }) => binding)).toEqual([undefined]);
+    expect(logs.lines()).toContain("INFO [local] Offer from the local viewer to 'alpha'");
   });
 });

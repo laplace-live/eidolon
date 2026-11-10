@@ -1,10 +1,11 @@
 // The local app's chats: one JSONL store in the data home, and per chat one reply at a time: a
 // greeting, or the answer to a viewer's line, typed or spoken, which may chain persona to persona.
 // A reply runs to its end whether or not anyone still reads it; only stop, delete or shutdown abort
-// one.
+// one. A call takes the chat over while it is on: it opens on her view, and stores its lines.
 import { join } from "node:path";
 import {
   CHAT_FORMAT,
+  CHAT_WINDOW_MESSAGES,
   type ChatEvent,
   type ChatEventDraft,
   type ChatHeader,
@@ -14,9 +15,11 @@ import {
   type ParticipantId,
   type ReplyMode,
   stampEvents,
+  type ViewMessage,
+  viewOf,
 } from "@eidolon/chat";
 import { JsonlChatStore } from "@eidolon/chat/jsonl";
-import { dataHome, errorText, logger } from "@eidolon/config";
+import { dataHome, errorText, logger, readPersonaIdentity } from "@eidolon/config";
 import {
   type ChatOutput,
   type ChatRequest,
@@ -29,14 +32,56 @@ import {
   runTurn,
   type TurnOutput,
   type TurnRequest,
+  UNHEARD,
 } from "@eidolon/engine";
 import type { AudioClip } from "@eidolon/providers/speech-batch";
-import type { ChatContents } from "../api.ts";
+import type { TranscriptLine } from "@eidolon/runtime";
+import type { ChatCallInfo, ChatContents } from "../api.ts";
 import { localViewer } from "../identity.ts";
 import { HearingFailed, hearingRefusal } from "./hearing.ts";
 import { LiveTurn } from "./live.ts";
 
 type MessageDraft = Extract<ChatEventDraft, { readonly type: "message" }>;
+
+/** A send, a voice message, a delete or a second call, refused while the chat is in a call. */
+export class ChatInCall extends Error {
+  override name = "ChatInCall";
+
+  constructor() {
+    super("The chat is in a call");
+  }
+}
+
+/** A call to a persona who isn't in the chat. */
+export class NotInChat extends Error {
+  override name = "NotInChat";
+
+  constructor() {
+    super("That persona isn't in the chat");
+  }
+}
+
+/** Why a call ended, as its call-ended holds it. */
+export type CallEndReason = "hangup" | "error" | "shutdown";
+
+/** A call the runner opened in a chat; the session bound to it reports back through it. */
+export interface ChatCall {
+  readonly id: string;
+  readonly persona: ParticipantId;
+  /** Her view of the chat as the call starts: the session's first messages. */
+  readonly seed: readonly ViewMessage[];
+  /** Stores a finished line of the call as a `call` message, the viewer's or hers. */
+  line(line: TranscriptLine): void;
+  /** The offer was answered on peer connection `pcId`, which a renegotiation names. */
+  connected(pcId: string): void;
+  /** Stores call-ended, once; a line after it is dropped. Resolves once it is stored or failed. */
+  end(reason: CallEndReason): Promise<void>;
+}
+
+/** The call on in chat `id`, with the connection it was answered on, if it was yet. */
+export interface CallInChat extends ChatCallInfo {
+  readonly pcId: string | null;
+}
 
 /** One persona's turn, saving its files into the turn's chat. */
 export type ChatTurn = (
@@ -91,6 +136,38 @@ interface Chat {
   readonly late: string[];
   /** Cancels those tools: the chat is deleted, or the server stops. */
   readonly cancel: AbortController;
+  /** From the moment it opens, before its call-started is stored, until its end is asked for. */
+  call: ActiveCall | null;
+}
+
+interface ActiveCall {
+  readonly id: string;
+  readonly persona: ParticipantId;
+  /** Each event the chat stores while the call is on, through its call-ended. */
+  readonly live: LiveTurn;
+  pcId: string | null;
+  /** Set by the first end; it resolves once call-ended is stored or has failed. */
+  ending: Promise<void> | null;
+}
+
+/** Her view of the chat as her next turn would read it: what a call bound to it opens on. */
+function callSeed(
+  chat: { readonly header: ChatHeader; readonly events: readonly ChatEvent[] },
+  persona: ParticipantId,
+): ViewMessage[] {
+  const events = chat.events.map((event) =>
+    event.type === "message" &&
+    event.speaker.kind === "user" &&
+    event.modality === "voice" &&
+    event.text === ""
+      ? { ...event, text: UNHEARD }
+      : event,
+  );
+  return viewOf(chat.header, events, persona, {
+    windowMessages: CHAT_WINDOW_MESSAGES,
+    nameOf: (id) => readPersonaIdentity(id).name,
+    viewerName: localViewer().uname ?? "",
+  });
 }
 
 /** The turn a reply is in, from its `started` to its `ended`. */
@@ -124,7 +201,9 @@ export class ChatRunner {
     const lateTools = [...(this.#chats.get(id)?.late ?? [])];
     const contents = await this.store.read(id, { afterSeq });
     const refusal = hearingRefusal(await this.participants(id));
-    return { ...contents, lateTools, hearingRefusal: refusal };
+    const active = this.callIn(id);
+    const call = active === null ? null : { id: active.id, persona: active.persona };
+    return { ...contents, lateTools, hearingRefusal: refusal, call };
   }
 
   /**
@@ -205,6 +284,7 @@ export class ChatRunner {
   send(id: string, text: string): Promise<LiveTurn> {
     const chat = this.#chat(id);
     return this.#serial(chat, async () => {
+      if (chat.call !== null) throw new ChatInCall();
       await this.#interrupt(chat);
       return this.#answerLine(id, chat, {
         type: "message",
@@ -223,6 +303,8 @@ export class ChatRunner {
   sendVoice(id: string, clip: AudioClip): Promise<LiveTurn> {
     const chat = this.#chat(id);
     return this.#serial(chat, async () => {
+      // Before the hearing, which bills.
+      if (chat.call !== null) throw new ChatInCall();
       await this.#interrupt(chat);
       const request = { chat: await this.store.read(id), clip, signal: chat.cancel.signal };
       const message = await this.#hear(request, this.#saver(id)).catch((error: unknown) => {
@@ -232,9 +314,64 @@ export class ChatRunner {
     });
   }
 
-  /** The running reply of chat `id`, or null while it is idle. */
+  /** The running reply of chat `id`, else its call's events, or null while it is idle. */
   live(id: string): LiveTurn | null {
-    return this.#chats.get(id)?.live ?? null;
+    const chat = this.#chats.get(id);
+    return chat?.live ?? chat?.call?.live ?? null;
+  }
+
+  /** The call on in chat `id`, or null. */
+  callIn(id: string): CallInChat | null {
+    const call = this.#chats.get(id)?.call ?? null;
+    return call && { id: call.id, persona: call.persona, pcId: call.pcId };
+  }
+
+  /**
+   * Opens a call in chat `id` with `persona`: it stops the running reply, which stores what it said
+   * as interrupted, stores call-started, and takes her view of the chat as the call's seed. Until
+   * the call ends, the chat refuses sends, voice messages, deletes and other calls with ChatInCall,
+   * and GET live streams each event it stores. NotInChat when she isn't in the chat.
+   */
+  startCall(id: string, persona: ParticipantId): Promise<ChatCall> {
+    const chat = this.#chat(id);
+    return this.#serial(chat, async () => {
+      if (chat.call !== null) throw new ChatInCall();
+      if (!(await this.participants(id)).includes(persona)) throw new NotInChat();
+      await this.#interrupt(chat);
+      const call: ActiveCall = {
+        id: Bun.randomUUIDv7(),
+        persona,
+        live: new LiveTurn(),
+        pcId: null,
+        ending: null,
+      };
+      chat.call = call;
+      try {
+        await this.#append(id, chat, [{ type: "call-started", call: call.id, persona }]);
+      } catch (error) {
+        chat.call = null;
+        call.live.end();
+        throw error;
+      }
+      const end = (reason: CallEndReason) => this.#endCall(id, chat, call, reason);
+      let seed: ViewMessage[];
+      try {
+        seed = callSeed(await this.store.read(id), persona);
+      } catch (error) {
+        await end("error");
+        throw error;
+      }
+      return {
+        id: call.id,
+        persona,
+        seed,
+        line: (line) => this.#callLine(id, chat, call, line),
+        connected: (pcId) => {
+          call.pcId = pcId;
+        },
+        end,
+      };
+    });
   }
 
   /** Aborts chat `id`'s running reply, resolving once what it said is stored. */
@@ -258,10 +395,11 @@ export class ChatRunner {
     await this.#append(id, this.#chat(id), [{ type: "settings", ...change }]);
   }
 
-  /** Stops any reply, then removes the chat's folder. */
+  /** Stops any reply, then removes the chat's folder; ChatInCall during a call. */
   remove(id: string): Promise<void> {
     const chat = this.#chat(id);
     return this.#serial(chat, async () => {
+      if (chat.call !== null) throw new ChatInCall();
       await this.#interrupt(chat);
       chat.cancel.abort();
       await chat.appends;
@@ -274,17 +412,21 @@ export class ChatRunner {
   }
 
   /**
-   * The stop hook: aborts every reply and the tools they left running, and waits briefly for each
-   * reply to store what it said.
+   * The stop hook: aborts every reply and the tools they left running, ends every call, and waits
+   * briefly for each reply to store what it said and each call its call-ended.
    */
   async shutdown(): Promise<void> {
     const running = [...this.#chats.values()].flatMap((chat) => (chat.live ? [chat.live] : []));
     for (const live of running) live.controller.abort();
     for (const chat of this.#chats.values()) chat.cancel.abort();
-    if (running.length === 0) return;
+    // The peers disconnect only after the stop hooks, too late for a call's own end to be stored.
+    const calls = [...this.#chats].flatMap(([id, chat]) =>
+      chat.call ? [this.#endCall(id, chat, chat.call, "shutdown")] : [],
+    );
+    if (running.length === 0 && calls.length === 0) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
     await Promise.race([
-      Promise.all(running.map((live) => live.ended)),
+      Promise.all([...running.map((live) => live.ended), ...calls]),
       new Promise<void>((resolve) => {
         timer = setTimeout(resolve, STOP_WAIT_MS);
       }),
@@ -303,6 +445,7 @@ export class ChatRunner {
         live: null,
         late: [],
         cancel: new AbortController(),
+        call: null,
       };
       this.#chats.set(id, chat);
     }
@@ -320,14 +463,20 @@ export class ChatRunner {
     return result;
   }
 
-  /** Numbers `drafts` on from the log's last event and stores them. */
+  /**
+   * Numbers `drafts` on from the log's last event and stores them. Asked for during a call, they
+   * also go out on its feed once stored.
+   */
   #append(id: string, chat: Chat, drafts: readonly ChatEventDraft[]): Promise<ChatEvent[]> {
+    // Taken now: the call's end clears it before the appends queued ahead of call-ended are stored.
+    const feed = chat.call?.live ?? null;
     const result = chat.appends.then(async () => {
       try {
         const lastSeq = chat.lastSeq ?? (await this.store.summary(id)).lastSeq;
         const events = stampEvents(drafts, lastSeq, Date.now());
         await this.store.append(id, events);
         chat.lastSeq = lastSeq + events.length;
+        feed?.push({ type: "events", events });
         return events;
       } catch (error) {
         chat.lastSeq = null;
@@ -336,6 +485,51 @@ export class ChatRunner {
     });
     chat.appends = result.catch(() => {});
     return result;
+  }
+
+  /** Stores a finished line of `call` as a `call` message; one after its end is dropped. */
+  #callLine(id: string, chat: Chat, call: ActiveCall, line: TranscriptLine): void {
+    if (call.ending !== null) {
+      const whose = line.role === "user" ? "the viewer's" : "her";
+      logger.warning(`Chat ${id}: ${whose} line came after call ${call.id} ended; dropped`);
+      return;
+    }
+    const speaker =
+      line.role === "user"
+        ? { kind: "user" as const }
+        : { kind: "persona" as const, id: call.persona };
+    void this.#append(id, chat, [
+      {
+        type: "message",
+        id: Bun.randomUUIDv7(),
+        speaker,
+        text: line.text,
+        modality: "call",
+        ...(line.interrupted ? { interrupted: true } : {}),
+      },
+    ]).catch((error: unknown) => {
+      logger.exception(`Chat ${id}: a line of call ${call.id} wasn't stored`, error);
+    });
+  }
+
+  /**
+   * Stores `call`'s call-ended, after every line asked for before it, then ends its feed. The chat
+   * takes sends again at once: they are stored after it.
+   */
+  #endCall(id: string, chat: Chat, call: ActiveCall, reason: CallEndReason): Promise<void> {
+    if (call.ending !== null) return call.ending;
+    const stored = this.#append(id, chat, [{ type: "call-ended", call: call.id, reason }]);
+    if (chat.call === call) chat.call = null;
+    call.ending = stored
+      .then(
+        () => {},
+        (error: unknown) => {
+          logger.exception(`Chat ${id}: call ${call.id}'s end wasn't stored`, error);
+        },
+      )
+      .finally(() => call.live.end());
+    logger.info(`Chat ${id}: call ${call.id} with ${call.persona} ended (${reason})`);
+    return call.ending;
   }
 
   /**

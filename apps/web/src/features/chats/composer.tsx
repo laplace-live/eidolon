@@ -31,13 +31,15 @@ const TEXT_MAX = 4000;
  * The text box: Enter sends and Shift+Enter breaks the line. A send while a reply runs is allowed,
  * since the server interrupts it; Stop shows while one does. With two or more personas, an `@`
  * offers their names, and whoever the line mentions answers first. While the box is empty, the
- * microphone takes the send button's place, and a take replaces the box while it records.
+ * microphone takes the send button's place, and a take replaces the box while it records. During a
+ * call it is disabled, keeping any draft, and it takes the focus back when the call ends.
  */
 export function Composer({
   placeholder,
   participants,
   busy,
   mic,
+  inCall = false,
   onSend,
   onSendVoice,
   onStop,
@@ -46,6 +48,7 @@ export function Composer({
   readonly participants: readonly ChatPersona[];
   readonly busy: boolean;
   readonly mic: MicState;
+  readonly inCall?: boolean;
   readonly onSend: (text: string) => void;
   readonly onSendVoice: (clip: VoiceClip) => void;
   readonly onStop: () => void;
@@ -76,10 +79,16 @@ export function Composer({
   const active = Math.min(highlight, options.length - 1);
   const mentioned = group ? parseMentions(text, participants) : [];
 
-  // A phone's keyboard would cover the chat it just opened.
+  // A phone's keyboard would cover the chat it just opened, or the call just ended.
   useEffect(() => {
-    if (window.matchMedia("(pointer: fine)").matches) ref.current?.focus();
-  }, []);
+    if (!inCall && window.matchMedia("(pointer: fine)").matches) ref.current?.focus();
+  }, [inCall]);
+
+  // A call takes the microphone, and the chat takes no voice message during one.
+  const { stop } = recorder;
+  useEffect(() => {
+    if (inCall) stop(false);
+  }, [inCall, stop]);
 
   // A picked name moves the caret past it once React has put the new text in the box.
   useLayoutEffect(() => {
@@ -103,7 +112,7 @@ export function Composer({
 
   function submit(event?: FormEvent) {
     event?.preventDefault();
-    if (trimmed === "") return;
+    if (trimmed === "" || inCall) return;
     onSend(trimmed);
     edit("", 0);
   }
@@ -135,6 +144,7 @@ export function Composer({
     submit();
   }
 
+  const shown = inCall ? t`In a call` : placeholder;
   const names = listOf(
     mentioned.flatMap((id) => {
       const persona = participants.find((entry) => entry.id === id);
@@ -196,8 +206,9 @@ export function Composer({
             onKeyDown={onKeyDown}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
-            placeholder={placeholder}
-            aria-label={placeholder}
+            placeholder={shown}
+            aria-label={shown}
+            disabled={inCall}
             aria-autocomplete={group ? "list" : undefined}
             aria-controls={options.length > 0 ? listId : undefined}
             aria-activedescendant={options.length > 0 ? `${listId}-${active}` : undefined}
@@ -207,13 +218,17 @@ export function Composer({
             className="max-h-40 min-h-9 resize-none bg-card py-1.5"
           />
         </div>
-        {busy && (
+        {busy && !inCall && (
           <Button type="button" variant="outline" size="lg" className="shrink-0" onClick={onStop}>
             <SquareIcon className="fill-current" />
             {t`Stop`}
           </Button>
         )}
-        {trimmed === "" ? (
+        {inCall ? (
+          <Button type="button" size="icon-lg" className="shrink-0" disabled aria-label={t`Send`}>
+            <ArrowUpIcon />
+          </Button>
+        ) : trimmed === "" ? (
           // A take under way can always be sent, whatever the chat learned since it started.
           <MicButton recorder={recorder} state={recording ? "ready" : mic} onHolding={setHolding} />
         ) : (

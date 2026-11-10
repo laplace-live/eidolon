@@ -1,19 +1,27 @@
 import type { AllowedOffer, UserContext } from "@eidolon/access";
-import { cpLen, errorText, logger, pyRepr } from "@eidolon/config";
+import { cpLen, errorText, logger, pyRepr, withPersona } from "@eidolon/config";
 import type { ContextProvider, LlmTool, TurnGate } from "@eidolon/core";
+import { MEM0_STORE_KEY } from "@eidolon/memory";
 import { withUsageScope } from "@eidolon/providers";
 import { ingestHint, PERSONA_FACTS, STREAM_ARCHIVE } from "@eidolon/retrieval";
 import type { VoiceStyles } from "@eidolon/tools";
 import { rethrowIfCancelled } from "@pipedog/asyncio";
 import { LLMRunFrame } from "@pipedog/core/frames/frames";
+import { BaseObserver, type FramePushed } from "@pipedog/core/observers/base_observer";
 import { Pipeline } from "@pipedog/core/pipeline/pipeline";
 import { PipelineParams, PipelineWorker } from "@pipedog/core/pipeline/worker";
-import { LLMContext } from "@pipedog/core/processors/aggregators/llm_context";
 import {
+  LLMContext,
+  type LLMContextMessage,
+} from "@pipedog/core/processors/aggregators/llm_context";
+import {
+  type AssistantTurnStoppedMessage,
   LLMContextAggregatorPair,
   LLMUserAggregatorParams,
+  type UserTurnMessageAddedMessage,
 } from "@pipedog/core/processors/aggregators/llm_response_universal";
 import type { FrameProcessor } from "@pipedog/core/processors/frame_processor";
+import { RTVISendTextFrame } from "@pipedog/core/processors/frameworks/rtvi/frames";
 import type { LLMService } from "@pipedog/core/services/llm_service";
 import { type BaseTransport, TransportParams } from "@pipedog/core/transports/base_transport";
 import { EmptyUserTurnConfig } from "@pipedog/core/turns/empty_user_turn";
@@ -36,8 +44,20 @@ export interface SessionMemory extends ContextProvider {
   newestFirst(): Promise<readonly { readonly memory?: unknown }[]>;
 }
 
+/** A finished line of a call, as its context keeps it. */
+export interface TranscriptLine {
+  readonly role: "user" | "assistant";
+  readonly text: string;
+  /** She was cut off, by the viewer or a hang-up, and `text` is what she had spoken by then. */
+  readonly interrupted: boolean;
+}
+
 /** Everything a session takes from the other packages, so tests can stand in for any of it. */
 export interface SessionDeps {
+  /** OpenAI-shaped messages the context opens with, before the greeting. */
+  readonly seedMessages?: readonly unknown[];
+  /** Each line the viewer said or typed, and each she spoke, once it is finished. */
+  readonly onTranscript?: (line: TranscriptLine) => void;
   /** One realtime model hears, thinks and speaks, in place of the three below. */
   isRealtime(): boolean;
   createRealtime(systemInstruction: string): LLMService<any>;
@@ -151,6 +171,67 @@ async function sessionMemory(
   }
 }
 
+/** Mem0 for a seeded call, storing what is said on the call and none of the seed. */
+function storingCallOnly(memory: SessionMemory, seed: readonly unknown[]): ContextProvider {
+  const seeded = new Set(seed);
+  return {
+    onContext: (turn) => {
+      turn.metadata[MEM0_STORE_KEY] = turn.context.getMessages().filter((m) => !seeded.has(m));
+      return memory.onContext(turn);
+    },
+    errorMessage: (error) => memory.errorMessage(error),
+  };
+}
+
+function reportLine(
+  report: (line: TranscriptLine) => void,
+  role: TranscriptLine["role"],
+  text: string,
+  interrupted: boolean,
+): void {
+  if (text.trim() === "") return;
+  try {
+    report({ role, text, interrupted });
+  } catch (e) {
+    // Thrown into pipedog, it would end TypedLines' observer task, and every typed line after it.
+    logger.error(`Could not report a call line: ${errorText(e)}`, e);
+  }
+}
+
+/**
+ * The viewer's spoken lines as her turn is written to the context, and hers as her turn stops.
+ * pipedog's assistant aggregator holds only the TTS text played out, so a cut-off reply is its
+ * spoken part.
+ */
+function reportTurns(pair: LLMContextAggregatorPair, report: (line: TranscriptLine) => void): void {
+  pair
+    .user()
+    .eventHandler("on_user_turn_message_added", (_: unknown, m: UserTurnMessageAddedMessage) =>
+      reportLine(report, "user", m.content, false),
+    );
+  pair
+    .assistant()
+    .eventHandler("on_assistant_turn_stopped", (_: unknown, m: AssistantTurnStoppedMessage) =>
+      reportLine(report, "assistant", m.content, m.interrupted),
+    );
+}
+
+/** The viewer's typed lines, which RTVI's send-text appends to the context outside any turn. */
+class TypedLines extends BaseObserver {
+  readonly #report: (line: TranscriptLine) => void;
+
+  constructor(report: (line: TranscriptLine) => void) {
+    super({ observeEveryPush: false });
+    this.#report = report;
+  }
+
+  override async onPushFrame(data: FramePushed): Promise<void> {
+    if (data.frame instanceof RTVISendTextFrame) {
+      reportLine(this.#report, "user", data.frame.text, false);
+    }
+  }
+}
+
 export interface Session {
   readonly worker: PipelineWorker;
   readonly context: LLMContext;
@@ -196,6 +277,7 @@ export async function buildSession(
 
   const context =
     tools.size > 0 ? new LLMContext({ tools: tools.toolsSchema() }) : new LLMContext();
+  if (deps.seedMessages) context.addMessages([...deps.seedMessages] as LLMContextMessage[]);
   const emptyUserTurn = new EmptyUserTurnConfig({
     interruptedPrompt: deps.interruptedEmptyTurnPrompt,
   });
@@ -213,6 +295,7 @@ export async function buildSession(
       emptyUserTurn,
     }),
   });
+  if (deps.onTranscript) reportTurns(aggregators, deps.onTranscript);
 
   const memory = await sessionMemory(user, deps);
   const facts = await optionalProvider(
@@ -232,7 +315,10 @@ export async function buildSession(
     gate: gate && new RetrievalGateProcessor(gate),
     memory:
       memory &&
-      new ContextProviderProcessor(memory, { label: "LaplaceMem0MemoryService", conversation }),
+      new ContextProviderProcessor(
+        deps.seedMessages ? storingCallOnly(memory, deps.seedMessages) : memory,
+        { label: "LaplaceMem0MemoryService", conversation },
+      ),
     archive:
       archive &&
       new ContextProviderProcessor(archive, { label: "StreamArchiveService", conversation }),
@@ -245,7 +331,7 @@ export async function buildSession(
   });
   const worker = new PipelineWorker(new Pipeline(processors), {
     params: new PipelineParams({ enableMetrics: true, enableUsageMetrics: true }),
-    observers: [],
+    observers: deps.onTranscript ? [new TypedLines(deps.onTranscript)] : [],
     rtviProcessor: new LaplaceRTVIProcessor(),
   });
   return { worker, context, memory, tools, processors };
@@ -326,19 +412,56 @@ export async function runSession(
   await runTransportSession(transport, admission, deps);
 }
 
-/** runSession for the background: never rejects. */
+/** How a call's session ended: it ran until either side hung up, or it failed. */
+export type CallEnd = "hangup" | "error";
+
+/** Ties a call to a conversation the caller keeps: whose call it is, what came before, its lines. */
+export interface CallBinding {
+  /** The persona the call runs as, active or not. The caller validates the id. */
+  readonly persona: string;
+  readonly seedMessages: readonly unknown[];
+  readonly onTranscript: (line: TranscriptLine) => void;
+  /** Called once, after the session's last line, however it ended. */
+  readonly onEnded: (end: CallEnd) => void;
+}
+
+/**
+ * `run` as the binding's persona, with its hooks. Everything the session builds and every task it
+ * starts inherits the scope, so her settings, not the active persona's, pick its services, tools,
+ * index and memory. Without a binding, `run(deps)`.
+ */
+export function runBound<T>(
+  binding: CallBinding | undefined,
+  deps: SessionDeps,
+  run: (deps: SessionDeps) => T,
+): T {
+  if (binding === undefined) return run(deps);
+  const { persona, seedMessages, onTranscript } = binding;
+  return withPersona(persona, () => run({ ...deps, seedMessages, onTranscript }));
+}
+
+/** runSession for the background, bound to `binding` when there is one: never rejects. */
 export async function runSessionSafely(
   connection: SmallWebRTCConnection,
   admission: AllowedOffer,
   deps: SessionDeps,
+  binding?: CallBinding,
 ): Promise<void> {
+  let end: CallEnd = "hangup";
   try {
-    await runSession(connection, admission, deps);
+    await runBound(binding, deps, (bound) => runSession(connection, admission, bound));
   } catch (e) {
+    end = "error";
     logger.error(`Bot session failed: ${errorText(e)}`, e);
     // The client already has its answer: left open, the call would connect to no bot.
     await connection.disconnect().catch((error: unknown) => {
       logger.warning(`Closing the failed session's connection failed: ${errorText(error)}`);
     });
+  }
+  if (binding === undefined) return;
+  try {
+    binding.onEnded(end);
+  } catch (e) {
+    logger.error(`Could not report the call's end: ${errorText(e)}`, e);
   }
 }

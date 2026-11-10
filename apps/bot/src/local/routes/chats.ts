@@ -1,5 +1,6 @@
 // /api/local/chats: chats with the personas, in text and voice messages, kept in the data home. A
-// reply streams as NDJSON while it runs, and GET live picks it up again from its start.
+// reply streams as NDJSON while it runs, and GET live picks it up again from its start, or streams
+// a call's lines as they are stored.
 import { existsSync } from "node:fs";
 import {
   attachmentKind,
@@ -14,7 +15,7 @@ import {
 import { isPlainObject, logger, withPersona } from "@eidolon/config";
 import { hasKey, missingKey, ProviderConfigError, trySelect } from "@eidolon/providers";
 import { HearingFailed, hearingRefusal } from "../chats/hearing.ts";
-import { ChatRunner, type ChatRunnerOptions } from "../chats/runner.ts";
+import { ChatInCall, ChatRunner, type ChatRunnerOptions } from "../chats/runner.ts";
 import { personaRefusal } from "../personas.ts";
 import {
   imageResponse,
@@ -133,7 +134,7 @@ function chatRefusal(id: string): Response | null {
   return isChatId(id) ? null : localError(400, "bad-request", "That is not a chat id");
 }
 
-/** `answer()`, with a chat the store doesn't have as a 404. */
+/** `answer()`, with a chat the store doesn't have as a 404, and one in a call as a 409. */
 async function inChat(answer: () => Promise<Response>): Promise<Response> {
   try {
     return await answer();
@@ -141,21 +142,32 @@ async function inChat(answer: () => Promise<Response>): Promise<Response> {
     if (error instanceof ChatStoreError && error.code === "not-found") {
       return localError(404, "unknown-chat", "No chat has that id");
     }
+    if (error instanceof ChatInCall) {
+      return localError(409, "chat-in-call", "The chat is in a call; hang up first");
+    }
     throw error;
   }
 }
 
-export function chatsRoutes(app: LocalApp, options: ChatRunnerOptions = {}): LocalRouteSpec[] {
-  // Made by the first request: building the route table touches no disk.
+/**
+ * The chats' one runner, shared by these routes and the offer route's calls, and shut down with the
+ * server. Made by its first use: building the route table touches no disk.
+ */
+export function chatRunner(
+  app: Pick<LocalApp, "onStop">,
+  options: ChatRunnerOptions = {},
+): () => ChatRunner {
   let made: ChatRunner | null = null;
-  const runner = (): ChatRunner => {
-    made ??= new ChatRunner(options);
-    return made;
-  };
   app.onStop(async () => {
     await made?.shutdown();
   });
+  return () => {
+    made ??= new ChatRunner(options);
+    return made;
+  };
+}
 
+export function chatsRoutes(runner: () => ChatRunner): LocalRouteSpec[] {
   return [
     {
       route: "GET /api/local/chats",

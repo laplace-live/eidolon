@@ -5,6 +5,8 @@ import {
   CameraIcon,
   CircleAlertIcon,
   MicIcon,
+  PhoneIcon,
+  PhoneOffIcon,
   RotateCcwIcon,
   SearchIcon,
   WrenchIcon,
@@ -21,8 +23,10 @@ import { chatFilePath } from "@/lib/chats";
 import { listOf } from "@/lib/labels";
 import { parseMarkup } from "@/lib/markup";
 import { cn } from "@/lib/utils";
+import { callLine } from "./call-line";
 import {
   type AudioAttachment,
+  type CallItem,
   type ChatItem,
   manyVoices,
   startsRun,
@@ -40,12 +44,26 @@ const TOOL_ICONS: Readonly<Record<string, ReactNode>> = {
   voice: <MicIcon />,
 };
 
+/** Marks a line said on a call. */
+function CallMark() {
+  const { t } = useLingui();
+  return (
+    <>
+      <PhoneIcon aria-hidden className="mr-1.5 inline size-3.5 align-[-0.15em] opacity-70" />
+      <span className="sr-only">{t`(on the call)`} </span>
+    </>
+  );
+}
+
 function UserBubble({
   text,
+  call = false,
   failed = false,
   onRetry,
 }: {
   readonly text: string;
+  /** Said on a call. */
+  readonly call?: boolean;
   readonly failed?: boolean;
   readonly onRetry?: () => void;
 }) {
@@ -59,6 +77,7 @@ function UserBubble({
         )}
       >
         <span className="sr-only">{t({ message: `You`, context: "chat speaker" })}: </span>
+        {call && <CallMark />}
         {text}
       </div>
       {failed && (
@@ -154,6 +173,7 @@ function HerBubble({
   sentAsText = false,
   interrupted = false,
   cutOff = false,
+  call = false,
   onRetry,
   aside,
   autoPlay = false,
@@ -170,6 +190,8 @@ function HerBubble({
   readonly interrupted?: boolean;
   /** Her provider stopped her short. */
   readonly cutOff?: boolean;
+  /** Said on a call. */
+  readonly call?: boolean;
   readonly onRetry?: (() => void) | null;
   /** Beside her words, or under her photos or voice message. */
   readonly aside?: ReactNode;
@@ -204,6 +226,7 @@ function HerBubble({
         <div className="flex max-w-[80%] items-end gap-0.5">
           <div className="min-w-0 whitespace-pre-line break-words rounded-2xl rounded-bl-md bg-muted px-3.5 py-2 text-sm">
             <span className="sr-only">{name}: </span>
+            {call && <CallMark />}
             <BotText runs={runs} />
           </div>
           {aside}
@@ -297,6 +320,29 @@ function Failed({
   );
 }
 
+/** Where a call began or ended: a quiet line across the log. */
+function CallSeparator({
+  item,
+  personaOf,
+}: {
+  readonly item: CallItem;
+  readonly personaOf: (id: ParticipantId) => ChatPersona;
+}) {
+  const { t } = useLingui();
+  const Icon = item.edge === "started" ? PhoneIcon : PhoneOffIcon;
+  const name = item.persona === null ? "" : shortNameOf(personaOf(item.persona));
+  return (
+    <p className="flex items-center gap-3 py-1 text-muted-foreground text-xs">
+      <span aria-hidden className="h-px flex-1 bg-border" />
+      <span className="flex min-w-0 items-center gap-1.5">
+        <Icon aria-hidden className="size-3.5 shrink-0" />
+        <span className="truncate">{t(callLine(item, name))}</span>
+      </span>
+      <span aria-hidden className="h-px flex-1 bg-border" />
+    </p>
+  );
+}
+
 const Item = memo(function Item({
   item,
   chatId,
@@ -319,9 +365,10 @@ const Item = memo(function Item({
   readonly autoPlay: boolean;
   readonly onAutoPlayEnd: AutoPlayEnd;
 }) {
+  if (item.kind === "call") return <CallSeparator item={item} personaOf={personaOf} />;
   if (item.kind === "user") {
     return item.voice === null ? (
-      <UserBubble text={item.text} />
+      <UserBubble text={item.text} call={item.call} />
     ) : (
       <UserVoiceBubble
         src={chatFilePath(chatId, item.voice.name)}
@@ -345,6 +392,7 @@ const Item = memo(function Item({
         sentAsText={item.sentAsText}
         interrupted={item.interrupted}
         cutOff={item.cutOff !== null}
+        call={item.call}
         onRetry={onRetry}
         autoPlay={autoPlay}
         onAutoPlayEnd={onAutoPlayEnd}
@@ -424,6 +472,7 @@ export function ChatLog({
   retry,
   autoPlay,
   onAutoPlayEnd,
+  inCall,
   onSend,
   onSendVoice,
 }: {
@@ -442,6 +491,8 @@ export function ChatLog({
   /** The seq of her voice message to play on its own now. */
   readonly autoPlay: number | null;
   readonly onAutoPlayEnd: AutoPlayEnd;
+  /** A call is on: its lines arrive as they are said, with no reply to wait for. */
+  readonly inCall: boolean;
   readonly onSend: (text: string) => void;
   readonly onSendVoice: (clip: VoiceClip) => void;
 }) {
@@ -462,7 +513,7 @@ export function ChatLog({
   const streamed = turn === null ? "" : withoutPartialMarkup(turn.text);
   // A group's reply goes on between turns, while the director decides who answers next.
   const waiting = pending.some((line) => !line.failed) || live.following > 0;
-  const thinking = turn === null ? waiting : streamed === "" && turn.tool === null;
+  const thinking = !inCall && (turn === null ? waiting : streamed === "" && turn.tool === null);
   const empty = items.length === 0 && turn === null && pending.length === 0;
   const speaker = turn?.persona ?? next ?? (group ? null : (personas[0]?.id ?? null));
   const thinker = speaker === null ? null : personaOf(speaker);

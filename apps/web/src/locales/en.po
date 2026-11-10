@@ -14,6 +14,10 @@ msgctxt "list separator"
 msgid ", "
 msgstr ", "
 
+#: src/features/chats/chat-log.tsx
+msgid "(on the call)"
+msgstr "(on the call)"
+
 #: src/features/setup/avatar-picker.tsx
 msgid "(optional)"
 msgstr "(optional)"
@@ -813,7 +817,7 @@ msgstr "By Provider"
 
 #: src/components/app-shell.tsx
 #: src/features/call/call-page.tsx
-#: src/features/chats/chat-view.tsx
+#: src/features/chats/call-dock.tsx
 msgid "Call"
 msgstr "Call"
 
@@ -833,14 +837,16 @@ msgid "Call {name} to start talking. You can speak or type."
 msgstr "Call {name} to start talking. You can speak or type."
 
 #: src/features/call/call-controls.tsx
+#: src/features/chats/call-dock.tsx
 msgid "Call Again"
 msgstr "Call Again"
 
-#: src/features/call/call-page.tsx
+#: src/features/call/call-state.tsx
+#: src/features/chats/call-line.ts
 msgid "Call ended"
 msgstr "Call ended"
 
-#: src/features/call/call-page.tsx
+#: src/features/call/call-state.tsx
 msgid "Call ended · {duration}"
 msgstr "Call ended · {duration}"
 
@@ -848,7 +854,16 @@ msgstr "Call ended · {duration}"
 msgid "Call her"
 msgstr "Call her"
 
-#: src/features/call/call-page.tsx
+#: src/features/chats/call-dock.tsx
+#: src/features/chats/call-line.ts
+msgid "Call with {name}"
+msgstr "Call with {name}"
+
+#: src/features/chats/call-line.ts
+msgid "Call with {name} · {duration}"
+msgstr "Call with {name} · {duration}"
+
+#: src/features/call/call-state.tsx
 msgid "Calling…"
 msgstr "Calling…"
 
@@ -875,10 +890,6 @@ msgstr "Calls fail with a key the provider refuses. Fix the keys marked above, o
 #: src/features/home/memory-panel.tsx
 msgid "Calls go on without memory meanwhile."
 msgstr "Calls go on without memory meanwhile."
-
-#: src/features/chats/chat-view.tsx
-msgid "Calls use the active persona for now."
-msgstr "Calls use the active persona for now."
 
 #: src/features/jobs/detail.tsx
 msgid "Can't be stopped from here"
@@ -1059,6 +1070,7 @@ msgstr "Client IP Header"
 
 #: src/components/ui/dialog.tsx
 #: src/components/ui/sheet.tsx
+#: src/features/chats/call-dock.tsx
 #: src/features/studio/facts-editor.tsx
 msgid "Close"
 msgstr "Close"
@@ -1643,7 +1655,7 @@ msgstr "General"
 msgid "Get a key"
 msgstr "Get a key"
 
-#: src/features/call/call-page.tsx
+#: src/features/call/call-state.tsx
 msgid "Getting your microphone ready…"
 msgstr "Getting your microphone ready…"
 
@@ -1676,7 +1688,7 @@ msgstr "Group ID"
 msgid "Hang Up"
 msgstr "Hang Up"
 
-#: src/features/call/call-page.tsx
+#: src/features/call/call-state.tsx
 msgid "Hanging up…"
 msgstr "Hanging up…"
 
@@ -1817,7 +1829,11 @@ msgstr "Identity saved."
 msgid "Images"
 msgstr "Images"
 
-#: src/features/call/call-page.tsx
+#: src/features/chats/composer.tsx
+msgid "In a call"
+msgstr "In a call"
+
+#: src/features/call/call-state.tsx
 msgid "In a call · {duration}"
 msgstr "In a call · {duration}"
 
@@ -2479,6 +2495,7 @@ msgid "Not every key passed its check"
 msgstr "Not every key passed its check"
 
 #: src/features/call/call-page.tsx
+#: src/features/call/call-state.tsx
 msgid "Not in a call"
 msgstr "Not in a call"
 
@@ -4174,6 +4191,10 @@ msgstr "This browser can't record audio here."
 msgid "This chat doesn't exist"
 msgstr "This chat doesn't exist"
 
+#: src/lib/labels.ts
+msgid "This chat is in a call. Hang up first."
+msgstr "This chat is in a call. Hang up first."
+
 #: src/components/settings-form/check-result.tsx
 msgid "This checked the key from the environment, which wins over the one saved here."
 msgstr "This checked the key from the environment, which wins over the one saved here."
@@ -4562,7 +4583,7 @@ msgstr "Voice set to {title}."
 msgid "Voice set to {voice}."
 msgstr "Voice set to {voice}."
 
-#: src/features/call/call-page.tsx
+#: src/features/call/call-state.tsx
 msgid "Waiting for {name} to answer…"
 msgstr "Waiting for {name} to answer…"
 
@@ -4681,6 +4702,10 @@ msgstr "Who she is, as the built-in prompts and the call page name her. Write th
 #: src/features/setup/persona-fields.tsx
 msgid "Who she is, in one English sentence. It tells the knowledge search which questions are about her."
 msgstr "Who she is, in one English sentence. It tells the knowledge search which questions are about her."
+
+#: src/features/chats/call-dock.tsx
+msgid "Who to Call"
+msgstr "Who to Call"
 
 #: src/features/setup/persona-step.tsx
 msgid "Who will you talk to?"

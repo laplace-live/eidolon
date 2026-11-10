@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { AudioLinesIcon, BrainIcon, KeyRoundIcon } from "lucide-react";
 import { type ReactNode, useCallback, useEffect } from "react";
 import { Link, useRevalidator } from "react-router";
-import { PersonaAvatar } from "@/components/avatar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,40 +13,14 @@ import type { MemoryStatus, Status } from "@/lib/api";
 import { errorMessage, listOf } from "@/lib/labels";
 import { studioPath } from "@/lib/paths";
 import { statusQuery } from "@/lib/query";
-import { useNow } from "@/lib/use-now";
 import { cn } from "@/lib/utils";
 import { CallControls, MicPill } from "./call-controls";
 import { CallNotices } from "./call-notices";
-import { formatDuration } from "./format";
-import type { CallPhase } from "./phase";
+import { CallStatus, Face } from "./call-state";
 import { TranscriptView } from "./transcript-view";
 import { useCall } from "./use-call";
 
 type Persona = Status["persona"];
-
-/** The call's state; only this line renders each second while the call runs. */
-function CallState({ phase, name }: { readonly phase: CallPhase; readonly name: string }) {
-  const { t } = useLingui();
-  const now = useNow(phase.name === "live" && phase.answeredAt !== null);
-  switch (phase.name) {
-    case "idle":
-      return t`Not in a call`;
-    case "starting":
-      return t`Getting your microphone ready…`;
-    case "connecting":
-      return t`Calling…`;
-    case "live":
-      return phase.answeredAt === null
-        ? t`Waiting for ${name} to answer…`
-        : t`In a call · ${ph({ duration: formatDuration(now - phase.answeredAt) })}`;
-    case "ending":
-      return t`Hanging up…`;
-    case "ended":
-      return phase.answeredAt === null
-        ? t`Call ended`
-        : t`Call ended · ${ph({ duration: formatDuration(phase.endedAt - phase.answeredAt) })}`;
-  }
-}
 
 function MemoryChip({ memory, name }: { readonly memory: MemoryStatus; readonly name: string }) {
   const { t } = useLingui();
@@ -69,28 +42,6 @@ function MemoryChip({ memory, name }: { readonly memory: MemoryStatus; readonly 
       </TooltipTrigger>
       <TooltipContent className="max-w-64">{hint}</TooltipContent>
     </Tooltip>
-  );
-}
-
-/** Her avatar, ringed while she speaks. */
-function Face({
-  persona,
-  size,
-  speaking = false,
-}: {
-  readonly persona: Persona;
-  readonly size: "md" | "xl";
-  readonly speaking?: boolean;
-}) {
-  return (
-    <PersonaAvatar
-      persona={persona}
-      size={size}
-      className={cn(
-        "transition-shadow",
-        speaking && "ring-2 ring-success ring-offset-2 ring-offset-card",
-      )}
-    />
   );
 }
 
@@ -169,12 +120,6 @@ function CallRoom({ status, onEnded }: { readonly status: Status; readonly onEnd
     if (signedOut) void revalidate();
   }, [signedOut, revalidate]);
 
-  const waiting =
-    phase.name === "starting" ||
-    phase.name === "connecting" ||
-    phase.name === "ending" ||
-    (phase.name === "live" && phase.answeredAt === null);
-  const answered = phase.name === "live" && phase.answeredAt !== null;
   const placeholder =
     phase.name === "idle" || phase.name === "ended"
       ? t`Call ${ph({ name: short })} to start talking. You can speak or type.`
@@ -186,15 +131,7 @@ function CallRoom({ status, onEnded }: { readonly status: Status; readonly onEnd
       <Frame
         persona={persona}
         speaking={call.botSpeaking}
-        state={
-          <>
-            {waiting && <Spinner className="size-3.5 shrink-0" />}
-            {answered && <span aria-hidden className="size-2 shrink-0 rounded-full bg-success" />}
-            <span className="truncate">
-              <CallState phase={phase} name={short} />
-            </span>
-          </>
-        }
+        state={<CallStatus phase={phase} name={short} />}
         aside={<MemoryChip memory={status.memory} name={short} />}
         footer={<CallControls call={call} name={short} />}
       >

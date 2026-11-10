@@ -76,7 +76,8 @@ finishing an index. A tool that stops the app should send SIGTERM.
 - `local.viewerName` (`EIDOLON_LOCAL_VIEWER_NAME`) is read in local mode only.
 - **Chats stay out too.** Only `apps/bot/src/local` imports the turn engine (`@eidolon/engine`) and
   the JSONL chat store (`@eidolon/chat/jsonl`); the same Biome rule and `boundaries.test.ts` hold
-  it.
+  it. Production's offer never binds a call to a chat, whatever its request data says, which
+  `production.test.ts` pins.
 
 ## Security
 
@@ -186,7 +187,9 @@ the session and call as [the local viewer](#the-local-viewer-and-memory), with n
 `GET /api/memories` and `POST /api/memories/forget` take the session and act on the active
 persona; `PATCH /api/offer`, `/api/selfie/:id`, `/api/ice-servers` and `/mcp` are unchanged. An
 offer counts as a call from the moment it is admitted, before its session starts, so a persona
-switch, a `persona` setting or a restart sent meanwhile is refused `call-active` too.
+switch, a `persona` setting or a restart sent meanwhile is refused `call-active` too. An offer
+whose `requestData` names a `chatId` and a `persona` calls her inside that chat, as herself,
+whether or not she is the active persona ([chat.md](chat.md#calls)).
 
 `ERROR_CODES` in `api.ts`:
 
@@ -229,6 +232,7 @@ switch, a `persona` setting or a restart sent meanwhile is refused `call-active`
 | `job-not-resumable` | 409 | Resuming a running or succeeded job, or one resumed already |
 | `unknown-chat` | 404 | No chat has that id |
 | `missing-key` | 409 | Starting a chat, or sending in one, while her mind's provider takes a key and has none |
+| `chat-in-call` | 409 | Sending a message or a voice message, deleting the chat, or calling into it while it is in a call |
 
 ## The local viewer and memory
 
@@ -262,9 +266,9 @@ memory at the saved one.
 
 ## Chats
 
-`/chats` talks with the personas, one or several at once, in text and voice messages, no call
-needed, and keeps every chat in the data home (`<data home>/chats/`). The format, the turn, the
-director, voice messages and the API are in [chat.md](chat.md).
+`/chats` talks with the personas, one or several at once, in text and voice messages or on a call
+inside the chat, and keeps every chat in the data home (`<data home>/chats/`). The format, the
+turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
 
 - **The page:**
   - The list of chats is on the left, newest first, and the open chat on the right. On a phone the
@@ -332,8 +336,21 @@ director, voice messages and the API are in [chat.md](chat.md).
   - A mind with no key shows a notice with a link to Settings → Providers.
 - **Reopening a chat mid-reply** picks the reply up again through `GET chats/:id/live`. The reply
   keeps running when the tab closes.
-- **Call** shows only in a chat of one, and opens `/call` while her persona is the active one. A
-  call doesn't share the chat's history yet.
+- **A call in the chat** ([chat.md](chat.md#calls)):
+  - **Call** in the header calls her in a chat of one; in a group it opens **Who to Call**. She
+    needn't be the active persona. It is disabled while the chat is in a call, by this page's word
+    or by `ChatContents.call`.
+  - **The dock** above the composer shows her avatar, ringed while she speaks, the call's state
+    line, the call's notices, the mic's mute toggle and **Hang Up**. Hanging up closes it. A call
+    that ends any other way stays docked with why, **Call Again** and **Close**.
+  - **The composer** waits, disabled and reading **In a call**, keeping any draft; Stop and the
+    microphone are hidden, and a recording under way is thrown away. It takes the focus back when
+    the call ends.
+  - **What is said** arrives through `GET chats/:id/live` as call lines: messages with a small
+    phone mark, her cut-off ones marked **Interrupted**, with no Why She Answered. The call's start
+    and end are quiet centred lines, "Call with 奶绿 · 3:12" and "Call ended".
+  - **Leaving the page,** or opening another chat, hangs up, as leaving `/call` does.
+  - `/call` stays the standalone call to the active persona, with no chat.
 - **Spend:** a chat's requests are recorded in the usage ledger with `source: "chat"`.
 
 ## Jobs
@@ -498,6 +515,12 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
   **Voice** in the chat's settings, her voice reply spoken with its cue taken out, playing on its
   own to its end, its file answering the player's `Range` request with a `206`, both bubbles after
   a reload, and the voice and hearing spend in the ledger;
+- a call inside a chat, on the same OpenAI account, whose realtime transcription session the
+  server accepts and hears nothing on, and whose speech it answers as a call's PCM: a line typed
+  first, then **Call**, the dock, her greeting answering that line from the call's history and
+  landing in the log with its phone mark under its separator, the composer waiting and a send
+  refused `chat-in-call`, then **Hang Up**, the log's `call-ended` with `hangup`, the separators
+  with the call's length, the composer back, and no server error during the call;
 
 then stops the server and deletes the home. It refuses to start when either `load-env.ts` would
 apply a `.env` or use another data home, and exits 0 when every check passes, else 1, after the

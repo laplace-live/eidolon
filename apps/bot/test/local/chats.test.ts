@@ -4,6 +4,7 @@ import "../../../../packages/config/test/isolated-guard.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { AllowedOffer } from "@eidolon/access";
 import {
   type ChatEvent,
   type ChatEventDraft,
@@ -12,8 +13,9 @@ import {
   type ChatSummary,
   type ParticipantId,
   summarize,
+  viewOf,
 } from "@eidolon/chat";
-import { activePersona, dataHome } from "@eidolon/config";
+import { activePersona, dataHome, readPersonaIdentity } from "@eidolon/config";
 import { Director } from "@eidolon/context";
 import {
   type ChatRequest,
@@ -21,6 +23,7 @@ import {
   runChat,
   type TurnOutput,
   type TurnRequest,
+  UNHEARD,
 } from "@eidolon/engine";
 import {
   ProviderConfigError,
@@ -28,6 +31,7 @@ import {
   setUsageSink,
   type UsageRecord,
 } from "@eidolon/providers";
+import type { CallBinding, SignallingResult, SignallingServer } from "@eidolon/runtime";
 import type { RouteHandler } from "../../src/app.ts";
 import type { ChatContents } from "../../src/local/api.ts";
 import {
@@ -37,9 +41,10 @@ import {
   type ChatRunnerOptions,
   type ChatTurn,
 } from "../../src/local/chats/runner.ts";
-import { createLocalRouter, type LocalApp } from "../../src/local/router.ts";
-import { chatsRoutes } from "../../src/local/routes/chats.ts";
-import { type CapturedLogs, captureLogs, deferred } from "../fakes.ts";
+import { identityHandlers } from "../../src/local/identity.ts";
+import { createLocalRouter, type LocalApp, localRoute } from "../../src/local/router.ts";
+import { chatRunner, chatsRoutes } from "../../src/local/routes/chats.ts";
+import { ANSWER, type CapturedLogs, captureLogs, deferred } from "../fakes.ts";
 
 const PERSONA = "milky-green";
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
@@ -221,10 +226,28 @@ function selfie(photo: Promise<void>): Script {
   };
 }
 
+interface Offered {
+  readonly admission: AllowedOffer;
+  readonly binding: CallBinding | undefined;
+}
+
+/** The fake signalling server's offers, each with the call it binds, and what it answers. */
+let offered: Offered[];
+let answer: SignallingResult;
+
+const signalling: Pick<SignallingServer, "offer"> = {
+  offer: async (admission, binding) => {
+    offered.push({ admission, binding });
+    return answer;
+  },
+};
+
 interface ChatsServer {
   call(method: string, path: string, body?: unknown): Promise<Response>;
   /** A request as `init` makes it: a raw body, or headers of its own. */
   raw(method: string, path: string, init?: RequestInit): Promise<Response>;
+  /** POST /api/offer with `body`, as the local offer route answers it. */
+  offer(body: Record<string, unknown>): Promise<Response>;
   /** Runs the stop hooks, as the server's shutdown does. */
   shutdown(): Promise<void>;
   close(): Promise<void>;
@@ -243,11 +266,16 @@ function serveChats(
     },
     memoryAdmin: () => null,
   };
-  const router: RouteHandler = createLocalRouter(chatsRoutes(app, options), () => "bearer");
+  const chats = chatRunner(app, options);
+  const router: RouteHandler = createLocalRouter(chatsRoutes(chats), () => "bearer");
+  const identity = identityHandlers({ signalling, memoryAdmin: () => null, chats });
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
-    routes: { "/api/local/*": router },
+    routes: {
+      "/api/local/*": router,
+      "/api/offer": localRoute("POST", identity.offer, () => "bearer"),
+    },
     fetch: () => new Response(null, { status: 404 }),
   });
   const base = `http://127.0.0.1:${server.port}/api/local`;
@@ -255,6 +283,12 @@ function serveChats(
     for (const stop of stops.splice(0)) await stop();
   };
   return {
+    offer: (body) =>
+      fetch(`http://127.0.0.1:${server.port}/api/offer`, {
+        method: "POST",
+        body: JSON.stringify(body),
+        headers: { "content-type": "application/json" },
+      }),
     call: (method, path, body) =>
       fetch(`${base}${path}`, {
         method,
@@ -352,6 +386,8 @@ beforeEach(() => {
   answers = [];
   hearing = async () => ({ text: "今天播什么？", durationMs: 2400 });
   heard = [];
+  offered = [];
+  answer = { status: 200, body: ANSWER };
   logs = captureLogs();
   process.env.OPENROUTER_API_KEY = "sk-or-test";
   server = serveChats();
@@ -1519,5 +1555,337 @@ test("shutdown aborts every turn and waits for what it said", async () => {
   expect(messages((await log(id)).events).at(-1)).toMatchObject({
     text: "我在呢",
     interrupted: true,
+  });
+});
+
+/** POST /api/offer's body, an SDP offer with `requestData` and any of `extra`'s fields. */
+function offerBody(
+  requestData: Record<string, unknown>,
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return { sdp: "v=0\r\n", type: "offer", requestData, ...extra };
+}
+
+/** Calls `who` in chat `id`, answered, and returns what the session was bound to. */
+async function dial(id: string, who: string = PERSONA): Promise<CallBinding> {
+  const response = await server.offer(
+    offerBody({ audioQuality: "medium", chatId: id, persona: who }),
+  );
+  expect([response.status, await response.json()]).toEqual([200, ANSWER]);
+  const binding = offered.at(-1)?.binding;
+  if (binding === undefined) throw new Error("the offer wasn't bound to the chat");
+  return binding;
+}
+
+describe("a call in a chat", () => {
+  test("opens on her view of the chat, stores each finished line as a call message, and ends with call-ended", async () => {
+    const id = await greeted();
+    await new Lines(
+      await server.call("POST", `/chats/${id}/messages`, { text: "今天播什么" }),
+    ).all();
+    const binding = await dial(id);
+    expect(binding.persona).toBe(PERSONA);
+    expect(binding.seedMessages).toEqual([
+      { role: "user", content: "打个招呼" },
+      { role: "assistant", content: "你好呀" },
+      { role: "user", content: "今天播什么" },
+      { role: "assistant", content: "收到啦" },
+    ]);
+    expect(offered[0]?.admission).toMatchObject({
+      user: { isLoggedIn: true },
+      quota: null,
+      requestData: { audioQuality: "medium", chatId: id, persona: PERSONA },
+    });
+    const during = await log(id);
+    const call = during.call?.id as string;
+    expect(during.call).toEqual({ id: call, persona: PERSONA });
+    expect(during.events.at(-1)).toEqual({
+      seq: 6,
+      at: expect.any(Number),
+      type: "call-started",
+      call,
+      persona: PERSONA,
+    });
+    expect(logs.lines()).toContain(
+      `INFO [local] Offer from the local viewer to '${PERSONA}' in chat ${id} (call ${call})`,
+    );
+
+    const live = new Lines(await server.call("GET", `/chats/${id}/live`));
+    binding.onTranscript({ role: "assistant", text: "喂？是你呀", interrupted: false });
+    binding.onTranscript({ role: "user", text: "刚才说到哪了", interrupted: false });
+    binding.onTranscript({ role: "assistant", text: "说到今天", interrupted: true });
+    binding.onEnded("hangup");
+    expect(shape(await live.all())).toEqual([
+      "events 6:call-started",
+      "events 7:message",
+      "events 8:message",
+      "events 9:message",
+      "events 10:call-ended",
+    ]);
+
+    const after = await log(id);
+    expectContiguous(after.events);
+    expect(after.call).toBeNull();
+    const at = expect.any(Number);
+    const message = expect.any(String);
+    const her = { kind: "persona", id: PERSONA } as const;
+    expect(after.events.slice(6)).toEqual([
+      {
+        seq: 7,
+        at,
+        type: "message",
+        id: message,
+        speaker: her,
+        text: "喂？是你呀",
+        modality: "call",
+      },
+      {
+        seq: 8,
+        at,
+        type: "message",
+        id: message,
+        speaker: { kind: "user" },
+        text: "刚才说到哪了",
+        modality: "call",
+      },
+      {
+        seq: 9,
+        at,
+        type: "message",
+        id: message,
+        speaker: her,
+        text: "说到今天",
+        modality: "call",
+        interrupted: true,
+      },
+      { seq: 10, at, type: "call-ended", call, reason: "hangup" },
+    ]);
+    expect((await server.call("GET", `/chats/${id}/live`)).status).toBe(204);
+    expect((await json<ChatSummary[]>(await server.call("GET", "/chats")))[0]?.lastText).toBe(
+      "说到今天",
+    );
+
+    // What the session reports once the call has ended changes nothing.
+    binding.onTranscript({ role: "assistant", text: "再见", interrupted: false });
+    binding.onEnded("error");
+    await Bun.sleep(20);
+    expect((await log(id)).events).toHaveLength(10);
+    expect(logs.lines()).toContain(
+      `WARNING Chat ${id}: her line came after call ${call} ended; dropped`,
+    );
+  });
+
+  test("stops the running reply first, so the call opens on what she had said", async () => {
+    const id = await greeted();
+    scripts.set("讲个故事", reply("从前有座山", { untilAborted: true }));
+    const posted = new Lines(
+      await server.call("POST", `/chats/${id}/messages`, { text: "讲个故事" }),
+    );
+    await posted.until((line) => line.type === "delta");
+    const binding = await dial(id);
+    expect(requests.at(-1)?.signal.aborted).toBe(true);
+    expect(shape(await posted.all()).at(-1)).toBe("ended");
+    expect((await log(id)).events.slice(-2)).toMatchObject([
+      { type: "message", text: "从前有", interrupted: true },
+      { type: "call-started", persona: PERSONA },
+    ]);
+    expect(binding.seedMessages.at(-1)).toEqual({ role: "assistant", content: "从前有" });
+    binding.onEnded("hangup");
+  });
+
+  test("while it is on, a message, a voice message, a delete or another call is refused with chat-in-call", async () => {
+    process.env.SONIOX_API_KEY = "soniox-test";
+    try {
+      const id = await greeted();
+      const binding = await dial(id);
+      expect(
+        await errorCode(await server.call("POST", `/chats/${id}/messages`, { text: "在吗" })),
+      ).toEqual([409, "chat-in-call"]);
+      expect(await errorCode(await voice(id))).toEqual([409, "chat-in-call"]);
+      expect(heard).toEqual([]);
+      expect(await errorCode(await server.call("DELETE", `/chats/${id}`))).toEqual([
+        409,
+        "chat-in-call",
+      ]);
+      const again = await server.offer(offerBody({ chatId: id, persona: PERSONA }));
+      expect(await errorCode(again)).toEqual([409, "chat-in-call"]);
+      expect(offered).toHaveLength(1);
+      expect((await server.call("POST", `/chats/${id}/stop`)).status).toBe(204);
+      expect(requests).toHaveLength(1);
+      expect((await log(id)).events.map((event) => event.type)).toEqual([
+        "kickoff",
+        "message",
+        "call-started",
+      ]);
+
+      // Stored after the call-ended its end asked for first.
+      binding.onEnded("hangup");
+      const lines = await new Lines(
+        await server.call("POST", `/chats/${id}/messages`, { text: "在吗" }),
+      ).all();
+      expect(shape(lines).slice(0, 2)).toEqual(["events 5:message", "events 6:decision"]);
+      expect((await log(id)).events[3]).toMatchObject({ type: "call-ended", reason: "hangup" });
+    } finally {
+      delete process.env.SONIOX_API_KEY;
+    }
+  });
+
+  test("is refused unless it names a chat and one of its personas, and nothing is stored", async () => {
+    persona("beta", "贝塔");
+    const id = await greeted();
+    const unknown = Bun.randomUUIDv7();
+    for (const [requestData, want] of [
+      [{ chatId: "nope", persona: PERSONA }, [400, "bad-request"]],
+      [{ chatId: id.toUpperCase(), persona: PERSONA }, [400, "bad-request"]],
+      [{ chatId: 7, persona: PERSONA }, [400, "bad-request"]],
+      [{ chatId: null, persona: PERSONA }, [400, "bad-request"]],
+      [{ chatId: id }, [400, "bad-request"]],
+      [{ chatId: id, persona: ["beta"] }, [400, "bad-request"]],
+      [{ chatId: id, persona: "Not A Slug" }, [400, "invalid-persona-id"]],
+      [{ chatId: id, persona: "nobody-here" }, [404, "unknown-persona"]],
+      [{ chatId: unknown, persona: PERSONA }, [404, "unknown-chat"]],
+      [{ chatId: id, persona: "beta" }, [400, "bad-request"]],
+    ] as const) {
+      const response = await server.offer(offerBody(requestData));
+      expect([requestData, await errorCode(response)]).toEqual([requestData, [...want]]);
+    }
+    expect(offered).toEqual([]);
+    expect((await log(id)).events).toHaveLength(2);
+    expect(existsSync(join(chatsRoot(), unknown))).toBe(false);
+  });
+
+  test("without a chatId, the offer is the standalone call: unbound, and no chat hears of it", async () => {
+    const id = await greeted();
+    const response = await server.offer(offerBody({ audioQuality: "medium", persona: "beta" }));
+    expect([response.status, await response.json()]).toEqual([200, ANSWER]);
+    expect(offered).toHaveLength(1);
+    expect(offered[0]?.binding).toBeUndefined();
+    expect(offered[0]?.admission.requestData).toEqual({ audioQuality: "medium", persona: "beta" });
+    expect(logs.lines()).toContain(
+      `INFO [local] Offer from the local viewer to '${activePersona().id}'`,
+    );
+    const { events, call } = await log(id);
+    expect([events.length, call]).toEqual([2, null]);
+  });
+
+  test("an offer that gets no answer ends the call it opened, with error", async () => {
+    answer = { status: 400, body: { error: "invalid request" } };
+    const id = await greeted();
+    const response = await server.offer(offerBody({ chatId: id, persona: PERSONA }));
+    expect([response.status, await response.json()]).toEqual([400, { error: "invalid request" }]);
+    const { events, call } = await log(id);
+    expect(call).toBeNull();
+    expect(events.slice(2)).toMatchObject([
+      { type: "call-started", persona: PERSONA },
+      {
+        type: "call-ended",
+        reason: "error",
+        call: (events[2] as ChatEventOf<"call-started">).call,
+      },
+    ]);
+    expect((await server.call("GET", `/chats/${id}/live`)).status).toBe(204);
+    (offered[0] as Offered).binding?.onEnded("hangup");
+    await Bun.sleep(20);
+    expect((await log(id)).events).toHaveLength(4);
+  });
+
+  test("the call's own connection renegotiating opens nothing; another connection is another call", async () => {
+    const id = await greeted();
+    const binding = await dial(id);
+    const renegotiated = await server.offer(
+      offerBody({ chatId: id, persona: PERSONA }, { pc_id: ANSWER.pc_id, restart_pc: true }),
+    );
+    expect([renegotiated.status, await renegotiated.json()]).toEqual([200, ANSWER]);
+    expect(offered).toHaveLength(2);
+    expect(offered[1]?.binding).toBeUndefined();
+    const other = await server.offer(
+      offerBody({ chatId: id, persona: PERSONA }, { pc_id: "SmallWebRTCConnection#1-other" }),
+    );
+    expect(await errorCode(other)).toEqual([409, "chat-in-call"]);
+    expect(offered).toHaveLength(2);
+    expect((await log(id)).events.map((event) => event.type)).toEqual([
+      "kickoff",
+      "message",
+      "call-started",
+    ]);
+    binding.onEnded("hangup");
+  });
+
+  test("in a group, she calls as herself: her lines are hers, and the others read them later", async () => {
+    persona("beta", "贝塔");
+    const id = await group("beta");
+    plans.set("大家好", [{ replies: [PERSONA], source: "model" }]);
+    await new Lines(await server.call("POST", `/chats/${id}/messages`, { text: "大家好" })).all();
+    const binding = await dial(id, "beta");
+    expect(binding.persona).toBe("beta");
+    expect(binding.seedMessages).toEqual([
+      { role: "user", content: "观众：大家好" },
+      { role: "user", content: `${readPersonaIdentity(PERSONA).name}：收到啦` },
+    ]);
+    binding.onTranscript({ role: "user", text: "贝塔你好", interrupted: false });
+    binding.onTranscript({ role: "assistant", text: "你好呀", interrupted: false });
+    binding.onEnded("hangup");
+    await until(async () => (await log(id)).call === null);
+    const { header, events } = await log(id);
+    expect(messages(events).slice(-2)).toMatchObject([
+      { speaker: { kind: "user" }, text: "贝塔你好", modality: "call" },
+      { speaker: { kind: "persona", id: "beta" }, text: "你好呀", modality: "call" },
+    ]);
+    const nameOf = (who: string) => (who === "beta" ? "贝塔" : who);
+    expect(viewOf(header, events, PERSONA, { windowMessages: 60, nameOf }).slice(-2)).toEqual([
+      { role: "user", content: "观众：贝塔你好" },
+      { role: "user", content: "贝塔：你好呀" },
+    ]);
+  });
+
+  test("opens on a voice message heard as nothing as her turns read it", async () => {
+    process.env.SONIOX_API_KEY = "soniox-test";
+    try {
+      const id = await greeted();
+      hearing = async () => ({ text: "" });
+      await new Lines(await voice(id)).all();
+      const binding = await dial(id);
+      expect(binding.seedMessages.slice(2, 3)).toEqual([{ role: "user", content: UNHEARD }]);
+      binding.onEnded("hangup");
+    } finally {
+      delete process.env.SONIOX_API_KEY;
+    }
+  });
+
+  test("streams what an interrupted turn's selfie brings, as any event the chat stores meanwhile", async () => {
+    const photo = deferred();
+    const id = await greeted();
+    scripts.set("拍张照", selfie(photo.promise));
+    const posted = new Lines(
+      await server.call("POST", `/chats/${id}/messages`, { text: "拍张照" }),
+    );
+    await posted.until((line) => line.type === "delta");
+    const binding = await dial(id);
+    await posted.all();
+    const live = new Lines(await server.call("GET", `/chats/${id}/live`));
+    photo.resolve();
+    await live.until(
+      (line) => line.type === "events" && line.events.some((event) => event.type === "tool-result"),
+    );
+    binding.onEnded("hangup");
+    expect(shape(await live.all())).toEqual([
+      "events 7:call-started",
+      "events 8:tool-result,9:message",
+      "events 10:call-ended",
+    ]);
+  });
+
+  test("shutdown ends it, and the session's own end later changes nothing", async () => {
+    const id = await greeted();
+    const binding = await dial(id);
+    binding.onTranscript({ role: "assistant", text: "要走了吗", interrupted: false });
+    await server.shutdown();
+    expect((await log(id)).events.slice(-2)).toMatchObject([
+      { type: "message", text: "要走了吗", modality: "call" },
+      { type: "call-ended", reason: "shutdown" },
+    ]);
+    binding.onEnded("hangup");
+    await Bun.sleep(20);
+    expect((await log(id)).events.at(-1)).toMatchObject({ type: "call-ended", reason: "shutdown" });
   });
 });

@@ -81,8 +81,9 @@ describe("chatItems", () => {
         interrupted: false,
         cutOff: null,
         reason: null,
+        call: false,
       },
-      { kind: "user", seq: 4, text: "拍张照", voice: null },
+      { kind: "user", seq: 4, text: "拍张照", voice: null, call: false },
       {
         kind: "persona",
         seq: 8,
@@ -94,8 +95,9 @@ describe("chatItems", () => {
         interrupted: true,
         cutOff: null,
         reason: single,
+        call: false,
       },
-      { kind: "user", seq: 10, text: "再来一张", voice: null },
+      { kind: "user", seq: 10, text: "再来一张", voice: null, call: false },
       { kind: "failed", seq: 11, persona: "mio", error: "Timed out" },
     ]);
   });
@@ -166,7 +168,7 @@ describe("voice messages", () => {
 
   test("audio on a message that isn't a voice message plays no part", () => {
     const [item] = chatItems([{ ...voice(1, { kind: "user" }, "hi"), modality: "text" }]);
-    expect(item).toEqual({ kind: "user", seq: 1, text: "hi", voice: null });
+    expect(item).toEqual({ kind: "user", seq: 1, text: "hi", voice: null, call: false });
     expect(chatItems([{ ...voice(2, { kind: "user" }, ""), modality: "text" }])).toEqual([]);
   });
 
@@ -197,7 +199,7 @@ describe("voice messages", () => {
     // Another persona's, or one with no message of hers right before it, badges nothing.
     expect(chatItems([her, failed(3, "ken")])).toMatchObject([{ sentAsText: false }]);
     expect(chatItems([userLine(1, "唱"), failed(2, "mio")])).toEqual([
-      { kind: "user", seq: 1, text: "唱", voice: null },
+      { kind: "user", seq: 1, text: "唱", voice: null, call: false },
     ]);
   });
 
@@ -389,7 +391,7 @@ describe("retryText", () => {
   });
 
   test("is the viewer's last line when her reply to it was cut off", () => {
-    const asked = { kind: "user", seq: 1, text: "讲个长故事", voice: null } as const;
+    const asked = { kind: "user", seq: 1, text: "讲个长故事", voice: null, call: false } as const;
     const reply = {
       kind: "persona",
       seq: 2,
@@ -400,6 +402,7 @@ describe("retryText", () => {
       sentAsText: false,
       interrupted: false,
       reason: null,
+      call: false,
     } as const;
     expect(retryText([asked, { ...reply, cutOff: "length" }])).toBe("讲个长故事");
     expect(retryText([asked, { ...reply, cutOff: null }])).toBeNull();
@@ -409,6 +412,113 @@ describe("retryText", () => {
     const items = chatItems(EVENTS);
     expect(retryText(items.slice(0, -1))).toBeNull();
     expect(retryText([{ kind: "failed", seq: 1, persona: "mio", error: "x" }])).toBeNull();
+  });
+});
+
+describe("calls", () => {
+  const MIO = { kind: "persona", id: "mio" } as const;
+  const said = (seq: number, speaker: Speaker, text: string, interrupted = false): ChatEvent => ({
+    type: "message",
+    seq,
+    at: seq * 1000,
+    id: `c${seq}`,
+    speaker,
+    text,
+    modality: "call",
+    ...(interrupted ? { interrupted } : {}),
+  });
+  const decided: ChatEvent = {
+    type: "decision",
+    seq: 2,
+    at: 2000,
+    after: 1,
+    replies: [{ persona: "mio", mode: "text" }],
+    source: "single",
+  };
+  const CALL: ChatEvent[] = [
+    { type: "message", seq: 1, at: 1000, id: "u1", speaker: { kind: "user" }, text: "在吗" },
+    decided,
+    { type: "message", seq: 3, at: 3000, id: "m3", speaker: MIO, text: "在呢" },
+    { type: "call-started", seq: 4, at: 4000, call: "k1", persona: "mio" },
+    said(5, MIO, "喂？"),
+    said(6, { kind: "user" }, "刚才说到哪了"),
+    said(7, MIO, "说到你的猫", true),
+    { type: "call-ended", seq: 8, at: 196_000, call: "k1", reason: "client" },
+  ];
+
+  test("its lines are messages marked as said on the call, with no decision behind hers", () => {
+    expect(chatItems(CALL).slice(3, 6)).toEqual([
+      {
+        kind: "persona",
+        seq: 5,
+        persona: "mio",
+        text: "喂？",
+        images: [],
+        voice: null,
+        sentAsText: false,
+        interrupted: false,
+        cutOff: null,
+        reason: null,
+        call: true,
+      },
+      { kind: "user", seq: 6, text: "刚才说到哪了", voice: null, call: true },
+      {
+        kind: "persona",
+        seq: 7,
+        persona: "mio",
+        text: "说到你的猫",
+        images: [],
+        voice: null,
+        sentAsText: false,
+        interrupted: true,
+        cutOff: null,
+        reason: null,
+        call: true,
+      },
+    ]);
+    expect(chatItems(CALL)[1]).toMatchObject({ kind: "persona", seq: 3, call: false });
+  });
+
+  test("its start and end are separators, each knowing whom it was with and how long it ran", () => {
+    const items = chatItems(CALL);
+    expect(items[2]).toEqual({
+      kind: "call",
+      seq: 4,
+      edge: "started",
+      persona: "mio",
+      durationMs: 192_000,
+    });
+    expect(items[6]).toEqual({
+      kind: "call",
+      seq: 8,
+      edge: "ended",
+      persona: "mio",
+      durationMs: 192_000,
+    });
+  });
+
+  test("a call still on has no length yet, and an end without its start names no one", () => {
+    expect(chatItems(CALL.slice(0, 6))[2]).toMatchObject({ edge: "started", durationMs: null });
+    expect(chatItems(CALL.slice(7))).toEqual([
+      { kind: "call", seq: 8, edge: "ended", persona: null, durationMs: null },
+    ]);
+  });
+
+  test("her first line after a separator starts a run, and Retry never reaches back past one", () => {
+    const items = chatItems(CALL);
+    expect(items[1]).toMatchObject({ kind: "persona", persona: "mio" });
+    expect(items[3]).toMatchObject({ kind: "persona", persona: "mio" });
+    expect(startsRun(items, 3)).toBe(true);
+    const failed: ChatEvent = {
+      type: "turn-failed",
+      seq: 9,
+      at: 9,
+      persona: "mio",
+      turn: "t",
+      error: "x",
+    };
+    expect(retryText(chatItems([...CALL, failed]))).toBeNull();
+    expect(manyVoices(items)).toBe(false);
   });
 });
 

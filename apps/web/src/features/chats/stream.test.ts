@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatEvent, ChatHeader, ChatStreamLine } from "@eidolon/chat";
 import {
+  callOn,
   IDLE,
   LATE_POLL_MS,
   type LiveAction,
@@ -379,6 +380,7 @@ describe("mergeEvents", () => {
     events: [userLine(1, "a"), herLine(2, "b")],
     lateTools: [],
     hearingRefusal: null,
+    call: null,
   };
 
   test("appends what continues the log, skipping what it already has", () => {
@@ -402,9 +404,35 @@ describe("mergeEvents", () => {
 describe("latePoll", () => {
   test("reads the chat again only while a tool her interrupted turn left running is out", () => {
     expect(latePoll(undefined)).toBe(false);
-    const contents = { header: HEADER, events: [], hearingRefusal: null };
+    const contents = { header: HEADER, events: [], hearingRefusal: null, call: null };
     expect(latePoll({ ...contents, lateTools: [] })).toBe(false);
     expect(latePoll({ ...contents, lateTools: ["take_selfie"] })).toBe(LATE_POLL_MS);
+  });
+});
+
+describe("callOn", () => {
+  const started: ChatEvent = { type: "call-started", seq: 3, at: 3, call: "c1", persona: "mio" };
+  const log = {
+    header: HEADER,
+    events: [userLine(1, "a"), herLine(2, "b"), started],
+    lateTools: [],
+    hearingRefusal: null,
+    call: { id: "c1", persona: "mio" },
+  };
+
+  test("is the call the server said is on", () => {
+    expect(callOn(log)).toEqual({ id: "c1", persona: "mio" });
+    expect(callOn({ ...log, call: null })).toBeNull();
+  });
+
+  test("ends once a stream merges the call's end, before the next read says so", () => {
+    const ended: ChatEvent = { type: "call-ended", seq: 4, at: 4, call: "c1", reason: "client" };
+    expect(callOn(mergeEvents(log, [ended]).log)).toBeNull();
+  });
+
+  test("but not at an earlier call's end", () => {
+    const earlier: ChatEvent = { type: "call-ended", seq: 4, at: 4, call: "c0", reason: "client" };
+    expect(callOn(mergeEvents(log, [earlier]).log)).toEqual({ id: "c1", persona: "mio" });
   });
 });
 

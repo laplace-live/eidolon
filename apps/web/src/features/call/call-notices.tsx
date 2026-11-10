@@ -182,22 +182,25 @@ export function CallNotices({
   call,
   status,
   name,
+  persona = status.persona.id,
 }: {
   readonly call: Call;
   readonly status: Status;
   /** The persona's short name. */
   readonly name: string;
+  /** Whom the call is with; status checks the active persona's voice alone. */
+  readonly persona?: string;
 }) {
   const { t } = useLingui();
   const { phase, botError } = call;
-  const { voice } = status.persona;
+  const voice = persona === status.persona.id ? status.persona.voice : null;
   const ended = phase.name === "ended" ? phase : null;
   const end =
     ended && endingOf(ended.end, sessionErrorSince(status.lastSessionError, ended.startedAt));
   const inCall = phase.name === "connecting" || phase.name === "live";
   const mic = call.micProblem !== null && inCall ? micEnding(call.micProblem) : null;
 
-  if (!end && !mic && !botError && !call.audioBlocked && voice.ok !== false) return null;
+  if (!end && !mic && !botError && !call.audioBlocked && voice?.ok !== false) return null;
   return (
     <div className="flex flex-col gap-2 border-b px-4 py-3 sm:px-6">
       {end && <EndingNotice ending={end} />}
@@ -233,7 +236,7 @@ export function CallNotices({
           </span>
         </Notice>
       )}
-      {voice.ok === false && (
+      {voice?.ok === false && (
         <Notice
           icon={TriangleAlertIcon}
           tone="warning"

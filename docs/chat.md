@@ -4,7 +4,9 @@ Chats with the personas, in the local web app, in text and in voice messages. A 
 append-only log of events with one to six personas in it. Each persona's reply is a turn of the
 turn engine, which talks to her mind without pipedog. In a group chat, the director decides who
 answers each line, and the personas may answer each other ([Group chats](#group-chats)). Either
-side may send a recorded clip instead of a line ([Voice messages](#voice-messages)).
+side may send a recorded clip instead of a line ([Voice messages](#voice-messages)), and the viewer
+may call one of the personas, on a call that opens on the chat and is stored in it
+([Calls](#calls)).
 
 ```text
 @eidolon/chat         the format: events, the header, ChatStore, viewOf, parseMentions; safe in a browser
@@ -14,7 +16,8 @@ side may send a recorded clip instead of a line ([Voice messages](#voice-message
                       hearVoiceMessage: the viewer's clip, heard
 @eidolon/context      Director: who answers each line, and in text or voice (director.ts)
 @eidolon/providers/speech-batch   synthesize and transcribe: a whole voice message per request
-apps/bot/src/local/chats/, routes/chats.ts   the runner and /api/local/chats
+@eidolon/runtime      CallBinding: a call run as a chat's persona, opened on it, reporting its lines
+apps/bot/src/local/chats/, routes/chats.ts   the runner, a chat's calls and /api/local/chats
 apps/web/src/features/chats/                 the Chats page (web-app.md)
 ```
 
@@ -41,7 +44,7 @@ isn't stored, she never saw.
 
 | Event | Written by | What it holds |
 | --- | --- | --- |
-| `message` | the runner for the viewer, the engine for her | `speaker`, `text`, and `attachments` (her selfies; `text` is empty on a message of photos alone); `modality: "voice"` on a voice message, whose first attachment is its audio and whose `text` is its transcript; `interrupted` when she was cut off, keeping what she had said; `cutOff` when her provider stopped her short: `length` at its token limit, `refusal` when it refused or filtered her |
+| `message` | the runner for the viewer and for a call's lines, the engine for her | `speaker`, `text`, and `attachments` (her selfies; `text` is empty on a message of photos alone); `modality: "voice"` on a voice message, whose first attachment is its audio and whose `text` is its transcript; `modality: "call"` on a line said on a call, the viewer's or hers, its transcript in `text`; `interrupted` when she was cut off, keeping what she had said; `cutOff` when her provider stopped her short: `length` at its token limit, `refusal` when it refused or filtered her |
 | `context` | the engine | A block a context provider put into her view: `role`, `content` and its `position` there; never shown |
 | `context-removed` | the engine | Her earlier `context` blocks, by seq, that a provider took back out; the stream archive replaces its blocks when they change or move |
 | `tool-call`, `tool-result` | the engine | Her call and what it returned; a call cut off has no result, and one that ran on past an interruption returns further down the log |
@@ -51,10 +54,7 @@ isn't stored, she never saw.
 | `title` | `PATCH` | The chat's title; the last one wins. Until there is one, the page names the chat by who is in it now |
 | `participants` | `POST participants` | Personas added or removed |
 | `settings` | `PATCH` | The chat's `chainLimit` or `replyMode`; the last of each wins |
-| `call-started`, `call-ended` | nothing yet | Calls inside a chat |
-
-**Reserved, so later steps need no format change:** a message's `modality: "call"`, which carries
-a call's turn with its transcript in `text`.
+| `call-started`, `call-ended` | the runner | A call in the chat ([Calls](#calls)): `call-started` names the `call`, a UUIDv7, and the `persona` called; `call-ended` names the same `call` and its `reason`, `hangup`, `error` or `shutdown` |
 
 **`ChatSummary`** is what the chat list shows: the title, the participants, `createdAt`,
 `updatedAt`, the last message's text and the last seq. `summarize` derives it from a log, so a
@@ -67,7 +67,8 @@ call would hold for her, without the system message:
 
 - **Her messages** are `assistant`, and **the viewer's** are `user`. An empty message is left
   out, and an interrupted one keeps what she said. A voice message is its transcript; the
-  engine reads the viewer's that was heard as nothing as `（听不清）` (`UNHEARD`).
+  engine reads the viewer's that was heard as nothing as `（听不清）` (`UNHEARD`). A call's lines
+  are messages like any other.
 - **In a chat of two or more personas,** the viewer's lines read `观众名：text`, with the
   viewer's name (`viewerName`, else 观众). A chat of one keeps them unlabelled.
 - **Another persona's messages** fold into one `user` message of `名字：text` lines, one per line,
@@ -453,6 +454,96 @@ as `（听不清）`, and the page says no words could be heard in it.
 - **In a chat of one in `auto`,** every viewer line adds one director call, about $0.00003, as a
   group's do.
 
+## Calls
+
+A call is a mode of a chat. The viewer calls one of its personas from the chat page, the call
+opens on the chat's history, and each line said on it is stored in the chat as a message. It still
+runs on pipedog's pipeline (`packages/runtime`), and costs what a call from `/call` costs. `/call`
+stays the standalone call to the active persona, with no chat.
+
+### The binding
+
+`packages/runtime` knows nothing of chats. `SignallingServer.offer(admission, binding?)` takes a
+`CallBinding`, and an offer without one runs exactly as before:
+
+```ts
+interface CallBinding {
+  persona: string; // whom the call runs as, active or not; the caller validates the id
+  seedMessages: readonly unknown[]; // OpenAI-shaped, before the greeting
+  onTranscript(line: { role: "user" | "assistant"; text: string; interrupted: boolean }): void;
+  onEnded(end: "hangup" | "error"): void; // once, after the last line
+}
+```
+
+- **She runs as herself.** `runSessionSafely` builds and runs the whole session inside
+  `withPersona(persona)`, so her hearing, mind, voice, tools, index and memory are hers while
+  another persona is active.
+  - **What keeps the scope:** every task the session starts, as pipedog starts them: each
+    processor's queue, function calls, Mem0's stores, event handlers, observers, the usage ledger,
+    and the RTVI task that greets.
+  - **What runs outside it, and reads no settings:** werift's connection events and data channel
+    only queue frames or log, `track-status` stops video, and `closeWhenDtlsCloses` logs and
+    disconnects.
+  - **What isn't hers:** the ICE plan and `PATCH /api/offer`, which read install-wide settings.
+- **The seed** goes into the `LLMContext` before the greeting's kickoff. The kickoff is unchanged:
+  she greets as she would on any call, with the chat behind her.
+- **The lines** come from pipedog's aggregators:
+  - the viewer's spoken lines from `on_user_turn_message_added`, one per message written to the
+    context, which realtime models emit too;
+  - her lines from `on_assistant_turn_stopped`, which holds only the text her voice played. A reply
+    cut off by the viewer or by a hang-up is its spoken part, with `interrupted`, the same text
+    the context keeps;
+  - lines typed into the call (RTVI `send-text`), which no turn carries, from an observer added
+    only with a binding.
+
+  An empty line isn't reported, and neither is the greeting's kickoff or the empty-turn recovery
+  prompt, which pipedog writes to the context itself. An `onTranscript` or `onEnded` that throws
+  is logged, and the call goes on.
+- **The end:** `onEnded("hangup")` once the session ran until either side hung up, `"error"` once
+  it failed and its peer was closed.
+- **Mem0 stores only what is said on the call.** With a seed, the Mem0 processor hands Mem0 its
+  context less the seed, through `MEM0_STORE_KEY`, as a group's turns do: the chat's lines were
+  stored by its own turns already. Its search and the greeting's memories are unchanged.
+
+### A call in the local app
+
+`POST /api/offer` with `requestData: { chatId, persona }` (`ChatCallRequestData`) calls her inside
+that chat; without a `chatId`, it is the standalone call, unbound.
+
+1. **The checks:** a chat the store has (`404 unknown-chat`), a persona id (`400
+   invalid-persona-id`, `404 unknown-persona`) who is in it (`400 bad-request`), and no call on in
+   it already (`409 chat-in-call`).
+2. **The runner** (`chats/runner.ts`, through `chats/calls.ts`):
+   1. stops a running reply, which stores what she said as interrupted;
+   2. stores `call-started { call, persona }`;
+   3. seeds the call with her `viewOf` of the chat, the window her next text turn would read, a
+      viewer's voice message heard as nothing reading `（听不清）`;
+   4. stores each finished line as a `message` with `modality: "call"`, from the viewer or from
+      her, `interrupted` where she was cut off;
+   5. stores `call-ended { call, reason }` once the session ends: `hangup`, `error`, or `shutdown`
+      when the server stops mid-call. A line after it is dropped.
+3. **An offer the signalling server refuses** still stores both ends, the second with `error`: a
+   call of no length.
+4. **A renegotiation,** an offer for the call's own `pc_id`, passes through unbound and stores
+   nothing.
+
+**While a call is on:**
+- `POST messages`, `POST voice` (before it hears the clip, which bills), `DELETE` and a second call
+  answer `409 chat-in-call`. The chat takes them again as soon as the call's end is asked for, and
+  stores them after its `call-ended`.
+- `GET live` streams each event the chat stores, from `call-started` on, and ends after
+  `call-ended`, so the page follows a reply and a call through one subscription.
+- `GET chats/:id`'s `call` is `{ id, persona }`, and null once the call's end is asked for. A server
+  killed mid-call leaves a `call-started` with no `call-ended`, and `call` is null after the
+  restart, so the page goes by `call`, not by the events.
+
+**In a group,** the viewer picks whom to call. Her call lines land in the chat as her messages, so
+the other personas read them in their views later. A call with several personas at once comes with
+the voice engine.
+
+**Production never binds a call.** `main.ts`'s offer route passes no binding, whatever the
+request's data says, and `production.test.ts` pins it.
+
 ## The local API
 
 The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
@@ -462,7 +553,8 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
   line;
 - one live buffer of the running reply's lines, from its start: a greeting's turn, or a viewer
   line's decisions and turns;
-- the tools interrupted turns left running, by name.
+- the tools interrupted turns left running, by name;
+- the call on in it, with a live buffer of the events stored during it ([Calls](#calls)).
 
 **What a send does:**
 - **New chat:** with one persona, her greeting starts right after the `201`, and `GET live`
@@ -498,14 +590,14 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
 | --- | --- | --- |
 | `GET chats` | | `ChatSummary[]`, newest activity first |
 | `POST chats` | `{ participants: [id] }`, 1 to 6 personas, each once | `201 { id }`; one persona's greeting then runs |
-| `GET chats/:id?afterSeq=n` | | `{ header, events, lateTools, hearingRefusal }`: the events after `afterSeq`; the tools interrupted turns left running; and why a voice message can't be heard now, in `POST voice`'s words, or null |
-| `POST chats/:id/messages` | `{ text }`, 1 to 4000 characters | NDJSON `ChatStreamLine`s from the viewer's line on: each decision as an `events` line, and each turn from `started` to `ended` |
-| `POST chats/:id/voice?durationMs=n` | The recorded audio: `audio/webm`, `audio/ogg`, `audio/mp4` or `audio/mpeg`, codecs allowed, at most 10 MB; `durationMs` is the recorder's clock, 1 to 120000 | As `POST messages`, its first `events` line holding the stored voice message with its transcript. `415` for another type, `400` without `durationMs` or with an empty body, `413` past 2 minutes or 10 MB, `409 missing-key` while the hearing role can't hear, `502 upstream-failed` when hearing fails |
-| `GET chats/:id/live` | | NDJSON of the running reply from its start, or `204` while none runs |
+| `GET chats/:id?afterSeq=n` | | `{ header, events, lateTools, hearingRefusal, call }`: the events after `afterSeq`; the tools interrupted turns left running; why a voice message can't be heard now, in `POST voice`'s words, or null; and the call on in the chat, `{ id, persona }`, or null |
+| `POST chats/:id/messages` | `{ text }`, 1 to 4000 characters | NDJSON `ChatStreamLine`s from the viewer's line on: each decision as an `events` line, and each turn from `started` to `ended`. `409 chat-in-call` during a call |
+| `POST chats/:id/voice?durationMs=n` | The recorded audio: `audio/webm`, `audio/ogg`, `audio/mp4` or `audio/mpeg`, codecs allowed, at most 10 MB; `durationMs` is the recorder's clock, 1 to 120000 | As `POST messages`, its first `events` line holding the stored voice message with its transcript. `415` for another type, `400` without `durationMs` or with an empty body, `413` past 2 minutes or 10 MB, `409 missing-key` while the hearing role can't hear, `409 chat-in-call` during a call, `502 upstream-failed` when hearing fails |
+| `GET chats/:id/live` | | NDJSON of the running reply from its start; during a call, each event the chat stores, from `call-started` until the stream ends after `call-ended`; or `204` while neither runs |
 | `POST chats/:id/stop` | | `204` once the stopped reply's words are stored |
 | `PATCH chats/:id` | `{ title }`, 1 to 80 characters on one line, `{ chainLimit }`, a whole number from 0 to 6, or `{ replyMode }`, `auto`, `text` or `voice`; one per request | Appends a `title`, or a `settings` that applies from the next viewer line |
 | `POST chats/:id/participants` | `{ add?: [id], remove?: [id] }`, at least one persona, none in both | `200 { ok }` and a `participants` event; `400` when it adds one already there, removes one who isn't, or leaves fewer than 1 or more than 6 |
-| `DELETE chats/:id` | | Stops any reply, then removes `chats/<id>/` and nothing else |
+| `DELETE chats/:id` | | Stops any reply, then removes `chats/<id>/` and nothing else. `409 chat-in-call` during a call |
 | `GET chats/:id/files/:name` | | The attachment: its type, `nosniff`, a sandbox CSP and `Cache-Control: private, max-age=31536000, immutable`; an `<img>` or `<audio>` reads it with the cookie alone. It answers `Range` requests with a `206` (Bun.serve's own, on a file) and sends `Accept-Ranges: bytes`, since Safari plays audio only from a server that takes ranges |
 
 - **Text** is trimmed. A message may hold tabs and line breaks, but no other control character.
@@ -517,14 +609,18 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
   since is `404 unknown-persona`, until she is removed: `POST participants` looks up only the
   personas it adds.
 - **`unknown-chat`:** a chat the store doesn't have is `404 unknown-chat`.
+- **`chat-in-call`:** a send, a voice message, a delete or a second call while the chat is in a
+  call is `409 chat-in-call`.
 - **An `error` line** ends a stream only when a turn threw and even its `turn-failed` couldn't be
   stored, or when the answer threw outside any turn, as when reading the log fails.
 
 **Checks:**
-- `bun test --no-env-file packages/chat packages/engine packages/context apps/bot/test/local`.
-- `bun apps/bot/scripts/local-smoke.ts --headful`. It walks three chats against its fake
-  OpenAI-compatible server, which also answers the director's Decisions route and OpenAI's speech
-  and transcriptions. It bills nothing.
+- `bun test --no-env-file packages/chat packages/engine packages/context packages/runtime apps/bot/test/local`.
+  `packages/runtime/test/binding.test.ts` runs a bound call on scripted hearing, mind and voice,
+  and once over a real werift peer.
+- `bun apps/bot/scripts/local-smoke.ts --headful`. It walks four chats against its fake
+  OpenAI-compatible server, which also answers the director's Decisions route, OpenAI's speech and
+  transcriptions, and a call's realtime transcription session. It bills nothing.
   - **A chat of one:** New Chat and the greeting, a reply that streams in with its cue as a chip,
     after a decision that asked `voice_moment` alone, the history after a reload, Rename and
     Delete.
@@ -536,6 +632,10 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
     and her text answer; then Voice in the chat's settings, her voice reply with its cue taken out
     of what was spoken, playing on its own to its end, its file served in ranges, and both
     roles' spend in the ledger.
+  - **A call,** with her hearing, mind and voice at the fake server: a line typed first, then Call,
+    the dock, her greeting answering that line from the call's seed and landing in the log as a
+    call line, the composer waiting and a send refused `chat-in-call`, then Hang Up, the
+    `call-ended`, the separators with the call's length, and the composer back.
 - `bun run director-decisions` after changing the director's questions, state or thresholds
   ([Calibrating](#calibrating)).
 - **By hand, billed:** a chat with milky-green on OpenRouter. Ask a recall question (it must call
@@ -547,6 +647,10 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
 - **By hand, billed:** a voice reply from milky-green on Fish `drama-3`, to a line that draws her
   cues, listened to: a direction or a tag spoken aloud is a leak. Then a voice message recorded in
   the browser, transcribed by her hearing role.
+- **By hand, billed:** a call from a chat with history, on Soniox, OpenRouter and Fish. She must
+  refer to something typed earlier, her lines and yours must land in the chat as call lines, and a
+  reply you cut off must keep only what she said. Then call a persona who isn't the active one:
+  her own voice must answer.
 
 ## Later: chats in production
 

@@ -14,6 +14,10 @@ msgctxt "list separator"
 msgid ", "
 msgstr "、"
 
+#: src/features/chats/chat-log.tsx
+msgid "(on the call)"
+msgstr "（通话中）"
+
 #: src/features/setup/avatar-picker.tsx
 msgid "(optional)"
 msgstr "（可选）"
@@ -813,7 +817,7 @@ msgstr "按服务商"
 
 #: src/components/app-shell.tsx
 #: src/features/call/call-page.tsx
-#: src/features/chats/chat-view.tsx
+#: src/features/chats/call-dock.tsx
 msgid "Call"
 msgstr "通话"
 
@@ -833,14 +837,16 @@ msgid "Call {name} to start talking. You can speak or type."
 msgstr "呼叫{name}即可开始聊天，可以说话，也可以打字。"
 
 #: src/features/call/call-controls.tsx
+#: src/features/chats/call-dock.tsx
 msgid "Call Again"
 msgstr "再次呼叫"
 
-#: src/features/call/call-page.tsx
+#: src/features/call/call-state.tsx
+#: src/features/chats/call-line.ts
 msgid "Call ended"
 msgstr "通话已结束"
 
-#: src/features/call/call-page.tsx
+#: src/features/call/call-state.tsx
 msgid "Call ended · {duration}"
 msgstr "通话已结束 · {duration}"
 
@@ -848,7 +854,16 @@ msgstr "通话已结束 · {duration}"
 msgid "Call her"
 msgstr "开始通话"
 
-#: src/features/call/call-page.tsx
+#: src/features/chats/call-dock.tsx
+#: src/features/chats/call-line.ts
+msgid "Call with {name}"
+msgstr "与{name}通话"
+
+#: src/features/chats/call-line.ts
+msgid "Call with {name} · {duration}"
+msgstr "与{name}通话 · {duration}"
+
+#: src/features/call/call-state.tsx
 msgid "Calling…"
 msgstr "正在呼叫…"
 
@@ -875,10 +890,6 @@ msgstr "服务商拒绝的密钥会导致通话失败。请修正上面标出的
 #: src/features/home/memory-panel.tsx
 msgid "Calls go on without memory meanwhile."
 msgstr "在此期间通话照常进行，只是没有记忆。"
-
-#: src/features/chats/chat-view.tsx
-msgid "Calls use the active persona for now."
-msgstr "目前通话只能使用当前人设。"
 
 #: src/features/jobs/detail.tsx
 msgid "Can't be stopped from here"
@@ -1059,6 +1070,7 @@ msgstr "客户端 IP 请求头"
 
 #: src/components/ui/dialog.tsx
 #: src/components/ui/sheet.tsx
+#: src/features/chats/call-dock.tsx
 #: src/features/studio/facts-editor.tsx
 msgid "Close"
 msgstr "关闭"
@@ -1643,7 +1655,7 @@ msgstr "通用"
 msgid "Get a key"
 msgstr "获取密钥"
 
-#: src/features/call/call-page.tsx
+#: src/features/call/call-state.tsx
 msgid "Getting your microphone ready…"
 msgstr "正在准备麦克风…"
 
@@ -1676,7 +1688,7 @@ msgstr "Group ID"
 msgid "Hang Up"
 msgstr "挂断"
 
-#: src/features/call/call-page.tsx
+#: src/features/call/call-state.tsx
 msgid "Hanging up…"
 msgstr "正在挂断…"
 
@@ -1817,7 +1829,11 @@ msgstr "身份已保存。"
 msgid "Images"
 msgstr "图片"
 
-#: src/features/call/call-page.tsx
+#: src/features/chats/composer.tsx
+msgid "In a call"
+msgstr "通话中"
+
+#: src/features/call/call-state.tsx
 msgid "In a call · {duration}"
 msgstr "通话中 · {duration}"
 
@@ -2479,6 +2495,7 @@ msgid "Not every key passed its check"
 msgstr "部分密钥没有通过检查"
 
 #: src/features/call/call-page.tsx
+#: src/features/call/call-state.tsx
 msgid "Not in a call"
 msgstr "未在通话"
 
@@ -4174,6 +4191,10 @@ msgstr "这个浏览器在这里无法录音。"
 msgid "This chat doesn't exist"
 msgstr "这个聊天不存在"
 
+#: src/lib/labels.ts
+msgid "This chat is in a call. Hang up first."
+msgstr "这个聊天正在通话中，请先挂断。"
+
 #: src/components/settings-form/check-result.tsx
 msgid "This checked the key from the environment, which wins over the one saved here."
 msgstr "检查的是环境变量中的密钥，它优先于这里保存的密钥。"
@@ -4562,7 +4583,7 @@ msgstr "声音已设为{title}。"
 msgid "Voice set to {voice}."
 msgstr "声音已设为{voice}。"
 
-#: src/features/call/call-page.tsx
+#: src/features/call/call-state.tsx
 msgid "Waiting for {name} to answer…"
 msgstr "等待{name}接听…"
 
@@ -4681,6 +4702,10 @@ msgstr "她是谁：内置提示词和通话页面会这样称呼她。名字请
 #: src/features/setup/persona-fields.tsx
 msgid "Who she is, in one English sentence. It tells the knowledge search which questions are about her."
 msgstr "用一句英文介绍她是谁。知识检索据此判断哪些问题是在问她。"
+
+#: src/features/chats/call-dock.tsx
+msgid "Who to Call"
+msgstr "选择通话对象"
 
 #: src/features/setup/persona-step.tsx
 msgid "Who will you talk to?"

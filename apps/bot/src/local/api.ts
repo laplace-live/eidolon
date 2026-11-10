@@ -110,6 +110,7 @@ export const ERROR_CODES = [
   "job-not-resumable",
   "unknown-chat",
   "missing-key",
+  "chat-in-call",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -918,10 +919,14 @@ export interface LocalApi {
   "POST /api/local/chats": Endpoint<ChatCreateRequest, ChatCreated>;
   "GET /api/local/chats/:id": Endpoint<undefined, ChatContents, ChatReadQuery>;
   "PATCH /api/local/chats/:id": Endpoint<ChatUpdateRequest, Ok>;
+  /** 409 chat-in-call during a call. */
   "DELETE /api/local/chats/:id": Endpoint<undefined, Ok>;
   "POST /api/local/chats/:id/messages": Endpoint<ChatMessageRequest, Raw<"ndjson">>;
   "POST /api/local/chats/:id/voice": Endpoint<Raw<"audio">, Raw<"ndjson">, ChatVoiceQuery>;
-  /** A 204 with no body while no turn runs. */
+  /**
+   * The running reply from its start; during a call, each event the chat stores, from its
+   * call-started to its call-ended, where the stream ends. A 204 with no body while neither runs.
+   */
   "GET /api/local/chats/:id/live": Endpoint<undefined, Raw<"ndjson">>;
   /** A 204 with no body, once the turn has stopped and what it said is stored. */
   "POST /api/local/chats/:id/stop": Endpoint<undefined, undefined>;
@@ -957,6 +962,27 @@ export interface ChatContents {
    * missing-key with this message. null when it can hear one.
    */
   readonly hearingRefusal: string | null;
+  /** The call on in this chat, from its call-started until its call-ended is stored; else null. */
+  readonly call: ChatCallInfo | null;
+}
+
+export interface ChatCallInfo {
+  /** The `call` its call-started and call-ended carry. */
+  readonly id: string;
+  readonly persona: ParticipantId;
+}
+
+/**
+ * The `requestData` of a local POST /api/offer that calls a persona inside a chat. The call runs as
+ * `persona`, active or not, opens on her view of the chat, and stores each finished line in it as a
+ * `call` message; GET chats/:id/live streams them. Without `chatId`, the call is the standalone
+ * one to the active persona. Refused with 400 bad-request (no persona, or one not in the chat),
+ * 404 unknown-chat, 400 invalid-persona-id or 404 unknown-persona, and 409 chat-in-call while
+ * the chat is in another call.
+ */
+export interface ChatCallRequestData {
+  readonly chatId: string;
+  readonly persona: ParticipantId;
 }
 
 export interface ChatReadQuery {
@@ -968,7 +994,7 @@ export interface ChatReadQuery {
  * POST chats/:id/messages: 1 to 4000 characters, answered with ChatStreamLines: the viewer's line,
  * then for each line the director answers, its `decision` and every chosen persona's turn. A reply
  * still running is stopped first, with the hops queued after it, and what it said is stored as
- * interrupted.
+ * interrupted. 409 chat-in-call during a call, as for POST voice.
  */
 export interface ChatMessageRequest {
   readonly text: string;

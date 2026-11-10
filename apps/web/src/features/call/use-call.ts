@@ -3,6 +3,7 @@
 import { PipecatClient, RTVIEvent, type RTVIEvents, type RTVIMessage } from "@pipecat-ai/client-js";
 import { SmallWebRTCTransport, WavMediaManager } from "@pipecat-ai/small-webrtc-transport";
 import { type RefObject, useCallback, useEffect, useReducer, useRef, useState } from "react";
+import type { ChatCallRequestData } from "@/lib/api";
 import { deviceProblemOf, type MicProblem, probeMic } from "./media";
 import { type CallPhase, connectEnd, endOf, IDLE, reducePhase } from "./phase";
 import { selfiePaths } from "./selfie";
@@ -31,7 +32,8 @@ export interface Call {
   readonly audioBlocked: boolean;
   /** The element that plays the bot. */
   readonly audioRef: RefObject<HTMLAudioElement | null>;
-  start(): void;
+  /** Calls the active persona, or with a target, a persona inside a chat. */
+  start(target?: ChatCallRequestData): void;
   hangUp(): void;
   setMic(on: boolean): void;
   sendText(text: string): void;
@@ -197,58 +199,64 @@ export function useCall(): Call {
     [playBot, release, watchdog],
   );
 
-  const start = useCallback(async () => {
-    if (activeRef.current !== null) return;
-    const attempt = ++attemptRef.current;
-    const stale = () => attempt !== attemptRef.current;
-    dispatchPhase({ type: "start", at: Date.now() });
-    dispatchTranscript({ type: "reset" });
-    watchdog.clear();
-    setMicOn(true);
-    setMicProblem(null);
-    setBotError(null);
+  const start = useCallback(
+    async (target?: ChatCallRequestData) => {
+      if (activeRef.current !== null) return;
+      const attempt = ++attemptRef.current;
+      const stale = () => attempt !== attemptRef.current;
+      dispatchPhase({ type: "start", at: Date.now() });
+      dispatchTranscript({ type: "reset" });
+      watchdog.clear();
+      setMicOn(true);
+      setMicProblem(null);
+      setBotError(null);
 
-    const problem = await probeMic(navigator.mediaDevices);
-    if (stale()) return;
-    if (problem !== null) {
-      dispatchPhase({ type: "failed", at: Date.now(), end: { kind: "mic", problem } });
-      return;
-    }
-    let iceServers: RTCIceServer[];
-    try {
-      iceServers = await fetchIceServers();
-    } catch (error) {
+      const problem = await probeMic(navigator.mediaDevices);
       if (stale()) return;
-      const detail = error instanceof Error ? error.message : "";
-      dispatchPhase({ type: "failed", at: Date.now(), end: { kind: "ice", detail } });
-      return;
-    }
-    if (stale()) return;
+      if (problem !== null) {
+        dispatchPhase({ type: "failed", at: Date.now(), end: { kind: "mic", problem } });
+        return;
+      }
+      let iceServers: RTCIceServer[];
+      try {
+        iceServers = await fetchIceServers();
+      } catch (error) {
+        if (stale()) return;
+        const detail = error instanceof Error ? error.message : "";
+        dispatchPhase({ type: "failed", at: Date.now(), end: { kind: "ice", detail } });
+        return;
+      }
+      if (stale()) return;
 
-    const transport = new SmallWebRTCTransport({ iceServers, mediaManager: new WavMediaManager() });
-    const client = new PipecatClient({ transport, enableMic: true, enableCam: false });
-    const call: ActiveCall = {
-      client,
-      transport,
-      botLeft: false,
-      heardAt: Date.now(),
-      detach() {},
-    };
-    call.detach = attach(client, listenersFor(call));
-    activeRef.current = call;
-    dispatchPhase({ type: "dial" });
-    try {
-      await client.connect({ webrtcRequestParams: offerRequest() });
-    } catch (error) {
+      const transport = new SmallWebRTCTransport({
+        iceServers,
+        mediaManager: new WavMediaManager(),
+      });
+      const client = new PipecatClient({ transport, enableMic: true, enableCam: false });
+      const call: ActiveCall = {
+        client,
+        transport,
+        botLeft: false,
+        heardAt: Date.now(),
+        detach() {},
+      };
+      call.detach = attach(client, listenersFor(call));
+      activeRef.current = call;
+      dispatchPhase({ type: "dial" });
+      try {
+        await client.connect({ webrtcRequestParams: offerRequest(target) });
+      } catch (error) {
+        if (stale()) return;
+        release(call);
+        dispatchPhase({ type: "failed", at: Date.now(), end: connectEnd(error) });
+        return;
+      }
       if (stale()) return;
-      release(call);
-      dispatchPhase({ type: "failed", at: Date.now(), end: connectEnd(error) });
-      return;
-    }
-    if (stale()) return;
-    call.heardAt = Date.now();
-    dispatchPhase({ type: "ready" });
-  }, [listenersFor, release, watchdog]);
+      call.heardAt = Date.now();
+      dispatchPhase({ type: "ready" });
+    },
+    [listenersFor, release, watchdog],
+  );
 
   const hangUp = useCallback(async () => {
     attemptRef.current++;
@@ -318,7 +326,7 @@ export function useCall(): Call {
     botError,
     audioBlocked,
     audioRef,
-    start: () => void start(),
+    start: (target?: ChatCallRequestData) => void start(target),
     hangUp: () => void hangUp(),
     setMic,
     sendText,

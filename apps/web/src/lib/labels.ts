@@ -84,6 +84,7 @@ const ERRORS: Readonly<Record<ErrorCode | ClientErrorCode | "unknown", MessageDe
   "job-not-resumable": msg`That job can't be resumed.`,
   "unknown-chat": msg`There is no such chat.`,
   "missing-key": msg`Her chat model has no key yet. Add one in Settings.`,
+  "chat-in-call": msg`This chat is in a call. Hang up first.`,
 };
 
 /** What an error says to the viewer: its code's sentence, else a general one. */

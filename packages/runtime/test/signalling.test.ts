@@ -9,6 +9,7 @@ import type {
 } from "@pipedog/transport-smallwebrtc/opus";
 import { HTTPException } from "@pipedog/transport-smallwebrtc/request_handler";
 import type { RTCIceCandidate } from "@pipedog/transport-smallwebrtc/rtc";
+import type { CallBinding } from "../src/session/session.ts";
 import type { CandidateRules } from "../src/webrtc/handler.ts";
 import {
   createSignallingServerWith,
@@ -137,15 +138,21 @@ function admission(body: Record<string, unknown> | null, opusBitrateBps = 96000)
   };
 }
 
+interface Started {
+  readonly connection: SmallWebRTCConnection;
+  readonly admission: AllowedOffer;
+  readonly binding: CallBinding | undefined;
+}
+
 function server(
   plans: (ServerIcePlan | Deferred<ServerIcePlan>)[],
   deps: Partial<SignallingDeps> = {},
 ): {
   signalling: SignallingServer;
-  sessions: { connection: SmallWebRTCConnection; admission: AllowedOffer }[];
+  sessions: Started[];
   planCalls: () => number;
 } {
-  const sessions: { connection: SmallWebRTCConnection; admission: AllowedOffer }[] = [];
+  const sessions: Started[] = [];
   let calls = 0;
   const signalling = createSignallingServerWith(
     {
@@ -158,8 +165,8 @@ function server(
       },
     },
     {
-      startSession: async (connection, offer) => {
-        sessions.push({ connection, admission: offer });
+      startSession: async (connection, offer, binding) => {
+        sessions.push({ connection, admission: offer, binding });
       },
       candidates: rules,
       ...deps,
@@ -192,6 +199,21 @@ describe("POST /api/offer", () => {
     expect(sessions[0]?.admission).toBe(offer);
     expect(sessions[0]?.connection).toBe(built[0]?.connection as SmallWebRTCConnection);
     expect(sessions[0]?.connection.pcId).toBe(body.pc_id);
+    expect(sessions[0]?.binding).toBeUndefined();
+  });
+
+  test("a bound offer hands its binding to the session it starts", async () => {
+    const { signalling, sessions } = server([STUN_PLAN]);
+    const binding: CallBinding = {
+      persona: "bob",
+      seedMessages: [],
+      onTranscript: () => {},
+      onEnded: () => {},
+    };
+    const result = await signalling.offer(admission({ sdp: "offer", type: "offer" }), binding);
+    expect(result.status).toBe(200);
+    await until(() => sessions.length > 0);
+    expect(sessions[0]?.binding).toBe(binding);
   });
 
   test("every answer's relay raddr is scrubbed", async () => {

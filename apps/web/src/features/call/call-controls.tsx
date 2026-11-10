@@ -59,6 +59,46 @@ function MessageInput({
   );
 }
 
+/** Mutes and unmutes the viewer's mic, once the call is live. */
+export function MicToggle({ call }: { readonly call: Call }) {
+  const { t } = useLingui();
+  const micLabel = call.micOn ? t`Mute your mic` : t`Unmute your mic`;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant={call.micOn ? "outline" : "destructive"}
+          size="icon-lg"
+          aria-label={micLabel}
+          aria-pressed={!call.micOn}
+          disabled={call.phase.name !== "live"}
+          onClick={() => call.setMic(!call.micOn)}
+        >
+          {call.micOn ? <MicIcon /> : <MicOffIcon />}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{micLabel}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+export function HangUpButton({ call }: { readonly call: Call }) {
+  const { t } = useLingui();
+  return (
+    <Button
+      variant="destructive"
+      size="lg"
+      className="shrink-0 max-sm:w-9 max-sm:px-0"
+      disabled={call.phase.name === "ending"}
+      onClick={call.hangUp}
+    >
+      <PhoneOffIcon />
+      {/* On a phone the row needs the width; the name stays for screen readers. */}
+      <span className="max-sm:sr-only">{t`Hang Up`}</span>
+    </Button>
+  );
+}
+
 /** Call, or once in a call: the mic, the text box and the hang-up. */
 export function CallControls({ call, name }: { readonly call: Call; readonly name: string }) {
   const { t } = useLingui();
@@ -67,7 +107,7 @@ export function CallControls({ call, name }: { readonly call: Call; readonly nam
   if (phase.name === "idle" || phase.name === "ended") {
     return (
       <div className="flex justify-center px-4 py-4 sm:px-6">
-        <Button size="lg" onClick={call.start}>
+        <Button size="lg" onClick={() => call.start()}>
           <PhoneIcon data-icon="inline-start" />
           {phase.name === "ended" ? t`Call Again` : t`Call ${name}`}
         </Button>
@@ -75,37 +115,11 @@ export function CallControls({ call, name }: { readonly call: Call; readonly nam
     );
   }
 
-  const live = phase.name === "live";
-  const micLabel = call.micOn ? t`Mute your mic` : t`Unmute your mic`;
   return (
     <div className="flex items-center gap-2 px-4 py-4 sm:px-6">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant={call.micOn ? "outline" : "destructive"}
-            size="icon-lg"
-            aria-label={micLabel}
-            aria-pressed={!call.micOn}
-            disabled={!live}
-            onClick={() => call.setMic(!call.micOn)}
-          >
-            {call.micOn ? <MicIcon /> : <MicOffIcon />}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>{micLabel}</TooltipContent>
-      </Tooltip>
-      <MessageInput disabled={!live} name={name} onSend={call.sendText} />
-      <Button
-        variant="destructive"
-        size="lg"
-        className="shrink-0 max-sm:w-9 max-sm:px-0"
-        disabled={phase.name === "ending"}
-        onClick={call.hangUp}
-      >
-        <PhoneOffIcon />
-        {/* On a phone the text box needs the width; the name stays for screen readers. */}
-        <span className="max-sm:sr-only">{t`Hang Up`}</span>
-      </Button>
+      <MicToggle call={call} />
+      <MessageInput disabled={phase.name !== "live"} name={name} onSend={call.sendText} />
+      <HangUpButton call={call} />
     </div>
   );
 }

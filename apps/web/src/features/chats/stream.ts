@@ -194,6 +194,17 @@ export function latePoll(log: ChatContents | undefined): number | false {
 }
 
 /**
+ * The call on in the chat, as the server last said; null once the log it has grown since holds the
+ * call's end, which a stream merges before the next read.
+ */
+export function callOn(log: ChatContents): ChatContents["call"] {
+  const { call } = log;
+  if (call === null) return null;
+  const ended = log.events.some((event) => event.type === "call-ended" && event.call === call.id);
+  return ended ? null : call;
+}
+
+/**
  * `log` with the events that continue it. A gap (an event missed, or two streams' lines arriving
  * out of order) keeps what came before it and asks for a refetch.
  */

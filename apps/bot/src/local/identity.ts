@@ -24,6 +24,8 @@ import { LOCAL_VIEWER_MID } from "@eidolon/context";
 import type { AdminOutcome, MemoryAdmin } from "@eidolon/memory";
 import type { SignallingServer } from "@eidolon/runtime";
 import { jsonResponse } from "../responses.ts";
+import { chatCallTarget, offerChatCall } from "./chats/calls.ts";
+import type { ChatRunner } from "./chats/runner.ts";
 import { personaSetting } from "./personas.ts";
 import { localError, localFailure } from "./responses.ts";
 import type { LocalHandler } from "./router.ts";
@@ -71,6 +73,8 @@ export interface IdentityParts {
   readonly signalling: Pick<SignallingServer, "offer">;
   /** Built per request, so saving the Qdrant settings needs no restart; null while memory is off. */
   readonly memoryAdmin: () => MemoryAdmin | null;
+  /** The chats an offer's requestData may bind its call to. */
+  readonly chats: () => ChatRunner;
 }
 
 /** The local handlers for POST /api/offer, POST /api/offer/preflight and /api/memories*. */
@@ -112,6 +116,8 @@ export function identityHandlers(parts: IdentityParts): IdentityHandlers {
     async offer(request, { server }) {
       const body = parseOfferBody(await request.text());
       const requestData = offerRequestData(body);
+      const target = chatCallTarget(requestData);
+      if (target instanceof Response) return target;
       const admission: AllowedOffer = {
         allowed: true,
         user: localViewer(),
@@ -122,6 +128,14 @@ export function identityHandlers(parts: IdentityParts): IdentityHandlers {
         clientIp: server.requestIP(request)?.address ?? UNKNOWN_CLIENT_IP,
         quota: null,
       };
+      if (target !== null) {
+        pending++;
+        try {
+          return await offerChatCall(parts.chats(), parts.signalling, admission, target);
+        } finally {
+          pending--;
+        }
+      }
       logger.info(`[local] Offer from the local viewer to ${pyRepr(activePersona().id)}`);
       pending++;
       try {

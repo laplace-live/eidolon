@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import type { AllowedOffer, UserContext } from "@eidolon/access";
+import { activePersona } from "@eidolon/config";
 import type { ContextProvider, LlmTool } from "@eidolon/core";
 import { SileroVADAnalyzer } from "@pipedog/audio-silero";
 import { LocalSmartTurnAnalyzerV3 } from "@pipedog/audio-smart-turn";
@@ -22,6 +23,7 @@ import {
   type PipelineParts,
   runSessionSafely,
   runTransportSession,
+  type Session,
   type SessionDeps,
   type SessionMemory,
 } from "../src/session/session.ts";
@@ -233,6 +235,44 @@ describe("buildSession", () => {
     expect(calls.opened).toEqual(["archive:/repo/data/lancedb", "facts:/repo/data/lancedb"]);
     expect(calls.gates).toBe(1);
     expect(sessionLines()).toEqual(["Mem0 long-term memory enabled for user_id=12345 ('奶糖花A')"]);
+  });
+
+  test("with no chat bound, a session is today's: the same processors, no messages, no listeners", async () => {
+    const { deps } = fakeDeps({ dbPathExists: async () => true, isMemoryConfigured: () => true });
+    const bare = await buildSession(new FakeTransport(), VIEWER, deps);
+    const bound = await buildSession(new FakeTransport(), VIEWER, {
+      ...deps,
+      seedMessages: [{ role: "user", content: "早" }],
+      onTranscript: () => {},
+    });
+    const classes = (s: Session) => s.processors.map((p) => p.constructor.name);
+    expect(classes(bare)).toEqual([
+      "PassThrough",
+      "PassThrough",
+      "LLMUserAggregator",
+      "RetrievalGateProcessor",
+      "ContextProviderProcessor",
+      "ContextProviderProcessor",
+      "ContextProviderProcessor",
+      "OpenRouterLLMService",
+      "PassThrough",
+      "PassThrough",
+      "LLMAssistantAggregator",
+    ]);
+    expect(classes(bound)).toEqual(classes(bare));
+    expect(bare.context.getMessages()).toEqual([]);
+    expect(bound.context.getMessages()).toEqual([{ role: "user", content: "早" }]);
+    const listeners = (s: Session) =>
+      [
+        [s.processors[2], "on_user_turn_message_added"],
+        [s.processors[10], "on_assistant_turn_stopped"],
+      ].map(([p, event]) => (p as any)._eventHandlers.get(event).handlers.length);
+    expect(listeners(bare)).toEqual([0, 0]);
+    expect(listeners(bound)).toEqual([1, 1]);
+    const observers = (s: Session) =>
+      (s.worker as any)._observer._observers.map((o: object) => o.constructor.name);
+    expect(observers(bare)).not.toContain("TypedLines");
+    expect(observers(bound)).toEqual(["TypedLines", ...observers(bare)]);
   });
 
   test("a logged-in viewer without a vector store skips Mem0", async () => {
@@ -584,5 +624,60 @@ describe("runSessionSafely", () => {
     expect(logs.messages("WARNING")).toContain(
       "Closing the failed session's connection failed: already closed",
     );
+  });
+
+  const failedAdmission: AllowedOffer = {
+    allowed: true,
+    user: ANONYMOUS,
+    token: null,
+    body: { sdp: "x", type: "offer" },
+    requestData: null,
+    opusBitrateBps: 96000,
+    clientIp: "203.0.113.1",
+    quota: null,
+  };
+
+  test("bound, a setup failure built as her ends the call once, as an error, after closing the peer", async () => {
+    const connection = new SmallWebRTCConnection();
+    const order: string[] = [];
+    spyOn(connection, "disconnect").mockImplementation(async () => {
+      order.push("disconnect");
+    });
+    const { deps } = fakeDeps({
+      createStt: () => {
+        order.push(`build:${activePersona().id}`);
+        throw new Error("boom");
+      },
+    });
+    await runSessionSafely(connection, failedAdmission, deps, {
+      persona: "bob",
+      seedMessages: [],
+      onTranscript: () => {},
+      onEnded: (end) => order.push(`ended:${end}`),
+    });
+    expect(order).toEqual(["build:bob", "disconnect", "ended:error"]);
+    expect(activePersona().id).toBe("milky-green");
+  });
+
+  test("an end its binding fails to record is logged, and nothing rejects", async () => {
+    const connection = new SmallWebRTCConnection();
+    spyOn(connection, "disconnect").mockResolvedValue(undefined);
+    const { deps } = fakeDeps({
+      createStt: () => {
+        throw new Error("boom");
+      },
+    });
+    await runSessionSafely(connection, failedAdmission, deps, {
+      persona: "bob",
+      seedMessages: [],
+      onTranscript: () => {},
+      onEnded: () => {
+        throw new Error("the chat is gone");
+      },
+    });
+    expect(logs.messages("ERROR")).toEqual([
+      "Bot session failed: boom",
+      "Could not report the call's end: the chat is gone",
+    ]);
   });
 });

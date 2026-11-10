@@ -1,20 +1,22 @@
-import { chainLimitOf, replyModeOf, summarize } from "@eidolon/chat";
+import { chainLimitOf, type ParticipantId, replyModeOf, summarize } from "@eidolon/chat";
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
-import { KeyRoundIcon, MessageSquareOffIcon, PanelLeftIcon, PhoneIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { KeyRoundIcon, MessageSquareOffIcon, PanelLeftIcon } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorAlert } from "@/components/error-alert";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { MicPill } from "@/features/call/call-controls";
+import { useCall } from "@/features/call/use-call";
 import { ApiError, type ErrorCode } from "@/lib/api";
 import { listOf } from "@/lib/labels";
 import { statusQuery } from "@/lib/query";
 import { useLang } from "@/locales/i18n";
+import { CallButton, CallDock } from "./call-dock";
 import { ChatLog } from "./chat-log";
 import { ChatMenu } from "./chat-menu";
 import { ChatSettingsSheet } from "./chat-settings";
@@ -23,47 +25,12 @@ import { chatName, shortDate } from "./format";
 import { nextUp } from "./group";
 import { chatItems, retryText } from "./items";
 import { ParticipantsMenu } from "./participants";
-import { type ChatPersona, chatWith, shortNameOf, usePersonaOf } from "./persona";
+import { chatWith, shortNameOf, usePersonaOf } from "./persona";
 import { chatQuery } from "./queries";
-import type { LiveError } from "./stream";
+import { callOn, type LiveError } from "./stream";
 import { useChat } from "./use-chat";
 import { canRecord } from "./use-recorder";
 import type { MicState } from "./voice-recorder";
-
-/** A call reaches only the active persona for now, so the button waits for her to be active. */
-function CallButton({ persona }: { readonly persona: ChatPersona }) {
-  const { t } = useLingui();
-  const { data: status } = useQuery(statusQuery);
-  const label = <span className="max-sm:sr-only">{t`Call`}</span>;
-  if (status?.persona.id === persona.id) {
-    return (
-      <Button variant="outline" size="sm" asChild>
-        <Link to="/call">
-          <PhoneIcon />
-          {label}
-        </Link>
-      </Button>
-    );
-  }
-  // aria-disabled rather than disabled, which would take the tooltip's hover and focus too.
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          aria-disabled
-          className="cursor-not-allowed opacity-50 hover:bg-card"
-          onClick={(event) => event.preventDefault()}
-        >
-          <PhoneIcon />
-          {label}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent className="max-w-64">{t`Calls use the active persona for now.`}</TooltipContent>
-    </Tooltip>
-  );
-}
 
 /** A reply that couldn't start: a key she needs, else the API's failure. */
 function LiveNotice({
@@ -165,8 +132,14 @@ export function ChatView({
   const { t } = useLingui();
   const lang = useLang();
   const chat = useQuery(chatQuery(id));
+  const { data: status, refetch: refetchStatus } = useQuery(statusQuery);
   const personaOf = usePersonaOf();
-  const turns = useChat(id);
+  const call = useCall();
+  // Whom the docked call is with: set by Call, and cleared by closing the dock.
+  const [callee, setCallee] = useState<ParticipantId | null>(null);
+  const { phase } = call;
+  const calling = phase.name !== "idle" && phase.name !== "ended";
+  const turns = useChat(id, calling);
   const [recordable] = useState(canRecord);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const events = chat.data?.events;
@@ -183,6 +156,17 @@ export function ChatView({
   const next = useMemo(() => nextUp(events ?? []), [events]);
   const chainLimit = useMemo(() => chainLimitOf(events ?? []), [events]);
   const replyMode = useMemo(() => replyModeOf(events ?? []), [events]);
+  // The server's word on a call in the chat, which another tab may hold.
+  const serverCall = useMemo(
+    () => (chat.data === undefined ? null : callOn(chat.data)),
+    [chat.data],
+  );
+
+  // Status then says whether the bot recorded a failure.
+  const ended = phase.name === "ended";
+  useEffect(() => {
+    if (ended) void refetchStatus();
+  }, [ended, refetchStatus]);
 
   if (chat.data === undefined || summary === null) {
     const state =
@@ -201,7 +185,9 @@ export function ChatView({
   const names = listOf(personas.map((persona) => persona.name));
   const now = Date.now();
   const menuName = chatName(title, who, createdAt, lang, now);
-  const retry = turns.busy ? null : retryText(items);
+  // This page knows of its own call before the server's answer says so.
+  const inCall = calling || serverCall !== null;
+  const retry = turns.busy || inCall ? null : retryText(items);
   const placeholder =
     solo === null ? t`Message everyone` : t`Message ${ph({ name: shortNameOf(solo) })}`;
   const mic: MicState = !recordable
@@ -209,6 +195,15 @@ export function ChatView({
     : chat.data.hearingRefusal !== null
       ? "no-key"
       : "ready";
+  // Hanging up returns to the composer; a call that ended any other way stays to say why.
+  const docked =
+    callee !== null &&
+    phase.name !== "idle" &&
+    !(phase.name === "ended" && phase.end.kind === "hung-up");
+  const startCall = (persona: ParticipantId) => {
+    setCallee(persona);
+    call.start({ chatId: id, persona });
+  };
 
   return (
     <>
@@ -221,7 +216,7 @@ export function ChatView({
             {title === null ? shortDate(createdAt, lang, now) : names}
           </p>
         </div>
-        {solo !== null && <CallButton persona={solo} />}
+        <CallButton personas={personas} disabled={inCall} onCall={startCall} />
         <ChatMenu
           id={id}
           name={menuName}
@@ -241,11 +236,22 @@ export function ChatView({
           retry={retry}
           autoPlay={turns.autoPlay}
           onAutoPlayEnd={turns.autoPlayEnded}
+          inCall={inCall}
           onSend={turns.send}
           onSendVoice={turns.sendVoice}
         />
+        <MicPill call={call} />
       </div>
       <footer className="flex shrink-0 flex-col gap-3 border-t bg-muted/50 px-4 py-3">
+        {docked && (
+          <CallDock
+            call={call}
+            persona={personaOf(callee)}
+            status={status}
+            onCallAgain={() => startCall(callee)}
+            onClose={() => setCallee(null)}
+          />
+        )}
         {turns.live.error !== null && (
           <LiveNotice
             error={turns.live.error}
@@ -258,6 +264,7 @@ export function ChatView({
           participants={personas}
           busy={turns.busy}
           mic={mic}
+          inCall={inCall}
           onSend={turns.send}
           onSendVoice={turns.sendVoice}
           onStop={turns.stop}
@@ -270,6 +277,8 @@ export function ChatView({
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
       />
+      {/* biome-ignore lint/a11y/useMediaCaption: a live MediaStream takes no track; the chat's log is its caption. */}
+      <audio ref={call.audioRef} autoPlay hidden />
     </>
   );
 }

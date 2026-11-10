@@ -16,6 +16,7 @@ import {
   setSettingDefaults,
 } from "@eidolon/config";
 import type { MemoryAdmin } from "@eidolon/memory";
+import type { CallBinding } from "@eidolon/runtime";
 import { PROOF_HEADER } from "../../src/local/api.ts";
 import {
   type BootIo,
@@ -46,6 +47,7 @@ export function fixtureDist(options: { outside?: string } = {}): string {
 
 export interface RecordedOffer {
   readonly admission: AllowedOffer;
+  readonly binding: CallBinding | undefined;
 }
 
 export interface Fakes {
@@ -88,8 +90,8 @@ export function fakeModules(): Fakes {
         },
         warmAudioModels: async () => {},
         createSignallingServer: () => ({
-          offer: async (admission) => {
-            offers.push({ admission });
+          offer: async (admission, binding) => {
+            offers.push({ admission, binding });
             return { status: 200, body: ANSWER };
           },
           patch: async () => ({ status: 200, body: { status: "success" } }),

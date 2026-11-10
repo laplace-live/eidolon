@@ -1,7 +1,7 @@
-// Follows the chat on screen: its running turn from GET live when it opens, and each reply a send
-// starts. A dropped stream leaves the turn running on the server, so live picks it up again once.
-// Her voice messages answering a send from this tab play on their own, one after another, while
-// the tab has the focus.
+// Follows the chat on screen: its running turn from GET live when it opens, each reply a send
+// starts, and a call this page holds in it. A dropped stream leaves the turn running on the server,
+// so live picks it up again once. Her voice messages answering a send from this tab play on their
+// own, one after another, while the tab has the focus.
 import type { ChatEvent, ChatStreamLine } from "@eidolon/chat";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
@@ -24,6 +24,11 @@ import { voiceReplies } from "./voice";
 
 type Open = (signal: AbortSignal) => AsyncIterable<ChatStreamLine>;
 
+/** How long a call's feed waits to ask GET live again, after a 204 or a dropped stream. */
+const CALL_FEED_RETRY_MS = 2000;
+
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export interface ChatTurns {
   readonly live: LiveState;
   /** A line is on its way to the log, or a reply is under way. */
@@ -37,7 +42,8 @@ export interface ChatTurns {
   autoPlayEnded(finished: boolean): void;
 }
 
-export function useChat(id: string): ChatTurns {
+/** `calling`: this page holds a call in the chat, whose lines GET live carries as they are stored. */
+export function useChat(id: string, calling: boolean): ChatTurns {
   const queryClient = useQueryClient();
   const [live, dispatch] = useReducer(reduceLive, IDLE);
   const streams = useRef(new Set<AbortController>());
@@ -130,6 +136,23 @@ export function useChat(id: string): ChatTurns {
       open.clear();
     };
   }, [id, follow]);
+
+  // GET live answers 204 until the call is set up, and may drop, so it is asked again while the
+  // call is on. A stream still open at the hang-up runs on to the call-ended the server stores.
+  useEffect(() => {
+    if (!calling) return;
+    let on = true;
+    void (async () => {
+      while (on) {
+        await follow((signal) => followLive(id, signal), null, false);
+        await pause(CALL_FEED_RETRY_MS);
+      }
+      void reread(queryClient, chatQuery(id).queryKey);
+    })();
+    return () => {
+      on = false;
+    };
+  }, [calling, id, follow, queryClient]);
 
   const send = useCallback(
     (text: string) => {
