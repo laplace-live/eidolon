@@ -478,6 +478,7 @@ interface CallBinding {
   persona: string; // whom the call runs as, active or not; the caller validates the id
   seedMessages: readonly unknown[]; // OpenAI-shaped, before the greeting
   onTranscript(line: { role: "user" | "assistant"; text: string; interrupted: boolean }): void;
+  onServerMessage?(data: Readonly<Record<string, unknown>>): void; // a tool's, as take_selfie's
   onEnded(end: "hangup" | "error"): void; // once, after the last line
 }
 ```
@@ -506,6 +507,10 @@ interface CallBinding {
   An empty line isn't reported, and neither is the greeting's kickoff or the empty-turn recovery
   prompt, which pipedog writes to the context itself. An `onTranscript` or `onEnded` that throws
   is logged, and the call goes on.
+- **Her photos:** each server message a tool sends the client, `take_selfie`'s `{ type: "selfie",
+  urls }`, reaches `onServerMessage` once it is sent, in order with the lines. One that throws is
+  logged, and the tool still returns its result. A hang-up while a line is still held reports its
+  spoken part, `interrupted`, before `onEnded`.
 - **The end:** `onEnded("hangup")` once the session ran until either side hung up, `"error"` once
   it failed and its peer was closed.
 - **Mem0 stores only what is said on the call.** With a seed, the Mem0 processor hands Mem0 its
@@ -527,9 +532,12 @@ that chat; without a `chatId`, it is the standalone call, unbound.
       viewer's voice message heard as nothing reading `（听不清）`, less her tool calls and their
       results: the call may offer none, and Anthropic refuses a `tool_use` block then;
    4. stores each finished line as a `message` with `modality: "call"`, from the viewer or from
-      her, `interrupted` where she was cut off;
+      her, `interrupted` where she was cut off, and each selfie she sends as her photos alone,
+      `modality: "call"` and `text: ""`, copied from the in-process selfie store into the chat. A
+      photo takes its place among the lines as it arrives, while its files are saved;
    5. stores `call-ended { call, reason }` once the session ends: `hangup`, `error`, or `shutdown`
-      when the server stops mid-call. A line after it is dropped.
+      when the server stops mid-call. A line or photo after it is dropped. Shutdown waits up to 2 s
+      for it, after the call's last lines, a call hung up just before included.
 3. **An offer the signalling server refuses** still stores both ends, the second with `error`: a
    call of no length.
 4. **A renegotiation,** an offer for the call's own `pc_id`, passes through unbound and stores

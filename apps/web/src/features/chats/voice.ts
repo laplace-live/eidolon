@@ -41,6 +41,19 @@ export function voiceReplies(events: readonly ChatEvent[]): number[] {
 }
 
 /**
+ * The replies waiting to play on their own once her new `replies` arrive: they join the queue while
+ * the tab has the focus, and none waits while a call is on, whose microphone would hear them.
+ */
+export function queueReplies(
+  waiting: readonly number[],
+  replies: readonly number[],
+  { focused, calling }: { readonly focused: boolean; readonly calling: boolean },
+): readonly number[] {
+  if (calling) return [];
+  return focused ? [...waiting, ...replies] : waiting;
+}
+
+/**
  * The replies left to play on their own once the first stops: the rest, if `next` and the tab
  * still has the focus, which it may have lost since they were queued; else none.
  */
@@ -76,6 +89,11 @@ export function claimPlayback(audio: Playable): void {
 /** `audio` stopped playing. */
 export function releasePlayback(audio: Playable): void {
   if (playing === audio) playing = null;
+}
+
+/** A call starts: the bubble playing pauses, so the microphone doesn't hear it. */
+export function pausePlayback(): void {
+  playing?.pause();
 }
 
 /**

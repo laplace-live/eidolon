@@ -30,7 +30,7 @@ import type { OnnxBackend } from "@pipedog/onnx";
 import type { SmallWebRTCConnection } from "@pipedog/transport-smallwebrtc/connection";
 import { SmallWebRTCTransport } from "@pipedog/transport-smallwebrtc/transport";
 import { ContextProviderProcessor, RetrievalGateProcessor } from "../adapters/context.ts";
-import { SessionTools } from "../adapters/tools.ts";
+import { type ServerMessageHook, SessionTools } from "../adapters/tools.ts";
 import { createUserTurnStrategies, createVadAnalyzer } from "../audio.ts";
 import { LaplaceRTVIProcessor } from "../rtvi.ts";
 
@@ -58,6 +58,8 @@ export interface SessionDeps {
   readonly seedMessages?: readonly unknown[];
   /** Each line the viewer said or typed, and each she spoke, once it is finished. */
   readonly onTranscript?: (line: TranscriptLine) => void;
+  /** Each server message a tool sends the client, as take_selfie's photos. */
+  readonly onServerMessage?: ServerMessageHook;
   /** One realtime model hears, thinks and speaks, in place of the three below. */
   isRealtime(): boolean;
   createRealtime(systemInstruction: string): LLMService<any>;
@@ -266,7 +268,7 @@ export async function buildSession(
   });
   const llm = realtime ? deps.createRealtime(systemInstruction) : deps.createLlm(systemInstruction);
 
-  const tools = new SessionTools(llm, tts);
+  const tools = new SessionTools(llm, tts, deps.onServerMessage);
   if (voiceTool) tools.register(voiceTool);
   if (selfieTool) tools.register(selfieTool);
   const dbPath = deps.dbPath();
@@ -426,6 +428,8 @@ export interface CallBinding {
   readonly persona: string;
   readonly seedMessages: readonly unknown[];
   readonly onTranscript: (line: TranscriptLine) => void;
+  /** Each server message a tool sends the client, in order with the lines: take_selfie's photos. */
+  readonly onServerMessage?: ServerMessageHook;
   /** Called once, after the session's last line, however it ended. */
   readonly onEnded: (end: CallEnd) => void;
 }
@@ -441,8 +445,10 @@ export function runBound<T>(
   run: (deps: SessionDeps) => T,
 ): T {
   if (binding === undefined) return run(deps);
-  const { persona, seedMessages, onTranscript } = binding;
-  return withPersona(persona, () => run({ ...deps, seedMessages, onTranscript }));
+  const { persona, seedMessages, onTranscript, onServerMessage } = binding;
+  return withPersona(persona, () =>
+    run({ ...deps, seedMessages, onTranscript, ...(onServerMessage ? { onServerMessage } : {}) }),
+  );
 }
 
 /** runSession for the background, bound to `binding` when there is one: never rejects. */

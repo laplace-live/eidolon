@@ -2,7 +2,7 @@
 // which order, and what each stream carries. The engine itself is never run here.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AllowedOffer } from "@eidolon/access";
 import {
@@ -24,6 +24,7 @@ import {
   type TurnOutput,
   type TurnRequest,
 } from "@eidolon/engine";
+import { selfieStore } from "@eidolon/imagegen";
 import {
   ProviderConfigError,
   ProviderHttpError,
@@ -2012,5 +2013,63 @@ describe("a call in a chat", () => {
     binding.onEnded("hangup");
     await Bun.sleep(20);
     expect((await log(id)).events.at(-1)).toMatchObject({ type: "call-ended", reason: "shutdown" });
+  });
+
+  test("stores a photo she takes on it as her call message, in order with its lines", async () => {
+    const id = await greeted();
+    const binding = await dial(id);
+    const url = selfieStore.publish({ data: PNG, mediaType: "image/png" }, 600);
+    const live = new Lines(await server.call("GET", `/chats/${id}/live`));
+    binding.onTranscript({ role: "assistant", text: "拍给你看", interrupted: false });
+    binding.onServerMessage?.({ type: "selfie", urls: [url] });
+    binding.onTranscript({ role: "assistant", text: "好看吗", interrupted: false });
+    binding.onServerMessage?.({ type: "notice", urls: [url] });
+    binding.onEnded("hangup");
+    binding.onServerMessage?.({ type: "selfie", urls: [url] });
+    expect(shape(await live.all())).toEqual([
+      "events 3:call-started",
+      "events 4:message",
+      "events 5:message",
+      "events 6:message",
+      "events 7:call-ended",
+    ]);
+    const { events } = await log(id);
+    const name = `${new Bun.CryptoHasher("sha256").update(PNG).digest("hex")}.png`;
+    const her = { kind: "persona", id: PERSONA } as const;
+    expect(events.slice(3).map(({ seq, at, ...event }) => event)).toEqual([
+      { type: "message", id: expect.any(String), speaker: her, text: "拍给你看", modality: "call" },
+      {
+        type: "message",
+        id: expect.any(String),
+        speaker: her,
+        text: "",
+        attachments: [{ kind: "image", name, mime: "image/png" }],
+        modality: "call",
+      },
+      { type: "message", id: expect.any(String), speaker: her, text: "好看吗", modality: "call" },
+      { type: "call-ended", call: expect.any(String), reason: "hangup" },
+    ]);
+    const file = await server.call("GET", `/chats/${id}/files/${name}`);
+    expect(new Uint8Array(await file.arrayBuffer())).toEqual(PNG);
+    expect(logs.lines()).toContain(
+      `WARNING Chat ${id}: her photo came after call ${(events[2] as ChatEventOf<"call-started">).call} ended; dropped`,
+    );
+  });
+
+  test("shutdown right after a hang-up waits for the call's last line and its end to be stored", async () => {
+    const id = await greeted();
+    const binding = await dial(id);
+    binding.onTranscript({ role: "assistant", text: "拜拜", interrupted: false });
+    binding.onEnded("hangup");
+    await server.shutdown();
+    // From the disk: a read through the store would wait for the appends itself.
+    const stored = readFileSync(join(chatsRoot(), id, "chat.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as ChatEvent);
+    expect(stored.slice(-2)).toMatchObject([
+      { type: "message", text: "拜拜", modality: "call" },
+      { type: "call-ended", reason: "hangup" },
+    ]);
   });
 });

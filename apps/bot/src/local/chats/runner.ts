@@ -23,11 +23,13 @@ import {
   type ChatRequest,
   defaultEngineDeps,
   type EngineDeps,
+  fetchStoredSelfie,
   hearVoiceMessage,
   type LateTools,
   replyModeFor,
   runChat,
   runTurn,
+  saveSelfies,
   type TurnOutput,
   type TurnRequest,
   turnView,
@@ -65,7 +67,7 @@ export type CallEndReason = CallEnd | "shutdown";
 /**
  * A call the runner opened in a chat, and the binding of the session that runs it: the session
  * opens on her view of the chat as the call starts, and each finished line it reports, the viewer's
- * or hers, is stored as a `call` message.
+ * or hers, is stored as a `call` message, as is each photo she sends.
  */
 export interface ChatCall extends CallBinding {
   readonly id: string;
@@ -171,6 +173,8 @@ export class ChatRunner {
   readonly #answer: ChatAnswer;
   readonly #hear: ChatHear;
   readonly #chats = new Map<string, Chat>();
+  /** Each call whose end was asked for, until its call-ended, after its last lines, is stored. */
+  readonly #endings = new Set<Promise<void>>();
 
   constructor(options: ChatRunnerOptions = {}) {
     this.store = new JsonlChatStore(options.root ?? join(dataHome(), "chats"), {
@@ -358,6 +362,7 @@ export class ChatRunner {
         persona,
         seedMessages,
         onTranscript: (line) => this.#callLine(id, chat, call, line),
+        onServerMessage: (data) => this.#callPhotos(id, chat, call, data),
         connected: (pcId) => {
           call.pcId = pcId;
         },
@@ -412,20 +417,22 @@ export class ChatRunner {
 
   /**
    * The stop hook: aborts every reply and the tools they left running, ends every call, and waits
-   * briefly for each reply to store what it said and each call its call-ended.
+   * briefly for each reply to store what it said and each call, a call just hung up too, its
+   * call-ended.
    */
   async shutdown(): Promise<void> {
     const running = [...this.#chats.values()].flatMap((chat) => (chat.live ? [chat.live] : []));
     for (const live of running) live.controller.abort();
     for (const chat of this.#chats.values()) chat.cancel.abort();
     // The peers disconnect only after the stop hooks, too late for a call's own end to be stored.
-    const calls = [...this.#chats].flatMap(([id, chat]) =>
-      chat.call ? [this.#endCall(id, chat, chat.call, "shutdown")] : [],
-    );
-    if (running.length === 0 && calls.length === 0) return;
+    for (const [id, chat] of this.#chats) {
+      if (chat.call) void this.#endCall(id, chat, chat.call, "shutdown");
+    }
+    const endings = [...this.#endings];
+    if (running.length === 0 && endings.length === 0) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
     await Promise.race([
-      Promise.all([...running.map((live) => live.ended), ...calls]),
+      Promise.all([...running.map((live) => live.ended), ...endings]),
       new Promise<void>((resolve) => {
         timer = setTimeout(resolve, STOP_WAIT_MS);
       }),
@@ -463,16 +470,23 @@ export class ChatRunner {
   }
 
   /**
-   * Numbers `drafts` on from the log's last event and stores them. Asked for during a call, they
-   * also go out on its feed once stored.
+   * Numbers `drafts` on from the log's last event and stores them, in the order asked for, even
+   * when they are still being made. Asked for during a call, they also go out on its feed once
+   * stored.
    */
-  #append(id: string, chat: Chat, drafts: readonly ChatEventDraft[]): Promise<ChatEvent[]> {
+  #append(
+    id: string,
+    chat: Chat,
+    drafts: readonly ChatEventDraft[] | Promise<readonly ChatEventDraft[]>,
+  ): Promise<ChatEvent[]> {
     // Taken now: the call's end clears it before the appends queued ahead of call-ended are stored.
     const feed = chat.call?.live ?? null;
     const result = chat.appends.then(async () => {
       try {
+        const made = await drafts;
+        if (made.length === 0) return [];
         const lastSeq = chat.lastSeq ?? (await this.store.summary(id)).lastSeq;
-        const events = stampEvents(drafts, lastSeq, Date.now());
+        const events = stampEvents(made, lastSeq, Date.now());
         await this.store.append(id, events);
         chat.lastSeq = lastSeq + events.length;
         feed?.push({ type: "events", events });
@@ -486,13 +500,16 @@ export class ChatRunner {
     return result;
   }
 
+  /** Whether `call` still takes what its session reports; `what` came too late if not. */
+  #takes(id: string, call: ActiveCall, what: string): boolean {
+    if (call.ending === null) return true;
+    logger.warning(`Chat ${id}: ${what} came after call ${call.id} ended; dropped`);
+    return false;
+  }
+
   /** Stores a finished line of `call` as a `call` message; one after its end is dropped. */
   #callLine(id: string, chat: Chat, call: ActiveCall, line: TranscriptLine): void {
-    if (call.ending !== null) {
-      const whose = line.role === "user" ? "the viewer's" : "her";
-      logger.warning(`Chat ${id}: ${whose} line came after call ${call.id} ended; dropped`);
-      return;
-    }
+    if (!this.#takes(id, call, `${line.role === "user" ? "the viewer's" : "her"} line`)) return;
     const speaker =
       line.role === "user"
         ? { kind: "user" as const }
@@ -512,6 +529,42 @@ export class ChatRunner {
   }
 
   /**
+   * Stores the photos a selfie message of `call` names as her `call` message, copied from the
+   * selfie store into the chat. It takes its place among the call's lines as it arrives.
+   */
+  #callPhotos(
+    id: string,
+    chat: Chat,
+    call: ActiveCall,
+    data: Readonly<Record<string, unknown>>,
+  ): void {
+    if (data.type !== "selfie" || !this.#takes(id, call, "her photo")) return;
+    const deps = {
+      fetchImage: (url: string) => fetchStoredSelfie(url),
+      saveAttachment: this.#saver(id),
+    };
+    // Never aborted: the photo is rendered and billed, and shutdown waits for it as for her lines.
+    const photos = saveSelfies(data, new AbortController().signal, deps).then(
+      (attachments): ChatEventDraft[] =>
+        attachments.length === 0
+          ? []
+          : [
+              {
+                type: "message",
+                id: Bun.randomUUIDv7(),
+                speaker: { kind: "persona", id: call.persona },
+                text: "",
+                attachments,
+                modality: "call",
+              },
+            ],
+    );
+    void this.#append(id, chat, photos).catch((error: unknown) => {
+      logger.exception(`Chat ${id}: a photo of call ${call.id} wasn't stored`, error);
+    });
+  }
+
+  /**
    * Stores `call`'s call-ended, after every line asked for before it, then ends its feed. The chat
    * takes sends again at once: they are stored after it.
    */
@@ -519,14 +572,19 @@ export class ChatRunner {
     if (call.ending !== null) return call.ending;
     const stored = this.#append(id, chat, [{ type: "call-ended", call: call.id, reason }]);
     chat.call = null;
-    call.ending = stored
+    const ending = stored
       .then(
         () => {},
         (error: unknown) => {
           logger.exception(`Chat ${id}: call ${call.id}'s end wasn't stored`, error);
         },
       )
-      .finally(() => call.live.end());
+      .finally(() => {
+        call.live.end();
+        this.#endings.delete(ending);
+      });
+    call.ending = ending;
+    this.#endings.add(ending);
     logger.info(`Chat ${id}: call ${call.id} with ${call.persona} ended (${reason})`);
     return call.ending;
   }

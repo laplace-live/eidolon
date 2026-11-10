@@ -185,6 +185,33 @@ describe("SessionTools", () => {
     expect(frame.data).toEqual({ type: "selfie", urls: ["/api/selfie/abc.png"] });
   });
 
+  test("a server message is also handed to the session's hook, which may throw without failing the tool", async () => {
+    const llm = new OpenRouterLLMService({ apiKey: "test-key" });
+    const reported: unknown[] = [];
+    const tools = new SessionTools(llm, new PassThrough("tts"), (data) => {
+      reported.push(data);
+      if (reported.length === 2) throw new Error("the chat is gone");
+    });
+    tools.register(
+      tool("take_selfie", { cancelOnInterruption: false, timeoutSecs: 120 }, async (_, effects) => {
+        await effects.sendServerMessage({ type: "selfie", urls: ["/api/selfie/abc.png"] });
+        return { ok: true, count: 1 };
+      }),
+    );
+    for (const _ of [1, 2]) {
+      const { task, events } = call(llm, "take_selfie");
+      await task;
+      expect(events.map(([kind]) => kind)).toEqual(["push", "result"]);
+      const frame = events[0]?.[1] as RTVIServerMessageFrame;
+      expect(frame.data).toEqual({ type: "selfie", urls: ["/api/selfie/abc.png"] });
+    }
+    expect(reported).toEqual([
+      { type: "selfie", urls: ["/api/selfie/abc.png"] },
+      { type: "selfie", urls: ["/api/selfie/abc.png"] },
+    ]);
+    expect(logs.messages("ERROR")).toEqual(["Could not report a server message: the chat is gone"]);
+  });
+
   test("cancelling the call aborts the tool's signal and reports no result", async () => {
     const { llm, tools } = session();
     const started = deferred<AbortSignal>();

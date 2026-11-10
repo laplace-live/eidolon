@@ -348,8 +348,12 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
     microphone are hidden, and a recording under way is thrown away. It takes the focus back when
     the call ends.
   - **What is said** arrives through `GET chats/:id/live` as call lines: messages with a small
-    phone mark, her cut-off ones marked **Interrupted**, with no Why She Answered. The call's start
-    and end are quiet centred lines, "Call with 奶绿 · 3:12" and "Call ended".
+    phone mark, her cut-off ones marked **Interrupted**, with no Why She Answered, and her selfies
+    as photos. The call's start and end are quiet centred lines, "Call with 奶绿 · 3:12" and "Call
+    ended".
+  - **Voice messages** stay quiet, since the microphone would hear them: a call starting pauses the
+    one playing and drops those waiting to play on their own, and none plays on its own until the
+    call ends. Play still plays one.
   - **Another tab** that learns of the call from `ChatContents.call`, as a refused send rereads it,
     follows it too, and gets its composer back when the call ends.
   - **Leaving the page,** or opening another chat, hangs up, as leaving `/call` does.

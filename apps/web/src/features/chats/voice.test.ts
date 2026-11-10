@@ -6,7 +6,9 @@ import {
   claimPlayback,
   knownDuration,
   MicRequests,
+  pausePlayback,
   playsNextAfter,
+  queueReplies,
   recordingType,
   releasePlayback,
   voiceReplies,
@@ -86,6 +88,17 @@ describe("voiceReplies", () => {
   });
 });
 
+describe("queueReplies", () => {
+  test("her new replies wait their turn to play while the tab has the focus", () => {
+    expect(queueReplies([3], [5, 7], { focused: true, calling: false })).toEqual([3, 5, 7]);
+    expect(queueReplies([3], [5], { focused: false, calling: false })).toEqual([3]);
+  });
+
+  test("none waits while a call is on, whose microphone would hear them", () => {
+    expect(queueReplies([3], [5], { focused: true, calling: true })).toEqual([]);
+  });
+});
+
 describe("afterAutoPlay", () => {
   test("the next reply plays on its own only while the tab still has the focus", () => {
     expect(afterAutoPlay([3, 5, 7], true, true)).toEqual([5, 7]);
@@ -122,5 +135,18 @@ describe("playback", () => {
     claimPlayback(c);
     expect(paused).toEqual(["a"]);
     releasePlayback(c);
+  });
+
+  test("a call starting pauses the one playing, and nothing once none plays", () => {
+    const paused: string[] = [];
+    const audio = { pause: () => paused.push("a") };
+    pausePlayback();
+    claimPlayback(audio);
+    pausePlayback();
+    expect(paused).toEqual(["a"]);
+    // The bubble lets go of it as its pause event arrives.
+    releasePlayback(audio);
+    pausePlayback();
+    expect(paused).toEqual(["a"]);
   });
 });

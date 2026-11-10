@@ -1,7 +1,7 @@
 // Follows the chat on screen: its running turn from GET live when it opens, each reply a send
 // starts, and a call this page holds in it. A dropped stream leaves the turn running on the server,
 // so live picks it up again once. Her voice messages answering a send from this tab play on their
-// own, one after another, while the tab has the focus.
+// own, one after another, while the tab has the focus and no call is on.
 import type { ChatEvent, ChatStreamLine } from "@eidolon/chat";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
@@ -20,7 +20,7 @@ import {
   Sends,
   type VoiceClip,
 } from "./stream";
-import { afterAutoPlay, voiceReplies } from "./voice";
+import { afterAutoPlay, pausePlayback, queueReplies, voiceReplies } from "./voice";
 
 type Open = (signal: AbortSignal) => AsyncIterable<ChatStreamLine>;
 
@@ -52,6 +52,14 @@ export function useChat(id: string, calling: boolean): ChatTurns {
   const streams = useRef(new Set<AbortController>());
   const sends = useRef(new Sends());
   const [toPlay, setToPlay] = useState<readonly number[]>([]);
+  const callOn = useRef(calling);
+
+  useEffect(() => {
+    callOn.current = calling;
+    if (!calling) return;
+    pausePlayback();
+    setToPlay([]);
+  }, [calling]);
 
   const store = useCallback(
     (events: readonly ChatEvent[]) => {
@@ -98,8 +106,9 @@ export function useChat(id: string, calling: boolean): ChatTurns {
           if (line.type === "events") {
             store(line.events);
             const replies = key === null || superseded ? [] : voiceReplies(line.events);
-            if (replies.length > 0 && document.hasFocus()) {
-              setToPlay((waiting) => [...waiting, ...replies]);
+            if (replies.length > 0) {
+              const state = { focused: document.hasFocus(), calling: callOn.current };
+              setToPlay((waiting) => queueReplies(waiting, replies, state));
             }
           } else if (line.type === "started" && reached) [turn, ended] = [line.turn, false];
           else if (line.type === "ended" && line.turn === turn) ended = true;
@@ -196,7 +205,7 @@ export function useChat(id: string, calling: boolean): ChatTurns {
     send,
     sendVoice: sendVoiceClip,
     stop,
-    autoPlay: toPlay[0] ?? null,
+    autoPlay: calling ? null : (toPlay[0] ?? null),
     autoPlayEnded,
   };
 }
