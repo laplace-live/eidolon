@@ -14,6 +14,7 @@ export {
   type ChatStoreErrorCode,
   type ChatStreamLine,
   type ChatSummary,
+  type CutOff,
   isChatId,
   type ParticipantId,
   type Speaker,

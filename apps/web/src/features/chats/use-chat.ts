@@ -7,7 +7,7 @@ import { asApiError } from "@/lib/api";
 import { followLive, sendMessage, stopChat } from "@/lib/chats";
 import { toastError } from "@/lib/feedback";
 import { chatQuery, chatsQuery } from "./queries";
-import { IDLE, type LiveState, mergeEvents, reduceLive } from "./stream";
+import { IDLE, type LiveState, mergeEvents, reaches, reduceLive } from "./stream";
 
 type Open = (signal: AbortSignal) => AsyncIterable<ChatStreamLine>;
 
@@ -48,14 +48,17 @@ export function useChat(id: string): ChatTurns {
     async (open: Open, key: number | null, rejoin: boolean): Promise<void> => {
       const controller = new AbortController();
       streams.current.add(controller);
+      // Each send counts one: a send since this stream opened supersedes it.
+      const opened = sends.current;
       let turn: string | null = null;
       let ended = false;
       try {
         for await (const line of open(controller.signal)) {
+          const reached = reaches(line, sends.current !== opened);
           if (line.type === "events") store(line.events);
-          else if (line.type === "started") [turn, ended] = [line.turn, false];
+          else if (line.type === "started" && reached) [turn, ended] = [line.turn, false];
           else if (line.type === "ended" && line.turn === turn) ended = true;
-          dispatch(line);
+          if (reached) dispatch(line);
         }
       } catch (error) {
         // Live failing leaves the log as stored, which the refetch below shows.
@@ -72,7 +75,9 @@ export function useChat(id: string): ChatTurns {
       void queryClient.invalidateQueries({ queryKey: chatQuery(id).queryKey });
       void queryClient.invalidateQueries({ queryKey: chatsQuery.queryKey, exact: true });
       if (turn !== null && !ended) {
-        if (rejoin) await follow((signal) => followLive(id, signal), null, false);
+        if (rejoin && sends.current === opened) {
+          await follow((signal) => followLive(id, signal), null, false);
+        }
         dispatch({ type: "settled", key: null, turn });
       }
     },
@@ -102,6 +107,6 @@ export function useChat(id: string): ChatTurns {
     stopChat(id).catch(toastError);
   }, [id]);
 
-  const busy = live.turn !== null || (live.pending !== null && !live.pending.failed);
+  const busy = live.turn !== null || live.pending.some((line) => !line.failed);
   return { live, busy, send, stop };
 }

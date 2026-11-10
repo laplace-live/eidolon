@@ -1119,6 +1119,10 @@ msgstr "剩余余额：{amount}"
 msgid "Current voice:"
 msgstr "当前声音："
 
+#: src/features/chats/chat-log.tsx
+msgid "Cut off"
+msgstr "未说完"
+
 #: src/components/preferences.tsx
 msgid "Dark"
 msgstr "深色"

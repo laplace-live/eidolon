@@ -78,6 +78,7 @@ export const RECALL_HINT =
   "不要把不同时期的直播混在一起，也不要还没查询就说记不清。";
 export const CHUNK_SCOPE_LABEL = "刚才查到的直播片段";
 const TIMELINE_SCOPE_LABEL = "刚才查到的场次";
+const SELECTED_SCOPE_LABEL = "选定的归档直播";
 export const RENDER_HEADER =
   "以下是已归档直播的记录，用来 ground 回复，不要照念，也不要主动念日期。";
 
@@ -370,6 +371,16 @@ export class StreamArchive implements ContextProvider {
     return this.#tool;
   }
 
+  /**
+   * Takes up the selection a recall_streams call left in a conversation this archive didn't serve,
+   * such as a chat's after a restart: `broadcastIds` are the broadcasts that call returned.
+   */
+  async resumeSelection(broadcastIds: readonly string[]): Promise<void> {
+    const scope = streamScope({ streamIds: broadcastIds, label: SELECTED_SCOPE_LABEL });
+    const broadcasts = await this.recall.select(scope);
+    this.recall.remember(recallResult({ scope, overview: false, broadcasts }));
+  }
+
   /** Returns whether the turn was a recap, which makes the facts provider skip it. */
   async enhance(
     context: ConversationContext,
@@ -550,7 +561,7 @@ export class StreamArchive implements ContextProvider {
         if (!request.broadcastIds.every((id) => known.has(id))) {
           throw new Error("场次 ID 不在归档中，请使用日期范围查找");
         }
-        return streamScope({ streamIds: request.broadcastIds, label: "选定的归档直播" });
+        return streamScope({ streamIds: request.broadcastIds, label: SELECTED_SCOPE_LABEL });
       }
       case "date_range": {
         const start = request.startDate;

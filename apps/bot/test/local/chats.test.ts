@@ -15,7 +15,7 @@ import { dataHome } from "@eidolon/config";
 import type { TurnOutput, TurnRequest } from "@eidolon/engine";
 import type { RouteHandler } from "../../src/app.ts";
 import type { ChatContents } from "../../src/local/api.ts";
-import type { ChatTurn } from "../../src/local/chats/runner.ts";
+import { ChatRunner, type ChatTurn } from "../../src/local/chats/runner.ts";
 import { createLocalRouter, type LocalApp } from "../../src/local/router.ts";
 import { chatsRoutes } from "../../src/local/routes/chats.ts";
 import { type CapturedLogs, captureLogs, deferred } from "../fakes.ts";
@@ -544,6 +544,37 @@ describe("a message", () => {
     expect(shape(await posted.all()).at(-1)).toBe("ended");
     expect((await server.call("GET", `/chats/${id}/live`)).status).toBe(204);
     expect((await server.call("POST", `/chats/${id}/stop`)).status).toBe(204);
+  });
+
+  test("stop while a send is still storing the viewer's line stops the reply it starts", async () => {
+    const runner = new ChatRunner({ root: chatsRoot(), turn: fakeTurn });
+    try {
+      const id = await runner.create([PERSONA]);
+      await runner.live(id)?.ended;
+      const decided = deferred();
+      const holding = deferred();
+      const append = runner.store.append.bind(runner.store);
+      runner.store.append = async (chat, events) => {
+        if (events.some((event) => event.type === "decision")) {
+          holding.resolve();
+          await decided.promise;
+        }
+        return append(chat, events);
+      };
+      const sent = runner.send(id, "说吧", PERSONA);
+      await holding.promise;
+      const stopped = runner.stop(id);
+      decided.resolve();
+      await stopped;
+      expect(requests[1]?.signal.aborted).toBe(true);
+      await (await sent).ended;
+      expect(messages((await runner.read(id)).events).at(-1)).toMatchObject({
+        text: "收到",
+        interrupted: true,
+      });
+    } finally {
+      await runner.shutdown();
+    }
   });
 
   test("a turn that throws is stored as turn-failed, and the chat stays usable", async () => {

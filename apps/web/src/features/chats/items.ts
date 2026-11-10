@@ -1,6 +1,6 @@
 // What a chat's log shows: the lines said and the turns that failed. Recall, tool events, the
 // greeting prompt and the bookkeeping events stay hidden.
-import type { Attachment, ChatEvent, ParticipantId } from "@eidolon/chat";
+import type { Attachment, ChatEvent, CutOff, ParticipantId } from "@eidolon/chat";
 import { parseMarkup } from "@/lib/markup";
 
 export type ChatItem =
@@ -12,6 +12,7 @@ export type ChatItem =
       readonly text: string;
       readonly images: readonly Attachment[];
       readonly interrupted: boolean;
+      readonly cutOff: CutOff | null;
     }
   | {
       readonly kind: "failed";
@@ -27,7 +28,7 @@ export function chatItems(events: readonly ChatEvent[]): ChatItem[] {
       const images = (event.attachments ?? []).filter((file) => file.kind === "image");
       if (event.speaker.kind === "user") {
         if (event.text !== "") items.push({ kind: "user", seq: event.seq, text: event.text });
-      } else if (event.text !== "" || images.length > 0) {
+      } else if (event.text !== "" || images.length > 0 || event.cutOff !== undefined) {
         items.push({
           kind: "persona",
           seq: event.seq,
@@ -35,6 +36,7 @@ export function chatItems(events: readonly ChatEvent[]): ChatItem[] {
           text: event.text,
           images,
           interrupted: event.interrupted === true,
+          cutOff: event.cutOff ?? null,
         });
       }
     } else if (event.type === "turn-failed") {
@@ -44,9 +46,17 @@ export function chatItems(events: readonly ChatEvent[]): ChatItem[] {
   return items;
 }
 
-/** What Retry sends again: the viewer's last line, if anything followed it only to fail. */
+/**
+ * What Retry sends again: the viewer's last line, if anything followed it only to fail, or her
+ * reply to it was cut off.
+ */
 export function retryText(items: readonly ChatItem[]): string | null {
-  if (items.at(-1)?.kind !== "failed") return null;
+  const last = items.at(-1);
+  if (last?.kind === "persona" && last.cutOff !== null) {
+    const asked = items.at(-2);
+    return asked?.kind === "user" ? asked.text : null;
+  }
+  if (last?.kind !== "failed") return null;
   for (let index = items.length - 1; index >= 0; index--) {
     const item = items[index]!;
     if (item.kind === "user") return item.text;

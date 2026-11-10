@@ -1119,6 +1119,10 @@ msgstr "Credit left: {amount}"
 msgid "Current voice:"
 msgstr "Current voice:"
 
+#: src/features/chats/chat-log.tsx
+msgid "Cut off"
+msgstr "Cut off"
+
 #: src/components/preferences.tsx
 msgid "Dark"
 msgstr "Dark"

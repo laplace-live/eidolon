@@ -62,12 +62,17 @@ function HerBubble({
   text,
   images = [],
   interrupted = false,
+  cutOff = false,
+  onRetry,
 }: {
   readonly chatId: string;
   readonly name: string;
   readonly text: string;
   readonly images?: readonly Attachment[];
   readonly interrupted?: boolean;
+  /** Her provider stopped her short. */
+  readonly cutOff?: boolean;
+  readonly onRetry?: (() => void) | null;
 }) {
   const { t } = useLingui();
   const shown = withoutPartialMarkup(text);
@@ -98,6 +103,16 @@ function HerBubble({
         </div>
       )}
       {interrupted && <QuietBadge>{t`Interrupted`}</QuietBadge>}
+      {cutOff && (
+        <span className="flex items-center gap-2">
+          <QuietBadge>{t`Cut off`}</QuietBadge>
+          {onRetry && (
+            <Button variant="link" size="xs" className="h-auto p-0" onClick={onRetry}>
+              {t`Retry`}
+            </Button>
+          )}
+        </span>
+      )}
     </div>
   );
 }
@@ -140,7 +155,7 @@ const Item = memo(function Item({
   readonly item: ChatItem;
   readonly chatId: string;
   readonly name: string;
-  /** Only the last item's failure offers Retry. */
+  /** Only the last item's failure, or her reply cut off, offers Retry. */
   readonly onRetry: (() => void) | null;
 }) {
   if (item.kind === "user") return <UserBubble text={item.text} />;
@@ -152,6 +167,8 @@ const Item = memo(function Item({
       text={item.text}
       images={item.images}
       interrupted={item.interrupted}
+      cutOff={item.cutOff !== null}
+      onRetry={onRetry}
     />
   );
 });
@@ -198,7 +215,7 @@ export function ChatLog({
   const { turn, pending } = live;
 
   // The viewer's own line brings the view back down.
-  const sentKey = pending?.key;
+  const sentKey = pending.at(-1)?.key;
   useEffect(() => {
     if (sentKey !== undefined) pinnedRef.current = true;
   }, [sentKey, pinnedRef]);
@@ -206,9 +223,9 @@ export function ChatLog({
   // Stable, so the memoized last item doesn't re-render with every streamed delta.
   const retryLast = useMemo(() => (retry === null ? null : () => onSend(retry)), [retry, onSend]);
   const streamed = turn === null ? "" : withoutPartialMarkup(turn.text);
-  const waiting = pending !== null && !pending.failed && turn === null;
+  const waiting = pending.some((line) => !line.failed) && turn === null;
   const thinking = waiting || (turn !== null && streamed === "" && turn.tool === null);
-  const empty = items.length === 0 && turn === null && pending === null;
+  const empty = items.length === 0 && turn === null && pending.length === 0;
 
   return (
     <div
@@ -244,13 +261,14 @@ export function ChatLog({
         ))}
         {streamed !== "" && <HerBubble chatId={chatId} name={name} text={streamed} />}
         {turn !== null && turn.tool !== null && <ToolLine tool={turn.tool} />}
-        {pending !== null && (
+        {pending.map((line) => (
           <UserBubble
-            text={pending.text}
-            failed={pending.failed}
-            onRetry={pending.failed ? () => onSend(pending.text) : undefined}
+            key={line.key}
+            text={line.text}
+            failed={line.failed}
+            onRetry={line.failed ? () => onSend(line.text) : undefined}
           />
-        )}
+        ))}
         {thinking && <Thinking label={t`${name} is thinking…`} />}
       </div>
     </div>

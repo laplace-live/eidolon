@@ -278,11 +278,16 @@ memory at the saved one.
 - **While she replies:**
   - Her words stream in, and a quiet line names the tool she is using.
   - **Stop** ends the reply, and what she said stays, marked **Interrupted**.
-  - Sending while she replies is allowed: the server stops her first.
+  - Sending while she replies is allowed: the server stops her first. Each line sent shows until
+    it is stored, and one that fails stays, marked **Not sent**, with **Retry**.
+  - A send supersedes the streams open before it: its own carries her reply from its start, so
+    the older ones only store what they bring.
   - A selfie she was taking keeps rendering through either. Its quiet line stays, and the photo
     arrives later as a message of its own ([chat.md](chat.md#the-local-api)).
 - **When a reply goes wrong:**
   - A failed reply shows its error with **Retry**, which sends the viewer's last line again.
+  - A reply her provider stopped short, at its token limit or refusing, is marked **Cut off**, with
+    the same **Retry**.
   - A mind with no key shows a notice with a link to Settings → Providers.
 - **Reopening a chat mid-reply** picks the reply up again through `GET chats/:id/live`. The reply
   keeps running when the tab closes.

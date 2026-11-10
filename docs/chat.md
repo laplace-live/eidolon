@@ -35,7 +35,7 @@ isn't stored, she never saw.
 
 | Event | Written by | What it holds |
 | --- | --- | --- |
-| `message` | the runner for the viewer, the engine for her | `speaker`, `text`, and `attachments` (her selfies; `text` is empty on a message of photos alone); `interrupted` when she was cut off, keeping what she had said |
+| `message` | the runner for the viewer, the engine for her | `speaker`, `text`, and `attachments` (her selfies; `text` is empty on a message of photos alone); `interrupted` when she was cut off, keeping what she had said; `cutOff` when her provider stopped her short: `length` at its token limit, `refusal` when it refused or filtered her |
 | `context` | the engine | A block a context provider put into her view: `role`, `content` and its `position` there; never shown |
 | `context-removed` | the engine | Her earlier `context` blocks, by seq, that a provider took back out; the stream archive replaces its blocks when they change or move |
 | `tool-call`, `tool-result` | the engine | Her call and what it returned; a call cut off has no result, and one that ran on past an interruption returns further down the log |
@@ -137,6 +137,10 @@ aborts the turn. The engine never rejects for the turn's own failures.
    - **How long they last:** they are kept per chat and persona until the settings generation
      changes, for the 32 chats used last. Providers remember the conversation they serve (the turn
      they last searched, the archive's recall scope), so two chats never share them.
+   - **Opened on a chat under way,** after a restart, a settings save or an eviction, the archive
+     takes up as its recall scope the broadcasts her last `recall_streams` call returned, so
+     `period: "selected"` still works. It doesn't when a recall block came after that call: the
+     archive's own recall may have moved the scope, and the log doesn't record where.
    - **What fails:** a missing index or an unreachable Qdrant is logged once per chat and skipped.
      An index is tried again next turn, and Qdrant a minute later, since each try can wait out its
      timeout.
@@ -145,6 +149,8 @@ aborts the turn. The engine never rejects for the turn's own failures.
 3. **Her view** is `viewOf` the log as stored. A greeting turn adds `buildGreetingKickoff` over her
    memories of the viewer, recorded as a `kickoff`.
 4. **Recall:** the gate attaches its decision, then Mem0, the archive and the facts run in turn.
+   The gate and the archive key their turn on the turn's id, since past the window a repeated line
+   leaves the view's last lines as they were.
    Each block one of them inserts is recorded as a `context` at its position. Each block from the
    log one of them takes out is recorded as a `context-removed` first, so the next turn's view is
    the one this turn left. A block put back exactly as it was, in the same order among the rest,
@@ -165,7 +171,9 @@ aborts the turn. The engine never rejects for the turn's own failures.
    serves it (`SELFIE_TTL_SECONDS`), and the images become attachments on her message, or on a
    later one when the turn was interrupted first (step 8).
 7. **The end:**
-   - **Normally:** one `message` with her text and attachments.
+   - **Normally:** one `message` with her text and attachments. When the last round's finish
+     reason says her provider stopped her short (OpenAI's `length` or `content_filter`,
+     Anthropic's `max_tokens` or `refusal`), it is marked `cutOff`, and kept even with no text.
    - **On abort:** the message is marked `interrupted`, keeping what she said, and none is stored
      if she said nothing.
    - **On a failure:** her partial text is stored as interrupted, followed by `turn-failed`.
@@ -188,7 +196,7 @@ aborts the turn. The engine never rejects for the turn's own failures.
 
 The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
 `<data home>/chats`. Per chat, it keeps:
-- one queue for sends and deletes;
+- one queue for sends, stops and deletes;
 - one append chain, which numbers each batch, stores it, and only then forwards it as an `events`
   line;
 - one live buffer of the running turn's lines, from its start;
@@ -207,6 +215,8 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
 - **A dropped connection** never stops a turn. The turn finishes and is stored, and `GET live`
   replays it. Only stop, `DELETE` and the server's shutdown abort a turn. Shutdown waits up to 2 s
   for what was said to be stored.
+- **A stop** waits its turn in the queue, so one that arrives while a send is still storing the
+  viewer's line stops the reply that send starts.
 - **A selfie still rendering when its turn was interrupted** is the runner's until it ends, as
   `late` (step 8 above):
   - **Storing:** what it brings goes through the chat's queue, so it never lands between a send's

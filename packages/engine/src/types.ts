@@ -79,8 +79,15 @@ export interface PersonaParts {
 export interface EngineDeps {
   /** The mind of the persona whose scope it is called in. */
   createMind(): Mind;
-  /** Her parts in chat `chat`: its providers keep what they saw of it, as a call's do. */
-  parts(persona: ParticipantId, viewer: UserContext, chat: string): Promise<PersonaParts>;
+  /**
+   * Her parts in `chat`: its providers keep what they saw of it, as a call's do, and ones opened on
+   * a chat under way take up from its log what they had kept.
+   */
+  parts(
+    persona: ParticipantId,
+    viewer: UserContext,
+    chat: TurnRequest["chat"],
+  ): Promise<PersonaParts>;
   /** Stores a file in the turn's chat. */
   saveAttachment(bytes: Uint8Array, mime: string): Promise<Attachment>;
   fetchImage(url: string, signal: AbortSignal): Promise<{ bytes: Uint8Array; mime: string }>;

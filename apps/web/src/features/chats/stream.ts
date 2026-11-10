@@ -35,14 +35,14 @@ export interface LiveError {
 
 export interface LiveState {
   readonly turn: LiveTurn | null;
-  /** The viewer's line, sent and not yet stored. */
-  readonly pending: PendingLine | null;
+  /** The viewer's lines, sent and not yet stored, in the order sent. */
+  readonly pending: readonly PendingLine[];
   readonly error: LiveError | null;
   /** The highest seq any stream has carried. */
   readonly seen: number;
 }
 
-export const IDLE: LiveState = { turn: null, pending: null, error: null, seen: 0 };
+export const IDLE: LiveState = { turn: null, pending: [], error: null, seen: 0 };
 
 export type LiveAction =
   | ChatStreamLine
@@ -68,11 +68,18 @@ function finishes(turn: LiveTurn, events: readonly ChatEvent[]): boolean {
   );
 }
 
-function stores(pending: PendingLine, events: readonly ChatEvent[]): boolean {
-  return events.some(
-    (event) =>
-      event.type === "message" && event.seq > pending.after && event.speaker.kind === "user",
-  );
+/** `pending` without the lines `events` store, each the first sent before it with its text. */
+function unstored(
+  pending: readonly PendingLine[],
+  events: readonly ChatEvent[],
+): readonly PendingLine[] {
+  let left = pending;
+  for (const event of events) {
+    if (event.type !== "message" || event.speaker.kind !== "user") continue;
+    const stored = left.findIndex((line) => event.seq > line.after && line.text === event.text);
+    if (stored >= 0) left = left.filter((_, i) => i !== stored);
+  }
+  return left;
 }
 
 export function reduceLive(state: LiveState, action: LiveAction): LiveState {
@@ -97,8 +104,7 @@ export function reduceLive(state: LiveState, action: LiveAction): LiveState {
     case "events":
       return {
         ...state,
-        pending:
-          state.pending !== null && stores(state.pending, action.events) ? null : state.pending,
+        pending: unstored(state.pending, action.events),
         turn: state.turn !== null && finishes(state.turn, action.events) ? null : state.turn,
         seen: Math.max(state.seen, ...action.events.map((event) => event.seq)),
       };
@@ -108,26 +114,30 @@ export function reduceLive(state: LiveState, action: LiveAction): LiveState {
       return {
         ...state,
         turn: null,
-        pending: state.pending && { ...state.pending, failed: true },
+        pending: state.pending.map((line) => ({ ...line, failed: true })),
         error: { code: action.code, message: action.message },
       };
     case "sending":
       return {
         ...state,
-        pending: { key: action.key, after: action.after, text: action.text, failed: false },
+        pending: [
+          ...state.pending.filter((line) => !line.failed),
+          { key: action.key, after: action.after, text: action.text, failed: false },
+        ],
         error: null,
       };
     case "send-failed":
       return {
         ...state,
-        pending:
-          state.pending?.key === action.key ? { ...state.pending, failed: true } : state.pending,
+        pending: state.pending.map((line) =>
+          line.key === action.key ? { ...line, failed: true } : line,
+        ),
         error: action.error,
       };
     case "settled":
       return {
         ...state,
-        pending: state.pending?.key === action.key && !state.pending.failed ? null : state.pending,
+        pending: state.pending.filter((line) => line.key !== action.key || line.failed),
         turn: action.turn !== null && state.turn?.id === action.turn ? null : state.turn,
       };
   }
@@ -166,4 +176,13 @@ export function mergeEvents(
 
 function extended(log: ChatContents, added: readonly ChatEvent[]): ChatContents {
   return added.length === 0 ? log : { ...log, events: [...log.events, ...added] };
+}
+
+/**
+ * Whether a stream's line reaches the reducer. A send supersedes every stream open before it, and
+ * its own carries her reply from its start: a superseded one only stores what it brings, whether
+ * it replays that same reply or still carries the one the send interrupted.
+ */
+export function reaches(line: ChatStreamLine, superseded: boolean): boolean {
+  return !superseded || (line.type !== "started" && line.type !== "delta" && line.type !== "tool");
 }

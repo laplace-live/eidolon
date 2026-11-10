@@ -43,7 +43,8 @@ export interface ContextProvider {
 
 /** The retrieval gate as a turn sees it: it attaches its decision to the turn's metadata. */
 export interface TurnGate {
-  attach(messages: readonly unknown[], metadata: FrameMetadata): void;
+  /** `turn` is `ConversationContext.turn`, from a caller that knows its turns. */
+  attach(messages: readonly unknown[], metadata: FrameMetadata, turn?: string): void;
 }
 
 /** An OpenAI function schema, without the `type: "object"` wrapper. */

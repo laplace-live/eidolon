@@ -5,6 +5,7 @@ import {
   type Attachment,
   CHAT_WINDOW_MESSAGES,
   type ChatEventDraft,
+  type CutOff,
   type ParticipantId,
   toolCallMessages,
   viewWithBlocks,
@@ -34,6 +35,14 @@ const missingResult = (name: string): ToolResult => ({
 const failedResult = (name: string): ToolResult => ({
   error: `The function \`${name}\` failed and returned no result.`,
 });
+
+/** The finish reasons that stop her short: OpenAI's and Anthropic's names for each. */
+const CUT_OFF = new Map<string | null, CutOff>([
+  ["length", "length"],
+  ["max_tokens", "length"],
+  ["content_filter", "refusal"],
+  ["refusal", "refusal"],
+]);
 
 /** How a tool call ended: the result the mind sees, null when it timed out. */
 interface ToolOutcome {
@@ -114,6 +123,7 @@ class Turn {
   readonly #id: string;
   #text = "";
   readonly #attachments: Attachment[] = [];
+  #cutOff: CutOff | undefined;
   /** Her message is built: photos saved from now on go out on a later one. */
   #sealed = false;
 
@@ -147,7 +157,8 @@ class Turn {
     }
     const events: ChatEventDraft[] = [];
     this.#sealed = true;
-    if (this.#text !== "" || this.#attachments.length > 0) {
+    // A reply cut off before any words is kept too, so the chat shows it.
+    if (this.#text !== "" || this.#attachments.length > 0 || this.#cutOff !== undefined) {
       const interrupted = this.#signal.aborted || failure !== null;
       events.push({
         type: "message",
@@ -156,6 +167,7 @@ class Turn {
         text: this.#text,
         ...(this.#attachments.length > 0 ? { attachments: [...this.#attachments] } : {}),
         ...(interrupted ? { interrupted: true } : {}),
+        ...(this.#cutOff !== undefined ? { cutOff: this.#cutOff } : {}),
       });
     }
     if (failure !== null) {
@@ -172,7 +184,7 @@ class Turn {
   async #respond(): Promise<void> {
     const { chat, viewer, kickoff } = this.#request;
     const signal = this.#signal;
-    const parts = await raceAbort(this.#deps.parts(this.#persona, viewer, chat.header.id), signal);
+    const parts = await raceAbort(this.#deps.parts(this.#persona, viewer, chat), signal);
     const mind = this.#deps.createMind();
     const { messages, blocks } = viewWithBlocks(chat.header, chat.events, this.#persona, {
       windowMessages: CHAT_WINDOW_MESSAGES,
@@ -206,7 +218,7 @@ class Turn {
   async #enrich(parts: PersonaParts, conversation: TurnConversation): Promise<void> {
     const signal = this.#signal;
     const metadata: FrameMetadata = {};
-    parts.gate?.attach(conversation.getMessages(), metadata);
+    parts.gate?.attach(conversation.getMessages(), metadata, conversation.turn);
     for (const { label, provider } of parts.providers) {
       try {
         await raceAbort(
@@ -239,6 +251,7 @@ class Turn {
       const hidden = conversation.hiddenTools;
       let text = "";
       let calls: MindToolCall[] = [];
+      let finishReason: string | null = null;
       for await (const chunk of mind.stream({
         system: parts.systemInstruction,
         messages: conversation.getMessages(),
@@ -254,10 +267,15 @@ class Turn {
           this.#emit({ type: "delta", turn: this.#id, text: chunk.text });
         } else if (chunk.type === "tool-calls") {
           calls = [...calls, ...chunk.calls];
+        } else if (chunk.type === "done") {
+          finishReason = chunk.finishReason;
         }
       }
       signal.throwIfAborted();
-      if (calls.length === 0) return;
+      if (calls.length === 0) {
+        this.#cutOff = CUT_OFF.get(finishReason);
+        return;
+      }
       if (round === MAX_ROUNDS) {
         logger.warning(
           `[chat] ${this.#persona} called ${calls.map((call) => call.name).join(", ")} ` +
