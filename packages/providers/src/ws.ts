@@ -6,7 +6,7 @@
 //
 // The socket the streaming clients share, with the open and close timeouts and the reconnect
 // pacing pipedog's services used.
-import { logger } from "@eidolon/config";
+import { AsyncQueue, logger } from "@eidolon/config";
 import type { WebSocket as BunWebSocket, WebSocketOptions } from "bun";
 
 // The DOM lib in tsconfig types the global WebSocket as the browser's, which takes no handshake
@@ -66,8 +66,7 @@ function refused(where: string, event: ErrorEvent): WsHandshakeError {
 
 class Socket implements WsConnection {
   readonly #ws: BunWebSocket;
-  readonly #queue: WsData[] = [];
-  #wake: (() => void) | null = null;
+  readonly #queue = new AsyncQueue<WsData>();
   #closeCode: number | null = null;
   #closeReason = "";
   readonly #ended = Promise.withResolvers<void>();
@@ -77,7 +76,6 @@ class Socket implements WsConnection {
     ws.binaryType = "arraybuffer";
     ws.addEventListener("message", ({ data }) => {
       this.#queue.push(typeof data === "string" ? data : new Uint8Array(data as ArrayBuffer));
-      this.#wake?.();
     });
     ws.addEventListener("close", ({ code, reason }) => this.ended(code, reason));
   }
@@ -102,24 +100,7 @@ class Socket implements WsConnection {
     if (this.open) this.#ws.send(data);
   }
 
-  readonly messages: AsyncIterable<WsData> = {
-    [Symbol.asyncIterator]: () => this.#read(),
-  };
-
-  async *#read(): AsyncGenerator<WsData> {
-    for (;;) {
-      const next = this.#queue.shift();
-      if (next !== undefined) {
-        yield next;
-        continue;
-      }
-      if (this.#closeCode !== null) return;
-      await new Promise<void>((resolve) => {
-        this.#wake = resolve;
-      });
-      this.#wake = null;
-    }
-  }
+  readonly messages: AsyncIterable<WsData> = this.#queue;
 
   async close(): Promise<void> {
     if (this.#closeCode !== null) return;
@@ -150,7 +131,7 @@ class Socket implements WsConnection {
     this.#closeCode = code;
     this.#closeReason = reason;
     this.#ended.resolve();
-    this.#wake?.();
+    this.#queue.close();
   }
 }
 

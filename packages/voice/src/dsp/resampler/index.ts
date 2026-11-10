@@ -2,7 +2,7 @@
 // to WebAssembly (rust/), byte for byte the build pipedog's transports run.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { shippedPath } from "@eidolon/config";
+import { resamplerDir } from "@eidolon/config";
 import { engineFromModule, type RubatoEngine } from "./engine.ts";
 
 export {
@@ -13,11 +13,6 @@ export {
   RubatoEngine,
   RubatoStream,
 } from "./engine.ts";
-
-/** resampler.wasm with its notices; the npm package ships the folder as data/resampler. */
-export function resamplerDir(): string {
-  return shippedPath("data/resampler", "packages/voice/src/dsp/resampler/wasm");
-}
 
 let engine: RubatoEngine | null = null;
 

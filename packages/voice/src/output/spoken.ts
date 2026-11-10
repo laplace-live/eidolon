@@ -1,15 +1,13 @@
 // What the listener heard of one reply, from the segments its voice was given and the Speaker's
 // cursor: a call stores this as her message, never what the mind streamed.
+import { CUES } from "@eidolon/providers";
 import type { CursorEvent, JoinSegments } from "../types.ts";
 
-// The cues stripMarkup (@eidolon/providers) takes out for a voice that reads none: a word count
-// over the text a voice was sent skips them.
-const CUE = /<\/?(?:whisper|emphasis|soft|fast|slow|stress|forceful)>|\[[^[\]\n]*\]/giu;
 const WORD = /[\p{L}\p{N}]/u;
 
 /** `text` through its `chars`-th letter or digit outside cues; cues before it stay. */
 function wordPrefix(text: string, chars: number): string {
-  const cues = [...text.matchAll(CUE)];
+  const cues = [...text.matchAll(CUES)];
   let cue = 0;
   let count = 0;
   for (let i = 0; i < text.length; ) {

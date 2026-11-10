@@ -132,13 +132,22 @@ class Reader {
     return this.#at === this.#bytes.length;
   }
 
-  u8 = () => this.#view.getUint8(this.#take(1));
-  u16 = () => this.#view.getUint16(this.#take(2));
-  u32 = () => this.#view.getUint32(this.#take(4));
+  u8(): number {
+    return this.#view.getUint8(this.#take(1));
+  }
 
+  u16(): number {
+    return this.#view.getUint16(this.#take(2));
+  }
+
+  u32(): number {
+    return this.#view.getUint32(this.#take(4));
+  }
+
+  /** A view into the message, as @msgpack/msgpack decodes bin. */
   bytes(length: number): Uint8Array {
     const at = this.#take(length);
-    return this.#bytes.slice(at, at + length);
+    return this.#bytes.subarray(at, at + length);
   }
 
   value(): unknown {

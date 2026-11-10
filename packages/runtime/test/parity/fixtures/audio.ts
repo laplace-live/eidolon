@@ -11,10 +11,11 @@ function overRoomTone(speech: Float64Array, seed: number): Float64Array {
 /**
  * A caller's 39 s at 16 kHz: a quiet start long enough for Silero's resets and Smart Turn's
  * pre-speech trim, a question with a short pause in it, a fragment Smart Turn judges unfinished
- * followed by more than its 3 s stop, then a quieter answer longer than its 8 s window.
+ * followed by more than its 3 s stop, then a quieter answer longer than its 8 s window. Built
+ * once and shared, so never written to.
  */
 export function callAudio(): Int16Array {
-  return toPcm(
+  call ??= toPcm(
     concat(
       noise(12.5, ROOM_TONE, 11),
       overRoomTone(syntheticSpeech(2.5, 21), 12),
@@ -32,21 +33,25 @@ export function callAudio(): Int16Array {
       noise(1, ROOM_TONE / 10, 20),
     ),
   );
+  return call;
 }
+let call: Int16Array | undefined;
 
 /** `speech` rising from `from` to `to` of its level: it crosses the VAD's volume gate on the way. */
 function fadeIn(speech: Float64Array, from: number, to: number): Float64Array {
   return speech.map((v, i) => v * (from + ((to - from) * i) / speech.length));
 }
 
-/** Segments for Smart Turn alone: shorter than its 8 s window, longer, silent and noisy. */
-export function turnSegments(): Record<string, Float32Array> {
+/** Segments for Smart Turn alone: shorter than its 8 s window, longer, silent and noisy. Shared. */
+export function turnSegments(): Readonly<Record<string, Float32Array>> {
   const float = (audio: Float64Array) => Float32Array.from(toPcm(audio), (v) => v / 32768);
-  return {
+  segments ??= {
     "2 s of speech": float(syntheticSpeech(2, 31)),
     "10 s of speech": float(syntheticSpeech(10, 32)),
     "speech then a pause": float(concat(syntheticSpeech(3, 33), noise(1, ROOM_TONE, 34))),
     "1 s of silence": new Float32Array(16000),
     "3 s of noise": float(noise(3, 3000, 35)),
   };
+  return segments;
 }
+let segments: Record<string, Float32Array> | undefined;

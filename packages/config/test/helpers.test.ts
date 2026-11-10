@@ -1,6 +1,7 @@
 // Expected values were printed by CPython 3.13 and pydantic 2.13.
 import { describe, expect, test } from "bun:test";
 import {
+  AsyncQueue,
   abortableSleep,
   daysInMonth,
   errorText,
@@ -379,5 +380,32 @@ describe("validationErrorText", () => {
     expect(shown("你".repeat(30))).toBe("'你你你你你你你你...你你你你你你你'");
     expect(shown("a你".repeat(1) + "你".repeat(29))).toBe("'a你你你你你你你...你你你你你你你'");
     expect(shown("😀a".repeat(15))).toBe("'😀a😀a😀a😀a😀...a😀a😀a😀a😀a'");
+  });
+});
+
+describe("AsyncQueue", () => {
+  async function read<T>(queue: AsyncQueue<T>): Promise<T[]> {
+    const items: T[] = [];
+    for await (const item of queue) items.push(item);
+    return items;
+  }
+
+  test("reads in order, wakes a waiting reader, and ends once closed and drained", async () => {
+    const queue = new AsyncQueue<number>();
+    const reading = read(queue);
+    queue.push(1);
+    await Promise.resolve();
+    queue.push(2);
+    queue.close();
+    queue.push(3);
+    expect(queue.closed).toBe(true);
+    expect(await reading).toEqual([1, 2]);
+  });
+
+  test("drop ends at once, leaving what was queued unread", async () => {
+    const queue = new AsyncQueue<string>();
+    queue.push("a");
+    queue.drop();
+    expect(await read(queue)).toEqual([]);
   });
 });

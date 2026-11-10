@@ -11,7 +11,14 @@ import {
 } from "node:fs";
 import { isBuiltin } from "node:module";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { cliEntry, jiebaDir, serverEntry, templatesDir, webDist } from "@eidolon/config";
+import {
+  cliEntry,
+  jiebaDir,
+  resamplerDir,
+  serverEntry,
+  templatesDir,
+  webDist,
+} from "@eidolon/config";
 import { ENTRIES, PLATFORMS } from "../src/launcher.ts";
 
 const ROOT = resolve(import.meta.dir, "../../..");
@@ -315,20 +322,6 @@ export function notices(dist: readonly Bundled[], web: readonly Bundled[]): stri
   ].join("\n");
 }
 
-/**
- * Where @eidolon/voice's `resamplerDir` finds the resampler's module and notices, in the checkout
- * and in the package. Only packages/runtime may import @eidolon/voice, so the paths are repeated.
- */
-const RESAMPLER = { checkout: "packages/voice/src/dsp/resampler/wasm", packaged: "data/resampler" };
-
-/** Copies the resampler's module, license and notices into the package at `root`. */
-export function copyResampler(root: string): void {
-  mkdirSync(join(root, RESAMPLER.packaged), { recursive: true });
-  for (const file of ["resampler.wasm", "LICENSE", "THIRD_PARTY_LICENSES.md"]) {
-    cpSync(join(ROOT, RESAMPLER.checkout, file), join(root, RESAMPLER.packaged, file));
-  }
-}
-
 /** Copies the repository's files under `from`, so an untracked index or picture never ships. */
 function copyTracked(from: string, to: string): void {
   const dir = relative(ROOT, from);
@@ -362,7 +355,7 @@ async function stage(): Promise<Manifest> {
   const web = await buildWeb(inPackage(PACK_DIR, webDist));
   copyTracked(templatesDir(), inPackage(PACK_DIR, templatesDir));
   copyTracked(jiebaDir(), inPackage(PACK_DIR, jiebaDir));
-  copyResampler(PACK_DIR);
+  copyTracked(resamplerDir(), inPackage(PACK_DIR, resamplerDir));
   writeFileSync(join(PACK_DIR, "bunfig.toml"), BUNFIG);
   writeFileSync(join(PACK_DIR, "THIRD_PARTY_NOTICES.md"), notices(inlinedPackages(inlined), web));
   cpSync(join(HERE, "README.md"), join(PACK_DIR, "README.md"));

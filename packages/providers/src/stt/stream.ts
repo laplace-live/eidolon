@@ -6,7 +6,7 @@
 //
 // What every live recognizer shares: its events, the meter, audio dropped unless the socket is
 // open, the idle keepalive, and pipedog's rules for reconnecting a dropped socket.
-import { logger } from "@eidolon/config";
+import { AsyncQueue, abortableSleep, errorText, logger } from "@eidolon/config";
 import { Meter } from "../meter.ts";
 import type { Selection } from "../resolve.ts";
 import {
@@ -29,10 +29,6 @@ export function isPermanent(status: unknown): boolean {
   return typeof status === "number" && PERMANENT_STATUSES.has(status);
 }
 
-export function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 /** `url` under the origin of an account's own API base, its scheme made ws; else `url`. */
 export function accountUrl(selection: Selection, url: string): string {
   if (selection.account.baseSource !== "account" || selection.baseUrl === undefined) return url;
@@ -51,51 +47,7 @@ export function pcmBase64(pcm: Int16Array): string {
 
 /** Resolves after `ms`, or as soon as `signal` aborts. */
 export function sleep(ms: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve) => {
-    if (signal.aborted) {
-      resolve();
-      return;
-    }
-    const done = () => {
-      clearTimeout(timer);
-      signal.removeEventListener("abort", done);
-      resolve();
-    };
-    const timer = setTimeout(done, ms);
-    signal.addEventListener("abort", done, { once: true });
-  });
-}
-
-class EventQueue implements AsyncIterable<SttEvent> {
-  readonly #items: SttEvent[] = [];
-  #wake: (() => void) | null = null;
-  #ended = false;
-
-  push(event: SttEvent): void {
-    if (this.#ended) return;
-    this.#items.push(event);
-    this.#wake?.();
-  }
-
-  end(): void {
-    this.#ended = true;
-    this.#wake?.();
-  }
-
-  async *[Symbol.asyncIterator](): AsyncGenerator<SttEvent> {
-    for (;;) {
-      const next = this.#items.shift();
-      if (next !== undefined) {
-        yield next;
-        continue;
-      }
-      if (this.#ended) return;
-      await new Promise<void>((resolve) => {
-        this.#wake = resolve;
-      });
-      this.#wake = null;
-    }
-  }
+  return abortableSleep(ms, signal).catch(() => {});
 }
 
 export abstract class SttBase implements SttStream {
@@ -112,7 +64,7 @@ export abstract class SttBase implements SttStream {
   /** The read-and-reconnect loop, which `close()` waits for. */
   protected loop: Promise<void> = Promise.resolve();
   #audioAt = performance.now();
-  readonly #queue = new EventQueue();
+  readonly #queue = new AsyncQueue<SttEvent>();
   readonly #meter: Meter;
   readonly #detach: () => void;
   #closed: Promise<void> | null = null;
@@ -172,7 +124,7 @@ export abstract class SttBase implements SttStream {
     await this.socket?.close();
     await this.loop;
     this.#meter.flush();
-    this.#queue.end();
+    this.#queue.close();
   }
 }
 

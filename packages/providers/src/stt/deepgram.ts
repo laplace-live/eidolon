@@ -4,11 +4,11 @@
 //
 // Ported from pipedog packages/deepgram/src/stt.ts@ce8f8bc
 //
-// Deepgram's live `/v1/listen` WebSocket with pipedog's query parameters. Unlike the other
+// Deepgram's live listening WebSocket with pipedog's query parameters. Unlike the other
 // recognizers it reconnects on its own loop: every drop waits 4 s, and it gives up on a rejected
 // handshake or three connections in a row that didn't stay up.
 // https://developers.deepgram.com/reference/speech-to-text/listen-streaming
-import { logger, pyJsonDumps } from "@eidolon/config";
+import { errorText, logger, pyJsonDumps } from "@eidolon/config";
 import type { Selection } from "../resolve.ts";
 import {
   backoffMs,
@@ -18,7 +18,7 @@ import {
   WsHandshakeError,
 } from "../ws.ts";
 import type { SttStream } from "./index.ts";
-import { accountUrl, errorText, pcmBytes, SttBase, sleep } from "./stream.ts";
+import { accountUrl, pcmBytes, SttBase, sleep } from "./stream.ts";
 
 const DEEPGRAM_URL = "wss://api.deepgram.com/v1/listen";
 const KEEPALIVE = pyJsonDumps({ type: "KeepAlive" });

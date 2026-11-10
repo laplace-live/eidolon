@@ -4,6 +4,8 @@ import type { Markup } from "./catalog.ts";
 
 const PAIRED_TAG = /<\/?(?:whisper|emphasis|soft|fast|slow|stress|forceful)>/gi;
 const BRACKETS = /\[[^[\]\n]*\]/g;
+/** Every cue `stripMarkup` can take out. */
+export const CUES = new RegExp(`${PAIRED_TAG.source}|${BRACKETS.source}`, "giu");
 
 /** `text` as a TTS reading `markup` should get it; undefined reads no cues at all. */
 export function stripMarkup(text: string, markup: Markup | undefined): string {

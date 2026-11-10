@@ -1,6 +1,6 @@
 // What the streaming speech clients share: the utterance's event queue, the text a segment sends,
 // where a socket goes, and a socket that queues what is sent before it opens.
-import { errorText, logger } from "@eidolon/config";
+import { AsyncQueue, errorText, logger } from "@eidolon/config";
 import { modelInfo } from "../../catalog.ts";
 import { stripMarkup } from "../../markup.ts";
 import { Meter } from "../../meter.ts";
@@ -12,53 +12,12 @@ import type { UtteranceAudio } from "./index.ts";
 
 export type KeyedSelection = Selection & { readonly apiKey: string };
 
-/** An utterance's audio events, pushed as they come and read once. */
-export class AudioQueue implements AsyncIterable<UtteranceAudio> {
-  #items: UtteranceAudio[] = [];
-  #wake: (() => void) | null = null;
-  #closed = false;
-
-  get closed(): boolean {
-    return this.#closed;
-  }
-
-  push(item: UtteranceAudio): void {
-    if (this.#closed) return;
-    this.#items.push(item);
-    this.#wake?.();
-  }
-
+/** An utterance's audio events. */
+export class AudioQueue extends AsyncQueue<UtteranceAudio> {
   /** Pushes the last event, `end` or `error`. */
   finish(item: UtteranceAudio): void {
     this.push(item);
     this.close();
-  }
-
-  /** Ends once what is queued has been read. */
-  close(): void {
-    this.#closed = true;
-    this.#wake?.();
-  }
-
-  /** Ends at once. */
-  drop(): void {
-    this.#items = [];
-    this.close();
-  }
-
-  async *[Symbol.asyncIterator](): AsyncGenerator<UtteranceAudio> {
-    for (;;) {
-      const next = this.#items.shift();
-      if (next !== undefined) {
-        yield next;
-        continue;
-      }
-      if (this.#closed) return;
-      await new Promise<void>((resolve) => {
-        this.#wake = resolve;
-      });
-      this.#wake = null;
-    }
   }
 }
 

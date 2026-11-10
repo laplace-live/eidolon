@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from "bun:test";
+import { afterAll, beforeAll, expect, jest, test } from "bun:test";
 import { createHash } from "node:crypto";
 import type { Server, TCPSocketListener } from "bun";
 import {
@@ -20,6 +20,7 @@ const serverSaw: { code: number; reason: string }[] = [];
 
 beforeAll(() => {
   server = Bun.serve<Peer>({
+    hostname: "127.0.0.1",
     port: 0,
     async fetch(request, srv) {
       const { pathname } = new URL(request.url);
@@ -142,14 +143,17 @@ test("close drops a peer that never acknowledges it after 2 s", async () => {
   });
   try {
     const connection = await connectWs(`ws://127.0.0.1:${listener.port}/`, {}, live());
-    const started = performance.now();
-    await connection.close();
-    const waited = performance.now() - started;
-    expect(waited).toBeGreaterThanOrEqual(1900);
-    expect(waited).toBeLessThan(3000);
+    jest.useFakeTimers();
+    const closing = connection.close();
+    jest.advanceTimersByTime(1_999);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(connection.closeCode).toBeNull();
+    jest.advanceTimersByTime(1);
+    await closing;
     expect(connection.closeCode).toBe(1006);
     expect(await rest(connection)).toEqual([]);
   } finally {
+    jest.useRealTimers();
     listener.stop(true);
   }
 });

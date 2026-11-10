@@ -1,6 +1,6 @@
 // Streaming speech synthesis for the voice engine: one stream per persona per call, one utterance
 // per stretch of a reply in one voice.
-import { hasKey, missingKey, type Selection, selectRequired } from "../../resolve.ts";
+import { hasKey, missingKey, selectRequired } from "../../resolve.ts";
 import { CartesiaSpeech } from "./cartesia.ts";
 import { ElevenLabsSpeech } from "./elevenlabs.ts";
 import { FishSpeech } from "./fish.ts";
@@ -55,10 +55,7 @@ export type UtteranceAudio =
 
 /** The voice role in the current persona scope; throws before connecting without its key. */
 export function openSpeech(): SpeechStream {
-  return streamFor(selectRequired("voice"));
-}
-
-function streamFor(selection: Selection): SpeechStream {
+  const selection = selectRequired("voice");
   if (!hasKey(selection)) throw missingKey(selection);
   const keyed = selection as KeyedSelection;
   switch (selection.provider.id) {

@@ -26,6 +26,7 @@ import {
   personaTemplateDir,
   personaTimeZone,
   pyIsoformatUtc,
+  resamplerDir,
   resolveProjectPath,
   serverEntry,
   sourceFolder,
@@ -256,6 +257,7 @@ describe("flags, raw values and paths", () => {
       server: serverEntry(),
       cli: cliEntry(),
       jieba: jiebaDir(),
+      resampler: resamplerDir(),
     });
     expect(shipped()).toEqual({
       templates: join(PROJECT_ROOT, "personas"),
@@ -263,12 +265,14 @@ describe("flags, raw values and paths", () => {
       server: join(PROJECT_ROOT, "apps/bot/src/local/server.ts"),
       cli: join(PROJECT_ROOT, "apps/cli/src/main.ts"),
       jieba: join(PROJECT_ROOT, "packages/retrieval/data/jieba"),
+      resampler: join(PROJECT_ROOT, "packages/voice/src/dsp/resampler/wasm"),
     });
     for (const file of [
       join(templatesDir(), "milky-green", "prompt.md"),
       serverEntry(),
       cliEntry(),
       join(jiebaDir(), "dict.txt"),
+      join(resamplerDir(), "resampler.wasm"),
     ]) {
       expect([file, existsSync(file)]).toEqual([file, true]);
     }
@@ -282,6 +286,7 @@ describe("flags, raw values and paths", () => {
       server: "/opt/eidolon/dist/server.js",
       cli: "/opt/eidolon/dist/cli.js",
       jieba: "/opt/eidolon/data/jieba",
+      resampler: "/opt/eidolon/data/resampler",
     });
     expect(personaTemplateDir("milky-green")).toBe("/opt/eidolon/personas/milky-green");
     // What a user configures never resolves into the package, which an update replaces.

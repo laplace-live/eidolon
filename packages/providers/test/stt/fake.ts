@@ -85,6 +85,9 @@ export class FakeServer {
 
   constructor() {
     this.#server = Bun.serve<PeerData>({
+      // Bound to every address, the port can be shared with another process's 127.0.0.1 listener,
+      // which then answers a client dialling 127.0.0.1 in its place.
+      hostname: "127.0.0.1",
       port: 0,
       fetch: (request, server) => {
         if (this.refuse !== null) return new Response("refused", { status: this.refuse });

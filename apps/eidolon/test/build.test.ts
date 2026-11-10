@@ -1,15 +1,7 @@
 // The package build: each bundle where the resolvers look for it, importing only builtins and what
 // the package installs, and the published manifest the workspaces' pins make.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cliEntry, serverEntry } from "@eidolon/config";
@@ -17,7 +9,6 @@ import {
   bareImports,
   bundle,
   checkImports,
-  copyResampler,
   inlinedPackages,
   inPackage,
   licenseText,
@@ -113,22 +104,6 @@ describe("the bundles", () => {
     const unknown = Bun.spawnSync([process.execPath, launcher, "serve"]);
     expect(unknown.exitCode).toBe(2);
     expect(unknown.stderr.toString()).toStartWith('eidolon: unknown command "serve"');
-  });
-});
-
-describe("the resampler", () => {
-  test("ships in data/resampler, where @eidolon/voice reads it, with its notices", () => {
-    const checkout = join(ROOT, "packages/voice/src/dsp/resampler/wasm");
-    copyResampler(root);
-    const shipped = join(root, "data", "resampler");
-    expect(readdirSync(shipped).sort()).toEqual([
-      "LICENSE",
-      "THIRD_PARTY_LICENSES.md",
-      "resampler.wasm",
-    ]);
-    expect(readFileSync(join(shipped, "resampler.wasm"))).toEqual(
-      readFileSync(join(checkout, "resampler.wasm")),
-    );
   });
 });
 

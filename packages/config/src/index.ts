@@ -67,6 +67,7 @@ export {
   expandUser,
   jiebaDir,
   PROJECT_ROOT,
+  resamplerDir,
   resolveProjectPath,
   serverEntry,
   shippedPath,
@@ -122,6 +123,7 @@ export {
   pyPathWithName,
   pyPathWithSuffix,
 } from "./pypath.ts";
+export { AsyncQueue } from "./queue.ts";
 export {
   accountEntries,
   activePersona,

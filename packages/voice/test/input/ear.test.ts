@@ -1,6 +1,7 @@
 // The Ear's plumbing on scripted VAD, Smart Turn and recognizer fakes and a fake clock, and once on
 // the real models.
 import { describe, expect, test } from "bun:test";
+import { AsyncQueue } from "@eidolon/config";
 import type { SttEvent, SttStream } from "@eidolon/providers/stt";
 import { resampler } from "../../src/dsp/resampler/index.ts";
 import { type EarDeps, runEar } from "../../src/input/ear.ts";
@@ -22,44 +23,11 @@ import {
 const FRAME_MS = 20;
 const AUDIO_IDLE_MS = 1_000;
 
-/** An async iterable the test pushes into. */
-class Feed<T> implements AsyncIterable<T> {
-  #items: T[] = [];
-  #wake: (() => void) | null = null;
-  #ended = false;
-
-  push(item: T): void {
-    this.#items.push(item);
-    this.#wake?.();
-  }
-
-  end(): void {
-    this.#ended = true;
-    this.#wake?.();
-  }
-
-  async *[Symbol.asyncIterator](): AsyncIterator<T> {
-    for (;;) {
-      const item = this.#items.shift();
-      if (item !== undefined) {
-        yield item;
-      } else if (this.#ended) {
-        return;
-      } else {
-        await new Promise<void>((resolve) => {
-          this.#wake = resolve;
-        });
-        this.#wake = null;
-      }
-    }
-  }
-}
-
 /** A recognizer that records what it was sent; the test scripts its events. */
 class FakeStt implements SttStream {
   readonly ttfsP99 = 0.35;
   readonly sent: Int16Array[] = [];
-  readonly events = new Feed<SttEvent>();
+  readonly events = new AsyncQueue<SttEvent>();
   onFinalize: () => void = () => {};
   readonly log: string[];
   readonly inputRate: 16000 | 24000;
@@ -79,7 +47,7 @@ class FakeStt implements SttStream {
   }
 
   async close(): Promise<void> {
-    this.events.end();
+    this.events.close();
   }
 }
 
@@ -155,14 +123,6 @@ function settle(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
 }
 
-function deferred(): { promise: Promise<void>; resolve: () => void } {
-  let resolve = () => {};
-  const promise = new Promise<void>((r) => {
-    resolve = r;
-  });
-  return { promise, resolve };
-}
-
 /** An Ear on fakes, with what it posted (activity left out unless asked for). */
 function ear(inputRate: 16000 | 24000 = 16000) {
   const log: string[] = [];
@@ -170,7 +130,7 @@ function ear(inputRate: 16000 | 24000 = 16000) {
   const stt = new FakeStt(log, inputRate);
   const vad = new ScriptedVad();
   const turn = new ScriptedTurn(log);
-  const audio = new Feed<Pcm>();
+  const audio = new AsyncQueue<Pcm>();
   const posted: string[] = [];
   const abort = new AbortController();
   const deps: EarDeps = { stt, vad, turn, clock, join: (parts) => parts.join("|") };
@@ -186,7 +146,7 @@ function ear(inputRate: 16000 | 24000 = 16000) {
   }
   const speak = (count: number) => hear(...Array.from({ length: count }, () => frame(1000)));
   async function end(): Promise<void> {
-    audio.end();
+    audio.close();
     await stt.close();
     await done;
   }
@@ -200,7 +160,7 @@ function frame(value: number): Pcm {
 describe("each frame", () => {
   test("reaches the recognizer at once, without waiting for the VAD", async () => {
     const e = ear();
-    const held = deferred();
+    const held = Promise.withResolvers<void>();
     e.vad.hold = held.promise;
     await e.speak(3);
     expect([e.stt.sent.length, e.vad.pushed, e.turn.appends.length]).toEqual([3, 1, 0]);
@@ -250,7 +210,7 @@ describe("a turn", () => {
     const e = ear();
     e.vad.edges.set(1, "started");
     e.vad.edges.set(10, "stopped");
-    const verdict = deferred();
+    const verdict = Promise.withResolvers<void>();
     e.turn.hold = verdict.promise;
     e.stt.onFinalize = () => e.stt.events.push({ type: "final", text: "你好", finalized: true });
     await e.speak(11);
@@ -376,7 +336,7 @@ describe("ending", () => {
       const e = ear();
       e.vad.edges.set(0, inFlight === "frame" ? "started" : "stopped");
       e.vad.speaking = inFlight === "verdict";
-      const held = deferred();
+      const held = Promise.withResolvers<void>();
       if (inFlight === "frame") e.vad.hold = held.promise;
       else e.turn.hold = held.promise;
       await e.speak(1);
@@ -439,7 +399,7 @@ test("hears a spoken turn on the real VAD and Smart Turn", async () => {
     stt.onFinalize = () => {};
     stt.events.push({ type: "final", text: "你好", finalized: true });
   };
-  const audio = new Feed<Pcm>();
+  const audio = new AsyncQueue<Pcm>();
   const events: string[] = [];
   const abort = new AbortController();
   const done = runEar(
@@ -461,7 +421,7 @@ test("hears a spoken turn on the real VAD and Smart Turn", async () => {
     "user-stopped 你好",
   ]);
   expect(events).toContain("user-speaking");
-  audio.end();
+  audio.close();
   await stt.close();
   await done;
 });

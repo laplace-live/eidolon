@@ -14,7 +14,6 @@ import {
   type Quality,
   type RubatoEngine,
   resampler,
-  resamplerDir,
 } from "../../src/dsp/resampler/index.ts";
 
 let engine: RubatoEngine;
@@ -106,16 +105,6 @@ describe("init", () => {
   test("the vendored wasm is pipedog's v0.10.0 build, byte for byte", () => {
     const sha256 = createHash("sha256").update(readFileSync(WASM)).digest("hex");
     expect(sha256).toBe("16a43a8ddedd5378cdfb2c26d8fc7b80044aab48e15c897f3dda21fc800c8ba4");
-  });
-
-  test("the module is found through shippedPath: the checkout's, else the package's data/resampler", () => {
-    expect(join(resamplerDir(), "resampler.wasm")).toBe(WASM);
-    process.env.EIDOLON_APP_ROOT = "/opt/eidolon";
-    try {
-      expect(resamplerDir()).toBe("/opt/eidolon/data/resampler");
-    } finally {
-      delete process.env.EIDOLON_APP_ROOT;
-    }
   });
 });
 

@@ -28,6 +28,7 @@ export class PcmBytes {
   }
 }
 
+/** A Buffer, whose `buffer` may be a pool shared with others: read it through its own offset. */
 export function bytesOfBase64(text: string): Uint8Array {
-  return new Uint8Array(Buffer.from(text, "base64"));
+  return Buffer.from(text, "base64");
 }

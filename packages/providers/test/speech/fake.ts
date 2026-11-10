@@ -41,6 +41,7 @@ export function fakeServer(options: FakeOptions = {}): Fake {
   const peers: Peer[] = [];
   const requests: HttpRequest[] = [];
   const server: Server<{ peer: Peer }> = Bun.serve<{ peer: Peer }>({
+    hostname: "127.0.0.1",
     port: 0,
     async fetch(request, srv) {
       const url = new URL(request.url);
