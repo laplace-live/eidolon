@@ -16,9 +16,11 @@ chat. It is experimental and off by default: `EIDOLON_VOICE_ENGINE=native` turns
 @eidolon/providers/stt          live speech recognition, one stream per call
 @eidolon/providers/speech-stream   streaming speech, one stream per persona per call
 @eidolon/providers/realtime   a realtime model's session, OpenAI's dialect or xAI's
+@eidolon/webrtc                 a call's WebRTC on werift: signalling, the peer, its data channel and
+                                audio, the werift patches; no pipedog, and only packages/runtime imports it
 @eidolon/engine                 runTurn in call mode (CallHooks)
-packages/runtime/src/native/    the bridge: the switch, the transport over pipedog's connection, deps,
-                                a call inside a chat (binding.ts)
+packages/runtime/src/native/    the bridge: the switch, deps, a call inside a chat (binding.ts), and
+                                the transport over pipedog's connection native calls used until G6
 ```
 
 Code ported from pipedog keeps pipedog's BSD-2 header, then `Ported from pipedog <path>@ce8f8bc`.
@@ -30,27 +32,24 @@ pipedog is never followed past that commit.
 - `createSignallingServer` reads it once, when the server is made, through `envStr`, so blank is
   unset. Any other value logs one warning and runs pipedog.
 - It has no settings row: only the environment sets it.
-- **Under `pipedog`, an offer starts exactly the session it started before the switch existed.**
-  `sessionStarter` hands back pipedog's starter itself, and a test pins that.
+- **It picks the signalling server.** Under `pipedog`, every offer is a pipedog session on
+  pipedog's SmallWebRTC transport, as before the switch existed. Under `native`, every offer is a
+  native call on `@eidolon/webrtc`'s peers ([The transport](#the-transport)): the HTTP answers, SDP,
+  ICE, data channel and `restart_pc` are the same on both.
+- **No native call goes to pipedog.** Every provider the catalog offers for hearing, voice and
+  realtime has a native client. A provider added without one fails its calls as they start,
+  `Bot session failed: <provider> has no … in Eidolon yet`, and so do settings that can't be read.
 
-**Under `native`, each offer asks `nativeCanRun()`** in its persona's scope: the active persona's,
-or for a call inside a chat, the binding's ([A call inside a chat](#a-call-inside-a-chat)). It
-sends the call to pipedog, binding and all, with one info line,
-`[voice] This call runs on pipedog: <why>`, when:
-- her hearing or voice role, or her realtime role when it is on, names a provider with no native
-  client. None does today: every provider the catalog offers for any of the three has one, and a
-  test walks the catalog;
-- her settings can't be read. pipedog then fails the call exactly as it does today.
+A group call ([Group calls](#group-calls)) runs only on `native`. As it starts,
+`groupCallProblem(host, personas)` checks that none of them talks through a realtime model and
+that the host is one of them; a call that fails the check logs
+`[voice] This group call can't run: <why>` and fails as `Bot session failed: <why>`. Under
+`pipedog`, nothing offers one: the local app refuses it first, and the server fails one it gets.
 
-A group call ([Group calls](#group-calls)) always runs natively, since pipedog can't run one. As it
-starts, `nativeCanRun(host, personas)` checks that the host's hearing and each persona's voice have
-native clients and that none of them talks through a realtime model; a call that fails the check
-logs `[voice] This group call can't run: <why>` and fails as `Bot session failed: <why>`. Under
-`pipedog`, nothing offers one: the local app refuses it first.
-
-**Warm-up:** under `native`, `warmAudioModels()` loads the native Ear's models as well as
-pipedog's, since some calls still go to pipedog. Both engines load the same two `.onnx` files, from
-pipedog's packages (`voiceModels()`), on the same pinned onnxruntime-node.
+**Warm-up:** `warmAudioModels()` loads pipedog's models on both engines, since its backend turns
+ORT's telemetry off before ORT first loads, and under `native` the native Ear's too. Both engines
+load the same two `.onnx` files, from pipedog's packages (`voiceModels()`), on the same pinned
+onnxruntime-node.
 
 **Logs:** a native call logs what the local app and the e2e notes read from pipedog's:
 - the `[bot] Session start …` line and `Starting bot`, through the `logSessionStart` pipedog's
@@ -76,7 +75,7 @@ The native code stays dormant there until the variable is set.
 ## The loop
 
 ```text
-browser ══WebRTC══▶ CallTransport ─ runtime/native/transport_pipedog.ts (pipedog's connection)
+browser ══WebRTC══▶ CallTransport ─ @eidolon/webrtc (a werift peer)
                      ├─ audioIn (16 kHz mono, 20 ms) ─▶ Ear: STT ∥ VAD ─▶ Smart Turn ─▶ TurnDetector ─┐
                      ├─ messages (RTVI in) ──────────────────────────────────────────────────────────┤
                      └─ Speaker (24 kHz) ◀── pull(240) on the transport's drift-free 10 ms clock     │
@@ -311,8 +310,8 @@ sends its conversation as the session opens.
 A call bound to a chat (`CallBinding`, [chat.md](chat.md#the-binding)) runs on the native engine
 through the same binding pipedog's session takes, so the local app's runner and production's
 `bindChatCall` work unchanged on either engine (`src/native/binding.ts`).
-- **She runs as herself:** the whole call runs inside `withPersona(binding.persona)`, and
-  `nativeCanRun` asks in her scope, so her roles, not the active persona's, decide the engine.
+- **She runs as herself:** the whole call runs inside `withPersona(binding.persona)`, so her
+  roles, not the active persona's, make the call, and settings of hers that can't be read fail it.
 - **The seed opens the call's log:** the viewer's lines and hers as messages, a system or developer
   message as her context block where it stands. Her view is the seed, then the call, in the text
   chat's 60-line window, which counts the chat's lines too (D1). A realtime call packs that view
@@ -410,22 +409,50 @@ and I9 doesn't apply.
 
 ## The transport
 
-**Phase 1** (`packages/runtime/src/native/transport_pipedog.ts`) takes over the
-`SmallWebRTCConnection` pipedog's signalling built for the offer, where pipedog's client would. So
-HTTP, SDP, ICE, the data channel, `restart_pc` and the werift patches are the same code on both
-engines.
-- **On `connected`:** the input track decodes straight to 16 kHz mono, the camera and screen
-  receivers are switched off unread, as pipedog's client leaves them, and a `SpeakerTrack`
-  (pipedog's `RawAudioTrack` clock, its samples pulled from the Speaker) replaces the output track.
-- **On `disconnected`** (`restart_pc`, or ICE dropping): both tracks are dropped, and the next
-  `connected` takes up the new peer's. Her audio waits meanwhile, and while the peer sends no ping
-  for 3 s, instead of playing to no one (D10).
+A native call runs on `@eidolon/webrtc`: werift and libopus-wasm, with pipedog's SmallWebRTC
+transport ported in, less its aiortc emulation, its aiortc-derived code and its video.
+`createSignallingServer` serves it under `native`; pipedog's own transport serves `pipedog` until
+G8. What a client sees is the same on both:
+- **HTTP** (`signalling.ts`): `POST` and `PATCH /api/offer` answer with the same JSON, status codes
+  and error bodies, the guard first, and a pc_id of the same form. Each offer's peer is built from
+  its own plan: its ICE servers, the relay-only rules for the offer and its PATCHes, and the Opus
+  bitrate.
+- **The peer** (`peer.ts`): the answer waits for ICE gathering; transceivers 0 and 1 send and
+  receive and the rest only receive, her audio on mid 0; Opus 48k/2 with
+  `minptime=10;useinbandfec=1`, VP8 and H264 listed so the camera sections are answered;
+  max-bundle; a 1100-byte SCTP DATA chunk. 60 s in "connecting", or "failed", closes it. The werift
+  patches are `patches.ts`'s.
+- **`restart_pc`** answers on a new werift peer with a new pc_id and the original options, its DTLS
+  close watched again; PATCHes to the old pc_id still reach it, and the call goes on.
+- **The data channel** (`channel.ts`): JSON both ways, up to 50 messages queued until it opens and
+  none once it has failed to open 10 s after the peer connected; the client's pings, read for
+  liveness; the signalling envelope, its `trackStatus` read and ignored, and `peerLeft` sent when
+  the bot hangs up.
+- **The caller's audio** (`audio_in.ts`): reordered by pipedog's audio jitter buffer (60 ms; late
+  and duplicate packets dropped, a jump of more than 0x1000 resyncs), a gap of up to 10 packets
+  concealed (PLC, the last packet recovered from the next one's FEC), and decoded straight to
+  16 kHz mono. Packets that come while the decoder loads wait, 50 at most.
+- **Her audio** (`audio_out.ts`): the Speaker pulled every 10 ms on a clock counted from its start,
+  so a stall catches up instead of drifting, and sent as 20 ms Opus at 24 kHz at the offer's
+  bitrate (libopus's `voip`), RTP sequence +1 and timestamp +960 from random starts, every packet
+  marked. Silence goes out while she says nothing, so the browser's track never mutes.
+
+**The call's transport** (`peerCallTransport`), which the loop reads as its `CallTransport`:
+- **On `connected`:** the caller's audio and hers start on the current werift peer.
+- **On `disconnected`** (`restart_pc`, or ICE dropping): both stop, and the next `connected` takes
+  up the new peer's. Her audio waits meanwhile, and while the peer sends no ping for 3 s, instead
+  of playing to no one (D10).
 - **App messages** reach the call; `connect()` delivers those that came first, `client-ready`
   among them.
 - **`closed`** resolves when the peer closes, the server's shutdown included, but not after the
   call's own `disconnect()`, which sends `peerLeft` and closes the peer.
 
-**Phase 2** (G6) replaces it with `@eidolon/webrtc` on werift directly.
+Messages go out as `JSON.stringify` writes them, where pipedog's transport writes Python's
+`json.dumps` form; clients parse both alike.
+
+**Phase 1** (G2 to G5) ran native calls on the `SmallWebRTCConnection` pipedog's signalling built
+(`packages/runtime/src/native/transport_pipedog.ts`). It stays in the tree until G8, though no
+server starts it any more.
 
 ## Allowed differences
 
@@ -468,7 +495,9 @@ A realtime call's differences, each a fix of pipedog's realtime path:
 | `packages/runtime/test/parity/` | the ported leaves against the installed pipedog: VAD and Smart Turn probabilities, loudness, the segmenter on every reply production recorded, RTVI messages against pipedog's observer, the async envelopes. The only tests that import both engines |
 | `packages/runtime/test/parity/twin.ts` | the twin harness: one scripted call on each engine ([below](#the-twin-harness)) |
 | `packages/voice/test/` | each leaf on its own; the Floor row by row on a fake engine and clock; the real `runTurn` with a scripted mind; whole calls on a fake transport with the real hearing models; a realtime call on a scripted session, with the real `prepareTurn` and `runTool`; a group call's floor on the real `runChat` with a scripted director (`group.test.ts`) |
-| `packages/runtime/test/native/` | the switch, `nativeCanRun`, a native call's start, the transport against a real werift peer, a call inside a chat reporting what pipedog's binding tests expect, and a group call's binding (`group.test.ts`) |
+| `packages/runtime/test/native/` | the switch and the server each engine gets, a native call's start, the phase-1 transport against a real werift peer, a call inside a chat reporting what pipedog's binding tests expect (once over `@eidolon/webrtc`), and a group call's binding (`group.test.ts`) |
+| `packages/webrtc/test/` | pipedog's transport tests, ported (`rtc_media`, `test_smallwebrtc_request_handler`); the caller's audio and hers against libopus; a call's transport on a fake peer, and against a real werift client: both ways, liveness, a hang-up from either side, `restart_pc` |
+| `packages/runtime/test/{signalling,loopback,werift,opus}.test.ts` | each on both transports (`transports.ts`) until G8; `werift.test.ts` also holds that both resolve one werift and patch it once |
 | `apps/bot/test/{chat,local}/native_call.test.ts` | production's `bindChatCall` and the local runner's binding, unchanged, on a native call |
 | `apps/bot/test/local/group_call.test.ts` | the local offer route's group checks, and the runner storing a native group call's lines and decisions |
 | `packages/runtime/test/native_boundaries.test.ts` | under `src/native/`, only the transport imports pipedog |
@@ -490,7 +519,8 @@ against fresh fakes that speak the providers' wire protocols (`fakes/`):
 
 The persona's roles are accounts at the fakes, in the test data home's `credentials.json`. The
 native engine reaches them through those accounts; pipedog's Soniox and Fish services get the
-fakes' URLs set on production's instances. Both start through `sessionStarter`, as production does.
+fakes' URLs set on production's instances. Each engine runs on the transport production gives it:
+pipedog's sessions on pipedog's, native calls on `@eidolon/webrtc`'s.
 
 **What is compared**, after normalizing (no ids, timestamps or metric values; segment ids as
 ordinals; a mind round's `bot-llm-text` as one message; mind requests as JSON with sorted keys, the
@@ -558,4 +588,3 @@ bun apps/bot/scripts/e2e-compare.ts a1.json a2.json … --vs b1.json b2.json …
 ## Not yet native
 
 - **Fish's exact segment ends** (G5): serial flushes, once measured.
-- **The transport** (G6): `@eidolon/webrtc`.

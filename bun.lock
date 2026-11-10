@@ -193,6 +193,7 @@
         "@eidolon/tools": "workspace:*",
         "@eidolon/turn": "workspace:*",
         "@eidolon/voice": "workspace:*",
+        "@eidolon/webrtc": "workspace:*",
         "@pipedog/anthropic": "0.10.0",
         "@pipedog/asyncio": "0.10.0",
         "@pipedog/audio-silero": "0.10.0",
@@ -248,6 +249,16 @@
         "@eidolon/engine": "workspace:*",
         "@eidolon/providers": "workspace:*",
         "onnxruntime-node": "1.30.0",
+      },
+    },
+    "packages/webrtc": {
+      "name": "@eidolon/webrtc",
+      "dependencies": {
+        "@eidolon/access": "workspace:*",
+        "@eidolon/config": "workspace:*",
+        "@eidolon/turn": "workspace:*",
+        "libopus-wasm": "0.4.1",
+        "werift": "0.25.0",
       },
     },
   },
@@ -407,6 +418,8 @@
     "@eidolon/voice": ["@eidolon/voice@workspace:packages/voice"],
 
     "@eidolon/web": ["@eidolon/web@workspace:apps/web"],
+
+    "@eidolon/webrtc": ["@eidolon/webrtc@workspace:packages/webrtc"],
 
     "@emnapi/runtime": ["@emnapi/runtime@1.11.3", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-Xz4Tpyki7XyrpbUK1jR1AhdAdaXyhhY4lZ3neLodmhpuWfy2PAQN5B46sAiU4liOXGLkHypn/qU+jvfWSCYYLA=="],
 

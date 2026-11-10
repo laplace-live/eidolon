@@ -4,7 +4,7 @@
 // it, and each persona's Mem0 stores only the viewer's call lines and hers. A realtime persona can't
 // join one, and nothing but the native engine runs one.
 import "../../../config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AllowedOffer, UserContext } from "@eidolon/access";
@@ -21,19 +21,16 @@ import type { ContextProvider } from "@eidolon/core";
 import { type ChatDeps, type MindChunk, type MindRequest, runChat, runTurn } from "@eidolon/engine";
 import { MEM0_STORE_KEY } from "@eidolon/memory";
 import type { CallDeps } from "@eidolon/voice";
+import { SmallWebRTCConnection } from "@pipedog/transport-smallwebrtc/connection";
 import { FakeSpeech, FakeStt, FakeTransport, settle } from "../../../voice/test/call/harness.ts";
 import { FakeClock } from "../../../voice/test/input/clock.ts";
 import { voiceModels } from "../../src/audio.ts";
-import type { AnyCallBinding, GroupCallBinding } from "../../src/native/binding.ts";
-import {
-  nativeCanRun,
-  realtimeIn,
-  runNativeSafely,
-  sessionStarter,
-} from "../../src/native/engine.ts";
+import { createSignallingServer } from "../../src/index.ts";
+import type { GroupCallBinding } from "../../src/native/binding.ts";
+import { groupCallProblem, realtimeIn, runNativeSafely } from "../../src/native/engine.ts";
 import { BOT_ABOUT } from "../../src/rtvi.ts";
 import type { CallClient } from "../../src/session/session.ts";
-import { captureLogs, type LogCapture, setEnv, until } from "../support.ts";
+import { captureLogs, type LogCapture, admission as offered, setEnv, until } from "../support.ts";
 
 const HOST = "bob";
 const OTHER = "cat";
@@ -275,8 +272,8 @@ describe("who can join a group call", () => {
       `${PERSONAS[OTHER]}realtime:\n  provider: openai\n`,
     );
     expect(realtimeIn([HOST, OTHER])).toBe(OTHER);
-    expect(nativeCanRun(HOST, [HOST])).toBeNull();
-    const reason = nativeCanRun(HOST, [HOST, OTHER]);
+    expect(groupCallProblem(HOST, [HOST])).toBeNull();
+    const reason = groupCallProblem(HOST, [HOST, OTHER]);
     expect(reason).toBe("cat's calls run on a realtime model, which can't join a group call");
 
     const transport = new FakeTransport();
@@ -293,32 +290,36 @@ describe("who can join a group call", () => {
     expect(logs.messages("ERROR")).toEqual([`Bot session failed: ${reason}`]);
   });
 
-  test("under native, a group call runs natively whatever nativeCanRun says; under pipedog, never asks", async () => {
-    writeFileSync(
-      join(dataHome(), "personas", HOST, "persona.yaml"),
-      "realtime:\n  provider: openrouter\n",
+  test("under pipedog, the server refuses a group call: it fails as it starts, and ends as an error", async () => {
+    const restore = setEnv({ EIDOLON_VOICE_ENGINE: undefined });
+    const spy = spyOn(SmallWebRTCConnection.prototype, "initialize").mockImplementation(
+      async function (this: SmallWebRTCConnection) {
+        (this as unknown as { _answer: unknown })._answer = { sdp: "v=0\r\n", type: "answer" };
+      },
     );
-    expect(nativeCanRun(HOST)).not.toBeNull();
-    const started: string[] = [];
-    const sessions = {
-      pipedog: async (connection: string, _admission: AllowedOffer, binding?: AnyCallBinding) =>
-        void started.push(`pipedog ${connection} ${binding?.persona}`),
-      native: async (connection: string, _admission: AllowedOffer, binding?: AnyCallBinding) =>
-        void started.push(`native ${connection} ${binding?.persona}`),
-    };
-    const group: GroupCallBinding = {
-      group: true,
-      persona: HOST,
-      chat: { header: HEADER, events: CHAT },
-      onEvents: () => {},
-      onEnded: () => {},
-    };
-    await sessionStarter<string, AnyCallBinding>("native", sessions)(
-      "pc-1",
-      { allowed: true } as AllowedOffer,
-      group,
-    );
-    expect(started).toEqual([`native pc-1 ${HOST}`]);
-    expect(sessionStarter<string, AnyCallBinding>("pipedog", sessions)).toBe(sessions.pipedog);
+    const signalling = createSignallingServer({
+      ice: { serverPlan: async () => ({ iceServers: [], relayOnly: false, turnUrl: null }) },
+    });
+    const ends: string[] = [];
+    try {
+      const group: GroupCallBinding = {
+        group: true,
+        persona: HOST,
+        chat: { header: HEADER, events: CHAT },
+        onEvents: () => {},
+        onEnded: (end) => ends.push(end),
+      };
+      const offer = offered({ sdp: "v=0", type: "offer" });
+      expect((await signalling.offer(offer, group)).status).toBe(200);
+      await until(() => ends.length === 1);
+    } finally {
+      spy.mockRestore();
+      await signalling.close();
+      restore();
+    }
+    expect(ends).toEqual(["error"]);
+    expect(logs.messages("ERROR")).toEqual([
+      "Bot session failed: a group call needs EIDOLON_VOICE_ENGINE=native",
+    ]);
   });
 });

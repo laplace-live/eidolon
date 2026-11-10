@@ -1,7 +1,8 @@
 // A call bound to a chat on the native engine: the binding pipedog's sessions take
-// (../binding.test.ts), run on the native loop over a fake transport (and once a real peer), a fake
-// recognizer and voice, the real hearing models and the real engine on a scripted mind. It opens on
-// the chat and reports the same lines, photos and end, in the same order, as her.
+// (../binding.test.ts), run on the native loop over a fake transport (and once a real peer over
+// @eidolon/webrtc), a fake recognizer and voice, the real hearing models and the real engine on a
+// scripted mind. It opens on the chat and reports the same lines, photos and end, in the same
+// order, as her.
 import "../../../config/test/isolated-guard.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -14,16 +15,16 @@ import { type EngineDeps, type MindChunk, type MindRequest, runTurn } from "@eid
 import { MEM0_STORE_KEY } from "@eidolon/memory";
 import type { RealtimeEvent, RealtimeSession } from "@eidolon/providers/realtime";
 import type { CallDeps } from "@eidolon/voice";
+import { createSignallingServerWith, peerCallTransport } from "@eidolon/webrtc";
 import { RTCPeerConnection } from "@pipedog/transport-smallwebrtc/rtc";
 import { packHistory } from "../../../voice/src/call/realtime.ts";
 import { FakeSpeech, FakeStt, FakeTransport, settle } from "../../../voice/test/call/harness.ts";
 import { FakeClock } from "../../../voice/test/input/clock.ts";
 import { voiceModels } from "../../src/audio.ts";
-import { nativeCanRun, runNativeSafely, sessionStarter } from "../../src/native/engine.ts";
-import { pipedogCallTransport } from "../../src/native/transport_pipedog.ts";
+import type { AnyCallBinding } from "../../src/native/binding.ts";
+import { runNativeSafely } from "../../src/native/engine.ts";
 import { BOT_ABOUT } from "../../src/rtvi.ts";
 import type { CallBinding, CallClient, TranscriptLine } from "../../src/session/session.ts";
-import { createSignallingServerWith } from "../../src/webrtc/signalling.ts";
 import {
   admission,
   CAN_DIAL,
@@ -508,33 +509,27 @@ describe("a call bound to a chat on the native engine", () => {
   });
 });
 
-describe("which engine a call inside a chat runs on", () => {
-  const offer = { allowed: true } as AllowedOffer;
-
-  test("her own settings decide, not the active persona's", async () => {
+describe("her own settings", () => {
+  test("decide the call, not the active persona's: ones that can't be read fail it as it starts", async () => {
     mkdirSync(join(dataHome(), "personas", "bob"), { recursive: true });
     writeFileSync(
       join(dataHome(), "personas", "bob", "persona.yaml"),
       "realtime:\n  provider: openrouter\n",
     );
-    expect(nativeCanRun()).toBeNull();
-    const reason = nativeCanRun("bob");
-    expect(reason).toContain("OpenRouter offers no realtime voice model");
-
-    const started: string[] = [];
-    const start = sessionStarter<string, { readonly persona: string }>("native", {
-      pipedog: async (connection, _admission, binding) =>
-        void started.push(`pipedog ${connection} ${binding?.persona}`),
-      native: async (connection, _admission, binding) =>
-        void started.push(`native ${connection} ${binding?.persona}`),
+    const transport = new FakeTransport();
+    const ends: string[] = [];
+    await runNativeSafely(transport, ADMISSION, {} as CallDeps, {
+      persona: "bob",
+      seedMessages: SEED,
+      onTranscript: () => {},
+      onEnded: (end) => ends.push(end),
     });
-    await start("pc-1", offer, { persona: "bob" });
-    await start("pc-2", offer, { persona: "milky-green" });
-    expect(started).toEqual(["pipedog pc-1 bob", "native pc-2 milky-green"]);
-    expect(logs.messages("INFO").filter((m) => m.startsWith("[voice]"))).toEqual([
-      `[voice] This call runs on pipedog: ${reason}`,
-      `[voice] This call runs on pipedog: ${reason}`,
-    ]);
+    expect(ends).toEqual(["error"]);
+    expect(transport.disconnects).toBe(1);
+    const failed = logs.messages("ERROR");
+    expect(failed).toHaveLength(1);
+    expect(failed[0]).toStartWith("Bot session failed: ");
+    expect(failed[0]).toContain("OpenRouter offers no realtime voice model");
     expect(activePersona().id).toBe("milky-green");
   });
 });
@@ -560,11 +555,11 @@ describe.skipIf(!CAN_DIAL)("over a real peer", () => {
     const lines: Line[] = [];
     const ends: { end: string; after: number }[] = [];
     const sessions: Promise<void>[] = [];
-    const server = createSignallingServerWith(
+    const server = createSignallingServerWith<AnyCallBinding>(
       { ice: { serverPlan: async () => ({ iceServers: [], relayOnly: false, turnUrl: null }) } },
       {
         startSession: (connection, offered, binding) => {
-          const session = runNativeSafely(pipedogCallTransport(connection), offered, deps, binding);
+          const session = runNativeSafely(peerCallTransport(connection), offered, deps, binding);
           sessions.push(session);
           return session;
         },

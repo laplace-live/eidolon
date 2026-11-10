@@ -31,10 +31,19 @@ const SPDX_DIR = join(HERE, "spdx");
  * What the bundles leave in node_modules, each a dependency of the package: files read beside the
  * code (@pipedog's models, onnxruntime-node's binaries, LanceDB's per-platform binary, which its
  * inlined loader requires by name), and packages whose prototypes or classes an external one
- * shares: the runtime patches werift's prototype for @pipedog's copy, and LanceDB checks
- * apache-arrow's tables, which must be one copy for both.
+ * shares: the runtime and @eidolon/webrtc patch werift's prototype for @pipedog's copy and their
+ * own, and LanceDB checks apache-arrow's tables, which must be one copy for both. libopus-wasm
+ * stays a package, as @pipedog's transport has it: inlined, the notices would carry its MIT license
+ * but not libopus's, which its THIRD_PARTY_NOTICES.md holds.
  */
-const EXTERNAL = ["@pipedog/*", "onnxruntime-node", "werift", "apache-arrow", "@lancedb/lancedb-*"];
+const EXTERNAL = [
+  "@pipedog/*",
+  "onnxruntime-node",
+  "werift",
+  "libopus-wasm",
+  "apache-arrow",
+  "@lancedb/lancedb-*",
+];
 
 /** LanceDB requires it inside its OpenAI embedding function only, which nothing calls. */
 const NEVER_LOADED = ["openai"];

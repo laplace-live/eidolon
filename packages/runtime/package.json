@@ -19,6 +19,7 @@
     "@eidolon/tools": "workspace:*",
     "@eidolon/turn": "workspace:*",
     "@eidolon/voice": "workspace:*",
+    "@eidolon/webrtc": "workspace:*",
     "@pipedog/anthropic": "0.10.0",
     "@pipedog/asyncio": "0.10.0",
     "@pipedog/audio-silero": "0.10.0",
