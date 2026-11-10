@@ -18,16 +18,16 @@ import { icePolicy } from "./patches.ts";
 // werift's ICE sockets have no "error" listener. A UDP socket reports ICMP errors from earlier
 // sends (`recvmsg ECONNREFUSED` on Linux under Bun, for a STUN check to a candidate nobody listens
 // on) as an "error" event, which without a listener is an uncaught exception that kills the
-// process. The flag, pipedog rtc.ts's own, keeps a second evaluation of this module from patching
-// again.
+// process. The symbol keeps a second evaluation of this module from patching again.
+const UDP_PATCHED = Symbol.for("eidolon.werift.udp-patched");
 const udp = UdpTransport.prototype as unknown as { init: (this: UdpTransport) => Promise<void> };
-const udpInit = udp.init as typeof udp.init & { pipedogPatched?: boolean };
-if (udpInit.pipedogPatched !== true) {
+const udpInit = udp.init as typeof udp.init & { [UDP_PATCHED]?: boolean };
+if (udpInit[UDP_PATCHED] !== true) {
   const init = async function (this: UdpTransport): Promise<void> {
     this.socket.on("error", (e: Error) => logger.debug(`ICE UDP socket error: ${e.message}`));
     return udpInit.call(this);
   };
-  (init as { pipedogPatched?: boolean }).pipedogPatched = true;
+  (init as { [UDP_PATCHED]?: boolean })[UDP_PATCHED] = true;
   udp.init = init;
 }
 

@@ -16,7 +16,10 @@ export const productionCallDeps: CallDeps = {
   openStt,
   openSpeech,
   openRealtime,
-  models: voiceModels(),
+  // A getter: voiceModels() reads EIDOLON_APP_ROOT, which no module may read at import.
+  get models() {
+    return voiceModels();
+  },
   about: BOT_ABOUT,
   clock: {
     now: () => performance.now(),

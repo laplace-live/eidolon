@@ -1,5 +1,6 @@
 // What a call runs on outside the tests, and the models it warms.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { join } from "node:path";
 import { defaultEngineDeps, runTurn } from "@eidolon/engine";
 import { openRealtime } from "@eidolon/providers/realtime";
 import { openSpeech } from "@eidolon/providers/speech-stream";
@@ -28,6 +29,18 @@ describe("productionCallDeps", () => {
     const engine = defaultEngineDeps({ saveAttachment: async () => ({}) as never });
     expect(deps.engine.createMind).toBe(engine.createMind);
     expect(deps.engine.parts).toBe(engine.parts);
+  });
+
+  test("its models resolve when a call reads them, under the EIDOLON_APP_ROOT set since import", () => {
+    process.env.EIDOLON_APP_ROOT = "/opt/eidolon";
+    try {
+      expect(productionCallDeps.models).toEqual({
+        silero: join("/opt/eidolon", "data/models", "silero_vad.onnx"),
+        smartTurn: join("/opt/eidolon", "data/models", "smart-turn-v3.2-cpu.onnx"),
+      });
+    } finally {
+      delete process.env.EIDOLON_APP_ROOT;
+    }
   });
 
   test("a call stores no files", async () => {

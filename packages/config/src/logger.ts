@@ -1,5 +1,3 @@
-// Levels, record shape and line format as pipedog's logger had them.
-
 export const LOG_LEVELS = {
   TRACE: 5,
   DEBUG: 10,
