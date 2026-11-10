@@ -1,12 +1,13 @@
 # Chats
 
-Chats with the personas, in the local web app, in text and in voice messages. A chat is an
-append-only log of events with one to six personas in it. Each persona's reply is a turn of the
-turn engine, which talks to her mind without pipedog. In a group chat, the director decides who
-answers each line, and the personas may answer each other ([Group chats](#group-chats)). Either
-side may send a recorded clip instead of a line ([Voice messages](#voice-messages)), and the viewer
-may call one of the personas, on a call that opens on the chat and is stored in it
-([Calls](#calls)).
+Chats with the personas, in text and in voice messages: in the local web app, which keeps each
+chat in the data home, and in production, where each viewer's browser keeps it
+([Production](#production-the-browser-keeps-the-chat)). A chat is an append-only log of events
+with one to six personas in it. Each persona's reply is a turn of the turn engine, which talks to
+her mind without pipedog. In a group chat, the director decides who answers each line, and the
+personas may answer each other ([Group chats](#group-chats)). Either side may send a recorded clip
+instead of a line ([Voice messages](#voice-messages)), and the viewer may call one of the personas,
+on a call that opens on the chat and is stored in it ([Calls](#calls)).
 
 ```text
 @eidolon/chat         the format: events, the header, ChatStore, viewOf, parseMentions; safe in a browser
@@ -19,12 +20,16 @@ may call one of the personas, on a call that opens on the chat and is stored in 
 @eidolon/runtime      CallBinding: a call run as a chat's persona, opened on it, reporting its lines
 apps/bot/src/local/chats/, routes/chats.ts   the runner, a chat's calls and /api/local/chats
 apps/web/src/features/chats/                 the Chats page (web-app.md)
+apps/bot/src/chat/                           production's endpoint: /api/chat/*, signing, a call's binding
+packages/access/src/chat.ts                  production's chat quotas and served personas
 ```
 
-**Production keeps no chats yet.** Only `apps/bot/src/local` imports the engine and the JSONL
-store. A Biome rule forbids them in the rest of `apps/bot/src`, and `boundaries.test.ts` follows
-`main.ts`'s imports to prove it. `@eidolon/chat` itself imports no other package, and nothing from
-Bun or Node outside `src/jsonl.ts`, because `apps/web` bundles it and laplace's client will too.
+**Production keeps no transcripts; it signs what it produces.** It runs the engine and imports
+`@eidolon/chat`'s main entry, but only `apps/bot/src/local` imports the JSONL store (and only tests
+the store contract): a Biome rule forbids `@eidolon/chat/jsonl` and `@eidolon/chat/contract` in the
+rest of `apps/bot/src`, and `boundaries.test.ts` follows `main.ts`'s imports to prove it.
+`@eidolon/chat` itself imports no other package, and nothing from Bun or Node outside
+`src/jsonl.ts`, because `apps/web` bundles it and laplace's client will too.
 
 ## The format
 
@@ -35,8 +40,8 @@ A log is a header line, then one event per line:
 - **Each event** carries a `seq` (1, 2, 3… with no gaps) and `at` (ms since the epoch).
   - The engine emits drafts without either (`ChatEventDraft`). Whoever stores them numbers them
     on from the log's last event (`stampEvents`).
-  - `sig` is reserved for the production endpoint (below). Nothing local writes it, and every
-    reader ignores it.
+  - `sig` is the production endpoint's signature ([Signing](#signing)). Nothing local writes it,
+    and every reader but that endpoint ignores it.
 
 **The log keeps what was said and what each persona was given,** never how it arrived. Stream
 deltas and tool states only go over the wire. Each persona's view is rebuilt from the log, so what
@@ -54,7 +59,7 @@ isn't stored, she never saw.
 | `title` | `PATCH` | The chat's title; the last one wins. Until there is one, the page names the chat by who is in it now |
 | `participants` | `POST participants` | Personas added or removed |
 | `settings` | `PATCH` | The chat's `chainLimit` or `replyMode`; the last of each wins |
-| `call-started`, `call-ended` | the runner | A call in the chat ([Calls](#calls)): `call-started` names the `call`, a UUIDv7, and the `persona` called; `call-ended` names the same `call` and its `reason`, `hangup`, `error` or `shutdown` |
+| `call-started`, `call-ended` | the runner; in production, the browser | A call in the chat ([Calls](#calls)): `call-started` names the `call`, a UUIDv7, and the `persona` called; `call-ended` names the same `call` and its `reason`, `hangup`, `error` or `shutdown` |
 
 **`ChatSummary`** is what the chat list shows: the title, the participants, `createdAt`,
 `updatedAt`, the last message's text and the last seq. `summarize` derives it from a log, so a
@@ -470,8 +475,17 @@ stays the standalone call to the active persona, with no chat.
 interface CallBinding {
   persona: string; // whom the call runs as, active or not; the caller validates the id
   seedMessages: readonly unknown[]; // OpenAI-shaped, before the greeting
-  onTranscript(line: { role: "user" | "assistant"; text: string; interrupted: boolean }): void;
+  onTranscript(
+    line: { role: "user" | "assistant"; text: string; interrupted: boolean },
+    client?: CallClient, // the call's browser; the session always passes it
+  ): void;
   onEnded(end: "hangup" | "error"): void; // once, after the last line
+}
+
+interface CallClient {
+  // An RTVI `server-message` to the call's browser, through the session's RTVI processor; nothing
+  // once the browser has hung up
+  sendServerMessage(data: Readonly<Record<string, unknown>>): Promise<void>;
 }
 ```
 
@@ -541,8 +555,10 @@ that chat; without a `chatId`, it is the standalone call, unbound.
 the other personas read them in their views later. A call with several personas at once comes with
 the voice engine.
 
-**Production never binds a call.** `main.ts`'s offer route passes no binding, whatever the
-request's data says, and `production.test.ts` pins it.
+**Production binds a call only through its chat endpoint**
+([A call inside a chat](#a-call-inside-a-chat)), whose window comes signed from the browser. With
+`EIDOLON_CHAT_SECRET` unset, `main.ts`'s offer route passes no binding, whatever the request's
+data says, and `production.test.ts` and `apps/bot/test/chat/call.test.ts` pin it.
 
 ## The local API
 
@@ -652,16 +668,223 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
   reply you cut off must keep only what she said. Then call a persona who isn't the active one:
   her own voice must answer.
 
-## Later: chats in production
+## Production: the browser keeps the chat
 
-**Production chats will live only in each viewer's browser,** in IndexedDB in laplace's `/ai`
-page, behind the same `ChatStore`. The store passes `runChatStoreContract`.
+The bot's chat endpoint is for laplace's `/ai` page. Each viewer's chats live only in their browser,
+in IndexedDB behind the same `ChatStore`, which passes `runChatStoreContract`. Every request carries
+the chat's newest events; the server answers with what the turn adds, signed, and forgets it.
+It runs the same `runChat` the local runner does, with `withPersona` per participant, over a store
+of the request alone (`RequestChatStore`, `apps/bot/src/chat/window.ts`).
 
-**The server keeps no transcripts.**
-- **The endpoint is stateless:** the browser sends the chat's window, and the server answers
-  with the turn's events, signed.
-- **`sig`** is an HMAC over `canonicalForSig(chatId, event)`: the chat id, a newline, then the
-  event without `sig` as JSON with its keys sorted. The server drops any persona, context, tool or
-  decision event whose signature doesn't verify, so a browser can't put words in her mouth or
-  recall in her view.
-- **Quotas** are per viewer, for text, voice and the decision model.
+**Production keeps no transcripts; it signs what it produces.** Nothing a chat does is written to
+the data home: the tests in `apps/bot/test/chat` run turns, voice messages and calls on a
+temporary data home and find it unchanged.
+
+### Turning it on
+
+| Variable | Setting | What it does |
+| --- | --- | --- |
+| `EIDOLON_CHAT_SECRET` | none: environment only | The HMAC key, at least 32 characters (`openssl rand -base64 32`). `credentials.json` ignores it with a warning, and no YAML file has a setting for it |
+| `EIDOLON_CHAT_PERSONAS` | `access.chatPersonas` | The persona ids the endpoint serves, comma-separated; by default the installed persona alone. Read on every request |
+| `EIDOLON_CHAT_ANON_QUOTA` | `access.chatAnonQuota` | Viewer lines an hour per client IP for anonymous viewers, default 20 |
+| `EIDOLON_CHAT_USER_QUOTA` | `access.chatUserQuota` | Viewer lines an hour per mid for logged-in viewers, default 200 |
+
+- **Off, the default:** while the secret is unset or blank, no chat route exists. Every
+  `/api/chat/*` path, in every method, preflights included, answers exactly as an unknown path
+  does, and an offer's `requestData.chat` is ignored. A secret shorter than 32 characters is the
+  same, plus one `ERROR` line at boot.
+- **On:** the boot log says `[chat] Installed routes: POST /api/chat/turn, POST /api/chat/voice,
+  GET /api/chat/files/{name}`, with the personas served and both quotas.
+- **CORS** is `/api/offer`'s (`PIPECAT_ALLOWED_ORIGINS`): the same preflight answer, and the same
+  headers on every answer, errors and 429s included.
+- **Rotating the secret** fails every signature in every browser's chats. Each persona then reads
+  only the viewers' own lines from them, never her own, until new ones come in.
+- **The quotas** are read on the first chat turn, so changing them needs a restart.
+
+### Who may use it, and how much
+
+- **The viewer** is what `resolveUserContext` makes of the request's `loginSyncToken`, never the
+  token's presence. A token that doesn't validate is anonymous.
+- **Each viewer line costs one slot of a sliding hour** (`admitChatTurn`,
+  `packages/access/src/chat.ts`): a typed line, a voice message and a greeting alike.
+  - **Who is counted:** a logged-in viewer by mid, anyone else by client IP. Behind a proxy, set
+    `EIDOLON_REAL_IP_HEADER`, or every viewer shares the proxy's slots.
+  - **When:** only once the request is valid, so a refused request costs nothing. A voice message
+    is charged before it is heard, since hearing bills.
+  - **Past the quota:** `429 {"error": …, "retry_after": n}` with `Retry-After`, the offer's 429.
+- **Mem0** runs for logged-in viewers alone, keyed by mid and persona as calls key it. An
+  anonymous viewer's turn skips it.
+- **What a line can cost:** the chain limit is at most 3 (`PUBLIC_CHAIN_LIMIT`), whatever a
+  `settings` event asks, so at most 5 turns, each up to 4 mind calls, plus the director's calls
+  ([Costs](#costs)). A reply is in voice only while her voice role can speak, whatever the reply
+  mode. Every request a chat makes is billed with `source: "chat"` and the chat's id as its
+  session.
+
+### The routes
+
+**`POST /api/chat/turn`** takes JSON, at most 1 MB (`413 payload-too-large`):
+
+```ts
+{
+  chat: { header: ChatHeader, events: ChatEvent[] }, // the chat's newest events, as stored
+  text?: string,                                     // the viewer's line
+  loginSyncToken?: string,
+}
+```
+
+- **`text`** is 1 to 4000 characters once trimmed, with no control character but tabs and line
+  breaks. Its @-mentions are read from it (`parseMentions`).
+- **No `text`** asks for her greeting. Only a chat of one persona with no message in it greets;
+  anything else is `400 bad-request`.
+- **The answer** is NDJSON of `ChatStreamLine`s (`application/x-ndjson`, `no-store`), as the local
+  `POST messages` streams them:
+  1. an `events` line with the viewer's message, as the server stamped it: `seq`, `at` and `id`
+     (a greeting has none);
+  2. each decision as an `events` line, and each turn from `started` to `ended`, its events
+     signed.
+- **A turn that fails** ends in a `turn-failed`, its `error` a fixed sentence: `The reply failed`,
+  or for `voice-failed`, `Her voice message couldn't be made, so she answered in text`. The
+  provider's own words, which can name its account, go to the log alone. An `error` line ends the
+  stream only when the answer threw outside any turn.
+- **A reader that goes away** aborts the reply: nothing is kept for it to come back to. There are
+  no late tools: a selfie still rendering is cancelled with its turn.
+
+**`POST /api/chat/voice`** takes `multipart/form-data`:
+
+| Part | What it holds |
+| --- | --- |
+| `chat` | The window, as JSON, as `POST /api/chat/turn` takes it |
+| `audio` | The recording, a file part with its own `Content-Type`: `audio/webm`, `audio/ogg`, `audio/mp4` or `audio/mpeg`, codecs allowed, at most 10 MB. The part's type counts, never its filename |
+| `durationMs` | The recorder's clock: 1 to 120000 |
+| `loginSyncToken` | Optional |
+
+- **The answer** is `POST /api/chat/turn`'s. Its first `events` line holds the viewer's voice
+  message, with its transcript in `text` and an audio attachment named `<sha256>.<ext>`.
+- **The server doesn't keep the clip:** the browser keeps its recording, under that name.
+- **Errors:**
+  - `415` for a body that isn't multipart, or a clip of another type;
+  - `400` for a missing or malformed part, or an empty clip;
+  - `413` past 10 MB or 2 minutes;
+  - `502 upstream-failed` when hearing fails;
+  - `503 unavailable` while the first persona's hearing role has no key.
+- **Multipart, not a header,** because a window of 256 KB is past what proxies take in a header.
+
+**`GET /api/chat/files/:name`** serves her selfies and voice replies (`files.ts`):
+- **Where they live:** in the process's memory for her `SELFIE_TTL_SECONDS` (600), as
+  `/api/selfie` keeps a selfie. A restart loses them, and so would a second instance.
+- **Names:** `<sha256>.<ext>`, the content's hash, as the local store names them, so a name can't
+  be guessed without the bytes, and the route needs no session.
+- **What it sends:** the type, `nosniff`, `default-src 'none'; sandbox` and `private,
+  max-age=31536000, immutable`.
+- **Once a file is gone:** the selfie route's empty `404`. `HEAD` is `405`, as on every GET route.
+
+**Refusals** before a stream starts are `{ "error": { "code", "message" } }` with `no-store`:
+`400 bad-json`, `400 bad-request`, `403 persona-not-served` (a persona in the chat that
+`EIDOLON_CHAT_PERSONAS` doesn't list), `413 payload-too-large`, and the voice route's above.
+
+### The window
+
+`openChatWindow` (`window.ts`) reads the request's chat:
+
+- **The cut:** the newest 120 events that fit in 256 KB of JSON (`CHAT_WINDOW_EVENTS`,
+  `CHAT_WINDOW_BYTES`). Older ones are dropped and counted in the log. A browser can send its whole
+  log; the server keeps what fits.
+- **The viewer's own events** are rebuilt from the fields a turn reads, and dropped when malformed:
+  - messages, without their attachments: no turn reads the viewer's, and the browser keeps them;
+  - `title`, `participants` and `settings`, a `chainLimit` past 3 read as 3;
+  - a call's `call-started` and `call-ended`.
+- **Every other event** stays only while its `sig` verifies in this chat.
+- **Context never comes back** ([below](#context-stays-on-the-server)); any that does is dropped.
+- **Order:** an event whose `seq` doesn't rise is dropped.
+- **The participants** after the window's `participants` events must be 1 to 6, each one served.
+  A browser could add anyone with an unsigned event, so the check is on every request.
+- **What it drops** is counted in one log line, a `WARNING` when anything failed its signature or
+  was malformed. The browser is never told: a tampered history just loses those lines.
+- **Seqs** go on from the newest `seq` the browser sent, kept or not, so its log stays contiguous.
+
+### Signing
+
+- **The signature:** `sig = base64url(HMAC-SHA256(secret, canonicalForSig(chatId, event)))`, 43
+  characters unpadded, made and checked with WebCrypto (`ChatSigner`, `sig.ts`).
+  `canonicalForSig` is the chat id, a newline, then the event without `sig` as JSON with its keys
+  sorted and no whitespace.
+- **What carries one:** every event the server adds, but the viewer's: her messages, tool calls and
+  results, kickoffs, decisions, `turn-failed`s, and her lines on a call.
+- **What never does:** the viewer's own events, which are their words and settings either way:
+  their messages, `title`, `participants`, `settings`, `call-started` and `call-ended`. The browser
+  writes the last two around a call, since the server can't sign `call-ended` once the call's peer
+  is gone.
+- **What it guards:** the chat id is in every signature, so a line can't move between chats. A
+  browser can't put words in her mouth, recall in her view, or a decision in the log.
+
+### What the browser stores
+
+- **Each `events` line's events, as received,** in order, before it reads on. That includes the
+  viewer's own message, which exists only once the server has stamped it. Change a signed event
+  in any way and it fails its signature; key order doesn't matter.
+- **Files beside the events.** An attachment's `name` is its key: fetch
+  `/api/chat/files/<name>` as soon as its event arrives, keep the Blob under that name, and never
+  rewrite the event to point at it. Keep the viewer's own recording under the name the server
+  gave it.
+- **Its own events:** a title, a participants change or a settings change, numbered on from the
+  newest `seq`; a call's `call-started` before it offers, and its `call-ended` after the last line.
+- **Not `started`, `delta` or `tool`:** they show progress, and aren't stored.
+- **One request at a time per chat.** The server numbers from the window it gets, so two at once
+  would give two events the same `seq`. During a call, no turn.
+
+### Context stays on the server
+
+What she recalled, `context` and `context-removed` events, never reaches the browser:
+- on real turns of the local app, those blocks came to about 15 KB a turn, which would fill the
+  256 KB window in about 15 turns;
+- they are her retrieval, not the viewer's conversation.
+
+`RequestChatStore.add` drops them before it signs, so no answer carries them, and a later turn of
+the same request doesn't see them either. **Her view in production** is the request's messages,
+tool events and kickoffs, plus this turn's fresh context; earlier turns' blocks aren't replayed, as
+they are in the local app, where they accumulate as a call's do.
+
+### A call inside a chat
+
+`POST /api/offer` with `requestData: { chat, persona }`, the window as the routes take it, calls her
+inside that chat (`bindChatCall`, `call.ts`):
+- **Refusals,** before any call starts, in the routes' words: `400 bad-request` without a
+  `persona`, for a window that isn't a chat's, or for a persona who isn't in it; `403
+  persona-not-served`.
+- **The seed** is her view of the window, as her next text turn would read it, less tool calls and
+  their results; a viewer's clip heard as nothing reads `（听不清）`.
+- **Each line,** the viewer's and hers, goes to the browser as an RTVI server message `{ type:
+  "chat-line", event }`, through the `CallClient` the session hands `onTranscript`: a `message`
+  with `modality: "call"`, numbered on from the window, signed unless it is the viewer's. A line
+  said after the browser hung up never arrives.
+- **The window leaves the admission** before the session sees it, so the session's log line
+  doesn't carry the conversation.
+- **With the endpoint off,** `chat` is ignored and the call is an ordinary one.
+
+The browser's side is in
+[frontend-loading-state.md](frontend-loading-state.md#a-call-inside-a-chat-chat-line).
+
+### Before turning it on
+
+- **Her parts are kept per chat id and persona** ([step 2](#a-turn-runturn)), for the 32 chats
+  used last. With more chats active than that, a turn opens the stream archive's and the facts'
+  LanceDB tables again. Measure that under load before setting the secret on the server.
+- **Files live in one process.** A second instance behind a load balancer would answer `404` for
+  another's files.
+
+### Checks
+
+- `bun test --no-env-file apps/bot/test/chat packages/access/test/chat.test.ts
+  apps/bot/test/local/boundaries.test.ts apps/bot/test/local/production.test.ts`.
+- `apps/bot/test/chat/e2e.test.ts` boots `startBotServer` as `main.ts` does, with the secret, the
+  real engine and her mind at a fake OpenRouter. A browser that keeps the chat greets, sends a
+  line, calls her, rewrites one of her lines and sends another; she never reads the rewritten
+  line, and the data home is unchanged. With the secret unset, every route answers as an unknown
+  path does.
+- **By hand, billed, once the secret is set:** a greeting, one mind turn, with a fresh UUIDv7 as
+  the chat's id.
+
+  ```bash
+  curl -sN https://<host>/api/chat/turn -H 'content-type: application/json' \
+    -d '{"chat":{"header":{"format":1,"id":"<uuidv7>","createdAt":0,"participants":["milky-green"]},"events":[]}}'
+  ```

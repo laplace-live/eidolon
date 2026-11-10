@@ -1,6 +1,6 @@
-// What keeps the local app out of production: main.ts reaches none of it, nor the chats it keeps,
-// nothing outside apps/bot/src/local names it, apps/bot gains no dependency, and the SPA's leaves
-// import nothing but @eidolon/chat's types.
+// What keeps the local app out of production: main.ts reaches none of it, nor the store it keeps
+// chats in, nothing outside apps/bot/src/local names it, apps/bot gains no dependency, and the
+// SPA's leaves import nothing but @eidolon/chat's types.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -86,27 +86,31 @@ function sources(dir: string): string[] {
 }
 
 describe("production never loads the local app", () => {
-  test("main.ts reaches none of local/, ingest, cli, apps/web, the engine or the chat store", () => {
+  test("main.ts reaches the engine and the chat format, but none of local/, ingest, cli, apps/web or the chat store", () => {
     const { files, specifiers } = importGraph(join(BOT_SRC, "main.ts"));
     const reached = [...files].map((file) => relative(ROOT, file));
     expect(reached).toContain("apps/bot/src/server.ts");
     expect(reached).toContain("packages/runtime/src/index.ts");
     expect(reached).toContain("packages/memory/src/admin.ts");
+    // The production chat endpoint (apps/bot/src/chat) runs turns, and keeps nothing.
+    expect(reached).toContain("apps/bot/src/chat/routes.ts");
+    expect(reached).toContain("packages/engine/src/index.ts");
+    expect(reached).toContain("packages/chat/src/index.ts");
     const forbidden = reached.filter(
       (file) =>
         file.startsWith("apps/bot/src/local/") ||
         file.startsWith("apps/web/") ||
         file.startsWith("apps/cli/") ||
         file.startsWith("packages/ingest/") ||
-        file.startsWith("packages/engine/") ||
-        file === "packages/chat/src/jsonl.ts",
+        file === "packages/chat/src/jsonl.ts" ||
+        file === "packages/chat/src/contract.ts",
     );
     expect(forbidden).toEqual([]);
     expect(
       [...specifiers].filter(
         (s) =>
-          /^@eidolon\/(ingest|cli|engine)(\/|$)/.test(s) ||
-          s === "@eidolon/chat/jsonl" ||
+          /^@eidolon\/(ingest|cli)(\/|$)/.test(s) ||
+          /^@eidolon\/chat\/(jsonl|contract)$/.test(s) ||
           s.includes("/local"),
       ),
     ).toEqual([]);

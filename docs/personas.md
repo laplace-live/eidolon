@@ -127,6 +127,10 @@ moves it into the entry when it saves a new one. The names it accepts: each prov
 a role's own (`RERANK_API_KEY`, `EMBED_API_KEY`, `REFINE_API_KEY`), and production's
 (`CLOUDFLARE_TURN_KEY_API_TOKEN`, `WEBRTC_TURN_CREDENTIAL`, `CF_WAF_BYPASS_TOKEN`).
 
+`EIDOLON_CHAT_SECRET`, the key the production chat endpoint signs with, comes from the environment
+alone: `credentials.json` ignores it with a warning, and no YAML file has a setting for it. While
+it is unset, or shorter than 32 characters, the endpoint stays off ([chat.md](chat.md)).
+
 The offline commands read these files as the bot does, for the persona `--persona` names.
 
 A misspelled key (`identity` and the gate questions included), a value of the wrong type, malformed
@@ -265,6 +269,9 @@ The install's settings, for every persona. Paths resolve in the data home.
 | `access.anonRateLimitWindowSec` | `EIDOLON_ANON_RATE_LIMIT_WINDOW_SEC` | int | Anonymous window seconds |
 | `access.realIpHeader` | `EIDOLON_REAL_IP_HEADER` | string | Client IP header |
 | `access.allowedOrigins` | `PIPECAT_ALLOWED_ORIGINS` | list | Allowed browser origins |
+| `access.chatPersonas` | `EIDOLON_CHAT_PERSONAS` | list | Public chat personas |
+| `access.chatAnonQuota` | `EIDOLON_CHAT_ANON_QUOTA` | int | Anonymous chat turns per hour |
+| `access.chatUserQuota` | `EIDOLON_CHAT_USER_QUOTA` | int | Logged-in chat turns per hour |
 | `network.cloudflareTurn.keyId` | `CLOUDFLARE_TURN_KEY_ID` | string | Cloudflare TURN key id |
 | `network.cloudflareTurn.ttlSec` | `CLOUDFLARE_TURN_TTL_SEC` | int | TURN credential lifetime |
 | `network.stunUrl` | `WEBRTC_STUN_URL` | string | STUN URL |
@@ -307,6 +314,11 @@ chat turn, job and MCP search records its spend in (default `<data home>/usage.d
 [providers.md](providers.md#usage-and-cost)).
 Each `providers.<id>` base moves that provider's API, for a proxy or another region; blank uses its
 own.
+The `access.chat*` rows apply only once `EIDOLON_CHAT_SECRET` turns the production chat endpoint on
+([chat.md](chat.md)). `access.chatPersonas` lists the persona ids it serves, by default the
+installed persona alone. Each viewer line costs one turn of a quota counted over the last hour:
+`access.chatAnonQuota` (default 20) per client IP for anonymous viewers, and `access.chatUserQuota`
+(default 200) per mid for logged-in ones. Both quotas are read once, on the first chat turn.
 
 ## Deploying a persona
 

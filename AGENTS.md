@@ -33,8 +33,9 @@ Python runtime is in the repo too, for human readers only; agents never touch it
 ## Repository layout
 
 ```text
-apps/bot/             the bot: HTTP server, routes, MCP, entry point; src/local/ is the
-                      local web app's own entry and API, which production never loads
+apps/bot/             the bot: HTTP server, routes, MCP, entry point; src/chat/ is production's
+                      chat endpoint; src/local/ is the local web app's own entry and API, which
+                      production never loads
 apps/web/             the local web app's pages (Vite, React, shadcn), served by src/local/
 apps/cli/             every laplace-* command, the offline chain's included
 apps/eidolon/         the npm package @laplace.live/eidolon: a Node launcher, and a build that
@@ -70,6 +71,7 @@ a row here and writing the prose there — not a new section in this file.**
 | the offline chain (`packages/ingest` and its `laplace-*` commands) or their `--json` events | [typescript.md](docs/typescript.md#the-offline-chain) |
 | the local web app (`apps/web`, `apps/bot/src/local`): local mode, its API, jobs or security | [web-app.md](docs/web-app.md) |
 | chats, the chat log format, the turn engine, group chats' director, or voice messages (`packages/chat`, `packages/engine`, `packages/context/src/director.ts`, `packages/providers/src/speech/batch`) | [chat.md](docs/chat.md) |
+| the production chat endpoint (`apps/bot/src/chat`, `/api/chat/*`, a call inside a chat), its signing, quotas or `EIDOLON_CHAT_SECRET` | [chat.md](docs/chat.md#production-the-browser-keeps-the-chat) |
 | a string the web app shows, its languages, or its `.po` catalogs | [web-app.md](docs/web-app.md#strings-and-languages) |
 | changesets, the version PR, tags, or publishing the npm package (`apps/eidolon`) | [releasing.md](docs/releasing.md) |
 | any env var — all 50-odd are documented there | `.env.example` |
@@ -216,8 +218,13 @@ the layout's one line.
 - **Only `@eidolon/engine` talks to a mind outside the voice pipeline**, and a chat's log
   stores what was said and recalled, never stream deltas. Its `createMind` sends what a call's
   `createLlm` does, and each persona's view is rebuilt from the log, so what isn't stored she
-  never saw. Only `apps/bot/src/local` imports the engine and `@eidolon/chat/jsonl` (Biome and
-  `boundaries.test.ts` hold it); see [chat.md](docs/chat.md).
+  never saw. The local app and production's chat endpoint both run it; see [chat.md](docs/chat.md).
+- **Production keeps no transcripts; it signs what it produces.** Its chat endpoint
+  (`apps/bot/src/chat`) exists only while `EIDOLON_CHAT_SECRET` is set; unset, every `/api/chat/*`
+  path answers as an unknown path and no offer is bound. It answers from the window the browser
+  sends and writes nothing to the data home. Every event it adds but the viewer's own carries an
+  HMAC `sig`, one that fails is dropped from her view, and context blocks never leave the server.
+  Only `apps/bot/src/local` imports `@eidolon/chat/jsonl` (Biome and `boundaries.test.ts` hold it).
 - **No vendor SDK sends a request.** A provider is reached with `fetch`, through the
   clients in `packages/providers`, and every request that bills reports it with
   `reportUsage`, or the usage ledger misses it. `@eidolon/providers/catalog`

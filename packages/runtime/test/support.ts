@@ -1,5 +1,5 @@
 import { consoleSink, type LogLevel, type LogRecord, logger } from "@eidolon/config";
-import type { Frame } from "@pipedog/core/frames/frames";
+import { type Frame, OutputTransportMessageUrgentFrame } from "@pipedog/core/frames/frames";
 import { type FrameDirection, FrameProcessor } from "@pipedog/core/processors/frame_processor";
 import { BaseTransport } from "@pipedog/core/transports/base_transport";
 import { configureLogging } from "../src/logging.ts";
@@ -63,20 +63,28 @@ export async function until(check: () => boolean, timeoutMs = 2000): Promise<voi
 
 /** A processor that passes every frame on, standing in for a service. */
 export class PassThrough extends FrameProcessor {
-  constructor(name: string) {
+  readonly #seen: ((frame: Frame) => void) | undefined;
+
+  constructor(name: string, seen?: (frame: Frame) => void) {
     super({ name });
+    this.#seen = seen;
   }
 
   override async processFrame(frame: Frame, direction: FrameDirection): Promise<void> {
     await super.processFrame(frame, direction);
+    this.#seen?.(frame);
     await this.pushFrame(frame, direction);
   }
 }
 
 /** A transport whose input and output pass frames through and whose events tests fire. */
 export class FakeTransport extends BaseTransport {
+  /** The urgent messages the output would send the browser, as RTVI's server messages are. */
+  readonly sent: unknown[] = [];
   readonly #input = new PassThrough("FakeInput");
-  readonly #output = new PassThrough("FakeOutput");
+  readonly #output = new PassThrough("FakeOutput", (frame) => {
+    if (frame instanceof OutputTransportMessageUrgentFrame) this.sent.push(frame.message);
+  });
 
   constructor() {
     super();

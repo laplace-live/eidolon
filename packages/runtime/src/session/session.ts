@@ -52,12 +52,17 @@ export interface TranscriptLine {
   readonly interrupted: boolean;
 }
 
+/** The call's browser: `data` reaches it as an RTVI `server-message`, or nowhere once it hung up. */
+export interface CallClient {
+  sendServerMessage(data: Readonly<Record<string, unknown>>): Promise<void>;
+}
+
 /** Everything a session takes from the other packages, so tests can stand in for any of it. */
 export interface SessionDeps {
   /** OpenAI-shaped messages the context opens with, before the greeting. */
   readonly seedMessages?: readonly unknown[];
   /** Each line the viewer said or typed, and each she spoke, once it is finished. */
-  readonly onTranscript?: (line: TranscriptLine) => void;
+  readonly onTranscript?: CallBinding["onTranscript"];
   /** One realtime model hears, thinks and speaks, in place of the three below. */
   isRealtime(): boolean;
   createRealtime(systemInstruction: string): LLMService<any>;
@@ -295,7 +300,6 @@ export async function buildSession(
       emptyUserTurn,
     }),
   });
-  if (deps.onTranscript) reportTurns(aggregators, deps.onTranscript);
 
   const memory = await sessionMemory(user, deps);
   const facts = await optionalProvider(
@@ -329,10 +333,16 @@ export async function buildSession(
     output: transport.output(),
     assistant: aggregators.assistant(),
   });
-  const worker = new PipelineWorker(new Pipeline(processors), {
+  const pipeline = new Pipeline(processors);
+  const rtvi = new LaplaceRTVIProcessor();
+  const client: CallClient = { sendServerMessage: (data) => rtvi.sendServerMessage(data) };
+  const { onTranscript } = deps;
+  const report = onTranscript && ((line: TranscriptLine) => onTranscript(line, client));
+  if (report) reportTurns(aggregators, report);
+  const worker = new PipelineWorker(pipeline, {
     params: new PipelineParams({ enableMetrics: true, enableUsageMetrics: true }),
-    observers: deps.onTranscript ? [new TypedLines(deps.onTranscript)] : [],
-    rtviProcessor: new LaplaceRTVIProcessor(),
+    observers: report ? [new TypedLines(report)] : [],
+    rtviProcessor: rtvi,
   });
   return { worker, context, memory, tools, processors };
 }
@@ -420,7 +430,8 @@ export interface CallBinding {
   /** The persona the call runs as, active or not. The caller validates the id. */
   readonly persona: string;
   readonly seedMessages: readonly unknown[];
-  readonly onTranscript: (line: TranscriptLine) => void;
+  /** `client` is the call's browser; the session always passes it, a caller standing in may not. */
+  readonly onTranscript: (line: TranscriptLine, client?: CallClient) => void;
   /** Called once, after the session's last line, however it ended. */
   readonly onEnded: (end: CallEnd) => void;
 }

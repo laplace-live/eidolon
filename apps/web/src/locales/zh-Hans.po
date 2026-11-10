@@ -671,6 +671,10 @@ msgid "Anonymous Calls per Window"
 msgstr "匿名用户每个窗口的通话次数"
 
 #: src/components/settings-form/labels.ts
+msgid "Anonymous Chat Turns per Hour"
+msgstr "匿名用户每小时的聊天轮数"
+
+#: src/components/settings-form/labels.ts
 msgid "Anonymous Window Seconds"
 msgstr "匿名限额窗口秒数"
 
@@ -2139,6 +2143,10 @@ msgid "Log"
 msgstr "日志"
 
 #: src/components/settings-form/labels.ts
+msgid "Logged-in Chat Turns per Hour"
+msgstr "登录用户每小时的聊天轮数"
+
+#: src/components/settings-form/labels.ts
 msgid "Login Cache Seconds"
 msgstr "登录缓存秒数"
 
@@ -2866,6 +2874,10 @@ msgstr "服务商账号"
 #: src/features/settings/route.tsx
 msgid "Providers"
 msgstr "服务商"
+
+#: src/components/settings-form/labels.ts
+msgid "Public Chat Personas"
+msgstr "公开聊天的人设"
 
 #: src/components/settings-form/labels.ts
 msgid "Public Deployment"

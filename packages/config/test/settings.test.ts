@@ -4,6 +4,7 @@ import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   activePersona,
+  CREDENTIALS,
   chatInterests,
   chatReplyMode,
   chatTalkativeness,
@@ -259,10 +260,9 @@ describe("credentials", () => {
     ]);
   });
 
-  test("YAML never carries a secret", () => {
-    expect(SETTINGS.some((s) => s.env.endsWith("_API_KEY") || s.env.endsWith("_TOKEN"))).toBe(
-      false,
-    );
+  test("YAML never carries a secret, and no file carries the chat endpoint's", () => {
+    expect(SETTINGS.some((s) => /_(API_KEY|TOKEN|SECRET)$/.test(s.env))).toBe(false);
+    expect(CREDENTIALS).not.toContain("EIDOLON_CHAT_SECRET");
   });
 });
 

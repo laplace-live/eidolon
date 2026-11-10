@@ -26,7 +26,7 @@ Bun workspaces, one package per subsystem. Dependencies point down this list; no
 | `packages/engine` | the turn engine: one persona's text turn, her mind per provider without pipedog, the tool loop and her context providers ([chat.md](chat.md#a-turn-runturn)); `runChat`, a chat's turns in the order the director chooses ([chat.md](chat.md#the-chain)) |
 | `packages/ingest` | the offline chain: download, transcribe, refine, both ingests, the stream catalog and the pipeline ([below](#the-offline-chain)) |
 | `packages/runtime` | the only pipedog importer: the pipeline, adapters from `core` contracts to pipedog, WebRTC signalling, and the `CallBinding` that runs a call inside a chat ([chat.md](chat.md#the-binding)) |
-| `apps/bot` | `Bun.serve`, the routes, MCP, the entry point |
+| `apps/bot` | `Bun.serve`, the routes, MCP, the entry point, and the production chat endpoint, `src/chat` ([chat.md](chat.md#production-the-browser-keeps-the-chat)) |
 | `apps/cli` | every `laplace-*` command and the gate benchmark: argparse specs, the persona, locks, printing, exit codes |
 
 A new context tier implements `ContextProvider`; a new LLM tool implements `LlmTool`. Neither

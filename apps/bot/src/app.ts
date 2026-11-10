@@ -16,6 +16,8 @@ import type { MemoryAdmin } from "@eidolon/memory";
 import type { SignallingResult, SignallingServer } from "@eidolon/runtime";
 import type { IceService } from "@eidolon/turn";
 import type { BunRequest, Server } from "bun";
+import { bindChatCall } from "./chat/call.ts";
+import type { ChatEndpoint } from "./chat/routes.ts";
 import type { McpHandler } from "./mcp/index.ts";
 import {
   FORGET_MEMORIES_PATH,
@@ -57,6 +59,8 @@ export interface BotAppParts {
   readonly memoryAdmin: MemoryAdmin | null;
   readonly selfieResponse: (segment: string) => Response;
   readonly mcp: Pick<McpHandler, "handle">;
+  /** The chat endpoint; without it, its paths are unknown routes and every offer is unbound. */
+  readonly chat?: ChatEndpoint | null;
 }
 
 export interface BotApp {
@@ -148,7 +152,10 @@ export function createBotApp(parts: BotAppParts): BotApp {
     const bodyText = await request.text();
     const admission = await access.admitOffer({ bodyText, clientIp: clientIp(request, server) });
     if (!admission.allowed) return admission.response;
-    return signallingResponse(await parts.signalling.offer(admission));
+    const call = parts.chat ? await bindChatCall(admission, parts.chat.signer) : null;
+    if (call === null) return signallingResponse(await parts.signalling.offer(admission));
+    if (call instanceof Response) return call;
+    return signallingResponse(await parts.signalling.offer(call.admission, call.binding));
   };
 
   const methodRoutes: Record<string, MethodRoutes> = {
@@ -172,6 +179,7 @@ export function createBotApp(parts: BotAppParts): BotApp {
     [LIST_MEMORIES_PATH]: { GET: (request) => listMemories(request, memoryParts) },
     [FORGET_MEMORIES_PATH]: { POST: (request) => forgetMemories(request, memoryParts) },
     [`${SELFIE_PATH}/:id`]: { GET: async (request) => parts.selfieResponse(request.params.id) },
+    ...parts.chat?.routes(clientIp),
   };
 
   const routes: Record<string, RouteHandler | MethodRoutes> = {};

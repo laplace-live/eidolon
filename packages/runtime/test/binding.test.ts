@@ -33,6 +33,7 @@ import { createLlm, createStt, createTts } from "../src/session/services.ts";
 import {
   buildSession,
   type CallBinding,
+  type CallClient,
   runBound,
   runSessionSafely,
   runTransportSession,
@@ -259,6 +260,7 @@ async function call(
   const stored: Stored[] = [];
   const seen: string[] = [];
   const lines: Line[] = [];
+  const clients: CallClient[] = [];
   const stt = new ScriptedStt(["今天吃什么", "等一下"]);
   const tts = new ScriptedTts("第二句。");
   const replies = [["你好呀，", "又见面了。"], ["第一句。", "第二句。"], ["好的。"], ["收到。"]];
@@ -271,7 +273,8 @@ async function call(
     const { failing, ...bound } = options;
     binding = {
       ...bound,
-      onTranscript: (line) => {
+      onTranscript: (line, client) => {
+        if (client) clients.push(client);
         if (line.text === failing) throw new Error("the chat is gone");
         lines.push({ ...line, persona: activePersona().id });
       },
@@ -291,6 +294,10 @@ async function call(
     stt,
     tts,
     input,
+    clients,
+    /** The RTVI server messages the transport's output would have sent the browser. */
+    serverMessages: () =>
+      transport.sent.filter((m) => (m as { type?: unknown }).type === "server-message"),
     /** Her reply as the assistant aggregator holds it, before her turn stops. */
     held: () => (transport.output().next as LLMAssistantAggregator).aggregationString(),
     /** A transport callback, outside any persona scope, as werift's are. */
@@ -383,6 +390,24 @@ describe("a call bound to a chat", () => {
     }
     expect(activePersona().id).toBe("milky-green");
     expect(logs.messages("WARNING")).toEqual([]);
+    expect(logs.messages("ERROR")).toEqual([]);
+  }, 15000);
+
+  test("each line comes with the call's browser, which a server message reaches until it hangs up", async () => {
+    const c = await call({ persona: "bob", seedMessages: [] });
+    await startTalking(c.input);
+    await stopTalking(c.input);
+    await until(() => c.lines.length === 2);
+    const [client] = c.clients;
+    expect([c.clients.length, new Set(c.clients).size]).toEqual([2, 1]);
+    await client?.sendServerMessage({ type: "chat-line", event: { seq: 4 } });
+    await until(() => c.serverMessages().length === 1);
+    expect(c.serverMessages()).toEqual([
+      { label: "rtvi-ai", type: "server-message", data: { type: "chat-line", event: { seq: 4 } } },
+    ]);
+    await c.hangUp();
+    await client?.sendServerMessage({ type: "chat-line", event: { seq: 5 } });
+    expect(c.serverMessages()).toHaveLength(1);
     expect(logs.messages("ERROR")).toEqual([]);
   }, 15000);
 

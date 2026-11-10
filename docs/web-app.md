@@ -74,9 +74,11 @@ finishing an index. A tool that stops the app should send SIGTERM.
   `package.json`, which the frozen install needs. `docker.yml` skips the image build for changes
   under `apps/web/**` and `apps/bot/src/local/**`.
 - `local.viewerName` (`EIDOLON_LOCAL_VIEWER_NAME`) is read in local mode only.
-- **Chats stay out too.** Only `apps/bot/src/local` imports the turn engine (`@eidolon/engine`) and
-  the JSONL chat store (`@eidolon/chat/jsonl`); the same Biome rule and `boundaries.test.ts` hold
-  it. Production's offer never binds a call to a chat, whatever its request data says, which
+- **The app's chats stay out too.** Only `apps/bot/src/local` imports the JSONL chat store
+  (`@eidolon/chat/jsonl`); the same Biome rule and `boundaries.test.ts` hold it. Production runs
+  the turn engine only for its own chat endpoint, which keeps no transcripts and is off until
+  `EIDOLON_CHAT_SECRET` is set ([chat.md](chat.md#production-the-browser-keeps-the-chat)). Until
+  then, production's offer never binds a call to a chat, whatever its request data says, which
   `production.test.ts` pins.
 
 ## Security

@@ -113,8 +113,8 @@
                     "message": "The image leaves apps/bot/src/local out: production code never imports the local entry."
                   },
                   {
-                    "group": ["@eidolon/engine", "@eidolon/engine/**", "@eidolon/chat/jsonl"],
-                    "message": "Production keeps no chats yet: only apps/bot/src/local imports the turn engine and the JSONL chat store."
+                    "group": ["@eidolon/chat/jsonl", "@eidolon/chat/contract"],
+                    "message": "Production keeps no transcripts: only apps/bot/src/local imports the JSONL chat store, and only tests the store contract. Production may import @eidolon/chat's main entry."
                   }
                 ]
               }

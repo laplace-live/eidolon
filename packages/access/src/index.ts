@@ -10,6 +10,20 @@ export {
   sessionBitrateFor,
 } from "./audio-quality.ts";
 export { extractBearerToken, resolveBearerCaller } from "./bearer.ts";
+export {
+  admitChatTurn,
+  CHAT_ANON_DEFAULT_PER_HOUR,
+  CHAT_ANON_QUOTA_ERROR,
+  CHAT_USER_DEFAULT_PER_HOUR,
+  CHAT_USER_QUOTA_ERROR,
+  type ChatAdmission,
+  type ChatGuardDeps,
+  type ChatQuotas,
+  type ChatTurnInput,
+  chatPersonas,
+  chatQuotaExceededResponse,
+  chatQuotas,
+} from "./chat.ts";
 export { resolveClientIp, UNKNOWN_CLIENT_IP } from "./client-ip.ts";
 export {
   CORS_ALLOWED_METHODS,

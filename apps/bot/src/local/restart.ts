@@ -46,10 +46,13 @@ export const BOOT_READ: Readonly<Record<string, readonly BootReader[]>> = {
   ...PROVIDER_READERS,
   // The usage ledger opens at boot.
   EIDOLON_USAGE_DB: ["server"],
-  // At boot: CORS, the anonymous offer quota, ICE and the Opus presets.
+  // At boot: CORS, the anonymous offer quota, ICE and the Opus presets; the chat quotas on the
+  // first chat turn.
   PIPECAT_ALLOWED_ORIGINS: ["server"],
   EIDOLON_ANON_RATE_LIMIT_PER_HOUR: ["server"],
   EIDOLON_ANON_RATE_LIMIT_WINDOW_SEC: ["server"],
+  EIDOLON_CHAT_ANON_QUOTA: ["server"],
+  EIDOLON_CHAT_USER_QUOTA: ["server"],
   CLOUDFLARE_TURN_KEY_ID: ["server"],
   CLOUDFLARE_TURN_TTL_SEC: ["server"],
   CLOUDFLARE_TURN_KEY_API_TOKEN: ["server"],
@@ -89,6 +92,7 @@ export const LIVE_READ: readonly string[] = [
   "EIDOLON_LOCAL_VIEWER_NAME",
   "WORKERS_BASE_URL",
   "EIDOLON_REAL_IP_HEADER",
+  "EIDOLON_CHAT_PERSONAS",
   "REFINE_BASE_URL",
   "YT_DLP_PATH",
   "YT_DLP_COOKIES_FROM_BROWSER",

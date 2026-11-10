@@ -4,9 +4,11 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import {
   ANONYMOUS,
+  admitChatTurn,
   admitOffer,
   anonOfferQuota,
   audioQualitySettings,
+  chatQuotas,
   preflightOffer,
   resolveBearerCaller,
   resolveUserContext,
@@ -38,18 +40,26 @@ describe("env is read after import", () => {
         EIDOLON_OPUS_BITRATE_MEDIUM_BPS: "128000",
         PIPECAT_ALLOWED_ORIGINS: "https://a.example",
         EIDOLON_REAL_IP_HEADER: "x-real-ip",
+        EIDOLON_CHAT_ANON_QUOTA: "3",
+        EIDOLON_CHAT_USER_QUOTA: "4",
       });
       const quota = access.anonOfferQuota();
       const audio = access.audioQualitySettings();
+      const chat = access.chatQuotas();
       const first = {
         quota: [quota.maxPerWindow, quota.windowSeconds],
         audio: audio.defaultBitrateBps,
         origins: access.corsPolicyFromEnv().allowOrigins,
         ip: access.resolveClientIp(new Headers({ "x-real-ip": "192.0.2.1" }), "10.0.0.1"),
+        chat: [chat.anonymous.maxPerWindow, chat.loggedIn.maxPerWindow, chat.loggedIn.windowSeconds],
       };
       process.env.EIDOLON_ANON_RATE_LIMIT_PER_HOUR = "9";
       process.env.EIDOLON_OPUS_BITRATE_MEDIUM_BPS = "64000";
-      const memoized = access.anonOfferQuota() === quota && access.audioQualitySettings() === audio;
+      process.env.EIDOLON_CHAT_ANON_QUOTA = "8";
+      const memoized =
+        access.anonOfferQuota() === quota &&
+        access.audioQualitySettings() === audio &&
+        access.chatQuotas() === chat;
       console.log("@@" + JSON.stringify({ first, memoized }));
     `;
     const run = Bun.spawnSync({
@@ -67,6 +77,7 @@ describe("env is read after import", () => {
         audio: 128000,
         origins: ["https://a.example"],
         ip: "192.0.2.1",
+        chat: [3, 4, 3600],
       },
       memoized: true,
     });
@@ -129,5 +140,22 @@ describe("process-wide defaults", () => {
     expect(audioQualitySettings()).toBe(audioQualitySettings());
     expect(sessionBitrateFor(undefined)).toBe(audioQualitySettings().defaultBitrateBps);
     expect(sessionBitrateFor("lowest")).toBe(audioQualitySettings().presetsBps.lowest);
+  });
+
+  test("admitChatTurn charges the process's chat quotas: 20 anonymous, 200 logged-in an hour", async () => {
+    const quotas = chatQuotas();
+    expect(chatQuotas()).toBe(quotas);
+    expect([
+      quotas.anonymous.maxPerWindow,
+      quotas.loggedIn.maxPerWindow,
+      quotas.anonymous.windowSeconds,
+      quotas.loggedIn.windowSeconds,
+    ]).toEqual([20, 200, 3600, 3600]);
+    const clientIp = "198.51.100.202";
+    expect(await admitChatTurn({ token: null, clientIp })).toMatchObject({
+      allowed: true,
+      user: ANONYMOUS,
+    });
+    expect(quotas.anonymous.peek(clientIp).remaining).toBe(19);
   });
 });

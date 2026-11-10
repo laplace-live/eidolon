@@ -7,7 +7,7 @@ import { createSignallingServerWith, type SignallingServer } from "./webrtc/sign
 export { warmAudioModels } from "./audio.ts";
 export { configureLogging } from "./logging.ts";
 export { BOT_ABOUT } from "./rtvi.ts";
-export type { CallBinding, CallEnd, TranscriptLine } from "./session/session.ts";
+export type { CallBinding, CallClient, CallEnd, TranscriptLine } from "./session/session.ts";
 export type { SignallingResult, SignallingServer } from "./webrtc/signalling.ts";
 
 export function createSignallingServer(options: {

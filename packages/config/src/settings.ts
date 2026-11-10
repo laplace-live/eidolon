@@ -73,6 +73,21 @@ export const SETTINGS: readonly SettingField[] = [
     "list",
     "Allowed browser origins",
   ),
+  field("app", "access.chatPersonas", "EIDOLON_CHAT_PERSONAS", "list", "Public chat personas"),
+  field(
+    "app",
+    "access.chatAnonQuota",
+    "EIDOLON_CHAT_ANON_QUOTA",
+    "int",
+    "Anonymous chat turns per hour",
+  ),
+  field(
+    "app",
+    "access.chatUserQuota",
+    "EIDOLON_CHAT_USER_QUOTA",
+    "int",
+    "Logged-in chat turns per hour",
+  ),
   field(
     "app",
     "network.cloudflareTurn.keyId",

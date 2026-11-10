@@ -671,6 +671,10 @@ msgid "Anonymous Calls per Window"
 msgstr "Anonymous Calls per Window"
 
 #: src/components/settings-form/labels.ts
+msgid "Anonymous Chat Turns per Hour"
+msgstr "Anonymous Chat Turns per Hour"
+
+#: src/components/settings-form/labels.ts
 msgid "Anonymous Window Seconds"
 msgstr "Anonymous Window Seconds"
 
@@ -2139,6 +2143,10 @@ msgid "Log"
 msgstr "Log"
 
 #: src/components/settings-form/labels.ts
+msgid "Logged-in Chat Turns per Hour"
+msgstr "Logged-in Chat Turns per Hour"
+
+#: src/components/settings-form/labels.ts
 msgid "Login Cache Seconds"
 msgstr "Login Cache Seconds"
 
@@ -2866,6 +2874,10 @@ msgstr "Provider Accounts"
 #: src/features/settings/route.tsx
 msgid "Providers"
 msgstr "Providers"
+
+#: src/components/settings-form/labels.ts
+msgid "Public Chat Personas"
+msgstr "Public Chat Personas"
 
 #: src/components/settings-form/labels.ts
 msgid "Public Deployment"
