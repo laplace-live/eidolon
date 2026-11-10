@@ -165,6 +165,7 @@
       "name": "@eidolon/providers",
       "dependencies": {
         "@eidolon/config": "workspace:*",
+        "@eidolon/core": "workspace:*",
       },
     },
     "packages/retrieval": {
@@ -231,6 +232,19 @@
       "dependencies": {
         "@eidolon/config": "workspace:*",
         "@eidolon/providers": "workspace:*",
+      },
+    },
+    "packages/voice": {
+      "name": "@eidolon/voice",
+      "dependencies": {
+        "@eidolon/access": "workspace:*",
+        "@eidolon/chat": "workspace:*",
+        "@eidolon/config": "workspace:*",
+        "@eidolon/context": "workspace:*",
+        "@eidolon/core": "workspace:*",
+        "@eidolon/engine": "workspace:*",
+        "@eidolon/providers": "workspace:*",
+        "onnxruntime-node": "1.30.0",
       },
     },
   },
@@ -386,6 +400,8 @@
     "@eidolon/turn": ["@eidolon/turn@workspace:packages/turn"],
 
     "@eidolon/usage": ["@eidolon/usage@workspace:packages/usage"],
+
+    "@eidolon/voice": ["@eidolon/voice@workspace:packages/voice"],
 
     "@eidolon/web": ["@eidolon/web@workspace:apps/web"],
 

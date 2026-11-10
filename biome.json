@@ -34,6 +34,15 @@
               {
                 "group": ["@pipedog/*", "@pipedog/**"],
                 "message": "Only packages/runtime may import pipedog; expose what you need through @eidolon/runtime."
+              },
+              {
+                "group": [
+                  "@eidolon/voice",
+                  "@eidolon/voice/**",
+                  "@eidolon/webrtc",
+                  "@eidolon/webrtc/**"
+                ],
+                "message": "Only packages/runtime may import the voice engine and its transport; reach calls through @eidolon/runtime."
               }
             ]
           }
@@ -79,6 +88,15 @@
                   {
                     "group": ["@pipedog/*", "@pipedog/**"],
                     "message": "Only packages/runtime may import pipedog; expose what you need through @eidolon/runtime."
+                  },
+                  {
+                    "group": [
+                      "@eidolon/voice",
+                      "@eidolon/voice/**",
+                      "@eidolon/webrtc",
+                      "@eidolon/webrtc/**"
+                    ],
+                    "message": "Only packages/runtime may import the voice engine and its transport; reach calls through @eidolon/runtime."
                   }
                 ]
               }
@@ -107,6 +125,15 @@
                   {
                     "group": ["@pipedog/*", "@pipedog/**"],
                     "message": "Only packages/runtime may import pipedog; expose what you need through @eidolon/runtime."
+                  },
+                  {
+                    "group": [
+                      "@eidolon/voice",
+                      "@eidolon/voice/**",
+                      "@eidolon/webrtc",
+                      "@eidolon/webrtc/**"
+                    ],
+                    "message": "Only packages/runtime may import the voice engine and its transport; reach calls through @eidolon/runtime."
                   },
                   {
                     "group": ["**/local", "**/local/**"],

@@ -32,6 +32,7 @@ COPY packages/runtime/package.json packages/runtime/
 COPY packages/tools/package.json packages/tools/
 COPY packages/turn/package.json packages/turn/
 COPY packages/usage/package.json packages/usage/
+COPY packages/voice/package.json packages/voice/
 
 # onnxruntime-node's postinstall stays blocked (Bun runs no untrusted lifecycle
 # scripts): on linux/x64 it downloads the CUDA execution provider, and the CPU

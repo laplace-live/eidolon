@@ -5,9 +5,13 @@
   "exports": {
     ".": "./src/index.ts",
     "./catalog": "./src/catalog.ts",
-    "./speech-batch": "./src/speech/batch/index.ts"
+    "./speech-batch": "./src/speech/batch/index.ts",
+    "./stt": "./src/stt/index.ts",
+    "./speech-stream": "./src/speech/stream/index.ts",
+    "./realtime": "./src/realtime/index.ts"
   },
   "dependencies": {
-    "@eidolon/config": "workspace:*"
+    "@eidolon/config": "workspace:*",
+    "@eidolon/core": "workspace:*"
   }
 }

@@ -1,7 +1,7 @@
 // A call's speech recognition, chat model and voice, from whichever providers the persona picks.
 // Chat models talk through @eidolon/providers' fetch clients, handed to pipedog's services in
 // place of the vendor SDKs they would otherwise build.
-import { envOptional, openrouterHeaders } from "@eidolon/config";
+import { openrouterHeaders } from "@eidolon/config";
 import {
   ANTHROPIC_FALLBACK_MODELS,
   AnthropicClient,
@@ -18,6 +18,7 @@ import {
   usageHook,
   voiceOf,
 } from "@eidolon/providers";
+import { spokenLanguage, sttLanguage } from "@eidolon/providers/stt";
 import { AnthropicLLMService } from "@pipedog/anthropic/llm";
 import { CartesiaTTSService } from "@pipedog/cartesia/tts";
 import type { FrameProcessor } from "@pipedog/core/processors/frame_processor";
@@ -58,15 +59,6 @@ function keyed(
 }
 
 /**
- * The language viewers speak with her, for the providers that want one: STT_LANGUAGE, else her
- * videos' language, else Mandarin. `none` lets the provider detect it.
- */
-function spokenLanguage(): string | null {
-  const language = envOptional("STT_LANGUAGE") ?? envOptional("TRANSCRIBE_LANGUAGE") ?? "zh";
-  return language.trim().toLowerCase() === "none" ? null : language.trim();
-}
-
-/**
  * The realtime WebSocket under an account's HTTP API base, where OpenAI's and xAI's APIs put it:
  * `wss://api.openai.com/v1/realtime` for `https://api.openai.com/v1`, and a proxy's beside its own.
  */
@@ -77,21 +69,17 @@ function realtimeUrl(selection: Selection): string {
 export function createStt(): FrameProcessor {
   const selection = keyed("hearing");
   const { apiKey, model } = selection;
+  const language = sttLanguage(selection);
   switch (selection.provider.id) {
     case "soniox": {
-      // Soniox detects the language; only an explicit STT_LANGUAGE becomes a hint.
-      const language = envOptional("STT_LANGUAGE");
-      const settings = new SonioxSTTService.Settings({
-        model,
-        ...(language && language !== "none" ? { language } : {}),
-      });
+      const settings = new SonioxSTTService.Settings({ model, ...(language ? { language } : {}) });
       return meterAudio(new SonioxSTTService({ apiKey, settings }), selection);
     }
     case "deepgram":
       return meterAudio(
         new DeepgramSTTService({
           apiKey,
-          settings: new DeepgramSTTService.Settings({ model, language: spokenLanguage() }),
+          settings: new DeepgramSTTService.Settings({ model, language }),
         }),
         selection,
       );
@@ -99,10 +87,7 @@ export function createStt(): FrameProcessor {
       return meterAudio(
         new ElevenLabsRealtimeSTTService({
           apiKey,
-          settings: new ElevenLabsRealtimeSTTService.Settings({
-            model,
-            language: spokenLanguage(),
-          }),
+          settings: new ElevenLabsRealtimeSTTService.Settings({ model, language }),
         }),
         selection,
       );
@@ -111,7 +96,7 @@ export function createStt(): FrameProcessor {
         new OpenAIRealtimeSTTService({
           apiKey,
           baseUrl: realtimeUrl(selection),
-          settings: new OpenAIRealtimeSTTService.Settings({ model, language: spokenLanguage() }),
+          settings: new OpenAIRealtimeSTTService.Settings({ model, language }),
         }),
         selection,
       );

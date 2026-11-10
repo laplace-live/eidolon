@@ -31,6 +31,7 @@ export {
 } from "./http/json.ts";
 export { type SseEvent, sseEvents } from "./http/sse.ts";
 export { stripMarkup } from "./markup.ts";
+export { Meter } from "./meter.ts";
 export { type ListedModel, listModels, type ModelListing } from "./models.ts";
 export { costOf, priceOf, textUnits, type Units } from "./pricing.ts";
 export {
@@ -63,3 +64,11 @@ export {
   usageRecord,
   withUsageScope,
 } from "./usage.ts";
+export {
+  backoffMs,
+  connectWs,
+  QuickFailureTracker,
+  type WsConnection,
+  type WsData,
+  WsHandshakeError,
+} from "./ws.ts";

@@ -1,0 +1,18 @@
+{
+  "name": "@eidolon/voice",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@eidolon/access": "workspace:*",
+    "@eidolon/chat": "workspace:*",
+    "@eidolon/config": "workspace:*",
+    "@eidolon/context": "workspace:*",
+    "@eidolon/core": "workspace:*",
+    "@eidolon/engine": "workspace:*",
+    "@eidolon/providers": "workspace:*",
+    "onnxruntime-node": "1.30.0"
+  }
+}
