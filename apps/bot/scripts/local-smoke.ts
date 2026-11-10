@@ -1488,19 +1488,14 @@ async function groupChatWalk(walk: Walk): Promise<void> {
   const createStatus = (await posted).status();
   await page.waitForURL(/\/chats\/[0-9a-f-]{36}$/);
   const id = new URL(page.url()).pathname.split("/").at(-1) as string;
-  const title = `${short(first)}、${short(second)}`;
+  // Untitled, the page names it by who is in it.
+  const title = [short(first), short(second)].join(t("en", ", ", {}, "list separator"));
   const headed = await shows(page.getByRole("heading", { name: title, exact: true }));
   const opened = await chatLog(walk, id);
   const live = (await walk.api("GET", `/api/local/chats/${id}/live`)).status;
   checks.add(
     "group chat",
-    createStatus === 201 &&
-      headed &&
-      opened.length === 1 &&
-      opened[0]?.type === "title" &&
-      opened[0].title === title &&
-      live === 204 &&
-      chats.length === asked,
+    createStatus === 201 && headed && opened.length === 0 && live === 204 && chats.length === asked,
     `POST chats ${createStatus} with ${first.id} and ${second.id}, the template-free one; the ` +
       `header ${headed ? "shows" : "doesn't show"} ${title}; the log holds ` +
       `${opened.map((e) => e.type).join(", ") || "nothing"}; GET live ${live}, and the fake ` +
@@ -1560,8 +1555,8 @@ async function groupChatWalk(walk: Walk): Promise<void> {
   const heldBack =
     stops(theirs).includes(`\n${first.name}：`) && stops(hers).includes(`\n${second.name}：`);
   const introduced =
-    systemOf(theirs).includes(`这是群聊，群里还有：${first.name}`) &&
-    systemOf(hers).includes(`这是群聊，群里还有：${second.name}（${SECOND.summary}）`);
+    systemOf(theirs).includes(`这是群聊，群里还有：${first.name}；`) &&
+    systemOf(hers).includes(`这是群聊，群里还有：${second.name}；`);
   checks.add(
     "group mention",
     offered &&

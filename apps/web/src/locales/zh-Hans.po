@@ -1193,7 +1193,6 @@ msgstr "默认"
 
 #: src/components/settings-form/field.tsx
 #: src/components/settings-form/model-picker.tsx
-#: src/features/studio/chat-section.tsx
 msgid "Default ({value})"
 msgstr "默认（{value}）"
 
@@ -1587,7 +1586,6 @@ msgid "Fish has this voice"
 msgstr "Fish 上有这个声音"
 
 #: src/components/settings-form/settings-card.tsx
-#: src/features/studio/chat-section.tsx
 #: src/features/studio/identity-section.tsx
 msgid "Fix the highlighted values first."
 msgstr "请先修正标出的值。"
@@ -1636,10 +1634,6 @@ msgstr "朋友"
 #: src/features/settings/accounts-card.tsx
 msgid "From the environment"
 msgstr "来自环境变量"
-
-#: src/features/studio/chat-section.tsx
-msgid "Games, cats, late-night talks"
-msgstr "游戏、猫、深夜聊天"
 
 #: src/features/settings/route.tsx
 msgid "General"
@@ -3107,7 +3101,7 @@ msgstr "每次检索重排序约花费 $0.002。"
 msgid "Reruns an earlier job"
 msgstr "重新运行了之前的任务"
 
-#: src/features/studio/chat-section.tsx
+#: src/components/settings-form/field.tsx
 msgid "Reset"
 msgstr "重置"
 
@@ -3224,7 +3218,6 @@ msgid "Saved"
 msgstr "已保存"
 
 #: src/components/settings-form/settings-card.tsx
-#: src/features/studio/chat-section.tsx
 #: src/features/studio/identity-section.tsx
 msgid "Saved for {name}"
 msgstr "保存到{name}的设置中"
@@ -3250,7 +3243,6 @@ msgid "Saved settings wait for a restart."
 msgstr "已保存的设置需要重启后生效。"
 
 #: src/components/settings-form/settings-card.tsx
-#: src/features/studio/chat-section.tsx
 #: src/features/studio/identity-section.tsx
 msgid "Saved. Restart Eidolon to apply it."
 msgstr "已保存。重启 Eidolon 后生效。"
@@ -3395,7 +3387,6 @@ msgid "Settings for {name} alone, such as her voice and chat model, are in <0>he
 msgstr "只属于{name}的设置（例如声音和对话模型）在<0>她的工作室</0>中。"
 
 #: src/components/settings-form/settings-card.tsx
-#: src/features/studio/chat-section.tsx
 #: src/features/studio/identity-section.tsx
 msgid "Settings saved."
 msgstr "设置已保存。"

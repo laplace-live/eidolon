@@ -271,7 +271,7 @@ director, voice messages and the API are in [chat.md](chat.md).
     list is the page until a chat opens, and a sheet after.
   - **New Chat** ticks one to six personas, the active one listed first, then **Start Chat** or
     **Start Group Chat**. One persona's greeting then streams in, the way a call greets; a group
-    starts quiet, titled with their short names.
+    starts quiet, named by the short names of whoever is in it until it is renamed.
   - A row and the chat's header each have a menu with **Rename** and **Delete**. Delete confirms in
     the page. The header's menu also has **Chat Settings**, a sheet saved as soon as a value is
     picked: **Reply Mode** (Auto, Text or Voice), which overrides every persona's own until it is
@@ -281,7 +281,9 @@ director, voice messages and the API are in [chat.md](chat.md).
   - Each run of a persona's lines starts with her avatar and short name, and the streaming text
     and the thinking dots name whoever answers next, from the decision before her turn.
   - The composer offers the participants' names after `@` (arrow keys, Enter or Tab, Escape),
-    inserting one `parseMentions` reads back, and a quiet line names whom the message mentions.
+    inserting one `parseMentions` reads back: her short name, or her name when another
+    participant answers to the short one too. A pick closes the list, so the next Enter sends, and
+    a quiet line names whom the message mentions.
   - **Stop** and the thinking dots stay up across the whole chain, while the director decides
     between turns.
   - A chain that ends with no one answering shows nothing more.

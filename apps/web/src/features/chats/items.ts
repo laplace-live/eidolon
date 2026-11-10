@@ -26,7 +26,7 @@ type PersonaItem = {
   readonly sentAsText: boolean;
   readonly interrupted: boolean;
   readonly cutOff: CutOff | null;
-  /** The decision that last chose her; null for a greeting. */
+  /** The decision her turn answered; null for a greeting, or a late photo of unknown turn. */
   readonly reason: ReplyReason | null;
 };
 
@@ -56,7 +56,13 @@ export function chatItems(events: readonly ChatEvent[]): ChatItem[] {
   const items: ChatItem[] = [];
   const speakers = new Map<number, Speaker>();
   const chosen = new Map<ParticipantId, ReplyReason>();
+  // The decision each turn began under, by turn.
+  const turns = new Map<string, ReplyReason | null>();
+  let previous: ChatEvent | undefined;
   for (const event of events) {
+    if ("turn" in event && !turns.has(event.turn)) {
+      turns.set(event.turn, chosen.get(event.persona) ?? null);
+    }
     if (event.type === "decision") {
       const reason = reasonOf(event, speakers);
       for (const reply of event.replies) chosen.set(reply.persona, reason);
@@ -74,6 +80,13 @@ export function chatItems(events: readonly ChatEvent[]): ChatItem[] {
         voice !== null ||
         event.cutOff !== undefined
       ) {
+        // Photos that land after her interrupted turn follow its result, when it brought one, and
+        // a decision since may have chosen her again: they take her turn's decision, or none.
+        const late = event.text === "" && !event.interrupted && event.cutOff === undefined;
+        const turn =
+          late && previous?.type === "tool-result" && previous.persona === event.speaker.id
+            ? previous.turn
+            : null;
         items.push({
           kind: "persona",
           seq: event.seq,
@@ -84,7 +97,12 @@ export function chatItems(events: readonly ChatEvent[]): ChatItem[] {
           sentAsText: false,
           interrupted: event.interrupted === true,
           cutOff: event.cutOff ?? null,
-          reason: chosen.get(event.speaker.id) ?? null,
+          reason:
+            turn !== null
+              ? (turns.get(turn) ?? null)
+              : late
+                ? null
+                : (chosen.get(event.speaker.id) ?? null),
         });
       }
     } else if (event.type === "turn-failed") {
@@ -98,6 +116,7 @@ export function chatItems(events: readonly ChatEvent[]): ChatItem[] {
         items.push({ kind: "failed", seq: event.seq, persona: event.persona, error: event.error });
       }
     }
+    previous = event;
   }
   return items;
 }

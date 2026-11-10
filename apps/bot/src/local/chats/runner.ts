@@ -16,7 +16,7 @@ import {
   stampEvents,
 } from "@eidolon/chat";
 import { JsonlChatStore } from "@eidolon/chat/jsonl";
-import { dataHome, errorText, logger, readPersonaIdentity } from "@eidolon/config";
+import { dataHome, errorText, logger } from "@eidolon/config";
 import {
   type ChatOutput,
   type ChatRequest,
@@ -129,7 +129,8 @@ export class ChatRunner {
 
   /**
    * A new chat of personas the caller validated. One persona's greeting starts at once, and GET
-   * live streams it; a group chat doesn't greet, and is titled with their short names.
+   * live streams it; a group chat doesn't greet. Neither gets a title: the page names a chat by who
+   * is in it now until one is given.
    */
   async create(participants: readonly ParticipantId[]): Promise<string> {
     const header: ChatHeader = {
@@ -142,10 +143,7 @@ export class ChatRunner {
     const chat = this.#chat(header.id);
     chat.lastSeq = 0;
     const [persona] = participants;
-    if (participants.length > 1) {
-      const title = participants.map((p) => readPersonaIdentity(p).shortName).join("、");
-      await this.#append(header.id, chat, [{ type: "title", title }]);
-    } else if (persona !== undefined) {
+    if (participants.length === 1 && persona !== undefined) {
       const live = new LiveTurn();
       chat.live = live;
       const { signal } = live.controller;

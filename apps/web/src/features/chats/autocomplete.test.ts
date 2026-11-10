@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { type MentionTarget, parseMentions } from "@eidolon/chat";
-import { insertMention, mentionAt, mentionName, mentionOptions } from "./autocomplete";
+import {
+  EMPTY_DRAFT,
+  insertMention,
+  mentionAt,
+  mentionName,
+  mentionOptions,
+  picked,
+  retyped,
+  suggestions,
+} from "./autocomplete";
 
 const KEN: MentionTarget = { id: "ken", name: "Kenny Lin", shortName: "Ken" };
 const MIO: MentionTarget = { id: "mio", name: "澪", shortName: "" };
@@ -58,15 +67,57 @@ describe("insertMention", () => {
 
   test("inserts a name parseMentions reads back", () => {
     for (const target of ALL) {
-      const text = "问问@";
-      const { text: done } = insertMention(text, mentionAt(text, 3)!, mentionName(target));
-      expect(parseMentions(done, ALL)).toEqual([target.id]);
+      for (const name of [target.name, target.shortName].filter((name) => name !== "")) {
+        const text = "问问@";
+        const { text: done } = insertMention(text, mentionAt(text, 3)!, name);
+        expect(parseMentions(done, ALL)).toEqual([target.id]);
+      }
     }
   });
 });
 
-test("a pick inserts her short name, else her name", () => {
-  expect(mentionName(KEN)).toBe("Ken");
-  expect(mentionName(MIO)).toBe("澪");
-  expect(mentionName({ ...MIO, shortName: "  " })).toBe("澪");
+describe("picking a mention", () => {
+  const TAKAGI: MentionTarget = { id: "takagi", name: "Ken Takagi", shortName: "Ken" };
+
+  /** The draft after typing `text` and picking `target` for its mention. */
+  function pick(text: string, target: MentionTarget, room: readonly MentionTarget[]) {
+    const draft = retyped(EMPTY_DRAFT, text, text.length);
+    const { at } = suggestions(draft, room);
+    return picked(draft, at!, mentionName(target, room));
+  }
+
+  test("inserts her full name where her short name is someone else's too", () => {
+    const room = [TAKAGI, KEN, MILKY];
+    for (const target of room) {
+      expect(parseMentions(pick("问问@", target, room).text, room)).toEqual([target.id]);
+    }
+    expect(room.map((target) => mentionName(target, room))).toEqual([
+      "Ken Takagi",
+      "Kenny Lin",
+      "米绿",
+    ]);
+    expect(mentionName(TAKAGI, [TAKAGI, MILKY])).toBe("Ken");
+    // Her short name as someone's full name, in any case.
+    expect(mentionName(TAKAGI, [TAKAGI, { id: "k", name: "KEN", shortName: "" }])).toBe(
+      "Ken Takagi",
+    );
+  });
+
+  test("closes its suggestions, though her name still begins with what is typed", () => {
+    const room = [TAKAGI, MIO];
+    expect(suggestions(retyped(EMPTY_DRAFT, "@Ke", 3), room).options).toEqual([TAKAGI]);
+    const done = pick("@Ke", TAKAGI, room);
+    expect(done.text).toBe("@Ken ");
+    expect(suggestions(done, room).options).toEqual([]);
+    // Typing on in that mention keeps them closed; a new @ opens its own.
+    expect(suggestions(retyped(done, "@Ken T", 6), room).options).toEqual([]);
+    expect(suggestions(retyped(done, "@Ken @", 6), room).options).toEqual(room);
+  });
+
+  test("an @ typed over a picked mention, in its place, opens again", () => {
+    const room = [TAKAGI, MIO];
+    const done = pick("@Ke", TAKAGI, room);
+    expect(suggestions(retyped(done, "@", 1), room).options).toEqual(room);
+    expect(suggestions(retyped(done, "@澪", 2), room).options).toEqual([MIO]);
+  });
 });

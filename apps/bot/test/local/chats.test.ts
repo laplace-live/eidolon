@@ -987,7 +987,7 @@ describe("a voice message", () => {
       201,
     );
     rmSync(join(dataHome(), "personas", "beta"), { recursive: true });
-    expect((await log(led)).events).toHaveLength(1);
+    expect((await log(led)).header.participants).toEqual(["beta", PERSONA]);
     expect(await errorCode(await voice(led))).toEqual([404, "unknown-persona"]);
   });
 
@@ -1175,16 +1175,18 @@ describe("a chat", () => {
 });
 
 describe("a group chat", () => {
-  test("doesn't greet, and is titled with their short names", async () => {
+  test("doesn't greet, and stores no title, so the name the page gives it follows who is in it", async () => {
     persona("beta", "贝塔小姐", "贝塔");
+    persona("gamma", "伽马");
     const id = await group("beta");
     expect((await server.call("GET", `/chats/${id}/live`)).status).toBe(204);
     expect(requests).toEqual([]);
     const { header, events } = await log(id);
     expect(header.participants).toEqual([PERSONA, "beta"]);
-    expect(events).toMatchObject([{ seq: 1, type: "title", title: "奶绿、贝塔" }]);
+    expect(events).toEqual([]);
+    await server.call("POST", `/chats/${id}/participants`, { add: ["gamma"], remove: ["beta"] });
     expect(await json<ChatSummary[]>(await server.call("GET", "/chats"))).toMatchObject([
-      { id, title: "奶绿、贝塔", participants: [PERSONA, "beta"], lastText: null, lastSeq: 1 },
+      { id, title: null, participants: [PERSONA, "gamma"], lastText: null, lastSeq: 1 },
     ]);
   });
 
@@ -1201,30 +1203,28 @@ describe("a group chat", () => {
       await server.call("POST", `/chats/${id}/messages`, { text: "大家好" }),
     ).all();
     expect(shape(lines)).toEqual([
-      "events 2:message",
-      "events 3:decision",
+      "events 1:message",
+      "events 2:decision",
       "started",
       "delta 奶绿",
-      "events 4:message",
+      "events 3:message",
       "ended",
       "started",
       "delta 贝塔",
-      "events 5:message",
+      "events 4:message",
       "ended",
-      "events 6:decision",
+      "events 5:decision",
       "started",
       "delta 奶绿",
-      "events 7:message",
+      "events 6:message",
       "ended",
     ]);
     const { events } = await log(id);
     expectContiguous(events);
-    expect(events.slice(1)).toEqual(
-      lines.flatMap((line) => (line.type === "events" ? line.events : [])),
-    );
-    expect(events[2]).toMatchObject({
+    expect(events).toEqual(lines.flatMap((line) => (line.type === "events" ? line.events : [])));
+    expect(events[1]).toMatchObject({
       type: "decision",
-      after: 2,
+      after: 1,
       replies: [
         { persona: PERSONA, mode: "text" },
         { persona: "beta", mode: "text" },
@@ -1238,10 +1238,10 @@ describe("a group chat", () => {
       [{ kind: "persona", id: "beta" }, "贝塔在呢"],
       [{ kind: "persona", id: PERSONA }, "奶绿来啦"],
     ]);
-    expect(answers.map((answer) => answer.after)).toEqual([2]);
-    expect(answers[0]?.chat.events.map((event) => event.seq)).toEqual([1, 2]);
+    expect(answers.map((answer) => answer.after)).toEqual([1]);
+    expect(answers[0]?.chat.events.map((event) => event.seq)).toEqual([1]);
     // Each turn read the chat with every line before it stored.
-    expect(requests.map((request) => request.chat.events.length)).toEqual([3, 4, 6]);
+    expect(requests.map((request) => request.chat.events.length)).toEqual([2, 3, 5]);
     expect((await server.call("GET", `/chats/${id}/live`)).status).toBe(204);
   });
 
@@ -1257,19 +1257,19 @@ describe("a group chat", () => {
     ).all();
     expect(answers[0]?.signal.aborted).toBe(true);
     expect(shape(await first.all())).toEqual([
-      "events 2:message",
-      "events 3:decision",
+      "events 1:message",
+      "events 2:decision",
       "started",
       "delta 我先说",
-      "events 4:message",
+      "events 3:message",
       "ended",
     ]);
     expect(shape(second)).toEqual([
-      "events 5:message",
-      "events 6:decision",
+      "events 4:message",
+      "events 5:decision",
       "started",
       "delta 收到",
-      "events 7:message",
+      "events 6:message",
       "ended",
     ]);
     expect(requests.map((request) => request.persona)).toEqual([PERSONA, PERSONA]);
@@ -1295,13 +1295,13 @@ describe("a group chat", () => {
       await server.call("POST", `/chats/${id}/messages`, { text: "坏了" }),
     ).all();
     expect(shape(lines)).toEqual([
-      "events 2:message",
-      "events 3:decision",
+      "events 1:message",
+      "events 2:decision",
       "started",
-      "events 4:turn-failed",
+      "events 3:turn-failed",
       "ended",
     ]);
-    expect((await log(id)).events[3]).toMatchObject({
+    expect((await log(id)).events[2]).toMatchObject({
       type: "turn-failed",
       persona: "beta",
       turn: "t-beta",
@@ -1317,19 +1317,19 @@ describe("a group chat", () => {
     const lines = await new Lines(
       await server.call("POST", `/chats/${id}/messages`, { text: "出错" }),
     ).all();
-    expect(shape(lines)).toEqual(["events 2:message", "error"]);
+    expect(shape(lines)).toEqual(["events 1:message", "error"]);
     expect(lines.at(-1)).toMatchObject({ type: "error", code: "internal" });
     expect(logs.lines()).toContainEqual(expect.stringContaining("the reply failed"));
-    expect((await log(id)).events.map((event) => event.type)).toEqual(["title", "message"]);
+    expect((await log(id)).events.map((event) => event.type)).toEqual(["message"]);
     const next = await new Lines(
       await server.call("POST", `/chats/${id}/messages`, { text: "再来" }),
     ).all();
     expect(shape(next)).toEqual([
-      "events 3:message",
-      "events 4:decision",
+      "events 2:message",
+      "events 3:decision",
       "started",
       "delta 收到",
-      "events 5:message",
+      "events 4:message",
       "ended",
     ]);
   });
@@ -1340,14 +1340,14 @@ describe("a group chat", () => {
     const change = (body: unknown) => server.call("POST", `/chats/${id}/participants`, body);
     expect(await json(await change({ add: ["gamma"], remove: ["beta"] }))).toEqual({ ok: true });
     expect((await log(id)).events.at(-1)).toMatchObject({
-      seq: 2,
+      seq: 1,
       type: "participants",
       added: ["gamma"],
       removed: ["beta"],
     });
     expect(await json(await change({ remove: ["gamma"] }))).toEqual({ ok: true });
     expect((await log(id)).events.at(-1)).toEqual({
-      seq: 3,
+      seq: 2,
       at: expect.any(Number),
       type: "participants",
       removed: ["gamma"],
@@ -1392,11 +1392,11 @@ describe("a group chat", () => {
     rmSync(join(dataHome(), "personas", "beta"), { recursive: true });
     const post = () => server.call("POST", `/chats/${id}/messages`, { text: "还在吗" });
     expect(await errorCode(await post())).toEqual([404, "unknown-persona"]);
-    expect((await log(id)).events).toHaveLength(1);
+    expect((await log(id)).events).toHaveLength(0);
     expect(
       await json(await server.call("POST", `/chats/${id}/participants`, { remove: ["beta"] })),
     ).toEqual({ ok: true });
-    expect(shape(await new Lines(await post()).all()).at(-2)).toBe("events 5:message");
+    expect(shape(await new Lines(await post()).all()).at(-2)).toBe("events 4:message");
   });
 
   test("the chain limit is kept as a settings event", async () => {
@@ -1488,18 +1488,16 @@ test("the engine's runChat answers through the runner, each turn on the chat as 
     ).all();
     const { events } = await json<ChatContents>(await engine.call("GET", `/chats/${id}`));
     expectContiguous(events);
-    expect(events.slice(1)).toEqual(
-      lines.flatMap((line) => (line.type === "events" ? line.events : [])),
-    );
+    expect(events).toEqual(lines.flatMap((line) => (line.type === "events" ? line.events : [])));
     // Beta answers the mention, Milky Green the name in Beta's line, and no one hers.
     expect(
       events.flatMap((event) =>
         event.type === "decision" ? [[event.after, event.replies.map((r) => r.persona)]] : [],
       ),
     ).toEqual([
-      [2, ["beta"]],
-      [4, [PERSONA]],
-      [6, []],
+      [1, ["beta"]],
+      [3, [PERSONA]],
+      [5, []],
     ]);
     expect(messages(events).map((m) => [m.speaker, m.text])).toEqual([
       [{ kind: "user" }, "@贝塔 在吗"],

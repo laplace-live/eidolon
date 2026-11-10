@@ -13,6 +13,7 @@ import { reread } from "./reread";
 import {
   IDLE,
   type LiveState,
+  mayRunOn,
   mergeEvents,
   reaches,
   reduceLive,
@@ -70,6 +71,7 @@ export function useChat(id: string): ChatTurns {
       let turn: string | null = null;
       let ended = false;
       let broke = false;
+      let received = false;
       let following = false;
       const carry = () => {
         if (following) return;
@@ -79,6 +81,7 @@ export function useChat(id: string): ChatTurns {
       if (key !== null) carry();
       try {
         for await (const line of open(controller.signal)) {
+          received = true;
           carry();
           if (key !== null) sends.current.accept(key);
           const superseded = sends.current.superseded(opened);
@@ -109,8 +112,7 @@ export function useChat(id: string): ChatTurns {
       // The log a turn ends with, and a turn that ended between the page's two requests.
       void reread(queryClient, chatQuery(id).queryKey);
       void queryClient.invalidateQueries({ queryKey: chatsQuery.queryKey, exact: true });
-      // A group's reply goes on past a turn's end, so a stream that broke after one may have more.
-      if (turn !== null && (!ended || broke)) {
+      if (mayRunOn({ turn, ended, broke, received })) {
         if (rejoin && !sends.current.superseded(opened)) {
           await follow((signal) => followLive(id, signal), null, false);
         }

@@ -1193,7 +1193,6 @@ msgstr "Default"
 
 #: src/components/settings-form/field.tsx
 #: src/components/settings-form/model-picker.tsx
-#: src/features/studio/chat-section.tsx
 msgid "Default ({value})"
 msgstr "Default ({value})"
 
@@ -1587,7 +1586,6 @@ msgid "Fish has this voice"
 msgstr "Fish has this voice"
 
 #: src/components/settings-form/settings-card.tsx
-#: src/features/studio/chat-section.tsx
 #: src/features/studio/identity-section.tsx
 msgid "Fix the highlighted values first."
 msgstr "Fix the highlighted values first."
@@ -1636,10 +1634,6 @@ msgstr "Friends"
 #: src/features/settings/accounts-card.tsx
 msgid "From the environment"
 msgstr "From the environment"
-
-#: src/features/studio/chat-section.tsx
-msgid "Games, cats, late-night talks"
-msgstr "Games, cats, late-night talks"
 
 #: src/features/settings/route.tsx
 msgid "General"
@@ -3107,7 +3101,7 @@ msgstr "Reranking costs about $0.002 per search."
 msgid "Reruns an earlier job"
 msgstr "Reruns an earlier job"
 
-#: src/features/studio/chat-section.tsx
+#: src/components/settings-form/field.tsx
 msgid "Reset"
 msgstr "Reset"
 
@@ -3224,7 +3218,6 @@ msgid "Saved"
 msgstr "Saved"
 
 #: src/components/settings-form/settings-card.tsx
-#: src/features/studio/chat-section.tsx
 #: src/features/studio/identity-section.tsx
 msgid "Saved for {name}"
 msgstr "Saved for {name}"
@@ -3250,7 +3243,6 @@ msgid "Saved settings wait for a restart."
 msgstr "Saved settings wait for a restart."
 
 #: src/components/settings-form/settings-card.tsx
-#: src/features/studio/chat-section.tsx
 #: src/features/studio/identity-section.tsx
 msgid "Saved. Restart Eidolon to apply it."
 msgstr "Saved. Restart Eidolon to apply it."
@@ -3395,7 +3387,6 @@ msgid "Settings for {name} alone, such as her voice and chat model, are in <0>he
 msgstr "Settings for {name} alone, such as her voice and chat model, are in <0>her studio</0>."
 
 #: src/components/settings-form/settings-card.tsx
-#: src/features/studio/chat-section.tsx
 #: src/features/studio/identity-section.tsx
 msgid "Settings saved."
 msgstr "Settings saved."

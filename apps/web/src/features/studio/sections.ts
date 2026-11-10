@@ -34,7 +34,7 @@ export const CARD_PATHS = {
     "hearing.language",
     ["mind.provider", "mind.model"],
   ],
-  chat: ["chat.replyMode", ["chat.interests", "chat.talkativeness"]],
+  chat: ["chat.replyMode", "chat.interests", "chat.talkativeness"],
   memory: [
     ["memory.provider", "memory.model"],
     ["memory.searchLimit", "memory.searchThreshold"],

@@ -133,8 +133,6 @@ class Turn {
   #cutOff: CutOff | undefined;
   /** Her message is built: photos saved from now on go out on a later one. */
   #sealed = false;
-  /** The chat's other personas; null in a chat of one. */
-  #group: Group | null = null;
   /** The voice her voice-style tool switched this voice message to. */
   #voice: string | undefined;
   /** Her voice message's audio, once spoken and saved. */
@@ -211,10 +209,11 @@ class Turn {
   async #respond(): Promise<void> {
     const { chat, viewer, kickoff } = this.#request;
     const signal = this.#signal;
-    this.#group = groupOf(chat, this.#persona);
+    const viewerName = viewer.uname ?? "";
+    const group = groupOf(chat, this.#persona, viewerName);
     const parts = await raceAbort(
       this.#deps.parts(this.#persona, viewer, chat, {
-        others: this.#group?.members ?? [],
+        others: group?.others ?? [],
         voice: this.#request.mode === "voice",
       }),
       signal,
@@ -227,7 +226,7 @@ class Turn {
       {
         windowMessages: CHAT_WINDOW_MESSAGES,
         nameOf: (id) => readPersonaIdentity(id).name,
-        viewerName: viewer.uname ?? "",
+        viewerName,
       },
     );
     const conversation = new TurnConversation(messages, {
@@ -240,8 +239,8 @@ class Turn {
       this.#record([{ type: "kickoff", persona: this.#persona, turn: this.#id, content }]);
       conversation.append({ role: "user", content });
     }
-    await this.#enrich(parts, conversation);
-    await this.#converse(parts, mind, conversation);
+    await this.#enrich(parts, conversation, group);
+    await this.#converse(parts, mind, conversation, group);
   }
 
   /**
@@ -283,10 +282,14 @@ class Turn {
   }
 
   /** The gate, then each provider in turn, as a call's pipeline runs them ahead of the LLM. */
-  async #enrich(parts: PersonaParts, conversation: TurnConversation): Promise<void> {
+  async #enrich(
+    parts: PersonaParts,
+    conversation: TurnConversation,
+    group: Group | null,
+  ): Promise<void> {
     const signal = this.#signal;
     const metadata: FrameMetadata = {};
-    if (this.#group !== null) metadata[MEM0_STORE_KEY] = this.#group.memory;
+    if (group !== null) metadata[MEM0_STORE_KEY] = group.memory;
     parts.gate?.attach(conversation.getMessages(), metadata, conversation.turn);
     for (const { label, provider } of parts.providers) {
       try {
@@ -314,9 +317,13 @@ class Turn {
     this.#record(conversation.takeRecorded());
   }
 
-  async #converse(parts: PersonaParts, mind: Mind, conversation: TurnConversation): Promise<void> {
+  async #converse(
+    parts: PersonaParts,
+    mind: Mind,
+    conversation: TurnConversation,
+    group: Group | null,
+  ): Promise<void> {
     const signal = this.#signal;
-    const group = this.#group;
     const cut = group === null ? null : new SpeakerCut(group.names);
     for (let round = 1; ; round++) {
       const hidden = conversation.hiddenTools;

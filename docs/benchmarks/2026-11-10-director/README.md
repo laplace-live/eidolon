@@ -19,7 +19,8 @@ has run yet. Real `decision` events from group chats replace them once there are
 | 林小满 (`xiaoman`) | 做饭、美食、数码、编程、科幻 | 0.3 |
 
 Each line has its participants, its history and its latest line, from the viewer or a persona.
-Its labels are:
+Where two personas both answered the viewer's last line, as one decision can choose,
+`viewer_replies` is 2. Its labels are:
 
 - **`addressed`:** who the line speaks to, by name or by answering her. It is absent when the line
   speaks to the room, or when nobody could tell.
@@ -33,7 +34,8 @@ A line in `history` or `latest` is `[speaker, text]`, or `[speaker, text, "voice
 message.
 
 `score.ts` derives the rest the way a chat does:
-- the hop is the number of persona lines since the viewer's last one;
+- the hop counts decisions, as `runChat` does: 0 for the viewer's line, 1 for the last of her
+  replies, then one more for each persona line after them;
 - the mentions come from `parseMentions` on the latest line.
 
 | Kind | Lines | What the latest line is |
@@ -90,8 +92,8 @@ the hop's raise taken off, so all of them compare with the base threshold.
 | --- | --- | --- | ---: | --- |
 | `addressed` | 57: 0.06 / 0.93 / 0.98 | 136: −0.29 / 0.02 / 0.40 | 3 at 0.5 | 2, from 0.41 to 0.44 |
 | `interested`, the raw noul | 71: 0.27 / 0.87 / 0.97 | 153: 0.03 / 0.09 / 0.90 | | 8, from 0.46 to 0.53 |
-| `interested` × talkativeness | 15: 0.16 / 0.37 / 0.85 | 55: −0.21 / 0.04 / 0.15 | 6 at 0.3 | 0, from 0.15 to 0.16 |
-| `invites_reply`, after a persona | 26: 0.05 / 0.77 / 0.88 | 9: −0.18 / 0.02 / 0.24 | 11 at 0.5, 3 at 0.3 | 1, from 0.25 to 0.27 |
+| `interested` × talkativeness | 15: 0.16 / 0.37 / 0.85 | 55: −0.11 / 0.04 / 0.15 | 6 at 0.3 | 0, from 0.15 to 0.16 |
+| `invites_reply`, after a persona | 26: 0.05 / 0.77 / 0.88 | 9: −0.18 / 0.08 / 0.24 | 11 at 0.5, 3 at 0.3 | 1, from 0.25 to 0.27 |
 | `invites_reply`, after the viewer (unused) | 59: 0.44 / 0.94 / 0.98 | 6: 0.07 / 0.12 / 0.22 | | 0, from 0.23 to 0.44 |
 
 The interest product is scored only where interest decides: lines with no mention and nobody

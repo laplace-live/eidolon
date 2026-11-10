@@ -22,8 +22,8 @@ export function usePersonaOf(): (id: ParticipantId) => ChatPersona {
   );
 }
 
-/** What a line names her by: her short name, else her name. */
-export function shortNameOf(persona: ChatPersona): string {
+/** What a line, or an @-mention, names her by: her short name, else her name. */
+export function shortNameOf(persona: Pick<ChatPersona, "name" | "shortName">): string {
   return persona.shortName.trim() || persona.name;
 }
 

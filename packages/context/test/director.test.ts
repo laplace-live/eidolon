@@ -348,6 +348,17 @@ describe("after the viewer's line", () => {
     const quiet = [persona("a", "A", 0), persona("b", "B", 0.1)];
     expect(await who({ interested_a: 1 }, line, { participants: quiet })).toEqual(["b"]);
   });
+
+  test("the forced answer passes over a persona at 0 unless everyone is", async () => {
+    const room = [persona("chatty", "Chatty", 0.5), persona("mute", "Mute", 0)];
+    // Marked down, Chatty's 0.1 × 0.5 − 0.1 ranks under Mute's 0.
+    const lines = [viewer("hi"), from("chatty", "嗨"), viewer("嗯嗯")];
+    expect(
+      await who({ interested_chatty: 0.1, interested_mute: 1 }, lines, { participants: room }),
+    ).toEqual(["chatty"]);
+    const silent = [persona("a", "A", 0), persona("b", "B", 0)];
+    expect(await who({ interested_b: 1 }, line, { participants: silent })).toHaveLength(1);
+  });
 });
 
 describe("after a persona's line", () => {
@@ -486,6 +497,13 @@ describe("falling back to rules", () => {
     expect(named.replies.map((r) => r.persona)).toEqual(["ken", "milky"]);
     const late = await rules([viewer("问一下奶绿，然后露比")], { participants: [RUBY, MILKY] });
     expect(late.replies.map((r) => r.persona)).toEqual(["milky", "ruby"]);
+  });
+
+  test("a Latin name is named only as a whole word", async () => {
+    const lines = [viewer("hi"), from("milky", "Kenny说的token好贵")];
+    expect((await rules(lines, { hop: 1 })).replies).toEqual([]);
+    const named = [viewer("hi"), from("milky", "问问Ken吧")];
+    expect((await rules(named, { hop: 1 })).replies.map((r) => r.persona)).toEqual(["ken"]);
   });
 
   test("then, after the viewer's line only, the most talkative", async () => {

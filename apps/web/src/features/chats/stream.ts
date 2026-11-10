@@ -244,6 +244,24 @@ export class Sends {
   }
 }
 
+/** How a stream stopped: the turn it started last, whether that ended, and whether it broke. */
+export interface StreamEnd {
+  readonly turn: string | null;
+  readonly ended: boolean;
+  readonly broke: boolean;
+  /** It carried a line before it stopped. */
+  readonly received: boolean;
+}
+
+/**
+ * Whether the reply a stream carried may still be running: a turn it started never ended, or it
+ * broke once it carried anything, since a group's reply goes on between turns and before the
+ * first, while the director decides.
+ */
+export function mayRunOn({ turn, ended, broke, received }: StreamEnd): boolean {
+  return (turn !== null && !ended) || (broke && received);
+}
+
 /**
  * Whether a stream's line reaches the reducer. A send supersedes every stream open before it, and
  * its own carries her reply from its start: a superseded one only stores what it brings, whether

@@ -2,6 +2,7 @@
 // groups, option labels, flags and why a value is refused.
 import type { MessageDescriptor } from "@lingui/core";
 import { msg } from "@lingui/core/macro";
+import { REPLY_MODE_LABELS } from "@/features/chats/labels";
 import type { RoleId } from "@/lib/providers";
 
 /** Each row's title. */
@@ -139,6 +140,7 @@ export const SETTING_OPTION_LABELS: Readonly<
     s1: msg`s1 (Retires 2026-12-31)`,
     "s2.1-pro-free": msg`s2.1-pro-free (Free, under Fair Use)`,
   },
+  "chat.replyMode": REPLY_MODE_LABELS,
 };
 
 /** The headings a card's rows are grouped under. */

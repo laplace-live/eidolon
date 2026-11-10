@@ -7,7 +7,6 @@ import type {
   ChatStreamLine,
   ParticipantId,
 } from "@eidolon/chat";
-import type { GroupMember } from "@eidolon/context";
 import type { ContextProvider, LlmTool, ToolSchema, TurnGate } from "@eidolon/core";
 import type { AudioClip, Speech, Transcript } from "@eidolon/providers/speech-batch";
 
@@ -16,7 +15,7 @@ export interface MindRequest {
   /** OpenAI-shaped, with no system message: `system` carries it. */
   readonly messages: readonly unknown[];
   readonly tools: readonly ToolSchema[];
-  /** Ends her reply where one appears, unwritten; OpenAI takes at most 4. */
+  /** Ends her reply where one appears, unwritten, where her provider takes it; at most 4. */
   readonly stop?: readonly string[];
   readonly signal: AbortSignal;
 }
@@ -85,8 +84,8 @@ export interface PersonaParts {
 }
 
 export interface PartsOptions {
-  /** The chat's other personas, whom her system instruction names. */
-  readonly others?: readonly GroupMember[];
+  /** The names of the chat's other personas, which her system instruction lists. */
+  readonly others?: readonly string[];
   /** The voice variant: her voice-style tool, and its hint in her system instruction. */
   readonly voice?: boolean;
 }

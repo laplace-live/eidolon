@@ -1,40 +1,41 @@
-// What changes in her turn while the chat holds other personas: the prefix's line naming them, stop
-// sequences and a cut for a line she writes as one of them, and the lines Mem0 may store.
+// What changes in her turn while the chat holds other personas or their lines: the prefix's line
+// naming them, stop sequences and a cut for a line she writes as one of them or as the viewer, and
+// the lines Mem0 may store.
 import {
   CHAT_WINDOW_MESSAGES,
   type ChatEvent,
   type ChatHeader,
   type ParticipantId,
   summarize,
+  viewerLabel,
 } from "@eidolon/chat";
 import { readPersonaIdentity } from "@eidolon/config";
-import type { GroupMember } from "@eidolon/context";
 
 /** Stop sequences are `\n名字：` and `\n名字:`, and OpenAI takes at most 4. */
 const STOP_SPEAKERS = 2;
 
 export interface Group {
-  /** The others, as her prefix introduces them. */
-  readonly members: readonly GroupMember[];
+  /** The names of the others in the chat now, as her prefix lists them. */
+  readonly others: readonly string[];
   /** Ends her reply at a line written as one of the two others heard from last. */
   readonly stop: readonly string[];
-  /** Every other's name and short name, which `SpeakerCut` cuts at. */
+  /** What `SpeakerCut` cuts at: every other's name and short name, and the viewer's label. */
   readonly names: readonly string[];
   /** What Mem0 stores of the chat: the viewer's lines and hers, never another persona's. */
   readonly memory: readonly { readonly role: "user" | "assistant"; readonly content: string }[];
 }
 
-/** Persona `persona`'s group in the chat as it stands, or null while she is its only persona. */
+/**
+ * Persona `persona`'s group in the chat as it stands, or null while no other persona is in it or
+ * has a line in it: one removed leaves her lines in the view. `viewerName` is her view's, which
+ * labels the viewer's lines.
+ */
 export function groupOf(
   chat: { readonly header: ChatHeader; readonly events: readonly ChatEvent[] },
   persona: ParticipantId,
+  viewerName: string,
 ): Group | null {
-  const others = new Map(
-    summarize(chat.header, chat.events)
-      .participants.filter((id) => id !== persona)
-      .map((id) => [id, readPersonaIdentity(id)]),
-  );
-  if (others.size === 0) return null;
+  const present = summarize(chat.header, chat.events).participants.filter((id) => id !== persona);
   const heard: ParticipantId[] = [];
   const memory: { role: "user" | "assistant"; content: string }[] = [];
   for (const event of chat.events) {
@@ -44,14 +45,18 @@ export function groupOf(
       memory.push({ role: "user", content: event.text });
     } else if (speaker.id === persona) {
       memory.push({ role: "assistant", content: event.text });
-    } else if (others.has(speaker.id)) {
+    } else {
       heard.push(speaker.id);
     }
   }
-  const lastHeard = [...new Set([...heard.reverse(), ...others.keys()])].slice(0, STOP_SPEAKERS);
+  const others = new Map(
+    [...new Set([...present, ...heard])].map((id) => [id, readPersonaIdentity(id)]),
+  );
+  if (others.size === 0) return null;
+  const lastHeard = [...new Set([...heard.reverse(), ...present])].slice(0, STOP_SPEAKERS);
   const identities = [...others.values()];
   return {
-    members: identities.map(({ name, summary }) => ({ name, summary })),
+    others: present.map((id) => others.get(id)?.name ?? id),
     stop: [
       ...new Set(
         lastHeard.flatMap((id) => {
@@ -60,15 +65,18 @@ export function groupOf(
         }),
       ),
     ],
-    names: identities.flatMap(({ name, shortName }) => [name, shortName]),
+    names: [
+      ...identities.flatMap(({ name, shortName }) => [name, shortName]),
+      viewerLabel(viewerName),
+    ],
     memory: memory.slice(-CHAT_WINDOW_MESSAGES),
   };
 }
 
 /**
- * Her text as it streams, with each line held back until it can't be one written as another
- * participant (her name or short name, then `：` or `:`, case-blind), and cut before the first that
- * is. Stop sequences catch most such lines at the provider; this catches the rest.
+ * Her text as it streams, with each line held back until it can't be one written as someone else
+ * (one of `names`, then `：` or `:`, case-blind), and cut before the first that is. Stop
+ * sequences, where her provider takes them, catch most other personas' lines; this catches the rest.
  */
 export class SpeakerCut {
   readonly #labels: readonly string[];

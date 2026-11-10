@@ -30,11 +30,6 @@ export function mentionAt(text: string, caret: number): MentionQuery | null {
   return null;
 }
 
-/** What a pick inserts after the `@`: her short name, else her name. */
-export function mentionName(target: MentionTarget): string {
-  return target.shortName.trim() || target.name;
-}
-
 /**
  * The participants `query` could be the start of, case-blind: those whose name or short name begins
  * with it, then those that hold it elsewhere. An empty query is everyone.
@@ -64,4 +59,70 @@ export function insertMention(
   const after = text.slice(at.start + 1 + at.query.length);
   const spaced = /^\s/.test(after) ? after : ` ${after}`;
   return { text: `${before}${name}${spaced}`, caret: before.length + name.length + 1 };
+}
+
+/** An `@` whose suggestions are closed, and the mention it held then. */
+export interface Closed {
+  readonly start: number;
+  readonly mention: string;
+}
+
+/** The composer's text and caret, and the `@` whose suggestions are closed. */
+export interface Draft {
+  readonly text: string;
+  readonly caret: number;
+  readonly closed: Closed | null;
+}
+
+/** The mention at `at` in `text`, closed as it stands. */
+export function closedAt(text: string, at: MentionQuery): Closed {
+  return { start: at.start, mention: text.slice(at.start, at.start + 1 + at.query.length) };
+}
+
+export const EMPTY_DRAFT: Draft = { text: "", caret: 0, closed: null };
+
+/**
+ * `draft` edited to `text`: a closed `@` stays closed while the caret is still in its mention and
+ * the mention is still there. An `@` typed over it, in the same place, opens again.
+ */
+export function retyped(draft: Draft, text: string, caret: number): Draft {
+  const { closed } = draft;
+  const still =
+    closed !== null &&
+    mentionAt(text, caret)?.start === closed.start &&
+    text.startsWith(closed.mention, closed.start);
+  return { text, caret, closed: still ? closed : null };
+}
+
+/** The mention at the caret, and who it could be: no one once its `@` is closed. */
+export function suggestions<T extends MentionTarget>(
+  draft: Draft,
+  participants: readonly T[],
+): { readonly at: MentionQuery | null; readonly options: T[] } {
+  const at = mentionAt(draft.text, draft.caret);
+  const closed = at === null || at.start === draft.closed?.start;
+  return { at, options: closed ? [] : mentionOptions(at.query, participants) };
+}
+
+/**
+ * `draft` with the mention at `at` completed to `name`, and its suggestions closed: `@Ken ` still
+ * begins "Ken Takagi", so Enter would pick her again instead of sending.
+ */
+export function picked(draft: Draft, at: MentionQuery, name: string): Draft {
+  const next = insertMention(draft.text, at, name);
+  return { ...next, closed: closedAt(next.text, { start: at.start, query: name }) };
+}
+
+/**
+ * What picking `target` inserts: her short name, else her name where another participant answers
+ * to the short one too, which parseMentions would read as whoever comes first.
+ */
+export function mentionName(target: MentionTarget, participants: readonly MentionTarget[]): string {
+  const short = target.shortName.trim();
+  const shared = participants.some(
+    (other) =>
+      other.id !== target.id &&
+      [other.name, other.shortName].some((name) => name.toLowerCase() === short.toLowerCase()),
+  );
+  return short === "" || shared ? target.name : short;
 }

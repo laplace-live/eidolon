@@ -15,6 +15,13 @@ import type { Mind } from "../types.ts";
 import { AnthropicMind } from "./anthropic.ts";
 import { type OpenAIDialect, OpenAIMind } from "./openai.ts";
 
+/**
+ * OpenAI's and xAI's reasoning models reject a request with `stop`
+ * (https://platform.openai.com/docs/api-reference/chat/create#chat-create-stop,
+ * https://docs.x.ai/docs/guides/reasoning).
+ */
+const REJECTS_STOP: ReadonlySet<string> = new Set(["openai", "xai"]);
+
 function dialectOf(provider: string, model: string): OpenAIDialect {
   switch (provider) {
     case "openai":
@@ -59,5 +66,11 @@ export function createMind(): Mind {
     onUsage,
     ...(openrouter ? { extraBody: { usage: { include: true } }, reportsCost: true } : {}),
   });
-  return new OpenAIMind({ client, model, live, dialect: dialectOf(provider.id, model) });
+  return new OpenAIMind({
+    client,
+    model,
+    live,
+    dialect: dialectOf(provider.id, model),
+    takesStop: !REJECTS_STOP.has(provider.id),
+  });
 }

@@ -23,6 +23,7 @@ import {
   INTEREST_THRESHOLD,
   INVITES_THRESHOLD,
   JUST_SPOKE_PENALTY,
+  MAX_REPLIES_TO_USER,
 } from "../../../packages/context/src/index.ts";
 import {
   VOICE_THRESHOLD,
@@ -56,6 +57,8 @@ interface Line {
   readonly responders: readonly string[];
   readonly maybe?: readonly string[];
   readonly invites_reply: boolean;
+  /** How many persona lines after the viewer's last answer it, as one decision; absent is 1. */
+  readonly viewer_replies?: number;
   /** Whether a voice message suits the reply better than text; absent unlabelled. */
   readonly voice_moment?: boolean;
   readonly note?: string;
@@ -110,11 +113,20 @@ const candidatesOf = (line: Line) => line.participants.filter((id) => id !== lin
 const saidOf = (line: Line): Said[] => [...(line.history ?? []), line.latest];
 const round = (value: number) => Math.round(value * 1e4) / 1e4;
 
-/** Persona lines since the viewer's last, the latest included: `DirectorInput.hop`. */
-function hopOf(said: readonly Said[]): number {
-  let hop = 0;
-  for (let i = said.length - 1; i >= 0 && said[i]?.[0] !== VIEWER; i--) hop++;
-  return hop;
+/** Persona lines since the viewer's last, the latest included. */
+function spokenOf(said: readonly Said[]): number {
+  let spoken = 0;
+  for (let i = said.length - 1; i >= 0 && said[i]?.[0] !== VIEWER; i--) spoken++;
+  return spoken;
+}
+
+/**
+ * `DirectorInput.hop` as runChat counts it, one a decision: 0 for the viewer's line, 1 for the last
+ * of its replies, then one more for each persona line after them.
+ */
+function hopOf(line: Line): number {
+  const spoken = spokenOf(saidOf(line));
+  return spoken === 0 ? 0 : spoken - (line.viewer_replies ?? 1) + 1;
 }
 
 /** Whoever spoke the persona line before the latest, the one the just-spoke penalty falls on. */
@@ -143,6 +155,10 @@ function validate(): void {
       line.responders.length === 0
     ) {
       fail("a voice_moment label needs a line someone answers");
+    }
+    const replies = line.viewer_replies;
+    if (replies !== undefined && replies > Math.min(spokenOf(saidOf(line)), MAX_REPLIES_TO_USER)) {
+      fail(`viewer_replies ${replies}: more than the lines since hers, or than a decision chooses`);
     }
     const candidates = candidatesOf(line);
     const labels = [
@@ -221,7 +237,7 @@ function inputOf(line: Line, voice = false): DirectorInput {
         ? { speaker: { kind: "user" }, text, ...spoken }
         : { speaker: { kind: "persona", id: speaker }, text, ...spoken };
     }),
-    hop: hopOf(said),
+    hop: hopOf(line),
     mentions: parseMentions(line.latest[1], participants),
   };
 }
