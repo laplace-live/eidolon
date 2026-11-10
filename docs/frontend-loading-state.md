@@ -364,7 +364,10 @@ If the LLM call fails or times out, the TTS service errors, or a context provide
 `data.fatal` is always `false`, since pipedog never ported the flag and the native engine keeps
 its shape: a call that can't go on (her hearing failing for good, a realtime model's fatal error)
 sends its `error`, then hangs up, so the end arrives as `Disconnected`. A voice that fails or
-stalls for 15 s sends an `error` too, and the reply goes on in text. Always handle `Error` —
+stalls for 15 s sends an `error` too, and the reply goes on in text. That text arrives only as
+`bot-llm-text`: the reply sends no more `bot-output` or `bot-transcription`, so a client that
+shows her words from `onBotOutput` should show the reply's `bot-llm-text` after such an `error`
+until its `bot-llm-stopped`. Always handle `Error` —
 otherwise a stuck "thinking…" indicator will sit on screen forever:
 
 ```ts
