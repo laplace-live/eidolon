@@ -12,6 +12,10 @@ import type { UtteranceAudio } from "./index.ts";
 
 export type KeyedSelection = Selection & { readonly apiKey: string };
 
+/** Speech that owes audio and sends none for this long has stalled. */
+export const SPEECH_STALL_MS = 15_000;
+export const SPEECH_STALLED = `No speech audio arrived within ${SPEECH_STALL_MS / 1000} seconds`;
+
 /** An utterance's audio events. */
 export class AudioQueue extends AsyncQueue<UtteranceAudio> {
   /** Pushes the last event, `end` or `error`. */
@@ -93,10 +97,13 @@ export class SocketLink {
   #closing = false;
   #keepalive: ReturnType<typeof setInterval> | undefined;
   readonly #ended = Promise.withResolvers<void>();
+  /** Gives up the handshake when the link closes before it opens. */
+  readonly #connecting = new AbortController();
 
   constructor(options: SocketLinkOptions) {
     this.#options = options;
-    connectWs(options.url, options.headers, options.signal).then(
+    const signal = AbortSignal.any([options.signal, this.#connecting.signal]);
+    connectWs(options.url, options.headers, signal).then(
       (socket) => this.#opened(socket),
       (error) =>
         this.#end(
@@ -125,6 +132,7 @@ export class SocketLink {
   async close(): Promise<void> {
     this.#closing = true;
     if (this.#socket === null) {
+      this.#connecting.abort();
       this.#end(null);
       return;
     }

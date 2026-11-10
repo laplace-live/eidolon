@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, jest, test } from "bun:test";
 import { setUsageSink, type UsageRecord } from "../../src/index.ts";
 import { openSpeech, type SpeechStream } from "../../src/speech/stream/index.ts";
 import { MiniMaxSpeech } from "../../src/speech/stream/minimax.ts";
@@ -198,6 +198,82 @@ test("a failed request is an error without the key, and stops the rest", async (
   expect(await collect(failing.audio)).toEqual([
     { kind: "error", message: "MiniMax TTS error: HTTP 500" },
   ]);
+});
+
+test("MiniMax: a refusal answered 200, whole or mid-stream, is an error", async () => {
+  fake = fakeServer({
+    http: (request) =>
+      JSON.parse(request.body).text === "一。"
+        ? new Response('{"base_resp":{"status_code":1008,"status_msg":"insufficient balance"}}')
+        : streamed([
+            `data: {"data":{"audio":"${hex([1])}","status":1},"base_resp":{"status_code":0,"status_msg":""}}\n\n`,
+            'data: {"data":{"audio":"","status":1},"base_resp":{"status_code":1026,"status_msg":"sensitive"}}\n\n',
+          ]),
+  });
+  const stream = keep(new MiniMaxSpeech(selectionAt("minimax", fake.base, {}, { groupId: "g" })));
+  const refused = stream.utterance(null);
+  refused.say({ id: 1, text: "一。" });
+  refused.end();
+  expect(await collect(refused.audio)).toEqual([
+    { kind: "error", message: "MiniMax TTS error: insufficient balance (1008)" },
+  ]);
+  const cut = stream.utterance(null);
+  cut.say({ id: 1, text: "二。" });
+  cut.end();
+  expect(plain(await collect(cut.audio))).toEqual([
+    { kind: "pcm", seg: 1, pcm: [1] },
+    { kind: "error", message: "MiniMax TTS error: sensitive (1026)" },
+  ]);
+});
+
+test("a request that sends no audio for 15 s has stalled; each piece puts that off", async () => {
+  // No `until` here: the fake clock holds Bun.sleep too.
+  jest.useFakeTimers();
+  try {
+    const body = Promise.withResolvers<ReadableStreamDefaultController<Uint8Array>>();
+    const unanswered = Promise.withResolvers<void>();
+    fake = fakeServer({
+      http: (request) => {
+        if (JSON.parse(request.body).input === "二。") {
+          unanswered.resolve();
+          return new Promise<Response>(() => {});
+        }
+        return new Response(
+          new ReadableStream({ start: (controller) => body.resolve(controller) }),
+        );
+      },
+    });
+    const stream = keep(new OpenAISpeech(selectionAt("openai", fake.base)));
+    const silent = stream.utterance(null);
+    silent.say({ id: 1, text: "二。" });
+    await unanswered.promise;
+    jest.advanceTimersByTime(15_000);
+    expect(await collect(silent.audio)).toEqual([
+      { kind: "error", message: "No speech audio arrived within 15 seconds" },
+    ]);
+
+    const utterance = stream.utterance(null);
+    utterance.say({ id: 1, text: "一。" });
+    utterance.end();
+    const events = utterance.audio[Symbol.asyncIterator]();
+    const next = async () => plain([(await events.next()).value])[0];
+    const sending = await body.promise;
+    sending.enqueue(bytesOf([1]));
+    expect(await next()).toEqual({ kind: "pcm", seg: 1, pcm: [1] });
+    jest.advanceTimersByTime(10_000);
+    sending.enqueue(bytesOf([2]));
+    expect(await next()).toEqual({ kind: "pcm", seg: 1, pcm: [2] });
+    jest.advanceTimersByTime(10_000);
+    sending.enqueue(bytesOf([3]));
+    expect(await next()).toEqual({ kind: "pcm", seg: 1, pcm: [3] });
+    jest.advanceTimersByTime(15_000);
+    expect(await next()).toEqual({
+      kind: "error",
+      message: "No speech audio arrived within 15 seconds",
+    });
+  } finally {
+    jest.useRealTimers();
+  }
 });
 
 test("an unknown OpenAI voice fails before any request", async () => {

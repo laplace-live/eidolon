@@ -286,6 +286,42 @@ describe("a turn", () => {
     await e.end();
   });
 
+  test("audio that keeps arriving while the VAD is slow is not missing audio", async () => {
+    const e = ear();
+    e.vad.edges.set(0, "started");
+    await e.speak(3);
+    const held = Promise.withResolvers<void>();
+    e.vad.hold = held.promise;
+    await e.speak(2 * (AUDIO_IDLE_MS / FRAME_MS));
+    e.vad.hold = null;
+    held.resolve();
+    await settle();
+    expect(e.vad.pushed).toBe(3 + 2 * (AUDIO_IDLE_MS / FRAME_MS));
+    expect([e.log, e.events(), e.vad.speaking]).toEqual([[], ["user-started"], true]);
+    await e.end();
+  });
+
+  test("missing audio stops the speech after the frame the VAD is on, unless audio came since", async () => {
+    for (const resumes of [false, true]) {
+      const e = ear();
+      e.vad.edges.set(0, "started");
+      await e.speak(3);
+      const held = Promise.withResolvers<void>();
+      e.vad.hold = held.promise;
+      await e.speak(1);
+      e.clock.advance(AUDIO_IDLE_MS);
+      await settle();
+      expect([e.log, e.vad.speaking]).toEqual([[], true]);
+      if (resumes) await e.speak(1);
+      e.vad.hold = null;
+      held.resolve();
+      await settle();
+      expect(e.log).toEqual(resumes ? [] : ["finalize", "analyze"]);
+      expect(e.vad.speaking).toBe(resumes);
+      await e.end();
+    }
+  });
+
   test("no audio while the VAD hears nothing changes nothing", async () => {
     const e = ear();
     await e.speak(5);

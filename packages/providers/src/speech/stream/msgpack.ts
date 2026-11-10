@@ -210,6 +210,9 @@ class Reader {
   }
 
   array(length: number): unknown[] {
+    // Each item takes at least a byte: a count past what is left can't be met, and making room for
+    // it first would let a 5-byte message take gigabytes.
+    if (length > this.#bytes.length - this.#at) throw new Error("truncated MessagePack");
     return Array.from({ length }, () => this.value());
   }
 

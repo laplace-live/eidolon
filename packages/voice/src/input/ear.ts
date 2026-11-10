@@ -59,6 +59,7 @@ class Ear {
   #end: (error: unknown) => void = () => {};
   /** Frames and VAD stops, one at a time, as pipedog's aggregator takes its system frames. */
   #frames: Promise<void> = Promise.resolve();
+  /** When the latest frame arrived, though the VAD may not have reached it yet. */
   #lastAudio = 0;
   #cancelIdle: (() => void) | null = null;
   #lastActivity = Number.NEGATIVE_INFINITY;
@@ -99,8 +100,11 @@ class Ear {
   }
 
   async #listen(audio: AsyncIterable<Pcm>): Promise<void> {
+    const { clock } = this.#deps;
     for await (const pcm of audio) {
       if (this.#stopped) return;
+      this.#lastAudio = clock.now();
+      this.#cancelIdle ??= clock.setTimer(AUDIO_IDLE_MS, () => this.#audioIdle());
       this.#toStt.send(pcm);
       this.#enqueue(() => this.#hear(pcm));
     }
@@ -134,8 +138,6 @@ class Ear {
 
   async #hear(pcm: Pcm): Promise<void> {
     const { vad, turn, clock } = this.#deps;
-    this.#lastAudio = clock.now();
-    this.#cancelIdle ??= clock.setTimer(AUDIO_IDLE_MS, () => this.#audioIdle());
     const edge = await vad.push(pcm);
     if (this.#stopped) return;
     // pipedog queues the VAD's edge behind the frame that made it, so Smart Turn gets that frame
@@ -164,10 +166,15 @@ class Ear {
     const remaining = this.#lastAudio + AUDIO_IDLE_MS - clock.now();
     if (remaining > 0) {
       this.#cancelIdle = clock.setTimer(remaining, () => this.#audioIdle());
-    } else if (vad.forceStop() === "stopped") {
-      logger.warning("VAD: no audio received while speaking, forcing speech stop");
-      this.#enqueue(() => this.#speechStopped());
+      return;
     }
+    // In line behind the frames that came before the gap, so the stop follows what the VAD made
+    // of them; audio that came while they were heard means the mic is back.
+    this.#enqueue(async () => {
+      if (clock.now() - this.#lastAudio < AUDIO_IDLE_MS || vad.forceStop() !== "stopped") return;
+      logger.warning("VAD: no audio received while speaking, forcing speech stop");
+      await this.#speechStopped();
+    });
   }
 }
 
