@@ -8,12 +8,7 @@
 // OpenAI's Realtime API, with its server VAD on. It takes and speaks 24 kHz PCM.
 // https://platform.openai.com/docs/guides/realtime-websocket
 import { isPlainObject } from "@eidolon/config";
-import { type Dialect, functionTools, num, obj, realtimeBase, str } from "./wire.ts";
-
-const BENIGN_CODES: ReadonlySet<unknown> = new Set([
-  "response_cancel_not_active",
-  "conversation_already_has_active_response",
-]);
+import { BENIGN_CODES, type Dialect, functionTools, num, obj, realtimeBase, str } from "./wire.ts";
 
 export const OPENAI: Dialect = {
   label: "OpenAIRealtimeLLMService",

@@ -1,16 +1,32 @@
-// What every call runs on: its one mailbox, the timers that post to it, the idle timeout, and the
-// streams it closes at the end, whose meters flush as they close. Transport, provider and timer
-// callbacks only post here; the Floor reads it, one event at a time.
+// What every call runs on: its one mailbox, the timers that post to it, the idle timeout, the
+// streams it closes at the end, whose meters flush as they close, and the loop from the client's
+// connection to the call's end. Transport, provider and timer callbacks only post here; the Floor
+// reads it, one event at a time.
 import type { ChatEventDraft, ParticipantId } from "@eidolon/chat";
 import { AsyncQueue, errorText, logger } from "@eidolon/config";
 import type { CallChatOutput } from "@eidolon/engine";
 import type { MouthEvent } from "../output/mouth.ts";
-import type { RtviInbound } from "../rtvi/codec.ts";
-import type { CallLog, Clock, CursorEvent, EarEvent, Heard } from "../types.ts";
+import { createSpeaker } from "../output/speaker.ts";
+import { type RtviInbound, readRtvi } from "../rtvi/codec.ts";
+import type {
+  CallLog,
+  CallPlan,
+  CallTransport,
+  Clock,
+  CloseReason,
+  CursorEvent,
+  EarEvent,
+  Heard,
+  Speaker,
+} from "../types.ts";
 import type { RealtimeInput } from "./realtime.ts";
 
 /** pipedog's `IDLE_TIMEOUT_SECS`: `apps/web/src/features/call/phase.ts` counts on at least 285. */
 export const IDLE_TIMEOUT_MS = 300_000;
+/** pipedog's `BOT_VAD_STOP_FALLBACK_SECS`: the Speaker drained mid-reply this long has stopped. */
+export const DRAIN_FALLBACK_MS = 3_000;
+/** How long `disconnect-bot` lets her audio play out. */
+export const DISCONNECT_DRAIN_MS = 10_000;
 
 export type TimerName =
   /** The call has been idle: nothing heard, said or played. */
@@ -149,5 +165,83 @@ export class CallKit {
         }),
       ),
     );
+  }
+}
+
+/** What a kind of call opens on its kit: the floor that reads the mailbox, and its hearing. */
+export interface OpenedCall {
+  readonly floor: { handle(event: LoopEvent): void; readonly finished: CloseReason | null };
+  /** Starts hearing the caller, once the client has connected. */
+  listen(): void;
+}
+
+/** What `open` gets: `listening` aborts and `close` closes the kit's streams as the call ends. */
+export interface CallSetup {
+  readonly kit: CallKit;
+  readonly speaker: Speaker;
+  readonly listening: AbortSignal;
+  readonly close: () => Promise<void>;
+}
+
+/**
+ * Runs a call on `transport` until it ends, around what `open` opens: the client's messages, its
+ * hang-up and `signal` reach the mailbox, which the floor reads until it finishes. Rejects when
+ * `open` or the connection does; what it opened is closed by then.
+ */
+export async function runCall(
+  transport: CallTransport,
+  plan: CallPlan,
+  clock: Clock,
+  signal: AbortSignal,
+  open: (setup: CallSetup) => Promise<OpenedCall>,
+): Promise<CloseReason> {
+  const kit = new CallKit(clock);
+  const listening = new AbortController();
+  let closed: Promise<void> | null = null;
+  const close = (): Promise<void> => {
+    listening.abort();
+    closed ??= kit.close();
+    return closed;
+  };
+  const onShutdown = (): void => kit.post({ source: "shutdown" });
+  try {
+    const speaker = createSpeaker((event) => kit.post({ source: "speaker", event }));
+    const { floor, listen } = await open({ kit, speaker, listening: listening.signal, close });
+
+    void (async () => {
+      for await (const message of transport.messages) {
+        kit.post({ source: "rtvi", message: readRtvi(message) });
+      }
+    })().catch((error: unknown) => {
+      logger.error(`[voice] The client's messages failed: ${errorText(error)}`, error);
+    });
+    void transport.closed.then(() => kit.post({ source: "transport" }));
+    signal.addEventListener("abort", onShutdown, { once: true });
+    if (signal.aborted) onShutdown();
+    transport.attachSpeaker(speaker);
+    await transport.connect();
+    logger.info("Client connected");
+
+    kit.active();
+    listen();
+    for await (const event of kit.events) {
+      floor.handle(event);
+      if (floor.finished !== null) break;
+    }
+    const reason = floor.finished ?? "shutdown";
+    kit.stop();
+    await close();
+    await plan.log.flush();
+    if (reason !== "client") {
+      await transport.disconnect().catch((error: unknown) => {
+        logger.warning(`[voice] Disconnecting the client failed: ${errorText(error)}`);
+      });
+    }
+    logger.info(reason === "client" ? "Client disconnected" : `Call ended: ${reason}`);
+    return reason;
+  } finally {
+    signal.removeEventListener("abort", onShutdown);
+    kit.stop();
+    await close();
   }
 }

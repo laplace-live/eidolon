@@ -10,8 +10,9 @@ chat. It is experimental and off by default: `EIDOLON_VOICE_ENGINE=native` turns
   src/input/                    the Ear: Silero VAD, Smart Turn, the TurnDetector (ported from pipedog)
   src/output/                   the segmenter, the Mouth, the Speaker, what was heard
   src/rtvi/                     the RTVI messages pipedog's observer sends
-  src/call/                     the mailbox (kit.ts), the Floor, the call log, runCascadeCall,
-                                runRealtimeCall (realtime.ts), a group call's policy (group.ts)
+  src/call/                     the mailbox and the loop every call runs (kit.ts), the Floor, the
+                                call log, runCascadeCall, runRealtimeCall (realtime.ts), a group
+                                call's policy (group.ts)
   src/dsp/resampler/            pipedog's rubato resampler, vendored with its wasm
 @eidolon/providers/stt          live speech recognition, one stream per call
 @eidolon/providers/speech-stream   streaming speech, one stream per persona per call
@@ -41,9 +42,9 @@ pipedog is never followed past that commit.
   `Bot session failed: <provider> has no … in Eidolon yet`, and so do settings that can't be read.
 
 A group call ([Group calls](#group-calls)) runs only on `native`. As it starts,
-`groupCallProblem(host, personas)` checks that none of them talks through a realtime model and
-that the host is one of them; a call that fails the check logs
-`[voice] This group call can't run: <why>` and fails as `Bot session failed: <why>`. Under
+`groupReason(host, personas)` checks that none of them talks through a realtime model
+(`realtimeIn`, which the local app's check shares) and that the host is one of them; a call that
+fails the check fails as `Bot session failed: <why>`. Under
 `pipedog`, nothing offers one: the local app refuses it first, and the server fails one it gets.
 
 **Warm-up:** `warmAudioModels()` loads pipedog's models on both engines, since its backend turns
@@ -347,8 +348,9 @@ one ([chat.md](chat.md#a-call-in-the-local-app)).
   heard, so the director is asked about the next turn, and the next persona's mind, only after it.
   Nothing is generated ahead.
 - **Her label:** as each persona's first sample plays, just before `bot-started-speaking`, the
-  client gets `server-message {type: "speaker", persona, name}`, her id and her identity name.
-  A selfie's `server-message` names her `persona` too.
+  client gets `server-message {type: "speaker", persona, name}`, her id and her identity name; a
+  reply in text alone (`audio_response` false) gets it just before its first `bot-output`. A
+  selfie's `server-message` names her `persona` too.
 - **A barge-in** cuts the persona speaking, who stores what was heard as interrupted, aborts the
   chain, and drops the turns still to come; one that comes while the director weighs the next turn
   stops it, and nothing more is stored. An empty turn that cut her off asks her alone to go on.

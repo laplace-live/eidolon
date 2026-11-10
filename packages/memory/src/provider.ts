@@ -39,6 +39,9 @@ const MEMORY_POSITION = 1;
  */
 export const MEM0_STORE_KEY = "mem0_messages";
 
+/** pipedog's name for the Mem0 service, which labels her Mem0 among a turn's providers. */
+export const MEM0_LABEL = "LaplaceMem0MemoryService";
+
 /** The last user message with string content; LLM-specific messages are not plain objects. */
 function latestUserText(messages: readonly unknown[]): string | null {
   for (let i = messages.length - 1; i >= 0; i--) {

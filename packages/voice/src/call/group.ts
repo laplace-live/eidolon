@@ -29,7 +29,7 @@ export interface GroupFloor {
 
 /**
  * The server message a group call sends as each persona's audio starts, just before
- * `bot-started-speaking`: who is speaking now.
+ * `bot-started-speaking`, or before a reply in text alone's first words: who is speaking now.
  */
 export function speakerLabel(
   persona: ParticipantId,
@@ -54,40 +54,52 @@ export function groupOf(chat: {
   return summarize(chat.header, chat.events).participants;
 }
 
+interface MouthOptions {
+  readonly kit: CallKit;
+  readonly speaker: Speaker;
+  readonly deps: Pick<CallDeps, "openSpeech" | "clock">;
+}
+
+/** Her Mouth on the call's Speaker, with the voice role of the persona scope it runs in. */
+export function openMouth(
+  persona: ParticipantId,
+  { kit, speaker, deps }: MouthOptions,
+  name: string,
+): Mouth {
+  const mouth = new Mouth({
+    persona,
+    speech: deps.openSpeech(),
+    ...voiceTraits(selectRequired("voice")),
+    speaker,
+    join: joinSegments,
+    clock: deps.clock,
+    post: (event) => kit.post({ source: "mouth", event }),
+  });
+  kit.own(name, mouth);
+  return mouth;
+}
+
 /**
  * Opens each persona's Mouth inside her own persona scope, so she speaks with her own voice role,
  * styles and markup, all of them on the call's one Speaker. `kit` closes them as the call ends.
  */
 export function openGroup(
   personas: readonly ParticipantId[],
-  options: {
-    readonly kit: CallKit;
-    readonly speaker: Speaker;
+  options: MouthOptions & {
     readonly deps: Pick<CallDeps, "engine" | "runChat" | "openSpeech" | "clock">;
   },
 ): GroupFloor {
-  const { kit, speaker, deps } = options;
+  const { deps } = options;
   const { runChat } = deps;
   if (runChat === undefined) throw new Error("A group call needs the engine's runChat");
   const mouths = new Map<ParticipantId, Mouth>();
   const names = new Map<ParticipantId, string>();
   for (const persona of personas) {
     names.set(persona, readPersonaIdentity(persona).name);
-    const mouth = withPersona(
+    mouths.set(
       persona,
-      () =>
-        new Mouth({
-          persona,
-          speech: deps.openSpeech(),
-          ...voiceTraits(selectRequired("voice")),
-          speaker,
-          join: joinSegments,
-          clock: deps.clock,
-          post: (event) => kit.post({ source: "mouth", event }),
-        }),
+      withPersona(persona, () => openMouth(persona, options, `${persona}'s voice`)),
     );
-    mouths.set(persona, mouth);
-    kit.own(`${persona}'s voice`, mouth);
   }
   return {
     mouthOf: (persona) => mouths.get(persona),

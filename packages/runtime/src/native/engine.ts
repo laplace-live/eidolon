@@ -3,7 +3,7 @@
 import type { AllowedOffer } from "@eidolon/access";
 import { CHAT_FORMAT, type ChatHeader, summarize } from "@eidolon/chat";
 import { activePersona, envStr, errorText, logger, pyRepr, withPersona } from "@eidolon/config";
-import { select } from "@eidolon/providers";
+import { realtimeIn, select } from "@eidolon/providers";
 import {
   type CallDeps,
   type CallLog,
@@ -40,31 +40,15 @@ export function voiceEngineFromEnv(): VoiceEngine {
 }
 
 /**
- * The first of `personas` whose calls a realtime model runs: she can't join a group call. One whose
- * settings can't say is passed over, for the call's own checks to fail.
+ * Why `host` can't hold a group call of `personas`, which only the native engine runs; or null.
+ * Throws when settings can't be read.
  */
-export function realtimeIn(personas: readonly string[]): string | null {
-  const realtime = (persona: string) => {
-    try {
-      return withPersona(persona, () => select("realtime") !== null);
-    } catch {
-      return false;
-    }
-  };
-  return personas.find(realtime) ?? null;
-}
-
-/** Why `host` can't hold a group call of `personas`, logged; null when she can. */
-export function groupCallProblem(host: string, personas: readonly string[]): string | null {
+export function groupReason(host: string, personas: readonly string[]): string | null {
   const realtime = realtimeIn(personas);
-  const reason =
-    realtime !== null
-      ? `${realtime}'s calls run on a realtime model, which can't join a group call`
-      : personas.includes(host)
-        ? null
-        : `${host} isn't in the call`;
-  if (reason !== null) logger.info(`[voice] This group call can't run: ${reason}`);
-  return reason;
+  if (realtime !== null) {
+    return `${realtime}'s calls run on a realtime model, which can't join a group call`;
+  }
+  return personas.includes(host) ? null : `${host} isn't in the call`;
 }
 
 /** Never aborts: the signalling server's close disconnects every peer, which ends their calls. */
@@ -117,7 +101,7 @@ async function runNative(
   if (isGroupCall(binding)) {
     // The chat's own header and events, under the call's id: every persona in it answers.
     const { chat } = binding;
-    const reason = groupCallProblem(host, summarize(chat.header, chat.events).participants);
+    const reason = groupReason(host, summarize(chat.header, chat.events).participants);
     if (reason !== null) throw new Error(reason);
     const log = memoryCallLog({ ...chat.header, id }, chat.events);
     call = bindGroupCall(binding, log, transport, deps);

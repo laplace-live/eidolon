@@ -7,15 +7,10 @@
 // xAI's Grok Voice Agent API, with its server VAD on. It takes 16 kHz PCM and speaks 24 kHz.
 // https://docs.x.ai/docs/guides/voice/agent
 import { isPlainObject, pyJsonDumps, pyTruthy } from "@eidolon/config";
-import { type Dialect, functionTools, num, obj, realtimeBase, str } from "./wire.ts";
+import { BENIGN_CODES, type Dialect, functionTools, num, obj, realtimeBase, str } from "./wire.ts";
 
 const INPUT_RATE = 16000;
 const OUTPUT_RATE = 24000;
-
-const BENIGN_CODES: ReadonlySet<unknown> = new Set([
-  "response_cancel_not_active",
-  "conversation_already_has_active_response",
-]);
 
 // Grok's codes for a cancel with nothing to cancel, or a second response, differ from OpenAI's:
 // only the message says so.

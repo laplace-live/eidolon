@@ -48,6 +48,12 @@ export interface Dialect {
   connectFailed(error: string): string;
 }
 
+/** OpenAI's error codes for a cancel with nothing to cancel, and for a second response. */
+export const BENIGN_CODES: ReadonlySet<unknown> = new Set([
+  "response_cancel_not_active",
+  "conversation_already_has_active_response",
+]);
+
 /** The realtime WebSocket under the account's API base, as pipedog's services were given it. */
 export function realtimeBase(selection: Selection): string {
   return `${(selection.baseUrl as string).replace(/\/+$/, "").replace(/^http/, "ws")}/realtime`;

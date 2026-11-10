@@ -198,6 +198,7 @@ describe("a group call's binding", () => {
           text: "我先说",
           modality: "call",
           interrupted: true,
+          cutOff: "length",
         },
         { type: "decision", after: 5, replies: [], source: "model" },
       ],
@@ -225,7 +226,7 @@ describe("a group call's binding", () => {
       [8, "call-ended", "hangup"],
     ]);
     const cut = (await runner.store.read(id)).events.find((event) => event.seq === 6);
-    expect(cut).toMatchObject({ interrupted: true });
+    expect(cut).toMatchObject({ interrupted: true, cutOff: "length" });
   });
 
   test("a whole native group call: the director picks who answers, and the chat stores it all", async () => {

@@ -41,6 +41,7 @@ export {
   hasKey,
   missingKey,
   ProviderConfigError,
+  realtimeIn,
   realtimeVoiceOf,
   type Selection,
   select,

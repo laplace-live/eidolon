@@ -396,6 +396,36 @@ describe("a group call", () => {
     ).toEqual(["call", "call", "call"]);
   });
 
+  test("a reply in text alone is labeled before its first words", async () => {
+    const { decide, inputs } = director([ANN, BEA]);
+    const call = startGroup({ decide });
+    await call.ready();
+    call.news();
+    call.kit.post({
+      source: "rtvi",
+      message: readRtvi({
+        label: "rtvi-ai",
+        type: "send-text",
+        id: "c-send-text",
+        data: { content: "打字回我们", options: { audio_response: false } },
+      }),
+    });
+    await until(() => inputs.length === 2);
+    await settle();
+    expect(call.speech(ANN).utterances).toEqual([]);
+    expect(call.speech(BEA).utterances).toEqual([]);
+    expect(
+      call
+        .news()
+        .filter((line) => line.startsWith("server-message") || line.startsWith("bot-output")),
+    ).toEqual([
+      `server-message speaker ${ANN}`,
+      "bot-output new 安妮说1。",
+      `server-message speaker ${BEA}`,
+      "bot-output new 露比说1。",
+    ]);
+  });
+
   test("a barge-in mid-turn keeps what was heard of her, drops the turns still to come, and answers the new line", async () => {
     const { decide, inputs } = director([ANN, BEA], [BEA]);
     const call = startGroup({ decide, script: { [ANN]: [["第一句。", "第二句。"]] } });

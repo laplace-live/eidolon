@@ -20,6 +20,7 @@ import type { DirectorInput } from "@eidolon/context";
 import type { ContextProvider } from "@eidolon/core";
 import { type ChatDeps, type MindChunk, type MindRequest, runChat, runTurn } from "@eidolon/engine";
 import { MEM0_STORE_KEY } from "@eidolon/memory";
+import { realtimeIn } from "@eidolon/providers";
 import type { CallDeps } from "@eidolon/voice";
 import { SmallWebRTCConnection } from "@pipedog/transport-smallwebrtc/connection";
 import { FakeSpeech, FakeStt, FakeTransport, settle } from "../../../voice/test/call/harness.ts";
@@ -27,7 +28,7 @@ import { FakeClock } from "../../../voice/test/input/clock.ts";
 import { voiceModels } from "../../src/audio.ts";
 import { createSignallingServer } from "../../src/index.ts";
 import type { GroupCallBinding } from "../../src/native/binding.ts";
-import { groupCallProblem, realtimeIn, runNativeSafely } from "../../src/native/engine.ts";
+import { groupReason, runNativeSafely } from "../../src/native/engine.ts";
 import { BOT_ABOUT } from "../../src/rtvi.ts";
 import type { CallClient } from "../../src/session/session.ts";
 import { captureLogs, type LogCapture, admission as offered, setEnv, until } from "../support.ts";
@@ -272,8 +273,8 @@ describe("who can join a group call", () => {
       `${PERSONAS[OTHER]}realtime:\n  provider: openai\n`,
     );
     expect(realtimeIn([HOST, OTHER])).toBe(OTHER);
-    expect(groupCallProblem(HOST, [HOST])).toBeNull();
-    const reason = groupCallProblem(HOST, [HOST, OTHER]);
+    expect(groupReason(HOST, [HOST])).toBeNull();
+    const reason = groupReason(HOST, [HOST, OTHER]);
     expect(reason).toBe("cat's calls run on a realtime model, which can't join a group call");
 
     const transport = new FakeTransport();

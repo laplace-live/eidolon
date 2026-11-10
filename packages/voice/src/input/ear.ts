@@ -183,8 +183,11 @@ interface SttSender {
   close(): void;
 }
 
-/** Sends 16 kHz frames at the recognizer's own rate. */
-function sttSender(stt: SttStream, clock: Clock): SttSender {
+/** Sends 16 kHz frames at the recognizer's own rate, or a realtime session's. */
+export function sttSender(
+  stt: { readonly inputRate: number; send(pcm: Pcm): void },
+  clock: Clock,
+): SttSender {
   if (stt.inputRate === VAD_SAMPLE_RATE) return { send: (pcm) => stt.send(pcm), close: () => {} };
   const stream = resampler().createStream(VAD_SAMPLE_RATE, stt.inputRate);
   let last = Number.NEGATIVE_INFINITY;
