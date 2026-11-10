@@ -1,25 +1,56 @@
-// POST and PATCH /api/offer, its peers' negotiation stood in for (transports.ts): the answers,
-// status codes and bodies, per-offer plans and relay-only rules.
+// POST and PATCH /api/offer, its peers' negotiation stood in for: the answers, status codes and
+// bodies, per-offer plans and relay-only rules.
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { type AllowedOffer, ANONYMOUS } from "@eidolon/access";
 import type { ServerIcePlan } from "@eidolon/turn";
-import type {
-  CandidateRules,
-  OpusCodec,
-  OpusEncoder,
-  OpusEncoderOptions,
-  SignallingServer,
-} from "@eidolon/webrtc";
-import type { AnyCallBinding, CallBinding } from "../src/native/binding.ts";
-import { captureLogs, type Deferred, deferred, type LogCapture, until } from "./support.ts";
+import type { OpusCodec, OpusEncoder, OpusEncoderOptions } from "../src/opus.ts";
+import type { CandidateRules, DtlsClosable } from "../src/patches.ts";
+import { type IceCandidate, Peer } from "../src/peer.ts";
 import {
-  type Candidate,
-  type Connection,
-  type ConnectionHooks,
-  type DtlsPeer,
-  type ServerDeps,
-  transport,
-} from "./transports.ts";
+  createSignallingServerWith,
+  HttpError,
+  type SignallingDeps,
+  type SignallingServer,
+} from "../src/signalling.ts";
+import { captureLogs, type Deferred, deferred, type LogCapture, until } from "./support.ts";
+
+/** What a call's offer may be bound to, opaque to the server. */
+interface Binding {
+  readonly persona: string;
+}
+
+type Renegotiate = (
+  peer: Peer,
+  options: { sdp: string; type: string; restartPc?: boolean },
+) => Promise<void>;
+
+/** Stands in for every peer's answering and trickling, so no werift peer negotiates. */
+function standIn(hooks: {
+  initialize(peer: Peer, sdp: string): Promise<{ sdp: string; type: string }>;
+  renegotiate: Renegotiate;
+  addIceCandidate(candidate: IceCandidate | null): Promise<void>;
+}): () => void {
+  const proto = Peer.prototype;
+  const answers = new WeakMap<Peer, { sdp: string; type: string }>();
+  const spies = [
+    spyOn(proto, "initialize").mockImplementation(async function (this: Peer, sdp: string) {
+      answers.set(this, await hooks.initialize(this, sdp));
+    }),
+    spyOn(proto, "getAnswer").mockImplementation(function (this: Peer) {
+      const answer = answers.get(this);
+      return answer === undefined ? null : { ...answer, pc_id: this.pcId };
+    }),
+    spyOn(proto, "renegotiate").mockImplementation(function (this: Peer, options) {
+      return hooks.renegotiate(this, options);
+    }),
+    spyOn(proto, "addIceCandidate").mockImplementation((candidate) =>
+      hooks.addIceCandidate(candidate),
+    ),
+  ];
+  return () => {
+    for (const spy of spies) spy.mockRestore();
+  };
+}
 
 const RELAY_ANSWER =
   "v=0\r\n" +
@@ -95,23 +126,23 @@ function admission(body: Record<string, unknown> | null, opusBitrateBps = 96000)
 
 describe("the signalling server", () => {
   interface Built {
-    readonly connection: Connection;
+    readonly connection: Peer;
     readonly sdp: string;
   }
 
   interface Started {
-    readonly connection: Connection;
+    readonly connection: Peer;
     readonly admission: AllowedOffer;
-    readonly binding: AnyCallBinding | undefined;
+    readonly binding: Binding | undefined;
   }
 
   let logs: LogCapture;
   let built: Built[];
-  let renegotiated: { connection: Connection; sdp: string; restartPc?: boolean }[];
-  let added: (Candidate | null)[];
+  let renegotiated: { connection: Peer; sdp: string; restartPc?: boolean }[];
+  let added: (IceCandidate | null)[];
   let restore: () => void;
-  let servers: SignallingServer<AnyCallBinding>[];
-  let onRenegotiate: ConnectionHooks["renegotiate"];
+  let servers: SignallingServer<Binding>[];
+  let onRenegotiate: Renegotiate;
 
   beforeEach(() => {
     logs = captureLogs();
@@ -122,11 +153,11 @@ describe("the signalling server", () => {
     onRenegotiate = async (connection, options) => {
       renegotiated.push({ connection, sdp: options.sdp, restartPc: options.restartPc });
     };
-    restore = transport.mock({
+    restore = standIn({
       async initialize(connection, sdp) {
         built.push({ connection, sdp });
         if (sdp === "explode") throw new Error("boom");
-        if (sdp === "conflict") throw transport.httpError(409, "busy");
+        if (sdp === "conflict") throw new HttpError(409, "busy");
         return { sdp: RELAY_ANSWER, type: "answer" };
       },
       renegotiate: (connection, options) => onRenegotiate(connection, options),
@@ -144,15 +175,15 @@ describe("the signalling server", () => {
 
   function server(
     plans: (ServerIcePlan | Deferred<ServerIcePlan>)[],
-    deps: Partial<ServerDeps> = {},
+    deps: Partial<SignallingDeps<Binding>> = {},
   ): {
-    signalling: SignallingServer<AnyCallBinding>;
+    signalling: SignallingServer<Binding>;
     sessions: Started[];
     planCalls: () => number;
   } {
     const sessions: Started[] = [];
     let calls = 0;
-    const signalling = transport.createServer(
+    const signalling = createSignallingServerWith<Binding>(
       {
         ice: {
           serverPlan: async () => {
@@ -174,7 +205,7 @@ describe("the signalling server", () => {
     return { signalling, sessions, planCalls: () => calls };
   }
 
-  const urlsOf = (connection: Connection) => transport.iceServers(connection).map((s) => s.urls);
+  const urlsOf = (connection: Peer) => connection.options.iceServers.map((s) => s.urls);
 
   describe("POST /api/offer", () => {
     test("answers with the pc_id and starts one background session", async () => {
@@ -194,19 +225,14 @@ describe("the signalling server", () => {
       await until(() => sessions.length > 0);
       expect(sessions).toHaveLength(1);
       expect(sessions[0]?.admission).toBe(offer);
-      expect(sessions[0]?.connection).toBe(built[0]?.connection as Connection);
+      expect(sessions[0]?.connection).toBe(built[0]?.connection as Peer);
       expect(sessions[0]?.connection.pcId).toBe(body.pc_id);
       expect(sessions[0]?.binding).toBeUndefined();
     });
 
     test("a bound offer hands its binding to the session it starts", async () => {
       const { signalling, sessions } = server([STUN_PLAN]);
-      const binding: CallBinding = {
-        persona: "bob",
-        seedMessages: [],
-        onTranscript: () => {},
-        onEnded: () => {},
-      };
+      const binding: Binding = { persona: "bob" };
       const result = await signalling.offer(admission({ sdp: "offer", type: "offer" }), binding);
       expect(result.status).toBe(200);
       await until(() => sessions.length > 0);
@@ -236,23 +262,19 @@ describe("the signalling server", () => {
       relay.resolve(RELAY_PLAN);
       await Promise.all([first, second]);
 
-      const a = built.find((b) => b.sdp === "A")?.connection as Connection;
-      const b = built.find((b) => b.sdp === "B")?.connection as Connection;
-      expect(transport.iceServers(a)).toEqual([
+      const a = built.find((b) => b.sdp === "A")?.connection as Peer;
+      const b = built.find((b) => b.sdp === "B")?.connection as Peer;
+      expect(a.options.iceServers).toEqual([
         { urls: "turn:turn.example:3478?transport=tcp", username: "u", credential: "c" },
       ]);
-      expect(transport.relayOnly(a)).toBe(true);
-      expect(transport.iceServers(b)).toEqual([
+      expect(a.options.relayOnly).toBe(true);
+      expect(b.options.iceServers).toEqual([
         { urls: "stun:stun.example:3478", username: null, credential: null },
       ]);
-      expect(transport.relayOnly(b)).toBe(false);
+      expect(b.options.relayOnly).toBe(false);
 
-      await transport
-        .opusCodec(a)
-        .createEncoder({ sampleRate: 24000, channels: 1, bitrate: 96000 });
-      await transport
-        .opusCodec(b)
-        .createEncoder({ sampleRate: 24000, channels: 1, bitrate: 96000 });
+      await a.options.opusCodec.createEncoder({ sampleRate: 24000, channels: 1, bitrate: 96000 });
+      await b.options.opusCodec.createEncoder({ sampleRate: 24000, channels: 1, bitrate: 96000 });
       expect(opus.bitrates).toEqual([8000, 192000]);
     });
 
@@ -268,11 +290,11 @@ describe("the signalling server", () => {
       relay.resolve(RELAY_PLAN);
       await first;
       expect(built.map((b) => b.sdp)).toEqual(["B", "A"]);
-      const [b, a] = built.map((entry) => entry.connection) as [Connection, Connection];
-      expect(transport.relayOnly(a)).toBe(true);
+      const [b, a] = built.map((entry) => entry.connection) as [Peer, Peer];
+      expect(a.options.relayOnly).toBe(true);
       expect(urlsOf(b)).toEqual(["stun:stun.example:3478"]);
-      await transport.opusCodec(a).createEncoder({ sampleRate: 24000, channels: 1 });
-      await transport.opusCodec(b).createEncoder({ sampleRate: 24000, channels: 1 });
+      await a.options.opusCodec.createEncoder({ sampleRate: 24000, channels: 1 });
+      await b.options.opusCodec.createEncoder({ sampleRate: 24000, channels: 1 });
       expect(opus.bitrates).toEqual([8000, 192000]);
     });
 
@@ -311,7 +333,7 @@ describe("the signalling server", () => {
       expect(logs.messages("WARNING")).toEqual([
         "[WebRTC] TURN server has no credentials; relay-only gathering is off",
       ]);
-      expect(transport.relayOnly(built[0]?.connection as Connection)).toBe(false);
+      expect(built[0]!.connection.options.relayOnly).toBe(false);
     });
 
     test("a known pc_id renegotiates: no new connection, no session, the original options", async () => {
@@ -334,9 +356,9 @@ describe("the signalling server", () => {
       expect(renegotiated[0]?.restartPc).toBe(true);
       // Still relay-only: the renegotiation's candidates are filtered too.
       expect(renegotiated[0]?.sdp).not.toContain("10.0.0.1");
-      const connection = built[0]?.connection as Connection;
+      const connection = built[0]?.connection as Peer;
       expect(urlsOf(connection)).toEqual(["turn:turn.example:3478?transport=tcp"]);
-      await transport.opusCodec(connection).createEncoder({ sampleRate: 24000, channels: 1 });
+      await connection.options.opusCodec.createEncoder({ sampleRate: 24000, channels: 1 });
       expect(opus.bitrates).toEqual([8000]);
     });
 
@@ -365,8 +387,13 @@ describe("the signalling server", () => {
         state: "connected",
         onStateChange: { subscribe: (handler: (state: string) => void) => handlers.push(handler) },
       };
-      const replacement: DtlsPeer = { connectionState: "connected", dtlsTransports: [dtls] };
-      onRenegotiate = async (renegotiating) => transport.replaceWerift(renegotiating, replacement);
+      const replacement: DtlsClosable["pc"] = {
+        connectionState: "connected",
+        dtlsTransports: [dtls],
+      };
+      onRenegotiate = async (renegotiating) => {
+        Object.defineProperty(renegotiating, "pc", { value: replacement, configurable: true });
+      };
       await signalling.offer(admission({ sdp: "B", type: "offer", pc_id: pcId, restart_pc: true }));
       dtls.state = "closed";
       for (const handler of handlers) handler("closed");
@@ -386,9 +413,9 @@ describe("the signalling server", () => {
       expect(built).toHaveLength(2);
       await until(() => sessions.length === 2);
       expect(renegotiated).toHaveLength(0);
-      const second = built[1]?.connection as Connection;
+      const second = built[1]?.connection as Peer;
       expect(urlsOf(second)).toEqual(["stun:stun.example:3478"]);
-      expect(transport.relayOnly(second)).toBe(false);
+      expect(second.options.relayOnly).toBe(false);
     });
 
     test("a body that isn't a JSON object, or lacks sdp/type, is a 400", async () => {
@@ -524,7 +551,7 @@ describe("the signalling server", () => {
     });
 
     test("close() disconnects every peer and forgets them", async () => {
-      const disconnect = spyOn(transport.Connection.prototype, "disconnect");
+      const disconnect = spyOn(Peer.prototype, "disconnect");
       try {
         const { signalling } = server([STUN_PLAN]);
         const a = await signalling.offer(admission({ sdp: "A", type: "offer" }));

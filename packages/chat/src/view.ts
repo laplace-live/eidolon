@@ -16,7 +16,7 @@ export interface ViewToolCall {
   function: { name: string; arguments: string };
 }
 
-/** An OpenAI-shaped message, as the voice pipeline's context holds them. */
+/** An OpenAI-shaped message, as a turn's context holds them. */
 export type ViewMessage =
   | { role: "user" | "assistant" | "system" | "developer"; content: string }
   | { role: "assistant"; tool_calls: [ViewToolCall] }

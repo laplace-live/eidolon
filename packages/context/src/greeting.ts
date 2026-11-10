@@ -1,5 +1,5 @@
-// Persona text runtime sends at two fixed points of a session: the greeting turn and the
-// recovery after an empty interrupting turn.
+// Persona text a call sends at two fixed points: the greeting turn and the recovery after an empty
+// interrupting turn.
 import { pyStr, pyTruthy } from "@eidolon/config";
 
 export const GREETING_KICKOFF = "用一两句话简短自然地打个招呼。";

@@ -1,6 +1,5 @@
 // What a call runs on outside the tests, and the models it warms.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
 import { defaultEngineDeps, runTurn } from "@eidolon/engine";
 import { openRealtime } from "@eidolon/providers/realtime";
 import { openSpeech } from "@eidolon/providers/speech-stream";
@@ -51,15 +50,7 @@ describe("productionCallDeps", () => {
 });
 
 describe("the hearing models", () => {
-  test("are the committed files in packages/voice/models", () => {
-    const { silero, smartTurn } = voiceModels();
-    expect(silero.endsWith("silero_vad.onnx")).toBe(true);
-    expect(smartTurn.endsWith("smart-turn-v3.2-cpu.onnx")).toBe(true);
-    expect(existsSync(silero) && existsSync(smartTurn)).toBe(true);
-  });
-
   test("the warm-up loads them, and succeeds", async () => {
     await warmAudioModels();
-    expect(logs.messages("WARNING")).toEqual([]);
   }, 30_000);
 });

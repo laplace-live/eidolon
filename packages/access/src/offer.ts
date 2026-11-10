@@ -78,7 +78,10 @@ export interface AllowedOffer {
   readonly allowed: true;
   readonly user: UserContext;
   readonly token: string | null;
-  /** The parsed body, or null when it is not a JSON object (runtime answers that with a 400). */
+  /**
+   * The parsed body, or null when it is not a JSON object (the signalling server answers that with
+   * a 400).
+   */
   readonly body: JsonObject | null;
   readonly requestData: JsonObject | null;
   readonly opusBitrateBps: number;

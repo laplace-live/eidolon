@@ -34,8 +34,8 @@ const CALL: WireMessage[] = [
   m("bot-stopped-speaking"),
 ];
 
-const ids = (messages: WireMessage[], native = true) =>
-  checkInvariants(messages, { native }).map((v) => v.id);
+const ids = (messages: WireMessage[], pipedog = false) =>
+  checkInvariants(messages, { pipedog }).map((v) => v.id);
 
 describe("invariants", () => {
   test("a well-formed call keeps all ten, metrics anywhere", () => {
@@ -77,7 +77,7 @@ describe("invariants", () => {
   test("I6: every bot-tts-started is stopped, unless pipedog ran the call", () => {
     const open = CALL.filter((message) => message.type !== "bot-tts-stopped");
     expect(ids(open)).toEqual(["I6"]);
-    expect(ids(open, false)).toEqual([]);
+    expect(ids(open, true)).toEqual([]);
   });
 
   test("I7: each segment is new first and completes once, unless cut off or never to be spoken", () => {
@@ -147,13 +147,11 @@ describe("a realtime call's invariants", () => {
 
   test("I2 holds as a final after its turn's start, and I9 waits for no transcript", () => {
     expect(ids(turn)).toEqual(["I9", "I2", "I2"]);
-    expect(checkInvariants(turn, { native: true, realtime: true })).toEqual([]);
+    expect(checkInvariants(turn, { realtime: true })).toEqual([]);
   });
 
   test("a final with no turn of the caller's before it still breaks I2", () => {
     const early = [ready, ...said("你好")];
-    expect(checkInvariants(early, { native: true, realtime: true }).map((v) => v.id)).toEqual([
-      "I2",
-    ]);
+    expect(checkInvariants(early, { realtime: true }).map((v) => v.id)).toEqual(["I2"]);
   });
 });

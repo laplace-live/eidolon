@@ -218,7 +218,7 @@ original) or one code path against another (the pipeline's dry run against the p
   since, because `override` sets keys and never unsets them.
 - **werift needs four corrections, all in `packages/webrtc/src/patches.ts`.** Its prototype patch
   is guarded with `Symbol.for("eidolon.werift.patched")`, so a second evaluation of the module
-  patches nothing (`packages/runtime/test/werift.test.ts`).
+  patches nothing (`packages/webrtc/test/werift.test.ts`).
   1. It queries `stun.l.google.com` when no STUN server is configured. That put the origin's
      public IP in every non-relay answer and, where UDP to Google is blocked, stalled every
      answer by its 5 s STUN timeout. It now queries only a server the plan names.
@@ -233,7 +233,7 @@ original) or one code path against another (the pipeline's dry run against the p
   A fifth, ported from pipedog, sits in `packages/webrtc/src/peer.ts` under pipedog's flag: an
   `error` listener on werift's UDP sockets, whose ICMP errors otherwise kill the process.
 - **ICE servers and the Opus bitrate are set per peer.** `@eidolon/webrtc` builds each peer from
-  its own offer's plan; the interleaved-offer test (`packages/runtime/test/signalling.test.ts`)
+  its own offer's plan; the interleaved-offer test (`packages/webrtc/test/signalling.test.ts`)
   holds that two offers in flight never share one.
 - **Golden fixtures are the code's record.** Each holds what a test pins for fixed inputs. A test
   that fails against one means behavior changed: fix the code, or, when the change is on purpose,

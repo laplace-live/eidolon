@@ -332,7 +332,7 @@ export function notices(dist: readonly Bundled[], web: readonly Bundled[]): stri
 }
 
 /** Copies the repository's files under `from`, so an untracked index or picture never ships. */
-function copyTracked(from: string, to: string): void {
+export function copyTracked(from: string, to: string): void {
   const dir = relative(ROOT, from);
   const listed = Bun.spawnSync(["git", "ls-files", "-z", "--", dir], { cwd: ROOT });
   if (listed.exitCode !== 0) throw new Error(`git ls-files ${dir} failed`);
@@ -341,14 +341,6 @@ function copyTracked(from: string, to: string): void {
     mkdirSync(dirname(target), { recursive: true });
     cpSync(join(ROOT, file), target);
   }
-}
-
-/**
- * @eidolon/voice's models folder into the package at `root`, whole: it holds the two models and
- * their notices alone.
- */
-export function copyVoiceModels(root: string): void {
-  cpSync(voiceModelsDir(), inPackage(root, voiceModelsDir), { recursive: true });
 }
 
 /** The Bun the production image runs: the package ships it, and builds with no other. */
@@ -373,7 +365,7 @@ async function stage(): Promise<Manifest> {
   copyTracked(templatesDir(), inPackage(PACK_DIR, templatesDir));
   copyTracked(jiebaDir(), inPackage(PACK_DIR, jiebaDir));
   copyTracked(resamplerDir(), inPackage(PACK_DIR, resamplerDir));
-  copyVoiceModels(PACK_DIR);
+  copyTracked(voiceModelsDir(), inPackage(PACK_DIR, voiceModelsDir));
   writeFileSync(join(PACK_DIR, "bunfig.toml"), BUNFIG);
   writeFileSync(join(PACK_DIR, "THIRD_PARTY_NOTICES.md"), notices(inlinedPackages(inlined), web));
   cpSync(join(HERE, "README.md"), join(PACK_DIR, "README.md"));

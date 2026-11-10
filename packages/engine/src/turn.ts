@@ -512,7 +512,7 @@ class Turn {
     }
   }
 
-  /** The gate, then each provider in turn, as a call's pipeline runs them ahead of the LLM. */
+  /** The gate, then each provider in turn, ahead of the LLM. */
   async #enrich(
     parts: PersonaParts,
     conversation: TurnConversation,

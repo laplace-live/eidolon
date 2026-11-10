@@ -36,12 +36,10 @@ afterEach(() => {
 
 describe("createSignallingServer", () => {
   test("every offer is a call on @eidolon/webrtc's peers", async () => {
-    const built: string[] = [];
     const answer = { sdp: "v=0\r\n", type: "answer" };
+    const initialize = spyOn(Peer.prototype, "initialize").mockImplementation(async () => {});
     const spies = [
-      spyOn(Peer.prototype, "initialize").mockImplementation(async () => {
-        built.push("webrtc");
-      }),
+      initialize,
       spyOn(Peer.prototype, "getAnswer").mockImplementation(function (this: Peer) {
         return { ...answer, pc_id: this.pcId };
       }),
@@ -53,6 +51,7 @@ describe("createSignallingServer", () => {
       const result = await signalling.offer(offered({ sdp: "v=0", type: "offer" }));
       expect(result.status).toBe(200);
       expect(Object.keys(result.body as object)).toEqual(["sdp", "type", "pc_id"]);
+      expect(initialize).toHaveBeenCalledTimes(1);
       expect(await signalling.offer({ allowed: true, body: null } as AllowedOffer)).toMatchObject({
         status: 400,
       });
@@ -60,7 +59,6 @@ describe("createSignallingServer", () => {
       for (const spy of spies) spy.mockRestore();
       await signalling.close();
     }
-    expect(built).toEqual(["webrtc"]);
   });
 });
 

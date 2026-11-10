@@ -296,7 +296,7 @@ export interface StreamArchiveOptions {
 
 /** The stream-archive RAG provider, which also owns the recall_streams tool. */
 export class StreamArchive implements ContextProvider {
-  /** Rejects when the archive can't be opened; runtime logs `Stream archive disabled: ${e}`. */
+  /** Rejects when the archive can't be opened; the engine logs `Stream archive disabled: ${e}`. */
   static async open(options: { dbPath: string; timeZone?: string }): Promise<StreamArchive> {
     const retriever = await openStreamArchiveRetriever(options.dbPath);
     const archive = new StreamArchive({

@@ -6,7 +6,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { type Browser, chromium, type Page } from "playwright-core";
-import { checkInvariants } from "./e2e/invariants.ts";
+import { checkInvariants, field } from "./e2e/invariants.ts";
 import {
   type ConnectResult,
   type EntrySource,
@@ -263,12 +263,6 @@ const BOT_ACTIVITY = new Set([
   "llmFunctionCallInProgress",
   "llmFunctionCallStopped",
 ]);
-
-function field(data: unknown, key: string): unknown {
-  return typeof data === "object" && data !== null
-    ? (data as Record<string, unknown>)[key]
-    : undefined;
-}
 
 /** Collects the timeline and follows the bot's turn state from the RTVI events in it. */
 class Recorder {
@@ -808,7 +802,7 @@ function analyze(
   const wire = recorder.timeline
     .filter((e) => e.source === "wire")
     .map((e) => ({ type: e.event, data: e.data }));
-  const invariants = checkInvariants(wire, { native: options.engine !== "pipedog" });
+  const invariants = checkInvariants(wire, { pipedog: options.engine === "pipedog" });
   checks.push({
     name: "rtvi invariants",
     pass: wire.length > 0 && invariants.length === 0,

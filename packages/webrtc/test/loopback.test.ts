@@ -3,9 +3,9 @@
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createServer } from "node:net";
-import type { SignallingServer } from "@eidolon/webrtc";
 import { RTCPeerConnection } from "werift";
-import type { AnyCallBinding } from "../src/native/binding.ts";
+import type { Peer } from "../src/peer.ts";
+import { createSignallingServerWith, type SignallingServer } from "../src/signalling.ts";
 import {
   admission,
   CAN_DIAL,
@@ -14,7 +14,6 @@ import {
   PASS_THROUGH_RULES,
   until,
 } from "./support.ts";
-import { type Connection, transport } from "./transports.ts";
 
 /** Answers every STUN Binding Request with the sender's address (RFC 5389 §7.3.1). */
 async function stunResponder(): Promise<{ url: string; close(): void }> {
@@ -63,14 +62,14 @@ describe("the signalling server", () => {
   let logs: LogCapture;
   let stun: { url: string; close(): void };
   let client: RTCPeerConnection;
-  let server: SignallingServer<AnyCallBinding>;
-  let sessions: Connection[];
+  let server: SignallingServer;
+  let sessions: Peer[];
 
   beforeEach(async () => {
     logs = captureLogs();
     stun = await stunResponder();
     sessions = [];
-    server = transport.createServer(
+    server = createSignallingServerWith(
       {
         ice: {
           serverPlan: async () => ({
@@ -148,8 +147,8 @@ describe("the signalling server", () => {
       // A browser restarting (restart_pc) PATCHes its new candidates under the old pc_id until the
       // answer arrives, so the restart must not wait on a plan it never uses.
       let planDelay = 0;
-      const connections: Connection[] = [];
-      const restarting = transport.createServer(
+      const connections: Peer[] = [];
+      const restarting = createSignallingServerWith(
         {
           ice: {
             serverPlan: async () => {
@@ -202,7 +201,7 @@ describe("the signalling server", () => {
         );
         expect(patch.status).toBe(200);
         expect((await restart).status).toBe(200);
-        const peer = transport.werift(connections[0]!);
+        const peer = connections[0]!.pc;
         const remote = peer.iceTransports.reduce(
           (n, transport) => n + transport.connection.remoteCandidates.length,
           0,
@@ -216,7 +215,7 @@ describe("the signalling server", () => {
 
     test("relay-only advertises no host or srflx candidate when the relay can't allocate", async () => {
       const turn = `turn:127.0.0.1:${await closedPort()}?transport=tcp`;
-      const relay = transport.createServer(
+      const relay = createSignallingServerWith(
         {
           ice: {
             serverPlan: async () => ({

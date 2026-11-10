@@ -9,7 +9,7 @@ import {
   bareImports,
   bundle,
   checkImports,
-  copyVoiceModels,
+  copyTracked,
   inlinedPackages,
   inPackage,
   licenseText,
@@ -105,9 +105,9 @@ describe("the bundles", () => {
 
 describe("the voice models", () => {
   test("ship byte for byte in data/models, with their licenses", async () => {
-    copyVoiceModels(root);
     const dir = inPackage(root, voiceModelsDir);
     expect(dir).toBe(join(root, "data", "models"));
+    copyTracked(voiceModelsDir(), dir);
     const sha256 = async (file: string) =>
       new Bun.CryptoHasher("sha256")
         .update(await Bun.file(join(dir, file)).arrayBuffer())

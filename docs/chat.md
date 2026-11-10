@@ -664,8 +664,8 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
 
 **Checks:**
 - `bun test --no-env-file packages/chat packages/engine packages/context packages/runtime apps/bot/test/local`.
-  `packages/runtime/test/binding.test.ts` runs a bound call on scripted hearing, mind and voice,
-  and once over a real werift peer.
+  `packages/runtime/test/native/binding.test.ts` runs a bound call on scripted hearing, mind and
+  voice, and once over a real werift peer.
 - `bun apps/bot/scripts/local-smoke.ts --headful`. It walks four chats against its fake
   OpenAI-compatible server, which also answers the director's Decisions route, OpenAI's speech and
   transcriptions, and a call's realtime transcription session. It bills nothing.

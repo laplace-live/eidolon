@@ -132,7 +132,8 @@ function chooseStatic(staticIce: StaticIceEnv): Choice {
 /**
  * At most one STUN and one TURN server, and whether to gather relay candidates only.
  *
- * Logs nothing; runtime warns about a TURN server without credentials, once per new connection.
+ * Logs nothing; the signalling server warns about a TURN server without credentials, once per new
+ * connection.
  */
 export function serverIcePlan(cf: IcePayload | null, staticIce: StaticIceEnv): ServerIcePlan {
   const { stun, turn } = cf !== null ? chooseCloudflare(cf) : chooseStatic(staticIce);

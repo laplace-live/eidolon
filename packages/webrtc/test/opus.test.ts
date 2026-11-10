@@ -8,7 +8,7 @@ import {
   type OpusEncoder,
   type OpusEncoderOptions,
   opusCodecAtBitrate,
-} from "@eidolon/webrtc";
+} from "../src/opus.ts";
 import { captureLogs, type LogCapture } from "./support.ts";
 
 let logs: LogCapture;

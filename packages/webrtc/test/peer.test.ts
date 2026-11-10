@@ -19,6 +19,7 @@ import {
   captureLogs,
   type LogCapture,
   loud,
+  PASS_THROUGH_RULES,
   ToneSource,
   until,
 } from "./support.ts";
@@ -269,11 +270,7 @@ describe.skipIf(!CAN_DIAL)("against a real peer", () => {
           peers.push(peer);
           transports.push(peerCallTransport(peer));
         },
-        candidates: {
-          dropUnreachableCandidates: (sdp) => ({ sdp, dropped: [] }),
-          candidateReachable: () => true,
-          scrubRelayRelatedAddresses: (sdp) => sdp,
-        },
+        candidates: PASS_THROUGH_RULES,
       },
     );
   });

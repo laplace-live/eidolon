@@ -1,5 +1,5 @@
 // A call's timeline cut into her turns, and how each played: what e2e-call.ts reports and
-// e2e-compare.ts holds the native engine to. Reads only the timeline and the audible spans, so it
+// e2e-compare.ts holds the candidate to. Reads only the timeline and the audible spans, so it
 // scores reports recorded before it existed too.
 import type { EntrySource } from "./protocol.ts";
 

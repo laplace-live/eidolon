@@ -2,7 +2,15 @@
 // docs/voice-engine.md.
 import type { AllowedOffer } from "@eidolon/access";
 import { CHAT_FORMAT, type ChatHeader, summarize } from "@eidolon/chat";
-import { activePersona, errorText, logger, withPersona } from "@eidolon/config";
+import {
+  activePersona,
+  cpLen,
+  errorText,
+  isJsonObject,
+  logger,
+  pyRepr,
+  withPersona,
+} from "@eidolon/config";
 import { realtimeIn, select } from "@eidolon/providers";
 import {
   type CallDeps,
@@ -19,7 +27,6 @@ import {
   isGroupCall,
   reportEnd,
 } from "./binding.ts";
-import { logSessionStart } from "./start.ts";
 
 /**
  * Why `host` can't hold a group call of `personas`; or null.
@@ -31,6 +38,27 @@ export function groupReason(host: string, personas: readonly string[]): string |
     return `${realtime}'s calls run on a realtime model, which can't join a group call`;
   }
   return personas.includes(host) ? null : `${host} isn't in the call`;
+}
+
+/** `requestData` as the log may carry it: a chat window, the viewer's conversation, by size alone. */
+function loggedRequestData(requestData: AllowedOffer["requestData"]): unknown {
+  if (requestData === null || !("chat" in requestData)) return requestData;
+  const events = isJsonObject(requestData.chat) ? requestData.chat.events : undefined;
+  const chat = Array.isArray(events) ? `<chat: ${events.length} events>` : "<chat: not a window>";
+  return { ...requestData, chat };
+}
+
+/** `[bot] Session start …` and `Starting bot`, which the local app's status and the e2e notes read. */
+function logSessionStart(admission: Pick<AllowedOffer, "token" | "requestData">): void {
+  // Logged either way: the "anonymous everywhere" failure mode is
+  // otherwise silent, and this makes it one grep.
+  if (admission.token) {
+    logger.info(`[bot] Session start with loginSyncToken (len=${cpLen(admission.token)})`);
+  } else {
+    const body = pyRepr(loggedRequestData(admission.requestData));
+    logger.info(`[bot] Session start without loginSyncToken; runner_args.body=${body}`);
+  }
+  logger.info("Starting bot");
 }
 
 /** Never aborts: the signalling server's close disconnects every peer, which ends their calls. */

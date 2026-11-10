@@ -1,31 +1,27 @@
 // @eidolon/webrtc's werift corrections: each patches werift once, however often it loads.
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { closeWhenDtlsCloses } from "@eidolon/webrtc";
+import { Connection, UdpTransport } from "werift";
+import { closeWhenDtlsCloses } from "../src/patches.ts";
+// Patches werift as it loads, as patches.ts does.
+import "../src/peer.ts";
 
-const WEBRTC_SRC = join(import.meta.dir, "..", "..", "webrtc", "src");
-
-/** werift as @eidolon/webrtc resolves it. */
-function werift(): Promise<typeof import("werift")> {
-  return import(Bun.resolveSync("werift", WEBRTC_SRC));
-}
+const SRC = join(import.meta.dir, "..", "src");
 
 test("loading a patch again changes nothing", async () => {
-  const { Connection, UdpTransport } = await werift();
   const gatherCandidates = Connection.prototype.gatherCandidates;
   // A private method, which the patch wraps.
   const udp = UdpTransport.prototype as unknown as { init: unknown };
   const udpInit = udp.init;
   // Each module that patches, evaluated a second time, as a second copy of its package would be.
-  await import(`${join(WEBRTC_SRC, "patches.ts")}?again`);
-  await import(`${join(WEBRTC_SRC, "peer.ts")}?again`);
+  await import(`${join(SRC, "patches.ts")}?again`);
+  await import(`${join(SRC, "peer.ts")}?again`);
   expect(Connection.prototype.gatherCandidates).toBe(gatherCandidates);
   expect(udp.init).toBe(udpInit);
 });
 
 describe("the werift patches", () => {
   test("a connection with no STUN server gathers host candidates only, without waiting", async () => {
-    const { Connection } = await werift();
     const connection = new Connection(true, { useIpv6: false });
     const started = performance.now();
     await connection.gatherCandidates();
@@ -36,7 +32,6 @@ describe("the werift patches", () => {
   });
 
   test("a configured STUN server is kept", async () => {
-    const { Connection } = await werift();
     const connection = new Connection(true, {
       stunServer: ["stun.example", 3478],
       useIpv4: false,

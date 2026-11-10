@@ -1,23 +1,10 @@
-import { CString, dlopen, FFIType } from "bun:ffi";
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { PROJECT_ROOT } from "@eidolon/config";
 import { sharedSession } from "../../src/input/onnx.ts";
 import { voiceModels } from "../../src/models.ts";
+import { cEnv } from "./getenv.ts";
 import { SILERO_MODEL, SMART_TURN_MODEL } from "./speech.ts";
-
-/** `name` as getenv reads it, which process.env doesn't change under Bun; null when unset. */
-function cEnv(name: string): string | null {
-  const libc = dlopen(process.platform === "darwin" ? "libc.dylib" : "libc.so.6", {
-    getenv: { args: [FFIType.cstring], returns: FFIType.ptr },
-  });
-  try {
-    const value = libc.symbols.getenv(Buffer.from(`${name}\0`));
-    return value === null ? null : new CString(value).toString();
-  } finally {
-    libc.close();
-  }
-}
 
 describe("onnx sessions", () => {
   test("the ORT build is the pinned 1.30.0: another shifts Smart Turn's probabilities", async () => {
@@ -33,18 +20,16 @@ describe("onnx sessions", () => {
 
   test("an ORT_DISABLE_TELEMETRY the environment sets is kept", async () => {
     const onnx = join(import.meta.dir, "../../src/input/onnx.ts");
+    const getenv = join(import.meta.dir, "getenv.ts");
     const child = Bun.spawn(
       [
         process.execPath,
         "--no-env-file",
         "-e",
-        `import { dlopen, FFIType, CString } from "bun:ffi";
+        `const { cEnv } = await import(${JSON.stringify(getenv)});
 const { sharedSession } = await import(${JSON.stringify(onnx)});
 await sharedSession(${JSON.stringify(SILERO_MODEL)});
-const libc = dlopen(process.platform === "darwin" ? "libc.dylib" : "libc.so.6", {
-  getenv: { args: [FFIType.cstring], returns: FFIType.ptr },
-});
-process.stdout.write(new CString(libc.symbols.getenv(Buffer.from("ORT_DISABLE_TELEMETRY\\0"))).toString());`,
+process.stdout.write(String(cEnv("ORT_DISABLE_TELEMETRY")));`,
       ],
       { env: { ...process.env, ORT_DISABLE_TELEMETRY: "0" }, stdout: "pipe", stderr: "inherit" },
     );
