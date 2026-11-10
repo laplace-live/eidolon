@@ -103,6 +103,11 @@ export type ChatEvent =
       readonly turn: string;
       readonly callId: string;
       readonly result: Readonly<Record<string, unknown>>;
+      /**
+       * For a tool that runs on past her reply (a call's selfie): `started` as it begins, then
+       * `final` or `cancelled` once it settles. Absent when she waited for the result.
+       */
+      readonly stage?: "started" | "final" | "cancelled";
     })
   | (EventBase & {
       /** The hidden greeting prompt. */

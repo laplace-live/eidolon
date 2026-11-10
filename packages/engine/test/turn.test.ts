@@ -563,13 +563,13 @@ describe("runTurn", () => {
     expect(requests[1]?.messages).toEqual([
       { role: "user", content: "发张自拍" },
       toolCall,
-      { role: "tool", tool_call_id: "call-1", content: '{"ok":true,"count":1}' },
+      { role: "tool", tool_call_id: "call-1", content: '{"ok": true, "count": 1}' },
       { role: "assistant", content: "等我一下" },
     ]);
     expect(viewAfter(log.events, outputs)).toEqual([
       { role: "user", content: "发张自拍" },
       toolCall,
-      { role: "tool", tool_call_id: "call-1", content: '{"ok":true,"count":1}' },
+      { role: "tool", tool_call_id: "call-1", content: '{"ok": true, "count": 1}' },
       { role: "assistant", content: "等我一下拍好啦" },
     ] as never);
   });
@@ -632,8 +632,8 @@ describe("runTurn", () => {
     const missing = { error: "The function `ghost` is not currently available." };
     const failed = { error: "The function `thrower` failed and returned no result." };
     expect(requests[1]?.messages.filter((m) => (m as { role: string }).role === "tool")).toEqual([
-      { role: "tool", tool_call_id: "c1", content: JSON.stringify(missing) },
-      { role: "tool", tool_call_id: "c2", content: JSON.stringify(failed) },
+      { role: "tool", tool_call_id: "c1", content: `{"error": "${missing.error}"}` },
+      { role: "tool", tool_call_id: "c2", content: `{"error": "${failed.error}"}` },
       { role: "tool", tool_call_id: "c3", content: "CANCELLED" },
     ]);
     const results = eventsOf(outputs).filter((event) => event.type === "tool-result");
@@ -877,7 +877,7 @@ describe("a tool that runs on past an interruption", () => {
           { id: "call-1", type: "function", function: { name: "take_selfie", arguments: "{}" } },
         ],
       },
-      { role: "tool", tool_call_id: "call-1", content: '{"ok":true,"count":1}' },
+      { role: "tool", tool_call_id: "call-1", content: '{"ok": true, "count": 1}' },
       { role: "assistant", content: "等我一下" },
       { role: "user", content: "好了吗" },
     ]);

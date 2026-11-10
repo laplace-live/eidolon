@@ -20,9 +20,16 @@ import {
   directorFromEnv,
   directorParticipant,
 } from "@eidolon/context";
-import { withUsageScope } from "@eidolon/providers";
+import { type UsageScope, withUsageScope } from "@eidolon/providers";
 import { runTurn } from "./turn.ts";
-import type { EngineDeps, LateTools, TurnOutput, TurnRequest } from "./types.ts";
+import type {
+  CallHooks,
+  CallTurnOutput,
+  EngineDeps,
+  LateTools,
+  TurnOutput,
+  TurnRequest,
+} from "./types.ts";
 import { replyModeFor, withUnheard } from "./voice.ts";
 
 type ChatLog = TurnRequest["chat"];
@@ -43,6 +50,14 @@ export interface ChatRequest {
   readonly signal: AbortSignal;
   /** Without it, an interruption cancels every tool, `cancelOnInterruption` or not. */
   readonly late?: LateTools;
+  /** The director's and each turn's. Default: `{ source: "chat", session: <chat id> }`. */
+  readonly usage?: UsageScope;
+}
+
+/** A call's answer: each persona's turn is a call's, and every reply is spoken. */
+export interface CallChatRequest extends Omit<ChatRequest, "late"> {
+  /** Called just before each persona's turn, for that turn alone. */
+  readonly hooks: (persona: ParticipantId) => CallHooks;
 }
 
 export interface ChatDeps extends EngineDeps {
@@ -54,6 +69,7 @@ type DecisionDraft = Extract<ChatEventDraft, { readonly type: "decision" }>;
 
 /** Each turn's outputs, and a decision to store before the replies it chooses. */
 export type ChatOutput = TurnOutput | DecisionDraft;
+export type CallChatOutput = CallTurnOutput | DecisionDraft;
 
 let shared: { readonly generation: number; readonly director: Director } | null = null;
 
@@ -140,6 +156,7 @@ async function* answerWhileDeciding(
       signal,
       mode,
       ...(request.late ? { late: request.late } : {}),
+      ...(request.usage ? { usage: request.usage } : {}),
     },
     deps,
   )) {
@@ -156,21 +173,35 @@ async function* answerWhileDeciding(
  * and chain limit the chat had then. The caller stores each `events` and `decision` output before
  * taking the next. A chat of one persona never chains, and asks the director only whether to
  * answer in voice, when her reply mode is auto, while she writes. An abort ends it quietly, once
- * the running turn has given what it said.
+ * the running turn has given what it said. In a call, every reply is spoken, so the director never
+ * weighs a voice message, and each decision records its replies as text.
  */
-export async function* runChat(request: ChatRequest, deps: ChatDeps): AsyncGenerator<ChatOutput> {
+export function runChat(request: CallChatRequest, deps: ChatDeps): AsyncGenerator<CallChatOutput>;
+export function runChat(request: ChatRequest, deps: ChatDeps): AsyncGenerator<ChatOutput>;
+export async function* runChat(
+  request: ChatRequest | CallChatRequest,
+  deps: ChatDeps,
+): AsyncGenerator<ChatOutput | CallChatOutput> {
   const { signal } = request;
   const { header } = request.chat;
   const director = deps.director ?? defaultDirector();
+  const hooks = "hooks" in request ? request.hooks : null;
   const participants: DirectorParticipant[] = summarize(
     header,
     request.chat.events,
   ).participants.map((id) => ({
     ...directorParticipant(id),
-    replyMode: replyModeFor(request.chat, id, deps.speech),
+    replyMode: hooks === null ? replyModeFor(request.chat, id, deps.speech) : "text",
   }));
+  const usage = request.usage ?? { source: "chat", session: header.id };
+  const turn = (chat: ChatLog, persona: ParticipantId, mode: "text" | "voice") => {
+    const base = { chat, persona, viewer: request.viewer, signal, usage };
+    if (hooks !== null) return runTurn({ ...base, ...hooks(persona) }, deps);
+    const late = "late" in request ? request.late : undefined;
+    return runTurn({ ...base, mode, ...(late ? { late } : {}) }, deps);
+  };
   const decide = (lines: DirectorLine[], hop: number): Promise<DirectorDecision> =>
-    withUsageScope({ source: "chat", session: header.id }, () =>
+    withUsageScope(usage, () =>
       director.decide(
         {
           participants,
@@ -202,17 +233,7 @@ export async function* runChat(request: ChatRequest, deps: ChatDeps): AsyncGener
     for (const { persona, mode } of decision.replies) {
       if (signal.aborted) return;
       log = await request.read();
-      yield* runTurn(
-        {
-          chat: log,
-          persona,
-          viewer: request.viewer,
-          signal,
-          mode,
-          ...(request.late ? { late: request.late } : {}),
-        },
-        deps,
-      );
+      yield* turn(log, persona, mode);
     }
     if (signal.aborted || hop === limit) return;
     log = await request.read();

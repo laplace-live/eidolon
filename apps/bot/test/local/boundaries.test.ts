@@ -117,6 +117,26 @@ describe("production never loads the local app", () => {
     ).toEqual([]);
   });
 
+  test("main.ts reaches the voice engine only through runtime, and the turn engine through it or the chat endpoint", () => {
+    const { files } = importGraph(join(BOT_SRC, "main.ts"));
+    const reached = [...files].map((file) => relative(ROOT, file));
+    expect(reached).toContain("packages/runtime/src/native/engine.ts");
+    expect(reached).toContain("packages/engine/src/index.ts");
+    const importers = (pattern: RegExp): string[] =>
+      [...files]
+        .filter((file) => scan(file).some((s) => pattern.test(s)))
+        .map((file) => relative(ROOT, file))
+        .filter(
+          (file) =>
+            !file.startsWith("packages/runtime/src/") && !file.startsWith("packages/voice/src/"),
+        );
+    expect(importers(/^@eidolon\/voice(\/|$)/)).toEqual([]);
+    expect(importers(/^@eidolon\/engine(\/|$)/).toSorted()).toEqual([
+      "apps/bot/src/chat/call.ts",
+      "apps/bot/src/chat/routes.ts",
+    ]);
+  });
+
   test("no file outside local/ names it", () => {
     for (const file of sources(BOT_SRC).filter((f) => !f.startsWith(`${LOCAL_SRC}/`))) {
       const text = readFileSync(file, "utf8");
@@ -192,8 +212,11 @@ describe("the SPA's leaves", () => {
     const { files, specifiers } = importGraph(join(ROOT, "packages/chat/src/index.ts"));
     expect([...specifiers].filter((specifier) => !specifier.startsWith("./"))).toEqual([]);
     expect([...files].map((file) => relative(ROOT, file)).toSorted()).toEqual([
+      "packages/chat/src/async_tool.ts",
       "packages/chat/src/format.ts",
       "packages/chat/src/index.ts",
+      "packages/chat/src/join.ts",
+      "packages/chat/src/memory.ts",
       "packages/chat/src/mentions.ts",
       "packages/chat/src/sig.ts",
       "packages/chat/src/summary.ts",

@@ -1,3 +1,9 @@
+import {
+  asyncToolCallId,
+  cancelledEnvelope,
+  finalEnvelope,
+  startedEnvelope,
+} from "./async_tool.ts";
 import type { ChatEvent, ChatEventOf, ChatHeader, ParticipantId } from "./format.ts";
 import { summarize } from "./summary.ts";
 
@@ -14,7 +20,9 @@ export interface ViewToolCall {
 export type ViewMessage =
   | { role: "user" | "assistant" | "system" | "developer"; content: string }
   | { role: "assistant"; tool_calls: [ViewToolCall] }
-  | { role: "tool"; tool_call_id: string; content: string };
+  | ViewToolMessage;
+
+type ViewToolMessage = { role: "tool"; tool_call_id: string; content: string };
 
 export interface ViewOptions {
   /** How many lines (messages and her kickoffs) to keep, counted back from the newest. */
@@ -54,17 +62,36 @@ function isFrom(message: ChatEventOf<"message">, id: ParticipantId): boolean {
 }
 
 /**
+ * Python's `json.dumps(value, ensure_ascii=False)`, its `", "` and `": "` separators included, as
+ * pipedog writes a call's arguments and result into the context.
+ */
+function pyJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(pyJson).join(", ")}]`;
+  if (typeof value !== "object" || value === null) return JSON.stringify(value) ?? "null";
+  const fields = Object.entries(value)
+    .filter(([, field]) => field !== undefined)
+    .map(([key, field]) => `${JSON.stringify(key)}: ${pyJson(field)}`);
+  return `{${fields.join(", ")}}`;
+}
+
+/** pipedog's content for a tool's result: "COMPLETED" for an empty one, by Python's truthiness. */
+function resultContent(result: Readonly<Record<string, unknown>>): string {
+  return Object.keys(result).length === 0 ? "COMPLETED" : pyJson(result);
+}
+
+/**
  * A tool call as her view holds it: the `assistant.tool_calls` message, then its `tool` message,
- * with pipedog's content: "CANCELLED" for a call with no result, and "COMPLETED" for an empty
- * result, by Python's truthiness.
+ * with pipedog's content: "CANCELLED" for a call with no result, and for `started`, an async call
+ * still running, the placeholder `startedEnvelope`.
  */
 export function toolCallMessages(
   call: Pick<ChatEventOf<"tool-call">, "callId" | "name" | "arguments">,
-  result: Readonly<Record<string, unknown>> | null,
-): [ViewMessage, ViewMessage] {
+  result: Readonly<Record<string, unknown>> | null | "started",
+): [ViewMessage, ViewToolMessage] {
   let content: string;
   if (result === null) content = "CANCELLED";
-  else content = Object.keys(result).length === 0 ? "COMPLETED" : JSON.stringify(result);
+  else if (result === "started") content = startedEnvelope(call.callId);
+  else content = resultContent(result);
   return [
     {
       role: "assistant",
@@ -72,7 +99,7 @@ export function toolCallMessages(
         {
           id: call.callId,
           type: "function",
-          function: { name: call.name, arguments: JSON.stringify(call.arguments) },
+          function: { name: call.name, arguments: pyJson(call.arguments) },
         },
       ],
     },
@@ -86,8 +113,9 @@ export function toolCallMessages(
  * personas; a run of other personas' lines becomes one `user` message of `名字：text` lines. Her
  * kickoff is a `user` message, each tool call an `assistant.tool_calls` message followed by its
  * result, and each context block is spliced in at its recorded position in seq order, so blocks
- * accumulate as they do in a call, until a `context-removed` takes one out. What belongs to another
- * persona is left out.
+ * accumulate as they do in a call, until a `context-removed` takes one out. An async call's result
+ * replaces its placeholder, or comes later as a developer message once the conversation has moved
+ * on, as pipedog settles it. What belongs to another persona is left out.
  */
 export function viewOf(
   header: ChatHeader,
@@ -108,10 +136,13 @@ export function viewWithBlocks(
   const start = windowStart(events, id, options.windowMessages);
   const viewer =
     summarize(header, events).participants.length > 1 ? `${viewerLabel(options.viewerName)}：` : "";
-  const results = new Map<string, ChatEventOf<"tool-result">>();
+  const results = new Map<string, Readonly<Record<string, unknown>> | "started">();
   for (const event of events) {
-    if (event.type === "tool-result" && event.persona === id) results.set(event.callId, event);
+    if (event.type !== "tool-result" || event.persona !== id) continue;
+    if (event.stage === undefined) results.set(event.callId, event.result);
+    else if (event.stage === "started") results.set(event.callId, "started");
   }
+  const placeholders = new Map<string, ViewToolMessage>();
   const view: ViewMessage[] = [];
   const blocks = new Map<ViewMessage, number>();
   const bySeq = new Map<number, ViewMessage>();
@@ -162,10 +193,39 @@ export function viewWithBlocks(
         break;
       case "tool-call":
         if (event.persona === id) {
-          view.push(...toolCallMessages(event, results.get(event.callId)?.result ?? null));
+          const result = results.get(event.callId) ?? null;
+          const [call, tool] = toolCallMessages(event, result);
+          view.push(call, tool);
+          if (result === "started") placeholders.set(event.callId, tool);
+        }
+        break;
+      case "tool-result":
+        if (event.persona === id && event.stage === "cancelled") {
+          view.push({ role: "developer", content: cancelledEnvelope(event.callId) });
+        } else if (event.persona === id && event.stage === "final") {
+          const content = resultContent(event.result);
+          const placeholder = placeholders.get(event.callId);
+          if (placeholder !== undefined && !movedOn(view, placeholder)) {
+            placeholder.content = content;
+          } else {
+            view.push({ role: "developer", content: finalEnvelope(event.callId, content) });
+          }
         }
         break;
     }
   }
   return { messages: view, blocks };
+}
+
+/**
+ * Whether the conversation went on past an async call's placeholder, so its result has to reach
+ * her as a developer message: pipedog's `_isDeferred`, which overlooks tool and assistant messages
+ * and other calls' async-tool messages.
+ */
+function movedOn(view: readonly ViewMessage[], placeholder: ViewToolMessage): boolean {
+  return view.slice(view.indexOf(placeholder) + 1).some((message) => {
+    if (message.role === "tool" || message.role === "assistant") return false;
+    const callId = message.role === "developer" ? asyncToolCallId(message.content) : null;
+    return callId === null || callId === placeholder.tool_call_id;
+  });
 }

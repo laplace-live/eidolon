@@ -3,9 +3,12 @@
 // turn ends (one warning) when @pipedog/audio-smart-turn can't. Either is a silent behavior
 // change, so this module never takes a default.
 import { dlopen, FFIType } from "bun:ffi";
-import { SileroVADAnalyzer } from "@pipedog/audio-silero";
+import { fileURLToPath } from "node:url";
+import { warmVoiceModels } from "@eidolon/voice";
+import { defaultSileroModelUrl, SileroVADAnalyzer } from "@pipedog/audio-silero";
 import {
   createLocalSmartTurnAnalyzerV3,
+  defaultSmartTurnModelUrl,
   type LocalSmartTurnAnalyzerV3,
 } from "@pipedog/audio-smart-turn";
 import { TurnAnalyzerUserTurnStopStrategy } from "@pipedog/core/turns/user_stop/turn_analyzer_user_turn_stop_strategy";
@@ -14,6 +17,7 @@ import {
   UserTurnStrategies,
 } from "@pipedog/core/turns/user_turn_strategies";
 import { createNativeBackend, type OnnxBackend, type OrtModuleLike } from "@pipedog/onnx";
+import { voiceEngineFromEnv } from "./native/engine.ts";
 
 let nativeBackend: Promise<OnnxBackend> | null = null;
 
@@ -80,7 +84,19 @@ export async function warmModels(backend: OnnxBackend): Promise<void> {
   await turn.analyzeEndOfTurn();
 }
 
-/** Loads the Silero VAD and Smart Turn models before the first call needs them. */
+/** The model files pipedog's analyzers load, which the native engine's Ear loads too. */
+export function voiceModels(): { readonly silero: string; readonly smartTurn: string } {
+  return {
+    silero: fileURLToPath(defaultSileroModelUrl()),
+    smartTurn: fileURLToPath(defaultSmartTurnModelUrl()),
+  };
+}
+
+/**
+ * Loads the Silero VAD and Smart Turn models before the first call needs them: pipedog's, and
+ * under the native engine its own too, since nativeCanRun still sends some calls to pipedog.
+ */
 export async function warmAudioModels(): Promise<void> {
   await warmModels(await onnxBackend());
+  if (voiceEngineFromEnv() === "native") await warmVoiceModels(voiceModels());
 }

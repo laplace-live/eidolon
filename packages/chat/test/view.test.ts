@@ -5,7 +5,10 @@ import {
   type ChatEvent,
   type ChatEventDraft,
   type ChatHeader,
+  cancelledEnvelope,
+  finalEnvelope,
   stampEvents,
+  startedEnvelope,
   type ViewMessage,
   viewOf,
   viewWithBlocks,
@@ -83,6 +86,16 @@ const result = (
   callId,
   result: value,
 });
+const staged = (
+  persona: string,
+  callId: string,
+  stage: "started" | "final" | "cancelled",
+  value: Record<string, unknown> = {},
+): ChatEventDraft => ({ type: "tool-result", persona, turn: "t", callId, result: value, stage });
+const toolCall = (id: string, args = "{}"): ViewMessage => ({
+  role: "assistant",
+  tool_calls: [{ id, type: "function", function: { name: "take_selfie", arguments: args } }],
+});
 
 describe("viewOf, one persona", () => {
   test("her kickoff, her lines and the viewer's alternate as a call's would", () => {
@@ -151,6 +164,19 @@ describe("viewOf, one persona", () => {
     expect([...blocks]).toEqual([[messages[1] as ViewMessage, 8]]);
   });
 
+  test("a call's arguments and result are written as pipedog's json.dumps writes them", () => {
+    const events = log(
+      user("自拍一张"),
+      call("milky", "c1", { scene: "花店", tags: ["a", { b: null }] }),
+      result("milky", "c1", { ok: true, sizes: [1, 2.5], 名字: "奶绿" }),
+    );
+    const [, assistant, tool] = view(events) as [ViewMessage, ViewMessage, ViewMessage];
+    expect(assistant).toMatchObject({
+      tool_calls: [{ function: { arguments: '{"scene": "花店", "tags": ["a", {"b": null}]}' } }],
+    });
+    expect(tool).toMatchObject({ content: '{"ok": true, "sizes": [1, 2.5], "名字": "奶绿"}' });
+  });
+
   test("her tool calls become tool_calls, each followed by its result", () => {
     const events = log(
       user("自拍一张"),
@@ -169,8 +195,8 @@ describe("viewOf, one persona", () => {
     });
     expect(view(events)).toEqual([
       { role: "user", content: "自拍一张" },
-      toolCall("c1", '{"scene":"café"}'),
-      { role: "tool", tool_call_id: "c1", content: '{"ok":true,"note":"已发送"}' },
+      toolCall("c1", '{"scene": "café"}'),
+      { role: "tool", tool_call_id: "c1", content: '{"ok": true, "note": "已发送"}' },
       toolCall("c2", "{}"),
       { role: "tool", tool_call_id: "c2", content: "COMPLETED" },
       toolCall("c3", "{}"),
@@ -246,7 +272,7 @@ describe("viewOf's window", () => {
           { id: "c11", type: "function", function: { name: "take_selfie", arguments: "{}" } },
         ],
       },
-      { role: "tool", tool_call_id: "c11", content: '{"n":11}' },
+      { role: "tool", tool_call_id: "c11", content: '{"n": 11}' },
       { role: "assistant", content: "a11" },
     ]);
     expect(messages.at(-1)).toEqual({ role: "assistant", content: "a40" });
@@ -264,7 +290,7 @@ describe("viewOf's window", () => {
           { id: "c3", type: "function", function: { name: "take_selfie", arguments: "{}" } },
         ],
       },
-      { role: "tool", tool_call_id: "c3", content: '{"n":3}' },
+      { role: "tool", tool_call_id: "c3", content: '{"n": 3}' },
       { role: "assistant", content: "a3" },
     ]);
   });
@@ -273,6 +299,140 @@ describe("viewOf's window", () => {
     const events = chat(2);
     expect(view(events, "milky", 4).length).toBe(view(events, "milky", 100).length);
     expect(view(events, "milky", 0)).toEqual([]);
+  });
+
+  test("an async result whose call left the window comes as a developer message", () => {
+    const events = log(
+      user("u1"),
+      call("milky", "c1"),
+      staged("milky", "c1", "started"),
+      from("milky", "a1"),
+      user("u2"),
+      from("milky", "a2"),
+      staged("milky", "c1", "final", { ok: true }),
+    );
+    expect(view(events, "milky", 2)).toEqual([
+      { role: "user", content: "u2" },
+      { role: "assistant", content: "a2" },
+      { role: "developer", content: finalEnvelope("c1", '{"ok": true}') },
+    ]);
+  });
+});
+
+describe("viewOf, async calls", () => {
+  const placeholder = (id: string): ViewMessage => ({
+    role: "tool",
+    tool_call_id: id,
+    content: startedEnvelope(id),
+  });
+
+  test("a call still running holds pipedog's started placeholder", () => {
+    const events = log(
+      user("拍一张"),
+      call("milky", "c1", { scene: "café" }),
+      staged("milky", "c1", "started"),
+      from("milky", "好呀，等我一下"),
+    );
+    expect(view(events)).toEqual([
+      { role: "user", content: "拍一张" },
+      toolCall("c1", '{"scene": "café"}'),
+      placeholder("c1"),
+      { role: "assistant", content: "好呀，等我一下" },
+    ]);
+  });
+
+  test("a result before the conversation moved on settles in place, as a sync call's would", () => {
+    const events = log(
+      user("拍一张"),
+      call("milky", "c1"),
+      staged("milky", "c1", "started"),
+      from("milky", "好呀"),
+      staged("milky", "c1", "final", { ok: true, count: 1 }),
+      call("milky", "c2"),
+      staged("milky", "c2", "started"),
+      staged("milky", "c2", "final"),
+    );
+    expect(view(events)).toEqual([
+      { role: "user", content: "拍一张" },
+      toolCall("c1"),
+      { role: "tool", tool_call_id: "c1", content: '{"ok": true, "count": 1}' },
+      { role: "assistant", content: "好呀" },
+      toolCall("c2"),
+      { role: "tool", tool_call_id: "c2", content: "COMPLETED" },
+    ]);
+  });
+
+  test("a result after a user line or a recall block comes as a developer message", () => {
+    const afterLine = log(
+      user("拍一张"),
+      call("milky", "c1"),
+      staged("milky", "c1", "started"),
+      from("milky", "好呀"),
+      user("顺便唱首歌"),
+      staged("milky", "c1", "final", { ok: true }),
+    );
+    expect(view(afterLine).slice(2)).toEqual([
+      placeholder("c1"),
+      { role: "assistant", content: "好呀" },
+      { role: "user", content: "顺便唱首歌" },
+      { role: "developer", content: finalEnvelope("c1", '{"ok": true}') },
+    ]);
+    const afterRecall = log(
+      user("拍一张"),
+      call("milky", "c1"),
+      staged("milky", "c1", "started"),
+      context("milky", 99, "memories", "developer"),
+      staged("milky", "c1", "final"),
+    );
+    expect(view(afterRecall).slice(2)).toEqual([
+      placeholder("c1"),
+      { role: "developer", content: "memories" },
+      { role: "developer", content: finalEnvelope("c1", "COMPLETED") },
+    ]);
+  });
+
+  test("a cancelled call always settles with a developer message", () => {
+    const events = log(
+      user("拍一张"),
+      call("milky", "c1"),
+      staged("milky", "c1", "started"),
+      staged("milky", "c1", "cancelled"),
+    );
+    expect(view(events).slice(2)).toEqual([
+      placeholder("c1"),
+      { role: "developer", content: cancelledEnvelope("c1") },
+    ]);
+  });
+
+  test("another call's async messages don't move the conversation on", () => {
+    const events = log(
+      user("拍两张"),
+      call("milky", "c1"),
+      call("milky", "c2"),
+      staged("milky", "c1", "started"),
+      staged("milky", "c2", "started"),
+      staged("milky", "c2", "cancelled"),
+      staged("milky", "c1", "final", { ok: true }),
+    );
+    expect(view(events)).toEqual([
+      { role: "user", content: "拍两张" },
+      toolCall("c1"),
+      { role: "tool", tool_call_id: "c1", content: '{"ok": true}' },
+      toolCall("c2"),
+      placeholder("c2"),
+      { role: "developer", content: cancelledEnvelope("c2") },
+    ]);
+  });
+
+  test("another persona's async calls are left out", () => {
+    const events = log(
+      user("拍一张"),
+      call("ruby", "c1"),
+      staged("ruby", "c1", "started"),
+      staged("ruby", "c1", "final", { ok: true }),
+      staged("ruby", "c1", "cancelled"),
+    );
+    expect(groupView(events)).toEqual([{ role: "user", content: "小明：拍一张" }]);
   });
 });
 
@@ -320,7 +480,7 @@ describe("viewOf, a group", () => {
           { id: "r1", type: "function", function: { name: "take_selfie", arguments: "{}" } },
         ],
       },
-      { role: "tool", tool_call_id: "r1", content: '{"ok":true}' },
+      { role: "tool", tool_call_id: "r1", content: '{"ok": true}' },
       { role: "assistant", content: "那我先走了" },
     ]);
   });

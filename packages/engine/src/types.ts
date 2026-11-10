@@ -7,7 +7,8 @@ import type {
   ChatStreamLine,
   ParticipantId,
 } from "@eidolon/chat";
-import type { ContextProvider, LlmTool, ToolSchema, TurnGate } from "@eidolon/core";
+import type { ContextProvider, LlmTool, ToolEffects, ToolSchema, TurnGate } from "@eidolon/core";
+import type { UsageScope } from "@eidolon/providers";
 import type { AudioClip, Speech, Transcript } from "@eidolon/providers/speech-batch";
 
 export interface MindRequest {
@@ -54,7 +55,40 @@ export interface TurnRequest {
    * being decided gets the voice variant, and is awaited only once her reply is written.
    */
   readonly mode?: "text" | "voice" | Promise<"text" | "voice">;
+  /** Default: `{ source: "chat", session: <chat id> }`. */
+  readonly usage?: UsageScope;
+  /** A prompt she answers, stored as a developer `context` block at her view's end. */
+  readonly nudge?: string;
 }
+
+/** What a call gives each of her turns: her reply is spoken live, and her tools act on the call. */
+export interface CallHooks {
+  /**
+   * Her parts' voice variant, spoken live rather than saved: tools act through `effects`,
+   * `ASYNC_TOOL_INSTRUCTIONS` joins her system instruction while an async tool is registered, and
+   * an async tool reports through `onAsyncResult`. The turn's outputs gain `mind` and `notice`
+   * lines, and its `tool` lines a `callId`.
+   */
+  readonly mode: "call";
+  readonly effects: ToolEffects;
+  /**
+   * Ends her speech and resolves with what was heard. Awaited after the last round, or at once on
+   * an abort or a failure; her message is its text, none when it is empty, `interrupted` unless
+   * `complete`.
+   */
+  readonly heard: () => Promise<{ readonly text: string; readonly complete: boolean }>;
+  /**
+   * An async tool's settled result, during the turn or after it: one `tool-result` with stage
+   * `final` or `cancelled`. Its `running` line was the turn's; nothing else reports its end.
+   */
+  readonly onAsyncResult: (events: readonly ChatEventDraft[]) => void;
+  /** Cancels the async tools her turns start, as the call ends; each also stops at its timeout. */
+  readonly asyncSignal?: AbortSignal;
+  readonly usage?: UsageScope;
+}
+
+/** A turn in a call, which has no `late`: an async tool runs on through `onAsyncResult`. */
+export type CallTurnRequest = Omit<TurnRequest, "mode" | "late" | "usage"> & CallHooks;
 
 /** Takes a tool that runs on (`cancelOnInterruption: false`) when its turn is interrupted. */
 export interface LateTools {
@@ -73,6 +107,34 @@ export type TurnOutput =
   | Exclude<ChatStreamLine, { type: "events" } | { type: "error" }>
   | { readonly type: "events"; readonly events: readonly ChatEventDraft[] };
 
+/** A call turn's stream lines: a text turn's, with the lines only a call reads. */
+export type CallTurnOutput =
+  | Exclude<TurnOutput, { readonly type: "tool" }>
+  | {
+      /** One mind request: `started` just before it is sent, then `ended`, an abort included. */
+      readonly type: "mind";
+      readonly turn: string;
+      readonly state: "started" | "ended";
+      /** Why it failed, in the words an RTVI `error` carries. */
+      readonly error?: string;
+    }
+  | {
+      /** A context provider failed, and the turn went on without it: its `errorMessage`. */
+      readonly type: "notice";
+      readonly turn: string;
+      readonly text: string;
+    }
+  | {
+      readonly type: "tool";
+      readonly turn: string;
+      readonly name: string;
+      readonly callId: string;
+      /** An async tool's line is only `running`; its end comes through `onAsyncResult`. */
+      readonly async: boolean;
+      /** `cancelled`: it timed out, or her turn was interrupted while it ran. */
+      readonly state: "running" | "done" | "failed" | "cancelled";
+    };
+
 /** What a persona brings to a turn. */
 export interface PersonaParts {
   readonly systemInstruction: string;
@@ -89,6 +151,8 @@ export interface PartsOptions {
   readonly others?: readonly string[];
   /** The voice variant: her voice-style tool, and its hint in her system instruction. */
   readonly voice?: boolean;
+  /** A realtime model voices her: the prefix's realtime delivery line. Its voice never switches. */
+  readonly realtime?: boolean;
   /** What the chat's parts are kept under, by default its id. */
   readonly chatKey?: string;
 }

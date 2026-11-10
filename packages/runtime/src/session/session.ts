@@ -1,5 +1,5 @@
 import type { AllowedOffer, UserContext } from "@eidolon/access";
-import { cpLen, errorText, isJsonObject, logger, pyRepr, withPersona } from "@eidolon/config";
+import { errorText, logger, pyRepr, withPersona } from "@eidolon/config";
 import type { ContextProvider, LlmTool, TurnGate } from "@eidolon/core";
 import { MEM0_STORE_KEY } from "@eidolon/memory";
 import { withUsageScope } from "@eidolon/providers";
@@ -33,6 +33,7 @@ import { ContextProviderProcessor, RetrievalGateProcessor } from "../adapters/co
 import { SessionTools } from "../adapters/tools.ts";
 import { createUserTurnStrategies, createVadAnalyzer } from "../audio.ts";
 import { LaplaceRTVIProcessor } from "../rtvi.ts";
+import { logSessionStart } from "./start.ts";
 
 /** The stream archive: a context provider that may also offer recall_streams. */
 export interface ArchiveProvider extends ContextProvider {
@@ -391,28 +392,12 @@ export async function runTransportSession(
   );
 }
 
-/** `requestData` as the log may carry it: a chat window, the viewer's conversation, by size alone. */
-function loggedRequestData(requestData: AllowedOffer["requestData"]): unknown {
-  if (requestData === null || !("chat" in requestData)) return requestData;
-  const events = isJsonObject(requestData.chat) ? requestData.chat.events : undefined;
-  const chat = Array.isArray(events) ? `<chat: ${events.length} events>` : "<chat: not a window>";
-  return { ...requestData, chat };
-}
-
 async function runScopedSession(
   transport: BaseTransport,
   admission: Pick<AllowedOffer, "user" | "token" | "requestData">,
   deps: SessionDeps,
 ): Promise<void> {
-  // Logged either way: the "anonymous everywhere" failure mode is
-  // otherwise silent, and this makes it one grep.
-  if (admission.token) {
-    logger.info(`[bot] Session start with loginSyncToken (len=${cpLen(admission.token)})`);
-  } else {
-    const body = pyRepr(loggedRequestData(admission.requestData));
-    logger.info(`[bot] Session start without loginSyncToken; runner_args.body=${body}`);
-  }
-  logger.info("Starting bot");
+  logSessionStart(admission);
   const session = await buildSession(transport, admission.user, deps);
   installGreeting(session.worker, session.context, session.memory, deps.buildGreetingKickoff);
   transport.eventHandler("on_client_connected", async () => {

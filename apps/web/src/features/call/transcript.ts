@@ -1,5 +1,6 @@
 // What the call page shows of a call, rebuilt from its RTVI events: the viewer's speech and typed
 // messages, the bot's replies sentence by sentence as the TTS says them, and the selfies it sends.
+import { separator } from "@eidolon/chat";
 import type { BotOutputData, TranscriptData, UserInputData } from "@pipecat-ai/client-js";
 import { type MarkupToken, parseMarkup } from "../../lib/markup";
 
@@ -84,18 +85,6 @@ const SKIPPED_OUTPUT = new Set([
   "expression_sound",
   "expression_pause",
 ]);
-
-const CJK =
-  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3000-\u303f\uff00-\uffef]/u;
-
-/** The space two pieces of text need between them: none beside a space or CJK. */
-export function separator(left: string, right: string): "" | " " {
-  const before = left.at(-1);
-  const after = right[0];
-  if (before === undefined || after === undefined) return "";
-  if (/\s/.test(before) || /\s/.test(after) || CJK.test(before) || CJK.test(after)) return "";
-  return " ";
-}
 
 function append(state: Transcript, entry: Entry, open?: "user" | "bot"): Transcript {
   return {

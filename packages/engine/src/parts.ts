@@ -53,6 +53,7 @@ export interface PartsDeps {
     voiceHint: string;
     selfieHint: string;
     participants?: readonly string[];
+    realtime?: boolean;
   }): Promise<string>;
   dbPath(): string;
   dbPathExists(path: string): Promise<boolean>;
@@ -179,7 +180,7 @@ class Pieces {
   async parts(
     viewer: UserContext,
     events: readonly ChatEvent[],
-    { others = [], voice: spoken = false }: PartsOptions,
+    { others = [], voice: spoken = false, realtime = false }: PartsOptions,
   ): Promise<PersonaParts> {
     const deps = this.#deps;
     this.#selfie ??= (() => {
@@ -215,6 +216,7 @@ class Pieces {
         voiceHint: voice?.hint ?? "",
         selfieHint: this.#selfie.hint,
         ...(others.length > 0 ? { participants: others } : {}),
+        ...(realtime ? { realtime: true } : {}),
       }),
     ]);
     if (archive !== null) this.#recall ??= await archive.recallTool();

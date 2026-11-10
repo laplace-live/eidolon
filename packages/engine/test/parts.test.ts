@@ -234,6 +234,16 @@ describe("personaParts", () => {
     expect(calls.styles).toBe(2);
   });
 
+  test("a realtime call's variant has the prefix's delivery line and no voice-style tool", async () => {
+    const { deps, calls, parts: made } = fake();
+    const built = await personaParts(deps)(PERSONA, VIEWER, CHAT, { realtime: true });
+    expect(built.tools).toEqual([made.selfie, made.recall]);
+    expect(calls.styles).toBe(0);
+    expect(calls.instructions).toEqual([
+      { viewer: VIEWER, voiceHint: "", selfieHint: "SELFIE HINT", realtime: true },
+    ]);
+  });
+
   test("a voice message offers no voice-style tool or hint while she has one voice", async () => {
     const { deps, calls } = fake({ createVoiceTool: () => null });
     const built = await personaParts(deps)(PERSONA, VIEWER, CHAT, { voice: true });

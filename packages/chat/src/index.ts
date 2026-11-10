@@ -1,5 +1,6 @@
 // The chat log's format, browser-safe: apps/web and laplace's client import it, so nothing here
 // imports Bun, Node or another workspace package. The local store is `@eidolon/chat/jsonl`.
+export { cancelledEnvelope, finalEnvelope, startedEnvelope } from "./async_tool.ts";
 export {
   type Attachment,
   attachmentExtension,
@@ -28,6 +29,8 @@ export {
   type Speaker,
   stampEvents,
 } from "./format.ts";
+export { joinSegments, separator } from "./join.ts";
+export { MemoryChatStore } from "./memory.ts";
 export { type MentionTarget, parseMentions } from "./mentions.ts";
 export { canonicalForSig } from "./sig.ts";
 export { chainLimitOf, replyModeOf, summarize } from "./summary.ts";

@@ -5,7 +5,6 @@ import {
   botRuns,
   EMPTY_TRANSCRIPT,
   reduceTranscript,
-  separator,
   type Transcript,
   type TranscriptEvent,
   userText,
@@ -246,19 +245,6 @@ describe("selfies and resets", () => {
     const busy = run(said("a"), announce(1, "b"), { type: "selfie", paths: ["/api/selfie/x"] });
     expect(busy.entries.map((entry) => entry.id)).toEqual([1, 2, 3]);
     expect(reduceTranscript(busy, { type: "reset" })).toBe(EMPTY_TRANSCRIPT);
-  });
-});
-
-describe("separator", () => {
-  test("spaces only between two non-CJK words", () => {
-    expect(separator("Hi there.", "How")).toBe(" ");
-    expect(separator("你好。", "我是")).toBe("");
-    expect(separator("OK,", "你好")).toBe("");
-    expect(separator("好的", "OK")).toBe("");
-    expect(separator("Hi ", "there")).toBe("");
-    expect(separator("Hi", " there")).toBe("");
-    expect(separator("", "x")).toBe("");
-    expect(separator("x", "")).toBe("");
   });
 });
 

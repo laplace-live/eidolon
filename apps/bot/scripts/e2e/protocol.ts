@@ -3,7 +3,8 @@
 export const LEVEL_INTERVAL_MS = 100;
 export const FLOOR_DB = -120;
 
-export type EntrySource = "rtvi" | "http" | "pc" | "harness" | "console" | "level";
+/** `wire`: an RTVI message exactly as it crossed the data channel, before client-js read it. */
+export type EntrySource = "rtvi" | "wire" | "http" | "pc" | "harness" | "console" | "level";
 
 /** One observation, stamped with the observer's wall clock in epoch milliseconds. */
 export interface PageEntry {
@@ -31,6 +32,8 @@ export interface E2EPage {
   connect(options: ConnectOptions): Promise<ConnectResult>;
   sendText(text: string): Promise<string>;
   askByVoice(): Promise<void>;
+  /** Says the WAV at `url` over the mic, in place of its track, and resolves once it has played. */
+  bargeIn(url: string): Promise<{ durationMs: number }>;
   stats(): Promise<unknown>;
   disconnect(): Promise<void>;
 }

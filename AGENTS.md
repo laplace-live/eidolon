@@ -72,6 +72,7 @@ a row here and writing the prose there — not a new section in this file.**
 | the local web app (`apps/web`, `apps/bot/src/local`): local mode, its API, jobs or security | [web-app.md](docs/web-app.md) |
 | chats, the chat log format, the turn engine, group chats' director, or voice messages (`packages/chat`, `packages/engine`, `packages/context/src/director.ts`, `packages/providers/src/speech/batch`) | [chat.md](docs/chat.md) |
 | the production chat endpoint (`apps/bot/src/chat`, `/api/chat/*`, a call inside a chat), its signing, quotas or `EIDOLON_CHAT_SECRET` | [chat.md](docs/chat.md#production-the-browser-keeps-the-chat) |
+| the native voice engine (`packages/voice`, `packages/runtime/src/native`), `EIDOLON_VOICE_ENGINE`, or call-mode turns | [voice-engine.md](docs/voice-engine.md) |
 | a string the web app shows, its languages, or its `.po` catalogs | [web-app.md](docs/web-app.md#strings-and-languages) |
 | changesets, the version PR, tags, or publishing the npm package (`apps/eidolon`) | [releasing.md](docs/releasing.md) |
 | any env var — all 50-odd are documented there | `.env.example` |
@@ -138,6 +139,7 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | an ingest, `EMBED_MODEL`, or `EMBED_DIM` | re-run **both** ingests (`bun run laplace-ingest-streams`, `laplace-ingest-facts`) into the persona's `index/`, then copy it to each server's mounted data home with the rsync in [personas.md](docs/personas.md#deploying-a-persona) |
 | anything under `packages/ingest`, an offline command in `apps/cli`, or the write side of `packages/retrieval` | the gates below, then the stage's real-data test with `EIDOLON_REQUIRE_PARITY=1 bun test --no-env-file <file>`: `packages/ingest/test/*_real.test.ts` (streams, download, transcribe, refine, ingest_streams, pipeline), `apps/cli/test/ingest_facts_real.test.ts`, `packages/retrieval/test/write_real.test.ts`. They are free and only read `~/.laplace/eidolon` (`EIDOLON_REAL_HOME`). Without the variable a missing corpus skips silently |
 | the bot's pipeline, the transport, or the werift patches | boot the bot and hold a real call (`bun apps/bot/scripts/e2e-call.ts --text`, or `--audio`) — none of this is unit-testable |
+| `packages/voice` or `packages/runtime/src/native` | the parity tests with the twin harness, `EIDOLON_TWIN=1 bun test --no-env-file packages/runtime/test/parity` (about seven minutes, free): every difference between the engines must match a rule in `allowed.ts`, never a new rule added to pass. Then real calls on each engine with `e2e-call.ts` (`--text`, `--audio`, `--barge-in`) against a server started with and without `EIDOLON_VOICE_ENGINE=native`, compared by `e2e-compare.ts` ([voice-engine.md](docs/voice-engine.md#real-calls)). Billed |
 | `packages/imagegen` or the `take_selfie` tool | `bun run laplace-generate-image` against a real reference — it shares `generate()` with the bot, so a successful render is the check. Billed per image |
 | the gate's recall questions, state, or threshold (`packages/context/src/gate.ts`), or `RETRIEVAL_GATE_MODEL` | `bun run gate-decisions` — re-scores the labeled turns of `docs/benchmarks/2026-09-19-retrieval-gate/` into its `decisions.json`, and exits non-zero if any turn that needs recall would be skipped. About $0.002 of gate calls |
 | the director's questions, state, or thresholds (`packages/context/src/director.ts`) | `bun run director-decisions` — asks Jev about the labelled group-chat lines of `docs/benchmarks/2026-11-10-director/` into its `decisions.json`, and exits non-zero if any is decided wrong. About $0.003 of gate calls; after a threshold or label change alone, `bun docs/benchmarks/2026-11-10-director/score.ts --cached --check` replays the stored scores for free |
@@ -218,13 +220,21 @@ the layout's one line.
 - **Only `@eidolon/engine` talks to a mind outside the voice pipeline**, and a chat's log
   stores what was said and recalled, never stream deltas. Its `createMind` sends what a call's
   `createLlm` does, and each persona's view is rebuilt from the log, so what isn't stored she
-  never saw. The local app and production's chat endpoint both run it; see [chat.md](docs/chat.md).
+  never saw. The local app, production's chat endpoint and `packages/runtime`'s native calls all
+  run it; see [chat.md](docs/chat.md).
 - **Production keeps no transcripts; it signs what it produces.** Its chat endpoint
   (`apps/bot/src/chat`) exists only while `EIDOLON_CHAT_SECRET` is set; unset, every `/api/chat/*`
   path answers as an unknown path and no offer is bound. It answers from the window the browser
   sends and writes nothing to the data home. Every event it adds but the viewer's own carries an
   HMAC `sig`, one that fails is dropped from her view, and context blocks never leave the server.
   Only `apps/bot/src/local` imports `@eidolon/chat/jsonl` (Biome and `boundaries.test.ts` hold it).
+- **Only `packages/runtime` imports `@eidolon/voice` and `@eidolon/webrtc`.** Biome enforces it;
+  under `packages/runtime/src/native`, only `transport_pipedog.ts` imports `@pipedog/*`
+  (`native_boundaries.test.ts`). See [voice-engine.md](docs/voice-engine.md).
+- **In the voice loop, transport, provider and timer callbacks only post to the call's
+  mailbox;** only the Floor changes call state, and it never awaits. A billable request started
+  anywhere else falls outside the call's usage scope.
+- **A call's stored assistant text is what was heard (`heard()`), never what streamed.**
 - **No vendor SDK sends a request.** A provider is reached with `fetch`, through the
   clients in `packages/providers`, and every request that bills reports it with
   `reportUsage`, or the usage ledger misses it. `@eidolon/providers/catalog`
