@@ -35,6 +35,9 @@ function cjkJoined(value: string): string {
   return chars.filter((c, i) => c !== " " || !(cjk(chars[i - 1]) || cjk(chars[i + 1]))).join("");
 }
 
+/** `value` without whitespace, which a TTS segment may trim from the reply's text. */
+const unspaced = (value: string): string => value.replace(/\s+/g, "");
+
 /** A message's text content, when it is one. */
 function contentOf(message: unknown): string | null {
   const content = field(message, "content");
@@ -201,14 +204,18 @@ function partOfRecovery(d: Difference, twin: Twin): boolean {
       if (d.what !== "fish text" || !Array.isArray(d.pipedog) || !Array.isArray(d.native)) {
         return false;
       }
-      // Her texts with the recovery's taken out are native's.
-      const extra = [...(d.pipedog as string[])];
+      // Native's texts are pipedog's in order, and what they leave out is what the recovery said.
+      const pipedog = d.pipedog as string[];
+      const omitted: string[] = [];
+      let from = 0;
       for (const said of d.native as string[]) {
-        const at = extra.indexOf(said);
+        const at = pipedog.indexOf(said, from);
         if (at === -1) return false;
-        extra.splice(0, at + 1);
+        omitted.push(...pipedog.slice(from, at));
+        from = at + 1;
       }
-      return true;
+      omitted.push(...pipedog.slice(from));
+      return unspaced(omitted.join("")) === unspaced(spoken.join(""));
     }
     case "usage": {
       const own = usageOf(d.record);

@@ -4,7 +4,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { AllowedOffer } from "@eidolon/access";
 import { activePersona, pyRepr } from "@eidolon/config";
-import type { CallTurnRequest, EngineDeps } from "@eidolon/engine";
+import type { CallTurnRequest, EngineDeps, Mind } from "@eidolon/engine";
 import { PROVIDERS } from "@eidolon/providers";
 import type { CallDeps } from "@eidolon/voice";
 import {
@@ -180,7 +180,7 @@ describe("runNativeSafely", () => {
     const transport = new FakeTransport();
     const turns: FakeTurn[] = [];
     const deps: CallDeps = {
-      engine: {} as EngineDeps,
+      engine: { createMind: (): Mind => ({ async *stream() {} }) } as EngineDeps,
       runTurn: ((request: CallTurnRequest) => {
         const turn = new FakeTurn(request, `turn-${turns.length + 1}`);
         turns.push(turn);

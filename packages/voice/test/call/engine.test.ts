@@ -200,6 +200,44 @@ describe("the Floor on the real engine", () => {
     });
   });
 
+  test("a turn that fails before its mind request tells the client, a failed request only once", async () => {
+    const failing: Mind = {
+      stream: () => ({
+        [Symbol.asyncIterator]: () => ({
+          next: () => Promise.reject(new Error("502 Bad Gateway")),
+        }),
+      }),
+    };
+    let made = 0;
+    const deps: EngineDeps = {
+      ...engine(failing, []),
+      createMind: () => {
+        if (++made === 1) throw new Error("OpenRouter needs an API key");
+        return failing;
+      },
+    };
+    const call = startCall({ turn: (request) => runTurn(request, deps) });
+    await call.ready();
+    const told = () => call.news().filter((l) => /^(error|bot-llm)/.test(l));
+    call.news();
+
+    await call.says("你好");
+    await settle();
+    expect(told()).toEqual(["error OpenRouter needs an API key"]);
+    expect(call.events().at(-1)).toMatchObject({
+      type: "turn-failed",
+      error: "OpenRouter needs an API key",
+    });
+
+    await call.says("还在吗");
+    await settle();
+    expect(told()).toEqual([
+      "bot-llm-started",
+      "bot-llm-stopped",
+      "error Error during completion: 502 Bad Gateway",
+    ]);
+  });
+
   test("an async selfie's result, landing once she is done, brings her follow-up reply", async () => {
     const selfie = selfieTool();
     const { mind, requests } = scriptedMind(

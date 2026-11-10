@@ -48,6 +48,8 @@ interface Reply {
   readonly startedAt: number;
   /** `bot-llm-started` went out without its `bot-llm-stopped`. */
   mindOpen: boolean;
+  /** A mind request's `error` went out: her turn's `turn-failed` repeats it. */
+  failed: boolean;
   /** Tool calls whose `llm-function-call-in-progress` waits for the round's `bot-llm-stopped`. */
   readonly inProgress: string[];
   /** `bot-tts-started` went out without its `bot-tts-stopped`. */
@@ -280,6 +282,7 @@ export class Floor {
       speech: mouth.begin(id, { audio: options.speech ?? true }),
       startedAt: kit.clock.now(),
       mindOpen: false,
+      failed: false,
       inProgress: [],
       ttsOpen: false,
       spoken: false,
@@ -336,6 +339,12 @@ export class Floor {
       case "events":
         // Stored before anything else is done with it.
         plan.log.append(out.events);
+        // Row 18: a failure no mind request reported, as her parts or her mind not being made.
+        for (const event of out.events) {
+          if (event.type === "turn-failed" && !reply.failed && !reply.cut) {
+            emitter.error(event.error);
+          }
+        }
         return;
       case "decision":
         plan.log.append([out]);
@@ -352,7 +361,10 @@ export class Floor {
           reply.mindOpen = false;
           emitter.botLlmStopped();
           for (const callId of reply.inProgress.splice(0)) emitter.toolInProgress(callId);
-          if (out.error !== undefined) emitter.error(out.error);
+          if (out.error !== undefined) {
+            reply.failed = true;
+            emitter.error(out.error);
+          }
           reply.speech.flush();
         }
         return;

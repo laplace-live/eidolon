@@ -54,6 +54,10 @@ export interface Scenario {
   readonly fish?: FishOptions;
   /** Variables the persona's settings read, beside the fakes' accounts. */
   readonly env?: Readonly<Record<string, string>>;
+  /** The roles whose account has no API key. */
+  readonly keyless?: readonly (keyof typeof ACCOUNTS)[];
+  /** The call can't start: the caller's offer is answered, and nothing waits for it to connect. */
+  readonly failsToStart?: boolean;
   run(call: TwinCall): Promise<void>;
 }
 
@@ -94,17 +98,19 @@ const ACCOUNTS = { hearing: "soniox-twin", voice: "fish-twin", mind: "openrouter
  * The persona's roles filled by accounts at the fakes, in credentials.json, which every other
  * variable a call reads leaves alone. Returns what puts things back.
  */
-function useFakes(fakes: Fakes, env: Readonly<Record<string, string>>): () => void {
+function useFakes(fakes: Fakes, scenario: Pick<Scenario, "env" | "keyless">): () => void {
   const path = join(dataHome(), "credentials.json");
   const before = existsSync(path) ? readFileSync(path, "utf8") : null;
+  const key = (role: keyof typeof ACCOUNTS) =>
+    scenario.keyless?.includes(role) ? {} : { apiKey: "twin-key" };
   mkdirSync(dataHome(), { recursive: true, mode: 0o700 });
   writeFileSync(
     path,
     JSON.stringify({
       accounts: {
-        [ACCOUNTS.hearing]: { provider: "soniox", apiKey: "twin-key", baseUrl: fakes.soniox.base },
-        [ACCOUNTS.voice]: { provider: "fish", apiKey: "twin-key", baseUrl: fakes.fish.base },
-        [ACCOUNTS.mind]: { provider: "openrouter", apiKey: "twin-key", baseUrl: fakes.mind.base },
+        [ACCOUNTS.hearing]: { provider: "soniox", ...key("hearing"), baseUrl: fakes.soniox.base },
+        [ACCOUNTS.voice]: { provider: "fish", ...key("voice"), baseUrl: fakes.fish.base },
+        [ACCOUNTS.mind]: { provider: "openrouter", ...key("mind"), baseUrl: fakes.mind.base },
       },
     }),
     { mode: 0o600 },
@@ -115,7 +121,7 @@ function useFakes(fakes: Fakes, env: Readonly<Record<string, string>>): () => vo
     LLM_PROVIDER: ACCOUNTS.mind,
     LLM_MODEL: "twin/mind-1",
     TTS_VOICE_ID: "twin-voice",
-    ...env,
+    ...scenario.env,
   };
   const saved = Object.keys(vars).map((name) => [name, process.env[name]] as const);
   Object.assign(process.env, vars);
@@ -179,7 +185,7 @@ export async function runOn(engine: VoiceEngine, scenario: Scenario): Promise<Ca
   const logs = captureLogs();
   const usage: UsageRecord[] = [];
   setUsageSink((record) => usage.push(record));
-  const restore = useFakes(fakes, scenario.env ?? {});
+  const restore = useFakes(fakes, scenario);
   const pipedogSeen: { context: LLMContext | null } = { context: null };
   let nativeLog: CallLog | null = null;
   const sessions: Promise<void>[] = [];
@@ -207,7 +213,8 @@ export async function runOn(engine: VoiceEngine, scenario: Scenario): Promise<Ca
   let ended = false;
   let failed: string | null = null;
   try {
-    await peer.dial(server);
+    if (scenario.failsToStart) await peer.offer(server);
+    else await peer.dial(server);
     await scenario.run({ engine, peer, fakes });
   } catch (error) {
     failed = error instanceof Error ? error.message : String(error);

@@ -77,6 +77,9 @@ export async function runCascadeCall(
         post: (event) => kit.post({ source: "mouth", event }),
       });
       kit.own("her voice", mouth);
+      // Made here as pipedog's session makes its LLM, so a mind role with no key fails the call
+      // before it connects.
+      deps.engine.createMind();
       const stt = await deps.openStt(listening.signal);
       kit.own("her hearing", stt);
       return { stt, mouth };

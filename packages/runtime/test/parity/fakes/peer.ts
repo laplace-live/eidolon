@@ -51,6 +51,18 @@ export class TwinPeer {
 
   /** Offers to `server` and waits until the call is connected and the channel open. */
   async dial(server: SignallingServer): Promise<string> {
+    const id = await this.offer(server);
+    await this.#until(() => this.#channel.readyState === "open", 10_000, "the channel to open");
+    this.#audio.sender.replaceTrack(this.#mic);
+    this.#pings = setInterval(() => {
+      if (this.#channel.readyState === "open") this.#channel.send(`ping: ${Date.now()}`);
+    }, 1000);
+    void this.#listen();
+    return id;
+  }
+
+  /** Offers to `server` and takes its answer, without waiting for the call to connect. */
+  async offer(server: SignallingServer): Promise<string> {
     await this.#pc.setLocalDescription(await this.#pc.createOffer());
     const result = await server.offer(
       admission({ sdp: this.#pc.localDescription!.sdp, type: "offer" }),
@@ -58,13 +70,15 @@ export class TwinPeer {
     if (result.status !== 200) throw new Error(`offer failed: ${JSON.stringify(result.body)}`);
     const answer = result.body as { sdp: string; pc_id: string };
     await this.#pc.setRemoteDescription({ sdp: answer.sdp, type: "answer" } as never);
-    await this.#until(() => this.#channel.readyState === "open", 10_000, "the channel to open");
-    this.#audio.sender.replaceTrack(this.#mic);
-    this.#pings = setInterval(() => {
-      if (this.#channel.readyState === "open") this.#channel.send(`ping: ${Date.now()}`);
-    }, 1000);
-    void this.#listen();
     return answer.pc_id;
+  }
+
+  /** Whether the channel opens within `timeoutMs`. */
+  opens(timeoutMs: number): Promise<boolean> {
+    return this.#until(() => this.#channel.readyState === "open", timeoutMs, "the channel").then(
+      () => true,
+      () => false,
+    );
   }
 
   /** An RTVI message from the client, as client-js frames it; returns its id. */

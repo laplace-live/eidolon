@@ -137,7 +137,7 @@ The Floor's state is three regions, plus counters:
 | 15 | — | reply `mind ended(error?)` | — | emit `bot-llm-stopped`, and `error` on a failure; flush her speech | — |
 | 16 | — | reply `tool running` | — | emit `llm-function-call-started`, and `-in-progress` once the round's `bot-llm-stopped` is out, as pipedog orders them; a sync tool counts | — |
 | 17 | — | reply `tool done / failed / cancelled` | — | emit `llm-function-call-stopped{cancelled}`; a sync tool uncounts | — |
-| 18 | — | reply `notice` | — | emit `error` | — |
+| 18 | — | reply `notice`, or a `turn-failed` no mind request reported | — | emit `error` | — |
 | 19 | — | Mouth `tts-stopped` | the reply's last utterance | emit `bot-tts-stopped`; the reply is spoken once the mind is done | — |
 | 20 | BOT speaking | Speaker `drained` | spoken | emit `bot-stopped-speaking` | BOT thinking until `ended` |
 | 21 | BOT speaking | Speaker `drained` | not spoken | arm 3 s; if the Speaker is still drained then, emit `bot-stopped-speaking` | — |
@@ -163,6 +163,11 @@ transcript, and her audio playing. `apps/web/src/features/call/phase.ts` counts 
    `bot-stopped-speaking` for whichever was open, so a new `user-started-speaking` comes before the
    old `bot-stopped-speaking`, as [frontend-loading-state.md](frontend-loading-state.md) documents;
 5. her turn stores her message, `interrupted`, with the heard text, then ends.
+
+**Starting a call:** her mind is made before anything connects, as pipedog's session makes its
+LLM, so a mind role with no key fails the call with `Bot session failed: …` on both engines. A turn
+that fails later before its mind request (her key removed mid-call, her parts failing to build)
+reports its failure as `error` (row 18), and the call goes on, as it does after any pipedog error.
 
 **Ending a call** (`end(reason)`): cut the open reply silently, abort her async tools, close the
 recognizer and her speech (their meters flush), wait at most 2 s for the cut reply to store what
@@ -368,12 +373,12 @@ reason, for the user to decide.
 without `run_immediately`, left for the next turn, and one typed during her last reply; a reply
 with `audio_response: false`; a spoken question and a two-sentence reply; a barge-in mid-sentence
 and before her first audio; an empty turn while idle, after cutting her off, and just after her
-audio ended (D13); `change_voice_style`; a mind request that fails; the recognizer's socket
-dropping and reconnecting; a call longer than the 60-line window (D1). One is skipped, its
-difference noted where it is written: a line typed without `run_immediately` within 15 s of her
-Fish reply, which pipedog stores before that reply, since it stores her reply only when Fish's
-audio context times out. `scenarios/checks.test.ts` tests the harness itself on made-up sequences,
-and runs without the variable.
+audio ended (D13); `change_voice_style`; a mind account with no key; a mind request that fails;
+the recognizer's socket dropping and reconnecting; a call longer than the 60-line window (D1). One
+is skipped, its difference noted where it is written: a line typed without `run_immediately` within
+15 s of her Fish reply, which pipedog stores before that reply, since it stores her reply only when
+Fish's audio context times out. `scenarios/checks.test.ts` tests the harness itself on made-up
+sequences, and runs without the variable.
 
 ### Real calls
 

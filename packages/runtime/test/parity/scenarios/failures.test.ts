@@ -1,8 +1,9 @@
-// What a call does when a provider fails: a mind request that errors, a recognizer socket that
-// drops and comes back.
-import { describe, test } from "bun:test";
-import { assertParity, runTwin } from "../twin.ts";
+// What a call does when a provider fails: a mind role with no key, a mind request that errors, a
+// recognizer socket that drops and comes back.
+import { describe, expect, test } from "bun:test";
+import { assertParity, type Capture, runTwin } from "../twin.ts";
 import {
+  clientReady,
   finished,
   GREETING,
   greeted,
@@ -13,7 +14,33 @@ import {
   TWIN,
 } from "./script.ts";
 
+const SESSION_FAILED = "Bot session failed: ";
+
 describe.skipIf(!TWIN)("twin: failures", () => {
+  test(
+    "a mind account with no key fails the call before it connects",
+    async () => {
+      const twin = await runTwin({
+        name: "mind with no key",
+        keyless: ["mind"],
+        failsToStart: true,
+        async run({ peer }) {
+          // client-js says it is ready once the channel opens, which a call that failed never opens.
+          if (await peer.opens(5_000)) {
+            clientReady(peer);
+            await Bun.sleep(3_000);
+          }
+        },
+      });
+      assertParity(twin);
+      const failures = (c: Capture) =>
+        c.logs.filter((r) => r.message.startsWith(SESSION_FAILED)).map((r) => r.message);
+      expect(failures(twin.pipedog)).toEqual([expect.stringContaining("no API key")]);
+      expect(failures(twin.native)).toEqual(failures(twin.pipedog));
+    },
+    SCENARIO_MS,
+  );
+
   test(
     "a mind request that fails tells the client, and the call goes on",
     async () => {
