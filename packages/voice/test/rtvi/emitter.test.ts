@@ -124,6 +124,19 @@ describe("RtviEmitter bot-output", () => {
     ]);
   });
 
+  test("a segment she won't speak goes out once, new, its id counted with the spoken ones", () => {
+    rtvi.unspokenSegment("好的。");
+    rtvi.segment(tag(0), "嗯。");
+    rtvi.segmentStarted(tag(0));
+    expect(wire().slice(0, 2)).toEqual([
+      '{"label":"rtvi-ai","type":"bot-transcription","data":{"text":"好的。"}}',
+      '{"label":"rtvi-ai","type":"bot-output","data":{"text":"好的。","text_type":"sentence",' +
+        '"aggregated_by":"sentence","segment_id":1,"spoken":false,"will_be_spoken":false,' +
+        '"spoken_status":"new"}}',
+    ]);
+    expect(output().at(-1)).toMatchObject({ text: "嗯。", segment_id: 2 });
+  });
+
   test("word progress reports in-progress, and completes at the text's end", () => {
     rtvi.segment(tag(0), "Hi there.");
     rtvi.segmentStarted(tag(0));

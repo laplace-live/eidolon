@@ -37,7 +37,7 @@ import { productionSessionDeps } from "../../src/session/defaults.ts";
 import { createLlm, createStt, createTts } from "../../src/session/services.ts";
 import { runSessionSafely, type SessionDeps } from "../../src/session/session.ts";
 import { createSignallingServerWith } from "../../src/webrtc/signalling.ts";
-import { captureLogs } from "../support.ts";
+import { captureLogs, PASS_THROUGH_RULES } from "../support.ts";
 import { ALLOWED, type Allowance } from "./allowed.ts";
 import { FakeFish, type FishOptions, type FishSession } from "./fakes/fish.ts";
 import { FakeMind, type MindReply, type MindRequest } from "./fakes/mind.ts";
@@ -96,12 +96,6 @@ export interface Twin {
   readonly pipedog: Capture;
   readonly native: Capture;
 }
-
-const PASS_THROUGH_RULES = {
-  dropUnreachableCandidates: (sdp: string) => ({ sdp, dropped: [] }),
-  candidateReachable: () => true,
-  scrubRelayRelatedAddresses: (sdp: string) => sdp,
-};
 
 const ACCOUNTS = { hearing: "soniox-twin", voice: "fish-twin", mind: "openrouter-twin" } as const;
 

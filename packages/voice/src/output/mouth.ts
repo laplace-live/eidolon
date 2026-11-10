@@ -5,19 +5,27 @@ import { logger } from "@eidolon/config";
 import { type Markup, modelInfo, type Selection, unreadCues } from "@eidolon/providers";
 import type { SpeechStream, Utterance, UtteranceAudio } from "@eidolon/providers/speech-stream";
 import { type RubatoStream, resampler } from "../dsp/resampler/index.ts";
-import type { Clock, CursorEvent, JoinSegments, ReplySpeech, Speaker, Tag } from "../types.ts";
+import type {
+  Clock,
+  CursorEvent,
+  Heard,
+  JoinSegments,
+  ReplySpeech,
+  Speaker,
+  Tag,
+} from "../types.ts";
 import { Segmenter } from "./segmenter.ts";
-import { SpokenTracker } from "./spoken.ts";
+import { SpokenTracker, spokenTo } from "./spoken.ts";
 
 /** An utterance with no audio this long after its first segment has stalled. */
 const STALL_MS = 15_000;
-
-const WORD = /[\p{L}\p{N}]/u;
 
 /** What a reply's speech has to tell the client, in the order it happened. */
 export type SpeechNote =
   /** A segment went to her voice, cues and all: `bot-transcription`. */
   | { readonly type: "segment"; readonly tag: Tag; readonly text: string }
+  /** A segment of a reply without audio: `bot-transcription`, and a `bot-output` "new" only. */
+  | { readonly type: "unspoken"; readonly text: string }
   /** The reply's first segment went to her voice: `bot-tts-started`. */
   | { readonly type: "tts-started" }
   /** The listener starts hearing the segment: its `bot-output` "new". */
@@ -71,25 +79,6 @@ export function voiceTraits(selection: Selection): Pick<MouthOptions, "markup" |
   };
 }
 
-/** The UTF-16 offset in `text` just past its `chars`-th letter or digit outside `unread` cues. */
-function spokenTo(text: string, chars: number, unread: RegExp | null): number {
-  const cues = unread === null ? [] : [...text.matchAll(unread)];
-  let cue = 0;
-  let count = 0;
-  for (let i = 0; i < text.length; ) {
-    const at = cues[cue];
-    if (at !== undefined && i === at.index) {
-      i += at[0].length;
-      cue++;
-      continue;
-    }
-    const char = String.fromCodePoint(text.codePointAt(i) as number);
-    i += char.length;
-    if (WORD.test(char) && ++count === chars) return i;
-  }
-  return text.length;
-}
-
 /** A persona's voice for one call: her replies one at a time, in the voice she last chose. */
 export class Mouth {
   readonly #options: MouthOptions;
@@ -101,7 +90,10 @@ export class Mouth {
     this.#options = options;
   }
 
-  /** Reply `reply`'s speech; with `audio` false (`send-text` without `audio_response`), none. */
+  /**
+   * Reply `reply`'s speech; with `audio` false (`send-text` without `audio_response`), its segments
+   * are only reported.
+   */
   begin(reply: string, options: { readonly audio?: boolean } = {}): SpokenReply {
     const spoken: Reply = new Reply(this.#options, this.#voice, reply, options.audio ?? true, () =>
       this.#live.delete(spoken),
@@ -115,11 +107,6 @@ export class Mouth {
     for (const reply of [...this.#live]) reply.cancel();
     await this.#options.speech.close();
   }
-}
-
-interface Heard {
-  readonly text: string;
-  readonly complete: boolean;
 }
 
 interface Said {
@@ -175,15 +162,14 @@ class Reply implements SpokenReply {
     if (this.#cancelled) return;
     if (this.#ended) {
       logger.warning(`[voice] Text came after reply ${this.#id}'s speech ended; it isn't spoken`);
-    } else if (!this.#audio) {
-      this.#pushed += delta;
-    } else {
-      for (const sentence of this.#segmenter.push(delta)) this.#say(sentence);
+      return;
     }
+    if (!this.#audio) this.#pushed += delta;
+    for (const sentence of this.#segmenter.push(delta)) this.#say(sentence);
   }
 
   flush(): void {
-    if (!this.#audio || this.#ended || this.#cancelled) return;
+    if (this.#ended || this.#cancelled) return;
     const rest = this.#segmenter.flush();
     if (rest !== null) this.#say(rest);
   }
@@ -210,9 +196,8 @@ class Reply implements SpokenReply {
   // Bound, so it can be handed on as it stands (`heard: speech.heard`).
   readonly heard = (): Promise<Heard> => {
     if (!this.#ended && !this.#cancelled) {
+      this.flush();
       if (this.#audio) {
-        const rest = this.#segmenter.flush();
-        if (rest !== null) this.#say(rest);
         this.#tracker.attach(this.#segmenter.held);
         this.#current?.utterance.end();
         this.#current = null;
@@ -255,6 +240,10 @@ class Reply implements SpokenReply {
   }
 
   #say(text: string): void {
+    if (!this.#audio) {
+      this.#note({ type: "unspoken", text });
+      return;
+    }
     const seg = this.#nextSeg++;
     const voiced = this.#current ?? this.#open();
     this.#current = voiced;

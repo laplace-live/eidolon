@@ -146,6 +146,16 @@ export class RtviEmitter {
     this.#send(rtviMessage("bot-transcription", { text }));
   }
 
+  /**
+   * A segment of a reply without audio: `bot-transcription`, then the one `bot-output` pipedog's
+   * observer sends for skipTts text.
+   */
+  unspokenSegment(text: string): void {
+    this.#send(rtviMessage("bot-transcription", { text }));
+    const segment = { id: this.#nextSegmentId++, text };
+    this.#botOutput(segment, { spoken: false, status: "new", accumulated: null });
+  }
+
   /** The cursor reached the segment: its "new". */
   segmentStarted(tag: Tag): void {
     const segment = this.#segments.get(keyOf(tag));
@@ -185,24 +195,31 @@ export class RtviEmitter {
     this.#send(rtviMessage("bot-tts-text", { text: segment.text }));
   }
 
-  // `spoken` is absent from progress, as pipedog's word-timestamp path leaves it.
+  // `spoken` is absent from progress, as pipedog's word-timestamp path leaves it. A segment she
+  // won't speak has `accumulated` null, and no progress.
   #botOutput(
-    segment: Segment,
-    o: { readonly spoken?: boolean; readonly status: string; readonly accumulated: string },
+    segment: Pick<Segment, "id" | "text">,
+    o: { readonly spoken?: boolean; readonly status: string; readonly accumulated: string | null },
   ): void {
+    const { text } = segment;
+    const { accumulated } = o;
     this.#send(
       rtviMessage("bot-output", {
-        text: segment.text,
+        text,
         text_type: "sentence",
         aggregated_by: "sentence",
         segment_id: segment.id,
         ...(o.spoken === undefined ? {} : { spoken: o.spoken }),
-        will_be_spoken: true,
+        will_be_spoken: accumulated !== null,
         spoken_status: o.status,
-        spoken_progress: {
-          accumulated_text: o.accumulated,
-          remaining_text: segment.text.slice(o.accumulated.length),
-        },
+        ...(accumulated === null
+          ? {}
+          : {
+              spoken_progress: {
+                accumulated_text: accumulated,
+                remaining_text: text.slice(accumulated.length),
+              },
+            }),
       }),
     );
   }

@@ -1,9 +1,37 @@
 import { CString, dlopen, FFIType } from "bun:ffi";
+import { networkInterfaces } from "node:os";
+import type { AllowedOffer } from "@eidolon/access";
 import { consoleSink, type LogLevel, type LogRecord, logger } from "@eidolon/config";
 import { type Frame, OutputTransportMessageUrgentFrame } from "@pipedog/core/frames/frames";
 import { type FrameDirection, FrameProcessor } from "@pipedog/core/processors/frame_processor";
 import { BaseTransport } from "@pipedog/core/transports/base_transport";
 import { configureLogging } from "../src/logging.ts";
+
+/** werift offers no loopback host candidate, so a peer on this machine needs another interface. */
+export const CAN_DIAL = Object.values(networkInterfaces()).some((addresses) =>
+  addresses?.some((a) => a.family === "IPv4" && !a.internal),
+);
+
+/** Candidate rules that keep every candidate, for a peer on this machine. */
+export const PASS_THROUGH_RULES = {
+  dropUnreachableCandidates: (sdp: string) => ({ sdp, dropped: [] }),
+  candidateReachable: () => true,
+  scrubRelayRelatedAddresses: (sdp: string) => sdp,
+};
+
+/** An anonymous viewer's offer, let through. */
+export function admission(body: Record<string, unknown>): AllowedOffer {
+  return {
+    allowed: true,
+    user: { mid: null, uname: null, face: null, isLoggedIn: false },
+    token: null,
+    body,
+    requestData: { audioQuality: "medium" },
+    opusBitrateBps: 96000,
+    clientIp: "127.0.0.1",
+    quota: null,
+  };
+}
 
 export interface LogCapture {
   readonly records: LogRecord[];

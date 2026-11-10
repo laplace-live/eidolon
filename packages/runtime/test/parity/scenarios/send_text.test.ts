@@ -35,11 +35,7 @@ describe.skipIf(!TWIN)("twin: send-text while she speaks", () => {
     SCENARIO_MS,
   );
 
-  // Skipped: the engines differ beyond allowed.ts. For a reply in text alone pipedog still sends
-  // each sentence's bot-transcription and a bot-output "new" with will_be_spoken: false, which
-  // client-react's transcript shows; the native Floor speaks nothing for it and sends neither
-  // (docs/voice-engine.md, "Speaking": "With audio_response: false, a reply speaks nothing").
-  test.skip(
+  test(
     "audio_response false answers in text, its sentences still reported",
     async () => {
       const twin = await runTwin({

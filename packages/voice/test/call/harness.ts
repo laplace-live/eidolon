@@ -11,16 +11,26 @@ import {
 } from "@eidolon/chat";
 import { AsyncQueue } from "@eidolon/config";
 import type { CallChatOutput, CallTurnRequest } from "@eidolon/engine";
+import { reportUsage } from "@eidolon/providers";
 import type { SpeechStream, Utterance, UtteranceAudio } from "@eidolon/providers/speech-stream";
+import type { SttEvent, SttStream } from "@eidolon/providers/stt";
 import { Floor, type FloorOptions } from "../../src/call/floor.ts";
-import { CallKit, type Heard } from "../../src/call/kit.ts";
+import { CallKit } from "../../src/call/kit.ts";
 import { memoryCallLog } from "../../src/call/log.ts";
 import { Mouth } from "../../src/output/mouth.ts";
 import { createSpeaker } from "../../src/output/speaker.ts";
 import type { RtviMessage } from "../../src/rtvi/codec.ts";
 import { readRtvi } from "../../src/rtvi/codec.ts";
 import { RtviEmitter } from "../../src/rtvi/emitter.ts";
-import type { CallLog, CloseReason, EarEvent } from "../../src/types.ts";
+import type {
+  CallLog,
+  CallTransport,
+  CloseReason,
+  EarEvent,
+  Heard,
+  Pcm,
+  PcmSource,
+} from "../../src/types.ts";
 import { FakeClock } from "../input/clock.ts";
 
 export const HOST = "milky-green";
@@ -382,4 +392,76 @@ export async function spokenReply(call: Call, text: string, samples = 480): Prom
   await call.play(samples);
   await ending;
   await settle();
+}
+
+/** A call's transport, its client scripted by the test. */
+export class FakeTransport implements CallTransport {
+  readonly audioIn = new AsyncQueue<Pcm>();
+  readonly messages = new AsyncQueue<unknown>();
+  readonly sent: Readonly<Record<string, unknown>>[] = [];
+  source: PcmSource | null = null;
+  connected = false;
+  disconnects = 0;
+  readonly closed: Promise<"client">;
+  #leave: () => void = () => {};
+
+  constructor() {
+    this.closed = new Promise((resolve) => {
+      this.#leave = () => resolve("client");
+    });
+  }
+
+  attachSpeaker(source: PcmSource): void {
+    this.source = source;
+  }
+
+  send(message: Readonly<Record<string, unknown>>): void {
+    this.sent.push(message);
+  }
+
+  async connect(): Promise<void> {
+    this.connected = true;
+  }
+
+  async disconnect(): Promise<void> {
+    this.disconnects++;
+  }
+
+  leave(): void {
+    this.#leave();
+  }
+
+  rtvi(type: string, data?: Record<string, unknown>): void {
+    this.messages.push({ label: "rtvi-ai", type, id: `c-${type}`, data });
+  }
+
+  get types(): string[] {
+    return this.sent.map((m) => m.type as string);
+  }
+}
+
+/** A recognizer that bills what it is sent, as the real ones do. */
+export class FakeStt implements SttStream {
+  readonly inputRate = 16_000;
+  readonly ttfsP99 = 0.35;
+  readonly events = new AsyncQueue<SttEvent>();
+  samples = 0;
+  closed = false;
+
+  send(pcm: Int16Array): void {
+    this.samples += pcm.length;
+    reportUsage({
+      role: "hearing",
+      provider: "soniox",
+      model: "stt-rt-v3",
+      units: { audioSeconds: pcm.length / 16_000 },
+    });
+  }
+
+  finalize(): void {}
+
+  async close(): Promise<void> {
+    this.closed = true;
+    this.events.close();
+  }
 }

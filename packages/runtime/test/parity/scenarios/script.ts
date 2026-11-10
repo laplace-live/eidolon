@@ -1,14 +1,9 @@
 // What the twin scenarios share: the caller's audio, the greeting, and the steps a caller takes.
-import { networkInterfaces } from "node:os";
 import { concat, noise, syntheticSpeech, toPcm } from "../../../../voice/test/input/speech.ts";
+import { CAN_DIAL } from "../../support.ts";
 import type { MindReply } from "../fakes/mind.ts";
 import type { TwinPeer } from "../fakes/peer.ts";
 import type { Capture } from "../twin.ts";
-
-/** werift offers no loopback host candidate, so the caller needs another interface. */
-export const CAN_DIAL = Object.values(networkInterfaces()).some((addresses) =>
-  addresses?.some((a) => a.family === "IPv4" && !a.internal),
-);
 
 /** A scenario runs on both engines, each call in real time. */
 export const SCENARIO_MS = 120_000;

@@ -314,6 +314,20 @@ describe("outbound messages", () => {
     expectSameWire(native, pipedog);
   });
 
+  // pipedog's TTS service passes a skipTts reply's sentences on unspoken, and the observer reports
+  // each once.
+  test("a reply in text alone (send-text without audio_response)", async () => {
+    await ready();
+    const text = "好呀，那我们慢慢聊。";
+    const unspoken = new AggregatedTextFrame({ text, textType: TextType.SENTENCE });
+    unspoken.skipTts = true;
+    unspoken.id = 1;
+    await pipedog.push(new LLMTextFrame({ text }), unspoken);
+    native.rtvi.botLlmText(text);
+    native.rtvi.unspokenSegment(text);
+    expectSameWire(native, pipedog);
+  });
+
   // pipedog sends a word provider's bot-tts-text per word; the native emitter sends one per segment,
   // with its "completed", so only the bot-output messages are compared.
   test("a segment spoken with word timings", async () => {

@@ -78,6 +78,12 @@ export interface Speaker extends PcmSource {
   isSpeaking(): boolean;
 }
 
+/** What the listener heard of a reply: `complete` only when it drained uncancelled. */
+export interface Heard {
+  readonly text: string;
+  readonly complete: boolean;
+}
+
 /** One reply's speech, from the mind's deltas to the audio the Speaker plays. */
 export interface ReplySpeech {
   /** Raw mind text, cues included. */
@@ -87,11 +93,8 @@ export interface ReplySpeech {
   /** Flushes, ends the utterance so its audio plays out, and opens one in `voice`. */
   switchVoice(voice: string): void;
   cancel(): void;
-  /**
-   * Ends the speech; resolves with what was heard once it drains or is cancelled, `complete` only
-   * when it drained uncancelled.
-   */
-  heard(): Promise<{ readonly text: string; readonly complete: boolean }>;
+  /** Ends the speech; resolves with what was heard once it drains or is cancelled. */
+  heard(): Promise<Heard>;
 }
 
 /** The chat a call writes to: stamped at once, persisted in order. */

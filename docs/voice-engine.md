@@ -45,8 +45,8 @@ pipedog's, since some calls still go to pipedog. Both engines load the same two 
 pipedog's packages (`voiceModels()`), on the same pinned onnxruntime-node.
 
 **Logs:** a native call logs what the local app and the e2e notes read from pipedog's:
-- the `[bot] Session start …` line and `Starting bot`, from pipedog's own `logSessionStart`, so a
-  chat window in the request data is logged by its size alone;
+- the `[bot] Session start …` line and `Starting bot`, through the `logSessionStart` pipedog's
+  sessions call too, so a chat window in the request data is logged by its size alone;
 - `Client connected`, then `Client disconnected` or `Call ended: <reason>`;
 - `Bot session failed: <why>` when it can't start, which `apps/bot/src/local/status.ts` parses;
 - one `[voice] ttfb <stage> <ms>` line per stage per reply: `llm`, `text`, `speaking`.
@@ -127,10 +127,10 @@ The Floor's state is three regions, plus counters:
 | 5 | USER speaking | ear `user-stopped(null)` | interruptedBot, recoveries < 1, no sync tool | emit `user-stopped-speaking`; recoveries++; start a reply with `INTERRUPTED_EMPTY_TURN_PROMPT` | USER quiet, BOT thinking |
 | 6 | USER speaking | ear `user-stopped(null)` | otherwise | emit `user-stopped-speaking`; start a follow-up owed while the caller spoke | USER quiet |
 | 7 | live | `send-text{run_immediately:true}` | — | emit `bot-interrupted`; barge in if BOT ≠ idle; emit `user-input{chat}`, then `user-llm-text`; store the line; start a reply, spoken unless `audio_response` is false | BOT thinking |
-| 8 | live | `send-text{run_immediately:false}` | — | emit `user-input{chat}`; store the line; start a reply if idle, else owe one | — |
+| 8 | live | `send-text{run_immediately:false}` | — | emit `user-input{chat}`; store the line for her next turn; start no reply, as pipedog runs none | — |
 | 9 | BOT ≠ idle | reply `mind started` | — | emit `bot-llm-started` | — |
 | 10 | BOT ≠ idle | reply `delta` | — | emit `bot-llm-text`; push it to her speech | — |
-| 11 | — | Mouth `segment` | — | emit `bot-transcription` | — |
+| 11 | — | Mouth `segment` | — | emit `bot-transcription`; for a reply without audio, also its one `bot-output` "new", `will_be_spoken: false` | — |
 | 12 | — | Mouth `tts-started` | the reply's first | emit `bot-tts-started` | — |
 | 13 | BOT thinking | Speaker `reply-start` | this reply | emit `bot-started-speaking` | BOT speaking |
 | 14 | BOT speaking | Speaker `seg-start` / `words` / `seg-end` | — | emit `bot-output` new / in-progress / completed, the last with `bot-tts-text` | — |
@@ -218,7 +218,9 @@ the words played, and `drained`. Clearing it takes effect at once.
 - joined with `joinSegments`;
 - `complete` only when the reply drained without a barge-in.
 
-With `audio_response: false`, a reply speaks nothing and keeps all of its text.
+With `audio_response: false`, a reply speaks nothing and keeps all of its text. Each of its
+segments still goes out, as pipedog's do: its `bot-transcription`, and one `bot-output` "new" with
+`will_be_spoken: false`, which nothing completes.
 
 **A voice switch** (`change_voice_style`) flushes the segmenter, ends the utterance so its audio
 plays out, and opens one in the new voice for the text after it.
@@ -270,7 +272,7 @@ What a client must be able to count on, on both engines:
 - **I5:** every `bot-llm-started` has a later `bot-llm-stopped`, with no start between.
 - **I6 (native):** every `bot-tts-started` has a later `bot-tts-stopped`.
 - **I7:** each `segment_id` is "new" before "in-progress" or "completed", and "completed" once
-  unless interrupted.
+  unless interrupted or never to be spoken (`will_be_spoken: false`).
 - **I8:** every `error` is `fatal: false`.
 - **I9:** a turn with no final transcript starts no mind request unless it interrupted her.
 - **I10:** after `bot-interrupted`, no `bot-llm-text` comes before the next `bot-llm-started`.
@@ -362,15 +364,15 @@ runs must keep I1–I10 (`invariants.ts`). Rules are added only with a trigger, 
 scenario: a difference no rule explains is a native bug to fix, or a skipped scenario with its
 reason, for the user to decide.
 
-**The scenarios:** the greeting; typed text while she is idle and while she speaks; a spoken
+**The scenarios:** the greeting; typed text while she is idle and while she speaks; a line typed
+without `run_immediately`, left for the next turn; a reply with `audio_response: false`; a spoken
 question and a two-sentence reply; a barge-in mid-sentence and before her first audio; an empty
 turn while idle, after cutting her off, and just after her audio ended (D13); `change_voice_style`;
 a mind request that fails; the recognizer's socket dropping and reconnecting; a call longer than
-the 60-line window (D1). Two are skipped, each with its difference noted where it is written: a
-`send-text` without `run_immediately`, which pipedog leaves for the next turn and native answers,
-and a reply with `audio_response: false`, whose sentences pipedog still reports and native
-doesn't. `scenarios/checks.test.ts` tests the harness itself on made-up sequences, and runs
-without the variable.
+the 60-line window (D1). One is skipped, its difference noted where it is written: a line typed
+without `run_immediately` within 15 s of her Fish reply, which pipedog stores before that reply,
+since it stores her reply only when Fish's audio context times out. `scenarios/checks.test.ts`
+tests the harness itself on made-up sequences, and runs without the variable.
 
 ### Real calls
 

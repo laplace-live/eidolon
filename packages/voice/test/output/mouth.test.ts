@@ -134,6 +134,8 @@ function harness(
         return `done ${note.tag.seg}`;
       case "tts-error":
         return `tts-error ${note.message}`;
+      case "unspoken":
+        return `unspoken ${note.text}`;
       default:
         return note.type;
     }
@@ -470,20 +472,21 @@ describe("failures", () => {
 });
 
 describe("a reply without audio (send-text without audio_response)", () => {
-  test("speaks nothing, hears all it was given, and still switches her voice", async () => {
+  test("speaks nothing, reports each segment, hears all it was given, and switches her voice", async () => {
     const h = harness();
     const reply = h.begin("r1", false);
     reply.push("你好。");
     reply.push("今天");
     reply.flush();
     reply.switchVoice("voice-b");
-    expect(await reply.heard()).toEqual({ text: "你好。今天", complete: true });
+    reply.push("[笑]");
+    expect(await reply.heard()).toEqual({ text: "你好。今天[笑]", complete: true });
     const cut = h.begin("r2", false);
     cut.push("你好");
     cut.cancel();
     expect(await cut.heard()).toEqual({ text: "你好", complete: false });
     h.take();
-    expect([h.speech.utterances, h.notes]).toEqual([[], []]);
+    expect([h.speech.utterances, h.notes]).toEqual([[], ["unspoken 你好。", "unspoken 今天"]]);
     const next = h.begin("r3");
     next.push("嗯。");
     next.flush();

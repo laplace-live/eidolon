@@ -2,14 +2,14 @@
 // replies and their speech, her tools, and the call's end, as docs/voice-engine.md's state table
 // numbers its rows. `handle` takes the mailbox's events one at a time and never awaits: a reply
 // runs as a task that posts its lines back, and so do her speech and the Speaker.
-import type { ChatEventDraft, ParticipantId } from "@eidolon/chat";
+import type { ChatEventDraft } from "@eidolon/chat";
 import { errorText, logger } from "@eidolon/config";
 import type { CallChatOutput, CallTurnRequest } from "@eidolon/engine";
 import type { SpeechNote, SpokenReply } from "../output/mouth.ts";
 import type { RtviInbound } from "../rtvi/codec.ts";
 import type { RtviEmitter } from "../rtvi/emitter.ts";
-import type { CallPlan, CloseReason, CursorEvent, EarEvent, Speaker } from "../types.ts";
-import type { CallKit, Effect, Heard, LoopEvent } from "./kit.ts";
+import type { CallPlan, CloseReason, CursorEvent, EarEvent, Heard, Speaker } from "../types.ts";
+import type { CallKit, Effect, LoopEvent } from "./kit.ts";
 
 /** pipedog's `BOT_VAD_STOP_FALLBACK_SECS`: the Speaker drained mid-reply this long has stopped. */
 const DRAIN_FALLBACK_MS = 3_000;
@@ -43,7 +43,6 @@ interface StartOptions {
 
 interface Reply {
   readonly id: string;
-  readonly persona: ParticipantId;
   readonly abort: AbortController;
   readonly speech: SpokenReply;
   readonly startedAt: number;
@@ -184,17 +183,14 @@ export class Floor {
       this.#start({ speech: message.audioResponse });
       return;
     }
+    // Row 8: stored for her next turn, as pipedog's LLMMessagesAppendFrame with runLlm false.
     emitter.userTyped(message.content, message.id);
     this.#append(line);
-    if (this.#idle()) this.#start();
-    else this.#followUpOwed = true;
   }
 
   /** Row 27: no more replies; the call ends once her audio has played, 10 s at most. */
   #disconnect(): void {
     this.#closing = true;
-    this.#startOwed = null;
-    this.#followUpOwed = false;
     if (this.#speaking) this.#o.kit.arm("disconnect", DISCONNECT_DRAIN_MS);
     else this.#end("bot");
   }
@@ -280,7 +276,6 @@ export class Floor {
     const persona = plan.host;
     const reply: Reply = {
       id,
-      persona,
       abort: new AbortController(),
       speech: mouth.begin(id, { audio: options.speech ?? true }),
       startedAt: kit.clock.now(),
@@ -294,7 +289,6 @@ export class Floor {
     };
     this.#reply = reply;
     this.#replies.set(id, reply);
-    this.#speaking = false;
     const { post } = kit;
     const request: CallTurnRequest = {
       chat: plan.log.snapshot(),
@@ -408,7 +402,7 @@ export class Floor {
     const owed = this.#startOwed;
     this.#startOwed = null;
     if (owed !== null) this.#start(owed);
-    else if (this.#followUpOwed && this.#user === null) this.#start();
+    else if (this.#followUpOwed && this.#idle()) this.#start();
   }
 
   /** Her turn is done writing: her speech ends, and `answer` gets what was heard once it played. */
@@ -423,7 +417,9 @@ export class Floor {
       this.#o.emitter.serverMessage(effect.data);
       return;
     }
-    this.#replies.get(id)?.speech.switchVoice(effect.voice);
+    // A barge-in that came first cancelled the tool, as pipedog's interruption cancels its task.
+    const reply = this.#replies.get(id);
+    if (reply !== undefined && !reply.cut) reply.speech.switchVoice(effect.voice);
   }
 
   /** Row 23: stored, and answered once the floor is free; a reply started sooner sees it too. */
@@ -471,6 +467,9 @@ export class Floor {
     switch (note.type) {
       case "segment":
         emitter.segment(note.tag, note.text);
+        return;
+      case "unspoken":
+        emitter.unspokenSegment(note.text);
         return;
       case "tts-started":
         reply.ttsOpen = true;
@@ -617,8 +616,6 @@ export class Floor {
     this.#ending = reason;
     this.#bargeIn(false);
     this.#asyncTools.abort();
-    this.#startOwed = null;
-    this.#followUpOwed = false;
     kit.cancel("idle");
     kit.cancel("disconnect");
     this.#o.onEnding(reason);

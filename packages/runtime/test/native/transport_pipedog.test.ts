@@ -1,8 +1,6 @@
 // The native engine's phase-1 transport over pipedog's connection: first against a connection whose
 // events the test fires, then against a real werift peer offering to the signalling server.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { networkInterfaces } from "node:os";
-import type { AllowedOffer } from "@eidolon/access";
 import type { CallTransport, Pcm, PcmSource } from "@eidolon/voice";
 import { pyJsonDumps } from "@pipedog/core/utils/py_json";
 import type { SmallWebRTCConnection } from "@pipedog/transport-smallwebrtc/connection";
@@ -19,13 +17,24 @@ import {
 import { RawAudioTrack } from "@pipedog/transport-smallwebrtc/transport";
 import { pipedogCallTransport, type SpeakerTrack } from "../../src/native/transport_pipedog.ts";
 import { createSignallingServerWith, type SignallingServer } from "../../src/webrtc/signalling.ts";
-import { captureLogs, type LogCapture, until } from "../support.ts";
+import {
+  admission,
+  CAN_DIAL,
+  captureLogs,
+  type LogCapture,
+  PASS_THROUGH_RULES,
+  until,
+} from "../support.ts";
 
 let logs: LogCapture;
 beforeEach(() => {
   logs = captureLogs();
 });
-afterEach(() => logs.restore());
+afterEach(() => {
+  // A transport left connected keeps reading its fake track, warning every 2 s into later files.
+  for (const connection of made.splice(0)) connection.fire("closed");
+  logs.restore();
+});
 
 /** An input track whose frames the test queues; `end()` kills it as a closed peer does. */
 class FakeInputTrack {
@@ -125,7 +134,10 @@ class RampSource implements PcmSource {
   }
 }
 
+const made: FakeConnection[] = [];
+
 function transportOn(connection: FakeConnection): CallTransport {
+  made.push(connection);
   return pipedogCallTransport(connection as unknown as SmallWebRTCConnection);
 }
 
@@ -329,30 +341,6 @@ describe("a native call's transport on pipedog's connection", () => {
   });
 });
 
-// werift never offers a loopback address as a host candidate, so the peers need another interface.
-const hasLanAddress = Object.values(networkInterfaces()).some((addresses) =>
-  addresses?.some((a) => a.family === "IPv4" && !a.internal),
-);
-
-const PASS_THROUGH_RULES = {
-  dropUnreachableCandidates: (sdp: string) => ({ sdp, dropped: [] }),
-  candidateReachable: () => true,
-  scrubRelayRelatedAddresses: (sdp: string) => sdp,
-};
-
-function admission(body: Record<string, unknown>): AllowedOffer {
-  return {
-    allowed: true,
-    user: { mid: null, uname: null, face: null, isLoggedIn: false },
-    token: null,
-    body,
-    requestData: { audioQuality: "medium" },
-    opusBitrateBps: 96000,
-    clientIp: "127.0.0.1",
-    quota: null,
-  };
-}
-
 /** A 440 Hz tone at `rate`, 10 ms at a time. */
 class ToneSource implements PcmSource {
   readonly rate: number;
@@ -371,7 +359,7 @@ class ToneSource implements PcmSource {
 
 const loud = (pcm: Int16Array) => pcm.some((s) => Math.abs(s) > 1000);
 
-describe.skipIf(!hasLanAddress)("against a real peer", () => {
+describe.skipIf(!CAN_DIAL)("against a real peer", () => {
   let server: SignallingServer;
   let client: RTCPeerConnection;
   let transports: CallTransport[];

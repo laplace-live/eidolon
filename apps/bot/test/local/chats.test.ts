@@ -1965,7 +1965,7 @@ describe("a call in a chat", () => {
     expect(viewOf(header, events, PERSONA, { windowMessages: 60, nameOf: String })).toContainEqual({
       role: "tool",
       tool_call_id: "c1",
-      content: '{"ok":true}',
+      content: '{"ok": true}',
     });
     const binding = await dial(id);
     expect(binding.seedMessages).toEqual([

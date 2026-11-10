@@ -83,13 +83,19 @@ describe("invariants", () => {
     expect(ids(open, false)).toEqual([]);
   });
 
-  test("I7: each segment is new first and completes once, unless a barge-in cut it", () => {
+  test("I7: each segment is new first and completes once, unless cut off or never to be spoken", () => {
     expect(ids([ready, output(1, "completed")])).toEqual(["I7"]);
     expect(ids([ready, output(1, "new"), output(1, "completed"), output(1, "completed")])).toEqual([
       "I7",
     ]);
     expect(ids([ready, output(1, "new")])).toEqual(["I7"]);
     expect(ids([ready, output(1, "new"), m("bot-interrupted")])).toEqual([]);
+    const unspoken = m("bot-output", {
+      segment_id: 1,
+      spoken_status: "new",
+      will_be_spoken: false,
+    });
+    expect(ids([ready, unspoken])).toEqual([]);
   });
 
   test("I8: errors are never fatal", () => {

@@ -15,7 +15,7 @@ import {
   type LevelSample,
   type PageEntry,
 } from "./e2e/protocol.ts";
-import { pacingByTurn, type TimelineEntry } from "./e2e/turns.ts";
+import { isRtvi, pacingByTurn, type TimelineEntry } from "./e2e/turns.ts";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const DEFAULT_QUESTION = "你好呀，你今天心情怎么样？";
@@ -487,9 +487,6 @@ interface Check {
   pass: boolean;
   detail: string;
 }
-
-const isRtvi = (entry: TimelineEntry, event: string): boolean =>
-  entry.source === "rtvi" && entry.event === event;
 
 function textOf(entries: TimelineEntry[], event: string): string {
   return entries

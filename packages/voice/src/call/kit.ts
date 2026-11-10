@@ -6,7 +6,7 @@ import { AsyncQueue, errorText, logger } from "@eidolon/config";
 import type { CallChatOutput } from "@eidolon/engine";
 import type { MouthEvent } from "../output/mouth.ts";
 import type { RtviInbound } from "../rtvi/codec.ts";
-import type { Clock, CursorEvent, EarEvent } from "../types.ts";
+import type { Clock, CursorEvent, EarEvent, Heard } from "../types.ts";
 
 /** pipedog's `IDLE_TIMEOUT_SECS`: `apps/web/src/features/call/phase.ts` counts on at least 285. */
 export const IDLE_TIMEOUT_MS = 300_000;
@@ -20,11 +20,6 @@ export type TimerName =
   | "disconnect"
   /** The call's end waited this long for her reply's `ended`. */
   | "end";
-
-export interface Heard {
-  readonly text: string;
-  readonly complete: boolean;
-}
 
 export type Effect =
   | { readonly type: "voice"; readonly voice: string }

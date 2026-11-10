@@ -3,12 +3,17 @@
 // the real hearing models.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { AllowedOffer } from "@eidolon/access";
-import { AsyncQueue, activePersona, pyRepr } from "@eidolon/config";
+import { activePersona, pyRepr } from "@eidolon/config";
 import type { CallTurnRequest, EngineDeps } from "@eidolon/engine";
 import { PROVIDERS } from "@eidolon/providers";
-import type { SttEvent, SttStream } from "@eidolon/providers/stt";
-import type { CallDeps, CallTransport, Pcm, PcmSource } from "@eidolon/voice";
-import { FakeSpeech, FakeTurn, settle } from "../../../voice/test/call/harness.ts";
+import type { CallDeps } from "@eidolon/voice";
+import {
+  FakeSpeech,
+  FakeStt,
+  FakeTransport,
+  FakeTurn,
+  settle,
+} from "../../../voice/test/call/harness.ts";
 import { FakeClock } from "../../../voice/test/input/clock.ts";
 import { voiceModels } from "../../src/audio.ts";
 import { createSignallingServer } from "../../src/index.ts";
@@ -169,47 +174,6 @@ describe("sessionStarter", () => {
     ]);
   });
 });
-
-class FakeTransport implements CallTransport {
-  readonly audioIn = new AsyncQueue<Pcm>();
-  readonly messages = new AsyncQueue<unknown>();
-  readonly sent: Readonly<Record<string, unknown>>[] = [];
-  readonly closed: Promise<"client">;
-  connected = false;
-  disconnects = 0;
-  leave: () => void = () => {};
-
-  constructor() {
-    this.closed = new Promise((resolve) => {
-      this.leave = () => resolve("client");
-    });
-  }
-
-  attachSpeaker(_source: PcmSource): void {}
-
-  send(message: Readonly<Record<string, unknown>>): void {
-    this.sent.push(message);
-  }
-
-  async connect(): Promise<void> {
-    this.connected = true;
-  }
-
-  async disconnect(): Promise<void> {
-    this.disconnects++;
-  }
-}
-
-class FakeStt implements SttStream {
-  readonly inputRate = 16_000;
-  readonly ttfsP99 = 0.35;
-  readonly events = new AsyncQueue<SttEvent>();
-  send(_pcm: Int16Array): void {}
-  finalize(): void {}
-  async close(): Promise<void> {
-    this.events.close();
-  }
-}
 
 describe("runNativeSafely", () => {
   function setup(overrides: Partial<CallDeps> = {}) {

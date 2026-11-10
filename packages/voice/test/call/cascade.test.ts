@@ -2,24 +2,26 @@
 // and closes, how it ends, the logs runtime's status reads, and the call's usage scope reaching
 // what the transport's audio bills. runVoiceCall runs the real Ear on the real models.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { AsyncQueue, consoleSink, logger } from "@eidolon/config";
+import { consoleSink, logger } from "@eidolon/config";
 import type { EngineDeps } from "@eidolon/engine";
-import { reportUsage, setUsageSink, type UsageRecord } from "@eidolon/providers";
-import type { SttEvent, SttStream } from "@eidolon/providers/stt";
+import { setUsageSink, type UsageRecord } from "@eidolon/providers";
 import { type Ear, runCascadeCall } from "../../src/call/cascade.ts";
 import { memoryCallLog } from "../../src/call/log.ts";
 import { runVoiceCall, warmVoiceModels } from "../../src/index.ts";
-import type {
-  CallDeps,
-  CallPlan,
-  CallTransport,
-  EarEvent,
-  Pcm,
-  PcmSource,
-} from "../../src/types.ts";
+import type { CallDeps, CallPlan, EarEvent } from "../../src/types.ts";
 import { FakeClock } from "../input/clock.ts";
 import { SILERO_MODEL, SMART_TURN_MODEL } from "../input/speech.ts";
-import { ABOUT, FakeSpeech, FakeTurn, HEADER, HOST, settle, VIEWER } from "./harness.ts";
+import {
+  ABOUT,
+  FakeSpeech,
+  FakeStt,
+  FakeTransport,
+  FakeTurn,
+  HEADER,
+  HOST,
+  settle,
+  VIEWER,
+} from "./harness.ts";
 
 let logs: string[];
 beforeEach(() => {
@@ -30,77 +32,6 @@ afterEach(() => {
   logger.setSink(consoleSink);
   setUsageSink(null);
 });
-
-class FakeTransport implements CallTransport {
-  readonly audioIn = new AsyncQueue<Pcm>();
-  readonly messages = new AsyncQueue<unknown>();
-  readonly sent: Readonly<Record<string, unknown>>[] = [];
-  source: PcmSource | null = null;
-  connected = false;
-  disconnects = 0;
-  readonly closed: Promise<"client">;
-  #leave: () => void = () => {};
-
-  constructor() {
-    this.closed = new Promise((resolve) => {
-      this.#leave = () => resolve("client");
-    });
-  }
-
-  attachSpeaker(source: PcmSource): void {
-    this.source = source;
-  }
-
-  send(message: Readonly<Record<string, unknown>>): void {
-    this.sent.push(message);
-  }
-
-  async connect(): Promise<void> {
-    this.connected = true;
-  }
-
-  async disconnect(): Promise<void> {
-    this.disconnects++;
-  }
-
-  leave(): void {
-    this.#leave();
-  }
-
-  rtvi(type: string, data?: Record<string, unknown>): void {
-    this.messages.push({ label: "rtvi-ai", type, id: `c-${type}`, data });
-  }
-
-  get types(): string[] {
-    return this.sent.map((m) => m.type as string);
-  }
-}
-
-/** A recognizer that bills what it is sent, as the real ones do. */
-class FakeStt implements SttStream {
-  readonly inputRate = 16_000;
-  readonly ttfsP99 = 0.35;
-  readonly events = new AsyncQueue<SttEvent>();
-  samples = 0;
-  closed = false;
-
-  send(pcm: Int16Array): void {
-    this.samples += pcm.length;
-    reportUsage({
-      role: "hearing",
-      provider: "soniox",
-      model: "stt-rt-v3",
-      units: { audioSeconds: pcm.length / 16_000 },
-    });
-  }
-
-  finalize(): void {}
-
-  async close(): Promise<void> {
-    this.closed = true;
-    this.events.close();
-  }
-}
 
 function setup(o: { readonly greet?: boolean; readonly openStt?: CallDeps["openStt"] } = {}) {
   const transport = new FakeTransport();

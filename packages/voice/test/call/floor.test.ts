@@ -391,7 +391,7 @@ describe("her reply (rows 9-15, 18-22)", () => {
     expect(call.news()).toEqual(["bot-output new 第二句。"]);
   });
 
-  test("rows 8 and 22: a line typed to wait is stored at once and answered once she ends", async () => {
+  test("row 8: a line typed to wait while she speaks is stored at once, for her next turn", async () => {
     const call = startCall();
     await call.ready();
     await call.says("你好");
@@ -402,19 +402,29 @@ describe("her reply (rows 9-15, 18-22)", () => {
     expect(call.news()).toEqual(["user-input chat 还有"]);
     expect(call.sent.at(-1)?.data).toMatchObject({ input_type: "chat", msg_id: "t1", final: true });
     expect(call.events().at(-1)).toMatchObject({ text: "还有", modality: "text" });
-    expect(call.turns).toHaveLength(1);
     call.turn.mind("ended");
     await call.turn.end();
     await settle();
+    expect(call.turns).toHaveLength(1);
+    await call.says("在吗");
     expect(call.turns).toHaveLength(2);
-    expect(call.turn.request.chat.events.at(-1)).toMatchObject({ text: "还有" });
+    expect(call.turn.request.chat.events.slice(-2)).toMatchObject([
+      { text: "还有", modality: "text" },
+      { text: "在吗", modality: "call" },
+    ]);
   });
 
-  test("row 8: a line typed to wait while she is idle is answered at once", async () => {
+  test("row 8: a line typed to wait while she is idle starts no reply", async () => {
     const call = startCall();
     await call.ready();
+    call.news();
     await call.rtvi("send-text", { content: "在吗", options: { run_immediately: false } });
+    await call.advance(5_000);
+    expect(call.news()).toEqual(["user-input chat 在吗"]);
+    expect(call.turns).toHaveLength(0);
+    await call.rtvi("send-text", { content: "说话呀" });
     expect(call.turns).toHaveLength(1);
+    expect(call.turn.request.chat.events).toMatchObject([{ text: "在吗" }, { text: "说话呀" }]);
   });
 
   test("row 7: a line typed to run now while she is idle", async () => {
@@ -431,7 +441,7 @@ describe("her reply (rows 9-15, 18-22)", () => {
     expect(call.turns).toHaveLength(1);
   });
 
-  test("row 7: audio_response false answers in text alone", async () => {
+  test("row 7: audio_response false answers in text alone, its segments still reported", async () => {
     const call = startCall();
     await call.ready();
     await call.rtvi("send-text", { content: "打字回我", options: { audio_response: false } });
@@ -441,7 +451,22 @@ describe("her reply (rows 9-15, 18-22)", () => {
     await settle();
     expect(heard).toEqual({ text: "好的。", complete: true });
     expect(call.speech.utterances).toEqual([]);
-    expect(call.news()).toEqual(["bot-llm-started", "bot-llm-text 好的。", "bot-llm-stopped"]);
+    expect(call.news()).toEqual([
+      "bot-llm-started",
+      "bot-llm-text 好的。",
+      "bot-llm-stopped",
+      "bot-transcription 好的。",
+      "bot-output new 好的。",
+    ]);
+    expect(call.sent.at(-1)?.data).toEqual({
+      text: "好的。",
+      text_type: "sentence",
+      aggregated_by: "sentence",
+      segment_id: 1,
+      spoken: false,
+      will_be_spoken: false,
+      spoken_status: "new",
+    });
     expect(call.events().at(-1)).toMatchObject({ text: "好的。", modality: "call" });
   });
 });
@@ -589,6 +614,25 @@ describe("tools and async results (rows 16, 17, 23)", () => {
     call.turn.round("嗯。");
     await settle();
     expect(call.utterance().voice).toBe("whisper");
+  });
+
+  test("a voice switch that reaches the Floor after a barge-in cut her turn is dropped", async () => {
+    const call = startCall();
+    await call.ready();
+    await call.says("换个声音");
+    const cut = call.turn;
+    cut.round("好的");
+    cut.tool("c1", "running");
+    await settle();
+    // The caller's speech is in the mailbox before her tool's effect: the barge-in cancels the tool.
+    call.kit.post({ source: "ear", event: { type: "user-started" } });
+    await cut.request.effects.switchVoice("whisper");
+    await settle();
+    await call.ear({ type: "final", text: "算了" }, { type: "user-stopped", text: "算了" });
+    expect(call.turn).not.toBe(cut);
+    call.turn.round("好。");
+    await settle();
+    expect(call.utterance().voice).toBeNull();
   });
 
   test("a server message goes to the client", async () => {
@@ -788,7 +832,8 @@ describe("the end of a call (rows 24, 25, 27-29)", () => {
     await settle();
     await call.play(240);
     await call.rtvi("disconnect-bot");
-    await call.rtvi("send-text", { content: "还在吗", options: { run_immediately: false } });
+    call.turn.request.onAsyncResult([settled("s1", "final")]);
+    await settle();
     expect(call.endings).toEqual([]);
     expect(call.turns).toHaveLength(1);
     await call.play(240);
@@ -846,7 +891,6 @@ describe("the end of a call (rows 24, 25, 27-29)", () => {
     const call = startCall({ stubborn: true });
     await call.ready();
     await call.says("讲个故事");
-    await call.rtvi("send-text", { content: "再见", options: { run_immediately: false } });
     call.kit.post({ source: "shutdown" });
     await settle();
     expect(call.floor.finished).toBeNull();

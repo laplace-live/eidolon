@@ -3,12 +3,17 @@
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createServer } from "node:net";
-import { networkInterfaces } from "node:os";
-import type { AllowedOffer } from "@eidolon/access";
 import type { SmallWebRTCConnection } from "@pipedog/transport-smallwebrtc/connection";
 import { RTCIceServer, RTCPeerConnection } from "@pipedog/transport-smallwebrtc/rtc";
 import { createSignallingServerWith, type SignallingServer } from "../src/webrtc/signalling.ts";
-import { captureLogs, type LogCapture, until } from "./support.ts";
+import {
+  admission,
+  CAN_DIAL,
+  captureLogs,
+  type LogCapture,
+  PASS_THROUGH_RULES,
+  until,
+} from "./support.ts";
 
 /** Answers every STUN Binding Request with the sender's address (RFC 5389 §7.3.1). */
 async function stunResponder(): Promise<{ url: string; close(): void }> {
@@ -43,28 +48,9 @@ async function closedPort(): Promise<number> {
   return port;
 }
 
-function admission(body: Record<string, unknown>): AllowedOffer {
-  return {
-    allowed: true,
-    user: { mid: null, uname: null, face: null, isLoggedIn: false },
-    token: null,
-    body,
-    requestData: { audioQuality: "medium" },
-    opusBitrateBps: 96000,
-    clientIp: "127.0.0.1",
-    quota: null,
-  };
-}
-
 async function connected(peer: RTCPeerConnection): Promise<void> {
   await until(() => peer.connectionState === "connected", 8000);
 }
-
-const PASS_THROUGH_RULES = {
-  dropUnreachableCandidates: (sdp: string) => ({ sdp, dropped: [] }),
-  candidateReachable: () => true,
-  scrubRelayRelatedAddresses: (sdp: string) => sdp,
-};
 
 let logs: LogCapture;
 let stun: { url: string; close(): void };
@@ -107,12 +93,7 @@ afterEach(async () => {
   logs.restore();
 });
 
-// werift never offers a loopback address as a host candidate, so the peers need another interface.
-const hasLanAddress = Object.values(networkInterfaces()).some((addresses) =>
-  addresses?.some((a) => a.family === "IPv4" && !a.internal),
-);
-
-describe.skipIf(!hasLanAddress)("localhost loopback", () => {
+describe.skipIf(!CAN_DIAL)("localhost loopback", () => {
   test("an offer carrying its candidates connects and starts one session", async () => {
     const offer = client.localDescription!.sdp;
     const result = await server.offer(admission({ sdp: offer, type: "offer" }));

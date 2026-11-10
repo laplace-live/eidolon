@@ -100,8 +100,11 @@ export function checkInvariants(
   if (options.native && tts !== null) violate("I6", tts, "bot-tts-started never stopped");
 
   // I7: each segment's "new" comes before its "in-progress" or "completed", and it completes once
-  // unless a barge-in cut it.
-  const segments = new Map<unknown, { at: number; completed: number; cut: boolean }>();
+  // unless a barge-in cut it or it won't be spoken (`will_be_spoken: false`, its "new" alone).
+  const segments = new Map<
+    unknown,
+    { at: number; completed: number; cut: boolean; spoken: boolean }
+  >();
   for (const { message, index } of seq) {
     if (message.type === "bot-interrupted") {
       for (const segment of segments.values()) segment.cut = true;
@@ -113,7 +116,8 @@ export function checkInvariants(
     const segment = segments.get(id);
     if (status === "new") {
       if (segment !== undefined) violate("I7", index, `segment ${String(id)} is new twice`);
-      segments.set(id, { at: index, completed: 0, cut: false });
+      const spoken = field(message.data, "will_be_spoken") !== false;
+      segments.set(id, { at: index, completed: 0, cut: false, spoken });
     } else if (segment === undefined) {
       violate("I7", index, `segment ${String(id)} is ${String(status)} before it is new`);
     } else if (status === "completed") {
@@ -122,7 +126,7 @@ export function checkInvariants(
     }
   }
   for (const [id, segment] of segments) {
-    if (segment.completed === 0 && !segment.cut) {
+    if (segment.completed === 0 && !segment.cut && segment.spoken) {
       violate("I7", segment.at, `segment ${String(id)} never completed`);
     }
   }

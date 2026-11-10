@@ -5,8 +5,8 @@ import type { CursorEvent, JoinSegments } from "../types.ts";
 
 const WORD = /[\p{L}\p{N}]/u;
 
-/** `text` through its `chars`-th letter or digit outside `unread` cues; cues before it stay. */
-function wordPrefix(text: string, chars: number, unread: RegExp | null): string {
+/** The UTF-16 offset in `text` just past its `chars`-th letter or digit outside `unread` cues. */
+export function spokenTo(text: string, chars: number, unread: RegExp | null): number {
   const cues = unread === null ? [] : [...text.matchAll(unread)];
   let cue = 0;
   let count = 0;
@@ -19,9 +19,9 @@ function wordPrefix(text: string, chars: number, unread: RegExp | null): string 
     }
     const char = String.fromCodePoint(text.codePointAt(i) as number);
     i += char.length;
-    if (WORD.test(char) && ++count === chars) return text.slice(0, i);
+    if (WORD.test(char) && ++count === chars) return i;
   }
-  return text;
+  return text.length;
 }
 
 interface Said {
@@ -95,7 +95,8 @@ export class SpokenTracker {
       if (said.heard) parts.push(said.text);
       else {
         all = false;
-        if (said.chars > 0) parts.push(wordPrefix(said.text, said.chars, this.#unread));
+        if (said.chars > 0)
+          parts.push(said.text.slice(0, spokenTo(said.text, said.chars, this.#unread)));
       }
     }
     if (all && this.#tail) parts.push(this.#tail);

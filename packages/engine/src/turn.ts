@@ -154,17 +154,7 @@ class Outputs implements AsyncIterable<AnyOutput> {
  * since a reader that stopped never reads the rest.
  */
 function inOrder(hooks: CallHooks, read: () => Promise<void>, aborted: AbortSignal): CallHooks {
-  const flushed = (): Promise<void> =>
-    aborted.aborted
-      ? Promise.resolve()
-      : new Promise((resolve) => {
-          const done = (): void => {
-            aborted.removeEventListener("abort", done);
-            resolve();
-          };
-          aborted.addEventListener("abort", done, { once: true });
-          void read().then(done);
-        });
+  const flushed = (): Promise<void> => raceAbort(read(), aborted).catch(() => {});
   const { effects } = hooks;
   return {
     ...hooks,

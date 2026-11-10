@@ -1,7 +1,6 @@
 // The caller: a real werift peer that offers as a browser does (an audio and a camera section and
 // the "chat" channel), pings once a second as small-webrtc's client does, says WAV-like audio
 // through its mic as Opus, and keeps every message the bot sends and when her audio is loud.
-import type { AllowedOffer } from "@eidolon/access";
 import { AudioFrame } from "@pipedog/transport-smallwebrtc/media";
 import {
   type RTCDataChannel,
@@ -11,6 +10,7 @@ import {
 } from "@pipedog/transport-smallwebrtc/rtc";
 import { RawAudioTrack } from "@pipedog/transport-smallwebrtc/transport";
 import type { SignallingServer } from "../../../src/webrtc/signalling.ts";
+import { admission } from "../../support.ts";
 
 /** A message the bot sent, and when it arrived (ms since the peer was made). */
 export interface Received {
@@ -21,19 +21,6 @@ export interface Received {
 const MIC_RATE = 16_000;
 /** A 10 ms frame of the bot's audio this loud counts as audible. */
 const AUDIBLE = 500;
-
-function admission(body: Record<string, unknown>): AllowedOffer {
-  return {
-    allowed: true,
-    user: { mid: null, uname: null, face: null, isLoggedIn: false },
-    token: null,
-    body,
-    requestData: { audioQuality: "medium" },
-    opusBitrateBps: 96000,
-    clientIp: "127.0.0.1",
-    quota: null,
-  };
-}
 
 export class TwinPeer {
   readonly #startedAt = performance.now();

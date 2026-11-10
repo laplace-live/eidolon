@@ -24,11 +24,11 @@ export interface Pacing {
   ttsStopped: boolean;
 }
 
-const isRtvi = (entry: TimelineEntry, event: string): boolean =>
+export const isRtvi = (entry: TimelineEntry, event: string): boolean =>
   entry.source === "rtvi" && entry.event === event;
 
 /** Where each turn starts and ends: the greeting until the question, the reply, the barge-in. */
-export function turnWindows(
+function turnWindows(
   timeline: readonly TimelineEntry[],
   end: number,
 ): Partial<Record<Turn, readonly [number, number]>> {
@@ -46,7 +46,7 @@ export function turnWindows(
 }
 
 /** How her turn in [from, to) played, from its RTVI events and her audible spans. */
-export function pacing(
+function pacing(
   timeline: readonly TimelineEntry[],
   botSpans: readonly (readonly [number, number])[],
   from: number,
