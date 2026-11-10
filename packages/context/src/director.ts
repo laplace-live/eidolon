@@ -1,8 +1,9 @@
-// Who answers each line of a group chat. One Decisions request, on the gate's role, asks of every
-// persona who didn't write the line whether it is addressed to her and whether it touches what she
-// cares about, and once whether it invites a reply; the rules below turn those answers into
-// replies. Nobody speaks before it answers, so it gives up after DIRECTOR_TIMEOUT_SEC and falls
-// back to rules that need no model.
+// Who answers each line of a group chat, and in text or voice. One Decisions request, on the gate's
+// role, asks of every persona who didn't write the line whether it is addressed to her and whether
+// it touches what she cares about, once whether it invites a reply, and once whether it suits a
+// voice message when someone's reply mode is auto; the rules below turn those answers into
+// replies. A chat of one asks only that last question. Nobody speaks before it answers, so it gives
+// up after DIRECTOR_TIMEOUT_SEC and falls back to rules that need no model.
 import {
   activePersona,
   chatInterests,
@@ -26,6 +27,11 @@ export const HOP_STEP = 0.1;
 /** Off the interest of whoever spoke the persona line before, so two can't trade the floor. */
 export const JUST_SPOKE_PENALTY = 0.1;
 export const MAX_REPLIES_TO_USER = 2;
+// Bars on voice_moment for a persona whose reply mode is auto: placeholders until the benchmark's
+// voice_moment labels are scored. The lower one applies while the viewer's last line was a voice
+// message, so she leans toward answering in kind.
+export const VOICE_THRESHOLD = 0.7;
+export const VOICE_THRESHOLD_AFTER_VOICE = 0.4;
 // Jev answered in ~0.5 s on a warm connection and 1.3–1.4 s on a fresh TLS one
 // (docs/benchmarks/2026-09-19-retrieval-gate).
 export const DIRECTOR_TIMEOUT_SEC = 2;
@@ -44,6 +50,8 @@ export interface DirectorParticipant {
   readonly interests: readonly string[];
   /** chat.talkativeness, 0 to 1. */
   readonly talkativeness: number;
+  /** How she answers once chosen, as her chat settles it: auto lets voice_moment choose. Unset: text. */
+  readonly replyMode?: "auto" | "text" | "voice";
 }
 
 /** A line of the chat, as a chat event's speaker and text. */
@@ -67,7 +75,7 @@ export interface DirectorInput {
 
 export interface DirectorReply {
   readonly persona: string;
-  readonly mode: "text";
+  readonly mode: "text" | "voice";
 }
 
 export interface DirectorDecision {
@@ -140,9 +148,29 @@ export function directorState(input: DirectorInput): DirectorState {
   };
 }
 
-/** Per candidate, `addressed_<id>` and `interested_<id>`; then `invites_reply`. Jev reads them literally. */
+const VOICE_MOMENT = "voice_moment";
+
+/** `voice_moment`, once, when some candidate's reply mode is auto; else nothing to ask. */
+export function voiceQuestions(
+  candidates: readonly Pick<DirectorParticipant, "replyMode">[],
+): DirectorQuestions {
+  if (!candidates.some((p) => p.replyMode === "auto")) return {};
+  return {
+    [VOICE_MOMENT]: {
+      type: "noul",
+      instructions:
+        "Would a voice message suit a reply to the latest message better than text, because the " +
+        "moment is emotional, playful or intimate, or calls for a sound (a laugh, a sigh, a song)?",
+    },
+  };
+}
+
+/**
+ * Per candidate, `addressed_<id>` and `interested_<id>`; then `invites_reply`, and `voice_moment`
+ * when some candidate's reply mode is auto. Jev reads them literally.
+ */
 export function directorQuestions(
-  candidates: readonly Pick<DirectorParticipant, "id" | "name">[],
+  candidates: readonly Pick<DirectorParticipant, "id" | "name" | "replyMode">[],
 ): DirectorQuestions {
   const questions: DirectorQuestions = {};
   for (const { id, name } of candidates) {
@@ -163,7 +191,13 @@ export function directorQuestions(
       "Does the latest message invite a reply (a question, an opinion, a tease) rather than " +
       "close the exchange?",
   };
-  return questions;
+  return { ...questions, ...voiceQuestions(candidates) };
+}
+
+/** The bar voice_moment must clear: lower while the viewer's last line was a voice message. */
+export function voiceThreshold(input: Pick<DirectorInput, "lines">): number {
+  const viewer = input.lines.findLast((line) => line.speaker.kind === "user");
+  return viewer?.modality === "voice" ? VOICE_THRESHOLD_AFTER_VOICE : VOICE_THRESHOLD;
 }
 
 function mentioned(input: DirectorInput, candidates: readonly DirectorParticipant[]): string[] {
@@ -240,60 +274,87 @@ function fallback(input: DirectorInput, candidates: readonly DirectorParticipant
   return toViewer ? [mostTalkative(candidates).id] : [];
 }
 
+/**
+ * `ids` answering, each in her reply mode: voice, text, or for auto, voice when voice_moment
+ * cleared its bar. Without that score, auto is text.
+ */
 function decision(
+  input: DirectorInput,
   ids: readonly string[],
   source: DirectorDecision["source"],
   scores: Readonly<Record<string, number>> = {},
 ): DirectorDecision {
-  return { replies: ids.map((persona) => ({ persona, mode: "text" })), source, scores };
+  const moment = scores[VOICE_MOMENT];
+  const voice = moment !== undefined && moment >= voiceThreshold(input);
+  const modeOf = (id: string): DirectorReply["mode"] => {
+    const mode = input.participants.find((p) => p.id === id)?.replyMode;
+    return mode === "voice" || (mode === "auto" && voice) ? "voice" : "text";
+  };
+  return { replies: ids.map((persona) => ({ persona, mode: modeOf(persona) })), source, scores };
 }
 
 /** Decides who answers each line of a chat; never rejects but for its caller's abort. */
 export class Director {
   readonly #client: DecisionsClient | null;
 
-  /** Without `options`, every group decision falls back to the rules. */
+  /** Without `options`, every group decision falls back to the rules, and auto replies are text. */
   constructor(options: DecisionsOptions | null) {
     this.#client = options === null ? null : new DecisionsClient(options, DIRECTOR_TIMEOUT_SEC);
   }
 
-  /** One request for a chat of two or more personas; `signal` rejects it with its reason. */
+  /**
+   * One request for a chat of two or more personas, or for a chat of one whose persona's reply
+   * mode is auto; `signal` rejects it with its reason.
+   */
   async decide(input: DirectorInput, signal?: AbortSignal): Promise<DirectorDecision> {
     signal?.throwIfAborted();
     const candidates = candidatesOf(input);
-    if (input.participants.length < 2) {
-      return decision(
-        candidates.slice(0, 1).map(({ id }) => id),
-        "single",
-      );
-    }
+    const group = input.participants.length > 1;
+    const questions = group ? directorQuestions(candidates) : voiceQuestions(candidates);
     const started = performance.now();
-    const names = (ids: readonly string[]) =>
-      ids.length === 0
+    const names = (reached: DirectorDecision) =>
+      reached.replies.length === 0
         ? "no one"
-        : ids.map((id) => candidates.find((p) => p.id === id)?.name ?? id).join(", ");
+        : reached.replies
+            .map(({ persona, mode }) => {
+              const name = candidates.find((p) => p.id === persona)?.name ?? persona;
+              return mode === "voice" ? `${name} in voice` : name;
+            })
+            .join(", ");
     const fellBack = () => {
-      const ids = fallback(input, candidates);
-      logger.info(`Director: ${names(ids)} (fallback, hop ${input.hop})`);
-      return decision(ids, "fallback");
+      const fell = decision(input, fallback(input, candidates), "fallback");
+      logger.info(`Director: ${names(fell)} (fallback, hop ${input.hop})`);
+      return fell;
     };
+    const alone = candidates.slice(0, 1).map(({ id }) => id);
+    if (!group && (this.#client === null || Object.keys(questions).length === 0)) {
+      return decision(input, alone, "single");
+    }
     if (this.#client === null) return fellBack();
-    const questions = directorQuestions(candidates);
     let scores: Record<string, number>;
     try {
       const body = await this.#client.ask(directorState(input), questions, signal);
       scores = Object.fromEntries(Object.keys(questions).map((key) => [key, noulOf(body, key)]));
     } catch (error) {
       if (signal?.aborted) throw signal.reason;
+      if (!group) {
+        logger.warning(
+          `Director couldn't weigh a voice reply, so she answers in text: ${errorRepr(error)}`,
+        );
+        return decision(input, alone, "single");
+      }
       logger.warning(`Director fell back to rules: ${errorRepr(error)}`);
       return fellBack();
     }
-    const { ids, source } = choose(input, candidates, scores);
+    const { ids, source } = group
+      ? choose(input, candidates, scores)
+      : { ids: alone, source: "single" as const };
+    const decided = decision(input, ids, source, scores);
     logger.info(
-      `Director: ${names(ids)} (${source}, hop ${input.hop}, ` +
+      `Director: ${names(decided)} (${source}, hop ${input.hop}, ` +
         `${pyFixed(performance.now() - started, 0)} ms)`,
     );
-    return decision(ids, source, scores);
+    return decided;
   }
 }
 
@@ -317,6 +378,10 @@ export function directorFromEnv(): Director {
   const options = gateRoleDecisions((error) =>
     logger.warning(`Director's decision model off: ${error.message}`),
   );
-  if (options === null) logger.info("Director has no decision model: group chats follow rules");
+  if (options === null) {
+    logger.info(
+      "Director has no decision model: group chats follow rules, and auto replies are text",
+    );
+  }
   return new Director(options);
 }

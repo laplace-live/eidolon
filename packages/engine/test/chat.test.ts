@@ -17,7 +17,7 @@ import { activePersona, consoleSink, dataHome, logger, resetSettings } from "@ei
 import { Director, type DirectorDecision, type DirectorInput } from "@eidolon/context";
 import { type UsageRecord, usageRecord } from "@eidolon/providers";
 import { type ChatDeps, type ChatOutput, runChat } from "../src/chat.ts";
-import type { MindChunk, MindRequest, PersonaParts } from "../src/types.ts";
+import type { MindChunk, MindRequest, PersonaParts, SpeechDeps } from "../src/types.ts";
 
 const PERSONAS: Record<string, string> = {
   ann: "identity:\n  name: 安妮\n  shortName: 安安\nchat:\n  talkativeness: 0.4\n",
@@ -114,6 +114,17 @@ const PARTS: PersonaParts = {
   memories: async () => [],
 };
 
+/** No persona here has a voice that speaks, so every reply is text. */
+const SILENT: SpeechDeps = {
+  canSpeak: () => false,
+  synthesize: async () => {
+    throw new Error("no voice here");
+  },
+  transcribe: async () => {
+    throw new Error("no ears here");
+  },
+};
+
 function deps(createMind: ChatDeps["createMind"], decide: Decide): ChatDeps {
   let n = 0;
   return {
@@ -127,6 +138,7 @@ function deps(createMind: ChatDeps["createMind"], decide: Decide): ChatDeps {
     },
     newId: () => `id-${++n}`,
     director: { decide },
+    speech: SILENT,
   };
 }
 
@@ -172,7 +184,7 @@ function request(chat: ReturnType<typeof chatOf>, signal = new AbortController()
 }
 
 describe("runChat", () => {
-  test("a chat of one asks no model, and she answers as in a chat of one before", async () => {
+  test("a chat of one whose voice can't speak asks no model, and she answers as before", async () => {
     let posted = 0;
     const director = new Director({
       apiKey: "k",
@@ -233,6 +245,7 @@ describe("runChat", () => {
         summary: "",
         interests: [],
         talkativeness: 0.4,
+        replyMode: "text",
       },
       {
         id: "bea",
@@ -241,8 +254,17 @@ describe("runChat", () => {
         summary: "",
         interests: ["唱歌", "猫"],
         talkativeness: 0.5,
+        replyMode: "text",
       },
-      { id: "ken", name: "Ken", shortName: "Ken", summary: "", interests: [], talkativeness: 0.9 },
+      {
+        id: "ken",
+        name: "Ken",
+        shortName: "Ken",
+        summary: "",
+        interests: [],
+        talkativeness: 0.9,
+        replyMode: "text",
+      },
     ]);
     expect(decisions(chat.events).map(({ seq: _, at: __, ...decision }) => decision)).toEqual([
       {

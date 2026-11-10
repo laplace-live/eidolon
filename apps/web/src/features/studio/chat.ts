@@ -1,4 +1,4 @@
-// The Group Chats card's talkativeness: what the slider shows for a draft, as the director reads it.
+// The Chats card's talkativeness: what the slider shows for a draft, as the director reads it.
 
 /** @eidolon/config's DEFAULT_CHAT_TALKATIVENESS: hers while neither her file nor the environment sets one. */
 export const DEFAULT_TALKATIVENESS = 0.5;

@@ -262,9 +262,9 @@ memory at the saved one.
 
 ## Chats
 
-`/chats` texts the personas, one or several at once, no call needed, and keeps every chat in the
-data home (`<data home>/chats/`). The format, the turn, the director and the API are in
-[chat.md](chat.md).
+`/chats` talks with the personas, one or several at once, in text and voice messages, no call
+needed, and keeps every chat in the data home (`<data home>/chats/`). The format, the turn, the
+director, voice messages and the API are in [chat.md](chat.md).
 
 - **The page:**
   - The list of chats is on the left, newest first, and the open chat on the right. On a phone the
@@ -273,8 +273,9 @@ data home (`<data home>/chats/`). The format, the turn, the director and the API
     **Start Group Chat**. One persona's greeting then streams in, the way a call greets; a group
     starts quiet, titled with their short names.
   - A row and the chat's header each have a menu with **Rename** and **Delete**. Delete confirms in
-    the page. The header's menu also has **Chat Settings**, a sheet whose **Replies between
-    Personas**, 0 to 6, is the chain limit, saved as soon as it's picked.
+    the page. The header's menu also has **Chat Settings**, a sheet saved as soon as a value is
+    picked: **Reply Mode** (Auto, Text or Voice), which overrides every persona's own until it is
+    changed, and **Replies between Personas**, 0 to 6, the chain limit.
 - **A group chat:**
   - The header's avatars open **In This Chat**, with **Add Persona** and **Remove Persona**.
   - Each run of a persona's lines starts with her avatar and short name, and the streaming text
@@ -287,7 +288,27 @@ data home (`<data home>/chats/`). The format, the turn, the director and the API
 - **Why She Answered:** a quiet info button beside each reply the director chose opens
   **Why <name> Answered**, its decision: the source (mention, model or fallback), whose line she answered, and each persona's
   Addressed and Interested scores, with Invites a Reply.
-- **The studio's Group Chats section** edits a persona's `chat.interests` and
+- **Voice messages** ([chat.md](chat.md#voice-messages)):
+  - **Recording:** while the text box is empty, a microphone takes the Send button's place.
+    Holding it 350 ms or more records until it is let go, then sends; letting go off the button,
+    Escape or the cancel button throws the take away. A shorter press is a click: it records until
+    the next click, Enter or Space. A bar replaces the text box while it records, with its time out
+    of 2:00, where it sends itself. A take under 0.5 s is dropped with a toast.
+  - **What is recorded:** `audio/webm;codecs=opus`, else `audio/mp4` on Safari, sent to
+    `POST voice` with the recorder's clock as `durationMs`.
+  - **Without a hearing key** (`ChatContents.hearingRefusal`) or a browser that records, the
+    microphone is disabled, with a tooltip linking to Settings → Providers. A take already
+    recording can still be sent.
+  - **The bubble:** play and pause, a seekable bar and the length, and the transcript folded under
+    it, her cues as chips. Only one bubble plays at a time. The viewer's own shows **Transcribing…**
+    until it is stored, then its transcript, or that no words could be heard in it; one the server
+    refused stays, marked **Not sent**, with **Retry** sending the same recording again.
+  - **Her voice replies** show **Recording a voice message…** while her voice speaks them, and
+    play on their own, in order, when they answer a send from this tab while it has the focus.
+    Pausing one, or playing another, stops the rest. One whose voice failed is text, marked
+    **Sent as text**.
+  - **Retry** after a failed reply sends a voice message's transcript as text.
+- **The studio's Chats section** edits a persona's `chat.replyMode`, `chat.interests` and
   `chat.talkativeness` ([personas.md](personas.md#personayaml)), showing where each value
   comes from.
 - **Her lines** render through `lib/markup.ts` like a call's transcript: cues as chips and
@@ -464,13 +485,21 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
   New Chat and her greeting, a reply that streams in with its cue as a chip, the history after a
   reload, and Rename and Delete from the chat's menus, with `chats/` at 0700 and its log at 0600;
 - a group chat with a second persona made from no template, the director's Decisions requests
-  answered by that server through an OpenRouter account pointed at it: no greeting, an @-mention
-  the composer completes, the second persona's answer with her stop sequences and the group line
-  in her request, the first's answer to her a hop later, and each line under its persona's name,
-  before and after a reload;
+  answered by that server through an OpenRouter account pointed at it (the text chat already
+  asks it `voice_moment`): no greeting, an @-mention the composer completes, the second persona's
+  answer with her stop sequences and the group line in her request, the first's answer to her a
+  hop later, and each line under its persona's name, before and after a reload;
+- voice messages, with milky-green's voice and hearing on an OpenAI account pointed at that
+  server's `/audio/speech` and `/audio/transcriptions` (OpenAI-compatible accounts offer
+  neither): the microphone held down through Chrome's fake microphone, which plays a WAV the walk
+  writes, the upload heard as `voice.webm` and its transcript shown, her text answer, then
+  **Voice** in the chat's settings, her voice reply spoken with its cue taken out, playing on its
+  own to its end, its file answering the player's `Range` request with a `206`, both bubbles after
+  a reload, and the voice and hearing spend in the ledger;
 
 then stops the server and deletes the home. It refuses to start when either `load-env.ts` would
-apply a `.env` or use another data home, and exits 0 when every check passes, else 1.
+apply a `.env` or use another data home, and exits 0 when every check passes, else 1, after the
+server's last warnings.
 
 ### A real call: `--call`
 

@@ -246,6 +246,58 @@ describe("reduceLive", () => {
   });
 });
 
+describe("a voice message", () => {
+  const clip = { audio: new Blob(["x"], { type: "audio/webm" }), durationMs: 1200 };
+  const voiceLine = (seq: number, text: string): ChatEvent => ({
+    type: "message",
+    seq,
+    at: seq,
+    id: `u${seq}`,
+    speaker: { kind: "user" },
+    text,
+    modality: "voice",
+    attachments: [{ kind: "audio", name: `${"c".repeat(64)}.webm`, mime: "audio/webm" }],
+  });
+
+  test("waits with its recording until the server stores it, whatever its transcript", () => {
+    const sent = run([{ type: "sending", key: 1, after: 2, text: "", voice: clip }]);
+    expect(sent.pending).toEqual([{ key: 1, after: 2, text: "", voice: clip, failed: false }]);
+    expect(run([{ type: "events", events: [voiceLine(3, "你好")] }], sent).pending).toEqual([]);
+  });
+
+  test("and a typed line are each matched only by their own kind of message", () => {
+    const both = run([
+      { type: "sending", key: 1, after: 2, text: "", voice: clip },
+      { type: "sending", key: 2, after: 2, text: "你好" },
+    ]);
+    expect(
+      run([{ type: "events", events: [voiceLine(3, "你好")] }], both).pending.map(
+        (line) => line.key,
+      ),
+    ).toEqual([2]);
+    expect(
+      run([{ type: "events", events: [userLine(3, "你好")] }], both).pending.map(
+        (line) => line.key,
+      ),
+    ).toEqual([1]);
+  });
+
+  test("refused keeps its recording to send again, and says the refusal was of a voice message", () => {
+    const refused = run([
+      { type: "sending", key: 1, after: 0, text: "", voice: clip },
+      { type: "send-failed", key: 1, error: { code: "missing-key", message: "no key" } },
+      { type: "settled", key: 1, turn: null },
+    ]);
+    expect(refused.error).toEqual({ code: "missing-key", message: "no key", voice: true });
+    expect(refused.pending).toMatchObject([{ key: 1, failed: true, voice: clip }]);
+    const typed = run([
+      { type: "sending", key: 2, after: 0, text: "hi" },
+      { type: "send-failed", key: 2, error: { code: "missing-key", message: "mind" } },
+    ]);
+    expect(typed.error).toEqual({ code: "missing-key", message: "mind" });
+  });
+});
+
 describe("Sends", () => {
   test("a send supersedes the streams open before it once the server accepts it", () => {
     const sends = new Sends();
@@ -321,7 +373,12 @@ describe("a stream a send superseded", () => {
 });
 
 describe("mergeEvents", () => {
-  const log = { header: HEADER, events: [userLine(1, "a"), herLine(2, "b")], lateTools: [] };
+  const log = {
+    header: HEADER,
+    events: [userLine(1, "a"), herLine(2, "b")],
+    lateTools: [],
+    hearingRefusal: null,
+  };
 
   test("appends what continues the log, skipping what it already has", () => {
     const merged = mergeEvents(log, [herLine(2, "b"), userLine(3, "c"), herLine(4, "d")]);
@@ -344,7 +401,8 @@ describe("mergeEvents", () => {
 describe("latePoll", () => {
   test("reads the chat again only while a tool her interrupted turn left running is out", () => {
     expect(latePoll(undefined)).toBe(false);
-    expect(latePoll({ header: HEADER, events: [], lateTools: [] })).toBe(false);
-    expect(latePoll({ header: HEADER, events: [], lateTools: ["take_selfie"] })).toBe(LATE_POLL_MS);
+    const contents = { header: HEADER, events: [], hearingRefusal: null };
+    expect(latePoll({ ...contents, lateTools: [] })).toBe(false);
+    expect(latePoll({ ...contents, lateTools: ["take_selfie"] })).toBe(LATE_POLL_MS);
   });
 });

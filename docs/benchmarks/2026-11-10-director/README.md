@@ -26,6 +26,11 @@ Its labels are:
 - **`interested`:** whose subject the line is.
 - **`responders`:** who must answer it, and `maybe`, who may also answer.
 - **`invites_reply`:** whether the line invites a reply or closes the exchange.
+- **`voice_moment`,** on 24 lines: whether a voice message suits the reply better than text
+  ([Voice moments](#voice-moments)).
+
+A line in `history` or `latest` is `[speaker, text]`, or `[speaker, text, "voice"]` for a voice
+message.
 
 `score.ts` derives the rest the way a chat does:
 - the hop is the number of persona lines since the viewer's last one;
@@ -136,6 +141,33 @@ With the change, each bar can move on its own, in steps of 0.01, without decidin
 the addressed bar from 0.4 to 0.63 at least, the interest bar from 0.1 to 0.43, and the invites bar
 from 0.17 to 0.38. Under 0.1, the interest bar lets a second persona follow on two lines.
 
+## Voice moments
+
+A persona whose reply mode is `auto` answers in voice when Jev's `voice_moment` clears a bar:
+`VOICE_THRESHOLD`, or `VOICE_THRESHOLD_AFTER_VOICE` while the viewer's last line was a voice
+message. **Both bars are placeholders, 0.7 and 0.4, that no run has scored yet.**
+
+**The labels were written before any line was scored.** 24 lines carry one, 14 yes and 10 no:
+
+| Label | Lines |
+| --- | --- |
+| yes, typed | `name-09` 吓哭了, `off-topic-01` 加班累死了, `off-topic-03` 四级要挂, `closing-01` 晚安, `group-03` 有人想我吗, `mention-10` @坚果, `reply-02` 我想听情歌, `reply-04` 我想去撸猫, `persona-05` 茶茶 teases Lumi, `persona-28` Lumi invites 茶茶 to sing |
+| no, typed | `mention-03` 生日会的票, `mention-09` 花店的新花, `name-04` 键盘的轴, `interest-07` 键盘值不值, `interest-11` 《三体》, `interest-14` 健身完吃什么, `persona-13` 奶绿 asks 小满 for food, `persona-22` 茶茶 asks 小满 about RAM |
+| yes, a voice message | `name-08` 妆好好看, `interest-13` 凌晨三点睡不着, `off-topic-04` 发年终奖了, `off-topic-06` 面试好紧张 |
+| no, a voice message | `interest-03` 红烧肉怎么做, `interest-05` 布偶和英短 |
+
+- **Yes** is a moment for feeling, play or closeness, or for a sound: comfort, a goodnight, a tease,
+  a song.
+- **No** asks for facts, steps or a recommendation, which read better as text, even after a voice
+  message.
+- **The six voice messages were text lines before.** Their stored scores for the other questions
+  were taken with them as text, until the next real run.
+
+`score.ts` asks about a labelled line with every persona on `auto`, so the request carries
+`voice_moment`, and checks the mode the replies got. Only lines someone must answer can carry a
+label, since a line no one answers has no mode to check. `decisions.json` scores the two bars as
+`voice_moment` and `voice_moment_after_voice`, each with the bar its labels suggest.
+
 ## Reproduce
 
 From the repository root, with the gate role's key (`OPENROUTER_API_KEY` by default) in `.env` or
@@ -148,13 +180,15 @@ bun docs/benchmarks/2026-11-10-director/score.ts --cached
 ```
 
 - **`director-decisions`** runs `score.ts --check`. It asks Jev about every line, writes
-  `decisions.json`, and exits non-zero when any line is decided wrong. It costs about $0.003.
+  `decisions.json`, and exits non-zero when any line is decided wrong, its replies or their mode.
+  It costs about $0.003.
 - **Without `--check`,** `score.ts` exits 0, for calibration.
 - **`--cached`** re-decides the scores stored in `decisions.json` through the director instead of
   asking Jev, so it costs nothing. Use it after changing a threshold or a label; a changed question
-  or state needs a real run.
+  or state needs a real run. A `voice_moment` label with no stored score is counted as unscored,
+  not checked: until a real run stores them, all 24 are.
 - **`--persona <id>`** picks whose gate role it calls.
 
 Each `OFF` line it prints is one question's score on the wrong side of its threshold. That is a
 diagnostic, and it never fails the check, because a line whose decision comes out right anyway is
-fine.
+fine. A `WRONG-VOICE` line is a labelled line answered in the other mode, and fails it.

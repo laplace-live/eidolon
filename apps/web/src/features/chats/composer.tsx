@@ -11,13 +11,18 @@ import {
   useRef,
   useState,
 } from "react";
+import { toast } from "sonner";
 import { PersonaAvatar } from "@/components/avatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { listOf } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import { insertMention, mentionAt, mentionName, mentionOptions } from "./autocomplete";
+import { RECORDER_PROBLEMS } from "./labels";
 import { type ChatPersona, shortNameOf } from "./persona";
+import type { VoiceClip } from "./stream";
+import { useRecorder } from "./use-recorder";
+import { MicButton, type MicState, RecordingBar } from "./voice-recorder";
 
 /** The server's limit, in code points; maxLength counts UTF-16 units, which is stricter. */
 const TEXT_MAX = 4000;
@@ -25,22 +30,36 @@ const TEXT_MAX = 4000;
 /**
  * The text box: Enter sends and Shift+Enter breaks the line. A send while a reply runs is allowed,
  * since the server interrupts it; Stop shows while one does. With two or more personas, an `@`
- * offers their names, and whoever the line mentions answers first.
+ * offers their names, and whoever the line mentions answers first. While the box is empty, the
+ * microphone takes the send button's place, and a take replaces the box while it records.
  */
 export function Composer({
   placeholder,
   participants,
   busy,
+  mic,
   onSend,
+  onSendVoice,
   onStop,
 }: {
   readonly placeholder: string;
   readonly participants: readonly ChatPersona[];
   readonly busy: boolean;
+  readonly mic: MicState;
   readonly onSend: (text: string) => void;
+  readonly onSendVoice: (clip: VoiceClip) => void;
   readonly onStop: () => void;
 }) {
   const { t } = useLingui();
+  const recorder = useRecorder({
+    onClip: onSendVoice,
+    onProblem: (problem) =>
+      toast.error(t(RECORDER_PROBLEMS[problem].title), {
+        description: t(RECORDER_PROBLEMS[problem].body),
+      }),
+  });
+  const recording = recorder.phase !== "idle";
+  const [holding, setHolding] = useState(false);
   const [text, setText] = useState("");
   const [caret, setCaret] = useState(0);
   const [highlight, setHighlight] = useState(0);
@@ -131,7 +150,8 @@ export function Composer({
         <p className="text-muted-foreground text-xs">{t`Mentioned: ${ph({ names })}`}</p>
       )}
       <div className="flex items-end gap-2">
-        <div className="relative min-w-0 flex-1">
+        {recording && <RecordingBar recorder={recorder} holding={holding} />}
+        <div className="relative min-w-0 flex-1" hidden={recording}>
           {options.length > 0 && (
             <div
               id={listId}
@@ -193,15 +213,14 @@ export function Composer({
             {t`Stop`}
           </Button>
         )}
-        <Button
-          type="submit"
-          size="icon-lg"
-          className="shrink-0"
-          disabled={trimmed === ""}
-          aria-label={t`Send`}
-        >
-          <ArrowUpIcon />
-        </Button>
+        {trimmed === "" ? (
+          // A take under way can always be sent, whatever the chat learned since it started.
+          <MicButton recorder={recorder} state={recording ? "ready" : mic} onHolding={setHolding} />
+        ) : (
+          <Button type="submit" size="icon-lg" className="shrink-0" aria-label={t`Send`}>
+            <ArrowUpIcon />
+          </Button>
+        )}
       </div>
     </form>
   );

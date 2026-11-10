@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ChatEvent } from "@eidolon/chat";
+import type { ChatEvent, Speaker } from "@eidolon/chat";
 import {
   chatItems,
   manyVoices,
@@ -76,22 +76,26 @@ describe("chatItems", () => {
         persona: "mio",
         text: "你好呀",
         images: [],
+        voice: null,
+        sentAsText: false,
         interrupted: false,
         cutOff: null,
         reason: null,
       },
-      { kind: "user", seq: 4, text: "拍张照" },
+      { kind: "user", seq: 4, text: "拍张照", voice: null },
       {
         kind: "persona",
         seq: 8,
         persona: "mio",
         text: "",
         images: [IMAGE],
+        voice: null,
+        sentAsText: false,
         interrupted: true,
         cutOff: null,
         reason: single,
       },
-      { kind: "user", seq: 10, text: "再来一张" },
+      { kind: "user", seq: 10, text: "再来一张", voice: null },
       { kind: "failed", seq: 11, persona: "mio", error: "Timed out" },
     ]);
   });
@@ -123,6 +127,91 @@ describe("chatItems", () => {
       { kind: "persona", seq: 1, text: "说到一", cutOff: "length" },
       { kind: "persona", seq: 2, text: "", cutOff: "refusal" },
     ]);
+  });
+});
+
+describe("voice messages", () => {
+  const AUDIO = { kind: "audio", name: `${"b".repeat(64)}.mp3`, mime: "audio/mpeg" } as const;
+  const voice = (seq: number, speaker: Speaker, text: string) =>
+    ({
+      type: "message",
+      seq,
+      at: seq,
+      id: `v${seq}`,
+      speaker,
+      text,
+      modality: "voice",
+      attachments: [AUDIO],
+    }) as const satisfies ChatEvent;
+  const userLine = (seq: number, text: string): ChatEvent => ({
+    type: "message",
+    seq,
+    at: seq,
+    id: `u${seq}`,
+    speaker: { kind: "user" },
+    text,
+  });
+
+  test("carry their audio and transcript, even when nothing in the viewer's could be heard", () => {
+    expect(
+      chatItems([
+        voice(1, { kind: "user" }, ""),
+        voice(2, { kind: "persona", id: "mio" }, "[笑]好呀"),
+      ]),
+    ).toMatchObject([
+      { kind: "user", seq: 1, text: "", voice: AUDIO },
+      { kind: "persona", seq: 2, text: "[笑]好呀", voice: AUDIO, sentAsText: false },
+    ]);
+  });
+
+  test("audio on a message that isn't a voice message plays no part", () => {
+    const [item] = chatItems([{ ...voice(1, { kind: "user" }, "hi"), modality: "text" }]);
+    expect(item).toEqual({ kind: "user", seq: 1, text: "hi", voice: null });
+    expect(chatItems([{ ...voice(2, { kind: "user" }, ""), modality: "text" }])).toEqual([]);
+  });
+
+  test("a voice that couldn't be made badges her message as sent as text, not a failure", () => {
+    const her: ChatEvent = {
+      type: "message",
+      seq: 2,
+      at: 2,
+      id: "m2",
+      speaker: { kind: "persona", id: "mio" },
+      text: "好呀",
+    };
+    const failed = (seq: number, persona: string): ChatEvent => ({
+      type: "turn-failed",
+      seq,
+      at: seq,
+      persona,
+      turn: "t1",
+      error: "Fish Audio answered 402",
+      code: "voice-failed",
+    });
+    const items = chatItems([userLine(1, "唱首歌"), her, failed(3, "mio")]);
+    expect(items).toMatchObject([
+      { kind: "user" },
+      { kind: "persona", seq: 2, voice: null, sentAsText: true },
+    ]);
+    expect(retryText(items)).toBeNull();
+    // Another persona's, or one with no message of hers right before it, badges nothing.
+    expect(chatItems([her, failed(3, "ken")])).toMatchObject([{ sentAsText: false }]);
+    expect(chatItems([userLine(1, "唱"), failed(2, "mio")])).toEqual([
+      { kind: "user", seq: 1, text: "唱", voice: null },
+    ]);
+  });
+
+  test("Retry sends a voice message again as its transcript, and one with none not at all", () => {
+    const fails: ChatEvent = {
+      type: "turn-failed",
+      seq: 2,
+      at: 2,
+      persona: "mio",
+      turn: "t",
+      error: "x",
+    };
+    expect(retryText(chatItems([voice(1, { kind: "user" }, "你好"), fails]))).toBe("你好");
+    expect(retryText(chatItems([voice(1, { kind: "user" }, ""), fails]))).toBeNull();
   });
 });
 
@@ -203,13 +292,15 @@ describe("retryText", () => {
   });
 
   test("is the viewer's last line when her reply to it was cut off", () => {
-    const asked = { kind: "user", seq: 1, text: "讲个长故事" } as const;
+    const asked = { kind: "user", seq: 1, text: "讲个长故事", voice: null } as const;
     const reply = {
       kind: "persona",
       seq: 2,
       persona: "mio",
       text: "从前",
       images: [],
+      voice: null,
+      sentAsText: false,
       interrupted: false,
       reason: null,
     } as const;

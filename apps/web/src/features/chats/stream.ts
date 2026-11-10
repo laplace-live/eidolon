@@ -1,6 +1,6 @@
 // What a chat shows beyond its stored log: the reply streaming in, the tool she is running, the
-// viewer's line until it is stored, and whether a reply is still under way between its turns. The log itself lives in the query cache, which `mergeEvents`
-// extends as `events` lines arrive.
+// viewer's line until it is stored, and whether a reply is still under way between its turns. The
+// log itself lives in the query cache, which `mergeEvents` extends as `events` lines arrive.
 //
 // A send interrupts the reply running, and that reply's last lines come on its own stream, which
 // can arrive after the new reply started. Message events carry no turn, so a stored line is matched
@@ -19,18 +19,28 @@ export interface LiveTurn {
   readonly tool: string | null;
 }
 
+/** A voice message as recorded, before the server stores it. */
+export interface VoiceClip {
+  readonly audio: Blob;
+  readonly durationMs: number;
+}
+
 export interface PendingLine {
   /** Which send it came from, so another stream's end leaves it be. */
   readonly key: number;
   /** The last seq stored when it was sent. */
   readonly after: number;
+  /** Empty for a voice message, whose transcript the server writes. */
   readonly text: string;
+  readonly voice?: VoiceClip;
   readonly failed: boolean;
 }
 
 export interface LiveError {
   readonly code: string;
   readonly message: string;
+  /** The send refused was a voice message. */
+  readonly voice?: true;
 }
 
 export interface LiveState {
@@ -56,6 +66,7 @@ export type LiveAction =
       readonly key: number;
       readonly after: number;
       readonly text: string;
+      readonly voice?: VoiceClip;
     }
   | { readonly type: "send-failed"; readonly key: number; readonly error: LiveError }
   /** A stream is gone: send `key`'s line is stored or never will be, and nothing finishes `turn`. */
@@ -75,7 +86,10 @@ function finishes(turn: LiveTurn, events: readonly ChatEvent[]): boolean {
   );
 }
 
-/** `pending` without the lines `events` store, each the first sent before it with its text. */
+/**
+ * `pending` without the lines `events` store: each the first sent before it with its text, or for
+ * a voice message, the first voice message sent before it.
+ */
 function unstored(
   pending: readonly PendingLine[],
   events: readonly ChatEvent[],
@@ -83,7 +97,12 @@ function unstored(
   let left = pending;
   for (const event of events) {
     if (event.type !== "message" || event.speaker.kind !== "user") continue;
-    const stored = left.findIndex((line) => event.seq > line.after && line.text === event.text);
+    const voice = event.modality === "voice";
+    const stored = left.findIndex(
+      (line) =>
+        event.seq > line.after &&
+        (line.voice === undefined ? !voice && line.text === event.text : voice),
+    );
     if (stored >= 0) left = left.filter((_, i) => i !== stored);
   }
   return left;
@@ -129,18 +148,26 @@ export function reduceLive(state: LiveState, action: LiveAction): LiveState {
         ...state,
         pending: [
           ...state.pending.filter((line) => !line.failed),
-          { key: action.key, after: action.after, text: action.text, failed: false },
+          {
+            key: action.key,
+            after: action.after,
+            text: action.text,
+            ...(action.voice === undefined ? {} : { voice: action.voice }),
+            failed: false,
+          },
         ],
         error: null,
       };
-    case "send-failed":
+    case "send-failed": {
+      const voice = state.pending.some((line) => line.key === action.key && line.voice);
       return {
         ...state,
         pending: state.pending.map((line) =>
           line.key === action.key ? { ...line, failed: true } : line,
         ),
-        error: action.error,
+        error: voice ? { ...action.error, voice } : action.error,
       };
+    }
     case "settled":
       return {
         ...state,

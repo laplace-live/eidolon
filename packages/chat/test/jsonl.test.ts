@@ -247,6 +247,26 @@ describe("JsonlChatStore's attachments", () => {
     expect(jpeg).toEqual({ kind: "image", name: `${sha}.jpg`, mime: "image/jpeg" });
   });
 
+  test("audio is an audio attachment, with its length when given", async () => {
+    const { root, chat } = await chatWith([]);
+    const store = quietStore(root);
+    expect(await store.saveFile(chat.id, png, "audio/webm;codecs=opus", 2500)).toEqual({
+      kind: "audio",
+      name: `${sha}.webm`,
+      mime: "audio/webm",
+      durationMs: 2500,
+    });
+    expect(await store.saveFile(chat.id, png, "audio/mpeg")).toEqual({
+      kind: "audio",
+      name: `${sha}.mp3`,
+      mime: "audio/mpeg",
+    });
+    expect((await readdir(join(root, chat.id, "files"))).sort()).toEqual([
+      `${sha}.mp3`,
+      `${sha}.webm`,
+    ]);
+  });
+
   test("refuse a type that could run script, or an unknown chat", async () => {
     const { root, chat } = await chatWith([]);
     const store = quietStore(root);

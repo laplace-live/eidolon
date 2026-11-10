@@ -7,7 +7,9 @@
   "interest": 0.3,
   "invites": 0.3,
   "hop_step": 0.1,
-  "just_spoke_penalty": 0.1
+  "just_spoke_penalty": 0.1,
+  "voice": 0.7,
+  "voice_after_voice": 0.4
  },
  "latency_ms": {
   "p50": 413,
@@ -29,6 +31,10 @@
   "persona-closing": "6/6",
   "persona-opinion": "6/6",
   "persona-answers": "2/2"
+ },
+ "voice_right": {
+  "scored": "0/0",
+  "unscored": 24
  },
  "questions": {
   "addressed": {
@@ -150,6 +156,40 @@
      0.44
     ]
    }
+  },
+  "voice_moment": {
+   "threshold": 0.7,
+   "labelled_yes": {
+    "n": 0,
+    "min": null,
+    "median": null,
+    "max": null
+   },
+   "labelled_no": {
+    "n": 0,
+    "min": null,
+    "median": null,
+    "max": null
+   },
+   "wrong": 0,
+   "suggests": null
+  },
+  "voice_moment_after_voice": {
+   "threshold": 0.4,
+   "labelled_yes": {
+    "n": 0,
+    "min": null,
+    "median": null,
+    "max": null
+   },
+   "labelled_no": {
+    "n": 0,
+    "min": null,
+    "median": null,
+    "max": null
+   },
+   "wrong": 0,
+   "suggests": null
   }
  },
  "lines": [
@@ -170,6 +210,7 @@
    ],
    "source": "mention",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.94,
     "interested_milky-green": 0.83,
@@ -197,6 +238,7 @@
    ],
    "source": "mention",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.01,
     "interested_milky-green": 0.08,
@@ -226,6 +268,11 @@
    ],
    "source": "mention",
    "right": true,
+   "voice": {
+    "label": false,
+    "decided": null,
+    "right": null
+   },
    "scores": {
     "addressed_lumi": 0.98,
     "interested_lumi": 0.95,
@@ -256,6 +303,7 @@
    ],
    "source": "mention",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.84,
     "interested_milky-green": 0.42,
@@ -287,6 +335,7 @@
    ],
    "source": "mention",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_kuro": 0.97,
     "interested_kuro": 0.97,
@@ -314,6 +363,7 @@
    ],
    "source": "mention",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.01,
     "interested_milky-green": 0.06,
@@ -345,6 +395,7 @@
    ],
    "source": "mention",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.97,
     "interested_milky-green": 0.17,
@@ -375,6 +426,7 @@
    ],
    "source": "mention",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.01,
     "interested_milky-green": 0.08,
@@ -404,6 +456,11 @@
    ],
    "source": "mention",
    "right": true,
+   "voice": {
+    "label": false,
+    "decided": null,
+    "right": null
+   },
    "scores": {
     "addressed_milky-green": 0.96,
     "interested_milky-green": 0.85,
@@ -431,6 +488,11 @@
    ],
    "source": "model",
    "right": true,
+   "voice": {
+    "label": true,
+    "decided": null,
+    "right": null
+   },
    "scores": {
     "addressed_milky-green": 0.15,
     "interested_milky-green": 0.81,
@@ -458,6 +520,7 @@
    ],
    "source": "mention",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_kuro": 0.01,
     "interested_kuro": 0.07,
@@ -483,6 +546,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.97,
     "interested_milky-green": 0.82,
@@ -508,6 +572,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.06,
     "interested_milky-green": 0.11,
@@ -535,6 +600,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_lumi": 0.98,
     "interested_lumi": 0.97,
@@ -560,6 +626,11 @@
    ],
    "source": "model",
    "right": true,
+   "voice": {
+    "label": false,
+    "decided": null,
+    "right": null
+   },
    "scores": {
     "addressed_kuro": 0.01,
     "interested_kuro": 0.07,
@@ -585,6 +656,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.95,
     "interested_milky-green": 0.27,
@@ -614,6 +686,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.73,
     "interested_milky-green": 0.45,
@@ -645,6 +718,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.08,
     "interested_milky-green": 0.83,
@@ -661,7 +735,7 @@
    "id": "name-08",
    "kind": "name",
    "hop": 0,
-   "latest": "viewer：Lumi今天的妆好好看！",
+   "latest": "viewer：Lumi今天的妆好好看！ (voice)",
    "mentions": [],
    "responders": [
     "lumi"
@@ -672,6 +746,11 @@
    ],
    "source": "model",
    "right": true,
+   "voice": {
+    "label": true,
+    "decided": null,
+    "right": null
+   },
    "scores": {
     "addressed_milky-green": 0.01,
     "interested_milky-green": 0.08,
@@ -699,6 +778,11 @@
    ],
    "source": "model",
    "right": true,
+   "voice": {
+    "label": true,
+    "decided": null,
+    "right": null
+   },
    "scores": {
     "addressed_kuro": 0.97,
     "interested_kuro": 0.96,
@@ -726,6 +810,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.94,
     "interested_milky-green": 0.39,
@@ -751,6 +836,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_kuro": 0.01,
     "interested_kuro": 0.14,
@@ -778,6 +864,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_kuro": 0.04,
     "interested_kuro": 0.11,
@@ -803,6 +890,11 @@
    ],
    "source": "model",
    "right": true,
+   "voice": {
+    "label": true,
+    "decided": null,
+    "right": null
+   },
    "scores": {
     "addressed_milky-green": 0.02,
     "interested_milky-green": 0.09,
@@ -830,6 +922,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.02,
     "interested_milky-green": 0.07,
@@ -857,6 +950,11 @@
    ],
    "source": "model",
    "right": true,
+   "voice": {
+    "label": true,
+    "decided": null,
+    "right": null
+   },
    "scores": {
     "addressed_milky-green": 0.73,
     "interested_milky-green": 0.8,
@@ -882,6 +980,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.02,
     "interested_milky-green": 0.07,
@@ -909,6 +1008,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_lumi": 0.93,
     "interested_lumi": 0.83,
@@ -934,6 +1034,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.02,
     "interested_milky-green": 0.13,
@@ -963,6 +1064,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.97,
     "interested_milky-green": 0.83,
@@ -988,6 +1090,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.03,
     "interested_milky-green": 0.22,
@@ -1015,6 +1118,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.09,
     "interested_milky-green": 0.26,
@@ -1042,6 +1146,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.02,
     "interested_milky-green": 0.08,
@@ -1069,6 +1174,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.02,
     "interested_milky-green": 0.09,
@@ -1085,7 +1191,7 @@
    "id": "interest-03",
    "kind": "interest",
    "hop": 0,
-   "latest": "viewer：红烧肉怎么做才不腻啊",
+   "latest": "viewer：红烧肉怎么做才不腻啊 (voice)",
    "mentions": [],
    "responders": [
     "xiaoman"
@@ -1096,6 +1202,11 @@
    ],
    "source": "model",
    "right": true,
+   "voice": {
+    "label": false,
+    "decided": null,
+    "right": null
+   },
    "scores": {
     "addressed_lumi": 0.03,
     "interested_lumi": 0.08,
@@ -1121,6 +1232,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.4,
     "interested_milky-green": 0.78,
@@ -1137,7 +1249,7 @@
    "id": "interest-05",
    "kind": "interest",
    "hop": 0,
-   "latest": "viewer：我想养只猫，布偶和英短哪个好养",
+   "latest": "viewer：我想养只猫，布偶和英短哪个好养 (voice)",
    "mentions": [],
    "responders": [
     "milky-green"
@@ -1148,6 +1260,11 @@
    ],
    "source": "model",
    "right": true,
+   "voice": {
+    "label": false,
+    "decided": null,
+    "right": null
+   },
    "scores": {
     "addressed_milky-green": 0.04,
     "interested_milky-green": 0.32,
@@ -1177,6 +1294,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_kuro": 0.08,
     "interested_kuro": 0.9,
@@ -1202,6 +1320,11 @@
    ],
    "source": "model",
    "right": true,
+   "voice": {
+    "label": false,
+    "decided": null,
+    "right": null
+   },
    "scores": {
     "addressed_milky-green": 0.02,
     "interested_milky-green": 0.09,
@@ -1229,6 +1352,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_kuro": 0.02,
     "interested_kuro": 0.11,
@@ -1256,6 +1380,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_kuro": 0.14,
     "interested_kuro": 0.92,
@@ -1281,6 +1406,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.03,
     "interested_milky-green": 0.1,
@@ -1312,6 +1438,11 @@
    ],
    "source": "model",
    "right": true,
+   "voice": {
+    "label": false,
+    "decided": null,
+    "right": null
+   },
    "scores": {
     "addressed_milky-green": 0.03,
     "interested_milky-green": 0.08,
@@ -1341,6 +1472,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.06,
     "interested_milky-green": 0.53,
@@ -1357,7 +1489,7 @@
    "id": "interest-13",
    "kind": "interest",
    "hop": 0,
-   "latest": "viewer：凌晨三点了还睡不着，有人陪我聊会儿吗",
+   "latest": "viewer：凌晨三点了还睡不着，有人陪我聊会儿吗 (voice)",
    "mentions": [],
    "responders": [
     "kuro"
@@ -1370,6 +1502,11 @@
    ],
    "source": "model",
    "right": true,
+   "voice": {
+    "label": true,
+    "decided": null,
+    "right": null
+   },
    "scores": {
     "addressed_kuro": 0.05,
     "interested_kuro": 0.83,
@@ -1397,6 +1534,11 @@
    ],
    "source": "model",
    "right": true,
+   "voice": {
+    "label": false,
+    "decided": null,
+    "right": null
+   },
    "scores": {
     "addressed_lumi": 0.12,
     "interested_lumi": 0.89,
@@ -1422,6 +1564,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.02,
     "interested_milky-green": 0.09,
@@ -1451,6 +1594,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.04,
     "interested_milky-green": 0.08,
@@ -1476,6 +1620,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.05,
     "interested_milky-green": 0.32,
@@ -1503,6 +1648,11 @@
    ],
    "source": "model",
    "right": true,
+   "voice": {
+    "label": true,
+    "decided": null,
+    "right": null
+   },
    "scores": {
     "addressed_milky-green": 0.03,
     "interested_milky-green": 0.07,
@@ -1531,6 +1681,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_kuro": 0.03,
     "interested_kuro": 0.19,
@@ -1557,6 +1708,11 @@
    ],
    "source": "model",
    "right": true,
+   "voice": {
+    "label": true,
+    "decided": null,
+    "right": null
+   },
    "scores": {
     "addressed_milky-green": 0.04,
     "interested_milky-green": 0.07,
@@ -1571,7 +1727,7 @@
    "id": "off-topic-04",
    "kind": "off-topic",
    "hop": 0,
-   "latest": "viewer：我们公司今天发年终奖了！",
+   "latest": "viewer：我们公司今天发年终奖了！ (voice)",
    "mentions": [],
    "responders": [],
    "maybe": [
@@ -1585,6 +1741,11 @@
    ],
    "source": "model",
    "right": true,
+   "voice": {
+    "label": true,
+    "decided": null,
+    "right": null
+   },
    "scores": {
     "addressed_milky-green": 0.03,
     "interested_milky-green": 0.08,
@@ -1615,6 +1776,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_kuro": 0.03,
     "interested_kuro": 0.17,
@@ -1629,7 +1791,7 @@
    "id": "off-topic-06",
    "kind": "off-topic",
    "hop": 0,
-   "latest": "viewer：明天要早起去面试，好紧张",
+   "latest": "viewer：明天要早起去面试，好紧张 (voice)",
    "mentions": [],
    "responders": [],
    "maybe": [
@@ -1641,6 +1803,11 @@
    ],
    "source": "model",
    "right": true,
+   "voice": {
+    "label": true,
+    "decided": null,
+    "right": null
+   },
    "scores": {
     "addressed_milky-green": 0.04,
     "interested_milky-green": 0.07,
@@ -1668,6 +1835,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.03,
     "interested_milky-green": 0.07,
@@ -1695,6 +1863,11 @@
    ],
    "source": "model",
    "right": true,
+   "voice": {
+    "label": true,
+    "decided": null,
+    "right": null
+   },
    "scores": {
     "addressed_milky-green": 0.05,
     "interested_milky-green": 0.09,
@@ -1722,6 +1895,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.14,
     "interested_milky-green": 0.25,
@@ -1749,6 +1923,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_lumi": 0.02,
     "interested_lumi": 0.06,
@@ -1774,6 +1949,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.74,
     "interested_milky-green": 0.21,
@@ -1801,6 +1977,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.02,
     "interested_milky-green": 0.06,
@@ -1830,6 +2007,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_kuro": 0.02,
     "interested_kuro": 0.04,
@@ -1857,6 +2035,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.03,
     "interested_milky-green": 0.15,
@@ -1886,6 +2065,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_kuro": 0.06,
     "interested_kuro": 0.23,
@@ -1913,6 +2093,11 @@
    ],
    "source": "model",
    "right": true,
+   "voice": {
+    "label": true,
+    "decided": null,
+    "right": null
+   },
    "scores": {
     "addressed_milky-green": 0.06,
     "interested_milky-green": 0.23,
@@ -1940,6 +2125,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_kuro": 0.82,
     "interested_kuro": 0.87,
@@ -1963,6 +2149,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_kuro": 0.03,
     "interested_kuro": 0.08,
@@ -1984,6 +2171,7 @@
    "decided": [],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_kuro": 0.05,
     "interested_kuro": 0.06,
@@ -2003,6 +2191,7 @@
    "decided": [],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_kuro": 0.03,
     "interested_kuro": 0.06,
@@ -2028,6 +2217,11 @@
    ],
    "source": "model",
    "right": true,
+   "voice": {
+    "label": true,
+    "decided": null,
+    "right": null
+   },
    "scores": {
     "addressed_lumi": 0.74,
     "interested_lumi": 0.25,
@@ -2051,6 +2245,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_kuro": 0.84,
     "interested_kuro": 0.9,
@@ -2074,6 +2269,7 @@
    "decided": [],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_xiaoman": 0.17,
     "interested_xiaoman": 0.55,
@@ -2097,6 +2293,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.97,
     "interested_milky-green": 0.57,
@@ -2118,6 +2315,7 @@
    "decided": [],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_kuro": 0.92,
     "interested_kuro": 0.9,
@@ -2141,6 +2339,7 @@
    "decided": [],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.02,
     "interested_milky-green": 0.09,
@@ -2166,6 +2365,7 @@
    "decided": [],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_xiaoman": 0.05,
     "interested_xiaoman": 0.55,
@@ -2188,6 +2388,7 @@
    "decided": [],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.02,
     "interested_milky-green": 0.09,
@@ -2213,6 +2414,11 @@
    ],
    "source": "model",
    "right": true,
+   "voice": {
+    "label": false,
+    "decided": null,
+    "right": null
+   },
    "scores": {
     "addressed_kuro": 0.01,
     "interested_kuro": 0.09,
@@ -2238,6 +2444,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_lumi": 0.08,
     "interested_lumi": 0.95,
@@ -2261,6 +2468,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_kuro": 0.89,
     "interested_kuro": 0.71,
@@ -2282,6 +2490,7 @@
    "decided": [],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_kuro": 0.03,
     "interested_kuro": 0.61,
@@ -2301,6 +2510,7 @@
    "decided": [],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_kuro": 0.03,
     "interested_kuro": 0.07,
@@ -2324,6 +2534,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_xiaoman": 0.96,
     "interested_xiaoman": 0.9,
@@ -2345,6 +2556,7 @@
    "decided": [],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_kuro": 0.96,
     "interested_kuro": 0.9,
@@ -2366,6 +2578,7 @@
    "decided": [],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.02,
     "interested_milky-green": 0.12,
@@ -2389,6 +2602,7 @@
    "decided": [],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_kuro": 0.02,
     "interested_kuro": 0.12,
@@ -2416,6 +2630,11 @@
    ],
    "source": "model",
    "right": true,
+   "voice": {
+    "label": false,
+    "decided": null,
+    "right": null
+   },
    "scores": {
     "addressed_xiaoman": 0.87,
     "interested_xiaoman": 0.9,
@@ -2437,6 +2656,7 @@
    "decided": [],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_lumi": 0.86,
     "interested_lumi": 0.19,
@@ -2456,6 +2676,7 @@
    "decided": [],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.02,
     "interested_milky-green": 0.05,
@@ -2480,6 +2701,7 @@
    "decided": [],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.04,
     "interested_milky-green": 0.09,
@@ -2501,6 +2723,7 @@
    "decided": [],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_lumi": 0.03,
     "interested_lumi": 0.06,
@@ -2522,6 +2745,7 @@
    "decided": [],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.06,
     "interested_milky-green": 0.07,
@@ -2545,6 +2769,11 @@
    ],
    "source": "model",
    "right": true,
+   "voice": {
+    "label": true,
+    "decided": null,
+    "right": null
+   },
    "scores": {
     "addressed_kuro": 0.81,
     "interested_kuro": 0.28,
@@ -2568,6 +2797,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_xiaoman": 0.74,
     "interested_xiaoman": 0.79,
@@ -2587,6 +2817,7 @@
    "decided": [],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_kuro": 0.05,
     "interested_kuro": 0.08,
@@ -2610,6 +2841,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.85,
     "interested_milky-green": 0.58,
@@ -2635,6 +2867,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_lumi": 0.17,
     "interested_lumi": 0.96,
@@ -2656,6 +2889,7 @@
    "decided": [],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_kuro": 0.01,
     "interested_kuro": 0.05,
@@ -2681,6 +2915,7 @@
    ],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_kuro": 0.02,
     "interested_kuro": 0.07,
@@ -2702,6 +2937,7 @@
    "decided": [],
    "source": "model",
    "right": true,
+   "voice": null,
    "scores": {
     "addressed_milky-green": 0.02,
     "interested_milky-green": 0.05,

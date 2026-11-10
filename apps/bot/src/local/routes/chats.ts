@@ -1,24 +1,38 @@
-// /api/local/chats: text chats with the personas, kept in the data home. A reply streams as NDJSON
-// while it runs, and GET live picks it up again from its start.
+// /api/local/chats: chats with the personas, in text and voice messages, kept in the data home. A
+// reply streams as NDJSON while it runs, and GET live picks it up again from its start.
 import { existsSync } from "node:fs";
 import {
+  attachmentKind,
   attachmentMime,
   ChatStoreError,
   isChatId,
+  isReplyMode,
   MAX_CHAIN_LIMIT,
   MAX_PARTICIPANTS,
+  type ReplyMode,
 } from "@eidolon/chat";
-import { isPlainObject, withPersona } from "@eidolon/config";
-import { hasKey, missingKey, trySelect } from "@eidolon/providers";
+import { isPlainObject, logger, withPersona } from "@eidolon/config";
+import { hasKey, missingKey, ProviderConfigError, trySelect } from "@eidolon/providers";
+import { HearingFailed, hearingRefusal } from "../chats/hearing.ts";
 import { ChatRunner, type ChatRunnerOptions } from "../chats/runner.ts";
 import { personaRefusal } from "../personas.ts";
-import { imageResponse, localError, localJson, ndjsonResponse, readJson } from "../responses.ts";
+import {
+  imageResponse,
+  localError,
+  localFailure,
+  localJson,
+  ndjsonResponse,
+  readBytes,
+  readJson,
+} from "../responses.ts";
 import type { LocalApp, LocalRouteSpec } from "../router.ts";
 
 const MAX_TEXT = 4000;
 const MAX_TITLE = 80;
 /** 4000 characters, each escaped as JSON at worst. */
 const BODY_LIMIT = 64 * 1024;
+const MAX_VOICE_BYTES = 10 * 1024 * 1024;
+const MAX_VOICE_MS = 2 * 60 * 1000;
 // Attachments are named by their content's hash: a name never changes what it serves.
 const IMMUTABLE = "private, max-age=31536000, immutable";
 /** Control characters other than a tab or a line break. */
@@ -65,6 +79,34 @@ function chainLimitOf(body: unknown): number | null {
   const { chainLimit } = body;
   if (typeof chainLimit !== "number" || !Number.isInteger(chainLimit)) return null;
   return chainLimit >= 0 && chainLimit <= MAX_CHAIN_LIMIT ? chainLimit : null;
+}
+
+/** PATCH's `replyMode`: auto, text or voice; else null. */
+function replyModeIn(body: unknown): ReplyMode | null {
+  if (!isPlainObject(body) || Object.keys(body).some((key) => key !== "replyMode")) return null;
+  return isReplyMode(body.replyMode) ? body.replyMode : null;
+}
+
+/** POST voice's `durationMs`, a whole number of ms from 1; else null. */
+function durationIn(url: URL): number | null {
+  const value = url.searchParams.get("durationMs");
+  if (value === null || !/^\d{1,15}$/.test(value)) return null;
+  const ms = Number(value);
+  return ms > 0 ? ms : null;
+}
+
+/** The answer to a voice message that couldn't be heard. */
+function hearingFailure(id: string, { cause }: HearingFailed): Response {
+  if (cause instanceof ProviderConfigError) {
+    return localError(
+      409,
+      "missing-key",
+      `The hearing role can't hear a voice message. ${cause.message}`,
+    );
+  }
+  return localFailure(502, "upstream-failed", "The voice message couldn't be transcribed", (log) =>
+    logger.exception(`Chat ${id}: a voice message couldn't be heard (error ${log})`, cause),
+  );
 }
 
 /** The 409 when persona `id`'s mind takes a key and has none; the caller validates `id`. */
@@ -156,17 +198,19 @@ export function chatsRoutes(app: LocalApp, options: ChatRunnerOptions = {}): Loc
         const body = await readJson(request, BODY_LIMIT);
         if (!body.ok) return body.response;
         const title = field(body.value, "title", MAX_TITLE, CONTROL);
-        const chainLimit = title === null ? chainLimitOf(body.value) : null;
-        if (title === null && chainLimit === null) {
+        const chainLimit = chainLimitOf(body.value);
+        const replyMode = replyModeIn(body.value);
+        if (title === null && chainLimit === null && replyMode === null) {
           return localError(
             400,
             "bad-request",
-            "Send a `title` of 1 to 80 characters on one line, or a `chainLimit` from 0 to 6",
+            "Send a `title` of 1 to 80 characters on one line, a `chainLimit` from 0 to 6, or a `replyMode` of auto, text or voice",
           );
         }
         return inChat(async () => {
           if (title !== null) await runner().rename(id, title);
-          else await runner().setChainLimit(id, chainLimit as number);
+          else if (chainLimit !== null) await runner().changeSettings(id, { chainLimit });
+          else await runner().changeSettings(id, { replyMode: replyMode as ReplyMode });
           return localJson(200, { ok: true });
         });
       },
@@ -198,6 +242,50 @@ export function chatsRoutes(app: LocalApp, options: ChatRunnerOptions = {}): Loc
           const blocked = speakersRefusal(await runner().participants(id));
           if (blocked !== null) return blocked;
           return ndjsonResponse((await runner().send(id, text)).stream());
+        });
+      },
+    },
+    {
+      route: "POST /api/local/chats/:id/voice",
+      async handler(request, { params, url }) {
+        const id = params.id as string;
+        const refused = chatRefusal(id);
+        if (refused !== null) return refused;
+        const mime = request.headers.get("content-type") ?? "";
+        if (attachmentKind(mime) !== "audio") {
+          return localError(
+            415,
+            "unsupported-media-type",
+            "Send a voice message as audio/webm, audio/ogg, audio/mp4 or audio/mpeg",
+          );
+        }
+        const durationMs = durationIn(url);
+        if (durationMs === null) {
+          return localError(400, "bad-request", "`durationMs` is the clip's length in ms, from 1");
+        }
+        if (durationMs > MAX_VOICE_MS) {
+          return localError(413, "payload-too-large", "A voice message is at most 2 minutes");
+        }
+        return inChat(async () => {
+          const participants = await runner().participants(id);
+          const blocked = speakersRefusal(participants);
+          if (blocked !== null) return blocked;
+          const deaf = hearingRefusal(participants);
+          if (deaf !== null) return localError(409, "missing-key", deaf);
+          const bytes = await readBytes(request, MAX_VOICE_BYTES);
+          if (bytes === null) {
+            return localError(413, "payload-too-large", "A voice message is at most 10 MB");
+          }
+          if (bytes.byteLength === 0) {
+            return localError(400, "bad-request", "The voice message is empty");
+          }
+          try {
+            const live = await runner().sendVoice(id, { bytes, mime, durationMs });
+            return ndjsonResponse(live.stream());
+          } catch (error) {
+            if (error instanceof HearingFailed) return hearingFailure(id, error);
+            throw error;
+          }
         });
       },
     },
@@ -264,7 +352,7 @@ export function chatsRoutes(app: LocalApp, options: ChatRunnerOptions = {}): Loc
       route: "GET /api/local/chats/:id/files/:name",
       image: true,
       cache: IMMUTABLE,
-      handler(_request, { params }) {
+      handler(request, { params }) {
         const id = params.id as string;
         const name = params.name as string;
         const refused = chatRefusal(id);
@@ -275,7 +363,13 @@ export function chatsRoutes(app: LocalApp, options: ChatRunnerOptions = {}): Loc
         }
         const path = runner().store.filePath(id, name);
         if (!existsSync(path)) return localError(404, "not-found", "No such file");
-        return imageResponse(Bun.file(path), mime);
+        // Bun.serve answers a Range request on a Bun.file body itself, with a 206 or 416 and its
+        // own Accept-Ranges; a second one would read `bytes, bytes`. Safari plays audio only from
+        // a server that takes ranges.
+        const ranges: Record<string, string> = request.headers.has("range")
+          ? {}
+          : { "accept-ranges": "bytes" };
+        return imageResponse(Bun.file(path), mime, ranges);
       },
     },
   ];

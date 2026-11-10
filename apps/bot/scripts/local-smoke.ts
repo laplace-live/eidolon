@@ -1,10 +1,10 @@
 // A browser walk through the local web app on a throwaway data home: sign-in, the wizard's keys step
 // in English and 简体中文, saved keys, an embeddings account added and picked in Settings, a saved
-// prompt, a facts index built through the studio, a text chat from greeting to delete, and a group
-// chat with a second persona. The keys are fake, so the providers refuse them for free, and the
-// embeddings, the chats' replies and the director's decisions come from a fake server, so nothing is
-// billed. --call instead places a real call from the call page
-// with the .env's keys, which bills them.
+// prompt, a facts index built through the studio, a text chat from greeting to delete, a group chat
+// with a second persona, and voice messages both ways. The keys are fake, so the providers refuse
+// them for free, and the embeddings, the chats' replies, the director's decisions and the voice
+// messages' speech come from a fake server, so nothing is billed. --call instead places a real call
+// from the call page with the .env's keys, which bills them.
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import {
   existsSync,
@@ -27,7 +27,15 @@ import {
   type Locator,
   type Page,
 } from "playwright-core";
-import type { JobSnapshot, PersonasResponse, Status } from "../src/local/api.ts";
+import type {
+  AccountsResponse,
+  AccountView,
+  ChatContents,
+  JobSnapshot,
+  PersonasResponse,
+  Status,
+  UsageSummary,
+} from "../src/local/api.ts";
 import { Output, READY_LINE } from "./output.ts";
 
 const ROOT = resolve(import.meta.dir, "../../..");
@@ -216,6 +224,22 @@ const GROUP_MESSAGE = `@${SECOND.shortName} ${GROUP_TEXT}`;
 const SECOND_REPLY = "在玩恐怖游戏呢，奶绿要一起吗？";
 /** The first persona's answer to her, a hop later. */
 const HOP_REPLY = "不要不要，我最怕黑了！";
+/** The OpenAI account her voice and hearing reach the fake server through; an OpenAI-compatible
+ * endpoint offers neither. */
+const SPEECH_ACCOUNT_NAME = "Local smoke speech";
+/** How long the walk holds the microphone down, past the composer's 350 ms hold. */
+const HOLD_MIC_MS = 1500;
+/** What the fake server hears in any voice message. */
+const VOICE_TRANSCRIPT = "你听得到我说话吗？";
+/** Her answer to it, in text. */
+const HEARD_REPLY = "听得到呀，声音很清楚。";
+/** The viewer's line once the chat answers in voice. */
+const VOICE_ASK = "用语音跟我说句话吧";
+/** Her voice reply; the fake voice's model reads no cues, so it is sent VOICE_SPOKEN. */
+const VOICE_REPLY = "[sighing] 好吧好吧，就说一句哦。";
+const VOICE_SPOKEN = "好吧好吧，就说一句哦。";
+/** How long the fake voice speaks. */
+const SPEECH_SECONDS = 1;
 
 interface Check {
   readonly name: string;
@@ -287,8 +311,30 @@ interface ChatRequest {
 
 /** One Decisions request the fake server took, as far as the walk reads it. */
 interface DecisionsRequest {
-  readonly state?: { readonly latest?: { readonly speaker?: unknown; readonly text?: unknown } };
+  readonly state?: {
+    readonly latest?: {
+      readonly speaker?: unknown;
+      readonly text?: unknown;
+      readonly modality?: unknown;
+    };
+  };
   readonly questions?: Readonly<Record<string, unknown>>;
+}
+
+/** One speech request the fake server took. */
+interface SpeechRequest {
+  readonly model?: unknown;
+  readonly input?: unknown;
+  readonly voice?: unknown;
+  readonly response_format?: unknown;
+}
+
+/** One transcription upload the fake server took. */
+interface HeardUpload {
+  readonly model: string | null;
+  readonly language: string | null;
+  readonly name: string | null;
+  readonly bytes: number;
 }
 
 /** Whether a user message of the request holds `text`. */
@@ -347,10 +393,30 @@ function completionStream(texts: readonly string[], holdMs: number): Response {
   return new Response(body, { headers: { "content-type": "text/event-stream" } });
 }
 
+/** `seconds` of silent MPEG-1 Layer III frames, mono, 44.1 kHz at 128 kbps: the fake voice. */
+function silentMp3(seconds: number): Uint8Array<ArrayBuffer> {
+  // 144 × 128000 / 44100, unpadded; all-zero side info decodes as silence.
+  const frame = 417;
+  const frames = Math.ceil((seconds * 44_100) / 1152);
+  const bytes = new Uint8Array(frames * frame);
+  for (let i = 0; i < frames; i++) bytes.set([0xff, 0xfb, 0x90, 0xc4], i * frame);
+  return bytes;
+}
+
+const ROUTES = new Set([
+  "POST /v1/embeddings",
+  "GET /v1/models",
+  "POST /v1/chat/completions",
+  "POST /v1/audio/speech",
+  "POST /v1/audio/transcriptions",
+  "POST /alpha/decisions",
+]);
+
 /**
  * An OpenAI-compatible server that answers the fake key only: its embeddings, its model list,
- * streaming chat completions, which greet a kickoff and answer CHAT_MESSAGE and the group's lines,
- * and OpenRouter's Decisions route beside its v1 API.
+ * streaming chat completions, which greet a kickoff and answer CHAT_MESSAGE, the group's lines and
+ * the voice walk's, OpenAI's speech and transcriptions, and OpenRouter's Decisions route beside
+ * its v1 API.
  */
 function fakeEmbeddings(key: string) {
   const seen = {
@@ -361,20 +427,15 @@ function fakeEmbeddings(key: string) {
     models: new Set<string>(),
     chats: [] as ChatRequest[],
     decisions: [] as DecisionsRequest[],
+    speech: [] as SpeechRequest[],
+    heard: [] as HeardUpload[],
   };
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       const route = `${request.method} ${new URL(request.url).pathname}`;
-      if (
-        route !== "POST /v1/embeddings" &&
-        route !== "GET /v1/models" &&
-        route !== "POST /v1/chat/completions" &&
-        route !== "POST /alpha/decisions"
-      ) {
-        return new Response(null, { status: 404 });
-      }
+      if (!ROUTES.has(route)) return new Response(null, { status: 404 });
       if (request.headers.get("authorization") !== `Bearer ${key}`) {
         seen.refused++;
         return Response.json({ error: { message: "Invalid API key" } }, { status: 401 });
@@ -383,9 +444,10 @@ function fakeEmbeddings(key: string) {
         const body = (await request.json()) as ChatRequest;
         seen.chats.push(body);
         const last = body.messages?.at(-1);
-        if (last?.role === "user" && last.content === CHAT_MESSAGE) {
-          return completionStream(REPLY, REPLY_HOLD_MS);
-        }
+        const asked = last?.role === "user" ? last.content : undefined;
+        if (asked === CHAT_MESSAGE) return completionStream(REPLY, REPLY_HOLD_MS);
+        if (asked === VOICE_TRANSCRIPT) return completionStream([HEARD_REPLY], 0);
+        if (asked === VOICE_ASK) return completionStream([VOICE_REPLY], 0);
         if (heard(body, SECOND_REPLY)) return completionStream([HOP_REPLY], 0);
         if (heard(body, GROUP_MESSAGE)) return completionStream([SECOND_REPLY], 0);
         return completionStream([GREETING], 0);
@@ -394,6 +456,31 @@ function fakeEmbeddings(key: string) {
         const body = (await request.json()) as DecisionsRequest;
         seen.decisions.push(body);
         return decisionsAnswer(body);
+      }
+      if (route === "POST /v1/audio/speech") {
+        seen.speech.push((await request.json()) as SpeechRequest);
+        return new Response(silentMp3(SPEECH_SECONDS), {
+          headers: { "content-type": "audio/mpeg" },
+        });
+      }
+      if (route === "POST /v1/audio/transcriptions") {
+        const form = await request.formData();
+        const file = form.get("file");
+        const text = (name: string) => {
+          const value = form.get(name);
+          return typeof value === "string" ? value : null;
+        };
+        seen.heard.push({
+          model: text("model"),
+          language: text("language"),
+          name: file instanceof File ? file.name : null,
+          bytes: file instanceof File ? file.size : 0,
+        });
+        // As gpt-4o-transcribe answers: usage in tokens, so the clip's length is the recorder's.
+        return Response.json({
+          text: VOICE_TRANSCRIPT,
+          usage: { type: "tokens", input_tokens: 0, output_tokens: 0, total_tokens: 0 },
+        });
       }
       if (route === "GET /v1/models") {
         seen.listed++;
@@ -700,7 +787,12 @@ interface Walk {
   readonly keys: Readonly<Record<string, string>>;
   readonly embeddings: FakeEmbeddings;
   /** A call with the Bearer token, as a CLI makes one; its answer joins the echo scan. */
-  readonly api: (method: string, path: string, body?: string) => Promise<Response>;
+  readonly api: (
+    method: string,
+    path: string,
+    body?: string,
+    headers?: Readonly<Record<string, string>>,
+  ) => Promise<Response>;
 }
 
 /** The field an account's key sits in, with its Check button and its verdict. */
@@ -1071,6 +1163,15 @@ interface LoggedEvent {
   readonly replies?: readonly { readonly persona: string }[];
   readonly scores?: Readonly<Record<string, number>>;
   readonly title?: string;
+  readonly modality?: string;
+  readonly attachments?: readonly {
+    readonly kind: string;
+    readonly name: string;
+    readonly mime: string;
+    readonly durationMs?: number;
+  }[];
+  readonly code?: string;
+  readonly replyMode?: string;
 }
 
 async function chatLog(walk: Walk, id: string): Promise<readonly LoggedEvent[]> {
@@ -1088,29 +1189,49 @@ function roles(request: ChatRequest | undefined): string {
   return (request?.messages ?? []).map((message) => String(message.role)).join(", ") || "none";
 }
 
+/** The id of `provider`'s account named `name` at the fake server, added the first time. */
+async function fakeAccount(walk: Walk, provider: string, name: string): Promise<string> {
+  const listed = (await (await walk.api("GET", "/api/local/accounts")).json()) as AccountsResponse;
+  const found = listed.accounts.find((account) => account.name === name);
+  if (found !== undefined) return found.id;
+  const added = await walk.api(
+    "POST",
+    "/api/local/accounts",
+    JSON.stringify({ provider, name, apiKey: walk.keys.embed, baseUrl: walk.embeddings.url }),
+  );
+  if (added.status !== 201) throw new Error(`POST accounts for ${name} answered ${added.status}`);
+  return ((await added.json()) as AccountView).id;
+}
+
+/** Persona `persona`'s settings `values`, saved through PUT settings. */
+async function configure(
+  walk: Walk,
+  persona: string,
+  values: Readonly<Record<string, unknown>>,
+): Promise<void> {
+  const body = JSON.stringify({ scope: "persona", persona, values });
+  const saved = await walk.api("PUT", "/api/local/settings", body);
+  if (!saved.ok) throw new Error(`PUT settings for ${persona} answered ${saved.status}`);
+}
+
 /**
  * A text chat with her mind on the fake server: New Chat and its greeting, a reply that streams in,
  * the history after a reload, then Rename and Delete from the chat's menus.
  */
 async function chatWalk(walk: Walk): Promise<void> {
   const { page, checks, origin } = walk;
-  const { chats } = walk.embeddings.seen;
-  // Off, since her gate and reranker would ask OpenRouter with the fake key.
-  const configured = await walk.api(
-    "PUT",
-    "/api/local/settings",
-    JSON.stringify({
-      scope: "persona",
-      persona: PERSONA,
-      values: {
-        "mind.provider": EMBED_ACCOUNT,
-        "mind.model": MIND_MODEL,
-        "knowledge.gate.enabled": false,
-        "knowledge.rerank.enabled": false,
-      },
-    }),
-  );
-  if (!configured.ok) throw new Error(`PUT settings for her mind answered ${configured.status}`);
+  const { chats, decisions } = walk.embeddings.seen;
+  const gate = await fakeAccount(walk, "openrouter", DECISIONS_ACCOUNT_NAME);
+  await configure(walk, PERSONA, {
+    "mind.provider": EMBED_ACCOUNT,
+    "mind.model": MIND_MODEL,
+    // Off, since her retrieval gate and reranker would ask OpenRouter with the fake key.
+    "knowledge.gate.enabled": false,
+    "knowledge.rerank.enabled": false,
+    // The director asks the active persona's gate role, on, though her retrieval gate is off: in a
+    // chat of one, whether to answer in voice, since her reply mode is auto and Fish has a key.
+    "knowledge.gate.provider": gate,
+  });
   const listed = (await (await walk.api("GET", "/api/local/personas")).json()) as PersonasResponse;
   const persona = listed.personas.find((entry) => entry.id === PERSONA);
   if (persona === undefined) throw new Error(`GET personas has no ${PERSONA}`);
@@ -1169,6 +1290,7 @@ async function chatWalk(walk: Walk): Promise<void> {
     name: t("en", "Message {name}", { name: short }),
     exact: true,
   });
+  const decided = decisions.length;
   await box.fill(CHAT_MESSAGE);
   await box.press("Enter");
   const [head, tail] = [REPLY[0], "刚刚在看猫猫视频"];
@@ -1213,18 +1335,22 @@ async function chatWalk(walk: Walk): Promise<void> {
     .getByRole("listitem")
     .filter({ hasText: tail });
   const inList = await shows(row);
+  const weighed = decisions.slice(decided).map((d) => Object.keys(d.questions ?? {}).join(" "));
   checks.add(
     "chat history",
     said(stored, "persona", REPLY.join("")) &&
       decision?.after === viewerLine?.seq &&
       decision?.source === "single" &&
+      decision.scores?.voice_moment === 0 &&
+      JSON.stringify(weighed) === JSON.stringify(["voice_moment"]) &&
       history.every(Boolean) &&
       inList &&
       modeOf(join(walk.home, "chats")) === "0700" &&
       modeOf(logFile) === "0600",
     `the log ${said(stored, "persona", REPLY.join("")) ? "stores" : "lacks"} her reply after a ` +
-      `${decision?.source ?? "missing"} decision on seq ${String(decision?.after)}; ` +
-      `after a reload ` +
+      `${decision?.source ?? "missing"} decision on seq ${String(decision?.after)} with ` +
+      `${JSON.stringify(decision?.scores ?? {})}, from ${weighed.length} Decisions request(s) ` +
+      `asking ${JSON.stringify(weighed)}; after a reload ` +
       `the page shows ${history.filter(Boolean).length} of 3 lines and the list ` +
       `${inList ? "previews" : "doesn't preview"} her reply; ` +
       `chats/ ${modeOf(join(walk.home, "chats"))}, ` +
@@ -1330,38 +1456,13 @@ async function groupChatWalk(walk: Walk): Promise<void> {
     JSON.stringify({ ...SECOND, voiceId: "0".repeat(32) }),
   );
   if (made.status !== 201) throw new Error(`POST personas answered ${made.status}`);
-  const account = await walk.api(
-    "POST",
-    "/api/local/accounts",
-    JSON.stringify({
-      provider: "openrouter",
-      name: DECISIONS_ACCOUNT_NAME,
-      apiKey: walk.keys.embed,
-      baseUrl: walk.embeddings.url,
-    }),
-  );
-  if (account.status !== 201) throw new Error(`POST accounts answered ${account.status}`);
-  const gate = ((await account.json()) as { id: string }).id;
-  for (const persona of [PERSONA, SECOND.id]) {
-    const configured = await walk.api(
-      "PUT",
-      "/api/local/settings",
-      JSON.stringify({
-        scope: "persona",
-        persona,
-        values: {
-          "mind.provider": EMBED_ACCOUNT,
-          "mind.model": MIND_MODEL,
-          "knowledge.gate.enabled": false,
-          "knowledge.rerank.enabled": false,
-          // The director asks the active persona's gate role, on, though her retrieval gate is off.
-          ...(persona === PERSONA ? { "knowledge.gate.provider": gate } : {}),
-        },
-      }),
-    );
-    if (!configured.ok)
-      throw new Error(`PUT settings for ${persona} answered ${configured.status}`);
-  }
+  // The first persona's, and the director's gate, are the chat walk's.
+  await configure(walk, SECOND.id, {
+    "mind.provider": EMBED_ACCOUNT,
+    "mind.model": MIND_MODEL,
+    "knowledge.gate.enabled": false,
+    "knowledge.rerank.enabled": false,
+  });
   const listed = (await (await walk.api("GET", "/api/local/personas")).json()) as PersonasResponse;
   const first = listed.personas.find((entry) => entry.id === PERSONA);
   const second = listed.personas.find((entry) => entry.id === SECOND.id);
@@ -1472,7 +1573,7 @@ async function groupChatWalk(walk: Walk): Promise<void> {
       hopLine?.speaker?.id === PERSONA &&
       JSON.stringify(picks) === JSON.stringify(expected) &&
       asks.length === 3 &&
-      questioned(1) === `addressed_${PERSONA} interested_${PERSONA} invites_reply` &&
+      questioned(1) === `addressed_${PERSONA} interested_${PERSONA} invites_reply voice_moment` &&
       heldBack &&
       introduced,
     `@ ${offered ? "offered" : "didn't offer"} ${second.name}, the box read ${quote(typed)} ` +
@@ -1501,6 +1602,311 @@ async function groupChatWalk(walk: Walk): Promise<void> {
       JSON.stringify(after) === JSON.stringify(expectedNames),
     `her answer shows under ${String(shown[0])} and the hop's under ${String(shown[1])}; ` +
       `after a reload, ${reloaded ? `${String(after[0])} and ${String(after[1])}` : "neither shows"}`,
+  );
+}
+
+/**
+ * Installed in the page before its own scripts: each media element that starts playing or plays
+ * to its end, as `playing <src>` or `ended <src>`.
+ */
+function observeMedia(): void {
+  const seen: string[] = [];
+  (window as unknown as { smokeMedia: string[] }).smokeMedia = seen;
+  for (const type of ["playing", "ended"]) {
+    // Media events don't bubble, so they are caught on the way down.
+    document.addEventListener(
+      type,
+      (event) => {
+        if (event.target instanceof HTMLMediaElement) {
+          seen.push(`${type} ${event.target.currentSrc}`);
+        }
+      },
+      true,
+    );
+  }
+}
+
+async function mediaEvents(page: Page): Promise<readonly string[]> {
+  return page.evaluate(() => (window as unknown as { smokeMedia?: string[] }).smokeMedia ?? []);
+}
+
+/** The NDJSON lines of a stream's whole text. */
+function ndjson(text: string): readonly Record<string, unknown>[] {
+  return text
+    .split("\n")
+    .filter((line) => line.trim() !== "")
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+}
+
+/**
+ * Voice messages, with her voice and hearing on an OpenAI account at the fake server: one held on
+ * the microphone, heard and answered in text; then the chat set to Voice in its settings, and her
+ * voice reply, which plays, its file served in ranges.
+ */
+async function voiceChatWalk(walk: Walk): Promise<void> {
+  const { page, checks, origin } = walk;
+  const { chats, decisions, speech, heard: uploads } = walk.embeddings.seen;
+  const speaker = await fakeAccount(walk, "openai", SPEECH_ACCOUNT_NAME);
+  await configure(walk, PERSONA, { "voice.provider": speaker, "hearing.provider": speaker });
+  const listed = (await (await walk.api("GET", "/api/local/personas")).json()) as PersonasResponse;
+  const persona = listed.personas.find((entry) => entry.id === PERSONA);
+  if (persona === undefined) throw new Error(`GET personas has no ${PERSONA}`);
+  const short = persona.shortName.trim() || persona.name;
+
+  await page.goto(`${origin}/chats`);
+  await page
+    .getByRole("button", { name: t("en", "New Chat"), exact: true })
+    .first()
+    .click();
+  await page.getByRole("menuitemcheckbox").filter({ hasText: persona.name }).click();
+  const minded = chats.length;
+  await page.getByRole("menuitem", { name: t("en", "Start Chat"), exact: true }).click();
+  await page.waitForURL(/\/chats\/[0-9a-f-]{36}$/);
+  const id = new URL(page.url()).pathname.split("/").at(-1) as string;
+  const log = page.getByRole("log", { name: t("en", "Conversation"), exact: true });
+  if (!(await shows(log.getByText(GREETING, { exact: true }), 30_000))) {
+    const logged = (await chatLog(walk, id)).map((e) => e.type).join(", ") || "nothing";
+    throw new Error(
+      `her greeting never showed: the log holds ${logged}, after ${chats.length - minded} mind ` +
+        `request(s); the page shows ${quote(await visibleText(log), 40)}`,
+    );
+  }
+
+  const opened = (await (await walk.api("GET", `/api/local/chats/${id}`)).json()) as ChatContents;
+  const mic = page.getByRole("button", { name: t("en", "Record Voice Message"), exact: true });
+  await mic.waitFor();
+  const usable = (await mic.getAttribute("aria-disabled")) === null;
+  const box = await mic.boundingBox();
+  if (box === null) throw new Error("the microphone button has no box");
+  const posted = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === `/api/local/chats/${id}/voice`,
+  );
+  const decided = decisions.length;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  const holding = await shows(
+    page.getByText(t("en", "Let go to send, or slide off the button to cancel."), { exact: true }),
+    10_000,
+  );
+  await Bun.sleep(HOLD_MIC_MS);
+  await page.mouse.up();
+  const upload = await posted;
+  const sentMs = Number(new URL(upload.url()).searchParams.get("durationMs"));
+  const sentType = (await upload.request().headerValue("content-type")) ?? "";
+  await log
+    .getByRole("button", { name: t("en", "Show Transcript"), exact: true })
+    .first()
+    .click();
+  const transcribed = await shows(log.getByText(VOICE_TRANSCRIPT, { exact: true }), 15_000);
+  const answered = await shows(log.getByText(HEARD_REPLY, { exact: true }), 30_000);
+  const stored = await poll(
+    () => chatLog(walk, id),
+    (events) => said(events, "persona", HEARD_REPLY),
+    10_000,
+  );
+  const line = stored.find((e) => e.type === "message" && e.speaker?.kind === "user");
+  const clip = line?.attachments?.[0];
+  const decision = stored.find((e) => e.type === "decision" && e.after === line?.seq);
+  const textReply = stored.find((e) => e.type === "message" && e.text === HEARD_REPLY);
+  const weighed = decisions.slice(decided);
+  const latest = weighed[0]?.state?.latest;
+  const hearing = uploads.at(-1);
+  checks.add(
+    "voice message",
+    opened.hearingRefusal === null &&
+      usable &&
+      holding &&
+      upload.status() === 200 &&
+      sentType.startsWith("audio/webm") &&
+      sentMs >= HOLD_MIC_MS &&
+      hearing?.model === "gpt-4o-transcribe" &&
+      hearing.language === "zh" &&
+      hearing.name === "voice.webm" &&
+      hearing.bytes > 0 &&
+      line?.modality === "voice" &&
+      line.text === VOICE_TRANSCRIPT &&
+      clip?.kind === "audio" &&
+      clip.mime === "audio/webm" &&
+      clip.durationMs === sentMs &&
+      transcribed &&
+      answered &&
+      textReply?.modality === undefined &&
+      decision?.source === "single" &&
+      weighed.length === 1 &&
+      Object.keys(weighed[0]?.questions ?? {}).join(" ") === "voice_moment" &&
+      latest?.modality === "voice" &&
+      latest.text === VOICE_TRANSCRIPT,
+    `the microphone ${usable ? "was offered" : "was disabled"} (hearingRefusal ` +
+      `${JSON.stringify(opened.hearingRefusal)}); held, it ${holding ? "showed" : "never showed"} ` +
+      `the let-go hint; POST voice ${upload.status()} with ${sentType || "no type"}, ` +
+      `${sentMs} ms; the fake server heard ${hearing ? `${hearing.bytes} bytes as ${hearing.name} with ${hearing.model} in ${hearing.language}` : "nothing"}; ` +
+      `the log stores a ${String(line?.modality)} message of ${quote(line?.text ?? "")} with ` +
+      `${clip ? `${clip.mime}, ${String(clip.durationMs)} ms` : "no audio"}; the page ` +
+      `${transcribed ? "shows" : "lacks"} its transcript and ${answered ? "shows" : "lacks"} her ` +
+      `text answer after a ${decision?.source ?? "missing"} decision that weighed ` +
+      `${weighed.map((d) => Object.keys(d.questions ?? {}).join(" ")).join(", ") || "nothing"} ` +
+      `on a ${String(latest?.modality)} line`,
+  );
+
+  await page
+    .getByRole("button", { name: t("en", "Chat Options"), exact: true })
+    .last()
+    .click();
+  await page.getByRole("menuitem", { name: t("en", "Chat Settings"), exact: true }).click();
+  const sheet = page.getByRole("dialog");
+  const voiceMode = sheet.getByRole("radio", {
+    name: t("en", "Voice", {}, "reply mode"),
+    exact: true,
+  });
+  const patched = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      response.url() === `${origin}/api/local/chats/${id}`,
+  );
+  await voiceMode.click();
+  const patchStatus = (await patched).status();
+  const chosen = await poll(
+    () => voiceMode.getAttribute("aria-checked"),
+    (checked) => checked === "true",
+    5_000,
+  );
+  await page.keyboard.press("Escape");
+  await sheet.waitFor({ state: "hidden" });
+
+  const fetched: Promise<string>[] = [];
+  page.on("response", (response) => {
+    if (!new URL(response.url()).pathname.endsWith(".mp3")) return;
+    fetched.push(
+      (async () => {
+        const range = (await response.request().headerValue("range")) ?? "no range";
+        const ranges = (await response.headerValue("accept-ranges")) ?? "none";
+        return `${range} ${response.status()} accept-ranges ${ranges}`;
+      })(),
+    );
+  });
+  const textBox = page.getByRole("textbox", {
+    name: t("en", "Message {name}", { name: short }),
+    exact: true,
+  });
+  const sent = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url() === `${origin}/api/local/chats/${id}/messages`,
+  );
+  const [spoke, weighedBefore] = [speech.length, decisions.length];
+  await textBox.fill(VOICE_ASK);
+  await textBox.press("Enter");
+  const streamed = ndjson(await (await sent).text());
+  const states = streamed
+    .filter((l) => l.type === "tool" && l.name === "voice")
+    .map((l) => String(l.state));
+  const herAudio = log.locator('audio[src$=".mp3"]');
+  await herAudio.waitFor({ state: "attached", timeout: 30_000 });
+  const src = new URL((await herAudio.getAttribute("src")) as string, origin).href;
+  const autoPlayed =
+    (await waitFor(async () => (await mediaEvents(page)).includes(`playing ${src}`), 5_000)) !==
+    null;
+  if (!autoPlayed) {
+    await herAudio
+      .locator("xpath=..")
+      .getByRole("button", { name: t("en", "Play Voice Message"), exact: true })
+      .click();
+  }
+  const ended =
+    (await waitFor(async () => (await mediaEvents(page)).includes(`ended ${src}`), 15_000)) !==
+    null;
+  const played = (await mediaEvents(page)).includes(`playing ${src}`);
+  await herAudio
+    .locator("xpath=../..")
+    .getByRole("button", { name: t("en", "Show Transcript"), exact: true })
+    .click();
+  const chip = await shows(log.getByRole("img", { name: "sighing", exact: true }), 5_000);
+  const raw = RAW_MARKUP.exec(await visibleText(log))?.[0] ?? null;
+  const after = await poll(
+    () => chatLog(walk, id),
+    (events) => said(events, "persona", VOICE_REPLY),
+    10_000,
+  );
+  const setting = after.find((e) => e.type === "settings" && e.replyMode === "voice");
+  const reply = after.find((e) => e.type === "message" && e.text === VOICE_REPLY);
+  const audio = reply?.attachments?.[0];
+  const failure = after.find((e) => e.type === "turn-failed");
+  const asked = speech.slice(spoke);
+  checks.add(
+    "voice reply",
+    patchStatus === 200 &&
+      chosen === "true" &&
+      setting !== undefined &&
+      decisions.length === weighedBefore &&
+      JSON.stringify(states) === JSON.stringify(["running", "done"]) &&
+      asked.length === 1 &&
+      asked[0]?.model === "gpt-4o-mini-tts" &&
+      asked[0].voice === "marin" &&
+      asked[0].response_format === "mp3" &&
+      asked[0].input === VOICE_SPOKEN &&
+      reply?.modality === "voice" &&
+      audio?.kind === "audio" &&
+      audio.mime === "audio/mpeg" &&
+      Math.abs((audio.durationMs ?? 0) - SPEECH_SECONDS * 1000) < 100 &&
+      failure === undefined &&
+      chip &&
+      raw === null,
+    `PATCH ${patchStatus} ${chosen === "true" ? "chose" : "didn't choose"} Voice and the log ` +
+      `${setting ? "stores" : "lacks"} it; her reply asked the director ` +
+      `${decisions.length - weighedBefore} time(s), streamed the voice tool ` +
+      `${states.join(" → ") || "never"}, and asked the fake voice ${asked.length} time(s), for ` +
+      `${quote(String(asked[0]?.input ?? ""))} in ${String(asked[0]?.voice)} with ` +
+      `${String(asked[0]?.model)}; the log stores a ${String(reply?.modality)} message with ` +
+      `${audio ? `${audio.mime}, ${String(audio.durationMs)} ms` : "no audio"}` +
+      `${failure ? ` and a ${String(failure.code)} turn-failed` : ""}; its transcript's cue ` +
+      (raw !== null ? `shows as written: ${raw}` : chip ? "shows as a chip" : "is missing"),
+  );
+
+  const file = `/api/local/chats/${id}/files/${audio?.name ?? "missing.mp3"}`;
+  const whole = await walk.api("GET", file);
+  const part = await walk.api("GET", file, undefined, { range: "bytes=0-99" });
+  const player = await Promise.all(fetched);
+  const ranged = player.some((entry) => /^bytes=\S+ 206 accept-ranges bytes$/.test(entry));
+  await page.reload();
+  const bubbles = await poll(
+    () => log.getByRole("button", { name: t("en", "Play Voice Message"), exact: true }).count(),
+    (count) => count === 2,
+    15_000,
+  );
+  checks.add(
+    "voice playback",
+    played &&
+      ended &&
+      ranged &&
+      whole.status === 200 &&
+      whole.headers.get("content-type") === "audio/mpeg" &&
+      whole.headers.get("accept-ranges") === "bytes" &&
+      part.status === 206 &&
+      (part.headers.get("content-range") ?? "").startsWith("bytes 0-99/") &&
+      bubbles === 2,
+    `her voice message ${played ? (autoPlayed ? "played on its own" : "played on Play") : "never played"} ` +
+      `and ${ended ? "played to its end" : "never ended"}; the player fetched ` +
+      `${player.join(", ") || "nothing"}; GET ${whole.status} ` +
+      `${whole.headers.get("content-type")} accept-ranges ${whole.headers.get("accept-ranges")}, ` +
+      `a range ${part.status} ${part.headers.get("content-range")}; after a reload, ${bubbles} ` +
+      `voice bubbles`,
+  );
+
+  const usage = (await (await walk.api("GET", "/api/local/usage")).json()) as UsageSummary;
+  const used = (role: string) =>
+    usage.rows.find((row) => row.role === role && row.provider === "openai");
+  const [voiced, heardRow] = [used("voice"), used("hearing")];
+  checks.add(
+    "voice usage",
+    voiced?.characters === [...VOICE_SPOKEN].length &&
+      heardRow !== undefined &&
+      heardRow.records === 1 &&
+      Math.abs(heardRow.audioSeconds - sentMs / 1000) < 0.01,
+    `the ledger has her voice speaking ${String(voiced?.characters ?? "no")} characters and her ` +
+      `hearing ${String(heardRow?.records ?? "no")} clip(s) of ` +
+      `${String(heardRow?.audioSeconds ?? 0)} s`,
   );
 }
 
@@ -1539,10 +1945,19 @@ async function smoke(options: Options): Promise<Checks> {
     if (server === null) return checks;
     const { link, origin, secret, stdout, stderr } = server;
     const bodies: Promise<string | null>[] = [];
-    const api = async (method: string, path: string, body?: string): Promise<Response> => {
+    const api = async (
+      method: string,
+      path: string,
+      body?: string,
+      headers: Readonly<Record<string, string>> = {},
+    ): Promise<Response> => {
       const response = await fetch(`${origin}${path}`, {
         method,
-        headers: { authorization: `Bearer ${secret}`, "content-type": "application/json" },
+        headers: {
+          authorization: `Bearer ${secret}`,
+          "content-type": "application/json",
+          ...headers,
+        },
         body,
       });
       const text = await response.text();
@@ -1550,15 +1965,23 @@ async function smoke(options: Options): Promise<Checks> {
       return new Response(text, { status: response.status, headers: response.headers });
     };
 
+    const mic = join(run.temp, "voice.wav");
+    writeFileSync(mic, toneWav(2));
     let browser: Browser;
     try {
-      browser = await chromium.launch({ ...chrome(), headless: !options.headful });
+      browser = await chromium.launch({
+        ...chrome(),
+        headless: !options.headful,
+        args: fakeMicArgs(mic),
+      });
     } catch (error) {
       checks.add("browser", false, error instanceof Error ? error.message.split("\n")[0] : "");
       return checks;
     }
     run.browser = browser;
     const context = await browser.newContext({ locale: "en-US" });
+    await context.grantPermissions(["microphone"], { origin });
+    await context.addInitScript(observeMedia);
     const problems: string[] = [];
     await reportCsp(context, problems);
     const page = await context.newPage();
@@ -1596,6 +2019,7 @@ async function smoke(options: Options): Promise<Checks> {
       if (embedder) {
         await checks.step("chat", () => chatWalk(walk));
         await checks.step("group chat", () => groupChatWalk(walk));
+        await checks.step("voice chat", () => voiceChatWalk(walk));
       }
     }
     checks.add(
@@ -1604,6 +2028,9 @@ async function smoke(options: Options): Promise<Checks> {
       problems.length === 0 ? "no page errors or CSP violations" : problems.slice(0, 3).join("; "),
     );
 
+    if (!checks.pass) {
+      for (const line of serverTrouble(server)) checks.notes.push(`server   ${line}`);
+    }
     const texts = await settled(bodies);
     const code = await run.stop();
     checks.add("shutdown", code === 0, `the server exited ${String(code)}`);
@@ -1625,9 +2052,30 @@ async function smoke(options: Options): Promise<Checks> {
   return checks;
 }
 
+/** Chrome's flags for a fake microphone that plays `wav` and asks no permission. */
+function fakeMicArgs(wav: string): string[] {
+  return [
+    "--use-fake-ui-for-media-stream",
+    "--use-fake-device-for-media-stream",
+    `--use-file-for-fake-audio-capture=${wav}`,
+  ];
+}
+
 /** A silent 16-bit mono WAV: without a capture file, Chrome's fake microphone beeps. */
 function silentWav(seconds: number, rate = 48_000): Uint8Array {
-  const bytes = seconds * rate * 2;
+  return wav(new Int16Array(seconds * rate), rate);
+}
+
+/** A quiet 440 Hz tone as a 16-bit mono WAV: the voice message the walk records. */
+function toneWav(seconds: number, rate = 48_000): Uint8Array {
+  const samples = Int16Array.from({ length: seconds * rate }, (_, i) =>
+    Math.round(Math.sin((2 * Math.PI * 440 * i) / rate) * 4096),
+  );
+  return wav(samples, rate);
+}
+
+function wav(samples: Int16Array, rate: number): Uint8Array {
+  const bytes = samples.length * 2;
   const view = new DataView(new ArrayBuffer(44 + bytes));
   const ascii = (at: number, text: string) => {
     for (const [i, char] of [...text].entries()) view.setUint8(at + i, char.charCodeAt(0));
@@ -1644,6 +2092,7 @@ function silentWav(seconds: number, rate = 48_000): Uint8Array {
   view.setUint16(34, 16, true);
   ascii(36, "data");
   view.setUint32(40, bytes, true);
+  for (const [i, sample] of samples.entries()) view.setInt16(44 + i * 2, sample, true);
   return new Uint8Array(view.buffer);
 }
 
@@ -2291,15 +2740,7 @@ async function callSmoke(options: Options): Promise<Checks> {
     writeFileSync(mic, silentWav(1));
     let browser: Browser;
     try {
-      browser = await chromium.launch({
-        ...chrome(),
-        headless: false,
-        args: [
-          "--use-fake-ui-for-media-stream",
-          "--use-fake-device-for-media-stream",
-          `--use-file-for-fake-audio-capture=${mic}`,
-        ],
-      });
+      browser = await chromium.launch({ ...chrome(), headless: false, args: fakeMicArgs(mic) });
     } catch (error) {
       checks.add("browser", false, error instanceof Error ? error.message.split("\n")[0] : "");
       return checks;

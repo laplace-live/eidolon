@@ -34,8 +34,17 @@ export type Attachment =
       readonly kind: "audio";
       readonly name: string;
       readonly mime: string;
-      readonly durationMs: number;
+      /** Absent when nothing measured it; a player reads it from the file. */
+      readonly durationMs?: number;
     };
+
+/** How personas answer: `auto` lets the director choose voice where a line suits it. */
+export const REPLY_MODES = ["auto", "text", "voice"] as const;
+export type ReplyMode = (typeof REPLY_MODES)[number];
+
+export function isReplyMode(value: unknown): value is ReplyMode {
+  return REPLY_MODES.some((mode) => mode === value);
+}
 
 export type CutOff = "length" | "refusal";
 
@@ -111,6 +120,8 @@ export type ChatEvent =
       readonly persona: ParticipantId;
       readonly turn: string;
       readonly error: string;
+      /** `voice-failed`: her reply, stored just before, was meant as a voice message but stayed text. */
+      readonly code?: "voice-failed";
     })
   | (EventBase & {
       /** Who answers the line at seq `after`, and how. */
@@ -127,7 +138,7 @@ export type ChatEvent =
   | (EventBase & {
       /** Per-chat overrides. */
       readonly type: "settings";
-      readonly replyMode?: "auto" | "text" | "voice";
+      readonly replyMode?: ReplyMode;
       readonly chainLimit?: number;
     })
   | (EventBase & {
@@ -221,20 +232,37 @@ export function isChatId(id: string): boolean {
   return CHAT_ID.test(id);
 }
 
-// No SVG: an attachment is served from the app's own origin, where one could run script.
+// No SVG: an attachment is served from the app's own origin, where one could run script. The audio
+// is what browsers record (webm, or mp4 on Safari, or ogg) and what TTS providers send (mp3).
 const ATTACHMENT_TYPES: Readonly<Record<string, string>> = {
   "image/png": "png",
   "image/jpeg": "jpg",
   "image/webp": "webp",
   "image/gif": "gif",
   "image/avif": "avif",
+  "audio/mpeg": "mp3",
+  "audio/webm": "webm",
+  "audio/ogg": "ogg",
+  "audio/mp4": "m4a",
 };
 
 const ATTACHMENT_NAME = /^[0-9a-f]{64}\.([a-z0-9]+)$/;
 
+/** `mime` without its parameters: MediaRecorder's `audio/webm;codecs=opus` is `audio/webm`. */
+function essence(mime: string): string {
+  return (mime.split(";")[0] as string).trim().toLowerCase();
+}
+
 /** The extension an attachment of type `mime` is stored under, or null for a type not taken. */
 export function attachmentExtension(mime: string): string | null {
-  return ATTACHMENT_TYPES[mime.toLowerCase()] ?? null;
+  const type = essence(mime);
+  return Object.hasOwn(ATTACHMENT_TYPES, type) ? (ATTACHMENT_TYPES[type] as string) : null;
+}
+
+/** Whether an attachment of type `mime` is an image or audio; null for a type not taken. */
+export function attachmentKind(mime: string): Attachment["kind"] | null {
+  if (attachmentExtension(mime) === null) return null;
+  return essence(mime).startsWith("audio/") ? "audio" : "image";
 }
 
 /** The type of the attachment named `name` (`<sha256>.<ext>`), or null when it isn't one. */

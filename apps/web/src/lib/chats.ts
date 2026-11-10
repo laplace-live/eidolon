@@ -1,5 +1,5 @@
 // The chats API at /api/local/chats, whose wire types carry @eidolon/chat's format.
-import type { ChatStreamLine, ChatSummary, ParticipantId } from "@eidolon/chat";
+import type { ChatStreamLine, ChatSummary, ParticipantId, ReplyMode } from "@eidolon/chat";
 import { ApiError, type ChatContents, call, send, stream, url } from "./api";
 import { readNdjson } from "./ndjson";
 
@@ -41,6 +41,27 @@ export async function* sendMessage(
   );
 }
 
+/**
+ * Sends a recorded voice message, `durationMs` long by the recorder's clock, as sendMessage sends a
+ * line: its first `events` line holds the stored message with its transcript, then the reply
+ * follows.
+ */
+export async function* sendVoice(
+  id: string,
+  audio: Blob,
+  durationMs: number,
+  signal: AbortSignal,
+): AsyncGenerator<ChatStreamLine> {
+  yield* lines(
+    await stream("POST /api/local/chats/:id/voice", {
+      params: { id },
+      query: { durationMs: Math.max(1, Math.round(durationMs)) },
+      body: audio,
+      signal,
+    }),
+  );
+}
+
 /** The running turn's lines from its start; none when the chat is idle, which answers 204. */
 export async function* followLive(id: string, signal: AbortSignal): AsyncGenerator<ChatStreamLine> {
   const response = await send("GET /api/local/chats/:id/live", { params: { id }, signal });
@@ -63,6 +84,11 @@ export async function setChainLimit(id: string, chainLimit: number): Promise<voi
   await call("PATCH /api/local/chats/:id", { params: { id }, body: { chainLimit } });
 }
 
+/** How every persona in the chat answers from the next line on, over each one's own setting. */
+export async function setReplyMode(id: string, replyMode: ReplyMode): Promise<void> {
+  await call("PATCH /api/local/chats/:id", { params: { id }, body: { replyMode } });
+}
+
 /** Adds personas to the chat and removes others, leaving it 1 to 6. */
 export async function changeParticipants(
   id: string,
@@ -75,7 +101,7 @@ export async function deleteChat(id: string): Promise<void> {
   await call("DELETE /api/local/chats/:id", { params: { id } });
 }
 
-/** An attachment's path, which an <img> loads with the session cookie alone. */
+/** An attachment's path, which an <img> or <audio> loads with the session cookie alone. */
 export function chatFilePath(id: string, name: string): string {
   return url("GET /api/local/chats/:id/files/:name", { params: { id, name } });
 }

@@ -1,5 +1,5 @@
-// /api/local/chats over a fake turn and a fake director: what the runner stores, in which order, and
-// what each stream carries. The engine itself is never run here.
+// /api/local/chats over a fake turn, a fake director and a fake hearing: what the runner stores, in
+// which order, and what each stream carries. The engine itself is never run here.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -22,10 +22,17 @@ import {
   type TurnOutput,
   type TurnRequest,
 } from "@eidolon/engine";
+import {
+  ProviderConfigError,
+  ProviderHttpError,
+  setUsageSink,
+  type UsageRecord,
+} from "@eidolon/providers";
 import type { RouteHandler } from "../../src/app.ts";
 import type { ChatContents } from "../../src/local/api.ts";
 import {
   type ChatAnswer,
+  type ChatHear,
   ChatRunner,
   type ChatRunnerOptions,
   type ChatTurn,
@@ -105,6 +112,27 @@ const fakeAnswer: ChatAnswer = (request, save) => {
       }
     }
   })();
+};
+
+type HearRequest = Parameters<ChatHear>[0];
+
+/** What the fake hearing hears in a request's clip; it may wait, or throw. */
+let hearing: (request: HearRequest) => Promise<{ text: string; durationMs?: number }>;
+let heard: HearRequest[];
+
+/** As the engine's: hears the clip, then saves it, as the viewer's voice message. */
+const fakeHear: ChatHear = async (request, save) => {
+  heard.push(request);
+  const { text, durationMs } = await hearing(request);
+  const audio = await save(request.clip.bytes, request.clip.mime);
+  return {
+    type: "message",
+    id: crypto.randomUUID(),
+    speaker: { kind: "user" },
+    text,
+    modality: "voice",
+    attachments: [durationMs === undefined ? audio : { ...audio, durationMs }],
+  };
 };
 
 function aborted(signal: AbortSignal): Promise<void> {
@@ -195,13 +223,15 @@ function selfie(photo: Promise<void>): Script {
 
 interface ChatsServer {
   call(method: string, path: string, body?: unknown): Promise<Response>;
+  /** A request as `init` makes it: a raw body, or headers of its own. */
+  raw(method: string, path: string, init?: RequestInit): Promise<Response>;
   /** Runs the stop hooks, as the server's shutdown does. */
   shutdown(): Promise<void>;
   close(): Promise<void>;
 }
 
 function serveChats(
-  options: ChatRunnerOptions = { turn: fakeTurn, answer: fakeAnswer },
+  options: ChatRunnerOptions = { turn: fakeTurn, answer: fakeAnswer, hear: fakeHear },
 ): ChatsServer {
   const stops: (() => Promise<void>)[] = [];
   const app: LocalApp = {
@@ -235,6 +265,7 @@ function serveChats(
               headers: { "content-type": "application/json" },
             }),
       }),
+    raw: (method, path, init) => fetch(`${base}${path}`, { ...init, method }),
     shutdown,
     async close() {
       await shutdown();
@@ -319,6 +350,8 @@ beforeEach(() => {
   requests = [];
   plans = new Map();
   answers = [];
+  hearing = async () => ({ text: "今天播什么？", durationMs: 2400 });
+  heard = [];
   logs = captureLogs();
   process.env.OPENROUTER_API_KEY = "sk-or-test";
   server = serveChats();
@@ -425,6 +458,29 @@ describe("a new chat", () => {
 
     const list = await json<ChatSummary[]>(await server.call("GET", "/chats"));
     expect(list).toMatchObject([{ id, title: null, lastText: "你好呀", lastSeq: 2 }]);
+  });
+
+  test("greets in voice only when her reply mode is voice and her voice role can speak", async () => {
+    const greet = async () => {
+      const { id } = await json<{ id: string }>(
+        await server.call("POST", "/chats", { participants: [PERSONA] }),
+        201,
+      );
+      await new Lines(await server.call("GET", `/chats/${id}/live`)).all();
+      return requests.at(-1)?.mode;
+    };
+    try {
+      expect(await greet()).toBe("text");
+      process.env.CHAT_REPLY_MODE = "voice";
+      expect(await greet()).toBe("text");
+      process.env.FISH_API_KEY = "fish-test";
+      expect(await greet()).toBe("voice");
+      process.env.CHAT_REPLY_MODE = "auto";
+      expect(await greet()).toBe("text");
+    } finally {
+      delete process.env.CHAT_REPLY_MODE;
+      delete process.env.FISH_API_KEY;
+    }
   });
 
   test("is refused unless it names 1 to 6 personas that exist, each once", async () => {
@@ -739,6 +795,283 @@ describe("a message", () => {
     const before = (await log(id)).events.length;
     expect(await errorCode(await post("hi"))).toEqual([409, "missing-key"]);
     expect((await log(id)).events).toHaveLength(before);
+  });
+});
+
+const WEBM = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 1, 2, 3, 4, 5, 6]);
+const WEBM_NAME = `${new Bun.CryptoHasher("sha256").update(WEBM).digest("hex")}.webm`;
+
+interface VoiceOptions {
+  readonly bytes?: Uint8Array<ArrayBuffer>;
+  readonly type?: string;
+  /** `durationMs`, as sent; null sends none. */
+  readonly ms?: string | null;
+}
+
+/** Sends chat `id` a voice message: WEBM, recorded as Chrome does, 2.5 s long. */
+function voice(
+  id: string,
+  { bytes = WEBM, type = "audio/webm;codecs=opus", ms = "2500" }: VoiceOptions = {},
+): Promise<Response> {
+  return server.raw("POST", `/chats/${id}/voice${ms === null ? "" : `?durationMs=${ms}`}`, {
+    body: bytes,
+    headers: { "content-type": type },
+  });
+}
+
+describe("a voice message", () => {
+  beforeEach(() => {
+    process.env.SONIOX_API_KEY = "soniox-test";
+  });
+
+  afterEach(() => {
+    delete process.env.SONIOX_API_KEY;
+  });
+
+  test("stops the running reply, then is heard, stored with its audio and transcript, and answered", async () => {
+    const id = await greeted();
+    scripts.set("第一句", reply("我想想看哦", { untilAborted: true }));
+    const first = new Lines(await server.call("POST", `/chats/${id}/messages`, { text: "第一句" }));
+    await first.until((line) => line.type === "delta");
+    const lines = await new Lines(await voice(id)).all();
+    expect(shape(await first.all()).at(-2)).toBe("events 5:message");
+    expect(shape(lines)).toEqual([
+      "events 6:message",
+      "events 7:decision",
+      "started",
+      "delta 收到",
+      "events 8:message",
+      "ended",
+    ]);
+
+    // Heard on the chat as stored once the reply it interrupted had kept what it said.
+    expect(heard).toHaveLength(1);
+    const [request] = heard as [HearRequest];
+    expect(messages(request.chat.events).at(-1)).toMatchObject({
+      text: "我想想",
+      interrupted: true,
+    });
+    expect(new Uint8Array(request.clip.bytes)).toEqual(WEBM);
+    expect(request.clip).toMatchObject({ mime: "audio/webm;codecs=opus", durationMs: 2500 });
+    expect(request.signal.aborted).toBe(false);
+
+    const { events } = await log(id);
+    expectContiguous(events);
+    expect(events[5]).toEqual({
+      seq: 6,
+      at: expect.any(Number),
+      type: "message",
+      id: expect.any(String),
+      speaker: { kind: "user" },
+      text: "今天播什么？",
+      modality: "voice",
+      attachments: [{ kind: "audio", name: WEBM_NAME, mime: "audio/webm", durationMs: 2400 }],
+    });
+    expect(answers.at(-1)?.after).toBe(6);
+    expect(readdirSync(join(chatsRoot(), id, "files"))).toEqual([WEBM_NAME]);
+  });
+
+  test("heard as nothing is stored with an empty transcript, and still answered", async () => {
+    const id = await greeted();
+    hearing = async () => ({ text: "" });
+    scripts.set(`${PERSONA} `, reply("没听清呢"));
+    const lines = await new Lines(await voice(id, { type: "audio/mp4", ms: "120000" })).all();
+    expect(shape(lines).slice(0, 2)).toEqual(["events 3:message", "events 4:decision"]);
+    expect(messages((await log(id)).events).slice(1)).toMatchObject([
+      { text: "", modality: "voice", attachments: [{ kind: "audio", mime: "audio/mp4" }] },
+      { speaker: { kind: "persona", id: PERSONA }, text: "没听清呢" },
+    ]);
+  });
+
+  test("a stop while it is heard stops the reply it starts", async () => {
+    const id = await greeted();
+    const hold = deferred();
+    hearing = async () => {
+      await hold.promise;
+      return { text: "等一下" };
+    };
+    const posted = voice(id);
+    await until(() => heard.length === 1);
+    const stopped = server.call("POST", `/chats/${id}/stop`);
+    hold.resolve();
+    expect((await stopped).status).toBe(204);
+    await new Lines(await posted).all();
+    expect(answers.at(-1)?.signal.aborted).toBe(true);
+    const said = messages((await log(id)).events);
+    const asked = said.findLast((message) => message.speaker.kind === "user");
+    expect(asked).toMatchObject({ text: "等一下", modality: "voice" });
+    const after = said.filter((message) => message.seq > (asked?.seq ?? 0));
+    expect(after.filter((message) => message.interrupted !== true)).toEqual([]);
+  });
+
+  test("one that can't be heard stores nothing: 502, or 409 for her settings", async () => {
+    const id = await greeted();
+    const before = (await log(id)).events;
+    hearing = async () => {
+      throw new ProviderHttpError("Soniox", 500, "the transcriber fell over");
+    };
+    const failed = await voice(id);
+    const body = (await failed.json()) as {
+      error: { code: string; message: string; id: string };
+    };
+    expect([failed.status, body.error.code]).toEqual([502, "upstream-failed"]);
+    expect(body.error.message).not.toContain("fell over");
+    const logged = logs.records.find((record) => record.message.includes(body.error.id));
+    expect(String(logged?.error)).toContain("the transcriber fell over");
+
+    hearing = async () => {
+      throw new ProviderConfigError("Soniox needs an API key: set SONIOX_API_KEY");
+    };
+    const refused = await voice(id);
+    const why = (await refused.json()) as { error: { code: string; message: string } };
+    expect([refused.status, why.error.code]).toEqual([409, "missing-key"]);
+    expect(why.error.message).toContain("SONIOX_API_KEY");
+
+    expect((await log(id)).events).toEqual(before);
+    expect(existsSync(join(chatsRoot(), id, "files"))).toBe(false);
+    expect((await json<ChatSummary[]>(await server.call("GET", "/chats")))[0]?.lastSeq).toBe(2);
+  });
+
+  test("is refused, unheard, when its audio, the chat or a key is wrong", async () => {
+    const id = await greeted();
+    const refusals: [VoiceOptions, [number, string]][] = [
+      [{ type: "audio/wav" }, [415, "unsupported-media-type"]],
+      [{ type: "video/webm" }, [415, "unsupported-media-type"]],
+      [{ type: "application/json" }, [415, "unsupported-media-type"]],
+      [{ ms: null }, [400, "bad-request"]],
+      [{ ms: "0" }, [400, "bad-request"]],
+      [{ ms: "-1" }, [400, "bad-request"]],
+      [{ ms: "1.5" }, [400, "bad-request"]],
+      [{ ms: "120001" }, [413, "payload-too-large"]],
+      [{ bytes: new Uint8Array() }, [400, "bad-request"]],
+      [{ bytes: new Uint8Array(10 * 1024 * 1024 + 1) }, [413, "payload-too-large"]],
+    ];
+    for (const [options, want] of refusals) {
+      const { type, ms } = options;
+      expect([type, ms, await errorCode(await voice(id, options))]).toEqual([type, ms, want]);
+    }
+    expect(await errorCode(await voice(crypto.randomUUID()))).toEqual([404, "unknown-chat"]);
+    expect(await errorCode(await voice("not-a-chat"))).toEqual([400, "bad-request"]);
+
+    delete process.env.SONIOX_API_KEY;
+    const deaf = await voice(id);
+    const body = (await deaf.json()) as { error: { code: string; message: string } };
+    expect([deaf.status, body.error.code]).toEqual([409, "missing-key"]);
+    expect(body.error.message).toStartWith("Her hearing role can't hear a voice message.");
+    expect(body.error.message).toContain("SONIOX_API_KEY");
+    expect((await log(id)).hearingRefusal).toBe(body.error.message);
+
+    process.env.SONIOX_API_KEY = "soniox-test";
+    expect((await log(id)).hearingRefusal).toBeNull();
+    delete process.env.OPENROUTER_API_KEY;
+    expect(await errorCode(await voice(id))).toEqual([409, "missing-key"]);
+
+    expect(heard).toEqual([]);
+    expect((await log(id)).events).toHaveLength(2);
+  });
+
+  test("a group's is heard by its first persona's hearing role", async () => {
+    persona("beta", "贝塔");
+    const id = await group("beta");
+    delete process.env.SONIOX_API_KEY;
+    const deaf = await voice(id);
+    const body = (await deaf.json()) as { error: { code: string; message: string } };
+    expect([deaf.status, body.error.code]).toEqual([409, "missing-key"]);
+    expect(body.error.message).toStartWith(`${PERSONA}'s hearing role can't hear a voice message.`);
+    expect((await log(id)).hearingRefusal).toBe(body.error.message);
+
+    // One whose first persona was deleted since still reads, and refuses her.
+    process.env.SONIOX_API_KEY = "soniox-test";
+    const { id: led } = await json<{ id: string }>(
+      await server.call("POST", "/chats", { participants: ["beta", PERSONA] }),
+      201,
+    );
+    rmSync(join(dataHome(), "personas", "beta"), { recursive: true });
+    expect((await log(led)).events).toHaveLength(1);
+    expect(await errorCode(await voice(led))).toEqual([404, "unknown-persona"]);
+  });
+
+  test("is heard by default through the engine, on her hearing role's provider, as the chat's usage", async () => {
+    const uploads: { auth: string | null; file: Uint8Array }[] = [];
+    const openai = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(request) {
+        if (new URL(request.url).pathname !== "/v1/audio/transcriptions") {
+          return new Response(null, { status: 404 });
+        }
+        const file = (await request.formData()).get("file") as File;
+        uploads.push({
+          auth: request.headers.get("authorization"),
+          file: new Uint8Array(await file.arrayBuffer()),
+        });
+        return Response.json({ text: " 听得见吗 ", usage: { type: "duration", seconds: 2.4 } });
+      },
+    });
+    process.env.STT_PROVIDER = "openai";
+    process.env.OPENAI_API_KEY = "sk-openai-test";
+    process.env.OPENAI_BASE_URL = `http://127.0.0.1:${openai.port}/v1`;
+    const usage: UsageRecord[] = [];
+    setUsageSink((record) => usage.push(record));
+    const engine = serveChats({ turn: fakeTurn, answer: fakeAnswer });
+    try {
+      const { id } = await json<{ id: string }>(
+        await engine.call("POST", "/chats", { participants: [PERSONA] }),
+        201,
+      );
+      await until(async () => (await engine.call("GET", `/chats/${id}/live`)).status === 204);
+      const sent = await engine.raw("POST", `/chats/${id}/voice?durationMs=2500`, {
+        body: WEBM,
+        headers: { "content-type": "audio/webm;codecs=opus" },
+      });
+      await new Lines(sent).all();
+      expect(uploads).toEqual([{ auth: "Bearer sk-openai-test", file: WEBM }]);
+      const { events } = await json<ChatContents>(await engine.call("GET", `/chats/${id}`));
+      expect(messages(events)[1]).toMatchObject({
+        speaker: { kind: "user" },
+        text: "听得见吗",
+        modality: "voice",
+        attachments: [{ kind: "audio", name: WEBM_NAME, mime: "audio/webm", durationMs: 2400 }],
+      });
+      expect(usage).toMatchObject([
+        { role: "hearing", provider: "openai", source: "chat", session: id },
+      ]);
+    } finally {
+      await engine.close();
+      await openai.stop(true);
+      setUsageSink(null);
+      delete process.env.STT_PROVIDER;
+      delete process.env.OPENAI_API_KEY;
+      delete process.env.OPENAI_BASE_URL;
+    }
+  });
+
+  test("its audio is served with its type, and in ranges for a player to seek", async () => {
+    const id = await greeted();
+    await new Lines(await voice(id)).all();
+    const path = `/chats/${id}/files/${WEBM_NAME}`;
+
+    const whole = await server.call("GET", path);
+    expect(whole.status).toBe(200);
+    expect(whole.headers.get("content-type")).toBe("audio/webm");
+    expect(whole.headers.get("accept-ranges")).toBe("bytes");
+    expect(whole.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(whole.headers.get("cache-control")).toBe("private, max-age=31536000, immutable");
+    expect(new Uint8Array(await whole.arrayBuffer())).toEqual(WEBM);
+
+    const part = await server.raw("GET", path, { headers: { range: "bytes=2-5" } });
+    expect(part.status).toBe(206);
+    expect(part.headers.get("content-range")).toBe("bytes 2-5/10");
+    expect(part.headers.get("accept-ranges")).toBe("bytes");
+    expect(new Uint8Array(await part.arrayBuffer())).toEqual(WEBM.slice(2, 6));
+
+    const tail = await server.raw("GET", path, { headers: { range: "bytes=-3" } });
+    expect(tail.status).toBe(206);
+    expect(new Uint8Array(await tail.arrayBuffer())).toEqual(WEBM.slice(7));
+
+    const past = await server.raw("GET", path, { headers: { range: "bytes=10-" } });
+    expect(past.status).toBe(416);
+    expect(past.headers.get("content-range")).toBe("bytes */10");
   });
 });
 
@@ -1092,6 +1425,28 @@ describe("a group chat", () => {
         await server.call("PATCH", `/chats/${crypto.randomUUID()}`, { chainLimit: 1 }),
       ),
     ).toEqual([404, "unknown-chat"]);
+  });
+
+  test("the reply mode is kept as a settings event", async () => {
+    const id = await greeted();
+    const patch = (body: unknown) => server.call("PATCH", `/chats/${id}`, body);
+    for (const replyMode of ["voice", "text", "auto"]) {
+      expect(await json(await patch({ replyMode }))).toEqual({ ok: true });
+    }
+    expect((await log(id)).events.slice(2)).toMatchObject([
+      { seq: 3, type: "settings", replyMode: "voice" },
+      { seq: 4, type: "settings", replyMode: "text" },
+      { seq: 5, type: "settings", replyMode: "auto" },
+    ]);
+    for (const body of [
+      { replyMode: "Voice" },
+      { replyMode: "audio" },
+      { replyMode: null },
+      { replyMode: "text", chainLimit: 2 },
+    ]) {
+      expect([body, await errorCode(await patch(body))]).toEqual([body, [400, "bad-request"]]);
+    }
+    expect((await log(id)).events).toHaveLength(5);
   });
 });
 

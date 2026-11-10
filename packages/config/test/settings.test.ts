@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   activePersona,
   chatInterests,
+  chatReplyMode,
   chatTalkativeness,
   dataHome,
   envEntries,
@@ -392,12 +393,31 @@ describe("chat settings", () => {
   });
 
   test("each persona's own, under withPersona", () => {
-    write("personas/alice/persona.yaml", "chat:\n  interests: 猫\n  talkativeness: 0.9\n");
+    write(
+      "personas/alice/persona.yaml",
+      "chat:\n  interests: 猫\n  talkativeness: 0.9\n  replyMode: voice\n",
+    );
     write("personas/bob/persona.yaml", "identity:\n  name: Bob\n");
     installSettings();
-    const read = () => [chatInterests(), chatTalkativeness()];
-    expect(withPersona("alice", read)).toEqual([["猫"], 0.9]);
-    expect(withPersona("bob", read)).toEqual([[], 0.5]);
+    const read = () => [chatInterests(), chatTalkativeness(), chatReplyMode()];
+    expect(withPersona("alice", read)).toEqual([["猫"], 0.9, "voice"]);
+    expect(withPersona("bob", read)).toEqual([[], 0.5, "auto"]);
+  });
+
+  test("the reply mode is auto, text or voice in any case; anything else is auto, with a warning", () => {
+    expect(chatReplyMode()).toBe("auto");
+    for (const [value, read] of [
+      ["text", "text"],
+      [" Voice ", "voice"],
+      ["AUTO", "auto"],
+    ] as const) {
+      setEnv("CHAT_REPLY_MODE", value);
+      expect([value, chatReplyMode()]).toEqual([value, read]);
+    }
+    expect(warnings).toEqual([]);
+    setEnv("CHAT_REPLY_MODE", "audio");
+    expect(chatReplyMode()).toBe("auto");
+    expect(warnings).toEqual(["CHAT_REPLY_MODE='audio' is not auto, text or voice; using auto"]);
   });
 });
 

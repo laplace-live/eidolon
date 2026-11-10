@@ -4,6 +4,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataHome, type LogRecord, resetSettings } from "@eidolon/config";
 import { setUsageSink, type UsageRecord } from "@eidolon/providers";
+import { VOICE_THRESHOLD, VOICE_THRESHOLD_AFTER_VOICE, voiceThreshold } from "../src/director.ts";
 import {
   ADDRESSED_THRESHOLD,
   DEFAULT_GATE_MODEL,
@@ -605,7 +606,159 @@ describe("from the settings", () => {
     setEnv("OPENROUTER_API_KEY", "");
     const decision = await directorFromEnv().decide(input([viewer("hi")]));
     expect(decision.source).toBe("fallback");
-    expect(messages("INFO")[0]).toBe("Director has no decision model: group chats follow rules");
+    expect(messages("INFO")[0]).toBe(
+      "Director has no decision model: group chats follow rules, and auto replies are text",
+    );
     expect(messages("WARNING")).toEqual([]);
+  });
+});
+
+describe("voice replies", () => {
+  const auto = (p: DirectorParticipant): DirectorParticipant => ({ ...p, replyMode: "auto" });
+  const voiced = (p: DirectorParticipant): DirectorParticipant => ({ ...p, replyMode: "voice" });
+  const VOICE_QUESTION = {
+    type: "noul" as const,
+    instructions:
+      "Would a voice message suit a reply to the latest message better than text, because the " +
+      "moment is emotional, playful or intimate, or calls for a sound (a laugh, a sigh, a song)?",
+  };
+
+  test("voice_moment is asked once, last, only when some candidate is auto", async () => {
+    expect(Object.keys(directorQuestions([auto(RUBY), auto(KEN)]))).toEqual([
+      "addressed_ruby",
+      "interested_ruby",
+      "addressed_ken",
+      "interested_ken",
+      "invites_reply",
+      "voice_moment",
+    ]);
+    expect(directorQuestions([RUBY, auto(KEN)]).voice_moment).toEqual(VOICE_QUESTION);
+    expect(directorQuestions([voiced(RUBY), KEN]).voice_moment).toBeUndefined();
+    // The latest line's speaker is no candidate, so her auto asks nothing.
+    const bodies: Body[] = [];
+    await directorWith(answering({}, bodies)).decide(
+      input([viewer("hi"), from("milky", "露比？")], {
+        participants: [auto(MILKY), RUBY, KEN],
+        hop: 1,
+      }),
+    );
+    expect(bodies[0]?.questions.voice_moment).toBeUndefined();
+  });
+
+  test("each reply takes her mode: voice always, auto when voice_moment clears its bar", async () => {
+    const room = [auto(MILKY), voiced(RUBY), KEN];
+    const modes = async (voice_moment: number) => {
+      const decision = await directorWith(
+        answering({ addressed_milky: 0.9, addressed_ruby: 0.8, addressed_ken: 0.7, voice_moment }),
+      ).decide(input([viewer("大家好")], { participants: room }));
+      return decision.replies.map(({ persona, mode }) => `${persona} ${mode}`);
+    };
+    expect(await modes(VOICE_THRESHOLD)).toEqual(["milky voice", "ruby voice"]);
+    expect(await modes(VOICE_THRESHOLD - 0.01)).toEqual(["milky text", "ruby voice"]);
+    const ken = await directorWith(answering({ addressed_ken: 1, voice_moment: 1 })).decide(
+      input([viewer("Ken?")], { participants: room }),
+    );
+    expect(ken.replies).toEqual([{ persona: "ken", mode: "text" }]);
+    expect(ken.scores.voice_moment).toBe(1);
+  });
+
+  test("the bar drops while the viewer's last line was a voice message, hops included", async () => {
+    const said = { ...viewer("今天好累"), modality: "voice" as const };
+    const room = [auto(MILKY), auto(RUBY)];
+    const mode = async (lines: DirectorLine[], hop: number, voice_moment: number) => {
+      const decision = await directorWith(
+        answering({ addressed_milky: 1, addressed_ruby: 1, invites_reply: 1, voice_moment }),
+      ).decide(input(lines, { participants: room, hop }));
+      return decision.replies[0]?.mode;
+    };
+    expect(VOICE_THRESHOLD_AFTER_VOICE).toBeLessThan(VOICE_THRESHOLD);
+    expect(voiceThreshold({ lines: [said] })).toBe(VOICE_THRESHOLD_AFTER_VOICE);
+    expect(voiceThreshold({ lines: [viewer("今天好累")] })).toBe(VOICE_THRESHOLD);
+    expect(await mode([said], 0, VOICE_THRESHOLD_AFTER_VOICE)).toBe("voice");
+    expect(await mode([viewer("今天好累")], 0, VOICE_THRESHOLD_AFTER_VOICE)).toBe("text");
+    const hop = [said, { ...from("milky", "抱抱～"), modality: "voice" as const }];
+    expect(await mode(hop, 1, VOICE_THRESHOLD_AFTER_VOICE)).toBe("voice");
+    // A persona's voice message doesn't lower it.
+    const typed = [viewer("今天好累"), { ...from("milky", "抱抱～"), modality: "voice" as const }];
+    expect(await mode(typed, 1, VOICE_THRESHOLD_AFTER_VOICE)).toBe("text");
+  });
+
+  test("falling back to rules, auto is text and voice is voice", async () => {
+    const decision = await new Director(null).decide(
+      input([viewer("奶绿和露比")], { participants: [auto(MILKY), voiced(RUBY), KEN] }),
+    );
+    expect(decision.replies).toEqual([
+      { persona: "milky", mode: "text" },
+      { persona: "ruby", mode: "voice" },
+    ]);
+    expect(messages("INFO")).toEqual(["Director: 明前奶绿, 露比 in voice (fallback, hop 0)"]);
+  });
+
+  test("a chat of one in auto asks voice_moment alone, about the same state", async () => {
+    const bodies: Body[] = [];
+    const alone = { participants: [auto(MILKY)], hop: 0 };
+    const lines = [viewer("早"), from("milky", "早呀"), viewer("想你了")];
+    const decision = await directorWith(answering({ voice_moment: 0.8 }, bodies)).decide({
+      ...alone,
+      lines,
+    });
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]?.questions).toEqual({ voice_moment: VOICE_QUESTION });
+    expect(bodies[0]?.state).toEqual(directorState({ ...alone, lines }));
+    expect(decision).toEqual({
+      replies: [{ persona: "milky", mode: "voice" }],
+      source: "single",
+      scores: { voice_moment: 0.8 },
+    });
+    expect(messages("INFO")).toHaveLength(1);
+    expect(messages("INFO")[0]).toMatch(/^Director: 明前奶绿 in voice \(single, hop 0, \d+ ms\)$/);
+    expect(usage).toHaveLength(1);
+  });
+
+  test("a chat of one asks nothing without auto or a model, and answers in text when Jev fails", async () => {
+    let calls = 0;
+    const counting = directorWith(async (url, init) => {
+      calls++;
+      return answering({ voice_moment: 1 })(url, init);
+    });
+    const line = [viewer("你好")];
+    expect(await counting.decide({ participants: [voiced(MILKY)], lines: line, hop: 0 })).toEqual({
+      replies: [{ persona: "milky", mode: "voice" }],
+      source: "single",
+      scores: {},
+    });
+    expect(calls).toBe(0);
+    expect(
+      await new Director(null).decide({ participants: [auto(MILKY)], lines: line, hop: 0 }),
+    ).toEqual({ replies: [{ persona: "milky", mode: "text" }], source: "single", scores: {} });
+    expect(logs.records).toEqual([]);
+
+    const failing = directorWith(async () => new Response(null, { status: 503 }));
+    expect(await failing.decide({ participants: [auto(MILKY)], lines: line, hop: 0 })).toEqual({
+      replies: [{ persona: "milky", mode: "text" }],
+      source: "single",
+      scores: {},
+    });
+    expect(messages("WARNING")).toEqual([
+      "Director couldn't weigh a voice reply, so she answers in text: " +
+        `HTTPStatusError("Server error '503' for url '${GATE_URL}'")`,
+    ]);
+  });
+
+  test("a chat of one's abort rejects with its reason", async () => {
+    const controller = new AbortController();
+    const director = directorWith(
+      (_url, init) =>
+        new Promise((_resolve, reject) => {
+          init.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+        }),
+    );
+    const pending = director.decide(
+      { participants: [auto(MILKY)], lines: [viewer("hi")], hop: 0 },
+      controller.signal,
+    );
+    const reason = new Error("the viewer stepped in");
+    controller.abort(reason);
+    await expect(pending).rejects.toBe(reason);
   });
 });

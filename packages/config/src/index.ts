@@ -7,7 +7,13 @@ export {
   parseAccounts,
 } from "./accounts.ts";
 export { daysInMonth, isLeap, ordinalToYmd, ymdToOrdinal } from "./calendar.ts";
-export { chatInterests, chatTalkativeness, DEFAULT_CHAT_TALKATIVENESS } from "./chat.ts";
+export {
+  chatInterests,
+  chatReplyMode,
+  chatTalkativeness,
+  DEFAULT_CHAT_REPLY_MODE,
+  DEFAULT_CHAT_TALKATIVENESS,
+} from "./chat.ts";
 export { isValidTimeZone, personaTimeZone, type ZonedClock, zonedClock } from "./clock.ts";
 export { type DotenvEntry, findDotenv, loadDotenv, parseDotenv } from "./dotenv.ts";
 export { DEFAULT_EMBED_MODEL, embedDim } from "./embed.ts";

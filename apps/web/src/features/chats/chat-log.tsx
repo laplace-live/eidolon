@@ -1,7 +1,14 @@
 import type { Attachment, ParticipantId } from "@eidolon/chat";
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
-import { CameraIcon, CircleAlertIcon, RotateCcwIcon, SearchIcon, WrenchIcon } from "lucide-react";
+import {
+  CameraIcon,
+  CircleAlertIcon,
+  MicIcon,
+  RotateCcwIcon,
+  SearchIcon,
+  WrenchIcon,
+} from "lucide-react";
 import { memo, type ReactNode, useEffect, useMemo } from "react";
 import { PersonaAvatar } from "@/components/avatar";
 import { Photo, Thinking, useStickToBottom } from "@/components/conversation";
@@ -14,15 +21,23 @@ import { chatFilePath } from "@/lib/chats";
 import { listOf } from "@/lib/labels";
 import { parseMarkup } from "@/lib/markup";
 import { cn } from "@/lib/utils";
-import { type ChatItem, manyVoices, startsRun, withoutPartialMarkup } from "./items";
+import {
+  type AudioAttachment,
+  type ChatItem,
+  manyVoices,
+  startsRun,
+  withoutPartialMarkup,
+} from "./items";
 import { toolState } from "./labels";
 import { type ChatPersona, shortNameOf } from "./persona";
-import type { LiveState } from "./stream";
+import type { LiveState, PendingLine, VoiceClip } from "./stream";
+import { type AutoPlayEnd, useObjectUrl, VoiceBubble } from "./voice-bubble";
 import { WhyAnswered } from "./why-answered";
 
 const TOOL_ICONS: Readonly<Record<string, ReactNode>> = {
   take_selfie: <CameraIcon />,
   recall_streams: <SearchIcon />,
+  voice: <MicIcon />,
 };
 
 function UserBubble({
@@ -60,26 +75,106 @@ function UserBubble({
   );
 }
 
+/** The viewer's voice message, with its transcript; on its way while `transcript` is null. */
+function UserVoiceBubble({
+  src,
+  durationMs,
+  transcript,
+  failed = false,
+  onRetry,
+}: {
+  readonly src: string | null;
+  readonly durationMs: number | null;
+  readonly transcript: string | null;
+  readonly failed?: boolean;
+  readonly onRetry?: () => void;
+}) {
+  const { t } = useLingui();
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <div className={cn("flex max-w-[80%] flex-col items-end", failed && "opacity-60")}>
+        <VoiceBubble
+          src={src}
+          durationMs={durationMs}
+          mine
+          speaker={t({ message: `You`, context: "chat speaker" })}
+          transcript={transcript === null || transcript === "" ? null : transcript}
+        />
+      </div>
+      {transcript === "" && (
+        <span className="text-muted-foreground text-xs">{t`No words could be heard in it.`}</span>
+      )}
+      {transcript === null && !failed && (
+        <span role="status" className="animate-pulse text-muted-foreground text-xs">
+          {t`Transcribing…`}
+        </span>
+      )}
+      {failed && (
+        <span className="flex items-center gap-2 text-destructive text-xs">
+          {t`Not sent`}
+          {onRetry && (
+            <Button variant="link" size="xs" className="h-auto p-0" onClick={onRetry}>
+              {t`Retry`}
+            </Button>
+          )}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** A voice message of the viewer's that the server hasn't stored yet, played from the recording. */
+function PendingVoice({
+  line,
+  voice,
+  onRetry,
+}: {
+  readonly line: PendingLine;
+  readonly voice: VoiceClip;
+  readonly onRetry: () => void;
+}) {
+  const src = useObjectUrl(voice.audio);
+  return (
+    <UserVoiceBubble
+      src={src}
+      durationMs={voice.durationMs}
+      transcript={null}
+      failed={line.failed}
+      onRetry={line.failed ? onRetry : undefined}
+    />
+  );
+}
+
 function HerBubble({
   chatId,
   name,
   text,
   images = [],
+  voice = null,
+  sentAsText = false,
   interrupted = false,
   cutOff = false,
   onRetry,
   aside,
+  autoPlay = false,
+  onAutoPlayEnd,
 }: {
   readonly chatId: string;
   readonly name: string;
+  /** A voice message's transcript. */
   readonly text: string;
   readonly images?: readonly Attachment[];
+  readonly voice?: AudioAttachment | null;
+  /** Her voice couldn't be made, so her words came as text. */
+  readonly sentAsText?: boolean;
   readonly interrupted?: boolean;
   /** Her provider stopped her short. */
   readonly cutOff?: boolean;
   readonly onRetry?: (() => void) | null;
-  /** Beside her words, or under her photos when she sent no words. */
+  /** Beside her words, or under her photos or voice message. */
   readonly aside?: ReactNode;
+  readonly autoPlay?: boolean;
+  readonly onAutoPlayEnd?: AutoPlayEnd;
 }) {
   const { t } = useLingui();
   const shown = withoutPartialMarkup(text);
@@ -89,9 +184,23 @@ function HerBubble({
   );
   const alt = t`A photo from ${name}`;
   const failed = t`This photo couldn't be loaded`;
+  const asideBelow = shown === "" || voice !== null;
   return (
     <div className="flex flex-col items-start gap-1.5">
-      {shown !== "" && (
+      {voice !== null && (
+        <div className="flex max-w-[80%] flex-col items-start">
+          <VoiceBubble
+            src={chatFilePath(chatId, voice.name)}
+            durationMs={voice.durationMs ?? null}
+            mine={false}
+            speaker={name}
+            transcript={shown === "" ? null : <BotText runs={runs} />}
+            autoPlay={autoPlay}
+            onAutoPlayEnd={onAutoPlayEnd}
+          />
+        </div>
+      )}
+      {voice === null && shown !== "" && (
         <div className="flex max-w-[80%] items-end gap-0.5">
           <div className="min-w-0 whitespace-pre-line break-words rounded-2xl rounded-bl-md bg-muted px-3.5 py-2 text-sm">
             <span className="sr-only">{name}: </span>
@@ -112,8 +221,9 @@ function HerBubble({
           ))}
         </div>
       )}
-      {(interrupted || cutOff || (shown === "" && aside)) && (
+      {(interrupted || cutOff || sentAsText || (asideBelow && aside)) && (
         <div className="flex items-center gap-1">
+          {sentAsText && <QuietBadge>{t`Sent as text`}</QuietBadge>}
           {interrupted && <QuietBadge>{t`Interrupted`}</QuietBadge>}
           {cutOff && (
             <span className="flex items-center gap-2">
@@ -125,7 +235,7 @@ function HerBubble({
               )}
             </span>
           )}
-          {shown === "" && aside}
+          {asideBelow && aside}
         </div>
       )}
     </div>
@@ -194,6 +304,8 @@ const Item = memo(function Item({
   group,
   first,
   onRetry,
+  autoPlay,
+  onAutoPlayEnd,
 }: {
   readonly item: ChatItem;
   readonly chatId: string;
@@ -203,8 +315,21 @@ const Item = memo(function Item({
   readonly first: boolean;
   /** Only the last item's failure, or her reply cut off, offers Retry. */
   readonly onRetry: (() => void) | null;
+  /** Her voice message plays on its own now. */
+  readonly autoPlay: boolean;
+  readonly onAutoPlayEnd: AutoPlayEnd;
 }) {
-  if (item.kind === "user") return <UserBubble text={item.text} />;
+  if (item.kind === "user") {
+    return item.voice === null ? (
+      <UserBubble text={item.text} />
+    ) : (
+      <UserVoiceBubble
+        src={chatFilePath(chatId, item.voice.name)}
+        durationMs={item.voice.durationMs ?? null}
+        transcript={item.text}
+      />
+    );
+  }
   const persona = personaOf(item.persona);
   const name = shortNameOf(persona);
   const said =
@@ -216,9 +341,13 @@ const Item = memo(function Item({
         name={name}
         text={item.text}
         images={item.images}
+        voice={item.voice}
+        sentAsText={item.sentAsText}
         interrupted={item.interrupted}
         cutOff={item.cutOff !== null}
         onRetry={onRetry}
+        autoPlay={autoPlay}
+        onAutoPlayEnd={onAutoPlayEnd}
         aside={
           item.reason !== null && item.reason.source !== "single" ? (
             <WhyAnswered persona={persona} reason={item.reason} personaOf={personaOf} />
@@ -259,7 +388,7 @@ function Intro({ personas }: { readonly personas: readonly ChatPersona[] }) {
         </p>
         <p className="text-balance text-muted-foreground text-sm">
           {solo
-            ? t`Say something to ${name}. She answers in text, and this chat keeps what you both said.`
+            ? t`Say something to ${name}, in text or with your voice. This chat keeps what you both said.`
             : t`Say something to everyone here. Whoever it's for answers, and they may answer each other too.`}
         </p>
       </div>
@@ -293,7 +422,10 @@ export function ChatLog({
   next,
   lateTools,
   retry,
+  autoPlay,
+  onAutoPlayEnd,
   onSend,
+  onSendVoice,
 }: {
   readonly chatId: string;
   /** Who is in the chat now. */
@@ -307,7 +439,11 @@ export function ChatLog({
   readonly lateTools: readonly string[];
   /** What Retry sends after a failed turn; null offers none. */
   readonly retry: string | null;
+  /** The seq of her voice message to play on its own now. */
+  readonly autoPlay: number | null;
+  readonly onAutoPlayEnd: AutoPlayEnd;
   readonly onSend: (text: string) => void;
+  readonly onSendVoice: (clip: VoiceClip) => void;
 }) {
   const { t } = useLingui();
   // Each line names its persona once the chat holds more than one, now or in its lines.
@@ -364,6 +500,8 @@ export function ChatLog({
             group={group}
             first={startsRun(items, index)}
             onRetry={index === items.length - 1 ? retryLast : null}
+            autoPlay={item.seq === autoPlay}
+            onAutoPlayEnd={onAutoPlayEnd}
           />
         ))}
         {[...new Set(lateTools)].map((tool) => (
@@ -373,14 +511,24 @@ export function ChatLog({
           thinker !== null &&
           said(<HerBubble chatId={chatId} name={shortNameOf(thinker)} text={streamed} />)}
         {turn !== null && turn.tool !== null && <ToolLine tool={turn.tool} />}
-        {pending.map((line) => (
-          <UserBubble
-            key={line.key}
-            text={line.text}
-            failed={line.failed}
-            onRetry={line.failed ? () => onSend(line.text) : undefined}
-          />
-        ))}
+        {pending.map((line) => {
+          const { voice } = line;
+          return voice === undefined ? (
+            <UserBubble
+              key={line.key}
+              text={line.text}
+              failed={line.failed}
+              onRetry={line.failed ? () => onSend(line.text) : undefined}
+            />
+          ) : (
+            <PendingVoice
+              key={line.key}
+              line={line}
+              voice={voice}
+              onRetry={() => onSendVoice(voice)}
+            />
+          );
+        })}
         {thinking &&
           said(
             <Thinking

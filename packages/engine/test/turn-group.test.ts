@@ -130,8 +130,8 @@ function deps(mind: Mind, seen: Seen = {}, tools: LlmTool[] = []): EngineDeps {
   };
   return {
     createMind: () => mind,
-    parts: async (_persona, _viewer, _chat, others) => {
-      seen.others = others;
+    parts: async (_persona, _viewer, _chat, options) => {
+      seen.others = options?.others;
       return parts;
     },
     saveAttachment: async () => {

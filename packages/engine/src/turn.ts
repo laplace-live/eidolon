@@ -1,6 +1,7 @@
 // One persona's turn in a chat, run the way a call runs one: her view of the log, the retrieval
-// gate and context providers, then the mind and its tool loop. It all runs as her, inside
-// withPersona, and its events come out as drafts for the caller to number and store.
+// gate and context providers, then the mind and its tool loop, and for a voice message her voice
+// role speaking what she wrote. It all runs as her, inside withPersona, and its events come out as
+// drafts for the caller to number and store.
 import {
   type Attachment,
   CHAT_WINDOW_MESSAGES,
@@ -26,6 +27,10 @@ import type {
   TurnOutput,
   TurnRequest,
 } from "./types.ts";
+import { batchSpeech, timed, withUnheard } from "./voice.ts";
+
+/** The `tool` stream line's name while her voice role speaks a voice message. */
+const SPEAKING = "voice";
 
 /** Mind calls per turn; tool calls the last one asks for are not run. */
 export const MAX_ROUNDS = 4;
@@ -130,6 +135,12 @@ class Turn {
   #sealed = false;
   /** The chat's other personas; null in a chat of one. */
   #group: Group | null = null;
+  /** The voice her voice-style tool switched this voice message to. */
+  #voice: string | undefined;
+  /** Her voice message's audio, once spoken and saved. */
+  #audio: Attachment | null = null;
+  /** Why her voice message stayed text. */
+  #unspoken: string | null = null;
 
   constructor(
     request: TurnRequest,
@@ -151,6 +162,7 @@ class Turn {
     let failure: string | null = null;
     try {
       await this.#respond();
+      if (this.#request.mode === "voice") await this.#speak();
     } catch (error) {
       if (this.#signal.aborted) {
         logger.info(`[chat] ${this.#persona}'s turn ${turn} was interrupted`);
@@ -164,18 +176,29 @@ class Turn {
     // A reply cut off before any words is kept too, so the chat shows it.
     if (this.#text !== "" || this.#attachments.length > 0 || this.#cutOff !== undefined) {
       const interrupted = this.#signal.aborted || failure !== null;
+      const attachments =
+        this.#audio === null ? this.#attachments : [this.#audio, ...this.#attachments];
       events.push({
         type: "message",
         id: this.#deps.newId(),
         speaker: { kind: "persona", id: this.#persona },
         text: this.#text,
-        ...(this.#attachments.length > 0 ? { attachments: [...this.#attachments] } : {}),
+        ...(this.#audio === null ? {} : { modality: "voice" }),
+        ...(attachments.length > 0 ? { attachments: [...attachments] } : {}),
         ...(interrupted ? { interrupted: true } : {}),
         ...(this.#cutOff !== undefined ? { cutOff: this.#cutOff } : {}),
       });
     }
     if (failure !== null) {
       events.push({ type: "turn-failed", persona: this.#persona, turn, error: failure });
+    } else if (this.#unspoken !== null) {
+      events.push({
+        type: "turn-failed",
+        persona: this.#persona,
+        turn,
+        error: this.#unspoken,
+        code: "voice-failed",
+      });
     }
     this.#record(events);
     this.#emit({ type: "ended", turn });
@@ -190,15 +213,23 @@ class Turn {
     const signal = this.#signal;
     this.#group = groupOf(chat, this.#persona);
     const parts = await raceAbort(
-      this.#deps.parts(this.#persona, viewer, chat, this.#group?.members ?? []),
+      this.#deps.parts(this.#persona, viewer, chat, {
+        others: this.#group?.members ?? [],
+        voice: this.#request.mode === "voice",
+      }),
       signal,
     );
     const mind = this.#deps.createMind();
-    const { messages, blocks } = viewWithBlocks(chat.header, chat.events, this.#persona, {
-      windowMessages: CHAT_WINDOW_MESSAGES,
-      nameOf: (id) => readPersonaIdentity(id).name,
-      viewerName: viewer.uname ?? "",
-    });
+    const { messages, blocks } = viewWithBlocks(
+      chat.header,
+      withUnheard(chat.events),
+      this.#persona,
+      {
+        windowMessages: CHAT_WINDOW_MESSAGES,
+        nameOf: (id) => readPersonaIdentity(id).name,
+        viewerName: viewer.uname ?? "",
+      },
+    );
     const conversation = new TurnConversation(messages, {
       persona: this.#persona,
       turn: this.#id,
@@ -211,6 +242,34 @@ class Turn {
     }
     await this.#enrich(parts, conversation);
     await this.#converse(parts, mind, conversation);
+  }
+
+  /**
+   * Her voice role speaks what she wrote, cues and all, and the audio is saved for her message.
+   * When that fails, her message stays text, and the failure is recorded after it.
+   */
+  async #speak(): Promise<void> {
+    if (this.#text.trim() === "") return;
+    const signal = this.#signal;
+    const state = (s: "running" | "done" | "failed"): void =>
+      this.#emit({ type: "tool", turn: this.#id, name: SPEAKING, state: s });
+    state("running");
+    try {
+      const speech = this.#deps.speech ?? batchSpeech;
+      const voice = this.#voice;
+      const spoken = await raceAbort(
+        speech.synthesize(this.#text, { ...(voice === undefined ? {} : { voice }), signal }),
+        signal,
+      );
+      const saved = await raceAbort(this.#deps.saveAttachment(spoken.bytes, spoken.mime), signal);
+      this.#audio = timed(saved, spoken.durationMs);
+      state("done");
+    } catch (error) {
+      if (signal.aborted) throw signal.reason;
+      this.#unspoken = errorText(error);
+      logger.warning(`[chat] ${this.#persona}'s voice message goes as text: ${this.#unspoken}`);
+      state("failed");
+    }
   }
 
   async #greetingMemories(parts: PersonaParts): Promise<readonly { readonly memory?: unknown }[]> {
@@ -357,8 +416,9 @@ class Turn {
     const signal = timeout === null ? cancel : AbortSignal.any([cancel, timeout]);
     const later: Attachment[] = [];
     const effects: ToolEffects = {
-      switchVoice: async () => {
-        throw new Error("A text chat has no voice to switch");
+      switchVoice: async (voice) => {
+        if (this.#request.mode !== "voice") throw new Error("A text reply has no voice to switch");
+        this.#voice = voice;
       },
       sendServerMessage: async (data) => {
         const saved = await saveSelfies(data, signal, this.#deps);

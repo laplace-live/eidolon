@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   attachmentExtension,
+  attachmentKind,
   attachmentMime,
   CHAT_FORMAT,
   type ChatEvent,
@@ -9,6 +10,8 @@ import {
   chainLimitOf,
   DEFAULT_CHAIN_LIMIT,
   isChatId,
+  isReplyMode,
+  replyModeOf,
   stampEvents,
   summarize,
 } from "../src/index.ts";
@@ -97,6 +100,25 @@ describe("chainLimitOf", () => {
   });
 });
 
+describe("replyModeOf", () => {
+  test("is the last settings event's, else null: the personas' own then apply", () => {
+    expect(replyModeOf([])).toBeNull();
+    const events: ChatEvent[] = [
+      { type: "settings", seq: 1, at: 1, replyMode: "voice" },
+      { type: "settings", seq: 2, at: 2, chainLimit: 1 },
+    ];
+    expect(replyModeOf(events)).toBe("voice");
+    expect(replyModeOf([...events, { type: "settings", seq: 3, at: 3, replyMode: "auto" }])).toBe(
+      "auto",
+    );
+  });
+
+  test("isReplyMode takes the three modes only", () => {
+    expect(["auto", "text", "voice"].every(isReplyMode)).toBe(true);
+    expect([" auto", "Voice", "audio", null, 1].some(isReplyMode)).toBe(false);
+  });
+});
+
 describe("stampEvents", () => {
   test("numbers drafts on from lastSeq, all at one time, fields kept", () => {
     expect(
@@ -174,5 +196,20 @@ describe("ids and attachment names", () => {
     expect(attachmentMime(`${sha}.svg`)).toBeNull();
     expect(attachmentMime(`${sha.slice(1)}.png`)).toBeNull();
     expect(attachmentMime(`../${sha}.png`)).toBeNull();
+  });
+
+  test("audio is what browsers record and TTS providers send, its codecs aside", () => {
+    expect(attachmentExtension("audio/webm;codecs=opus")).toBe("webm");
+    expect(attachmentExtension("audio/mp4")).toBe("m4a");
+    expect(attachmentExtension("audio/ogg; codecs=opus")).toBe("ogg");
+    expect(attachmentExtension("audio/mpeg")).toBe("mp3");
+    expect(attachmentExtension("audio/wav")).toBeNull();
+    expect(attachmentExtension("constructor")).toBeNull();
+    const sha = "0123456789abcdef".repeat(4);
+    expect(attachmentMime(`${sha}.m4a`)).toBe("audio/mp4");
+    expect(attachmentMime(`${sha}.mp3`)).toBe("audio/mpeg");
+    expect(attachmentKind("audio/webm;codecs=opus")).toBe("audio");
+    expect(attachmentKind("image/png")).toBe("image");
+    expect(attachmentKind("video/webm")).toBeNull();
   });
 });

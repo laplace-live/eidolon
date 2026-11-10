@@ -81,6 +81,11 @@ const provider = (): ContextProvider => ({ onContext: async () => {}, errorMessa
 function fake(overrides: Partial<PartsDeps> = {}) {
   const selfie = tool("take_selfie");
   const recall = tool("recall_streams");
+  const voice = tool("change_voice_style");
+  const styles = new Map([
+    ["default", "v-default"],
+    ["gentle", "v-gentle"],
+  ]);
   const archive: ArchiveProvider = {
     ...provider(),
     recallTool: async () => recall,
@@ -91,6 +96,7 @@ function fake(overrides: Partial<PartsDeps> = {}) {
   const gate: TurnGate = { attach: () => {} };
   const calls = {
     selfie: 0,
+    styles: 0,
     archive: [] as string[],
     facts: [] as string[],
     gate: 0,
@@ -104,6 +110,12 @@ function fake(overrides: Partial<PartsDeps> = {}) {
       return selfie;
     },
     selfiePromptHint: () => "SELFIE HINT",
+    loadVoiceStyles: () => {
+      calls.styles++;
+      return styles;
+    },
+    createVoiceTool: (loaded) => (loaded === styles ? voice : null),
+    voicePromptHint: (loaded) => (loaded === styles ? "VOICE HINT" : ""),
     buildSystemInstruction: async (input) => {
       calls.instructions.push(input);
       return `SYSTEM ${calls.instructions.length} for ${activePersona().id}`;
@@ -133,7 +145,7 @@ function fake(overrides: Partial<PartsDeps> = {}) {
   return {
     deps,
     calls,
-    parts: { selfie, recall, archive, facts, memory, gate },
+    parts: { selfie, recall, voice, archive, facts, memory, gate },
     bump: () => {
       generation++;
     },
@@ -189,13 +201,46 @@ describe("personaParts", () => {
     const { deps, calls } = fake();
     const parts = personaParts(deps);
     const others = [{ name: "露比", summary: "a singer" }];
-    await parts(PERSONA, VIEWER, CHAT, others);
-    await parts(PERSONA, VIEWER, CHAT, []);
+    await parts(PERSONA, VIEWER, CHAT, { others });
+    await parts(PERSONA, VIEWER, CHAT, { others: [] });
     expect(calls.instructions).toEqual([
       { viewer: VIEWER, voiceHint: "", selfieHint: "SELFIE HINT", participants: others },
       { viewer: VIEWER, voiceHint: "", selfieHint: "SELFIE HINT" },
     ]);
     expect(calls.archive).toHaveLength(1);
+  });
+
+  test("a voice message's variant adds her voice-style tool first and its hint, as a call's", async () => {
+    const { deps, calls, parts: made, bump } = fake();
+    const parts = personaParts(deps);
+    const text = await parts(PERSONA, VIEWER, CHAT);
+    expect(calls.styles).toBe(0);
+    const voice = await parts(PERSONA, VIEWER, CHAT, { voice: true });
+    const again = await parts(PERSONA, VIEWER, CHAT, { voice: true });
+    expect(text.tools).toEqual([made.selfie, made.recall]);
+    expect(voice.tools).toEqual([made.voice, made.selfie, made.recall]);
+    expect(again.tools).toEqual(voice.tools);
+    expect(calls.instructions).toEqual([
+      { viewer: VIEWER, voiceHint: "", selfieHint: "SELFIE HINT" },
+      { viewer: VIEWER, voiceHint: "VOICE HINT", selfieHint: "SELFIE HINT" },
+      { viewer: VIEWER, voiceHint: "VOICE HINT", selfieHint: "SELFIE HINT" },
+    ]);
+    // Her styles are read once per settings generation, and her providers are the text turns'.
+    expect(calls.styles).toBe(1);
+    expect(voice.providers).toEqual(text.providers);
+    expect((await parts(PERSONA, VIEWER, CHAT)).tools).toEqual([made.selfie, made.recall]);
+    bump();
+    await parts(PERSONA, VIEWER, CHAT, { voice: true });
+    expect(calls.styles).toBe(2);
+  });
+
+  test("a voice message offers no voice-style tool or hint while she has one voice", async () => {
+    const { deps, calls } = fake({ createVoiceTool: () => null });
+    const built = await personaParts(deps)(PERSONA, VIEWER, CHAT, { voice: true });
+    expect(built.tools.map((t) => t.schema.name)).toEqual(["take_selfie", "recall_streams"]);
+    expect(calls.instructions).toEqual([
+      { viewer: VIEWER, voiceHint: "", selfieHint: "SELFIE HINT" },
+    ]);
   });
 
   test("opens a chat's own, so no chat's providers see another's turns", async () => {

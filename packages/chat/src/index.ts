@@ -3,6 +3,7 @@
 export {
   type Attachment,
   attachmentExtension,
+  attachmentKind,
   attachmentMime,
   CHAT_FORMAT,
   type ChatEvent,
@@ -17,15 +18,18 @@ export {
   type CutOff,
   DEFAULT_CHAIN_LIMIT,
   isChatId,
+  isReplyMode,
   MAX_CHAIN_LIMIT,
   MAX_PARTICIPANTS,
   type ParticipantId,
+  REPLY_MODES,
+  type ReplyMode,
   type Speaker,
   stampEvents,
 } from "./format.ts";
 export { type MentionTarget, parseMentions } from "./mentions.ts";
 export { canonicalForSig } from "./sig.ts";
-export { chainLimitOf, summarize } from "./summary.ts";
+export { chainLimitOf, replyModeOf, summarize } from "./summary.ts";
 export {
   CHAT_WINDOW_MESSAGES,
   toolCallMessages,

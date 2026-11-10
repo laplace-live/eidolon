@@ -8,6 +8,7 @@ import { join } from "node:path";
 import {
   type Attachment,
   attachmentExtension,
+  attachmentKind,
   attachmentMime,
   CHAT_FORMAT,
   type ChatEvent,
@@ -238,13 +239,25 @@ export class JsonlChatStore implements ChatStore {
     });
   }
 
-  /** Stores `bytes` in chat `id`'s files/, once per content, as an attachment of type `mime`. */
-  async saveFile(id: string, bytes: Uint8Array, mime: string): Promise<Attachment> {
+  /**
+   * Stores `bytes` in chat `id`'s files/, once per content, as an attachment of type `mime`; audio
+   * carries `durationMs` when given.
+   */
+  async saveFile(
+    id: string,
+    bytes: Uint8Array,
+    mime: string,
+    durationMs?: number,
+  ): Promise<Attachment> {
     this.#check(id);
     const ext = attachmentExtension(mime);
     if (ext === null) throw new ChatStoreError("invalid", `An attachment can't be ${mime}`);
     const name = `${createHash("sha256").update(bytes).digest("hex")}.${ext}`;
-    const attachment: Attachment = { kind: "image", name, mime: attachmentMime(name) as string };
+    const type = attachmentMime(name) as string;
+    const attachment: Attachment =
+      attachmentKind(type) === "audio"
+        ? { kind: "audio", name, mime: type, ...(durationMs === undefined ? {} : { durationMs }) }
+        : { kind: "image", name, mime: type };
     return this.#serial(id, async () => {
       await this.#size(id);
       const dir = join(this.#dir(id), FILES);

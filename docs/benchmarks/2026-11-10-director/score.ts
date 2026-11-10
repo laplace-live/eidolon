@@ -1,7 +1,9 @@
 // Scores the group-chat director on lines.json as a chat asks it: the director's own state,
-// questions and rules, on the gate role's model. Writes decisions.json, with each question's scores
-// by label and the threshold they suggest. --check exits 1 when a line is decided wrong; --cached
-// re-decides the stored scores instead of asking Jev. About $0.003 of Jev calls.
+// questions and rules, on the gate role's model. A line labelled voice_moment is asked with every
+// persona's reply mode auto, so its replies' mode is checked too. Writes decisions.json, with each
+// question's scores by label and the threshold they suggest. --check exits 1 when a line is
+// decided wrong; --cached re-decides the stored scores instead of asking Jev. About $0.003 of Jev
+// calls.
 
 // Must stay the first import: the .env and settings files, as the laplace-* commands load them.
 import "../../../apps/cli/src/load-env.ts";
@@ -22,11 +24,17 @@ import {
   INVITES_THRESHOLD,
   JUST_SPOKE_PENALTY,
 } from "../../../packages/context/src/index.ts";
+import {
+  VOICE_THRESHOLD,
+  VOICE_THRESHOLD_AFTER_VOICE,
+  voiceThreshold,
+} from "../../../packages/context/src/director.ts";
 
 const VIEWER = "viewer";
+const MODALITIES = ["text", "voice", "call"] as const;
 
-/** A speaker (a persona id, or "viewer") and her text. */
-type Said = readonly [speaker: string, text: string];
+/** A speaker (a persona id, or "viewer") and her text; a voice message's modality is "voice". */
+type Said = readonly [speaker: string, text: string, modality?: (typeof MODALITIES)[number]];
 
 interface Persona {
   readonly name: string;
@@ -48,7 +56,18 @@ interface Line {
   readonly responders: readonly string[];
   readonly maybe?: readonly string[];
   readonly invites_reply: boolean;
+  /** Whether a voice message suits the reply better than text; absent unlabelled. */
+  readonly voice_moment?: boolean;
   readonly note?: string;
+}
+
+/** A voice_moment label, checked against the mode the line's replies got. */
+interface Voice {
+  readonly label: boolean;
+  /** Null when no one answered, or when --cached has no stored voice_moment for the line. */
+  readonly decided: "voice" | "text" | null;
+  /** Null when unscored. */
+  readonly right: boolean | null;
 }
 
 interface Row {
@@ -62,6 +81,8 @@ interface Row {
   readonly decided: readonly string[];
   readonly source: DirectorDecision["source"];
   readonly right: boolean;
+  /** Null for a line with no voice_moment label. */
+  readonly voice: Voice | null;
   readonly scores: Readonly<Record<string, number>>;
   readonly ms: number;
   readonly model: string;
@@ -111,8 +132,17 @@ function validate(): void {
     seen.add(line.id);
     if (line.participants.length < 2) fail("a group needs two or more personas");
     for (const id of line.participants) if (!(id in personas)) fail(`no persona ${id}`);
-    for (const [speaker] of saidOf(line)) {
+    for (const [speaker, , modality] of saidOf(line)) {
       if (speaker !== VIEWER && !line.participants.includes(speaker)) fail(`${speaker} isn't here`);
+      if (modality !== undefined && !MODALITIES.includes(modality)) fail(`no modality ${modality}`);
+    }
+    // A line no one need answer may get no reply, which has no mode to check.
+    if (
+      line.voice_moment !== undefined &&
+      line.latest[0] !== VIEWER &&
+      line.responders.length === 0
+    ) {
+      fail("a voice_moment label needs a line someone answers");
     }
     const candidates = candidatesOf(line);
     const labels = [
@@ -176,39 +206,61 @@ function liveDirector(): Director {
   return new Director({ ...options, fetch: recording, timeoutSec: 30 });
 }
 
-function inputOf(line: Line): DirectorInput {
-  const participants = line.participants.map(participantOf);
+/** `line` as a chat asks about it; with `voice`, every persona's reply mode is auto. */
+function inputOf(line: Line, voice = false): DirectorInput {
+  const participants = line.participants.map((id) => ({
+    ...participantOf(id),
+    ...(voice ? { replyMode: "auto" as const } : {}),
+  }));
   const said = saidOf(line);
   return {
     participants,
-    lines: said.map(
-      ([speaker, text]): DirectorLine =>
-        speaker === VIEWER
-          ? { speaker: { kind: "user" }, text }
-          : { speaker: { kind: "persona", id: speaker }, text },
-    ),
+    lines: said.map(([speaker, text, modality]): DirectorLine => {
+      const spoken = modality === undefined ? {} : { modality };
+      return speaker === VIEWER
+        ? { speaker: { kind: "user" }, text, ...spoken }
+        : { speaker: { kind: "persona", id: speaker }, text, ...spoken };
+    }),
     hop: hopOf(said),
     mentions: parseMentions(line.latest[1], participants),
   };
 }
 
-async function decide(director: Director, line: Line): Promise<DirectorDecision> {
-  const decision = await director.decide(inputOf(line));
+async function decide(director: Director, line: Line, voice: boolean): Promise<DirectorDecision> {
+  const decision = await director.decide(inputOf(line, voice));
   // A benchmark must not fail open: the director's warning above says why it fell back.
   if (decision.source === "fallback") throw new Error(`${line.id}: the director fell back`);
   return decision;
 }
 
-function rowOf(line: Line, decision: DirectorDecision, ms: number, model: string): Row {
+function rowOf(
+  line: Line,
+  decision: DirectorDecision,
+  ms: number,
+  model: string,
+  voiced: boolean,
+): Row {
   const { hop, mentions = [] } = inputOf(line);
   const decided = decision.replies.map(({ persona }) => persona);
   const maybe = line.maybe ?? [];
-  const [speaker, text] = line.latest;
+  const [speaker, text, modality] = line.latest;
+  let voice: Voice | null = null;
+  if (line.voice_moment !== undefined) {
+    // Every persona is auto, so every reply has the one mode voice_moment chose.
+    const mode = voiced ? (decision.replies[0]?.mode ?? null) : null;
+    voice = {
+      label: line.voice_moment,
+      decided: mode,
+      right: voiced ? mode === (line.voice_moment ? "voice" : "text") : null,
+    };
+  }
   return {
     id: line.id,
     kind: line.kind,
     hop,
-    latest: `${speaker === VIEWER ? VIEWER : personas[speaker]?.shortName}：${text}`,
+    latest:
+      `${speaker === VIEWER ? VIEWER : personas[speaker]?.shortName}：${text}` +
+      (modality === "voice" ? " (voice)" : ""),
     mentions,
     responders: line.responders,
     maybe,
@@ -217,6 +269,7 @@ function rowOf(line: Line, decision: DirectorDecision, ms: number, model: string
     right:
       line.responders.every((id) => decided.includes(id)) &&
       decided.every((id) => line.responders.includes(id) || maybe.includes(id)),
+    voice,
     scores: decision.scores,
     ms,
     model,
@@ -238,28 +291,35 @@ if (cached) {
     if (row === undefined)
       throw new Error(`${line.id} has no stored scores: score it without --cached`);
     const director = new Director({ apiKey: "cached", fetch: replaying(row) });
-    rows.push(rowOf(line, await decide(director, line), row.ms, row.model));
+    // A label added since the last real run has no stored voice_moment to replay.
+    const voiced = line.voice_moment !== undefined && "voice_moment" in row.scores;
+    rows.push(rowOf(line, await decide(director, line, voiced), row.ms, row.model, voiced));
   }
   costUsd = null;
 } else {
   const director = liveDirector();
   // Opens the connection, as a chat's first line has.
-  await decide(director, {
-    id: "warm-up",
-    kind: "warm-up",
-    participants: Object.keys(personas).slice(0, 2),
-    latest: [VIEWER, "你好"],
-    interested: [],
-    responders: [],
-    invites_reply: true,
-  });
+  await decide(
+    director,
+    {
+      id: "warm-up",
+      kind: "warm-up",
+      participants: Object.keys(personas).slice(0, 2),
+      latest: [VIEWER, "你好"],
+      interested: [],
+      responders: [],
+      invites_reply: true,
+    },
+    false,
+  );
   for (const line of lines) {
     answered = null;
-    const decision = await decide(director, line);
+    const voiced = line.voice_moment !== undefined;
+    const decision = await decide(director, line, voiced);
     const call = answered as { ms: number; model: string; costUsd: number | null } | null;
     if (call === null) throw new Error(`${line.id}: no request reached Jev`);
     costUsd = costUsd === null || call.costUsd === null ? null : costUsd + call.costUsd;
-    rows.push(rowOf(line, decision, call.ms, call.model));
+    rows.push(rowOf(line, decision, call.ms, call.model, voiced));
   }
 }
 
@@ -320,8 +380,19 @@ const interested: Point[] = [];
 const keen: Point[] = [];
 const invitesAfterPersona: Point[] = [];
 const invitesAfterViewer: Point[] = [];
+const voiceMoment: Point[] = [];
+const voiceMomentAfterVoice: Point[] = [];
 for (const row of rows) {
   const line = lineOf.get(row.id) as Line;
+  if (row.voice !== null && row.voice.right !== null) {
+    const after = voiceThreshold(inputOf(line)) === VOICE_THRESHOLD_AFTER_VOICE;
+    (after ? voiceMomentAfterVoice : voiceMoment).push({
+      id: row.id,
+      persona: null,
+      score: row.scores.voice_moment as number,
+      positive: row.voice.label,
+    });
+  }
   const candidates = candidatesOf(line);
   const raise = raiseOf(row);
   const last = spokeBefore(saidOf(line));
@@ -379,11 +450,16 @@ const questions = {
   interested_x_talkativeness: question(keen, INTEREST_THRESHOLD),
   invites_reply_after_persona: question(invitesAfterPersona, INVITES_THRESHOLD),
   invites_reply_after_viewer: question(invitesAfterViewer, null),
+  voice_moment: question(voiceMoment, VOICE_THRESHOLD),
+  voice_moment_after_voice: question(voiceMomentAfterVoice, VOICE_THRESHOLD_AFTER_VOICE),
 };
 
 const kinds = [...new Set(rows.map((row) => row.kind))];
 const tally = (subset: readonly Row[]) =>
   `${subset.filter((r) => r.right).length}/${subset.length}`;
+const scoredVoice = rows.filter((row) => row.voice !== null && row.voice.right !== null);
+const unscored = rows.filter((row) => row.voice !== null && row.voice.right === null);
+const voiceTally = `${scoredVoice.filter((row) => row.voice?.right).length}/${scoredVoice.length}`;
 const ms = rows.map((row) => row.ms);
 const latency = { p50: quantile(ms, 0.5), p90: quantile(ms, 0.9), max: quantile(ms, 1) };
 const result = {
@@ -394,6 +470,8 @@ const result = {
     invites: INVITES_THRESHOLD,
     hop_step: HOP_STEP,
     just_spoke_penalty: JUST_SPOKE_PENALTY,
+    voice: VOICE_THRESHOLD,
+    voice_after_voice: VOICE_THRESHOLD_AFTER_VOICE,
   },
   latency_ms: {
     ...latency,
@@ -403,6 +481,7 @@ const result = {
     all: tally(rows),
     ...Object.fromEntries(kinds.map((kind) => [kind, tally(rows.filter((r) => r.kind === kind))])),
   },
+  voice_right: { scored: voiceTally, unscored: unscored.length },
   questions: Object.fromEntries(
     Object.entries(questions).map(([name, { wrong_points: _points, ...summary }]) => [
       name,
@@ -427,6 +506,13 @@ console.log(
 );
 console.log(
   `decided right ${tally(rows)}: ${kinds.map((k) => `${k} ${tally(rows.filter((r) => r.kind === k))}`).join(", ")}`,
+);
+console.log(
+  `voice right ${voiceTally}; bars ${VOICE_THRESHOLD}, ` +
+    `${VOICE_THRESHOLD_AFTER_VOICE} after a voice message` +
+    (unscored.length === 0
+      ? ""
+      : `; ${unscored.length} voice labels have no stored voice_moment: run without --cached`),
 );
 console.log(
   "question (min/median/max)          yes                    no                     wrong  suggests",
@@ -457,4 +543,13 @@ for (const row of wrong) {
       `${row.latest} ${JSON.stringify(row.scores)}`,
   );
 }
-process.exitCode = check && wrong.length > 0 ? 1 : 0;
+const wrongVoice = rows.filter((row) => row.voice?.right === false);
+for (const row of wrongVoice) {
+  const { label, decided } = row.voice as Voice;
+  const score = fixed(row.scores.voice_moment ?? null);
+  console.log(
+    `WRONG-VOICE ${row.id} answered in ${decided ?? "nothing"}, labelled ` +
+      `${label ? "voice" : "text"}; voice_moment ${score} ${row.latest}`,
+  );
+}
+process.exitCode = check && wrong.length + wrongVoice.length > 0 ? 1 : 0;

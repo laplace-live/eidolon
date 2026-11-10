@@ -318,6 +318,7 @@ export const SETTINGS: readonly SettingField[] = [
   field("persona", "selfie.references", "SELFIE_REFERENCE_IMAGES", "paths", "Selfie references"),
   field("persona", "chat.interests", "CHAT_INTERESTS", "string", "Chat interests"),
   field("persona", "chat.talkativeness", "CHAT_TALKATIVENESS", "float", "Chat talkativeness"),
+  field("persona", "chat.replyMode", "CHAT_REPLY_MODE", "string", "Chat reply mode"),
 ];
 
 /** `voice.styles.<name>` sets `TTS_VOICE_ID_<NAME>`. */

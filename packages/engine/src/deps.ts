@@ -2,6 +2,7 @@ import { fetchStoredSelfie } from "./attachments.ts";
 import { createMind } from "./mind/index.ts";
 import { personaParts } from "./parts.ts";
 import type { EngineDeps } from "./types.ts";
+import { batchSpeech } from "./voice.ts";
 
 // One cache for the process: deps are made per chat, since `saveAttachment` names the chat.
 const parts = personaParts();
@@ -16,5 +17,6 @@ export function defaultEngineDeps(options: {
     saveAttachment: options.saveAttachment,
     fetchImage: (url) => fetchStoredSelfie(url),
     newId: () => Bun.randomUUIDv7(),
+    speech: batchSpeech,
   };
 }

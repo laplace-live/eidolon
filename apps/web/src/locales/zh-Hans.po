@@ -191,6 +191,10 @@ msgstr "{name} API 密钥"
 msgid "{name} can't answer yet"
 msgstr "{name}暂时无法回复"
 
+#: src/features/chats/chat-view.tsx
+msgid "{name} can't hear voice messages yet"
+msgstr "{name}还听不了语音消息"
+
 #: src/features/chats/chat-log.tsx
 msgid "{name} couldn't answer."
 msgstr "{name}没能回复。"
@@ -470,6 +474,10 @@ msgstr "人设 ID 只能使用小写字母、数字、- 和 _，并以字母或�
 msgid "A persona uses this account: pick another for her first."
 msgstr "有人设在使用这个账号：请先为她换一个。"
 
+#: src/features/chats/chat-settings.tsx
+msgid "A persona whose voice has no key answers in text."
+msgstr "声音没有密钥的人设会用文字回复。"
+
 #: src/features/setup/persona-fields.tsx
 #: src/lib/labels.ts
 msgid "A persona with that id already exists."
@@ -621,6 +629,10 @@ msgstr "全部"
 msgid "Allow microphone access for this page in your browser's site settings, then call again."
 msgstr "请在浏览器的网站设置中允许此页面使用麦克风，然后再次呼叫。"
 
+#: src/features/chats/labels.ts
+msgid "Allow microphone access for this page in your browser's site settings, then try again."
+msgstr "请在浏览器的网站设置中允许此页面使用麦克风，然后再试一次。"
+
 #: src/components/settings-form/labels.ts
 msgid "Allowed Browser Origins"
 msgstr "允许的浏览器来源"
@@ -661,6 +673,10 @@ msgstr "匿名限额窗口秒数"
 #: src/features/call/call-notices.tsx
 msgid "Another app is using your microphone. Close it, then call again."
 msgstr "其他应用正在使用麦克风。请先关闭它，然后再次呼叫。"
+
+#: src/features/chats/labels.ts
+msgid "Another app is using your microphone. Close it, then try again."
+msgstr "另一个应用正在使用麦克风。关闭它后再试一次。"
 
 #: src/features/jobs/labels.ts
 msgid "Another run is already working on this persona."
@@ -706,6 +722,11 @@ msgstr "正在向服务商获取模型列表…"
 msgid "Audio over 5 hours needs ffmpeg to split it. Install ffmpeg and try again."
 msgstr "超过 5 小时的音频需要 ffmpeg 来切分，请安装 ffmpeg 后重试。"
 
+#: src/features/chats/labels.ts
+msgctxt "reply mode"
+msgid "Auto"
+msgstr "自动"
+
 #: src/features/setup/avatar-picker.tsx
 #: src/features/studio/identity-section.tsx
 msgid "Avatar"
@@ -741,6 +762,7 @@ msgid "Browser to Read Cookies From"
 msgstr "读取 Cookie 的浏览器"
 
 #: src/features/call/call-notices.tsx
+#: src/features/chats/labels.ts
 msgid "Browsers allow the microphone only on secure pages. Open Eidolon at http://localhost or http://127.0.0.1."
 msgstr "浏览器只允许安全页面使用麦克风。请通过 http://localhost 或 http://127.0.0.1 打开 Eidolon。"
 
@@ -880,6 +902,10 @@ msgstr "取消"
 msgid "Cancel Job"
 msgstr "取消任务"
 
+#: src/features/chats/voice-recorder.tsx
+msgid "Cancel Recording"
+msgstr "取消录音"
+
 #: src/features/jobs/parts.tsx
 msgid "Cancel this job?"
 msgstr "取消这个任务？"
@@ -954,6 +980,8 @@ msgstr "和谁聊天"
 #: src/components/app-shell.tsx
 #: src/features/chats/chat-list.tsx
 #: src/features/chats/route.tsx
+#: src/features/studio/chat-section.tsx
+#: src/features/studio/route.tsx
 msgid "Chats"
 msgstr "聊天"
 
@@ -997,6 +1025,10 @@ msgstr "检查地址"
 msgid "Check your microphone, then call again."
 msgstr "请检查麦克风，然后再次呼叫。"
 
+#: src/features/chats/labels.ts
+msgid "Check your microphone, then try again."
+msgstr "请检查麦克风，然后再试一次。"
+
 #: src/components/voice-picker/index.tsx
 msgid "Chinese"
 msgstr "中文"
@@ -1038,6 +1070,10 @@ msgstr "Cloudflare TURN 密钥 ID"
 #: src/features/call/call-notices.tsx
 msgid "Connect a microphone, then call again."
 msgstr "请连接麦克风，然后再次呼叫。"
+
+#: src/features/chats/labels.ts
+msgid "Connect a microphone, then try again."
+msgstr "请连接麦克风，然后再试一次。"
 
 #: src/features/setup/memory-step.tsx
 #: src/features/setup/persona-step.tsx
@@ -1157,6 +1193,7 @@ msgstr "默认"
 
 #: src/components/settings-form/field.tsx
 #: src/components/settings-form/model-picker.tsx
+#: src/features/studio/chat-section.tsx
 msgid "Default ({value})"
 msgstr "默认（{value}）"
 
@@ -1637,11 +1674,6 @@ msgstr "词汇表已保存。"
 msgid "Go to Home"
 msgstr "前往首页"
 
-#: src/features/studio/chat-section.tsx
-#: src/features/studio/route.tsx
-msgid "Group Chats"
-msgstr "群聊"
-
 #: src/lib/labels.ts
 msgid "Group ID"
 msgstr "Group ID"
@@ -1718,9 +1750,17 @@ msgstr "她的声音（{id}）尚未经过 Fish Audio 检查。"
 msgid "Hide"
 msgstr "隐藏"
 
+#: src/features/chats/voice-bubble.tsx
+msgid "Hide Transcript"
+msgstr "收起文字"
+
 #: src/components/settings-form/labels.ts
 msgid "Higher costs more and takes longer while you wait in the call."
 msgstr "画质越高越贵，通话中等待的时间也越长。"
+
+#: src/features/chats/labels.ts
+msgid "Hold the microphone button while you talk, or click it to start and again to send."
+msgstr "说话时按住麦克风按钮，或者点一下开始、再点一下发送。"
 
 #: src/components/app-shell.tsx
 msgid "Home"
@@ -1755,6 +1795,10 @@ msgstr "没人点她名时，她有多愿意插话，从 0 到 1。设为 0 时�
 msgid "How Settings and the studio list it, such as “OpenAI (work)”."
 msgstr "在设置和工作室中显示的名字，例如“OpenAI（工作）”。"
 
+#: src/features/studio/chat-section.tsx
+msgid "How she answers in chats. In a chat with several personas, a director decides who answers each line, and weighs her by her interests and talkativeness."
+msgstr "她在聊天里怎么回复。在有多个人设的聊天里，调度器决定每句话由谁来接，并根据她的兴趣和健谈程度来权衡。"
+
 #: src/features/setup/stepper.tsx
 msgid "How she sounds"
 msgstr "她的声音"
@@ -1782,10 +1826,6 @@ msgstr "图片"
 #: src/features/call/call-page.tsx
 msgid "In a call · {duration}"
 msgstr "通话中 · {duration}"
-
-#: src/features/studio/chat-section.tsx
-msgid "In a chat with several personas, a director decides who answers each line. It weighs her by these."
-msgstr "在有多个人设的聊天里，由一个调度器决定每句话由谁来回答。它会参考这些设置来衡量她。"
 
 #: src/features/setup/persona-fields.tsx
 msgid "In her own language; prompts use it as written."
@@ -2046,6 +2086,10 @@ msgstr "不保存就离开？"
 #: src/features/studio/video-table.tsx
 msgid "Length"
 msgstr "时长"
+
+#: src/features/chats/voice-recorder.tsx
+msgid "Let go to send, or slide off the button to cancel."
+msgstr "松开发送，滑出按钮取消。"
 
 #: src/components/preferences.tsx
 msgid "Light"
@@ -2352,6 +2396,7 @@ msgid "No memories yet"
 msgstr "还没有记忆"
 
 #: src/features/call/call-notices.tsx
+#: src/features/chats/labels.ts
 msgid "No microphone found"
 msgstr "未找到麦克风"
 
@@ -2414,6 +2459,10 @@ msgstr "还没有声音"
 #: src/components/voice-picker/index.tsx
 msgid "No voices match."
 msgstr "没有匹配的声音。"
+
+#: src/features/chats/chat-log.tsx
+msgid "No words could be heard in it."
+msgstr "没有听清说了什么。"
 
 #: src/components/settings-form/labels.ts
 msgid "None"
@@ -2578,6 +2627,10 @@ msgstr "打开视频页面"
 msgid "OpenAI API Base"
 msgstr "OpenAI API 地址"
 
+#: src/features/chats/voice-recorder.tsx
+msgid "Opening the microphone…"
+msgstr "正在打开麦克风…"
+
 #: src/components/settings-form/labels.ts
 msgid "OpenRouter API Base"
 msgstr "OpenRouter API 地址"
@@ -2671,6 +2724,10 @@ msgstr "粘贴密钥"
 msgid "Paste video links, or the link of a playlist, series or channel. Each link is checked first, so you see what it holds before anything downloads."
 msgstr "粘贴视频链接，或者播放列表、合集、频道的链接。每个链接都会先检查，下载之前就能看到里面有什么。"
 
+#: src/features/chats/voice-bubble.tsx
+msgid "Pause Voice Message"
+msgstr "暂停语音消息"
+
 #: src/features/studio/references-section.tsx
 msgid "People she can take a selfie with: one picture each, named after them."
 msgstr "可以和她一起自拍的人：每人一张图片，以名字命名。"
@@ -2760,6 +2817,14 @@ msgstr "重新规划"
 #: src/features/call/call-notices.tsx
 msgid "Play"
 msgstr "播放"
+
+#: src/features/chats/voice-bubble.tsx
+msgid "Play Voice Message"
+msgstr "播放语音消息"
+
+#: src/features/chats/voice-bubble.tsx
+msgid "Playback Position"
+msgstr "播放进度"
 
 #: src/features/studio/route.tsx
 msgid "Profile"
@@ -2884,6 +2949,15 @@ msgstr "重新构建"
 msgid "Rebuild Catalog"
 msgstr "重建目录"
 
+#: src/features/chats/voice-recorder.tsx
+msgid "Record Voice Message"
+msgstr "录制语音消息"
+
+#: src/features/chats/labels.ts
+#: src/features/chats/voice-recorder.tsx
+msgid "Recording a voice message…"
+msgstr "正在录制语音消息…"
+
 #: src/features/jobs/labels.ts
 msgid "Refine"
 msgstr "转写整理"
@@ -2976,9 +3050,26 @@ msgstr "更换"
 msgid "Replace Her Avatar"
 msgstr "更换她的头像"
 
+#: src/features/chats/labels.ts
+msgid "Replies always come as text."
+msgstr "总是用文字回复。"
+
+#: src/features/chats/labels.ts
+msgid "Replies always come as voice messages."
+msgstr "总是用语音消息回复。"
+
 #: src/features/chats/chat-settings.tsx
 msgid "Replies between Personas"
 msgstr "人设之间的接话"
+
+#: src/features/chats/labels.ts
+msgid "Replies come as voice messages when a line suits one, more often after one of yours, and as text otherwise."
+msgstr "适合的时候用语音消息回复，你发过语音后更常这样；其余时候用文字回复。"
+
+#: src/components/settings-form/labels.ts
+#: src/features/chats/chat-settings.tsx
+msgid "Reply Mode"
+msgstr "回复方式"
 
 #: src/features/usage/tables.tsx
 msgid "Requests"
@@ -3169,8 +3260,8 @@ msgid "Saving clears {fields}, which belonged to the old provider."
 msgstr "保存后会清除 {fields}，它们属于原来的服务商。"
 
 #: src/features/chats/chat-log.tsx
-msgid "Say something to {name}. She answers in text, and this chat keeps what you both said."
-msgstr "和{name}说点什么吧。她会用文字回复，这个聊天会保存你们说过的话。"
+msgid "Say something to {name}, in text or with your voice. This chat keeps what you both said."
+msgstr "跟{name}说点什么吧，打字或者发语音都行。这个聊天会保留你们说过的话。"
 
 #: src/features/chats/chat-log.tsx
 msgid "Say something to everyone here. Whoever it's for answers, and they may answer each other too."
@@ -3236,6 +3327,10 @@ msgstr "自拍"
 msgid "Send"
 msgstr "发送"
 
+#: src/features/chats/voice-recorder.tsx
+msgid "Send Voice Message"
+msgstr "发送语音消息"
+
 #: src/components/settings-form/labels.ts
 msgid "Sends embeddings to an endpoint of your own, such as a proxy, instead of the provider's API."
 msgstr "把嵌入请求发到你自己的地址（例如代理），而不是服务商的 API。"
@@ -3247,6 +3342,10 @@ msgstr "把重排序请求发到你自己的地址，而不是服务商的 API�
 #: src/components/settings-form/labels.ts
 msgid "Sends transcript refinement to an endpoint of your own instead of the provider's API."
 msgstr "把转写整理请求发到你自己的地址，而不是服务商的 API。"
+
+#: src/features/chats/chat-log.tsx
+msgid "Sent as text"
+msgstr "已改用文字发送"
 
 #: src/features/settings/account-dialog.tsx
 msgid "Set by {env} in settings.yaml; a value saved here replaces it."
@@ -3405,6 +3504,10 @@ msgstr "显示更多"
 #: src/features/jobs/list.tsx
 msgid "Show Plans and Link Checks ({count})"
 msgstr "显示规划和链接检查（{count}）"
+
+#: src/features/chats/voice-bubble.tsx
+msgid "Show Transcript"
+msgstr "显示文字"
 
 #: src/components/settings-form/field.tsx
 msgid "Shown only: set it in settings.yaml or with <0>{env}</0>."
@@ -3685,6 +3788,11 @@ msgstr "技术日志"
 msgid "terms = [\"奶绿\", \"奶糖花\"]"
 msgstr "terms = [\"奶绿\", \"奶糖花\"]"
 
+#: src/features/chats/labels.ts
+msgctxt "reply mode"
+msgid "Text"
+msgstr "文字"
+
 #: src/features/chats/route.tsx
 msgid "Text one persona or several at once, no call needed. Each chat keeps its own history."
 msgstr "给一位或几位人设发消息，无需通话。每个聊天都有自己的记录。"
@@ -3898,6 +4006,7 @@ msgid "The MCP server still serves the settings it started with."
 msgstr "MCP 服务仍在使用启动时的设置。"
 
 #: src/features/call/call-notices.tsx
+#: src/features/chats/labels.ts
 msgid "The microphone isn't available here"
 msgstr "此处无法使用麦克风"
 
@@ -4066,6 +4175,10 @@ msgstr "这些文件已被删除，或不再符合规则。重新索引资料，
 msgid "This bills your Soniox, OpenRouter and embedding accounts: about {usd} by the estimate."
 msgstr "这会向你的 Soniox、OpenRouter 和嵌入服务账户收费：按估价约 {usd}。"
 
+#: src/features/chats/voice-recorder.tsx
+msgid "This browser can't record audio here."
+msgstr "这个浏览器在这里无法录音。"
+
 #: src/features/chats/chat-view.tsx
 msgid "This chat doesn't exist"
 msgstr "这个聊天不存在"
@@ -4185,6 +4298,10 @@ msgstr "待索引"
 msgid "To transcribe"
 msgstr "待转写"
 
+#: src/features/chats/labels.ts
+msgid "Too short to send"
+msgstr "太短了，没有发送"
+
 #: src/components/settings-form/labels.ts
 msgid "Topics she cares about, separated by commas or 、. The director reads them with her summary to tell when a group's line is one she'd join in on. Empty means her summary alone."
 msgstr "她在意的话题，用逗号或顿号（、）分隔。调度器会结合她的简介来判断群聊里的某句话她会不会想接。留空则只参考她的简介。"
@@ -4205,6 +4322,10 @@ msgstr "转写、整理和索引"
 #: src/features/studio/video-table.tsx
 msgid "Transcribing bills your Soniox account."
 msgstr "转写会向你的 Soniox 账户收费。"
+
+#: src/features/chats/chat-log.tsx
+msgid "Transcribing…"
+msgstr "正在转写…"
 
 #: src/lib/labels.ts
 msgid "Transcript Refinement"
@@ -4283,6 +4404,10 @@ msgstr "打开麦克风"
 #: src/features/studio/text-editor.tsx
 msgid "Unsaved changes"
 msgstr "有未保存的修改"
+
+#: src/features/chats/chat-settings.tsx
+msgid "Until you choose, each persona answers as her own settings say."
+msgstr "在你选择之前，每个人设按她自己的设置回复。"
 
 #: src/features/setup/avatar-picker.tsx
 #: src/features/studio/references-section.tsx
@@ -4407,9 +4532,22 @@ msgstr "视图"
 msgid "Voice"
 msgstr "声音"
 
+#: src/features/chats/labels.ts
+msgctxt "reply mode"
+msgid "Voice"
+msgstr "语音"
+
 #: src/components/voice-picker/index.tsx
 msgid "Voice Language"
 msgstr "声音语言"
+
+#: src/features/chats/chat-view.tsx
+msgid "Voice messages can't be heard yet"
+msgstr "还听不了语音消息"
+
+#: src/features/chats/voice-recorder.tsx
+msgid "Voice messages need a key for speech recognition. <0>Add one in Settings → Providers</0>."
+msgstr "语音消息需要语音识别的密钥。<0>到「设置 → 服务商」添加</0>。"
 
 #: src/components/settings-form/labels.ts
 #: src/features/home/readiness-labels.ts
@@ -4529,6 +4667,10 @@ msgstr "通话和任务记录花费的位置。默认为数据目录中的 usage
 msgid "Where each video stands by the latest plan, and what the running job is doing."
 msgstr "按最近一次规划显示每个视频的进度，以及正在运行的任务在做什么。"
 
+#: src/components/settings-form/labels.ts
+msgid "Whether she answers in text or with a voice message. Auto lets the director choose voice when a line suits it, more often after a voice message of yours. A chat's own reply mode overrides hers, and without a key for her voice she answers in text."
+msgstr "她用文字还是语音消息回复。选「自动」时由调度器判断哪句话适合用语音，你发过语音后更常这样。聊天自己的回复方式优先于她的设置；她的声音没有密钥时，她会用文字回复。"
+
 #: src/features/studio/voice-section.tsx
 msgid "Which provider and model read her lines."
 msgstr "由哪个服务商的哪个模型朗读她的台词。"
@@ -4613,14 +4755,17 @@ msgid "Your mic is muted"
 msgstr "麦克风已关闭"
 
 #: src/features/call/call-notices.tsx
+#: src/features/chats/labels.ts
 msgid "Your microphone didn't start"
 msgstr "麦克风未能启动"
 
 #: src/features/call/call-notices.tsx
+#: src/features/chats/labels.ts
 msgid "Your microphone is blocked"
 msgstr "麦克风被禁用"
 
 #: src/features/call/call-notices.tsx
+#: src/features/chats/labels.ts
 msgid "Your microphone is in use"
 msgstr "麦克风正被占用"
 

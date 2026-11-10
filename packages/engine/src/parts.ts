@@ -1,8 +1,9 @@
 // What a persona brings to a chat turn, built as a call builds it (runtime's session.ts): Mem0, the
-// stream archive, persona facts, the retrieval gate, take_selfie and recall_streams. These are kept
-// per chat and persona until the settings change, because the providers remember the conversation
-// they serve (the turn they last searched, the archive's recall scope), and what failed to open is
-// tried again later. The system instruction is rebuilt every turn, because it carries the clock.
+// stream archive, persona facts, the retrieval gate, take_selfie and recall_streams, and for a
+// voice message her voice-style tool. These are kept per chat and persona until the settings
+// change, because the providers remember the conversation they serve (the turn they last searched,
+// the archive's recall scope), and what failed to open is tried again later. The system
+// instruction is rebuilt every turn, because it carries the clock.
 import { stat } from "node:fs/promises";
 import type { UserContext } from "@eidolon/access";
 import type { ChatEvent, ParticipantId } from "@eidolon/chat";
@@ -20,8 +21,15 @@ import {
 import type { ContextProvider, LlmTool, TurnGate } from "@eidolon/core";
 import { createMemoryProvider, isMemoryConfigured } from "@eidolon/memory";
 import { ingestHint, PERSONA_FACTS, resolveDbPath, STREAM_ARCHIVE } from "@eidolon/retrieval";
-import { createSelfieTool, selfiePromptHint } from "@eidolon/tools";
-import type { EngineDeps, PersonaParts } from "./types.ts";
+import {
+  createSelfieTool,
+  createVoiceTool,
+  loadVoiceStyles,
+  selfiePromptHint,
+  type VoiceStyles,
+  voicePromptHint,
+} from "@eidolon/tools";
+import type { EngineDeps, PartsOptions, PersonaParts } from "./types.ts";
 
 /** The stream archive: a context provider that may also offer recall_streams. */
 export interface ArchiveProvider extends ContextProvider {
@@ -38,6 +46,9 @@ export interface MemoryProvider extends ContextProvider {
 export interface PartsDeps {
   createSelfieTool(): LlmTool | null;
   selfiePromptHint(): string;
+  loadVoiceStyles(): VoiceStyles;
+  createVoiceTool(styles: VoiceStyles): LlmTool | null;
+  voicePromptHint(styles: VoiceStyles): string;
   buildSystemInstruction(input: {
     viewer: UserContext;
     voiceHint: string;
@@ -66,6 +77,9 @@ async function pathExists(path: string): Promise<boolean> {
 export const productionPartsDeps: PartsDeps = {
   createSelfieTool: () => createSelfieTool(),
   selfiePromptHint: () => selfiePromptHint(),
+  loadVoiceStyles: () => loadVoiceStyles(),
+  createVoiceTool,
+  voicePromptHint,
   buildSystemInstruction,
   dbPath: resolveDbPath,
   dbPathExists: pathExists,
@@ -152,6 +166,8 @@ class Pieces {
   /** What is off and already said so: a chat logs it once, not every turn. */
   readonly #missing = new Set<string>();
   #selfie: { readonly tool: LlmTool | null; readonly hint: string } | null = null;
+  /** Her voice-style tool and its hint, read the first time a voice message needs them. */
+  #voice: { readonly tool: LlmTool | null; readonly hint: string } | null = null;
   #recall: LlmTool | null = null;
   #gate: TurnGate | null | undefined;
 
@@ -164,13 +180,21 @@ class Pieces {
   async parts(
     viewer: UserContext,
     events: readonly ChatEvent[],
-    others: readonly GroupMember[],
+    { others = [], voice: spoken = false }: PartsOptions,
   ): Promise<PersonaParts> {
     const deps = this.#deps;
     this.#selfie ??= (() => {
       const tool = deps.createSelfieTool();
       return { tool, hint: tool ? deps.selfiePromptHint() : "" };
     })();
+    if (spoken) {
+      this.#voice ??= (() => {
+        const styles = deps.loadVoiceStyles();
+        const tool = deps.createVoiceTool(styles);
+        return { tool, hint: tool ? deps.voicePromptHint(styles) : "" };
+      })();
+    }
+    const voice = spoken ? this.#voice : null;
     const dbPath = deps.dbPath();
     const [archive, memory, facts, systemInstruction] = await Promise.all([
       this.#archive.get(async () => {
@@ -189,7 +213,7 @@ class Pieces {
       ),
       deps.buildSystemInstruction({
         viewer,
-        voiceHint: "",
+        voiceHint: voice?.hint ?? "",
         selfieHint: this.#selfie.hint,
         ...(others.length > 0 ? { participants: others } : {}),
       }),
@@ -206,7 +230,10 @@ class Pieces {
       systemInstruction,
       providers,
       gate: this.#gate ?? null,
-      tools: [this.#selfie.tool, this.#recall].filter((tool): tool is LlmTool => tool !== null),
+      // A call's order: voice, selfie, recall.
+      tools: [voice?.tool ?? null, this.#selfie.tool, this.#recall].filter(
+        (tool): tool is LlmTool => tool !== null,
+      ),
       memories: async () => (memory === null ? [] : memory.newestFirst()),
     };
   }
@@ -289,7 +316,7 @@ class Pieces {
 /** EngineDeps.parts over the cache of each chat's Pieces. */
 export function personaParts(deps: PartsDeps = productionPartsDeps): EngineDeps["parts"] {
   const cache = new Map<string, Pieces>();
-  return (persona, viewer, chat, others = []) =>
+  return (persona, viewer, chat, options = {}) =>
     withPersona(persona, () => {
       const generation = deps.settingsGeneration();
       const key = `${chat.header.id}/${persona}`;
@@ -303,6 +330,6 @@ export function personaParts(deps: PartsDeps = productionPartsDeps): EngineDeps[
         if (cache.size <= KEPT_CHATS) break;
         cache.delete(old);
       }
-      return pieces.parts(viewer, chat.events, others);
+      return pieces.parts(viewer, chat.events, options);
     });
 }

@@ -1,4 +1,4 @@
-import { chainLimitOf, summarize } from "@eidolon/chat";
+import { chainLimitOf, replyModeOf, summarize } from "@eidolon/chat";
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
@@ -27,6 +27,8 @@ import { type ChatPersona, chatWith, shortNameOf, usePersonaOf } from "./persona
 import { chatQuery } from "./queries";
 import type { LiveError } from "./stream";
 import { useChat } from "./use-chat";
+import { canRecord } from "./use-recorder";
+import type { MicState } from "./voice-recorder";
 
 /** A call reaches only the active persona for now, so the button waits for her to be active. */
 function CallButton({ persona }: { readonly persona: ChatPersona }) {
@@ -67,19 +69,28 @@ function CallButton({ persona }: { readonly persona: ChatPersona }) {
 function LiveNotice({
   error,
   name,
+  unheard,
 }: {
   readonly error: LiveError;
   /** Hers in a chat with one persona; null in a group, where the message names who. */
   readonly name: string | null;
+  /** The chat can't hear a voice message, so a voice message's refusal was for that key. */
+  readonly unheard: boolean;
 }) {
   const { t } = useLingui();
   if (error.code === "missing-key") {
+    const title =
+      error.voice && unheard
+        ? name === null
+          ? t`Voice messages can't be heard yet`
+          : t`${ph({ name })} can't hear voice messages yet`
+        : name === null
+          ? t`Someone here can't answer yet`
+          : t`${ph({ name })} can't answer yet`;
     return (
       <Alert>
         <KeyRoundIcon />
-        <AlertTitle>
-          {name === null ? t`Someone here can't answer yet` : t`${ph({ name })} can't answer yet`}
-        </AlertTitle>
+        <AlertTitle>{title}</AlertTitle>
         <AlertDescription>{error.message}</AlertDescription>
         <AlertAction>
           <Button variant="outline" size="sm" asChild>
@@ -156,6 +167,7 @@ export function ChatView({
   const chat = useQuery(chatQuery(id));
   const personaOf = usePersonaOf();
   const turns = useChat(id);
+  const [recordable] = useState(canRecord);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const events = chat.data?.events;
   const items = useMemo(() => chatItems(events ?? []), [events]);
@@ -170,6 +182,7 @@ export function ChatView({
   );
   const next = useMemo(() => nextUp(events ?? []), [events]);
   const chainLimit = useMemo(() => chainLimitOf(events ?? []), [events]);
+  const replyMode = useMemo(() => replyModeOf(events ?? []), [events]);
 
   if (chat.data === undefined || summary === null) {
     const state =
@@ -191,6 +204,11 @@ export function ChatView({
   const retry = turns.busy ? null : retryText(items);
   const placeholder =
     solo === null ? t`Message everyone` : t`Message ${ph({ name: shortNameOf(solo) })}`;
+  const mic: MicState = !recordable
+    ? "unsupported"
+    : chat.data.hearingRefusal !== null
+      ? "no-key"
+      : "ready";
 
   return (
     <>
@@ -221,24 +239,34 @@ export function ChatView({
           next={next}
           lateTools={chat.data.lateTools}
           retry={retry}
+          autoPlay={turns.autoPlay}
+          onAutoPlayEnd={turns.autoPlayEnded}
           onSend={turns.send}
+          onSendVoice={turns.sendVoice}
         />
       </div>
       <footer className="flex shrink-0 flex-col gap-3 border-t bg-muted/50 px-4 py-3">
         {turns.live.error !== null && (
-          <LiveNotice error={turns.live.error} name={solo === null ? null : shortNameOf(solo)} />
+          <LiveNotice
+            error={turns.live.error}
+            name={solo === null ? null : shortNameOf(solo)}
+            unheard={chat.data.hearingRefusal !== null}
+          />
         )}
         <Composer
           placeholder={placeholder}
           participants={personas}
           busy={turns.busy}
+          mic={mic}
           onSend={turns.send}
+          onSendVoice={turns.sendVoice}
           onStop={turns.stop}
         />
       </footer>
       <ChatSettingsSheet
         id={id}
         chainLimit={chainLimit}
+        replyMode={replyMode}
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
       />

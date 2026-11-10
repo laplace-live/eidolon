@@ -1,13 +1,25 @@
 // Follows the chat on screen: its running turn from GET live when it opens, and each reply a send
 // starts. A dropped stream leaves the turn running on the server, so live picks it up again once.
+// Her voice messages answering a send from this tab play on their own, one after another, while
+// the tab has the focus.
 import type { ChatEvent, ChatStreamLine } from "@eidolon/chat";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { asApiError } from "@/lib/api";
-import { followLive, sendMessage, stopChat } from "@/lib/chats";
+import { followLive, sendMessage, sendVoice, stopChat } from "@/lib/chats";
 import { toastError } from "@/lib/feedback";
 import { chatQuery, chatsQuery } from "./queries";
-import { IDLE, type LiveState, mergeEvents, reaches, reduceLive, Sends } from "./stream";
+import { reread } from "./reread";
+import {
+  IDLE,
+  type LiveState,
+  mergeEvents,
+  reaches,
+  reduceLive,
+  Sends,
+  type VoiceClip,
+} from "./stream";
+import { voiceReplies } from "./voice";
 
 type Open = (signal: AbortSignal) => AsyncIterable<ChatStreamLine>;
 
@@ -16,7 +28,12 @@ export interface ChatTurns {
   /** A line is on its way to the log, or a reply is under way. */
   readonly busy: boolean;
   send(text: string): void;
+  sendVoice(clip: VoiceClip): void;
   stop(): void;
+  /** The seq of her voice message to play now on its own; null for none. */
+  readonly autoPlay: number | null;
+  /** It played through, and the next waiting plays; or it stopped, and none of them does. */
+  autoPlayEnded(finished: boolean): void;
 }
 
 export function useChat(id: string): ChatTurns {
@@ -24,6 +41,7 @@ export function useChat(id: string): ChatTurns {
   const [live, dispatch] = useReducer(reduceLive, IDLE);
   const streams = useRef(new Set<AbortController>());
   const sends = useRef(new Sends());
+  const [toPlay, setToPlay] = useState<readonly number[]>([]);
 
   const store = useCallback(
     (events: readonly ChatEvent[]) => {
@@ -34,7 +52,7 @@ export function useChat(id: string): ChatTurns {
         gap = merged.gap;
         return merged.log;
       });
-      if (gap) void queryClient.invalidateQueries({ queryKey: chatQuery(id).queryKey });
+      if (gap) void reread(queryClient, chatQuery(id).queryKey);
       // The list shows the last message; the end of the stream refreshes it for the rest.
       if (events.some((event) => event.type === "message")) {
         void queryClient.invalidateQueries({ queryKey: chatsQuery.queryKey, exact: true });
@@ -63,9 +81,15 @@ export function useChat(id: string): ChatTurns {
         for await (const line of open(controller.signal)) {
           carry();
           if (key !== null) sends.current.accept(key);
-          const reached = reaches(line, sends.current.superseded(opened));
-          if (line.type === "events") store(line.events);
-          else if (line.type === "started" && reached) [turn, ended] = [line.turn, false];
+          const superseded = sends.current.superseded(opened);
+          const reached = reaches(line, superseded);
+          if (line.type === "events") {
+            store(line.events);
+            const replies = key === null || superseded ? [] : voiceReplies(line.events);
+            if (replies.length > 0 && document.hasFocus()) {
+              setToPlay((waiting) => [...waiting, ...replies]);
+            }
+          } else if (line.type === "started" && reached) [turn, ended] = [line.turn, false];
           else if (line.type === "ended" && line.turn === turn) ended = true;
           if (reached) dispatch(line);
         }
@@ -83,7 +107,7 @@ export function useChat(id: string): ChatTurns {
       if (controller.signal.aborted) return;
       dispatch({ type: "settled", key, turn: null });
       // The log a turn ends with, and a turn that ended between the page's two requests.
-      void queryClient.invalidateQueries({ queryKey: chatQuery(id).queryKey });
+      void reread(queryClient, chatQuery(id).queryKey);
       void queryClient.invalidateQueries({ queryKey: chatsQuery.queryKey, exact: true });
       // A group's reply goes on past a turn's end, so a stream that broke after one may have more.
       if (turn !== null && (!ended || broke)) {
@@ -115,11 +139,33 @@ export function useChat(id: string): ChatTurns {
     [queryClient, id, follow],
   );
 
+  const sendVoiceClip = useCallback(
+    (clip: VoiceClip) => {
+      const key = sends.current.issue();
+      const after = queryClient.getQueryData(chatQuery(id).queryKey)?.events.at(-1)?.seq ?? 0;
+      dispatch({ type: "sending", key, after, text: "", voice: clip });
+      void follow((signal) => sendVoice(id, clip.audio, clip.durationMs, signal), key, true);
+    },
+    [queryClient, id, follow],
+  );
+
+  const autoPlayEnded = useCallback((finished: boolean) => {
+    setToPlay((waiting) => (finished ? waiting.slice(1) : []));
+  }, []);
+
   const stop = useCallback(() => {
     stopChat(id).catch(toastError);
   }, [id]);
 
   const busy =
     live.following > 0 || live.turn !== null || live.pending.some((line) => !line.failed);
-  return { live, busy, send, stop };
+  return {
+    live,
+    busy,
+    send,
+    sendVoice: sendVoiceClip,
+    stop,
+    autoPlay: toPlay[0] ?? null,
+    autoPlayEnded,
+  };
 }

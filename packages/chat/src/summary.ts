@@ -3,6 +3,7 @@ import {
   type ChatHeader,
   type ChatSummary,
   DEFAULT_CHAIN_LIMIT,
+  type ReplyMode,
 } from "./format.ts";
 
 /** `summary` with `events`, the ones after its `lastSeq`, applied. */
@@ -37,6 +38,14 @@ export function chainLimitOf(events: readonly ChatEvent[]): number {
     (event) => event.type === "settings" && event.chainLimit !== undefined,
   );
   return set?.type === "settings" ? (set.chainLimit as number) : DEFAULT_CHAIN_LIMIT;
+}
+
+/** The chat's own reply mode, which overrides each persona's: the last `settings` event's, else null. */
+export function replyModeOf(events: readonly ChatEvent[]): ReplyMode | null {
+  const set = events.findLast(
+    (event) => event.type === "settings" && event.replyMode !== undefined,
+  );
+  return set?.type === "settings" ? (set.replyMode as ReplyMode) : null;
 }
 
 export function summarize(header: ChatHeader, events: readonly ChatEvent[]): ChatSummary {

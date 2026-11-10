@@ -1,4 +1,4 @@
-import type { ParticipantId } from "@eidolon/chat";
+import type { ParticipantId, ReplyMode } from "@eidolon/chat";
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   changeParticipants,
@@ -8,6 +8,7 @@ import {
   readChat,
   renameChat,
   setChainLimit,
+  setReplyMode,
 } from "@/lib/chats";
 import { toastError } from "@/lib/feedback";
 import { latePoll } from "./stream";
@@ -66,6 +67,16 @@ export function useSetChainLimit() {
   return useMutation({
     mutationFn: ({ id, chainLimit }: { readonly id: string; readonly chainLimit: number }) =>
       setChainLimit(id, chainLimit),
+    onSuccess: (_, { id }) => changed(id),
+    onError: toastError,
+  });
+}
+
+export function useSetReplyMode() {
+  const changed = useChanged();
+  return useMutation({
+    mutationFn: ({ id, replyMode }: { readonly id: string; readonly replyMode: ReplyMode }) =>
+      setReplyMode(id, replyMode),
     onSuccess: (_, { id }) => changed(id),
     onError: toastError,
   });

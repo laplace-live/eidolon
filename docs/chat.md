@@ -1,16 +1,19 @@
 # Chats
 
-Text chats with the personas, in the local web app. A chat is an append-only log of events with
-one to six personas in it. Each persona's reply is a turn of the turn engine, which talks to her
-mind without pipedog. In a group chat, the director decides who answers each line, and the
-personas may answer each other ([Group chats](#group-chats)).
+Chats with the personas, in the local web app, in text and in voice messages. A chat is an
+append-only log of events with one to six personas in it. Each persona's reply is a turn of the
+turn engine, which talks to her mind without pipedog. In a group chat, the director decides who
+answers each line, and the personas may answer each other ([Group chats](#group-chats)). Either
+side may send a recorded clip instead of a line ([Voice messages](#voice-messages)).
 
 ```text
 @eidolon/chat         the format: events, the header, ChatStore, viewOf, parseMentions; safe in a browser
 @eidolon/chat/jsonl   JsonlChatStore: the local store, in the data home
 @eidolon/engine       runTurn: one persona's turn, from her view of the log to the events it adds;
-                      runChat: a chat's answer to the viewer's line, turn by turn
-@eidolon/context      Director: who answers each line of a group chat (director.ts)
+                      runChat: a chat's answer to the viewer's line, turn by turn;
+                      hearVoiceMessage: the viewer's clip, heard
+@eidolon/context      Director: who answers each line, and in text or voice (director.ts)
+@eidolon/providers/speech-batch   synthesize and transcribe: a whole voice message per request
 apps/bot/src/local/chats/, routes/chats.ts   the runner and /api/local/chats
 apps/web/src/features/chats/                 the Chats page (web-app.md)
 ```
@@ -38,22 +41,20 @@ isn't stored, she never saw.
 
 | Event | Written by | What it holds |
 | --- | --- | --- |
-| `message` | the runner for the viewer, the engine for her | `speaker`, `text`, and `attachments` (her selfies; `text` is empty on a message of photos alone); `interrupted` when she was cut off, keeping what she had said; `cutOff` when her provider stopped her short: `length` at its token limit, `refusal` when it refused or filtered her |
+| `message` | the runner for the viewer, the engine for her | `speaker`, `text`, and `attachments` (her selfies; `text` is empty on a message of photos alone); `modality: "voice"` on a voice message, whose first attachment is its audio and whose `text` is its transcript; `interrupted` when she was cut off, keeping what she had said; `cutOff` when her provider stopped her short: `length` at its token limit, `refusal` when it refused or filtered her |
 | `context` | the engine | A block a context provider put into her view: `role`, `content` and its `position` there; never shown |
 | `context-removed` | the engine | Her earlier `context` blocks, by seq, that a provider took back out; the stream archive replaces its blocks when they change or move |
 | `tool-call`, `tool-result` | the engine | Her call and what it returned; a call cut off has no result, and one that ran on past an interruption returns further down the log |
 | `kickoff` | the engine | The greeting prompt she answered |
-| `turn-failed` | the engine, or the runner when a turn throws | The failure, through `errorText`; the chat stays usable |
-| `decision` | the engine (`runChat`) | Who answers the line at seq `after`, and how: `source: "single"` in a chat of one persona, else `mention`, `model` or `fallback`, with the director's `scores` when it asked. Every reply follows one, and one may choose no one |
+| `turn-failed` | the engine, or the runner when a turn throws | The failure, through `errorText`; the chat stays usable. `code: "voice-failed"` when her reply, stored just before it, was meant as a voice message but stayed text |
+| `decision` | the engine (`runChat`) | Who answers the line at seq `after`, and how: `source: "single"` in a chat of one persona, else `mention`, `model` or `fallback`, with the director's `scores` when it asked, and each reply's `mode`, `text` or `voice`. Every reply follows one, and one may choose no one |
 | `title` | `PATCH`, or the runner for a new group | The chat's title; the last one wins |
 | `participants` | `POST participants` | Personas added or removed |
-| `settings` | `PATCH` | The chat's `chainLimit`; the last one wins |
+| `settings` | `PATCH` | The chat's `chainLimit` or `replyMode`; the last of each wins |
 | `call-started`, `call-ended` | nothing yet | Calls inside a chat |
 
-**Reserved, so later steps need no format change:**
-- a message's `modality`: `voice` and `call` messages carry their transcript in `text`;
-- `audio` attachments;
-- a reply's `voice` mode, and a `settings` event's `replyMode`.
+**Reserved, so later steps need no format change:** a message's `modality: "call"`, which carries
+a call's turn with its transcript in `text`.
 
 **`ChatSummary`** is what the chat list shows: the title, the participants, `createdAt`,
 `updatedAt`, the last message's text and the last seq. `summarize` derives it from a log, so a
@@ -65,7 +66,8 @@ store can always rebuild it.
 call would hold for her, without the system message:
 
 - **Her messages** are `assistant`, and **the viewer's** are `user`. An empty message is left
-  out, and an interrupted one keeps what she said.
+  out, and an interrupted one keeps what she said. A voice message is its transcript; the
+  engine reads the viewer's that was heard as nothing as `（听不清）` (`UNHEARD`).
 - **In a chat of two or more personas,** the viewer's lines read `观众名：text`, with the
   viewer's name (`viewerName`, else 观众). A chat of one keeps them unlabelled.
 - **Another persona's messages** fold into one `user` message of `名字：text` lines, one per line,
@@ -96,8 +98,9 @@ record which blocks a provider removed.
 - **Chats aren't in a persona's folder,** since one chat can hold several personas.
 - **Privacy:** folders are made 0700 and files 0600.
 - **Names are checked before they touch the disk.** A chat id must be a lowercase UUID. An
-  attachment is a PNG, JPEG, WebP, GIF or AVIF, named by its content's hash. SVG is refused, since
-  the app serves attachments from its own origin.
+  attachment is a PNG, JPEG, WebP, GIF or AVIF image, or WebM, Ogg, MP4 or MP3 audio, named by its
+  content's hash. SVG is refused, since the app serves attachments from its own origin. An audio
+  attachment carries `durationMs` where something measured it.
 - **Appends:**
   - Each batch is one `appendFile`, then `fsync`, and resolves only once it is durable.
   - A batch that doesn't continue the log's seqs is refused with `seq-gap`, and nothing is
@@ -126,9 +129,14 @@ It takes the test runner's `describe`, `test` and `expect`, so a store in laplac
 `runTurn(request, deps)` streams a turn's output:
 - `started`;
 - `delta` lines of her text;
-- `tool` states (`running`, `done`, `failed`);
+- `tool` states (`running`, `done`, `failed`), and in a voice reply, `voice`'s while her voice role
+  speaks;
 - `events` with the drafts to store;
 - `ended`, always last.
+
+A request's `mode`, `text` by default, says whether her reply is a voice message
+([step 9](#a-turn-runturn)). It is the one option a turn takes for voice, so a later caller, such
+as a call run on the engine, can ask for her voice variant the same way.
 
 The caller numbers and stores each `events` line before it forwards it. A reader that stops reading
 aborts the turn. The engine never rejects for the turn's own failures.
@@ -138,8 +146,11 @@ aborts the turn. The engine never rejects for the turn's own failures.
    both scopes.
 2. **Her parts** are what a call's session builds:
    - **What they are:** Mem0 (for a logged-in viewer, which the local viewer is), the stream
-     archive, persona facts, the retrieval gate, `take_selfie` and `recall_streams`. There is no
-     voice tool, since text has no voice to switch.
+     archive, persona facts, the retrieval gate, `take_selfie` and `recall_streams`.
+   - **The voice variant:** a voice reply (`PartsOptions.voice`) also gets her voice-style tool,
+     first, as a call orders them, while her voice has styles to switch between. Her styles are
+     read the first time a voice reply in the chat needs them, and kept with her other parts, so a
+     text reply never reads them.
    - **How long they last:** they are kept per chat and persona until the settings generation
      changes, for the 32 chats used last. Providers remember the conversation they serve (the turn
      they last searched, the archive's recall scope), so two chats never share them.
@@ -151,8 +162,8 @@ aborts the turn. The engine never rejects for the turn's own failures.
      An index is tried again next turn, and Qdrant a minute later, since each try can wait out its
      timeout.
    - **The system instruction** is rebuilt every turn, since it carries the clock:
-     `buildSystemInstruction` with no voice hint, and in a group the line naming the others
-     ([below](#what-each-persona-sees)).
+     `buildSystemInstruction`, with `voicePromptHint` in a voice reply alone, and in a group the
+     line naming the others ([below](#what-each-persona-sees)).
 3. **Her view** is `viewOf` the log as stored. A greeting turn adds `buildGreetingKickoff` over her
    memories of the viewer, recorded as a `kickoff`.
 4. **Recall:** the gate attaches its decision, then Mem0, the archive and the facts run in turn.
@@ -175,7 +186,8 @@ aborts the turn. The engine never rejects for the turn's own failures.
    - **Rounds:** at most 4 mind calls per turn. A round's tool calls run in parallel and are
      recorded as a `tool-call` and a `tool-result` each. A tool she doesn't have, or one that
      throws, gets pipedog's error text, and one that times out gets no result.
-6. **Tools' effects:** `switchVoice` throws. A `selfie` server message copies each image from the
+6. **Tools' effects:** `switchVoice` sets the voice her voice reply is spoken in, and throws in a
+   text reply, which isn't offered the tool. A `selfie` server message copies each image from the
    in-process selfie store into the chat's `files/` as soon as it is sent, while the URL still
    serves it (`SELFIE_TTL_SECONDS`), and the images become attachments on her message, or on a
    later one when the turn was interrupted first (step 8).
@@ -186,6 +198,7 @@ aborts the turn. The engine never rejects for the turn's own failures.
    - **On abort:** the message is marked `interrupted`, keeping what she said, and none is stored
      if she said nothing.
    - **On a failure:** her partial text is stored as interrupted, followed by `turn-failed`.
+   - **A voice reply** is step 9's message.
 8. **A tool that runs on:** an interruption cancels a running tool, unless the tool's
    `cancelOnInterruption` is false, as `take_selfie`'s is, and the caller passes `late`
    (`LateTools`).
@@ -200,6 +213,17 @@ aborts the turn. The engine never rejects for the turn's own failures.
        an empty message out, so the photo adds no line to her view.
    - **When it times out:** it brings no result, only photos it had already saved. Without
      `late`, every tool is cancelled with its turn.
+9. **A voice reply** (`mode: "voice"`) is written as a text reply is, cues included, and its
+   deltas stream the same. Then:
+   - **Speaking it:** the stream gets `{ type: "tool", name: "voice", state: "running" }`, her
+     voice role speaks her whole text, in the voice `switchVoice` chose if she called it, and the
+     audio is saved with `saveAttachment` and its length.
+   - **What is stored:** one `message` with `modality: "voice"`, the audio first and any photos
+     after it, and the transcript in `text`, cues and all.
+   - **When speaking or saving fails:** the tool line ends `failed`, her message is stored as
+     text, and a `turn-failed` with `code: "voice-failed"` follows it.
+   - **An interruption while she is spoken** stores her words as interrupted text, with no audio.
+   - **A reply with no words** isn't spoken.
 
 ## Group chats
 
@@ -223,7 +247,10 @@ the gate's plumbing: the active persona's `gate` role and its key, `decisionsUrl
     addressed to <name>, by name or by answering what she said?") and `interested_<id>` ("…about
     something <name> cares about (her interests above), or something she has a stake in?");
   - once, `invites_reply` ("Does the latest message invite a reply (a question, an opinion, a
-    tease) rather than close the exchange?").
+    tease) rather than close the exchange?");
+  - once, and only when some candidate's reply mode is `auto`, `voice_moment` ("Would a voice
+    message suit a reply to the latest message better than text…?",
+    [Voice messages](#voice-messages)).
 
   Jev reads them literally, so a reworded question or state needs the benchmark run again.
 - **Who answers the viewer's line:**
@@ -250,22 +277,25 @@ the gate's plumbing: the active persona's `gate` role and its key, `decisionsUrl
   2. then the personas whose name or short name the line holds, in the order they appear;
   3. then, after the viewer's line only, the most talkative.
 
-  The same caps apply. The source is `fallback`, with no scores. Without a key for the gate role,
-  every group decision falls back.
-- **A chat of one persona** makes no request: she answers every viewer line, as `single`.
-- **Each reply's `mode`** is always `text` for now.
+  The same caps apply. The source is `fallback`, with no scores, so every reply is in text unless
+  her mode is `voice`. Without a key for the gate role, every group decision falls back.
+- **A chat of one persona:** she answers every viewer line, as `single`. The director asks only
+  `voice_moment`, and only while her reply mode is `auto`; otherwise it makes no request.
+- **Each reply's `mode`** follows her reply mode: `voice` is voice, `text` is text, and `auto` is
+  voice when `voice_moment` clears its bar ([Voice messages](#voice-messages)).
 
 ### The chain
 
 `runChat` (`packages/engine/src/chat.ts`) answers each viewer line:
 
-1. It reads the participants and the chain limit once, from the log as it stood. The limit is the
-   last `settings` event's `chainLimit`, 0 to 6, else 3 (`DEFAULT_CHAIN_LIMIT`). A chat of one
-   never chains.
+1. It reads the participants, their reply modes and the chain limit once, from the log as it
+   stood. The limit is the last `settings` event's `chainLimit`, 0 to 6, else 3
+   (`DEFAULT_CHAIN_LIMIT`). A chat of one never chains.
 2. It asks the director about the viewer's line, in the chat's usage scope, and yields the
    decision for the caller to store.
-3. It runs each chosen persona's turn in order with `runTurn`. It reads the log again before each,
-   so each turn sees what the ones before it said, and anything else stored meanwhile.
+3. It runs each chosen persona's turn in order with `runTurn`, in the mode the decision gave her.
+   It reads the log again before each, so each turn sees what the ones before it said, and
+   anything else stored meanwhile.
 4. If a persona spoke and the chain limit isn't reached, it asks about the last persona line, one
    hop further, and so on until no one is chosen.
 
@@ -309,7 +339,8 @@ For each viewer line, at the default chain limit, the most it can cost is:
   recall as in a chat of one;
 - 4 director calls: one for the viewer's line, and one before each of the 3 hops. The
   benchmark's 101 calls cost $0.0033 in all, about $0.00003 each, and took 413 ms at the median on
-  a warm connection.
+  a warm connection;
+- a synthesis for each of those turns that answers in voice ([Voice costs](#voice-costs)).
 
 The defaults keep a typical line at one or two replies. A chain limit of 6 allows 8 turns and 7
 director calls.
@@ -322,6 +353,91 @@ director calls.
   non-zero when any is decided wrong.
 - **`bun docs/benchmarks/2026-11-10-director/score.ts --cached`** replays the stored scores through
   the director for free, after a threshold or a label changes.
+
+## Voice messages
+
+A voice message is a recorded clip in the chat, not a live line: the viewer records one in the
+composer, and a persona answers with one when her reply mode says so. Both are a `message` with
+`modality: "voice"`, its audio as the first attachment in the chat's `files/`, and its transcript
+in `text`. Every persona's view reads the transcript, so voice and text mix freely.
+
+### The clients
+
+`@eidolon/providers/speech-batch` makes or hears a whole message in one request, over `fetch`, and
+reports what it used with `reportUsage`. It is not the call's speech, which streams through
+pipedog; [providers.md](providers.md#voice-messages-batch-speech) has each provider's request.
+
+- **`synthesize(selection, text, { voice? })`,** on her voice role: MP3, with its length from the
+  provider or measured from the frames. Her text goes through `stripMarkup` for the model, as a
+  call's does: Fish's `drama-3` reads her cues as written, and other models get what they can
+  perform. The voice is `voiceOf(selection)`, as a call picks it, unless her voice-style tool
+  switched it for this reply.
+- **`transcribe(selection, { bytes, mime, durationMs? })`,** on a hearing role: the transcript,
+  trimmed and possibly empty, and the clip's length from the provider, else the recorder's clock.
+  The language hint is a call's (`STT_LANGUAGE`).
+- **`speechSupport(selection)`** says which of the two a role's provider offers. Every voice
+  provider in the catalog synthesizes, and every hearing provider transcribes.
+
+The engine reaches them through `EngineDeps.speech` (`batchSpeech`), so tests stand in for both.
+
+### Her reply mode
+
+**Which mode a reply takes** (`replyModeFor`):
+- the chat's `replyMode`, from its settings sheet (a `settings` event), for every persona in it;
+- else her own `chat.replyMode` (`CHAT_REPLY_MODE`, [personas.md](personas.md#personayaml));
+- else `auto`.
+
+`voice` and `auto` become `text` while her voice role can't speak a voice message: no key, or a
+provider without batch synthesis (`canSpeak`). An explicit `voice` turned to text that way is
+logged.
+
+**`auto`** lets the director choose, with `voice_moment`, asked once per decision while some
+candidate is `auto`:
+- she answers in voice when its score is `VOICE_THRESHOLD` (0.7) or more;
+- the bar drops to `VOICE_THRESHOLD_AFTER_VOICE` (0.4) while the viewer's last line was a voice
+  message, so she leans toward answering in kind, on the chain's hops too;
+- with no score (no gate key, a timeout, a failure, or a fallback decision), `auto` is text.
+
+**Both bars are placeholders.** The director benchmark has 24 `voice_moment` labels and no
+scored run yet ([its README](benchmarks/2026-11-10-director/README.md#voice-moments)).
+
+**In a chat of one,** the director sends one Decisions request per viewer line with only
+`voice_moment`, while her mode is `auto`, her voice can speak and the gate role has a key. The
+decision stays `single`, with its score. On a failure it warns, and she answers in text.
+
+**A greeting** has no line to weigh, so it is a voice message only when her mode is `voice`.
+
+### The viewer's voice messages
+
+`hearVoiceMessage` hears a clip before anything is stored:
+1. **Who hears it:** the hearing role of the chat's first current persona (`voiceHearer`), billed
+   to the chat.
+2. **Then the clip is saved,** so a clip that couldn't be heard leaves nothing behind.
+3. **The message** is stored with the clip and its transcript, and the chat answers it as it
+   answers a typed line.
+
+**A clip heard as nothing** is stored with an empty transcript. Her view and the director read it
+as `（听不清）`, and the page says no words could be heard in it.
+
+### What fails, and what it does
+
+| What | What happens |
+| --- | --- |
+| Her voice role has no key, or no batch synthesis | `voice` and `auto` replies are text; the chat's settings sheet says so |
+| Synthesis or saving its audio fails | Her message is stored as text, then a `turn-failed` with `code: "voice-failed"`; the page shows a quiet **Sent as text** |
+| She is interrupted while she is spoken | Her words are stored as interrupted text, with no audio |
+| The director doesn't answer `voice_moment` within 2 s | `auto` replies are text |
+| The first persona's hearing role has no key | `POST voice` answers `409 missing-key`, and `GET chats/:id`'s `hearingRefusal` says why, which disables the microphone |
+| Her hearing provider fails | `POST voice` answers `502 upstream-failed`, and nothing is stored, so the recording can be sent again |
+
+### Voice costs
+
+- **Each voice reply** is one synthesis, billed for what is spoken: Fish's `drama-3` at $50 per
+  million UTF-8 bytes ($10 until 2026-11-30), about $0.005 for a 30-character Chinese reply.
+- **Each viewer voice message** is one transcription: Soniox's async model at $0.10 an hour of
+  audio, about $0.0003 for 10 s.
+- **In a chat of one in `auto`,** every viewer line adds one director call, about $0.00003, as a
+  group's do.
 
 ## The local API
 
@@ -336,8 +452,8 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
 
 **What a send does:**
 - **New chat:** with one persona, her greeting starts right after the `201`, and `GET live`
-  streams it. A group doesn't greet: it gets a `title` of the personas' short names, joined
-  with 、.
+  streams it, as a voice message when her reply mode is `voice`. A group doesn't greet: it gets
+  a `title` of the personas' short names, joined with 、.
 - **New message:**
   1. It stops a running reply, and waits until what it said is stored as interrupted. The hops
      still to come are dropped.
@@ -345,11 +461,14 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
   3. It starts the answer, `runChat`: each decision and each turn is stored, then streamed.
 
   The answer streams from the viewer's line on, so the viewer can step into a chain at any time.
+- **New voice message:** as a new message, except that after the stop it hears the clip
+  (`hearVoiceMessage`), and only then stores it with its transcript. One that can't be heard
+  stores nothing.
 - **A dropped connection** never stops a reply. It finishes and is stored, and `GET live` replays
   it. Only stop, a new message, `DELETE` and the server's shutdown abort one. Shutdown waits up to
   2 s for what was said to be stored.
 - **A stop** waits its turn in the queue, so one that arrives while a send is still storing the
-  viewer's line stops the reply that send starts.
+  viewer's line, or hearing the viewer's clip, stops the reply that send starts.
 - **A selfie still rendering when its turn was interrupted** is the runner's until it ends, as
   `late` (step 8 above):
   - **Storing:** what it brings is numbered on from the log like any append. It always lands
@@ -364,19 +483,21 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
 | --- | --- | --- |
 | `GET chats` | | `ChatSummary[]`, newest activity first |
 | `POST chats` | `{ participants: [id] }`, 1 to 6 personas, each once | `201 { id }`; one persona's greeting then runs |
-| `GET chats/:id?afterSeq=n` | | `{ header, events, lateTools }`: the events after `afterSeq`, and the tools interrupted turns left running |
+| `GET chats/:id?afterSeq=n` | | `{ header, events, lateTools, hearingRefusal }`: the events after `afterSeq`; the tools interrupted turns left running; and why a voice message can't be heard now, in `POST voice`'s words, or null |
 | `POST chats/:id/messages` | `{ text }`, 1 to 4000 characters | NDJSON `ChatStreamLine`s from the viewer's line on: each decision as an `events` line, and each turn from `started` to `ended` |
+| `POST chats/:id/voice?durationMs=n` | The recorded audio: `audio/webm`, `audio/ogg`, `audio/mp4` or `audio/mpeg`, codecs allowed, at most 10 MB; `durationMs` is the recorder's clock, 1 to 120000 | As `POST messages`, its first `events` line holding the stored voice message with its transcript. `415` for another type, `400` without `durationMs` or with an empty body, `413` past 2 minutes or 10 MB, `409 missing-key` while the hearing role can't hear, `502 upstream-failed` when hearing fails |
 | `GET chats/:id/live` | | NDJSON of the running reply from its start, or `204` while none runs |
 | `POST chats/:id/stop` | | `204` once the stopped reply's words are stored |
-| `PATCH chats/:id` | `{ title }`, 1 to 80 characters on one line, or `{ chainLimit }`, a whole number from 0 to 6; one per request | Appends a `title`, or a `settings` that applies from the next viewer line |
+| `PATCH chats/:id` | `{ title }`, 1 to 80 characters on one line, `{ chainLimit }`, a whole number from 0 to 6, or `{ replyMode }`, `auto`, `text` or `voice`; one per request | Appends a `title`, or a `settings` that applies from the next viewer line |
 | `POST chats/:id/participants` | `{ add?: [id], remove?: [id] }`, at least one persona, none in both | `200 { ok }` and a `participants` event; `400` when it adds one already there, removes one who isn't, or leaves fewer than 1 or more than 6 |
 | `DELETE chats/:id` | | Stops any reply, then removes `chats/<id>/` and nothing else |
-| `GET chats/:id/files/:name` | | The attachment: its type, `nosniff`, a sandbox CSP and `Cache-Control: private, max-age=31536000, immutable`; an `<img>` reads it with the cookie alone |
+| `GET chats/:id/files/:name` | | The attachment: its type, `nosniff`, a sandbox CSP and `Cache-Control: private, max-age=31536000, immutable`; an `<img>` or `<audio>` reads it with the cookie alone. It answers `Range` requests with a `206` (Bun.serve's own, on a file) and sends `Accept-Ranges: bytes`, since Safari plays audio only from a server that takes ranges |
 
 - **Text** is trimmed. A message may hold tabs and line breaks, but no other control character.
-- **`missing-key`:** when a persona's mind role's provider takes a key and has none, `POST chats`
-  and `POST messages` answer `409 missing-key` before anything is written, in the words a call's
-  preflight uses. In a group, the message names her (`<id>'s mind role has no key.`).
+- **`missing-key`:** when a persona's mind role's provider takes a key and has none, `POST chats`,
+  `POST messages` and `POST voice` answer `409 missing-key` before anything is written, in the
+  words a call's preflight uses. In a group, the message names her (`<id>'s mind role has no
+  key.`). `POST voice` also checks the first persona's hearing role, before it reads the body.
 - **Every persona in the chat is checked,** whether or not the director would choose her. One deleted
   since is `404 unknown-persona`, until she is removed: `POST participants` looks up only the
   personas it adds.
@@ -386,13 +507,20 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
 
 **Checks:**
 - `bun test --no-env-file packages/chat packages/engine packages/context apps/bot/test/local`.
-- `bun apps/bot/scripts/local-smoke.ts --headful`. It walks two chats against its fake
-  OpenAI-compatible server, which also answers the director's Decisions route. It bills nothing.
+- `bun apps/bot/scripts/local-smoke.ts --headful`. It walks three chats against its fake
+  OpenAI-compatible server, which also answers the director's Decisions route and OpenAI's speech
+  and transcriptions. It bills nothing.
   - **A chat of one:** New Chat and the greeting, a reply that streams in with its cue as a chip,
-    the history after a reload, Rename and Delete.
+    after a decision that asked `voice_moment` alone, the history after a reload, Rename and
+    Delete.
   - **A group,** with a second persona made from no template: no greeting, an @-mention the
     composer completes, the second persona's answer, the first's answer to her a hop later, and
     each line under its persona's name.
+  - **Voice messages,** with her voice and hearing on an OpenAI account at the fake server: a
+    message held on the microphone, through Chrome's fake microphone playing a WAV, its transcript
+    and her text answer; then Voice in the chat's settings, her voice reply with its cue taken out
+    of what was spoken, playing on its own to its end, its file served in ranges, and both
+    roles' spend in the ledger.
 - `bun run director-decisions` after changing the director's questions, state or thresholds
   ([Calibrating](#calibrating)).
 - **By hand, billed:** a chat with milky-green on OpenRouter. Ask a recall question (it must call
@@ -401,6 +529,9 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
 - **By hand, billed:** a group of two personas on OpenRouter. Its `decision` events must come
   from `mention` or `model` with scores, not `fallback`, and neither persona may write the other's
   lines.
+- **By hand, billed:** a voice reply from milky-green on Fish `drama-3`, to a line that draws her
+  cues, listened to: a direction or a tag spoken aloud is a leak. Then a voice message recorded in
+  the browser, transcribed by her hearing role.
 
 ## Later: chats in production
 

@@ -1,7 +1,7 @@
 // The local web app's admin API on the wire, under /api/local: what apps/bot/src/local serves and
 // apps/web imports with `import type`. Its only import is @eidolon/chat's types, which are
 // browser-safe and erased, so the SPA's typecheck sees no Bun or Node.
-import type { ChatEvent, ChatHeader, ChatSummary, ParticipantId } from "@eidolon/chat";
+import type { ChatEvent, ChatHeader, ChatSummary, ParticipantId, ReplyMode } from "@eidolon/chat";
 
 /** Every route the local router serves, as `<METHOD> <path>`; `:name` is one path segment. */
 export const LOCAL_ROUTES = [
@@ -59,6 +59,7 @@ export const LOCAL_ROUTES = [
   "PATCH /api/local/chats/:id",
   "DELETE /api/local/chats/:id",
   "POST /api/local/chats/:id/messages",
+  "POST /api/local/chats/:id/voice",
   "GET /api/local/chats/:id/live",
   "POST /api/local/chats/:id/stop",
   "POST /api/local/chats/:id/participants",
@@ -126,7 +127,7 @@ export interface ErrorBody {
 }
 
 /** A body or response that is not JSON: an upload's bytes, a job's NDJSON events, a log's text. */
-export interface Raw<Kind extends "image" | "ndjson" | "text"> {
+export interface Raw<Kind extends "image" | "audio" | "ndjson" | "text"> {
   readonly raw: Kind;
 }
 
@@ -919,12 +920,14 @@ export interface LocalApi {
   "PATCH /api/local/chats/:id": Endpoint<ChatUpdateRequest, Ok>;
   "DELETE /api/local/chats/:id": Endpoint<undefined, Ok>;
   "POST /api/local/chats/:id/messages": Endpoint<ChatMessageRequest, Raw<"ndjson">>;
+  "POST /api/local/chats/:id/voice": Endpoint<Raw<"audio">, Raw<"ndjson">, ChatVoiceQuery>;
   /** A 204 with no body while no turn runs. */
   "GET /api/local/chats/:id/live": Endpoint<undefined, Raw<"ndjson">>;
   /** A 204 with no body, once the turn has stopped and what it said is stored. */
   "POST /api/local/chats/:id/stop": Endpoint<undefined, undefined>;
   "POST /api/local/chats/:id/participants": Endpoint<ChatParticipantsRequest, Ok>;
-  "GET /api/local/chats/:id/files/:name": Endpoint<undefined, Raw<"image">>;
+  /** Audio answers Range requests, so a player can seek. */
+  "GET /api/local/chats/:id/files/:name": Endpoint<undefined, Raw<"image" | "audio">>;
 }
 
 /**
@@ -948,6 +951,12 @@ export interface ChatContents {
    * bring is stored after the turn, and each leaves the list once it is.
    */
   readonly lateTools: readonly string[];
+  /**
+   * Why the viewer can't send a voice message now, in English: the hearing role of the chat's first
+   * persona, which hears them, has no key or can't be resolved, and POST voice answers 409
+   * missing-key with this message. null when it can hear one.
+   */
+  readonly hearingRefusal: string | null;
 }
 
 export interface ChatReadQuery {
@@ -966,11 +975,28 @@ export interface ChatMessageRequest {
 }
 
 /**
- * PATCH chats/:id, one field at a time: a `title` of 1 to 80 characters on one line, or the
- * `chainLimit` of persona-to-persona hops after each viewer line, 0 to 6, kept as a `settings`
- * event.
+ * POST chats/:id/voice: a recorded voice message as the body, of type audio/webm, audio/ogg,
+ * audio/mp4 or audio/mpeg, codecs and all, at most 10 MB, else 415 or 413. As POST messages, it
+ * stops a reply still running; the clip is then heard through the hearing role of the chat's first
+ * persona, stored with its transcript, which is empty when nothing was heard, and answered. The
+ * stream is POST messages'. 409 missing-key while that role can't hear (ChatContents'
+ * `hearingRefusal`) or a mind has no key; 502 upstream-failed, with nothing stored, when the
+ * hearing provider fails.
  */
-export type ChatUpdateRequest = { readonly title: string } | { readonly chainLimit: number };
+export interface ChatVoiceQuery {
+  /** The clip's length by the recorder's clock, a whole number of ms up to 120000 (2 minutes). */
+  readonly durationMs: number;
+}
+
+/**
+ * PATCH chats/:id, one field at a time: a `title` of 1 to 80 characters on one line, the
+ * `chainLimit` of persona-to-persona hops after each viewer line, 0 to 6, or the `replyMode` that
+ * overrides every persona's own; each setting is kept as a `settings` event.
+ */
+export type ChatUpdateRequest =
+  | { readonly title: string }
+  | { readonly chainLimit: number }
+  | { readonly replyMode: ReplyMode };
 
 /**
  * POST chats/:id/participants: personas to add, who aren't in the chat, and to remove, who are,

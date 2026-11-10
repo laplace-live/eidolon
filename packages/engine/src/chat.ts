@@ -1,6 +1,6 @@
-// A chat's answer to the viewer's line: the director chooses who answers, each answers in turn,
-// then the director is asked again about the last persona line, each hop against a higher bar,
-// until no one is chosen or the chat's chain limit is reached.
+// A chat's answer to the viewer's line: the director chooses who answers and whether in text or
+// voice, each answers in turn, then the director is asked again about the last persona line, each
+// hop against a higher bar, until no one is chosen or the chat's chain limit is reached.
 import type { UserContext } from "@eidolon/access";
 import {
   type ChatEvent,
@@ -21,6 +21,7 @@ import {
 import { withUsageScope } from "@eidolon/providers";
 import { runTurn } from "./turn.ts";
 import type { EngineDeps, LateTools, TurnOutput, TurnRequest } from "./types.ts";
+import { batchSpeech, replyModeFor, withUnheard } from "./voice.ts";
 
 type ChatLog = TurnRequest["chat"];
 
@@ -60,7 +61,7 @@ function defaultDirector(): Director {
 
 /** The chat's lines through seq `last`, oldest first, as the director reads them. */
 function linesThrough(events: readonly ChatEvent[], last: number): DirectorLine[] {
-  return events.flatMap((event) =>
+  return withUnheard(events).flatMap((event) =>
     event.type === "message" && event.text !== "" && event.seq <= last
       ? [
           {
@@ -86,19 +87,24 @@ function spokenAfter(events: readonly ChatEvent[], line: number): number | null 
 }
 
 /**
- * The chat's answer to the viewer's line at seq `request.after`, with the personas and chain limit
- * the chat had then. The caller stores each `events` and `decision` output before taking the
- * next. A chat of one persona makes no decisions request and never chains. An abort ends it
- * quietly, once the running turn has given what it said.
+ * The chat's answer to the viewer's line at seq `request.after`, with the personas, reply modes
+ * and chain limit the chat had then. The caller stores each `events` and `decision` output before
+ * taking the next. A chat of one persona never chains, and asks the director only whether to
+ * answer in voice, when her reply mode is auto. An abort ends it quietly, once the running turn
+ * has given what it said.
  */
 export async function* runChat(request: ChatRequest, deps: ChatDeps): AsyncGenerator<ChatOutput> {
   const { signal } = request;
   const { header } = request.chat;
   const director = deps.director ?? defaultDirector();
+  const speech = deps.speech ?? batchSpeech;
   const participants: DirectorParticipant[] = summarize(
     header,
     request.chat.events,
-  ).participants.map((id) => directorParticipant(id));
+  ).participants.map((id) => ({
+    ...directorParticipant(id),
+    replyMode: replyModeFor(request.chat, id, speech),
+  }));
   const limit = participants.length > 1 ? chainLimitOf(request.chat.events) : 0;
   let log = request.chat;
   let line = request.after;
@@ -128,7 +134,7 @@ export async function* runChat(request: ChatRequest, deps: ChatDeps): AsyncGener
       source: decision.source,
       ...(Object.keys(decision.scores).length > 0 ? { scores: { ...decision.scores } } : {}),
     };
-    for (const { persona } of decision.replies) {
+    for (const { persona, mode } of decision.replies) {
       if (signal.aborted) return;
       log = await request.read();
       yield* runTurn(
@@ -137,6 +143,7 @@ export async function* runChat(request: ChatRequest, deps: ChatDeps): AsyncGener
           persona,
           viewer: request.viewer,
           signal,
+          mode,
           ...(request.late ? { late: request.late } : {}),
         },
         deps,

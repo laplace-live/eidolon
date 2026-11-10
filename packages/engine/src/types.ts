@@ -9,6 +9,7 @@ import type {
 } from "@eidolon/chat";
 import type { GroupMember } from "@eidolon/context";
 import type { ContextProvider, LlmTool, ToolSchema, TurnGate } from "@eidolon/core";
+import type { AudioClip, Speech, Transcript } from "@eidolon/providers/speech-batch";
 
 export interface MindRequest {
   readonly system: string;
@@ -48,6 +49,11 @@ export interface TurnRequest {
   readonly signal: AbortSignal;
   /** Without it, an interruption cancels every tool, `cancelOnInterruption` or not. */
   readonly late?: LateTools;
+  /**
+   * "voice": her parts' voice variant, with her voice-style tool and its hint, and her finished
+   * reply spoken by her voice role and stored as a voice message. Default "text".
+   */
+  readonly mode?: "text" | "voice";
 }
 
 /** Takes a tool that runs on (`cancelOnInterruption: false`) when its turn is interrupted. */
@@ -78,23 +84,44 @@ export interface PersonaParts {
   memories(): Promise<readonly { readonly memory?: unknown }[]>;
 }
 
+export interface PartsOptions {
+  /** The chat's other personas, whom her system instruction names. */
+  readonly others?: readonly GroupMember[];
+  /** The voice variant: her voice-style tool, and its hint in her system instruction. */
+  readonly voice?: boolean;
+}
+
+/** A persona's whole-message speech, through the roles of the persona whose scope it runs in. */
+export interface SpeechDeps {
+  /** Whether her voice role can speak a voice message: its provider has batch synthesis and a key. */
+  canSpeak(): boolean;
+  /** `text` in her voice role's voice, or in `voice` for this message alone. */
+  synthesize(
+    text: string,
+    options: { readonly voice?: string; readonly signal: AbortSignal },
+  ): Promise<Speech>;
+  /** What `clip` says, heard by her hearing role. */
+  transcribe(clip: AudioClip, options: { readonly signal: AbortSignal }): Promise<Transcript>;
+}
+
 /** Everything a turn takes from outside, so tests can stand in for any of it. */
 export interface EngineDeps {
   /** The mind of the persona whose scope it is called in. */
   createMind(): Mind;
   /**
    * Her parts in `chat`: its providers keep what they saw of it, as a call's do, and ones opened on
-   * a chat under way take up from its log what they had kept. `others` are the chat's other
-   * personas, whom her system instruction names.
+   * a chat under way take up from its log what they had kept.
    */
   parts(
     persona: ParticipantId,
     viewer: UserContext,
     chat: TurnRequest["chat"],
-    others?: readonly GroupMember[],
+    options?: PartsOptions,
   ): Promise<PersonaParts>;
   /** Stores a file in the turn's chat. */
   saveAttachment(bytes: Uint8Array, mime: string): Promise<Attachment>;
   fetchImage(url: string, signal: AbortSignal): Promise<{ bytes: Uint8Array; mime: string }>;
   newId(): string;
+  /** Default: `@eidolon/providers/speech-batch` on her voice and hearing roles. */
+  readonly speech?: SpeechDeps;
 }

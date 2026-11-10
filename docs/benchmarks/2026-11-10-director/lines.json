@@ -64,6 +64,7 @@
    "interested": ["lumi"],
    "responders": ["lumi"],
    "invites_reply": true,
+   "voice_moment": false,
    "note": "A Latin name, mentioned in lower case."
   },
   {
@@ -138,7 +139,8 @@
    "addressed": ["milky-green"],
    "interested": ["milky-green"],
    "responders": ["milky-green"],
-   "invites_reply": true
+   "invites_reply": true,
+   "voice_moment": false
   },
   {
    "id": "mention-10",
@@ -152,6 +154,7 @@
    "interested": ["milky-green"],
    "responders": ["milky-green"],
    "invites_reply": true,
+   "voice_moment": true,
    "note": "坚果 is her cat, not a participant, so nothing parses as a mention."
   },
   {
@@ -207,7 +210,8 @@
    "addressed": ["xiaoman"],
    "interested": ["xiaoman"],
    "responders": ["xiaoman"],
-   "invites_reply": true
+   "invites_reply": true,
+   "voice_moment": false
   },
   {
    "id": "name-05",
@@ -245,11 +249,12 @@
    "id": "name-08",
    "kind": "name",
    "participants": ["milky-green", "kuro", "lumi"],
-   "latest": ["viewer", "Lumi今天的妆好好看！"],
+   "latest": ["viewer", "Lumi今天的妆好好看！", "voice"],
    "addressed": ["lumi"],
    "interested": ["lumi"],
    "responders": ["lumi"],
-   "invites_reply": true
+   "invites_reply": true,
+   "voice_moment": true
   },
   {
    "id": "name-09",
@@ -259,7 +264,8 @@
    "addressed": ["kuro"],
    "interested": ["kuro"],
    "responders": ["kuro"],
-   "invites_reply": true
+   "invites_reply": true,
+   "voice_moment": true
   },
   {
    "id": "name-10",
@@ -312,6 +318,7 @@
    "interested": ["lumi"],
    "responders": ["lumi"],
    "invites_reply": true,
+   "voice_moment": true,
    "note": "Answers Lumi's offer, not the line just before it."
   },
   {
@@ -342,7 +349,8 @@
    "addressed": ["milky-green"],
    "interested": ["milky-green"],
    "responders": ["milky-green"],
-   "invites_reply": true
+   "invites_reply": true,
+   "voice_moment": true
   },
   {
    "id": "reply-05",
@@ -456,11 +464,12 @@
    "id": "interest-03",
    "kind": "interest",
    "participants": ["lumi", "xiaoman"],
-   "latest": ["viewer", "红烧肉怎么做才不腻啊"],
+   "latest": ["viewer", "红烧肉怎么做才不腻啊", "voice"],
    "addressed": [],
    "interested": ["xiaoman"],
    "responders": ["xiaoman"],
    "invites_reply": true,
+   "voice_moment": false,
    "note": "Squarely the quiet cook's subject, beside the most talkative persona."
   },
   {
@@ -477,11 +486,12 @@
    "id": "interest-05",
    "kind": "interest",
    "participants": ["milky-green", "kuro", "lumi", "xiaoman"],
-   "latest": ["viewer", "我想养只猫，布偶和英短哪个好养"],
+   "latest": ["viewer", "我想养只猫，布偶和英短哪个好养", "voice"],
    "addressed": [],
    "interested": ["milky-green"],
    "responders": ["milky-green"],
    "invites_reply": true,
+   "voice_moment": false,
    "note": "奶绿 has no chat.interests; her summary's cat carries it."
   },
   {
@@ -502,7 +512,8 @@
    "addressed": [],
    "interested": ["xiaoman"],
    "responders": ["xiaoman"],
-   "invites_reply": true
+   "invites_reply": true,
+   "voice_moment": false
   },
   {
    "id": "interest-08",
@@ -543,6 +554,7 @@
    "responders": ["xiaoman"],
    "maybe": ["milky-green", "kuro", "lumi"],
    "invites_reply": true,
+   "voice_moment": false,
    "note": "你们 asks the room; the science-fiction fan should be among the replies."
   },
   {
@@ -559,11 +571,12 @@
    "id": "interest-13",
    "kind": "interest",
    "participants": ["kuro", "xiaoman"],
-   "latest": ["viewer", "凌晨三点了还睡不着，有人陪我聊会儿吗"],
+   "latest": ["viewer", "凌晨三点了还睡不着，有人陪我聊会儿吗", "voice"],
    "interested": ["kuro"],
    "responders": ["kuro"],
    "maybe": ["xiaoman"],
-   "invites_reply": true
+   "invites_reply": true,
+   "voice_moment": true
   },
   {
    "id": "interest-14",
@@ -574,7 +587,8 @@
    "interested": ["lumi", "xiaoman"],
    "responders": ["lumi"],
    "maybe": ["xiaoman"],
-   "invites_reply": true
+   "invites_reply": true,
+   "voice_moment": false
   },
   {
    "id": "interest-15",
@@ -616,6 +630,7 @@
    "responders": [],
    "maybe": ["milky-green", "kuro", "lumi"],
    "invites_reply": true,
+   "voice_moment": true,
    "note": "No one's subject, so any one of them may answer."
   },
   {
@@ -638,18 +653,20 @@
    "interested": [],
    "responders": [],
    "maybe": ["milky-green", "kuro"],
-   "invites_reply": true
+   "invites_reply": true,
+   "voice_moment": true
   },
   {
    "id": "off-topic-04",
    "kind": "off-topic",
    "participants": ["milky-green", "kuro", "lumi", "xiaoman"],
-   "latest": ["viewer", "我们公司今天发年终奖了！"],
+   "latest": ["viewer", "我们公司今天发年终奖了！", "voice"],
    "addressed": [],
    "interested": [],
    "responders": [],
    "maybe": ["milky-green", "kuro", "lumi", "xiaoman"],
-   "invites_reply": true
+   "invites_reply": true,
+   "voice_moment": true
   },
   {
    "id": "off-topic-05",
@@ -666,12 +683,13 @@
    "id": "off-topic-06",
    "kind": "off-topic",
    "participants": ["milky-green", "xiaoman"],
-   "latest": ["viewer", "明天要早起去面试，好紧张"],
+   "latest": ["viewer", "明天要早起去面试，好紧张", "voice"],
    "addressed": [],
    "interested": [],
    "responders": [],
    "maybe": ["milky-green", "xiaoman"],
-   "invites_reply": true
+   "invites_reply": true,
+   "voice_moment": true
   },
   {
    "id": "off-topic-07",
@@ -696,7 +714,8 @@
    "addressed": ["kuro"],
    "interested": [],
    "responders": ["kuro"],
-   "invites_reply": false
+   "invites_reply": false,
+   "voice_moment": true
   },
   {
    "id": "closing-02",
@@ -799,7 +818,8 @@
    "interested": [],
    "responders": [],
    "maybe": ["milky-green", "lumi", "xiaoman"],
-   "invites_reply": true
+   "invites_reply": true,
+   "voice_moment": true
   },
   {
    "id": "persona-01",
@@ -858,6 +878,7 @@
    "interested": [],
    "responders": ["lumi"],
    "invites_reply": true,
+   "voice_moment": true,
    "note": "A tease."
   },
   {
@@ -963,7 +984,8 @@
    "addressed": ["xiaoman"],
    "interested": ["xiaoman"],
    "responders": ["xiaoman"],
-   "invites_reply": true
+   "invites_reply": true,
+   "voice_moment": false
   },
   {
    "id": "persona-14",
@@ -1073,7 +1095,8 @@
    "addressed": ["xiaoman"],
    "interested": ["xiaoman"],
    "responders": ["xiaoman"],
-   "invites_reply": true
+   "invites_reply": true,
+   "voice_moment": false
   },
   {
    "id": "persona-23",
@@ -1145,7 +1168,8 @@
    "addressed": ["kuro"],
    "interested": [],
    "responders": ["kuro"],
-   "invites_reply": true
+   "invites_reply": true,
+   "voice_moment": true
   },
   {
    "id": "persona-29",

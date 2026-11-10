@@ -49,7 +49,7 @@ const SECTION_LABELS: Readonly<Record<SectionId, MessageDescriptor>> = {
   prompt: msg`Prompt`,
   voice: msg`Voice`,
   models: msg`Mind`,
-  chat: msg`Group Chats`,
+  chat: msg`Chats`,
   knowledge: msg`Knowledge`,
   videos: msg`Videos`,
   glossary: msg`Glossary`,

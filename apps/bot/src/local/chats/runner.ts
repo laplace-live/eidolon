@@ -1,15 +1,18 @@
 // The local app's chats: one JSONL store in the data home, and per chat one reply at a time: a
-// greeting, or a viewer line's answer, which may chain persona to persona. A reply runs to its end
-// whether or not anyone still reads it; only stop, delete or shutdown abort one.
+// greeting, or the answer to a viewer's line, typed or spoken, which may chain persona to persona.
+// A reply runs to its end whether or not anyone still reads it; only stop, delete or shutdown abort
+// one.
 import { join } from "node:path";
 import {
   CHAT_FORMAT,
   type ChatEvent,
   type ChatEventDraft,
   type ChatHeader,
+  ChatStoreError,
   type ChatSummary,
   MAX_PARTICIPANTS,
   type ParticipantId,
+  type ReplyMode,
   stampEvents,
 } from "@eidolon/chat";
 import { JsonlChatStore } from "@eidolon/chat/jsonl";
@@ -19,15 +22,21 @@ import {
   type ChatRequest,
   defaultEngineDeps,
   type EngineDeps,
+  hearVoiceMessage,
   type LateTools,
+  replyModeFor,
   runChat,
   runTurn,
   type TurnOutput,
   type TurnRequest,
 } from "@eidolon/engine";
+import type { AudioClip } from "@eidolon/providers/speech-batch";
 import type { ChatContents } from "../api.ts";
 import { localViewer } from "../identity.ts";
+import { HearingFailed, hearingRefusal } from "./hearing.ts";
 import { LiveTurn } from "./live.ts";
+
+type MessageDraft = Extract<ChatEventDraft, { readonly type: "message" }>;
 
 /** One persona's turn, saving its files into the turn's chat. */
 export type ChatTurn = (
@@ -41,6 +50,12 @@ export type ChatAnswer = (
   saveAttachment: EngineDeps["saveAttachment"],
 ) => AsyncIterable<ChatOutput>;
 
+/** A voice message of the viewer's, heard and saved into the chat, as the message to store. */
+export type ChatHear = (
+  request: Parameters<typeof hearVoiceMessage>[0],
+  saveAttachment: EngineDeps["saveAttachment"],
+) => Promise<MessageDraft>;
+
 export interface ChatRunnerOptions {
   /** Default: chats/ in the data home. */
   readonly root?: string;
@@ -48,6 +63,8 @@ export interface ChatRunnerOptions {
   readonly turn?: ChatTurn;
   /** Default: the engine's. */
   readonly answer?: ChatAnswer;
+  /** Default: the engine's. */
+  readonly hear?: ChatHear;
 }
 
 /** How long shutdown waits for aborted replies to store what they said. */
@@ -58,6 +75,9 @@ const engineTurn: ChatTurn = (request, saveAttachment) =>
 
 const engineAnswer: ChatAnswer = (request, saveAttachment) =>
   runChat(request, defaultEngineDeps({ saveAttachment }));
+
+const engineHear: ChatHear = (request, saveAttachment) =>
+  hearVoiceMessage(request, defaultEngineDeps({ saveAttachment }));
 
 interface Chat {
   /** Sends, participant changes and deletes, one at a time. */
@@ -83,6 +103,7 @@ export class ChatRunner {
   readonly store: JsonlChatStore;
   readonly #turn: ChatTurn;
   readonly #answer: ChatAnswer;
+  readonly #hear: ChatHear;
   readonly #chats = new Map<string, Chat>();
 
   constructor(options: ChatRunnerOptions = {}) {
@@ -91,6 +112,7 @@ export class ChatRunner {
     });
     this.#turn = options.turn ?? engineTurn;
     this.#answer = options.answer ?? engineAnswer;
+    this.#hear = options.hear ?? engineHear;
   }
 
   list(): Promise<ChatSummary[]> {
@@ -100,7 +122,9 @@ export class ChatRunner {
   async read(id: string, afterSeq?: number): Promise<ChatContents> {
     // Taken first: a tool leaves the list only once what it brought is stored.
     const lateTools = [...(this.#chats.get(id)?.late ?? [])];
-    return { ...(await this.store.read(id, { afterSeq })), lateTools };
+    const contents = await this.store.read(id, { afterSeq });
+    const refusal = hearingRefusal(await this.participants(id));
+    return { ...contents, lateTools, hearingRefusal: refusal };
   }
 
   /**
@@ -128,7 +152,9 @@ export class ChatRunner {
       void this.#run(header.id, chat, live, persona, async (late, save) => {
         const log = await this.store.read(header.id);
         const viewer = localViewer();
-        return this.#turn({ chat: log, persona, viewer, kickoff: true, signal, late }, save);
+        // With no line to weigh, an auto greeting is text.
+        const mode = replyModeFor(log, persona) === "voice" ? "voice" : "text";
+        return this.#turn({ chat: log, persona, viewer, kickoff: true, signal, late, mode }, save);
       });
     }
     return header.id;
@@ -182,26 +208,29 @@ export class ChatRunner {
     const chat = this.#chat(id);
     return this.#serial(chat, async () => {
       await this.#interrupt(chat);
-      const message = await this.#append(id, chat, [
-        { type: "message", id: Bun.randomUUIDv7(), speaker: { kind: "user" }, text },
-      ]);
-      const after = (message[0] as ChatEvent).seq;
-      const live = new LiveTurn();
-      chat.live = live;
-      live.push({ type: "events", events: message });
-      const { signal } = live.controller;
-      void this.#run(id, chat, live, null, async (late, save) => {
-        const request: ChatRequest = {
-          chat: await this.store.read(id),
-          read: () => this.store.read(id),
-          viewer: localViewer(),
-          after,
-          signal,
-          late,
-        };
-        return this.#answer(request, save);
+      return this.#answerLine(id, chat, {
+        type: "message",
+        id: Bun.randomUUIDv7(),
+        speaker: { kind: "user" },
+        text,
       });
-      return live;
+    });
+  }
+
+  /**
+   * As `send`, for a voice message: once the running reply has stopped, `clip` is heard through the
+   * hearing role of the chat's first persona, then stored with its transcript, which may be empty.
+   * One that can't be heard rejects with HearingFailed, and nothing of it is stored.
+   */
+  sendVoice(id: string, clip: AudioClip): Promise<LiveTurn> {
+    const chat = this.#chat(id);
+    return this.#serial(chat, async () => {
+      await this.#interrupt(chat);
+      const request = { chat: await this.store.read(id), clip, signal: chat.cancel.signal };
+      const message = await this.#hear(request, this.#saver(id)).catch((error: unknown) => {
+        throw error instanceof ChatStoreError ? error : new HearingFailed(error);
+      });
+      return this.#answerLine(id, chat, message);
     });
   }
 
@@ -223,9 +252,12 @@ export class ChatRunner {
     await this.#append(id, this.#chat(id), [{ type: "title", title }]);
   }
 
-  /** From the next viewer line on; a reply already running keeps the limit it began with. */
-  async setChainLimit(id: string, chainLimit: number): Promise<void> {
-    await this.#append(id, this.#chat(id), [{ type: "settings", chainLimit }]);
+  /** The chat's chain limit or reply mode, as a `settings` event. */
+  async changeSettings(
+    id: string,
+    change: { readonly chainLimit: number } | { readonly replyMode: ReplyMode },
+  ): Promise<void> {
+    await this.#append(id, this.#chat(id), [{ type: "settings", ...change }]);
   }
 
   /** Stops any reply, then removes the chat's folder. */
@@ -279,6 +311,11 @@ export class ChatRunner {
     return chat;
   }
 
+  /** Saves a file into chat `id`'s files/. */
+  #saver(id: string): EngineDeps["saveAttachment"] {
+    return (bytes, mime) => this.store.saveFile(id, bytes, mime);
+  }
+
   #serial<T>(chat: Chat, task: () => Promise<T>): Promise<T> {
     const result = chat.queue.then(task);
     chat.queue = result.catch(() => {});
@@ -301,6 +338,31 @@ export class ChatRunner {
     });
     chat.appends = result.catch(() => {});
     return result;
+  }
+
+  /**
+   * Stores the viewer's `message` and starts the answer to it: the director's decisions and the
+   * turns they choose. Its stream starts with the message.
+   */
+  async #answerLine(id: string, chat: Chat, message: MessageDraft): Promise<LiveTurn> {
+    const stored = await this.#append(id, chat, [message]);
+    const after = (stored[0] as ChatEvent).seq;
+    const live = new LiveTurn();
+    chat.live = live;
+    live.push({ type: "events", events: stored });
+    const { signal } = live.controller;
+    void this.#run(id, chat, live, null, async (late, save) => {
+      const request: ChatRequest = {
+        chat: await this.store.read(id),
+        read: () => this.store.read(id),
+        viewer: localViewer(),
+        after,
+        signal,
+        late,
+      };
+      return this.#answer(request, save);
+    });
+    return live;
   }
 
   /** Resolves false when no turn was running. */
@@ -331,7 +393,7 @@ export class ChatRunner {
     try {
       const outputs = await start(
         { signal: chat.cancel.signal, add: (name, events) => this.#late(id, chat, name, events) },
-        (bytes, mime) => this.store.saveFile(id, bytes, mime),
+        this.#saver(id),
       );
       for await (const output of outputs) {
         if (output.type === "events" || output.type === "decision") {
