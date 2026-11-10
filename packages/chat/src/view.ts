@@ -1,4 +1,5 @@
 import type { ChatEvent, ChatEventOf, ChatHeader, ParticipantId } from "./format.ts";
+import { summarize } from "./summary.ts";
 
 /** The lines a persona's view keeps; older ones are Mem0's to recall. */
 export const CHAT_WINDOW_MESSAGES = 60;
@@ -20,6 +21,8 @@ export interface ViewOptions {
   readonly windowMessages: number;
   /** The name another persona's lines are prefixed with. */
   nameOf(id: ParticipantId): string;
+  /** The viewer's lines are prefixed with it while the chat has two or more personas; 观众 unset. */
+  readonly viewerName?: string;
 }
 
 type Line = ChatEventOf<"message"> | ChatEventOf<"kickoff">;
@@ -74,11 +77,12 @@ export function toolCallMessages(
 
 /**
  * Persona `id`'s LLM messages, without a system message: what a call with her would have built.
- * Her lines are `assistant` and the viewer's `user`; a run of other personas' lines becomes one
- * `user` message of `名字：text` lines. Her kickoff is a `user` message, each tool call an
- * `assistant.tool_calls` message followed by its result, and each context block is spliced in at
- * its recorded position in seq order, so blocks accumulate as they do in a call, until a
- * `context-removed` takes one out. What belongs to another persona is left out.
+ * Her lines are `assistant` and the viewer's `user`, as `名字：text` while the chat has two or more
+ * personas; a run of other personas' lines becomes one `user` message of `名字：text` lines. Her
+ * kickoff is a `user` message, each tool call an `assistant.tool_calls` message followed by its
+ * result, and each context block is spliced in at its recorded position in seq order, so blocks
+ * accumulate as they do in a call, until a `context-removed` takes one out. What belongs to another
+ * persona is left out.
  */
 export function viewOf(
   header: ChatHeader,
@@ -91,12 +95,14 @@ export function viewOf(
 
 /** viewOf, with the seq of the `context` event each of her blocks in it came from. */
 export function viewWithBlocks(
-  _header: ChatHeader,
+  header: ChatHeader,
   events: readonly ChatEvent[],
   id: ParticipantId,
   options: ViewOptions,
 ): { messages: ViewMessage[]; blocks: Map<ViewMessage, number> } {
   const start = windowStart(events, id, options.windowMessages);
+  const viewer =
+    summarize(header, events).participants.length > 1 ? `${options.viewerName || "观众"}：` : "";
   const results = new Map<string, ChatEventOf<"tool-result">>();
   for (const event of events) {
     if (event.type === "tool-result" && event.persona === id) results.set(event.callId, event);
@@ -112,7 +118,7 @@ export function viewWithBlocks(
         if (event.text === "") break;
         const { speaker } = event;
         if (speaker.kind === "user") {
-          view.push({ role: "user", content: event.text });
+          view.push({ role: "user", content: `${viewer}${event.text}` });
         } else if (speaker.id === id) {
           view.push({ role: "assistant", content: event.text });
         } else {

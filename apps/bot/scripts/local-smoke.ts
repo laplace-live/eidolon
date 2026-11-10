@@ -1,8 +1,9 @@
 // A browser walk through the local web app on a throwaway data home: sign-in, the wizard's keys step
 // in English and 简体中文, saved keys, an embeddings account added and picked in Settings, a saved
-// prompt, a facts index built through the studio, and a text chat from greeting to delete. The keys
-// are fake, so the providers refuse them for free, and the embeddings and the chat's replies come
-// from a fake server, so nothing is billed. --call instead places a real call from the call page
+// prompt, a facts index built through the studio, a text chat from greeting to delete, and a group
+// chat with a second persona. The keys are fake, so the providers refuse them for free, and the
+// embeddings, the chats' replies and the director's decisions come from a fake server, so nothing is
+// billed. --call instead places a real call from the call page
 // with the .env's keys, which bills them.
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import {
@@ -199,6 +200,22 @@ const CHAT_MESSAGE = "今天过得怎么样？";
 const REPLY = ["还不错哦，", "[laughing] 刚刚在看猫猫视频。"] as const;
 const REPLY_HOLD_MS = 2000;
 const CHAT_TITLE = "Local smoke chat";
+/** The group chat's second persona, made from no template. */
+const SECOND = {
+  id: "local-smoke-kuro",
+  name: "黑川茶茶",
+  shortName: "茶茶",
+  summary: "A horror-game streamer who stays up late",
+} as const;
+/** The OpenRouter account the director's Decisions requests reach the fake server through. */
+const DECISIONS_ACCOUNT_NAME = "Local smoke decisions";
+/** The viewer's group line after the mention the composer completes. */
+const GROUP_TEXT = "你今晚玩什么？";
+const GROUP_MESSAGE = `@${SECOND.shortName} ${GROUP_TEXT}`;
+/** The second persona's answer, which invites the first. */
+const SECOND_REPLY = "在玩恐怖游戏呢，奶绿要一起吗？";
+/** The first persona's answer to her, a hop later. */
+const HOP_REPLY = "不要不要，我最怕黑了！";
 
 interface Check {
   readonly name: string;
@@ -264,7 +281,38 @@ function fakeVector(text: string, dimensions: number): number[] {
 interface ChatRequest {
   readonly model?: unknown;
   readonly stream?: unknown;
+  readonly stop?: unknown;
   readonly messages?: readonly { readonly role?: unknown; readonly content?: unknown }[];
+}
+
+/** One Decisions request the fake server took, as far as the walk reads it. */
+interface DecisionsRequest {
+  readonly state?: { readonly latest?: { readonly speaker?: unknown; readonly text?: unknown } };
+  readonly questions?: Readonly<Record<string, unknown>>;
+}
+
+/** Whether a user message of the request holds `text`. */
+function heard(request: ChatRequest, text: string): boolean {
+  return (request.messages ?? []).some(
+    (message) => message.role === "user" && String(message.content).includes(text),
+  );
+}
+
+/**
+ * The director's answer: SECOND_REPLY is addressed to the first persona and invites a reply, and
+ * every other noul is 0, so the viewer's line goes to whoever it mentions and the chain then ends.
+ */
+function decisionsAnswer(request: DecisionsRequest): Response {
+  const invited = request.state?.latest?.text === SECOND_REPLY;
+  const noul = (key: string) =>
+    invited && (key === "invites_reply" || key === `addressed_${PERSONA}`) ? 0.9 : 0;
+  return Response.json({
+    model: "fake-decider",
+    answers: Object.fromEntries(
+      Object.keys(request.questions ?? {}).map((key) => [key, { type: "noul", noul: noul(key) }]),
+    ),
+    usage: { input_tokens: 0, output_tokens: 0, cost: 0 },
+  });
 }
 
 /** An OpenAI chat completion stream of `texts`, each after the one before by `holdMs`. */
@@ -300,8 +348,9 @@ function completionStream(texts: readonly string[], holdMs: number): Response {
 }
 
 /**
- * An OpenAI-compatible server that answers the fake key only: its embeddings, its model list, and
- * streaming chat completions, which greet a kickoff and answer CHAT_MESSAGE.
+ * An OpenAI-compatible server that answers the fake key only: its embeddings, its model list,
+ * streaming chat completions, which greet a kickoff and answer CHAT_MESSAGE and the group's lines,
+ * and OpenRouter's Decisions route beside its v1 API.
  */
 function fakeEmbeddings(key: string) {
   const seen = {
@@ -311,6 +360,7 @@ function fakeEmbeddings(key: string) {
     listed: 0,
     models: new Set<string>(),
     chats: [] as ChatRequest[],
+    decisions: [] as DecisionsRequest[],
   };
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -320,7 +370,8 @@ function fakeEmbeddings(key: string) {
       if (
         route !== "POST /v1/embeddings" &&
         route !== "GET /v1/models" &&
-        route !== "POST /v1/chat/completions"
+        route !== "POST /v1/chat/completions" &&
+        route !== "POST /alpha/decisions"
       ) {
         return new Response(null, { status: 404 });
       }
@@ -332,9 +383,17 @@ function fakeEmbeddings(key: string) {
         const body = (await request.json()) as ChatRequest;
         seen.chats.push(body);
         const last = body.messages?.at(-1);
-        return last?.role === "user" && last.content === CHAT_MESSAGE
-          ? completionStream(REPLY, REPLY_HOLD_MS)
-          : completionStream([GREETING], 0);
+        if (last?.role === "user" && last.content === CHAT_MESSAGE) {
+          return completionStream(REPLY, REPLY_HOLD_MS);
+        }
+        if (heard(body, SECOND_REPLY)) return completionStream([HOP_REPLY], 0);
+        if (heard(body, GROUP_MESSAGE)) return completionStream([SECOND_REPLY], 0);
+        return completionStream([GREETING], 0);
+      }
+      if (route === "POST /alpha/decisions") {
+        const body = (await request.json()) as DecisionsRequest;
+        seen.decisions.push(body);
+        return decisionsAnswer(body);
       }
       if (route === "GET /v1/models") {
         seen.listed++;
@@ -1006,9 +1065,11 @@ interface LoggedEvent {
   readonly seq: number;
   readonly type: string;
   readonly text?: string;
-  readonly speaker?: { readonly kind: string };
+  readonly speaker?: { readonly kind: string; readonly id?: string };
   readonly after?: number;
   readonly source?: string;
+  readonly replies?: readonly { readonly persona: string }[];
+  readonly scores?: Readonly<Record<string, number>>;
   readonly title?: string;
 }
 
@@ -1065,11 +1126,12 @@ async function chatWalk(walk: Walk): Promise<void> {
     .getByRole("button", { name: t("en", "New Chat"), exact: true })
     .first()
     .click();
+  await page.getByRole("menuitemcheckbox").filter({ hasText: persona.name }).click();
   const created = page.waitForResponse(
     (response) =>
       response.request().method() === "POST" && response.url() === `${origin}/api/local/chats`,
   );
-  await page.getByRole("menuitem").filter({ hasText: persona.name }).click();
+  await page.getByRole("menuitem", { name: t("en", "Start Chat"), exact: true }).click();
   const createStatus = (await created).status();
   await page.waitForURL(/\/chats\/[0-9a-f-]{36}$/);
   const id = new URL(page.url()).pathname.split("/").at(-1) as string;
@@ -1219,6 +1281,229 @@ async function chatWalk(walk: Walk): Promise<void> {
   );
 }
 
+/** The short name over the run of lines that `text` is in, as the page labels a group's lines. */
+async function speakerShown(
+  log: Locator,
+  text: string,
+  names: readonly string[],
+): Promise<string | null> {
+  return log.evaluate(
+    (root, [text, names]) => {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let element: Element | null = null;
+      for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+        if (node.textContent?.includes(text)) {
+          element = node.parentElement;
+          break;
+        }
+      }
+      // The run's label is hidden from a screen reader, whom her bubble names instead.
+      for (; element !== null && element !== root; element = element.parentElement) {
+        const labels = [...element.querySelectorAll("[aria-hidden='true']")]
+          .map((label) => label.textContent?.trim() ?? "")
+          .filter((label) => names.includes(label));
+        if (labels.length > 0) return labels.length === 1 ? (labels[0] as string) : null;
+      }
+      return null;
+    },
+    [text, names] as const,
+  );
+}
+
+/** The system message of a request, or "". */
+function systemOf(request: ChatRequest | undefined): string {
+  const first = request?.messages?.[0];
+  return first?.role === "system" ? String(first.content) : "";
+}
+
+/**
+ * A group chat of her and a persona made from no template, with the director on the fake server:
+ * New Chat with both and no greeting, an @-mention the composer completes, the second persona's
+ * answer, the first's answer to her a hop later, and each line under its persona's name.
+ */
+async function groupChatWalk(walk: Walk): Promise<void> {
+  const { page, checks, origin } = walk;
+  const { chats, decisions } = walk.embeddings.seen;
+  const made = await walk.api(
+    "POST",
+    "/api/local/personas",
+    JSON.stringify({ ...SECOND, voiceId: "0".repeat(32) }),
+  );
+  if (made.status !== 201) throw new Error(`POST personas answered ${made.status}`);
+  const account = await walk.api(
+    "POST",
+    "/api/local/accounts",
+    JSON.stringify({
+      provider: "openrouter",
+      name: DECISIONS_ACCOUNT_NAME,
+      apiKey: walk.keys.embed,
+      baseUrl: walk.embeddings.url,
+    }),
+  );
+  if (account.status !== 201) throw new Error(`POST accounts answered ${account.status}`);
+  const gate = ((await account.json()) as { id: string }).id;
+  for (const persona of [PERSONA, SECOND.id]) {
+    const configured = await walk.api(
+      "PUT",
+      "/api/local/settings",
+      JSON.stringify({
+        scope: "persona",
+        persona,
+        values: {
+          "mind.provider": EMBED_ACCOUNT,
+          "mind.model": MIND_MODEL,
+          "knowledge.gate.enabled": false,
+          "knowledge.rerank.enabled": false,
+          // The director asks the active persona's gate role, on, though her retrieval gate is off.
+          ...(persona === PERSONA ? { "knowledge.gate.provider": gate } : {}),
+        },
+      }),
+    );
+    if (!configured.ok)
+      throw new Error(`PUT settings for ${persona} answered ${configured.status}`);
+  }
+  const listed = (await (await walk.api("GET", "/api/local/personas")).json()) as PersonasResponse;
+  const first = listed.personas.find((entry) => entry.id === PERSONA);
+  const second = listed.personas.find((entry) => entry.id === SECOND.id);
+  if (first === undefined || second === undefined) {
+    throw new Error(`GET personas lacks ${first === undefined ? PERSONA : SECOND.id}`);
+  }
+  const short = (persona: typeof first) => persona.shortName.trim() || persona.name;
+
+  await page.goto(`${origin}/chats`);
+  await page
+    .getByRole("button", { name: t("en", "New Chat"), exact: true })
+    .first()
+    .click();
+  for (const persona of [first, second]) {
+    await page.getByRole("menuitemcheckbox").filter({ hasText: persona.name }).click();
+  }
+  const posted = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" && response.url() === `${origin}/api/local/chats`,
+  );
+  const asked = chats.length;
+  await page.getByRole("menuitem", { name: t("en", "Start Group Chat"), exact: true }).click();
+  const createStatus = (await posted).status();
+  await page.waitForURL(/\/chats\/[0-9a-f-]{36}$/);
+  const id = new URL(page.url()).pathname.split("/").at(-1) as string;
+  const title = `${short(first)}、${short(second)}`;
+  const headed = await shows(page.getByRole("heading", { name: title, exact: true }));
+  const opened = await chatLog(walk, id);
+  const live = (await walk.api("GET", `/api/local/chats/${id}/live`)).status;
+  checks.add(
+    "group chat",
+    createStatus === 201 &&
+      headed &&
+      opened.length === 1 &&
+      opened[0]?.type === "title" &&
+      opened[0].title === title &&
+      live === 204 &&
+      chats.length === asked,
+    `POST chats ${createStatus} with ${first.id} and ${second.id}, the template-free one; the ` +
+      `header ${headed ? "shows" : "doesn't show"} ${title}; the log holds ` +
+      `${opened.map((e) => e.type).join(", ") || "nothing"}; GET live ${live}, and the fake ` +
+      `server took ${chats.length - asked} greeting request(s)`,
+  );
+
+  const box = page.getByRole("textbox", { name: t("en", "Message everyone"), exact: true });
+  await box.click();
+  await box.pressSequentially(`@${SECOND.shortName.slice(0, 1)}`);
+  const offered = await shows(
+    page
+      .getByRole("listbox", { name: t("en", "Mention"), exact: true })
+      .getByRole("option")
+      .filter({ hasText: second.name }),
+  );
+  await box.press("Tab");
+  await box.pressSequentially(GROUP_TEXT);
+  const typed = await box.inputValue();
+  const noted = await shows(
+    page.getByText(t("en", "Mentioned: {names}", { names: short(second) }), { exact: true }),
+  );
+  const decided = decisions.length;
+  await box.press("Enter");
+  const log = page.getByRole("log", { name: t("en", "Conversation"), exact: true });
+  const answered = await shows(log.getByText(SECOND_REPLY), 30_000);
+  const followed = await shows(log.getByText(HOP_REPLY), 30_000);
+  const stored = await poll(
+    () => chatLog(walk, id),
+    (events) =>
+      said(events, "persona", HOP_REPLY) &&
+      events.filter((e) => e.type === "decision").length === 3,
+    10_000,
+  );
+  const line = (text: string) => stored.find((e) => e.type === "message" && e.text === text);
+  const [viewerLine, secondLine, hopLine] = [GROUP_MESSAGE, SECOND_REPLY, HOP_REPLY].map(line);
+  const picks = stored
+    .filter((e) => e.type === "decision")
+    .map((e) => ({
+      after: e.after,
+      source: e.source,
+      replies: (e.replies ?? []).map((reply) => reply.persona),
+    }));
+  const expected = [
+    { after: viewerLine?.seq, source: "mention", replies: [SECOND.id] },
+    { after: secondLine?.seq, source: "model", replies: [PERSONA] },
+    { after: hopLine?.seq, source: "model", replies: [] },
+  ];
+  const asks = decisions.slice(decided);
+  const questioned = (index: number) =>
+    Object.keys(asks[index]?.questions ?? {})
+      .sort()
+      .join(" ");
+  const theirs = chats.find((c) => heard(c, GROUP_MESSAGE) && !heard(c, SECOND_REPLY));
+  const hers = chats.find((c) => heard(c, SECOND_REPLY));
+  const stops = (request: ChatRequest | undefined) =>
+    Array.isArray(request?.stop) ? (request.stop as unknown[]).map(String) : [];
+  const heldBack =
+    stops(theirs).includes(`\n${first.name}：`) && stops(hers).includes(`\n${second.name}：`);
+  const introduced =
+    systemOf(theirs).includes(`这是群聊，群里还有：${first.name}`) &&
+    systemOf(hers).includes(`这是群聊，群里还有：${second.name}（${SECOND.summary}）`);
+  checks.add(
+    "group mention",
+    offered &&
+      typed === GROUP_MESSAGE &&
+      noted &&
+      answered &&
+      followed &&
+      secondLine?.speaker?.id === SECOND.id &&
+      hopLine?.speaker?.id === PERSONA &&
+      JSON.stringify(picks) === JSON.stringify(expected) &&
+      asks.length === 3 &&
+      questioned(1) === `addressed_${PERSONA} interested_${PERSONA} invites_reply` &&
+      heldBack &&
+      introduced,
+    `@ ${offered ? "offered" : "didn't offer"} ${second.name}, the box read ${quote(typed)} ` +
+      `${noted ? "and named" : "without naming"} whom it mentions; the page ` +
+      `${answered ? "shows" : "lacks"} her answer and ${followed ? "shows" : "lacks"} ` +
+      `${short(first)}'s a hop later; decisions ${JSON.stringify(picks)}; the fake server took ` +
+      `${asks.length} Decisions request(s), the second asking ${questioned(1) || "nothing"}; ` +
+      `their minds ${heldBack ? "got" : "lacked"} each other's stop sequences and ` +
+      `${introduced ? "were" : "weren't"} told who else is here`,
+  );
+
+  const names = [short(first), short(second)];
+  const shown = await Promise.all(
+    [SECOND_REPLY, HOP_REPLY].map((text) => speakerShown(log, text, names)),
+  );
+  await page.reload();
+  const reloaded = await shows(log.getByText(HOP_REPLY), 15_000);
+  const after = await Promise.all(
+    [SECOND_REPLY, HOP_REPLY].map((text) => speakerShown(log, text, names)),
+  );
+  const expectedNames = [short(second), short(first)];
+  checks.add(
+    "group names",
+    JSON.stringify(shown) === JSON.stringify(expectedNames) &&
+      reloaded &&
+      JSON.stringify(after) === JSON.stringify(expectedNames),
+    `her answer shows under ${String(shown[0])} and the hop's under ${String(shown[1])}; ` +
+      `after a reload, ${reloaded ? `${String(after[0])} and ${String(after[1])}` : "neither shows"}`,
+  );
+}
+
 /** Settles the bodies read so far; null for one the browser couldn't give. */
 async function settled(bodies: readonly Promise<string | null>[]): Promise<(string | null)[]> {
   const all = Promise.all(bodies);
@@ -1308,7 +1593,10 @@ async function smoke(options: Options): Promise<Checks> {
       if (embedder && (await checks.step("ingest-facts", () => indexFacts(walk)))) {
         await checks.step("jobs page", () => jobsPage(walk));
       }
-      if (embedder) await checks.step("chat", () => chatWalk(walk));
+      if (embedder) {
+        await checks.step("chat", () => chatWalk(walk));
+        await checks.step("group chat", () => groupChatWalk(walk));
+      }
     }
     checks.add(
       "page health",

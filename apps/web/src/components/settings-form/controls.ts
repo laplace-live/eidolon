@@ -387,6 +387,7 @@ const GROUP_OF: Readonly<Record<string, Group>> = {
   voice: "voice",
   identity: "persona",
   prompt: "persona",
+  chat: "persona",
   hearing: "models",
   mind: "models",
   realtime: "models",

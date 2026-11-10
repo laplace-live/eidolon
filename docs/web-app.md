@@ -179,7 +179,7 @@ terminal's log line that holds what went wrong, and the app shows it beside the 
 | Jobs | `POST jobs`, `GET jobs`, `GET jobs/:id`, `…/events?after=`, `…/log`, `DELETE jobs/:id`, `POST jobs/:id/resume` | [Jobs](#jobs) |
 | Memories | `GET`, `DELETE memories?persona=` | One persona's memories of you |
 | Usage | `GET usage?from=&to=&persona=` | The usage ledger's spend summed by day, persona, provider, task and model, every persona and provider it knows, and whether it records at all ([providers.md](providers.md#usage-and-cost)) |
-| Chats | `GET`, `POST chats`, `GET`, `PATCH`, `DELETE chats/:id`, `POST chats/:id/messages`, `GET chats/:id/live`, `POST chats/:id/stop`, `GET chats/:id/files/:name` | [Chats](#chats) |
+| Chats | `GET`, `POST chats`, `GET`, `PATCH`, `DELETE chats/:id`, `POST chats/:id/messages`, `GET chats/:id/live`, `POST chats/:id/stop`, `POST chats/:id/participants`, `GET chats/:id/files/:name` | [Chats](#chats) |
 
 The bot's own routes stay, behind the guard: `POST /api/offer` and `/api/offer/preflight` take
 the session and call as [the local viewer](#the-local-viewer-and-memory), with no quota;
@@ -262,16 +262,34 @@ memory at the saved one.
 
 ## Chats
 
-`/chats` texts the personas, no call needed, and keeps every chat in the data home
-(`<data home>/chats/`). The format, the turn and the API are in [chat.md](chat.md).
+`/chats` texts the personas, one or several at once, no call needed, and keeps every chat in the
+data home (`<data home>/chats/`). The format, the turn, the director and the API are in
+[chat.md](chat.md).
 
 - **The page:**
   - The list of chats is on the left, newest first, and the open chat on the right. On a phone the
     list is the page until a chat opens, and a sheet after.
-  - **New Chat** picks the persona, the active one first. Her greeting then streams in, the way a
-    call greets.
+  - **New Chat** ticks one to six personas, the active one listed first, then **Start Chat** or
+    **Start Group Chat**. One persona's greeting then streams in, the way a call greets; a group
+    starts quiet, titled with their short names.
   - A row and the chat's header each have a menu with **Rename** and **Delete**. Delete confirms in
-    the page.
+    the page. The header's menu also has **Chat Settings**, a sheet whose **Replies between
+    Personas**, 0 to 6, is the chain limit, saved as soon as it's picked.
+- **A group chat:**
+  - The header's avatars open **In This Chat**, with **Add Persona** and **Remove Persona**.
+  - Each run of a persona's lines starts with her avatar and short name, and the streaming text
+    and the thinking dots name whoever answers next, from the decision before her turn.
+  - The composer offers the participants' names after `@` (arrow keys, Enter or Tab, Escape),
+    inserting one `parseMentions` reads back, and a quiet line names whom the message mentions.
+  - **Stop** and the thinking dots stay up across the whole chain, while the director decides
+    between turns.
+  - A chain that ends with no one answering shows nothing more.
+- **Why She Answered:** a quiet info button beside each reply the director chose opens
+  **Why <name> Answered**, its decision: the source (mention, model or fallback), whose line she answered, and each persona's
+  Addressed and Interested scores, with Invites a Reply.
+- **The studio's Group Chats section** edits a persona's `chat.interests` and
+  `chat.talkativeness` ([personas.md](personas.md#personayaml)), showing where each value
+  comes from.
 - **Her lines** render through `lib/markup.ts` like a call's transcript: cues as chips and
   directions as small labels, never as HTML. A selfie shows as a photo, served from the chat's
   `files/`.
@@ -286,8 +304,8 @@ memory at the saved one.
   - A mind with no key shows a notice with a link to Settings → Providers.
 - **Reopening a chat mid-reply** picks the reply up again through `GET chats/:id/live`. The reply
   keeps running when the tab closes.
-- **Call** opens `/call` while the chat's persona is the active one. A call doesn't share the
-  chat's history yet.
+- **Call** shows only in a chat of one, and opens `/call` while her persona is the active one. A
+  call doesn't share the chat's history yet.
 - **Spend:** a chat's requests are recorded in the usage ledger with `source: "chat"`.
 
 ## Jobs
@@ -440,6 +458,11 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
 - a text chat with milky-green, her mind pointed at that server's streaming `/chat/completions`:
   New Chat and her greeting, a reply that streams in with its cue as a chip, the history after a
   reload, and Rename and Delete from the chat's menus, with `chats/` at 0700 and its log at 0600;
+- a group chat with a second persona made from no template, the director's Decisions requests
+  answered by that server through an OpenRouter account pointed at it: no greeting, an @-mention
+  the composer completes, the second persona's answer with her stop sequences and the group line
+  in her request, the first's answer to her a hop later, and each line under its persona's name,
+  before and after a reload;
 
 then stops the server and deletes the home. It refuses to start when either `load-env.ts` would
 apply a `.env` or use another data home, and exits 0 when every check passes, else 1.

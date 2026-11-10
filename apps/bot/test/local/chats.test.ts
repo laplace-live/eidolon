@@ -1,21 +1,30 @@
-// /api/local/chats over a fake turn: what the runner stores, in which order, and what each stream
-// carries. The engine itself is never run here.
+// /api/local/chats over a fake turn and a fake director: what the runner stores, in which order, and
+// what each stream carries. The engine itself is never run here.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type {
-  ChatEvent,
-  ChatEventDraft,
-  ChatEventOf,
-  ChatStreamLine,
-  ChatSummary,
+import {
+  type ChatEvent,
+  type ChatEventDraft,
+  type ChatEventOf,
+  type ChatStreamLine,
+  type ChatSummary,
+  type ParticipantId,
+  summarize,
 } from "@eidolon/chat";
-import { dataHome } from "@eidolon/config";
-import type { TurnOutput, TurnRequest } from "@eidolon/engine";
+import { activePersona, dataHome } from "@eidolon/config";
+import { Director } from "@eidolon/context";
+import {
+  type ChatRequest,
+  type EngineDeps,
+  runChat,
+  type TurnOutput,
+  type TurnRequest,
+} from "@eidolon/engine";
 import type { RouteHandler } from "../../src/app.ts";
 import type { ChatContents } from "../../src/local/api.ts";
-import type { ChatTurn } from "../../src/local/chats/runner.ts";
+import type { ChatAnswer, ChatRunnerOptions, ChatTurn } from "../../src/local/chats/runner.ts";
 import { createLocalRouter, type LocalApp } from "../../src/local/router.ts";
 import { chatsRoutes } from "../../src/local/routes/chats.ts";
 import { type CapturedLogs, captureLogs, deferred } from "../fakes.ts";
@@ -27,7 +36,10 @@ const chatsRoot = () => join(dataHome(), "chats");
 
 type Script = (request: TurnRequest, save: Parameters<ChatTurn>[1]) => AsyncIterable<TurnOutput>;
 
-/** What a request's turn does, by the viewer's last line ("" for the greeting). */
+/**
+ * What a request's turn does, by `<persona> <line>` or else `<line>`, the viewer's last line (""
+ * for the greeting).
+ */
 let scripts: Map<string, Script>;
 let requests: TurnRequest[];
 
@@ -37,9 +49,57 @@ const fakeTurn: ChatTurn = (request, save) => {
     (event): event is ChatEventOf<"message"> =>
       event.type === "message" && event.speaker.kind === "user",
   );
-  const script = scripts.get(request.kickoff ? "" : (last?.text ?? "")) ?? scripts.get("*");
+  const line = request.kickoff ? "" : (last?.text ?? "");
+  const script = scripts.get(`${request.persona} ${line}`) ?? scripts.get(line) ?? scripts.get("*");
   if (script === undefined) throw new Error(`no script for ${JSON.stringify(last?.text)}`);
   return script(request, save);
+};
+
+/** One decision of the fake director: who answers, in order. */
+interface Hop {
+  readonly replies: readonly ParticipantId[];
+  readonly source: ChatEventOf<"decision">["source"];
+  readonly scores?: Readonly<Record<string, number>>;
+}
+
+/**
+ * The fake director's decisions by the viewer's line, each followed by its turns; "throw" throws
+ * before any. The default is the chat's first persona alone. Like the engine's, each turn reads the
+ * chat as stored.
+ */
+let plans: Map<string, readonly Hop[] | "throw">;
+let answers: ChatRequest[];
+
+const fakeAnswer: ChatAnswer = (request, save) => {
+  answers.push(request);
+  return (async function* () {
+    const line = request.chat.events.find((event) => event.seq === request.after);
+    const text = line?.type === "message" ? line.text : "";
+    const { participants } = summarize(request.chat.header, request.chat.events);
+    const plan = plans.get(text) ?? [
+      {
+        replies: participants.slice(0, 1),
+        source: participants.length > 1 ? "fallback" : "single",
+      },
+    ];
+    if (plan === "throw") throw new Error("the chain fell over");
+    for (const hop of plan) {
+      if (request.signal.aborted) return;
+      yield {
+        type: "decision",
+        after: request.after,
+        replies: hop.replies.map((persona) => ({ persona, mode: "text" }) as const),
+        source: hop.source,
+        ...(hop.scores ? { scores: hop.scores } : {}),
+      };
+      for (const persona of hop.replies) {
+        if (request.signal.aborted) return;
+        const chat = await request.read();
+        const { viewer, signal, late } = request;
+        yield* fakeTurn({ chat, persona, viewer, signal, ...(late ? { late } : {}) }, save);
+      }
+    }
+  })();
 };
 
 function aborted(signal: AbortSignal): Promise<void> {
@@ -135,7 +195,9 @@ interface ChatsServer {
   close(): Promise<void>;
 }
 
-function serveChats(): ChatsServer {
+function serveChats(
+  options: ChatRunnerOptions = { turn: fakeTurn, answer: fakeAnswer },
+): ChatsServer {
   const stops: (() => Promise<void>)[] = [];
   const app: LocalApp = {
     port: () => 0,
@@ -146,10 +208,7 @@ function serveChats(): ChatsServer {
     },
     memoryAdmin: () => null,
   };
-  const router: RouteHandler = createLocalRouter(
-    chatsRoutes(app, { turn: fakeTurn }),
-    () => "bearer",
-  );
+  const router: RouteHandler = createLocalRouter(chatsRoutes(app, options), () => "bearer");
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -253,6 +312,8 @@ beforeEach(() => {
     ["*", reply("收到啦")],
   ]);
   requests = [];
+  plans = new Map();
+  answers = [];
   logs = captureLogs();
   process.env.OPENROUTER_API_KEY = "sk-or-test";
   server = serveChats();
@@ -263,6 +324,7 @@ afterEach(async () => {
   logs.restore();
   delete process.env.OPENROUTER_API_KEY;
   rmSync(chatsRoot(), { recursive: true, force: true });
+  for (const dir of made.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
 async function json<T>(response: Response, status = 200): Promise<T> {
@@ -287,6 +349,32 @@ async function greeted(): Promise<string> {
 
 async function log(id: string): Promise<ChatContents> {
   return json(await server.call("GET", `/chats/${id}`));
+}
+
+/** Seven persona ids, PERSONA first: one more than a chat holds. */
+const SEVEN = [PERSONA, "beta", "gamma", "delta", "epsilon", "zeta", "eta"];
+
+/** Personas a test made, removed after it. */
+const made: string[] = [];
+
+/** Persona `id` in the data home, named `name` and `shortName`. */
+function persona(id: string, name: string, shortName = name): void {
+  const dir = join(dataHome(), "personas", id);
+  made.push(dir);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, "persona.yaml"),
+    `identity:\n  name: ${name}\n  shortName: ${shortName}\n`,
+  );
+}
+
+/** A chat with PERSONA and `others`, which doesn't greet. */
+async function group(...others: string[]): Promise<string> {
+  const { id } = await json<{ id: string }>(
+    await server.call("POST", "/chats", { participants: [PERSONA, ...others] }),
+    201,
+  );
+  return id;
 }
 
 function messages(events: readonly ChatEvent[]): ChatEventOf<"message">[] {
@@ -334,14 +422,18 @@ describe("a new chat", () => {
     expect(list).toMatchObject([{ id, title: null, lastText: "你好呀", lastSeq: 2 }]);
   });
 
-  test("is refused unless it names exactly one persona that exists", async () => {
+  test("is refused unless it names 1 to 6 personas that exist, each once", async () => {
+    for (const id of SEVEN.slice(1)) persona(id, id.toUpperCase());
     for (const [body, want] of [
       [{ participants: [] }, [400, "bad-request"]],
       [{ participants: [PERSONA, PERSONA] }, [400, "bad-request"]],
+      [{ participants: SEVEN }, [400, "bad-request"]],
       [{ participants: [7] }, [400, "bad-request"]],
+      [{ participants: PERSONA }, [400, "bad-request"]],
       [{ participants: [PERSONA], title: "x" }, [400, "bad-request"]],
       [{ participants: ["Not A Slug"] }, [400, "invalid-persona-id"]],
       [{ participants: ["nobody-here"] }, [404, "unknown-persona"]],
+      [{ participants: [PERSONA, "nobody-here"] }, [404, "unknown-persona"]],
       ["{", [400, "bad-json"]],
     ] as const) {
       expect([body, await errorCode(await server.call("POST", "/chats", body))]).toEqual([
@@ -357,7 +449,14 @@ describe("a new chat", () => {
     const response = await server.call("POST", "/chats", { participants: [PERSONA] });
     const body = (await response.json()) as { error: { code: string; message: string } };
     expect([response.status, body.error.code]).toEqual([409, "missing-key"]);
+    expect(body.error.message).toStartWith("Her mind role has no key.");
     expect(body.error.message).toContain("OPENROUTER_API_KEY");
+
+    persona("beta", "贝塔");
+    const group = await server.call("POST", "/chats", { participants: [PERSONA, "beta"] });
+    const named = (await group.json()) as { error: { code: string; message: string } };
+    expect([group.status, named.error.code]).toEqual([409, "missing-key"]);
+    expect(named.error.message).toStartWith(`${PERSONA}'s mind role has no key.`);
     expect(existsSync(chatsRoot())).toBe(false);
   });
 });
@@ -392,8 +491,13 @@ describe("a message", () => {
       replies: [{ persona: PERSONA, mode: "text" }],
       source: "single",
     });
-    // The reply's turn read the log with the viewer's line in it.
-    expect(requests[1]?.kickoff).toBe(false);
+    // The answer read the log with the viewer's line in it.
+    expect(answers).toHaveLength(1);
+    expect(answers[0]?.after).toBe(3);
+    expect(answers[0]?.chat.events.map((event) => event.seq)).toEqual([1, 2, 3]);
+    expect(answers[0]?.viewer.isLoggedIn).toBe(true);
+    // Her turn read it with the decision stored too.
+    expect(requests[1]?.kickoff).toBeUndefined();
     expect(requests[1]?.chat.events.map((event) => event.seq)).toEqual([1, 2, 3, 4]);
 
     const tail = await json<ChatContents>(await server.call("GET", `/chats/${id}?afterSeq=3`));
@@ -698,6 +802,321 @@ describe("a chat", () => {
       );
     }
   });
+});
+
+describe("a group chat", () => {
+  test("doesn't greet, and is titled with their short names", async () => {
+    persona("beta", "贝塔小姐", "贝塔");
+    const id = await group("beta");
+    expect((await server.call("GET", `/chats/${id}/live`)).status).toBe(204);
+    expect(requests).toEqual([]);
+    const { header, events } = await log(id);
+    expect(header.participants).toEqual([PERSONA, "beta"]);
+    expect(events).toMatchObject([{ seq: 1, type: "title", title: "奶绿、贝塔" }]);
+    expect(await json<ChatSummary[]>(await server.call("GET", "/chats"))).toMatchObject([
+      { id, title: "奶绿、贝塔", participants: [PERSONA, "beta"], lastText: null, lastSeq: 1 },
+    ]);
+  });
+
+  test("answers a line hop by hop, storing each decision and turn before it streams", async () => {
+    persona("beta", "贝塔");
+    const id = await group("beta");
+    plans.set("大家好", [
+      { replies: [PERSONA, "beta"], source: "model", scores: { addressed_beta: 0.9 } },
+      { replies: [PERSONA], source: "model", scores: { invites_reply: 0.7 } },
+    ]);
+    scripts.set(`${PERSONA} 大家好`, reply("奶绿来啦"));
+    scripts.set("beta 大家好", reply("贝塔在呢"));
+    const lines = await new Lines(
+      await server.call("POST", `/chats/${id}/messages`, { text: "大家好" }),
+    ).all();
+    expect(shape(lines)).toEqual([
+      "events 2:message",
+      "events 3:decision",
+      "started",
+      "delta 奶绿",
+      "events 4:message",
+      "ended",
+      "started",
+      "delta 贝塔",
+      "events 5:message",
+      "ended",
+      "events 6:decision",
+      "started",
+      "delta 奶绿",
+      "events 7:message",
+      "ended",
+    ]);
+    const { events } = await log(id);
+    expectContiguous(events);
+    expect(events.slice(1)).toEqual(
+      lines.flatMap((line) => (line.type === "events" ? line.events : [])),
+    );
+    expect(events[2]).toMatchObject({
+      type: "decision",
+      after: 2,
+      replies: [
+        { persona: PERSONA, mode: "text" },
+        { persona: "beta", mode: "text" },
+      ],
+      source: "model",
+      scores: { addressed_beta: 0.9 },
+    });
+    expect(messages(events).map((m) => [m.speaker, m.text])).toEqual([
+      [{ kind: "user" }, "大家好"],
+      [{ kind: "persona", id: PERSONA }, "奶绿来啦"],
+      [{ kind: "persona", id: "beta" }, "贝塔在呢"],
+      [{ kind: "persona", id: PERSONA }, "奶绿来啦"],
+    ]);
+    expect(answers.map((answer) => answer.after)).toEqual([2]);
+    expect(answers[0]?.chat.events.map((event) => event.seq)).toEqual([1, 2]);
+    // Each turn read the chat with every line before it stored.
+    expect(requests.map((request) => request.chat.events.length)).toEqual([3, 4, 6]);
+    expect((await server.call("GET", `/chats/${id}/live`)).status).toBe(204);
+  });
+
+  test("a new line interrupts the whole chain: her partial line is kept, and the hops after it dropped", async () => {
+    persona("beta", "贝塔");
+    const id = await group("beta");
+    plans.set("聊聊天", [{ replies: [PERSONA, "beta"], source: "model" }]);
+    scripts.set(`${PERSONA} 聊聊天`, reply("我先说两句", { untilAborted: true }));
+    const first = new Lines(await server.call("POST", `/chats/${id}/messages`, { text: "聊聊天" }));
+    await first.until((line) => line.type === "delta");
+    const second = await new Lines(
+      await server.call("POST", `/chats/${id}/messages`, { text: "停一下" }),
+    ).all();
+    expect(answers[0]?.signal.aborted).toBe(true);
+    expect(shape(await first.all())).toEqual([
+      "events 2:message",
+      "events 3:decision",
+      "started",
+      "delta 我先说",
+      "events 4:message",
+      "ended",
+    ]);
+    expect(shape(second)).toEqual([
+      "events 5:message",
+      "events 6:decision",
+      "started",
+      "delta 收到",
+      "events 7:message",
+      "ended",
+    ]);
+    expect(requests.map((request) => request.persona)).toEqual([PERSONA, PERSONA]);
+    const { events } = await log(id);
+    expectContiguous(events);
+    expect(messages(events).map((m) => [m.text, m.interrupted ?? false])).toEqual([
+      ["聊聊天", false],
+      ["我先说", true],
+      ["停一下", false],
+      ["收到啦", false],
+    ]);
+  });
+
+  test("a turn that throws is stored as that persona's turn-failed, and the chain goes no further", async () => {
+    persona("beta", "贝塔");
+    const id = await group("beta");
+    plans.set("坏了", [{ replies: ["beta", PERSONA], source: "mention" }]);
+    scripts.set("beta 坏了", async function* (request) {
+      yield { type: "started", turn: "t-beta", persona: request.persona };
+      throw new Error("the mind fell over");
+    });
+    const lines = await new Lines(
+      await server.call("POST", `/chats/${id}/messages`, { text: "坏了" }),
+    ).all();
+    expect(shape(lines)).toEqual([
+      "events 2:message",
+      "events 3:decision",
+      "started",
+      "events 4:turn-failed",
+      "ended",
+    ]);
+    expect((await log(id)).events[3]).toMatchObject({
+      type: "turn-failed",
+      persona: "beta",
+      turn: "t-beta",
+      error: "the mind fell over",
+    });
+    expect(requests.map((request) => request.persona)).toEqual(["beta"]);
+  });
+
+  test("an answer that throws outside any turn ends its stream with an error, and the chat stays usable", async () => {
+    persona("beta", "贝塔");
+    const id = await group("beta");
+    plans.set("出错", "throw");
+    const lines = await new Lines(
+      await server.call("POST", `/chats/${id}/messages`, { text: "出错" }),
+    ).all();
+    expect(shape(lines)).toEqual(["events 2:message", "error"]);
+    expect(lines.at(-1)).toMatchObject({ type: "error", code: "internal" });
+    expect(logs.lines()).toContainEqual(expect.stringContaining("the reply failed"));
+    expect((await log(id)).events.map((event) => event.type)).toEqual(["title", "message"]);
+    const next = await new Lines(
+      await server.call("POST", `/chats/${id}/messages`, { text: "再来" }),
+    ).all();
+    expect(shape(next)).toEqual([
+      "events 3:message",
+      "events 4:decision",
+      "started",
+      "delta 收到",
+      "events 5:message",
+      "ended",
+    ]);
+  });
+
+  test("adds and removes personas as participants events, keeping 1 to 6", async () => {
+    for (const id of SEVEN.slice(1)) persona(id, id.toUpperCase());
+    const id = await group("beta");
+    const change = (body: unknown) => server.call("POST", `/chats/${id}/participants`, body);
+    expect(await json(await change({ add: ["gamma"], remove: ["beta"] }))).toEqual({ ok: true });
+    expect((await log(id)).events.at(-1)).toMatchObject({
+      seq: 2,
+      type: "participants",
+      added: ["gamma"],
+      removed: ["beta"],
+    });
+    expect(await json(await change({ remove: ["gamma"] }))).toEqual({ ok: true });
+    expect((await log(id)).events.at(-1)).toEqual({
+      seq: 3,
+      at: expect.any(Number),
+      type: "participants",
+      removed: ["gamma"],
+    });
+    expect(await json(await change({ add: ["beta", "gamma"] }))).toEqual({ ok: true });
+    expect(
+      (await json<ChatSummary[]>(await server.call("GET", "/chats")))[0]?.participants,
+    ).toEqual([PERSONA, "beta", "gamma"]);
+
+    const before = (await log(id)).events.length;
+    for (const [body, want] of [
+      [{}, [400, "bad-request"]],
+      [{ add: [] }, [400, "bad-request"]],
+      [{ add: "delta" }, [400, "bad-request"]],
+      [{ add: ["delta", "delta"] }, [400, "bad-request"]],
+      [{ add: ["delta"], remove: ["delta"] }, [400, "bad-request"]],
+      [{ add: ["delta"], title: "x" }, [400, "bad-request"]],
+      [{ add: [PERSONA] }, [400, "bad-request"]],
+      [{ remove: ["delta"] }, [400, "bad-request"]],
+      [{ remove: [PERSONA, "beta", "gamma"] }, [400, "bad-request"]],
+      [{ add: ["delta", "epsilon", "zeta", "eta"] }, [400, "bad-request"]],
+      [{ add: ["Not A Slug"] }, [400, "invalid-persona-id"]],
+      [{ add: ["nobody-here"] }, [404, "unknown-persona"]],
+    ] as const) {
+      expect([body, await errorCode(await change(body))]).toEqual([body, [...want]]);
+    }
+    expect((await log(id)).events).toHaveLength(before);
+    expect(
+      await errorCode(
+        await server.call("POST", `/chats/${crypto.randomUUID()}/participants`, { add: ["delta"] }),
+      ),
+    ).toEqual([404, "unknown-chat"]);
+
+    delete process.env.OPENROUTER_API_KEY;
+    expect(await errorCode(await change({ add: ["delta"] }))).toEqual([409, "missing-key"]);
+    expect(await json(await change({ remove: ["gamma"] }))).toEqual({ ok: true });
+  });
+
+  test("a persona deleted since is refused until she is removed from the chat", async () => {
+    persona("beta", "贝塔");
+    const id = await group("beta");
+    rmSync(join(dataHome(), "personas", "beta"), { recursive: true });
+    const post = () => server.call("POST", `/chats/${id}/messages`, { text: "还在吗" });
+    expect(await errorCode(await post())).toEqual([404, "unknown-persona"]);
+    expect((await log(id)).events).toHaveLength(1);
+    expect(
+      await json(await server.call("POST", `/chats/${id}/participants`, { remove: ["beta"] })),
+    ).toEqual({ ok: true });
+    expect(shape(await new Lines(await post()).all()).at(-2)).toBe("events 5:message");
+  });
+
+  test("the chain limit is kept as a settings event", async () => {
+    const id = await greeted();
+    const patch = (body: unknown) => server.call("PATCH", `/chats/${id}`, body);
+    expect(await json(await patch({ chainLimit: 0 }))).toEqual({ ok: true });
+    expect(await json(await patch({ chainLimit: 6 }))).toEqual({ ok: true });
+    expect((await log(id)).events.slice(2)).toMatchObject([
+      { seq: 3, type: "settings", chainLimit: 0 },
+      { seq: 4, type: "settings", chainLimit: 6 },
+    ]);
+    for (const body of [
+      { chainLimit: -1 },
+      { chainLimit: 7 },
+      { chainLimit: 1.5 },
+      { chainLimit: "3" },
+      { chainLimit: null },
+      { chainLimit: 2, title: "x" },
+      {},
+    ]) {
+      expect([body, await errorCode(await patch(body))]).toEqual([body, [400, "bad-request"]]);
+    }
+    expect((await log(id)).events).toHaveLength(4);
+    expect(
+      await errorCode(
+        await server.call("PATCH", `/chats/${crypto.randomUUID()}`, { chainLimit: 1 }),
+      ),
+    ).toEqual([404, "unknown-chat"]);
+  });
+});
+
+test("the engine's runChat answers through the runner, each turn on the chat as stored", async () => {
+  persona("beta", "贝塔");
+  /** What each persona says, whatever she is asked. */
+  const says: Record<string, string> = { [PERSONA]: "好呀", beta: "奶绿你说呢" };
+  const deps: Omit<EngineDeps, "saveAttachment"> = {
+    createMind: () => {
+      const text = says[activePersona().id] ?? "";
+      return {
+        async *stream() {
+          yield { type: "text", text };
+          yield { type: "done", finishReason: "stop" };
+        },
+      };
+    },
+    parts: async () => ({
+      systemInstruction: "SYSTEM",
+      providers: [],
+      gate: null,
+      tools: [],
+      memories: async () => [],
+    }),
+    fetchImage: () => Promise.reject(new Error("no images here")),
+    newId: () => crypto.randomUUID(),
+  };
+  const engine = serveChats({
+    answer: (request, saveAttachment) =>
+      runChat(request, { ...deps, saveAttachment, director: new Director(null) }),
+  });
+  try {
+    const { id } = await json<{ id: string }>(
+      await engine.call("POST", "/chats", { participants: [PERSONA, "beta"] }),
+      201,
+    );
+    const lines = await new Lines(
+      await engine.call("POST", `/chats/${id}/messages`, { text: "@贝塔 在吗" }),
+    ).all();
+    const { events } = await json<ChatContents>(await engine.call("GET", `/chats/${id}`));
+    expectContiguous(events);
+    expect(events.slice(1)).toEqual(
+      lines.flatMap((line) => (line.type === "events" ? line.events : [])),
+    );
+    // Beta answers the mention, Milky Green the name in Beta's line, and no one hers.
+    expect(
+      events.flatMap((event) =>
+        event.type === "decision" ? [[event.after, event.replies.map((r) => r.persona)]] : [],
+      ),
+    ).toEqual([
+      [2, ["beta"]],
+      [4, [PERSONA]],
+      [6, []],
+    ]);
+    expect(messages(events).map((m) => [m.speaker, m.text])).toEqual([
+      [{ kind: "user" }, "@贝塔 在吗"],
+      [{ kind: "persona", id: "beta" }, "奶绿你说呢"],
+      [{ kind: "persona", id: PERSONA }, "好呀"],
+    ]);
+  } finally {
+    await engine.close();
+  }
 });
 
 test("shutdown aborts every turn and waits for what it said", async () => {

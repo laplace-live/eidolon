@@ -561,6 +561,10 @@ msgstr "在上面添加链接，每个视频都会列在这里，并显示它的
 msgid "Add Outfits"
 msgstr "添加服装"
 
+#: src/features/chats/participants.tsx
+msgid "Add Persona"
+msgstr "添加人设"
+
 #: src/features/studio/references-section.tsx
 msgid "Add Pictures"
 msgstr "添加图片"
@@ -585,6 +589,10 @@ msgstr "添加视频"
 #: src/features/call/call-page.tsx
 msgid "Add your API keys first"
 msgstr "请先添加 API 密钥"
+
+#: src/features/chats/why-answered.tsx
+msgid "Addressed"
+msgstr "被点名"
 
 #: src/features/settings/route.tsx
 #: src/features/studio/advanced-section.tsx
@@ -934,6 +942,11 @@ msgstr "聊天选项"
 msgid "Chat Provider"
 msgstr "对话服务商"
 
+#: src/features/chats/chat-menu.tsx
+#: src/features/chats/chat-settings.tsx
+msgid "Chat Settings"
+msgstr "聊天设置"
+
 #: src/features/chats/chat-list.tsx
 msgid "Chat With"
 msgstr "和谁聊天"
@@ -1259,6 +1272,10 @@ msgstr "每个链接都必须是完整的 http 或 https 网址。"
 msgid "Each model, and the task it did for her."
 msgstr "每个模型，以及它为她承担的任务。"
 
+#: src/features/chats/why-answered.tsx
+msgid "Each score runs from 0 to 1. Addressed: the line was for her. Interested: it touches what she cares about."
+msgstr "每项分数都在 0 到 1 之间。被点名：这句话是对她说的。感兴趣：话题是她在意的。"
+
 #: src/features/studio/knowledge-section.tsx
 msgid "Edit"
 msgstr "编辑"
@@ -1529,6 +1546,7 @@ msgid "Fish has this voice"
 msgstr "Fish 上有这个声音"
 
 #: src/components/settings-form/settings-card.tsx
+#: src/features/studio/chat-section.tsx
 #: src/features/studio/identity-section.tsx
 msgid "Fix the highlighted values first."
 msgstr "请先修正标出的值。"
@@ -1578,6 +1596,10 @@ msgstr "朋友"
 msgid "From the environment"
 msgstr "来自环境变量"
 
+#: src/features/studio/chat-section.tsx
+msgid "Games, cats, late-night talks"
+msgstr "游戏、猫、深夜聊天"
+
 #: src/features/settings/route.tsx
 msgid "General"
 msgstr "通用"
@@ -1610,6 +1632,11 @@ msgstr "词汇表已保存。"
 #: src/features/setup/done-step.tsx
 msgid "Go to Home"
 msgstr "前往首页"
+
+#: src/features/studio/chat-section.tsx
+#: src/features/studio/route.tsx
+msgid "Group Chats"
+msgstr "群聊"
 
 #: src/lib/labels.ts
 msgid "Group ID"
@@ -1712,6 +1739,14 @@ msgstr "通话时如何检索她知道的事：每个索引提供多少候选、
 msgid "How her videos become transcripts: the language and model Soniox transcribes with, and the model that refines them, with how many chunks it works on at once."
 msgstr "她的视频如何变成转写稿：Soniox 转写用的语言和模型，以及整理转写稿的模型和它同时处理的段数。"
 
+#: src/features/chats/chat-settings.tsx
+msgid "How many times personas may answer each other after each of your lines, once two or more are in the chat. At 0 they only answer you."
+msgstr "聊天里有两个或更多人设时，你每说一句，她们之间最多可以互相接话几次。设为 0 时，她们只回答你。"
+
+#: src/components/settings-form/labels.ts
+msgid "How readily she joins in when no one addressed her, from 0 to 1. At 0 she answers only when she's addressed, or when no one else will answer you. Default 0.5."
+msgstr "没人点她名时，她有多愿意插话，从 0 到 1。设为 0 时，她只在被点名、或没有别人回答你时才开口。默认 0.5。"
+
 #: src/features/settings/account-dialog.tsx
 msgid "How Settings and the studio list it, such as “OpenAI (work)”."
 msgstr "在设置和工作室中显示的名字，例如“OpenAI（工作）”。"
@@ -1744,6 +1779,10 @@ msgstr "图片"
 msgid "In a call · {duration}"
 msgstr "通话中 · {duration}"
 
+#: src/features/studio/chat-section.tsx
+msgid "In a chat with several personas, a director decides who answers each line. It weighs her by these."
+msgstr "在有多个人设的聊天里，由一个调度器决定每句话由谁来回答。它会参考这些设置来衡量她。"
+
 #: src/features/setup/persona-fields.tsx
 msgid "In her own language; prompts use it as written."
 msgstr "用她自己的语言填写，提示词会原样使用。"
@@ -1767,6 +1806,10 @@ msgstr "近 7 天"
 #: src/features/usage/route.tsx
 msgid "in the last 90 days"
 msgstr "近 90 天"
+
+#: src/features/chats/participants.tsx
+msgid "In This Chat"
+msgstr "聊天成员"
 
 #: src/features/studio/knowledge-section.tsx
 msgid "Index"
@@ -1839,10 +1882,22 @@ msgstr "会在第一次下载时自动安装。"
 msgid "Installs on the first download"
 msgstr "首次下载时安装"
 
+#: src/features/chats/why-answered.tsx
+msgid "Interested"
+msgstr "感兴趣"
+
+#: src/components/settings-form/labels.ts
+msgid "Interests"
+msgstr "兴趣"
+
 #: src/features/chats/chat-log.tsx
 #: src/features/jobs/labels.ts
 msgid "Interrupted"
 msgstr "已中断"
+
+#: src/features/chats/why-answered.tsx
+msgid "Invites a reply: {score}"
+msgstr "期待回应：{score}"
 
 #: src/features/setup/memory-step.tsx
 msgid "It answers only on this machine, keeps its data in a Docker volume and restarts with Docker."
@@ -2144,8 +2199,20 @@ msgid "Memory Score Threshold"
 msgstr "记忆相关度阈值"
 
 #: src/features/chats/composer.tsx
+msgid "Mention"
+msgstr "提及"
+
+#: src/features/chats/composer.tsx
+msgid "Mentioned: {names}"
+msgstr "已提及：{names}"
+
+#: src/features/chats/chat-view.tsx
 msgid "Message {name}"
 msgstr "给{name}发消息"
+
+#: src/features/chats/chat-view.tsx
+msgid "Message everyone"
+msgstr "给大家发消息"
 
 #: src/features/studio/route.tsx
 msgid "Mind"
@@ -2582,6 +2649,10 @@ msgstr "覆盖了环境变量 <0>{env}</0>，它设为 <1>{value}</1>。"
 msgid "Part of the cost couldn't be priced."
 msgstr "部分费用无法估价。"
 
+#: src/features/chats/participants.tsx
+msgid "Participants"
+msgstr "成员"
+
 #: src/components/settings-form/account-key-field.tsx
 #: src/features/settings/account-dialog.tsx
 msgid "Paste a new key to replace it"
@@ -2601,6 +2672,7 @@ msgid "People she can take a selfie with: one picture each, named after them."
 msgstr "可以和她一起自拍的人：每人一张图片，以名字命名。"
 
 #: src/components/settings-form/labels.ts
+#: src/features/chats/why-answered.tsx
 #: src/features/jobs/detail.tsx
 #: src/features/setup/persona-step.tsx
 #: src/features/setup/stepper.tsx
@@ -2880,6 +2952,10 @@ msgstr "移除她的头像？"
 msgid "Remove Key"
 msgstr "删除密钥"
 
+#: src/features/chats/participants.tsx
+msgid "Remove Persona"
+msgstr "移除人设"
+
 #: src/features/chats/chat-menu.tsx
 msgid "Rename"
 msgstr "重命名"
@@ -2895,6 +2971,10 @@ msgstr "更换"
 #: src/features/studio/identity-section.tsx
 msgid "Replace Her Avatar"
 msgstr "更换她的头像"
+
+#: src/features/chats/chat-settings.tsx
+msgid "Replies between Personas"
+msgstr "人设之间的接话"
 
 #: src/features/usage/tables.tsx
 msgid "Requests"
@@ -2931,6 +3011,10 @@ msgstr "每次检索重排序约花费 $0.002。"
 #: src/features/jobs/detail.tsx
 msgid "Reruns an earlier job"
 msgstr "重新运行了之前的任务"
+
+#: src/features/studio/chat-section.tsx
+msgid "Reset"
+msgstr "重置"
 
 #: src/features/home/readiness-labels.ts
 #: src/features/settings/notices.tsx
@@ -3045,6 +3129,7 @@ msgid "Saved"
 msgstr "已保存"
 
 #: src/components/settings-form/settings-card.tsx
+#: src/features/studio/chat-section.tsx
 #: src/features/studio/identity-section.tsx
 msgid "Saved for {name}"
 msgstr "保存到{name}的设置中"
@@ -3070,6 +3155,7 @@ msgid "Saved settings wait for a restart."
 msgstr "已保存的设置需要重启后生效。"
 
 #: src/components/settings-form/settings-card.tsx
+#: src/features/studio/chat-section.tsx
 #: src/features/studio/identity-section.tsx
 msgid "Saved. Restart Eidolon to apply it."
 msgstr "已保存。重启 Eidolon 后生效。"
@@ -3081,6 +3167,10 @@ msgstr "保存后会清除 {fields}，它们属于原来的服务商。"
 #: src/features/chats/chat-log.tsx
 msgid "Say something to {name}. She answers in text, and this chat keeps what you both said."
 msgstr "和{name}说点什么吧。她会用文字回复，这个聊天会保存你们说过的话。"
+
+#: src/features/chats/chat-log.tsx
+msgid "Say something to everyone here. Whoever it's for answers, and they may answer each other too."
+msgstr "和大家说点什么吧。话是对谁说的，谁就来回答，她们之间也可能互相接话。"
 
 #: src/components/settings-form/labels.ts
 msgid "Scene Types Left Out of the Index"
@@ -3202,6 +3292,7 @@ msgid "Settings for {name} alone, such as her voice and chat model, are in <0>he
 msgstr "只属于{name}的设置（例如声音和对话模型）在<0>她的工作室</0>中。"
 
 #: src/components/settings-form/settings-card.tsx
+#: src/features/studio/chat-section.tsx
 #: src/features/studio/identity-section.tsx
 msgid "Settings saved."
 msgstr "设置已保存。"
@@ -3221,6 +3312,14 @@ msgstr "设置步骤"
 #: src/features/usage/tables.tsx
 msgid "Share"
 msgstr "占比"
+
+#: src/features/chats/why-answered.tsx
+msgid "She answered {name}'s line."
+msgstr "她回应的是{name}的话。"
+
+#: src/features/chats/why-answered.tsx
+msgid "She answered your line."
+msgstr "她回应的是你的话。"
 
 #: src/features/studio/models-section.tsx
 msgid "She can't switch voice styles during a call."
@@ -3265,6 +3364,10 @@ msgstr "她会从一份写好名字的中文提示词框架开始，之后在工
 #: src/features/setup/persona-step.tsx
 msgid "She uses it in calls. Leave it empty and she won't use a name."
 msgstr "她会在通话中这样称呼你。留空则她不使用称呼。"
+
+#: src/features/chats/labels.ts
+msgid "She's the only persona in this chat, so she answers every line."
+msgstr "这个聊天里只有她一个人设，所以每句话都由她回答。"
 
 #: src/features/setup/persona-fields.tsx
 #: src/features/studio/identity-section.tsx
@@ -3338,6 +3441,10 @@ msgstr "有些设置只在 Eidolon 启动或第一次检索时读取。重启会
 #: src/features/studio/videos-section.tsx
 msgid "Some videos need a signed-in browser's cookies. Reading a browser's cookies may ask for your password (the macOS Keychain), and yt-dlp writes the cookies it used back into a cookies file."
 msgstr "有些视频需要已登录浏览器的 Cookie。读取浏览器 Cookie 时可能会要求输入密码（macOS 钥匙串），而 yt-dlp 会把用过的 Cookie 写回 Cookie 文件。"
+
+#: src/features/chats/chat-view.tsx
+msgid "Someone here can't answer yet"
+msgstr "有人设暂时无法回答"
 
 #: src/components/settings-form/check-labels.ts
 msgid "Something answers there, but it isn't Qdrant."
@@ -3413,13 +3520,21 @@ msgstr "通话语言"
 msgid "Stacked by provider."
 msgstr "按服务商堆叠。"
 
+#: src/features/chats/chat-list.tsx
+msgid "Start Chat"
+msgstr "开始聊天"
+
 #: src/features/home/hero.tsx
 msgid "Start Chatting"
 msgstr "开始聊天"
 
 #: src/features/chats/chat-list.tsx
-msgid "Start one with any persona. Each chat keeps its own history."
-msgstr "和任意人设开始聊天。每个聊天都有自己的记录。"
+msgid "Start Group Chat"
+msgstr "开始群聊"
+
+#: src/features/chats/chat-list.tsx
+msgid "Start one with any persona, or with several at once. Each chat keeps its own history."
+msgstr "和任意人设开始聊天，也可以同时拉上几位。每个聊天都有自己的记录。"
 
 #: src/features/studio/videos-section.tsx
 msgid "Start the billed run?"
@@ -3546,6 +3661,10 @@ msgstr "不需要密钥"
 msgid "Taking a selfie…"
 msgstr "正在自拍…"
 
+#: src/components/settings-form/labels.ts
+msgid "Talkativeness"
+msgstr "健谈程度"
+
 #: src/features/home/hero.tsx
 msgid "Talking to"
 msgstr "正在和她聊天"
@@ -3563,8 +3682,8 @@ msgid "terms = [\"奶绿\", \"奶糖花\"]"
 msgstr "terms = [\"奶绿\", \"奶糖花\"]"
 
 #: src/features/chats/route.tsx
-msgid "Text a persona any time, no call needed. Each chat keeps its own history."
-msgstr "随时给人设发消息，无需通话。每个聊天都有自己的记录。"
+msgid "Text one persona or several at once, no call needed. Each chat keeps its own history."
+msgstr "给一位或几位人设发消息，无需通话。每个聊天都有自己的记录。"
 
 #: src/lib/labels.ts
 msgid "That action isn't supported here."
@@ -3670,6 +3789,14 @@ msgstr "连接已断开。"
 msgid "The delivery cues in her prompt aren't performed: she's told to put them in her voice instead."
 msgstr "提示词里的表演提示不会被演绎：模型会被要求直接用声音表达。"
 
+#: src/features/chats/labels.ts
+msgid "The director chose from how it scored the line."
+msgstr "调度器根据它对这句话的评分做出了选择。"
+
+#: src/features/chats/labels.ts
+msgid "The director didn't answer in time, so simple rules chose: a mention, a name in the line, then the most talkative."
+msgstr "调度器没能及时回应，于是按简单规则选择：先看 @ 提及，再看话里提到的名字，最后选最健谈的。"
+
 #: src/features/jobs/labels.ts
 msgid "The disk is full."
 msgstr "磁盘空间已满。"
@@ -3749,6 +3876,10 @@ msgstr "上次下载因 Cookie 失败。请换一个浏览器、改用 Cookie �
 #: src/features/studio/add-videos.tsx
 msgid "The length of {count} of them is unknown."
 msgstr "其中 {count} 个时长未知。"
+
+#: src/features/chats/labels.ts
+msgid "The line @-mentioned someone, and whoever a line mentions answers first."
+msgstr "这句话 @ 了某位人设，被 @ 的人设会先回答。"
 
 #: src/features/studio/add-videos.tsx
 msgid "The link couldn't be read."
@@ -3907,6 +4038,10 @@ msgstr "没有这个任务。"
 msgid "There may not be enough free space for this audio. Free some space first, or add fewer videos."
 msgstr "可用空间可能不够存放这些音频。请先腾出空间，或者少添加一些视频。"
 
+#: src/features/chats/chat-settings.tsx
+msgid "These apply to this chat alone."
+msgstr "这些设置只对这个聊天生效。"
+
 #: src/features/studio/add-videos.tsx
 msgid "These lines aren't http or https links:"
 msgstr "这些行不是 http 或 https 链接："
@@ -4045,6 +4180,10 @@ msgstr "待索引"
 #: src/features/studio/video-table.tsx
 msgid "To transcribe"
 msgstr "待转写"
+
+#: src/components/settings-form/labels.ts
+msgid "Topics she cares about, separated by commas or 、. The director reads them with her summary to tell when a group's line is one she'd join in on. Empty means her summary alone."
+msgstr "她在意的话题，用逗号或顿号（、）分隔。调度器会结合她的简介来判断群聊里的某句话她会不会想接。留空则只参考她的简介。"
 
 #: src/features/usage/spend-chart.tsx
 msgid "Total"
@@ -4294,6 +4433,10 @@ msgstr "声音已设为{voice}。"
 msgid "Waiting for {name} to answer…"
 msgstr "等待{name}接听…"
 
+#: src/features/chats/chat-log.tsx
+msgid "Waiting for a reply…"
+msgstr "等待回复…"
+
 #: src/features/home/memory-panel.tsx
 msgid "What {name} Remembers"
 msgstr "{name}的记忆"
@@ -4409,6 +4552,10 @@ msgstr "你想和谁聊天？"
 #: src/features/setup/stepper.tsx
 msgid "Who you'll talk to"
 msgstr "你的聊天对象"
+
+#: src/features/chats/why-answered.tsx
+msgid "Why {name} Answered"
+msgstr "{name}为什么回答"
 
 #: src/features/setup/memory-step.tsx
 msgid "With memory on, she remembers you from one call to the next. It needs Qdrant, a database you run in Docker on this machine. Skip it and everything else still works."

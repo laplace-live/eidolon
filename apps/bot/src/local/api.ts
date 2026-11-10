@@ -61,6 +61,7 @@ export const LOCAL_ROUTES = [
   "POST /api/local/chats/:id/messages",
   "GET /api/local/chats/:id/live",
   "POST /api/local/chats/:id/stop",
+  "POST /api/local/chats/:id/participants",
   "GET /api/local/chats/:id/files/:name",
 ] as const satisfies readonly (keyof LocalApi)[];
 
@@ -915,17 +916,21 @@ export interface LocalApi {
   "GET /api/local/chats": Endpoint<undefined, readonly ChatSummary[]>;
   "POST /api/local/chats": Endpoint<ChatCreateRequest, ChatCreated>;
   "GET /api/local/chats/:id": Endpoint<undefined, ChatContents, ChatReadQuery>;
-  "PATCH /api/local/chats/:id": Endpoint<ChatRenameRequest, Ok>;
+  "PATCH /api/local/chats/:id": Endpoint<ChatUpdateRequest, Ok>;
   "DELETE /api/local/chats/:id": Endpoint<undefined, Ok>;
   "POST /api/local/chats/:id/messages": Endpoint<ChatMessageRequest, Raw<"ndjson">>;
   /** A 204 with no body while no turn runs. */
   "GET /api/local/chats/:id/live": Endpoint<undefined, Raw<"ndjson">>;
   /** A 204 with no body, once the turn has stopped and what it said is stored. */
   "POST /api/local/chats/:id/stop": Endpoint<undefined, undefined>;
+  "POST /api/local/chats/:id/participants": Endpoint<ChatParticipantsRequest, Ok>;
   "GET /api/local/chats/:id/files/:name": Endpoint<undefined, Raw<"image">>;
 }
 
-/** POST chats: exactly one persona for now. Her greeting then runs; GET live streams it. */
+/**
+ * POST chats: 1 to 6 personas, each once. One persona's greeting then runs, and GET live streams it;
+ * a group chat doesn't greet, and is titled with their short names.
+ */
 export interface ChatCreateRequest {
   readonly participants: readonly ParticipantId[];
 }
@@ -951,16 +956,29 @@ export interface ChatReadQuery {
 }
 
 /**
- * POST chats/:id/messages: 1 to 4000 characters, answered with ChatStreamLines. A turn still
- * running is stopped first, and what it said is stored as interrupted.
+ * POST chats/:id/messages: 1 to 4000 characters, answered with ChatStreamLines: the viewer's line,
+ * then for each line the director answers, its `decision` and every chosen persona's turn. A reply
+ * still running is stopped first, with the hops queued after it, and what it said is stored as
+ * interrupted.
  */
 export interface ChatMessageRequest {
   readonly text: string;
 }
 
-/** PATCH chats/:id: 1 to 80 characters on one line. */
-export interface ChatRenameRequest {
-  readonly title: string;
+/**
+ * PATCH chats/:id, one field at a time: a `title` of 1 to 80 characters on one line, or the
+ * `chainLimit` of persona-to-persona hops after each viewer line, 0 to 6, kept as a `settings`
+ * event.
+ */
+export type ChatUpdateRequest = { readonly title: string } | { readonly chainLimit: number };
+
+/**
+ * POST chats/:id/participants: personas to add, who aren't in the chat, and to remove, who are,
+ * leaving 1 to 6. Kept as a `participants` event; a reply already running is left to finish.
+ */
+export interface ChatParticipantsRequest {
+  readonly add?: readonly ParticipantId[];
+  readonly remove?: readonly ParticipantId[];
 }
 
 /** One day's spend for one persona, role and model, summed. */

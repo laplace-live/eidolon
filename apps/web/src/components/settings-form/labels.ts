@@ -90,6 +90,8 @@ export const SETTING_TITLES: Readonly<Record<string, MessageDescriptor>> = {
   "selfie.ttlSeconds": msg`Selfie Lifetime`,
   "selfie.timeoutSeconds": msg`Selfie Timeout`,
   "selfie.references": msg`Selfie References`,
+  "chat.interests": msg`Interests`,
+  "chat.talkativeness": msg`Talkativeness`,
 };
 
 /** The line under a row, for the rows that have one. */
@@ -120,6 +122,8 @@ export const SETTING_HELP: Readonly<Record<string, MessageDescriptor>> = {
   "transcription.language": msg`The language of her videos as a two-letter code, or none. Default zh.`,
   "selfie.quality": msg`Higher costs more and takes longer while you wait in the call.`,
   "selfie.references": msg`One per line, relative to her folder.`,
+  "chat.interests": msg`Topics she cares about, separated by commas or 、. The director reads them with her summary to tell when a group's line is one she'd join in on. Empty means her summary alone.`,
+  "chat.talkativeness": msg`How readily she joins in when no one addressed her, from 0 to 1. At 0 she answers only when she's addressed, or when no one else will answer you. Default 0.5.`,
 };
 
 /** A choice's label by row and value; a value without one shows as it is. */

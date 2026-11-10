@@ -4,6 +4,8 @@ import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   activePersona,
+  chatInterests,
+  chatTalkativeness,
   dataHome,
   envEntries,
   envInt,
@@ -19,6 +21,7 @@ import {
   personaPath,
   resetSettings,
   SETTINGS,
+  withPersona,
 } from "../src/index.ts";
 
 const touched = new Set<string>();
@@ -350,6 +353,51 @@ describe("choosing the persona", () => {
     expect(activePersona().id).toBe("milky-green");
     resetSettings();
     expect(activePersona().id).toBe("other");
+  });
+});
+
+describe("chat settings", () => {
+  test("unset, she has no interests and the default talkativeness", () => {
+    expect(chatInterests()).toEqual([]);
+    expect(chatTalkativeness()).toBe(0.5);
+  });
+
+  test("interests split at commas, full-width commas and 、, blanks dropped", () => {
+    write(
+      "personas/milky-green/persona.yaml",
+      "chat:\n  interests: 游戏、 猫，深夜聊天, horror films ,,、\n  talkativeness: 0.8\n",
+    );
+    installSettings();
+    expect(chatInterests()).toEqual(["游戏", "猫", "深夜聊天", "horror films"]);
+    expect(chatTalkativeness()).toBe(0.8);
+    expect(warnings).toEqual([]);
+  });
+
+  test("talkativeness is clamped to 0–1, and a value that isn't a number is the default", () => {
+    for (const [value, read] of [
+      ["1.5", 1],
+      ["-2", 0],
+      ["inf", 1],
+      ["0", 0],
+      ["nan", 0.5],
+    ] as const) {
+      setEnv("CHAT_TALKATIVENESS", value);
+      expect([value, chatTalkativeness()]).toEqual([value, read]);
+    }
+    setEnv("CHAT_TALKATIVENESS", "chatty");
+    expect(chatTalkativeness()).toBe(0.5);
+    expect(warnings).toEqual([
+      "CHAT_TALKATIVENESS='chatty' is not a valid float; using default 0.5",
+    ]);
+  });
+
+  test("each persona's own, under withPersona", () => {
+    write("personas/alice/persona.yaml", "chat:\n  interests: 猫\n  talkativeness: 0.9\n");
+    write("personas/bob/persona.yaml", "identity:\n  name: Bob\n");
+    installSettings();
+    const read = () => [chatInterests(), chatTalkativeness()];
+    expect(withPersona("alice", read)).toEqual([["猫"], 0.9]);
+    expect(withPersona("bob", read)).toEqual([[], 0.5]);
   });
 });
 

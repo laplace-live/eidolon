@@ -316,6 +316,8 @@ export const SETTINGS: readonly SettingField[] = [
   field("persona", "selfie.ttlSeconds", "SELFIE_TTL_SECONDS", "int", "Selfie lifetime"),
   field("persona", "selfie.timeoutSeconds", "SELFIE_TIMEOUT_SECONDS", "int", "Selfie timeout"),
   field("persona", "selfie.references", "SELFIE_REFERENCE_IMAGES", "paths", "Selfie references"),
+  field("persona", "chat.interests", "CHAT_INTERESTS", "string", "Chat interests"),
+  field("persona", "chat.talkativeness", "CHAT_TALKATIVENESS", "float", "Chat talkativeness"),
 ];
 
 /** `voice.styles.<name>` sets `TTS_VOICE_ID_<NAME>`. */

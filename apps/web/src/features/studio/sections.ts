@@ -7,6 +7,7 @@ export const SECTIONS = [
   "prompt",
   "voice",
   "models",
+  "chat",
   "knowledge",
   "videos",
   "glossary",
@@ -33,6 +34,7 @@ export const CARD_PATHS = {
     "hearing.language",
     ["mind.provider", "mind.model"],
   ],
+  chat: [["chat.interests", "chat.talkativeness"]],
   memory: [
     ["memory.provider", "memory.model"],
     ["memory.searchLimit", "memory.searchThreshold"],

@@ -369,6 +369,23 @@ describe("an OpenAI-compatible mind", () => {
     expect(seen).toEqual([]);
   });
 
+  test("stop sequences go as `stop`, on every dialect; none sends no field", async () => {
+    reply = () => completions([{ choices: [{ delta: { content: "好" }, finish_reason: "stop" }] }]);
+    const stop = ["\n露比：", "\n露比:", "\nKen：", "\nKen:"];
+    await drain(createMind(), ask({ stop }));
+    setEnv({ LLM_PROVIDER: "openai", OPENAI_API_KEY: "sk", OPENAI_BASE_URL: base() });
+    await drain(createMind(), ask({ stop: ["\n露比："] }));
+    setEnv({ LLM_PROVIDER: "deepseek", DEEPSEEK_API_KEY: "dk", DEEPSEEK_BASE_URL: base() });
+    await drain(createMind(), ask({ stop: ["\n露比："] }));
+    await drain(createMind(), ask({ stop: [] }));
+    expect(seen.map((request) => request.body.stop)).toEqual([
+      stop,
+      ["\n露比："],
+      ["\n露比："],
+      undefined,
+    ]);
+  });
+
   test("a provider's refusal rejects the stream with its message", async () => {
     reply = () => Response.json({ error: { message: "no such model" } }, { status: 400 });
     const error = await drain(createMind(), ask()).catch((e: unknown) => e);
@@ -645,6 +662,28 @@ describe("an Anthropic mind", () => {
     expect(logs.map((record) => record.message)).toContain(
       "Anthropic's response is incomplete: the model stopped for refusal (cyber)",
     );
+  });
+
+  test("stop sequences go as stop_sequences, and stopping at one is no cut", async () => {
+    reply = () =>
+      messages([
+        start,
+        { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+        { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "好呀" } },
+        {
+          type: "message_delta",
+          delta: { stop_reason: "stop_sequence", stop_sequence: "\n露比：" },
+        },
+      ]);
+    const chunks = await drain(createMind(), ask({ stop: ["\n露比：", "\n露比:"] }));
+    await drain(createMind(), ask({ stop: [] }));
+    expect(seen[0]?.body.stop_sequences).toEqual(["\n露比：", "\n露比:"]);
+    expect("stop_sequences" in (seen[1]?.body ?? {})).toBe(false);
+    expect(chunks).toEqual([
+      { type: "text", text: "好呀" },
+      { type: "done", finishReason: "stop_sequence" },
+    ]);
+    expect(logs.filter((record) => record.level === "WARNING")).toEqual([]);
   });
 });
 

@@ -97,6 +97,37 @@ describe("buildPersonaPrefix", () => {
     );
   });
 
+  test("a group chat names the others after the viewer line; a chat of one stays as it was", () => {
+    const input = {
+      viewer: { isLoggedIn: true, uname: "小明", mid: 0 },
+      timeZone: "Asia/Shanghai",
+      now: new Date("2026-09-08T23:05:00Z"),
+      recentStreamDates: ["2026-09-08"],
+      selfieHint: "SELFIE",
+    };
+    const single =
+      "现在是 2026年9月9日 周三 07:05。如果用户问到时间或日期，根据这里的事实回答；不要主动念时间，除非话题相关。\n" +
+      "今天来花店的奶糖花叫「小明」。聊天里可以自然地叫她/他的名字，但不要每句都重复，也不要主动念UID。\n" +
+      "你最近几次直播：9月8日（昨天）。如果用户问最近 / 上次 / 上一次 / 好久没播 / 这周播了吗 之类的，根据这里的日期自然回答；不要凭空编日期。\n" +
+      "SELFIE\n\n";
+    expect(buildPersonaPrefix(input)).toBe(single);
+    expect(buildPersonaPrefix({ ...input, participants: [] })).toBe(single);
+    expect(
+      buildPersonaPrefix({
+        ...input,
+        participants: [
+          { name: "露比", summary: "a VTuber who sings" },
+          { name: "Ken", summary: "" },
+        ],
+      }),
+    ).toBe(
+      single.replace(
+        "UID。\n",
+        "UID。\n这是群聊，群里还有：露比（a VTuber who sings）、Ken；只用你自己的身份说话，不要替别人说话。\n",
+      ),
+    );
+  });
+
   test("anonymous with nothing else is the clock line alone", () => {
     expect(
       buildPersonaPrefix({
@@ -361,6 +392,24 @@ describe("buildSystemInstruction", () => {
       dbPath: join(dir, "no-lancedb"),
     });
     expect(instruction.startsWith("现在是 2026年9月8日 周二 23:05。")).toBe(true);
+  });
+
+  test("names a group chat's other personas", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "eidolon-instruction-"));
+    writeFileSync(join(dir, "persona.md"), "p");
+    setEnv("PERSONA_FILE", join(dir, "persona.md"));
+    const instruction = await buildSystemInstruction({
+      viewer: { isLoggedIn: false, uname: null, mid: null },
+      voiceHint: "",
+      selfieHint: "",
+      participants: [{ name: "露比", summary: "" }],
+      timeZone: "UTC",
+      now: new Date("2026-09-08T23:05:00Z"),
+      dbPath: join(dir, "no-lancedb"),
+    });
+    expect(instruction.split("\n")[1]).toBe(
+      "这是群聊，群里还有：露比；只用你自己的身份说话，不要替别人说话。",
+    );
   });
 });
 

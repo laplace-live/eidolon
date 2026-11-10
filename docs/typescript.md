@@ -20,10 +20,10 @@ Bun workspaces, one package per subsystem. Dependencies point down this list; no
 | `packages/turn` | Cloudflare TURN credentials, ICE plans, relay-only candidate rules |
 | `packages/retrieval` | the LanceDB read path: jieba (pure TS, same dictionary), hybrid search, RRF and the reranker, stream dates and the catalog; and its write side: the Arrow schemas, `writeTable`, `EmbedCache`, `embedInBatches` |
 | `packages/memory` | Mem0's engine over Qdrant: mem0's payloads, its `history.db` |
-| `packages/context` | the retrieval gate, both RAG providers, the recall tool, the system instruction, the greeting |
+| `packages/context` | the retrieval gate, both RAG providers, the recall tool, the system instruction, the greeting, and group chats' director ([chat.md](chat.md#the-director)) |
 | `packages/tools`, `packages/imagegen` | `change_voice_style`, `take_selfie`, the selfie store |
-| `packages/chat` | the chat log's format, browser-safe: its events, `viewOf`, the `ChatStore` interface and its contract suite; `@eidolon/chat/jsonl` is the local store ([chat.md](chat.md)) |
-| `packages/engine` | the turn engine: one persona's text turn, her mind per provider without pipedog, the tool loop and her context providers ([chat.md](chat.md#a-turn-runturn)) |
+| `packages/chat` | the chat log's format, browser-safe: its events, `viewOf`, `parseMentions`, the `ChatStore` interface and its contract suite; `@eidolon/chat/jsonl` is the local store ([chat.md](chat.md)) |
+| `packages/engine` | the turn engine: one persona's text turn, her mind per provider without pipedog, the tool loop and her context providers ([chat.md](chat.md#a-turn-runturn)); `runChat`, a chat's turns in the order the director chooses ([chat.md](chat.md#the-chain)) |
 | `packages/ingest` | the offline chain: download, transcribe, refine, both ingests, the stream catalog and the pipeline ([below](#the-offline-chain)) |
 | `packages/runtime` | the only pipedog importer: the pipeline, adapters from `core` contracts to pipedog, WebRTC signalling |
 | `apps/bot` | `Bun.serve`, the routes, MCP, the entry point |

@@ -1,6 +1,6 @@
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
-import { EllipsisIcon, PencilIcon, Trash2Icon } from "lucide-react";
+import { EllipsisIcon, PencilIcon, Settings2Icon, Trash2Icon } from "lucide-react";
 import { type FormEvent, useId, useRef, useState } from "react";
 import {
   AlertDialog,
@@ -158,23 +158,25 @@ function DeleteDialog({
   );
 }
 
-/** A chat's Rename and Delete, behind a button. */
+/** A chat's Rename and Delete, behind a button, and Chat Settings where `onSettings` opens them. */
 export function ChatMenu({
   id,
   name,
   onDeleted,
+  onSettings,
   className,
 }: {
   readonly id: string;
   /** The chat's title, or what stands in for one. */
   readonly name: string;
   readonly onDeleted: (id: string) => void;
+  readonly onSettings?: () => void;
   readonly className?: string;
 }) {
   const { t } = useLingui();
   const [dialog, setDialog] = useState<"rename" | "delete" | null>(null);
-  // A dialog opens once the menu has closed: open together, the two focus traps fight.
-  const opening = useRef<"rename" | "delete" | null>(null);
+  // A dialog or sheet opens once the menu has closed: open together, the two focus traps fight.
+  const opening = useRef<"rename" | "delete" | "settings" | null>(null);
   return (
     <>
       <DropdownMenu>
@@ -186,12 +188,20 @@ export function ChatMenu({
         <DropdownMenuContent
           align="end"
           onCloseAutoFocus={(event) => {
-            if (opening.current === null) return;
+            const next = opening.current;
+            if (next === null) return;
             event.preventDefault();
-            setDialog(opening.current);
             opening.current = null;
+            if (next === "settings") onSettings?.();
+            else setDialog(next);
           }}
         >
+          {onSettings && (
+            <DropdownMenuItem onSelect={() => (opening.current = "settings")}>
+              <Settings2Icon />
+              {t`Chat Settings`}
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem onSelect={() => (opening.current = "rename")}>
             <PencilIcon />
             {t`Rename`}

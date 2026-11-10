@@ -14,13 +14,17 @@ export {
   type ChatStoreErrorCode,
   type ChatStreamLine,
   type ChatSummary,
+  DEFAULT_CHAIN_LIMIT,
   isChatId,
+  MAX_CHAIN_LIMIT,
+  MAX_PARTICIPANTS,
   type ParticipantId,
   type Speaker,
   stampEvents,
 } from "./format.ts";
+export { type MentionTarget, parseMentions } from "./mentions.ts";
 export { canonicalForSig } from "./sig.ts";
-export { summarize } from "./summary.ts";
+export { chainLimitOf, summarize } from "./summary.ts";
 export {
   CHAT_WINDOW_MESSAGES,
   toolCallMessages,

@@ -206,7 +206,8 @@ export class GateDecision {
   }
 }
 
-export interface RetrievalGateOptions {
+/** A Decisions API model and where to reach it. */
+export interface DecisionsOptions {
   readonly apiKey: string;
   readonly model?: string;
   readonly url?: string;
@@ -215,6 +216,8 @@ export interface RetrievalGateOptions {
   readonly fetch?: typeof fetch;
   readonly timeoutSec?: number;
 }
+
+export type RetrievalGateOptions = DecisionsOptions;
 
 /** OpenRouter's Decisions route sits beside its v1 API, not under it. */
 export function decisionsUrl(baseUrl: string): string {
@@ -236,18 +239,17 @@ export function reportDecision(provider: string, model: string, body: unknown): 
   });
 }
 
-/** Attaches one Jev decision per user turn to every context frame of that turn. */
-export class RetrievalGate {
+/** One model's Decisions API, billed to the gate's role. */
+export class DecisionsClient {
   readonly model: string;
   readonly #provider: string;
   readonly #headers: Record<string, string>;
   readonly #url: string;
   readonly #fetch: typeof fetch;
   readonly #timeoutSec: number;
-  #turn: TurnKey | null = null;
-  #decision: GateDecision | null = null;
 
-  constructor(options: RetrievalGateOptions) {
+  /** `timeoutSec` applies when `options` sets none. */
+  constructor(options: DecisionsOptions, timeoutSec: number) {
     this.model = options.model ?? DEFAULT_GATE_MODEL;
     this.#provider = options.provider ?? "openrouter";
     this.#headers = {
@@ -257,7 +259,46 @@ export class RetrievalGate {
     };
     this.#url = options.url ?? GATE_URL;
     this.#fetch = options.fetch ?? fetch;
-    this.#timeoutSec = options.timeoutSec ?? GATE_TIMEOUT_SEC;
+    this.#timeoutSec = options.timeoutSec ?? timeoutSec;
+  }
+
+  /** The answer's body, its usage reported; rejects on any failure, `signal`'s abort included. */
+  async ask(state: unknown, questions: object, signal?: AbortSignal): Promise<unknown> {
+    const timeout = AbortSignal.timeout(this.#timeoutSec * 1000);
+    const post = this.#fetch;
+    // The connection must outlive the gap between turns: with httpx's 5 s keep-alive, turns
+    // 15-40 s apart paid a fresh TLS session each, ~1.4 s a call instead of ~0.5 s. Bun's
+    // fetch pools sockets process-wide and reused an idle one after 90 s when measured.
+    const response = await post(this.#url, {
+      method: "POST",
+      headers: this.#headers,
+      body: JSON.stringify({ model: this.model, state, questions }),
+      // httpx follows no redirects, so a 3xx failed open there too.
+      redirect: "manual",
+      signal: signal === undefined ? timeout : AbortSignal.any([timeout, signal]),
+    });
+    if (!response.ok) {
+      throw pyError(
+        "HTTPStatusError",
+        httpxStatusMessage(response, this.#url, { statusLineOnly: true }),
+      );
+    }
+    const body: unknown = await response.json();
+    reportDecision(this.#provider, this.model, body);
+    return body;
+  }
+}
+
+/** Attaches one Jev decision per user turn to every context frame of that turn. */
+export class RetrievalGate {
+  readonly model: string;
+  readonly #client: DecisionsClient;
+  #turn: TurnKey | null = null;
+  #decision: GateDecision | null = null;
+
+  constructor(options: RetrievalGateOptions) {
+    this.#client = new DecisionsClient(options, GATE_TIMEOUT_SEC);
+    this.model = this.#client.model;
   }
 
   /** One POST; any failure retrieves without a timeline (fail open). A null state asks nothing. */
@@ -267,30 +308,7 @@ export class RetrievalGate {
     let body: unknown;
     let score: number;
     try {
-      const post = this.#fetch;
-      // The connection must outlive the gap between turns: with httpx's 5 s keep-alive, turns
-      // 15-40 s apart paid a fresh TLS session each, ~1.4 s a call instead of ~0.5 s. Bun's
-      // fetch pools sockets process-wide and reused an idle one after 90 s when measured.
-      const response = await post(this.#url, {
-        method: "POST",
-        headers: this.#headers,
-        body: JSON.stringify({
-          model: this.model,
-          state,
-          questions: { ...gateQuestions(), ...TIMELINE_QUESTIONS },
-        }),
-        // httpx follows no redirects, so a 3xx failed open there too.
-        redirect: "manual",
-        signal: AbortSignal.timeout(this.#timeoutSec * 1000),
-      });
-      if (!response.ok) {
-        throw pyError(
-          "HTTPStatusError",
-          httpxStatusMessage(response, this.#url, { statusLineOnly: true }),
-        );
-      }
-      body = await response.json();
-      reportDecision(this.#provider, this.model, body);
+      body = await this.#client.ask(state, { ...gateQuestions(), ...TIMELINE_QUESTIONS });
       score = maxNoul(body, Object.keys(GATE_QUESTIONS));
     } catch (error) {
       logger.warning(`Retrieval gate failed open: ${errorRepr(error)}`);
@@ -335,24 +353,33 @@ export class RetrievalGate {
   }
 }
 
+/**
+ * The active persona's gate role as a Decisions API: null when its key is unset, or when its
+ * settings name no decision model, which `onError` hears.
+ */
+export function gateRoleDecisions(onError: (error: Error) => void): DecisionsOptions | null {
+  const selection = trySelect("gate", undefined, onError);
+  if (selection === null || !hasKey(selection)) return null;
+  return {
+    apiKey: selection.apiKey as string,
+    model: selection.model,
+    provider: selection.provider.id,
+    url: decisionsUrl(selection.baseUrl as string),
+  };
+}
+
 /** null when the gate's key is unset, its settings name no decision model, or it is disabled. */
 export function retrievalGateFromEnv(): RetrievalGate | null {
   if (!envFlag("RETRIEVAL_GATE_ENABLED", true)) {
     logger.info("RETRIEVAL_GATE_ENABLED is off — every turn searches both LanceDB tiers");
     return null;
   }
-  const selection = trySelect("gate", undefined, (error) =>
+  const options = gateRoleDecisions((error) =>
     logger.warning(`Retrieval gate off: ${error.message}`),
   );
-  if (selection === null || !hasKey(selection)) return null;
-  const { model, provider } = selection;
-  logger.info(`Retrieval gate enabled: model=${pyRepr(model)}`);
-  return new RetrievalGate({
-    apiKey: selection.apiKey as string,
-    model,
-    provider: provider.id,
-    url: decisionsUrl(selection.baseUrl as string),
-  });
+  if (options === null) return null;
+  logger.info(`Retrieval gate enabled: model=${pyRepr(options.model)}`);
+  return new RetrievalGate(options);
 }
 
 /** The decision a frame carries, or null when no gate ran. */
@@ -418,12 +445,16 @@ function subscript(container: unknown, key: string): unknown {
   return container[key];
 }
 
+/** Question `name`'s noul in a Decisions answer; throws on a missing or malformed one. */
+export function noulOf(body: unknown, name: string): number {
+  return pyFloat(subscript(subscript(subscript(body, "answers"), name), "noul"));
+}
+
 // Python's max() keeps the first of equal or unordered values, so a NaN noul only wins first.
 function maxNoul(body: unknown, names: readonly string[]): number {
-  const answers = subscript(body, "answers");
   let score: number | undefined;
   for (const name of names) {
-    const noul = pyFloat(subscript(subscript(answers, name), "noul"));
+    const noul = noulOf(body, name);
     if (score === undefined || noul > score) score = noul;
   }
   return score as number;

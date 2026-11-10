@@ -13,9 +13,14 @@ export function listChats(signal?: AbortSignal): Promise<readonly ChatSummary[]>
   return call("GET /api/local/chats", { signal });
 }
 
-/** A new chat with `persona`; her greeting starts at once, and GET live streams it. */
-export function createChat(persona: ParticipantId): Promise<{ readonly id: string }> {
-  return call("POST /api/local/chats", { body: { participants: [persona] } });
+/**
+ * A new chat with `participants`, 1 to 6 personas. With one, her greeting starts at once and GET
+ * live streams it; a group waits for the viewer's first line.
+ */
+export function createChat(
+  participants: readonly ParticipantId[],
+): Promise<{ readonly id: string }> {
+  return call("POST /api/local/chats", { body: { participants } });
 }
 
 export function readChat(id: string, signal?: AbortSignal): Promise<ChatContents> {
@@ -51,6 +56,19 @@ export async function stopChat(id: string): Promise<void> {
 
 export async function renameChat(id: string, title: string): Promise<void> {
   await call("PATCH /api/local/chats/:id", { params: { id }, body: { title } });
+}
+
+/** How many times personas may answer each other after each of the viewer's lines, 0 to 6. */
+export async function setChainLimit(id: string, chainLimit: number): Promise<void> {
+  await call("PATCH /api/local/chats/:id", { params: { id }, body: { chainLimit } });
+}
+
+/** Adds personas to the chat and removes others, leaving it 1 to 6. */
+export async function changeParticipants(
+  id: string,
+  change: { readonly add?: readonly ParticipantId[]; readonly remove?: readonly ParticipantId[] },
+): Promise<void> {
+  await call("POST /api/local/chats/:id/participants", { params: { id }, body: change });
 }
 
 export async function deleteChat(id: string): Promise<void> {

@@ -21,6 +21,7 @@
     "laplace-eval-retrieval": "bun apps/cli/src/main.ts eval-retrieval",
     "laplace-generate-image": "bun apps/cli/src/main.ts generate-image",
     "gate-decisions": "bun apps/cli/src/main.ts gate-decisions",
+    "director-decisions": "bun docs/benchmarks/2026-11-10-director/score.ts --check",
     "laplace-download": "bun apps/cli/src/main.ts download",
     "laplace-transcribe": "bun apps/cli/src/main.ts transcribe",
     "laplace-refine": "bun apps/cli/src/main.ts refine",

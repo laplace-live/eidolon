@@ -1,11 +1,10 @@
-import { summarize } from "@eidolon/chat";
+import { chainLimitOf, summarize } from "@eidolon/chat";
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { KeyRoundIcon, MessageSquareOffIcon, PanelLeftIcon, PhoneIcon } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router";
-import { PersonaAvatar } from "@/components/avatar";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorAlert } from "@/components/error-alert";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -13,14 +12,18 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ApiError, type ErrorCode } from "@/lib/api";
+import { listOf } from "@/lib/labels";
 import { statusQuery } from "@/lib/query";
 import { useLang } from "@/locales/i18n";
 import { ChatLog } from "./chat-log";
 import { ChatMenu } from "./chat-menu";
+import { ChatSettingsSheet } from "./chat-settings";
 import { Composer } from "./composer";
 import { chatName, shortDate } from "./format";
+import { nextUp } from "./group";
 import { chatItems, retryText } from "./items";
-import { type ChatPersona, shortNameOf, usePersonaOf } from "./persona";
+import { ParticipantsMenu } from "./participants";
+import { type ChatPersona, chatWith, shortNameOf, usePersonaOf } from "./persona";
 import { chatQuery } from "./queries";
 import type { LiveError } from "./stream";
 import { useChat } from "./use-chat";
@@ -61,13 +64,22 @@ function CallButton({ persona }: { readonly persona: ChatPersona }) {
 }
 
 /** A reply that couldn't start: a key she needs, else the API's failure. */
-function LiveNotice({ error, name }: { readonly error: LiveError; readonly name: string }) {
+function LiveNotice({
+  error,
+  name,
+}: {
+  readonly error: LiveError;
+  /** Hers in a chat with one persona; null in a group, where the message names who. */
+  readonly name: string | null;
+}) {
   const { t } = useLingui();
   if (error.code === "missing-key") {
     return (
       <Alert>
         <KeyRoundIcon />
-        <AlertTitle>{t`${ph({ name })} can't answer yet`}</AlertTitle>
+        <AlertTitle>
+          {name === null ? t`Someone here can't answer yet` : t`${ph({ name })} can't answer yet`}
+        </AlertTitle>
         <AlertDescription>{error.message}</AlertDescription>
         <AlertAction>
           <Button variant="outline" size="sm" asChild>
@@ -139,14 +151,25 @@ export function ChatView({
   readonly onShowList: () => void;
   readonly onDeleted: (id: string) => void;
 }) {
+  const { t } = useLingui();
   const lang = useLang();
   const chat = useQuery(chatQuery(id));
   const personaOf = usePersonaOf();
   const turns = useChat(id);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const events = chat.data?.events;
   const items = useMemo(() => chatItems(events ?? []), [events]);
+  const header = chat.data?.header;
+  const summary = useMemo(
+    () => (header === undefined ? null : summarize(header, events ?? [])),
+    [header, events],
+  );
+  const personas = useMemo(
+    () => (summary?.participants ?? []).map(personaOf),
+    [summary, personaOf],
+  );
 
-  if (chat.data === undefined) {
+  if (chat.data === undefined || summary === null) {
     const state =
       chat.error === null
         ? "loading"
@@ -156,43 +179,67 @@ export function ChatView({
     return <ChatPlaceholder state={state} onShowList={onShowList} />;
   }
 
-  const { header } = chat.data;
-  const persona = personaOf(header.participants[0] ?? "");
-  const name = shortNameOf(persona);
-  const { title } = summarize(header, chat.data.events);
+  const { createdAt, participants, title } = summary;
+  const [only] = personas;
+  const solo = personas.length === 1 && only !== undefined ? only : null;
+  const who = chatWith(personas);
+  const names = solo?.name ?? listOf(personas.map((persona) => persona.name));
   const now = Date.now();
-  const menuName = chatName(title, persona.name, header.createdAt, lang, now);
+  const menuName = chatName(title, who, createdAt, lang, now);
   const retry = turns.busy ? null : retryText(items);
+  const placeholder =
+    solo === null ? t`Message everyone` : t`Message ${ph({ name: shortNameOf(solo) })}`;
 
   return (
     <>
       <header className="flex h-14 shrink-0 items-center gap-3 border-b px-4">
         <ListButton onClick={onShowList} />
-        <PersonaAvatar persona={persona} size="sm" />
+        <ParticipantsMenu chatId={id} participants={participants} personaOf={personaOf} />
         <div className="min-w-0 flex-1">
-          <h2 className="truncate font-semibold text-sm leading-tight">{title ?? persona.name}</h2>
+          <h2 className="truncate font-semibold text-sm leading-tight">{title ?? who}</h2>
           <p className="truncate text-muted-foreground text-xs">
-            {title === null ? shortDate(header.createdAt, lang, now) : persona.name}
+            {title === null ? shortDate(createdAt, lang, now) : names}
           </p>
         </div>
-        <CallButton persona={persona} />
-        <ChatMenu id={id} name={menuName} onDeleted={onDeleted} />
+        {solo !== null && <CallButton persona={solo} />}
+        <ChatMenu
+          id={id}
+          name={menuName}
+          onDeleted={onDeleted}
+          onSettings={() => setSettingsOpen(true)}
+        />
       </header>
       <div className="relative min-h-0 flex-1">
         <ChatLog
           chatId={id}
-          persona={persona}
+          personas={personas}
+          personaOf={personaOf}
           items={items}
           live={turns.live}
+          next={nextUp(chat.data.events)}
           lateTools={chat.data.lateTools}
           retry={retry}
           onSend={turns.send}
         />
       </div>
       <footer className="flex shrink-0 flex-col gap-3 border-t bg-muted/50 px-4 py-3">
-        {turns.live.error !== null && <LiveNotice error={turns.live.error} name={name} />}
-        <Composer name={name} busy={turns.busy} onSend={turns.send} onStop={turns.stop} />
+        {turns.live.error !== null && (
+          <LiveNotice error={turns.live.error} name={solo === null ? null : shortNameOf(solo)} />
+        )}
+        <Composer
+          placeholder={placeholder}
+          participants={personas}
+          busy={turns.busy}
+          onSend={turns.send}
+          onStop={turns.stop}
+        />
       </footer>
+      <ChatSettingsSheet
+        id={id}
+        chainLimit={chainLimitOf(chat.data.events)}
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+      />
     </>
   );
 }

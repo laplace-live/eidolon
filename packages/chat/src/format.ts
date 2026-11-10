@@ -3,6 +3,12 @@
 
 export const CHAT_FORMAT = 1;
 
+/** The most personas a chat holds. */
+export const MAX_PARTICIPANTS = 6;
+/** Persona-to-persona hops after each viewer line until a `settings` event sets them; 0 is none. */
+export const DEFAULT_CHAIN_LIMIT = 3;
+export const MAX_CHAIN_LIMIT = 6;
+
 /** A persona id. */
 export type ParticipantId = string;
 

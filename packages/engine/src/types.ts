@@ -7,6 +7,7 @@ import type {
   ChatStreamLine,
   ParticipantId,
 } from "@eidolon/chat";
+import type { GroupMember } from "@eidolon/context";
 import type { ContextProvider, LlmTool, ToolSchema, TurnGate } from "@eidolon/core";
 
 export interface MindRequest {
@@ -14,6 +15,8 @@ export interface MindRequest {
   /** OpenAI-shaped, with no system message: `system` carries it. */
   readonly messages: readonly unknown[];
   readonly tools: readonly ToolSchema[];
+  /** Ends her reply where one appears, unwritten; OpenAI takes at most 4. */
+  readonly stop?: readonly string[];
   readonly signal: AbortSignal;
 }
 
@@ -79,8 +82,16 @@ export interface PersonaParts {
 export interface EngineDeps {
   /** The mind of the persona whose scope it is called in. */
   createMind(): Mind;
-  /** Her parts in chat `chat`: its providers keep what they saw of it, as a call's do. */
-  parts(persona: ParticipantId, viewer: UserContext, chat: string): Promise<PersonaParts>;
+  /**
+   * Her parts in chat `chat`: its providers keep what they saw of it, as a call's do. `others`
+   * are the chat's other personas, whom her system instruction names.
+   */
+  parts(
+    persona: ParticipantId,
+    viewer: UserContext,
+    chat: string,
+    others?: readonly GroupMember[],
+  ): Promise<PersonaParts>;
   /** Stores a file in the turn's chat. */
   saveAttachment(bytes: Uint8Array, mime: string): Promise<Attachment>;
   fetchImage(url: string, signal: AbortSignal): Promise<{ bytes: Uint8Array; mime: string }>;

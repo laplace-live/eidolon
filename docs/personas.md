@@ -220,6 +220,8 @@ is unset, and the other providers use `transcription.language`, else `zh`.
 | `selfie.ttlSeconds` | `SELFIE_TTL_SECONDS` | int | Selfie lifetime |
 | `selfie.timeoutSeconds` | `SELFIE_TIMEOUT_SECONDS` | int | Selfie timeout |
 | `selfie.references` | `SELFIE_REFERENCE_IMAGES` | paths | Selfie references |
+| `chat.interests` | `CHAT_INTERESTS` | string | Chat interests |
+| `chat.talkativeness` | `CHAT_TALKATIVENESS` | float | Chat talkativeness |
 
 `knowledge.facts.files` lists name patterns for the fact files in `sources/<id>/facts/` (default
 `*.txt`). A pattern matches a file name as Python's pathlib glob does: `*`, `?`, `[…]` and `[!…]`,
@@ -234,6 +236,14 @@ and the punctuation that follows.
 `transcription.model` defaults to `stt-async-v5`, `refine.model` to `~google/gemini-pro-latest` and
 `refine.concurrency` to 8. `transcription.language` is the two-letter language hint Soniox gets for
 the persona's videos (default `zh`; `none` sends none), as `--language` sets it for one run.
+
+`chat.*` is how she joins a group chat ([chat.md](chat.md)). `chat.interests` names the
+topics she cares about, separated by commas or 、 (`游戏、猫、深夜聊天`); the director reads them
+with `identity.summary` to judge whether a line is something she'd join in on, and reads the
+summary alone when they're unset. `chat.talkativeness`, from 0 to 1 (default 0.5; a value
+outside is clamped), weighs that interest: the director ranks the personas who weren't addressed
+by interest times talkativeness. At 0 she joins in only when a line mentions or addresses her,
+or when everyone else there is at 0 too, since someone always answers the viewer.
 
 ## settings.yaml
 

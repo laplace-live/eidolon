@@ -7,7 +7,7 @@ import type { ContextTurn, ConversationContext } from "@eidolon/core";
 import type { LlmSettings, MemoryConfig } from "../src/config.ts";
 import { MemoryEngine, SharedEngine } from "../src/engine.ts";
 import { HistoryStore } from "../src/history.ts";
-import { createMemoryProvider } from "../src/index.ts";
+import { createMemoryProvider, MEM0_STORE_KEY } from "../src/index.ts";
 import { OpenAICompatibleChat, OpenAICompatibleEmbedder } from "../src/openai.ts";
 import { Mem0MemoryProvider, openMemoryProvider } from "../src/provider.ts";
 import { QdrantVectorStore } from "../src/qdrant.ts";
@@ -263,6 +263,29 @@ describe("the background store", () => {
       "Mem0: dropped 2 non-string-content message(s) before storing 3 valid one(s)",
     ]);
     expect(logs.at("DEBUG")).toContainEqual(["DEBUG", "Storing 3 messages in Mem0"]);
+  });
+
+  test("a turn's own list is stored in place of its context, and searching is unchanged", async () => {
+    const { engine, calls } = stubEngine();
+    const provider = new Mem0MemoryProvider(engine, SCOPE, SEARCH);
+    const listed = [
+      { role: "user", content: "我养了猫" },
+      { role: "assistant", content: "好可爱" },
+      { role: "assistant", content: " " },
+    ];
+    const { turn, spawned } = turnFor(
+      new FakeContext([
+        { role: "user", content: "观众：我养了猫" },
+        { role: "assistant", content: "好可爱" },
+        { role: "user", content: "露比：我最喜欢狗" },
+      ]),
+    );
+    await provider.onContext({ ...turn, metadata: { [MEM0_STORE_KEY]: listed } });
+    await Promise.all(spawned.map(([, job]) => job));
+    expect(calls.search.map(([query]) => query)).toEqual(["露比：我最喜欢狗"]);
+    expect(calls.add).toEqual([
+      [listed.slice(0, 2), { scope: SCOPE, metadata: { platform: "pipecat" } }],
+    ]);
   });
 
   test("a batch that filters down to nothing skips mem0", async () => {

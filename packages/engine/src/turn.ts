@@ -12,9 +12,11 @@ import {
 import { errorText, logger, raceAbort, readPersonaIdentity, withPersona } from "@eidolon/config";
 import { buildGreetingKickoff } from "@eidolon/context";
 import type { FrameMetadata, ToolEffects, ToolResult } from "@eidolon/core";
+import { MEM0_STORE_KEY } from "@eidolon/memory";
 import { withUsageScope } from "@eidolon/providers";
 import { saveSelfies } from "./attachments.ts";
 import { TurnConversation } from "./context.ts";
+import { type Group, groupOf, SpeakerCut } from "./group.ts";
 import type {
   EngineDeps,
   Mind,
@@ -116,6 +118,8 @@ class Turn {
   readonly #attachments: Attachment[] = [];
   /** Her message is built: photos saved from now on go out on a later one. */
   #sealed = false;
+  /** The chat's other personas; null in a chat of one. */
+  #group: Group | null = null;
 
   constructor(
     request: TurnRequest,
@@ -172,11 +176,16 @@ class Turn {
   async #respond(): Promise<void> {
     const { chat, viewer, kickoff } = this.#request;
     const signal = this.#signal;
-    const parts = await raceAbort(this.#deps.parts(this.#persona, viewer, chat.header.id), signal);
+    this.#group = groupOf(chat, this.#persona);
+    const parts = await raceAbort(
+      this.#deps.parts(this.#persona, viewer, chat.header.id, this.#group?.members ?? []),
+      signal,
+    );
     const mind = this.#deps.createMind();
     const { messages, blocks } = viewWithBlocks(chat.header, chat.events, this.#persona, {
       windowMessages: CHAT_WINDOW_MESSAGES,
       nameOf: (id) => readPersonaIdentity(id).name,
+      viewerName: viewer.uname ?? "",
     });
     const conversation = new TurnConversation(messages, {
       persona: this.#persona,
@@ -206,6 +215,7 @@ class Turn {
   async #enrich(parts: PersonaParts, conversation: TurnConversation): Promise<void> {
     const signal = this.#signal;
     const metadata: FrameMetadata = {};
+    if (this.#group !== null) metadata[MEM0_STORE_KEY] = this.#group.memory;
     parts.gate?.attach(conversation.getMessages(), metadata);
     for (const { label, provider } of parts.providers) {
       try {
@@ -235,28 +245,42 @@ class Turn {
 
   async #converse(parts: PersonaParts, mind: Mind, conversation: TurnConversation): Promise<void> {
     const signal = this.#signal;
+    const group = this.#group;
+    const cut = group === null ? null : new SpeakerCut(group.names);
     for (let round = 1; ; round++) {
       const hidden = conversation.hiddenTools;
       let text = "";
       let calls: MindToolCall[] = [];
+      const say = (said: string): void => {
+        if (said === "") return;
+        text += said;
+        this.#text += said;
+        this.#emit({ type: "delta", turn: this.#id, text: said });
+      };
       for await (const chunk of mind.stream({
         system: parts.systemInstruction,
         messages: conversation.getMessages(),
         tools: parts.tools
           .filter((tool) => !hidden.includes(tool.schema.name))
           .map((tool) => tool.schema),
+        ...(group === null ? {} : { stop: group.stop }),
         signal,
       })) {
         signal.throwIfAborted();
-        if (chunk.type === "text" && chunk.text !== "") {
-          text += chunk.text;
-          this.#text += chunk.text;
-          this.#emit({ type: "delta", turn: this.#id, text: chunk.text });
+        if (chunk.type === "text") {
+          say(cut === null ? chunk.text : cut.push(chunk.text));
+          // What follows a line written as someone else is theirs too, tool calls included.
+          if (cut?.cut) break;
         } else if (chunk.type === "tool-calls") {
           calls = [...calls, ...chunk.calls];
         }
       }
       signal.throwIfAborted();
+      if (cut?.cut) {
+        logger.info(`[chat] ${this.#persona}'s reply was cut where she wrote as someone else`);
+        return;
+      }
+      if (cut !== null) say(cut.flush());
       if (calls.length === 0) return;
       if (round === MAX_ROUNDS) {
         logger.warning(

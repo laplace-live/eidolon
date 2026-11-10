@@ -5,10 +5,10 @@
 // tried again later. The system instruction is rebuilt every turn, because it carries the clock.
 import { stat } from "node:fs/promises";
 import type { UserContext } from "@eidolon/access";
-import type { ParticipantId } from "@eidolon/chat";
 import { errorText, logger, pyRepr, settingsGeneration, withPersona } from "@eidolon/config";
 import {
   buildSystemInstruction,
+  type GroupMember,
   PersonaFacts,
   retrievalGateFromEnv,
   StreamArchive,
@@ -17,7 +17,7 @@ import type { ContextProvider, LlmTool, TurnGate } from "@eidolon/core";
 import { createMemoryProvider, isMemoryConfigured } from "@eidolon/memory";
 import { ingestHint, PERSONA_FACTS, resolveDbPath, STREAM_ARCHIVE } from "@eidolon/retrieval";
 import { createSelfieTool, selfiePromptHint } from "@eidolon/tools";
-import type { PersonaParts } from "./types.ts";
+import type { EngineDeps, PersonaParts } from "./types.ts";
 
 /** The stream archive: a context provider that may also offer recall_streams. */
 export interface ArchiveProvider extends ContextProvider {
@@ -37,6 +37,7 @@ export interface PartsDeps {
     viewer: UserContext;
     voiceHint: string;
     selfieHint: string;
+    participants?: readonly GroupMember[];
   }): Promise<string>;
   dbPath(): string;
   dbPathExists(path: string): Promise<boolean>;
@@ -124,7 +125,7 @@ class Pieces {
     this.#deps = deps;
   }
 
-  async parts(viewer: UserContext): Promise<PersonaParts> {
+  async parts(viewer: UserContext, others: readonly GroupMember[]): Promise<PersonaParts> {
     const deps = this.#deps;
     this.#selfie ??= (() => {
       const tool = deps.createSelfieTool();
@@ -139,7 +140,12 @@ class Pieces {
       this.#facts.get(() =>
         this.#optional("Persona facts", PERSONA_FACTS.ingestCommand, dbPath, deps.openFacts),
       ),
-      deps.buildSystemInstruction({ viewer, voiceHint: "", selfieHint: this.#selfie.hint }),
+      deps.buildSystemInstruction({
+        viewer,
+        voiceHint: "",
+        selfieHint: this.#selfie.hint,
+        ...(others.length > 0 ? { participants: others } : {}),
+      }),
     ]);
     if (archive !== null) this.#recall ??= await archive.recallTool();
     if (this.#gate === undefined && (archive !== null || facts !== null)) {
@@ -224,11 +230,9 @@ class Pieces {
 }
 
 /** EngineDeps.parts over the cache of each chat's Pieces. */
-export function personaParts(
-  deps: PartsDeps = productionPartsDeps,
-): (persona: ParticipantId, viewer: UserContext, chat: string) => Promise<PersonaParts> {
+export function personaParts(deps: PartsDeps = productionPartsDeps): EngineDeps["parts"] {
   const cache = new Map<string, Pieces>();
-  return (persona, viewer, chat) =>
+  return (persona, viewer, chat, others = []) =>
     withPersona(persona, () => {
       const generation = deps.settingsGeneration();
       const key = `${chat}/${persona}`;
@@ -242,6 +246,6 @@ export function personaParts(
         if (cache.size <= KEPT_CHATS) break;
         cache.delete(old);
       }
-      return pieces.parts(viewer);
+      return pieces.parts(viewer, others);
     });
 }

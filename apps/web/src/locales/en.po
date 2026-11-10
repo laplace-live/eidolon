@@ -561,6 +561,10 @@ msgstr "Add links above, and each video is listed here with where it stands."
 msgid "Add Outfits"
 msgstr "Add Outfits"
 
+#: src/features/chats/participants.tsx
+msgid "Add Persona"
+msgstr "Add Persona"
+
 #: src/features/studio/references-section.tsx
 msgid "Add Pictures"
 msgstr "Add Pictures"
@@ -585,6 +589,10 @@ msgstr "Add Videos"
 #: src/features/call/call-page.tsx
 msgid "Add your API keys first"
 msgstr "Add your API keys first"
+
+#: src/features/chats/why-answered.tsx
+msgid "Addressed"
+msgstr "Addressed"
 
 #: src/features/settings/route.tsx
 #: src/features/studio/advanced-section.tsx
@@ -934,6 +942,11 @@ msgstr "Chat Options"
 msgid "Chat Provider"
 msgstr "Chat Provider"
 
+#: src/features/chats/chat-menu.tsx
+#: src/features/chats/chat-settings.tsx
+msgid "Chat Settings"
+msgstr "Chat Settings"
+
 #: src/features/chats/chat-list.tsx
 msgid "Chat With"
 msgstr "Chat With"
@@ -1259,6 +1272,10 @@ msgstr "Each link must be a full http or https URL."
 msgid "Each model, and the task it did for her."
 msgstr "Each model, and the task it did for her."
 
+#: src/features/chats/why-answered.tsx
+msgid "Each score runs from 0 to 1. Addressed: the line was for her. Interested: it touches what she cares about."
+msgstr "Each score runs from 0 to 1. Addressed: the line was for her. Interested: it touches what she cares about."
+
 #: src/features/studio/knowledge-section.tsx
 msgid "Edit"
 msgstr "Edit"
@@ -1529,6 +1546,7 @@ msgid "Fish has this voice"
 msgstr "Fish has this voice"
 
 #: src/components/settings-form/settings-card.tsx
+#: src/features/studio/chat-section.tsx
 #: src/features/studio/identity-section.tsx
 msgid "Fix the highlighted values first."
 msgstr "Fix the highlighted values first."
@@ -1578,6 +1596,10 @@ msgstr "Friends"
 msgid "From the environment"
 msgstr "From the environment"
 
+#: src/features/studio/chat-section.tsx
+msgid "Games, cats, late-night talks"
+msgstr "Games, cats, late-night talks"
+
 #: src/features/settings/route.tsx
 msgid "General"
 msgstr "General"
@@ -1610,6 +1632,11 @@ msgstr "Glossary saved."
 #: src/features/setup/done-step.tsx
 msgid "Go to Home"
 msgstr "Go to Home"
+
+#: src/features/studio/chat-section.tsx
+#: src/features/studio/route.tsx
+msgid "Group Chats"
+msgstr "Group Chats"
 
 #: src/lib/labels.ts
 msgid "Group ID"
@@ -1712,6 +1739,14 @@ msgstr "How a call searches what she knows: how many candidates each index offer
 msgid "How her videos become transcripts: the language and model Soniox transcribes with, and the model that refines them, with how many chunks it works on at once."
 msgstr "How her videos become transcripts: the language and model Soniox transcribes with, and the model that refines them, with how many chunks it works on at once."
 
+#: src/features/chats/chat-settings.tsx
+msgid "How many times personas may answer each other after each of your lines, once two or more are in the chat. At 0 they only answer you."
+msgstr "How many times personas may answer each other after each of your lines, once two or more are in the chat. At 0 they only answer you."
+
+#: src/components/settings-form/labels.ts
+msgid "How readily she joins in when no one addressed her, from 0 to 1. At 0 she answers only when she's addressed, or when no one else will answer you. Default 0.5."
+msgstr "How readily she joins in when no one addressed her, from 0 to 1. At 0 she answers only when she's addressed, or when no one else will answer you. Default 0.5."
+
 #: src/features/settings/account-dialog.tsx
 msgid "How Settings and the studio list it, such as “OpenAI (work)”."
 msgstr "How Settings and the studio list it, such as “OpenAI (work)”."
@@ -1744,6 +1779,10 @@ msgstr "Images"
 msgid "In a call · {duration}"
 msgstr "In a call · {duration}"
 
+#: src/features/studio/chat-section.tsx
+msgid "In a chat with several personas, a director decides who answers each line. It weighs her by these."
+msgstr "In a chat with several personas, a director decides who answers each line. It weighs her by these."
+
 #: src/features/setup/persona-fields.tsx
 msgid "In her own language; prompts use it as written."
 msgstr "In her own language; prompts use it as written."
@@ -1767,6 +1806,10 @@ msgstr "in the last 7 days"
 #: src/features/usage/route.tsx
 msgid "in the last 90 days"
 msgstr "in the last 90 days"
+
+#: src/features/chats/participants.tsx
+msgid "In This Chat"
+msgstr "In This Chat"
 
 #: src/features/studio/knowledge-section.tsx
 msgid "Index"
@@ -1839,10 +1882,22 @@ msgstr "Installs itself on the first download."
 msgid "Installs on the first download"
 msgstr "Installs on the first download"
 
+#: src/features/chats/why-answered.tsx
+msgid "Interested"
+msgstr "Interested"
+
+#: src/components/settings-form/labels.ts
+msgid "Interests"
+msgstr "Interests"
+
 #: src/features/chats/chat-log.tsx
 #: src/features/jobs/labels.ts
 msgid "Interrupted"
 msgstr "Interrupted"
+
+#: src/features/chats/why-answered.tsx
+msgid "Invites a reply: {score}"
+msgstr "Invites a reply: {score}"
 
 #: src/features/setup/memory-step.tsx
 msgid "It answers only on this machine, keeps its data in a Docker volume and restarts with Docker."
@@ -2144,8 +2199,20 @@ msgid "Memory Score Threshold"
 msgstr "Memory Score Threshold"
 
 #: src/features/chats/composer.tsx
+msgid "Mention"
+msgstr "Mention"
+
+#: src/features/chats/composer.tsx
+msgid "Mentioned: {names}"
+msgstr "Mentioned: {names}"
+
+#: src/features/chats/chat-view.tsx
 msgid "Message {name}"
 msgstr "Message {name}"
+
+#: src/features/chats/chat-view.tsx
+msgid "Message everyone"
+msgstr "Message everyone"
 
 #: src/features/studio/route.tsx
 msgid "Mind"
@@ -2582,6 +2649,10 @@ msgstr "Overrides <0>{env}</0> in the environment, which sets <1>{value}</1>."
 msgid "Part of the cost couldn't be priced."
 msgstr "Part of the cost couldn't be priced."
 
+#: src/features/chats/participants.tsx
+msgid "Participants"
+msgstr "Participants"
+
 #: src/components/settings-form/account-key-field.tsx
 #: src/features/settings/account-dialog.tsx
 msgid "Paste a new key to replace it"
@@ -2601,6 +2672,7 @@ msgid "People she can take a selfie with: one picture each, named after them."
 msgstr "People she can take a selfie with: one picture each, named after them."
 
 #: src/components/settings-form/labels.ts
+#: src/features/chats/why-answered.tsx
 #: src/features/jobs/detail.tsx
 #: src/features/setup/persona-step.tsx
 #: src/features/setup/stepper.tsx
@@ -2880,6 +2952,10 @@ msgstr "Remove her avatar?"
 msgid "Remove Key"
 msgstr "Remove Key"
 
+#: src/features/chats/participants.tsx
+msgid "Remove Persona"
+msgstr "Remove Persona"
+
 #: src/features/chats/chat-menu.tsx
 msgid "Rename"
 msgstr "Rename"
@@ -2895,6 +2971,10 @@ msgstr "Replace"
 #: src/features/studio/identity-section.tsx
 msgid "Replace Her Avatar"
 msgstr "Replace Her Avatar"
+
+#: src/features/chats/chat-settings.tsx
+msgid "Replies between Personas"
+msgstr "Replies between Personas"
 
 #: src/features/usage/tables.tsx
 msgid "Requests"
@@ -2931,6 +3011,10 @@ msgstr "Reranking costs about $0.002 per search."
 #: src/features/jobs/detail.tsx
 msgid "Reruns an earlier job"
 msgstr "Reruns an earlier job"
+
+#: src/features/studio/chat-section.tsx
+msgid "Reset"
+msgstr "Reset"
 
 #: src/features/home/readiness-labels.ts
 #: src/features/settings/notices.tsx
@@ -3045,6 +3129,7 @@ msgid "Saved"
 msgstr "Saved"
 
 #: src/components/settings-form/settings-card.tsx
+#: src/features/studio/chat-section.tsx
 #: src/features/studio/identity-section.tsx
 msgid "Saved for {name}"
 msgstr "Saved for {name}"
@@ -3070,6 +3155,7 @@ msgid "Saved settings wait for a restart."
 msgstr "Saved settings wait for a restart."
 
 #: src/components/settings-form/settings-card.tsx
+#: src/features/studio/chat-section.tsx
 #: src/features/studio/identity-section.tsx
 msgid "Saved. Restart Eidolon to apply it."
 msgstr "Saved. Restart Eidolon to apply it."
@@ -3081,6 +3167,10 @@ msgstr "Saving clears {fields}, which belonged to the old provider."
 #: src/features/chats/chat-log.tsx
 msgid "Say something to {name}. She answers in text, and this chat keeps what you both said."
 msgstr "Say something to {name}. She answers in text, and this chat keeps what you both said."
+
+#: src/features/chats/chat-log.tsx
+msgid "Say something to everyone here. Whoever it's for answers, and they may answer each other too."
+msgstr "Say something to everyone here. Whoever it's for answers, and they may answer each other too."
 
 #: src/components/settings-form/labels.ts
 msgid "Scene Types Left Out of the Index"
@@ -3202,6 +3292,7 @@ msgid "Settings for {name} alone, such as her voice and chat model, are in <0>he
 msgstr "Settings for {name} alone, such as her voice and chat model, are in <0>her studio</0>."
 
 #: src/components/settings-form/settings-card.tsx
+#: src/features/studio/chat-section.tsx
 #: src/features/studio/identity-section.tsx
 msgid "Settings saved."
 msgstr "Settings saved."
@@ -3221,6 +3312,14 @@ msgstr "Setup Steps"
 #: src/features/usage/tables.tsx
 msgid "Share"
 msgstr "Share"
+
+#: src/features/chats/why-answered.tsx
+msgid "She answered {name}'s line."
+msgstr "She answered {name}'s line."
+
+#: src/features/chats/why-answered.tsx
+msgid "She answered your line."
+msgstr "She answered your line."
 
 #: src/features/studio/models-section.tsx
 msgid "She can't switch voice styles during a call."
@@ -3265,6 +3364,10 @@ msgstr "She starts with a Chinese prompt skeleton in her name; build her up in t
 #: src/features/setup/persona-step.tsx
 msgid "She uses it in calls. Leave it empty and she won't use a name."
 msgstr "She uses it in calls. Leave it empty and she won't use a name."
+
+#: src/features/chats/labels.ts
+msgid "She's the only persona in this chat, so she answers every line."
+msgstr "She's the only persona in this chat, so she answers every line."
 
 #: src/features/setup/persona-fields.tsx
 #: src/features/studio/identity-section.tsx
@@ -3338,6 +3441,10 @@ msgstr "Some saved settings are read only when Eidolon starts or runs its first 
 #: src/features/studio/videos-section.tsx
 msgid "Some videos need a signed-in browser's cookies. Reading a browser's cookies may ask for your password (the macOS Keychain), and yt-dlp writes the cookies it used back into a cookies file."
 msgstr "Some videos need a signed-in browser's cookies. Reading a browser's cookies may ask for your password (the macOS Keychain), and yt-dlp writes the cookies it used back into a cookies file."
+
+#: src/features/chats/chat-view.tsx
+msgid "Someone here can't answer yet"
+msgstr "Someone here can't answer yet"
 
 #: src/components/settings-form/check-labels.ts
 msgid "Something answers there, but it isn't Qdrant."
@@ -3413,13 +3520,21 @@ msgstr "Spoken Language"
 msgid "Stacked by provider."
 msgstr "Stacked by provider."
 
+#: src/features/chats/chat-list.tsx
+msgid "Start Chat"
+msgstr "Start Chat"
+
 #: src/features/home/hero.tsx
 msgid "Start Chatting"
 msgstr "Start Chatting"
 
 #: src/features/chats/chat-list.tsx
-msgid "Start one with any persona. Each chat keeps its own history."
-msgstr "Start one with any persona. Each chat keeps its own history."
+msgid "Start Group Chat"
+msgstr "Start Group Chat"
+
+#: src/features/chats/chat-list.tsx
+msgid "Start one with any persona, or with several at once. Each chat keeps its own history."
+msgstr "Start one with any persona, or with several at once. Each chat keeps its own history."
 
 #: src/features/studio/videos-section.tsx
 msgid "Start the billed run?"
@@ -3546,6 +3661,10 @@ msgstr "Takes no key"
 msgid "Taking a selfie…"
 msgstr "Taking a selfie…"
 
+#: src/components/settings-form/labels.ts
+msgid "Talkativeness"
+msgstr "Talkativeness"
+
 #: src/features/home/hero.tsx
 msgid "Talking to"
 msgstr "Talking to"
@@ -3563,8 +3682,8 @@ msgid "terms = [\"奶绿\", \"奶糖花\"]"
 msgstr "terms = [\"奶绿\", \"奶糖花\"]"
 
 #: src/features/chats/route.tsx
-msgid "Text a persona any time, no call needed. Each chat keeps its own history."
-msgstr "Text a persona any time, no call needed. Each chat keeps its own history."
+msgid "Text one persona or several at once, no call needed. Each chat keeps its own history."
+msgstr "Text one persona or several at once, no call needed. Each chat keeps its own history."
 
 #: src/lib/labels.ts
 msgid "That action isn't supported here."
@@ -3670,6 +3789,14 @@ msgstr "The connection dropped."
 msgid "The delivery cues in her prompt aren't performed: she's told to put them in her voice instead."
 msgstr "The delivery cues in her prompt aren't performed: she's told to put them in her voice instead."
 
+#: src/features/chats/labels.ts
+msgid "The director chose from how it scored the line."
+msgstr "The director chose from how it scored the line."
+
+#: src/features/chats/labels.ts
+msgid "The director didn't answer in time, so simple rules chose: a mention, a name in the line, then the most talkative."
+msgstr "The director didn't answer in time, so simple rules chose: a mention, a name in the line, then the most talkative."
+
 #: src/features/jobs/labels.ts
 msgid "The disk is full."
 msgstr "The disk is full."
@@ -3749,6 +3876,10 @@ msgstr "The last download failed on cookies. Pick another browser, a cookies fil
 #: src/features/studio/add-videos.tsx
 msgid "The length of {count} of them is unknown."
 msgstr "The length of {count} of them is unknown."
+
+#: src/features/chats/labels.ts
+msgid "The line @-mentioned someone, and whoever a line mentions answers first."
+msgstr "The line @-mentioned someone, and whoever a line mentions answers first."
 
 #: src/features/studio/add-videos.tsx
 msgid "The link couldn't be read."
@@ -3907,6 +4038,10 @@ msgstr "There is no such job."
 msgid "There may not be enough free space for this audio. Free some space first, or add fewer videos."
 msgstr "There may not be enough free space for this audio. Free some space first, or add fewer videos."
 
+#: src/features/chats/chat-settings.tsx
+msgid "These apply to this chat alone."
+msgstr "These apply to this chat alone."
+
 #: src/features/studio/add-videos.tsx
 msgid "These lines aren't http or https links:"
 msgstr "These lines aren't http or https links:"
@@ -4045,6 +4180,10 @@ msgstr "To index"
 #: src/features/studio/video-table.tsx
 msgid "To transcribe"
 msgstr "To transcribe"
+
+#: src/components/settings-form/labels.ts
+msgid "Topics she cares about, separated by commas or 、. The director reads them with her summary to tell when a group's line is one she'd join in on. Empty means her summary alone."
+msgstr "Topics she cares about, separated by commas or 、. The director reads them with her summary to tell when a group's line is one she'd join in on. Empty means her summary alone."
 
 #: src/features/usage/spend-chart.tsx
 msgid "Total"
@@ -4294,6 +4433,10 @@ msgstr "Voice set to {voice}."
 msgid "Waiting for {name} to answer…"
 msgstr "Waiting for {name} to answer…"
 
+#: src/features/chats/chat-log.tsx
+msgid "Waiting for a reply…"
+msgstr "Waiting for a reply…"
+
 #: src/features/home/memory-panel.tsx
 msgid "What {name} Remembers"
 msgstr "What {name} Remembers"
@@ -4409,6 +4552,10 @@ msgstr "Who will you talk to?"
 #: src/features/setup/stepper.tsx
 msgid "Who you'll talk to"
 msgstr "Who you'll talk to"
+
+#: src/features/chats/why-answered.tsx
+msgid "Why {name} Answered"
+msgstr "Why {name} Answered"
 
 #: src/features/setup/memory-step.tsx
 msgid "With memory on, she remembers you from one call to the next. It needs Qdrant, a database you run in Docker on this machine. Skip it and everything else still works."

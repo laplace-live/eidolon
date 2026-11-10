@@ -6,6 +6,8 @@ import {
   type ChatEvent,
   type ChatHeader,
   canonicalForSig,
+  chainLimitOf,
+  DEFAULT_CHAIN_LIMIT,
   isChatId,
   stampEvents,
   summarize,
@@ -62,6 +64,18 @@ describe("summarize", () => {
       { seq: 2, at: 2000, type: "title", title: "b" },
     ];
     expect(summarize(HEADER, events).updatedAt).toBe(3000);
+  });
+});
+
+describe("chainLimitOf", () => {
+  test("is the last settings event's, else the default", () => {
+    expect(chainLimitOf([])).toBe(DEFAULT_CHAIN_LIMIT);
+    const events: ChatEvent[] = [
+      { type: "settings", seq: 1, at: 1, chainLimit: 0 },
+      { type: "settings", seq: 2, at: 2, replyMode: "text" },
+    ];
+    expect(chainLimitOf(events)).toBe(0);
+    expect(chainLimitOf([...events, { type: "settings", seq: 3, at: 3, chainLimit: 5 }])).toBe(5);
   });
 });
 

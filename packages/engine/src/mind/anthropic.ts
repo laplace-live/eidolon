@@ -212,6 +212,7 @@ function bodyFor(
   }
   body.messages = withCacheMarkers(turns);
   body.tools = request.tools.map(toolFor);
+  if (request.stop?.length) body.stop_sequences = [...request.stop];
   Object.assign(body, options.extra);
   const effort = isPlainObject(body.output_config) && "effort" in body.output_config;
   const name = modelName(options.model);

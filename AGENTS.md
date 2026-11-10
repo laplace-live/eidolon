@@ -69,7 +69,7 @@ a row here and writing the prose there — not a new section in this file.**
 | settings files, credentials, the data home, a persona's folder or its sources | [personas.md](docs/personas.md) |
 | the offline chain (`packages/ingest` and its `laplace-*` commands) or their `--json` events | [typescript.md](docs/typescript.md#the-offline-chain) |
 | the local web app (`apps/web`, `apps/bot/src/local`): local mode, its API, jobs or security | [web-app.md](docs/web-app.md) |
-| chats, the chat log format, or the turn engine (`packages/chat`, `packages/engine`) | [chat.md](docs/chat.md) |
+| chats, the chat log format, the turn engine, or group chats' director (`packages/chat`, `packages/engine`, `packages/context/src/director.ts`) | [chat.md](docs/chat.md) |
 | a string the web app shows, its languages, or its `.po` catalogs | [web-app.md](docs/web-app.md#strings-and-languages) |
 | changesets, the version PR, tags, or publishing the npm package (`apps/eidolon`) | [releasing.md](docs/releasing.md) |
 | any env var — all 50-odd are documented there | `.env.example` |
@@ -89,7 +89,7 @@ The bot:
 bun install
 bun run dev                            # watch mode on :7860 (--port to move it); `start` without watch
 bun run typecheck && bun run lint && bun run test
-bun run laplace-search / laplace-eval-retrieval / laplace-generate-image / gate-decisions
+bun run laplace-search / laplace-eval-retrieval / laplace-generate-image / gate-decisions / director-decisions
 ```
 
 The local web app, on loopback only ([web-app.md](docs/web-app.md)):
@@ -138,13 +138,14 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | the bot's pipeline, the transport, or the werift patches | boot the bot and hold a real call (`bun apps/bot/scripts/e2e-call.ts --text`, or `--audio`) — none of this is unit-testable |
 | `packages/imagegen` or the `take_selfie` tool | `bun run laplace-generate-image` against a real reference — it shares `generate()` with the bot, so a successful render is the check. Billed per image |
 | the gate's recall questions, state, or threshold (`packages/context/src/gate.ts`), or `RETRIEVAL_GATE_MODEL` | `bun run gate-decisions` — re-scores the labeled turns of `docs/benchmarks/2026-09-19-retrieval-gate/` into its `decisions.json`, and exits non-zero if any turn that needs recall would be skipped. About $0.002 of gate calls |
+| the director's questions, state, or thresholds (`packages/context/src/director.ts`) | `bun run director-decisions` — asks Jev about the labelled group-chat lines of `docs/benchmarks/2026-11-10-director/` into its `decisions.json`, and exits non-zero if any is decided wrong. About $0.003 of gate calls; after a threshold or label change alone, `bun docs/benchmarks/2026-11-10-director/score.ts --cached --check` replays the stored scores for free |
 | the gate's timeline questions or `TIMELINE_THRESHOLD` (`packages/context/src/gate.ts`) | `bun docs/benchmarks/2026-11-07-timeline-question/score.ts` — exits non-zero if any labeled turn lands on the wrong side of the threshold |
 | `prompt.md`'s 表演提示 markup, or `FISH_MODEL` | no scripted check exists ([the 2026-10-17 benchmark](docs/benchmarks/2026-10-17-drama-3-markup/README.md) records what drama-3 does with each kind). Hold a real call, `bun apps/bot/scripts/e2e-call.ts --text "<a question her reply would mark up>" --headful`, and listen: a direction or a tag spoken aloud is a leak. Billed per character |
 | `packages/memory`, or `/api/memories` (`apps/bot/src/memory-admin.ts`) | `docker compose up qdrant`, then round-trip a real `add` → `search` → `deleteAll` through `openMemoryEngine(buildMemoryConfig())`. The tests fake Qdrant and both model calls, so only a live run proves the wire format; it needs an embedding key and an LLM key |
 | an env var | document it in `.env.example` in the same commit |
 | anything under `apps/` or `packages/` | `bun run typecheck`, `bun run lint`, `bun run test`; for retrieval, the gate or the bot's pipeline, also the row above that names it |
 | anything under `apps/web` | the row above, whose typecheck also runs both `apps/web` tsconfigs, then `bun run build:web`; after changing a string, `bun run i18n` and its `msgstr` in `zh-Hans.po` |
-| local mode (`apps/bot/src/local`), or chats (`packages/chat`, `packages/engine`) | `bun test --no-env-file apps/bot/test/local` from the repository root, then `bun apps/bot/scripts/local-smoke.ts --headful`: a browser walk on a temporary data home that bills nothing, a chat with a fake mind included |
+| local mode (`apps/bot/src/local`), or chats (`packages/chat`, `packages/engine`) | `bun test --no-env-file apps/bot/test/local` from the repository root, then `bun apps/bot/scripts/local-smoke.ts --headful`: a browser walk on a temporary data home that bills nothing, a chat and a group chat with a fake mind and director included |
 | `apps/eidolon`, or a file the package bundles or copies | the gates above, then `bun run pack:npm` and `bun apps/eidolon/scripts/ci-install-check.ts apps/eidolon/<tarball>`, which CI runs on Linux x64: it installs the tarball with npm, boots it on a temporary home, signs in, and stops it |
 
 ## Rules

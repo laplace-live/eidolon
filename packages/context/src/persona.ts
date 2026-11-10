@@ -62,6 +62,13 @@ export function humanizeDaysAgo(days: number): string {
   return `${Math.floor(days / 365)}年前`;
 }
 
+/** Another persona in a group chat, as the prefix introduces her. */
+export interface GroupMember {
+  readonly name: string;
+  /** identity.summary; may be empty. */
+  readonly summary: string;
+}
+
 export interface PersonaPrefixInput {
   readonly viewer: Viewer;
   readonly timeZone: string;
@@ -73,6 +80,8 @@ export interface PersonaPrefixInput {
   readonly selfieHint?: string;
   /** A realtime model voices her replies itself, so no cue is ever stripped before it speaks. */
   readonly realtime?: boolean;
+  /** The other personas of a group chat; none in a chat of one and on calls. */
+  readonly participants?: readonly GroupMember[];
 }
 
 /**
@@ -86,7 +95,8 @@ export const REALTIME_DELIVERY_LINE =
 /**
  * The preamble prepended to prompt.md. The 不要主动念 lines are load-bearing: without them the
  * model occasionally narrates the current time or reads the UID aloud, which sounds robotic and
- * breaks the persona's 短简、不像 AI 助手 rule. The viewer line is the persona's own wording.
+ * breaks the persona's 短简、不像 AI 助手 rule. The viewer line is the persona's own wording. Only a
+ * group chat gets the line naming the others.
  */
 export function buildPersonaPrefix(input: PersonaPrefixInput): string {
   const clock = zonedClock(input.timeZone, input.now);
@@ -107,6 +117,11 @@ export function buildPersonaPrefix(input: PersonaPrefixInput): string {
       fillPersonaText(line, values) +
         "聊天里可以自然地叫她/他的名字，但不要每句都重复，也不要主动念UID。",
     );
+  }
+  const others = input.participants ?? [];
+  if (others.length > 0) {
+    const named = others.map(({ name, summary }) => (summary ? `${name}（${summary}）` : name));
+    lines.push(`这是群聊，群里还有：${named.join("、")}；只用你自己的身份说话，不要替别人说话。`);
   }
 
   const dates: string[] = [];
@@ -227,6 +242,8 @@ export async function buildSystemInstruction(input: {
   selfieHint: string;
   /** The call runs on a realtime model. */
   realtime?: boolean;
+  /** The other personas of a group chat. */
+  participants?: readonly GroupMember[];
   /** Defaults to config's personaTimeZone(). */
   timeZone?: string;
   now?: Date;
@@ -244,6 +261,7 @@ export async function buildSystemInstruction(input: {
     voiceHint: input.voiceHint,
     selfieHint: input.selfieHint,
     ...(input.realtime ? { realtime: true } : {}),
+    ...(input.participants ? { participants: input.participants } : {}),
   });
   return prefix + (await loadPersona());
 }

@@ -45,7 +45,7 @@ export function Component() {
                   className="border-0"
                   icon={<MessagesSquareIcon />}
                   title={t`Pick a chat, or start a new one`}
-                  description={t`Text a persona any time, no call needed. Each chat keeps its own history.`}
+                  description={t`Text one persona or several at once, no call needed. Each chat keeps its own history.`}
                   action={<NewChatMenu />}
                 />
               </div>

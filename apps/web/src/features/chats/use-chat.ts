@@ -13,7 +13,7 @@ type Open = (signal: AbortSignal) => AsyncIterable<ChatStreamLine>;
 
 export interface ChatTurns {
   readonly live: LiveState;
-  /** A line is on its way to the log, or her reply is. */
+  /** A line is on its way to the log, or a reply is under way. */
   readonly busy: boolean;
   send(text: string): void;
   stop(): void;
@@ -50,14 +50,24 @@ export function useChat(id: string): ChatTurns {
       streams.current.add(controller);
       let turn: string | null = null;
       let ended = false;
+      let broke = false;
+      let following = false;
+      const carry = () => {
+        if (following) return;
+        following = true;
+        dispatch({ type: "follow" });
+      };
+      if (key !== null) carry();
       try {
         for await (const line of open(controller.signal)) {
+          carry();
           if (line.type === "events") store(line.events);
           else if (line.type === "started") [turn, ended] = [line.turn, false];
           else if (line.type === "ended" && line.turn === turn) ended = true;
           dispatch(line);
         }
       } catch (error) {
+        broke = !controller.signal.aborted;
         // Live failing leaves the log as stored, which the refetch below shows.
         if (key !== null && !controller.signal.aborted) {
           const { code, message } = asApiError(error);
@@ -65,13 +75,15 @@ export function useChat(id: string): ChatTurns {
         }
       } finally {
         streams.current.delete(controller);
+        if (following) dispatch({ type: "unfollow" });
       }
       if (controller.signal.aborted) return;
       dispatch({ type: "settled", key, turn: null });
       // The log a turn ends with, and a turn that ended between the page's two requests.
       void queryClient.invalidateQueries({ queryKey: chatQuery(id).queryKey });
       void queryClient.invalidateQueries({ queryKey: chatsQuery.queryKey, exact: true });
-      if (turn !== null && !ended) {
+      // A group's reply goes on past a turn's end, so a stream that broke after one may have more.
+      if (turn !== null && (!ended || broke)) {
         if (rejoin) await follow((signal) => followLive(id, signal), null, false);
         dispatch({ type: "settled", key: null, turn });
       }
@@ -102,6 +114,7 @@ export function useChat(id: string): ChatTurns {
     stopChat(id).catch(toastError);
   }, [id]);
 
-  const busy = live.turn !== null || (live.pending !== null && !live.pending.failed);
+  const busy =
+    live.following > 0 || live.turn !== null || (live.pending !== null && !live.pending.failed);
   return { live, busy, send, stop };
 }

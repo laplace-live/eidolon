@@ -173,6 +173,51 @@ describe("reduceLive", () => {
     expect(state.pending?.text).toBe("new");
     expect(state.seen).toBe(4);
   });
+
+  test("a group's reply follows one persona's turn with another's, and is followed in between", () => {
+    const ken: ChatEvent = {
+      type: "message",
+      seq: 4,
+      at: 4,
+      id: "k4",
+      speaker: { kind: "persona", id: "ken" },
+      text: "我先说",
+    };
+    const first = run([
+      { type: "follow" },
+      { type: "sending", key: 1, after: 0, text: "大家好" },
+      { type: "events", events: [userLine(1, "大家好")] },
+      { type: "started", turn: "a", persona: "ken" },
+      { type: "delta", turn: "a", text: "我先说" },
+    ]);
+    // Her own message ends only her turn: another persona's doesn't finish Mio's.
+    const between = run(
+      [
+        { type: "events", events: [ken] },
+        { type: "ended", turn: "a" },
+      ],
+      first,
+    );
+    expect(between.turn).toBeNull();
+    expect(between.following).toBe(1);
+    const second = run(
+      [
+        { type: "started", turn: "b", persona: "mio" },
+        { type: "events", events: [herLine(5, "ken说得对")] },
+      ],
+      between,
+    );
+    expect(second.turn).toBeNull();
+    const started = run(
+      [
+        { type: "started", turn: "c", persona: "mio" },
+        { type: "events", events: [{ ...ken, seq: 6 }] },
+      ],
+      second,
+    );
+    expect(started.turn?.persona).toBe("mio");
+    expect(run([{ type: "unfollow" }, { type: "unfollow" }], second).following).toBe(0);
+  });
 });
 
 describe("mergeEvents", () => {

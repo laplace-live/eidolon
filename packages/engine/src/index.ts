@@ -1,5 +1,7 @@
 // The turn engine: one persona's turn in a chat, from her view of its log to the events the turn
-// adds. Text chats run on it; it never imports pipedog.
+// adds, and a chat's answer to the viewer, turn by turn. Text chats run on it; it never imports
+// pipedog.
+export { type ChatDeps, type ChatOutput, type ChatRequest, runChat } from "./chat.ts";
 export { defaultEngineDeps } from "./deps.ts";
 export { createMind } from "./mind/index.ts";
 export { runTurn } from "./turn.ts";

@@ -71,6 +71,7 @@ function bodyFor(request: MindRequest, options: OpenAIMindOptions): Message {
     messages: messagesFor(request, options.dialect),
   };
   if (request.tools.length > 0) body.tools = request.tools.map(toolFor);
+  if (request.stop?.length) body.stop = [...request.stop];
   Object.assign(body, options.live);
   // pipedog sends DeepSeek's `thinking` in `extra_body`, which lands over every other field.
   if (options.dialect === "deepseek") body.thinking = { type: "disabled" };

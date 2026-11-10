@@ -1,7 +1,8 @@
+import { MAX_PARTICIPANTS } from "@eidolon/chat";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
-import { MessagesSquareIcon, PlusIcon } from "lucide-react";
-import type { ComponentProps } from "react";
+import { MessageSquarePlusIcon, MessagesSquareIcon, PlusIcon } from "lucide-react";
+import { type ComponentProps, useState } from "react";
 import { useNavigate } from "react-router";
 import { PersonaAvatar } from "@/components/avatar";
 import { EmptyState } from "@/components/empty-state";
@@ -11,9 +12,11 @@ import { personasQuery } from "@/components/settings-form/queries";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,7 +29,8 @@ import { useLang } from "@/locales/i18n";
 import { ChatMenu } from "./chat-menu";
 import { chatName, relativeTime } from "./format";
 import { previewText } from "./items";
-import { usePersonaOf } from "./persona";
+import { ChatAvatar } from "./participants";
+import { chatWith, usePersonaOf } from "./persona";
 import { chatsQuery, useCreateChat } from "./queries";
 
 /** A list's relative times move on about this often. */
@@ -36,7 +40,7 @@ export function chatPath(id: string): string {
   return `/chats/${encodeURIComponent(id)}`;
 }
 
-/** New Chat: pick who it is with, the active persona first, then it opens. */
+/** New Chat: tick who it is with, the active persona listed first, then start it. */
 export function NewChatMenu({
   variant = "default",
   size = "default",
@@ -47,13 +51,24 @@ export function NewChatMenu({
   const personas = useQuery(personasQuery);
   const status = useQuery(statusQuery);
   const create = useCreateChat((id) => navigate(chatPath(id)));
+  const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set());
   const active = status.data?.persona.id ?? personas.data?.active;
   const list = [...(personas.data?.personas ?? [])].sort(
     (a, b) => Number(b.id === active) - Number(a.id === active),
   );
+  const picked = list.filter((persona) => chosen.has(persona.id)).map((persona) => persona.id);
+
+  function toggle(id: string, on: boolean) {
+    setChosen((current) => {
+      const next = new Set(current);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
 
   return (
-    <DropdownMenu>
+    <DropdownMenu onOpenChange={(open) => open && setChosen(new Set())}>
       <DropdownMenuTrigger asChild>
         <Button
           variant={variant}
@@ -67,16 +82,28 @@ export function NewChatMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuLabel>{t`Chat With`}</DropdownMenuLabel>
-        {list.map((persona) => (
-          <DropdownMenuItem
-            key={persona.id}
-            className="gap-2 py-1.5"
-            onSelect={() => create.mutate(persona.id)}
-          >
-            <PersonaAvatar persona={persona} size="xs" />
-            <span className="truncate">{persona.name}</span>
-          </DropdownMenuItem>
-        ))}
+        {list.map((persona) => {
+          const on = chosen.has(persona.id);
+          return (
+            <DropdownMenuCheckboxItem
+              key={persona.id}
+              className="gap-2 py-1.5"
+              checked={on}
+              disabled={!on && picked.length >= MAX_PARTICIPANTS}
+              // Ticking keeps the menu open for the next.
+              onSelect={(event) => event.preventDefault()}
+              onCheckedChange={(next) => toggle(persona.id, next)}
+            >
+              <PersonaAvatar persona={persona} size="xs" />
+              <span className="truncate">{persona.name}</span>
+            </DropdownMenuCheckboxItem>
+          );
+        })}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem disabled={picked.length === 0} onSelect={() => create.mutate(picked)}>
+          <MessageSquarePlusIcon />
+          {picked.length > 1 ? t`Start Group Chat` : t`Start Chat`}
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -129,21 +156,21 @@ function ChatList({
         className="m-4"
         icon={<MessagesSquareIcon />}
         title={t`No chats yet`}
-        description={t`Start one with any persona. Each chat keeps its own history.`}
+        description={t`Start one with any persona, or with several at once. Each chat keeps its own history.`}
       />
     );
   }
   return (
     <ListCard label={t`Chats`} className="rounded-none border-0 bg-transparent">
       {chats.data.map((chat) => {
-        const persona = personaOf(chat.participants[0] ?? "");
-        const name = chatName(chat.title, persona.name, chat.createdAt, lang, now);
+        const personas = chat.participants.map(personaOf);
+        const name = chatName(chat.title, chatWith(personas), chat.createdAt, lang, now);
         return (
           <ListRow
             key={chat.id}
             href={chatPath(chat.id)}
             className={cn("min-h-0 gap-x-3 px-4 py-3 sm:px-4", chat.id === current && "bg-muted")}
-            leading={<PersonaAvatar persona={persona} size="sm" />}
+            leading={<ChatAvatar personas={personas} />}
             title={<span className="line-clamp-1 break-all">{name}</span>}
             description={
               <span className="flex items-baseline gap-2">

@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatEvent } from "@eidolon/chat";
-import { chatItems, previewText, retryText, withoutPartialMarkup } from "./items";
+import {
+  chatItems,
+  manyVoices,
+  previewText,
+  retryText,
+  startsRun,
+  withoutPartialMarkup,
+} from "./items";
 
 const IMAGE = { kind: "image", name: `${"a".repeat(64)}.png`, mime: "image/png" } as const;
 
@@ -61,10 +68,27 @@ const EVENTS: ChatEvent[] = [
 
 describe("chatItems", () => {
   test("shows the lines said and the failures, and hides everything else", () => {
+    const single = { source: "single", scores: {}, to: { kind: "user" } } as const;
     expect(chatItems(EVENTS)).toEqual([
-      { kind: "persona", seq: 3, persona: "mio", text: "你好呀", images: [], interrupted: false },
+      {
+        kind: "persona",
+        seq: 3,
+        persona: "mio",
+        text: "你好呀",
+        images: [],
+        interrupted: false,
+        reason: null,
+      },
       { kind: "user", seq: 4, text: "拍张照" },
-      { kind: "persona", seq: 8, persona: "mio", text: "", images: [IMAGE], interrupted: true },
+      {
+        kind: "persona",
+        seq: 8,
+        persona: "mio",
+        text: "",
+        images: [IMAGE],
+        interrupted: true,
+        reason: single,
+      },
       { kind: "user", seq: 10, text: "再来一张" },
       { kind: "failed", seq: 11, persona: "mio", error: "Timed out" },
     ]);
@@ -81,6 +105,77 @@ describe("chatItems", () => {
       interrupted: true,
     };
     expect(chatItems([empty])).toEqual([]);
+  });
+});
+
+describe("a group's lines", () => {
+  const user = (seq: number): ChatEvent => ({
+    type: "message",
+    seq,
+    at: seq,
+    id: `u${seq}`,
+    speaker: { kind: "user" },
+    text: "大家好",
+  });
+  const her = (seq: number, id: string): ChatEvent => ({
+    type: "message",
+    seq,
+    at: seq,
+    id: `m${seq}`,
+    speaker: { kind: "persona", id },
+    text: `${id}在`,
+  });
+  const GROUP: ChatEvent[] = [
+    user(1),
+    {
+      type: "decision",
+      seq: 2,
+      at: 2,
+      after: 1,
+      replies: [{ persona: "ken", mode: "text" }],
+      source: "mention",
+      scores: { addressed_ken: 0.9, addressed_mio: 0.1 },
+    },
+    her(3, "ken"),
+    {
+      type: "decision",
+      seq: 4,
+      at: 4,
+      after: 3,
+      replies: [{ persona: "mio", mode: "text" }],
+      source: "fallback",
+    },
+    her(5, "mio"),
+    her(6, "mio"),
+  ];
+
+  test("each reply carries the decision that chose her, and whose line it answered", () => {
+    const reasons = chatItems(GROUP).flatMap((item) =>
+      item.kind === "persona" ? [[item.persona, item.reason]] : [],
+    );
+    expect(reasons).toEqual([
+      [
+        "ken",
+        {
+          source: "mention",
+          scores: { addressed_ken: 0.9, addressed_mio: 0.1 },
+          to: { kind: "user" },
+        },
+      ],
+      ["mio", { source: "fallback", scores: {}, to: { kind: "persona", id: "ken" } }],
+      ["mio", { source: "fallback", scores: {}, to: { kind: "persona", id: "ken" } }],
+    ]);
+  });
+
+  test("a run of one speaker's lines starts where the speaker changes", () => {
+    const items = chatItems(GROUP);
+    expect(items.map((_, index) => startsRun(items, index))).toEqual([true, true, true, false]);
+  });
+
+  test("hold more than one voice once two personas have spoken", () => {
+    expect(manyVoices(chatItems(GROUP))).toBe(true);
+    expect(manyVoices(chatItems(GROUP.slice(0, 3)))).toBe(false);
+    expect(manyVoices(chatItems(EVENTS))).toBe(false);
   });
 });
 

@@ -1,21 +1,26 @@
-// The local app's chats: one JSONL store in the data home, and per chat one turn at a time. A turn
-// runs to its end whether or not anyone still reads it; only stop, delete or shutdown abort one.
+// The local app's chats: one JSONL store in the data home, and per chat one reply at a time: a
+// greeting, or a viewer line's answer, which may chain persona to persona. A reply runs to its end
+// whether or not anyone still reads it; only stop, delete or shutdown abort one.
 import { join } from "node:path";
 import {
   CHAT_FORMAT,
   type ChatEvent,
   type ChatEventDraft,
   type ChatHeader,
-  ChatStoreError,
   type ChatSummary,
+  MAX_PARTICIPANTS,
   type ParticipantId,
   stampEvents,
 } from "@eidolon/chat";
 import { JsonlChatStore } from "@eidolon/chat/jsonl";
-import { dataHome, errorText, logger } from "@eidolon/config";
+import { dataHome, errorText, logger, readPersonaIdentity } from "@eidolon/config";
 import {
+  type ChatOutput,
+  type ChatRequest,
   defaultEngineDeps,
   type EngineDeps,
+  type LateTools,
+  runChat,
   runTurn,
   type TurnOutput,
   type TurnRequest,
@@ -30,21 +35,32 @@ export type ChatTurn = (
   saveAttachment: EngineDeps["saveAttachment"],
 ) => AsyncIterable<TurnOutput>;
 
+/** A viewer line's answer: the director's decisions and the turns they choose, hop by hop. */
+export type ChatAnswer = (
+  request: ChatRequest,
+  saveAttachment: EngineDeps["saveAttachment"],
+) => AsyncIterable<ChatOutput>;
+
 export interface ChatRunnerOptions {
   /** Default: chats/ in the data home. */
   readonly root?: string;
-  /** Default: the engine's. */
+  /** A greeting's turn. Default: the engine's. */
   readonly turn?: ChatTurn;
+  /** Default: the engine's. */
+  readonly answer?: ChatAnswer;
 }
 
-/** How long shutdown waits for aborted turns to store what they said. */
+/** How long shutdown waits for aborted replies to store what they said. */
 const STOP_WAIT_MS = 2000;
 
 const engineTurn: ChatTurn = (request, saveAttachment) =>
   runTurn(request, defaultEngineDeps({ saveAttachment }));
 
+const engineAnswer: ChatAnswer = (request, saveAttachment) =>
+  runChat(request, defaultEngineDeps({ saveAttachment }));
+
 interface Chat {
-  /** Sends and deletes, one at a time. */
+  /** Sends, participant changes and deletes, one at a time. */
   queue: Promise<unknown>;
   /** Appends, one at a time, so each is numbered after the last. */
   appends: Promise<unknown>;
@@ -57,9 +73,16 @@ interface Chat {
   readonly cancel: AbortController;
 }
 
+/** The turn a reply is in, from its `started` to its `ended`. */
+interface Running {
+  readonly turn: string;
+  readonly persona: ParticipantId;
+}
+
 export class ChatRunner {
   readonly store: JsonlChatStore;
   readonly #turn: ChatTurn;
+  readonly #answer: ChatAnswer;
   readonly #chats = new Map<string, Chat>();
 
   constructor(options: ChatRunnerOptions = {}) {
@@ -67,6 +90,7 @@ export class ChatRunner {
       log: (message) => logger.warning(message),
     });
     this.#turn = options.turn ?? engineTurn;
+    this.#answer = options.answer ?? engineAnswer;
   }
 
   list(): Promise<ChatSummary[]> {
@@ -79,7 +103,10 @@ export class ChatRunner {
     return { ...(await this.store.read(id, { afterSeq })), lateTools };
   }
 
-  /** A new chat; with one persona, her greeting starts at once and GET live streams it. */
+  /**
+   * A new chat of personas the caller validated. One persona's greeting starts at once, and GET
+   * live streams it; a group chat doesn't greet, and is titled with their short names.
+   */
   async create(participants: readonly ParticipantId[]): Promise<string> {
     const header: ChatHeader = {
       format: CHAT_FORMAT,
@@ -91,54 +118,99 @@ export class ChatRunner {
     const chat = this.#chat(header.id);
     chat.lastSeq = 0;
     const [persona] = participants;
-    if (participants.length === 1 && persona !== undefined) {
-      chat.live = new LiveTurn();
-      void this.#reply(header.id, chat, chat.live, persona, true);
+    if (participants.length > 1) {
+      const title = participants.map((p) => readPersonaIdentity(p).shortName).join("、");
+      await this.#append(header.id, chat, [{ type: "title", title }]);
+    } else if (persona !== undefined) {
+      const live = new LiveTurn();
+      chat.live = live;
+      const { signal } = live.controller;
+      void this.#run(header.id, chat, live, persona, async (late, save) => {
+        const log = await this.store.read(header.id);
+        const viewer = localViewer();
+        return this.#turn({ chat: log, persona, viewer, kickoff: true, signal, late }, save);
+      });
     }
     return header.id;
   }
 
-  /** Who answers the viewer in chat `id`: its one persona. */
-  async replier(id: string): Promise<ParticipantId> {
-    const [persona] = (await this.store.summary(id)).participants;
-    if (persona === undefined) throw new ChatStoreError("invalid", `Chat ${id} has no persona`);
-    return persona;
+  /** The personas in chat `id` now. */
+  async participants(id: string): Promise<readonly ParticipantId[]> {
+    return (await this.store.summary(id)).participants;
   }
 
   /**
-   * Stops the running turn, which stores what it said as interrupted, then stores `text` as the
-   * viewer's and starts `persona`'s reply. The answer streams from the viewer's message on.
+   * Adds personas the caller validated and removes some, as one `participants` event. False, with
+   * nothing stored, when one added is already in the chat, one removed isn't, or it would be left
+   * with none or more than MAX_PARTICIPANTS. A reply already running finishes as it began.
    */
-  send(id: string, text: string, persona: ParticipantId): Promise<LiveTurn> {
+  changeParticipants(
+    id: string,
+    add: readonly ParticipantId[],
+    remove: readonly ParticipantId[],
+  ): Promise<boolean> {
+    const chat = this.#chat(id);
+    return this.#serial(chat, async () => {
+      const now = await this.participants(id);
+      const kept = now.filter((p) => !remove.includes(p));
+      const size = kept.length + add.length;
+      if (
+        add.some((p) => now.includes(p)) ||
+        kept.length + remove.length !== now.length ||
+        size < 1 ||
+        size > MAX_PARTICIPANTS
+      ) {
+        return false;
+      }
+      await this.#append(id, chat, [
+        {
+          type: "participants",
+          ...(add.length > 0 ? { added: add } : {}),
+          ...(remove.length > 0 ? { removed: remove } : {}),
+        },
+      ]);
+      return true;
+    });
+  }
+
+  /**
+   * Stops the running reply, which stores what it said as interrupted and drops the hops queued
+   * after it, then stores `text` as the viewer's and starts the answer: the director's decisions
+   * and the turns they choose. It streams from the viewer's message on.
+   */
+  send(id: string, text: string): Promise<LiveTurn> {
     const chat = this.#chat(id);
     return this.#serial(chat, async () => {
       await this.#interrupt(chat);
       const message = await this.#append(id, chat, [
         { type: "message", id: Bun.randomUUIDv7(), speaker: { kind: "user" }, text },
       ]);
-      const decision = await this.#append(id, chat, [
-        {
-          type: "decision",
-          after: (message[0] as ChatEvent).seq,
-          replies: [{ persona, mode: "text" }],
-          source: "single",
-        },
-      ]);
+      const after = (message[0] as ChatEvent).seq;
       const live = new LiveTurn();
       chat.live = live;
       live.push({ type: "events", events: message });
-      live.push({ type: "events", events: decision });
-      void this.#reply(id, chat, live, persona, false);
+      const { signal } = live.controller;
+      void this.#run(id, chat, live, null, async (late, save) => {
+        const request: ChatRequest = {
+          chat: await this.store.read(id),
+          read: () => this.store.read(id),
+          viewer: localViewer(),
+          after,
+          signal,
+          late,
+        };
+        return this.#answer(request, save);
+      });
       return live;
     });
   }
 
-  /** The running turn of chat `id`, or null while it is idle. */
+  /** The running reply of chat `id`, or null while it is idle. */
   live(id: string): LiveTurn | null {
     return this.#chats.get(id)?.live ?? null;
   }
 
-  /** Aborts chat `id`'s running turn, resolving once what it said is stored. */
+  /** Aborts chat `id`'s running reply, resolving once what it said is stored. */
   async stop(id: string): Promise<void> {
     const chat = this.#chats.get(id);
     if (chat === undefined || chat.live === null) {
@@ -153,7 +225,12 @@ export class ChatRunner {
     await this.#append(id, this.#chat(id), [{ type: "title", title }]);
   }
 
-  /** Stops any turn, then removes the chat's folder. */
+  /** From the next viewer line on; a reply already running keeps the limit it began with. */
+  async setChainLimit(id: string, chainLimit: number): Promise<void> {
+    await this.#append(id, this.#chat(id), [{ type: "settings", chainLimit }]);
+  }
+
+  /** Stops any reply, then removes the chat's folder. */
   remove(id: string): Promise<void> {
     const chat = this.#chat(id);
     return this.#serial(chat, async () => {
@@ -169,8 +246,8 @@ export class ChatRunner {
   }
 
   /**
-   * The stop hook: aborts every turn and the tools they left running, and waits briefly for each
-   * turn to store what it said.
+   * The stop hook: aborts every reply and the tools they left running, and waits briefly for each
+   * reply to store what it said.
    */
   async shutdown(): Promise<void> {
     const running = [...this.#chats.values()].flatMap((chat) => (chat.live ? [chat.live] : []));
@@ -235,51 +312,50 @@ export class ChatRunner {
     await live.ended;
   }
 
-  /** Runs `persona`'s turn on the log as stored, storing its events before `live` carries them. */
-  async #reply(
+  /**
+   * Runs a reply on the log as stored, storing its events and decisions before `live` carries
+   * them, and each before the reply goes on. `greeter` is the persona of a greeting, which fails as
+   * hers even before it starts.
+   */
+  async #run(
     id: string,
     chat: Chat,
     live: LiveTurn,
-    persona: ParticipantId,
-    kickoff: boolean,
+    greeter: ParticipantId | null,
+    start: (
+      late: LateTools,
+      save: EngineDeps["saveAttachment"],
+    ) => Promise<AsyncIterable<ChatOutput>>,
   ): Promise<void> {
-    let turn: string | null = null;
-    let ended = false;
+    let running: Running | null = null;
     try {
-      const request: TurnRequest = {
-        chat: await this.store.read(id),
-        persona,
-        viewer: localViewer(),
-        kickoff,
-        signal: live.controller.signal,
-        late: {
-          signal: chat.cancel.signal,
-          add: (name, events) => this.#late(id, chat, name, events),
-        },
-      };
-      const save: EngineDeps["saveAttachment"] = (bytes, mime) =>
-        this.store.saveFile(id, bytes, mime);
-      for await (const output of this.#turn(request, save)) {
-        if (output.type === "events") {
-          live.push({ type: "events", events: await this.#append(id, chat, output.events) });
+      const outputs = await start(
+        { signal: chat.cancel.signal, add: (name, events) => this.#late(id, chat, name, events) },
+        (bytes, mime) => this.store.saveFile(id, bytes, mime),
+      );
+      for await (const output of outputs) {
+        if (output.type === "events" || output.type === "decision") {
+          const drafts = output.type === "events" ? output.events : [output];
+          live.push({ type: "events", events: await this.#append(id, chat, drafts) });
           continue;
         }
-        if (output.type === "started") turn = output.turn;
-        if (output.type === "ended") ended = true;
+        if (output.type === "started") running = { turn: output.turn, persona: output.persona };
         live.push(output);
+        if (output.type === "ended") running = null;
       }
     } catch (error) {
-      await this.#failed(id, chat, live, persona, turn, error);
+      const persona = running?.persona ?? greeter;
+      await this.#failed(id, chat, live, persona, running?.turn ?? null, error);
     } finally {
-      if (turn !== null && !ended) live.push({ type: "ended", turn });
+      if (running !== null) live.push({ type: "ended", turn: running.turn });
       if (chat.live === live) chat.live = null;
       live.end();
     }
   }
 
   /**
-   * Stores what a tool an interrupted turn left running brings, through the chat's queue so it never
-   * lands between a send's line and its decision. A deleted chat's is dropped.
+   * Stores what a tool an interrupted turn left running brings, through the chat's queue so it lands
+   * after the viewer's line that interrupted the turn. A deleted chat's is dropped.
    */
   #late(id: string, chat: Chat, name: string, events: Promise<readonly ChatEventDraft[]>): void {
     chat.late.push(name);
@@ -299,28 +375,40 @@ export class ChatRunner {
       });
   }
 
-  /** A turn that threw, rather than reporting its failure: stored as turn-failed if it can be. */
+  /**
+   * A reply that threw rather than reporting its failure: stored as the turn-failed of the persona
+   * whose turn it was, if any and if it can be, else an `error` line.
+   */
   async #failed(
     id: string,
     chat: Chat,
     live: LiveTurn,
-    persona: ParticipantId,
+    persona: ParticipantId | null,
     turn: string | null,
     error: unknown,
   ): Promise<void> {
-    logger.exception(`Chat ${id}: ${persona}'s turn failed`, error);
-    try {
-      const events = await this.#append(id, chat, [
-        { type: "turn-failed", persona, turn: turn ?? Bun.randomUUIDv7(), error: errorText(error) },
-      ]);
-      live.push({ type: "events", events });
-    } catch (storing) {
-      logger.exception(`Chat ${id}: the failed turn wasn't stored`, storing);
-      live.push({
-        type: "error",
-        code: "internal",
-        message: "Eidolon hit an error; the terminal has the details",
-      });
+    const who = persona === null ? "the reply" : `${persona}'s turn`;
+    logger.exception(`Chat ${id}: ${who} failed`, error);
+    if (persona !== null) {
+      try {
+        const events = await this.#append(id, chat, [
+          {
+            type: "turn-failed",
+            persona,
+            turn: turn ?? Bun.randomUUIDv7(),
+            error: errorText(error),
+          },
+        ]);
+        live.push({ type: "events", events });
+        return;
+      } catch (storing) {
+        logger.exception(`Chat ${id}: the failed turn wasn't stored`, storing);
+      }
     }
+    live.push({
+      type: "error",
+      code: "internal",
+      message: "Eidolon hit an error; the terminal has the details",
+    });
   }
 }

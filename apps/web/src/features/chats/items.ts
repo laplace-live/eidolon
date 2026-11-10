@@ -1,7 +1,8 @@
 // What a chat's log shows: the lines said and the turns that failed. Recall, tool events, the
 // greeting prompt and the bookkeeping events stay hidden.
-import type { Attachment, ChatEvent, ParticipantId } from "@eidolon/chat";
+import type { Attachment, ChatEvent, ParticipantId, Speaker } from "@eidolon/chat";
 import { parseMarkup } from "@/lib/markup";
+import { type ReplyReason, reasonOf } from "./group";
 
 export type ChatItem =
   | { readonly kind: "user"; readonly seq: number; readonly text: string }
@@ -12,6 +13,8 @@ export type ChatItem =
       readonly text: string;
       readonly images: readonly Attachment[];
       readonly interrupted: boolean;
+      /** The decision that last chose her; null for a greeting. */
+      readonly reason: ReplyReason | null;
     }
   | {
       readonly kind: "failed";
@@ -22,8 +25,14 @@ export type ChatItem =
 
 export function chatItems(events: readonly ChatEvent[]): ChatItem[] {
   const items: ChatItem[] = [];
+  const speakers = new Map<number, Speaker>();
+  const chosen = new Map<ParticipantId, ReplyReason>();
   for (const event of events) {
-    if (event.type === "message") {
+    if (event.type === "decision") {
+      const reason = reasonOf(event, speakers);
+      for (const reply of event.replies) chosen.set(reply.persona, reason);
+    } else if (event.type === "message") {
+      speakers.set(event.seq, event.speaker);
       const images = (event.attachments ?? []).filter((file) => file.kind === "image");
       if (event.speaker.kind === "user") {
         if (event.text !== "") items.push({ kind: "user", seq: event.seq, text: event.text });
@@ -35,6 +44,7 @@ export function chatItems(events: readonly ChatEvent[]): ChatItem[] {
           text: event.text,
           images,
           interrupted: event.interrupted === true,
+          reason: chosen.get(event.speaker.id) ?? null,
         });
       }
     } else if (event.type === "turn-failed") {
@@ -42,6 +52,28 @@ export function chatItems(events: readonly ChatEvent[]): ChatItem[] {
     }
   }
   return items;
+}
+
+/** Whoever said the item at `index`: null for the viewer, else her id, for her lines and failures. */
+function speakerAt(items: readonly ChatItem[], index: number): ParticipantId | null | undefined {
+  const item = items[index];
+  return item === undefined ? undefined : item.kind === "user" ? null : item.persona;
+}
+
+/** The item at `index` begins a run of one speaker's items, where a group chat names her. */
+export function startsRun(items: readonly ChatItem[], index: number): boolean {
+  return index === 0 || speakerAt(items, index - 1) !== speakerAt(items, index);
+}
+
+/** More than one persona has a line here, as in a group, or one that was a group. */
+export function manyVoices(items: readonly ChatItem[]): boolean {
+  let voice: ParticipantId | undefined;
+  for (const item of items) {
+    if (item.kind === "user") continue;
+    if (voice !== undefined && item.persona !== voice) return true;
+    voice = item.persona;
+  }
+  return false;
 }
 
 /** What Retry sends again: the viewer's last line, if anything followed it only to fail. */

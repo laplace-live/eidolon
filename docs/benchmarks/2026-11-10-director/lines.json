@@ -1,0 +1,1244 @@
+{
+ "personas": {
+  "milky-green": {
+   "name": "明前奶绿",
+   "shortName": "奶绿",
+   "summary": "明前奶绿, a Chinese VTuber who streams on Bilibili, runs a fictional flower shop (拉普拉斯花店) whose manager is her cat 坚果, and calls her fans 奶糖花",
+   "interests": [],
+   "talkativeness": 0.5
+  },
+  "kuro": {
+   "name": "黑川茶茶",
+   "shortName": "茶茶",
+   "summary": "黑川茶茶, a soft-spoken night-owl VTuber who plays horror games after midnight and reads mystery novels between streams",
+   "interests": ["恐怖游戏", "悬疑小说", "怪谈", "咖啡", "熬夜"],
+   "talkativeness": 0.4
+  },
+  "lumi": {
+   "name": "Lumi",
+   "shortName": "露米",
+   "summary": "Lumi (露米), an energetic idol VTuber who sings and dances on every stream and works out every morning",
+   "interests": ["唱歌", "跳舞", "偶像", "演唱会", "健身"],
+   "talkativeness": 0.9
+  },
+  "xiaoman": {
+   "name": "林小满",
+   "shortName": "小满",
+   "summary": "林小满, a quiet homebody VTuber who streams cooking and builds her own PCs",
+   "interests": ["做饭", "美食", "数码", "编程", "科幻"],
+   "talkativeness": 0.3
+  }
+ },
+ "lines": [
+  {
+   "id": "mention-01",
+   "kind": "mention",
+   "participants": ["milky-green", "kuro"],
+   "latest": ["viewer", "@奶绿 坚果今天乖不乖呀"],
+   "addressed": ["milky-green"],
+   "interested": ["milky-green"],
+   "responders": ["milky-green"],
+   "invites_reply": true
+  },
+  {
+   "id": "mention-02",
+   "kind": "mention",
+   "participants": ["milky-green", "kuro", "lumi"],
+   "history": [
+    ["viewer", "你们晚上都在干嘛呀"],
+    ["lumi", "我在练新歌的舞！累死了但是好开心～"],
+    ["milky-green", "我在花店对账，坚果一直踩键盘捣乱"]
+   ],
+   "latest": ["viewer", "@茶茶 你呢，是不是又在熬夜打恐怖游戏"],
+   "addressed": ["kuro"],
+   "interested": ["kuro"],
+   "responders": ["kuro"],
+   "invites_reply": true
+  },
+  {
+   "id": "mention-03",
+   "kind": "mention",
+   "participants": ["lumi", "xiaoman"],
+   "latest": ["viewer", "@lumi 下周的生日会还有票吗"],
+   "addressed": ["lumi"],
+   "interested": ["lumi"],
+   "responders": ["lumi"],
+   "invites_reply": true,
+   "note": "A Latin name, mentioned in lower case."
+  },
+  {
+   "id": "mention-04",
+   "kind": "mention",
+   "participants": ["milky-green", "kuro", "lumi", "xiaoman"],
+   "history": [
+    ["viewer", "今天想自己做晚饭，又不知道做什么"],
+    ["lumi", "做沙拉！健康又好看！"]
+   ],
+   "latest": ["viewer", "@小满 @奶绿 你们俩谁做饭更好吃"],
+   "addressed": ["xiaoman", "milky-green"],
+   "interested": ["xiaoman"],
+   "responders": ["xiaoman", "milky-green"],
+   "invites_reply": true
+  },
+  {
+   "id": "mention-05",
+   "kind": "mention",
+   "participants": ["kuro", "xiaoman"],
+   "latest": ["viewer", "＠茶茶 最近有什么好看的悬疑小说推荐吗"],
+   "addressed": ["kuro"],
+   "interested": ["kuro"],
+   "responders": ["kuro"],
+   "invites_reply": true,
+   "note": "A full-width ＠."
+  },
+  {
+   "id": "mention-06",
+   "kind": "mention",
+   "participants": ["milky-green", "kuro", "xiaoman"],
+   "latest": ["viewer", "@小满 你新配的那台电脑打恐怖游戏卡不卡"],
+   "addressed": ["xiaoman"],
+   "interested": ["xiaoman", "kuro"],
+   "responders": ["xiaoman"],
+   "invites_reply": true,
+   "note": "The mention wins: 茶茶's interest in horror games must not add her."
+  },
+  {
+   "id": "mention-07",
+   "kind": "mention",
+   "participants": ["milky-green", "lumi"],
+   "history": [
+    ["viewer", "露米最近在忙什么"],
+    ["lumi", "下个月我要开第一场线下演唱会啦！门票周五开抢哦"],
+    ["viewer", "真的假的！恭喜！"],
+    ["lumi", "嘿嘿谢谢～一定要来呀"]
+   ],
+   "latest": ["viewer", "@明前奶绿 你会去看露米的演唱会吗"],
+   "addressed": ["milky-green"],
+   "interested": ["lumi"],
+   "responders": ["milky-green"],
+   "maybe": ["lumi"],
+   "invites_reply": true,
+   "note": "Mentioned by her full name; the concert is Lumi's, so she may chime in."
+  },
+  {
+   "id": "mention-08",
+   "kind": "mention",
+   "participants": ["milky-green", "kuro", "lumi"],
+   "latest": ["viewer", "@露米 @茶茶 你们俩谁更怕鬼"],
+   "addressed": ["lumi", "kuro"],
+   "interested": ["kuro"],
+   "responders": ["lumi", "kuro"],
+   "invites_reply": true
+  },
+  {
+   "id": "mention-09",
+   "kind": "mention",
+   "participants": ["milky-green", "kuro", "xiaoman"],
+   "latest": ["viewer", "@奶绿 花店最近进了什么新花"],
+   "addressed": ["milky-green"],
+   "interested": ["milky-green"],
+   "responders": ["milky-green"],
+   "invites_reply": true
+  },
+  {
+   "id": "mention-10",
+   "kind": "mention",
+   "participants": ["milky-green", "kuro"],
+   "history": [
+    ["viewer", "奶绿今天直播吗"],
+    ["milky-green", "今天休息～在店里陪坚果晒太阳"]
+   ],
+   "latest": ["viewer", "@坚果 快过来让我摸摸"],
+   "interested": ["milky-green"],
+   "responders": ["milky-green"],
+   "invites_reply": true,
+   "note": "坚果 is her cat, not a participant, so nothing parses as a mention."
+  },
+  {
+   "id": "mention-11",
+   "kind": "mention",
+   "participants": ["kuro", "lumi"],
+   "latest": ["viewer", "今天的舞台太燃了 @LUMI 你是怎么做到边跳边唱还不喘的"],
+   "addressed": ["lumi"],
+   "interested": ["lumi"],
+   "responders": ["lumi"],
+   "invites_reply": true
+  },
+  {
+   "id": "name-01",
+   "kind": "name",
+   "participants": ["milky-green", "kuro"],
+   "latest": ["viewer", "奶绿，你家坚果最近是不是又胖了"],
+   "addressed": ["milky-green"],
+   "interested": ["milky-green"],
+   "responders": ["milky-green"],
+   "invites_reply": true
+  },
+  {
+   "id": "name-02",
+   "kind": "name",
+   "participants": ["milky-green", "kuro", "lumi"],
+   "history": [
+    ["viewer", "晚上好呀"],
+    ["lumi", "晚上好晚上好！今天也要元气满满！"],
+    ["milky-green", "晚上好～欢迎来花店坐坐"]
+   ],
+   "latest": ["viewer", "茶茶昨晚又熬到四点吧，黑眼圈都藏不住了"],
+   "addressed": ["kuro"],
+   "interested": ["kuro"],
+   "responders": ["kuro"],
+   "invites_reply": true
+  },
+  {
+   "id": "name-03",
+   "kind": "name",
+   "participants": ["lumi", "xiaoman"],
+   "latest": ["viewer", "露米你每天练舞要练几个小时啊"],
+   "addressed": ["lumi"],
+   "interested": ["lumi"],
+   "responders": ["lumi"],
+   "invites_reply": true
+  },
+  {
+   "id": "name-04",
+   "kind": "name",
+   "participants": ["kuro", "xiaoman"],
+   "latest": ["viewer", "小满，你那把键盘是什么轴的，声音好好听"],
+   "addressed": ["xiaoman"],
+   "interested": ["xiaoman"],
+   "responders": ["xiaoman"],
+   "invites_reply": true
+  },
+  {
+   "id": "name-05",
+   "kind": "name",
+   "participants": ["milky-green", "kuro", "xiaoman"],
+   "latest": ["viewer", "这周末想去看樱花，奶绿你说哪里的樱花最好看"],
+   "addressed": ["milky-green"],
+   "interested": ["milky-green"],
+   "responders": ["milky-green"],
+   "invites_reply": true
+  },
+  {
+   "id": "name-06",
+   "kind": "name",
+   "participants": ["milky-green", "kuro", "lumi", "xiaoman"],
+   "latest": ["viewer", "奶绿和茶茶，你们俩谁胆子更小"],
+   "addressed": ["milky-green", "kuro"],
+   "interested": ["kuro"],
+   "responders": ["milky-green", "kuro"],
+   "invites_reply": true
+  },
+  {
+   "id": "name-07",
+   "kind": "name",
+   "participants": ["milky-green", "lumi", "xiaoman"],
+   "latest": ["viewer", "小满，奶绿家的坚果是什么品种的猫你知道吗"],
+   "addressed": ["xiaoman"],
+   "interested": ["milky-green"],
+   "responders": ["xiaoman"],
+   "maybe": ["milky-green"],
+   "invites_reply": true,
+   "note": "Asked of 小满, about 奶绿's cat: 奶绿 may answer too."
+  },
+  {
+   "id": "name-08",
+   "kind": "name",
+   "participants": ["milky-green", "kuro", "lumi"],
+   "latest": ["viewer", "Lumi今天的妆好好看！"],
+   "addressed": ["lumi"],
+   "interested": ["lumi"],
+   "responders": ["lumi"],
+   "invites_reply": true
+  },
+  {
+   "id": "name-09",
+   "kind": "name",
+   "participants": ["kuro", "lumi"],
+   "latest": ["viewer", "茶茶，昨天直播那个结局我真的被吓哭了"],
+   "addressed": ["kuro"],
+   "interested": ["kuro"],
+   "responders": ["kuro"],
+   "invites_reply": true
+  },
+  {
+   "id": "name-10",
+   "kind": "name",
+   "participants": ["milky-green", "kuro"],
+   "latest": ["viewer", "奶绿你快劝劝茶茶，她又通宵了"],
+   "addressed": ["milky-green"],
+   "interested": ["kuro"],
+   "responders": ["milky-green"],
+   "maybe": ["kuro"],
+   "invites_reply": true,
+   "note": "Spoken to 奶绿, about 茶茶, who may defend herself."
+  },
+  {
+   "id": "name-11",
+   "kind": "name",
+   "participants": ["kuro", "lumi", "xiaoman"],
+   "latest": ["viewer", "这个周末的火锅局你来不来啊小满"],
+   "addressed": ["xiaoman"],
+   "interested": ["xiaoman"],
+   "responders": ["xiaoman"],
+   "invites_reply": true,
+   "note": "Her name comes last."
+  },
+  {
+   "id": "reply-01",
+   "kind": "reply",
+   "participants": ["kuro", "xiaoman"],
+   "history": [
+    ["viewer", "我回来啦"],
+    ["xiaoman", "欢迎回来～晚饭吃了吗？"]
+   ],
+   "latest": ["viewer", "还没呢，冰箱里只剩两个鸡蛋了"],
+   "addressed": ["xiaoman"],
+   "interested": ["xiaoman"],
+   "responders": ["xiaoman"],
+   "invites_reply": true
+  },
+  {
+   "id": "reply-02",
+   "kind": "reply",
+   "participants": ["milky-green", "kuro", "lumi"],
+   "history": [
+    ["viewer", "今天好无聊啊"],
+    ["lumi", "那来听我唱歌吧！你想听什么类型的？"],
+    ["kuro", "……或者我给你讲个怪谈"]
+   ],
+   "latest": ["viewer", "我想听情歌！"],
+   "addressed": ["lumi"],
+   "interested": ["lumi"],
+   "responders": ["lumi"],
+   "invites_reply": true,
+   "note": "Answers Lumi's offer, not the line just before it."
+  },
+  {
+   "id": "reply-03",
+   "kind": "reply",
+   "participants": ["milky-green", "kuro", "lumi"],
+   "history": [
+    ["viewer", "今天好无聊啊"],
+    ["lumi", "那来听我唱歌吧！你想听什么类型的？"],
+    ["kuro", "……或者我给你讲个怪谈"]
+   ],
+   "latest": ["viewer", "怪谈怪谈！要那种细思极恐的"],
+   "addressed": ["kuro"],
+   "interested": ["kuro"],
+   "responders": ["kuro"],
+   "invites_reply": true
+  },
+  {
+   "id": "reply-04",
+   "kind": "reply",
+   "participants": ["milky-green", "xiaoman"],
+   "history": [
+    ["viewer", "最近压力好大"],
+    ["milky-green", "抱抱～要不要来花店看看花？坚果可以借你撸一下"],
+    ["xiaoman", "压力大就做点好吃的吧，番茄牛腩很治愈"]
+   ],
+   "latest": ["viewer", "我想去撸猫！"],
+   "addressed": ["milky-green"],
+   "interested": ["milky-green"],
+   "responders": ["milky-green"],
+   "invites_reply": true
+  },
+  {
+   "id": "reply-05",
+   "kind": "reply",
+   "participants": ["milky-green", "kuro", "xiaoman"],
+   "history": [
+    ["viewer", "睡不着"],
+    ["kuro", "我也是……要不要聊聊你最怕的东西？"]
+   ],
+   "latest": ["viewer", "我最怕半夜有人敲门"],
+   "addressed": ["kuro"],
+   "interested": ["kuro"],
+   "responders": ["kuro"],
+   "invites_reply": true
+  },
+  {
+   "id": "reply-06",
+   "kind": "reply",
+   "participants": ["lumi", "xiaoman"],
+   "history": [
+    ["viewer", "我在减肥"],
+    ["lumi", "一起健身吧！我每天早上跑五公里！你平时运动吗？"]
+   ],
+   "latest": ["viewer", "完全不运动，只想躺着"],
+   "addressed": ["lumi"],
+   "interested": ["lumi"],
+   "responders": ["lumi"],
+   "invites_reply": true
+  },
+  {
+   "id": "reply-07",
+   "kind": "reply",
+   "participants": ["milky-green", "kuro", "lumi", "xiaoman"],
+   "history": [
+    ["viewer", "大家晚上好"],
+    ["lumi", "晚上好呀！"],
+    ["xiaoman", "晚上好，我今天做了提拉米苏，有人想吃吗？"]
+   ],
+   "latest": ["viewer", "我我我！给我留一块"],
+   "addressed": ["xiaoman"],
+   "interested": ["xiaoman"],
+   "responders": ["xiaoman"],
+   "invites_reply": true
+  },
+  {
+   "id": "reply-08",
+   "kind": "reply",
+   "participants": ["milky-green", "kuro"],
+   "history": [
+    ["viewer", "奶绿今天开店了吗"],
+    ["milky-green", "开了开了，今天进了一批向日葵，你喜欢什么花呀？"]
+   ],
+   "latest": ["viewer", "我喜欢满天星"],
+   "addressed": ["milky-green"],
+   "interested": ["milky-green"],
+   "responders": ["milky-green"],
+   "invites_reply": true
+  },
+  {
+   "id": "reply-09",
+   "kind": "reply",
+   "participants": ["milky-green", "kuro", "lumi"],
+   "history": [
+    ["viewer", "猫和狗你们更喜欢哪个"],
+    ["milky-green", "猫！坚果天下第一可爱"],
+    ["kuro", "我喜欢狗……晚上有它陪着就不怕黑了"]
+   ],
+   "latest": ["viewer", "哈哈茶茶说得有道理，一个人住晚上确实怕"],
+   "addressed": ["kuro"],
+   "interested": ["kuro"],
+   "responders": ["kuro"],
+   "invites_reply": true
+  },
+  {
+   "id": "reply-10",
+   "kind": "reply",
+   "participants": ["milky-green", "kuro", "lumi"],
+   "history": [
+    ["viewer", "我想学一样乐器"],
+    ["lumi", "学吉他吧！边弹边唱超帅的！你喜欢什么风格的音乐？"],
+    ["milky-green", "钢琴也不错，花店里放钢琴曲特别有氛围"]
+   ],
+   "latest": ["viewer", "我喜欢摇滚！"],
+   "addressed": ["lumi"],
+   "interested": ["lumi"],
+   "responders": ["lumi"],
+   "invites_reply": true,
+   "note": "Answers Lumi's question, though 奶绿 spoke last."
+  },
+  {
+   "id": "interest-01",
+   "kind": "interest",
+   "participants": ["milky-green", "kuro", "lumi"],
+   "latest": ["viewer", "最近有什么好玩的恐怖游戏推荐吗"],
+   "addressed": [],
+   "interested": ["kuro"],
+   "responders": ["kuro"],
+   "invites_reply": true
+  },
+  {
+   "id": "interest-02",
+   "kind": "interest",
+   "participants": ["milky-green", "lumi", "xiaoman"],
+   "latest": ["viewer", "下个月有谁去看偶像演唱会吗，我抢到内场票了"],
+   "addressed": [],
+   "interested": ["lumi"],
+   "responders": ["lumi"],
+   "invites_reply": true
+  },
+  {
+   "id": "interest-03",
+   "kind": "interest",
+   "participants": ["lumi", "xiaoman"],
+   "latest": ["viewer", "红烧肉怎么做才不腻啊"],
+   "addressed": [],
+   "interested": ["xiaoman"],
+   "responders": ["xiaoman"],
+   "invites_reply": true,
+   "note": "Squarely the quiet cook's subject, beside the most talkative persona."
+  },
+  {
+   "id": "interest-04",
+   "kind": "interest",
+   "participants": ["milky-green", "kuro", "xiaoman"],
+   "latest": ["viewer", "楼下花店的绣球开得好漂亮，好想买一束"],
+   "addressed": [],
+   "interested": ["milky-green"],
+   "responders": ["milky-green"],
+   "invites_reply": true
+  },
+  {
+   "id": "interest-05",
+   "kind": "interest",
+   "participants": ["milky-green", "kuro", "lumi", "xiaoman"],
+   "latest": ["viewer", "我想养只猫，布偶和英短哪个好养"],
+   "addressed": [],
+   "interested": ["milky-green"],
+   "responders": ["milky-green"],
+   "invites_reply": true,
+   "note": "奶绿 has no chat.interests; her summary's cat carries it."
+  },
+  {
+   "id": "interest-06",
+   "kind": "interest",
+   "participants": ["kuro", "lumi"],
+   "latest": ["viewer", "有人看过《白夜行》吗，结局好压抑"],
+   "addressed": [],
+   "interested": ["kuro"],
+   "responders": ["kuro"],
+   "invites_reply": true
+  },
+  {
+   "id": "interest-07",
+   "kind": "interest",
+   "participants": ["milky-green", "kuro", "xiaoman"],
+   "latest": ["viewer", "新出的那款机械键盘值得入手吗"],
+   "addressed": [],
+   "interested": ["xiaoman"],
+   "responders": ["xiaoman"],
+   "invites_reply": true
+  },
+  {
+   "id": "interest-08",
+   "kind": "interest",
+   "participants": ["kuro", "lumi", "xiaoman"],
+   "latest": ["viewer", "最近在学跳宅舞，腿酸得下不了楼"],
+   "addressed": [],
+   "interested": ["lumi"],
+   "responders": ["lumi"],
+   "invites_reply": true
+  },
+  {
+   "id": "interest-09",
+   "kind": "interest",
+   "participants": ["kuro", "xiaoman"],
+   "latest": ["viewer", "深夜一个人喝着咖啡听雨，好有感觉"],
+   "addressed": [],
+   "interested": ["kuro"],
+   "responders": ["kuro"],
+   "invites_reply": true
+  },
+  {
+   "id": "interest-10",
+   "kind": "interest",
+   "participants": ["milky-green", "lumi", "xiaoman"],
+   "latest": ["viewer", "推荐几首适合睡前听的歌吧"],
+   "addressed": [],
+   "interested": ["lumi"],
+   "responders": ["lumi"],
+   "invites_reply": true
+  },
+  {
+   "id": "interest-11",
+   "kind": "interest",
+   "participants": ["milky-green", "kuro", "lumi", "xiaoman"],
+   "latest": ["viewer", "你们看过《三体》吗，觉得拍得怎么样"],
+   "interested": ["xiaoman"],
+   "responders": ["xiaoman"],
+   "maybe": ["milky-green", "kuro", "lumi"],
+   "invites_reply": true,
+   "note": "你们 asks the room; the science-fiction fan should be among the replies."
+  },
+  {
+   "id": "interest-12",
+   "kind": "interest",
+   "participants": ["milky-green", "kuro", "lumi"],
+   "latest": ["viewer", "情人节想送女朋友花，送什么好呢"],
+   "addressed": [],
+   "interested": ["milky-green"],
+   "responders": ["milky-green"],
+   "invites_reply": true
+  },
+  {
+   "id": "interest-13",
+   "kind": "interest",
+   "participants": ["kuro", "xiaoman"],
+   "latest": ["viewer", "凌晨三点了还睡不着，有人陪我聊会儿吗"],
+   "interested": ["kuro"],
+   "responders": ["kuro"],
+   "maybe": ["xiaoman"],
+   "invites_reply": true
+  },
+  {
+   "id": "interest-14",
+   "kind": "interest",
+   "participants": ["lumi", "xiaoman"],
+   "latest": ["viewer", "健身完吃什么比较好"],
+   "addressed": [],
+   "interested": ["lumi", "xiaoman"],
+   "responders": ["lumi"],
+   "maybe": ["xiaoman"],
+   "invites_reply": true
+  },
+  {
+   "id": "interest-15",
+   "kind": "interest",
+   "participants": ["milky-green", "kuro", "lumi", "xiaoman"],
+   "latest": ["viewer", "今晚的月亮好圆，适合讲鬼故事"],
+   "addressed": [],
+   "interested": ["kuro"],
+   "responders": ["kuro"],
+   "invites_reply": true
+  },
+  {
+   "id": "interest-16",
+   "kind": "interest",
+   "participants": ["milky-green", "xiaoman"],
+   "latest": ["viewer", "刚看完《星际穿越》，到现在还没缓过来"],
+   "addressed": [],
+   "interested": ["xiaoman"],
+   "responders": ["xiaoman"],
+   "invites_reply": true
+  },
+  {
+   "id": "interest-17",
+   "kind": "interest",
+   "participants": ["milky-green", "lumi"],
+   "latest": ["viewer", "我家猫今天把花瓶打碎了"],
+   "addressed": [],
+   "interested": ["milky-green"],
+   "responders": ["milky-green"],
+   "invites_reply": true
+  },
+  {
+   "id": "off-topic-01",
+   "kind": "off-topic",
+   "participants": ["milky-green", "kuro", "lumi"],
+   "latest": ["viewer", "今天加班到十点，累死了"],
+   "addressed": [],
+   "interested": [],
+   "responders": [],
+   "maybe": ["milky-green", "kuro", "lumi"],
+   "invites_reply": true,
+   "note": "No one's subject, so any one of them may answer."
+  },
+  {
+   "id": "off-topic-02",
+   "kind": "off-topic",
+   "participants": ["kuro", "xiaoman"],
+   "latest": ["viewer", "外面下好大的雨，我还忘带伞了"],
+   "addressed": [],
+   "interested": [],
+   "responders": [],
+   "maybe": ["kuro", "xiaoman"],
+   "invites_reply": true
+  },
+  {
+   "id": "off-topic-03",
+   "kind": "off-topic",
+   "participants": ["milky-green", "kuro"],
+   "latest": ["viewer", "刚考完四级，感觉要挂"],
+   "addressed": [],
+   "interested": [],
+   "responders": [],
+   "maybe": ["milky-green", "kuro"],
+   "invites_reply": true
+  },
+  {
+   "id": "off-topic-04",
+   "kind": "off-topic",
+   "participants": ["milky-green", "kuro", "lumi", "xiaoman"],
+   "latest": ["viewer", "我们公司今天发年终奖了！"],
+   "addressed": [],
+   "interested": [],
+   "responders": [],
+   "maybe": ["milky-green", "kuro", "lumi", "xiaoman"],
+   "invites_reply": true
+  },
+  {
+   "id": "off-topic-05",
+   "kind": "off-topic",
+   "participants": ["kuro", "xiaoman"],
+   "latest": ["viewer", "地铁上有人一直外放短视频，好烦"],
+   "addressed": [],
+   "interested": [],
+   "responders": [],
+   "maybe": ["kuro", "xiaoman"],
+   "invites_reply": true
+  },
+  {
+   "id": "off-topic-06",
+   "kind": "off-topic",
+   "participants": ["milky-green", "xiaoman"],
+   "latest": ["viewer", "明天要早起去面试，好紧张"],
+   "addressed": [],
+   "interested": [],
+   "responders": [],
+   "maybe": ["milky-green", "xiaoman"],
+   "invites_reply": true
+  },
+  {
+   "id": "off-topic-07",
+   "kind": "off-topic",
+   "participants": ["milky-green", "kuro", "lumi"],
+   "latest": ["viewer", "我刚搬完家，腰快断了"],
+   "addressed": [],
+   "interested": [],
+   "responders": [],
+   "maybe": ["milky-green", "kuro", "lumi"],
+   "invites_reply": true
+  },
+  {
+   "id": "closing-01",
+   "kind": "closing",
+   "participants": ["milky-green", "kuro"],
+   "history": [
+    ["viewer", "我要去睡了"],
+    ["kuro", "这么早？才一点诶……好吧，早点睡哦"]
+   ],
+   "latest": ["viewer", "好的晚安～"],
+   "addressed": ["kuro"],
+   "interested": [],
+   "responders": ["kuro"],
+   "invites_reply": false
+  },
+  {
+   "id": "closing-02",
+   "kind": "closing",
+   "participants": ["milky-green", "kuro", "lumi"],
+   "history": [
+    ["viewer", "今天聊得好开心"],
+    ["lumi", "我也是！下次还要来哦！"],
+    ["milky-green", "嗯嗯，花店随时欢迎你～"]
+   ],
+   "latest": ["viewer", "好的，那我先下线啦，大家拜拜"],
+   "interested": [],
+   "responders": [],
+   "maybe": ["milky-green", "kuro", "lumi"],
+   "invites_reply": false
+  },
+  {
+   "id": "closing-03",
+   "kind": "closing",
+   "participants": ["lumi", "xiaoman"],
+   "history": [
+    ["viewer", "小满推荐的番茄牛腩我做出来了！"],
+    ["xiaoman", "真的吗！味道怎么样？"]
+   ],
+   "latest": ["viewer", "超好吃！谢谢小满"],
+   "addressed": ["xiaoman"],
+   "interested": ["xiaoman"],
+   "responders": ["xiaoman"],
+   "invites_reply": false
+  },
+  {
+   "id": "closing-04",
+   "kind": "closing",
+   "participants": ["milky-green", "kuro", "xiaoman"],
+   "history": [
+    ["viewer", "我去吃饭了"],
+    ["milky-green", "去吧去吧，多吃点～"]
+   ],
+   "latest": ["viewer", "嗯嗯，一会儿回来"],
+   "addressed": ["milky-green"],
+   "interested": [],
+   "responders": ["milky-green"],
+   "invites_reply": false
+  },
+  {
+   "id": "closing-05",
+   "kind": "closing",
+   "participants": ["milky-green", "kuro", "lumi", "xiaoman"],
+   "history": [
+    ["viewer", "露米你会唱戏曲吗"],
+    ["lumi", "不会啦哈哈，但我可以现学！要不要我现在给你唱一句？"]
+   ],
+   "latest": ["viewer", "哈哈哈好吧，下次吧"],
+   "addressed": ["lumi"],
+   "interested": [],
+   "responders": ["lumi"],
+   "invites_reply": false
+  },
+  {
+   "id": "closing-06",
+   "kind": "closing",
+   "participants": ["kuro", "xiaoman"],
+   "history": [
+    ["viewer", "小满，电脑我按你说的加了内存条"],
+    ["xiaoman", "那现在还卡吗？"]
+   ],
+   "latest": ["viewer", "不卡了，好的谢谢"],
+   "addressed": ["xiaoman"],
+   "interested": ["xiaoman"],
+   "responders": ["xiaoman"],
+   "invites_reply": false
+  },
+  {
+   "id": "group-01",
+   "kind": "group",
+   "participants": ["milky-green", "kuro", "lumi"],
+   "latest": ["viewer", "大家晚上好！"],
+   "interested": [],
+   "responders": [],
+   "maybe": ["milky-green", "kuro", "lumi"],
+   "invites_reply": true
+  },
+  {
+   "id": "group-02",
+   "kind": "group",
+   "participants": ["kuro", "xiaoman"],
+   "latest": ["viewer", "你们俩今天晚饭吃的什么"],
+   "addressed": ["kuro", "xiaoman"],
+   "interested": ["xiaoman"],
+   "responders": ["xiaoman"],
+   "maybe": ["kuro"],
+   "invites_reply": true,
+   "note": "你们俩 speaks to both, but Jev reads no plural as addressing her, so 小满's interest carries it. Both were required before the first run."
+  },
+  {
+   "id": "group-03",
+   "kind": "group",
+   "participants": ["milky-green", "lumi", "xiaoman"],
+   "latest": ["viewer", "我回来啦，有人想我吗"],
+   "interested": [],
+   "responders": [],
+   "maybe": ["milky-green", "lumi", "xiaoman"],
+   "invites_reply": true
+  },
+  {
+   "id": "persona-01",
+   "kind": "persona-addresses",
+   "participants": ["milky-green", "kuro"],
+   "history": [["viewer", "奶绿，你怕鬼吗"]],
+   "latest": ["milky-green", "怕死了，我连恐怖片的预告都不敢看。茶茶你是不是一点都不怕？"],
+   "addressed": ["kuro"],
+   "interested": ["kuro"],
+   "responders": ["kuro"],
+   "invites_reply": true
+  },
+  {
+   "id": "persona-02",
+   "kind": "persona-addresses",
+   "participants": ["milky-green", "kuro", "xiaoman"],
+   "history": [["viewer", "奶绿，猫和狗你更喜欢哪个"]],
+   "latest": ["milky-green", "当然是猫！坚果天下第一可爱。小满你呢？"],
+   "addressed": ["xiaoman"],
+   "interested": [],
+   "responders": ["xiaoman"],
+   "invites_reply": true
+  },
+  {
+   "id": "persona-03",
+   "kind": "persona-to-viewer",
+   "participants": ["milky-green", "kuro"],
+   "history": [["viewer", "奶绿，坚果今天怎么样"]],
+   "latest": ["milky-green", "坚果今天吃了两碗猫粮，现在趴在收银台上睡觉呢。"],
+   "addressed": [],
+   "interested": [],
+   "responders": [],
+   "invites_reply": false
+  },
+  {
+   "id": "persona-04",
+   "kind": "persona-closing",
+   "participants": ["milky-green", "kuro", "lumi"],
+   "history": [
+    ["viewer", "我要睡了，大家晚安"],
+    ["lumi", "晚安晚安！做个好梦！"]
+   ],
+   "latest": ["milky-green", "晚安～明天花店见哦"],
+   "addressed": [],
+   "interested": [],
+   "responders": [],
+   "invites_reply": false
+  },
+  {
+   "id": "persona-05",
+   "kind": "persona-addresses",
+   "participants": ["kuro", "lumi"],
+   "history": [["viewer", "茶茶你最近在玩什么"]],
+   "latest": ["kuro", "一个新出的恐怖游戏……露米肯定连标题画面都不敢看吧"],
+   "addressed": ["lumi"],
+   "interested": [],
+   "responders": ["lumi"],
+   "invites_reply": true,
+   "note": "A tease."
+  },
+  {
+   "id": "persona-06",
+   "kind": "persona-opinion",
+   "participants": ["milky-green", "kuro", "lumi"],
+   "history": [
+    ["viewer", "茶茶，最近有什么好玩的恐怖游戏推荐吗"],
+    ["kuro", "《零》系列吧，氛围感很好，适合关灯玩。"]
+   ],
+   "latest": ["milky-green", "恐怖游戏我真的不行，光听名字就起鸡皮疙瘩了"],
+   "interested": ["kuro"],
+   "responders": [],
+   "maybe": ["kuro"],
+   "invites_reply": true
+  },
+  {
+   "id": "persona-07",
+   "kind": "persona-to-viewer",
+   "participants": ["lumi", "xiaoman"],
+   "history": [["viewer", "露米你平时吃什么保持身材"]],
+   "latest": ["lumi", "我吃得超多的！全靠跳舞消耗～你呢，你平时喜欢吃什么？"],
+   "addressed": [],
+   "interested": ["xiaoman"],
+   "responders": [],
+   "maybe": ["xiaoman"],
+   "invites_reply": true,
+   "note": "Her question is the viewer's to answer."
+  },
+  {
+   "id": "persona-08",
+   "kind": "persona-addresses",
+   "participants": ["milky-green", "kuro"],
+   "history": [
+    ["viewer", "奶绿，你怕鬼吗"],
+    ["milky-green", "怕死了，我连恐怖片的预告都不敢看。茶茶你是不是一点都不怕？"]
+   ],
+   "latest": ["kuro", "怕呀，只是越怕越想玩。奶绿下次要不要跟我连麦一起玩？"],
+   "addressed": ["milky-green"],
+   "interested": [],
+   "responders": ["milky-green"],
+   "invites_reply": true
+  },
+  {
+   "id": "persona-09",
+   "kind": "persona-closing",
+   "participants": ["milky-green", "kuro"],
+   "history": [
+    ["viewer", "奶绿，你怕鬼吗"],
+    ["milky-green", "怕死了，我连恐怖片的预告都不敢看。茶茶你是不是一点都不怕？"],
+    ["kuro", "怕呀，只是越怕越想玩。奶绿下次要不要跟我连麦一起玩？"]
+   ],
+   "latest": ["milky-green", "不要不要不要！我会被吓哭的！"],
+   "addressed": ["kuro"],
+   "interested": [],
+   "responders": [],
+   "maybe": ["kuro"],
+   "invites_reply": false,
+   "note": "The third hop: a refusal that may end the chain."
+  },
+  {
+   "id": "persona-10",
+   "kind": "persona-addresses",
+   "participants": ["milky-green", "kuro", "lumi", "xiaoman"],
+   "history": [["viewer", "露米周末有什么安排"]],
+   "latest": ["lumi", "我要去练歌房唱一整天！你们谁要一起？"],
+   "interested": [],
+   "responders": [],
+   "maybe": ["milky-green", "kuro", "xiaoman"],
+   "invites_reply": true
+  },
+  {
+   "id": "persona-11",
+   "kind": "persona-to-viewer",
+   "participants": ["lumi", "xiaoman"],
+   "history": [["viewer", "露米明天有什么安排"]],
+   "latest": ["lumi", "明天想去吃那家新开的火锅，听说他们家的毛肚超好吃！"],
+   "addressed": [],
+   "interested": ["xiaoman"],
+   "responders": [],
+   "maybe": ["xiaoman"],
+   "invites_reply": true
+  },
+  {
+   "id": "persona-12",
+   "kind": "persona-closing",
+   "participants": ["milky-green", "kuro", "lumi"],
+   "history": [["viewer", "露米生日快乐！"]],
+   "latest": ["lumi", "谢谢你！！今天收到好多祝福，好幸福～"],
+   "addressed": [],
+   "interested": [],
+   "responders": [],
+   "maybe": ["milky-green", "kuro"],
+   "invites_reply": false,
+   "note": "The others may wish her a happy birthday too."
+  },
+  {
+   "id": "persona-13",
+   "kind": "persona-addresses",
+   "participants": ["milky-green", "kuro", "xiaoman"],
+   "history": [["viewer", "奶绿，你饿不饿"]],
+   "latest": ["milky-green", "有点饿了……小满，花店附近有什么好吃的推荐吗？"],
+   "addressed": ["xiaoman"],
+   "interested": ["xiaoman"],
+   "responders": ["xiaoman"],
+   "invites_reply": true
+  },
+  {
+   "id": "persona-14",
+   "kind": "persona-opinion",
+   "participants": ["milky-green", "lumi"],
+   "history": [["viewer", "奶绿，刚刚那首歌是谁唱的，好好听"]],
+   "latest": ["milky-green", "是露米唱的！她飙高音的时候我鸡皮疙瘩都起来了"],
+   "interested": ["lumi"],
+   "responders": ["lumi"],
+   "invites_reply": true,
+   "note": "Praise of Lumi, told to the viewer."
+  },
+  {
+   "id": "persona-15",
+   "kind": "persona-addresses",
+   "participants": ["kuro", "lumi"],
+   "history": [["viewer", "露米，恐怖片和爱情片哪个更适合约会"]],
+   "latest": ["lumi", "当然是爱情片啦！看恐怖片多煞风景，茶茶你说是吧？"],
+   "addressed": ["kuro"],
+   "interested": ["kuro"],
+   "responders": ["kuro"],
+   "invites_reply": true
+  },
+  {
+   "id": "persona-16",
+   "kind": "persona-opinion",
+   "participants": ["kuro", "lumi"],
+   "history": [["viewer", "露米，恐怖片和爱情片哪个更适合约会"]],
+   "latest": ["lumi", "当然是爱情片！恐怖片只会把人吓跑"],
+   "addressed": [],
+   "interested": ["kuro"],
+   "responders": [],
+   "maybe": ["kuro"],
+   "invites_reply": true,
+   "note": "persona-15 without the question to 茶茶."
+  },
+  {
+   "id": "persona-17",
+   "kind": "persona-to-viewer",
+   "participants": ["milky-green", "kuro"],
+   "history": [["viewer", "奶绿，我今天去看樱花了"]],
+   "latest": ["milky-green", "好羡慕！拍照了吗？是粉色的还是白色的？"],
+   "addressed": [],
+   "interested": [],
+   "responders": [],
+   "invites_reply": true
+  },
+  {
+   "id": "persona-18",
+   "kind": "persona-addresses",
+   "participants": ["kuro", "xiaoman"],
+   "history": [
+    ["viewer", "小满会做甜点吗"],
+    ["xiaoman", "会一点，最近在练提拉米苏。茶茶你喜欢吃甜的吗？"]
+   ],
+   "latest": ["kuro", "喜欢……配黑咖啡刚刚好。做好了能分我一块吗？"],
+   "addressed": ["xiaoman"],
+   "interested": ["xiaoman"],
+   "responders": ["xiaoman"],
+   "invites_reply": true
+  },
+  {
+   "id": "persona-19",
+   "kind": "persona-closing",
+   "participants": ["kuro", "xiaoman"],
+   "history": [
+    ["viewer", "小满会做甜点吗"],
+    ["xiaoman", "会一点，最近在练提拉米苏。茶茶你喜欢吃甜的吗？"],
+    ["kuro", "喜欢……配黑咖啡刚刚好。做好了能分我一块吗？"]
+   ],
+   "latest": ["xiaoman", "好呀，做好了给你留最大的那块"],
+   "addressed": ["kuro"],
+   "interested": [],
+   "responders": [],
+   "maybe": ["kuro"],
+   "invites_reply": false
+  },
+  {
+   "id": "persona-20",
+   "kind": "persona-to-viewer",
+   "participants": ["milky-green", "lumi"],
+   "history": [["viewer", "大家好，我叫小林，第一次来"]],
+   "latest": ["lumi", "欢迎小林！！你喜欢听什么歌呀？"],
+   "addressed": [],
+   "interested": [],
+   "responders": [],
+   "maybe": ["milky-green"],
+   "invites_reply": true
+  },
+  {
+   "id": "persona-21",
+   "kind": "persona-opinion",
+   "participants": ["milky-green", "kuro", "lumi", "xiaoman"],
+   "history": [["viewer", "奶绿，要是你们四个一起开店，会开什么店"]],
+   "latest": ["milky-green", "当然是花店！再加个甜品区，小满做甜点，露米在门口唱歌招揽客人～"],
+   "interested": ["xiaoman", "lumi"],
+   "responders": [],
+   "maybe": ["xiaoman", "lumi", "kuro"],
+   "invites_reply": true
+  },
+  {
+   "id": "persona-22",
+   "kind": "persona-addresses",
+   "participants": ["kuro", "xiaoman"],
+   "history": [["viewer", "茶茶，我电脑好卡怎么办"]],
+   "latest": ["kuro", "我也不太懂电脑……小满，这种是不是要加内存条？"],
+   "addressed": ["xiaoman"],
+   "interested": ["xiaoman"],
+   "responders": ["xiaoman"],
+   "invites_reply": true
+  },
+  {
+   "id": "persona-23",
+   "kind": "persona-answers",
+   "participants": ["milky-green", "lumi"],
+   "history": [
+    ["viewer", "露米你会做饭吗"],
+    ["lumi", "会！我的拿手菜是……泡面加蛋！奶绿你会做饭吗？"]
+   ],
+   "latest": ["milky-green", "我只会煮奶茶哈哈，上次煮粥还把锅烧糊了"],
+   "addressed": ["lumi"],
+   "interested": [],
+   "responders": [],
+   "maybe": ["lumi"],
+   "invites_reply": true
+  },
+  {
+   "id": "persona-24",
+   "kind": "persona-closing",
+   "participants": ["milky-green", "kuro", "xiaoman"],
+   "history": [["viewer", "小满，我先走啦"]],
+   "latest": ["xiaoman", "拜拜～路上小心"],
+   "addressed": [],
+   "interested": [],
+   "responders": [],
+   "invites_reply": false
+  },
+  {
+   "id": "persona-25",
+   "kind": "persona-addresses",
+   "participants": ["milky-green", "kuro", "lumi"],
+   "history": [["viewer", "茶茶，下雨天适合干什么"]],
+   "latest": ["kuro", "适合窝在被子里看恐怖片。你们下雨天都干嘛？"],
+   "interested": [],
+   "responders": [],
+   "maybe": ["milky-green", "lumi"],
+   "invites_reply": true,
+   "note": "你们 asks the viewer and the room alike."
+  },
+  {
+   "id": "persona-26",
+   "kind": "persona-to-viewer",
+   "participants": ["lumi", "xiaoman"],
+   "history": [["viewer", "小满，番茄炒蛋先放番茄还是先放蛋"]],
+   "latest": ["xiaoman", "先炒蛋，盛出来，再把番茄炒出汁，最后把蛋倒回去。"],
+   "addressed": [],
+   "interested": [],
+   "responders": [],
+   "invites_reply": false
+  },
+  {
+   "id": "persona-27",
+   "kind": "persona-to-viewer",
+   "participants": ["milky-green", "kuro"],
+   "history": [["viewer", "茶茶你今天看起来好累"]],
+   "latest": ["kuro", "嗯……昨晚做噩梦了，一直没睡好。"],
+   "addressed": [],
+   "interested": [],
+   "responders": [],
+   "maybe": ["milky-green"],
+   "invites_reply": true
+  },
+  {
+   "id": "persona-28",
+   "kind": "persona-addresses",
+   "participants": ["kuro", "lumi"],
+   "history": [["viewer", "露米，周末想去KTV吗"]],
+   "latest": ["lumi", "想！茶茶要不要一起，你唱歌其实超好听的！"],
+   "addressed": ["kuro"],
+   "interested": [],
+   "responders": ["kuro"],
+   "invites_reply": true
+  },
+  {
+   "id": "persona-29",
+   "kind": "persona-addresses",
+   "participants": ["milky-green", "xiaoman"],
+   "history": [["viewer", "奶绿你会剪视频吗"]],
+   "latest": ["milky-green", "完全不会……小满你会吗？教教我！"],
+   "addressed": ["xiaoman"],
+   "interested": ["xiaoman"],
+   "responders": ["xiaoman"],
+   "invites_reply": true
+  },
+  {
+   "id": "persona-30",
+   "kind": "persona-to-viewer",
+   "participants": ["milky-green", "kuro"],
+   "history": [["viewer", "奶绿，春天果然还是要看樱花"]],
+   "latest": ["milky-green", "对呀，樱花季最好了"],
+   "addressed": [],
+   "interested": [],
+   "responders": [],
+   "invites_reply": false
+  },
+  {
+   "id": "persona-31",
+   "kind": "persona-answers",
+   "participants": ["milky-green", "kuro", "xiaoman"],
+   "history": [
+    ["viewer", "奶绿，猫和狗你更喜欢哪个"],
+    ["milky-green", "当然是猫！坚果天下第一可爱。小满你呢？"]
+   ],
+   "latest": ["xiaoman", "我也喜欢猫，可惜我家只有一台会叫的电脑。"],
+   "addressed": ["milky-green"],
+   "interested": ["milky-green"],
+   "responders": [],
+   "maybe": ["milky-green"],
+   "invites_reply": true
+  },
+  {
+   "id": "persona-32",
+   "kind": "persona-opinion",
+   "participants": ["kuro", "lumi"],
+   "history": [["viewer", "茶茶，你看过露米的演唱会吗"]],
+   "latest": ["kuro", "看过……人太多我有点紧张，但是她跳舞的时候真的很耀眼"],
+   "interested": ["lumi"],
+   "responders": ["lumi"],
+   "invites_reply": true,
+   "note": "Praise of Lumi, told to the viewer."
+  },
+  {
+   "id": "persona-33",
+   "kind": "persona-addresses",
+   "participants": ["milky-green", "kuro", "lumi"],
+   "history": [
+    ["viewer", "露米，下周的演唱会准备得怎么样了"],
+    ["lumi", "超紧张的！每天练到半夜！"]
+   ],
+   "latest": ["milky-green", "露米加油！我一定去现场给你应援！"],
+   "addressed": ["lumi"],
+   "interested": ["lumi"],
+   "responders": [],
+   "maybe": ["lumi"],
+   "invites_reply": true,
+   "note": "Cheering her on may end the chain: Jev scores it as closing. Lumi was required before the first run."
+  },
+  {
+   "id": "persona-34",
+   "kind": "persona-opinion",
+   "participants": ["milky-green", "kuro", "lumi"],
+   "history": [
+    ["viewer", "露米，推荐一首歌吧"],
+    ["lumi", "《晴天》！每次唱都好有感觉！"]
+   ],
+   "latest": ["milky-green", "这首我也超喜欢，副歌一出来就想哭"],
+   "interested": ["lumi"],
+   "responders": [],
+   "maybe": ["lumi"],
+   "invites_reply": true
+  },
+  {
+   "id": "persona-35",
+   "kind": "persona-closing",
+   "participants": ["milky-green", "kuro", "lumi", "xiaoman"],
+   "history": [
+    ["viewer", "小满，今晚做什么好吃的"],
+    ["xiaoman", "做了咖喱饭。茶茶要不要来尝尝？"],
+    ["kuro", "要！我带咖啡过去"]
+   ],
+   "latest": ["xiaoman", "那就这么说定了"],
+   "addressed": ["kuro"],
+   "interested": [],
+   "responders": [],
+   "invites_reply": false
+  }
+ ]
+}

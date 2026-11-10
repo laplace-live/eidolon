@@ -1,7 +1,13 @@
 // /api/local/chats: text chats with the personas, kept in the data home. A reply streams as NDJSON
 // while it runs, and GET live picks it up again from its start.
 import { existsSync } from "node:fs";
-import { attachmentMime, ChatStoreError, isChatId } from "@eidolon/chat";
+import {
+  attachmentMime,
+  ChatStoreError,
+  isChatId,
+  MAX_CHAIN_LIMIT,
+  MAX_PARTICIPANTS,
+} from "@eidolon/chat";
 import { isPlainObject, withPersona } from "@eidolon/config";
 import { hasKey, missingKey, trySelect } from "@eidolon/providers";
 import { ChatRunner, type ChatRunnerOptions } from "../chats/runner.ts";
@@ -29,23 +35,56 @@ function field(body: unknown, name: string, max: number, control: RegExp): strin
   return length === 0 || length > max || control.test(trimmed) ? null : trimmed;
 }
 
-/** The persona a create names: exactly one, for now. */
+/** `value` as a list of strings, each once, of `min` to MAX_PARTICIPANTS; else null. */
+function idsOf(value: unknown, min: number): string[] | null {
+  if (!Array.isArray(value) || value.length < min || value.length > MAX_PARTICIPANTS) return null;
+  if (!value.every((id) => typeof id === "string")) return null;
+  return new Set(value).size === value.length ? (value as string[]) : null;
+}
+
+/** The personas a create names: 1 to MAX_PARTICIPANTS, each once. */
 function participantsOf(body: unknown): string[] | null {
   if (!isPlainObject(body) || Object.keys(body).some((key) => key !== "participants")) return null;
-  const { participants } = body;
-  if (!Array.isArray(participants) || participants.length !== 1) return null;
-  return participants.every((id) => typeof id === "string") ? (participants as string[]) : null;
+  return idsOf(body.participants, 1);
+}
+
+/** A participants change: `add`, `remove` or both, naming at least one persona, none in both. */
+function changeOf(body: unknown): { add: string[]; remove: string[] } | null {
+  if (!isPlainObject(body) || Object.keys(body).some((key) => key !== "add" && key !== "remove")) {
+    return null;
+  }
+  const add = body.add === undefined ? [] : idsOf(body.add, 0);
+  const remove = body.remove === undefined ? [] : idsOf(body.remove, 0);
+  if (add === null || remove === null || add.length + remove.length === 0) return null;
+  return add.some((id) => remove.includes(id)) ? null : { add, remove };
+}
+
+/** PATCH's `chainLimit`, a whole number of hops from 0 to MAX_CHAIN_LIMIT; else null. */
+function chainLimitOf(body: unknown): number | null {
+  if (!isPlainObject(body) || Object.keys(body).some((key) => key !== "chainLimit")) return null;
+  const { chainLimit } = body;
+  if (typeof chainLimit !== "number" || !Number.isInteger(chainLimit)) return null;
+  return chainLimit >= 0 && chainLimit <= MAX_CHAIN_LIMIT ? chainLimit : null;
 }
 
 /** The 409 when persona `id`'s mind takes a key and has none; the caller validates `id`. */
-function missingMindKey(id: string): Response | null {
+function missingMindKey(id: string, whose: string): Response | null {
   const selection = withPersona(id, () => trySelect("mind"));
   if (selection === null || hasKey(selection)) return null;
   return localError(
     409,
     "missing-key",
-    `Her mind role has no key. ${missingKey(selection).message}`,
+    `${whose} mind role has no key. ${missingKey(selection).message}`,
   );
+}
+
+/** Why personas `ids` can't reply: the first that doesn't exist, or whose mind has no key. */
+function speakersRefusal(ids: readonly string[]): Response | null {
+  for (const id of ids) {
+    const refused = personaRefusal(id) ?? missingMindKey(id, ids.length > 1 ? `${id}'s` : "Her");
+    if (refused !== null) return refused;
+  }
+  return null;
 }
 
 function chatRefusal(id: string): Response | null {
@@ -87,10 +126,9 @@ export function chatsRoutes(app: LocalApp, options: ChatRunnerOptions = {}): Loc
         if (!body.ok) return body.response;
         const participants = participantsOf(body.value);
         if (participants === null) {
-          return localError(400, "bad-request", "`participants` names exactly one persona");
+          return localError(400, "bad-request", "`participants` names 1 to 6 personas, each once");
         }
-        const [persona] = participants as [string];
-        const refused = personaRefusal(persona) ?? missingMindKey(persona);
+        const refused = speakersRefusal(participants);
         if (refused !== null) return refused;
         return localJson(201, { id: await runner().create(participants) });
       },
@@ -118,11 +156,17 @@ export function chatsRoutes(app: LocalApp, options: ChatRunnerOptions = {}): Loc
         const body = await readJson(request, BODY_LIMIT);
         if (!body.ok) return body.response;
         const title = field(body.value, "title", MAX_TITLE, CONTROL);
-        if (title === null) {
-          return localError(400, "bad-request", "`title` is 1 to 80 characters on one line");
+        const chainLimit = title === null ? chainLimitOf(body.value) : null;
+        if (title === null && chainLimit === null) {
+          return localError(
+            400,
+            "bad-request",
+            "Send a `title` of 1 to 80 characters on one line, or a `chainLimit` from 0 to 6",
+          );
         }
         return inChat(async () => {
-          await runner().rename(id, title);
+          if (title !== null) await runner().rename(id, title);
+          else await runner().setChainLimit(id, chainLimit as number);
           return localJson(200, { ok: true });
         });
       },
@@ -151,10 +195,9 @@ export function chatsRoutes(app: LocalApp, options: ChatRunnerOptions = {}): Loc
         const text = field(body.value, "text", MAX_TEXT, CONTROL_IN_TEXT);
         if (text === null) return localError(400, "bad-request", "`text` is 1 to 4000 characters");
         return inChat(async () => {
-          const persona = await runner().replier(id);
-          const blocked = personaRefusal(persona) ?? missingMindKey(persona);
+          const blocked = speakersRefusal(await runner().participants(id));
           if (blocked !== null) return blocked;
-          return ndjsonResponse((await runner().send(id, text, persona)).stream());
+          return ndjsonResponse((await runner().send(id, text)).stream());
         });
       },
     },
@@ -184,6 +227,37 @@ export function chatsRoutes(app: LocalApp, options: ChatRunnerOptions = {}): Loc
             return new Response(null, { status: 204 });
           })
         );
+      },
+    },
+    {
+      route: "POST /api/local/chats/:id/participants",
+      async handler(request, { params }) {
+        const id = params.id as string;
+        const refused = chatRefusal(id);
+        if (refused !== null) return refused;
+        const body = await readJson(request, BODY_LIMIT);
+        if (!body.ok) return body.response;
+        const change = changeOf(body.value);
+        if (change === null) {
+          return localError(
+            400,
+            "bad-request",
+            "Send `add` or `remove`, lists of personas, naming each once",
+          );
+        }
+        // Only those added are looked up: one deleted since can still be removed.
+        const blocked = speakersRefusal(change.add);
+        if (blocked !== null) return blocked;
+        return inChat(async () => {
+          if (!(await runner().changeParticipants(id, change.add, change.remove))) {
+            return localError(
+              400,
+              "bad-request",
+              "Add personas not in the chat and remove ones in it, keeping 1 to 6",
+            );
+          }
+          return localJson(200, { ok: true });
+        });
       },
     },
     {

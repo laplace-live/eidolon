@@ -11,24 +11,35 @@ import {
   viewWithBlocks,
 } from "../src/index.ts";
 
-const HEADER: ChatHeader = {
+const SOLO: ChatHeader = {
   format: CHAT_FORMAT,
   id: "0190f5c8-0000-7000-8000-000000000000",
   createdAt: 0,
-  participants: ["milky", "ruby"],
+  participants: ["milky"],
 };
+const GROUP: ChatHeader = { ...SOLO, participants: ["milky", "ruby", "ken"] };
 const NAMES: Record<string, string> = { milky: "奶绿", ruby: "露比", ken: "Ken" };
 
 function log(...drafts: ChatEventDraft[]): ChatEvent[] {
   return stampEvents(drafts, 0, 1000);
 }
 
-function view(events: readonly ChatEvent[], id = "milky", windowMessages = CHAT_WINDOW_MESSAGES) {
-  return viewOf(HEADER, events, id, {
+function view(
+  events: readonly ChatEvent[],
+  id = "milky",
+  windowMessages = CHAT_WINDOW_MESSAGES,
+  header = SOLO,
+  viewerName?: string,
+) {
+  return viewOf(header, events, id, {
     windowMessages,
     nameOf: (persona) => NAMES[persona] ?? persona,
+    ...(viewerName === undefined ? {} : { viewerName }),
   });
 }
+
+const groupView = (events: readonly ChatEvent[], id = "milky", viewerName = "小明") =>
+  view(events, id, CHAT_WINDOW_MESSAGES, GROUP, viewerName);
 
 const user = (text: string): ChatEventDraft => ({
   type: "message",
@@ -133,7 +144,7 @@ describe("viewOf, one persona", () => {
       { role: "user", content: "two" },
       { role: "assistant", content: "reply 2" },
     ]);
-    const { messages, blocks } = viewWithBlocks(HEADER, events, "milky", {
+    const { messages, blocks } = viewWithBlocks(SOLO, events, "milky", {
       windowMessages: CHAT_WINDOW_MESSAGES,
       nameOf: (persona) => persona,
     });
@@ -195,7 +206,7 @@ describe("viewOf, one persona", () => {
       },
       { type: "turn-failed", persona: "milky", turn: "t1", error: "timeout" },
       { type: "title", title: "Tea" },
-      { type: "participants", added: ["ruby"] },
+      { type: "participants", removed: ["ruby"] },
       { type: "settings", replyMode: "text", chainLimit: 2 },
       { type: "call-started", call: "c", persona: "milky" },
       { type: "call-ended", call: "c", reason: "hangup" },
@@ -282,10 +293,10 @@ describe("viewOf, a group", () => {
   );
 
   test("others' runs fold into one user message of 名字：lines; hers stay assistant", () => {
-    expect(view(events, "milky")).toEqual([
-      { role: "user", content: "大家好" },
+    expect(groupView(events, "milky")).toEqual([
+      { role: "user", content: "小明：大家好" },
       { role: "user", content: "露比：你好呀\nKen：晚上好" },
-      { role: "user", content: "今天玩什么" },
+      { role: "user", content: "小明：今天玩什么" },
       { role: "assistant", content: "玩恐怖游戏！" },
       { role: "user", content: "露比：不要啊" },
       { role: "system", content: "milky recall" },
@@ -294,12 +305,12 @@ describe("viewOf, a group", () => {
   });
 
   test("each persona sees her own lines, context, kickoff and tools, and no one else's", () => {
-    expect(view(events, "ruby")).toEqual([
-      { role: "user", content: "大家好" },
+    expect(groupView(events, "ruby")).toEqual([
+      { role: "user", content: "小明：大家好" },
       { role: "system", content: "ruby recall" },
       { role: "assistant", content: "你好呀" },
       { role: "user", content: "Ken：晚上好" },
-      { role: "user", content: "今天玩什么" },
+      { role: "user", content: "小明：今天玩什么" },
       { role: "user", content: "奶绿：玩恐怖游戏！" },
       { role: "assistant", content: "不要啊" },
       { role: "user", content: "ruby kickoff" },
@@ -321,10 +332,53 @@ describe("viewOf, a group", () => {
       from("ruby", "two"),
       from("ken", "three"),
     );
-    expect(view(folded)).toEqual([
+    expect(groupView(folded)).toEqual([
       { role: "user", content: "露比：one" },
       { role: "system", content: "recall" },
       { role: "user", content: "露比：two\nKen：three" },
     ]);
+  });
+
+  test("the viewer's lines are 观众 without a name, and stay their own message", () => {
+    const lines = log(user("大家好"), from("ruby", "你好呀"), user("在吗"));
+    expect(groupView(lines, "milky", "")).toEqual([
+      { role: "user", content: "观众：大家好" },
+      { role: "user", content: "露比：你好呀" },
+      { role: "user", content: "观众：在吗" },
+    ]);
+    expect(view(lines, "milky", CHAT_WINDOW_MESSAGES, GROUP)[0]).toEqual({
+      role: "user",
+      content: "观众：大家好",
+    });
+  });
+});
+
+describe("viewOf, labelling the viewer", () => {
+  const chat = (...more: ChatEventDraft[]) =>
+    log(user("你好"), from("milky", "嘿嘿"), ...more, user("再见"));
+
+  test("a one-persona chat is unlabelled, whatever the viewer's name", () => {
+    const solo: ViewMessage[] = [
+      { role: "user", content: "你好" },
+      { role: "assistant", content: "嘿嘿" },
+      { role: "user", content: "再见" },
+    ];
+    expect(view(chat())).toEqual(solo);
+    expect(view(chat(), "milky", CHAT_WINDOW_MESSAGES, SOLO, "小明")).toEqual(solo);
+    expect(JSON.stringify(view(chat(), "milky", CHAT_WINDOW_MESSAGES, SOLO, "小明"))).toBe(
+      '[{"role":"user","content":"你好"},{"role":"assistant","content":"嘿嘿"},' +
+        '{"role":"user","content":"再见"}]',
+    );
+  });
+
+  test("the participants as the log stands decide it, every line alike", () => {
+    const added = chat({ type: "participants", added: ["ruby"] });
+    expect(view(added, "milky", CHAT_WINDOW_MESSAGES, SOLO, "小明")).toEqual([
+      { role: "user", content: "小明：你好" },
+      { role: "assistant", content: "嘿嘿" },
+      { role: "user", content: "小明：再见" },
+    ]);
+    const left = chat({ type: "participants", removed: ["ruby", "ken"] });
+    expect(view(left, "milky", CHAT_WINDOW_MESSAGES, GROUP, "小明")).toEqual(view(chat()));
   });
 });

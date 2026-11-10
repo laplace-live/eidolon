@@ -189,6 +189,7 @@ describe("the SPA's leaves", () => {
     expect([...files].map((file) => relative(ROOT, file)).toSorted()).toEqual([
       "packages/chat/src/format.ts",
       "packages/chat/src/index.ts",
+      "packages/chat/src/mentions.ts",
       "packages/chat/src/sig.ts",
       "packages/chat/src/summary.ts",
       "packages/chat/src/view.ts",

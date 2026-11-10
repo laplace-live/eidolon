@@ -1,12 +1,13 @@
-// A running turn's stream lines, kept from its start: POST messages and GET live read the same
-// buffer, so a reader that joins late, or comes back after a dropped connection, misses nothing.
+// A running reply's stream lines, kept from its start: a greeting's turn, or a viewer line's
+// decisions and turns. POST messages and GET live read the same buffer, so a reader that joins late,
+// or comes back after a dropped connection, misses nothing.
 import type { ChatStreamLine } from "@eidolon/chat";
 
 const encoder = new TextEncoder();
 
 export class LiveTurn {
   readonly controller = new AbortController();
-  /** Resolves once the turn has stored everything it will. */
+  /** Resolves once the reply has stored everything it will. */
   readonly ended: Promise<void>;
   readonly #lines: string[] = [];
   readonly #wakers = new Set<() => void>();

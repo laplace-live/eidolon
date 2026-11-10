@@ -169,6 +169,19 @@ describe("personaParts", () => {
     expect([calls.selfie, calls.gate, calls.memory.length]).toEqual([3, 3, 3]);
   });
 
+  test("names a group chat's other personas in each turn's instruction", async () => {
+    const { deps, calls } = fake();
+    const parts = personaParts(deps);
+    const others = [{ name: "露比", summary: "a singer" }];
+    await parts(PERSONA, VIEWER, CHAT, others);
+    await parts(PERSONA, VIEWER, CHAT, []);
+    expect(calls.instructions).toEqual([
+      { viewer: VIEWER, voiceHint: "", selfieHint: "SELFIE HINT", participants: others },
+      { viewer: VIEWER, voiceHint: "", selfieHint: "SELFIE HINT" },
+    ]);
+    expect(calls.archive).toHaveLength(1);
+  });
+
   test("opens a chat's own, so no chat's providers see another's turns", async () => {
     const { deps, calls } = fake();
     const parts = personaParts(deps);

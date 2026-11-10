@@ -1,5 +1,5 @@
-// What a chat shows beyond its stored log: the reply streaming in, the tool she is running, and the
-// viewer's line until it is stored. The log itself lives in the query cache, which `mergeEvents`
+// What a chat shows beyond its stored log: the reply streaming in, the tool she is running, the
+// viewer's line until it is stored, and whether a reply is still under way between its turns. The log itself lives in the query cache, which `mergeEvents`
 // extends as `events` lines arrive.
 //
 // A send interrupts the reply running, and that reply's last lines come on its own stream, which
@@ -40,9 +40,14 @@ export interface LiveState {
   readonly error: LiveError | null;
   /** The highest seq any stream has carried. */
   readonly seen: number;
+  /**
+   * Streams carrying a reply: a send's from its start, live's from its first line. A group's reply
+   * goes on between its turns while the director decides who answers next.
+   */
+  readonly following: number;
 }
 
-export const IDLE: LiveState = { turn: null, pending: null, error: null, seen: 0 };
+export const IDLE: LiveState = { turn: null, pending: null, error: null, seen: 0, following: 0 };
 
 export type LiveAction =
   | ChatStreamLine
@@ -54,7 +59,9 @@ export type LiveAction =
     }
   | { readonly type: "send-failed"; readonly key: number; readonly error: LiveError }
   /** A stream is gone: send `key`'s line is stored or never will be, and nothing finishes `turn`. */
-  | { readonly type: "settled"; readonly key: number | null; readonly turn: string | null };
+  | { readonly type: "settled"; readonly key: number | null; readonly turn: string | null }
+  | { readonly type: "follow" }
+  | { readonly type: "unfollow" };
 
 /** Her message or failure for `turn` is among `events`, so its streamed text is done. */
 function finishes(turn: LiveTurn, events: readonly ChatEvent[]): boolean {
@@ -130,6 +137,10 @@ export function reduceLive(state: LiveState, action: LiveAction): LiveState {
         pending: state.pending?.key === action.key && !state.pending.failed ? null : state.pending,
         turn: action.turn !== null && state.turn?.id === action.turn ? null : state.turn,
       };
+    case "follow":
+      return { ...state, following: state.following + 1 };
+    case "unfollow":
+      return { ...state, following: Math.max(0, state.following - 1) };
   }
 }
 

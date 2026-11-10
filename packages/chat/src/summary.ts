@@ -1,4 +1,9 @@
-import type { ChatEvent, ChatHeader, ChatSummary } from "./format.ts";
+import {
+  type ChatEvent,
+  type ChatHeader,
+  type ChatSummary,
+  DEFAULT_CHAIN_LIMIT,
+} from "./format.ts";
 
 /** `summary` with `events`, the ones after its `lastSeq`, applied. */
 export function advanceSummary(summary: ChatSummary, events: readonly ChatEvent[]): ChatSummary {
@@ -23,6 +28,14 @@ export function advanceSummary(summary: ChatSummary, events: readonly ChatEvent[
     lastText,
     lastSeq,
   };
+}
+
+/** The chat's chain limit: the last `settings` event's, else DEFAULT_CHAIN_LIMIT. */
+export function chainLimitOf(events: readonly ChatEvent[]): number {
+  const set = events.findLast(
+    (event) => event.type === "settings" && event.chainLimit !== undefined,
+  );
+  return set?.type === "settings" ? (set.chainLimit as number) : DEFAULT_CHAIN_LIMIT;
 }
 
 export function summarize(header: ChatHeader, events: readonly ChatEvent[]): ChatSummary {

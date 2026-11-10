@@ -1,6 +1,14 @@
 import type { ParticipantId } from "@eidolon/chat";
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
-import { createChat, deleteChat, listChats, readChat, renameChat } from "@/lib/chats";
+import {
+  changeParticipants,
+  createChat,
+  deleteChat,
+  listChats,
+  readChat,
+  renameChat,
+  setChainLimit,
+} from "@/lib/chats";
 import { toastError } from "@/lib/feedback";
 import { latePoll } from "./stream";
 
@@ -20,7 +28,7 @@ export function chatQuery(id: string) {
 export function useCreateChat(onCreated: (id: string) => void) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (persona: ParticipantId) => createChat(persona),
+    mutationFn: (participants: readonly ParticipantId[]) => createChat(participants),
     onSuccess: ({ id }) => {
       void queryClient.invalidateQueries({ queryKey: chatsQuery.queryKey, exact: true });
       onCreated(id);
@@ -39,6 +47,42 @@ export function useRenameChat(onRenamed: () => void) {
       void queryClient.invalidateQueries({ queryKey: chatQuery(id).queryKey });
       onRenamed();
     },
+    onError: toastError,
+  });
+}
+
+/** Refreshes the chat and the list after a change to the chat's log. */
+function useChanged() {
+  const queryClient = useQueryClient();
+  return (id: string) =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: chatsQuery.queryKey, exact: true }),
+      queryClient.invalidateQueries({ queryKey: chatQuery(id).queryKey }),
+    ]);
+}
+
+export function useSetChainLimit() {
+  const changed = useChanged();
+  return useMutation({
+    mutationFn: ({ id, chainLimit }: { readonly id: string; readonly chainLimit: number }) =>
+      setChainLimit(id, chainLimit),
+    onSuccess: (_, { id }) => changed(id),
+    onError: toastError,
+  });
+}
+
+export function useChangeParticipants() {
+  const changed = useChanged();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...change
+    }: {
+      readonly id: string;
+      readonly add?: readonly ParticipantId[];
+      readonly remove?: readonly ParticipantId[];
+    }) => changeParticipants(id, change),
+    onSuccess: (_, { id }) => changed(id),
     onError: toastError,
   });
 }
