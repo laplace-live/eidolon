@@ -35,6 +35,7 @@ export class FakeProvider {
     }
     setUsageSink((record) => this.usage.push(record));
     this.#server = Bun.serve({
+      hostname: "127.0.0.1",
       port: 0,
       fetch: async (request) => {
         const type = request.headers.get("content-type") ?? "";

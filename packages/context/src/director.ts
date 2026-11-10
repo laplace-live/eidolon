@@ -16,8 +16,8 @@ import { errorRepr } from "./compat.ts";
 import { DecisionsClient, type DecisionsOptions, gateRoleDecisions, noulOf } from "./gate.ts";
 
 // Bars on Jev's nouls. With these, docs/benchmarks/2026-11-10-director decides all 100 of its
-// labelled lines right, and still does with any one bar moved: addressed from 0.4 to 0.63,
-// interest from 0.1 to 0.43, invites from 0.17 to 0.38.
+// labelled lines right, and in both its runs still does with any one bar moved: addressed from 0.4
+// to 0.61, interest from 0.1 to 0.43, invites from 0.17 to 0.33.
 export const ADDRESSED_THRESHOLD = 0.5;
 /** On interested × talkativeness. */
 export const INTEREST_THRESHOLD = 0.3;
@@ -27,11 +27,13 @@ export const HOP_STEP = 0.1;
 /** Off the interest of whoever spoke the persona line before, so two can't trade the floor. */
 export const JUST_SPOKE_PENALTY = 0.1;
 export const MAX_REPLIES_TO_USER = 2;
-// Bars on voice_moment for a persona whose reply mode is auto: placeholders until the benchmark's
-// voice_moment labels are scored. The lower one applies while the viewer's last line was a voice
-// message, so she leans toward answering in kind.
-export const VOICE_THRESHOLD = 0.7;
-export const VOICE_THRESHOLD_AFTER_VOICE = 0.4;
+// Bars on voice_moment for a persona whose reply mode is auto. With these, the second run of
+// docs/benchmarks/2026-11-10-director answers all 24 of its voice_moment labels in the right mode,
+// and still does with the first from 0.39 to 0.44, the second from 0.29 to 0.6. The second, kept
+// under the first, applies while the viewer's last line was a voice message, so she leans toward
+// answering in kind.
+export const VOICE_THRESHOLD = 0.42;
+export const VOICE_THRESHOLD_AFTER_VOICE = 0.35;
 // Jev answered in ~0.5 s on a warm connection and 1.3–1.4 s on a fresh TLS one
 // (docs/benchmarks/2026-09-19-retrieval-gate).
 export const DIRECTOR_TIMEOUT_SEC = 2;
@@ -151,7 +153,7 @@ export function directorState(input: DirectorInput): DirectorState {
 const VOICE_MOMENT = "voice_moment";
 
 /** `voice_moment`, once, when some candidate's reply mode is auto; else nothing to ask. */
-export function voiceQuestions(
+function voiceQuestions(
   candidates: readonly Pick<DirectorParticipant, "replyMode">[],
 ): DirectorQuestions {
   if (!candidates.some((p) => p.replyMode === "auto")) return {};
@@ -330,53 +332,86 @@ export class Director {
   async decide(input: DirectorInput, signal?: AbortSignal): Promise<DirectorDecision> {
     signal?.throwIfAborted();
     const candidates = candidatesOf(input);
-    const group = input.participants.length > 1;
-    const questions = group ? directorQuestions(candidates) : voiceQuestions(candidates);
+    if (input.participants.length < 2) return this.#alone(input, candidates, signal);
     const started = performance.now();
-    const names = (reached: DirectorDecision) =>
-      reached.replies.length === 0
-        ? "no one"
-        : reached.replies
-            .map(({ persona, mode }) => {
-              const name = candidates.find((p) => p.id === persona)?.name ?? persona;
-              return mode === "voice" ? `${name} in voice` : name;
-            })
-            .join(", ");
     const fellBack = () => {
       const fell = decision(input, fallback(input, candidates), "fallback");
-      logger.info(`Director: ${names(fell)} (fallback, hop ${input.hop})`);
+      logger.info(`Director: ${named(fell, candidates)} (fallback, hop ${input.hop})`);
       return fell;
     };
-    const alone = candidates.slice(0, 1).map(({ id }) => id);
-    if (!group && (this.#client === null || Object.keys(questions).length === 0)) {
-      return decision(input, alone, "single");
-    }
     if (this.#client === null) return fellBack();
     let scores: Record<string, number>;
     try {
-      const body = await this.#client.ask(directorState(input), questions, signal);
-      scores = Object.fromEntries(Object.keys(questions).map((key) => [key, noulOf(body, key)]));
+      scores = await scored(this.#client, input, directorQuestions(candidates), signal);
     } catch (error) {
       if (signal?.aborted) throw signal.reason;
-      if (!group) {
-        logger.warning(
-          `Director couldn't weigh a voice reply, so she answers in text: ${errorRepr(error)}`,
-        );
-        return decision(input, alone, "single");
-      }
       logger.warning(`Director fell back to rules: ${errorRepr(error)}`);
       return fellBack();
     }
-    const { ids, source } = group
-      ? choose(input, candidates, scores)
-      : { ids: alone, source: "single" as const };
-    const decided = decision(input, ids, source, scores);
-    logger.info(
-      `Director: ${names(decided)} (${source}, hop ${input.hop}, ` +
-        `${pyFixed(performance.now() - started, 0)} ms)`,
-    );
-    return decided;
+    const { ids, source } = choose(input, candidates, scores);
+    return reached(decision(input, ids, source, scores), candidates, input.hop, started);
   }
+
+  /** A chat of one: she answers, and voice_moment, while she is auto, says whether in voice. */
+  async #alone(
+    input: DirectorInput,
+    candidates: readonly DirectorParticipant[],
+    signal: AbortSignal | undefined,
+  ): Promise<DirectorDecision> {
+    const alone = candidates.slice(0, 1).map(({ id }) => id);
+    const questions = voiceQuestions(candidates);
+    if (this.#client === null || Object.keys(questions).length === 0) {
+      return decision(input, alone, "single");
+    }
+    const started = performance.now();
+    let scores: Record<string, number>;
+    try {
+      scores = await scored(this.#client, input, questions, signal);
+    } catch (error) {
+      if (signal?.aborted) throw signal.reason;
+      logger.warning(
+        `Director couldn't weigh a voice reply, so she answers in text: ${errorRepr(error)}`,
+      );
+      return decision(input, alone, "single");
+    }
+    return reached(decision(input, alone, "single", scores), candidates, input.hop, started);
+  }
+}
+
+/** Jev's noul for each of `questions`. */
+async function scored(
+  client: DecisionsClient,
+  input: DirectorInput,
+  questions: DirectorQuestions,
+  signal: AbortSignal | undefined,
+): Promise<Record<string, number>> {
+  const body = await client.ask(directorState(input), questions, signal);
+  return Object.fromEntries(Object.keys(questions).map((key) => [key, noulOf(body, key)]));
+}
+
+/** Who `decided` chose, by name, each voice reply marked. */
+function named(decided: DirectorDecision, candidates: readonly DirectorParticipant[]): string {
+  if (decided.replies.length === 0) return "no one";
+  return decided.replies
+    .map(({ persona, mode }) => {
+      const name = candidates.find((p) => p.id === persona)?.name ?? persona;
+      return mode === "voice" ? `${name} in voice` : name;
+    })
+    .join(", ");
+}
+
+/** `decided`, logged with the time since `started`. */
+function reached(
+  decided: DirectorDecision,
+  candidates: readonly DirectorParticipant[],
+  hop: number,
+  started: number,
+): DirectorDecision {
+  logger.info(
+    `Director: ${named(decided, candidates)} (${decided.source}, hop ${hop}, ` +
+      `${pyFixed(performance.now() - started, 0)} ms)`,
+  );
+  return decided;
 }
 
 /** Persona `id` as the director weighs her, from her settings. The caller validates the id. */

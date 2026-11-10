@@ -297,9 +297,10 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
 - **Voice messages** ([chat.md](chat.md#voice-messages)):
   - **Recording:** while the text box is empty, a microphone takes the Send button's place.
     Holding it 350 ms or more records until it is let go, then sends; letting go off the button,
-    Escape or the cancel button throws the take away. A shorter press is a click: it records until
-    the next click, Enter or Space. A bar replaces the text box while it records, with its time out
-    of 2:00, where it sends itself. A take under 0.5 s is dropped with a toast.
+    Escape (unless it closes a menu or sheet) or the cancel button throws the take away. A shorter
+    press is a click: it records until the next click, Enter or Space. A bar replaces the text box
+    while it records, with its time out of 2:00, where it sends itself. A take under 0.5 s is
+    dropped with a toast.
   - **What is recorded:** `audio/webm;codecs=opus`, else `audio/mp4` on Safari, sent to
     `POST voice` with the recorder's clock as `durationMs`.
   - **Without a hearing key** (`ChatContents.hearingRefusal`) or a browser that records, the

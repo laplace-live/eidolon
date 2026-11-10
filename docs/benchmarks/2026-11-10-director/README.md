@@ -131,7 +131,7 @@ personas whose subject it isn't, who mustn't answer on interest.
 Replaying the stored scores through the selection rules, with other bars, gave the results below.
 `director.ts` took the second row: `INVITES_THRESHOLD` is 0.3, and below the interest bar the
 viewer's forced answer goes to the top-ranked candidate, the more talkative of a tie. With it,
-`--cached` decides all 100 lines right, and `decisions.json` holds that replay.
+`--cached` decided all 100 lines of the first run right.
 
 | Change | Lines decided right |
 | --- | ---: |
@@ -143,11 +143,24 @@ With the change, each bar can move on its own, in steps of 0.01, without decidin
 the addressed bar from 0.4 to 0.63 at least, the interest bar from 0.1 to 0.43, and the invites bar
 from 0.17 to 0.38. Under 0.1, the interest bar lets a second persona follow on two lines.
 
+**The second run ([Voice moments](#voice-moments)) decided all 100 lines right too.** Its scores
+moved from the first run's by 0.01 or less at the median and 0.07 at most, so the bars' ranges
+moved:
+
+| Bar | First run | Second run | Both |
+| --- | --- | --- | --- |
+| addressed | 0.4 to 0.63 | 0.14 to 0.61 | 0.4 to 0.61 |
+| interest | 0.1 to 0.43 | 0.1 to 0.75 | 0.1 to 0.43 |
+| invites | 0.17 to 0.38 | 0 to 0.33 | 0.17 to 0.33 |
+
+The invites bar's top is set by 奶绿's 是露米唱的！, which Lumi must answer: it scored 0.34 after the
+raise, and 0.38 in the first run.
+
 ## Voice moments
 
 A persona whose reply mode is `auto` answers in voice when Jev's `voice_moment` clears a bar:
 `VOICE_THRESHOLD`, or `VOICE_THRESHOLD_AFTER_VOICE` while the viewer's last line was a voice
-message. **Both bars are placeholders, 0.7 and 0.4, that no run has scored yet.**
+message. **They are 0.42 and 0.35, which answer all 24 labelled lines in the right mode.**
 
 **The labels were written before any line was scored.** 24 lines carry one, 14 yes and 10 no:
 
@@ -162,13 +175,38 @@ message. **Both bars are placeholders, 0.7 and 0.4, that no run has scored yet.*
   a song.
 - **No** asks for facts, steps or a recommendation, which read better as text, even after a voice
   message.
-- **The six voice messages were text lines before.** Their stored scores for the other questions
-  were taken with them as text, until the next real run.
+- **The six voice messages were text lines in the first run,** so the tables under
+  [Decisions](#decisions) score them as text.
 
 `score.ts` asks about a labelled line with every persona on `auto`, so the request carries
 `voice_moment`, and checks the mode the replies got. Only lines someone must answer can carry a
 label, since a line no one answers has no mode to check. `decisions.json` scores the two bars as
 `voice_moment` and `voice_moment_after_voice`, each with the bar its labels suggest.
+
+### The second run
+
+A second run asked Jev about all 100 lines again, the 24 labelled ones with `voice_moment`, and
+`decisions.json` holds it, replayed with the bars above. The model answered as
+`typesafe/jev-1.14-20261014` again. The 101 calls cost $0.0033 and took 391 ms at the median,
+451 ms at p90 and 572 ms at most.
+
+With the placeholder bars, 0.7 and 0.4, it decided every line right but answered 16 of the 24
+labels in the right mode: eight typed lines labelled yes, which scored 0.44 to 0.65, were answered
+in text. Each cell gives the number of scores, then min / median / max:
+
+| `voice_moment` | Labelled yes | Labelled no | Fewest wrong | Bar |
+| --- | --- | --- | --- | ---: |
+| after a typed line | 10: 0.44 / 0.60 / 0.75 | 8: 0.10 / 0.25 / 0.38 | 0, from 0.39 to 0.44 | 0.42 |
+| after a voice message | 4: 0.60 / 0.65 / 0.73 | 2: 0.22 / 0.22 / 0.28 | 0, from 0.29 to 0.6 | 0.35 |
+
+- **After a typed line, the gap is narrow.** The lowest yes is 好的晚安～ at 0.44; the highest no is
+  @lumi 下周的生日会还有票吗 at 0.38, then 奶绿 asking 小满 for food at 0.36. `VOICE_THRESHOLD` is the
+  middle, 0.42, but the range is no wider than the 0.07 the other scores moved between the runs, so
+  a goodnight can fall either side of it.
+- **After a voice message, no line needs the lower bar yet.** The four labelled yes scored 0.60 or
+  more and the two labelled no 0.28 or less, so the typed bar would decide them the same. The middle
+  of the range, 0.45, would sit above the typed bar, so `VOICE_THRESHOLD_AFTER_VOICE` is 0.35, the
+  middle of the part under it.
 
 ## Reproduce
 
@@ -187,8 +225,8 @@ bun docs/benchmarks/2026-11-10-director/score.ts --cached
 - **Without `--check`,** `score.ts` exits 0, for calibration.
 - **`--cached`** re-decides the scores stored in `decisions.json` through the director instead of
   asking Jev, so it costs nothing. Use it after changing a threshold or a label; a changed question
-  or state needs a real run. A `voice_moment` label with no stored score is counted as unscored,
-  not checked: until a real run stores them, all 24 are.
+  or state needs a real run. A `voice_moment` label added since the last real run has no stored
+  score, so it is counted as unscored, not checked.
 - **`--persona <id>`** picks whose gate role it calls.
 
 Each `OFF` line it prints is one question's score on the wrong side of its threshold. That is a

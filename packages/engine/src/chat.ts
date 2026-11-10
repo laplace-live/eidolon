@@ -23,7 +23,7 @@ import {
 import { withUsageScope } from "@eidolon/providers";
 import { runTurn } from "./turn.ts";
 import type { EngineDeps, LateTools, TurnOutput, TurnRequest } from "./types.ts";
-import { batchSpeech, replyModeFor, withUnheard } from "./voice.ts";
+import { replyModeFor, withUnheard } from "./voice.ts";
 
 type ChatLog = TurnRequest["chat"];
 
@@ -162,13 +162,12 @@ export async function* runChat(request: ChatRequest, deps: ChatDeps): AsyncGener
   const { signal } = request;
   const { header } = request.chat;
   const director = deps.director ?? defaultDirector();
-  const speech = deps.speech ?? batchSpeech;
   const participants: DirectorParticipant[] = summarize(
     header,
     request.chat.events,
   ).participants.map((id) => ({
     ...directorParticipant(id),
-    replyMode: replyModeFor(request.chat, id, speech),
+    replyMode: replyModeFor(request.chat, id, deps.speech),
   }));
   const decide = (lines: DirectorLine[], hop: number): Promise<DirectorDecision> =>
     withUsageScope({ source: "chat", session: header.id }, () =>

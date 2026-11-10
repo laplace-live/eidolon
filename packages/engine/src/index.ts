@@ -18,4 +18,4 @@ export type {
   TurnOutput,
   TurnRequest,
 } from "./types.ts";
-export { hearVoiceMessage, replyModeFor, UNHEARD, voiceHearer } from "./voice.ts";
+export { hearVoiceMessage, replyModeFor } from "./voice.ts";

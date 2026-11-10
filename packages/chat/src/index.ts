@@ -21,6 +21,7 @@ export {
   isReplyMode,
   MAX_CHAIN_LIMIT,
   MAX_PARTICIPANTS,
+  MAX_VOICE_MS,
   type ParticipantId,
   REPLY_MODES,
   type ReplyMode,

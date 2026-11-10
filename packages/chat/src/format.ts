@@ -8,6 +8,8 @@ export const MAX_PARTICIPANTS = 6;
 /** Persona-to-persona hops after each viewer line until a `settings` event sets them; 0 is none. */
 export const DEFAULT_CHAIN_LIMIT = 3;
 export const MAX_CHAIN_LIMIT = 6;
+/** The longest voice message the viewer can send. */
+export const MAX_VOICE_MS = 120_000;
 
 /** A persona id. */
 export type ParticipantId = string;

@@ -384,13 +384,21 @@ export class ChatRunner {
     await this.#append(id, this.#chat(id), [{ type: "settings", ...change }]);
   }
 
-  /** Stops any reply, then removes the chat's folder; ChatInCall during a call. */
+  /**
+   * Stops any reply and the voice message being heard, then removes the chat's folder; ChatInCall
+   * during a call.
+   */
   remove(id: string): Promise<void> {
     const chat = this.#chat(id);
+    // Before the aborts: a refused delete leaves the chat's tools and hearing as they were.
+    if (chat.call !== null) return Promise.reject(new ChatInCall());
+    // Before the queue, which a voice message being heard holds until its time limit; the reply
+    // first, as shutdown does, so the tools it leaves running are cancelled as late ones.
+    chat.live?.controller.abort();
+    chat.cancel.abort();
     return this.#serial(chat, async () => {
       if (chat.call !== null) throw new ChatInCall();
       await this.#interrupt(chat);
-      chat.cancel.abort();
       await chat.appends;
       try {
         await this.store.remove(id);

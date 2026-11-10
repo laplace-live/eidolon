@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatEvent } from "@eidolon/chat";
 import {
+  afterAutoPlay,
+  cancelsTake,
   claimPlayback,
-  clock,
   knownDuration,
+  MicRequests,
+  playsNextAfter,
   recordingType,
   releasePlayback,
   voiceReplies,
@@ -17,13 +20,34 @@ describe("recordingType", () => {
   });
 });
 
-describe("clock", () => {
-  test("writes minutes and two-digit seconds, rounded", () => {
-    expect(clock(0)).toBe("0:00");
-    expect(clock(7_400)).toBe("0:07");
-    expect(clock(59_600)).toBe("1:00");
-    expect(clock(125_000)).toBe("2:05");
-    expect(clock(-1)).toBe("0:00");
+describe("MicRequests", () => {
+  test("one at a time: a start while one is under way asks for nothing", () => {
+    const requests = new MicRequests();
+    const first = requests.begin();
+    expect(first).not.toBeNull();
+    expect(requests.begin()).toBeNull();
+    expect(requests.settle(first as number)).toBe(true);
+    expect(requests.begin()).not.toBeNull();
+  });
+
+  test("a cancelled request's late answer is let go, and leaves the next one under way", () => {
+    const requests = new MicRequests();
+    const cancelled = requests.begin() as number;
+    requests.cancel();
+    const again = requests.begin() as number;
+    // The cancelled request is refused before the new one is granted.
+    expect(requests.settle(cancelled)).toBe(false);
+    expect(requests.begin()).toBeNull();
+    expect(requests.settle(again)).toBe(true);
+    expect(requests.settle(again)).toBe(false);
+  });
+});
+
+describe("cancelsTake", () => {
+  test("Escape throws the take away, unless a menu or sheet took it to close itself", () => {
+    expect(cancelsTake({ key: "Escape", defaultPrevented: false })).toBe(true);
+    expect(cancelsTake({ key: "Escape", defaultPrevented: true })).toBe(false);
+    expect(cancelsTake({ key: "Enter", defaultPrevented: false })).toBe(false);
   });
 });
 
@@ -59,6 +83,30 @@ describe("voiceReplies", () => {
         message(6, { modality: "voice", attachments: [audio] }),
       ]),
     ).toEqual([1, 6]);
+  });
+});
+
+describe("afterAutoPlay", () => {
+  test("the next reply plays on its own only while the tab still has the focus", () => {
+    expect(afterAutoPlay([3, 5, 7], true, true)).toEqual([5, 7]);
+    expect(afterAutoPlay([3, 5, 7], true, false)).toEqual([]);
+  });
+
+  test("one paused, or refused by the browser, ends them all", () => {
+    expect(afterAutoPlay([3, 5], false, true)).toEqual([]);
+  });
+});
+
+describe("playsNextAfter", () => {
+  test("played through, the next plays; paused, none does; the pause before the end, it plays on", () => {
+    expect(playsNextAfter("ended", true)).toBe(true);
+    expect(playsNextAfter("pause", false)).toBe(false);
+    expect(playsNextAfter("pause", true)).toBeNull();
+    expect(playsNextAfter("timeupdate", false)).toBeNull();
+  });
+
+  test("a clip that breaks off, lost or undecodable, is passed over for the next", () => {
+    expect(playsNextAfter("error", false)).toBe(true);
   });
 });
 
