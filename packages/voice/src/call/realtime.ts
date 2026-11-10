@@ -327,7 +327,7 @@ class RealtimeFloor {
     }
   }
 
-  /** Typed text cuts her off, and the model answers it as the caller's line (E2). */
+  /** Typed text cuts her off, and the model answers it as the caller's line (E2), then her recall. */
   #sendText(message: Extract<RtviInbound, { type: "send-text" }>): void {
     const { emitter, session } = this.#o;
     const line = this.#userLine(message.content, "text");
@@ -343,6 +343,7 @@ class RealtimeFloor {
       this.#append(line);
       void session.addItem({ role: "user", text: message.content });
       session.createResponse();
+      if (message.content.trim() !== "") this.#recall(false);
       return;
     }
     // Delivered for her next response, as pipedog's append without run_llm.
@@ -918,8 +919,8 @@ class RealtimeFloor {
   }
 
   /**
-   * Her audio stops at once and the item it came in is truncated where the cursor stood, the
-   * reply's sync tools are cancelled, and what was heard of it is stored. `cancel` cancels the
+   * Her audio stops at once and the item it came in is truncated where the cursor stood, every sync
+   * tool still running is cancelled, and what was heard of it is stored. `cancel` cancels the
    * response too, before or after the truncation; with `emit`, what she was doing is closed for
    * the client now, otherwise it is returned for the caller to close after its own messages.
    */
@@ -948,6 +949,11 @@ class RealtimeFloor {
       closes.tts ||= reply.ttsOpen;
       this.#cut(reply);
     }
+    // A response that has ended may still wait on a sync tool: pipedog cancels every one in flight.
+    for (const reply of [...this.#toolReplies]) {
+      if ([...reply.calls.values()].some((state) => state.output === null))
+        this.#cancelTools(reply);
+    }
     this.#speaking = false;
     kit.cancel("drain-fallback");
     if (o.emit) {
@@ -964,6 +970,11 @@ class RealtimeFloor {
     reply.ttsOpen = false;
     reply.pending.length = 0;
     this.#store(reply, false);
+    this.#cancelTools(reply);
+  }
+
+  /** Its sync tools still running are cancelled, and its calls answered with no response asked. */
+  #cancelTools(reply: Reply): void {
     const { session, emitter } = this.#o;
     // Its calls were answered once it left the set.
     const unanswered = this.#toolReplies.delete(reply);

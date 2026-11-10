@@ -776,6 +776,29 @@ describe("runRealtimeCall", () => {
     await call.running;
   });
 
+  test("a line typed to run now runs her recall, as a spoken one does (E1)", async () => {
+    const call = await startRealtime({ blocks: ["一", "二"] });
+    await call.ready();
+    const typed = (content: string, now: boolean) =>
+      call.rtvi("send-text", { content, options: { run_immediately: now, audio_response: true } });
+    await typed("给我讲讲花店", true);
+    await settle();
+    expect(call.asks()).toEqual([
+      "add item-1 user 给我讲讲花店",
+      "create",
+      "add item-2 system 档案：一",
+    ]);
+    expect(call.events().map((e) => e.type)).toEqual(["message", "context"]);
+    // A blank line, and one left for her next response, run none.
+    await typed("  ", true);
+    await typed("顺便说一句", false);
+    await settle();
+    expect(call.asks()).toEqual(["add item-3 user   ", "create", "add item-4 user 顺便说一句"]);
+    expect(call.events().map((e) => e.type)).toEqual(["message", "context", "message", "message"]);
+    call.transport.leave();
+    await call.running;
+  });
+
   test("a sync tool's result is answered once her response has played out, then she goes on", async () => {
     const gate = Promise.withResolvers<void>();
     const call = await startRealtime({ tools: [recallTool(gate.promise)] });
@@ -823,6 +846,53 @@ describe("runRealtimeCall", () => {
     await settle();
     expect(call.asks()).toEqual([]);
     expect(call.events().map((e) => e.type)).toEqual(["tool-call"]);
+    call.transport.leave();
+    await call.running;
+  });
+
+  test("a sync tool still running after its response ended is cancelled by a barge-in, and asks nothing more", async () => {
+    const gate = Promise.withResolvers<void>();
+    const call = await startRealtime({ tools: [recallTool(gate.promise)] });
+    await call.ready();
+    await call.server(
+      started("r1"),
+      { type: "tool-call", callId: "c1", name: "recall_streams", arguments: {} },
+      done("r1"),
+    );
+    call.asks();
+    call.news();
+    await call.server({ type: "speech-started" });
+    expect(call.asks()).toEqual(["output c1 CANCELLED"]);
+    expect(call.news()).toContain("llm-function-call-stopped c1 cancelled");
+    gate.resolve();
+    // The server answers the caller's turn on its own; nothing else is asked for.
+    await call.server({ type: "speech-stopped" }, heard("还在吗", true));
+    await reply(call, "r2", ["在呀。"]);
+    await settle();
+    expect(call.asks()).toEqual([]);
+    expect(call.events().map((e) => e.type)).toEqual(["tool-call", "message", "message"]);
+    call.transport.leave();
+    await call.running;
+  });
+
+  test("a line typed to run now cancels it too, and only the line is answered", async () => {
+    const gate = Promise.withResolvers<void>();
+    const call = await startRealtime({ tools: [recallTool(gate.promise)] });
+    await call.ready();
+    await call.server(
+      started("r1"),
+      { type: "tool-call", callId: "c1", name: "recall_streams", arguments: {} },
+      done("r1"),
+    );
+    call.asks();
+    await call.rtvi("send-text", {
+      content: "等等",
+      options: { run_immediately: true, audio_response: true },
+    });
+    expect(call.asks()).toEqual(["output c1 CANCELLED", "add item-1 user 等等", "create"]);
+    gate.resolve();
+    await settle();
+    expect(call.asks()).toEqual([]);
     call.transport.leave();
     await call.running;
   });

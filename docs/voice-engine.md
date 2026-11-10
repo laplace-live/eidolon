@@ -122,8 +122,10 @@ The Floor's state is three regions, plus counters:
 | USER | `quiet` \| `speaking{interruptedBot}` |
 | BOT | `idle` \| `thinking{reply}` \| `speaking{reply}` |
 
-- **Counters:** `recoveries` (empty-turn recoveries in a row), `syncToolsRunning`, `followUpOwed`,
-  and whether the reply is spoken (its last audio has come and the mind is done).
+- **Counters:** `recoveries` (empty-turn recoveries in a row), `syncToolsRunning`, `followUps`
+  (the personas owed a follow-up, each once, in the order their results came; a reply that isn't a
+  follow-up clears it), and whether the reply is spoken (its last audio has come and the mind is
+  done).
 - **Idle** is USER quiet and BOT idle, pipedog's `waitingForUser`.
 
 `floor.ts` numbers its transitions by this table. "Emit" is an RTVI message ([RTVI](#rtvi)).
@@ -297,12 +299,14 @@ sends its conversation as the session opens.
 - **The caller's `user-llm-text`** goes out once the reply to that turn has played or been cut,
   where pipedog's realtime handoff flush writes the line to her context.
 - **Typed text** (`send-text`) cuts her off, the response included, goes in as the caller's item and
-  asks for a response (E2); without `run_immediately`, it goes in for her next response.
+  asks for a response (E2), then runs `prepareTurn` as a final transcript does, unless it is blank;
+  without `run_immediately`, it goes in for her next response, and runs nothing.
 - **Tools:** a sync tool runs, and its result answers its call once the response has ended and
   played out and no other response runs; then she is asked for the response that reads it. A
-  barge-in cancels it, and its call is answered `CANCELLED`. An async tool's call is answered with
-  its placeholder (the started envelope), and its result goes in later as a system item carrying
-  the final or cancelled envelope, with a follow-up response once the floor is free.
+  barge-in, spoken or typed, cancels every sync tool still running, whether or not its response has
+  ended: its call is answered `CANCELLED`, and no response is asked for it. An async tool's call is
+  answered with its placeholder (the started envelope), and its result goes in later as a system
+  item carrying the final or cancelled envelope, with a follow-up response once the floor is free.
 - **Her voice can't switch:** `switchVoice` throws, as it does on pipedog.
 - **Metering** is the session's (`@eidolon/providers/realtime`): audio hours for a model priced by
   the hour, else each response's tokens.
@@ -356,7 +360,8 @@ one ([chat.md](chat.md#a-call-in-the-local-app)).
   chain, and drops the turns still to come; one that comes while the director weighs the next turn
   stops it, and nothing more is stored. An empty turn that cut her off asks her alone to go on.
 - **Her follow-up:** an async tool's result starts a turn of hers alone once the floor is free, as
-  the director chose no one for it.
+  the director chose no one for it. Each persona whose result comes while the floor is taken gets
+  hers, once, in the order the results came.
 - **No greeting**, as a group chat has none.
 - **The log** opens on the chat itself, its header and events, under the call's id: each turn
   stores her `call` message, and each answer its `decision`s.
