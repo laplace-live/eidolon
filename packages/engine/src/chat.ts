@@ -1,11 +1,13 @@
 // A chat's answer to the viewer's line: the director chooses who answers and whether in text or
 // voice, each answers in turn, then the director is asked again about the last persona line, each
-// hop against a higher bar, until no one is chosen or the chat's chain limit is reached.
+// hop against a higher bar, until no one is chosen or the chat's chain limit is reached. A chat of
+// one in auto doesn't wait for the director: she writes while it weighs a voice reply.
 import type { UserContext } from "@eidolon/access";
 import {
   type ChatEvent,
   type ChatEventDraft,
   chainLimitOf,
+  type ParticipantId,
   parseMentions,
   summarize,
 } from "@eidolon/chat";
@@ -48,8 +50,10 @@ export interface ChatDeps extends EngineDeps {
   readonly director?: Pick<Director, "decide">;
 }
 
-/** Each turn's outputs, and a decision to store before the turns it chooses. */
-export type ChatOutput = TurnOutput | Extract<ChatEventDraft, { readonly type: "decision" }>;
+type DecisionDraft = Extract<ChatEventDraft, { readonly type: "decision" }>;
+
+/** Each turn's outputs, and a decision to store before the replies it chooses. */
+export type ChatOutput = TurnOutput | DecisionDraft;
 
 let shared: { readonly generation: number; readonly director: Director } | null = null;
 
@@ -86,12 +90,73 @@ function spokenAfter(events: readonly ChatEvent[], line: number): number | null 
   return spoken?.seq ?? null;
 }
 
+function decisionOutput(after: number, decision: DirectorDecision): DecisionDraft {
+  return {
+    type: "decision",
+    after,
+    replies: decision.replies,
+    source: decision.source,
+    ...(Object.keys(decision.scores).length > 0 ? { scores: decision.scores } : {}),
+  };
+}
+
+/** Her reply, or its failure, or the turn's end: what her decision must be stored before. */
+function closes(output: TurnOutput): boolean {
+  return (
+    output.type === "ended" ||
+    (output.type === "events" &&
+      output.events.some((event) => event.type === "message" || event.type === "turn-failed"))
+  );
+}
+
+/**
+ * The only persona's turn in auto, started while `deciding` weighs voice_moment: she is spoken only
+ * if it chooses voice, and it is stored just before her reply. An interruption aborts the director,
+ * so her reply is text, and with nothing said, nothing is stored.
+ */
+async function* answerWhileDeciding(
+  request: ChatRequest,
+  deps: ChatDeps,
+  persona: ParticipantId,
+  deciding: Promise<DirectorDecision>,
+): AsyncGenerator<ChatOutput> {
+  const { signal } = request;
+  const decided = deciding.catch(
+    (): DirectorDecision => ({
+      replies: [{ persona, mode: "text" }],
+      source: "single",
+      scores: {},
+    }),
+  );
+  const mode = decided.then(
+    ({ replies }) => replies.find((reply) => reply.persona === persona)?.mode ?? "text",
+  );
+  let stored = false;
+  for await (const output of runTurn(
+    {
+      chat: await request.read(),
+      persona,
+      viewer: request.viewer,
+      signal,
+      mode,
+      ...(request.late ? { late: request.late } : {}),
+    },
+    deps,
+  )) {
+    if (!stored && closes(output) && !(output.type === "ended" && signal.aborted)) {
+      stored = true;
+      yield decisionOutput(request.after, await decided);
+    }
+    yield output;
+  }
+}
+
 /**
  * The chat's answer to the viewer's line at seq `request.after`, with the personas, reply modes
  * and chain limit the chat had then. The caller stores each `events` and `decision` output before
  * taking the next. A chat of one persona never chains, and asks the director only whether to
- * answer in voice, when her reply mode is auto. An abort ends it quietly, once the running turn
- * has given what it said.
+ * answer in voice, when her reply mode is auto, while she writes. An abort ends it quietly, once
+ * the running turn has given what it said.
  */
 export async function* runChat(request: ChatRequest, deps: ChatDeps): AsyncGenerator<ChatOutput> {
   const { signal } = request;
@@ -105,35 +170,36 @@ export async function* runChat(request: ChatRequest, deps: ChatDeps): AsyncGener
     ...directorParticipant(id),
     replyMode: replyModeFor(request.chat, id, speech),
   }));
+  const decide = (lines: DirectorLine[], hop: number): Promise<DirectorDecision> =>
+    withUsageScope({ source: "chat", session: header.id }, () =>
+      director.decide(
+        {
+          participants,
+          lines,
+          hop,
+          mentions: parseMentions(lines.at(-1)?.text ?? "", participants),
+        },
+        signal,
+      ),
+    );
+  const [only] = participants;
+  if (participants.length === 1 && only?.replyMode === "auto") {
+    const deciding = decide(linesThrough(request.chat.events, request.after), 0);
+    yield* answerWhileDeciding(request, deps, only.id, deciding);
+    return;
+  }
   const limit = participants.length > 1 ? chainLimitOf(request.chat.events) : 0;
   let log = request.chat;
   let line = request.after;
   for (let hop = 0; ; hop++) {
-    const lines = linesThrough(log.events, line);
     let decision: DirectorDecision;
     try {
-      decision = await withUsageScope({ source: "chat", session: header.id }, () =>
-        director.decide(
-          {
-            participants,
-            lines,
-            hop,
-            mentions: parseMentions(lines.at(-1)?.text ?? "", participants),
-          },
-          signal,
-        ),
-      );
+      decision = await decide(linesThrough(log.events, line), hop);
     } catch (error) {
       if (signal.aborted) return;
       throw error;
     }
-    yield {
-      type: "decision",
-      after: line,
-      replies: decision.replies,
-      source: decision.source,
-      ...(Object.keys(decision.scores).length > 0 ? { scores: decision.scores } : {}),
-    };
+    yield decisionOutput(line, decision);
     for (const { persona, mode } of decision.replies) {
       if (signal.aborted) return;
       log = await request.read();

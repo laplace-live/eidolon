@@ -50,9 +50,10 @@ export interface TurnRequest {
   readonly late?: LateTools;
   /**
    * "voice": her parts' voice variant, with her voice-style tool and its hint, and her finished
-   * reply spoken by her voice role and stored as a voice message. Default "text".
+   * reply spoken by her voice role and stored as a voice message. Default "text". A mode still
+   * being decided gets the voice variant, and is awaited only once her reply is written.
    */
-  readonly mode?: "text" | "voice";
+  readonly mode?: "text" | "voice" | Promise<"text" | "voice">;
 }
 
 /** Takes a tool that runs on (`cancelOnInterruption: false`) when its turn is interrupted. */

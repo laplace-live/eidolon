@@ -139,6 +139,8 @@ class Turn {
   #audio: Attachment | null = null;
   /** Why her voice message stayed text. */
   #unspoken: string | null = null;
+  /** Her reply is or may be a voice message. */
+  readonly #mayBeVoice: boolean;
 
   constructor(
     request: TurnRequest,
@@ -152,6 +154,7 @@ class Turn {
     this.#emit = emit;
     this.#persona = request.persona;
     this.#id = deps.newId();
+    this.#mayBeVoice = request.mode !== undefined && request.mode !== "text";
   }
 
   async run(): Promise<void> {
@@ -160,7 +163,8 @@ class Turn {
     let failure: string | null = null;
     try {
       await this.#respond();
-      if (this.#request.mode === "voice") await this.#speak();
+      const mode = await raceAbort(Promise.resolve(this.#request.mode), this.#signal);
+      if (mode === "voice") await this.#speak();
     } catch (error) {
       if (this.#signal.aborted) {
         logger.info(`[chat] ${this.#persona}'s turn ${turn} was interrupted`);
@@ -214,7 +218,7 @@ class Turn {
     const parts = await raceAbort(
       this.#deps.parts(this.#persona, viewer, chat, {
         others: group?.others ?? [],
-        voice: this.#request.mode === "voice",
+        voice: this.#mayBeVoice,
       }),
       signal,
     );
@@ -424,7 +428,7 @@ class Turn {
     const later: Attachment[] = [];
     const effects: ToolEffects = {
       switchVoice: async (voice) => {
-        if (this.#request.mode !== "voice") throw new Error("A text reply has no voice to switch");
+        if (!this.#mayBeVoice) throw new Error("A text reply has no voice to switch");
         this.#voice = voice;
       },
       sendServerMessage: async (data) => {

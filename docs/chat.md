@@ -47,7 +47,7 @@ isn't stored, she never saw.
 | `tool-call`, `tool-result` | the engine | Her call and what it returned; a call cut off has no result, and one that ran on past an interruption returns further down the log |
 | `kickoff` | the engine | The greeting prompt she answered |
 | `turn-failed` | the engine, or the runner when a turn throws | The failure, through `errorText`; the chat stays usable. `code: "voice-failed"` when her reply, stored just before it, was meant as a voice message but stayed text |
-| `decision` | the engine (`runChat`) | Who answers the line at seq `after`, and how: `source: "single"` in a chat of one persona, else `mention`, `model` or `fallback`, with the director's `scores` when it asked, and each reply's `mode`, `text` or `voice`. Every reply follows one, and one may choose no one |
+| `decision` | the engine (`runChat`) | Who answers the line at seq `after`, and how: `source: "single"` in a chat of one persona, else `mention`, `model` or `fallback`, with the director's `scores` when it asked, and each reply's `mode`, `text` or `voice`. Every reply follows one, and one may choose no one. In a chat of one in `auto`, it lands just before her reply, after her turn's other events |
 | `title` | `PATCH` | The chat's title; the last one wins. Until there is one, the page names the chat by who is in it now |
 | `participants` | `POST participants` | Personas added or removed |
 | `settings` | `PATCH` | The chat's `chainLimit` or `replyMode`; the last of each wins |
@@ -281,7 +281,8 @@ the gate's plumbing: the active persona's `gate` role and its key, `decisionsUrl
   The same caps apply. The source is `fallback`, with no scores, so every reply is in text unless
   her mode is `voice`. Without a key for the gate role, every group decision falls back.
 - **A chat of one persona:** she answers every viewer line, as `single`. The director asks only
-  `voice_moment`, and only while her reply mode is `auto`; otherwise it makes no request.
+  `voice_moment`, and only while her reply mode is `auto`; otherwise it makes no request. She
+  doesn't wait for it ([Voice messages](#voice-messages)).
 - **Each reply's `mode`** follows her reply mode: `voice` is voice, `text` is text, and `auto` is
   voice when `voice_moment` clears its bar ([Voice messages](#voice-messages)).
 
@@ -411,6 +412,12 @@ scored run yet ([its README](benchmarks/2026-11-10-director/README.md#voice-mome
 `voice_moment`, while her mode is `auto`, her voice can speak and the gate role has a key. The
 decision stays `single`, with its score. On a failure it warns, and she answers in text.
 
+**She doesn't wait for it** (`answerWhileDeciding`, `packages/engine/src/chat.ts`): her turn starts
+with the request, with her voice-style tool and its hint, since her reply may be spoken. Her words
+stream in while the director weighs them, and the decision is awaited only once she has written
+them, to choose whether her voice speaks them, so its up to 2 s never delays her first word. It is
+stored just before her reply. A group's turns wait for theirs.
+
 **A greeting** has no line to weigh, so it is a voice message only when her mode is `voice`.
 
 ### The viewer's voice messages
@@ -433,6 +440,7 @@ as `（听不清）`, and the page says no words could be heard in it.
 | Synthesis or saving its audio fails | Her message is stored as text, then a `turn-failed` with `code: "voice-failed"`; the page shows a quiet **Sent as text** |
 | She is interrupted while she is spoken | Her words are stored as interrupted text, with no audio |
 | The director doesn't answer `voice_moment` within 2 s | `auto` replies are text |
+| A chat of one is interrupted while the director weighs her reply | The request is aborted. Her words so far are stored as interrupted text, after a `single` decision for text with no scores; with no words yet, nothing is stored |
 | The first persona's hearing role has no key | `POST voice` answers `409 missing-key`, and `GET chats/:id`'s `hearingRefusal` says why, which disables the microphone |
 | Her hearing provider fails | `POST voice` answers `502 upstream-failed`, and nothing is stored, so the recording can be sent again |
 

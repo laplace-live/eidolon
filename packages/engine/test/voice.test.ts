@@ -260,7 +260,7 @@ describe("a voice message from her", () => {
     ]);
   });
 
-  test("asks for her parts' voice variant only for a voice message", async () => {
+  test("asks for her parts' voice variant only for a voice message, or one still being decided", async () => {
     const asked: (PartsOptions | undefined)[] = [];
     const parts: EngineDeps["parts"] = async (_persona, _viewer, _chat, options) => {
       asked.push(options);
@@ -275,10 +275,17 @@ describe("a voice message from her", () => {
     await collect(
       runTurn({ ...voiceTurn(log), mode: undefined }, deps(fakeMind().mind, speech, { parts })),
     );
+    await collect(
+      runTurn(
+        voiceTurn(log, { mode: Promise.resolve("text") }),
+        deps(fakeMind().mind, speech, { parts }),
+      ),
+    );
     expect(asked).toEqual([
       { others: [], voice: true },
       { others: [], voice: false },
       { others: [], voice: false },
+      { others: [], voice: true },
     ]);
   });
 
@@ -609,7 +616,15 @@ describe("how she answers: replyModeFor", () => {
 
 describe("a chat that answers in voice", () => {
   /** A chat as the runner keeps it: each output's events stored before the next is taken. */
-  async function answer(head: ChatHeader, drafts: ChatEventDraft[], engine: ChatDeps) {
+  async function answer(
+    head: ChatHeader,
+    drafts: ChatEventDraft[],
+    engine: ChatDeps,
+    { signal = new AbortController().signal, onOutput = () => {} } = {} as {
+      signal?: AbortSignal;
+      onOutput?: (output: ChatOutput) => void;
+    },
+  ) {
     const events: ChatEvent[] = stampEvents(drafts, 0, 1000);
     const outputs: ChatOutput[] = [];
     for await (const output of runChat(
@@ -618,11 +633,12 @@ describe("a chat that answers in voice", () => {
         read: async () => ({ header: head, events: [...events] }),
         viewer: VIEWER,
         after: events.length,
-        signal: new AbortController().signal,
+        signal,
       },
       engine,
     )) {
       outputs.push(output);
+      onOutput(output);
       const stored =
         output.type === "events" ? output.events : output.type === "decision" ? [output] : [];
       events.push(...stampEvents(stored, events.length, 2000));
@@ -665,6 +681,122 @@ describe("a chat that answers in voice", () => {
     ]);
     expect(spoken.map(({ text }) => text)).toEqual(["我也想你"]);
     expect(events.at(-1)).toMatchObject({ type: "message", text: "我也想你", modality: "voice" });
+  });
+
+  test("a chat of one in auto writes while the director weighs voice_moment, and is spoken only if it chose voice", async () => {
+    const run = async (noul: number) => {
+      const order: string[] = [];
+      let sawText = () => {};
+      const textSeen = new Promise<void>((resolve) => {
+        sawText = resolve;
+      });
+      // Answers once her words stream, or after 500 ms, when they wait for it.
+      const director = new Director({
+        apiKey: "k",
+        fetch: (async (_url: string, init: RequestInit) => {
+          await Promise.race([textSeen, Bun.sleep(500)]);
+          order.push("director answered");
+          const { questions } = JSON.parse(String(init.body)) as Body;
+          return Response.json({
+            answers: Object.fromEntries(
+              Object.keys(questions).map((key) => [key, { type: "noul", noul }]),
+            ),
+          });
+        }) as unknown as typeof fetch,
+      });
+      const { speech } = fakeSpeech({
+        speak: async () => {
+          order.push("spoken");
+        },
+      });
+      const engine: ChatDeps = {
+        ...deps(fakeMind([{ type: "text", text: "我也想你" }, DONE]).mind, speech),
+        director,
+      };
+      const { events } = await answer(header("vera"), [user("想你了")], engine, {
+        onOutput: (output) => {
+          if (output.type === "delta") {
+            order.push("delta");
+            sawText();
+          } else if (output.type === "decision") {
+            order.push(`decision ${output.replies.map((reply) => reply.mode).join()}`);
+          } else if (output.type === "events") {
+            for (const event of output.events) {
+              if (event.type === "message") order.push(`message ${event.modality ?? "text"}`);
+            }
+          }
+        },
+      });
+      return { order, events };
+    };
+
+    const voice = await run(0.9);
+    expect(voice.order).toEqual([
+      "delta",
+      "director answered",
+      "spoken",
+      "decision voice",
+      "message voice",
+    ]);
+    expect(voice.events.map((event) => event.type)).toEqual(["message", "decision", "message"]);
+    expect(voice.events[1]).toMatchObject({
+      after: 1,
+      replies: [{ persona: "vera", mode: "voice" }],
+      source: "single",
+      scores: { voice_moment: 0.9 },
+    });
+
+    const text = await run(0.1);
+    expect(text.order).toEqual(["delta", "director answered", "decision text", "message text"]);
+    expect(text.events[1]).toMatchObject({
+      replies: [{ persona: "vera", mode: "text" }],
+      scores: { voice_moment: 0.1 },
+    });
+  });
+
+  test("a chat of one interrupted while the director weighs her reply keeps her words as text", async () => {
+    const asked: AbortSignal[] = [];
+    const director = new Director({
+      apiKey: "k",
+      fetch: (async (_url: string, init: RequestInit) => {
+        const signal = init.signal as AbortSignal;
+        asked.push(signal);
+        return new Promise((_, reject) => {
+          signal.addEventListener("abort", () => reject(signal.reason));
+        });
+      }) as unknown as typeof fetch,
+    });
+    const { speech, spoken } = fakeSpeech();
+    const mind: Mind = {
+      async *stream({ signal }) {
+        yield { type: "text", text: "我也" };
+        await new Promise((_, reject) => {
+          signal.addEventListener("abort", () => reject(signal.reason));
+        });
+      },
+    };
+    const engine: ChatDeps = { ...deps(mind, speech), director };
+    const stop = new AbortController();
+    const { events } = await answer(header("vera"), [user("想你了")], engine, {
+      signal: stop.signal,
+      onOutput: (output) => {
+        if (output.type === "delta") stop.abort();
+      },
+    });
+    expect(asked).toHaveLength(1);
+    expect(spoken).toEqual([]);
+    expect(events.slice(1)).toMatchObject([
+      { type: "decision", replies: [{ persona: "vera", mode: "text" }], source: "single" },
+      { type: "message", text: "我也", interrupted: true },
+    ]);
+    expect(events[1]).not.toHaveProperty("scores");
+
+    // Stopped before she said anything, nothing is stored.
+    const early = new AbortController();
+    early.abort();
+    const quiet = await answer(header("vera"), [user("想你了")], engine, { signal: early.signal });
+    expect(quiet.events).toHaveLength(1);
+    expect(quiet.outputs.map((output) => output.type)).toEqual(["started", "ended"]);
   });
 
   test("a chat of one asks nothing when her mode is settled, and a chat's text wins", async () => {
