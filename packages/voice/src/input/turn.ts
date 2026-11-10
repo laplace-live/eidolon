@@ -50,7 +50,7 @@ export class TurnDetector {
   #text = "";
   #turnComplete = false;
   #vadStopped = false;
-  /** A finalized final or a bare acknowledgement came, or the cap passed, and no interim since. */
+  /** The last stop's finalize was answered, or the cap passed, and no interim since. */
   #acknowledged = false;
   #cancelAckCap: (() => void) | null = null;
   /** Finalizes called and not yet answered, each answered in turn; the cap forgets them. */
@@ -132,8 +132,9 @@ export class TurnDetector {
     this.#options.post({ type: "final", text });
     this.#text = text;
     this.#wordsPending = false;
-    if (finalized) {
-      this.#unanswered = Math.max(0, this.#unanswered - 1);
+    if (finalized) this.#unanswered = Math.max(0, this.#unanswered - 1);
+    // An earlier stop's answer, with the last stop's still owed, is a final like any other.
+    if (finalized && this.#unanswered === 0) {
       this.#acknowledge();
       if (!this.#inTurn) return;
     } else if (this.#timeoutExpired && this.#turnComplete) {
@@ -149,12 +150,12 @@ export class TurnDetector {
 
   /**
    * The recognizer answered a finalize() with no words. Only the answer to the last stop's ends
-   * the turn: one with answers still owed, or that comes while the VAD hears speech again,
-   * answered an earlier stop's.
+   * the turn: one with answers still owed, that comes while the VAD hears speech again, or with
+   * words heard since the last final, answered an earlier stop's.
    */
   finalized(): void {
     this.#unanswered = Math.max(0, this.#unanswered - 1);
-    if (this.#unanswered === 0 && this.#vadStopped) this.#acknowledge();
+    if (this.#unanswered === 0 && this.#vadStopped && !this.#wordsPending) this.#acknowledge();
   }
 
   /** Cancels the timers. */

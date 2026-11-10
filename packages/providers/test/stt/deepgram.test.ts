@@ -130,6 +130,29 @@ test("an empty answer acknowledges only a finalize this client sent, once", asyn
   await stt.close();
 });
 
+test("two finalizes sent before either is answered get an acknowledgement each", async () => {
+  const stt = await open();
+  const events = watch(stt);
+  const peer = await server.connection();
+  const empty = () => peer.send(results("", { is_final: true, from_finalize: true }));
+  stt.finalize();
+  stt.finalize();
+  await peer.next();
+  await peer.next();
+  empty();
+  empty();
+  // One more than it sent.
+  empty();
+  peer.send(results("好", { is_final: true }));
+  await events.until((event) => event.type === "final");
+  expect(events.seen).toEqual([
+    { type: "finalized" },
+    { type: "finalized" },
+    { type: "final", text: "好", finalized: true },
+  ]);
+  await stt.close();
+});
+
 test("sends KeepAlive every 5 s, audio or not", async () => {
   jest.useFakeTimers();
   const stt = await open();

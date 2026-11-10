@@ -514,6 +514,27 @@ describe("allowed.ts: Fish's sentences reported as they play (D11, D12)", () => 
     ).toEqual(["UNEXPLAINED", "UNEXPLAINED"]);
   });
 
+  test("D12: her reports move past other messages, never past each other", () => {
+    const pipedog = capture(
+      "pipedog",
+      [rtvi("bot-ready"), ...answer(A, B), ...played(1, A), ...played(2, B)],
+      fish,
+    );
+    const native = (...reports: Received[]) =>
+      capture("native", [rtvi("bot-ready"), ...answer(A, B), ...reports], fish);
+    const [newA, completedA, textA] = played(1, A);
+    const [newB, completedB, textB] = played(2, B);
+    // B completing before A, where the alignment moves A's reports, and B new before A completed,
+    // where it moves B's.
+    const swaps = [
+      [newA, newB, completedB, textB, completedA, textA],
+      [newA, newB, completedA, textA, completedB, textB],
+    ] as Received[][];
+    for (const reports of swaps) {
+      expect(rules({ pipedog, native: native(...reports) })).toContain("UNEXPLAINED");
+    }
+  });
+
   // Her reply of A and B cut off while A plays, then C: pipedog reported A and B whole at her first
   // audio and kept both; native reported A new, kept nothing, and numbers C one sentence earlier.
   const cut = [rtvi("user-started-speaking"), rtvi("bot-interrupted")];
@@ -524,14 +545,22 @@ describe("allowed.ts: Fish's sentences reported as they play (D11, D12)", () => 
     ...reports,
     rtvi("bot-stopped-speaking"),
   ];
-  const lines = (kept: string | null) => [
-    { role: "user", content: "给我讲讲花店" },
+  const question = { role: "user", content: "给我讲讲花店" };
+  const lines = (kept: string | null, earlier: readonly unknown[] = []) => [
+    ...earlier,
+    question,
     ...(kept === null ? [] : [{ role: "assistant", content: kept }]),
     { role: "user", content: "等一下" },
   ];
-  const asked = (kept: string | null) => ({
-    mind: [{ path: "/chat/completions", headers: {}, body: { messages: lines(kept) } }],
-    conversation: lines(kept),
+  const request = (messages: readonly unknown[]) => ({
+    path: "/chat/completions",
+    headers: {},
+    body: { messages: [{ role: "system", content: "你是花店的店员。" }, ...messages] },
+  });
+  /** The requests for the cut reply and for C, and what she would see next. */
+  const asked = (kept: string | null, earlier: readonly unknown[] = []) => ({
+    mind: [request([...earlier, question]), request(lines(kept, earlier))],
+    conversation: lines(kept, earlier),
   });
   const bargeIn = {
     pipedog: capture(
@@ -618,6 +647,29 @@ describe("allowed.ts: Fish's sentences reported as they play (D11, D12)", () => 
       { ...fish, ...asked(null) },
     );
     expect(kept(false, whole)).toEqual(["UNEXPLAINED", "UNEXPLAINED"]);
+  });
+
+  test("D11 allows only the cut message, not an older line of hers its first sentence matches", () => {
+    // Lines from the chat before the call, her last the cut reply's first sentence.
+    const earlier = [
+      { role: "user", content: "早" },
+      { role: "assistant", content: A },
+    ];
+    const withEarlier = (side: Capture, kept: string | null, lines: readonly unknown[]) =>
+      capture(side.engine, [...side.received], { ...fish, ...asked(kept, lines) });
+    const pipedog = withEarlier(bargeIn.pipedog, `${A} ${B}`, earlier);
+    const others = (native: Capture) =>
+      judge({ pipedog, native })
+        .filter((j) => j.difference.kind !== "rtvi")
+        .map((j) => j.rule?.id ?? "UNEXPLAINED");
+    expect(others(withEarlier(bargeIn.native(), null, earlier))).toEqual(["D11", "D11"]);
+    expect(others(withEarlier(bargeIn.native(), null, earlier.slice(0, 1)))).toEqual([
+      "UNEXPLAINED",
+      "UNEXPLAINED",
+      "D11",
+      "UNEXPLAINED",
+      "D11",
+    ]);
   });
 });
 

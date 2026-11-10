@@ -210,8 +210,8 @@ DFT, as in pipedog.
 **The acknowledgement** (U20) is native's own; pipedog has no such rule. Soniox and Deepgram answer
 every `finalize()`, words or none: Soniox with its `<fin>`, Deepgram with a `from_finalize` result.
 A `<fin>` with no final words before it, or an empty `from_finalize` answering a finalize the
-client sent, is the bare `finalized` event; one with words is the `final {finalized: true}` it
-always was.
+client sent (it counts them, so two stops before either answer get an answer each), is the bare
+`finalized` event; one with words is the `final {finalized: true}` it always was.
 
 - **Once the stop's finalize is acknowledged,** the turn ends as soon as Smart Turn says complete,
   with no wait for the p99. A turn with no words (a cough) ends then as an empty turn, so the
@@ -227,11 +227,13 @@ always was.
   not the cap, whether the interim came before the stop or after it), and a VAD start, which drops
   a pending stop as before.
 - **Which stop it answers:** the recognizer answers finalizes in order, so the TurnDetector counts
-  the ones still owed an answer (a bare acknowledgement or a finalized final). A bare
-  acknowledgement ends the turn only when it answers the last stop's: one that comes with answers
-  still owed (a cough, then a word stopped before the cough's answer came), or while the VAD hears
-  speech again, answered an earlier stop and is ignored. The cap forgets answers still owed, which
-  a reconnect loses.
+  the ones still owed an answer (a bare acknowledgement or a finalized final). An answer ends the
+  turn only when it answers the last stop's: one that comes with answers still owed (a cough, then
+  a word stopped before the cough's answer came) answered an earlier stop. A bare one is then
+  ignored, and a finalized final is kept as a final like any other, which the last answer, the
+  cap, the p99 or the watchdog ends. A bare acknowledgement that comes while the VAD hears speech
+  again, or with an interim since the last final (words it can't be the answer for), answered an
+  earlier stop too. The cap forgets answers still owed, which a reconnect loses.
 
 ## Speaking
 
@@ -508,7 +510,7 @@ Every difference between the engines must be one of these, each with what trigge
 | D9 | unsupported inbound types get `error-response` | no client sends them |
 | D10 | her audio pauses during `restart_pc` or a lost ping instead of being dropped | a reconnect mid-sentence |
 | D11 | an interrupted message keeps the sentences heard whole, Fish's too; pipedog's Fish kept every sentence said once her audio had started | a barge-in before her last sentence has played |
-| D12 | Fish's "completed" spread across the audio: each sentence new as its audio starts, completed as it ends, where pipedog reported all at her first audio. Required from G5 | every Fish reply: anything said meanwhile lands among her reports, and a reply cut off reports fewer sentences, so the later ones' segment ordinals run behind |
+| D12 | Fish's "completed" spread across the audio: each sentence new as its audio starts, completed as it ends, where pipedog reported all at her first audio. Required from G5 | every Fish reply: anything said meanwhile lands among her reports, which keep their order, and a reply cut off reports fewer sentences, so the later ones' segment ordinals run behind |
 | D13 | `interruptedBot` is exact | an empty turn within 3 s after Fish's audio ends |
 | D14 | no 15 s hold on a second reply in one turn | a follow-up after a tool call |
 | D15 | voices other than Fish keep her cues in the stored text | matches text chats; today the filtered text is stored |

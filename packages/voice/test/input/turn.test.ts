@@ -406,6 +406,44 @@ describe("the recognizer's acknowledgement of finalize", () => {
     expect(events).toEqual(["user-started", "final 喂", "user-stopped 喂"]);
   });
 
+  /** Two stops in one turn, the second complete, both finalizes unanswered. */
+  const stoppedTwice = (recognizer = SONIOX) => {
+    const stopped = detector(recognizer);
+    const { turn, clock } = stopped;
+    turn.speechStarted();
+    turn.speechStopped();
+    turn.analyzed("complete");
+    clock.advance(100);
+    turn.speechStarted();
+    clock.advance(300);
+    turn.speechStopped();
+    turn.analyzed("complete");
+    clock.advance(50);
+    return stopped;
+  };
+
+  test("an earlier stop's answer with words is a final like any other, not this stop's", () => {
+    const { turn, events } = stoppedTwice();
+    turn.final("我想", true);
+    expect(events).toEqual(["user-started", "final 我想"]);
+    turn.final("问一下", true);
+    expect(events.at(-1)).toBe("user-stopped 我想|问一下");
+
+    // With no answer after it, the recognizer's p99 ends the turn.
+    const unanswered = stoppedTwice();
+    unanswered.turn.final("我想", true);
+    unanswered.clock.advance(99);
+    expect(unanswered.events).toEqual(["user-started", "final 我想"]);
+    unanswered.clock.advance(1);
+    expect(unanswered.events.at(-1)).toBe("user-stopped 我想");
+  });
+
+  test("a recognizer that doesn't answer every finalize ends the turn on any finalized final", () => {
+    const { turn, events } = stoppedTwice(OPENAI);
+    turn.final("我想", true);
+    expect(events).toEqual(["user-started", "final 我想", "user-stopped 我想"]);
+  });
+
   test("a finalized final answers its stop's, so the next stop's bare answer ends the turn", () => {
     const { turn, clock, events } = detector();
     turn.speechStarted();
@@ -433,6 +471,24 @@ describe("the recognizer's acknowledgement of finalize", () => {
     turn.analyzed("complete");
     turn.finalized();
     expect(events).toEqual(["user-started", "user-stopped null"]);
+  });
+
+  test("one past the cap, with words heard since the last final, leaves the turn to their final", () => {
+    const { turn, clock, events } = detector();
+    turn.speechStarted();
+    turn.speechStopped();
+    turn.analyzed("incomplete");
+    clock.advance(FINALIZE_ACK_CAP_MS);
+    turn.speechStarted();
+    turn.interim("我想");
+    clock.advance(300);
+    turn.speechStopped();
+    turn.analyzed("complete");
+    // The first stop's, late.
+    turn.finalized();
+    expect(events).toEqual(["user-started", "interim 我想"]);
+    turn.final("我想问一下", true);
+    expect(events.at(-1)).toBe("user-stopped 我想问一下");
   });
 
   test("one with no turn, or after the turn ended, changes nothing", () => {
