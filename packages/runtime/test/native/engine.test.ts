@@ -1,12 +1,13 @@
-// The switch between the engines: how EIDOLON_VOICE_ENGINE reads, which offers the native engine
-// sends to pipedog and why, and a native call's start, on a fake transport with fake providers and
-// the real hearing models.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+// The switch between the engines: how EIDOLON_VOICE_ENGINE reads, which transport answers each
+// engine's offers, and a native call's start, on a fake transport with fake providers and the real
+// hearing models.
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import type { AllowedOffer } from "@eidolon/access";
 import { activePersona, pyRepr } from "@eidolon/config";
 import type { CallTurnRequest, EngineDeps, Mind } from "@eidolon/engine";
-import { PROVIDERS } from "@eidolon/providers";
 import type { CallDeps } from "@eidolon/voice";
+import { Peer } from "@eidolon/webrtc";
+import { SmallWebRTCConnection } from "@pipedog/transport-smallwebrtc/connection";
 import {
   FakeSpeech,
   FakeStt,
@@ -17,14 +18,9 @@ import {
 import { FakeClock } from "../../../voice/test/input/clock.ts";
 import { voiceModels } from "../../src/audio.ts";
 import { createSignallingServer } from "../../src/index.ts";
-import {
-  nativeCanRun,
-  runNativeSafely,
-  sessionStarter,
-  voiceEngineFromEnv,
-} from "../../src/native/engine.ts";
+import { runNativeSafely, voiceEngineFromEnv } from "../../src/native/engine.ts";
 import { BOT_ABOUT } from "../../src/rtvi.ts";
-import { captureLogs, type LogCapture, setEnv, until } from "../support.ts";
+import { captureLogs, type LogCapture, admission as offered, setEnv, until } from "../support.ts";
 
 let logs: LogCapture;
 let restoreEnv: () => void;
@@ -41,8 +37,6 @@ afterEach(() => {
   restoreEnv();
   logs.restore();
 });
-
-const voiceLines = () => logs.messages("INFO").filter((m) => m.startsWith("[voice]"));
 
 describe("voiceEngineFromEnv", () => {
   test("unset and blank are pipedog, without a word", () => {
@@ -86,106 +80,49 @@ describe("voiceEngineFromEnv", () => {
   });
 });
 
-describe("nativeCanRun", () => {
-  test("a persona who hears, thinks and speaks through three roles runs natively, quietly", () => {
-    expect(nativeCanRun()).toBeNull();
-    expect(voiceLines()).toEqual([]);
-  });
-
-  test("a realtime persona's calls run natively, quietly, whatever her hearing and voice", () => {
-    setEnv({ REALTIME_PROVIDER: "openai", STT_PROVIDER: "openrouter", TTS_PROVIDER: "openrouter" });
-    expect(nativeCanRun()).toBeNull();
-    setEnv({ REALTIME_PROVIDER: "xai" });
-    expect(nativeCanRun()).toBeNull();
-    expect(voiceLines()).toEqual([]);
-  });
-
-  test("every provider the catalog offers for realtime has a native client", () => {
-    const realtime = PROVIDERS.filter((p) => p.offers.realtime !== undefined).map((p) => p.id);
-    expect(realtime.length).toBeGreaterThan(0);
-    for (const id of realtime) {
-      setEnv({ REALTIME_PROVIDER: id });
-      expect([id, nativeCanRun()]).toEqual([id, null]);
+describe("createSignallingServer", () => {
+  /** Which transport's peer answered an offer to a server made under `engine`. */
+  async function answeredBy(engine: string | undefined): Promise<string[]> {
+    const built: string[] = [];
+    const answer = { sdp: "v=0\r\n", type: "answer" };
+    const spies = [
+      spyOn(SmallWebRTCConnection.prototype, "initialize").mockImplementation(async function (
+        this: SmallWebRTCConnection,
+      ) {
+        built.push("pipedog");
+        (this as unknown as { _answer: unknown })._answer = answer;
+      }),
+      spyOn(Peer.prototype, "initialize").mockImplementation(async () => {
+        built.push("webrtc");
+      }),
+      spyOn(Peer.prototype, "getAnswer").mockImplementation(function (this: Peer) {
+        return { ...answer, pc_id: this.pcId };
+      }),
+    ];
+    setEnv({ EIDOLON_VOICE_ENGINE: engine });
+    const signalling = createSignallingServer({
+      ice: { serverPlan: async () => ({ iceServers: [], relayOnly: false, turnUrl: null }) },
+    });
+    try {
+      const offer = offered({ sdp: "v=0", type: "offer" });
+      const result = await signalling.offer(offer);
+      expect(result.status).toBe(200);
+      // Both answer in the same shape.
+      expect(Object.keys(result.body as object)).toEqual(["sdp", "type", "pc_id"]);
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+      await signalling.close();
     }
-  });
-
-  test("settings it can't read send the call to pipedog, which fails it as it does today", () => {
-    setEnv({ REALTIME_PROVIDER: "soniox" });
-    const reason = nativeCanRun();
-    expect(reason).toContain("Soniox offers no realtime voice model (REALTIME_PROVIDER)");
-    expect(voiceLines()).toEqual([`[voice] This call runs on pipedog: ${reason}`]);
-  });
-
-  test("every provider the catalog offers for hearing or voice has a native client", () => {
-    const hearing = PROVIDERS.filter((p) => p.offers.stt !== undefined).map((p) => p.id);
-    const voice = PROVIDERS.filter((p) => p.offers.tts !== undefined).map((p) => p.id);
-    expect(hearing.length).toBeGreaterThan(0);
-    expect(voice.length).toBeGreaterThan(0);
-    for (const id of hearing) {
-      setEnv({ STT_PROVIDER: id });
-      expect([id, nativeCanRun()]).toEqual([id, null]);
-    }
-    setEnv({ STT_PROVIDER: undefined });
-    for (const id of voice) {
-      setEnv({ TTS_PROVIDER: id });
-      expect([id, nativeCanRun()]).toEqual([id, null]);
-    }
-  });
-});
-
-describe("sessionStarter", () => {
-  const offer = { allowed: true } as AllowedOffer;
-
-  function sessions() {
-    const started: string[] = [];
-    return {
-      started,
-      pipedog: async (connection: string) => void started.push(`pipedog ${connection}`),
-      native: async (connection: string) => void started.push(`native ${connection}`),
-    };
+    return built;
   }
 
-  test("under pipedog, an offer starts pipedog's session itself and asks nothing", async () => {
-    const s = sessions();
-    // Settings that would stop a native call: pipedog never looks.
-    setEnv({ REALTIME_PROVIDER: "soniox" });
-    const start = sessionStarter("pipedog", s);
-    expect(start).toBe(s.pipedog);
-    await start("pc-1", offer);
-    expect(s.started).toEqual(["pipedog pc-1"]);
-    expect(voiceLines()).toEqual([]);
+  test("under native, every offer is a native call on @eidolon/webrtc's peers", async () => {
+    expect(await answeredBy("native")).toEqual(["webrtc"]);
   });
 
-  test("under native, a call inside a chat runs natively with its binding, quietly", async () => {
-    const started: string[] = [];
-    const start = sessionStarter<string, { readonly persona: string }>("native", {
-      pipedog: async (connection, _admission, binding) =>
-        void started.push(`pipedog ${connection} ${binding?.persona}`),
-      native: async (connection, _admission, binding) =>
-        void started.push(`native ${connection} ${binding?.persona}`),
-    });
-    await start("pc-1", offer, { persona: "bob" });
-    await start("pc-2", offer);
-    expect(started).toEqual(["native pc-1 bob", "native pc-2 undefined"]);
-    expect(voiceLines()).toEqual([]);
-  });
-
-  test("under native, each offer runs natively unless its persona can't yet", async () => {
-    const s = sessions();
-    const start = sessionStarter("native", s);
-    await start("pc-1", offer);
-    setEnv({ REALTIME_PROVIDER: "xai" });
-    await start("pc-2", offer);
-    setEnv({ REALTIME_PROVIDER: "soniox" });
-    await start("pc-3", offer);
-    setEnv({ REALTIME_PROVIDER: undefined });
-    await start("pc-4", offer);
-    expect(s.started).toEqual(["native pc-1", "native pc-2", "pipedog pc-3", "native pc-4"]);
-    expect(voiceLines()).toEqual([
-      expect.stringContaining(
-        "[voice] This call runs on pipedog: Soniox offers no realtime voice model",
-      ),
-    ]);
+  test("under pipedog, unset or not, every offer is a pipedog session on pipedog's", async () => {
+    expect(await answeredBy("pipedog")).toEqual(["pipedog"]);
+    expect(await answeredBy(undefined)).toEqual(["pipedog"]);
   });
 });
 

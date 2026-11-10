@@ -116,20 +116,25 @@ function director(...rounds: (readonly ParticipantId[] | "hold")[]) {
   return { decide, inputs };
 }
 
-/** A selfie that resolves when the test says. */
+/** A selfie that resolves when the test says, each persona's on her own. */
 function selfieTool() {
-  const shot = Promise.withResolvers<void>();
+  const shots = new Map<ParticipantId, ReturnType<typeof Promise.withResolvers<void>>>();
+  const shot = (persona: ParticipantId) => {
+    const made = shots.get(persona) ?? Promise.withResolvers<void>();
+    shots.set(persona, made);
+    return made;
+  };
   const tool: LlmTool = {
     schema: { name: "take_selfie", description: "", properties: {}, required: [] },
     cancelOnInterruption: false,
     timeoutSecs: 120,
     async run(_call, effects) {
-      await shot.promise;
+      await shot(activePersona().id).promise;
       await effects.sendServerMessage({ type: "selfie", urls: ["https://x/1.png"] });
       return { ok: true };
     },
   };
-  return { tool, shoot: () => shot.resolve() };
+  return { tool, shoot: (persona: ParticipantId) => shot(persona).resolve() };
 }
 
 function engine(script: Script, decide: Decide, tools: readonly LlmTool[] = []): ChatDeps {
@@ -515,7 +520,7 @@ describe("a group call", () => {
     await call.plays(BEA);
     await until(() => inputs.length === 2);
     expect(requests).toHaveLength(1);
-    selfie.shoot();
+    selfie.shoot(BEA);
     await until(() => requests.length === 2);
     expect(call.sent.find((m) => (m.data as { type?: string })?.type === "selfie")?.data).toEqual({
       type: "selfie",
@@ -527,6 +532,50 @@ describe("a group call", () => {
     expect(inputs).toHaveLength(2);
     await call.plays(BEA);
     expect(call.said().slice(-1)).toEqual(["bea: 拍好啦。"]);
+  });
+
+  test("photos that come while another turn holds the floor each get their follow-up, in order", async () => {
+    const selfie = selfieTool();
+    const { decide, inputs } = director([ANN, BEA], [], [ANN], []);
+    const shoots = (id: string) => [
+      { type: "tool-calls", calls: [{ id, name: "take_selfie", arguments: {} }] } as const,
+    ];
+    const call = startGroup({
+      decide,
+      tools: [selfie.tool],
+      script: { [ANN]: [["我拍一张。", ...shoots("a1")]], [BEA]: [["我也拍。", ...shoots("b1")]] },
+    });
+    const stored = (callId: string) =>
+      call
+        .events()
+        .some((e) => e.type === "tool-result" && e.callId === callId && e.stage === "final");
+    await call.ready();
+    await call.says("你们拍张照");
+    await call.plays(ANN);
+    await until(() => requests.length === 2);
+    await call.plays(BEA);
+    await until(() => inputs.length === 2);
+
+    await call.says("拍好了吗");
+    await until(() => call.speech(ANN).utterances.length === 2);
+    selfie.shoot(ANN);
+    await until(() => stored("a1"));
+    selfie.shoot(BEA);
+    await until(() => stored("b1"));
+    expect(requests).toHaveLength(3);
+    await call.plays(ANN);
+
+    await until(() => requests.length === 4);
+    expect(requests[3]?.persona).toBe(ANN);
+    await until(() => call.speech(ANN).utterances.length === 3);
+    await call.plays(ANN);
+    await until(() => requests.length === 5);
+    await call.plays(BEA);
+    await settle();
+    expect(requests.map((r) => r.persona)).toEqual([ANN, BEA, ANN, ANN, BEA]);
+    // Each follow-up answers her own photo: the director isn't asked about either.
+    expect(inputs).toHaveLength(4);
+    expect(call.said().slice(-2)).toEqual(["ann: 安妮说3。", "bea: 露比说2。"]);
   });
 });
 

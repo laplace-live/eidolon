@@ -70,6 +70,7 @@ describe("the bundles", () => {
     const server = bareImports(join(root, "dist", "server.js"));
     for (const name of [
       "werift",
+      "libopus-wasm",
       "apache-arrow",
       "onnxruntime-node",
       "@pipedog/core/frames/frames",
@@ -77,7 +78,13 @@ describe("the bundles", () => {
       expect([name, server.has(name)]).toEqual([name, true]);
     }
     expect([...inlined.keys()]).toContain("@lancedb/lancedb");
-    for (const name of ["werift", "apache-arrow", "onnxruntime-node", "@pipedog/core"]) {
+    for (const name of [
+      "werift",
+      "libopus-wasm",
+      "apache-arrow",
+      "onnxruntime-node",
+      "@pipedog/core",
+    ]) {
       expect([name, inlined.has(name)]).toEqual([name, false]);
     }
     expect([...inlined.keys()].filter((name) => name.startsWith("@eidolon/"))).toEqual([]);
@@ -184,6 +191,7 @@ describe("the published manifest", () => {
   test("depends on the externals at the workspaces' pins, and each platform's Bun and LanceDB", () => {
     const runtime = manifestOf<{ dependencies: Record<string, string> }>("packages/runtime");
     const retrieval = manifestOf<{ dependencies: Record<string, string> }>("packages/retrieval");
+    const webrtc = manifestOf<{ dependencies: Record<string, string> }>("packages/webrtc");
     const pipedog = Object.entries(runtime.dependencies).filter(([name]) =>
       name.startsWith("@pipedog/"),
     );
@@ -191,8 +199,10 @@ describe("the published manifest", () => {
       ...Object.fromEntries(pipedog),
       "onnxruntime-node": runtime.dependencies["onnxruntime-node"],
       werift: runtime.dependencies.werift,
+      "libopus-wasm": webrtc.dependencies["libopus-wasm"],
       "apache-arrow": retrieval.dependencies["apache-arrow"],
     });
+    expect(webrtc.dependencies.werift).toBe(runtime.dependencies.werift);
     expect(manifest.optionalDependencies).toEqual({
       "@lancedb/lancedb-darwin-arm64": retrieval.dependencies["@lancedb/lancedb"],
       "@lancedb/lancedb-linux-arm64-gnu": retrieval.dependencies["@lancedb/lancedb"],

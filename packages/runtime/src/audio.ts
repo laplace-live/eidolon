@@ -93,10 +93,11 @@ export function voiceModels(): { readonly silero: string; readonly smartTurn: st
 }
 
 /**
- * Loads the Silero VAD and Smart Turn models before the first call needs them: pipedog's, and
- * under the native engine its own too, since nativeCanRun still sends some calls to pipedog.
+ * Loads the Silero VAD and Smart Turn models before the first call needs them, the engine's own.
+ * The backend comes first on both, since it turns ORT's telemetry off before ORT first loads.
  */
 export async function warmAudioModels(): Promise<void> {
-  await warmModels(await onnxBackend());
+  const backend = await onnxBackend();
   if (voiceEngineFromEnv() === "native") await warmVoiceModels(voiceModels());
+  else await warmModels(backend);
 }

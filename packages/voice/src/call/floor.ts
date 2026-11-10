@@ -52,6 +52,8 @@ interface StartOptions {
    * caller's line gets the chat's answer; a call with one persona always runs the host's.
    */
   readonly persona?: ParticipantId;
+  /** A follow-up's: the personas still owed one keep their places. */
+  readonly followUp?: boolean;
 }
 
 /** A group call's answer: the chat's to the caller's line, or one persona's turn, under one abort. */
@@ -114,8 +116,8 @@ export class Floor {
   /** Whose reply the last barge-in cut, whom a recovery asks to go on; null for none. */
   #cutPersona: ParticipantId | null = null;
   #syncToolsRunning = 0;
-  /** Whose async result is owed a follow-up reply once the floor is free. */
-  #followUp: ParticipantId | null = null;
+  /** Whose async results are owed a follow-up reply once the floor is free, each once, in order. */
+  readonly #followUps: ParticipantId[] = [];
   /** A reply to start once the cut one has ended. */
   #startOwed: StartOptions | null = null;
   /** Lines that go after the cut reply's own message, which its end stores. */
@@ -295,9 +297,9 @@ export class Floor {
       if (this.#o.group === undefined || this.#cutPersona !== null) {
         this.#start({ nudge: this.#o.nudge, persona: this.#cutPersona ?? this.#o.plan.host });
       }
-    } else if (this.#followUp !== null && this.#idle()) {
+    } else if (this.#idle()) {
       // An async result that came while the caller spoke, which a turn of words would have taken.
-      this.#start({ persona: this.#followUp });
+      this.#startFollowUp();
     }
   }
 
@@ -323,7 +325,7 @@ export class Floor {
       this.#startOwed = options;
       return;
     }
-    this.#followUp = null;
+    if (!options.followUp) this.#followUps.length = 0;
     const { group } = this.#o;
     if (group !== undefined) {
       this.#startChain(group, options);
@@ -615,7 +617,13 @@ export class Floor {
     const owed = this.#startOwed;
     this.#startOwed = null;
     if (owed !== null) this.#start(owed);
-    else if (this.#followUp !== null && this.#idle()) this.#start({ persona: this.#followUp });
+    else if (this.#idle()) this.#startFollowUp();
+  }
+
+  /** The first persona owed a follow-up gets her turn alone. */
+  #startFollowUp(): void {
+    const persona = this.#followUps.shift();
+    if (persona !== undefined) this.#start({ persona, followUp: true });
   }
 
   /** Her turn is done writing: her speech ends, and `answer` gets what was heard once it played. */
@@ -637,8 +645,8 @@ export class Floor {
   }
 
   /**
-   * Row 23: stored, and answered once the floor is free, by `persona`, whose tool it was; a reply
-   * started sooner sees it too.
+   * Row 23: stored, and answered once the floor is free, by `persona`, whose tool it was, after
+   * whoever was owed a follow-up before her; a reply started sooner sees it too.
    */
   #asyncResult(persona: ParticipantId, drafts: readonly ChatEventDraft[]): void {
     if (this.#call !== "ended") {
@@ -654,8 +662,8 @@ export class Floor {
     }
     this.#append(...drafts);
     if (this.#call === "ended" || this.#closing) return;
-    if (this.#idle()) this.#start({ persona });
-    else this.#followUp = persona;
+    if (!this.#followUps.includes(persona)) this.#followUps.push(persona);
+    if (this.#idle()) this.#startFollowUp();
   }
 
   /** Appends lines to the log, after her cut reply's message while it has yet to store it. */

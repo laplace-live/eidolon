@@ -1,10 +1,9 @@
-// Which voice engine answers a call: pipedog's pipeline, or the native loop in @eidolon/voice.
-// EIDOLON_VOICE_ENGINE picks one at boot; under native, an offer whose call can't run natively yet
-// still goes to pipedog. docs/voice-engine.md.
+// Which voice engine answers a call: pipedog's pipeline, or the native loop in @eidolon/voice over
+// @eidolon/webrtc. EIDOLON_VOICE_ENGINE picks one at boot, for every call. docs/voice-engine.md.
 import type { AllowedOffer } from "@eidolon/access";
 import { CHAT_FORMAT, type ChatHeader, summarize } from "@eidolon/chat";
 import { activePersona, envStr, errorText, logger, pyRepr, withPersona } from "@eidolon/config";
-import { type ProviderId, realtimeIn, select, selectRequired } from "@eidolon/providers";
+import { realtimeIn, select } from "@eidolon/providers";
 import {
   type CallDeps,
   type CallLog,
@@ -25,17 +24,6 @@ import {
 
 export type VoiceEngine = "pipedog" | "native";
 
-/**
- * The providers each role has a native client for (`@eidolon/providers/stt`, `/speech-stream`,
- * `/realtime`).
- */
-const NATIVE_CLIENTS: Readonly<Record<"hearing" | "voice" | "realtime", ReadonlySet<ProviderId>>> =
-  {
-    hearing: new Set(["soniox", "deepgram", "elevenlabs", "openai"]),
-    voice: new Set(["fish", "elevenlabs", "cartesia", "soniox", "minimax", "openai"]),
-    realtime: new Set(["openai", "xai"]),
-  };
-
 let warnedAbout: string | null = null;
 
 /** EIDOLON_VOICE_ENGINE: pipedog unless it says native. Any other value warns once. */
@@ -52,78 +40,15 @@ export function voiceEngineFromEnv(): VoiceEngine {
 }
 
 /**
- * Null when the call can run on the native engine as `persona`, a call inside a chat's, or else as
- * the persona whose scope it runs in; else why it runs on pipedog, logged. Settings that can't be
- * read fail the call on pipedog, as they do today.
- */
-export function nativeCanRun(persona?: string): string | null {
-  let reason: string | null;
-  try {
-    reason = persona === undefined ? pipedogReason() : withPersona(persona, pipedogReason);
-  } catch (error) {
-    reason = errorText(error);
-  }
-  if (reason !== null) logger.info(`[voice] This call runs on pipedog: ${reason}`);
-  return reason;
-}
-
-function pipedogReason(): string | null {
-  const realtime = select("realtime");
-  // A realtime model hears and speaks for her: her hearing and voice roles aren't read.
-  const roles = realtime === null ? (["hearing", "voice"] as const) : (["realtime"] as const);
-  return unsupported(roles);
-}
-
-/** The first of `roles`, in the persona scope it runs in, with no native client: why, or null. */
-function unsupported(roles: readonly ("hearing" | "voice" | "realtime")[]): string | null {
-  for (const role of roles) {
-    const selection = selectRequired(role);
-    if (!NATIVE_CLIENTS[role].has(selection.provider.id)) {
-      return `${selection.provider.name}'s ${selection.role.label} isn't native yet`;
-    }
-  }
-  return null;
-}
-
-/**
- * Why `host` can't hear a group call of `personas`, each speaking in her own voice, which only the
- * native engine runs; or null. Throws when settings can't be read.
+ * Why `host` can't hold a group call of `personas`, which only the native engine runs; or null.
+ * Throws when settings can't be read.
  */
 export function groupReason(host: string, personas: readonly string[]): string | null {
   const realtime = realtimeIn(personas);
-  if (realtime !== null)
+  if (realtime !== null) {
     return `${realtime}'s calls run on a realtime model, which can't join a group call`;
-  for (const persona of personas) {
-    const reason = withPersona(persona, () =>
-      unsupported(persona === host ? ["hearing", "voice"] : ["voice"]),
-    );
-    if (reason !== null) return reason;
   }
   return personas.includes(host) ? null : `${host} isn't in the call`;
-}
-
-/** Starts the call an offer asks for, bound to `binding` when it is a call inside a chat. */
-export type StartSession<C, B = never> = (
-  connection: C,
-  admission: AllowedOffer,
-  binding?: B,
-) => Promise<void>;
-
-/**
- * What each offer starts. Under pipedog it is `sessions.pipedog` itself, so calls run as they did
- * before the switch existed; under native, each offer asks nativeCanRun, as the binding's persona
- * for a call inside a chat. A group call runs natively whatever it answers, as nothing else runs
- * one: the call checks its personas as it starts, and fails if it must.
- */
-export function sessionStarter<C, B extends { readonly persona: string } = never>(
-  engine: VoiceEngine,
-  sessions: { readonly pipedog: StartSession<C, B>; readonly native: StartSession<C, B> },
-): StartSession<C, B> {
-  if (engine === "pipedog") return sessions.pipedog;
-  return (connection, admission, binding) =>
-    isGroupCall(binding) || nativeCanRun(binding?.persona) === null
-      ? sessions.native(connection, admission, binding)
-      : sessions.pipedog(connection, admission, binding);
 }
 
 /** Never aborts: the signalling server's close disconnects every peer, which ends their calls. */

@@ -18,17 +18,20 @@ import {
 } from "@eidolon/config";
 import { setUsageSink, type UsageRecord } from "@eidolon/providers";
 import { type CallLog, memoryCallLog } from "@eidolon/voice";
+import {
+  peerCallTransport,
+  createSignallingServerWith as webrtcSignallingServer,
+} from "@eidolon/webrtc";
 import { type Frame, LLMContextFrame } from "@pipedog/core/frames/frames";
 import type { LLMContext } from "@pipedog/core/processors/aggregators/llm_context";
 import type { FrameDirection } from "@pipedog/core/processors/frame_processor";
 import type { SmallWebRTCConnection } from "@pipedog/transport-smallwebrtc/connection";
 import { productionCallDeps } from "../../src/native/deps.ts";
-import { runNativeSafely, sessionStarter, type VoiceEngine } from "../../src/native/engine.ts";
-import { pipedogCallTransport } from "../../src/native/transport_pipedog.ts";
+import { runNativeSafely, type VoiceEngine } from "../../src/native/engine.ts";
 import { productionSessionDeps } from "../../src/session/defaults.ts";
 import { createLlm, createStt, createTts } from "../../src/session/services.ts";
 import { runSessionSafely, type SessionDeps } from "../../src/session/session.ts";
-import { createSignallingServerWith } from "../../src/webrtc/signalling.ts";
+import { createSignallingServerWith, type SignallingServer } from "../../src/webrtc/signalling.ts";
 import { captureLogs, PASS_THROUGH_RULES } from "../support.ts";
 import { ALLOWED, type Allowance } from "./allowed.ts";
 import { FakeFish, type FishOptions, type FishSession } from "./fakes/fish.ts";
@@ -219,32 +222,43 @@ export async function runOn(engine: VoiceEngine, scenario: Scenario): Promise<Ca
   const pipedogSeen: { context: LLMContext | null } = { context: null };
   let nativeLog: CallLog | null = null;
   const sessions: Promise<void>[] = [];
-  const start = sessionStarter<SmallWebRTCConnection>(engine, {
-    pipedog: (connection, admission) =>
-      runSessionSafely(connection, admission, pipedogDeps(fakes, pipedogSeen)),
-    native: (connection, admission) =>
-      runNativeSafely(
-        pipedogCallTransport(connection),
-        admission,
-        productionCallDeps,
-        undefined,
-        (header) => {
-          nativeLog = memoryCallLog(header);
-          return nativeLog;
-        },
-      ),
-  });
-  const server = createSignallingServerWith(
-    { ice: { serverPlan: async () => ({ iceServers: [], relayOnly: false, turnUrl: null }) } },
-    {
-      startSession: (connection: SmallWebRTCConnection, admission: AllowedOffer) => {
-        const session = start(connection, admission);
-        sessions.push(session);
-        return session;
-      },
-      candidates: PASS_THROUGH_RULES,
-    },
-  );
+  const started = (session: Promise<void>): Promise<void> => {
+    sessions.push(session);
+    return session;
+  };
+  const ice = {
+    serverPlan: async () => ({ iceServers: [], relayOnly: false, turnUrl: null }),
+  };
+  // Each engine on the transport production gives it: pipedog's, or @eidolon/webrtc's.
+  const server: SignallingServer =
+    engine === "pipedog"
+      ? createSignallingServerWith(
+          { ice },
+          {
+            startSession: (connection: SmallWebRTCConnection, admission: AllowedOffer) =>
+              started(runSessionSafely(connection, admission, pipedogDeps(fakes, pipedogSeen))),
+            candidates: PASS_THROUGH_RULES,
+          },
+        )
+      : webrtcSignallingServer(
+          { ice },
+          {
+            startSession: (peer, admission) =>
+              started(
+                runNativeSafely(
+                  peerCallTransport(peer),
+                  admission,
+                  productionCallDeps,
+                  undefined,
+                  (header) => {
+                    nativeLog = memoryCallLog(header);
+                    return nativeLog;
+                  },
+                ),
+              ),
+            candidates: PASS_THROUGH_RULES,
+          },
+        );
   const peer = new TwinPeer();
   let ended = false;
   let failed: string | null = null;

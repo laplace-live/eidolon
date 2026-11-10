@@ -62,7 +62,7 @@ describe("the hearing models", () => {
     expect(existsSync(silero) && existsSync(smartTurn)).toBe(true);
   });
 
-  test("under native, the warm-up loads the native engine's too, and succeeds", async () => {
+  test("under native, the warm-up loads the native engine's models, and succeeds", async () => {
     setEnv({ EIDOLON_VOICE_ENGINE: "native" });
     await warmAudioModels();
     expect(logs.messages("WARNING")).toEqual([]);
