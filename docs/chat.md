@@ -276,23 +276,25 @@ every turn and hop still to come is dropped. An abort while the director decides
 
 - **Her view** labels the viewer's lines with the viewer's name ([above](#her-view-viewof)), and
   folds another persona's run of lines into one `user` message of `名字：text` lines.
-- **Her system instruction** gets one line after the viewer line, naming the others with their
-  summaries. A persona with no summary is named alone:
+- **Her system instruction** gets one line after the viewer line, naming the others by their
+  identity names, joined with 、:
 
   ```text
-  这是群聊，群里还有：A（summary）、B；只用你自己的身份说话，不要替别人说话。
+  这是群聊，群里还有：A、B；只用你自己的身份说话，不要替别人说话。
   ```
 
-  A chat of one and a call get the prefix byte for byte as before, which a test pins.
-- **She can't write another persona's line:**
+  It leaves out `identity.summary`, the English sentence written for the retrieval gate. A chat of
+  one and a call get the prefix byte for byte as before, which a test pins.
+- **She can't write anyone else's line:**
   - **Stop sequences:** her request's `stop` (`stop_sequences` for Anthropic) holds `\n名字：`
     and `\n名字:` for the two other personas heard from last. That makes 4 strings, OpenAI's
-    limit.
+    limit. A mind on the `openai` or `xai` provider is sent none, since their reasoning models
+    reject `stop`.
   - **The cut:** `SpeakerCut` (`packages/engine/src/group.ts`) catches what the stop sequences
-    miss. It holds back the start of each line while it streams, and cuts her text before the
-    first line that starts with another persona's name or short name and `：` or `:`,
-    case-blind. Nothing after the cut is shown or stored, and the mind's stream is dropped there,
-    with any tool calls it held.
+    miss, on every provider. It holds back the start of each line while it streams, and cuts her
+    text before the first line that starts with another persona's name or short name, or the
+    viewer's label, and `：` or `:`, case-blind. Nothing after the cut is shown or stored, and
+    the mind's stream is dropped there, with any tool calls it held.
 - **Mem0 stores only the viewer's lines and hers.** In her view, other personas' lines are `user`
   messages, so storing them would make what they said memories about the viewer: B says 我最喜欢猫,
   and A's Mem0 records that the viewer likes cats. So the engine hands Mem0 its own list, in

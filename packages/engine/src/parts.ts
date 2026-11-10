@@ -9,7 +9,6 @@ import type { ChatEvent, ParticipantId } from "@eidolon/chat";
 import { errorText, logger, pyRepr, settingsGeneration, withPersona } from "@eidolon/config";
 import {
   buildSystemInstruction,
-  type GroupMember,
   PersonaFacts,
   RECALL_HINT,
   RECALL_PREFIX,
@@ -42,7 +41,7 @@ export interface PartsDeps {
     viewer: UserContext;
     voiceHint: string;
     selfieHint: string;
-    participants?: readonly GroupMember[];
+    participants?: readonly string[];
   }): Promise<string>;
   dbPath(): string;
   dbPathExists(path: string): Promise<boolean>;
@@ -164,7 +163,7 @@ class Pieces {
   async parts(
     viewer: UserContext,
     events: readonly ChatEvent[],
-    others: readonly GroupMember[],
+    others: readonly string[],
   ): Promise<PersonaParts> {
     const deps = this.#deps;
     this.#selfie ??= (() => {

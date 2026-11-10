@@ -3,6 +3,7 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { type ReactNode, useId, useMemo } from "react";
 import { QuietBadge } from "@/components/quiet-badge";
+import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
@@ -26,6 +27,8 @@ import {
   type Origin,
   optionsOf,
   originOf,
+  type Slider,
+  sliderValue,
   timeZones,
 } from "./controls";
 import {
@@ -204,6 +207,60 @@ function ChoiceSelect({
   );
 }
 
+/** A number on a slider, its value beside it, and a Reset back to what applies while it is unset. */
+function SliderInput({
+  id,
+  slider,
+  draft,
+  inherited,
+  invalid,
+  locked,
+  width,
+  onDraft,
+}: {
+  readonly id: string;
+  readonly slider: Slider;
+  readonly draft: string;
+  readonly inherited: string | null;
+  readonly invalid: boolean;
+  readonly locked: boolean;
+  readonly width: string | undefined;
+  readonly onDraft: (draft: string) => void;
+}) {
+  const { t } = useLingui();
+  const value = sliderValue(slider, draft, inherited);
+  return (
+    <div className={cn("flex items-center gap-3", width)}>
+      <input
+        id={id}
+        type="range"
+        min={slider.min}
+        max={slider.max}
+        step={slider.step}
+        value={value}
+        onChange={(event) => onDraft(event.target.value)}
+        disabled={locked}
+        aria-invalid={invalid}
+        className="h-2 min-w-0 flex-1 cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-50"
+      />
+      <output htmlFor={id} className="w-10 shrink-0 text-right text-sm tabular-nums">
+        {value.toFixed(2)}
+      </output>
+      {draft.trim() !== "" && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={locked}
+          onClick={() => onDraft("")}
+        >
+          {t`Reset`}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function ControlInput({
   id,
   row,
@@ -237,6 +294,20 @@ function ControlInput({
     placeholder,
   } as const;
 
+  if (control.type === "number" && control.slider !== undefined) {
+    return (
+      <SliderInput
+        id={id}
+        slider={control.slider}
+        draft={draft}
+        inherited={inherited}
+        invalid={invalid}
+        locked={locked}
+        width={fill ? undefined : "max-w-md"}
+        onDraft={onDraft}
+      />
+    );
+  }
   switch (control.type) {
     case "provider": {
       const { role } = control;

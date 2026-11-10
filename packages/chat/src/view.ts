@@ -27,6 +27,11 @@ export interface ViewOptions {
 
 type Line = ChatEventOf<"message"> | ChatEventOf<"kickoff">;
 
+/** The name the viewer's lines carry in a chat of two or more personas. */
+export function viewerLabel(viewerName: string | undefined): string {
+  return viewerName || "观众";
+}
+
 /**
  * The seq her view starts at: the oldest line in the window, moved on to the first that isn't
  * hers, so the view opens on a user message the way a call's does.
@@ -102,7 +107,7 @@ export function viewWithBlocks(
 ): { messages: ViewMessage[]; blocks: Map<ViewMessage, number> } {
   const start = windowStart(events, id, options.windowMessages);
   const viewer =
-    summarize(header, events).participants.length > 1 ? `${options.viewerName || "观众"}：` : "";
+    summarize(header, events).participants.length > 1 ? `${viewerLabel(options.viewerName)}：` : "";
   const results = new Map<string, ChatEventOf<"tool-result">>();
   for (const event of events) {
     if (event.type === "tool-result" && event.persona === id) results.set(event.callId, event);

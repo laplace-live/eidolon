@@ -13,7 +13,6 @@ import {
   stampEvents,
 } from "@eidolon/chat";
 import { consoleSink, dataHome, type LogRecord, logger, resetSettings } from "@eidolon/config";
-import type { GroupMember } from "@eidolon/context";
 import type { ContextProvider, FrameMetadata, LlmTool } from "@eidolon/core";
 import { MEM0_STORE_KEY } from "@eidolon/memory";
 import { SpeakerCut } from "../src/group.ts";
@@ -109,7 +108,7 @@ function fakeMind(...rounds: (readonly MindChunk[])[]) {
 }
 
 interface Seen {
-  others?: readonly GroupMember[];
+  others?: readonly string[];
   metadata?: FrameMetadata;
 }
 
@@ -160,7 +159,7 @@ const said = (outputs: readonly TurnOutput[]) =>
   );
 
 describe("a turn in a group chat", () => {
-  test("names the others, labels the viewer, and stops at the two others heard from last", async () => {
+  test("names the others without their summaries, labels the viewer, and stops at the two others heard from last", async () => {
     const { mind, requests } = fakeMind([text("我也好"), DONE]);
     const seen: Seen = {};
     await collect(
@@ -169,10 +168,7 @@ describe("a turn in a group chat", () => {
         deps(mind, seen),
       ),
     );
-    expect(seen.others).toEqual([
-      { name: "露比", summary: "a singer" },
-      { name: "Ken", summary: "" },
-    ]);
+    expect(seen.others).toEqual(["露比", "Ken"]);
     expect(requests[0]?.messages).toEqual([
       { role: "user", content: "小明：大家好" },
       { role: "user", content: "露比：你好呀\nKen：Hi" },
@@ -239,6 +235,17 @@ describe("a turn in a group chat", () => {
     expect(logs.map((record) => record.message)).toContain(
       "[chat] ann's reply was cut where she wrote as someone else",
     );
+  });
+
+  test("cuts her reply at a line she writes as the viewer, whose label stops nothing", async () => {
+    const named = fakeMind([text("好呀\n小明：我也去"), DONE]);
+    const outputs = await collect(runTurn(request(GROUP, user("出去玩吗")), deps(named.mind)));
+    expect(said(outputs)).toEqual(["好呀"]);
+    expect(named.requests[0]?.stop).toEqual(["\n露比：", "\n露比:", "\nKen：", "\nKen:"]);
+
+    const nameless = fakeMind([text("好呀\n观众: 我也去"), DONE]);
+    const anonymous = { ...request(GROUP, user("出去玩吗")), viewer: { ...VIEWER, uname: null } };
+    expect(said(await collect(runTurn(anonymous, deps(nameless.mind))))).toEqual(["好呀"]);
   });
 
   test("shows a held line once it can't be a name, and what is held when the round ends", async () => {

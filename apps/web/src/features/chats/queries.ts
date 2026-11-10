@@ -38,13 +38,12 @@ export function useCreateChat(onCreated: (id: string) => void) {
 }
 
 export function useRenameChat(onRenamed: () => void) {
-  const queryClient = useQueryClient();
+  const changed = useChanged();
   return useMutation({
     mutationFn: ({ id, title }: { readonly id: string; readonly title: string }) =>
       renameChat(id, title),
     onSuccess: (_, { id }) => {
-      void queryClient.invalidateQueries({ queryKey: chatsQuery.queryKey, exact: true });
-      void queryClient.invalidateQueries({ queryKey: chatQuery(id).queryKey });
+      void changed(id);
       onRenamed();
     },
     onError: toastError,

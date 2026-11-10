@@ -32,6 +32,7 @@ export {
   type ViewMessage,
   type ViewOptions,
   type ViewToolCall,
+  viewerLabel,
   viewOf,
   viewWithBlocks,
 } from "./view.ts";

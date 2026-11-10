@@ -97,7 +97,7 @@ describe("buildPersonaPrefix", () => {
     );
   });
 
-  test("a group chat names the others after the viewer line; a chat of one stays as it was", () => {
+  test("a group chat names the others alone after the viewer line; a chat of one stays as it was", () => {
     const input = {
       viewer: { isLoggedIn: true, uname: "小明", mid: 0 },
       timeZone: "Asia/Shanghai",
@@ -115,15 +115,12 @@ describe("buildPersonaPrefix", () => {
     expect(
       buildPersonaPrefix({
         ...input,
-        participants: [
-          { name: "露比", summary: "a VTuber who sings" },
-          { name: "Ken", summary: "" },
-        ],
+        participants: ["露比", "Ken"],
       }),
     ).toBe(
       single.replace(
         "UID。\n",
-        "UID。\n这是群聊，群里还有：露比（a VTuber who sings）、Ken；只用你自己的身份说话，不要替别人说话。\n",
+        "UID。\n这是群聊，群里还有：露比、Ken；只用你自己的身份说话，不要替别人说话。\n",
       ),
     );
   });
@@ -402,7 +399,7 @@ describe("buildSystemInstruction", () => {
       viewer: { isLoggedIn: false, uname: null, mid: null },
       voiceHint: "",
       selfieHint: "",
-      participants: [{ name: "露比", summary: "" }],
+      participants: ["露比"],
       timeZone: "UTC",
       now: new Date("2026-09-08T23:05:00Z"),
       dbPath: join(dir, "no-lancedb"),

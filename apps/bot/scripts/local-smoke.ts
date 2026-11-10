@@ -1459,8 +1459,8 @@ async function groupChatWalk(walk: Walk): Promise<void> {
   const heldBack =
     stops(theirs).includes(`\n${first.name}：`) && stops(hers).includes(`\n${second.name}：`);
   const introduced =
-    systemOf(theirs).includes(`这是群聊，群里还有：${first.name}`) &&
-    systemOf(hers).includes(`这是群聊，群里还有：${second.name}（${SECOND.summary}）`);
+    systemOf(theirs).includes(`这是群聊，群里还有：${first.name}；`) &&
+    systemOf(hers).includes(`这是群聊，群里还有：${second.name}；`);
   checks.add(
     "group mention",
     offered &&

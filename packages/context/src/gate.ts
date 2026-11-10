@@ -217,8 +217,6 @@ export interface DecisionsOptions {
   readonly timeoutSec?: number;
 }
 
-export type RetrievalGateOptions = DecisionsOptions;
-
 /** OpenRouter's Decisions route sits beside its v1 API, not under it. */
 export function decisionsUrl(baseUrl: string): string {
   return `${baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "")}/alpha/decisions`;
@@ -297,7 +295,7 @@ export class RetrievalGate {
   #turnId: string | undefined;
   #decision: GateDecision | null = null;
 
-  constructor(options: RetrievalGateOptions) {
+  constructor(options: DecisionsOptions) {
     this.#client = new DecisionsClient(options, GATE_TIMEOUT_SEC);
     this.model = this.#client.model;
   }

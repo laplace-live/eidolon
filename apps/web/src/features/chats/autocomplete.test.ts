@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { type MentionTarget, parseMentions } from "@eidolon/chat";
-import { insertMention, mentionAt, mentionName, mentionOptions } from "./autocomplete";
+import { insertMention, mentionAt, mentionOptions } from "./autocomplete";
 
 const KEN: MentionTarget = { id: "ken", name: "Kenny Lin", shortName: "Ken" };
 const MIO: MentionTarget = { id: "mio", name: "澪", shortName: "" };
@@ -58,15 +58,11 @@ describe("insertMention", () => {
 
   test("inserts a name parseMentions reads back", () => {
     for (const target of ALL) {
-      const text = "问问@";
-      const { text: done } = insertMention(text, mentionAt(text, 3)!, mentionName(target));
-      expect(parseMentions(done, ALL)).toEqual([target.id]);
+      for (const name of [target.name, target.shortName].filter((name) => name !== "")) {
+        const text = "问问@";
+        const { text: done } = insertMention(text, mentionAt(text, 3)!, name);
+        expect(parseMentions(done, ALL)).toEqual([target.id]);
+      }
     }
   });
-});
-
-test("a pick inserts her short name, else her name", () => {
-  expect(mentionName(KEN)).toBe("Ken");
-  expect(mentionName(MIO)).toBe("澪");
-  expect(mentionName({ ...MIO, shortName: "  " })).toBe("澪");
 });

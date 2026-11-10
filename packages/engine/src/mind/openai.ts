@@ -21,6 +21,8 @@ export interface OpenAIMindOptions {
   /** The catalog's call-time fields, over the request's own. */
   readonly live: Readonly<Record<string, unknown>>;
   readonly dialect: OpenAIDialect;
+  /** Whether the provider takes the request's `stop`. */
+  readonly takesStop: boolean;
 }
 
 type Message = Record<string, unknown>;
@@ -71,7 +73,7 @@ function bodyFor(request: MindRequest, options: OpenAIMindOptions): Message {
     messages: messagesFor(request, options.dialect),
   };
   if (request.tools.length > 0) body.tools = request.tools.map(toolFor);
-  if (request.stop?.length) body.stop = [...request.stop];
+  if (options.takesStop && request.stop?.length) body.stop = [...request.stop];
   Object.assign(body, options.live);
   // pipedog sends DeepSeek's `thinking` in `extra_body`, which lands over every other field.
   if (options.dialect === "deepseek") body.thinking = { type: "disabled" };

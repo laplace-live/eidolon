@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { listOf } from "@/lib/labels";
 import { cn } from "@/lib/utils";
-import { insertMention, mentionAt, mentionName, mentionOptions } from "./autocomplete";
+import { insertMention, mentionAt, mentionOptions } from "./autocomplete";
 import { type ChatPersona, shortNameOf } from "./persona";
 
 /** The server's limit, in code points; maxLength counts UTF-16 units, which is stricter. */
@@ -80,7 +80,7 @@ export function Composer({
 
   function pick(target: ChatPersona) {
     if (at === null) return;
-    const next = insertMention(text, at, mentionName(target));
+    const next = insertMention(text, at, shortNameOf(target));
     placeCaret.current = next.caret;
     edit(next.text, next.caret);
   }
@@ -159,9 +159,9 @@ export function Composer({
                 >
                   <PersonaAvatar persona={persona} size="xs" />
                   <span className="truncate">{persona.name}</span>
-                  {mentionName(persona) !== persona.name && (
+                  {shortNameOf(persona) !== persona.name && (
                     <span className="ml-auto shrink-0 text-muted-foreground text-xs">
-                      @{mentionName(persona)}
+                      @{shortNameOf(persona)}
                     </span>
                   )}
                 </div>

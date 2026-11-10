@@ -62,13 +62,6 @@ export function humanizeDaysAgo(days: number): string {
   return `${Math.floor(days / 365)}年前`;
 }
 
-/** Another persona in a group chat, as the prefix introduces her. */
-export interface GroupMember {
-  readonly name: string;
-  /** identity.summary; may be empty. */
-  readonly summary: string;
-}
-
 export interface PersonaPrefixInput {
   readonly viewer: Viewer;
   readonly timeZone: string;
@@ -80,8 +73,8 @@ export interface PersonaPrefixInput {
   readonly selfieHint?: string;
   /** A realtime model voices her replies itself, so no cue is ever stripped before it speaks. */
   readonly realtime?: boolean;
-  /** The other personas of a group chat; none in a chat of one and on calls. */
-  readonly participants?: readonly GroupMember[];
+  /** The names of a group chat's other personas; none in a chat of one and on calls. */
+  readonly participants?: readonly string[];
 }
 
 /**
@@ -120,8 +113,7 @@ export function buildPersonaPrefix(input: PersonaPrefixInput): string {
   }
   const others = input.participants ?? [];
   if (others.length > 0) {
-    const named = others.map(({ name, summary }) => (summary ? `${name}（${summary}）` : name));
-    lines.push(`这是群聊，群里还有：${named.join("、")}；只用你自己的身份说话，不要替别人说话。`);
+    lines.push(`这是群聊，群里还有：${others.join("、")}；只用你自己的身份说话，不要替别人说话。`);
   }
 
   const dates: string[] = [];
@@ -242,8 +234,8 @@ export async function buildSystemInstruction(input: {
   selfieHint: string;
   /** The call runs on a realtime model. */
   realtime?: boolean;
-  /** The other personas of a group chat. */
-  participants?: readonly GroupMember[];
+  /** The names of a group chat's other personas. */
+  participants?: readonly string[];
   /** Defaults to config's personaTimeZone(). */
   timeZone?: string;
   now?: Date;

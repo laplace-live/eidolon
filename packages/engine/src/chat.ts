@@ -124,9 +124,9 @@ export async function* runChat(request: ChatRequest, deps: ChatDeps): AsyncGener
     yield {
       type: "decision",
       after: line,
-      replies: decision.replies.map(({ persona, mode }) => ({ persona, mode })),
+      replies: decision.replies,
       source: decision.source,
-      ...(Object.keys(decision.scores).length > 0 ? { scores: { ...decision.scores } } : {}),
+      ...(Object.keys(decision.scores).length > 0 ? { scores: decision.scores } : {}),
     };
     for (const { persona } of decision.replies) {
       if (signal.aborted) return;

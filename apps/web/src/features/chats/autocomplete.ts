@@ -30,11 +30,6 @@ export function mentionAt(text: string, caret: number): MentionQuery | null {
   return null;
 }
 
-/** What a pick inserts after the `@`: her short name, else her name. */
-export function mentionName(target: MentionTarget): string {
-  return target.shortName.trim() || target.name;
-}
-
 /**
  * The participants `query` could be the start of, case-blind: those whose name or short name begins
  * with it, then those that hold it elsewhere. An empty query is everyone.

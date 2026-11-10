@@ -369,21 +369,37 @@ describe("an OpenAI-compatible mind", () => {
     expect(seen).toEqual([]);
   });
 
-  test("stop sequences go as `stop`, on every dialect; none sends no field", async () => {
+  test("stop sequences go as `stop`, but not to OpenAI or xAI, whose reasoning models reject it", async () => {
     reply = () => completions([{ choices: [{ delta: { content: "好" }, finish_reason: "stop" }] }]);
     const stop = ["\n露比：", "\n露比:", "\nKen：", "\nKen:"];
-    await drain(createMind(), ask({ stop }));
-    setEnv({ LLM_PROVIDER: "openai", OPENAI_API_KEY: "sk", OPENAI_BASE_URL: base() });
-    await drain(createMind(), ask({ stop: ["\n露比："] }));
-    setEnv({ LLM_PROVIDER: "deepseek", DEEPSEEK_API_KEY: "dk", DEEPSEEK_BASE_URL: base() });
-    await drain(createMind(), ask({ stop: ["\n露比："] }));
+    const providers: Record<string, Record<string, string>> = {
+      openrouter: {},
+      deepseek: { DEEPSEEK_API_KEY: "dk", DEEPSEEK_BASE_URL: base() },
+      google: { GEMINI_API_KEY: "gk", GEMINI_BASE_URL: base() },
+      "openai-compatible": { OPENAI_COMPATIBLE_BASE_URL: base(), LLM_MODEL: "local-model" },
+      openai: { OPENAI_API_KEY: "sk", OPENAI_BASE_URL: base() },
+      xai: { XAI_API_KEY: "xk", XAI_BASE_URL: base(), LLM_MODEL: "grok-4.3" },
+    };
+    const sent: Record<string, unknown> = {};
+    for (const [provider, env] of Object.entries(providers)) {
+      seen = [];
+      setEnv({ LLM_PROVIDER: provider, LLM_MODEL: undefined, ...env });
+      await drain(createMind(), ask({ stop }));
+      const body = seen[0]?.body ?? {};
+      sent[provider] = "stop" in body ? body.stop : "none";
+    }
+    expect(sent).toEqual({
+      openrouter: stop,
+      deepseek: stop,
+      google: stop,
+      "openai-compatible": stop,
+      openai: "none",
+      xai: "none",
+    });
+    seen = [];
+    setEnv({ LLM_PROVIDER: "deepseek", LLM_MODEL: undefined });
     await drain(createMind(), ask({ stop: [] }));
-    expect(seen.map((request) => request.body.stop)).toEqual([
-      stop,
-      ["\n露比："],
-      ["\n露比："],
-      undefined,
-    ]);
+    expect("stop" in (seen[0]?.body ?? {})).toBe(false);
   });
 
   test("a provider's refusal rejects the stream with its message", async () => {

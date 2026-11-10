@@ -17,7 +17,7 @@ export type Control =
   /** `placeholder`: what applies while it is empty, where that is a value, such as an API base. */
   | { readonly type: "text"; readonly placeholder?: string }
   | { readonly type: "integer"; readonly min?: number; readonly max?: number }
-  | { readonly type: "number" }
+  | { readonly type: "number"; readonly slider?: Slider }
   | { readonly type: "flag" }
   | { readonly type: "list" }
   | { readonly type: "path"; readonly inPersona: boolean }
@@ -31,6 +31,17 @@ export type Control =
   | { readonly type: "model"; readonly role: Role }
   /** A voice: a provider's fixed set, or its id. */
   | { readonly type: "voice"; readonly role: Role };
+
+/** A number set on a slider, which stands at `fallback` while nothing sets it. */
+export interface Slider {
+  readonly min: number;
+  readonly max: number;
+  readonly step: number;
+  readonly fallback: number;
+}
+
+/** @eidolon/config's DEFAULT_CHAT_TALKATIVENESS: hers while nothing sets one. */
+export const DEFAULT_TALKATIVENESS = 0.5;
 
 /** The browsers yt-dlp's --cookies-from-browser reads, and `none` for no cookies. */
 export const COOKIE_BROWSERS = [
@@ -57,6 +68,10 @@ const BY_PATH: Readonly<Record<string, Control>> = {
   "memory.qdrant.port": { type: "integer", min: 1, max: 65535 },
   "embeddings.dim": { type: "integer", min: 1 },
   "refine.concurrency": { type: "integer", min: 1 },
+  "chat.talkativeness": {
+    type: "number",
+    slider: { min: 0, max: 1, step: 0.05, fallback: DEFAULT_TALKATIVENESS },
+  },
 };
 
 function byKind(kind: SettingKind, scope: SettingScope): Control {
@@ -338,6 +353,19 @@ export function parseDraft(draft: string, control: Control): Parsed {
     default:
       return ok(text);
   }
+}
+
+/**
+ * Where a slider stands: the draft's number, else the inherited value's, else its fallback, clamped
+ * to its range as the bot clamps the value. A draft that isn't a number counts as unset.
+ */
+export function sliderValue(slider: Slider, draft: string, inherited: string | null): number {
+  const number = (text: string): number | null => {
+    const parsed = parseDraft(text, { type: "number" });
+    return parsed.ok && typeof parsed.value === "number" ? parsed.value : null;
+  };
+  const value = number(draft) ?? number(inherited ?? "") ?? slider.fallback;
+  return Math.min(slider.max, Math.max(slider.min, value));
 }
 
 /** A select's choices: its own, then the file's value when it is none of them, so it isn't lost. */

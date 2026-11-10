@@ -185,7 +185,7 @@ export function ChatView({
   const [only] = personas;
   const solo = personas.length === 1 && only !== undefined ? only : null;
   const who = chatWith(personas);
-  const names = solo?.name ?? listOf(personas.map((persona) => persona.name));
+  const names = listOf(personas.map((persona) => persona.name));
   const now = Date.now();
   const menuName = chatName(title, who, createdAt, lang, now);
   const retry = turns.busy ? null : retryText(items);

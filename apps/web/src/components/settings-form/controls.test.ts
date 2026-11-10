@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  DEFAULT_CHAT_TALKATIVENESS,
   PY_SPACE_CLASS,
   pyParseFloat,
   pyParseInt,
@@ -13,6 +14,7 @@ import {
   cardSections,
   changes,
   controlFor,
+  DEFAULT_TALKATIVENESS,
   draftOf,
   effectiveProvider,
   envDraft,
@@ -25,6 +27,7 @@ import {
   parseDraft,
   REINDEX_PATHS,
   SPACE_CLASS,
+  sliderValue,
   staysInside,
   visibleRows,
 } from "./controls";
@@ -93,6 +96,27 @@ describe("the control for each kind", () => {
       type: "text",
       placeholder: "https://api.openai.com/v1",
     });
+  });
+
+  test("talkativeness is a slider from 0 to 1 that stands at the bot's default while unset", () => {
+    const talkativeness = control("chat.talkativeness");
+    if (talkativeness.type !== "number" || talkativeness.slider === undefined) {
+      throw new Error("not a slider");
+    }
+    const { slider } = talkativeness;
+    expect(slider).toMatchObject({ min: 0, max: 1, fallback: DEFAULT_CHAT_TALKATIVENESS });
+    expect(DEFAULT_TALKATIVENESS).toBe(DEFAULT_CHAT_TALKATIVENESS);
+    // The draft's, else the environment's, else the default.
+    expect(sliderValue(slider, "0.8", "0.2")).toBe(0.8);
+    expect(sliderValue(slider, "", "0.2")).toBe(0.2);
+    expect(sliderValue(slider, "  ", null)).toBe(DEFAULT_TALKATIVENESS);
+    // A full-width digit, as a Chinese input method types it.
+    expect(sliderValue(slider, "０.３", null)).toBe(0.3);
+    // Clamped to its range, and a value that isn't a number counts as unset.
+    expect(sliderValue(slider, "1.5", null)).toBe(1);
+    expect(sliderValue(slider, "-1", null)).toBe(0);
+    expect(sliderValue(slider, "lots", "0.9")).toBe(0.9);
+    expect(sliderValue(slider, "lots", "much")).toBe(DEFAULT_TALKATIVENESS);
   });
 
   test("a select keeps a file's value that isn't one of its choices", () => {

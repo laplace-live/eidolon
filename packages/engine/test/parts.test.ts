@@ -188,7 +188,7 @@ describe("personaParts", () => {
   test("names a group chat's other personas in each turn's instruction", async () => {
     const { deps, calls } = fake();
     const parts = personaParts(deps);
-    const others = [{ name: "露比", summary: "a singer" }];
+    const others = ["露比"];
     await parts(PERSONA, VIEWER, CHAT, others);
     await parts(PERSONA, VIEWER, CHAT, []);
     expect(calls.instructions).toEqual([
