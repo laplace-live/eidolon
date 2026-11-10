@@ -39,10 +39,10 @@ afterEach(() => {
 });
 
 describe("voiceEngineFromEnv", () => {
-  test("unset and blank are pipedog, without a word", () => {
-    expect(voiceEngineFromEnv()).toBe("pipedog");
+  test("unset and blank are native, without a word", () => {
+    expect(voiceEngineFromEnv()).toBe("native");
     setEnv({ EIDOLON_VOICE_ENGINE: "" });
-    expect(voiceEngineFromEnv()).toBe("pipedog");
+    expect(voiceEngineFromEnv()).toBe("native");
     expect(logs.messages("WARNING")).toEqual([]);
   });
 
@@ -54,28 +54,28 @@ describe("voiceEngineFromEnv", () => {
     expect(logs.messages("WARNING")).toEqual([]);
   });
 
-  test("any other value runs pipedog, and says so once", () => {
-    setEnv({ EIDOLON_VOICE_ENGINE: "Native" });
-    expect(voiceEngineFromEnv()).toBe("pipedog");
-    expect(voiceEngineFromEnv()).toBe("pipedog");
+  test("any other value runs native, and says so once", () => {
+    setEnv({ EIDOLON_VOICE_ENGINE: "Pipedog" });
+    expect(voiceEngineFromEnv()).toBe("native");
+    expect(voiceEngineFromEnv()).toBe("native");
     expect(logs.messages("WARNING")).toEqual([
-      "EIDOLON_VOICE_ENGINE='Native' is neither pipedog nor native; calls run on pipedog",
+      "EIDOLON_VOICE_ENGINE='Pipedog' is neither pipedog nor native; calls run on native",
     ]);
   });
 
   test("createSignallingServer reads it once, as it is made", async () => {
-    setEnv({ EIDOLON_VOICE_ENGINE: "nativ" });
+    setEnv({ EIDOLON_VOICE_ENGINE: "pipdog" });
     const signalling = createSignallingServer({
       ice: { serverPlan: async () => ({ iceServers: [], relayOnly: false, turnUrl: null }) },
     });
-    setEnv({ EIDOLON_VOICE_ENGINE: "pipdog" });
+    setEnv({ EIDOLON_VOICE_ENGINE: "nativ" });
     expect((await signalling.patch("not json")).status).toBe(400);
     expect(await signalling.offer({ allowed: true, body: null } as AllowedOffer)).toMatchObject({
       status: 400,
     });
     await signalling.close();
     expect(logs.messages("WARNING")).toEqual([
-      "EIDOLON_VOICE_ENGINE='nativ' is neither pipedog nor native; calls run on pipedog",
+      "EIDOLON_VOICE_ENGINE='pipdog' is neither pipedog nor native; calls run on native",
     ]);
   });
 });
@@ -116,13 +116,14 @@ describe("createSignallingServer", () => {
     return built;
   }
 
-  test("under native, every offer is a native call on @eidolon/webrtc's peers", async () => {
+  test("under native, unset or not, every offer is a native call on @eidolon/webrtc's peers", async () => {
     expect(await answeredBy("native")).toEqual(["webrtc"]);
+    expect(await answeredBy(undefined)).toEqual(["webrtc"]);
+    expect(await answeredBy("")).toEqual(["webrtc"]);
   });
 
-  test("under pipedog, unset or not, every offer is a pipedog session on pipedog's", async () => {
+  test("under pipedog, every offer is a pipedog session on pipedog's", async () => {
     expect(await answeredBy("pipedog")).toEqual(["pipedog"]);
-    expect(await answeredBy(undefined)).toEqual(["pipedog"]);
   });
 });
 

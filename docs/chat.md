@@ -379,7 +379,8 @@ in `text`. Every persona's view reads the transcript, so voice and text mix free
 
 `@eidolon/providers/speech-batch` makes or hears a whole message in one request, over `fetch`, and
 reports what it used with `reportUsage`. It is not the call's speech, which streams through
-pipedog; [providers.md](providers.md#voice-messages-batch-speech) has each provider's request.
+`@eidolon/providers/speech-stream` on the native voice engine;
+[providers.md](providers.md#voice-messages-batch-speech) has each provider's request.
 
 - **`synthesize(selection, text, { voice? })`,** on her voice role: MP3, with its length from the
   provider or measured from the frames. Her text goes through `stripMarkup` for the model, as a
@@ -471,9 +472,10 @@ as `（听不清）`, and the page says no words could be heard in it.
 ## Calls
 
 A call is a mode of a chat. The viewer calls one of its personas from the chat page, the call
-opens on the chat's history, and each line said on it is stored in the chat as a message. It still
-runs on pipedog's pipeline (`packages/runtime`), and costs what a call from `/call` costs. `/call`
-stays the standalone call to the active persona, with no chat.
+opens on the chat's history, and each line said on it is stored in the chat as a message. It runs
+on the voice engine (`packages/runtime`), native by default
+([voice-engine.md](voice-engine.md#a-call-inside-a-chat)), and costs what a call from `/call`
+costs. `/call` stays the standalone call to the active persona, with no chat.
 
 ### The binding
 
@@ -499,6 +501,9 @@ interface CallClient {
   sendServerMessage(data: Readonly<Record<string, unknown>>): Promise<void>;
 }
 ```
+
+Both engines take the same binding. The native engine's side of it is in
+[voice-engine.md](voice-engine.md#a-call-inside-a-chat); pipedog's, the rollback's, is this:
 
 - **She runs as herself.** `runSessionSafely` builds and runs the whole session inside
   `withPersona(persona)`, so her hearing, mind, voice, tools, index and memory are hers while
@@ -574,12 +579,13 @@ that chat; without a `chatId`, it is the standalone call, unbound.
 **In a group,** the viewer picks whom to call. Her call lines land in the chat as her messages, so
 the other personas read them in their views later.
 
-**Everyone at once,** on the native voice engine: `requestData: { chatId, persona, group: true }`
-puts every persona in the chat on the call, `persona` hosting: her hearing role hears the viewer,
-and the director chooses who answers each line, as in the chat, each persona speaking in her own
-voice once the one before her has played out ([voice-engine.md](voice-engine.md#group-calls)).
+**Everyone at once,** on the native voice engine, the default:
+`requestData: { chatId, persona, group: true }` puts every persona in the chat on the call,
+`persona` hosting: her hearing role hears the viewer, and the director chooses who answers each
+line, as in the chat, each persona speaking in her own voice once the one before her has played
+out ([voice-engine.md](voice-engine.md#group-calls)).
 - **The checks,** besides the ones above: `400 bad-request` in a chat of one or while
-  `EIDOLON_VOICE_ENGINE` isn't `native`, and `409 realtime-in-group` while a persona in the chat
+  `EIDOLON_VOICE_ENGINE` is `pipedog`, and `409 realtime-in-group` while a persona in the chat
   talks through a realtime model. `GET chats/:id`'s `groupCall` says whether a group call would be
   taken now, and the page offers **Everyone** in its Call menu only then, the chat's first persona
   hosting.
