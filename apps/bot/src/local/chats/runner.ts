@@ -122,8 +122,6 @@ export interface ChatRunnerOptions {
   readonly answer?: ChatAnswer;
   /** Default: the engine's. */
   readonly hear?: ChatHear;
-  /** Why a chat's personas can't be called together. Default: the voice engine's and theirs. */
-  readonly groupCalls?: (personas: readonly ParticipantId[]) => GroupCallRefusal | null;
 }
 
 /** How long shutdown waits for aborted replies to store what they said. */
@@ -179,7 +177,6 @@ export class ChatRunner {
   readonly #turn: ChatTurn;
   readonly #answer: ChatAnswer;
   readonly #hear: ChatHear;
-  readonly #groupCalls: (personas: readonly ParticipantId[]) => GroupCallRefusal | null;
   readonly #chats = new Map<string, Chat>();
   /** Each call whose end was asked for, until its call-ended, after its last lines, is stored. */
   readonly #endings = new Set<Promise<void>>();
@@ -191,7 +188,6 @@ export class ChatRunner {
     this.#turn = options.turn ?? engineTurn;
     this.#answer = options.answer ?? engineAnswer;
     this.#hear = options.hear ?? engineHear;
-    this.#groupCalls = options.groupCalls ?? groupCallRefusal;
   }
 
   list(): Promise<ChatSummary[]> {
@@ -213,13 +209,13 @@ export class ChatRunner {
             persona: active.persona,
             ...(active.group ? { group: true as const } : {}),
           };
-    const groupCall = this.#groupCalls(participants) === null;
+    const groupCall = groupCallRefusal(participants) === null;
     return { ...contents, lateTools, hearingRefusal: refusal, call, groupCall };
   }
 
   /** Why the personas of chat `id` can't be called together now; null when they can. */
   async groupCallRefusal(id: string): Promise<GroupCallRefusal | null> {
-    return this.#groupCalls(await this.participants(id));
+    return groupCallRefusal(await this.participants(id));
   }
 
   /**
@@ -356,22 +352,16 @@ export class ChatRunner {
    * and GET live streams each event it stores. NotInChat when she isn't in the chat.
    */
   startCall(id: string, persona: ParticipantId): Promise<ChatCall> {
-    return this.#openCall(id, persona, false, async (chat, call, onEnded) => {
+    return this.#openCall(id, persona, false, async (chat, call) => {
       const seedMessages: ViewMessage[] = callSeed(
         await this.store.read(id),
         persona,
         localViewer().uname ?? "",
       );
       return {
-        id: call.id,
         persona,
         seedMessages,
-        onTranscript: (line) => this.#callLine(id, chat, call, line),
-        onServerMessage: (data) => this.#callPhotos(id, chat, call, data),
-        connected: (pcId) => {
-          call.pcId = pcId;
-        },
-        onEnded,
+        onTranscript: (line: TranscriptLine) => this.#callLine(id, chat, call, line),
       };
     });
   }
@@ -382,34 +372,24 @@ export class ChatRunner {
    * reports is stored. The caller checks first that they can be called together.
    */
   startGroupCall(id: string, host: ParticipantId): Promise<GroupChatCall> {
-    return this.#openCall(id, host, true, async (chat, call, onEnded) => ({
-      group: true,
-      id: call.id,
+    return this.#openCall(id, host, true, async (chat, call) => ({
+      group: true as const,
       persona: host,
       chat: await this.store.read(id),
-      onEvents: (events) => this.#groupEvents(id, chat, call, events),
-      onServerMessage: (data) => this.#callPhotos(id, chat, call, data),
-      connected: (pcId) => {
-        call.pcId = pcId;
-      },
-      onEnded,
+      onEvents: (events: readonly ChatEvent[]) => this.#groupEvents(id, chat, call, events),
     }));
   }
 
   /**
-   * Stops the running reply, stores call-started, and binds the call with `bind`; a call it can't
-   * bind ends at once, as an error.
+   * Stops the running reply, stores call-started, and binds the call with `bind`, adding what
+   * every call's binding has; a call it can't bind ends at once, as an error.
    */
   #openCall<T>(
     id: string,
     persona: ParticipantId,
     group: boolean,
-    bind: (
-      chat: Chat,
-      call: ActiveCall,
-      onEnded: (reason: CallEndReason) => Promise<void>,
-    ) => Promise<T>,
-  ): Promise<T> {
+    bind: (chat: Chat, call: ActiveCall) => Promise<T>,
+  ): Promise<T & Pick<ChatCall, "id" | "onServerMessage" | "connected" | "onEnded">> {
     const chat = this.#chat(id);
     return this.#serial(chat, async () => {
       if (chat.call !== null) throw new ChatInCall();
@@ -439,7 +419,16 @@ export class ChatRunner {
       }
       const onEnded = (reason: CallEndReason) => this.#endCall(id, chat, call, reason);
       try {
-        return await bind(chat, call, onEnded);
+        return {
+          ...(await bind(chat, call)),
+          id: call.id,
+          onServerMessage: (data: Readonly<Record<string, unknown>>) =>
+            this.#callPhotos(id, chat, call, data),
+          connected: (pcId: string) => {
+            call.pcId = pcId;
+          },
+          onEnded,
+        };
       } catch (error) {
         await onEnded("error");
         throw error;

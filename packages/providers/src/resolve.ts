@@ -1,5 +1,6 @@
 // Which account, provider and model fill a role, with which key and API base, as the settings say
 // now. Every caller that spends money resolves its role here, so a persona's choices reach each one.
+import { withPersona } from "@eidolon/config";
 import { type Account, accountOf, clean, type Read, type Sources, sourcesOf } from "./accounts.ts";
 import {
   CALL_ROLES,
@@ -210,6 +211,21 @@ export function realtimeVoiceOf(selection: Selection, read?: Read | Sources): st
 /** The roles a call runs on: one realtime model, or hearing, mind and voice. */
 export function callRoles(read?: Read | Sources): readonly RoleId[] {
   return selectedAccount(roleById("realtime"), read) === null ? CALL_ROLES : ["realtime"];
+}
+
+/**
+ * The first of `personas` whose calls a realtime model runs: she can't join a group call. One whose
+ * settings can't say is passed over, for the call's own checks to fail.
+ */
+export function realtimeIn(personas: readonly string[]): string | null {
+  const realtime = (persona: string): boolean => {
+    try {
+      return withPersona(persona, () => select("realtime") !== null);
+    } catch {
+      return false;
+    }
+  };
+  return personas.find(realtime) ?? null;
 }
 
 export interface AccountNeed {

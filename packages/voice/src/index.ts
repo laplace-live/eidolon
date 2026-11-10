@@ -9,6 +9,7 @@ import { sharedSession } from "./input/onnx.ts";
 import type { CallDeps, CallPlan, CallTransport, CloseReason } from "./types.ts";
 
 export { memoryCallLog } from "./call/log.ts";
+export { rtviMessage } from "./rtvi/codec.ts";
 export type {
   CallDeps,
   CallLog,

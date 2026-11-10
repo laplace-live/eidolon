@@ -13,9 +13,15 @@ import {
 } from "@eidolon/chat";
 import { errorText, isPlainObject, logger } from "@eidolon/config";
 import type { ContextProvider } from "@eidolon/core";
-import type { TurnRequest } from "@eidolon/engine";
-import { MEM0_STORE_KEY } from "@eidolon/memory";
-import type { CallDeps, CallLog, CallTransport, CloseReason } from "@eidolon/voice";
+import { groupMemory, type TurnRequest } from "@eidolon/engine";
+import { MEM0_LABEL, MEM0_STORE_KEY } from "@eidolon/memory";
+import {
+  type CallDeps,
+  type CallLog,
+  type CallTransport,
+  type CloseReason,
+  rtviMessage,
+} from "@eidolon/voice";
 import type { CallBinding, CallClient, CallEnd, TranscriptLine } from "../session/session.ts";
 
 /**
@@ -47,9 +53,6 @@ export function isGroupCall(
 ): binding is GroupCallBinding {
   return binding !== undefined && "group" in binding && binding.group === true;
 }
-
-/** The label `@eidolon/engine`'s parts give her Mem0 provider. */
-const MEM0 = "LaplaceMem0MemoryService";
 
 /**
  * The seed as log events whose view is the seed: the viewer's lines and hers as messages, and a
@@ -107,15 +110,7 @@ const herView: CallMemory = (header, said, persona) =>
  * On a group call, the viewer's lines and hers, never another persona's, which would become
  * memories of the viewer: what the engine hands Mem0 in a group chat, of the call's lines alone.
  */
-const ownLines: CallMemory = (_header, said, persona) =>
-  said
-    .flatMap((event) => {
-      if (event.type !== "message" || event.text === "") return [];
-      const { speaker } = event;
-      if (speaker.kind === "user") return [{ role: "user", content: event.text }];
-      return speaker.id === persona ? [{ role: "assistant", content: event.text }] : [];
-    })
-    .slice(-CHAT_WINDOW_MESSAGES);
+const ownLines: CallMemory = (_header, said, persona) => groupMemory(said, persona);
 
 /** Her Mem0, storing `memory` of what was said on the call: the chat's own turns stored the rest. */
 function storingCallOnly(
@@ -169,7 +164,7 @@ function bound(
   });
   const client: CallClient = {
     sendServerMessage: async (data) => {
-      if (!over) transport.send({ label: "rtvi-ai", type: "server-message", data });
+      if (!over) transport.send(rtviMessage("server-message", data));
     },
   };
   const { engine } = deps;
@@ -205,7 +200,7 @@ function bound(
         parts: async (who, viewer, chat, options) => {
           const parts = await engine.parts(who, viewer, chat, options);
           const providers = parts.providers.map((entry) =>
-            entry.label === MEM0
+            entry.label === MEM0_LABEL
               ? { ...entry, provider: storingCallOnly(entry.provider, chat, who, seeded, memory) }
               : entry,
           );

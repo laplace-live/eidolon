@@ -37,17 +37,10 @@ export function groupOf(
 ): Group | null {
   const present = summarize(chat.header, chat.events).participants.filter((id) => id !== persona);
   const heard: ParticipantId[] = [];
-  const memory: { role: "user" | "assistant"; content: string }[] = [];
   for (const event of chat.events) {
     if (event.type !== "message" || event.text === "") continue;
     const { speaker } = event;
-    if (speaker.kind === "user") {
-      memory.push({ role: "user", content: event.text });
-    } else if (speaker.id === persona) {
-      memory.push({ role: "assistant", content: event.text });
-    } else {
-      heard.push(speaker.id);
-    }
+    if (speaker.kind === "persona" && speaker.id !== persona) heard.push(speaker.id);
   }
   const others = new Map(
     [...new Set([...present, ...heard])].map((id) => [id, readPersonaIdentity(id)]),
@@ -69,8 +62,20 @@ export function groupOf(
       ...identities.flatMap(({ name, shortName }) => [name, shortName]),
       viewerLabel(viewerName),
     ],
-    memory: memory.slice(-CHAT_WINDOW_MESSAGES),
+    memory: groupMemory(chat.events, persona),
   };
+}
+
+/** What Mem0 stores of a group's `events` for `persona`: the viewer's lines and hers alone. */
+export function groupMemory(events: readonly ChatEvent[], persona: ParticipantId): Group["memory"] {
+  const memory: { role: "user" | "assistant"; content: string }[] = [];
+  for (const event of events) {
+    if (event.type !== "message" || event.text === "") continue;
+    const { speaker } = event;
+    if (speaker.kind === "user") memory.push({ role: "user", content: event.text });
+    else if (speaker.id === persona) memory.push({ role: "assistant", content: event.text });
+  }
+  return memory.slice(-CHAT_WINDOW_MESSAGES);
 }
 
 /**

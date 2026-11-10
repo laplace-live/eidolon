@@ -18,8 +18,9 @@ import {
 import { errorText, logger, pyJsonDumps, pyTruthy, withPersona } from "@eidolon/config";
 import type { ConversationContext, LlmTool, ToolEffects, ToolResult } from "@eidolon/core";
 import {
-  ASYNC_TOOL_INSTRUCTIONS,
+  callInstruction,
   callSeed,
+  isAsyncTool,
   type PersonaParts,
   prepareTurn,
   runTool,
@@ -27,10 +28,9 @@ import {
 import { realtimeVoiceOf, selectRequired } from "@eidolon/providers";
 import type { RealtimeEvent, RealtimeOptions, RealtimeSession } from "@eidolon/providers/realtime";
 import { spokenLanguage } from "@eidolon/providers/stt";
-import { resampler } from "../dsp/resampler/index.ts";
+import { sttSender } from "../input/ear.ts";
 import { Segmenter } from "../output/segmenter.ts";
-import { createSpeaker } from "../output/speaker.ts";
-import { type RtviInbound, readRtvi } from "../rtvi/codec.ts";
+import type { RtviInbound } from "../rtvi/codec.ts";
 import { RtviEmitter } from "../rtvi/emitter.ts";
 import type {
   CallDeps,
@@ -43,18 +43,16 @@ import type {
   Speaker,
   Tag,
 } from "../types.ts";
-import { CallKit, type LoopEvent } from "./kit.ts";
+import {
+  type CallKit,
+  DISCONNECT_DRAIN_MS,
+  DRAIN_FALLBACK_MS,
+  type LoopEvent,
+  runCall,
+} from "./kit.ts";
 
 /** The model OpenAI's realtime sessions transcribe the caller with, as pipedog's call asks. */
 const TRANSCRIPTION_MODEL = "gpt-realtime-whisper";
-/** The rate the transport delivers the caller's audio at. */
-const INPUT_RATE = 16_000;
-/** pipedog's stream resampler forgets its history after this long without audio. */
-const RESAMPLER_CLEAR_MS = 200;
-/** pipedog's `BOT_VAD_STOP_FALLBACK_SECS`: the Speaker drained mid-reply this long has stopped. */
-const DRAIN_FALLBACK_MS = 3_000;
-/** How long `disconnect-bot` lets her audio play out. */
-const DISCONNECT_DRAIN_MS = 10_000;
 /** How long her bot-output and stored line wait for the caller's final transcript (E4). */
 const TRANSCRIPT_HOLD_MS = 1_000;
 
@@ -79,28 +77,23 @@ export type RealtimeInput =
 
 type Dialect = "openai" | "xai";
 
-/** The intro and trailing text pipedog's adapters wrap a packed history in, per dialect. */
-const PACKED: Readonly<Record<Dialect, { readonly intro: string; readonly trailing: string }>> = {
-  openai: {
-    intro: `
+/** The intro pipedog's adapters open a packed history with. */
+const PACKED_INTRO = `
         This is a previously saved conversation. Please treat this conversation history as a
-        starting point for the current conversation.`,
-    trailing: `
+        starting point for the current conversation.`;
+
+/** The trailing text pipedog's adapters close a packed history with, each its own. */
+const PACKED_TRAILING: Readonly<Record<Dialect, string>> = {
+  openai: `
         This is the end of the previously saved conversation. Please continue the conversation
         from here. If the last message is a user instruction or question, act on that instruction
         or answer the question. If the last message is an assistant response, simple say that you
         are ready to continue the conversation.`,
-  },
-  xai: {
-    intro: `
-        This is a previously saved conversation. Please treat this conversation history as a
-        starting point for the current conversation.`,
-    trailing: `
+  xai: `
         This is the end of the previously saved conversation. Please continue the conversation
         from here. If the last message is a user instruction or question, act on that instruction
         or answer the question. If the last message is an assistant response, simply say that you
         are ready to continue the conversation.`,
-  },
 };
 
 type Message = Record<string, unknown>;
@@ -139,19 +132,12 @@ export function packHistory(messages: readonly unknown[], dialect: Dialect): str
   }
   const [only] = list;
   if (list.length === 1 && only?.role === "user") return [userText(only.content, dialect)];
-  const { intro, trailing } = PACKED[dialect];
-  return [[intro, JSON.stringify(list, null, 2), trailing].join("\n\n")];
+  return [[PACKED_INTRO, JSON.stringify(list, null, 2), PACKED_TRAILING[dialect]].join("\n\n")];
 }
 
 /** pipedog's content for a tool's result, as an output or an envelope: `COMPLETED` when empty. */
 function resultContent(result: ToolResult): string {
   return pyTruthy(result) ? pyJsonDumps(result, { ensureAscii: false }) : "COMPLETED";
-}
-
-/** Her instruction, then the async guidance while she has such a tool, as a call composes it. */
-function instructionsOf(parts: PersonaParts): string {
-  if (!parts.tools.some((tool) => !tool.cancelOnInterruption)) return parts.systemInstruction;
-  return [parts.systemInstruction, ASYNC_TOOL_INSTRUCTIONS].filter((p) => p !== "").join("\n\n");
 }
 
 /** A context for her tools before her first recall has made one. */
@@ -192,8 +178,6 @@ interface Reply {
   done: boolean;
   /** Its line is in the log, or there was none to store. */
   stored: boolean;
-  /** Its tool calls were answered. */
-  answered: boolean;
   readonly deltas: Delta[];
   readonly segmenter: Segmenter;
   /** Sentences whose end waits for its first audio. */
@@ -204,7 +188,7 @@ interface Reply {
   readonly calls: Map<string, ToolCallState>;
 }
 
-export interface RealtimeFloorOptions {
+interface RealtimeFloorOptions {
   readonly plan: CallPlan;
   readonly kit: CallKit;
   readonly emitter: RtviEmitter;
@@ -223,7 +207,7 @@ export interface RealtimeFloorOptions {
  * its own, so this follows its events (§9 of the voice engine's contract) rather than starting
  * turns. `handle` takes the mailbox's events one at a time and never awaits.
  */
-export class RealtimeFloor {
+class RealtimeFloor {
   readonly #o: RealtimeFloorOptions;
   #call: "connecting" | "live" | "ended" = "connecting";
   /** The caller is speaking, by the server's VAD. */
@@ -234,7 +218,8 @@ export class RealtimeFloor {
   #playing: Reply | null = null;
   /** The responses under way, by id. */
   readonly #replies = new Map<string, Reply>();
-  #responses = 0;
+  /** A response has started. */
+  #responded = false;
   /** Each tool call's `turn`, for its late result. */
   readonly #callTurns = new Map<string, string>();
   #speaking = false;
@@ -315,7 +300,8 @@ export class RealtimeFloor {
         emitter.botReady(message.id);
         if (this.#call === "connecting") {
           this.#call = "live";
-          if (this.#o.plan.greet) this.#greet();
+          // Her greeting: the kickoff and her recall stored, then the conversation and a response.
+          if (this.#o.plan.greet) this.#recall(true);
         }
         return;
       case "send-text":
@@ -375,11 +361,6 @@ export class RealtimeFloor {
     };
   }
 
-  /** Her greeting: the kickoff and her recall stored, then the conversation and a response. */
-  #greet(): void {
-    this.#recall(true);
-  }
-
   /** prepareTurn on the log as it stands; its result posts back. */
   #recall(greeting: boolean): void {
     let signal = this.#greetAbort.signal;
@@ -432,7 +413,7 @@ export class RealtimeFloor {
       // Her kickoff and recall reach the model inside the conversation it opens on; a caller who
       // spoke first has had an answer instead.
       this.#setUpConversation();
-      if (this.#responses === 0 && !this.#userSpeaking) this.#o.session.createResponse();
+      if (!this.#responded && !this.#userSpeaking) this.#o.session.createResponse();
       return;
     }
     if (this.#setUp) this.#mirror(stored);
@@ -606,7 +587,6 @@ export class RealtimeFloor {
       cut: false,
       done: false,
       stored: false,
-      answered: false,
       deltas: [],
       segmenter: new Segmenter(),
       pending: [],
@@ -615,7 +595,7 @@ export class RealtimeFloor {
       calls: new Map(),
     };
     this.#replies.set(id, reply);
-    this.#responses++;
+    this.#responded = true;
     this.#active = reply;
     // Any response takes in what was delivered before it.
     this.#followUpOwed = false;
@@ -749,7 +729,7 @@ export class RealtimeFloor {
     }
     const call = { id: event.callId, name: event.name, arguments: event.arguments };
     const tool: LlmTool | undefined = parts.tools.find((t) => t.schema.name === call.name);
-    const async = tool !== undefined && !tool.cancelOnInterruption;
+    const async = tool !== undefined && isAsyncTool(tool);
     emitter.toolStarted();
     emitter.toolInProgress(call.id);
     this.#append({
@@ -850,16 +830,11 @@ export class RealtimeFloor {
   #answerTools(): void {
     const { session } = this.#o;
     for (const reply of [...this.#toolReplies]) {
-      if (reply.cut) {
-        this.#toolReplies.delete(reply);
-        continue;
-      }
       const states = [...reply.calls.values()];
       if (!reply.done || states.some((state) => state.output === null)) continue;
       if (this.#active !== null || this.#userSpeaking) continue;
       if (this.#playing === reply && !this.#drained) continue;
       this.#toolReplies.delete(reply);
-      reply.answered = true;
       for (const [callId, state] of reply.calls) session.sendToolOutput(callId, state.output ?? "");
       session.createResponse();
     }
@@ -870,28 +845,17 @@ export class RealtimeFloor {
     if (this.#call === "ended") return;
     const { emitter, plan, session } = this.#o;
     emitter.toolStopped(callId, result === null);
-    const turn = this.#callTurns.get(callId) ?? "";
-    if (result === null) {
-      this.#append({
-        type: "tool-result",
-        persona: plan.host,
-        turn,
-        callId,
-        result: {},
-        stage: "cancelled",
-      });
-      void session.addItem({ role: "system", text: cancelledEnvelope(callId) });
-    } else {
-      this.#append({
-        type: "tool-result",
-        persona: plan.host,
-        turn,
-        callId,
-        result,
-        stage: "final",
-      });
-      void session.addItem({ role: "system", text: finalEnvelope(callId, resultContent(result)) });
-    }
+    this.#append({
+      type: "tool-result",
+      persona: plan.host,
+      turn: this.#callTurns.get(callId) ?? "",
+      callId,
+      result: result ?? {},
+      stage: result === null ? "cancelled" : "final",
+    });
+    const text =
+      result === null ? cancelledEnvelope(callId) : finalEnvelope(callId, resultContent(result));
+    void session.addItem({ role: "system", text });
     if (this.#closing) return;
     this.#followUpOwed = true;
     this.#maybeFollowUp();
@@ -999,6 +963,8 @@ export class RealtimeFloor {
     reply.pending.length = 0;
     this.#store(reply, false);
     const { session, emitter } = this.#o;
+    // Its calls were answered once it left the set.
+    const unanswered = this.#toolReplies.delete(reply);
     for (const [callId, state] of reply.calls) {
       if (state.output === null) {
         // pipedog settles a cancelled call so the API isn't left waiting on it.
@@ -1006,10 +972,8 @@ export class RealtimeFloor {
         state.output = "CANCELLED";
         emitter.toolStopped(callId, true);
       }
-      if (!reply.answered) session.sendToolOutput(callId, state.output);
+      if (unanswered) session.sendToolOutput(callId, state.output);
     }
-    reply.answered = true;
-    this.#toolReplies.delete(reply);
   }
 
   #timer(event: Extract<LoopEvent, { source: "timer" }>): void {
@@ -1056,134 +1020,89 @@ export class RealtimeFloor {
 }
 
 /** Sends the transport's 16 kHz frames to the session at its own rate. */
-function feedAudio(
+async function feedAudio(
   audio: AsyncIterable<Pcm>,
   session: RealtimeSession,
   clock: Clock,
   signal: AbortSignal,
 ): Promise<void> {
-  const stream =
-    session.inputRate === INPUT_RATE
-      ? null
-      : resampler().createStream(INPUT_RATE, session.inputRate);
-  let last = Number.NEGATIVE_INFINITY;
-  return (async () => {
-    try {
-      for await (const pcm of audio) {
-        if (signal.aborted) return;
-        if (stream === null) {
-          session.appendAudio(pcm);
-          continue;
-        }
-        const now = clock.now();
-        if (now - last > RESAMPLER_CLEAR_MS) stream.reset();
-        last = now;
-        const out = stream.processSamples(pcm);
-        if (out.length > 0) session.appendAudio(out);
-      }
-    } finally {
-      stream?.destroy();
+  const sender = sttSender(
+    { inputRate: session.inputRate, send: (pcm) => session.appendAudio(pcm) },
+    clock,
+  );
+  try {
+    for await (const pcm of audio) {
+      if (signal.aborted) return;
+      sender.send(pcm);
     }
-  })();
+  } finally {
+    sender.close();
+  }
 }
 
 /**
  * Runs a realtime persona's call on `transport` until it ends. Rejects when it can't start: a role
  * with no key, a session that can't connect; what it opened is closed by then.
  */
-export async function runRealtimeCall(
+export function runRealtimeCall(
   transport: CallTransport,
   plan: CallPlan,
   deps: CallDeps,
   signal: AbortSignal,
   options: { readonly newId?: () => string } = {},
 ): Promise<CloseReason> {
-  const kit = new CallKit(deps.clock);
-  const listening = new AbortController();
-  let closed: Promise<void> | null = null;
-  const close = (): Promise<void> => {
-    listening.abort();
-    closed ??= kit.close();
-    return closed;
-  };
-  const onShutdown = (): void => kit.post({ source: "shutdown" });
-  try {
-    const speaker = createSpeaker((event) => kit.post({ source: "speaker", event }));
-    const { session, parts, dialect } = await withPersona(plan.host, async () => {
-      const selection = selectRequired("realtime");
-      const dialect: Dialect = selection.provider.id === "xai" ? "xai" : "openai";
-      const parts = await deps.engine.parts(plan.host, plan.viewer, plan.log.snapshot(), {
-        realtime: true,
+  return runCall(
+    transport,
+    plan,
+    deps.clock,
+    signal,
+    async ({ kit, speaker, listening, close }) => {
+      const { session, parts, dialect } = await withPersona(plan.host, async () => {
+        const selection = selectRequired("realtime");
+        const dialect: Dialect = selection.provider.id === "xai" ? "xai" : "openai";
+        const parts = await deps.engine.parts(plan.host, plan.viewer, plan.log.snapshot(), {
+          realtime: true,
+        });
+        const realtime: RealtimeOptions = {
+          instructions: callInstruction(parts.systemInstruction, parts.tools),
+          tools: parts.tools.map((tool) => tool.schema),
+          voice: realtimeVoiceOf(selection) ?? "",
+          transcription:
+            dialect === "openai"
+              ? { model: TRANSCRIPTION_MODEL, language: spokenLanguage() }
+              : null,
+          signal: listening,
+        };
+        const session = await deps.openRealtime(realtime);
+        kit.own("her realtime model", session);
+        return { session, parts, dialect };
       });
-      const realtime: RealtimeOptions = {
-        instructions: instructionsOf(parts),
-        tools: parts.tools.map((tool) => tool.schema),
-        voice: realtimeVoiceOf(selection) ?? "",
-        transcription:
-          dialect === "openai" ? { model: TRANSCRIPTION_MODEL, language: spokenLanguage() } : null,
-        signal: listening.signal,
+      const floor = new RealtimeFloor({
+        plan,
+        kit,
+        emitter: new RtviEmitter((message) => transport.send(message), deps.about),
+        speaker,
+        session,
+        dialect,
+        parts,
+        engine: deps.engine,
+        newId: options.newId ?? (() => Bun.randomUUIDv7()),
+        onEnding: () => void close(),
+      });
+      void (async () => {
+        for await (const event of session.events) {
+          kit.post({ source: "realtime", input: { kind: "server", event } });
+        }
+      })().catch((error: unknown) => {
+        logger.error(`[voice] The realtime session's events failed: ${errorText(error)}`, error);
+      });
+      floor.start();
+      const listen = (): void => {
+        feedAudio(transport.audioIn, session, deps.clock, listening).catch((error: unknown) => {
+          logger.error(`[voice] The caller's audio failed: ${errorText(error)}`, error);
+        });
       };
-      const session = await deps.openRealtime(realtime);
-      kit.own("her realtime model", session);
-      return { session, parts, dialect };
-    });
-    const floor = new RealtimeFloor({
-      plan,
-      kit,
-      emitter: new RtviEmitter((message) => transport.send(message), deps.about),
-      speaker,
-      session,
-      dialect,
-      parts,
-      engine: deps.engine,
-      newId: options.newId ?? (() => Bun.randomUUIDv7()),
-      onEnding: () => void close(),
-    });
-
-    void (async () => {
-      for await (const event of session.events) {
-        kit.post({ source: "realtime", input: { kind: "server", event } });
-      }
-    })().catch((error: unknown) => {
-      logger.error(`[voice] The realtime session's events failed: ${errorText(error)}`, error);
-    });
-    void (async () => {
-      for await (const message of transport.messages) {
-        kit.post({ source: "rtvi", message: readRtvi(message) });
-      }
-    })().catch((error: unknown) => {
-      logger.error(`[voice] The client's messages failed: ${errorText(error)}`, error);
-    });
-    void transport.closed.then(() => kit.post({ source: "transport" }));
-    signal.addEventListener("abort", onShutdown, { once: true });
-    if (signal.aborted) onShutdown();
-    transport.attachSpeaker(speaker);
-    floor.start();
-    await transport.connect();
-    logger.info("Client connected");
-
-    kit.active();
-    feedAudio(transport.audioIn, session, deps.clock, listening.signal).catch((error: unknown) => {
-      logger.error(`[voice] The caller's audio failed: ${errorText(error)}`, error);
-    });
-    for await (const event of kit.events) {
-      floor.handle(event);
-      if (floor.finished !== null) break;
-    }
-    const reason = floor.finished ?? "shutdown";
-    kit.stop();
-    await close();
-    await plan.log.flush();
-    if (reason !== "client") {
-      await transport.disconnect().catch((error: unknown) => {
-        logger.warning(`[voice] Disconnecting the client failed: ${errorText(error)}`);
-      });
-    }
-    logger.info(reason === "client" ? "Client disconnected" : `Call ended: ${reason}`);
-    return reason;
-  } finally {
-    signal.removeEventListener("abort", onShutdown);
-    kit.stop();
-    await close();
-  }
+      return { floor, listen };
+    },
+  );
 }

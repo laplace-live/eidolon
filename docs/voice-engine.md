@@ -10,8 +10,9 @@ chat. It is experimental and off by default: `EIDOLON_VOICE_ENGINE=native` turns
   src/input/                    the Ear: Silero VAD, Smart Turn, the TurnDetector (ported from pipedog)
   src/output/                   the segmenter, the Mouth, the Speaker, what was heard
   src/rtvi/                     the RTVI messages pipedog's observer sends
-  src/call/                     the mailbox (kit.ts), the Floor, the call log, runCascadeCall,
-                                runRealtimeCall (realtime.ts), a group call's policy (group.ts)
+  src/call/                     the mailbox and the loop every call runs (kit.ts), the Floor, the
+                                call log, runCascadeCall, runRealtimeCall (realtime.ts), a group
+                                call's policy (group.ts)
   src/dsp/resampler/            pipedog's rubato resampler, vendored with its wasm
 @eidolon/providers/stt          live speech recognition, one stream per call
 @eidolon/providers/speech-stream   streaming speech, one stream per persona per call
@@ -43,9 +44,9 @@ sends the call to pipedog, binding and all, with one info line,
 - her settings can't be read. pipedog then fails the call exactly as it does today.
 
 A group call ([Group calls](#group-calls)) always runs natively, since pipedog can't run one. As it
-starts, `nativeCanRun(host, personas)` checks that the host's hearing and each persona's voice have
-native clients and that none of them talks through a realtime model; a call that fails the check
-logs `[voice] This group call can't run: <why>` and fails as `Bot session failed: <why>`. Under
+starts, `groupReason(host, personas)` checks that the host's hearing and each persona's voice have
+native clients and that none of them talks through a realtime model (`realtimeIn`, which the local
+app's check shares); a call that fails the check fails as `Bot session failed: <why>`. Under
 `pipedog`, nothing offers one: the local app refuses it first.
 
 **Warm-up:** under `native`, `warmAudioModels()` loads the native Ear's models as well as

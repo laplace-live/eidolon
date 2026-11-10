@@ -70,11 +70,10 @@ export async function offerChatCall(
     if (refused === null) throw error;
     return refused;
   }
-  const whom = group ? `everyone in chat ${chatId}, ${pyRepr(persona)} hosting` : null;
-  logger.info(
-    `[local] Offer from the local viewer to ${whom ?? `${pyRepr(persona)} in chat ${chatId}`} ` +
-      `(call ${call.id})`,
-  );
+  const whom = group
+    ? `everyone in chat ${chatId}, ${pyRepr(persona)} hosting`
+    : `${pyRepr(persona)} in chat ${chatId}`;
+  logger.info(`[local] Offer from the local viewer to ${whom} (call ${call.id})`);
   let result: SignallingResult;
   try {
     result = await signalling.offer(admission, call);

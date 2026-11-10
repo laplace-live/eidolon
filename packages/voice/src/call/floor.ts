@@ -11,12 +11,14 @@ import type { RtviInbound } from "../rtvi/codec.ts";
 import type { RtviEmitter } from "../rtvi/emitter.ts";
 import type { CallPlan, CloseReason, CursorEvent, EarEvent, Heard, Speaker } from "../types.ts";
 import { type GroupFloor, lastViewerLine, speakerLabel } from "./group.ts";
-import type { CallKit, Effect, LoopEvent } from "./kit.ts";
+import {
+  type CallKit,
+  DISCONNECT_DRAIN_MS,
+  DRAIN_FALLBACK_MS,
+  type Effect,
+  type LoopEvent,
+} from "./kit.ts";
 
-/** pipedog's `BOT_VAD_STOP_FALLBACK_SECS`: the Speaker drained mid-reply this long has stopped. */
-const DRAIN_FALLBACK_MS = 3_000;
-/** How long `disconnect-bot` lets her audio play out. */
-const DISCONNECT_DRAIN_MS = 10_000;
 /** How long the call's end waits for her interrupted reply to store what was heard. */
 const END_WAIT_MS = 2_000;
 /** What a turn whose speech never began heard. */
@@ -60,6 +62,8 @@ interface Chain {
   readonly speech: boolean;
   /** Barged in on, or the call ended: the turns still to come are dropped. */
   cut: boolean;
+  /** The turn it started last, whose lines it posts as that reply's. */
+  hop: string | null;
 }
 
 interface Reply {
@@ -411,12 +415,12 @@ export class Floor {
       abort: new AbortController(),
       speech: options.speech ?? true,
       cut: false,
+      hop: null,
     };
     this.#chain = chain;
-    const at: { hop: string | null } = { hop: null };
     const hooks = (persona: ParticipantId): CallHooks => {
       const hop = newId();
-      at.hop = hop;
+      chain.hop = hop;
       post({ source: "hop", chain: chain.id, hop, persona });
       return this.#hooks(hop, persona);
     };
@@ -445,19 +449,15 @@ export class Floor {
             signal,
             ...hooks(options.persona),
           });
-    void this.#runChain(chain, at, lines);
+    void this.#runChain(chain, lines);
   }
 
   /** The chain's lines, each posted as its turn's; its decisions and its end as its own. */
-  async #runChain(
-    chain: Chain,
-    at: { readonly hop: string | null },
-    lines: AsyncIterable<CallChatOutput>,
-  ): Promise<void> {
+  async #runChain(chain: Chain, lines: AsyncIterable<CallChatOutput>): Promise<void> {
     const { post } = this.#o.kit;
     try {
       for await (const out of lines) {
-        const reply = out.type === "decision" ? chain.id : (at.hop ?? chain.id);
+        const reply = out.type === "decision" ? chain.id : (chain.hop ?? chain.id);
         post({ source: "reply", reply, out });
       }
     } catch (error) {
@@ -591,14 +591,12 @@ export class Floor {
   #chainEnded(): void {
     this.#chain = null;
     const reply = this.#reply;
-    if (reply !== null) {
-      reply.speech.cancel();
-      this.#replies.delete(reply.id);
-      this.#reply = null;
-      this.#speaking = false;
-      this.#o.kit.cancel("drain-fallback");
+    if (reply === null) {
+      this.#settle();
+      return;
     }
-    this.#settle();
+    reply.speech.cancel();
+    this.#replyEnded(reply);
   }
 
   /** BOT is idle again: the call's end, the lines held back, then a reply owed. */

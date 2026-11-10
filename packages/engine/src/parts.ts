@@ -18,7 +18,7 @@ import {
   StreamArchive,
 } from "@eidolon/context";
 import type { ContextProvider, LlmTool, TurnGate } from "@eidolon/core";
-import { createMemoryProvider, isMemoryConfigured } from "@eidolon/memory";
+import { createMemoryProvider, isMemoryConfigured, MEM0_LABEL } from "@eidolon/memory";
 import { ingestHint, PERSONA_FACTS, resolveDbPath, STREAM_ARCHIVE } from "@eidolon/retrieval";
 import {
   createSelfieTool,
@@ -224,7 +224,7 @@ class Pieces {
       this.#gate = deps.retrievalGateFromEnv();
     }
     const providers: { label: string; provider: ContextProvider }[] = [];
-    if (memory) providers.push({ label: "LaplaceMem0MemoryService", provider: memory });
+    if (memory) providers.push({ label: MEM0_LABEL, provider: memory });
     if (archive) providers.push({ label: "StreamArchiveService", provider: archive });
     if (facts) providers.push({ label: "PersonaFactsService", provider: facts });
     return {

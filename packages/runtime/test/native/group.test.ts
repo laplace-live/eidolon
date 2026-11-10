@@ -20,14 +20,15 @@ import type { DirectorInput } from "@eidolon/context";
 import type { ContextProvider } from "@eidolon/core";
 import { type ChatDeps, type MindChunk, type MindRequest, runChat, runTurn } from "@eidolon/engine";
 import { MEM0_STORE_KEY } from "@eidolon/memory";
+import { realtimeIn } from "@eidolon/providers";
 import type { CallDeps } from "@eidolon/voice";
 import { FakeSpeech, FakeStt, FakeTransport, settle } from "../../../voice/test/call/harness.ts";
 import { FakeClock } from "../../../voice/test/input/clock.ts";
 import { voiceModels } from "../../src/audio.ts";
 import type { AnyCallBinding, GroupCallBinding } from "../../src/native/binding.ts";
 import {
+  groupReason,
   nativeCanRun,
-  realtimeIn,
   runNativeSafely,
   sessionStarter,
 } from "../../src/native/engine.ts";
@@ -275,8 +276,8 @@ describe("who can join a group call", () => {
       `${PERSONAS[OTHER]}realtime:\n  provider: openai\n`,
     );
     expect(realtimeIn([HOST, OTHER])).toBe(OTHER);
-    expect(nativeCanRun(HOST, [HOST])).toBeNull();
-    const reason = nativeCanRun(HOST, [HOST, OTHER]);
+    expect(groupReason(HOST, [HOST])).toBeNull();
+    const reason = groupReason(HOST, [HOST, OTHER]);
     expect(reason).toBe("cat's calls run on a realtime model, which can't join a group call");
 
     const transport = new FakeTransport();
