@@ -251,6 +251,7 @@ export async function synthesize(
       options: bounded,
     }),
   );
+  if (speech.bytes.length === 0) throw new Error(`${selection.provider.name} sent no audio`);
   reportUsage({
     role: selection.role.id,
     provider: selection.provider.id,

@@ -444,7 +444,7 @@ as `（听不清）`, and the page says no words could be heard in it.
 | What | What happens |
 | --- | --- |
 | Her voice role has no key, or no batch synthesis | `voice` and `auto` replies are text; the chat's settings sheet says so |
-| Synthesis or saving its audio fails, or synthesis outlasts its time limit | Her message is stored as text, then a `turn-failed` with `code: "voice-failed"`; the page shows a quiet **Sent as text** |
+| Synthesis fails, answers with no audio or outlasts its time limit, or saving its audio fails | Her message is stored as text, then a `turn-failed` with `code: "voice-failed"`; the page shows a quiet **Sent as text** |
 | She is interrupted while she is spoken | Her words are stored as interrupted text, with no audio |
 | The director doesn't answer `voice_moment` within 2 s | `auto` replies are text |
 | A chat of one is interrupted while the director weighs her reply | The request is aborted. Her words so far are stored as interrupted text, after a `single` decision for text with no scores; with no words yet, nothing is stored |
@@ -513,7 +513,7 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
 | `POST chats/:id/stop` | | `204` once the stopped reply's words are stored |
 | `PATCH chats/:id` | `{ title }`, 1 to 80 characters on one line, `{ chainLimit }`, a whole number from 0 to 6, or `{ replyMode }`, `auto`, `text` or `voice`; one per request | Appends a `title`, or a `settings` that applies from the next viewer line |
 | `POST chats/:id/participants` | `{ add?: [id], remove?: [id] }`, at least one persona, none in both | `200 { ok }` and a `participants` event; `400` when it adds one already there, removes one who isn't, or leaves fewer than 1 or more than 6 |
-| `DELETE chats/:id` | | Stops any reply, then removes `chats/<id>/` and nothing else |
+| `DELETE chats/:id` | | Stops any reply and cancels a voice message being heard, whose `POST voice` answers `502`, then removes `chats/<id>/` and nothing else |
 | `GET chats/:id/files/:name` | | The attachment: its type, `nosniff`, a sandbox CSP and `Cache-Control: private, max-age=31536000, immutable`; an `<img>` or `<audio>` reads it with the cookie alone. It answers `Range` requests with a `206` (Bun.serve's own, on a file) and sends `Accept-Ranges: bytes`, since Safari plays audio only from a server that takes ranges |
 
 - **Text** is trimmed. A message may hold tabs and line breaks, but no other control character.

@@ -904,6 +904,25 @@ describe("a voice message", () => {
     expect(after.filter((message) => message.interrupted !== true)).toEqual([]);
   });
 
+  test("a delete while it is heard cancels the hearing and removes the chat at once", async () => {
+    const id = await greeted();
+    hearing = async (request) => {
+      await aborted(request.signal);
+      throw request.signal.reason;
+    };
+    const posted = voice(id);
+    await until(() => heard.length === 1);
+    const deleted = await Promise.race([
+      server.call("DELETE", `/chats/${id}`),
+      Bun.sleep(1000).then(() => null),
+    ]);
+    expect(deleted).not.toBeNull();
+    expect(await json(deleted as Response)).toEqual({ ok: true });
+    expect((heard[0] as HearRequest).signal.aborted).toBe(true);
+    expect((await posted).status).toBe(502);
+    expect(existsSync(join(chatsRoot(), id))).toBe(false);
+  });
+
   test("one that can't be heard stores nothing: 502, or 409 for her settings", async () => {
     const id = await greeted();
     const before = (await log(id)).events;

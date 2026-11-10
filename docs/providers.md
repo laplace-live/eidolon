@@ -193,10 +193,12 @@ switched it for that reply.
 | Soniox | `POST https://tts-rt.soniox.com/tts`, its own host | `voice`, else `Bryce` | The spoken language |
 
 ElevenLabs and Cartesia have no default voice, so a role with none set fails there, and her reply
-goes as text. Every model but Fish's `drama-3` gets her text through `stripMarkup`, as a
-call's does. Each request reports the characters and UTF-8 bytes it spoke, under the voice role,
-priced by the catalog: Fish by the byte, ElevenLabs by the character. Its length is the
-provider's figure (MiniMax's) or counted from the MP3's frame headers.
+goes as text, as it does when a provider answers with no audio. Her text goes through
+`stripMarkup` with the model's `markup` from the catalog, as a call's does: `drama-3` keeps all her
+cues, a model that reads `[…]` (Fish's `s2` models, ElevenLabs' `eleven_v3`) keeps those and loses
+the paired tags, and any other loses both. Each request reports the characters and UTF-8 bytes it
+spoke, under the voice role, priced by the catalog: Fish by the byte, ElevenLabs by the character.
+Its length is the provider's figure (MiniMax's) or counted from the MP3's frame headers.
 
 **Transcription,** `transcribe`, on the hearing role, takes the clip as the browser recorded it
 (WebM with Opus, MP4 on Safari, Ogg or MP3). The language hint is a call's: `STT_LANGUAGE`, else

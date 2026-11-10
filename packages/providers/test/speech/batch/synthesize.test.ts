@@ -197,6 +197,37 @@ describe("synthesize", () => {
     expect(fake.usage).toEqual([]);
   });
 
+  test("a success with no audio is an error, and nothing is reported as used", async () => {
+    fake.answer(() =>
+      Response.json({
+        data: { audio: "", status: 2 },
+        extra_info: {},
+        base_resp: { status_code: 0, status_msg: "success" },
+      }),
+    );
+    const selection = voice({
+      TTS_PROVIDER: "minimax",
+      MINIMAX_API_KEY: "mk",
+      MINIMAX_GROUP_ID: "g",
+    });
+    const silent = await synthesize(selection, "你好", { fetch: fake.fetch }).catch(
+      (e: unknown) => e,
+    );
+    expect(silent).toBeInstanceOf(Error);
+    expect((silent as Error).message).toBe("MiniMax sent no audio");
+    expect(fake.usage).toEqual([]);
+
+    fake.answer(
+      () => new Response(new Uint8Array(), { headers: { "Content-Type": "audio/mpeg" } }),
+    );
+    const empty = await synthesize(voice({ FISH_API_KEY: "fk" }), "嗨", {
+      fetch: fake.fetch,
+    }).catch((e: unknown) => e);
+    expect((empty as Error).message).toBe("Fish Audio sent no audio");
+    expect(fake.seen).toHaveLength(1);
+    expect(fake.usage).toEqual([]);
+  });
+
   test("an error status becomes ProviderHttpError, with the provider's message", async () => {
     fake.answer(() => Response.json({ status: 402, message: "no credit" }, { status: 402 }));
     const failed = synthesize(voice({ FISH_API_KEY: "fk" }), "嗨", { fetch: fake.fetch });
