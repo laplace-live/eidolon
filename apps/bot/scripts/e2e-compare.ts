@@ -3,12 +3,15 @@
 // stagesMs, latencyMs and audible spans, then holds the candidate to the native engine's pass bar
 // (docs/voice-engine.md, "Parity tests"). Reads reports only, so it scores recorded ones too.
 import { resolve } from "node:path";
+import { LEVEL_INTERVAL_MS } from "./e2e/protocol.ts";
 import { pacingByTurn, type TimelineEntry, type Turn } from "./e2e/turns.ts";
 
 /** How much worse than the baseline a candidate's median may be. */
 const SLACK_MS = 100;
 /** How long after her last audible audio bot-stopped-speaking may come. */
 const STOPPED_AFTER_AUDIO_MS = 500;
+/** How long before it: a level sample stamps the end of its window, so her audio ended within one. */
+const STOPPED_BEFORE_AUDIO_MS = LEVEL_INTERVAL_MS;
 
 const USAGE = `usage: bun apps/bot/scripts/e2e-compare.ts <baseline.json> <candidate.json>
        bun apps/bot/scripts/e2e-compare.ts <baseline.json>... --vs <candidate.json>...
@@ -17,7 +20,8 @@ const USAGE = `usage: bun apps/bot/scripts/e2e-compare.ts <baseline.json> <candi
   of each side's first run. The candidate passes when every check of every run passes, I1-I10
   hold, its median question end -> first reply audio, TTS start -> bot-started-speaking and gap
   between sentences are each no more than the baseline's + ${SLACK_MS} ms, bot-stopped-speaking lands
-  within ${STOPPED_AFTER_AUDIO_MS} ms of its last audible audio, and bot-tts-stopped comes in every turn.
+  from ${STOPPED_BEFORE_AUDIO_MS} ms before its last audible audio ends to ${STOPPED_AFTER_AUDIO_MS} ms after, and
+  bot-tts-stopped comes in every turn.
 
   --json <file>   also write the comparison as JSON
   exit status     0 the candidate passes, 1 it doesn't, 2 bad arguments`;
@@ -265,9 +269,11 @@ function passBar(base: Report[], cand: Report[]): Check[] {
   noWorse("tts start -> speaking", (r) =>
     numbers(Object.values(pacingOf(r)).map((p) => p?.ttsToSpeakingMs)),
   );
-  noWorse("gap between sentences", (r) =>
-    Object.values(pacingOf(r)).flatMap((p) => p?.gapsMs ?? []),
-  );
+  noWorse("gap between sentences", (r) => {
+    const gaps = Object.values(pacingOf(r)).flatMap((p) => p?.gapsMs ?? []);
+    // Audio with no gap in it is no worse than any gap; no audio at all is still nothing to compare.
+    return gaps.length === 0 && r.audibleSpans.bot.length > 0 ? [0] : gaps;
+  });
   // A turn cut by a barge-in stops on the barge-in, not at its audio's end.
   const settled = (r: Report) =>
     Object.entries(pacingOf(r)).filter(
@@ -278,7 +284,9 @@ function passBar(base: Report[], cand: Report[]): Check[] {
       .filter(
         ([, p]) =>
           p !== undefined &&
-          (p.stoppedAfterAudioMs === null || p.stoppedAfterAudioMs > STOPPED_AFTER_AUDIO_MS),
+          (p.stoppedAfterAudioMs === null ||
+            p.stoppedAfterAudioMs > STOPPED_AFTER_AUDIO_MS ||
+            p.stoppedAfterAudioMs < -STOPPED_BEFORE_AUDIO_MS),
       )
       .map(([turn, p]) => `run ${i + 1} ${turn}: ${p?.stoppedAfterAudioMs ?? "never"}`),
   );
@@ -287,7 +295,7 @@ function passBar(base: Report[], cand: Report[]): Check[] {
     pass: late.length === 0,
     detail:
       late.length === 0
-        ? `within ${STOPPED_AFTER_AUDIO_MS} ms of her audio`
+        ? `from ${STOPPED_BEFORE_AUDIO_MS} ms before her audio's end to ${STOPPED_AFTER_AUDIO_MS} ms after`
         : late.slice(0, 3).join("; "),
   });
   const silent = cand.flatMap((r, i) =>

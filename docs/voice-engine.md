@@ -144,7 +144,7 @@ The Floor's state is three regions, plus counters:
 | 22 | BOT ≠ idle | reply `ended` | — | BOT idle; start an owed reply while the caller is quiet | BOT idle or thinking |
 | 23 | — | async result | — | store it; start a reply if idle, else owe one | — |
 | 24 | live | ear `stt-error` | fatal | emit `error`; end the call (`error`) | ended |
-| 25 | live | Mouth `tts-error`, or no audio 15 s after a segment | — | emit `error`; drop her queued audio and cancel her speech; the reply goes on in text, storing what was heard | — |
+| 25 | live | Mouth `tts-error`, or 15 s without audio she owes: after a segment is said until some comes, and after her speech ends until its end does | — | emit `error`; drop her queued audio and cancel her speech; the reply goes on in text, storing what was heard | — |
 | 26 | live | idle timer (300 s) | — | end the call (`idle`) | ended |
 | 27 | live | `disconnect-bot` | — | start no more replies; end the call (`bot`) once her audio plays out, 10 s at most | ended |
 | 28 | live | the transport closed | — | end the call (`client`) | ended |
@@ -365,14 +365,15 @@ scenario: a difference no rule explains is a native bug to fix, or a skipped sce
 reason, for the user to decide.
 
 **The scenarios:** the greeting; typed text while she is idle and while she speaks; a line typed
-without `run_immediately`, left for the next turn; a reply with `audio_response: false`; a spoken
-question and a two-sentence reply; a barge-in mid-sentence and before her first audio; an empty
-turn while idle, after cutting her off, and just after her audio ended (D13); `change_voice_style`;
-a mind request that fails; the recognizer's socket dropping and reconnecting; a call longer than
-the 60-line window (D1). One is skipped, its difference noted where it is written: a line typed
-without `run_immediately` within 15 s of her Fish reply, which pipedog stores before that reply,
-since it stores her reply only when Fish's audio context times out. `scenarios/checks.test.ts`
-tests the harness itself on made-up sequences, and runs without the variable.
+without `run_immediately`, left for the next turn, and one typed during her last reply; a reply
+with `audio_response: false`; a spoken question and a two-sentence reply; a barge-in mid-sentence
+and before her first audio; an empty turn while idle, after cutting her off, and just after her
+audio ended (D13); `change_voice_style`; a mind request that fails; the recognizer's socket
+dropping and reconnecting; a call longer than the 60-line window (D1). One is skipped, its
+difference noted where it is written: a line typed without `run_immediately` within 15 s of her
+Fish reply, which pipedog stores before that reply, since it stores her reply only when Fish's
+audio context times out. `scenarios/checks.test.ts` tests the harness itself on made-up sequences,
+and runs without the variable.
 
 ### Real calls
 
@@ -384,9 +385,9 @@ candidate's, mode by mode: their checks, event sequences, `stagesMs`, `latencyMs
 spans, then the pass bar:
 - every check passes and I1–I10 hold;
 - question end → first reply audio, TTS start → `bot-started-speaking`, and the gap between
-  sentences, each no worse than the baseline's median + 100 ms;
-- `bot-stopped-speaking` within 0.5 s of her last audible audio, and `bot-tts-stopped` in every
-  turn.
+  sentences (0 when her audio has none), each no worse than the baseline's median + 100 ms;
+- `bot-stopped-speaking` from 0.1 s before her last audible audio ends (a level sample's window)
+  to 0.5 s after, and `bot-tts-stopped` in every turn.
 
 ```bash
 bun run dev                                            # pipedog, on :7860

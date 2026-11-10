@@ -3,7 +3,13 @@
 // what the listener heard of it followed as the Speaker's cursor plays it.
 import { logger } from "@eidolon/config";
 import { type Markup, modelInfo, type Selection, unreadCues } from "@eidolon/providers";
-import type { SpeechStream, Utterance, UtteranceAudio } from "@eidolon/providers/speech-stream";
+import {
+  SPEECH_STALL_MS,
+  SPEECH_STALLED,
+  type SpeechStream,
+  type Utterance,
+  type UtteranceAudio,
+} from "@eidolon/providers/speech-stream";
 import { type RubatoStream, resampler } from "../dsp/resampler/index.ts";
 import type {
   Clock,
@@ -16,9 +22,6 @@ import type {
 } from "../types.ts";
 import { Segmenter } from "./segmenter.ts";
 import { SpokenTracker, spokenTo } from "./spoken.ts";
-
-/** An utterance with no audio this long after its first segment has stalled. */
-const STALL_MS = 15_000;
 
 /** What a reply's speech has to tell the client, in the order it happened. */
 export type SpeechNote =
@@ -36,7 +39,7 @@ export type SpeechNote =
   | { readonly type: "segment-ended"; readonly tag: Tag }
   /** All of the reply's audio has come and she says nothing more: `bot-tts-stopped`. */
   | { readonly type: "tts-stopped" }
-  /** Her voice failed, or sent no audio 15 s after a segment: the caller cancels the speech. */
+  /** Her voice failed, or owed audio and sent none for 15 s: the caller cancels the speech. */
   | { readonly type: "tts-error"; readonly message: string };
 
 /** Posted to the call's mailbox when a reply's speech has notes waiting and none were before. */
@@ -178,7 +181,7 @@ class Reply implements SpokenReply {
     this.#voice.current = voice;
     if (!this.#audio || this.#ended || this.#cancelled) return;
     this.flush();
-    this.#current?.utterance.end();
+    this.#current?.end();
     this.#current = this.#open();
   }
 
@@ -199,7 +202,7 @@ class Reply implements SpokenReply {
       this.flush();
       if (this.#audio) {
         this.#tracker.attach(this.#segmenter.held);
-        this.#current?.utterance.end();
+        this.#current?.end();
         this.#current = null;
       }
       this.#ended = true;
@@ -253,8 +256,8 @@ class Reply implements SpokenReply {
       this.#ttsStarted = true;
       this.#note({ type: "tts-started" });
     }
-    const { boundaries, clock } = this.#o;
-    const first = voiced.said(seg, clock, () => this.#stalled());
+    const { boundaries } = this.#o;
+    const first = voiced.said(seg);
     this.#tracker.say(seg, text, voiced.id, boundaries);
     if (boundaries || first) this.#unpassed.add(seg);
     if (!boundaries && voiced.playing) this.#heardWhole(seg);
@@ -268,6 +271,8 @@ class Reply implements SpokenReply {
       this.#nextUtterance++,
       speech.utterance(this.#voice.current),
       rate === speaker.rate ? null : resampler().createStream(rate, speaker.rate),
+      this.#o.clock,
+      () => this.#stalled(),
     );
     this.#voices.push(voiced);
     void this.#read(voiced);
@@ -277,11 +282,12 @@ class Reply implements SpokenReply {
   async #read(voiced: Voiced): Promise<void> {
     for await (const item of voiced.utterance.audio) {
       if (this.#cancelled) return;
-      if (item.kind === "pcm") voiced.sounded();
+      voiced.arrived(item);
       voiced.items.push(item);
       this.#pump();
     }
     if (this.#cancelled) return;
+    voiced.arrived(null);
     voiced.over = true;
     this.#pump();
   }
@@ -342,10 +348,7 @@ class Reply implements SpokenReply {
 
   #stalled(): void {
     if (this.#cancelled) return;
-    this.#note({
-      type: "tts-error",
-      message: `No speech audio arrived within ${STALL_MS / 1000} seconds`,
-    });
+    this.#note({ type: "tts-error", message: SPEECH_STALLED });
   }
 
   #heardWhole(seg: number): void {
@@ -402,27 +405,48 @@ class Voiced {
   /** A boundary-less utterance the cursor has reached. */
   playing = false;
   readonly #resampler: RubatoStream | null;
+  readonly #clock: Clock;
+  readonly #stalled: () => void;
   #cancelStall: (() => void) | null = null;
-  #sounded = false;
+  #ending = false;
 
-  constructor(id: number, utterance: Utterance, resampler: RubatoStream | null) {
+  constructor(
+    id: number,
+    utterance: Utterance,
+    resampler: RubatoStream | null,
+    clock: Clock,
+    stalled: () => void,
+  ) {
     this.id = id;
     this.utterance = utterance;
     this.#resampler = resampler;
+    this.#clock = clock;
+    this.#stalled = stalled;
   }
 
-  /** Segment `seg` goes to it; whether it is the first, which arms the stall timer. */
-  said(seg: number, clock: Clock, stalled: () => void): boolean {
+  /** Segment `seg` goes to it, which owes audio; whether it is the first. */
+  said(seg: number): boolean {
     this.segs.push(seg);
+    if (this.#cancelStall === null) this.#owe();
     if (this.first !== null) return false;
     this.first = seg;
-    if (!this.#sounded) this.#cancelStall = clock.setTimer(STALL_MS, stalled);
     return true;
   }
 
-  sounded(): void {
-    this.#sounded = true;
-    this.#stopStall();
+  /** No more segments: it owes its end. */
+  end(): void {
+    this.#ending = true;
+    this.utterance.end();
+    this.#owe();
+  }
+
+  /**
+   * An item of its audio, null once that has ended. Before `end`, audio pays what a segment owed;
+   * after it, each item starts the wait for the end over, and the end pays it.
+   */
+  arrived(item: UtteranceAudio | null): void {
+    if (this.#ending && item !== null && item.kind !== "end" && item.kind !== "error") this.#owe();
+    else this.#stopStall();
   }
 
   resample(pcm: Int16Array): Int16Array {
@@ -441,6 +465,15 @@ class Voiced {
   cancel(): void {
     this.utterance.cancel();
     this.close(true);
+  }
+
+  /** The rule the speech clients share: owed audio that doesn't come for this long has stalled. */
+  #owe(): void {
+    this.#stopStall();
+    this.#cancelStall = this.#clock.setTimer(SPEECH_STALL_MS, () => {
+      this.#cancelStall = null;
+      this.#stalled();
+    });
   }
 
   #stopStall(): void {

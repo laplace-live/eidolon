@@ -1,5 +1,5 @@
 // The greeting, and typed questions while she is idle.
-import { describe, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { assertParity, runTwin } from "../twin.ts";
 import {
   clientReady,
@@ -61,6 +61,26 @@ describe.skipIf(!TWIN)("twin: the greeting and typed text", () => {
         },
       });
       assertParity(twin);
+    },
+    SCENARIO_MS,
+  );
+
+  test(
+    "send-text without run_immediately during her last reply is kept at the call's end",
+    async () => {
+      const twin = await runTwin({
+        name: "send-text queued in her last reply",
+        mind: [GREETING],
+        async run({ peer }) {
+          clientReady(peer);
+          // Once both sentences are reported, so the line comes after them on either engine.
+          await peer.waitFor("bot-tts-text", 2);
+          sendText(peer, "我们聊聊天吧", { runImmediately: false });
+          await finished(peer, 1);
+        },
+      });
+      assertParity(twin);
+      expect(JSON.stringify(twin.native.conversation)).toContain("我们聊聊天吧");
     },
     SCENARIO_MS,
   );

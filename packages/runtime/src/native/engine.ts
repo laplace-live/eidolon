@@ -5,7 +5,13 @@ import type { AllowedOffer } from "@eidolon/access";
 import { CHAT_FORMAT, type ChatHeader } from "@eidolon/chat";
 import { activePersona, envStr, errorText, logger, pyRepr } from "@eidolon/config";
 import { type ProviderId, select, selectRequired } from "@eidolon/providers";
-import { type CallDeps, type CallTransport, memoryCallLog, runVoiceCall } from "@eidolon/voice";
+import {
+  type CallDeps,
+  type CallLog,
+  type CallTransport,
+  memoryCallLog,
+  runVoiceCall,
+} from "@eidolon/voice";
 import { logSessionStart } from "../session/start.ts";
 
 export type VoiceEngine = "pipedog" | "native";
@@ -86,11 +92,13 @@ const NO_SHUTDOWN = new AbortController().signal;
 /**
  * A call on the native engine, logged as pipedog's sessions start. Never rejects: a call that
  * can't start logs `Bot session failed: …`, which the local app's status reads, and disconnects.
+ * `newLog` makes the call's log; the twin harness passes its own to read it at the end.
  */
 export async function runNativeSafely(
   transport: CallTransport,
   admission: Pick<AllowedOffer, "user" | "token" | "requestData">,
   deps: CallDeps,
+  newLog: (header: ChatHeader) => CallLog = memoryCallLog,
 ): Promise<void> {
   try {
     logSessionStart(admission);
@@ -108,7 +116,7 @@ export async function runNativeSafely(
         id,
         host,
         viewer: admission.user,
-        log: memoryCallLog(header),
+        log: newLog(header),
         greet: true,
         realtime: select("realtime") !== null,
       },

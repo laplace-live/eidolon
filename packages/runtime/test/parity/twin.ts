@@ -7,15 +7,7 @@ import "../../../config/test/isolated-guard.ts";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AllowedOffer } from "@eidolon/access";
-import {
-  CHAT_FORMAT,
-  CHAT_WINDOW_MESSAGES,
-  type ChatEvent,
-  type ChatEventDraft,
-  type ChatHeader,
-  stampEvents,
-  viewOf,
-} from "@eidolon/chat";
+import { CHAT_WINDOW_MESSAGES, viewOf } from "@eidolon/chat";
 import {
   activePersona,
   dataHome,
@@ -23,9 +15,8 @@ import {
   readPersonaIdentity,
   resetSettings,
 } from "@eidolon/config";
-import { type CallTurnRequest, type EngineDeps, runTurn } from "@eidolon/engine";
 import { setUsageSink, type UsageRecord } from "@eidolon/providers";
-import type { CallDeps } from "@eidolon/voice";
+import { type CallLog, memoryCallLog } from "@eidolon/voice";
 import { type Frame, LLMContextFrame } from "@pipedog/core/frames/frames";
 import type { LLMContext } from "@pipedog/core/processors/aggregators/llm_context";
 import type { FrameDirection } from "@pipedog/core/processors/frame_processor";
@@ -167,34 +158,11 @@ function pipedogDeps(fakes: Fakes, seen: { context: LLMContext | null }): Sessio
   };
 }
 
-/** The native call on the fakes: production's deps, each turn's chat and the events it added kept. */
-function nativeDeps(seen: { chat: readonly ChatEvent[]; added: ChatEventDraft[] }): CallDeps {
-  async function* turn(request: CallTurnRequest, engine: EngineDeps) {
-    seen.chat = request.chat.events;
-    seen.added = [];
-    for await (const out of runTurn(request, engine)) {
-      if (out.type === "events") seen.added.push(...out.events);
-      yield out;
-    }
-  }
-  return { ...productionCallDeps, runTurn: turn as CallDeps["runTurn"] };
-}
-
-/** What she would see next: viewOf the native log as it ended. */
-function nativeConversation(seen: {
-  chat: readonly ChatEvent[];
-  added: readonly ChatEventDraft[];
-}): unknown[] {
-  if (seen.chat.length === 0 && seen.added.length === 0) return [];
-  const events = [...seen.chat, ...stampEvents(seen.added, seen.chat.at(-1)?.seq ?? 0, 0)];
-  const host = activePersona().id;
-  const header: ChatHeader = {
-    format: CHAT_FORMAT,
-    id: "twin",
-    createdAt: 0,
-    participants: [host],
-  };
-  return viewOf(header, events, host, {
+/** What she would see next: viewOf the native call's log as it ended. */
+function nativeConversation(log: CallLog | null): unknown[] {
+  if (log === null) return [];
+  const { header, events } = log.snapshot();
+  return viewOf(header, events, activePersona().id, {
     windowMessages: CHAT_WINDOW_MESSAGES,
     nameOf: (id) => readPersonaIdentity(id).name,
     viewerName: "",
@@ -213,16 +181,16 @@ export async function runOn(engine: VoiceEngine, scenario: Scenario): Promise<Ca
   setUsageSink((record) => usage.push(record));
   const restore = useFakes(fakes, scenario.env ?? {});
   const pipedogSeen: { context: LLMContext | null } = { context: null };
-  const nativeSeen: { chat: readonly ChatEvent[]; added: ChatEventDraft[] } = {
-    chat: [],
-    added: [],
-  };
+  let nativeLog: CallLog | null = null;
   const sessions: Promise<void>[] = [];
   const start = sessionStarter<SmallWebRTCConnection>(engine, {
     pipedog: (connection, admission) =>
       runSessionSafely(connection, admission, pipedogDeps(fakes, pipedogSeen)),
     native: (connection, admission) =>
-      runNativeSafely(pipedogCallTransport(connection), admission, nativeDeps(nativeSeen)),
+      runNativeSafely(pipedogCallTransport(connection), admission, productionCallDeps, (header) => {
+        nativeLog = memoryCallLog(header);
+        return nativeLog;
+      }),
   });
   const server = createSignallingServerWith(
     { ice: { serverPlan: async () => ({ iceServers: [], relayOnly: false, turnUrl: null }) } },
@@ -269,7 +237,7 @@ export async function runOn(engine: VoiceEngine, scenario: Scenario): Promise<Ca
     conversation:
       engine === "pipedog"
         ? (pipedogSeen.context?.getMessages() ?? [])
-        : nativeConversation(nativeSeen),
+        : nativeConversation(nativeLog),
     logs: logs.records,
     ended,
     failed,
