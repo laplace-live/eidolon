@@ -1,5 +1,5 @@
 // Batch speech: one request makes a whole voice message, or hears one. A call's streaming speech
-// runs through pipedog instead.
+// runs through @eidolon/providers/speech-stream instead.
 import type { Selection } from "../../resolve.ts";
 import { canSynthesize } from "./synthesize.ts";
 import { canTranscribe } from "./transcribe.ts";

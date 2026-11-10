@@ -224,8 +224,10 @@ voice reply goes as text after either.
 A realtime model hears, thinks and speaks in one session: OpenAI's `gpt-realtime` models and
 xAI's Grok voice agent. `realtime.provider` turns one on for a persona, in place of the hearing,
 mind and voice roles, which stop applying until it is turned off. It is experimental: the session
-code is in `createRealtime` (`packages/runtime/src/session/services.ts`), but no call has been
-made through it with a live key.
+code is `openRealtime` (`packages/providers/src/realtime/`), which the native voice engine's
+realtime call (`packages/voice/src/call/realtime.ts`) opens; under `EIDOLON_VOICE_ENGINE=pipedog`
+it is `createRealtime` (`packages/runtime/src/session/services.ts`). No call has been made through
+either with a live key.
 
 In the local app, the studio's Mind section opens with **How she talks**, a choice between three
 models and a realtime provider. Choosing one swaps the three-model card for the realtime model and
