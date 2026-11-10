@@ -168,6 +168,8 @@ export function ChatView({
     () => (summary?.participants ?? []).map(personaOf),
     [summary, personaOf],
   );
+  const next = useMemo(() => nextUp(events ?? []), [events]);
+  const chainLimit = useMemo(() => chainLimitOf(events ?? []), [events]);
 
   if (chat.data === undefined || summary === null) {
     const state =
@@ -216,7 +218,7 @@ export function ChatView({
           personaOf={personaOf}
           items={items}
           live={turns.live}
-          next={nextUp(chat.data.events)}
+          next={next}
           lateTools={chat.data.lateTools}
           retry={retry}
           onSend={turns.send}
@@ -236,7 +238,7 @@ export function ChatView({
       </footer>
       <ChatSettingsSheet
         id={id}
-        chainLimit={chainLimitOf(chat.data.events)}
+        chainLimit={chainLimit}
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
       />

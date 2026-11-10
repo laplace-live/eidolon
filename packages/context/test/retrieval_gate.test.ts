@@ -446,6 +446,17 @@ describe("RetrievalGate.forTurn", () => {
     expect(bodies).toHaveLength(2);
   });
 
+  test("a new turn id is a new turn, even over the same messages", async () => {
+    const bodies: unknown[] = [];
+    const gate = gateWith(answering(() => 0.9, bodies));
+    const messages = [{ role: "user", content: "为什么呀" }];
+    const first = gate.forTurn(messages, "t1");
+    expect(gate.forTurn(messages, "t1")).toBe(first);
+    expect(gate.forTurn(messages, "t2")).not.toBe(first);
+    await ticks(20);
+    expect(bodies).toHaveLength(2);
+  });
+
   test("a context without a user line retrieves without asking", async () => {
     let calls = 0;
     const gate = gateWith(async () => {

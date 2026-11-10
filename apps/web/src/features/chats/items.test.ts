@@ -77,6 +77,7 @@ describe("chatItems", () => {
         text: "你好呀",
         images: [],
         interrupted: false,
+        cutOff: null,
         reason: null,
       },
       { kind: "user", seq: 4, text: "拍张照" },
@@ -87,6 +88,7 @@ describe("chatItems", () => {
         text: "",
         images: [IMAGE],
         interrupted: true,
+        cutOff: null,
         reason: single,
       },
       { kind: "user", seq: 10, text: "再来一张" },
@@ -105,6 +107,22 @@ describe("chatItems", () => {
       interrupted: true,
     };
     expect(chatItems([empty])).toEqual([]);
+  });
+
+  test("keeps her message her provider cut off, even with no words", () => {
+    const cut = (seq: number, text: string, cutOff: "length" | "refusal"): ChatEvent => ({
+      type: "message",
+      seq,
+      at: seq,
+      id: `m${seq}`,
+      speaker: { kind: "persona", id: "mio" },
+      text,
+      cutOff,
+    });
+    expect(chatItems([cut(1, "说到一", "length"), cut(2, "", "refusal")])).toMatchObject([
+      { kind: "persona", seq: 1, text: "说到一", cutOff: "length" },
+      { kind: "persona", seq: 2, text: "", cutOff: "refusal" },
+    ]);
   });
 });
 
@@ -182,6 +200,21 @@ describe("a group's lines", () => {
 describe("retryText", () => {
   test("is the viewer's last line when the chat ends in a failure", () => {
     expect(retryText(chatItems(EVENTS))).toBe("再来一张");
+  });
+
+  test("is the viewer's last line when her reply to it was cut off", () => {
+    const asked = { kind: "user", seq: 1, text: "讲个长故事" } as const;
+    const reply = {
+      kind: "persona",
+      seq: 2,
+      persona: "mio",
+      text: "从前",
+      images: [],
+      interrupted: false,
+      reason: null,
+    } as const;
+    expect(retryText([asked, { ...reply, cutOff: "length" }])).toBe("讲个长故事");
+    expect(retryText([asked, { ...reply, cutOff: null }])).toBeNull();
   });
 
   test("is null once something followed the failure, or with no line to send", () => {

@@ -66,6 +66,8 @@ function HerBubble({
   text,
   images = [],
   interrupted = false,
+  cutOff = false,
+  onRetry,
   aside,
 }: {
   readonly chatId: string;
@@ -73,6 +75,9 @@ function HerBubble({
   readonly text: string;
   readonly images?: readonly Attachment[];
   readonly interrupted?: boolean;
+  /** Her provider stopped her short. */
+  readonly cutOff?: boolean;
+  readonly onRetry?: (() => void) | null;
   /** Beside her words, or under her photos when she sent no words. */
   readonly aside?: ReactNode;
 }) {
@@ -107,9 +112,19 @@ function HerBubble({
           ))}
         </div>
       )}
-      {(interrupted || (shown === "" && aside)) && (
+      {(interrupted || cutOff || (shown === "" && aside)) && (
         <div className="flex items-center gap-1">
           {interrupted && <QuietBadge>{t`Interrupted`}</QuietBadge>}
+          {cutOff && (
+            <span className="flex items-center gap-2">
+              <QuietBadge>{t`Cut off`}</QuietBadge>
+              {onRetry && (
+                <Button variant="link" size="xs" className="h-auto p-0" onClick={onRetry}>
+                  {t`Retry`}
+                </Button>
+              )}
+            </span>
+          )}
           {shown === "" && aside}
         </div>
       )}
@@ -186,7 +201,7 @@ const Item = memo(function Item({
   readonly group: boolean;
   /** It starts a run of one speaker's lines. */
   readonly first: boolean;
-  /** Only the last item's failure offers Retry. */
+  /** Only the last item's failure, or her reply cut off, offers Retry. */
   readonly onRetry: (() => void) | null;
 }) {
   if (item.kind === "user") return <UserBubble text={item.text} />;
@@ -202,6 +217,8 @@ const Item = memo(function Item({
         text={item.text}
         images={item.images}
         interrupted={item.interrupted}
+        cutOff={item.cutOff !== null}
+        onRetry={onRetry}
         aside={
           item.reason !== null && item.reason.source !== "single" ? (
             <WhyAnswered persona={persona} reason={item.reason} personaOf={personaOf} />
@@ -299,17 +316,18 @@ export function ChatLog({
   const { turn, pending } = live;
 
   // The viewer's own line brings the view back down.
-  const sentKey = pending?.key;
+  const sentKey = pending.at(-1)?.key;
   useEffect(() => {
     if (sentKey !== undefined) pinnedRef.current = true;
   }, [sentKey, pinnedRef]);
 
-  const retryLast = retry === null ? null : () => onSend(retry);
+  // Stable, so the memoized last item doesn't re-render with every streamed delta.
+  const retryLast = useMemo(() => (retry === null ? null : () => onSend(retry)), [retry, onSend]);
   const streamed = turn === null ? "" : withoutPartialMarkup(turn.text);
   // A group's reply goes on between turns, while the director decides who answers next.
-  const waiting = (pending !== null && !pending.failed) || live.following > 0;
+  const waiting = pending.some((line) => !line.failed) || live.following > 0;
   const thinking = turn === null ? waiting : streamed === "" && turn.tool === null;
-  const empty = items.length === 0 && turn === null && pending === null;
+  const empty = items.length === 0 && turn === null && pending.length === 0;
   const speaker = turn?.persona ?? next ?? (group ? null : (personas[0]?.id ?? null));
   const thinker = speaker === null ? null : personaOf(speaker);
   const last = items.at(-1);
@@ -355,13 +373,14 @@ export function ChatLog({
           thinker !== null &&
           said(<HerBubble chatId={chatId} name={shortNameOf(thinker)} text={streamed} />)}
         {turn !== null && turn.tool !== null && <ToolLine tool={turn.tool} />}
-        {pending !== null && (
+        {pending.map((line) => (
           <UserBubble
-            text={pending.text}
-            failed={pending.failed}
-            onRetry={pending.failed ? () => onSend(pending.text) : undefined}
+            key={line.key}
+            text={line.text}
+            failed={line.failed}
+            onRetry={line.failed ? () => onSend(line.text) : undefined}
           />
-        )}
+        ))}
         {thinking &&
           said(
             <Thinking

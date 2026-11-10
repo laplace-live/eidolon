@@ -213,12 +213,10 @@ export class ChatRunner {
   /** Aborts chat `id`'s running reply, resolving once what it said is stored. */
   async stop(id: string): Promise<void> {
     const chat = this.#chats.get(id);
-    if (chat === undefined || chat.live === null) {
-      // Only to answer 404 for a chat that isn't there.
-      await this.store.summary(id);
-      return;
-    }
-    await this.#interrupt(chat);
+    // Queued behind a send still storing the viewer's line, so the reply it starts is the one stopped.
+    const stopped = chat !== undefined && (await this.#serial(chat, () => this.#interrupt(chat)));
+    // Only to answer 404 for a chat that isn't there.
+    if (!stopped) await this.store.summary(id);
   }
 
   async rename(id: string, title: string): Promise<void> {
@@ -305,11 +303,13 @@ export class ChatRunner {
     return result;
   }
 
-  async #interrupt(chat: Chat): Promise<void> {
+  /** Resolves false when no turn was running. */
+  async #interrupt(chat: Chat): Promise<boolean> {
     const live = chat.live;
-    if (live === null) return;
+    if (live === null) return false;
     live.controller.abort();
     await live.ended;
+    return true;
   }
 
   /**

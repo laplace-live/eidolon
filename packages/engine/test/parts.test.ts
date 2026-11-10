@@ -12,6 +12,7 @@ import {
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { UserContext } from "@eidolon/access";
+import { CHAT_FORMAT, type ChatEventDraft, stampEvents } from "@eidolon/chat";
 import {
   activePersona,
   consoleSink,
@@ -21,16 +22,27 @@ import {
   type LogRecord,
   logger,
 } from "@eidolon/config";
+import { RECALL_HINT, RECALL_PREFIX, RECALL_TOOL_NAME } from "@eidolon/context";
 import type { ContextProvider, LlmTool, TurnGate } from "@eidolon/core";
 import {
   type ArchiveProvider,
+  lastSelection,
   type MemoryProvider,
   type PartsDeps,
   personaParts,
 } from "../src/parts.ts";
+import type { TurnRequest } from "../src/types.ts";
 
 const PERSONA = "alice";
-const CHAT = "0190f5c8-0000-7000-8000-000000000001";
+
+function chatOf(id: string, drafts: readonly ChatEventDraft[] = []): TurnRequest["chat"] {
+  return {
+    header: { format: CHAT_FORMAT, id, createdAt: 0, participants: [PERSONA] },
+    events: stampEvents(drafts, 0, 1000),
+  };
+}
+
+const CHAT = chatOf("0190f5c8-0000-7000-8000-000000000001");
 const VIEWER: UserContext = { mid: 0, uname: "Ken", face: null, isLoggedIn: true };
 const ANONYMOUS: UserContext = { mid: null, uname: null, face: null, isLoggedIn: false };
 
@@ -69,7 +81,11 @@ const provider = (): ContextProvider => ({ onContext: async () => {}, errorMessa
 function fake(overrides: Partial<PartsDeps> = {}) {
   const selfie = tool("take_selfie");
   const recall = tool("recall_streams");
-  const archive: ArchiveProvider = { ...provider(), recallTool: async () => recall };
+  const archive: ArchiveProvider = {
+    ...provider(),
+    recallTool: async () => recall,
+    resumeSelection: async () => {},
+  };
   const facts = provider();
   const memory: MemoryProvider = { ...provider(), newestFirst: async () => [{ memory: "喜欢猫" }] };
   const gate: TurnGate = { attach: () => {} };
@@ -186,7 +202,7 @@ describe("personaParts", () => {
     const { deps, calls } = fake();
     const parts = personaParts(deps);
     await parts(PERSONA, VIEWER, CHAT);
-    await parts(PERSONA, VIEWER, "other");
+    await parts(PERSONA, VIEWER, chatOf("other"));
     await parts(PERSONA, VIEWER, CHAT);
     expect([calls.archive.length, calls.facts.length, calls.gate, calls.memory.length]).toEqual([
       2, 2, 2, 2,
@@ -196,10 +212,10 @@ describe("personaParts", () => {
   test("keeps the 32 chats used last", async () => {
     const { deps, calls } = fake();
     const parts = personaParts(deps);
-    for (let n = 0; n <= 32; n++) await parts(PERSONA, VIEWER, `chat ${n}`);
-    await parts(PERSONA, VIEWER, "chat 32");
+    for (let n = 0; n <= 32; n++) await parts(PERSONA, VIEWER, chatOf(`chat ${n}`));
+    await parts(PERSONA, VIEWER, chatOf("chat 32"));
     expect(calls.archive).toHaveLength(33);
-    await parts(PERSONA, VIEWER, "chat 0");
+    await parts(PERSONA, VIEWER, chatOf("chat 0"));
     expect(calls.archive).toHaveLength(34);
   });
 
@@ -213,7 +229,11 @@ describe("personaParts", () => {
   test("leaves out take_selfie's hint and the recall tool when there are none", async () => {
     const { deps, calls } = fake({
       createSelfieTool: () => null,
-      openArchive: async () => ({ ...provider(), recallTool: async () => null }),
+      openArchive: async () => ({
+        ...provider(),
+        recallTool: async () => null,
+        resumeSelection: async () => {},
+      }),
     });
     const built = await personaParts(deps)(PERSONA, VIEWER, CHAT);
     expect(built.tools).toEqual([]);
@@ -328,5 +348,78 @@ describe("personaParts", () => {
     } finally {
       setSystemTime();
     }
+  });
+});
+
+describe("an archive opened on a chat under way", () => {
+  const recall = (turn: string, result: Record<string, unknown>): ChatEventDraft[] => [
+    {
+      type: "tool-call",
+      persona: PERSONA,
+      turn,
+      callId: "c1",
+      name: RECALL_TOOL_NAME,
+      arguments: {},
+    },
+    { type: "tool-result", persona: PERSONA, turn, callId: "c1", result },
+  ];
+  const block = (turn: string, content: string): ChatEventDraft => ({
+    type: "context",
+    persona: PERSONA,
+    turn,
+    position: 1,
+    role: "system",
+    content,
+  });
+
+  test("takes up her last recall_streams selection, once", async () => {
+    const resumed: (readonly string[])[] = [];
+    const { deps, parts: made } = fake();
+    const archive: ArchiveProvider = {
+      ...made.archive,
+      resumeSelection: async (ids) => {
+        resumed.push(ids);
+      },
+    };
+    const parts = personaParts({ ...deps, openArchive: async () => archive });
+    const log = chatOf(CHAT.header.id, recall("t1", { content: "…", broadcast_ids: ["b1", "b2"] }));
+    await parts(PERSONA, VIEWER, log);
+    await parts(PERSONA, VIEWER, log);
+    expect(resumed).toEqual([["b1", "b2"]]);
+  });
+
+  test("keeps the archive when the selection can't be taken up", async () => {
+    const { deps, parts: made } = fake();
+    const archive: ArchiveProvider = {
+      ...made.archive,
+      resumeSelection: async () => {
+        throw new Error("catalog unreadable");
+      },
+    };
+    const parts = personaParts({ ...deps, openArchive: async () => archive });
+    const log = chatOf(CHAT.header.id, recall("t1", { content: "…", broadcast_ids: ["b1"] }));
+    expect((await parts(PERSONA, VIEWER, log)).providers).toContainEqual({
+      label: "StreamArchiveService",
+      provider: archive,
+    });
+    expect(messages("WARNING")).toEqual([
+      "Stream archive: the chat's last recall selection is lost: catalog unreadable",
+    ]);
+  });
+
+  test("reads only her own successful calls, and none a recall block came after", () => {
+    const of = (...drafts: ChatEventDraft[]) => lastSelection(chatOf("c", drafts).events, PERSONA);
+    const picked = recall("t1", { content: "…", broadcast_ids: ["b1"] });
+    expect(of()).toBeNull();
+    expect(of(...picked)).toEqual(["b1"]);
+    expect(of(...picked, ...recall("t2", { error: "直播查询未完成" }))).toEqual(["b1"]);
+    expect(of(...picked, ...recall("t2", { content: "…", broadcast_ids: [] }))).toBeNull();
+    const theirs = recall("t2", { content: "…", broadcast_ids: ["b9"] }).map(
+      (event) => ({ ...event, persona: "bob" }) as ChatEventDraft,
+    );
+    expect(of(...picked, ...theirs)).toEqual(["b1"]);
+    expect(of(...picked, block("t2", `${RECALL_PREFIX}${RECALL_HINT}`))).toEqual(["b1"]);
+    expect(of(...picked, block("t2", `${RECALL_PREFIX}片段`))).toBeNull();
+    expect(of(block("t1", `${RECALL_PREFIX}片段`), ...picked)).toEqual(["b1"]);
   });
 });

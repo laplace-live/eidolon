@@ -76,6 +76,10 @@ export class TurnConversation implements ConversationContext {
     return this.#hidden;
   }
 
+  get turn(): string {
+    return this.#turn;
+  }
+
   /** Adds what the turn itself says and calls, which its own events record. */
   append(...messages: unknown[]): void {
     this.#messages.push(...messages);

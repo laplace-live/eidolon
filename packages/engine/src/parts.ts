@@ -5,11 +5,15 @@
 // tried again later. The system instruction is rebuilt every turn, because it carries the clock.
 import { stat } from "node:fs/promises";
 import type { UserContext } from "@eidolon/access";
+import type { ChatEvent, ParticipantId } from "@eidolon/chat";
 import { errorText, logger, pyRepr, settingsGeneration, withPersona } from "@eidolon/config";
 import {
   buildSystemInstruction,
   type GroupMember,
   PersonaFacts,
+  RECALL_HINT,
+  RECALL_PREFIX,
+  RECALL_TOOL_NAME,
   retrievalGateFromEnv,
   StreamArchive,
 } from "@eidolon/context";
@@ -22,6 +26,7 @@ import type { EngineDeps, PersonaParts } from "./types.ts";
 /** The stream archive: a context provider that may also offer recall_streams. */
 export interface ArchiveProvider extends ContextProvider {
   recallTool(): Promise<LlmTool | null>;
+  resumeSelection(broadcastIds: readonly string[]): Promise<void>;
 }
 
 /** A viewer's Mem0 provider. */
@@ -98,6 +103,35 @@ class Retried<T> {
   }
 }
 
+/**
+ * The broadcasts `persona`'s last recall_streams call in `events` returned, which an archive
+ * opened on the chat takes up as its selection. Null when no call returned any, or when a recall
+ * block came after it: the archive's own recall may have moved the selection, which the log
+ * doesn't record.
+ */
+export function lastSelection(
+  events: readonly ChatEvent[],
+  persona: ParticipantId,
+): readonly string[] | null {
+  const calls = new Set<string>();
+  let selected: readonly string[] | null = null;
+  for (const event of events) {
+    if (event.type === "tool-call" && event.persona === persona) {
+      if (event.name === RECALL_TOOL_NAME) calls.add(`${event.turn}/${event.callId}`);
+    } else if (event.type === "tool-result" && event.persona === persona) {
+      const ids = event.result.broadcast_ids;
+      // A failed call left the selection as it was.
+      if (calls.has(`${event.turn}/${event.callId}`) && Array.isArray(ids)) {
+        selected = ids.length > 0 ? ids.filter((id) => typeof id === "string") : null;
+      }
+    } else if (event.type === "context" && event.persona === persona) {
+      const recall = event.content.startsWith(RECALL_PREFIX);
+      if (recall && event.content !== RECALL_PREFIX + RECALL_HINT) selected = null;
+    }
+  }
+  return selected;
+}
+
 /** How many chats' parts are kept; the one used longest ago goes first. */
 const KEPT_CHATS = 32;
 
@@ -110,6 +144,7 @@ const MEMORY_RETRY_MS = 60_000;
 /** One persona's parts in one chat, for one settings generation. */
 class Pieces {
   readonly generation: number;
+  readonly #persona: ParticipantId;
   readonly #deps: PartsDeps;
   readonly #archive = new Retried<ArchiveProvider>();
   readonly #facts = new Retried<ContextProvider>();
@@ -120,12 +155,17 @@ class Pieces {
   #recall: LlmTool | null = null;
   #gate: TurnGate | null | undefined;
 
-  constructor(generation: number, deps: PartsDeps) {
+  constructor(generation: number, persona: ParticipantId, deps: PartsDeps) {
     this.generation = generation;
+    this.#persona = persona;
     this.#deps = deps;
   }
 
-  async parts(viewer: UserContext, others: readonly GroupMember[]): Promise<PersonaParts> {
+  async parts(
+    viewer: UserContext,
+    events: readonly ChatEvent[],
+    others: readonly GroupMember[],
+  ): Promise<PersonaParts> {
     const deps = this.#deps;
     this.#selfie ??= (() => {
       const tool = deps.createSelfieTool();
@@ -133,9 +173,16 @@ class Pieces {
     })();
     const dbPath = deps.dbPath();
     const [archive, memory, facts, systemInstruction] = await Promise.all([
-      this.#archive.get(() =>
-        this.#optional("Stream archive", STREAM_ARCHIVE.ingestCommand, dbPath, deps.openArchive),
-      ),
+      this.#archive.get(async () => {
+        const archive = await this.#optional(
+          "Stream archive",
+          STREAM_ARCHIVE.ingestCommand,
+          dbPath,
+          deps.openArchive,
+        );
+        if (archive !== null) await this.#resume(archive, events);
+        return archive;
+      }),
       this.#memory(viewer),
       this.#facts.get(() =>
         this.#optional("Persona facts", PERSONA_FACTS.ingestCommand, dbPath, deps.openFacts),
@@ -162,6 +209,16 @@ class Pieces {
       tools: [this.#selfie.tool, this.#recall].filter((tool): tool is LlmTool => tool !== null),
       memories: async () => (memory === null ? [] : memory.newestFirst()),
     };
+  }
+
+  async #resume(archive: ArchiveProvider, events: readonly ChatEvent[]): Promise<void> {
+    const selected = lastSelection(events, this.#persona);
+    if (selected === null) return;
+    try {
+      await archive.resumeSelection(selected);
+    } catch (e) {
+      logger.warning(`Stream archive: the chat's last recall selection is lost: ${errorText(e)}`);
+    }
   }
 
   /** runtime's optionalProvider, logging the same lines. */
@@ -235,10 +292,10 @@ export function personaParts(deps: PartsDeps = productionPartsDeps): EngineDeps[
   return (persona, viewer, chat, others = []) =>
     withPersona(persona, () => {
       const generation = deps.settingsGeneration();
-      const key = `${chat}/${persona}`;
+      const key = `${chat.header.id}/${persona}`;
       let pieces = cache.get(key);
       if (pieces === undefined || pieces.generation !== generation) {
-        pieces = new Pieces(generation, deps);
+        pieces = new Pieces(generation, persona, deps);
       }
       cache.delete(key);
       cache.set(key, pieces);
@@ -246,6 +303,6 @@ export function personaParts(deps: PartsDeps = productionPartsDeps): EngineDeps[
         if (cache.size <= KEPT_CHATS) break;
         cache.delete(old);
       }
-      return pieces.parts(viewer, others);
+      return pieces.parts(viewer, chat.events, others);
     });
 }

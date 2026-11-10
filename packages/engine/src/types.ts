@@ -83,13 +83,14 @@ export interface EngineDeps {
   /** The mind of the persona whose scope it is called in. */
   createMind(): Mind;
   /**
-   * Her parts in chat `chat`: its providers keep what they saw of it, as a call's do. `others`
-   * are the chat's other personas, whom her system instruction names.
+   * Her parts in `chat`: its providers keep what they saw of it, as a call's do, and ones opened on
+   * a chat under way take up from its log what they had kept. `others` are the chat's other
+   * personas, whom her system instruction names.
    */
   parts(
     persona: ParticipantId,
     viewer: UserContext,
-    chat: string,
+    chat: TurnRequest["chat"],
     others?: readonly GroupMember[],
   ): Promise<PersonaParts>;
   /** Stores a file in the turn's chat. */

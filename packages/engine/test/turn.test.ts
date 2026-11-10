@@ -22,9 +22,21 @@ import {
   type LogRecord,
   logger,
 } from "@eidolon/config";
-import { buildGreetingKickoff, GREETING_KICKOFF } from "@eidolon/context";
+import {
+  buildGreetingKickoff,
+  GATE_FRAME_KEY,
+  GATE_QUESTIONS,
+  type GateDecision,
+  GREETING_KICKOFF,
+  RECALL_TOOL_NAME,
+  RetrievalGate,
+  StreamArchive,
+  TIMELINE_QUESTIONS,
+} from "@eidolon/context";
 import type { ContextProvider, LlmTool, ToolResult, TurnGate } from "@eidolon/core";
 import { usageRecord } from "@eidolon/providers";
+import { broadcast, FakeRetriever, MemoryCatalog, TODAY } from "../../context/test/helpers.ts";
+import { type PartsDeps, personaParts } from "../src/parts.ts";
 import { MAX_ROUNDS, runTurn } from "../src/turn.ts";
 import type {
   EngineDeps,
@@ -204,6 +216,48 @@ describe("runTurn", () => {
     expect(requests[0]?.tools).toEqual([]);
   });
 
+  test("marks a reply the provider stopped short as cut off, and why", async () => {
+    for (const [finishReason, cutOff] of [
+      ["length", "length"],
+      ["max_tokens", "length"],
+      ["content_filter", "refusal"],
+      ["refusal", "refusal"],
+      ["stop", undefined],
+      ["end_turn", undefined],
+      [null, undefined],
+    ] as const) {
+      const { mind } = fakeMind([
+        { type: "text", text: "说到一半" },
+        { type: "done", finishReason },
+      ]);
+      const [message] = eventsOf(await collect(runTurn(request(), deps(mind, parts()))));
+      expect([finishReason, message]).toEqual([
+        finishReason,
+        {
+          type: "message",
+          id: "id-2",
+          speaker: { kind: "persona", id: PERSONA },
+          text: "说到一半",
+          ...(cutOff === undefined ? {} : { cutOff }),
+        },
+      ]);
+    }
+  });
+
+  test("keeps a refusal with no words as an empty message, cut off", async () => {
+    const { mind } = fakeMind([{ type: "done", finishReason: "refusal" }]);
+    const outputs = await collect(runTurn(request(), deps(mind, parts())));
+    expect(eventsOf(outputs)).toEqual([
+      {
+        type: "message",
+        id: "id-2",
+        speaker: { kind: "persona", id: PERSONA },
+        text: "",
+        cutOff: "refusal",
+      },
+    ]);
+  });
+
   test("a block a provider replaces leaves the next turn only the new one", async () => {
     let turns = 0;
     // As the stream archive's setBlock: every block with its prefix out, the new one in.
@@ -281,7 +335,7 @@ describe("runTurn", () => {
         request(),
         deps(mind, parts(), {
           parts: async (_persona, _viewer, chat) => {
-            seen.parts = [activePersona().id, chat];
+            seen.parts = [activePersona().id, chat.header.id];
             return parts({ providers: [{ label: "Mem0", provider: memory }] });
           },
         }),
@@ -913,5 +967,157 @@ describe("a tool that runs on past an interruption", () => {
     cancel.abort();
     expect(toolSignal?.aborted).toBe(true);
     expect(await (added[0] as (typeof added)[number]).events).toEqual([]);
+  });
+});
+
+describe("the stream archive across a chat's turns", () => {
+  test("gives a line repeated in a full window a new recall_streams budget", async () => {
+    const archive = new StreamArchive({
+      retriever: new FakeRetriever([]),
+      catalog: new MemoryCatalog([broadcast("2026-09-08")]),
+      timeZone: "UTC",
+      today: () => TODAY,
+    });
+    const recall = (await archive.recallTool()) as LlmTool;
+    const persona = parts({
+      providers: [{ label: "StreamArchiveService", provider: archive }],
+      tools: [recall],
+    });
+    const args = { query: "recap", mode: "overview", period: "latest" };
+    const line = "还记得上次直播吗";
+    // Past the window, each view holds as many of the viewer's lines as the last one did.
+    const earlier = Array.from({ length: CHAT_WINDOW_MESSAGES }, (_, i) => [
+      user(`问${i}`),
+      alice(`答${i}`),
+    ]).flat();
+    const log = chat(...earlier, user(line));
+    // Both turns spend the budget: two calls, then her answer.
+    const turn: Round[] = [
+      [call("c1", RECALL_TOOL_NAME, args), DONE],
+      [call("c2", RECALL_TOOL_NAME, args), DONE],
+      [{ type: "text", text: "记得" }, DONE],
+    ];
+    const { mind } = fakeMind(...turn, ...turn);
+    const engine = deps(mind, persona);
+    const results = (outputs: readonly TurnOutput[]) =>
+      eventsOf(outputs).flatMap((event) => (event.type === "tool-result" ? [event.result] : []));
+    const answered = await collect(runTurn(request({ chat: log }), engine));
+    expect(results(answered).map((result) => "content" in result)).toEqual([true, true]);
+
+    let events = [...log.events, ...stampEvents(eventsOf(answered), log.events.length, 2000)];
+    const again: ChatEventDraft = {
+      type: "message",
+      id: "u-again",
+      speaker: { kind: "user" },
+      text: line,
+    };
+    events = [...events, ...stampEvents([again], events.length, 3000)];
+    const outputs = await collect(runTurn(request({ chat: { header: HEADER, events } }), engine));
+    expect(results(outputs).map((result) => "content" in result)).toEqual([true, true]);
+  });
+
+  test("an archive opened on a chat under way takes up her last recall_streams selection", async () => {
+    const catalog = new MemoryCatalog([broadcast("2026-09-01"), broadcast("2026-09-08")]);
+    const quiet: ContextProvider = { onContext: async () => {}, errorMessage: () => "" };
+    const partsDeps: PartsDeps = {
+      createSelfieTool: () => null,
+      selfiePromptHint: () => "",
+      buildSystemInstruction: async () => "SYSTEM",
+      dbPath: () => "/index",
+      dbPathExists: async () => true,
+      openArchive: async () =>
+        new StreamArchive({
+          retriever: new FakeRetriever([]),
+          catalog,
+          timeZone: "UTC",
+          today: () => TODAY,
+        }),
+      openFacts: async () => quiet,
+      retrievalGateFromEnv: () => null,
+      isMemoryConfigured: () => false,
+      createMemoryProvider: async () => {
+        throw new Error("no Mem0 here");
+      },
+      settingsGeneration: () => 0,
+    };
+    const pick = {
+      query: "那天",
+      mode: "overview",
+      period: "date_range",
+      start_date: "2026-09-01",
+    };
+    const again = { query: "那天还聊了什么", mode: "overview", period: "selected" };
+    const results = (outputs: readonly TurnOutput[]) =>
+      eventsOf(outputs).flatMap((event) => (event.type === "tool-result" ? [event.result] : []));
+    // Lines too short for the archive's own recall, so only her calls select.
+    const log = chat(user("嗯"));
+    const first = fakeMind([call("c1", RECALL_TOOL_NAME, pick), DONE]);
+    const answered = await collect(
+      runTurn(
+        request({ chat: log }),
+        deps(first.mind, parts(), { parts: personaParts(partsDeps) }),
+      ),
+    );
+    expect(results(answered)[0]?.broadcast_ids).toEqual(["2026-09-01-BV1abc"]);
+
+    let events = [...log.events, ...stampEvents(eventsOf(answered), log.events.length, 2000)];
+    events = [...events, ...stampEvents([user("哦")], events.length, 3000)];
+    // A restart: the same log, her parts opened afresh.
+    const second = fakeMind([call("c2", RECALL_TOOL_NAME, again), DONE]);
+    const outputs = await collect(
+      runTurn(
+        request({ chat: { header: HEADER, events } }),
+        deps(second.mind, parts(), { parts: personaParts(partsDeps) }),
+      ),
+    );
+    expect(results(outputs)[0]).toMatchObject({ broadcast_ids: ["2026-09-01-BV1abc"] });
+  });
+});
+
+describe("the retrieval gate across a chat's turns", () => {
+  test("asks again about a line repeated in a full window", async () => {
+    const scores = [0.1, 0.9];
+    let asked = 0;
+    const gate = new RetrievalGate({
+      apiKey: "test",
+      fetch: (async () => {
+        const noul = scores[asked++];
+        const names = [...Object.keys(GATE_QUESTIONS), ...Object.keys(TIMELINE_QUESTIONS)];
+        return Response.json({
+          answers: Object.fromEntries(names.map((name) => [name, { noul }])),
+        });
+      }) as unknown as typeof fetch,
+    });
+    const verdicts: unknown[] = [];
+    const reader: ContextProvider = {
+      onContext: async ({ metadata }) => {
+        verdicts.push(await (metadata[GATE_FRAME_KEY] as GateDecision).value());
+      },
+      errorMessage: () => "",
+    };
+    const answer: Round = [{ type: "text", text: "因为呀" }, DONE];
+    const persona = parts({ gate, providers: [{ label: "R", provider: reader }] });
+    const engine = deps(fakeMind(answer, answer).mind, persona);
+    const line = "为什么呀";
+    const earlier = Array.from({ length: CHAT_WINDOW_MESSAGES }, (_, i) => [
+      user(`问${i}`),
+      alice(`答${i}`),
+    ]).flat();
+    const log = chat(...earlier, user(line));
+    const answered = await collect(runTurn(request({ chat: log }), engine));
+    let events = [...log.events, ...stampEvents(eventsOf(answered), log.events.length, 2000)];
+    const again: ChatEventDraft = {
+      type: "message",
+      id: "u-again",
+      speaker: { kind: "user" },
+      text: line,
+    };
+    events = [...events, ...stampEvents([again], events.length, 3000)];
+    await collect(runTurn(request({ chat: { header: HEADER, events } }), engine));
+    expect(asked).toBe(2);
+    expect(verdicts).toEqual([
+      { retrieve: false, timeline: false },
+      { retrieve: true, timeline: true },
+    ]);
   });
 });

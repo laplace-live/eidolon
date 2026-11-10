@@ -7,7 +7,7 @@ import { asApiError } from "@/lib/api";
 import { followLive, sendMessage, stopChat } from "@/lib/chats";
 import { toastError } from "@/lib/feedback";
 import { chatQuery, chatsQuery } from "./queries";
-import { IDLE, type LiveState, mergeEvents, reduceLive } from "./stream";
+import { IDLE, type LiveState, mergeEvents, reaches, reduceLive, Sends } from "./stream";
 
 type Open = (signal: AbortSignal) => AsyncIterable<ChatStreamLine>;
 
@@ -23,7 +23,7 @@ export function useChat(id: string): ChatTurns {
   const queryClient = useQueryClient();
   const [live, dispatch] = useReducer(reduceLive, IDLE);
   const streams = useRef(new Set<AbortController>());
-  const sends = useRef(0);
+  const sends = useRef(new Sends());
 
   const store = useCallback(
     (events: readonly ChatEvent[]) => {
@@ -48,6 +48,7 @@ export function useChat(id: string): ChatTurns {
     async (open: Open, key: number | null, rejoin: boolean): Promise<void> => {
       const controller = new AbortController();
       streams.current.add(controller);
+      const opened = sends.current.mark(key);
       let turn: string | null = null;
       let ended = false;
       let broke = false;
@@ -61,10 +62,12 @@ export function useChat(id: string): ChatTurns {
       try {
         for await (const line of open(controller.signal)) {
           carry();
+          if (key !== null) sends.current.accept(key);
+          const reached = reaches(line, sends.current.superseded(opened));
           if (line.type === "events") store(line.events);
-          else if (line.type === "started") [turn, ended] = [line.turn, false];
+          else if (line.type === "started" && reached) [turn, ended] = [line.turn, false];
           else if (line.type === "ended" && line.turn === turn) ended = true;
-          dispatch(line);
+          if (reached) dispatch(line);
         }
       } catch (error) {
         broke = !controller.signal.aborted;
@@ -84,7 +87,9 @@ export function useChat(id: string): ChatTurns {
       void queryClient.invalidateQueries({ queryKey: chatsQuery.queryKey, exact: true });
       // A group's reply goes on past a turn's end, so a stream that broke after one may have more.
       if (turn !== null && (!ended || broke)) {
-        if (rejoin) await follow((signal) => followLive(id, signal), null, false);
+        if (rejoin && !sends.current.superseded(opened)) {
+          await follow((signal) => followLive(id, signal), null, false);
+        }
         dispatch({ type: "settled", key: null, turn });
       }
     },
@@ -102,7 +107,7 @@ export function useChat(id: string): ChatTurns {
 
   const send = useCallback(
     (text: string) => {
-      const key = ++sends.current;
+      const key = sends.current.issue();
       const after = queryClient.getQueryData(chatQuery(id).queryKey)?.events.at(-1)?.seq ?? 0;
       dispatch({ type: "sending", key, after, text });
       void follow((signal) => sendMessage(id, text, signal), key, true);
@@ -115,6 +120,6 @@ export function useChat(id: string): ChatTurns {
   }, [id]);
 
   const busy =
-    live.following > 0 || live.turn !== null || (live.pending !== null && !live.pending.failed);
+    live.following > 0 || live.turn !== null || live.pending.some((line) => !line.failed);
   return { live, busy, send, stop };
 }

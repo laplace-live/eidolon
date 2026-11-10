@@ -294,6 +294,7 @@ export class RetrievalGate {
   readonly model: string;
   readonly #client: DecisionsClient;
   #turn: TurnKey | null = null;
+  #turnId: string | undefined;
   #decision: GateDecision | null = null;
 
   constructor(options: RetrievalGateOptions) {
@@ -336,20 +337,22 @@ export class RetrievalGate {
 
   /**
    * This turn's decision: started on a new user turn, the same object for every frame of it.
-   * It is never tied to a frame's signal, since it outlives that frame's processing.
+   * It is never tied to a frame's signal, since it outlives that frame's processing. A new
+   * `turnId` is a new turn, even over the same messages.
    */
-  forTurn(messages: readonly unknown[]): GateDecision {
+  forTurn(messages: readonly unknown[], turnId?: string): GateDecision {
     const turn = turnKeyOf(messages);
-    if (this.#decision === null || !sameTurn(this.#turn, turn)) {
+    if (this.#decision === null || !sameTurn(this.#turn, turn) || this.#turnId !== turnId) {
       this.#turn = turn;
+      this.#turnId = turnId;
       this.#decision = GateDecision.of(this.decide(gateState(messages)));
     }
     return this.#decision;
   }
 
   /** Starts this turn's decision without awaiting it and stores it at `metadata[GATE_FRAME_KEY]`. */
-  attach(messages: readonly unknown[], metadata: FrameMetadata): void {
-    metadata[GATE_FRAME_KEY] = this.forTurn(messages);
+  attach(messages: readonly unknown[], metadata: FrameMetadata, turn?: string): void {
+    metadata[GATE_FRAME_KEY] = this.forTurn(messages, turn);
   }
 }
 

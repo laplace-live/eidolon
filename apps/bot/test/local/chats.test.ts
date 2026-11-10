@@ -24,7 +24,12 @@ import {
 } from "@eidolon/engine";
 import type { RouteHandler } from "../../src/app.ts";
 import type { ChatContents } from "../../src/local/api.ts";
-import type { ChatAnswer, ChatRunnerOptions, ChatTurn } from "../../src/local/chats/runner.ts";
+import {
+  type ChatAnswer,
+  ChatRunner,
+  type ChatRunnerOptions,
+  type ChatTurn,
+} from "../../src/local/chats/runner.ts";
 import { createLocalRouter, type LocalApp } from "../../src/local/router.ts";
 import { chatsRoutes } from "../../src/local/routes/chats.ts";
 import { type CapturedLogs, captureLogs, deferred } from "../fakes.ts";
@@ -648,6 +653,38 @@ describe("a message", () => {
     expect(shape(await posted.all()).at(-1)).toBe("ended");
     expect((await server.call("GET", `/chats/${id}/live`)).status).toBe(204);
     expect((await server.call("POST", `/chats/${id}/stop`)).status).toBe(204);
+  });
+
+  test("stop while a send is still storing the viewer's line stops the reply it starts", async () => {
+    const runner = new ChatRunner({ root: chatsRoot(), turn: fakeTurn, answer: fakeAnswer });
+    try {
+      const id = await runner.create([PERSONA]);
+      await runner.live(id)?.ended;
+      const stored = deferred();
+      const holding = deferred();
+      const append = runner.store.append.bind(runner.store);
+      runner.store.append = async (chat, events) => {
+        if (events.some((event) => event.type === "message" && event.speaker.kind === "user")) {
+          holding.resolve();
+          await stored.promise;
+        }
+        return append(chat, events);
+      };
+      const sent = runner.send(id, "说吧");
+      await holding.promise;
+      const stopped = runner.stop(id);
+      stored.resolve();
+      await stopped;
+      expect(answers.at(-1)?.signal.aborted).toBe(true);
+      await (await sent).ended;
+      const said = messages((await runner.read(id)).events);
+      const asked = said.findLast((message) => message.speaker.kind === "user");
+      expect(asked?.text).toBe("说吧");
+      const after = said.filter((message) => message.seq > (asked?.seq ?? 0));
+      expect(after.filter((message) => message.interrupted !== true)).toEqual([]);
+    } finally {
+      await runner.shutdown();
+    }
   });
 
   test("a turn that throws is stored as turn-failed, and the chat stays usable", async () => {

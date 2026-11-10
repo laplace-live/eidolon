@@ -37,6 +37,8 @@ export type Attachment =
       readonly durationMs: number;
     };
 
+export type CutOff = "length" | "refusal";
+
 interface EventBase {
   /** 1, 2, 3…: contiguous. */
   readonly seq: number;
@@ -57,6 +59,8 @@ export type ChatEvent =
       readonly modality?: "text" | "voice" | "call";
       readonly attachments?: readonly Attachment[];
       readonly interrupted?: boolean;
+      /** Her provider stopped her short: at its token limit, or refusing. */
+      readonly cutOff?: CutOff;
     })
   | (EventBase & {
       /** Recall she was given, at `position` in her view; hidden in the UI. */
@@ -149,7 +153,7 @@ export interface ChatSummary {
   readonly createdAt: number;
   /** The last event's `at`, else `createdAt`. */
   readonly updatedAt: number;
-  /** The last message's text. */
+  /** The text of the last message that has any. */
   readonly lastText: string | null;
   /** 0 before the first event. */
   readonly lastSeq: number;

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ChatEvent, ChatHeader } from "@eidolon/chat";
+import type { ChatEvent, ChatHeader, ChatStreamLine } from "@eidolon/chat";
 import {
   IDLE,
   LATE_POLL_MS,
@@ -7,7 +7,9 @@ import {
   type LiveState,
   latePoll,
   mergeEvents,
+  reaches,
   reduceLive,
+  Sends,
 } from "./stream";
 
 const HEADER: ChatHeader = {
@@ -57,7 +59,7 @@ describe("reduceLive", () => {
       { type: "delta", turn: "t1", text: "[开心]哈" },
       { type: "delta", turn: "t1", text: "喽" },
     ]);
-    expect(streaming.pending).toBeNull();
+    expect(streaming.pending).toEqual([]);
     expect(streaming.turn).toEqual({
       id: "t1",
       persona: "mio",
@@ -134,12 +136,34 @@ describe("reduceLive", () => {
       { type: "send-failed", key: 1, error: { code: "missing-key", message: "no key" } },
       { type: "settled", key: 1, turn: null },
     ]);
-    expect(refused.pending).toEqual({ key: 1, after: 0, text: "hi", failed: true });
+    expect(refused.pending).toEqual([{ key: 1, after: 0, text: "hi", failed: true }]);
     expect(refused.error).toEqual({ code: "missing-key", message: "no key" });
 
     const again = run([{ type: "sending", key: 2, after: 0, text: "hi" }], refused);
-    expect(again.pending).toEqual({ key: 2, after: 0, text: "hi", failed: false });
+    expect(again.pending).toEqual([{ key: 2, after: 0, text: "hi", failed: false }]);
     expect(again.error).toBeNull();
+  });
+
+  test("a line sent before another fails on its own, keeping its text", () => {
+    const state = run([
+      { type: "sending", key: 1, after: 2, text: "one" },
+      { type: "sending", key: 2, after: 2, text: "two" },
+      { type: "send-failed", key: 1, error: { code: "network", message: "offline" } },
+      { type: "settled", key: 1, turn: null },
+    ]);
+    expect(state.pending).toEqual([
+      { key: 1, after: 2, text: "one", failed: true },
+      { key: 2, after: 2, text: "two", failed: false },
+    ]);
+  });
+
+  test("a stored line clears its own pending line, whichever stream brings it first", () => {
+    const state = run([
+      { type: "sending", key: 1, after: 2, text: "one" },
+      { type: "sending", key: 2, after: 2, text: "two" },
+      { type: "events", events: [userLine(4, "two")] },
+    ]);
+    expect(state.pending.map((line) => line.text)).toEqual(["one"]);
   });
 
   test("an error line ends the turn and fails the line waiting", () => {
@@ -149,7 +173,7 @@ describe("reduceLive", () => {
       { type: "error", code: "internal", message: "oops" },
     ]);
     expect(state.turn).toBeNull();
-    expect(state.pending?.failed).toBe(true);
+    expect(state.pending.map((line) => line.failed)).toEqual([true]);
     expect(state.error).toEqual({ code: "internal", message: "oops" });
   });
 
@@ -159,9 +183,11 @@ describe("reduceLive", () => {
       { type: "sending", key: 2, after: 0, text: "two" },
       { type: "started", turn: "t2", persona: "mio" },
     ]);
-    expect(run([{ type: "settled", key: 1, turn: "t1" }], state)).toEqual(state);
-    const settled = run([{ type: "settled", key: 2, turn: "t2" }], state);
-    expect(settled.pending).toBeNull();
+    const first = run([{ type: "settled", key: 1, turn: "t1" }], state);
+    expect(first.pending.map((line) => line.key)).toEqual([2]);
+    expect(first.turn).toBe(state.turn);
+    const settled = run([{ type: "settled", key: 2, turn: "t2" }], first);
+    expect(settled.pending).toEqual([]);
     expect(settled.turn).toBeNull();
   });
 
@@ -170,7 +196,7 @@ describe("reduceLive", () => {
       { type: "sending", key: 1, after: 5, text: "new" },
       { type: "events", events: [userLine(4, "old")] },
     ]);
-    expect(state.pending?.text).toBe("new");
+    expect(state.pending.map((line) => line.text)).toEqual(["new"]);
     expect(state.seen).toBe(4);
   });
 
@@ -217,6 +243,80 @@ describe("reduceLive", () => {
     );
     expect(started.turn?.persona).toBe("mio");
     expect(run([{ type: "unfollow" }, { type: "unfollow" }], second).following).toBe(0);
+  });
+});
+
+describe("Sends", () => {
+  test("a send supersedes the streams open before it once the server accepts it", () => {
+    const sends = new Sends();
+    const live = sends.mark(null);
+    const key = sends.issue();
+    const own = sends.mark(key);
+    expect(sends.superseded(live)).toBe(false);
+    sends.accept(key);
+    expect(sends.superseded(live)).toBe(true);
+    expect(sends.superseded(own)).toBe(false);
+  });
+
+  test("a send refused before its stream starts supersedes nothing", () => {
+    const sends = new Sends();
+    const first = sends.issue();
+    const reply = sends.mark(first);
+    sends.accept(first);
+    sends.issue();
+    expect(sends.superseded(reply)).toBe(false);
+  });
+
+  test("a later accepted send supersedes an earlier one", () => {
+    const sends = new Sends();
+    const first = sends.issue();
+    const mark = sends.mark(first);
+    sends.accept(first);
+    const second = sends.issue();
+    sends.accept(second);
+    expect(sends.superseded(mark)).toBe(true);
+  });
+});
+
+describe("a stream a send superseded", () => {
+  /** Lines in the order they arrive, each marked with whether its stream was superseded. */
+  const arrive = (from: LiveState, lines: readonly (readonly [boolean, ChatStreamLine])[]) =>
+    run(
+      lines.flatMap(([superseded, line]) => (reaches(line, superseded) ? [line] : [])),
+      from,
+    );
+
+  test("leaves her reply to the send's stream when it carries the same one", () => {
+    // The page's GET live, answered only after the send started her reply, replays it too.
+    const sent = run([{ type: "sending", key: 1, after: 2, text: "嗨" }]);
+    const stored: ChatStreamLine = { type: "events", events: [userLine(3, "嗨"), decision(4, 3)] };
+    const state = arrive(sent, [
+      [false, stored],
+      [false, { type: "started", turn: "t2", persona: "mio" }],
+      [false, { type: "delta", turn: "t2", text: "哈" }],
+      [true, stored],
+      [true, { type: "started", turn: "t2", persona: "mio" }],
+      [true, { type: "delta", turn: "t2", text: "哈" }],
+      [false, { type: "delta", turn: "t2", text: "喽" }],
+      [true, { type: "delta", turn: "t2", text: "喽" }],
+    ]);
+    expect(state.turn).toMatchObject({ id: "t2", text: "哈喽" });
+    expect(state.pending).toEqual([]);
+  });
+
+  test("never lets the reply the send interrupted replace the new one", () => {
+    const sent = run([{ type: "sending", key: 1, after: 2, text: "等等" }]);
+    const state = arrive(sent, [
+      [false, { type: "events", events: [userLine(4, "等等"), decision(5, 4)] }],
+      [false, { type: "started", turn: "t2", persona: "mio" }],
+      [false, { type: "delta", turn: "t2", text: "好" }],
+      [true, { type: "started", turn: "t1", persona: "mio" }],
+      [true, { type: "delta", turn: "t1", text: "我在" }],
+      [true, { type: "events", events: [herLine(3, "我在", true)] }],
+      [true, { type: "ended", turn: "t1" }],
+    ]);
+    expect(state.turn).toMatchObject({ id: "t2", text: "好" });
+    expect(state.seen).toBe(5);
   });
 });
 

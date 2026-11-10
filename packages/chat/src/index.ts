@@ -14,6 +14,7 @@ export {
   type ChatStoreErrorCode,
   type ChatStreamLine,
   type ChatSummary,
+  type CutOff,
   DEFAULT_CHAIN_LIMIT,
   isChatId,
   MAX_CHAIN_LIMIT,

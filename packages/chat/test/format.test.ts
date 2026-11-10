@@ -58,6 +58,24 @@ describe("summarize", () => {
     });
   });
 
+  test("a message with photos alone keeps the text before it", () => {
+    const events = stampEvents(
+      [
+        { type: "message", id: "m1", speaker: { kind: "persona", id: "milky" }, text: "看我" },
+        {
+          type: "message",
+          id: "m2",
+          speaker: { kind: "persona", id: "milky" },
+          text: "",
+          attachments: [{ kind: "image", name: `${"a".repeat(64)}.png`, mime: "image/png" }],
+        },
+      ],
+      0,
+      5000,
+    );
+    expect(summarize(HEADER, events).lastText).toBe("看我");
+  });
+
   test("updatedAt never runs backwards", () => {
     const events: ChatEvent[] = [
       { seq: 1, at: 3000, type: "title", title: "a" },

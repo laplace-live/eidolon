@@ -248,6 +248,24 @@ describe("a turn in a group chat", () => {
     expect(said(outputs)).toEqual(["嗯\n露台很好\nK"]);
   });
 
+  test("marks a reply her provider stopped short, held line and all, but not one cut at another's", async () => {
+    const messages = (outputs: readonly TurnOutput[]) =>
+      outputs.flatMap((output) =>
+        output.type === "events"
+          ? output.events.flatMap((event) =>
+              event.type === "message" ? [[event.text, event.cutOff]] : [],
+            )
+          : [],
+      );
+    const length: MindChunk = { type: "done", finishReason: "length" };
+    const stopped = fakeMind([text("嗯\n露"), length]);
+    const short = await collect(runTurn(request(GROUP, user("讲个故事")), deps(stopped.mind)));
+    expect(messages(short)).toEqual([["嗯\n露", "length"]]);
+    const written = fakeMind([text("好呀\n小露: 我也"), length]);
+    const cut = await collect(runTurn(request(GROUP, user("出去玩吗")), deps(written.mind)));
+    expect(messages(cut)).toEqual([["好呀", undefined]]);
+  });
+
   test("in a chat of one, sends no stop, names no one and leaves Mem0 the context", async () => {
     const { mind, requests } = fakeMind([text("嗨\n露比：你好"), DONE]);
     const seen: Seen = {};

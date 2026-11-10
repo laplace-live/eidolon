@@ -11,7 +11,8 @@ export function advanceSummary(summary: ChatSummary, events: readonly ChatEvent[
   for (const event of events) {
     lastSeq = event.seq;
     updatedAt = Math.max(updatedAt, event.at);
-    if (event.type === "message") lastText = event.text;
+    // A message with photos alone has no text to preview.
+    if (event.type === "message") lastText = event.text === "" ? lastText : event.text;
     else if (event.type === "title") title = event.title;
     else if (event.type === "participants") {
       const removed = new Set(event.removed ?? []);
