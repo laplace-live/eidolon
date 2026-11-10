@@ -20,3 +20,10 @@ test("its end says only that it ended", () => {
     "Call ended",
   );
 });
+
+test("a group call's start says the whole group was on it", () => {
+  const group = { ...started, group: true } as const;
+  expect(line({ ...group, durationMs: null }, "奶绿")).toBe("Group call");
+  expect(line({ ...group, durationMs: 192_000 }, "奶绿")).toBe("Group call · 3:12");
+  expect(line({ ...group, edge: "ended", durationMs: 192_000 }, "奶绿")).toBe("Call ended");
+});

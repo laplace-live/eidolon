@@ -10,12 +10,15 @@ chat. It is experimental and off by default: `EIDOLON_VOICE_ENGINE=native` turns
   src/input/                    the Ear: Silero VAD, Smart Turn, the TurnDetector (ported from pipedog)
   src/output/                   the segmenter, the Mouth, the Speaker, what was heard
   src/rtvi/                     the RTVI messages pipedog's observer sends
-  src/call/                     the mailbox (kit.ts), the Floor, the call log, runCascadeCall
+  src/call/                     the mailbox (kit.ts), the Floor, the call log, runCascadeCall,
+                                runRealtimeCall (realtime.ts), a group call's policy (group.ts)
   src/dsp/resampler/            pipedog's rubato resampler, vendored with its wasm
 @eidolon/providers/stt          live speech recognition, one stream per call
 @eidolon/providers/speech-stream   streaming speech, one stream per persona per call
+@eidolon/providers/realtime   a realtime model's session, OpenAI's dialect or xAI's
 @eidolon/engine                 runTurn in call mode (CallHooks)
-packages/runtime/src/native/    the bridge: the switch, the transport over pipedog's connection, deps
+packages/runtime/src/native/    the bridge: the switch, the transport over pipedog's connection, deps,
+                                a call inside a chat (binding.ts)
 ```
 
 Code ported from pipedog keeps pipedog's BSD-2 header, then `Ported from pipedog <path>@ce8f8bc`.
@@ -30,15 +33,20 @@ pipedog is never followed past that commit.
 - **Under `pipedog`, an offer starts exactly the session it started before the switch existed.**
   `sessionStarter` hands back pipedog's starter itself, and a test pins that.
 
-**Under `native`, each offer asks `nativeCanRun()`** in its persona's scope. It sends the call to
-pipedog, with one info line, `[voice] This call runs on pipedog: <why>`, when:
-- it is a call inside a chat, which carries a `CallBinding` ([chat.md](chat.md#the-binding)):
-  only pipedog's session takes one, and bound calls are native from G4. Its persona's settings
-  aren't read;
-- her realtime role is on: realtime calls are native from G3;
-- her hearing or voice role names a provider with no native client. None does today: every
-  provider the catalog offers for either has one, and a test walks the catalog;
+**Under `native`, each offer asks `nativeCanRun()`** in its persona's scope: the active persona's,
+or for a call inside a chat, the binding's ([A call inside a chat](#a-call-inside-a-chat)). It
+sends the call to pipedog, binding and all, with one info line,
+`[voice] This call runs on pipedog: <why>`, when:
+- her hearing or voice role, or her realtime role when it is on, names a provider with no native
+  client. None does today: every provider the catalog offers for any of the three has one, and a
+  test walks the catalog;
 - her settings can't be read. pipedog then fails the call exactly as it does today.
+
+A group call ([Group calls](#group-calls)) always runs natively, since pipedog can't run one. As it
+starts, `nativeCanRun(host, personas)` checks that the host's hearing and each persona's voice have
+native clients and that none of them talks through a realtime model; a call that fails the check
+logs `[voice] This group call can't run: <why>` and fails as `Bot session failed: <why>`. Under
+`pipedog`, nothing offers one: the local app refuses it first.
 
 **Warm-up:** under `native`, `warmAudioModels()` loads the native Ear's models as well as
 pipedog's, since some calls still go to pipedog. Both engines load the same two `.onnx` files, from
@@ -96,7 +104,8 @@ to wait on runs as a task that posts back.
 **A call's log** is a chat log (`@eidolon/chat`): the caller's lines are `message`s with
 `modality: "call"` (or `"text"` for `send-text`), and her turns store what the engine stores. Its
 view is `viewOf`'s, with the text chat's 60-message window. Production keeps it in memory and drops
-it when the call ends.
+it when the call ends; a call inside a chat opens it on the chat
+([below](#a-call-inside-a-chat)).
 
 **Billing:** each reply runs with `usage` set to the call's scope, never `"chat"`. STT bills the
 audio it is sent, speech the characters it is given, and both flush their meters when the call
@@ -120,7 +129,7 @@ The Floor's state is three regions, plus counters:
 
 | # | From | Event | Guard | Actions | To |
 | --- | --- | --- | --- | --- | --- |
-| 1 | CALL connecting | `client-ready` | — | an unparsable version or a major other than 2 gets `error-response`, and the call goes on; emit `bot-ready` with its id; CALL live; greet if the plan says so | BOT thinking |
+| 1 | CALL connecting | `client-ready` | — | an unparsable version or a major other than 2 gets `error-response`, and the call goes on; emit `bot-ready` with its id; CALL live; greet if the plan says so, which a group call never does | BOT thinking |
 | 2 | USER quiet | ear `user-started` | — | emit `user-started-speaking`, then `bot-interrupted`; `interruptedBot` is BOT ≠ idle or a sync tool running; barge in if BOT ≠ idle | USER speaking |
 | 3 | USER speaking | ear `interim` / `final` | — | emit `user-input`, then `user-transcription` | — |
 | 4 | USER speaking | ear `user-stopped(text)` | text | emit `user-llm-text`, then `user-stopped-speaking`, as pipedog does; store the line; recoveries := 0; start a reply | USER quiet, BOT thinking |
@@ -132,7 +141,7 @@ The Floor's state is three regions, plus counters:
 | 10 | BOT ≠ idle | reply `delta` | — | emit `bot-llm-text`; push it to her speech | — |
 | 11 | — | Mouth `segment` | — | emit `bot-transcription`; for a reply without audio, also its one `bot-output` "new", `will_be_spoken: false` | — |
 | 12 | — | Mouth `tts-started` | the reply's first | emit `bot-tts-started` | — |
-| 13 | BOT thinking | Speaker `reply-start` | this reply | emit `bot-started-speaking` | BOT speaking |
+| 13 | BOT thinking | Speaker `reply-start` | this reply | in a group call, emit `server-message {type: "speaker"}` naming her; emit `bot-started-speaking` | BOT speaking |
 | 14 | BOT speaking | Speaker `seg-start` / `words` / `seg-end` | — | emit `bot-output` new / in-progress / completed, the last with `bot-tts-text` | — |
 | 15 | — | reply `mind ended(error?)` | — | emit `bot-llm-stopped`, and `error` on a failure; flush her speech | — |
 | 16 | — | reply `tool running` | — | emit `llm-function-call-started`, and `-in-progress` once the round's `bot-llm-stopped` is out, as pipedog orders them; a sync tool counts | — |
@@ -240,6 +249,119 @@ In a call, the engine runs her turn in call mode (`CallHooks`, [chat.md](chat.md
 Her tools act on the call through effects: a voice switch reaches her speech, and a selfie's
 `server-message` goes to the client.
 
+## Realtime
+
+A persona whose realtime role is on calls through one realtime model that hears, thinks and speaks
+(`runRealtimeCall`, `src/call/realtime.ts`). The call keeps the mailbox, the Speaker, the RTVI
+emitter and the call log; the server's VAD takes the Ear's place, and her audio goes straight onto
+the Speaker, tagged with its item's id.
+
+**The session** opens as the call starts, in the host's persona scope, on her parts' realtime
+variant (`realtime: true`): her system instruction with the realtime delivery line and, while she
+has an async tool, `ASYNC_TOOL_INSTRUCTIONS`; her selfie and recall tools, never the voice tool; her
+realtime voice; and for OpenAI, transcription by `gpt-realtime-whisper` in `spokenLanguage()`.
+The caller's 16 kHz audio is resampled to OpenAI's 24 kHz.
+
+**The conversation it opens on** is her view of the log less her tool calls (`callSeed`), packed
+as pipedog's realtime adapters pack a call's context (`_fromUniversalContextMessages`, ported with
+its notice): nothing, a single user message as it is, or everything in one user item between the
+adapter's intro and trailing text. A production call's log starts empty, so its greeting is just the
+kickoff; a call bound to a chat opens on the chat.
+
+**The greeting:** on `client-ready`, `prepareTurn` with the kickoff stores the kickoff and her
+recall, then the conversation goes in and she is asked for a response. A call that doesn't greet
+sends its conversation as the session opens.
+
+| Server event | What the call does |
+| --- | --- |
+| `speech-started` | a barge-in: the Speaker empties, the item at the cursor is truncated at the ms the cursor had played (not pipedog's estimate), xAI also cancels the response; `user-started-speaking`, `bot-interrupted`, then the closes of a cascade barge-in |
+| `speech-stopped` | `user-stopped-speaking` at once |
+| `user-transcript` | `user-input` and `user-transcription`, cumulative; a final stores the caller's `call` line and runs `prepareTurn`, which the next `speech-started` stops, and its `context` events go to the session (E1). Recall trails by one turn |
+| `response-started` | one `bot-llm-started` per response (E5) |
+| `transcript-delta` | `bot-llm-text`; the segmenter's sentences become `bot-transcription`, and each sentence's `bot-output` "new" and "completed" go out as the cursor passes the audio queued by its last delta (E4) |
+| first `audio` of a response | `bot-tts-started`; `bot-started-speaking` comes from the Speaker |
+| `response-done` | `bot-tts-stopped`, `bot-llm-stopped`, an `error` if it failed, then her last sentence |
+| `tool-call` | `runTool` from the engine (below) |
+| `error`, or the socket closing | `error`, then the call ends (`error`, E8) |
+
+- **Her line** is her transcript, stored once her audio has played; cut off, it is the deltas the
+  cursor had passed, `interrupted`.
+- **E4's hold:** after the caller stops, her `bot-output` and stored lines wait for the caller's
+  final transcript, a second at most, so the caller's line comes first.
+- **The caller's `user-llm-text`** goes out once the reply to that turn has played or been cut,
+  where pipedog's realtime handoff flush writes the line to her context.
+- **Typed text** (`send-text`) cuts her off, the response included, goes in as the caller's item and
+  asks for a response (E2); without `run_immediately`, it goes in for her next response.
+- **Tools:** a sync tool runs, and its result answers its call once the response has ended and
+  played out and no other response runs; then she is asked for the response that reads it. A
+  barge-in cancels it, and its call is answered `CANCELLED`. An async tool's call is answered with
+  its placeholder (the started envelope), and its result goes in later as a system item carrying
+  the final or cancelled envelope, with a follow-up response once the floor is free.
+- **Her voice can't switch:** `switchVoice` throws, as it does on pipedog.
+- **Metering** is the session's (`@eidolon/providers/realtime`): audio hours for a model priced by
+  the hour, else each response's tokens.
+
+## A call inside a chat
+
+A call bound to a chat (`CallBinding`, [chat.md](chat.md#the-binding)) runs on the native engine
+through the same binding pipedog's session takes, so the local app's runner and production's
+`bindChatCall` work unchanged on either engine (`src/native/binding.ts`).
+- **She runs as herself:** the whole call runs inside `withPersona(binding.persona)`, and
+  `nativeCanRun` asks in her scope, so her roles, not the active persona's, decide the engine.
+- **The seed opens the call's log:** the viewer's lines and hers as messages, a system or developer
+  message as her context block where it stands. Her view is the seed, then the call, in the text
+  chat's 60-line window, which counts the chat's lines too (D1). A realtime call packs that view
+  into its history item ([Realtime](#realtime)).
+- **The lines:** each message the call stores, the viewer's spoken or typed line or hers, goes to
+  `onTranscript` as the log takes it. Hers is what was heard, `interrupted` when the viewer or a
+  hang-up cut her off. The seed, the greeting's kickoff, the empty-turn prompt and an empty line
+  aren't reported. A hook that throws is logged, and the call goes on.
+- **Her photos:** each `server-message` the call sends its browser, a selfie's, reaches
+  `onServerMessage` once sent, in order with the lines.
+- **The browser:** every hook gets the call's one `CallClient`, whose `sendServerMessage` reaches
+  the data channel until the browser hangs up or the call ends.
+- **The end:** `onEnded` once, after the last line: `error` when the call couldn't start or ended on
+  a fatal error, else `hangup`.
+- **Mem0 stores only what is said on the call:** her Mem0 provider gets her view of the call's own
+  events as the turn began (`MEM0_STORE_KEY`), since the chat's turns stored the seed already. So
+  the greeting's turn stores nothing, where pipedog's stores the kickoff.
+
+## Group calls
+
+A group call has every persona in a chat on it at once, and answers each of the caller's lines as
+the group chat does: the director chooses who answers, and the personas may answer each other
+([chat.md](chat.md#group-chats)). Only the native engine runs one, and only the local app offers
+one ([chat.md](chat.md#a-call-in-the-local-app)).
+
+- **Who hears and who speaks:** the host, the persona whose Call started it, hears the caller
+  through her hearing role, the call's one Ear. Every persona has her own Mouth, opened in her
+  persona scope with her own voice role, styles and markup, all on the call's one Speaker.
+- **Each line's answer** is `runChat` in call mode (`group.ts`, CallChatRequest's `hooks`): the
+  Floor runs it after each caller's line, spoken or typed, and each persona it chooses gets her own
+  call hooks, her turn a reply of its own, on her Mouth.
+- **One speaker at a time:** her turn ends only once her audio has played, since it awaits what was
+  heard, so the director is asked about the next turn, and the next persona's mind, only after it.
+  Nothing is generated ahead.
+- **Her label:** as each persona's first sample plays, just before `bot-started-speaking`, the
+  client gets `server-message {type: "speaker", persona, name}`, her id and her identity name.
+  A selfie's `server-message` names her `persona` too.
+- **A barge-in** cuts the persona speaking, who stores what was heard as interrupted, aborts the
+  chain, and drops the turns still to come; one that comes while the director weighs the next turn
+  stops it, and nothing more is stored. An empty turn that cut her off asks her alone to go on.
+- **Her follow-up:** an async tool's result starts a turn of hers alone once the floor is free, as
+  the director chose no one for it.
+- **No greeting**, as a group chat has none.
+- **The log** opens on the chat itself, its header and events, under the call's id: each turn
+  stores her `call` message, and each answer its `decision`s.
+- **Mem0** stores the viewer's lines on the call and hers, never another persona's, which would
+  become memories of the viewer.
+- **No realtime model joins one:** the local app refuses the call with `409 realtime-in-group`.
+
+A group call's binding (`GroupCallBinding`, `src/native/binding.ts`) carries the chat as stored
+instead of a seed, and reports each line and decision the call stores to `onEvents`, numbered as
+the call's log numbers them; the local runner stores each decision against the line it answers as
+the chat numbered it. Each persona's photo reaches `onServerMessage` with her `persona`.
+
 ## RTVI
 
 The server stays at protocol 2.2.0; client-js 1.16.0 speaks 2.3.0 and accepts any server of the
@@ -257,7 +379,7 @@ left out; `id` appears only on `bot-ready` and `error-response`.
 | `bot-tts-started` / `-stopped` | stopped now always comes, per reply and on a barge-in (D4) |
 | `bot-started-speaking` / `-stopped-speaking` | stopped comes at the audio's end, not seconds late (D5) |
 | `bot-output`, `bot-tts-text` | the same shape; `segment_id` counts from 1 in each call |
-| `server-message` | the same for selfies |
+| `server-message` | the same for selfies; a group call's also name her `persona`, and its `speaker` messages are new |
 | `error {fatal: false}` | the same texts |
 | `llm-function-call-started` / `-in-progress` / `-stopped` | the same |
 | `metrics` | never sent (D3) |
@@ -276,6 +398,10 @@ What a client must be able to count on, on both engines:
 - **I8:** every `error` is `fatal: false`.
 - **I9:** a turn with no final transcript starts no mind request unless it interrupted her.
 - **I10:** after `bot-interrupted`, no `bot-llm-text` comes before the next `bot-llm-started`.
+
+On a realtime call the server ends the caller's turn on its own VAD and answers before it has
+transcribed it: I2 holds as "a turn's final transcript comes after its `user-started-speaking`",
+and I9 doesn't apply.
 
 ## The transport
 
@@ -302,7 +428,7 @@ Every difference between the engines must be one of these, each with what trigge
 
 | Id | Difference | Trigger |
 | --- | --- | --- |
-| D1 | a call's view is the last 60 messages | a call longer than 60 lines |
+| D1 | a call's view is the last 60 messages | a call longer than 60 lines, or a call inside a chat whose window and lines pass 60 together |
 | D2 | no `user-llm-text` for the greeting or follow-ups | every call: today the kickoff prompt reaches the client |
 | D3 | no `metrics` | no client reads them |
 | D4 | `bot-tts-stopped` per reply and on a barge-in | Fish never sends it today: it waits for the 15 s context timeout |
@@ -319,18 +445,31 @@ Every difference between the engines must be one of these, each with what trigge
 | D15 | voices other than Fish keep her cues in the stored text | matches text chats; today the filtered text is stored |
 | D16 | her parts (her LanceDB tables, the selfie tool) outlive the call, in the engine's cache of its last 32 chats | every native call |
 
+A realtime call's differences, each a fix of pipedog's realtime path:
+
+| Id | Difference | Trigger |
+| --- | --- | --- |
+| E1 | her recall reaches the model: each block goes in as an item, and one a provider takes out is deleted | a realtime call with recall; pipedog sent none after the greeting |
+| E2 | typed text is answered: it cuts her off, goes in as the caller's item and asks for a response | `send-text` on a realtime call; pipedog never sent it its model, and OpenAI's response ran on past the interruption |
+| E3 | OpenAI's interim transcripts are cumulative | a turn transcribed in more than one delta |
+| E4 | `bot-output` per sentence, "new" then "completed" as the cursor passes it, held for the caller's final transcript (1 s at most) | every realtime reply: pipedog sent each transcript delta as a "new" never to be spoken |
+| E5 | one `bot-llm-started` and one `bot-llm-stopped` per response | every realtime response: pipedog started one as it asked and again per item announced, and stopped a cut one twice |
+| E8 | a fatal error, or the socket closing, ends the call | a server's fatal error; pipedog's call went on without its model |
+
 ## Parity tests
 
 | Where | What |
 | --- | --- |
 | `packages/runtime/test/parity/` | the ported leaves against the installed pipedog: VAD and Smart Turn probabilities, loudness, the segmenter on every reply production recorded, RTVI messages against pipedog's observer, the async envelopes. The only tests that import both engines |
 | `packages/runtime/test/parity/twin.ts` | the twin harness: one scripted call on each engine ([below](#the-twin-harness)) |
-| `packages/voice/test/` | each leaf on its own; the Floor row by row on a fake engine and clock; the real `runTurn` with a scripted mind; whole calls on a fake transport with the real hearing models |
-| `packages/runtime/test/native/` | the switch, `nativeCanRun`, a native call's start, and the transport against a real werift peer |
+| `packages/voice/test/` | each leaf on its own; the Floor row by row on a fake engine and clock; the real `runTurn` with a scripted mind; whole calls on a fake transport with the real hearing models; a realtime call on a scripted session, with the real `prepareTurn` and `runTool`; a group call's floor on the real `runChat` with a scripted director (`group.test.ts`) |
+| `packages/runtime/test/native/` | the switch, `nativeCanRun`, a native call's start, the transport against a real werift peer, a call inside a chat reporting what pipedog's binding tests expect, and a group call's binding (`group.test.ts`) |
+| `apps/bot/test/{chat,local}/native_call.test.ts` | production's `bindChatCall` and the local runner's binding, unchanged, on a native call |
+| `apps/bot/test/local/group_call.test.ts` | the local offer route's group checks, and the runner storing a native group call's lines and decisions |
 | `packages/runtime/test/native_boundaries.test.ts` | under `src/native/`, only the transport imports pipedog |
 
 `bun test --no-env-file packages/runtime/test/parity` runs the first; with `EIDOLON_TWIN=1` it runs
-the twin harness's scenarios too, about seven minutes of real-time calls. A change to the loop or its
+the twin harness's scenarios too, about ten minutes of real-time calls. A change to the loop or its
 transport also needs real calls on each engine ([Real calls](#real-calls)); they are billed.
 
 ### The twin harness
@@ -360,7 +499,13 @@ prompt's clock line masked):
 
 **Every difference must match a rule in `allowed.ts`** (the table [above](#allowed-differences)),
 each with its id, what it allows, its trigger and a predicate that matches nothing else, and both
-runs must keep I1–I10 (`invariants.ts`). Rules are added only with a trigger, never to quiet a
+runs must keep I1–I10 (`invariants.ts`). A rule may excuse an invariant pipedog breaks where its
+fix is that rule's: E5 excuses pipedog's second `bot-llm-started` on a realtime call.
+
+On a realtime call the harness also compares what the realtime server got, its audio aside: the
+session as its `session.update`s leave it (pipedog sends a second one once its context arrives),
+then every other client event, with the item ids the client made up as ordinals and no truncation
+position. Rules are added only with a trigger, never to quiet a
 scenario: a difference no rule explains is a native bug to fix, or a skipped scenario with its
 reason, for the user to decide.
 
@@ -369,10 +514,15 @@ without `run_immediately`, left for the next turn; a reply with `audio_response:
 question and a two-sentence reply; a barge-in mid-sentence and before her first audio; an empty
 turn while idle, after cutting her off, and just after her audio ended (D13); `change_voice_style`;
 a mind request that fails; the recognizer's socket dropping and reconnecting; a call longer than
-the 60-line window (D1). One is skipped, its difference noted where it is written: a line typed
-without `run_immediately` within 15 s of her Fish reply, which pipedog stores before that reply,
-since it stores her reply only when Fish's audio context times out. `scenarios/checks.test.ts`
-tests the harness itself on made-up sequences, and runs without the variable.
+the 60-line window (D1); and a realtime call in each dialect (`scenarios/realtime.test.ts`, against
+`fakes/realtime.ts`): the greeting, a spoken question, a barge-in, a line typed while she is idle
+and while she speaks, and a fatal error. One is skipped, its difference noted where it is written:
+a line typed without `run_immediately` within 15 s of her Fish reply, which pipedog stores before
+that reply, since it stores her reply only when Fish's audio context times out. And one isn't
+written: a barge-in before a realtime response's transcript has all arrived, where pipedog's
+observer joins the cut sentence to the next reply's in one `bot-transcription`, a defect no rule
+names. `scenarios/checks.test.ts` tests the harness itself on made-up sequences, and runs without
+the variable.
 
 ### Real calls
 
@@ -399,7 +549,5 @@ bun apps/bot/scripts/e2e-compare.ts a1.json a2.json … --vs b1.json b2.json …
 
 ## Not yet native
 
-- **Realtime personas** (G3): their calls go to pipedog.
-- **Calls bound to a chat, and group calls** (G4).
 - **Fish's exact segment ends** (G5): serial flushes, once measured.
 - **The transport** (G6): `@eidolon/webrtc`.

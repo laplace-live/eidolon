@@ -35,9 +35,10 @@ import {
   type TurnRequest,
 } from "@eidolon/engine";
 import type { AudioClip } from "@eidolon/providers/speech-batch";
-import type { CallBinding, CallEnd, TranscriptLine } from "@eidolon/runtime";
+import type { CallBinding, CallEnd, GroupCallBinding, TranscriptLine } from "@eidolon/runtime";
 import type { ChatCallInfo, ChatContents } from "../api.ts";
 import { localViewer } from "../identity.ts";
+import { type GroupCallRefusal, groupCallRefusal } from "./group.ts";
 import { HearingFailed, hearingRefusal } from "./hearing.ts";
 import { LiveTurn } from "./live.ts";
 
@@ -78,6 +79,17 @@ export interface ChatCall extends CallBinding {
   readonly onEnded: (reason: CallEndReason) => Promise<void>;
 }
 
+/**
+ * A call the runner opened with every persona in a chat, and the binding of the session that runs
+ * it: the session opens on the chat as stored, and each line and decision it reports is stored, the
+ * lines as `call` messages, each decision against the line it answers as the chat numbered it.
+ */
+export interface GroupChatCall extends GroupCallBinding {
+  readonly id: string;
+  connected(pcId: string): void;
+  readonly onEnded: (reason: CallEndReason) => Promise<void>;
+}
+
 /** The call on in chat `id`, with the connection it was answered on, if it was yet. */
 export interface CallInChat extends ChatCallInfo {
   readonly pcId: string | null;
@@ -110,6 +122,8 @@ export interface ChatRunnerOptions {
   readonly answer?: ChatAnswer;
   /** Default: the engine's. */
   readonly hear?: ChatHear;
+  /** Why a chat's personas can't be called together. Default: the voice engine's and theirs. */
+  readonly groupCalls?: (personas: readonly ParticipantId[]) => GroupCallRefusal | null;
 }
 
 /** How long shutdown waits for aborted replies to store what they said. */
@@ -143,11 +157,15 @@ interface Chat {
 interface ActiveCall {
   readonly id: string;
   readonly persona: ParticipantId;
+  /** Every persona in the chat is on it, `persona` hosting. */
+  readonly group: boolean;
   /** Each event the chat stores while the call is on, through its call-ended. */
   readonly live: LiveTurn;
   pcId: string | null;
   /** Set by the first end; it resolves once call-ended is stored or has failed. */
   ending: Promise<void> | null;
+  /** A group call's lines, by their seq on the call, to the seq the chat stores each at. */
+  readonly seqs: Map<number, Promise<number>>;
 }
 
 /** The turn a reply is in, from its `started` to its `ended`. */
@@ -161,6 +179,7 @@ export class ChatRunner {
   readonly #turn: ChatTurn;
   readonly #answer: ChatAnswer;
   readonly #hear: ChatHear;
+  readonly #groupCalls: (personas: readonly ParticipantId[]) => GroupCallRefusal | null;
   readonly #chats = new Map<string, Chat>();
   /** Each call whose end was asked for, until its call-ended, after its last lines, is stored. */
   readonly #endings = new Set<Promise<void>>();
@@ -172,6 +191,7 @@ export class ChatRunner {
     this.#turn = options.turn ?? engineTurn;
     this.#answer = options.answer ?? engineAnswer;
     this.#hear = options.hear ?? engineHear;
+    this.#groupCalls = options.groupCalls ?? groupCallRefusal;
   }
 
   list(): Promise<ChatSummary[]> {
@@ -182,10 +202,24 @@ export class ChatRunner {
     // Taken first: a tool leaves the list only once what it brought is stored.
     const lateTools = [...(this.#chats.get(id)?.late ?? [])];
     const contents = await this.store.read(id, { afterSeq });
-    const refusal = hearingRefusal(await this.participants(id));
+    const participants = await this.participants(id);
+    const refusal = hearingRefusal(participants);
     const active = this.callIn(id);
-    const call = active === null ? null : { id: active.id, persona: active.persona };
-    return { ...contents, lateTools, hearingRefusal: refusal, call };
+    const call =
+      active === null
+        ? null
+        : {
+            id: active.id,
+            persona: active.persona,
+            ...(active.group ? { group: true as const } : {}),
+          };
+    const groupCall = this.#groupCalls(participants) === null;
+    return { ...contents, lateTools, hearingRefusal: refusal, call, groupCall };
+  }
+
+  /** Why the personas of chat `id` can't be called together now; null when they can. */
+  async groupCallRefusal(id: string): Promise<GroupCallRefusal | null> {
+    return this.#groupCalls(await this.participants(id));
   }
 
   /**
@@ -305,7 +339,14 @@ export class ChatRunner {
   /** The call on in chat `id`, or null. */
   callIn(id: string): CallInChat | null {
     const call = this.#chats.get(id)?.call ?? null;
-    return call && { id: call.id, persona: call.persona, pcId: call.pcId };
+    return (
+      call && {
+        id: call.id,
+        persona: call.persona,
+        ...(call.group ? { group: true as const } : {}),
+        pcId: call.pcId,
+      }
+    );
   }
 
   /**
@@ -315,37 +356,12 @@ export class ChatRunner {
    * and GET live streams each event it stores. NotInChat when she isn't in the chat.
    */
   startCall(id: string, persona: ParticipantId): Promise<ChatCall> {
-    const chat = this.#chat(id);
-    return this.#serial(chat, async () => {
-      if (chat.call !== null) throw new ChatInCall();
-      if (!(await this.participants(id)).includes(persona)) throw new NotInChat();
-      await this.#interrupt(chat);
-      // After the awaits: a delete that came during them has aborted the chat's tools and hearing,
-      // and removes the chat next.
-      if (chat.cancel.signal.aborted) throw new ChatStoreError("not-found", `No chat ${id}`);
-      const call: ActiveCall = {
-        id: Bun.randomUUIDv7(),
+    return this.#openCall(id, persona, false, async (chat, call, onEnded) => {
+      const seedMessages: ViewMessage[] = callSeed(
+        await this.store.read(id),
         persona,
-        live: new LiveTurn(),
-        pcId: null,
-        ending: null,
-      };
-      chat.call = call;
-      try {
-        await this.#append(id, chat, [{ type: "call-started", call: call.id, persona }]);
-      } catch (error) {
-        chat.call = null;
-        call.live.end();
-        throw error;
-      }
-      const onEnded = (reason: CallEndReason) => this.#endCall(id, chat, call, reason);
-      let seedMessages: ViewMessage[];
-      try {
-        seedMessages = callSeed(await this.store.read(id), persona, localViewer().uname ?? "");
-      } catch (error) {
-        await onEnded("error");
-        throw error;
-      }
+        localViewer().uname ?? "",
+      );
       return {
         id: call.id,
         persona,
@@ -357,6 +373,77 @@ export class ChatRunner {
         },
         onEnded,
       };
+    });
+  }
+
+  /**
+   * As `startCall`, with every persona in the chat on the call, `host` hearing the viewer: the call
+   * opens on the chat as stored, its call-started marked `group`, and each line and decision it
+   * reports is stored. The caller checks first that they can be called together.
+   */
+  startGroupCall(id: string, host: ParticipantId): Promise<GroupChatCall> {
+    return this.#openCall(id, host, true, async (chat, call, onEnded) => ({
+      group: true,
+      id: call.id,
+      persona: host,
+      chat: await this.store.read(id),
+      onEvents: (events) => this.#groupEvents(id, chat, call, events),
+      onServerMessage: (data) => this.#callPhotos(id, chat, call, data),
+      connected: (pcId) => {
+        call.pcId = pcId;
+      },
+      onEnded,
+    }));
+  }
+
+  /**
+   * Stops the running reply, stores call-started, and binds the call with `bind`; a call it can't
+   * bind ends at once, as an error.
+   */
+  #openCall<T>(
+    id: string,
+    persona: ParticipantId,
+    group: boolean,
+    bind: (
+      chat: Chat,
+      call: ActiveCall,
+      onEnded: (reason: CallEndReason) => Promise<void>,
+    ) => Promise<T>,
+  ): Promise<T> {
+    const chat = this.#chat(id);
+    return this.#serial(chat, async () => {
+      if (chat.call !== null) throw new ChatInCall();
+      if (!(await this.participants(id)).includes(persona)) throw new NotInChat();
+      await this.#interrupt(chat);
+      // After the awaits: a delete that came during them has aborted the chat's tools and hearing,
+      // and removes the chat next.
+      if (chat.cancel.signal.aborted) throw new ChatStoreError("not-found", `No chat ${id}`);
+      const call: ActiveCall = {
+        id: Bun.randomUUIDv7(),
+        persona,
+        group,
+        live: new LiveTurn(),
+        pcId: null,
+        ending: null,
+        seqs: new Map(),
+      };
+      chat.call = call;
+      try {
+        await this.#append(id, chat, [
+          { type: "call-started", call: call.id, persona, ...(group ? { group: true } : {}) },
+        ]);
+      } catch (error) {
+        chat.call = null;
+        call.live.end();
+        throw error;
+      }
+      const onEnded = (reason: CallEndReason) => this.#endCall(id, chat, call, reason);
+      try {
+        return await bind(chat, call, onEnded);
+      } catch (error) {
+        await onEnded("error");
+        throw error;
+      }
     });
   }
 
@@ -505,8 +592,51 @@ export class ChatRunner {
   }
 
   /**
+   * Stores a group call's lines as `call` messages and its decisions, each against the seq its line
+   * was stored at, in the order reported; one after the call's end is dropped.
+   */
+  #groupEvents(id: string, chat: Chat, call: ActiveCall, events: readonly ChatEvent[]): void {
+    if (!this.#takes(id, call, "a line")) return;
+    const failed = (error: unknown) => {
+      logger.exception(`Chat ${id}: a line of call ${call.id} wasn't stored`, error);
+    };
+    for (const event of events) {
+      if (event.type === "message") {
+        const stored = this.#append(id, chat, [
+          {
+            type: "message",
+            id: Bun.randomUUIDv7(),
+            speaker: event.speaker,
+            text: event.text,
+            modality: "call",
+            ...(event.interrupted ? { interrupted: true } : {}),
+          },
+        ]);
+        stored.catch(failed);
+        const seq = stored.then(([line]) => (line as ChatEvent).seq);
+        // A decision awaits it, if one answers it.
+        seq.catch(() => {});
+        call.seqs.set(event.seq, seq);
+      } else if (event.type === "decision") {
+        const after = call.seqs.get(event.after);
+        if (after === undefined) {
+          logger.warning(`Chat ${id}: a decision of call ${call.id} answers no line of it`);
+          continue;
+        }
+        const { seq: _, at: __, ...decision } = event;
+        void this.#append(
+          id,
+          chat,
+          after.then((line) => [{ ...decision, after: line }]),
+        ).catch(failed);
+      }
+    }
+  }
+
+  /**
    * Stores the photos a selfie message of `call` names as her `call` message, copied from the
-   * selfie store into the chat. It takes its place among the call's lines as it arrives.
+   * selfie store into the chat; a group call's names whose photo it is. It takes its place among the
+   * call's lines as it arrives.
    */
   #callPhotos(
     id: string,
@@ -515,8 +645,9 @@ export class ChatRunner {
     data: Readonly<Record<string, unknown>>,
   ): void {
     if (data.type !== "selfie" || !this.#takes(id, call, "her photo")) return;
+    const persona = call.group && typeof data.persona === "string" ? data.persona : call.persona;
     // Shutdown waits for it as for her lines.
-    const photos = callPhotos(data, call.persona, this.#saver(id)).then((draft) =>
+    const photos = callPhotos(data, persona, this.#saver(id)).then((draft) =>
       draft === null ? [] : [draft],
     );
     void this.#append(id, chat, photos).catch((error: unknown) => {
@@ -545,7 +676,8 @@ export class ChatRunner {
       });
     call.ending = ending;
     this.#endings.add(ending);
-    logger.info(`Chat ${id}: call ${call.id} with ${call.persona} ended (${reason})`);
+    const who = call.group ? `everyone, ${call.persona} hosting,` : call.persona;
+    logger.info(`Chat ${id}: call ${call.id} with ${who} ended (${reason})`);
     return call.ending;
   }
 

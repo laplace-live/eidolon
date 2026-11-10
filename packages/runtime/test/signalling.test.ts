@@ -9,6 +9,7 @@ import type {
 } from "@pipedog/transport-smallwebrtc/opus";
 import { HTTPException } from "@pipedog/transport-smallwebrtc/request_handler";
 import type { RTCIceCandidate } from "@pipedog/transport-smallwebrtc/rtc";
+import type { AnyCallBinding } from "../src/native/binding.ts";
 import type { CallBinding } from "../src/session/session.ts";
 import type { CandidateRules } from "../src/webrtc/handler.ts";
 import {
@@ -141,7 +142,7 @@ function admission(body: Record<string, unknown> | null, opusBitrateBps = 96000)
 interface Started {
   readonly connection: SmallWebRTCConnection;
   readonly admission: AllowedOffer;
-  readonly binding: CallBinding | undefined;
+  readonly binding: AnyCallBinding | undefined;
 }
 
 function server(

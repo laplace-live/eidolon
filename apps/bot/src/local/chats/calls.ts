@@ -1,5 +1,6 @@
 // A call inside a chat: a local POST /api/offer whose requestData names a chat and one of its
 // personas. The session runs as her and opens on her view of the chat; the runner stores its lines.
+// With `group`, every persona in the chat is on the call, she hosting.
 import type { AllowedOffer, JsonObject } from "@eidolon/access";
 import { isChatId } from "@eidolon/chat";
 import { logger, pyRepr } from "@eidolon/config";
@@ -9,7 +10,7 @@ import type { ChatCallRequestData } from "../api.ts";
 import { personaRefusal } from "../personas.ts";
 import { localError } from "../responses.ts";
 import { chatErrorResponse } from "../routes/chats.ts";
-import { type ChatCall, type ChatRunner, NotInChat } from "./runner.ts";
+import { type ChatCall, type ChatRunner, type GroupChatCall, NotInChat } from "./runner.ts";
 
 /** The chat call `requestData` asks for; null without a `chatId`, else the 4xx for a bad one. */
 export function chatCallTarget(
@@ -24,7 +25,11 @@ export function chatCallTarget(
   if (typeof persona !== "string") {
     return localError(400, "bad-request", "A call in a chat names the `persona` it calls");
   }
-  return personaRefusal(persona) ?? { chatId, persona };
+  const group = requestData?.group;
+  if (group !== undefined && typeof group !== "boolean") {
+    return localError(400, "bad-request", "`group` is true or false");
+  }
+  return personaRefusal(persona) ?? { chatId, persona, ...(group ? { group } : {}) };
 }
 
 /** The 4xx for a call the runner refused to open, or null for an error it didn't expect. */
@@ -43,7 +48,7 @@ export async function offerChatCall(
   chats: ChatRunner,
   signalling: Pick<SignallingServer, "offer">,
   admission: AllowedOffer,
-  { chatId, persona }: ChatCallRequestData,
+  { chatId, persona, group }: ChatCallRequestData,
 ): Promise<Response> {
   const pcId = admission.body?.pc_id;
   const active = chats.callIn(chatId);
@@ -51,16 +56,24 @@ export async function offerChatCall(
     const result = await signalling.offer(admission);
     return jsonResponse(result.status, result.body);
   }
-  let call: ChatCall;
+  let call: ChatCall | GroupChatCall;
   try {
-    call = await chats.startCall(chatId, persona);
+    if (group) {
+      const refused = await chats.groupCallRefusal(chatId);
+      if (refused !== null) return localError(refused.status, refused.code, refused.message);
+      call = await chats.startGroupCall(chatId, persona);
+    } else {
+      call = await chats.startCall(chatId, persona);
+    }
   } catch (error) {
     const refused = refusal(error);
     if (refused === null) throw error;
     return refused;
   }
+  const whom = group ? `everyone in chat ${chatId}, ${pyRepr(persona)} hosting` : null;
   logger.info(
-    `[local] Offer from the local viewer to ${pyRepr(persona)} in chat ${chatId} (call ${call.id})`,
+    `[local] Offer from the local viewer to ${whom ?? `${pyRepr(persona)} in chat ${chatId}`} ` +
+      `(call ${call.id})`,
   );
   let result: SignallingResult;
   try {

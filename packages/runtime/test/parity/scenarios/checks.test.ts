@@ -2,8 +2,16 @@
 // normalized and compared, and that each allowed.ts rule matches its difference and nothing else.
 import { describe, expect, test } from "bun:test";
 import type { Received } from "../fakes/peer.ts";
+import type { ClientEvent } from "../fakes/realtime.ts";
 import { checkInvariants, type WireMessage } from "../invariants.ts";
-import { type Capture, judge, normalizeRtvi, type Twin } from "../twin.ts";
+import {
+  type Capture,
+  judge,
+  normalizeRealtime,
+  normalizeRtvi,
+  type Twin,
+  violations,
+} from "../twin.ts";
 
 const m = (type: string, data?: Record<string, unknown>): WireMessage =>
   data === undefined ? { type } : { type, data };
@@ -194,6 +202,7 @@ function capture(engine: "pipedog" | "native", messages: Received[], extra: Part
     mind: [],
     fish: [],
     soniox: [],
+    realtime: [],
     usage: [],
     conversation: [],
     logs: [],
@@ -220,9 +229,15 @@ describe("allowed.ts", () => {
 
   test("each rule names its difference and its trigger", async () => {
     const { ALLOWED } = await import("../allowed.ts");
-    expect(ALLOWED.map((rule): string => rule.id)).toEqual(
-      Array.from({ length: 16 }, (_, i) => `D${i + 1}`),
-    );
+    expect(ALLOWED.map((rule): string => rule.id)).toEqual([
+      ...Array.from({ length: 16 }, (_, i) => `D${i + 1}`),
+      "E1",
+      "E2",
+      "E3",
+      "E4",
+      "E5",
+      "E8",
+    ]);
     for (const rule of ALLOWED) {
       expect(rule.difference.length).toBeGreaterThan(0);
       expect(rule.trigger.length).toBeGreaterThan(0);
@@ -302,5 +317,210 @@ describe("allowed.ts", () => {
     ]);
     const pipedog = capture("pipedog", reply("late"));
     expect(rules({ pipedog, native: early })).toContain("UNEXPLAINED");
+  });
+});
+
+describe("a realtime call's invariants", () => {
+  // The server ends the turn on its VAD and answers before it has transcribed it.
+  const turn = [
+    ready,
+    m("user-started-speaking"),
+    m("bot-interrupted"),
+    m("user-stopped-speaking"),
+    m("bot-llm-started"),
+    ...said("你好"),
+    m("bot-llm-stopped"),
+  ];
+
+  test("I2 holds as a final after its turn's start, and I9 waits for no transcript", () => {
+    expect(ids(turn)).toEqual(["I9", "I2", "I2"]);
+    expect(checkInvariants(turn, { native: true, realtime: true })).toEqual([]);
+  });
+
+  test("a final with no turn of the caller's before it still breaks I2", () => {
+    const early = [ready, ...said("你好")];
+    expect(checkInvariants(early, { native: true, realtime: true }).map((v) => v.id)).toEqual([
+      "I2",
+    ]);
+  });
+});
+
+describe("normalizeRealtime", () => {
+  test("the session as its updates leave it, item ids as ordinals, and no cut position", () => {
+    const events: ClientEvent[] = [
+      {
+        type: "session.update",
+        session: { instructions: "现在是 2026年11月10日 周二 19:53。S", tools: [] },
+      },
+      {
+        type: "conversation.item.create",
+        item: { id: "abc", type: "message", role: "user", content: [] },
+      },
+      { type: "session.update", session: { tools: [{ name: "t" }] } },
+      { type: "conversation.item.delete", item_id: "abc" },
+      { type: "conversation.item.truncate", item_id: "it1", content_index: 0, audio_end_ms: 412 },
+      { type: "response.cancel" },
+    ];
+    expect(normalizeRealtime(events).map((n) => n.key)).toEqual([
+      'session {"instructions":"现在是 <now>。S","tools":[{"name":"t"}]}',
+      'conversation.item.create {"item":{"type":"message","role":"user","content":[]}}',
+      'conversation.item.delete {"item":1}',
+      'conversation.item.truncate {"item_id":"it1","content_index":0,"audio_end_ms":"<ms>"}',
+      "response.cancel",
+    ]);
+  });
+});
+
+describe("allowed.ts: a realtime call's rules", () => {
+  const session: ClientEvent = { type: "session.update", session: { instructions: "S" } };
+  const on = (events: ClientEvent[] = []) => ({ realtime: [session, ...events] });
+  const delta = (text: string, id: number) =>
+    rtvi("bot-output", {
+      text,
+      text_type: "sentence",
+      aggregated_by: "sentence",
+      segment_id: id,
+      spoken: true,
+      will_be_spoken: false,
+      spoken_status: "new",
+    });
+  const sentence = (text: string, status: "new" | "completed") =>
+    rtvi("bot-output", {
+      text,
+      text_type: "sentence",
+      aggregated_by: "sentence",
+      segment_id: 1,
+      spoken: status === "completed",
+      will_be_spoken: true,
+      spoken_status: status,
+    });
+  const greeting = {
+    pipedog: [
+      rtvi("bot-ready"),
+      rtvi("bot-llm-started"),
+      rtvi("bot-llm-started"),
+      rtvi("bot-llm-text", { text: "你好呀，欢迎。" }),
+      rtvi("bot-tts-started"),
+      rtvi("bot-started-speaking"),
+      delta("你好呀，", 8),
+      rtvi("bot-tts-text", { text: "你好呀，" }),
+      rtvi("bot-transcription", { text: "你好呀，欢迎。" }),
+      rtvi("bot-tts-stopped"),
+      rtvi("bot-llm-stopped"),
+      delta("欢迎。", 9),
+      rtvi("bot-tts-text", { text: "欢迎。" }),
+      rtvi("bot-stopped-speaking"),
+    ],
+    native: [
+      rtvi("bot-ready"),
+      rtvi("bot-llm-started"),
+      rtvi("bot-llm-text", { text: "你好呀，欢迎。" }),
+      rtvi("bot-tts-started"),
+      rtvi("bot-started-speaking"),
+      rtvi("bot-transcription", { text: "你好呀，欢迎。" }),
+      rtvi("bot-tts-stopped"),
+      rtvi("bot-llm-stopped"),
+      sentence("你好呀，欢迎。", "new"),
+      sentence("你好呀，欢迎。", "completed"),
+      rtvi("bot-tts-text", { text: "你好呀，欢迎。" }),
+      rtvi("bot-stopped-speaking"),
+    ],
+  };
+
+  test("E4 and E5 explain a realtime greeting, and E5 excuses pipedog's I5 there alone", () => {
+    const twin = {
+      pipedog: capture("pipedog", greeting.pipedog, on()),
+      native: capture("native", greeting.native, on()),
+    };
+    expect([...new Set(rules(twin))].sort()).toEqual(["E4", "E5"]);
+    expect(violations(twin)).toEqual({ pipedog: [], native: [] });
+    // On a cascade call, the same differences are no allowed ones.
+    const cascade = {
+      pipedog: capture("pipedog", greeting.pipedog),
+      native: capture("native", greeting.native),
+    };
+    expect(rules(cascade)).toContain("UNEXPLAINED");
+    expect(violations(cascade).pipedog.map((v) => v.id)).toContain("I5");
+  });
+
+  test("E4 allows only her own sentences as native's bot-output", () => {
+    const other = greeting.native.map((r) =>
+      r.message.type === "bot-output" ? sentence("别的话。", "new") : r,
+    );
+    const twin = {
+      pipedog: capture("pipedog", greeting.pipedog, on()),
+      native: capture("native", other, on()),
+    };
+    expect(rules(twin)).toContain("UNEXPLAINED");
+  });
+
+  test("E3: native's interim is pipedog's deltas so far, joined", () => {
+    const interims = (texts: string[]) => [
+      rtvi("bot-ready"),
+      rtvi("user-started-speaking"),
+      rtvi("bot-interrupted"),
+      ...texts.map((t) =>
+        rtvi("user-input", { text: t, input_type: "transcription", final: false }),
+      ),
+    ];
+    const pipedog = capture("pipedog", interims(["给我", "讲讲"]), on());
+    expect(
+      rules({ pipedog, native: capture("native", interims(["给我", "给我讲讲"]), on()) }),
+    ).toEqual(["E3"]);
+    expect(
+      rules({ pipedog, native: capture("native", interims(["给我", "讲讲吧"]), on()) }),
+    ).toEqual(["UNEXPLAINED"]);
+  });
+
+  test("E2: native's answer to a line pipedog never gave its model, and nothing once it did", () => {
+    const typed = [
+      rtvi("bot-ready"),
+      rtvi("bot-interrupted"),
+      rtvi("user-input", { text: "等一下", input_type: "chat", final: true }),
+      rtvi("user-llm-text", { text: "等一下" }),
+    ];
+    const answer = [
+      rtvi("bot-llm-started"),
+      rtvi("bot-llm-text", { text: "好的。" }),
+      rtvi("bot-llm-stopped"),
+    ];
+    const item: ClientEvent = {
+      type: "conversation.item.create",
+      item: {
+        id: "x",
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "等一下" }],
+      },
+    };
+    const create: ClientEvent = { type: "response.create", response: {} };
+    const usage = [
+      { role: "realtime", provider: "openai", model: "m", source: "call", session: "s", units: {} },
+    ] as unknown as Capture["usage"];
+    const native = capture("native", [...typed, ...answer], { ...on([item, create]), usage });
+    const twin = { pipedog: capture("pipedog", typed, on()), native };
+    expect([...new Set(rules(twin))]).toEqual(["E2"]);
+    // Once pipedog sent the line too, native's extra answer is no allowed difference.
+    const answered = { pipedog: capture("pipedog", typed, on([item])), native };
+    expect(rules(answered)).toContain("UNEXPLAINED");
+  });
+
+  test("E8: what pipedog sent after the fatal error that ended native's call", () => {
+    const failed = [rtvi("bot-ready"), rtvi("error", { error: "Error: boom", fatal: false })];
+    const after = rtvi("user-input", { text: "喂", input_type: "chat", final: true });
+    const twin = {
+      pipedog: capture("pipedog", [...failed, after], on()),
+      native: capture("native", failed, on()),
+    };
+    expect(rules(twin)).toEqual(["E8"]);
+    const going = {
+      pipedog: capture("pipedog", [...failed, after], on()),
+      native: capture(
+        "native",
+        [...failed, rtvi("bot-llm-started"), rtvi("bot-llm-stopped")],
+        on(),
+      ),
+    };
+    expect(rules(going)).toContain("UNEXPLAINED");
   });
 });

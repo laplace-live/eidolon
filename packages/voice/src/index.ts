@@ -3,6 +3,7 @@
 import { errorText, logger } from "@eidolon/config";
 import { withUsageScope } from "@eidolon/providers";
 import { runCascadeCall } from "./call/cascade.ts";
+import { runRealtimeCall } from "./call/realtime.ts";
 import { resampler } from "./dsp/resampler/index.ts";
 import { sharedSession } from "./input/onnx.ts";
 import type { CallDeps, CallPlan, CallTransport, CloseReason } from "./types.ts";
@@ -37,7 +38,7 @@ export function runVoiceCall(
 ): Promise<CloseReason> {
   return withUsageScope({ source: "call", session: plan.id }, async () => {
     try {
-      if (plan.realtime) throw new Error("A realtime persona's calls run on pipedog for now");
+      if (plan.realtime) return await runRealtimeCall(transport, plan, deps, signal);
       return await runCascadeCall(transport, plan, deps, signal);
     } catch (error) {
       logger.error(`Bot session failed: ${errorText(error)}`, error);

@@ -16,7 +16,7 @@ import {
   setSettingDefaults,
 } from "@eidolon/config";
 import type { MemoryAdmin } from "@eidolon/memory";
-import type { CallBinding } from "@eidolon/runtime";
+import type { AnyCallBinding } from "@eidolon/runtime";
 import { PROOF_HEADER } from "../../src/local/api.ts";
 import {
   type BootIo,
@@ -47,7 +47,7 @@ export function fixtureDist(options: { outside?: string } = {}): string {
 
 export interface RecordedOffer {
   readonly admission: AllowedOffer;
-  readonly binding: CallBinding | undefined;
+  readonly binding: AnyCallBinding | undefined;
 }
 
 export interface Fakes {

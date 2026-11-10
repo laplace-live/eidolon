@@ -227,6 +227,10 @@ msgstr "{name} inherits <0>{env}</0> from the environment. Continue to keep it, 
 msgid "{name} is now the active persona."
 msgstr "{name} is now the active persona."
 
+#: src/features/chats/call-dock.tsx
+msgid "{name} is speaking"
+msgstr "{name} is speaking"
+
 #: src/features/call/transcript-view.tsx
 #: src/features/chats/chat-log.tsx
 msgid "{name} is thinking…"
@@ -1501,6 +1505,10 @@ msgstr "Every persona's memories of you live in Qdrant, and each change to them 
 msgid "Every video is downloaded."
 msgstr "Every video is downloaded."
 
+#: src/features/chats/call-dock.tsx
+msgid "Everyone"
+msgstr "Everyone"
+
 #: src/features/settings/route.tsx
 msgid "Everything the other sections don't show. Most installs never change these."
 msgstr "Everything the other sections don't show. Most installs never change these."
@@ -1683,6 +1691,14 @@ msgstr "Glossary saved."
 #: src/features/setup/done-step.tsx
 msgid "Go to Home"
 msgstr "Go to Home"
+
+#: src/features/chats/call-line.ts
+msgid "Group call"
+msgstr "Group call"
+
+#: src/features/chats/call-line.ts
+msgid "Group call · {duration}"
+msgstr "Group call · {duration}"
 
 #: src/lib/labels.ts
 msgid "Group ID"
@@ -3572,6 +3588,10 @@ msgstr "Some videos need a signed-in browser's cookies. Reading a browser's cook
 #: src/features/chats/chat-view.tsx
 msgid "Someone here can't answer yet"
 msgstr "Someone here can't answer yet"
+
+#: src/lib/labels.ts
+msgid "Someone here talks through a realtime model, which can't join a group call."
+msgstr "Someone here talks through a realtime model, which can't join a group call."
 
 #: src/components/settings-form/check-labels.ts
 msgid "Something answers there, but it isn't Qdrant."

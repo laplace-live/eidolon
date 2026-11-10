@@ -158,7 +158,7 @@ describe("runVoiceCall", () => {
     expect(s.speech.closed).toBe(true);
   });
 
-  test("a realtime persona's call doesn't start here", async () => {
+  test("a realtime plan runs as a realtime call, which can't start without a realtime role", async () => {
     const s = setup();
     const plan = { ...s.plan, realtime: true };
     expect(await runVoiceCall(s.transport, plan, s.deps, new AbortController().signal)).toBe(

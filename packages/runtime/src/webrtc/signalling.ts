@@ -9,7 +9,7 @@ import {
   SmallWebRTCPatchRequest,
   SmallWebRTCRequest,
 } from "@pipedog/transport-smallwebrtc/request_handler";
-import type { CallBinding } from "../session/session.ts";
+import type { AnyCallBinding } from "../native/binding.ts";
 import { type CandidateRules, connectionPlan, EidolonRequestHandler } from "./handler.ts";
 
 /** An HTTP answer for apps/bot to serialize as JSON (it adds CORS). */
@@ -23,7 +23,7 @@ export interface SignallingServer {
    * POST /api/offer after the guard admitted it. New connections start a session in the background,
    * bound to `binding` when there is one.
    */
-  offer(admission: AllowedOffer, binding?: CallBinding): Promise<SignallingResult>;
+  offer(admission: AllowedOffer, binding?: AnyCallBinding): Promise<SignallingResult>;
   /**
    * PATCH /api/offer: trickled ICE candidates, the only way the browser's candidates arrive (the
    * client offers before gathering). `bodyText` is `await request.text()`; runtime parses it and
@@ -43,7 +43,7 @@ export interface SignallingDeps {
   startSession(
     connection: SmallWebRTCConnection,
     admission: AllowedOffer,
-    binding?: CallBinding,
+    binding?: AnyCallBinding,
   ): Promise<void>;
   /** The codec every connection's encoders wrap; pipedog's process default otherwise. */
   opusCodec?: OpusCodec;
@@ -72,7 +72,7 @@ export function createSignallingServerWith(
   const startSession = (
     connection: SmallWebRTCConnection,
     admission: AllowedOffer,
-    binding: CallBinding | undefined,
+    binding: AnyCallBinding | undefined,
   ): void => {
     // The answer goes out only after this returns, so the session runs on its own.
     const task = createTask(

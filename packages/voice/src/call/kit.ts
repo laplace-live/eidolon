@@ -1,12 +1,13 @@
 // What every call runs on: its one mailbox, the timers that post to it, the idle timeout, and the
 // streams it closes at the end, whose meters flush as they close. Transport, provider and timer
 // callbacks only post here; the Floor reads it, one event at a time.
-import type { ChatEventDraft } from "@eidolon/chat";
+import type { ChatEventDraft, ParticipantId } from "@eidolon/chat";
 import { AsyncQueue, errorText, logger } from "@eidolon/config";
 import type { CallChatOutput } from "@eidolon/engine";
 import type { MouthEvent } from "../output/mouth.ts";
 import type { RtviInbound } from "../rtvi/codec.ts";
-import type { Clock, CursorEvent, EarEvent, Heard } from "../types.ts";
+import type { CallLog, Clock, CursorEvent, EarEvent, Heard } from "../types.ts";
+import type { RealtimeInput } from "./realtime.ts";
 
 /** pipedog's `IDLE_TIMEOUT_SECS`: `apps/web/src/features/call/phase.ts` counts on at least 285. */
 export const IDLE_TIMEOUT_MS = 300_000;
@@ -21,6 +22,8 @@ export type TimerName =
   /** The call's end waited this long for her reply's `ended`. */
   | "end";
 
+type ChatLog = ReturnType<CallLog["snapshot"]>;
+
 export type Effect =
   | { readonly type: "voice"; readonly voice: string }
   | { readonly type: "server-message"; readonly data: Readonly<Record<string, unknown>> };
@@ -34,6 +37,15 @@ export type LoopEvent =
   | { readonly source: "heard"; readonly reply: string; readonly answer: (heard: Heard) => void }
   /** One of its tools acts on the call. */
   | { readonly source: "effect"; readonly reply: string; readonly effect: Effect }
+  /** A group call's answer `chain` starts persona `persona`'s turn, as reply `hop`. */
+  | {
+      readonly source: "hop";
+      readonly chain: string;
+      readonly hop: string;
+      readonly persona: ParticipantId;
+    }
+  /** A group call's answer reads the log, once every line it posted before is in. */
+  | { readonly source: "read"; readonly answer: (chat: ChatLog) => void }
   | { readonly source: "mouth"; readonly event: MouthEvent }
   | { readonly source: "speaker"; readonly event: CursorEvent }
   /** An async tool of `persona`'s settled. */
@@ -45,7 +57,9 @@ export type LoopEvent =
   /** `token` tells a timer from the one that replaced it. */
   | { readonly source: "timer"; readonly timer: TimerName; readonly token: number }
   | { readonly source: "transport" }
-  | { readonly source: "shutdown" };
+  | { readonly source: "shutdown" }
+  /** A realtime call's: its session's events, and what its tasks post back. */
+  | { readonly source: "realtime"; readonly input: RealtimeInput };
 
 interface Closable {
   close(): Promise<void>;

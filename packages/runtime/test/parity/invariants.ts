@@ -18,6 +18,12 @@ export interface Violation {
 export interface InvariantOptions {
   /** I6 holds on the native engine only: pipedog's Fish service never stops its audio context. */
   readonly native: boolean;
+  /**
+   * A realtime model's call: its server ends the caller's turn on its own VAD and answers it
+   * before transcribing it, so a turn's final transcript comes after its user-stopped-speaking
+   * (I2 holds as "after its user-started-speaking"), and I9 has no transcript to wait for.
+   */
+  readonly realtime?: boolean;
 }
 
 function field(data: unknown, key: string): unknown {
@@ -135,6 +141,8 @@ export function checkInvariants(
   // I9: a turn with no final transcript starts no mind request unless it interrupted her.
   // I10: after bot-interrupted, no bot-llm-text comes before the next bot-llm-started.
   let turn: { finals: number; interrupted: boolean } | null = null;
+  /** Realtime: turns started whose final transcript hasn't come. */
+  let untranscribed = 0;
   let quietTurn: number | null = null;
   let llmOpen = false;
   let speaking = false;
@@ -145,9 +153,12 @@ export function checkInvariants(
       case "user-started-speaking":
         turn = { finals: 0, interrupted: llmOpen || speaking || tools > 0 };
         quietTurn = null;
+        untranscribed++;
         break;
       case "user-stopped-speaking":
-        if (turn !== null && turn.finals === 0 && !turn.interrupted) quietTurn = index;
+        if (turn !== null && turn.finals === 0 && !turn.interrupted && !options.realtime) {
+          quietTurn = index;
+        }
         turn = null;
         break;
       case "bot-interrupted":
@@ -187,8 +198,17 @@ export function checkInvariants(
         break;
     }
     if (isFinalTranscription(message)) {
-      if (turn === null) violate("I2", index, "a final transcript outside the caller's turn");
-      else turn.finals++;
+      if (options.realtime) {
+        // user-input and user-transcription carry the same final.
+        if (message.type === "user-transcription") untranscribed = Math.max(0, untranscribed - 1);
+        else if (untranscribed === 0) {
+          violate("I2", index, "a final transcript with no turn of the caller's before it");
+        }
+      } else if (turn === null) {
+        violate("I2", index, "a final transcript outside the caller's turn");
+      } else {
+        turn.finals++;
+      }
     }
   }
   return found.sort((a, b) => a.index - b.index);

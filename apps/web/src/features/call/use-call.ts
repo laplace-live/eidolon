@@ -8,7 +8,7 @@ import { deviceProblemOf, type MicProblem, probeMic } from "./media";
 import { type CallPhase, connectEnd, endOf, IDLE, reducePhase } from "./phase";
 import { selfiePaths } from "./selfie";
 import { fetchIceServers, offerRequest } from "./signalling";
-import { EMPTY_TRANSCRIPT, reduceTranscript, type Transcript } from "./transcript";
+import { EMPTY_TRANSCRIPT, reduceTranscript, speakerOf, type Transcript } from "./transcript";
 import { type WaitState, Watchdog } from "./watchdog";
 
 export interface BotError {
@@ -166,6 +166,11 @@ export function useCall(): Call {
         [RTVIEvent.BotOutput]: (data) => dispatchTranscript({ type: "bot-output", data }),
         [RTVIEvent.BotInterrupted]: () => dispatchTranscript({ type: "interrupted" }),
         [RTVIEvent.ServerMessage]: (data: unknown) => {
+          const speaker = speakerOf(data);
+          if (speaker !== null) {
+            dispatchTranscript({ type: "speaker", speaker });
+            return;
+          }
           const paths = selfiePaths(data);
           if (paths.length > 0) dispatchTranscript({ type: "selfie", paths });
         },

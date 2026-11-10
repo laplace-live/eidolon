@@ -31,7 +31,12 @@ import {
   setUsageSink,
   type UsageRecord,
 } from "@eidolon/providers";
-import type { CallBinding, SignallingResult, SignallingServer } from "@eidolon/runtime";
+import type {
+  AnyCallBinding,
+  CallBinding,
+  SignallingResult,
+  SignallingServer,
+} from "@eidolon/runtime";
 import type { RouteHandler } from "../../src/app.ts";
 import type { ChatContents } from "../../src/local/api.ts";
 import {
@@ -228,7 +233,7 @@ function selfie(photo: Promise<void>): Script {
 
 interface Offered {
   readonly admission: AllowedOffer;
-  readonly binding: CallBinding | undefined;
+  readonly binding: AnyCallBinding | undefined;
 }
 
 /** The fake signalling server's offers, each with the call it binds, and what it answers. */
@@ -1597,7 +1602,7 @@ async function dial(id: string, who: string = PERSONA): Promise<CallBinding> {
   );
   expect([response.status, await response.json()]).toEqual([200, ANSWER]);
   const binding = offered.at(-1)?.binding;
-  if (binding === undefined) throw new Error("the offer wasn't bound to the chat");
+  if (binding === undefined || "group" in binding) throw new Error("not bound to her in the chat");
   return binding;
 }
 

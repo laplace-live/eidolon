@@ -1,6 +1,7 @@
 import "../../../config/test/isolated-guard.ts";
 // The twin harness: one scripted call run on each engine against the same wire-level fakes (a
-// chat completions API, Fish's live socket, Soniox's real-time socket) by a real werift caller,
+// chat completions API, Fish's live socket, Soniox's real-time socket, or a realtime model's
+// socket in OpenAI's dialect or xAI's) by a real werift caller,
 // and what each sent compared: the RTVI messages, the providers' requests, the usage ledger and
 // what she would see next. Every difference must be one allowed.ts explains, and invariants.ts
 // holds on every run. docs/voice-engine.md, "Parity tests".
@@ -42,6 +43,12 @@ import { ALLOWED, type Allowance } from "./allowed.ts";
 import { FakeFish, type FishOptions, type FishSession } from "./fakes/fish.ts";
 import { FakeMind, type MindReply, type MindRequest } from "./fakes/mind.ts";
 import { type Received, TwinPeer } from "./fakes/peer.ts";
+import {
+  type ClientEvent,
+  FakeRealtime,
+  type RealtimeDialect,
+  type RealtimeReply,
+} from "./fakes/realtime.ts";
 import { FakeSoniox, type SonioxConnection } from "./fakes/soniox.ts";
 import { checkInvariants, type Violation } from "./invariants.ts";
 
@@ -51,6 +58,8 @@ export interface Fakes {
   readonly mind: FakeMind;
   readonly fish: FakeFish;
   readonly soniox: FakeSoniox;
+  /** A realtime persona's server, in the scenario's dialect. */
+  readonly realtime: FakeRealtime | null;
 }
 
 /** What the caller does once the call is up; the call ends, the caller hanging up, when it returns. */
@@ -63,6 +72,11 @@ export interface Scenario {
   readonly fish?: FishOptions;
   /** Variables the persona's settings read, beside the fakes' accounts. */
   readonly env?: Readonly<Record<string, string>>;
+  /** Her calls run on a realtime model at a fake in this dialect, playing these responses. */
+  readonly realtime?: {
+    readonly dialect: RealtimeDialect;
+    readonly replies?: readonly RealtimeReply[];
+  };
   run(call: TwinCall): Promise<void>;
 }
 
@@ -82,6 +96,8 @@ export interface Capture {
   readonly mind: readonly MindRequest[];
   readonly fish: readonly FishSession[];
   readonly soniox: readonly SonioxConnection[];
+  /** What the realtime server got, its audio aside; empty for a cascade call. */
+  readonly realtime: readonly ClientEvent[];
   readonly usage: readonly UsageRecord[];
   /** pipedog: its context's messages at the end; native: viewOf its log at the end. */
   readonly conversation: readonly unknown[];
@@ -114,6 +130,15 @@ function useFakes(fakes: Fakes, env: Readonly<Record<string, string>>): () => vo
         [ACCOUNTS.hearing]: { provider: "soniox", apiKey: "twin-key", baseUrl: fakes.soniox.base },
         [ACCOUNTS.voice]: { provider: "fish", apiKey: "twin-key", baseUrl: fakes.fish.base },
         [ACCOUNTS.mind]: { provider: "openrouter", apiKey: "twin-key", baseUrl: fakes.mind.base },
+        ...(fakes.realtime === null
+          ? {}
+          : {
+              [`${fakes.realtime.dialect}-twin`]: {
+                provider: fakes.realtime.dialect,
+                apiKey: "twin-key",
+                baseUrl: fakes.realtime.base,
+              },
+            }),
       },
     }),
     { mode: 0o600 },
@@ -124,6 +149,7 @@ function useFakes(fakes: Fakes, env: Readonly<Record<string, string>>): () => vo
     LLM_PROVIDER: ACCOUNTS.mind,
     LLM_MODEL: "twin/mind-1",
     TTS_VOICE_ID: "twin-voice",
+    ...(fakes.realtime === null ? {} : { REALTIME_PROVIDER: `${fakes.realtime.dialect}-twin` }),
     ...env,
   };
   const saved = Object.keys(vars).map((name) => [name, process.env[name]] as const);
@@ -207,6 +233,10 @@ export async function runOn(engine: VoiceEngine, scenario: Scenario): Promise<Ca
     mind: new FakeMind(scenario.mind ?? []),
     fish: new FakeFish(scenario.fish),
     soniox: new FakeSoniox(scenario.heard ?? []),
+    realtime:
+      scenario.realtime === undefined
+        ? null
+        : new FakeRealtime(scenario.realtime.dialect, scenario.realtime.replies ?? []),
   };
   const logs = captureLogs();
   const usage: UsageRecord[] = [];
@@ -257,6 +287,7 @@ export async function runOn(engine: VoiceEngine, scenario: Scenario): Promise<Ca
     fakes.mind.stop();
     fakes.fish.stop();
     fakes.soniox.stop();
+    fakes.realtime?.stop();
   }
   return {
     engine,
@@ -265,6 +296,7 @@ export async function runOn(engine: VoiceEngine, scenario: Scenario): Promise<Ca
     mind: fakes.mind.requests,
     fish: fakes.fish.sessions,
     soniox: fakes.soniox.connections,
+    realtime: fakes.realtime?.received ?? [],
     usage,
     conversation:
       engine === "pipedog"
@@ -360,6 +392,42 @@ export function normalizeRtvi(received: readonly Received[]): Normalized[] {
   return out;
 }
 
+/**
+ * The client events a realtime server got, without what differs between runs: the session as its
+ * `session.update`s leave it, first (each replaces the fields it names, so pipedog's second update
+ * once its context arrives configures nothing the merge loses), the ids the client made up for its
+ * items as ordinals, and where a truncation cut, which follows the audio's timing.
+ */
+export function normalizeRealtime(events: readonly ClientEvent[]): Normalized[] {
+  const sessions = events.filter((event) => event.type === "session.update");
+  const session = Object.assign({}, ...sessions.map((event) => event.session));
+  const out: Normalized[] =
+    sessions.length === 0 ? [] : [normalized("session", withoutClock(session))];
+  const items = new Map<unknown, number>();
+  for (const event of events) {
+    const { type, ...fields } = event;
+    switch (type) {
+      case "session.update":
+        break;
+      case "conversation.item.create": {
+        const { id, ...item } = (fields.item ?? {}) as Record<string, unknown>;
+        if (id !== undefined) items.set(id, items.size + 1);
+        out.push(normalized(type, { ...fields, item }));
+        break;
+      }
+      case "conversation.item.delete":
+        out.push(normalized(type, { item: items.get(fields.item_id) ?? fields.item_id }));
+        break;
+      case "conversation.item.truncate":
+        out.push(normalized(type, { ...fields, audio_end_ms: "<ms>" }));
+        break;
+      default:
+        out.push(normalized(type, Object.keys(fields).length === 0 ? undefined : fields));
+    }
+  }
+  return out;
+}
+
 /** What one side has that the other doesn't, or has elsewhere. */
 export type Change = "pipedog-only" | "native-only" | "moved" | "changed";
 
@@ -393,6 +461,15 @@ export type Difference =
       readonly kind: "usage";
       readonly change: "pipedog-only" | "native-only";
       readonly record: string;
+    }
+  | {
+      /** A client event the realtime server got (`normalizeRealtime`). */
+      readonly kind: "realtime";
+      readonly change: Change;
+      readonly message: Normalized;
+      readonly other?: Normalized;
+      readonly pipedog: number | null;
+      readonly native: number | null;
     };
 
 interface Op<T> {
@@ -618,6 +695,21 @@ export function differences(twin: Twin): Difference[] {
     });
   }
 
+  const realtime = {
+    pipedog: normalizeRealtime(pipedog.realtime),
+    native: normalizeRealtime(native.realtime),
+  };
+  for (const c of changes(align(realtime.pipedog, realtime.native, key), key, (m) => m.type)) {
+    found.push({
+      kind: "realtime",
+      change: c.change,
+      message: c.item,
+      ...(c.other === undefined ? {} : { other: c.other }),
+      pipedog: c.pipedog,
+      native: c.native,
+    });
+  }
+
   const usage = {
     pipedog: pipedog.usage.map(usageKey).sort(),
     native: native.usage.map(usageKey).sort(),
@@ -641,16 +733,18 @@ export function judge(twin: Twin): Judged[] {
   }));
 }
 
-/** The invariants each run broke. */
+/** The invariants each run broke that no allowed.ts rule names as the defect it fixes. */
 export function violations(twin: Twin): Record<VoiceEngine, Violation[]> {
   const wire = (c: Capture) =>
     c.received
       .filter((r) => r.message.label === "rtvi-ai")
       .map((r) => ({ type: String(r.message.type), data: r.message.data }));
-  return {
-    pipedog: checkInvariants(wire(twin.pipedog), { native: false }),
-    native: checkInvariants(wire(twin.native), { native: true }),
-  };
+  const broken = (engine: VoiceEngine) =>
+    checkInvariants(wire(twin[engine]), {
+      native: engine === "native",
+      realtime: twin[engine].realtime.length > 0,
+    }).filter((v) => !ALLOWED.some((rule) => rule.excuses?.(v, engine, twin) === true));
+  return { pipedog: broken("pipedog"), native: broken("native") };
 }
 
 /** A readable account of a twin run: each side's messages, and every difference with its rule. */
@@ -663,6 +757,9 @@ export function report(twin: Twin): string {
     );
     for (const [i, m] of normalizeRtvi(twin[engine].received).entries()) {
       lines.push(`  ${String(i).padStart(3)} ${m.key.slice(0, 160)}`);
+    }
+    for (const [i, m] of normalizeRealtime(twin[engine].realtime).entries()) {
+      lines.push(`  realtime ${String(i).padStart(3)} ${m.key.slice(0, 160)}`);
     }
   }
   lines.push("── differences");

@@ -520,6 +520,45 @@ describe("calls", () => {
     expect(retryText(chatItems([...CALL, failed]))).toBeNull();
     expect(manyVoices(items)).toBe(false);
   });
+
+  test("on a group call, each line takes the decision that chose her, and a follow-up none", () => {
+    const BEA = { kind: "persona", id: "bea" } as const;
+    const chose = (seq: number, after: number, ...personas: string[]): ChatEvent => ({
+      type: "decision",
+      seq,
+      at: seq * 1000,
+      after,
+      replies: personas.map((persona) => ({ persona, mode: "text" })),
+      source: "mention",
+    });
+    const items = chatItems([
+      { type: "message", seq: 1, at: 1000, id: "u1", speaker: { kind: "user" }, text: "在吗" },
+      chose(2, 1, "mio"),
+      { type: "message", seq: 3, at: 3000, id: "m3", speaker: MIO, text: "在呢" },
+      { type: "call-started", seq: 4, at: 4000, call: "k2", persona: "mio", group: true },
+      said(5, { kind: "user" }, "@小露 你呢"),
+      chose(6, 5, "bea"),
+      said(7, BEA, "我也在"),
+      said(8, MIO, "我拍好照片了"),
+      { type: "call-ended", seq: 9, at: 64_000, call: "k2", reason: "hangup" },
+    ]);
+    expect(items[2]).toEqual({
+      kind: "call",
+      seq: 4,
+      edge: "started",
+      persona: "mio",
+      group: true,
+      durationMs: 60_000,
+    });
+    expect(items[4]).toMatchObject({
+      kind: "persona",
+      persona: "bea",
+      call: true,
+      reason: { source: "mention", to: { kind: "user" } },
+    });
+    // Her own follow-up, which no decision chose, and not the text turn's from before the call.
+    expect(items[5]).toMatchObject({ kind: "persona", persona: "mio", call: true, reason: null });
+  });
 });
 
 describe("withoutPartialMarkup", () => {

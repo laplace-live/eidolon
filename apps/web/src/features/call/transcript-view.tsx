@@ -36,12 +36,20 @@ function UserBubble({ entry }: { readonly entry: UserEntry }) {
   );
 }
 
+/** Her reply; on a group call, under the name of whoever said it. */
 function BotBubble({ entry, name }: { readonly entry: BotEntry; readonly name: string }) {
   const runs = useMemo(() => botRuns(entry), [entry]);
+  const speaker = entry.speaker?.name ?? null;
   return (
-    <div className="flex">
+    <div className="flex flex-col items-start gap-1">
+      {/* Her bubble names her to a screen reader. */}
+      {speaker !== null && (
+        <span aria-hidden className="max-w-[80%] truncate text-muted-foreground text-xs">
+          {speaker}
+        </span>
+      )}
       <div className="max-w-[80%] whitespace-pre-line rounded-2xl rounded-bl-md bg-muted px-3.5 py-2 text-sm">
-        <span className="sr-only">{name}: </span>
+        <span className="sr-only">{speaker ?? name}: </span>
         <BotText runs={runs} />
       </div>
     </div>

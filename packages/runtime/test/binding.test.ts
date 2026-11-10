@@ -617,7 +617,7 @@ describe("a call bound to a chat", () => {
         { ice: { serverPlan: async () => ({ iceServers: [], relayOnly: false, turnUrl: null }) } },
         {
           startSession: (connection, admission, binding) => {
-            const session = runSessionSafely(connection, admission, deps, binding);
+            const session = runSessionSafely(connection, admission, deps, binding as CallBinding);
             sessions.push(session);
             return session;
           },

@@ -37,8 +37,10 @@ export type CallItem = {
   readonly kind: "call";
   readonly seq: number;
   readonly edge: "started" | "ended";
-  /** Whom the call was with; null when its start isn't in the log. */
+  /** Whom the call was with; null when its start isn't in the log. On a group call, the host. */
   readonly persona: ParticipantId | null;
+  /** Every persona in the chat was on it. */
+  readonly group?: true;
   /** How long it lasted; null until it has ended, or when its other edge isn't in the log. */
   readonly durationMs: number | null;
 };
@@ -93,6 +95,8 @@ export function chatItems(events: readonly ChatEvent[]): ChatItem[] {
   // The decision each turn began under, by turn.
   const turns = new Map<string, ReplyReason | null>();
   const calls = callEdges(events);
+  // On a group call, the director chooses each line's speaker, but her follow-ups follow no decision.
+  let groupCall = false;
   let previous: ChatEvent | undefined;
   for (const event of events) {
     if ("turn" in event && !turns.has(event.turn)) {
@@ -103,11 +107,14 @@ export function chatItems(events: readonly ChatEvent[]): ChatItem[] {
       for (const reply of event.replies) chosen.set(reply.persona, reason);
     } else if (event.type === "call-started" || event.type === "call-ended") {
       const { started, ended } = calls.get(event.call) ?? {};
+      groupCall = event.type === "call-started" && event.group === true;
+      if (groupCall) chosen.clear();
       items.push({
         kind: "call",
         seq: event.seq,
         edge: event.type === "call-started" ? "started" : "ended",
         persona: started?.persona ?? null,
+        ...(started?.group ? { group: true as const } : {}),
         durationMs:
           started === undefined || ended === undefined ? null : Math.max(0, ended.at - started.at),
       });
@@ -133,6 +140,9 @@ export function chatItems(events: readonly ChatEvent[]): ChatItem[] {
           late && previous?.type === "tool-result" && previous.persona === event.speaker.id
             ? previous.turn
             : null;
+        // A group call's line takes the decision that chose her, once.
+        const chose = groupCall && call && !late ? (chosen.get(event.speaker.id) ?? null) : null;
+        if (chose !== null) chosen.delete(event.speaker.id);
         items.push({
           kind: "persona",
           seq: event.seq,
@@ -143,12 +153,12 @@ export function chatItems(events: readonly ChatEvent[]): ChatItem[] {
           sentAsText: false,
           interrupted: event.interrupted === true,
           cutOff: event.cutOff ?? null,
-          // No decision chooses who speaks on a call.
+          // No decision chooses who speaks on a call with her alone.
           reason:
             turn !== null
               ? (turns.get(turn) ?? null)
               : late || call
-                ? null
+                ? chose
                 : (chosen.get(event.speaker.id) ?? null),
           call,
         });

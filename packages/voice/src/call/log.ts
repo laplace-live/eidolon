@@ -41,11 +41,19 @@ export function callLog(
   };
 }
 
-/** A call log kept in memory and dropped at the call's end, as production keeps no chats. */
-export function memoryCallLog(header: ChatHeader): CallLog {
+/**
+ * A call log kept in memory and dropped at the call's end, as production keeps no chats; it opens
+ * on `events`, a chat's as stored, whose seqs it numbers on from.
+ */
+export function memoryCallLog(header: ChatHeader, events: readonly ChatEvent[] = []): CallLog {
   const store = new MemoryChatStore();
-  const created = store.create(header);
-  return callLog({ header, events: [] }, async (events) => {
+  const created = (async () => {
+    await store.create(header);
+    if (events.length > 0) await store.append(header.id, events);
+  })();
+  // Each batch written after it reports its failure.
+  created.catch(() => {});
+  return callLog({ header, events }, async (events) => {
     await created;
     await store.append(header.id, events);
   });

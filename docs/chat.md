@@ -59,7 +59,7 @@ isn't stored, she never saw.
 | `title` | `PATCH` | The chat's title; the last one wins. Until there is one, the page names the chat by who is in it now |
 | `participants` | `POST participants` | Personas added or removed |
 | `settings` | `PATCH` | The chat's `chainLimit` or `replyMode`; the last of each wins |
-| `call-started`, `call-ended` | the runner; in production, the browser | A call in the chat ([Calls](#calls)): `call-started` names the `call`, a UUIDv7, and the `persona` called; `call-ended` names the same `call` and its `reason`, `hangup`, `error` or `shutdown` |
+| `call-started`, `call-ended` | the runner; in production, the browser | A call in the chat ([Calls](#calls)): `call-started` names the `call`, a UUIDv7, and the `persona` called, with `group: true` when every persona in the chat was on it; `call-ended` names the same `call` and its `reason`, `hangup`, `error` or `shutdown` |
 
 **`ChatSummary`** is what the chat list shows: the title, the participants, `createdAt`,
 `updatedAt`, the last message's text and the last seq. `summarize` derives it from a log, so a
@@ -567,13 +567,28 @@ that chat; without a `chatId`, it is the standalone call, unbound.
   stores them after its `call-ended`.
 - `GET live` streams each event the chat stores, from `call-started` on, and ends after
   `call-ended`, so the page follows a reply and a call through one subscription.
-- `GET chats/:id`'s `call` is `{ id, persona }`, and null once the call's end is asked for. A server
-  killed mid-call leaves a `call-started` with no `call-ended`, and `call` is null after the
-  restart, so the page goes by `call`, not by the events.
+- `GET chats/:id`'s `call` is `{ id, persona }`, with `group: true` on a group call, and null once
+  the call's end is asked for. A server killed mid-call leaves a `call-started` with no
+  `call-ended`, and `call` is null after the restart, so the page goes by `call`, not by the events.
 
 **In a group,** the viewer picks whom to call. Her call lines land in the chat as her messages, so
-the other personas read them in their views later. A call with several personas at once comes with
-the voice engine.
+the other personas read them in their views later.
+
+**Everyone at once,** on the native voice engine: `requestData: { chatId, persona, group: true }`
+puts every persona in the chat on the call, `persona` hosting: her hearing role hears the viewer,
+and the director chooses who answers each line, as in the chat, each persona speaking in her own
+voice once the one before her has played out ([voice-engine.md](voice-engine.md#group-calls)).
+- **The checks,** besides the ones above: `400 bad-request` in a chat of one or while
+  `EIDOLON_VOICE_ENGINE` isn't `native`, and `409 realtime-in-group` while a persona in the chat
+  talks through a realtime model. `GET chats/:id`'s `groupCall` says whether a group call would be
+  taken now, and the page offers **Everyone** in its Call menu only then, the chat's first persona
+  hosting.
+- **What it stores:** `call-started { call, persona, group: true }`; each line as a `call` message
+  of whoever said it, each photo as hers, and each `decision`, against the line it answers as the
+  chat numbers it; then `call-ended`. The call opens on the chat itself, not a seed, so each
+  persona's view of it is her group view, and it doesn't greet.
+- **The page** names a group call's separator **Group call**, and a line said on it shows the
+  decision that chose her; her follow-up after a selfie, which no decision chose, shows none.
 
 **Production binds a call only through its chat endpoint**
 ([A call inside a chat](#a-call-inside-a-chat)), whose window comes signed from the browser. With
@@ -627,7 +642,7 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
 | --- | --- | --- |
 | `GET chats` | | `ChatSummary[]`, newest activity first |
 | `POST chats` | `{ participants: [id] }`, 1 to 6 personas, each once | `201 { id }`; one persona's greeting then runs |
-| `GET chats/:id?afterSeq=n` | | `{ header, events, lateTools, hearingRefusal, call }`: the events after `afterSeq`; the tools interrupted turns left running; why a voice message can't be heard now, in `POST voice`'s words, or null; and the call on in the chat, `{ id, persona }`, or null |
+| `GET chats/:id?afterSeq=n` | | `{ header, events, lateTools, hearingRefusal, call, groupCall }`: the events after `afterSeq`; the tools interrupted turns left running; why a voice message can't be heard now, in `POST voice`'s words, or null; the call on in the chat, `{ id, persona, group? }`, or null; and whether its personas can be called together now |
 | `POST chats/:id/messages` | `{ text }`, 1 to 4000 characters | NDJSON `ChatStreamLine`s from the viewer's line on: each decision as an `events` line, and each turn from `started` to `ended`. `409 chat-in-call` during a call |
 | `POST chats/:id/voice?durationMs=n` | The recorded audio: `audio/webm`, `audio/ogg`, `audio/mp4` or `audio/mpeg`, codecs allowed, at most 10 MB; `durationMs` is the recorder's clock, 1 to 120000 | As `POST messages`, its first `events` line holding the stored voice message with its transcript. `415` for another type, `400` without `durationMs` or with an empty body, `413` past 2 minutes or 10 MB, `409 missing-key` while the hearing role can't hear, `409 chat-in-call` during a call, `502 upstream-failed` when hearing fails |
 | `GET chats/:id/live` | | NDJSON of the running reply from its start; during a call, each event the chat stores, from `call-started` until the stream ends after `call-ended`; or `204` while neither runs |

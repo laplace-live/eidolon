@@ -1,20 +1,24 @@
-// The differences between the engines that are allowed, D1–D16 of docs/voice-engine.md: each with
-// its id, what it allows, the input that triggers it, and a predicate narrow enough that nothing
-// else passes as it. The twin harness fails on any difference no rule here matches. The user
+// The differences between the engines that are allowed, D1–D16 and E1–E8 of docs/voice-engine.md:
+// each with its id, what it allows, the input that triggers it, and a predicate narrow enough that
+// nothing else passes as it. The twin harness fails on any difference no rule here matches. The user
 // reviews this file; a rule is added only with a trigger, never to quiet a failing scenario. A rule
 // whose predicate is `() => false` names a difference no scenario here can produce (another
 // provider, a reconnect, a later phase): it allows nothing until a scenario triggers it.
 import { CHAT_WINDOW_MESSAGES } from "@eidolon/chat";
 import { INTERRUPTED_EMPTY_TURN_PROMPT } from "@eidolon/context";
-import type { Capture, Difference, Normalized, Twin } from "./twin.ts";
-import { canonical, differences, normalizeRtvi } from "./twin.ts";
+import type { Violation } from "./invariants.ts";
+import type { Capture, Difference, Engine, Normalized, Twin } from "./twin.ts";
+import { canonical, differences, normalizeRealtime, normalizeRtvi } from "./twin.ts";
 
 export interface Allowance {
-  readonly id: `D${number}`;
+  /** D: the cascade's differences; E: a realtime call's (§9 of the contract). */
+  readonly id: `D${number}` | `E${number}`;
   readonly difference: string;
   /** The input that produces it, or why it is allowed. */
   readonly trigger: string;
   matches(difference: Difference, twin: Twin): boolean;
+  /** An invariant pipedog breaks that this rule's fix is for: the twin doesn't fail on it. */
+  excuses?(violation: Violation, engine: Engine, twin: Twin): boolean;
 }
 
 function field(value: unknown, key: string): unknown {
@@ -210,6 +214,8 @@ function partOfRecovery(d: Difference, twin: Twin): boolean {
       }
       return true;
     }
+    case "realtime":
+      return false;
     case "usage": {
       const own = usageOf(d.record);
       if (own.role === "mind") return d.change === "pipedog-only";
@@ -227,6 +233,133 @@ function partOfRecovery(d: Difference, twin: Twin): boolean {
       });
     }
   }
+}
+
+/** Both runs talked to a realtime model. */
+const realtime = (twin: Twin): boolean =>
+  twin.pipedog.realtime.length > 0 && twin.native.realtime.length > 0;
+
+/** The text of a realtime item's `input_text`, when it is a message carrying one. */
+function itemText(message: Normalized | undefined): string | null {
+  const content = field(field(message?.data, "item"), "content");
+  if (!Array.isArray(content)) return null;
+  const text = field(content[0], "text");
+  return typeof text === "string" ? text : null;
+}
+
+/** The lines the caller typed that pipedog never gave its realtime model, by their text. */
+function unanswered(twin: Twin): Set<string> {
+  if (!realtime(twin)) return new Set();
+  const sent = new Set(
+    normalizeRealtime(twin.pipedog.realtime)
+      .map(itemText)
+      .filter((text) => text !== null),
+  );
+  return new Set(
+    rtvi(twin, "native")
+      .filter((m) => m.type === "user-input" && field(m.data, "input_type") === "chat")
+      .map((m) => text(m.data))
+      .filter((line) => !sent.has(line)),
+  );
+}
+
+/**
+ * Whether native's message `index` belongs to its answer to a typed line pipedog left unanswered:
+ * from that line's user-input to the caller's next turn or typed line.
+ */
+function inTypedReply(twin: Twin, index: number | null): boolean {
+  if (index === null) return false;
+  const lines = unanswered(twin);
+  const seq = rtvi(twin, "native");
+  for (let i = index - 1; i >= 0; i--) {
+    const m = seq[i] as Normalized;
+    if (m.type === "user-started-speaking") return false;
+    if (m.type === "user-input" && field(m.data, "input_type") === "chat") {
+      return lines.has(text(m.data));
+    }
+  }
+  return false;
+}
+
+/**
+ * Whether pipedog's message `index` is part of how it took a typed line it never sent its model:
+ * from the bot-interrupted the line caused (no user-started-speaking before it) to the line's
+ * user-input, the response it had going ran on.
+ */
+function inTypedCut(twin: Twin, index: number | null): boolean {
+  if (index === null) return false;
+  const lines = unanswered(twin);
+  const seq = rtvi(twin, "pipedog");
+  const typed = seq.findIndex(
+    (m, i) =>
+      i >= index &&
+      m.type === "user-input" &&
+      field(m.data, "input_type") === "chat" &&
+      lines.has(text(m.data)),
+  );
+  if (typed === -1) return false;
+  for (let i = index; i >= 0; i--) {
+    const m = seq[i] as Normalized;
+    if (m.type === "user-started-speaking" || m.type === "user-input") return false;
+    if (m.type === "bot-interrupted") return seq[i - 1]?.type !== "user-started-speaking";
+  }
+  return false;
+}
+
+/** Whether pipedog's message `index` is a bot-llm-started inside a round already started. */
+function secondStart(seq: readonly Normalized[], index: number | null): boolean {
+  return (
+    seq[index ?? -1]?.type === "bot-llm-started" &&
+    !afterRound(seq, index) &&
+    seq.slice(0, index ?? 0).some((m) => m.type === "bot-llm-started")
+  );
+}
+
+/** pipedog's bot-output for a realtime transcript delta: "new", spoken, never to be spoken. */
+function deltaOutput(m: Normalized | undefined): boolean {
+  return (
+    m?.type === "bot-output" &&
+    field(m.data, "spoken") === true &&
+    field(m.data, "will_be_spoken") === false &&
+    field(m.data, "spoken_status") === "new"
+  );
+}
+
+/** A sentence native's segmenter made of her realtime transcript: its bot-transcription. */
+function nativeSentence(twin: Twin, value: string): boolean {
+  return rtvi(twin, "native").some((m) => m.type === "bot-transcription" && text(m.data) === value);
+}
+
+/** Native's bot-output or bot-tts-text for one of her sentences, as the cursor passed it. */
+function sentenceOutput(twin: Twin, m: Normalized | undefined): boolean {
+  if (m === undefined || !nativeSentence(twin, text(m.data))) return false;
+  if (m.type === "bot-tts-text") return true;
+  return (
+    m.type === "bot-output" &&
+    field(m.data, "will_be_spoken") === true &&
+    ["new", "completed"].includes(String(field(m.data, "spoken_status")))
+  );
+}
+
+/** pipedog's bot-tts-text for a transcript delta: right after that delta's bot-output. */
+function deltaText(twin: Twin, m: Normalized | undefined, index: number | null): boolean {
+  if (m?.type !== "bot-tts-text" || index === null) return false;
+  const seq = rtvi(twin, "pipedog")
+    .slice(0, index)
+    .filter((x) => x.type !== "metrics");
+  const before = seq.at(-1);
+  return deltaOutput(before) && text(before?.data) === text(m.data);
+}
+
+/** The pipedog interims of `type` in the caller's turn up to `index`, joined. */
+function interimsSoFar(seq: readonly Normalized[], index: number, type: string): string {
+  let joined = "";
+  for (let i = index; i >= 0; i--) {
+    const m = seq[i] as Normalized;
+    if (m.type === "user-started-speaking") break;
+    if (m.type === type && field(m.data, "final") === false) joined = text(m.data) + joined;
+  }
+  return joined;
 }
 
 export const ALLOWED: readonly Allowance[] = [
@@ -385,5 +518,145 @@ export const ALLOWED: readonly Allowance[] = [
     difference: "her parts (LanceDB tables, the selfie tool) outlive a call",
     trigger: "every native call; no message shows it within a call",
     matches: () => false,
+  },
+  {
+    id: "E1",
+    difference:
+      "her recall reaches a realtime model: each block her providers record goes in as an item, " +
+      "and one they take out or replace is deleted (pipedog never sent recall after the greeting)",
+    trigger:
+      "a realtime call with recall, which the twin's persona, with no index or Mem0, never has",
+    matches: () => false,
+  },
+  {
+    id: "E2",
+    difference:
+      "a line typed into a realtime call is answered: it cuts her off, the response included, " +
+      "goes in as the caller's item and asks for a response; pipedog never sent it its model, " +
+      "and OpenAI's response ran on past the interruption",
+    trigger: "send-text on a realtime call",
+    matches: (d, twin) => {
+      if (unanswered(twin).size === 0) return false;
+      if (d.kind === "rtvi") {
+        if (d.change === "native-only") return inTypedReply(twin, d.native);
+        if (d.change === "pipedog-only") return inTypedCut(twin, d.pipedog);
+        if (d.change !== "moved") return false;
+        // The line's own echo, which pipedog sent once the response it let run had played.
+        if (d.message.type === "user-input" || d.message.type === "user-llm-text") {
+          return unanswered(twin).has(text(d.message.data));
+        }
+        // pipedog's speech of the response it let run, against native's of its answer.
+        return inTypedCut(twin, d.pipedog) && inTypedReply(twin, d.native);
+      }
+      if (d.kind === "usage")
+        return d.change === "native-only" && usageOf(d.record).role === "realtime";
+      if (d.kind !== "realtime" || d.change !== "native-only" || d.native === null) return false;
+      const seq = normalizeRealtime(twin.native.realtime);
+      const typed = (at: number) => {
+        const m = seq[at];
+        const line = itemText(m);
+        return (
+          m?.type === "conversation.item.create" && line !== null && unanswered(twin).has(line)
+        );
+      };
+      const at = d.native;
+      switch (d.message.type) {
+        case "conversation.item.create":
+          return typed(at);
+        case "response.create":
+          return typed(at - 1);
+        case "response.cancel":
+        case "conversation.item.truncate": {
+          // The barge-in just before the typed item.
+          let next = at + 1;
+          while (
+            ["response.cancel", "conversation.item.truncate"].includes(seq[next]?.type ?? "")
+          ) {
+            next++;
+          }
+          return typed(next);
+        }
+        default:
+          return false;
+      }
+    },
+  },
+  {
+    id: "E3",
+    difference: "OpenAI's realtime interim transcripts are cumulative, as D8 makes its STT's",
+    trigger: "a turn OpenAI's realtime transcription reports in more than one delta",
+    matches: (d, twin) => {
+      if (!realtime(twin) || d.kind !== "rtvi" || d.change !== "changed" || d.pipedog === null) {
+        return false;
+      }
+      const { message, other } = d;
+      if (!["user-input", "user-transcription"].includes(message.type)) return false;
+      if (other?.type !== message.type) return false;
+      if (field(message.data, "final") !== false || field(other.data, "final") !== false) {
+        return false;
+      }
+      const joined = interimsSoFar(rtvi(twin, "pipedog"), d.pipedog, message.type);
+      return text(other.data) === joined && joined !== text(message.data);
+    },
+  },
+  {
+    id: "E4",
+    difference:
+      'a realtime reply\'s bot-output is per sentence, "new" then "completed" as the cursor ' +
+      "passes the audio queued by its last delta, and held for the caller's final transcript " +
+      '(1 s at most); pipedog sent each transcript delta as a "new" never to be spoken',
+    trigger: "every realtime reply",
+    matches: (d, twin) => {
+      if (!realtime(twin) || d.kind !== "rtvi") return false;
+      const pipedogSide = (m: Normalized | undefined, at: number | null) =>
+        deltaOutput(m) || deltaText(twin, m, at);
+      switch (d.change) {
+        case "pipedog-only":
+          return pipedogSide(d.message, d.pipedog);
+        case "native-only":
+          return sentenceOutput(twin, d.message);
+        case "changed":
+          return pipedogSide(d.message, d.pipedog) && sentenceOutput(twin, d.other);
+        case "moved":
+          return sentenceOutput(twin, d.message);
+      }
+    },
+  },
+  {
+    id: "E5",
+    difference: "one bot-llm-started, and one bot-llm-stopped, per realtime response",
+    trigger:
+      "every realtime response: pipedog started one as it asked, and again for each item the " +
+      "server announced; a cut one it stopped at the cut and again at its response.done",
+    matches: (d, twin) => {
+      if (!realtime(twin) || d.kind !== "rtvi") return false;
+      if (d.change !== "pipedog-only" && d.change !== "moved") return false;
+      const seq = rtvi(twin, "pipedog");
+      if (secondStart(seq, d.pipedog)) return true;
+      // A stop with no round open: the last bot-llm-* before it is a stop too.
+      if (d.change !== "pipedog-only" || d.message.type !== "bot-llm-stopped") return false;
+      const before = seq.slice(0, d.pipedog ?? 0).filter((m) => m.type.startsWith("bot-llm-"));
+      const last = before.filter((m) => m.type !== "bot-llm-text").at(-1);
+      return last?.type === "bot-llm-stopped";
+    },
+    excuses: (v, engine, twin) =>
+      engine === "pipedog" &&
+      realtime(twin) &&
+      v.id === "I5" &&
+      v.detail === "a second bot-llm-started before bot-llm-stopped",
+  },
+  {
+    id: "E8",
+    difference:
+      "a fatal realtime error, or the socket closing, ends the call; pipedog's went on without " +
+      "its model",
+    trigger: "a realtime server's fatal error",
+    matches: (d, twin) => {
+      if (!realtime(twin) || d.kind !== "rtvi" || d.change !== "pipedog-only") return false;
+      const last = rtvi(twin, "native").at(-1);
+      if (last?.type !== "error") return false;
+      const failed = rtvi(twin, "pipedog").findIndex((m) => m.key === last.key);
+      return failed !== -1 && d.pipedog !== null && d.pipedog > failed;
+    },
   },
 ];

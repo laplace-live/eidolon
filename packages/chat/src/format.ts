@@ -151,7 +151,10 @@ export type ChatEvent =
   | (EventBase & {
       readonly type: "call-started";
       readonly call: string;
+      /** Whom the viewer called; on a group call, the host, whose hearing hears them. */
       readonly persona: ParticipantId;
+      /** Every persona in the chat was on the call, the director choosing who answered. */
+      readonly group?: true;
     })
   | (EventBase & { readonly type: "call-ended"; readonly call: string; readonly reason: string });
 

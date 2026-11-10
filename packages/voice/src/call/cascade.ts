@@ -24,6 +24,7 @@ import type {
   Pcm,
 } from "../types.ts";
 import { Floor } from "./floor.ts";
+import { groupOf, openGroup } from "./group.ts";
 import { CallKit } from "./kit.ts";
 
 /** Hears the caller until `signal` aborts, posting her turns. */
@@ -65,18 +66,25 @@ export async function runCascadeCall(
   const onShutdown = (): void => kit.post({ source: "shutdown" });
   try {
     const speaker = createSpeaker((event) => kit.post({ source: "speaker", event }));
+    // A group's Mouths, each in her own persona scope; the host hears for all of them.
+    const group = plan.group
+      ? openGroup(groupOf(plan.log.snapshot()), { kit, speaker, deps })
+      : null;
     const { stt, mouth } = await withPersona(plan.host, async () => {
-      const traits = voiceTraits(selectRequired("voice"));
-      const mouth = new Mouth({
-        persona: plan.host,
-        speech: deps.openSpeech(),
-        ...traits,
-        speaker,
-        join: joinSegments,
-        clock: deps.clock,
-        post: (event) => kit.post({ source: "mouth", event }),
-      });
-      kit.own("her voice", mouth);
+      let mouth = group?.mouthOf(plan.host);
+      if (mouth === undefined) {
+        const hers = new Mouth({
+          persona: plan.host,
+          speech: deps.openSpeech(),
+          ...voiceTraits(selectRequired("voice")),
+          speaker,
+          join: joinSegments,
+          clock: deps.clock,
+          post: (event) => kit.post({ source: "mouth", event }),
+        });
+        kit.own("her voice", hers);
+        mouth = hers;
+      }
       const stt = await deps.openStt(listening.signal);
       kit.own("her hearing", stt);
       return { stt, mouth };
@@ -92,6 +100,7 @@ export async function runCascadeCall(
       nudge: INTERRUPTED_EMPTY_TURN_PROMPT,
       newId: () => Bun.randomUUIDv7(),
       onEnding: () => void close(),
+      ...(group === null ? {} : { group }),
     });
 
     void (async () => {

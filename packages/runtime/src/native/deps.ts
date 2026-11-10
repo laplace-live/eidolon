@@ -1,4 +1,4 @@
-import { defaultEngineDeps, runTurn } from "@eidolon/engine";
+import { defaultEngineDeps, runChat, runTurn } from "@eidolon/engine";
 import { openRealtime } from "@eidolon/providers/realtime";
 import { openSpeech } from "@eidolon/providers/speech-stream";
 import { openStt } from "@eidolon/providers/stt";
@@ -13,6 +13,7 @@ export const productionCallDeps: CallDeps = {
     saveAttachment: () => Promise.reject(new Error("A call keeps no files")),
   }),
   runTurn,
+  runChat,
   openStt,
   openSpeech,
   openRealtime,

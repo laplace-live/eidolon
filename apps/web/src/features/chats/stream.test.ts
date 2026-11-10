@@ -408,6 +408,7 @@ describe("mergeEvents", () => {
     events: [userLine(1, "a"), herLine(2, "b")],
     lateTools: [],
     hearingRefusal: null,
+    groupCall: false,
     call: null,
   };
 
@@ -432,7 +433,13 @@ describe("mergeEvents", () => {
 describe("latePoll", () => {
   test("reads the chat again only while a tool her interrupted turn left running is out", () => {
     expect(latePoll(undefined)).toBe(false);
-    const contents = { header: HEADER, events: [], hearingRefusal: null, call: null };
+    const contents = {
+      header: HEADER,
+      events: [],
+      hearingRefusal: null,
+      call: null,
+      groupCall: false,
+    };
     expect(latePoll({ ...contents, lateTools: [] })).toBe(false);
     expect(latePoll({ ...contents, lateTools: ["take_selfie"] })).toBe(LATE_POLL_MS);
   });
@@ -445,6 +452,7 @@ describe("callOn", () => {
     events: [userLine(1, "a"), herLine(2, "b"), started],
     lateTools: [],
     hearingRefusal: null,
+    groupCall: false,
     call: { id: "c1", persona: "mio" },
   };
 

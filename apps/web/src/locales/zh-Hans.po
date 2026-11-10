@@ -227,6 +227,10 @@ msgstr "{name}继承了环境变量 <0>{env}</0> 的声音。继续即可保留�
 msgid "{name} is now the active persona."
 msgstr "当前人设已切换为{name}。"
 
+#: src/features/chats/call-dock.tsx
+msgid "{name} is speaking"
+msgstr "{name}正在说话"
+
 #: src/features/call/transcript-view.tsx
 #: src/features/chats/chat-log.tsx
 msgid "{name} is thinking…"
@@ -1501,6 +1505,10 @@ msgstr "所有人设对你的记忆都保存在 Qdrant 中，每次改动都会�
 msgid "Every video is downloaded."
 msgstr "所有视频都已下载。"
 
+#: src/features/chats/call-dock.tsx
+msgid "Everyone"
+msgstr "所有人"
+
 #: src/features/settings/route.tsx
 msgid "Everything the other sections don't show. Most installs never change these."
 msgstr "其他分区没有列出的设置。大多数情况下无需修改。"
@@ -1683,6 +1691,14 @@ msgstr "词汇表已保存。"
 #: src/features/setup/done-step.tsx
 msgid "Go to Home"
 msgstr "前往首页"
+
+#: src/features/chats/call-line.ts
+msgid "Group call"
+msgstr "群通话"
+
+#: src/features/chats/call-line.ts
+msgid "Group call · {duration}"
+msgstr "群通话 · {duration}"
 
 #: src/lib/labels.ts
 msgid "Group ID"
@@ -3572,6 +3588,10 @@ msgstr "有些视频需要已登录浏览器的 Cookie。读取浏览器 Cookie 
 #: src/features/chats/chat-view.tsx
 msgid "Someone here can't answer yet"
 msgstr "有人设暂时无法回答"
+
+#: src/lib/labels.ts
+msgid "Someone here talks through a realtime model, which can't join a group call."
+msgstr "有人设通过实时语音模型说话，无法加入群通话。"
 
 #: src/components/settings-form/check-labels.ts
 msgid "Something answers there, but it isn't Qdrant."

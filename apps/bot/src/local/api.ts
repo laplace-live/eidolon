@@ -111,6 +111,7 @@ export const ERROR_CODES = [
   "unknown-chat",
   "missing-key",
   "chat-in-call",
+  "realtime-in-group",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -964,12 +965,20 @@ export interface ChatContents {
   readonly hearingRefusal: string | null;
   /** The call on in this chat, from its call-started until its call-ended is stored; else null. */
   readonly call: ChatCallInfo | null;
+  /**
+   * Whether the viewer can call every persona in the chat at once (`group` in the offer): a chat of
+   * two or more, on the native voice engine, none of them on a realtime model.
+   */
+  readonly groupCall: boolean;
 }
 
 export interface ChatCallInfo {
   /** The `call` its call-started and call-ended carry. */
   readonly id: string;
+  /** Whom the viewer called; in a group call, the host. */
   readonly persona: ParticipantId;
+  /** Every persona in the chat is on the call. */
+  readonly group?: true;
 }
 
 /**
@@ -979,10 +988,16 @@ export interface ChatCallInfo {
  * one to the active persona. Refused with 400 bad-request (no persona, or one not in the chat),
  * 404 unknown-chat, 400 invalid-persona-id or 404 unknown-persona, and 409 chat-in-call while
  * the chat is in another call.
+ *
+ * With `group`, every persona in the chat is on the call, `persona` hosting: her hearing role hears
+ * the viewer, the director chooses who answers each line, and each decision is stored too. Refused
+ * with 400 bad-request in a chat of one or off the native voice engine, and 409 realtime-in-group
+ * when a persona in the chat talks through a realtime model.
  */
 export interface ChatCallRequestData {
   readonly chatId: string;
   readonly persona: ParticipantId;
+  readonly group?: boolean;
 }
 
 export interface ChatReadQuery {

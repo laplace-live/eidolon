@@ -135,8 +135,11 @@ export function ChatView({
   const { data: status, refetch: refetchStatus } = useQuery(statusQuery);
   const personaOf = usePersonaOf();
   const call = useCall();
-  // Whom the docked call is with: set by Call, and cleared by closing the dock.
-  const [callee, setCallee] = useState<ParticipantId | null>(null);
+  // Whom the docked call is with, her alone or everyone: set by Call, cleared by closing the dock.
+  const [callee, setCallee] = useState<{
+    readonly persona: ParticipantId;
+    readonly group: boolean;
+  } | null>(null);
   const { phase } = call;
   const calling = phase.name !== "idle" && phase.name !== "ended";
   // The server's word on a call in the chat, which another tab may hold.
@@ -201,9 +204,9 @@ export function ChatView({
     callee !== null &&
     phase.name !== "idle" &&
     !(phase.name === "ended" && phase.end.kind === "hung-up");
-  const startCall = (persona: ParticipantId) => {
-    setCallee(persona);
-    call.start({ chatId: id, persona });
+  const startCall = (persona: ParticipantId, group: boolean) => {
+    setCallee({ persona, group });
+    call.start({ chatId: id, persona, ...(group ? { group } : {}) });
   };
 
   return (
@@ -217,7 +220,12 @@ export function ChatView({
             {title === null ? shortDate(createdAt, lang, now) : names}
           </p>
         </div>
-        <CallButton personas={personas} disabled={inCall} onCall={startCall} />
+        <CallButton
+          personas={personas}
+          groupCall={chat.data.groupCall}
+          disabled={inCall}
+          onCall={startCall}
+        />
         <ChatMenu
           id={id}
           name={menuName}
@@ -247,9 +255,10 @@ export function ChatView({
         {docked && (
           <CallDock
             call={call}
-            persona={personaOf(callee)}
+            persona={personaOf(callee.persona)}
+            group={callee.group ? personas : null}
             status={status}
-            onCallAgain={() => startCall(callee)}
+            onCallAgain={() => startCall(callee.persona, callee.group)}
             onClose={() => setCallee(null)}
           />
         )}

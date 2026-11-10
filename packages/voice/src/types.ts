@@ -1,6 +1,6 @@
 import type { UserContext } from "@eidolon/access";
 import type { ChatEvent, ChatEventDraft, ChatHeader, ParticipantId } from "@eidolon/chat";
-import type { EngineDeps, runTurn } from "@eidolon/engine";
+import type { ChatDeps, runChat, runTurn } from "@eidolon/engine";
 import type { openRealtime } from "@eidolon/providers/realtime";
 import type { openSpeech } from "@eidolon/providers/speech-stream";
 import type { openStt } from "@eidolon/providers/stt";
@@ -112,8 +112,11 @@ export interface Clock {
 }
 
 export interface CallDeps {
-  readonly engine: EngineDeps;
+  /** A group call's director is `engine.director`, else the active persona's gate role's. */
+  readonly engine: ChatDeps;
   readonly runTurn: typeof runTurn;
+  /** A group call's answer to each line; a call with one persona never asks for it. */
+  readonly runChat?: typeof runChat;
   readonly openStt: typeof openStt;
   readonly openSpeech: typeof openSpeech;
   readonly openRealtime: typeof openRealtime;
@@ -126,10 +129,16 @@ export interface CallDeps {
 
 export interface CallPlan {
   readonly id: string;
-  /** The persona whose Call button started it. */
+  /** The persona whose Call button started it; in a group call, her hearing role hears. */
   readonly host: ParticipantId;
   readonly viewer: UserContext;
   readonly log: CallLog;
+  /** A group call never greets. */
   readonly greet: boolean;
   readonly realtime: boolean;
+  /**
+   * Every persona in the log's chat answers, one at a time in her own voice, as the director
+   * chooses (`group.ts`). Never on a realtime model.
+   */
+  readonly group?: boolean;
 }

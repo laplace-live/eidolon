@@ -92,12 +92,21 @@ describe("nativeCanRun", () => {
     expect(voiceLines()).toEqual([]);
   });
 
-  test("a realtime persona's calls run on pipedog, with one line saying why", () => {
-    setEnv({ REALTIME_PROVIDER: "openai" });
-    expect(nativeCanRun()).toBe("OpenAI's realtime model voices her");
-    expect(voiceLines()).toEqual([
-      "[voice] This call runs on pipedog: OpenAI's realtime model voices her",
-    ]);
+  test("a realtime persona's calls run natively, quietly, whatever her hearing and voice", () => {
+    setEnv({ REALTIME_PROVIDER: "openai", STT_PROVIDER: "openrouter", TTS_PROVIDER: "openrouter" });
+    expect(nativeCanRun()).toBeNull();
+    setEnv({ REALTIME_PROVIDER: "xai" });
+    expect(nativeCanRun()).toBeNull();
+    expect(voiceLines()).toEqual([]);
+  });
+
+  test("every provider the catalog offers for realtime has a native client", () => {
+    const realtime = PROVIDERS.filter((p) => p.offers.realtime !== undefined).map((p) => p.id);
+    expect(realtime.length).toBeGreaterThan(0);
+    for (const id of realtime) {
+      setEnv({ REALTIME_PROVIDER: id });
+      expect([id, nativeCanRun()]).toEqual([id, null]);
+    }
   });
 
   test("settings it can't read send the call to pipedog, which fails it as it does today", () => {
@@ -147,17 +156,18 @@ describe("sessionStarter", () => {
     expect(voiceLines()).toEqual([]);
   });
 
-  test("under native, a call inside a chat runs on pipedog with its binding, and says why", async () => {
+  test("under native, a call inside a chat runs natively with its binding, quietly", async () => {
     const started: string[] = [];
-    const start = sessionStarter<string, { readonly chat: string }>("native", {
+    const start = sessionStarter<string, { readonly persona: string }>("native", {
       pipedog: async (connection, _admission, binding) =>
-        void started.push(`pipedog ${connection} ${binding?.chat}`),
-      native: async (connection) => void started.push(`native ${connection}`),
+        void started.push(`pipedog ${connection} ${binding?.persona}`),
+      native: async (connection, _admission, binding) =>
+        void started.push(`native ${connection} ${binding?.persona}`),
     });
-    await start("pc-1", offer, { chat: "c1" });
+    await start("pc-1", offer, { persona: "bob" });
     await start("pc-2", offer);
-    expect(started).toEqual(["pipedog pc-1 c1", "native pc-2"]);
-    expect(voiceLines()).toEqual(["[voice] This call runs on pipedog: it is a call inside a chat"]);
+    expect(started).toEqual(["native pc-1 bob", "native pc-2 undefined"]);
+    expect(voiceLines()).toEqual([]);
   });
 
   test("under native, each offer runs natively unless its persona can't yet", async () => {
@@ -166,11 +176,15 @@ describe("sessionStarter", () => {
     await start("pc-1", offer);
     setEnv({ REALTIME_PROVIDER: "xai" });
     await start("pc-2", offer);
-    setEnv({ REALTIME_PROVIDER: undefined });
+    setEnv({ REALTIME_PROVIDER: "soniox" });
     await start("pc-3", offer);
-    expect(s.started).toEqual(["native pc-1", "pipedog pc-2", "native pc-3"]);
+    setEnv({ REALTIME_PROVIDER: undefined });
+    await start("pc-4", offer);
+    expect(s.started).toEqual(["native pc-1", "native pc-2", "pipedog pc-3", "native pc-4"]);
     expect(voiceLines()).toEqual([
-      "[voice] This call runs on pipedog: xAI's realtime model voices her",
+      expect.stringContaining(
+        "[voice] This call runs on pipedog: Soniox offers no realtime voice model",
+      ),
     ]);
   });
 });

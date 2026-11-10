@@ -1,14 +1,16 @@
 // Who has the floor in a call, and what the client is told about it: the caller's turns, her
 // replies and their speech, her tools, and the call's end, as docs/voice-engine.md's state table
 // numbers its rows. `handle` takes the mailbox's events one at a time and never awaits: a reply
-// runs as a task that posts its lines back, and so do her speech and the Speaker.
-import type { ChatEventDraft } from "@eidolon/chat";
+// runs as a task that posts its lines back, and so do her speech and the Speaker. In a group call,
+// each answer is a chain of the personas' turns, each a reply of its own (group.ts).
+import type { ChatEventDraft, ParticipantId } from "@eidolon/chat";
 import { errorText, logger } from "@eidolon/config";
-import type { CallChatOutput, CallTurnRequest } from "@eidolon/engine";
+import type { CallChatOutput, CallHooks, CallTurnRequest } from "@eidolon/engine";
 import type { SpeechNote, SpokenReply } from "../output/mouth.ts";
 import type { RtviInbound } from "../rtvi/codec.ts";
 import type { RtviEmitter } from "../rtvi/emitter.ts";
 import type { CallPlan, CloseReason, CursorEvent, EarEvent, Heard, Speaker } from "../types.ts";
+import { type GroupFloor, lastViewerLine, speakerLabel } from "./group.ts";
 import type { CallKit, Effect, LoopEvent } from "./kit.ts";
 
 /** pipedog's `BOT_VAD_STOP_FALLBACK_SECS`: the Speaker drained mid-reply this long has stopped. */
@@ -17,6 +19,8 @@ const DRAIN_FALLBACK_MS = 3_000;
 const DISCONNECT_DRAIN_MS = 10_000;
 /** How long the call's end waits for her interrupted reply to store what was heard. */
 const END_WAIT_MS = 2_000;
+/** What a turn whose speech never began heard. */
+const UNHEARD: Heard = { text: "", complete: false };
 
 export interface FloorOptions {
   readonly plan: CallPlan;
@@ -32,6 +36,8 @@ export interface FloorOptions {
   readonly newId: () => string;
   /** The call is ending: stop hearing, and close its streams, which flushes their meters. */
   readonly onEnding: (reason: CloseReason) => void;
+  /** A group call's: each answer is the chat's, its turns spoken by the personas it chooses. */
+  readonly group?: GroupFloor;
 }
 
 interface StartOptions {
@@ -39,10 +45,26 @@ interface StartOptions {
   readonly nudge?: string;
   /** `send-text`'s `audio_response`: false answers in text alone. */
   readonly speech?: boolean;
+  /**
+   * Whose turn: a follow-up's or a recovery's. In a group call it is her turn alone, where the
+   * caller's line gets the chat's answer; a call with one persona always runs the host's.
+   */
+  readonly persona?: ParticipantId;
+}
+
+/** A group call's answer: the chat's to the caller's line, or one persona's turn, under one abort. */
+interface Chain {
+  readonly id: string;
+  readonly abort: AbortController;
+  /** `send-text`'s `audio_response`, for each of its turns. */
+  readonly speech: boolean;
+  /** Barged in on, or the call ended: the turns still to come are dropped. */
+  cut: boolean;
 }
 
 interface Reply {
   readonly id: string;
+  readonly persona: ParticipantId;
   readonly abort: AbortController;
   readonly speech: SpokenReply;
   readonly startedAt: number;
@@ -67,8 +89,10 @@ export class Floor {
   #call: "connecting" | "live" | "ended" = "connecting";
   /** USER: null while quiet. */
   #user: { readonly interruptedBot: boolean } | null = null;
-  /** BOT: idle while null, else thinking, or speaking with `#speaking`. */
+  /** BOT: idle while null and no chain runs, else thinking, or speaking with `#speaking`. */
   #reply: Reply | null = null;
+  /** A group call's answer while it runs: between its turns, BOT is thinking with no reply. */
+  #chain: Chain | null = null;
   #speaking = false;
   /** Every reply whose turn hasn't ended, by id. */
   readonly #replies = new Map<string, Reply>();
@@ -76,8 +100,11 @@ export class Floor {
   #drained = true;
   /** Consecutive empty-turn recoveries. */
   #recoveries = 0;
+  /** Whose reply the last barge-in cut, whom a recovery asks to go on; null for none. */
+  #cutPersona: ParticipantId | null = null;
   #syncToolsRunning = 0;
-  #followUpOwed = false;
+  /** Whose async result is owed a follow-up reply once the floor is free. */
+  #followUp: ParticipantId | null = null;
   /** A reply to start once the cut one has ended. */
   #startOwed: StartOptions | null = null;
   /** Lines that go after the cut reply's own message, which its end stores. */
@@ -115,6 +142,12 @@ export class Floor {
       case "effect":
         this.#effect(event.reply, event.effect);
         return;
+      case "hop":
+        this.#hop(event.chain, event.hop, event.persona);
+        return;
+      case "read":
+        event.answer(this.#o.plan.log.snapshot());
+        return;
       case "mouth": {
         const reply = this.#replies.get(event.event.reply);
         if (reply !== undefined) this.#notes(reply);
@@ -124,7 +157,7 @@ export class Floor {
         this.#cursor(event.event);
         return;
       case "async-result":
-        this.#asyncResult(event.drafts);
+        this.#asyncResult(event.persona, event.drafts);
         return;
       case "timer":
         this.#timer(event);
@@ -147,7 +180,8 @@ export class Floor {
         emitter.botReady(message.id);
         if (this.#call === "connecting") {
           this.#call = "live";
-          if (this.#o.plan.greet) this.#start({ kickoff: true });
+          // A group call doesn't greet, as a group chat doesn't.
+          if (this.#o.plan.greet && this.#o.group === undefined) this.#start({ kickoff: true });
         }
         return;
       case "send-text":
@@ -176,7 +210,7 @@ export class Floor {
     const line = this.#userLine(message.content, "text");
     if (message.runImmediately) {
       emitter.botInterrupted();
-      if (this.#reply !== null) this.#bargeIn(true);
+      if (this.#busy()) this.#bargeIn(true);
       emitter.userTyped(message.content, message.id);
       emitter.userLlmText(message.content);
       this.#append(line);
@@ -225,8 +259,8 @@ export class Floor {
     const { emitter, kit } = this.#o;
     emitter.userStartedSpeaking();
     emitter.botInterrupted();
-    const interruptedBot = this.#reply !== null || this.#syncToolsRunning > 0;
-    if (this.#reply !== null) this.#bargeIn(true);
+    const interruptedBot = this.#busy() || this.#syncToolsRunning > 0;
+    if (this.#busy()) this.#bargeIn(true);
     this.#user = { interruptedBot };
     kit.active();
   }
@@ -246,10 +280,13 @@ export class Floor {
       this.#start();
     } else if (user.interruptedBot && this.#recoveries < 1 && this.#syncToolsRunning === 0) {
       this.#recoveries++;
-      this.#start({ nudge: this.#o.nudge });
-    } else if (this.#followUpOwed && this.#idle()) {
+      // In a group, the persona cut off goes on; a chain cut between turns has no one to.
+      if (this.#o.group === undefined || this.#cutPersona !== null) {
+        this.#start({ nudge: this.#o.nudge, persona: this.#cutPersona ?? this.#o.plan.host });
+      }
+    } else if (this.#followUp !== null && this.#idle()) {
       // An async result that came while the caller spoke, which a turn of words would have taken.
-      this.#start();
+      this.#start({ persona: this.#followUp });
     }
   }
 
@@ -260,25 +297,59 @@ export class Floor {
 
   /** USER quiet and BOT idle: pipedog's `waitingForUser`. */
   #idle(): boolean {
-    return this.#user === null && this.#reply === null;
+    return this.#user === null && !this.#busy();
+  }
+
+  /** BOT ≠ idle: a reply is open, or a group's answer runs between its turns. */
+  #busy(): boolean {
+    return this.#reply !== null || this.#chain !== null;
   }
 
   #start(options: StartOptions = {}): void {
     if (this.#call === "ended" || this.#closing) return;
     // The reply still open stores what was heard of it first.
-    if (this.#reply !== null) {
+    if (this.#busy()) {
       this.#startOwed = options;
       return;
     }
-    this.#followUpOwed = false;
-    const { plan, kit, mouth, newId } = this.#o;
+    this.#followUp = null;
+    const { group } = this.#o;
+    if (group !== undefined) {
+      this.#startChain(group, options);
+      return;
+    }
+    const { plan, mouth, newId } = this.#o;
     const id = newId();
     const persona = plan.host;
-    const reply: Reply = {
+    const abort = new AbortController();
+    const speech = mouth.begin(id, { audio: options.speech ?? true });
+    const reply = this.#newReply(id, persona, abort, speech);
+    this.#reply = reply;
+    this.#replies.set(id, reply);
+    const request: CallTurnRequest = {
+      chat: plan.log.snapshot(),
+      persona,
+      viewer: plan.viewer,
+      ...(options.kickoff ? { kickoff: true } : {}),
+      ...(options.nudge === undefined ? {} : { nudge: options.nudge }),
+      signal: abort.signal,
+      ...this.#hooks(id, persona),
+    };
+    void this.#run(id, request);
+  }
+
+  #newReply(
+    id: string,
+    persona: ParticipantId,
+    abort: AbortController,
+    speech: SpokenReply,
+  ): Reply {
+    return {
       id,
-      abort: new AbortController(),
-      speech: mouth.begin(id, { audio: options.speech ?? true }),
-      startedAt: kit.clock.now(),
+      persona,
+      abort,
+      speech,
+      startedAt: this.#o.kit.clock.now(),
       mindOpen: false,
       inProgress: [],
       ttsOpen: false,
@@ -287,34 +358,126 @@ export class Floor {
       cut: false,
       timed: new Set(),
     };
-    this.#reply = reply;
-    this.#replies.set(id, reply);
+  }
+
+  /** What reply `id`, persona `persona`'s turn, gives the engine: each reaches the call by mail. */
+  #hooks(id: string, persona: ParticipantId): CallHooks {
+    const { plan, kit, group } = this.#o;
     const { post } = kit;
-    const request: CallTurnRequest = {
-      chat: plan.log.snapshot(),
-      persona,
-      viewer: plan.viewer,
-      ...(options.kickoff ? { kickoff: true } : {}),
-      ...(options.nudge === undefined ? {} : { nudge: options.nudge }),
-      signal: reply.abort.signal,
+    return {
       mode: "call",
       effects: {
         switchVoice: async (voice) =>
           post({ source: "effect", reply: id, effect: { type: "voice", voice } }),
+        // In a group, her photo says whose it is.
         sendServerMessage: async (data) =>
-          post({ source: "effect", reply: id, effect: { type: "server-message", data } }),
+          post({
+            source: "effect",
+            reply: id,
+            effect: { type: "server-message", data: group ? { ...data, persona } : data },
+          }),
       },
       // Through the mailbox, behind the lines it has yet to speak; once the call has stopped
       // reading, her speech was cancelled and answers at once.
       heard: () =>
         kit.stopped
-          ? reply.speech.heard()
+          ? (this.#replies.get(id)?.speech.heard() ?? Promise.resolve(UNHEARD))
           : new Promise<Heard>((answer) => post({ source: "heard", reply: id, answer })),
       onAsyncResult: (drafts) => post({ source: "async-result", persona, drafts }),
       asyncSignal: this.#asyncTools.signal,
       usage: { source: "call", session: plan.id },
     };
-    void this.#run(id, request);
+  }
+
+  /**
+   * A group's answer: the chat's to the caller's last line, or with `persona`, her turn alone. Each
+   * turn it starts becomes a reply as its `hop` comes in, so she speaks one at a time: her turn
+   * ends only once her audio has played, and the director is asked about the next one after it.
+   */
+  #startChain(group: GroupFloor, options: StartOptions): void {
+    const { plan, kit, newId, turn } = this.#o;
+    const { post } = kit;
+    const chat = plan.log.snapshot();
+    const after = lastViewerLine(chat.events);
+    if (options.persona === undefined && after === null) return;
+    const chain: Chain = {
+      id: newId(),
+      abort: new AbortController(),
+      speech: options.speech ?? true,
+      cut: false,
+    };
+    this.#chain = chain;
+    const at: { hop: string | null } = { hop: null };
+    const hooks = (persona: ParticipantId): CallHooks => {
+      const hop = newId();
+      at.hop = hop;
+      post({ source: "hop", chain: chain.id, hop, persona });
+      return this.#hooks(hop, persona);
+    };
+    const { signal } = chain.abort;
+    const { viewer } = plan;
+    const lines =
+      options.persona === undefined
+        ? group.answer({
+            chat,
+            // Through the mailbox, so it holds every line posted before it.
+            read: () =>
+              kit.stopped
+                ? Promise.resolve(plan.log.snapshot())
+                : new Promise((answer) => post({ source: "read", answer })),
+            viewer,
+            after: after as number,
+            signal,
+            usage: { source: "call", session: plan.id },
+            hooks,
+          })
+        : turn({
+            chat,
+            persona: options.persona,
+            viewer,
+            ...(options.nudge === undefined ? {} : { nudge: options.nudge }),
+            signal,
+            ...hooks(options.persona),
+          });
+    void this.#runChain(chain, at, lines);
+  }
+
+  /** The chain's lines, each posted as its turn's; its decisions and its end as its own. */
+  async #runChain(
+    chain: Chain,
+    at: { readonly hop: string | null },
+    lines: AsyncIterable<CallChatOutput>,
+  ): Promise<void> {
+    const { post } = this.#o.kit;
+    try {
+      for await (const out of lines) {
+        const reply = out.type === "decision" ? chain.id : (at.hop ?? chain.id);
+        post({ source: "reply", reply, out });
+      }
+    } catch (error) {
+      logger.error(`[voice] Group answer ${chain.id} failed: ${errorText(error)}`, error);
+    }
+    post({ source: "reply", reply: chain.id, out: { type: "ended", turn: chain.id } });
+  }
+
+  /**
+   * Turn `hop` of the running chain starts, in `persona`'s voice. One that starts after a barge-in
+   * hears nothing, so it ends at once and stores nothing.
+   */
+  #hop(chainId: string, hop: string, persona: ParticipantId): void {
+    const chain = this.#chain === null || this.#chain.id !== chainId ? null : this.#chain;
+    const mouth = this.#o.group?.mouthOf(persona);
+    // The chat's answer chooses only the personas whose Mouths the call opened.
+    if (mouth === undefined) logger.warning(`[voice] ${persona} has no voice in this call`);
+    const speech = (mouth ?? this.#o.mouth).begin(hop, { audio: chain?.speech ?? true });
+    const reply = this.#newReply(hop, persona, chain?.abort ?? new AbortController(), speech);
+    this.#replies.set(hop, reply);
+    if (chain === null || chain.cut || mouth === undefined || this.#call === "ended") {
+      reply.speech.cancel();
+      reply.cut = true;
+      return;
+    }
+    this.#reply = reply;
   }
 
   /** Her turn's lines, posted as they come; a turn that throws still ends. */
@@ -329,6 +492,13 @@ export class Floor {
   }
 
   #replyLine(id: string, out: CallChatOutput): void {
+    const chain = this.#chain;
+    if (chain !== null && chain.id === id) {
+      // A decision whose turns a barge-in dropped never chose anyone who spoke.
+      if (out.type === "decision" && !chain.cut) this.#o.plan.log.append([out]);
+      else if (out.type === "ended") this.#chainEnded();
+      return;
+    }
     const reply = this.#replies.get(id);
     if (reply === undefined) return;
     const { emitter, plan } = this.#o;
@@ -390,6 +560,26 @@ export class Floor {
     this.#reply = null;
     this.#speaking = false;
     this.#o.kit.cancel("drain-fallback");
+    // A group's turn: the director may choose another before the floor is free.
+    if (this.#chain === null) this.#settle();
+  }
+
+  /** The group's answer has ended: a turn it left open, which its end never came for, is cut. */
+  #chainEnded(): void {
+    this.#chain = null;
+    const reply = this.#reply;
+    if (reply !== null) {
+      reply.speech.cancel();
+      this.#replies.delete(reply.id);
+      this.#reply = null;
+      this.#speaking = false;
+      this.#o.kit.cancel("drain-fallback");
+    }
+    this.#settle();
+  }
+
+  /** BOT is idle again: the call's end, the lines held back, then a reply owed. */
+  #settle(): void {
     if (this.#ending !== null) {
       this.#finish();
       return;
@@ -402,13 +592,14 @@ export class Floor {
     const owed = this.#startOwed;
     this.#startOwed = null;
     if (owed !== null) this.#start(owed);
-    else if (this.#followUpOwed && this.#idle()) this.#start();
+    else if (this.#followUp !== null && this.#idle()) this.#start({ persona: this.#followUp });
   }
 
   /** Her turn is done writing: her speech ends, and `answer` gets what was heard once it played. */
   #heard(id: string, answer: (heard: Heard) => void): void {
     const reply = this.#replies.get(id);
     if (reply !== undefined) void reply.speech.heard().then(answer);
+    else answer(UNHEARD);
   }
 
   #effect(id: string, effect: Effect): void {
@@ -422,8 +613,11 @@ export class Floor {
     if (reply !== undefined && !reply.cut) reply.speech.switchVoice(effect.voice);
   }
 
-  /** Row 23: stored, and answered once the floor is free; a reply started sooner sees it too. */
-  #asyncResult(drafts: readonly ChatEventDraft[]): void {
+  /**
+   * Row 23: stored, and answered once the floor is free, by `persona`, whose tool it was; a reply
+   * started sooner sees it too.
+   */
+  #asyncResult(persona: ParticipantId, drafts: readonly ChatEventDraft[]): void {
     if (this.#call !== "ended") {
       for (const draft of drafts) {
         if (
@@ -437,14 +631,14 @@ export class Floor {
     }
     this.#append(...drafts);
     if (this.#call === "ended" || this.#closing) return;
-    if (this.#idle()) this.#start();
-    else this.#followUpOwed = true;
+    if (this.#idle()) this.#start({ persona });
+    else this.#followUp = persona;
   }
 
   /** Appends lines to the log, after her cut reply's message while it has yet to store it. */
   #append(...drafts: ChatEventDraft[]): void {
     if (drafts.length === 0) return;
-    if (this.#reply?.cut) this.#deferred.push(drafts);
+    if (this.#reply?.cut || this.#chain?.cut) this.#deferred.push(drafts);
     else this.#o.plan.log.append(drafts);
   }
 
@@ -530,7 +724,12 @@ export class Floor {
         const reply = this.#reply;
         if (reply === null || reply.id !== event.reply || reply.cut || this.#speaking) return;
         this.#speaking = true;
-        this.#o.emitter.botStartedSpeaking();
+        const { emitter, group } = this.#o;
+        // On her first sample, so the label names whoever the caller hears.
+        if (group !== undefined) {
+          emitter.serverMessage(speakerLabel(reply.persona, group.nameOf(reply.persona)));
+        }
+        emitter.botStartedSpeaking();
         this.#timed(reply, "speaking");
         return;
       }
@@ -561,10 +760,22 @@ export class Floor {
 
   /**
    * A barge-in: her audio stops at once, her speech freezes at what was heard, and her turn is aborted;
-   * her async tools run on. With `emit`, what she was doing is closed for the client.
+   * her async tools run on. With `emit`, what she was doing is closed for the client. In a group,
+   * the chain's turns still to come are dropped, and the director isn't asked again.
    */
   #bargeIn(emit: boolean): void {
     const reply = this.#reply;
+    const chain = this.#chain;
+    if (chain !== null) {
+      chain.cut = true;
+      this.#cutPersona = reply?.persona ?? null;
+      if (reply === null) {
+        // Between turns: the director is stopped, and nothing more is stored.
+        chain.abort.abort("interrupted");
+        this.#startOwed = null;
+        return;
+      }
+    }
     if (reply === null) return;
     const { emitter, speaker, kit } = this.#o;
     speaker.clear();
@@ -619,8 +830,8 @@ export class Floor {
     kit.cancel("idle");
     kit.cancel("disconnect");
     this.#o.onEnding(reason);
-    if (this.#reply === null) this.#finish();
-    else kit.arm("end", END_WAIT_MS);
+    if (this.#busy()) kit.arm("end", END_WAIT_MS);
+    else this.#finish();
   }
 
   #finish(): void {
