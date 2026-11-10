@@ -64,6 +64,7 @@ const COMMIT = chunk(new Int16Array(0), true);
 class ElevenLabsStt extends WebsocketStt {
   readonly inputRate = SAMPLE_RATE;
   readonly ttfsP99 = 0.41;
+  readonly acknowledgesFinalize = false;
   protected readonly label = "ElevenLabsRealtimeSTTService";
   protected readonly url: string;
   protected readonly headers: Readonly<Record<string, string>>;

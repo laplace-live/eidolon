@@ -21,6 +21,11 @@ export interface TurnDetectorOptions {
   readonly clock: Clock;
   /** The recognizer's p99 seconds from the end of speech to its last final. */
   readonly ttfsP99: number;
+  /**
+   * The recognizer answers every finalize (`SttStream.acknowledgesFinalize`), so its silence past
+   * FINALIZE_ACK_CAP_MS means no words. One that doesn't may still send words later.
+   */
+  readonly acknowledgesFinalize: boolean;
   readonly join: JoinSegments;
   readonly post: (event: EarEvent) => void;
   /** Smart Turn forgets the turn's speech when the turn ends. */
@@ -30,8 +35,8 @@ export interface TurnDetectorOptions {
 /**
  * The turn state machine, fed the VAD's edges, Smart Turn's verdicts and the transcripts. A turn
  * ends once Smart Turn calls it complete and the recognizer has acknowledged its finalize, said
- * nothing for FINALIZE_ACK_CAP_MS after it, or sent a final and had its p99; never while the VAD
- * hears speech.
+ * nothing for FINALIZE_ACK_CAP_MS after it (one that acknowledges every finalize), or sent a final
+ * and had its p99; never while the VAD hears speech.
  */
 export class TurnDetector {
   readonly #options: TurnDetectorOptions;
@@ -48,6 +53,8 @@ export class TurnDetector {
   /** A finalized final or a bare acknowledgement came, or the cap passed, and no interim since. */
   #acknowledged = false;
   #cancelAckCap: (() => void) | null = null;
+  /** Finalizes called and not yet answered, each answered in turn; the cap forgets them. */
+  #unanswered = 0;
   /** An interim has come since the last final: words the recognizer has yet to finish. */
   #wordsPending = false;
   #timeoutExpired = false;
@@ -80,10 +87,15 @@ export class TurnDetector {
     this.#vadStopped = true;
     // The p99 counts from when speech ended, which the VAD reports its stop delay later.
     this.#sttDeadline = this.#options.clock.now() + (this.#options.ttfsP99 - this.#stopSecs) * 1000;
-    // The Ear has just called finalize(): a recognizer silent past the cap has nothing to add.
+    // The Ear has just called finalize(): a recognizer that answers every one and is silent past
+    // the cap has nothing to add.
+    if (!this.#options.acknowledgesFinalize) return;
+    this.#unanswered++;
     this.#cancelAckCap?.();
     this.#cancelAckCap = this.#options.clock.setTimer(FINALIZE_ACK_CAP_MS, () => {
       this.#cancelAckCap = null;
+      // An answer still owed was lost, as a reconnect loses them.
+      this.#unanswered = 0;
       // Words it heard and hasn't finished are still coming: their final, or the watchdog, ends it.
       if (!this.#wordsPending) this.#acknowledge();
     });
@@ -121,6 +133,7 @@ export class TurnDetector {
     this.#text = text;
     this.#wordsPending = false;
     if (finalized) {
+      this.#unanswered = Math.max(0, this.#unanswered - 1);
       this.#acknowledge();
       if (!this.#inTurn) return;
     } else if (this.#timeoutExpired && this.#turnComplete) {
@@ -135,11 +148,13 @@ export class TurnDetector {
   }
 
   /**
-   * The recognizer answered this stop's finalize() with no words. One that comes while the VAD
-   * hears speech again answered an earlier stop's.
+   * The recognizer answered a finalize() with no words. Only the answer to the last stop's ends
+   * the turn: one with answers still owed, or that comes while the VAD hears speech again,
+   * answered an earlier stop's.
    */
   finalized(): void {
-    if (this.#vadStopped) this.#acknowledge();
+    this.#unanswered = Math.max(0, this.#unanswered - 1);
+    if (this.#unanswered === 0 && this.#vadStopped) this.#acknowledge();
   }
 
   /** Cancels the timers. */

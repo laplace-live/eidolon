@@ -57,6 +57,7 @@ interface Results {
 class DeepgramStt extends SttBase {
   readonly inputRate = 16000;
   readonly ttfsP99 = 0.35;
+  readonly acknowledgesFinalize = true;
   protected readonly label = "DeepgramSTTService";
   readonly #url: string;
   readonly #headers: Readonly<Record<string, string>>;

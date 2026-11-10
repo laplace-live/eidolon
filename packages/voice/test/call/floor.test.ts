@@ -4,6 +4,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { ChatEventDraft } from "@eidolon/chat";
 import { consoleSink, logger } from "@eidolon/config";
+import { SPEECH_STALL_MS, SPEECH_STALLED } from "@eidolon/providers/speech-stream";
 import { HOST, NUDGE, settle, spokenReply, startCall, VIEWER } from "./harness.ts";
 
 let logs: string[];
@@ -870,6 +871,27 @@ describe("the end of a call (rows 24, 25, 27-29)", () => {
       "bot-tts-stopped",
     ]);
     expect(call.utterance().cancelled).toBe(true);
+  });
+
+  test("row 25: a stall her voice reports too, in the same tick, is reported once", async () => {
+    // Fish's flush arms its own 15 s stall as the Mouth arms its: just after it, or just before.
+    for (const lead of [0, 1]) {
+      const call = startCall();
+      await call.ready();
+      await call.says("你好");
+      call.turn.round("你好呀。");
+      await settle();
+      const utterance = call.utterance();
+      call.clock.setTimer(SPEECH_STALL_MS - lead, () =>
+        utterance.finish({ kind: "error", message: SPEECH_STALLED }),
+      );
+      call.news();
+      await call.advance(SPEECH_STALL_MS);
+      expect(call.news()).toEqual([
+        "error No speech audio arrived within 15 seconds",
+        "bot-tts-stopped",
+      ]);
+    }
   });
 
   test("row 27: disconnect-bot while she is idle ends the call at once", async () => {

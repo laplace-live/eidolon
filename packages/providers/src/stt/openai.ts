@@ -51,6 +51,7 @@ interface ServerEvent {
 class OpenAIStt extends WebsocketStt {
   readonly inputRate = SAMPLE_RATE;
   readonly ttfsP99 = 1.66;
+  readonly acknowledgesFinalize = false;
   protected readonly label = "OpenAIRealtimeSTTService";
   protected readonly url: string;
   protected readonly headers: Readonly<Record<string, string>>;

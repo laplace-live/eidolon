@@ -6,8 +6,8 @@ import { FINALIZE_ACK_CAP_MS, TurnDetector } from "../../src/input/turn.ts";
 import type { EarEvent } from "../../src/types.ts";
 import { FakeClock } from "./clock.ts";
 
-const SONIOX_P99 = 0.35;
-const OPENAI_P99 = 1.66;
+const SONIOX = { ttfsP99: 0.35, acknowledgesFinalize: true };
+const OPENAI = { ttfsP99: 1.66, acknowledgesFinalize: false };
 const STOP_TIMEOUT_MS = 5_000;
 
 function describeEvent(event: EarEvent): string {
@@ -24,14 +24,14 @@ function describeEvent(event: EarEvent): string {
   }
 }
 
-/** A detector, its clock, what it posted and how often it cleared Smart Turn. */
-function detector(ttfsP99 = SONIOX_P99) {
+/** A detector for `recognizer`, its clock, what it posted and how often it cleared Smart Turn. */
+function detector(recognizer = SONIOX) {
   const clock = new FakeClock(1_000);
   const events: string[] = [];
   const counts = { cleared: 0 };
   const turn = new TurnDetector({
     clock,
-    ttfsP99,
+    ...recognizer,
     join: (parts) => parts.join("|"),
     post: (event) => events.push(describeEvent(event)),
     clearAnalyzer: () => {
@@ -69,7 +69,7 @@ describe("a spoken turn", () => {
   });
 
   test("an unfinalized final waits for the recognizer's p99 from the end of speech", () => {
-    const { turn, clock, events } = detector(OPENAI_P99);
+    const { turn, clock, events } = detector(OPENAI);
     turn.speechStarted();
     turn.speechStopped();
     // The speech ended the VAD's 0.2 s before its stop: the deadline is 1.46 s after the stop.
@@ -388,6 +388,53 @@ describe("the recognizer's acknowledgement of finalize", () => {
     expect(events.at(-1)).toBe("user-stopped null");
   });
 
+  test("one answering an earlier stop's finalize, late, leaves the turn to this stop's", () => {
+    const { turn, clock, events } = detector();
+    // A cough, then a word at once, both stopped before the cough's finalize is answered.
+    turn.speechStarted();
+    turn.speechStopped();
+    turn.analyzed("complete");
+    clock.advance(100);
+    turn.speechStarted();
+    clock.advance(300);
+    turn.speechStopped();
+    turn.analyzed("complete");
+    clock.advance(100);
+    turn.finalized();
+    expect(events).toEqual(["user-started"]);
+    turn.final("喂", true);
+    expect(events).toEqual(["user-started", "final 喂", "user-stopped 喂"]);
+  });
+
+  test("a finalized final answers its stop's, so the next stop's bare answer ends the turn", () => {
+    const { turn, clock, events } = detector();
+    turn.speechStarted();
+    turn.speechStopped();
+    turn.analyzed("incomplete");
+    turn.final("我想", true);
+    clock.advance(300);
+    turn.speechStarted();
+    clock.advance(300);
+    turn.speechStopped();
+    turn.analyzed("complete");
+    clock.advance(50);
+    turn.finalized();
+    expect(events).toEqual(["user-started", "final 我想", "user-stopped 我想"]);
+  });
+
+  test("past the cap, a finalize never answered no longer holds back the next stop's", () => {
+    const { turn, clock, events } = detector();
+    turn.speechStarted();
+    turn.speechStopped();
+    turn.analyzed("incomplete");
+    clock.advance(FINALIZE_ACK_CAP_MS);
+    turn.speechStarted();
+    turn.speechStopped();
+    turn.analyzed("complete");
+    turn.finalized();
+    expect(events).toEqual(["user-started", "user-stopped null"]);
+  });
+
   test("one with no turn, or after the turn ended, changes nothing", () => {
     const { turn, clock, events } = detector();
     turn.finalized();
@@ -445,6 +492,42 @@ describe("the recognizer's acknowledgement of finalize", () => {
     expect(events).toEqual(["user-started"]);
     clock.advance(1);
     expect(events.at(-1)).toBe("user-stopped null");
+  });
+
+  test("only a recognizer that answers every finalize has its silence end the turn at the cap", () => {
+    // OpenAI hears nothing until the commit, and its first words can come after the cap.
+    const late = detector(OPENAI);
+    late.turn.speechStarted();
+    late.turn.speechStopped();
+    late.turn.analyzed("complete");
+    late.clock.advance(FINALIZE_ACK_CAP_MS + 200);
+    expect(late.events).toEqual(["user-started"]);
+    late.turn.interim("你好");
+    late.turn.final("你好啊", false);
+    expect(late.events).toEqual([
+      "user-started",
+      "interim 你好",
+      "final 你好啊",
+      "user-stopped 你好啊",
+    ]);
+
+    const { turn, clock, events } = detector(SONIOX);
+    turn.speechStarted();
+    turn.speechStopped();
+    turn.analyzed("complete");
+    clock.advance(FINALIZE_ACK_CAP_MS);
+    expect(events).toEqual(["user-started", "user-stopped null"]);
+  });
+
+  test("with no acknowledgement to wait for, a turn of no words ends at the watchdog", () => {
+    const { turn, clock, events } = detector(OPENAI);
+    turn.speechStarted();
+    turn.speechStopped();
+    turn.analyzed("complete");
+    clock.advance(STOP_TIMEOUT_MS - 1);
+    expect(events).toEqual(["user-started"]);
+    clock.advance(1);
+    expect(events).toEqual(["user-started", "user-stopped null"]);
   });
 });
 

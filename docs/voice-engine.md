@@ -206,7 +206,7 @@ The constants are pipedog's at ce8f8bc:
 Each turn's end costs about 88 ms of main-thread work on an M4 Max, 52 ms of it Smart Turn's naive
 DFT, as in pipedog.
 
-**The acknowledgement** (U20) is native's own; pipedog has no such rule. The recognizer answers
+**The acknowledgement** (U20) is native's own; pipedog has no such rule. Soniox and Deepgram answer
 every `finalize()`, words or none: Soniox with its `<fin>`, Deepgram with a `from_finalize` result.
 A `<fin>` with no final words before it, or an empty `from_finalize` answering a finalize the
 client sent, is the bare `finalized` event; one with words is the `final {finalized: true}` it
@@ -215,15 +215,22 @@ always was.
 - **Once the stop's finalize is acknowledged,** the turn ends as soon as Smart Turn says complete,
   with no wait for the p99. A turn with no words (a cough) ends then as an empty turn, so the
   Floor's empty-turn rules (the recovery prompt, D13) run at once, not after the 5 s watchdog.
-- **The cap:** a recognizer that has said nothing 1.91 s (`FINALIZE_ACK_CAP_MS`) after the
-  `finalize()` counts as having answered it. That is Soniox's p99 of 0.91 s plus 1 s, measured in
-  [`2026-11-10-finalize-ack`](benchmarks/2026-11-10-finalize-ack/README.md). It also bounds a
-  cough's empty turn on the recognizers whose clients report no bare acknowledgement (ElevenLabs,
-  OpenAI).
+- **The cap:** a recognizer that answers every `finalize()` (`acknowledgesFinalize`: Soniox,
+  Deepgram) and has said nothing 1.91 s (`FINALIZE_ACK_CAP_MS`) after it counts as having answered
+  it. That is Soniox's p99 of 0.91 s plus 1 s, measured in
+  [`2026-11-10-finalize-ack`](benchmarks/2026-11-10-finalize-ack/README.md). ElevenLabs and
+  OpenAI answer a commit with no words with nothing, and OpenAI's first words can come later than
+  the cap with no interim before them (its p99 is 1.66 s from the end of speech), so they get no
+  cap: their turns end on a final and its p99, or at the 5 s watchdog, as before U20.
 - **What clears it:** an interim (words are coming: their final, or the watchdog, ends the turn,
   not the cap, whether the interim came before the stop or after it), and a VAD start, which drops
-  a pending stop as before. A bare acknowledgement that
-  comes while the VAD hears speech again answered an earlier stop, and is ignored.
+  a pending stop as before.
+- **Which stop it answers:** the recognizer answers finalizes in order, so the TurnDetector counts
+  the ones still owed an answer (a bare acknowledgement or a finalized final). A bare
+  acknowledgement ends the turn only when it answers the last stop's: one that comes with answers
+  still owed (a cough, then a word stopped before the cough's answer came), or while the VAD hears
+  speech again, answered an earlier stop and is ignored. The cap forgets answers still owed, which
+  a reconnect loses.
 
 ## Speaking
 

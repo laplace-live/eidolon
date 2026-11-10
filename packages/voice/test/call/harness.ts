@@ -441,6 +441,7 @@ export class FakeTransport implements CallTransport {
 export class FakeStt implements SttStream {
   readonly inputRate = 16_000;
   readonly ttfsP99 = 0.35;
+  readonly acknowledgesFinalize = true;
   readonly events = new AsyncQueue<SttEvent>();
   samples = 0;
   closed = false;

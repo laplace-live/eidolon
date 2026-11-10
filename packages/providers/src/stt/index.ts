@@ -20,6 +20,11 @@ export interface SttStream {
   readonly inputRate: 16000 | 24000;
   /** Seconds: Soniox .35, Deepgram .35, ElevenLabs .41, OpenAI 1.66. */
   readonly ttfsP99: number;
+  /**
+   * Every `finalize()` gets an answer, `finalized` if it has no words: Soniox and Deepgram.
+   * ElevenLabs and OpenAI answer a commit with no words with nothing.
+   */
+  readonly acknowledgesFinalize: boolean;
   /** Metered here; dropped while the socket isn't open. */
   send(pcm: Int16Array): void;
   /** Soniox `finalize`, Deepgram `Finalize`, ElevenLabs and OpenAI commit. */

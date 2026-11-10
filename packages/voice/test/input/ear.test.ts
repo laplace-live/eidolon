@@ -6,6 +6,7 @@ import type { SttEvent, SttStream } from "@eidolon/providers/stt";
 import { resampler } from "../../src/dsp/resampler/index.ts";
 import { type EarDeps, runEar } from "../../src/input/ear.ts";
 import { type EndOfTurn, SmartTurn } from "../../src/input/smart_turn.ts";
+import { FINALIZE_ACK_CAP_MS } from "../../src/input/turn.ts";
 import { Vad, type VadEdge } from "../../src/input/vad.ts";
 import type { EarEvent, Pcm } from "../../src/types.ts";
 import { FakeClock } from "./clock.ts";
@@ -31,10 +32,12 @@ class FakeStt implements SttStream {
   onFinalize: () => void = () => {};
   readonly log: string[];
   readonly inputRate: 16000 | 24000;
+  readonly acknowledgesFinalize: boolean;
 
-  constructor(log: string[], inputRate: 16000 | 24000 = 16000) {
+  constructor(log: string[], inputRate: 16000 | 24000 = 16000, acknowledgesFinalize = true) {
     this.log = log;
     this.inputRate = inputRate;
+    this.acknowledgesFinalize = acknowledgesFinalize;
   }
 
   send(pcm: Int16Array): void {
@@ -124,10 +127,10 @@ function settle(): Promise<void> {
 }
 
 /** An Ear on fakes, with what it posted (activity left out unless asked for). */
-function ear(inputRate: 16000 | 24000 = 16000) {
+function ear(inputRate: 16000 | 24000 = 16000, acknowledgesFinalize = true) {
   const log: string[] = [];
   const clock = new FakeClock(10_000);
-  const stt = new FakeStt(log, inputRate);
+  const stt = new FakeStt(log, inputRate, acknowledgesFinalize);
   const vad = new ScriptedVad();
   const turn = new ScriptedTurn(log);
   const audio = new AsyncQueue<Pcm>();
@@ -343,6 +346,21 @@ describe("the recognizer's events", () => {
     expect(e.events()).toEqual(["user-started", "user-stopped null"]);
     expect(e.turn.cleared).toBe(1);
     await e.end();
+  });
+
+  test("its silence past the cap ends a turn only if it answers every finalize", async () => {
+    for (const acknowledgesFinalize of [true, false]) {
+      const e = ear(16000, acknowledgesFinalize);
+      e.vad.edges.set(1, "started");
+      e.vad.edges.set(10, "stopped");
+      await e.speak(11);
+      e.clock.advance(FINALIZE_ACK_CAP_MS);
+      await settle();
+      expect(e.events()).toEqual(
+        acknowledgesFinalize ? ["user-started", "user-stopped null"] : ["user-started"],
+      );
+      await e.end();
+    }
   });
 
   test("an error passes through; an acknowledgement with no turn changes nothing", async () => {

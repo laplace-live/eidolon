@@ -52,7 +52,7 @@ test("connects where pipedog does, with its query, and the key on the handshake"
   expect(peer.url.pathname).toBe("/v1/listen");
   expect(peer.url.searchParams.get("language")).toBe("zh");
   expect(peer.headers.get("authorization")).toBe(`Token ${KEY}`);
-  expect([stt.inputRate, stt.ttfsP99]).toEqual([16000, 0.35]);
+  expect([stt.inputRate, stt.ttfsP99, stt.acknowledgesFinalize]).toEqual([16000, 0.35, true]);
   await stt.close();
 });
 

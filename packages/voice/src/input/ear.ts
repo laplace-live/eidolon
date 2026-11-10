@@ -73,6 +73,7 @@ class Ear {
     this.#detector = new TurnDetector({
       clock: deps.clock,
       ttfsP99: deps.stt.ttfsP99,
+      acknowledgesFinalize: deps.stt.acknowledgesFinalize,
       join: deps.join,
       post,
       clearAnalyzer: () => deps.turn.clear(),

@@ -45,7 +45,7 @@ test("connects where pipedog does, with the key on the handshake and its config 
   expect(peer.url.pathname).toBe("/transcribe-websocket");
   expect(peer.headers.get("authorization")).toBe(`Bearer ${KEY}`);
   expect(await peer.next()).toBe(CONFIG);
-  expect([stt.inputRate, stt.ttfsP99]).toEqual([16000, 0.35]);
+  expect([stt.inputRate, stt.ttfsP99, stt.acknowledgesFinalize]).toEqual([16000, 0.35, true]);
   await stt.close();
 });
 

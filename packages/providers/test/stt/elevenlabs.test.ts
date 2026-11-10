@@ -45,7 +45,7 @@ test("connects where pipedog does, naming her language as ElevenLabs does", asyn
   const peer = await server.connection();
   expect(peer.url.pathname).toBe("/v1/speech-to-text/realtime");
   expect(peer.headers.get("xi-api-key")).toBe(KEY);
-  expect([stt.inputRate, stt.ttfsP99]).toEqual([16000, 0.41]);
+  expect([stt.inputRate, stt.ttfsP99, stt.acknowledgesFinalize]).toEqual([16000, 0.41, false]);
   await stt.close();
 });
 
