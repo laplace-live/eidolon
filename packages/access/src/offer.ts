@@ -40,8 +40,7 @@ export function parseOfferBody(bodyText: string): JsonObject | null {
 }
 
 /**
- * `requestData` when it is an object, else `request_data` when that is. With both present the
- * guard authenticates by `requestData`, while pipedog's `fromDict` takes `request_data`.
+ * `requestData` when it is an object, else `request_data` when that is.
  */
 export function offerRequestData(body: JsonObject | null): JsonObject | null {
   if (isJsonObject(body?.requestData)) return body.requestData;

@@ -1,6 +1,5 @@
-// What every client may count on in a call's RTVI messages, on either engine: I1–I10 of
-// docs/voice-engine.md, "RTVI". The twin harness checks them on every run, and
-// apps/bot/scripts/e2e-call.ts on every real call's timeline, so this file imports nothing.
+// What every client may count on in a call's RTVI messages: I1–I10 of docs/voice-engine.md,
+// "RTVI". e2e-call.ts checks them on every real call's timeline.
 
 /** One RTVI message as it crossed the wire: its type and data. */
 export interface WireMessage {
@@ -16,7 +15,7 @@ export interface Violation {
 }
 
 export interface InvariantOptions {
-  /** I6 holds on the native engine only: pipedog's Fish service never stops its audio context. */
+  /** Hold I6: pipedog, which ran calls before eidolon's own engine, never stopped Fish's audio. */
   readonly native: boolean;
   /**
    * A realtime model's call: its server ends the caller's turn on its own VAD and answers it
@@ -44,7 +43,7 @@ export function checkInvariants(
   messages: readonly WireMessage[],
   options: InvariantOptions,
 ): Violation[] {
-  // pipedog's metrics interleave with everything, and no client reads them (D3).
+  // The pipedog engine's metrics interleave with everything, and no client reads them (D3).
   const seq = messages
     .map((message, index) => ({ message, index }))
     .filter(({ message }) => message.type !== "metrics");

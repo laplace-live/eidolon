@@ -210,7 +210,7 @@ export class RubatoEngine {
   constructor(instance: WebAssembly.Instance) {
     this.#x = instance.exports as unknown as Exports;
     if (typeof this.#x.rs_stream_new !== "function") {
-      throw new Error("not the @pipedog/resampler-wasm module");
+      throw new Error("not the resampler-wasm module");
     }
   }
 

@@ -1,7 +1,6 @@
-// A call inside a chat on the native engine, through the CallBinding pipedog's sessions take: its
-// log opens on the chat as her view had it, and each line said on it, each photo she sends and its
-// end reach the binding's hooks as pipedog's session reports them (docs/voice-engine.md). A group
-// call, which only the native engine runs, opens on the chat itself and reports its events.
+// A call inside a chat, through a CallBinding: its log opens on the chat as her view had it, and
+// each line said on it, each photo she sends and its end reach the binding's hooks
+// (docs/voice-engine.md). A group call opens on the chat itself and reports its events.
 import {
   CHAT_WINDOW_MESSAGES,
   type ChatEvent,
@@ -22,12 +21,37 @@ import {
   type CloseReason,
   rtviMessage,
 } from "@eidolon/voice";
-import type { CallBinding, CallClient, CallEnd, TranscriptLine } from "../session/session.ts";
 
-/**
- * A call with every persona in a chat at once, the director choosing who answers each line. Only
- * the native engine runs one.
- */
+/** A finished line of a call, as its log keeps it. */
+export interface TranscriptLine {
+  readonly role: "user" | "assistant";
+  readonly text: string;
+  /** She was cut off, by the viewer or a hang-up, and `text` is what she had spoken by then. */
+  readonly interrupted: boolean;
+}
+
+/** The call's browser: `data` reaches it as an RTVI `server-message`, or nowhere once it hung up. */
+export interface CallClient {
+  sendServerMessage(data: Readonly<Record<string, unknown>>): Promise<void>;
+}
+
+/** How a call ended: it ran until either side hung up, or it failed. */
+export type CallEnd = "hangup" | "error";
+
+/** Ties a call to a conversation the caller keeps: whose call it is, what came before, its lines. */
+export interface CallBinding {
+  /** The persona the call runs as, active or not. The caller validates the id. */
+  readonly persona: string;
+  readonly seedMessages: readonly unknown[];
+  /** `client` is the call's browser; the call always passes it, a caller standing in may not. */
+  readonly onTranscript: (line: TranscriptLine, client?: CallClient) => void;
+  /** Each server message a tool sends the client, in order with the lines: take_selfie's photos. */
+  readonly onServerMessage?: (data: Readonly<Record<string, unknown>>, client?: CallClient) => void;
+  /** Called once, after the call's last line, however it ended. */
+  readonly onEnded: (end: CallEnd) => void;
+}
+
+/** A call with every persona in a chat at once, the director choosing who answers each line. */
 export interface GroupCallBinding {
   readonly group: true;
   /** The host, whose hearing role hears the viewer, and whose scope the call runs in. */

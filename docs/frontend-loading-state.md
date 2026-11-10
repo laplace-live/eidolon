@@ -47,11 +47,12 @@ status display (separate STT / LLM / TTS phases), use the
 ## Why this matters
 
 The bot is a voice persona ([明前奶绿](../personas/milky-green/prompt.md)) that talks to viewers
-over WebRTC. Each turn the user speaks → audio is streamed to the server → the pipeline runs:
+over WebRTC. Each turn the user speaks → audio is streamed to the server → the call's loop runs
+([voice-engine.md](voice-engine.md)):
 
 ```text
-transport.input → STT → user_aggregator → RetrievalGate
-    → Mem0 → StreamArchive → PersonaFacts → LLM → TTS → transport.output
+webrtc in → STT ∥ VAD → Smart Turn → runTurn: RetrievalGate ∥ Mem0, StreamArchive,
+    PersonaFacts → LLM → segmenter → TTS → Speaker → webrtc out
 ```
 
 Every stage can stall (the services named are the defaults; [providers.md](providers.md) lists the
@@ -72,44 +73,40 @@ what the bot is doing.
 
 ## How the bot signals state
 
-**RTVI** (Real-Time Voice Interaction) is Pipecat's protocol for translating pipeline frames into
-typed JSON messages over the WebRTC data channel, and pipedog, the TypeScript port of Pipecat the
-bot is built on, implements it. `buildSession` (`packages/runtime/src/session/session.ts`) hands
-pipedog's `PipelineWorker` a `LaplaceRTVIProcessor` (`packages/runtime/src/rtvi.ts`, which only
-brands the `bot-ready` message's `about` as `laplace-eidolon`). The worker puts it at the head of
-the pipeline, answers the client's `client-ready` with `bot-ready`, and attaches an `RTVIObserver`
-with pipedog's default `RTVIObserverParams`, which emits every event listed below. **You don't
-need to touch any bot code.**
+**RTVI** (Real-Time Voice Interaction) is Pipecat's protocol for a voice bot's state, as typed JSON
+messages over the WebRTC data channel; the bot speaks protocol 2.2.0. A call's Floor
+(`packages/voice/src/call/floor.ts`) sends every message below through its `RtviEmitter`
+(`packages/voice/src/rtvi/emitter.ts`), in the shapes pipedog's `RTVIObserver` sent, and answers
+the client's `client-ready` with `bot-ready`, whose `about` names `laplace-eidolon`
+(`packages/runtime/src/rtvi.ts`). **You don't need to touch any bot code.**
 
-Where the events come from (for reference only):
+Where the events come from (for reference only; [voice-engine.md](voice-engine.md#rtvi) has the
+whole table):
 
-| RTVI wire message | Triggered by pipedog frame | Pushed when |
-|---|---|---|
-| `bot-llm-started` | `LLMFullResponseStartFrame` | The LLM service is about to send its request — *before* the HTTP call to OpenRouter |
-| `bot-llm-stopped` | `LLMFullResponseEndFrame` | The stream closes, or the request fails |
-| `bot-tts-started` | `TTSStartedFrame` | The TTS service starts synthesising the reply |
-| `bot-tts-stopped` | `TTSStoppedFrame` | The TTS audio stream ends |
-| `bot-started-speaking` | `BotStartedSpeakingFrame` | Audio actually starts flowing through the transport |
-| `bot-stopped-speaking` | `BotStoppedSpeakingFrame` | Audio finishes playing |
-| `bot-interrupted` | `InterruptionFrame` | The user barged in and the reply was cut off |
-| `bot-output` | `AggregatedTextFrame` | The reply's text, sentence by sentence, as the output transport plays it |
-| `user-started-speaking` | `UserStartedSpeakingFrame` | Silero VAD hears speech (or a transcript arrives first) |
-| `user-stopped-speaking` | `UserStoppedSpeakingFrame` | Smart Turn judges the turn complete *and* a final transcript is in |
-| `user-input`, `user-transcription` | `TranscriptionFrame` / `InterimTranscriptionFrame` | Soniox emits text |
-| `server-message` | `RTVIServerMessageFrame`, or the RTVI processor itself | An LLM tool sends one, or a call inside a chat sends a line ([below](#custom-server-messages)) |
-| `error` | `ErrorFrame` | A service or a context provider reports an error |
+| RTVI wire message | Pushed when |
+|---|---|
+| `bot-llm-started` | A round of her reply is about to send its request — *before* the HTTP call to OpenRouter |
+| `bot-llm-stopped` | The round's stream closes, or the request fails |
+| `bot-tts-started` | Her voice starts synthesising the reply |
+| `bot-tts-stopped` | Her voice finishes the reply's speech, or a barge-in cuts it |
+| `bot-started-speaking` | Her first audio sample plays on the call |
+| `bot-stopped-speaking` | Her last audio sample has played, or a barge-in cut her off |
+| `bot-interrupted` | The user started speaking, or typed text that cuts her off |
+| `bot-output` | The reply's text, sentence by sentence, as her audio plays it |
+| `user-started-speaking` | Silero VAD hears speech |
+| `user-stopped-speaking` | Smart Turn judges the turn complete *and* a final transcript is in |
+| `user-input`, `user-transcription` | The recognizer (Soniox by default) emits text |
+| `server-message` | A tool sends one, a call inside a chat sends a line, or a group call names who speaks ([below](#custom-server-messages)) |
+| `error` | Her mind, her voice, the recognizer or a context provider reports an error |
 
 The bot also sends `bot-llm-text` (each chunk of the LLM's text), `bot-transcription` (the same,
 a sentence at a time) and `bot-tts-text`, which client-js deprecates in favour of `bot-output`, as
-it does `user-transcription` in favour of `user-input`.
+it does `user-transcription` in favour of `user-input`. It sends no `metrics`.
 
-**Key insight on `bot-llm-started`:** it fires *before* the request is dispatched. In pipedog's
-`BaseOpenAILLMService` (`@pipedog/openai`), which the default OpenRouter service extends,
-`processFrame` pushes `LLMFullResponseStartFrame` and only then calls `_processContext`, which
-makes the HTTPS call; the Anthropic service pushes it ahead of its request too. So this event
-captures the LLM's **time-to-first-token (TTFB)**, which is the period you actually want to
-indicate. A failed request pushes `LLMFullResponseEndFrame` all the same, so an `error` from the
-LLM comes with its `bot-llm-stopped`.
+**Key insight on `bot-llm-started`:** it fires as the request is dispatched, after the context
+providers' searches. So this event captures the LLM's **time-to-first-token (TTFB)**, which is the
+period you actually want to indicate. A failed request still sends its `bot-llm-stopped`, then an
+`error`.
 
 ---
 
@@ -127,7 +124,7 @@ npm install @pipecat-ai/client-js @pipecat-ai/small-webrtc-transport
 
 ### 2. Minimal: single "thinking…" indicator
 
-The simplest implementation — show one status while the pipeline is busy, hide it when audio
+The simplest implementation — show one status while the bot is busy, hide it when audio
 plays:
 
 ```ts
@@ -250,16 +247,16 @@ diagram you need:
 | 9 | `BotTtsStarted` | `onBotTtsStarted` | Fish Audio TTS synthesis starts | overlaps with 6–8 (starts mid-stream) |
 | 10 | `BotStartedSpeaking` | `onBotStartedSpeaking` | Audio is now playing on the user's speakers | ~200–500 ms after first TTS chunk |
 | 11 | `BotOutput` / `BotTtsText` | `onBotOutput` / `onBotTtsText` | The reply's text as it is spoken | inline |
-| 12 | `BotTtsStopped` | `onBotTtsStopped` | TTS finishes synthesis | — |
-| 13 | `BotStoppedSpeaking` | `onBotStoppedSpeaking` | Last audio sample played | — |
+| 12 | `BotTtsStopped` | `onBotTtsStopped` | TTS finishes the reply | — |
+| 13 | `BotStoppedSpeaking` | `onBotStoppedSpeaking` | Last audio sample played | as her audio ends |
 
 Bold rows are the "LLM wait" window the original question was about.
 
 The final transcript comes *before* `UserStoppedSpeaking`: the turn ends only once Smart Turn
-judges it complete and a final transcript is in (pipedog's `TurnAnalyzerUserTurnStopStrategy`).
-And the call opens with the bot's greeting: on `client-ready`, `installGreeting`
-(`packages/runtime/src/session/session.ts`) runs the LLM once, so steps 5–13 happen once before
-the user has said anything.
+judges it complete and a final transcript is in (the TurnDetector,
+`packages/voice/src/input/turn.ts`). And the call opens with the bot's greeting: on `client-ready`
+she answers a kickoff prompt, which never reaches the client as `user-llm-text`, so steps 5–13
+happen once before the user has said anything.
 
 ---
 
@@ -267,10 +264,11 @@ the user has said anything.
 
 ### Interruption (barge-in)
 
-If the user starts talking while the bot is still speaking, pipedog cancels the in-flight LLM/TTS,
-sends `bot-interrupted` (`RTVIEvent.BotInterrupted`) and starts a new turn. You'll see a new
-`UserStartedSpeaking` before the previous turn's `BotStoppedSpeaking`. Reset your indicator state
-on every `UserStartedSpeaking`.
+If the user starts talking while the bot is still speaking, the bot cancels the in-flight LLM and
+TTS, sends `bot-interrupted` (`RTVIEvent.BotInterrupted`), then closes whichever of
+`bot-llm-stopped`, `bot-tts-stopped` and `bot-stopped-speaking` was open, and starts a new turn.
+You'll see a new `UserStartedSpeaking` before the previous turn's `BotStoppedSpeaking`. Reset your
+indicator state on every `UserStartedSpeaking`.
 
 ```ts
 pcClient.on(RTVIEvent.UserStartedSpeaking, () => {
@@ -284,8 +282,8 @@ pcClient.on(RTVIEvent.UserStartedSpeaking, () => {
 
 If the LLM call fails or times out, the TTS service errors, or a context provider fails,
 `RTVIEvent.Error` fires with an `RTVIMessage` whose `data.error` is the bot's message. Its
-`data.fatal` is always `false`, since pipedog doesn't port the flag: a session that ends arrives
-as `Disconnected`, not as an error. Always handle `Error` — otherwise a stuck "thinking…"
+`data.fatal` is always `false`: a call that can't go on sends its `error`, then ends, which arrives
+as `Disconnected`. Always handle `Error` — otherwise a stuck "thinking…"
 indicator will sit on screen forever:
 
 ```ts
@@ -308,10 +306,10 @@ A slow LLM can't cause this: `bot-llm-started` goes out before its request does.
 `user-stopped-speaking` and `bot-llm-started` the turn waits for the context providers' searches
 (Mem0, the stream archive, persona facts), so a long gap that does end in `bot-llm-started` points
 at them. A turn that ends with no transcript at all (a cough, noise, speech the STT couldn't
-recognise) runs no LLM: under pipedog's `EmptyUserTurnConfig`, as `buildSession` sets it, the bot
-answers an empty turn only when it cut the bot off. A slow STT shows up earlier, as a late
-`user-stopped-speaking`: the turn ends once the final transcript is in, or when the aggregator's
-`userTurnStopTimeout` runs out. Log the timestamps and ping the backend team.
+recognise) runs no LLM: the bot answers an empty turn only when it cut the bot off, once, asking
+the user to say it again. A slow STT shows up earlier, as a late `user-stopped-speaking`: the turn
+ends once the final transcript is in, or when the TurnDetector's 5 s watchdog runs out. Log the
+timestamps and ping the backend team.
 
 ---
 
@@ -327,11 +325,14 @@ pcClient.on(RTVIEvent.ServerMessage, (data) => {
 ```
 
 Of the extension contracts in `packages/core/src/index.ts`, only an LLM tool can send one: its
-`run` gets `ToolEffects.sendServerMessage`, which `SessionTools`
-(`packages/runtime/src/adapters/tools.ts`) pushes from the LLM as an `RTVIServerMessageFrame`.
+`run` gets `ToolEffects.sendServerMessage`, which the call sends its browser as it is.
 `take_selfie` sends `{ type: "selfie", urls: [...] }` ([selfies.md](selfies.md)). A context
 provider's `ContextTurn` has no such effect, so the bot sends no progress messages like "RAG
 retrieving from stream archive…" or "checking long-term memory…" — flag it if you want them.
+
+In a group call (the local app's), each persona's first audio of a reply comes with
+`{ type: "speaker", persona, name }` just before its `bot-started-speaking`, and her selfie's
+message names her `persona` too.
 
 ### A call inside a chat: `chat-line`
 
@@ -385,11 +386,11 @@ pcClient.on(RTVIEvent.ServerMessage, (data) => {
 - [Pipecat client-js callbacks reference](https://docs.pipecat.ai/client/js/api-reference/callbacks)
   — canonical list of events and their data shapes
 - [RTVI standard protocol](https://docs.pipecat.ai/client/rtvi-standard) — wire format
-- pipedog's `RTVIObserver` (`@pipedog/core/processors/frameworks/rtvi/observer`) — which frames
-  trigger which messages, and the defaults of `RTVIObserverParams`
+- [voice-engine.md](voice-engine.md#rtvi) — every message the bot sends, and what a client can
+  count on (I1–I10)
 - Project README: [`../README.md`](../README.md)
-- [`../packages/runtime/src/session/session.ts`](../packages/runtime/src/session/session.ts) —
-  `buildSession`, where RTVI is wired in, and `installGreeting`;
-  [`../packages/runtime/src/rtvi.ts`](../packages/runtime/src/rtvi.ts) — `LaplaceRTVIProcessor`
+- [`../packages/voice/src/call/floor.ts`](../packages/voice/src/call/floor.ts) — when each message
+  goes out; [`../packages/voice/src/rtvi/emitter.ts`](../packages/voice/src/rtvi/emitter.ts) — its
+  shape
 - [`../apps/web/src/features/call/`](../apps/web/src/features/call/) — the local web app's call
   page: `use-call.ts` (its listeners), `watchdog.ts`, `transcript.ts`

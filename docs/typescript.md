@@ -1,14 +1,15 @@
 # The TypeScript bot
 
-The bot, and the offline chain that builds its indexes, in Bun/TypeScript, built on
-[pipedog](https://github.com/polvallverdu/pipedog) (a TypeScript port of Pipecat). The bot has
-run production since 2026-11-04. The code and its own tests are the only source of truth for how
+The bot, and the offline chain that builds its indexes, in Bun/TypeScript, on eidolon's own voice
+engine ([voice-engine.md](voice-engine.md)), parts of it ported from
+[pipedog](https://github.com/polvallverdu/pipedog) (a TypeScript port of Pipecat). The bot has run
+production since 2026-11-04. The code and its own tests are the only source of truth for how
 it behaves.
 
 ## Layout
 
-Bun workspaces, one package per subsystem. Dependencies point down this list; nothing below
-`runtime` imports pipedog, and `core` imports nothing.
+Bun workspaces, one package per subsystem. Dependencies point down this list, and `core` imports
+nothing.
 
 | Package | Owns |
 | --- | --- |
@@ -23,16 +24,16 @@ Bun workspaces, one package per subsystem. Dependencies point down this list; no
 | `packages/context` | the retrieval gate, both RAG providers, the recall tool, the system instruction, the greeting, and group chats' director ([chat.md](chat.md#the-director)) |
 | `packages/tools`, `packages/imagegen` | `change_voice_style`, `take_selfie`, the selfie store |
 | `packages/chat` | the chat log's format, browser-safe: its events, `viewOf`, `parseMentions`, the `ChatStore` interface and its contract suite; `@eidolon/chat/jsonl` is the local store ([chat.md](chat.md)) |
-| `packages/engine` | the turn engine: one persona's text turn, her mind per provider without pipedog, the tool loop and her context providers ([chat.md](chat.md#a-turn-runturn)); `runChat`, a chat's turns in the order the director chooses ([chat.md](chat.md#the-chain)) |
+| `packages/engine` | the turn engine: one persona's turn, her mind per provider, the tool loop and her context providers ([chat.md](chat.md#a-turn-runturn)); `runChat`, a chat's turns in the order the director chooses ([chat.md](chat.md#the-chain)) |
 | `packages/ingest` | the offline chain: download, transcribe, refine, both ingests, the stream catalog and the pipeline ([below](#the-offline-chain)) |
-| `packages/voice` | the native voice engine's pieces, not yet loaded in production: the Ear (Silero VAD, Smart Turn, the turn detector), the sentence segmenter, the Speaker and spoken-text tracker, the vendored resampler, the RTVI codec and emitter. Its live recognizers and speech clients are `@eidolon/providers/stt` and `/speech-stream`; only `packages/runtime` imports it (Biome) |
-| `packages/webrtc` | the native engine's WebRTC on werift and libopus-wasm, with no pipedog: the signalling server, the peer, the data channel, the caller's audio in and hers out, and the werift patches ([voice-engine.md](voice-engine.md#the-transport)); only `packages/runtime` imports it (Biome) |
-| `packages/runtime` | the only pipedog importer: the pipeline, adapters from `core` contracts to pipedog, WebRTC signalling, and the `CallBinding` that runs a call inside a chat ([chat.md](chat.md#the-binding)) |
+| `packages/voice` | the voice engine: a call's loop around the turn engine, the Ear (Silero VAD, Smart Turn, the turn detector), the sentence segmenter, the Mouth and the Speaker, the vendored resampler, the RTVI codec and emitter, and the two ONNX models (`models/`) ([voice-engine.md](voice-engine.md)). Its live recognizers and speech clients are `@eidolon/providers/stt` and `/speech-stream`; only `packages/runtime` imports it (Biome) |
+| `packages/webrtc` | a call's WebRTC on werift and libopus-wasm: the signalling server, the peer, the data channel, the caller's audio in and hers out, and the werift patches ([voice-engine.md](voice-engine.md#the-transport)); only `packages/runtime` imports it (Biome) |
+| `packages/runtime` | the bridge from `apps/bot` to the voice engine: the signalling server, a call's production deps and start, and the `CallBinding` that runs a call inside a chat ([chat.md](chat.md#the-binding)) |
 | `apps/bot` | `Bun.serve`, the routes, MCP, the entry point, and the production chat endpoint, `src/chat` ([chat.md](chat.md#production-the-browser-keeps-the-chat)) |
 | `apps/cli` | every `laplace-*` command and the gate benchmark: argparse specs, the persona, locks, printing, exit codes |
 
-A new context tier implements `ContextProvider`; a new LLM tool implements `LlmTool`. Neither
-touches pipedog: `packages/runtime` adapts both. Clients (the `/ai` page today; Electron or Expo
+A new context tier implements `ContextProvider`; a new LLM tool implements `LlmTool`; the turn
+engine runs both, in a chat and a call alike. Clients (the `/ai` page today; Electron or Expo
 later) talk to `apps/bot` over HTTP and RTVI.
 
 The bot reads each persona's index from the data home ([personas.md](personas.md)) and viewers'
@@ -190,15 +191,17 @@ original) or one code path against another (the pipeline's dry run against the p
 
 ## What keeps it working
 
-- **Only `packages/runtime` imports `@pipedog/*`.** Biome's `noRestrictedImports` enforces it.
-  Every other package is testable without a pipeline and reusable by another runtime.
+- **pipedog-derived code carries its BSD-2 header**, then `Ported from pipedog <path>@ce8f8bc`.
+  pipedog is never followed past that commit; `NOTICE` names every copyright holder a ported
+  file's header does, and `apps/eidolon/test/build.test.ts` holds it to that.
+- **Only `packages/runtime` imports `@eidolon/voice` and `@eidolon/webrtc`.** Biome's
+  `noRestrictedImports` enforces it, so every other package is testable without a call.
 - **`@eidolon/ingest` stays out of the bot image.** Biome forbids importing it under `apps/bot/**`
   and the other packages, because `docker.yml` skips the image build for changes to `apps/cli/**`
   and `packages/ingest/**`. Lift both together, or the image ships without a change it runs.
 - **No vendor SDK sends a request.** `packages/providers` has fetch clients for OpenAI-compatible
-  chat and Anthropic's Messages API, and `packages/runtime` hands them to pipedog's services in
-  place of the SDK clients they would build. A new service gets one too, or bills behind the
-  usage ledger's back.
+  chat and Anthropic's Messages API, which the engine's minds call, and every provider a call
+  hears or speaks through. A new provider gets one too, or bills behind the usage ledger's back.
 - **`@eidolon/providers/catalog` imports nothing.** The web app bundles it for its provider and
   model pickers; a test keeps it import-free, and Biome lets the web app import it alone.
 - **`bunfig.toml` turns Bun's own `.env` loader off.** `load-env.ts`, the first import of each
@@ -213,10 +216,9 @@ original) or one code path against another (the pipeline's dry run against the p
   `load-env.ts` of its own, a job's CLI or the server `bun run local` restarts, gets no `env` and
   reads `.env` as it is now. Handed `process.env`, it would keep every key deleted from `.env`
   since, because `override` sets keys and never unsets them.
-- **werift needs four corrections, all in `packages/webrtc/src/patches.ts`.** Until pipedog goes,
-  `packages/runtime/src/webrtc/handler.ts` patches the same werift for pipedog's transport; both
-  guard their prototype patch with `Symbol.for("eidolon.werift.patched")`, so the one werift both
-  resolve (`werift.test.ts` holds that) is patched once.
+- **werift needs four corrections, all in `packages/webrtc/src/patches.ts`.** Its prototype patch
+  is guarded with `Symbol.for("eidolon.werift.patched")`, so a second evaluation of the module
+  patches nothing (`packages/runtime/test/werift.test.ts`).
   1. It queries `stun.l.google.com` when no STUN server is configured. That put the origin's
      public IP in every non-relay answer and, where UDP to Google is blocked, stalled every
      answer by its 5 s STUN timeout. It now queries only a server the plan names.
@@ -228,12 +230,11 @@ original) or one code path against another (the pipeline's dry run against the p
   4. werift fills a relay candidate's `raddr` with the TURN server's XOR-MAPPED-ADDRESS, which
      is this host's public IP, so every answer is scrubbed to `raddr 0.0.0.0 rport 0`.
 
-  A fifth, pipedog's, sits in `packages/webrtc/src/peer.ts` under pipedog's own flag: an
+  A fifth, ported from pipedog, sits in `packages/webrtc/src/peer.ts` under pipedog's flag: an
   `error` listener on werift's UDP sockets, whose ICMP errors otherwise kill the process.
-- **ICE servers and the Opus bitrate are set per connection without a pipedog seam.** The
-  handler assigns them right before `handleWebRequest`, which builds the connection before its
-  first await. The interleaved-offer test locks that ordering in; rerun it on every pipedog bump.
-  `@eidolon/webrtc` builds each peer from its own offer's plan, and the same test runs on it.
+- **ICE servers and the Opus bitrate are set per peer.** `@eidolon/webrtc` builds each peer from
+  its own offer's plan; the interleaved-offer test (`packages/runtime/test/signalling.test.ts`)
+  holds that two offers in flight never share one.
 - **Golden fixtures are the code's record.** Each holds what a test pins for fixed inputs. A test
   that fails against one means behavior changed: fix the code, or, when the change is on purpose,
   update the golden in the same commit and `bunx biome check --write` it. They hold synthetic

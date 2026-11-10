@@ -28,7 +28,7 @@ await fetch("/api/memories/forget", {
 // → { ok: true, user_id }
 
 // 3. If the user is mid-call, disconnect the WebRTC session.
-//    Otherwise the running pipeline will store new memories
+//    Otherwise the running call will store new memories
 //    from the rest of this conversation. See "In-flight session"
 //    below.
 pcClient.disconnect();
@@ -45,7 +45,7 @@ service auto-extracts memories from chat (e.g. "the user mentioned they're
 allergic to seafood") and surfaces them in future conversations.
 
 Mem0 is self-hosted: the engine runs in-process and stores its vectors in
-Qdrant, so these endpoints reach the same store the pipeline writes to
+Qdrant, so these endpoints reach the same store a call writes to
 rather than a hosted API. `buildMemoryConfig()` in
 [`../packages/memory/src/config.ts`](../packages/memory/src/config.ts) holds the
 configuration both paths share.
@@ -172,8 +172,8 @@ validation.
 
 ## In-flight session caveat
 
-If the viewer hits "Forget me" *while a WebRTC session is active*,
-`Mem0MemoryService` is still running inside the live pipeline. It will keep
+If the viewer hits "Forget me" *while a WebRTC session is active*, her
+Mem0 provider is still running inside the live call. It will keep
 storing this session's transcript in the background — so memories created
 *after* the deletion request survive.
 

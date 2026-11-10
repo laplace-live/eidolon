@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { logger } from "@eidolon/config";
 import * as runtime from "../src/index.ts";
-import { productionSessionDeps } from "../src/session/defaults.ts";
-import { createLlm, createStt, createTts } from "../src/session/services.ts";
 import { captureLogs, type LogCapture } from "./support.ts";
 
 let logs: LogCapture;
@@ -11,7 +10,7 @@ beforeEach(() => {
 afterEach(() => logs.restore());
 
 describe("@eidolon/runtime", () => {
-  test("exports exactly the pipedog-free surface apps/bot uses", () => {
+  test("exports exactly the surface apps/bot uses", () => {
     expect(Object.keys(runtime).sort()).toEqual([
       "BOT_ABOUT",
       "configureLogging",
@@ -40,15 +39,8 @@ describe("@eidolon/runtime", () => {
     await signalling.close();
   });
 
-  test("sessions are built from the real services and bot.py's empty-turn prompt", () => {
-    expect(productionSessionDeps.createStt).toBe(createStt);
-    expect(productionSessionDeps.createTts).toBe(createTts);
-    expect(productionSessionDeps.createLlm).toBe(createLlm);
-    expect(productionSessionDeps.interruptedEmptyTurnPrompt).toBe(
-      "你刚才说话的时候，好像说了句什么，但没听清。" +
-        "你的话在那儿被打断了，对话里只留下ta听到的部分，也可能一句都没听到。" +
-        "用一句话自然地请ta再说一遍；" +
-        "如果你刚才问了问题，ta可能没听到，就顺带再问一次。",
-    );
+  test("configureLogging sets the logger's level", () => {
+    runtime.configureLogging({ level: "INFO" });
+    expect([logger.isEnabledFor("DEBUG"), logger.isEnabledFor("INFO")]).toEqual([false, true]);
   });
 });

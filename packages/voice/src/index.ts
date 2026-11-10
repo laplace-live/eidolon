@@ -1,5 +1,4 @@
-// eidolon's own voice engine: a call's loop around @eidolon/engine, without pipedog. Only
-// packages/runtime imports it.
+// eidolon's voice engine: a call's loop around @eidolon/engine. Only packages/runtime imports it.
 import { errorText, logger } from "@eidolon/config";
 import { withUsageScope } from "@eidolon/providers";
 import { runCascadeCall } from "./call/cascade.ts";
@@ -9,6 +8,7 @@ import { sharedSession } from "./input/onnx.ts";
 import type { CallDeps, CallPlan, CallTransport, CloseReason } from "./types.ts";
 
 export { memoryCallLog } from "./call/log.ts";
+export { voiceModels } from "./models.ts";
 export { rtviMessage } from "./rtvi/codec.ts";
 export type {
   CallDeps,

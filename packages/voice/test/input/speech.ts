@@ -1,20 +1,12 @@
 // Test audio made on the spot: the repository keeps no recordings (.gitignore), so a
 // formant-synthesized voice that Silero scores as speech stands in for one.
-import { join } from "node:path";
-import { PROJECT_ROOT } from "@eidolon/config";
+import { voiceModels } from "../../src/models.ts";
 
 export const SAMPLE_RATE = 16000;
 /** 20 ms, the frame the transport delivers. */
 export const FRAME_SAMPLES = 320;
 
-// Until the models move into packages/voice/models, the copies pipedog's packages ship, which
-// packages/runtime installs and loads today.
-const RUNTIME = join(PROJECT_ROOT, "packages/runtime");
-export const SILERO_MODEL = Bun.resolveSync("@pipedog/audio-silero/silero_vad.onnx", RUNTIME);
-export const SMART_TURN_MODEL = Bun.resolveSync(
-  "@pipedog/audio-smart-turn/smart-turn-v3.2-cpu.onnx",
-  RUNTIME,
-);
+export const { silero: SILERO_MODEL, smartTurn: SMART_TURN_MODEL } = voiceModels();
 
 /** A seeded uniform generator on [0, 1) (mulberry32). */
 export function mulberry32(seed: number): () => number {

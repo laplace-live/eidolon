@@ -468,22 +468,18 @@ Nothing is built yet. The system plugs into seams `packages/` and
   `change_voice_style` is in `packages/tools/src/voice.ts`: a schema
   and a `run(call, effects)` that resolves with the result the LLM
   sees. Its message to the frontend goes out through
-  `effects.sendServerMessage`, which `SessionTools`
-  (`packages/runtime/src/adapters/tools.ts`) pushes from the LLM as an
-  `RTVIServerMessageFrame`. No new pipeline processor: the tool runs in
-  the LLM service's function-call task, as `change_voice_style` does.
-- **Per-session wiring** is `buildSession`
-  (`packages/runtime/src/session/session.ts`). It gets the viewer's
-  `UserContext` (`packages/access/src/user-context.ts`), builds the
-  call's tools through `SessionDeps` (in production,
-  `productionSessionDeps` in `packages/runtime/src/session/defaults.ts`),
-  registers them with `SessionTools`, which advertises them all in one
-  schema, and passes their prompt hints to `buildSystemInstruction`.
-  Built per session, the tool can close over the viewer it serves;
-  `ToolCall` carries no viewer. `createVoiceTool` and
-  `createSelfieTool` return `null` when their tool is off, as this one
-  would for an anonymous viewer or an unset `DATABASE_URL`, and
-  `buildSession` already skips Mem0 for anonymous viewers.
+  `effects.sendServerMessage`, which a call sends its browser as an RTVI
+  `server-message`. The tool runs in the turn engine's tool loop, as
+  `change_voice_style` does.
+- **Per-persona wiring** is her parts (`packages/engine/src/parts.ts`).
+  They get the viewer's `UserContext`
+  (`packages/access/src/user-context.ts`), build her tools, and pass
+  their prompt hints to `buildSystemInstruction`. Built for the viewer,
+  the tool can close over the one it serves; `ToolCall` carries no
+  viewer. `createVoiceTool` and `createSelfieTool` return `null` when
+  their tool is off, as this one would for an anonymous viewer or an
+  unset `DATABASE_URL`, and her parts already skip Mem0 for anonymous
+  viewers.
 - **The prompt block** reaches the system prompt through
   `buildPersonaPrefix` (`packages/context/src/persona.ts`), which takes
   each hint pre-rendered; `voicePromptHint` returns `""` when its tool
@@ -512,7 +508,7 @@ Anonymous viewers have none.
 1. `admitOffer` (`packages/access/src/offer.ts`) reads the offer's
    `loginSyncToken` and validates it through `resolveUserContext`
    (existing).
-2. `buildSession` gets the resulting `UserContext` (existing) and loads
+2. Her parts get the resulting `UserContext` (existing) and load
    the viewer's state:
    - Anonymous → no state. Affection tool not registered, prefix
      hint empty, no Postgres I/O.
@@ -564,7 +560,7 @@ Anonymous viewers have none.
 - Postgres `FOR UPDATE` serializes the transaction; last write wins.
   Two simultaneous +2s either both apply (each in own txn) or one
   blocks briefly. Either way state stays consistent.
-- RTVI events are per-pipeline; each session sees its own update. Fine.
+- RTVI events are per-call; each call sees its own update. Fine.
 
 ### Clock skew / out-of-order
 - `affection_events.created_at` uses server time. No bot-side clocks.
@@ -932,12 +928,13 @@ Stretch (v1.1+):
 
 ## Related
 
-- [`../packages/runtime/src/session/session.ts`](../packages/runtime/src/session/session.ts)
-  — `buildSession`: tools, system prompt and pipeline for one call
+- [`../packages/engine/src/parts.ts`](../packages/engine/src/parts.ts)
+  — her parts: tools, context providers and system prompt, in a chat or
+  a call
 - [`../packages/core/src/index.ts`](../packages/core/src/index.ts) — the
   `LlmTool`, `ToolEffects` and `ContextProvider` contracts
 - [`../packages/tools/src/voice.ts`](../packages/tools/src/voice.ts) —
-  reference pattern for an LLM tool with in-pipeline side effects and
+  reference pattern for an LLM tool with side effects on the call and
   a prompt hint; [`../packages/tools/src/selfie.ts`](../packages/tools/src/selfie.ts)
   for one that sends a server message
 - [`../packages/context/src/persona.ts`](../packages/context/src/persona.ts)

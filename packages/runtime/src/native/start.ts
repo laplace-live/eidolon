@@ -1,4 +1,4 @@
-// The lines a call logs as it starts, on either voice engine; no pipedog, so src/native shares it.
+// The lines a call logs as it starts.
 import type { AllowedOffer } from "@eidolon/access";
 import { cpLen, isJsonObject, logger, pyRepr } from "@eidolon/config";
 

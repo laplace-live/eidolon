@@ -1,6 +1,6 @@
-// werift's four corrections for a call's peer (docs/typescript.md, "What keeps it working"). Until
-// pipedog goes, packages/runtime/src/webrtc/handler.ts patches the same werift; the symbol keeps
-// either from patching what the other already has.
+// werift's four corrections for a call's peer (docs/typescript.md, "What keeps it working"). The
+// symbol keeps a second evaluation of this module, as a second copy of the package would be, from
+// patching werift again.
 import { logger } from "@eidolon/config";
 import {
   candidateReachable,

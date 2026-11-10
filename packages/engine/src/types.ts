@@ -33,7 +33,7 @@ export type MindChunk =
   | { readonly type: "tool-calls"; readonly calls: readonly MindToolCall[] }
   | { readonly type: "done"; readonly finishReason: string | null };
 
-/** The provider that fills a persona's mind role, without pipedog. */
+/** The provider that fills a persona's mind role. */
 export interface Mind {
   stream(request: MindRequest): AsyncIterable<MindChunk>;
 }

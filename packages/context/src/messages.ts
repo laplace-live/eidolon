@@ -1,5 +1,5 @@
-// The live context holds OpenAI-shaped messages next to pipedog's LLMSpecificMessage objects,
-// which carry no `role`, so every check tests the shape before trusting a field.
+// Checks over a conversation's OpenAI-shaped messages, each testing a message's shape before
+// trusting a field.
 import { pyStr } from "@eidolon/config";
 import type { ConversationContext } from "@eidolon/core";
 

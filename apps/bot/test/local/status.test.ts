@@ -467,7 +467,7 @@ describe("the last failed call", () => {
 
   test("the runtime still logs a failed session with that prefix", () => {
     const source = readFileSync(
-      join(PROJECT_ROOT, "packages/runtime/src/session/session.ts"),
+      join(PROJECT_ROOT, "packages/runtime/src/native/engine.ts"),
       "utf8",
     );
     expect(source).toContain("logger.error(`Bot session failed: ${");

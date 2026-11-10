@@ -1,7 +1,6 @@
-// A production call inside a chat on the native voice engine: bindChatCall's binding, unchanged,
-// run on the native loop over a fake transport, recognizer and voice, with her turns scripted. She
-// opens on the window, and each line and photo reaches the browser through the call, numbered on
-// from the window and signed, as on pipedog.
+// A production call inside a chat: bindChatCall's binding run on the voice loop over a fake
+// transport, recognizer and voice, with her turns scripted. She opens on the window, and each line
+// and photo reaches the browser through the call, numbered on from the window and signed.
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { ANONYMOUS, chatPersonas, type JsonObject } from "@eidolon/access";

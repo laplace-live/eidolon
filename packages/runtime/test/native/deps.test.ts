@@ -1,25 +1,21 @@
-// What a native call runs on outside the tests, and the models it warms.
+// What a call runs on outside the tests, and the models it warms.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { defaultEngineDeps, runTurn } from "@eidolon/engine";
 import { openRealtime } from "@eidolon/providers/realtime";
 import { openSpeech } from "@eidolon/providers/speech-stream";
 import { openStt } from "@eidolon/providers/stt";
-import { voiceModels, warmAudioModels } from "../../src/audio.ts";
+import { voiceModels } from "@eidolon/voice";
+import { warmAudioModels } from "../../src/index.ts";
 import { productionCallDeps } from "../../src/native/deps.ts";
 import { BOT_ABOUT } from "../../src/rtvi.ts";
-import { captureLogs, type LogCapture, setEnv } from "../support.ts";
+import { captureLogs, type LogCapture } from "../support.ts";
 
 let logs: LogCapture;
-let restoreEnv: () => void;
 beforeEach(() => {
   logs = captureLogs();
-  restoreEnv = setEnv({ EIDOLON_VOICE_ENGINE: undefined });
 });
-afterEach(() => {
-  restoreEnv();
-  logs.restore();
-});
+afterEach(() => logs.restore());
 
 describe("productionCallDeps", () => {
   test("calls run on the real engine, clients and models, and bot-ready names this bot", () => {
@@ -55,15 +51,14 @@ describe("productionCallDeps", () => {
 });
 
 describe("the hearing models", () => {
-  test("are the files pipedog ships, which both engines load", () => {
+  test("are the committed files in packages/voice/models", () => {
     const { silero, smartTurn } = voiceModels();
     expect(silero.endsWith("silero_vad.onnx")).toBe(true);
     expect(smartTurn.endsWith("smart-turn-v3.2-cpu.onnx")).toBe(true);
     expect(existsSync(silero) && existsSync(smartTurn)).toBe(true);
   });
 
-  test("under native, the warm-up loads the native engine's models, and succeeds", async () => {
-    setEnv({ EIDOLON_VOICE_ENGINE: "native" });
+  test("the warm-up loads them, and succeeds", async () => {
     await warmAudioModels();
     expect(logs.messages("WARNING")).toEqual([]);
   }, 30_000);

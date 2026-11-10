@@ -1,8 +1,8 @@
-// A group call on the native engine: a GroupCallBinding run over a fake transport, a fake recognizer
+// A group call: a GroupCallBinding run over a fake transport, a fake recognizer
 // and a fake voice per persona, the real hearing models, the real engine on scripted minds and a
 // scripted director. It opens on the chat itself, reports each line and decision numbered on from
 // it, and each persona's Mem0 stores only the viewer's call lines and hers. A realtime persona can't
-// join one, and nothing but the native engine runs one.
+// join one.
 import "../../../config/test/isolated-guard.ts";
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -21,16 +21,14 @@ import type { ContextProvider } from "@eidolon/core";
 import { type ChatDeps, type MindChunk, type MindRequest, runChat, runTurn } from "@eidolon/engine";
 import { MEM0_STORE_KEY } from "@eidolon/memory";
 import { realtimeIn } from "@eidolon/providers";
-import type { CallDeps } from "@eidolon/voice";
-import { SmallWebRTCConnection } from "@pipedog/transport-smallwebrtc/connection";
+import { type CallDeps, voiceModels } from "@eidolon/voice";
+import { Peer } from "@eidolon/webrtc";
 import { FakeSpeech, FakeStt, FakeTransport, settle } from "../../../voice/test/call/harness.ts";
 import { FakeClock } from "../../../voice/test/input/clock.ts";
-import { voiceModels } from "../../src/audio.ts";
 import { createSignallingServer } from "../../src/index.ts";
-import type { GroupCallBinding } from "../../src/native/binding.ts";
+import type { CallClient, GroupCallBinding } from "../../src/native/binding.ts";
 import { groupReason, runNativeSafely } from "../../src/native/engine.ts";
 import { BOT_ABOUT } from "../../src/rtvi.ts";
-import type { CallClient } from "../../src/session/session.ts";
 import { captureLogs, type LogCapture, admission as offered, setEnv, until } from "../support.ts";
 
 const HOST = "bob";
@@ -212,7 +210,7 @@ async function groupCall(rounds: readonly (readonly ParticipantId[])[]) {
   };
 }
 
-describe("a group call on the native engine", () => {
+describe("a group call", () => {
   test("opens on the chat, and reports each line and decision numbered on from it, as each speaks", async () => {
     const c = await groupCall([[HOST, OTHER]]);
     // No greeting: she waits for the viewer.
@@ -291,13 +289,17 @@ describe("who can join a group call", () => {
     expect(logs.messages("ERROR")).toEqual([`Bot session failed: ${reason}`]);
   });
 
-  test("under pipedog, the server refuses a group call: it fails as it starts, and ends as an error", async () => {
-    const restore = setEnv({ EIDOLON_VOICE_ENGINE: undefined });
-    const spy = spyOn(SmallWebRTCConnection.prototype, "initialize").mockImplementation(
-      async function (this: SmallWebRTCConnection) {
-        (this as unknown as { _answer: unknown })._answer = { sdp: "v=0\r\n", type: "answer" };
-      },
+  test("the signalling server hands an offer's group binding to its call", async () => {
+    writeFileSync(
+      join(dataHome(), "personas", OTHER, "persona.yaml"),
+      `${PERSONAS[OTHER]}realtime:\n  provider: openai\n`,
     );
+    const spies = [
+      spyOn(Peer.prototype, "initialize").mockImplementation(async () => {}),
+      spyOn(Peer.prototype, "getAnswer").mockImplementation(function (this: Peer) {
+        return { sdp: "v=0\r\n", type: "answer", pc_id: this.pcId };
+      }),
+    ];
     const signalling = createSignallingServer({
       ice: { serverPlan: async () => ({ iceServers: [], relayOnly: false, turnUrl: null }) },
     });
@@ -314,13 +316,13 @@ describe("who can join a group call", () => {
       expect((await signalling.offer(offer, group)).status).toBe(200);
       await until(() => ends.length === 1);
     } finally {
-      spy.mockRestore();
+      for (const spy of spies) spy.mockRestore();
       await signalling.close();
-      restore();
     }
+    // Only a group call checks its personas' roles.
     expect(ends).toEqual(["error"]);
     expect(logs.messages("ERROR")).toEqual([
-      "Bot session failed: a group call needs EIDOLON_VOICE_ENGINE=native",
+      "Bot session failed: cat's calls run on a realtime model, which can't join a group call",
     ]);
   });
 });

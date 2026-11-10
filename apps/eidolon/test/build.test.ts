@@ -4,11 +4,12 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { cliEntry, serverEntry } from "@eidolon/config";
+import { cliEntry, serverEntry, voiceModelsDir } from "@eidolon/config";
 import {
   bareImports,
   bundle,
   checkImports,
+  copyVoiceModels,
   inlinedPackages,
   inPackage,
   licenseText,
@@ -68,23 +69,11 @@ describe("the bundles", () => {
 
   test("leave werift and apache-arrow to node_modules, one copy for the packages that share them", () => {
     const server = bareImports(join(root, "dist", "server.js"));
-    for (const name of [
-      "werift",
-      "libopus-wasm",
-      "apache-arrow",
-      "onnxruntime-node",
-      "@pipedog/core/frames/frames",
-    ]) {
+    for (const name of ["werift", "libopus-wasm", "apache-arrow", "onnxruntime-node"]) {
       expect([name, server.has(name)]).toEqual([name, true]);
     }
     expect([...inlined.keys()]).toContain("@lancedb/lancedb");
-    for (const name of [
-      "werift",
-      "libopus-wasm",
-      "apache-arrow",
-      "onnxruntime-node",
-      "@pipedog/core",
-    ]) {
+    for (const name of ["werift", "libopus-wasm", "apache-arrow", "onnxruntime-node"]) {
       expect([name, inlined.has(name)]).toEqual([name, false]);
     }
     expect([...inlined.keys()].filter((name) => name.startsWith("@eidolon/"))).toEqual([]);
@@ -111,6 +100,33 @@ describe("the bundles", () => {
     const unknown = Bun.spawnSync([process.execPath, launcher, "serve"]);
     expect(unknown.exitCode).toBe(2);
     expect(unknown.stderr.toString()).toStartWith('eidolon: unknown command "serve"');
+  });
+});
+
+describe("the voice models", () => {
+  test("ship byte for byte in data/models, with their licenses", async () => {
+    copyVoiceModels(root);
+    const dir = inPackage(root, voiceModelsDir);
+    expect(dir).toBe(join(root, "data", "models"));
+    const sha256 = async (file: string) =>
+      new Bun.CryptoHasher("sha256")
+        .update(await Bun.file(join(dir, file)).arrayBuffer())
+        .digest("hex");
+    expect({
+      silero: await sha256("silero_vad.onnx"),
+      smartTurn: await sha256("smart-turn-v3.2-cpu.onnx"),
+    }).toEqual({
+      silero: "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+      smartTurn: "2bb026316b14a660486a75b1733cd3fbab8c2fd0314dc9af7be49f8cca967e4f",
+    });
+    const licenses = readFileSync(join(dir, "THIRD_PARTY_LICENSES.md"), "utf8");
+    for (const line of [
+      "Copyright (c) 2020-present Silero Team",
+      "Copyright (c) 2024–2025, Daily",
+      "Apache License",
+    ]) {
+      expect([line, licenses.includes(line)]).toEqual([line, true]);
+    }
   });
 });
 
@@ -191,14 +207,11 @@ describe("the published manifest", () => {
   test("depends on the externals at the workspaces' pins, and each platform's Bun and LanceDB", () => {
     const runtime = manifestOf<{ dependencies: Record<string, string> }>("packages/runtime");
     const retrieval = manifestOf<{ dependencies: Record<string, string> }>("packages/retrieval");
+    const voice = manifestOf<{ dependencies: Record<string, string> }>("packages/voice");
     const webrtc = manifestOf<{ dependencies: Record<string, string> }>("packages/webrtc");
-    const pipedog = Object.entries(runtime.dependencies).filter(([name]) =>
-      name.startsWith("@pipedog/"),
-    );
     expect(manifest.dependencies).toEqual({
-      ...Object.fromEntries(pipedog),
-      "onnxruntime-node": runtime.dependencies["onnxruntime-node"],
-      werift: runtime.dependencies.werift,
+      "onnxruntime-node": voice.dependencies["onnxruntime-node"],
+      werift: webrtc.dependencies.werift,
       "libopus-wasm": webrtc.dependencies["libopus-wasm"],
       "apache-arrow": retrieval.dependencies["apache-arrow"],
     });

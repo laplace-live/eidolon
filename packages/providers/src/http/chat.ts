@@ -1,7 +1,6 @@
-// The clients pipedog's chat services call, over fetch: OpenAI-compatible chat completions and
-// Anthropic's Messages API. pipedog's services take a client object and call one method on it,
-// the shape of the vendor SDKs' (`chat.completions.create`, `beta.messages.create`), so these
-// stand in for the SDKs with nothing of theirs in the request path.
+// The clients a mind calls, over fetch: OpenAI-compatible chat completions and Anthropic's Messages
+// API, each one method in the vendor SDK's shape (`chat.completions.create`,
+// `beta.messages.create`), with nothing of the SDKs in the request path.
 import {
   abortableSleep,
   extractCostUsd,
@@ -79,7 +78,7 @@ async function send(
   }
 }
 
-/** A stream pipedog can stop: it calls the iterator's `return` and the controller's `abort`. */
+/** A stream its caller can stop, by the iterator's `return` or the controller's `abort`. */
 export type AbortableStream<T> = AsyncGenerator<T> & { readonly controller: AbortController };
 
 const count = (value: unknown): number =>

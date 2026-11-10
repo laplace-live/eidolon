@@ -1,5 +1,5 @@
-// POST and PATCH /api/offer on each transport (transports.ts), its connections' negotiation
-// stood in for: the same answers, status codes and bodies, per-offer plans and relay-only rules.
+// POST and PATCH /api/offer, its peers' negotiation stood in for (transports.ts): the answers,
+// status codes and bodies, per-offer plans and relay-only rules.
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { type AllowedOffer, ANONYMOUS } from "@eidolon/access";
 import type { ServerIcePlan } from "@eidolon/turn";
@@ -10,8 +10,7 @@ import type {
   OpusEncoderOptions,
   SignallingServer,
 } from "@eidolon/webrtc";
-import type { AnyCallBinding } from "../src/native/binding.ts";
-import type { CallBinding } from "../src/session/session.ts";
+import type { AnyCallBinding, CallBinding } from "../src/native/binding.ts";
 import { captureLogs, type Deferred, deferred, type LogCapture, until } from "./support.ts";
 import {
   type Candidate,
@@ -19,7 +18,7 @@ import {
   type ConnectionHooks,
   type DtlsPeer,
   type ServerDeps,
-  TRANSPORTS,
+  transport,
 } from "./transports.ts";
 
 const RELAY_ANSWER =
@@ -94,7 +93,7 @@ function admission(body: Record<string, unknown> | null, opusBitrateBps = 96000)
   };
 }
 
-describe.each(TRANSPORTS)("on $name's transport", (transport) => {
+describe("the signalling server", () => {
   interface Built {
     readonly connection: Connection;
     readonly sdp: string;
@@ -441,7 +440,7 @@ describe.each(TRANSPORTS)("on $name's transport", (transport) => {
         })),
       });
 
-    test("malformed bodies are 400s, as pipedog's PATCH branch answers", async () => {
+    test("malformed bodies are 400s", async () => {
       const { signalling } = server([STUN_PLAN]);
       const invalidJson = await signalling.patch("{");
       expect(invalidJson.status).toBe(400);

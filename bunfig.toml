@@ -11,15 +11,6 @@ minimumReleaseAge = 1209600
 minimumReleaseAgeExcludes = [
   "@pipecat-ai/client-js@1.16.0",
   "@pipecat-ai/small-webrtc-transport@1.11.2",
-  # pipedog's packages release together, and each pins @pipedog/core to its own version: a
-  # provider added later has to match the 0.10.0 the runtime already runs.
-  "@pipedog/anthropic@0.10.0",
-  "@pipedog/cartesia@0.10.0",
-  "@pipedog/deepgram@0.10.0",
-  "@pipedog/deepseek@0.10.0",
-  "@pipedog/elevenlabs@0.10.0",
-  "@pipedog/minimax@0.10.0",
-  "@pipedog/xai@0.10.0",
 ]
 
 [test]

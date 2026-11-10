@@ -71,6 +71,7 @@ export {
   resolveProjectPath,
   serverEntry,
   shippedPath,
+  voiceModelsDir,
   webDist,
 } from "./paths.ts";
 export {

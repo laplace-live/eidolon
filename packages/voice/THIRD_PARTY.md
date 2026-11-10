@@ -5,7 +5,8 @@ TypeScript port of Daily's Pipecat. It also runs or derives from the following.
 
 ## Silero VAD
 
-`src/input/vad.ts` runs the Silero VAD model, `silero_vad.onnx`.
+`src/input/vad.ts` runs the Silero VAD model, `models/silero_vad.onnx`: the file Pipecat ships, as
+`@pipedog/audio-silero` 0.10.0 shipped it, byte for byte (`models/README.md`).
 
 License: `MIT`  
 Source: https://github.com/snakers4/silero-vad
@@ -36,8 +37,10 @@ SOFTWARE.
 
 ## Smart Turn v3.2
 
-`src/input/smart_turn.ts` runs Daily's Smart Turn model, `smart-turn-v3.2-cpu.onnx`, which is
-fine-tuned from `openai/whisper-tiny` (Apache-2.0, https://huggingface.co/openai/whisper-tiny).
+`src/input/smart_turn.ts` runs Daily's Smart Turn model, `models/smart-turn-v3.2-cpu.onnx`: the file
+Pipecat ships, as `@pipedog/audio-smart-turn` 0.10.0 shipped it, byte for byte. It is fine-tuned from
+`openai/whisper-tiny` (Apache-2.0, https://huggingface.co/openai/whisper-tiny), whose license
+`models/THIRD_PARTY_LICENSES.md` holds with the two models'.
 
 License: `BSD-2-Clause`  
 Source: https://github.com/pipecat-ai/smart-turn

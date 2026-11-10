@@ -1,11 +1,10 @@
-// A real werift peer offers to each transport's signalling server (transports.ts) over this machine's
-// own interfaces. A local STUN responder stands in for werift's default (stun.l.google.com), so
-// nothing leaves the host.
+// A real werift peer offers to the signalling server over this machine's own interfaces. A local
+// STUN responder stands in for werift's default (stun.l.google.com), so nothing leaves the host.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createServer } from "node:net";
 import type { SignallingServer } from "@eidolon/webrtc";
-import { RTCIceServer, RTCPeerConnection } from "@pipedog/transport-smallwebrtc/rtc";
+import { RTCPeerConnection } from "werift";
 import type { AnyCallBinding } from "../src/native/binding.ts";
 import {
   admission,
@@ -15,7 +14,7 @@ import {
   PASS_THROUGH_RULES,
   until,
 } from "./support.ts";
-import { type Connection, TRANSPORTS } from "./transports.ts";
+import { type Connection, transport } from "./transports.ts";
 
 /** Answers every STUN Binding Request with the sender's address (RFC 5389 §7.3.1). */
 async function stunResponder(): Promise<{ url: string; close(): void }> {
@@ -54,7 +53,13 @@ async function connected(peer: RTCPeerConnection): Promise<void> {
   await until(() => peer.connectionState === "connected", 8000);
 }
 
-describe.each(TRANSPORTS)("on $name's transport", (transport) => {
+/** Offers, once its candidates are gathered into its description. */
+async function offered(peer: RTCPeerConnection): Promise<void> {
+  await peer.setLocalDescription(await peer.createOffer());
+  await until(() => peer.iceGatheringState === "complete", 5000);
+}
+
+describe("the signalling server", () => {
   let logs: LogCapture;
   let stun: { url: string; close(): void };
   let client: RTCPeerConnection;
@@ -82,10 +87,10 @@ describe.each(TRANSPORTS)("on $name's transport", (transport) => {
         candidates: PASS_THROUGH_RULES,
       },
     );
-    client = new RTCPeerConnection({ iceServers: [new RTCIceServer({ urls: stun.url })] });
+    client = new RTCPeerConnection({ iceServers: [{ urls: stun.url }] });
     client.addTransceiver("audio", { direction: "sendrecv" });
     client.createDataChannel("chat");
-    await client.setLocalDescription(await client.createOffer());
+    await offered(client);
   });
 
   afterEach(async () => {
@@ -178,7 +183,7 @@ describe.each(TRANSPORTS)("on $name's transport", (transport) => {
         await until(() => connections.length === 1);
         second.addTransceiver("audio", { direction: "sendrecv" });
         second.createDataChannel("chat");
-        await second.setLocalDescription(await second.createOffer());
+        await offered(second);
         const { bare, candidates } = strip(second.localDescription!.sdp);
         planDelay = 2000;
         const restart = restarting.offer(

@@ -1,49 +1,47 @@
-// The only package that imports @pipedog/*, @eidolon/voice and @eidolon/webrtc. No pipedog type
-// crosses this file.
-import { errorText, logger } from "@eidolon/config";
+// The bridge from apps/bot to the voice engine: the only package that imports @eidolon/voice and
+// @eidolon/webrtc.
+import { type LogLevel, logger } from "@eidolon/config";
 import type { IceService } from "@eidolon/turn";
+import { voiceModels, warmVoiceModels } from "@eidolon/voice";
 import {
+  type SignallingServer as PeerSignallingServer,
   peerCallTransport,
   createSignallingServerWith as webrtcSignallingServer,
 } from "@eidolon/webrtc";
-import { type AnyCallBinding, isGroupCall, reportEnd } from "./native/binding.ts";
+import type { AnyCallBinding } from "./native/binding.ts";
 import { productionCallDeps } from "./native/deps.ts";
-import { runNativeSafely, voiceEngineFromEnv } from "./native/engine.ts";
-import { productionSessionDeps } from "./session/defaults.ts";
-import { runSessionSafely } from "./session/session.ts";
-import { createSignallingServerWith, type SignallingServer } from "./webrtc/signalling.ts";
+import { runNativeSafely } from "./native/engine.ts";
 
-export { warmAudioModels } from "./audio.ts";
-export { configureLogging } from "./logging.ts";
-export type { AnyCallBinding, GroupCallBinding } from "./native/binding.ts";
+export type { SignallingResult } from "@eidolon/webrtc";
+export type {
+  AnyCallBinding,
+  CallBinding,
+  CallClient,
+  CallEnd,
+  GroupCallBinding,
+  TranscriptLine,
+} from "./native/binding.ts";
 export { BOT_ABOUT } from "./rtvi.ts";
-export type { CallBinding, CallClient, CallEnd, TranscriptLine } from "./session/session.ts";
-export type { SignallingResult, SignallingServer } from "./webrtc/signalling.ts";
 
-/**
- * Reads EIDOLON_VOICE_ENGINE once, here: under native, every offer this server answers is a native
- * call over @eidolon/webrtc's peers; else a pipedog session over pipedog's.
- */
+/** POST and PATCH /api/offer; an offer may bind its call to a chat. */
+export type SignallingServer = PeerSignallingServer<AnyCallBinding>;
+
+/** Sets the logger's level. */
+export function configureLogging(options: { level: LogLevel }): void {
+  logger.setLevel(options.level);
+}
+
+/** Loads the Silero VAD and Smart Turn models and the resampler before the first call needs them. */
+export function warmAudioModels(): Promise<void> {
+  return warmVoiceModels(voiceModels());
+}
+
+/** The signalling server: each offer it answers starts a call over @eidolon/webrtc's peers. */
 export function createSignallingServer(options: {
   ice: Pick<IceService, "serverPlan">;
 }): SignallingServer {
-  if (voiceEngineFromEnv() === "native") {
-    return webrtcSignallingServer<AnyCallBinding>(options, {
-      startSession: (peer, admission, binding) =>
-        runNativeSafely(peerCallTransport(peer), admission, productionCallDeps, binding),
-    });
-  }
-  return createSignallingServerWith(options, {
-    startSession: async (connection, admission, binding) => {
-      if (!isGroupCall(binding)) {
-        return runSessionSafely(connection, admission, productionSessionDeps, binding);
-      }
-      // Its callers offer a group call only to a native engine: pipedog can't run one.
-      logger.error("Bot session failed: a group call needs EIDOLON_VOICE_ENGINE=native");
-      await connection.disconnect().catch((error: unknown) => {
-        logger.warning(`Closing the failed session's connection failed: ${errorText(error)}`);
-      });
-      reportEnd(binding, "error");
-    },
+  return webrtcSignallingServer<AnyCallBinding>(options, {
+    startSession: (peer, admission, binding) =>
+      runNativeSafely(peerCallTransport(peer), admission, productionCallDeps, binding),
   });
 }
