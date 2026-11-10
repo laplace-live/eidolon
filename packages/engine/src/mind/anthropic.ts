@@ -111,6 +111,28 @@ function turnOf(message: Record<string, unknown>): Turn {
   return { role, content: content === "" ? "(empty)" : String(content ?? "") };
 }
 
+/**
+ * Her tool calls and their results as notes in the user's turns, for a request that offers no
+ * tools: Anthropic refuses tool_use and tool_result blocks without tools. Written as her own lines,
+ * they would teach her to write them.
+ */
+function callsAsNotes(messages: readonly Record<string, unknown>[]): Record<string, unknown>[] {
+  const names = new Map<unknown, string>();
+  return messages.map((message) => {
+    if (message.role === "tool") {
+      const name = names.get(message.tool_call_id) ?? "tool";
+      return { role: "user", content: `（${name} 返回：${textOf(message.content)}）` };
+    }
+    if (!Array.isArray(message.tool_calls) || message.tool_calls.length === 0) return message;
+    const notes = message.tool_calls.filter(isPlainObject).map((call) => {
+      const fn = isPlainObject(call.function) ? call.function : {};
+      names.set(call.id, String(fn.name));
+      return `（你调用了 ${fn.name} ${fn.arguments}）`;
+    });
+    return { role: "user", content: notes.join("\n") };
+  });
+}
+
 function asBlocks(content: string | Block[]): Block[] {
   return typeof content === "string" ? [{ type: "text", text: content }] : content;
 }
@@ -130,7 +152,8 @@ function turnsFor(
   model: string,
   thinking: ReadonlyMap<string, readonly Block[]>,
 ): { system: string | null; turns: Turn[] } {
-  const messages = request.messages.filter(isPlainObject);
+  const given = request.messages.filter(isPlainObject);
+  const messages = request.tools.length > 0 ? given : callsAsNotes(given);
   let extracted: string | null = null;
   const first = messages[0];
   if (first?.role === "system") {

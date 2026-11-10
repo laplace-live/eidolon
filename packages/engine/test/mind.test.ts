@@ -24,6 +24,7 @@ let reply: () => Response = () => new Response("{}");
 
 beforeAll(() => {
   server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       seen.push({
@@ -644,8 +645,8 @@ describe("an Anthropic mind", () => {
       { role: "tool", tool_call_id: "toolu_9", content: "COMPLETED" },
     ];
     reply = () => messages([start, { type: "message_delta", delta: { stop_reason: "end_turn" } }]);
-    await drain(mind, ask({ messages: round }));
-    await drain(createMind(), ask({ messages: round }));
+    await drain(mind, ask({ messages: round, tools: [SELFIE] }));
+    await drain(createMind(), ask({ messages: round, tools: [SELFIE] }));
     const toolUse = {
       type: "tool_use",
       id: "toolu_9",
@@ -658,6 +659,41 @@ describe("an Anthropic mind", () => {
       content: [{ type: "thinking", thinking: "她想要照片", signature: "sig-1" }, toolUse],
     });
     expect(call(2)).toEqual({ role: "assistant", content: [toolUse] });
+  });
+
+  test("with no tools offered, her earlier calls and results go as notes in the user's turns", async () => {
+    reply = () => messages([start, { type: "message_delta", delta: { stop_reason: "end_turn" } }]);
+    const view = [
+      { role: "user", content: "温柔一点" },
+      {
+        role: "assistant",
+        tool_calls: [
+          {
+            id: "toolu_1",
+            type: "function",
+            function: { name: "change_voice_style", arguments: '{"style":"温柔"}' },
+          },
+        ],
+      },
+      { role: "tool", tool_call_id: "toolu_1", content: "COMPLETED" },
+      { role: "assistant", content: "好呀" },
+      { role: "user", content: "在干嘛" },
+    ];
+    await drain(createMind(), ask({ messages: view }));
+    const marked = { cache_control: { type: "ephemeral" } };
+    expect(seen[0]?.body.messages).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "温柔一点" },
+          { type: "text", text: '（你调用了 change_voice_style {"style":"温柔"}）' },
+          { type: "text", text: "（change_voice_style 返回：COMPLETED）", ...marked },
+        ],
+      },
+      { role: "assistant", content: "好呀" },
+      { role: "user", content: [{ type: "text", text: "在干嘛", ...marked }] },
+    ]);
+    expect(seen[0]?.body.tools).toEqual([]);
   });
 
   test("tools run only when Claude stopped to call them", async () => {
