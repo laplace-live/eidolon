@@ -1,25 +1,19 @@
 // A production call inside a chat the browser keeps: POST /api/offer with the chat's signed window
 // in requestData.chat. The session runs as the persona called and opens on her view of the window;
-// each line said on it goes back to the browser numbered and signed, for the browser to store.
+// each line said on it, and each photo she sends, goes back to the browser numbered and signed, for
+// the browser to store.
 import {
   type AllowedOffer,
   chatPersonas,
   type JsonObject,
   type UserContext,
 } from "@eidolon/access";
-import {
-  CHAT_WINDOW_MESSAGES,
-  type ChatEvent,
-  type ChatEventDraft,
-  type ChatHeader,
-  summarize,
-  type ViewMessage,
-  viewOf,
-} from "@eidolon/chat";
-import { errorText, isJsonObject, logger, pyRepr, readPersonaIdentity } from "@eidolon/config";
-import { UNHEARD } from "@eidolon/engine";
-import type { CallBinding } from "@eidolon/runtime";
+import { type ChatEventDraft, summarize, type ViewMessage } from "@eidolon/chat";
+import { errorText, isJsonObject, logger, pyRepr } from "@eidolon/config";
+import { fetchStoredSelfie, saveSelfies, type TurnRequest, turnView } from "@eidolon/engine";
+import type { CallBinding, CallClient } from "@eidolon/runtime";
 import { jsonResponse } from "../responses.ts";
+import { type ChatFiles, chatFiles } from "./files.ts";
 import type { ChatSigner } from "./sig.ts";
 import { openChatWindow, type RequestChatStore } from "./window.ts";
 
@@ -47,11 +41,12 @@ function withoutWindow(data: unknown): unknown {
  * The call `admission` asks for in a chat: null when its requestData has no `chat`; a 400 when the
  * window isn't a chat's or `persona` isn't in it, a 403 when the endpoint doesn't serve her; else
  * the binding. Lines in the window that fail their signature are left out of her view, as a chat
- * turn leaves them out.
+ * turn leaves them out. Her photos wait in `files` for the browser to fetch.
  */
 export async function bindChatCall(
   admission: AllowedOffer,
   signer: ChatSigner,
+  files: ChatFiles = chatFiles,
 ): Promise<BoundOffer | Response | null> {
   const requestData = admission.requestData;
   if (requestData?.chat === undefined) return null;
@@ -65,11 +60,12 @@ export async function bindChatCall(
   const opened = await openChatWindow(requestData.chat, signer);
   if (!opened.ok) return refusal(400, "bad-request", opened.message);
   const { store } = opened;
-  const { header, events } = await store.read(store.header.id);
-  if (!summarize(header, events).participants.includes(persona)) {
+  const chat = await store.read(store.header.id);
+  const { header } = chat;
+  if (!summarize(header, chat.events).participants.includes(persona)) {
     return refusal(400, "bad-request", "That persona isn't in the chat");
   }
-  const seedMessages = callSeed(header, events, persona, admission.user);
+  const seedMessages = callSeed(chat, persona, admission.user);
   logger.info(
     `[chat] Offer to ${pyRepr(persona)} in chat ${header.id}, ` +
       `opening on ${seedMessages.length} messages of her view`,
@@ -92,7 +88,7 @@ export async function bindChatCall(
     binding: {
       persona,
       seedMessages,
-      onTranscript: chatLines(store, persona),
+      ...chatLines(store, persona, files),
       onEnded: (end) =>
         logger.info(`[chat] Call to ${pyRepr(persona)} in chat ${header.id}: ${end}`),
     },
@@ -100,53 +96,73 @@ export async function bindChatCall(
 }
 
 /** Her view of the window, as her next text turn would read it, less tool calls and their results. */
-function callSeed(
-  header: ChatHeader,
-  events: readonly ChatEvent[],
-  persona: string,
-  viewer: UserContext,
-): ViewMessage[] {
-  const heard = events.map((event) =>
-    event.type === "message" &&
-    event.speaker.kind === "user" &&
-    event.modality === "voice" &&
-    event.text === ""
-      ? { ...event, text: UNHEARD }
-      : event,
+function callSeed(chat: TurnRequest["chat"], persona: string, viewer: UserContext): ViewMessage[] {
+  return turnView(chat, persona, viewer.uname ?? "").messages.filter(
+    (message) => message.role !== "tool" && !("tool_calls" in message),
   );
-  const view = viewOf(header, heard, persona, {
-    windowMessages: CHAT_WINDOW_MESSAGES,
-    nameOf: (id) => readPersonaIdentity(id).name,
-    viewerName: viewer.uname ?? "",
-  });
-  return view.filter((message) => message.role !== "tool" && !("tool_calls" in message));
 }
 
 /**
  * Each finished line as a `call` message, numbered on from the window and signed unless it is the
- * viewer's, sent to the browser in the order said. One said after the browser hung up never reaches
+ * viewer's, and each selfie she sends as her photos alone, `text: ""`, their files saved into
+ * `files`: sent to the browser in the order said. One said after the browser hung up never reaches
  * it, and one whose sending fails is logged.
  */
-function chatLines(store: RequestChatStore, persona: string): CallBinding["onTranscript"] {
+function chatLines(
+  store: RequestChatStore,
+  persona: string,
+  files: ChatFiles,
+): Pick<CallBinding, "onTranscript" | "onServerMessage"> {
   let sending: Promise<void> = Promise.resolve();
-  return (line, client) => {
-    const draft: ChatEventDraft = {
-      type: "message",
-      id: Bun.randomUUIDv7(),
-      speaker: line.role === "user" ? { kind: "user" } : { kind: "persona", id: persona },
-      text: line.text,
-      modality: "call",
-      ...(line.interrupted ? { interrupted: true } : {}),
-    };
+  const send = (
+    what: string,
+    client: CallClient | undefined,
+    drafts: () => Promise<ChatEventDraft | null>,
+  ) => {
     sending = sending.then(async () => {
       try {
+        const draft = await drafts();
+        if (draft === null) return;
         const [event] = await store.add([draft]);
         await client?.sendServerMessage({ type: CHAT_LINE_MESSAGE, event });
       } catch (error) {
         logger.warning(
-          `[chat] Chat ${store.header.id}: a call line didn't reach the browser: ${errorText(error)}`,
+          `[chat] Chat ${store.header.id}: ${what} didn't reach the browser: ${errorText(error)}`,
         );
       }
     });
+  };
+  const photoDeps = {
+    fetchImage: (url: string) => fetchStoredSelfie(url),
+    saveAttachment: async (bytes: Uint8Array, mime: string) => files.save(bytes, mime),
+  };
+  return {
+    onTranscript: (line, client) => {
+      const draft: ChatEventDraft = {
+        type: "message",
+        id: Bun.randomUUIDv7(),
+        speaker: line.role === "user" ? { kind: "user" } : { kind: "persona", id: persona },
+        text: line.text,
+        modality: "call",
+        ...(line.interrupted ? { interrupted: true } : {}),
+      };
+      send("a call line", client, async () => draft);
+    },
+    onServerMessage: (data, client) => {
+      if (data.type !== "selfie") return;
+      send("a photo of the call", client, async () => {
+        // Never aborted: the photo is rendered and billed.
+        const attachments = await saveSelfies(data, new AbortController().signal, photoDeps);
+        if (attachments.length === 0) return null;
+        return {
+          type: "message",
+          id: Bun.randomUUIDv7(),
+          speaker: { kind: "persona", id: persona },
+          text: "",
+          attachments,
+          modality: "call",
+        };
+      });
+    },
   };
 }

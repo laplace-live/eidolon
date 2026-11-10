@@ -360,6 +360,10 @@ pcClient.on(RTVIEvent.ServerMessage, (data) => {
 
 - **`event`** is a `message` with `modality: "call"`, from the viewer or from her. A reply the
   viewer cut off has `interrupted: true`, and its `text` is what she said before it.
+- **A selfie she takes** arrives as her `message` with `text: ""` and the images in
+  `attachments`, in its place among the lines. Fetch each from `/api/chat/files/<name>` as a chat
+  turn's, before it expires. The call's `selfie` server message still comes first, to show at
+  once; the `chat-line` is the one to keep.
 - **Its `seq`** follows the newest `seq` in the offer's window, kept or not, then each line the one
   before. So the browser stores the call's `call-started` before it offers, and sends it in the
   window, and sends no turn in that chat until it hangs up. It stores `call-ended` after the last

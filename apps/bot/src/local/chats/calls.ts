@@ -1,21 +1,20 @@
 // A call inside a chat: a local POST /api/offer whose requestData names a chat and one of its
 // personas. The session runs as her and opens on her view of the chat; the runner stores its lines.
 import type { AllowedOffer, JsonObject } from "@eidolon/access";
-import { ChatStoreError, isChatId, type ParticipantId } from "@eidolon/chat";
+import { isChatId } from "@eidolon/chat";
 import { logger, pyRepr } from "@eidolon/config";
-import type { CallBinding, SignallingResult, SignallingServer } from "@eidolon/runtime";
+import type { SignallingResult, SignallingServer } from "@eidolon/runtime";
 import { jsonResponse } from "../../responses.ts";
+import type { ChatCallRequestData } from "../api.ts";
 import { personaRefusal } from "../personas.ts";
 import { localError } from "../responses.ts";
-import { type ChatCall, ChatInCall, type ChatRunner, NotInChat } from "./runner.ts";
-
-export interface ChatCallTarget {
-  readonly chatId: string;
-  readonly persona: ParticipantId;
-}
+import { chatErrorResponse } from "../routes/chats.ts";
+import { type ChatCall, type ChatRunner, NotInChat } from "./runner.ts";
 
 /** The chat call `requestData` asks for; null without a `chatId`, else the 4xx for a bad one. */
-export function chatCallTarget(requestData: JsonObject | null): ChatCallTarget | null | Response {
+export function chatCallTarget(
+  requestData: JsonObject | null,
+): ChatCallRequestData | null | Response {
   const chatId = requestData?.chatId;
   if (chatId === undefined) return null;
   if (typeof chatId !== "string" || !isChatId(chatId)) {
@@ -30,16 +29,10 @@ export function chatCallTarget(requestData: JsonObject | null): ChatCallTarget |
 
 /** The 4xx for a call the runner refused to open, or null for an error it didn't expect. */
 function refusal(error: unknown): Response | null {
-  if (error instanceof ChatStoreError && error.code === "not-found") {
-    return localError(404, "unknown-chat", "No chat has that id");
-  }
-  if (error instanceof ChatInCall) {
-    return localError(409, "chat-in-call", "The chat is in a call; hang up first");
-  }
   if (error instanceof NotInChat) {
     return localError(400, "bad-request", "That persona isn't in the chat");
   }
-  return null;
+  return chatErrorResponse(error);
 }
 
 /**
@@ -50,7 +43,7 @@ export async function offerChatCall(
   chats: ChatRunner,
   signalling: Pick<SignallingServer, "offer">,
   admission: AllowedOffer,
-  { chatId, persona }: ChatCallTarget,
+  { chatId, persona }: ChatCallRequestData,
 ): Promise<Response> {
   const pcId = admission.body?.pc_id;
   const active = chats.callIn(chatId);
@@ -69,23 +62,15 @@ export async function offerChatCall(
   logger.info(
     `[local] Offer from the local viewer to ${pyRepr(persona)} in chat ${chatId} (call ${call.id})`,
   );
-  const binding: CallBinding = {
-    persona,
-    seedMessages: call.seed,
-    onTranscript: (line) => call.line(line),
-    onEnded: (reason) => {
-      void call.end(reason);
-    },
-  };
   let result: SignallingResult;
   try {
-    result = await signalling.offer(admission, binding);
+    result = await signalling.offer(admission, call);
   } catch (error) {
-    await call.end("error");
+    await call.onEnded("error");
     throw error;
   }
   const answered = (result.body as { pc_id?: unknown } | null)?.pc_id;
   if (result.status === 200 && typeof answered === "string") call.connected(answered);
-  else await call.end("error");
+  else await call.onEnded("error");
   return jsonResponse(result.status, result.body);
 }

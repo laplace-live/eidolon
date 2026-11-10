@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { ProviderConfigError, ProviderHttpError, selectRequired } from "../../../src/index.ts";
 import { speechSupport, transcribe } from "../../../src/speech/batch/index.ts";
+import { transcribeTimeoutMs } from "../../../src/speech/batch/transcribe.ts";
 import { FakeProvider, type Seen, sources } from "./fake.ts";
 
 const fake = new FakeProvider();
@@ -15,6 +16,12 @@ const clip = {
   mime: "audio/webm;codecs=opus",
 };
 const noWait = async () => {};
+
+/** Soniox deletes after it answers: what reached the fake once `count` requests have. */
+async function requests(count: number): Promise<string[]> {
+  for (let waited = 0; fake.seen.length < count && waited < 2000; waited += 5) await Bun.sleep(5);
+  return fake.seen.map(({ method, url }) => `${method} ${new URL(url).pathname}`);
+}
 
 /** The upload's name, its type as sent (Bun's parse guesses one from the name), and its bytes. */
 async function fileOf(seen: Seen | undefined): Promise<[string, string, number[]]> {
@@ -171,15 +178,16 @@ describe("transcribe", () => {
     } finally {
       delete process.env.STT_LANGUAGE;
     }
-    expect(fake.seen.map(({ method, url }) => `${method} ${url}`)).toEqual([
-      "POST https://api.soniox.com/v1/files",
-      "POST https://api.soniox.com/v1/transcriptions",
-      "GET https://api.soniox.com/v1/transcriptions/t1",
-      "GET https://api.soniox.com/v1/transcriptions/t1",
-      "GET https://api.soniox.com/v1/transcriptions/t1/transcript",
-      "DELETE https://api.soniox.com/v1/transcriptions/t1",
-      "DELETE https://api.soniox.com/v1/files/f1",
+    expect(await requests(7)).toEqual([
+      "POST /v1/files",
+      "POST /v1/transcriptions",
+      "GET /v1/transcriptions/t1",
+      "GET /v1/transcriptions/t1",
+      "GET /v1/transcriptions/t1/transcript",
+      "DELETE /v1/transcriptions/t1",
+      "DELETE /v1/files/f1",
     ]);
+    expect(fake.seen[0]?.url).toBe("https://api.soniox.com/v1/files");
     expect(waits).toEqual([500, 500]);
     expect(fake.seen.every((seen) => seen.headers.get("authorization") === "Bearer sk")).toBe(true);
     expect(await fileOf(fake.seen[0])).toEqual(["voice.webm", "audio/webm", [...clip.bytes]]);
@@ -216,6 +224,7 @@ describe("transcribe", () => {
     } finally {
       delete process.env.TRANSCRIBE_LANGUAGE;
     }
+    await requests(5);
     expect(fake.seen[1]?.json).toEqual({ model: "stt-async-v5", file_id: "f2" });
   });
 
@@ -239,13 +248,59 @@ describe("transcribe", () => {
       sleep: noWait,
     });
     await expect(failed).rejects.toThrow("Soniox answered 200: audio_decode_error: can't decode");
-    expect(fake.seen.map(({ method, url }) => `${method} ${new URL(url).pathname}`)).toEqual([
+    expect(await requests(4)).toEqual([
       "POST /v1/files",
       "POST /v1/transcriptions",
       "DELETE /v1/transcriptions/t3",
       "DELETE /v1/files/f3",
     ]);
     expect(fake.usage).toEqual([]);
+  });
+
+  test("a Soniox job in a status it doesn't know is an error, not polled forever", async () => {
+    fake.answer(({ method, url }) => {
+      const path = new URL(url).pathname;
+      if (path === "/v1/files") return Response.json({ id: "f9" });
+      if (method === "POST") return Response.json({ id: "t9", status: "queued" });
+      if (method === "GET") return Response.json({ id: "t9" });
+      return new Response(null, { status: 204 });
+    });
+    const failed = transcribe(hearing({ SONIOX_API_KEY: "sk" }), clip, {
+      fetch: fake.fetch,
+      sleep: noWait,
+    });
+    await expect(failed).rejects.toThrow("Soniox answered 200: a transcription in status null");
+    expect(await requests(5)).toEqual([
+      "POST /v1/files",
+      "POST /v1/transcriptions",
+      "GET /v1/transcriptions/t9",
+      "DELETE /v1/transcriptions/t9",
+      "DELETE /v1/files/f9",
+    ]);
+  });
+
+  test("a Soniox delete that never answers still leaves the other its own time", async () => {
+    fake.answer(({ method, url }) => {
+      const path = new URL(url).pathname;
+      if (path === "/v1/files") return Response.json({ id: "f5" });
+      if (method === "POST") return Response.json({ id: "t5", status: "completed" });
+      if (method === "GET") return Response.json({ text: "嗯" });
+      if (path === "/v1/transcriptions/t5") return new Promise<Response>(() => {});
+      return new Response(null, { status: 204 });
+    });
+    const heard = await transcribe(hearing({ SONIOX_API_KEY: "sk" }), clip, {
+      fetch: fake.fetch,
+      sleep: noWait,
+      cleanupMs: 50,
+    });
+    expect(heard.text).toBe("嗯");
+    expect(await requests(5)).toEqual([
+      "POST /v1/files",
+      "POST /v1/transcriptions",
+      "GET /v1/transcriptions/t5/transcript",
+      "DELETE /v1/transcriptions/t5",
+      "DELETE /v1/files/f5",
+    ]);
   });
 
   test("an abort mid-poll still deletes the upload", async () => {
@@ -265,12 +320,55 @@ describe("transcribe", () => {
       },
     });
     await expect(failed).rejects.toThrow("stopped");
-    expect(fake.seen.map(({ method, url }) => `${method} ${new URL(url).pathname}`)).toEqual([
+    expect(await requests(4)).toEqual([
       "POST /v1/files",
       "POST /v1/transcriptions",
       "DELETE /v1/transcriptions/t4",
       "DELETE /v1/files/f4",
     ]);
+  });
+
+  test("a provider that never answers fails within the time limit, and nothing is used", async () => {
+    fake.answer(() => new Promise<Response>(() => {}));
+    const pending = transcribe(hearing({ STT_PROVIDER: "openai", OPENAI_API_KEY: "ok" }), clip, {
+      fetch: fake.fetch,
+      signal: new AbortController().signal,
+      timeoutMs: 50,
+    });
+    const error = await pending.catch((e: unknown) => e);
+    expect((error as Error).message).toBe("OpenAI didn't answer within 0.05 s");
+    expect(fake.usage).toEqual([]);
+  });
+
+  test("a Soniox job that never finishes fails within the limit, and both are still deleted", async () => {
+    fake.answer(({ method, url }) => {
+      const path = new URL(url).pathname;
+      if (path === "/v1/files") return Response.json({ id: "f6" });
+      if (method === "POST") return Response.json({ id: "t6", status: "queued" });
+      if (method === "GET") return new Promise<Response>(() => {});
+      return new Response(null, { status: 204 });
+    });
+    const pending = transcribe(hearing({ SONIOX_API_KEY: "sk" }), clip, {
+      fetch: fake.fetch,
+      sleep: noWait,
+      timeoutMs: 50,
+    });
+    const error = await pending.catch((e: unknown) => e);
+    expect((error as Error).message).toBe("Soniox didn't answer within 0.05 s");
+    expect(await requests(5)).toEqual([
+      "POST /v1/files",
+      "POST /v1/transcriptions",
+      "GET /v1/transcriptions/t6",
+      "DELETE /v1/transcriptions/t6",
+      "DELETE /v1/files/f6",
+    ]);
+  });
+
+  test("the time limit is 30 s and a second for every two of the clip's, at most 90 s", () => {
+    expect(transcribeTimeoutMs(10_000)).toBe(35_000);
+    expect(transcribeTimeoutMs(4321)).toBe(33_000);
+    expect(transcribeTimeoutMs(120_000)).toBe(90_000);
+    expect(transcribeTimeoutMs(undefined)).toBe(90_000);
   });
 
   test("an error status becomes ProviderHttpError, and nothing is reported as used", async () => {

@@ -8,7 +8,7 @@ import { networkInterfaces } from "node:os";
 import { join } from "node:path";
 import type { AllowedOffer, UserContext } from "@eidolon/access";
 import { activePersona, dataHome, resetSettings } from "@eidolon/config";
-import type { ContextTurn } from "@eidolon/core";
+import type { ContextTurn, LlmTool } from "@eidolon/core";
 import { MEM0_STORE_KEY } from "@eidolon/memory";
 import { abortable } from "@pipedog/asyncio";
 import {
@@ -42,7 +42,7 @@ import {
   type TranscriptLine,
 } from "../src/session/session.ts";
 import { createSignallingServerWith } from "../src/webrtc/signalling.ts";
-import { captureLogs, FakeTransport, type LogCapture, setEnv, until } from "./support.ts";
+import { captureLogs, deferred, FakeTransport, type LogCapture, setEnv, until } from "./support.ts";
 
 const VIEWER: UserContext = { mid: 7, uname: "看客", face: null, isLoggedIn: true };
 const ADMISSION = { user: VIEWER, token: null, requestData: null };
@@ -123,8 +123,11 @@ interface LlmRequest {
   readonly messages: readonly { readonly role: string; readonly content?: unknown }[];
 }
 
+/** Her text, or a raw delta such as a tool call. */
+type Part = string | Record<string, unknown>;
+
 /** OpenRouter's service on a client that streams the scripted replies, one per request. */
-function scriptedLlm(replies: string[][], requests: LlmRequest[]): SessionDeps["createLlm"] {
+function scriptedLlm(replies: Part[][], requests: LlmRequest[]): SessionDeps["createLlm"] {
   const client = {
     chat: {
       completions: {
@@ -132,7 +135,9 @@ function scriptedLlm(replies: string[][], requests: LlmRequest[]): SessionDeps["
           requests.push({ persona: activePersona().id, messages: structuredClone(body.messages) });
           const reply = replies.shift() ?? [];
           return (async function* () {
-            for (const content of reply) yield { choices: [{ delta: { content } }] };
+            for (const part of reply) {
+              yield { choices: [{ delta: typeof part === "string" ? { content: part } : part }] };
+            }
           })();
         },
       },
@@ -252,22 +257,41 @@ function write(rel: string, text: string): void {
 
 type Line = TranscriptLine & { readonly persona: string };
 
+/** A server message the binding was handed, as whom, after how many lines, and with which browser. */
+interface Sent {
+  readonly data: unknown;
+  readonly persona: string;
+  readonly afterLines: number;
+  readonly client: CallClient | undefined;
+}
+
 /** A call on scripted services, with the client-ready message already in. */
 async function call(
-  options: (Omit<CallBinding, "onTranscript" | "onEnded"> & { readonly failing?: string }) | null,
+  options:
+    | (Omit<CallBinding, "onTranscript" | "onServerMessage" | "onEnded"> & {
+        readonly failing?: string;
+      })
+    | null,
+  script: { readonly replies?: Part[][]; readonly deps?: Partial<SessionDeps> } = {},
 ) {
   const requests: LlmRequest[] = [];
   const stored: Stored[] = [];
   const seen: string[] = [];
   const lines: Line[] = [];
   const clients: CallClient[] = [];
+  const sent: Sent[] = [];
   const stt = new ScriptedStt(["今天吃什么", "等一下"]);
   const tts = new ScriptedTts("第二句。");
-  const replies = [["你好呀，", "又见面了。"], ["第一句。", "第二句。"], ["好的。"], ["收到。"]];
+  const replies = script.replies ?? [
+    ["你好呀，", "又见面了。"],
+    ["第一句。", "第二句。"],
+    ["好的。"],
+    ["收到。"],
+  ];
   const llm = scriptedLlm(replies, requests);
   const transport = new FakeTransport();
   const input = transport.input();
-  const deps = scriptedDeps({ stt, tts, llm, stored, seen });
+  const deps = { ...scriptedDeps({ stt, tts, llm, stored, seen }), ...script.deps };
   let binding: CallBinding | undefined;
   if (options) {
     const { failing, ...bound } = options;
@@ -277,6 +301,9 @@ async function call(
         if (client) clients.push(client);
         if (line.text === failing) throw new Error("the chat is gone");
         lines.push({ ...line, persona: activePersona().id });
+      },
+      onServerMessage: (data, client) => {
+        sent.push({ data, persona: activePersona().id, afterLines: lines.length, client });
       },
       onEnded: () => {},
     };
@@ -291,6 +318,7 @@ async function call(
     stored,
     seen,
     lines,
+    sent,
     stt,
     tts,
     input,
@@ -408,6 +436,71 @@ describe("a call bound to a chat", () => {
     await c.hangUp();
     await client?.sendServerMessage({ type: "chat-line", event: { seq: 5 } });
     expect(c.serverMessages()).toHaveLength(1);
+    expect(logs.messages("ERROR")).toEqual([]);
+  }, 15000);
+
+  test("a hang-up while her reply is still held reports its spoken part once, interrupted, before the session ends", async () => {
+    const c = await call({ persona: "bob", seedMessages: [] });
+    await until(() => c.lines.length === 1);
+    await startTalking(c.input);
+    await stopTalking(c.input);
+    await until(() => c.held() === "第一句。");
+    // The worker's cancel; runSessionSafely reports the end as soon as the session's run resolves.
+    await c.hangUp();
+    const atEnd = [...c.lines];
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const expected: Line[] = [
+      { role: "assistant", text: "你好呀，又见面了。", interrupted: false, persona: "bob" },
+      { role: "user", text: "今天吃什么", interrupted: false, persona: "bob" },
+      { role: "assistant", text: "第一句。", interrupted: true, persona: "bob" },
+    ];
+    expect(atEnd).toEqual(expected);
+    expect(c.lines).toEqual(expected);
+  }, 15000);
+
+  test("her photo is handed to the binding as the selfie tool sends it, as her, and the call goes on", async () => {
+    const photo = { type: "selfie", urls: ["/api/selfie/abc.png"] };
+    const rendered = deferred<void>();
+    const selfie: LlmTool = {
+      schema: { name: "take_selfie", description: "拍照", properties: {}, required: [] },
+      cancelOnInterruption: false,
+      timeoutSecs: 120,
+      run: async (_, effects) => {
+        await rendered.promise;
+        await effects.sendServerMessage(photo);
+        return { ok: true, count: 1 };
+      },
+    };
+    const takes = {
+      tool_calls: [{ index: 0, id: "call-1", function: { name: "take_selfie", arguments: "{}" } }],
+    };
+    const c = await call(
+      { persona: "bob", seedMessages: [] },
+      {
+        replies: [["你好呀。"], ["拍给你看。", takes], ["好看吗？"]],
+        deps: { createSelfieTool: () => selfie },
+      },
+    );
+    await until(() => c.lines.length === 1);
+    await startTalking(c.input);
+    await stopTalking(c.input);
+    await until(() => c.lines.length === 3);
+    rendered.resolve();
+    await until(() => c.lines.length === 4);
+    await c.hangUp();
+    expect(c.sent).toEqual([{ data: photo, persona: "bob", afterLines: 3, client: c.clients[0] }]);
+    expect(new Set(c.clients).size).toBe(1);
+    expect(c.lines.map((line) => [line.role, line.text])).toEqual([
+      ["assistant", "你好呀。"],
+      ["user", "今天吃什么"],
+      ["assistant", "拍给你看。"],
+      ["assistant", "好看吗？"],
+    ]);
+    expect(c.requests.at(-1)?.messages.at(-1)).toEqual({
+      role: "tool",
+      tool_call_id: "call-1",
+      content: '{"ok": true, "count": 1}',
+    } as LlmRequest["messages"][number]);
     expect(logs.messages("ERROR")).toEqual([]);
   }, 15000);
 

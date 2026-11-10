@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { join } from "node:path";
 import { SileroVADAnalyzer } from "@pipedog/audio-silero";
 import { LocalSmartTurnAnalyzerV3 } from "@pipedog/audio-smart-turn";
 import { TurnAnalyzerUserTurnStopStrategy } from "@pipedog/core/turns/user_stop/turn_analyzer_user_turn_stop_strategy";
@@ -10,7 +11,7 @@ import {
   onnxBackend,
   warmModels,
 } from "../src/audio.ts";
-import { captureLogs, type LogCapture } from "./support.ts";
+import { captureLogs, cEnv, type LogCapture } from "./support.ts";
 
 let logs: LogCapture;
 beforeEach(() => {
@@ -46,6 +47,30 @@ describe("audio models", () => {
     const backend = await onnxBackend();
     expect(backend.name).toBe("onnxruntime-node");
     expect(await onnxBackend()).toBe(backend);
+  });
+
+  test("ORT's telemetry is off by the time it loads, where its getenv reads it", async () => {
+    await onnxBackend();
+    expect(cEnv("ORT_DISABLE_TELEMETRY")).toBe("1");
+  });
+
+  test("an ORT_DISABLE_TELEMETRY the environment sets is kept", async () => {
+    const [audio, support] = ["../src/audio.ts", "./support.ts"].map((p) =>
+      join(import.meta.dir, p),
+    );
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "--no-env-file",
+        "-e",
+        `const { onnxBackend } = await import(${JSON.stringify(audio)});
+const { cEnv } = await import(${JSON.stringify(support)});
+await onnxBackend();
+process.stdout.write(String(cEnv("ORT_DISABLE_TELEMETRY")));`,
+      ],
+      { env: { ...process.env, ORT_DISABLE_TELEMETRY: "0" }, stdout: "pipe", stderr: "inherit" },
+    );
+    expect([await child.exited, await new Response(child.stdout).text()]).toEqual([0, "0"]);
   });
 
   test("the ORT build is the pinned 1.30.0: another shifts Smart Turn's probabilities", async () => {

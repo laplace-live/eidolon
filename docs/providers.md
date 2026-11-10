@@ -193,10 +193,12 @@ switched it for that reply.
 | Soniox | `POST https://tts-rt.soniox.com/tts`, its own host | `voice`, else `Bryce` | The spoken language |
 
 ElevenLabs and Cartesia have no default voice, so a role with none set fails there, and her reply
-goes as text. Every model but Fish's `drama-3` gets her text through `stripMarkup`, as a
-call's does. Each request reports the characters and UTF-8 bytes it spoke, under the voice role,
-priced by the catalog: Fish by the byte, ElevenLabs by the character. Its length is the
-provider's figure (MiniMax's) or counted from the MP3's frame headers.
+goes as text, as it does when a provider answers with no audio. Her text goes through
+`stripMarkup` with the model's `markup` from the catalog, as a call's does: `drama-3` keeps all her
+cues, a model that reads `[…]` (Fish's `s2` models, ElevenLabs' `eleven_v3`) keeps those and loses
+the paired tags, and any other loses both. Each request reports the characters and UTF-8 bytes it
+spoke, under the voice role, priced by the catalog: Fish by the byte, ElevenLabs by the character.
+Its length is the provider's figure (MiniMax's) or counted from the MP3's frame headers.
 
 **Transcription,** `transcribe`, on the hearing role, takes the clip as the browser recorded it
 (WebM with Opus, MP4 on Safari, Ogg or MP3). The language hint is a call's: `STT_LANGUAGE`, else
@@ -207,13 +209,15 @@ provider's figure (MiniMax's) or counted from the MP3's frame headers.
 | OpenAI | `POST {base}/audio/transcriptions`, multipart, the file named `voice.<ext>` | `gpt-realtime-whisper`, which serves Realtime sessions alone, becomes `gpt-4o-transcribe` | Its length when `usage` is in seconds; token usage is reported as tokens |
 | Deepgram | `POST {base}/v1/listen?model=…&punctuate=true`, the raw clip | as set | `detect_language` without a hint; the length from `metadata.duration` |
 | ElevenLabs | `POST {base}/v1/speech-to-text`, multipart | `_realtime` dropped | `tag_audio_events: false`, so the transcript holds only words, as a call's does |
-| Soniox | Its async files API: upload, create a transcription, poll every 500 ms, fetch the transcript, then delete both | `stt-rt-*` becomes `stt-async-*` | Only `STT_LANGUAGE` becomes a hint, as in a call. The deletes run even when the request fails or is abandoned, and a 404 is quiet. It is its own client: `@eidolon/ingest`'s never reaches the bot image |
+| Soniox | Its async files API: upload, create a transcription, poll every 500 ms, fetch the transcript, then delete both | `stt-rt-*` becomes `stt-async-*` | Only `STT_LANGUAGE` becomes a hint, as in a call. The deletes run after the transcript is returned, without holding it up, and even when the request fails or is abandoned, each with 10 s of its own; a 404 is quiet. It is its own client: `@eidolon/ingest`'s never reaches the bot image |
 
 Each request reports the clip's seconds, the provider's figure else the recorder's, under the
 hearing role, priced as the transcription role prices that model: Soniox's async models by the
 hour. A failed request is a `ProviderHttpError` (`httpError`), and a missing key or group id a
-`ProviderConfigError`. For a viewer's voice message, `POST voice` answers them `502
-upstream-failed` and `409 missing-key`; her voice reply goes as text after either.
+`ProviderConfigError`. A request that outlasts its time limit
+([chat.md](chat.md#the-clients)) fails with `<provider> didn't answer within <n> s`. For a viewer's
+voice message, `POST voice` answers them `502 upstream-failed` and `409 missing-key`; her
+voice reply goes as text after either.
 
 ## Realtime models
 

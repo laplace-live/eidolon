@@ -8,13 +8,13 @@
   "invites": 0.3,
   "hop_step": 0.1,
   "just_spoke_penalty": 0.1,
-  "voice": 0.7,
-  "voice_after_voice": 0.4
+  "voice": 0.42,
+  "voice_after_voice": 0.35
  },
  "latency_ms": {
-  "p50": 413,
-  "p90": 455,
-  "max": 558,
+  "p50": 391,
+  "p90": 451,
+  "max": 572,
   "over_timeout": 0
  },
  "decided_right": {
@@ -33,8 +33,8 @@
   "persona-answers": "2/2"
  },
  "voice_right": {
-  "scored": "0/0",
-  "unscored": 24
+  "scored": "24/24",
+  "unscored": 0
  },
  "questions": {
   "addressed": {
@@ -49,15 +49,15 @@
     "n": 136,
     "min": -0.29,
     "median": 0.02,
-    "max": 0.4
+    "max": 0.37
    },
    "wrong": 3,
    "suggests": {
-    "threshold": 0.43,
+    "threshold": 0.39,
     "wrong": 2,
     "range": [
-     0.41,
-     0.44
+     0.38,
+     0.4
     ]
    }
   },
@@ -65,23 +65,23 @@
    "threshold": null,
    "labelled_yes": {
     "n": 71,
-    "min": 0.27,
-    "median": 0.87,
+    "min": 0.25,
+    "median": 0.88,
     "max": 0.97
    },
    "labelled_no": {
     "n": 153,
     "min": 0.03,
-    "median": 0.09,
+    "median": 0.08,
     "max": 0.9
    },
    "wrong": null,
    "suggests": {
-    "threshold": 0.5,
+    "threshold": 0.46,
     "wrong": 8,
     "range": [
      0.46,
-     0.53
+     0.46
     ]
    }
   },
@@ -89,22 +89,22 @@
    "threshold": 0.3,
    "labelled_yes": {
     "n": 15,
-    "min": 0.16,
-    "median": 0.368,
+    "min": 0.125,
+    "median": 0.364,
     "max": 0.846
    },
    "labelled_no": {
     "n": 55,
-    "min": -0.11,
+    "min": -0.101,
     "median": 0.036,
-    "max": 0.148
+    "max": 0.152
    },
    "wrong": 6,
    "suggests": {
     "threshold": 0.16,
-    "wrong": 0,
+    "wrong": 1,
     "range": [
-     0.15,
+     0.16,
      0.16
     ]
    }
@@ -113,23 +113,23 @@
    "threshold": 0.3,
    "labelled_yes": {
     "n": 26,
-    "min": 0.05,
-    "median": 0.77,
+    "min": 0.07,
+    "median": 0.76,
     "max": 0.88
    },
    "labelled_no": {
     "n": 9,
-    "min": -0.18,
-    "median": 0.08,
-    "max": 0.24
+    "min": -0.17,
+    "median": 0.07,
+    "max": 0.23
    },
    "wrong": 3,
    "suggests": {
-    "threshold": 0.26,
-    "wrong": 1,
+    "threshold": 0.25,
+    "wrong": 2,
     "range": [
-     0.25,
-     0.27
+     0.2,
+     0.29
     ]
    }
   },
@@ -137,59 +137,73 @@
    "threshold": null,
    "labelled_yes": {
     "n": 59,
-    "min": 0.44,
+    "min": 0.41,
     "median": 0.94,
     "max": 0.98
    },
    "labelled_no": {
     "n": 6,
     "min": 0.07,
-    "median": 0.12,
+    "median": 0.14,
     "max": 0.22
    },
    "wrong": null,
    "suggests": {
-    "threshold": 0.34,
+    "threshold": 0.32,
     "wrong": 0,
     "range": [
      0.23,
-     0.44
+     0.41
     ]
    }
   },
   "voice_moment": {
-   "threshold": 0.7,
+   "threshold": 0.42,
    "labelled_yes": {
-    "n": 0,
-    "min": null,
-    "median": null,
-    "max": null
+    "n": 10,
+    "min": 0.44,
+    "median": 0.6,
+    "max": 0.75
    },
    "labelled_no": {
-    "n": 0,
-    "min": null,
-    "median": null,
-    "max": null
+    "n": 8,
+    "min": 0.1,
+    "median": 0.25,
+    "max": 0.38
    },
    "wrong": 0,
-   "suggests": null
+   "suggests": {
+    "threshold": 0.42,
+    "wrong": 0,
+    "range": [
+     0.39,
+     0.44
+    ]
+   }
   },
   "voice_moment_after_voice": {
-   "threshold": 0.4,
+   "threshold": 0.35,
    "labelled_yes": {
-    "n": 0,
-    "min": null,
-    "median": null,
-    "max": null
+    "n": 4,
+    "min": 0.6,
+    "median": 0.65,
+    "max": 0.73
    },
    "labelled_no": {
-    "n": 0,
-    "min": null,
-    "median": null,
-    "max": null
+    "n": 2,
+    "min": 0.22,
+    "median": 0.22,
+    "max": 0.28
    },
    "wrong": 0,
-   "suggests": null
+   "suggests": {
+    "threshold": 0.45,
+    "wrong": 0,
+    "range": [
+     0.29,
+     0.6
+    ]
+   }
   }
  },
  "lines": [
@@ -212,13 +226,13 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_milky-green": 0.94,
-    "interested_milky-green": 0.83,
+    "addressed_milky-green": 0.95,
+    "interested_milky-green": 0.84,
     "addressed_kuro": 0.01,
-    "interested_kuro": 0.05,
+    "interested_kuro": 0.04,
     "invites_reply": 0.97
    },
-   "ms": 409,
+   "ms": 353,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -241,14 +255,14 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.01,
-    "interested_milky-green": 0.08,
+    "interested_milky-green": 0.07,
     "addressed_kuro": 0.97,
-    "interested_kuro": 0.96,
+    "interested_kuro": 0.95,
     "addressed_lumi": 0.01,
     "interested_lumi": 0.05,
     "invites_reply": 0.97
    },
-   "ms": 422,
+   "ms": 425,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -270,17 +284,18 @@
    "right": true,
    "voice": {
     "label": false,
-    "decided": null,
-    "right": null
+    "decided": "text",
+    "right": true
    },
    "scores": {
     "addressed_lumi": 0.98,
     "interested_lumi": 0.95,
     "addressed_xiaoman": 0.01,
     "interested_xiaoman": 0.05,
-    "invites_reply": 0.97
+    "invites_reply": 0.97,
+    "voice_moment": 0.38
    },
-   "ms": 418,
+   "ms": 377,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -305,17 +320,17 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_milky-green": 0.84,
-    "interested_milky-green": 0.42,
+    "addressed_milky-green": 0.81,
+    "interested_milky-green": 0.44,
     "addressed_kuro": 0.01,
     "interested_kuro": 0.07,
     "addressed_lumi": 0.03,
-    "interested_lumi": 0.17,
-    "addressed_xiaoman": 0.94,
+    "interested_lumi": 0.19,
+    "addressed_xiaoman": 0.93,
     "interested_xiaoman": 0.94,
     "invites_reply": 0.98
    },
-   "ms": 394,
+   "ms": 384,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -340,10 +355,10 @@
     "addressed_kuro": 0.97,
     "interested_kuro": 0.97,
     "addressed_xiaoman": 0.01,
-    "interested_xiaoman": 0.13,
+    "interested_xiaoman": 0.15,
     "invites_reply": 0.98
    },
-   "ms": 412,
+   "ms": 360,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -368,12 +383,12 @@
     "addressed_milky-green": 0.01,
     "interested_milky-green": 0.06,
     "addressed_kuro": 0.01,
-    "interested_kuro": 0.79,
+    "interested_kuro": 0.81,
     "addressed_xiaoman": 0.98,
     "interested_xiaoman": 0.91,
     "invites_reply": 0.98
    },
-   "ms": 406,
+   "ms": 361,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -398,12 +413,12 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.97,
-    "interested_milky-green": 0.17,
+    "interested_milky-green": 0.16,
     "addressed_lumi": 0.08,
     "interested_lumi": 0.96,
     "invites_reply": 0.97
    },
-   "ms": 418,
+   "ms": 420,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -429,14 +444,14 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.01,
-    "interested_milky-green": 0.08,
-    "addressed_kuro": 0.87,
+    "interested_milky-green": 0.09,
+    "addressed_kuro": 0.86,
     "interested_kuro": 0.94,
-    "addressed_lumi": 0.95,
-    "interested_lumi": 0.31,
+    "addressed_lumi": 0.94,
+    "interested_lumi": 0.26,
     "invites_reply": 0.98
    },
-   "ms": 401,
+   "ms": 366,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -458,19 +473,20 @@
    "right": true,
    "voice": {
     "label": false,
-    "decided": null,
-    "right": null
+    "decided": "text",
+    "right": true
    },
    "scores": {
     "addressed_milky-green": 0.96,
-    "interested_milky-green": 0.85,
+    "interested_milky-green": 0.88,
     "addressed_kuro": 0.01,
     "interested_kuro": 0.04,
     "addressed_xiaoman": 0.01,
     "interested_xiaoman": 0.05,
-    "invites_reply": 0.98
+    "invites_reply": 0.98,
+    "voice_moment": 0.3
    },
-   "ms": 431,
+   "ms": 399,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -490,17 +506,18 @@
    "right": true,
    "voice": {
     "label": true,
-    "decided": null,
-    "right": null
+    "decided": "voice",
+    "right": true
    },
    "scores": {
     "addressed_milky-green": 0.15,
-    "interested_milky-green": 0.81,
-    "addressed_kuro": 0.02,
+    "interested_milky-green": 0.8,
+    "addressed_kuro": 0.01,
     "interested_kuro": 0.05,
-    "invites_reply": 0.66
+    "invites_reply": 0.66,
+    "voice_moment": 0.58
    },
-   "ms": 410,
+   "ms": 379,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -523,12 +540,12 @@
    "voice": null,
    "scores": {
     "addressed_kuro": 0.01,
-    "interested_kuro": 0.07,
+    "interested_kuro": 0.06,
     "addressed_lumi": 0.98,
     "interested_lumi": 0.97,
     "invites_reply": 0.97
    },
-   "ms": 393,
+   "ms": 379,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -549,12 +566,12 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.97,
-    "interested_milky-green": 0.82,
+    "interested_milky-green": 0.83,
     "addressed_kuro": 0.01,
     "interested_kuro": 0.03,
     "invites_reply": 0.97
    },
-   "ms": 409,
+   "ms": 382,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -574,15 +591,15 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_milky-green": 0.06,
-    "interested_milky-green": 0.11,
-    "addressed_kuro": 0.44,
-    "interested_kuro": 0.91,
+    "addressed_milky-green": 0.04,
+    "interested_milky-green": 0.1,
+    "addressed_kuro": 0.4,
+    "interested_kuro": 0.92,
     "addressed_lumi": 0.02,
     "interested_lumi": 0.05,
-    "invites_reply": 0.84
+    "invites_reply": 0.82
    },
-   "ms": 426,
+   "ms": 415,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -608,7 +625,7 @@
     "interested_xiaoman": 0.04,
     "invites_reply": 0.98
    },
-   "ms": 422,
+   "ms": 382,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -628,17 +645,18 @@
    "right": true,
    "voice": {
     "label": false,
-    "decided": null,
-    "right": null
+    "decided": "text",
+    "right": true
    },
    "scores": {
     "addressed_kuro": 0.01,
     "interested_kuro": 0.07,
     "addressed_xiaoman": 0.98,
-    "interested_xiaoman": 0.9,
-    "invites_reply": 0.96
+    "interested_xiaoman": 0.91,
+    "invites_reply": 0.96,
+    "voice_moment": 0.32
    },
-   "ms": 459,
+   "ms": 393,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -659,14 +677,14 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.95,
-    "interested_milky-green": 0.27,
+    "interested_milky-green": 0.25,
     "addressed_kuro": 0.01,
-    "interested_kuro": 0.07,
+    "interested_kuro": 0.06,
     "addressed_xiaoman": 0.01,
     "interested_xiaoman": 0.09,
     "invites_reply": 0.98
    },
-   "ms": 419,
+   "ms": 362,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -681,24 +699,24 @@
    ],
    "maybe": [],
    "decided": [
-    "milky-green",
-    "kuro"
+    "kuro",
+    "milky-green"
    ],
    "source": "model",
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_milky-green": 0.73,
+    "addressed_milky-green": 0.69,
     "interested_milky-green": 0.45,
-    "addressed_kuro": 0.67,
+    "addressed_kuro": 0.7,
     "interested_kuro": 0.64,
     "addressed_lumi": 0.01,
-    "interested_lumi": 0.04,
+    "interested_lumi": 0.03,
     "addressed_xiaoman": 0.01,
     "interested_xiaoman": 0.04,
-    "invites_reply": 0.97
+    "invites_reply": 0.98
    },
-   "ms": 431,
+   "ms": 363,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -723,12 +741,12 @@
     "addressed_milky-green": 0.08,
     "interested_milky-green": 0.83,
     "addressed_lumi": 0.01,
-    "interested_lumi": 0.03,
-    "addressed_xiaoman": 0.95,
+    "interested_lumi": 0.04,
+    "addressed_xiaoman": 0.94,
     "interested_xiaoman": 0.12,
-    "invites_reply": 0.97
+    "invites_reply": 0.98
    },
-   "ms": 416,
+   "ms": 412,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -748,8 +766,8 @@
    "right": true,
    "voice": {
     "label": true,
-    "decided": null,
-    "right": null
+    "decided": "voice",
+    "right": true
    },
    "scores": {
     "addressed_milky-green": 0.01,
@@ -758,9 +776,10 @@
     "interested_kuro": 0.04,
     "addressed_lumi": 0.92,
     "interested_lumi": 0.84,
-    "invites_reply": 0.54
+    "invites_reply": 0.53,
+    "voice_moment": 0.6
    },
-   "ms": 410,
+   "ms": 366,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -780,17 +799,18 @@
    "right": true,
    "voice": {
     "label": true,
-    "decided": null,
-    "right": null
+    "decided": "voice",
+    "right": true
    },
    "scores": {
     "addressed_kuro": 0.97,
     "interested_kuro": 0.96,
     "addressed_lumi": 0.01,
     "interested_lumi": 0.04,
-    "invites_reply": 0.75
+    "invites_reply": 0.76,
+    "voice_moment": 0.71
    },
-   "ms": 536,
+   "ms": 372,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -812,13 +832,13 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_milky-green": 0.94,
+    "addressed_milky-green": 0.93,
     "interested_milky-green": 0.39,
     "addressed_kuro": 0.07,
-    "interested_kuro": 0.9,
-    "invites_reply": 0.88
+    "interested_kuro": 0.91,
+    "invites_reply": 0.87
    },
-   "ms": 403,
+   "ms": 455,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -839,14 +859,14 @@
    "voice": null,
    "scores": {
     "addressed_kuro": 0.01,
-    "interested_kuro": 0.14,
+    "interested_kuro": 0.12,
     "addressed_lumi": 0.01,
     "interested_lumi": 0.05,
     "addressed_xiaoman": 0.98,
-    "interested_xiaoman": 0.78,
+    "interested_xiaoman": 0.77,
     "invites_reply": 0.97
    },
-   "ms": 493,
+   "ms": 463,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -867,12 +887,12 @@
    "voice": null,
    "scores": {
     "addressed_kuro": 0.04,
-    "interested_kuro": 0.11,
+    "interested_kuro": 0.12,
     "addressed_xiaoman": 0.96,
-    "interested_xiaoman": 0.85,
+    "interested_xiaoman": 0.86,
     "invites_reply": 0.66
    },
-   "ms": 422,
+   "ms": 414,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -892,19 +912,20 @@
    "right": true,
    "voice": {
     "label": true,
-    "decided": null,
-    "right": null
+    "decided": "voice",
+    "right": true
    },
    "scores": {
     "addressed_milky-green": 0.02,
     "interested_milky-green": 0.09,
     "addressed_kuro": 0.03,
-    "interested_kuro": 0.11,
+    "interested_kuro": 0.1,
     "addressed_lumi": 0.95,
     "interested_lumi": 0.94,
-    "invites_reply": 0.44
+    "invites_reply": 0.41,
+    "voice_moment": 0.75
    },
-   "ms": 400,
+   "ms": 370,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -930,9 +951,9 @@
     "interested_kuro": 0.97,
     "addressed_lumi": 0.02,
     "interested_lumi": 0.05,
-    "invites_reply": 0.66
+    "invites_reply": 0.61
    },
-   "ms": 423,
+   "ms": 469,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -952,17 +973,18 @@
    "right": true,
    "voice": {
     "label": true,
-    "decided": null,
-    "right": null
+    "decided": "voice",
+    "right": true
    },
    "scores": {
-    "addressed_milky-green": 0.73,
-    "interested_milky-green": 0.8,
-    "addressed_xiaoman": 0.06,
+    "addressed_milky-green": 0.72,
+    "interested_milky-green": 0.81,
+    "addressed_xiaoman": 0.07,
     "interested_xiaoman": 0.12,
-    "invites_reply": 0.63
+    "invites_reply": 0.64,
+    "voice_moment": 0.62
    },
-   "ms": 440,
+   "ms": 411,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -983,14 +1005,14 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.02,
-    "interested_milky-green": 0.07,
-    "addressed_kuro": 0.96,
+    "interested_milky-green": 0.08,
+    "addressed_kuro": 0.95,
     "interested_kuro": 0.91,
     "addressed_xiaoman": 0.02,
-    "interested_xiaoman": 0.09,
-    "invites_reply": 0.51
+    "interested_xiaoman": 0.1,
+    "invites_reply": 0.47
    },
-   "ms": 456,
+   "ms": 458,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1011,12 +1033,12 @@
    "voice": null,
    "scores": {
     "addressed_lumi": 0.93,
-    "interested_lumi": 0.83,
+    "interested_lumi": 0.8,
     "addressed_xiaoman": 0.04,
     "interested_xiaoman": 0.17,
-    "invites_reply": 0.49
+    "invites_reply": 0.42
    },
-   "ms": 420,
+   "ms": 408,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1037,16 +1059,16 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.02,
-    "interested_milky-green": 0.13,
+    "interested_milky-green": 0.12,
     "addressed_kuro": 0.01,
-    "interested_kuro": 0.11,
+    "interested_kuro": 0.12,
     "addressed_lumi": 0.03,
     "interested_lumi": 0.05,
     "addressed_xiaoman": 0.95,
-    "interested_xiaoman": 0.94,
+    "interested_xiaoman": 0.95,
     "invites_reply": 0.52
    },
-   "ms": 410,
+   "ms": 399,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1070,9 +1092,9 @@
     "interested_milky-green": 0.83,
     "addressed_kuro": 0.02,
     "interested_kuro": 0.06,
-    "invites_reply": 0.46
+    "invites_reply": 0.5
    },
-   "ms": 402,
+   "ms": 390,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1094,13 +1116,13 @@
    "scores": {
     "addressed_milky-green": 0.03,
     "interested_milky-green": 0.22,
-    "addressed_kuro": 0.94,
-    "interested_kuro": 0.84,
+    "addressed_kuro": 0.95,
+    "interested_kuro": 0.83,
     "addressed_lumi": 0.01,
     "interested_lumi": 0.04,
-    "invites_reply": 0.47
+    "invites_reply": 0.46
    },
-   "ms": 397,
+   "ms": 394,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1120,15 +1142,15 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_milky-green": 0.09,
-    "interested_milky-green": 0.26,
+    "addressed_milky-green": 0.13,
+    "interested_milky-green": 0.25,
     "addressed_kuro": 0.02,
-    "interested_kuro": 0.17,
-    "addressed_lumi": 0.93,
-    "interested_lumi": 0.86,
-    "invites_reply": 0.54
+    "interested_kuro": 0.18,
+    "addressed_lumi": 0.92,
+    "interested_lumi": 0.87,
+    "invites_reply": 0.58
    },
-   "ms": 409,
+   "ms": 379,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1148,15 +1170,15 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_milky-green": 0.02,
-    "interested_milky-green": 0.08,
-    "addressed_kuro": 0.25,
+    "addressed_milky-green": 0.03,
+    "interested_milky-green": 0.07,
+    "addressed_kuro": 0.22,
     "interested_kuro": 0.97,
     "addressed_lumi": 0.02,
-    "interested_lumi": 0.05,
+    "interested_lumi": 0.04,
     "invites_reply": 0.98
    },
-   "ms": 461,
+   "ms": 368,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1178,13 +1200,13 @@
    "scores": {
     "addressed_milky-green": 0.02,
     "interested_milky-green": 0.09,
-    "addressed_lumi": 0.11,
+    "addressed_lumi": 0.09,
     "interested_lumi": 0.94,
     "addressed_xiaoman": 0.02,
-    "interested_xiaoman": 0.12,
-    "invites_reply": 0.96
+    "interested_xiaoman": 0.13,
+    "invites_reply": 0.97
    },
-   "ms": 383,
+   "ms": 389,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1204,17 +1226,18 @@
    "right": true,
    "voice": {
     "label": false,
-    "decided": null,
-    "right": null
+    "decided": "text",
+    "right": true
    },
    "scores": {
     "addressed_lumi": 0.03,
-    "interested_lumi": 0.08,
-    "addressed_xiaoman": 0.28,
+    "interested_lumi": 0.07,
+    "addressed_xiaoman": 0.23,
     "interested_xiaoman": 0.94,
-    "invites_reply": 0.98
+    "invites_reply": 0.98,
+    "voice_moment": 0.22
    },
-   "ms": 436,
+   "ms": 372,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1234,15 +1257,15 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_milky-green": 0.4,
-    "interested_milky-green": 0.78,
+    "addressed_milky-green": 0.37,
+    "interested_milky-green": 0.75,
     "addressed_kuro": 0.02,
     "interested_kuro": 0.06,
     "addressed_xiaoman": 0.02,
     "interested_xiaoman": 0.1,
-    "invites_reply": 0.71
+    "invites_reply": 0.73
    },
-   "ms": 412,
+   "ms": 383,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1262,21 +1285,22 @@
    "right": true,
    "voice": {
     "label": false,
-    "decided": null,
-    "right": null
+    "decided": "text",
+    "right": true
    },
    "scores": {
     "addressed_milky-green": 0.04,
-    "interested_milky-green": 0.32,
+    "interested_milky-green": 0.33,
     "addressed_kuro": 0.02,
     "interested_kuro": 0.07,
-    "addressed_lumi": 0.02,
-    "interested_lumi": 0.05,
+    "addressed_lumi": 0.01,
+    "interested_lumi": 0.04,
     "addressed_xiaoman": 0.02,
-    "interested_xiaoman": 0.11,
-    "invites_reply": 0.98
+    "interested_xiaoman": 0.12,
+    "invites_reply": 0.98,
+    "voice_moment": 0.28
    },
-   "ms": 387,
+   "ms": 428,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1296,13 +1320,13 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_kuro": 0.08,
-    "interested_kuro": 0.9,
+    "addressed_kuro": 0.07,
+    "interested_kuro": 0.91,
     "addressed_lumi": 0.03,
     "interested_lumi": 0.05,
     "invites_reply": 0.94
    },
-   "ms": 454,
+   "ms": 422,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1322,19 +1346,20 @@
    "right": true,
    "voice": {
     "label": false,
-    "decided": null,
-    "right": null
+    "decided": "text",
+    "right": true
    },
    "scores": {
-    "addressed_milky-green": 0.02,
-    "interested_milky-green": 0.09,
+    "addressed_milky-green": 0.03,
+    "interested_milky-green": 0.08,
     "addressed_kuro": 0.02,
     "interested_kuro": 0.09,
-    "addressed_xiaoman": 0.17,
-    "interested_xiaoman": 0.78,
-    "invites_reply": 0.98
+    "addressed_xiaoman": 0.13,
+    "interested_xiaoman": 0.77,
+    "invites_reply": 0.98,
+    "voice_moment": 0.1
    },
-   "ms": 452,
+   "ms": 406,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1355,14 +1380,14 @@
    "voice": null,
    "scores": {
     "addressed_kuro": 0.02,
-    "interested_kuro": 0.11,
+    "interested_kuro": 0.12,
     "addressed_lumi": 0.14,
-    "interested_lumi": 0.9,
+    "interested_lumi": 0.91,
     "addressed_xiaoman": 0.02,
-    "interested_xiaoman": 0.14,
-    "invites_reply": 0.74
+    "interested_xiaoman": 0.13,
+    "invites_reply": 0.73
    },
-   "ms": 422,
+   "ms": 384,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1382,13 +1407,13 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_kuro": 0.14,
-    "interested_kuro": 0.92,
+    "addressed_kuro": 0.13,
+    "interested_kuro": 0.91,
     "addressed_xiaoman": 0.03,
-    "interested_xiaoman": 0.23,
-    "invites_reply": 0.6
+    "interested_xiaoman": 0.25,
+    "invites_reply": 0.61
    },
-   "ms": 390,
+   "ms": 512,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1408,15 +1433,15 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_milky-green": 0.03,
+    "addressed_milky-green": 0.04,
     "interested_milky-green": 0.1,
-    "addressed_lumi": 0.03,
-    "interested_lumi": 0.76,
+    "addressed_lumi": 0.04,
+    "interested_lumi": 0.81,
     "addressed_xiaoman": 0.03,
-    "interested_xiaoman": 0.32,
+    "interested_xiaoman": 0.33,
     "invites_reply": 0.97
    },
-   "ms": 482,
+   "ms": 380,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1440,21 +1465,22 @@
    "right": true,
    "voice": {
     "label": false,
-    "decided": null,
-    "right": null
+    "decided": "text",
+    "right": true
    },
    "scores": {
     "addressed_milky-green": 0.03,
-    "interested_milky-green": 0.08,
+    "interested_milky-green": 0.09,
     "addressed_kuro": 0.02,
-    "interested_kuro": 0.15,
+    "interested_kuro": 0.17,
     "addressed_lumi": 0.02,
     "interested_lumi": 0.05,
     "addressed_xiaoman": 0.03,
-    "interested_xiaoman": 0.67,
-    "invites_reply": 0.98
+    "interested_xiaoman": 0.7,
+    "invites_reply": 0.98,
+    "voice_moment": 0.15
    },
-   "ms": 426,
+   "ms": 418,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1475,14 +1501,14 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.06,
-    "interested_milky-green": 0.53,
+    "interested_milky-green": 0.46,
     "addressed_kuro": 0.02,
-    "interested_kuro": 0.09,
+    "interested_kuro": 0.08,
     "addressed_lumi": 0.02,
     "interested_lumi": 0.11,
     "invites_reply": 0.98
    },
-   "ms": 428,
+   "ms": 351,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1504,17 +1530,18 @@
    "right": true,
    "voice": {
     "label": true,
-    "decided": null,
-    "right": null
+    "decided": "voice",
+    "right": true
    },
    "scores": {
     "addressed_kuro": 0.05,
-    "interested_kuro": 0.83,
-    "addressed_xiaoman": 0.02,
-    "interested_xiaoman": 0.14,
-    "invites_reply": 0.97
+    "interested_kuro": 0.85,
+    "addressed_xiaoman": 0.03,
+    "interested_xiaoman": 0.16,
+    "invites_reply": 0.97,
+    "voice_moment": 0.71
    },
-   "ms": 423,
+   "ms": 417,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1536,17 +1563,18 @@
    "right": true,
    "voice": {
     "label": false,
-    "decided": null,
-    "right": null
+    "decided": "text",
+    "right": true
    },
    "scores": {
-    "addressed_lumi": 0.12,
-    "interested_lumi": 0.89,
-    "addressed_xiaoman": 0.07,
-    "interested_xiaoman": 0.68,
-    "invites_reply": 0.97
+    "addressed_lumi": 0.11,
+    "interested_lumi": 0.87,
+    "addressed_xiaoman": 0.09,
+    "interested_xiaoman": 0.65,
+    "invites_reply": 0.98,
+    "voice_moment": 0.18
    },
-   "ms": 441,
+   "ms": 433,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1567,16 +1595,16 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.02,
-    "interested_milky-green": 0.09,
-    "addressed_kuro": 0.09,
+    "interested_milky-green": 0.1,
+    "addressed_kuro": 0.11,
     "interested_kuro": 0.95,
-    "addressed_lumi": 0.01,
-    "interested_lumi": 0.05,
-    "addressed_xiaoman": 0.02,
+    "addressed_lumi": 0.02,
+    "interested_lumi": 0.04,
+    "addressed_xiaoman": 0.01,
     "interested_xiaoman": 0.11,
-    "invites_reply": 0.86
+    "invites_reply": 0.85
    },
-   "ms": 407,
+   "ms": 368,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1598,11 +1626,11 @@
    "scores": {
     "addressed_milky-green": 0.04,
     "interested_milky-green": 0.08,
-    "addressed_xiaoman": 0.05,
-    "interested_xiaoman": 0.85,
-    "invites_reply": 0.77
+    "addressed_xiaoman": 0.06,
+    "interested_xiaoman": 0.84,
+    "invites_reply": 0.74
    },
-   "ms": 412,
+   "ms": 413,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1623,12 +1651,12 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.05,
-    "interested_milky-green": 0.32,
+    "interested_milky-green": 0.25,
     "addressed_lumi": 0.03,
     "interested_lumi": 0.05,
-    "invites_reply": 0.75
+    "invites_reply": 0.73
    },
-   "ms": 417,
+   "ms": 381,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1650,19 +1678,20 @@
    "right": true,
    "voice": {
     "label": true,
-    "decided": null,
-    "right": null
+    "decided": "voice",
+    "right": true
    },
    "scores": {
-    "addressed_milky-green": 0.03,
+    "addressed_milky-green": 0.02,
     "interested_milky-green": 0.07,
     "addressed_kuro": 0.02,
-    "interested_kuro": 0.37,
+    "interested_kuro": 0.38,
     "addressed_lumi": 0.02,
     "interested_lumi": 0.08,
-    "invites_reply": 0.69
+    "invites_reply": 0.66,
+    "voice_moment": 0.58
    },
-   "ms": 407,
+   "ms": 440,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1683,13 +1712,13 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_kuro": 0.03,
-    "interested_kuro": 0.19,
+    "addressed_kuro": 0.04,
+    "interested_kuro": 0.17,
     "addressed_xiaoman": 0.03,
-    "interested_xiaoman": 0.12,
-    "invites_reply": 0.74
+    "interested_xiaoman": 0.14,
+    "invites_reply": 0.73
    },
-   "ms": 428,
+   "ms": 471,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1710,17 +1739,18 @@
    "right": true,
    "voice": {
     "label": true,
-    "decided": null,
-    "right": null
+    "decided": "voice",
+    "right": true
    },
    "scores": {
-    "addressed_milky-green": 0.04,
-    "interested_milky-green": 0.07,
+    "addressed_milky-green": 0.05,
+    "interested_milky-green": 0.08,
     "addressed_kuro": 0.04,
-    "interested_kuro": 0.06,
-    "invites_reply": 0.8
+    "interested_kuro": 0.07,
+    "invites_reply": 0.81,
+    "voice_moment": 0.57
    },
-   "ms": 412,
+   "ms": 379,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1743,21 +1773,22 @@
    "right": true,
    "voice": {
     "label": true,
-    "decided": null,
-    "right": null
+    "decided": "voice",
+    "right": true
    },
    "scores": {
     "addressed_milky-green": 0.03,
-    "interested_milky-green": 0.08,
+    "interested_milky-green": 0.07,
     "addressed_kuro": 0.02,
     "interested_kuro": 0.07,
     "addressed_lumi": 0.02,
     "interested_lumi": 0.09,
     "addressed_xiaoman": 0.02,
-    "interested_xiaoman": 0.17,
-    "invites_reply": 0.64
+    "interested_xiaoman": 0.18,
+    "invites_reply": 0.62,
+    "voice_moment": 0.65
    },
-   "ms": 393,
+   "ms": 433,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1781,10 +1812,10 @@
     "addressed_kuro": 0.03,
     "interested_kuro": 0.17,
     "addressed_xiaoman": 0.02,
-    "interested_xiaoman": 0.12,
+    "interested_xiaoman": 0.11,
     "invites_reply": 0.81
    },
-   "ms": 405,
+   "ms": 437,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1805,17 +1836,18 @@
    "right": true,
    "voice": {
     "label": true,
-    "decided": null,
-    "right": null
+    "decided": "voice",
+    "right": true
    },
    "scores": {
     "addressed_milky-green": 0.04,
     "interested_milky-green": 0.07,
     "addressed_xiaoman": 0.04,
-    "interested_xiaoman": 0.18,
-    "invites_reply": 0.81
+    "interested_xiaoman": 0.16,
+    "invites_reply": 0.82,
+    "voice_moment": 0.73
    },
-   "ms": 433,
+   "ms": 413,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1838,14 +1870,14 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.03,
-    "interested_milky-green": 0.07,
+    "interested_milky-green": 0.06,
     "addressed_kuro": 0.02,
-    "interested_kuro": 0.05,
+    "interested_kuro": 0.06,
     "addressed_lumi": 0.02,
-    "interested_lumi": 0.12,
-    "invites_reply": 0.73
+    "interested_lumi": 0.15,
+    "invites_reply": 0.71
    },
-   "ms": 484,
+   "ms": 452,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1865,17 +1897,18 @@
    "right": true,
    "voice": {
     "label": true,
-    "decided": null,
-    "right": null
+    "decided": "voice",
+    "right": true
    },
    "scores": {
-    "addressed_milky-green": 0.05,
-    "interested_milky-green": 0.09,
+    "addressed_milky-green": 0.04,
+    "interested_milky-green": 0.08,
     "addressed_kuro": 0.87,
     "interested_kuro": 0.19,
-    "invites_reply": 0.11
+    "invites_reply": 0.11,
+    "voice_moment": 0.44
    },
-   "ms": 433,
+   "ms": 389,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1897,15 +1930,15 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_milky-green": 0.14,
+    "addressed_milky-green": 0.15,
     "interested_milky-green": 0.25,
     "addressed_kuro": 0.03,
     "interested_kuro": 0.07,
-    "addressed_lumi": 0.12,
-    "interested_lumi": 0.16,
+    "addressed_lumi": 0.14,
+    "interested_lumi": 0.19,
     "invites_reply": 0.07
    },
-   "ms": 428,
+   "ms": 380,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1926,12 +1959,12 @@
    "voice": null,
    "scores": {
     "addressed_lumi": 0.02,
-    "interested_lumi": 0.06,
-    "addressed_xiaoman": 0.96,
-    "interested_xiaoman": 0.95,
+    "interested_lumi": 0.05,
+    "addressed_xiaoman": 0.97,
+    "interested_xiaoman": 0.96,
     "invites_reply": 0.22
    },
-   "ms": 438,
+   "ms": 352,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1955,11 +1988,11 @@
     "interested_milky-green": 0.21,
     "addressed_kuro": 0.02,
     "interested_kuro": 0.05,
-    "addressed_xiaoman": 0.02,
-    "interested_xiaoman": 0.06,
-    "invites_reply": 0.19
+    "addressed_xiaoman": 0.03,
+    "interested_xiaoman": 0.05,
+    "invites_reply": 0.2
    },
-   "ms": 417,
+   "ms": 388,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1983,13 +2016,13 @@
     "interested_milky-green": 0.06,
     "addressed_kuro": 0.02,
     "interested_kuro": 0.04,
-    "addressed_lumi": 0.93,
-    "interested_lumi": 0.7,
+    "addressed_lumi": 0.94,
+    "interested_lumi": 0.75,
     "addressed_xiaoman": 0.02,
     "interested_xiaoman": 0.04,
-    "invites_reply": 0.21
+    "invites_reply": 0.2
    },
-   "ms": 417,
+   "ms": 430,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2013,9 +2046,9 @@
     "interested_kuro": 0.04,
     "addressed_xiaoman": 0.97,
     "interested_xiaoman": 0.92,
-    "invites_reply": 0.12
+    "invites_reply": 0.14
    },
-   "ms": 390,
+   "ms": 378,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2038,14 +2071,14 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.03,
-    "interested_milky-green": 0.15,
+    "interested_milky-green": 0.14,
     "addressed_kuro": 0.02,
-    "interested_kuro": 0.2,
+    "interested_kuro": 0.19,
     "addressed_lumi": 0.02,
-    "interested_lumi": 0.11,
+    "interested_lumi": 0.1,
     "invites_reply": 0.48
    },
-   "ms": 383,
+   "ms": 426,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2068,12 +2101,12 @@
    "voice": null,
    "scores": {
     "addressed_kuro": 0.06,
-    "interested_kuro": 0.23,
+    "interested_kuro": 0.24,
     "addressed_xiaoman": 0.08,
     "interested_xiaoman": 0.73,
     "invites_reply": 0.98
    },
-   "ms": 449,
+   "ms": 382,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2095,19 +2128,20 @@
    "right": true,
    "voice": {
     "label": true,
-    "decided": null,
-    "right": null
+    "decided": "voice",
+    "right": true
    },
    "scores": {
     "addressed_milky-green": 0.06,
-    "interested_milky-green": 0.23,
+    "interested_milky-green": 0.25,
     "addressed_lumi": 0.04,
     "interested_lumi": 0.17,
-    "addressed_xiaoman": 0.02,
+    "addressed_xiaoman": 0.03,
     "interested_xiaoman": 0.08,
-    "invites_reply": 0.97
+    "invites_reply": 0.97,
+    "voice_moment": 0.62
    },
-   "ms": 421,
+   "ms": 436,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2127,11 +2161,11 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_kuro": 0.82,
-    "interested_kuro": 0.87,
-    "invites_reply": 0.97
+    "addressed_kuro": 0.78,
+    "interested_kuro": 0.88,
+    "invites_reply": 0.98
    },
-   "ms": 455,
+   "ms": 432,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2152,12 +2186,12 @@
    "voice": null,
    "scores": {
     "addressed_kuro": 0.03,
-    "interested_kuro": 0.08,
+    "interested_kuro": 0.07,
     "addressed_xiaoman": 0.88,
-    "interested_xiaoman": 0.17,
+    "interested_xiaoman": 0.16,
     "invites_reply": 0.98
    },
-   "ms": 413,
+   "ms": 400,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2173,11 +2207,11 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_kuro": 0.05,
+    "addressed_kuro": 0.04,
     "interested_kuro": 0.06,
-    "invites_reply": 0.27
+    "invites_reply": 0.29
    },
-   "ms": 376,
+   "ms": 359,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2195,11 +2229,11 @@
    "scores": {
     "addressed_kuro": 0.03,
     "interested_kuro": 0.06,
-    "addressed_lumi": 0.06,
-    "interested_lumi": 0.1,
+    "addressed_lumi": 0.07,
+    "interested_lumi": 0.11,
     "invites_reply": 0.22
    },
-   "ms": 397,
+   "ms": 440,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2219,15 +2253,16 @@
    "right": true,
    "voice": {
     "label": true,
-    "decided": null,
-    "right": null
+    "decided": "voice",
+    "right": true
    },
    "scores": {
-    "addressed_lumi": 0.74,
-    "interested_lumi": 0.25,
-    "invites_reply": 0.94
+    "addressed_lumi": 0.71,
+    "interested_lumi": 0.27,
+    "invites_reply": 0.94,
+    "voice_moment": 0.65
    },
-   "ms": 394,
+   "ms": 376,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2247,13 +2282,13 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_kuro": 0.84,
+    "addressed_kuro": 0.83,
     "interested_kuro": 0.9,
     "addressed_lumi": 0.02,
     "interested_lumi": 0.04,
-    "invites_reply": 0.6
+    "invites_reply": 0.58
    },
-   "ms": 432,
+   "ms": 373,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2271,11 +2306,11 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_xiaoman": 0.17,
-    "interested_xiaoman": 0.55,
+    "addressed_xiaoman": 0.23,
+    "interested_xiaoman": 0.57,
     "invites_reply": 0.98
    },
-   "ms": 558,
+   "ms": 370,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2296,10 +2331,10 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.97,
-    "interested_milky-green": 0.57,
-    "invites_reply": 0.97
+    "interested_milky-green": 0.62,
+    "invites_reply": 0.96
    },
-   "ms": 405,
+   "ms": 377,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2317,11 +2352,11 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_kuro": 0.92,
-    "interested_kuro": 0.9,
-    "invites_reply": 0.2
+    "addressed_kuro": 0.93,
+    "interested_kuro": 0.89,
+    "invites_reply": 0.23
    },
-   "ms": 399,
+   "ms": 403,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2342,14 +2377,14 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.02,
-    "interested_milky-green": 0.09,
+    "interested_milky-green": 0.08,
     "addressed_kuro": 0.02,
-    "interested_kuro": 0.09,
-    "addressed_xiaoman": 0.02,
-    "interested_xiaoman": 0.12,
+    "interested_kuro": 0.11,
+    "addressed_xiaoman": 0.03,
+    "interested_xiaoman": 0.14,
     "invites_reply": 0.97
    },
-   "ms": 434,
+   "ms": 419,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2368,10 +2403,10 @@
    "voice": null,
    "scores": {
     "addressed_xiaoman": 0.05,
-    "interested_xiaoman": 0.55,
-    "invites_reply": 0.57
+    "interested_xiaoman": 0.6,
+    "invites_reply": 0.58
    },
-   "ms": 405,
+   "ms": 373,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2394,9 +2429,9 @@
     "interested_milky-green": 0.09,
     "addressed_kuro": 0.02,
     "interested_kuro": 0.05,
-    "invites_reply": 0.19
+    "invites_reply": 0.17
    },
-   "ms": 393,
+   "ms": 382,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2416,17 +2451,18 @@
    "right": true,
    "voice": {
     "label": false,
-    "decided": null,
-    "right": null
+    "decided": "text",
+    "right": true
    },
    "scores": {
     "addressed_kuro": 0.01,
     "interested_kuro": 0.09,
     "addressed_xiaoman": 0.95,
     "interested_xiaoman": 0.82,
-    "invites_reply": 0.97
+    "invites_reply": 0.98,
+    "voice_moment": 0.36
    },
-   "ms": 407,
+   "ms": 383,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2446,11 +2482,11 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_lumi": 0.08,
+    "addressed_lumi": 0.07,
     "interested_lumi": 0.95,
-    "invites_reply": 0.48
+    "invites_reply": 0.44
    },
-   "ms": 399,
+   "ms": 476,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2470,11 +2506,11 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_kuro": 0.89,
-    "interested_kuro": 0.71,
+    "addressed_kuro": 0.9,
+    "interested_kuro": 0.7,
     "invites_reply": 0.96
    },
-   "ms": 433,
+   "ms": 410,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2493,10 +2529,10 @@
    "voice": null,
    "scores": {
     "addressed_kuro": 0.03,
-    "interested_kuro": 0.61,
-    "invites_reply": 0.48
+    "interested_kuro": 0.63,
+    "invites_reply": 0.45
    },
-   "ms": 415,
+   "ms": 384,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2513,10 +2549,10 @@
    "voice": null,
    "scores": {
     "addressed_kuro": 0.03,
-    "interested_kuro": 0.07,
+    "interested_kuro": 0.06,
     "invites_reply": 0.98
    },
-   "ms": 397,
+   "ms": 440,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2537,10 +2573,10 @@
    "voice": null,
    "scores": {
     "addressed_xiaoman": 0.96,
-    "interested_xiaoman": 0.9,
+    "interested_xiaoman": 0.88,
     "invites_reply": 0.96
    },
-   "ms": 392,
+   "ms": 436,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2562,7 +2598,7 @@
     "interested_kuro": 0.9,
     "invites_reply": 0.28
    },
-   "ms": 423,
+   "ms": 413,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2581,10 +2617,10 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.02,
-    "interested_milky-green": 0.12,
+    "interested_milky-green": 0.13,
     "invites_reply": 0.98
    },
-   "ms": 405,
+   "ms": 412,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2599,20 +2635,22 @@
     "lumi",
     "kuro"
    ],
-   "decided": [],
+   "decided": [
+    "lumi"
+   ],
    "source": "model",
    "right": true,
    "voice": null,
    "scores": {
     "addressed_kuro": 0.02,
-    "interested_kuro": 0.12,
-    "addressed_lumi": 0.08,
+    "interested_kuro": 0.11,
+    "addressed_lumi": 0.06,
     "interested_lumi": 0.92,
-    "addressed_xiaoman": 0.1,
-    "interested_xiaoman": 0.85,
-    "invites_reply": 0.37
+    "addressed_xiaoman": 0.11,
+    "interested_xiaoman": 0.84,
+    "invites_reply": 0.4
    },
-   "ms": 461,
+   "ms": 389,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2632,15 +2670,16 @@
    "right": true,
    "voice": {
     "label": false,
-    "decided": null,
-    "right": null
+    "decided": "text",
+    "right": true
    },
    "scores": {
-    "addressed_xiaoman": 0.87,
-    "interested_xiaoman": 0.9,
-    "invites_reply": 0.96
+    "addressed_xiaoman": 0.85,
+    "interested_xiaoman": 0.89,
+    "invites_reply": 0.96,
+    "voice_moment": 0.25
    },
-   "ms": 401,
+   "ms": 462,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2658,11 +2697,11 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_lumi": 0.86,
-    "interested_lumi": 0.19,
-    "invites_reply": 0.47
+    "addressed_lumi": 0.91,
+    "interested_lumi": 0.17,
+    "invites_reply": 0.43
    },
-   "ms": 392,
+   "ms": 451,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2681,10 +2720,10 @@
     "addressed_milky-green": 0.02,
     "interested_milky-green": 0.05,
     "addressed_kuro": 0.02,
-    "interested_kuro": 0.04,
-    "invites_reply": 0.09
+    "interested_kuro": 0.05,
+    "invites_reply": 0.08
    },
-   "ms": 402,
+   "ms": 366,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2704,12 +2743,12 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.04,
-    "interested_milky-green": 0.09,
-    "addressed_lumi": 0.03,
+    "interested_milky-green": 0.08,
+    "addressed_lumi": 0.02,
     "interested_lumi": 0.07,
     "invites_reply": 0.98
    },
-   "ms": 405,
+   "ms": 371,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2727,9 +2766,9 @@
    "scores": {
     "addressed_lumi": 0.03,
     "interested_lumi": 0.06,
-    "invites_reply": 0.18
+    "invites_reply": 0.19
    },
-   "ms": 409,
+   "ms": 358,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2749,9 +2788,9 @@
    "scores": {
     "addressed_milky-green": 0.06,
     "interested_milky-green": 0.07,
-    "invites_reply": 0.53
+    "invites_reply": 0.52
    },
-   "ms": 398,
+   "ms": 391,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2771,15 +2810,16 @@
    "right": true,
    "voice": {
     "label": true,
-    "decided": null,
-    "right": null
+    "decided": "voice",
+    "right": true
    },
    "scores": {
-    "addressed_kuro": 0.81,
-    "interested_kuro": 0.28,
-    "invites_reply": 0.96
+    "addressed_kuro": 0.79,
+    "interested_kuro": 0.27,
+    "invites_reply": 0.96,
+    "voice_moment": 0.6
    },
-   "ms": 438,
+   "ms": 384,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2799,11 +2839,11 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_xiaoman": 0.74,
-    "interested_xiaoman": 0.79,
-    "invites_reply": 0.98
+    "addressed_xiaoman": 0.77,
+    "interested_xiaoman": 0.78,
+    "invites_reply": 0.97
    },
-   "ms": 390,
+   "ms": 383,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2821,9 +2861,9 @@
    "scores": {
     "addressed_kuro": 0.05,
     "interested_kuro": 0.08,
-    "invites_reply": 0.34
+    "invites_reply": 0.33
    },
-   "ms": 448,
+   "ms": 407,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2843,13 +2883,13 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_milky-green": 0.85,
-    "interested_milky-green": 0.58,
-    "addressed_kuro": 0.02,
+    "addressed_milky-green": 0.87,
+    "interested_milky-green": 0.6,
+    "addressed_kuro": 0.03,
     "interested_kuro": 0.06,
-    "invites_reply": 0.68
+    "invites_reply": 0.66
    },
-   "ms": 486,
+   "ms": 395,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2869,11 +2909,11 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_lumi": 0.17,
+    "addressed_lumi": 0.19,
     "interested_lumi": 0.96,
-    "invites_reply": 0.53
+    "invites_reply": 0.59
    },
-   "ms": 394,
+   "ms": 401,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2895,9 +2935,9 @@
     "interested_kuro": 0.05,
     "addressed_lumi": 0.98,
     "interested_lumi": 0.97,
-    "invites_reply": 0.25
+    "invites_reply": 0.27
    },
-   "ms": 408,
+   "ms": 572,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2910,20 +2950,18 @@
    "maybe": [
     "lumi"
    ],
-   "decided": [
-    "lumi"
-   ],
+   "decided": [],
    "source": "model",
    "right": true,
    "voice": null,
    "scores": {
     "addressed_kuro": 0.02,
-    "interested_kuro": 0.07,
+    "interested_kuro": 0.08,
     "addressed_lumi": 0.93,
     "interested_lumi": 0.92,
-    "invites_reply": 0.54
+    "invites_reply": 0.49
    },
-   "ms": 454,
+   "ms": 434,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2940,14 +2978,14 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.02,
-    "interested_milky-green": 0.05,
-    "addressed_kuro": 0.85,
-    "interested_kuro": 0.87,
+    "interested_milky-green": 0.06,
+    "addressed_kuro": 0.86,
+    "interested_kuro": 0.88,
     "addressed_lumi": 0.01,
     "interested_lumi": 0.03,
-    "invites_reply": 0.12
+    "invites_reply": 0.13
    },
-   "ms": 396,
+   "ms": 377,
    "model": "typesafe/jev-1.14-20261014"
   }
  ]

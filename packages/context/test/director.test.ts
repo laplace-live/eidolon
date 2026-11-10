@@ -593,6 +593,7 @@ describe("from the settings", () => {
   test("the gate role's account and model, whether or not the gate retrieves", async () => {
     const seen: { path: string; auth: string | null; body: Body }[] = [];
     const server = Bun.serve({
+      hostname: "127.0.0.1",
       port: 0,
       async fetch(request) {
         const body = (await request.json()) as Body;

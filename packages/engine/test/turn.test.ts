@@ -149,6 +149,11 @@ function deps(mind: Mind, persona: PersonaParts, overrides: Partial<EngineDeps> 
       mime: "image/png",
     }),
     newId: () => `id-${++n}`,
+    speech: {
+      canSpeak: () => false,
+      synthesize: () => Promise.reject(new Error("no voice here")),
+      transcribe: () => Promise.reject(new Error("no ears here")),
+    },
     ...overrides,
   };
 }

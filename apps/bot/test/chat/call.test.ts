@@ -3,14 +3,16 @@
 // chat in the offer, the call is today's.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { type AllowedOffer, ANONYMOUS, type JsonObject } from "@eidolon/access";
 import { CHAT_FORMAT, type ChatEvent, type ChatEventOf, type ChatHeader } from "@eidolon/chat";
 import { dataHome, readPersonaIdentity } from "@eidolon/config";
-import { UNHEARD } from "@eidolon/engine";
+import { selfieStore } from "@eidolon/imagegen";
 import type { CallBinding, CallClient } from "@eidolon/runtime";
 import { type BoundOffer, bindChatCall, CHAT_LINE_MESSAGE } from "../../src/chat/call.ts";
+import { ChatFiles } from "../../src/chat/files.ts";
 import { ChatSigner, MIN_CHAT_SECRET_LENGTH } from "../../src/chat/sig.ts";
 import { openChatWindow } from "../../src/chat/window.ts";
 import { type BotServer, startBotServer } from "../../src/server.ts";
@@ -133,8 +135,12 @@ async function until(check: () => boolean): Promise<void> {
   }
 }
 
-async function bound(requestData: JsonObject, user = ANONYMOUS): Promise<BoundOffer> {
-  const result = await bindChatCall(admissionWith(requestData, user), signer);
+async function bound(
+  requestData: JsonObject,
+  user = ANONYMOUS,
+  files = new ChatFiles(),
+): Promise<BoundOffer> {
+  const result = await bindChatCall(admissionWith(requestData, user), signer, files);
   if (result === null || result instanceof Response) throw new Error("the call wasn't bound");
   return result;
 }
@@ -145,7 +151,7 @@ describe("bindChatCall", () => {
     expect(await bindChatCall(admissionWith({ persona: MILKY }), signer)).toBeNull();
   });
 
-  test("runs as her, on her view of what verifies, less tool calls, a clip heard as nothing as UNHEARD", async () => {
+  test("runs as her, on her view of what verifies, less tool calls, a clip heard as nothing as （听不清）", async () => {
     const chat = { header: HEADER, events: await window() };
     const { admission, binding } = await bound({ chat, persona: MILKY, loginSyncToken: "t" });
     expect(binding.persona).toBe(MILKY);
@@ -153,7 +159,7 @@ describe("bindChatCall", () => {
       { role: "user", content: "我养了一只叫团子的猫" },
       { role: "assistant", content: "团子这名字好可爱！" },
       { role: "assistant", content: "想起来了，你说过它很胖" },
-      { role: "user", content: UNHEARD },
+      { role: "user", content: "（听不清）" },
     ]);
     // The session logs requestData; the window stays out of it.
     expect(admission.requestData).toEqual({ persona: MILKY, loginSyncToken: "t" });
@@ -259,6 +265,59 @@ describe("bindChatCall", () => {
     expect((sent[1] as { event: ChatEvent }).event.seq).toBe(3);
     expect(logs.lines()).toContain(
       `WARNING [chat] Chat ${CHAT}: a call line didn't reach the browser: the data channel closed`,
+    );
+  });
+
+  test("her photo goes to the browser in its place among the lines, signed, its file kept in memory", async () => {
+    const files = new ChatFiles();
+    const events = [user(1, "拍一张看看")];
+    const { binding } = await bound(
+      { chat: { header: HEADER, events }, persona: MILKY },
+      ANONYMOUS,
+      files,
+    );
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 7]);
+    const url = selfieStore.publish({ data: png, mediaType: "image/png" }, 600);
+    const { client, sent } = browser();
+    binding.onTranscript({ role: "assistant", text: "拍给你看", interrupted: false }, client);
+    binding.onServerMessage?.({ type: "selfie", urls: [url] }, client);
+    binding.onServerMessage?.({ type: "voice", urls: [url] }, client);
+    binding.onTranscript({ role: "assistant", text: "好看吗", interrupted: false }, client);
+    await until(() => sent.length === 3);
+    const name = `${createHash("sha256").update(png).digest("hex")}.png`;
+    const lines = sent.map((message) => message.event as ChatEventOf<"message">);
+    expect(sent.map((message) => message.type)).toEqual(Array(3).fill(CHAT_LINE_MESSAGE));
+    expect(lines.map(({ seq, text, attachments }) => [seq, text, attachments])).toEqual([
+      [2, "拍给你看", undefined],
+      [3, "", [{ kind: "image", name, mime: "image/png" }]],
+      [4, "好看吗", undefined],
+    ]);
+    const photo = lines[1] as ChatEventOf<"message">;
+    expect([photo.speaker, photo.modality]).toEqual([{ kind: "persona", id: MILKY }, "call"]);
+    expect(await signer.verify(CHAT, JSON.parse(JSON.stringify(photo)))).toBe(true);
+    expect(files.lookup(name)).toMatchObject({ bytes: png, mime: "image/png" });
+    // Sent back with the browser's next request, the photo comes through whole.
+    const back = JSON.parse(JSON.stringify([...events, ...lines]));
+    const opened = await openChatWindow({ header: HEADER, events: back }, signer);
+    if (!opened.ok) throw new Error(opened.message);
+    expect((await opened.store.read(CHAT)).events[2]).toEqual(JSON.parse(JSON.stringify(photo)));
+  });
+
+  test("a photo whose selfie is gone is logged, and the next line still goes", async () => {
+    const files = new ChatFiles();
+    const { binding } = await bound(
+      { chat: { header: HEADER, events: [user(1, "在吗")] }, persona: MILKY },
+      ANONYMOUS,
+      files,
+    );
+    const { client, sent } = browser();
+    binding.onServerMessage?.({ type: "selfie", urls: ["/api/selfie/gone.png"] }, client);
+    binding.onTranscript({ role: "assistant", text: "拍糊了", interrupted: false }, client);
+    await until(() => sent.length === 1);
+    expect((sent[0] as { event: ChatEvent }).event.seq).toBe(2);
+    expect(files.size).toBe(0);
+    expect(logs.lines()).toContain(
+      `WARNING [chat] Chat ${CHAT}: a photo of the call didn't reach the browser: The selfie at /api/selfie/gone.png is gone`,
     );
   });
 
@@ -376,6 +435,23 @@ describe("the offer route", () => {
     binding.onEnded("hangup");
     await until(() => sent.length === 2);
     expect(sent.map((message) => (message.event as ChatEvent).seq)).toEqual([10, 11]);
+    expect(existsSync(join(dataHome(), "chats"))).toBe(false);
+  });
+
+  test("with the secret set, her photo on a chat's call is served from memory, never the disk", async () => {
+    await boot(SECRET);
+    await offer({ chat: { header: HEADER, events: await window() }, persona: MILKY });
+    const binding = fakes.offers[0]?.binding as CallBinding;
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 9]);
+    const url = selfieStore.publish({ data: png, mediaType: "image/png" }, 600);
+    const { client, sent } = browser();
+    binding.onServerMessage?.({ type: "selfie", urls: [url] }, client);
+    await until(() => sent.length === 1);
+    const [file] = (sent[0] as { event: ChatEventOf<"message"> }).event.attachments ?? [];
+    const served = await fetch(`http://127.0.0.1:${bot?.server.port}/api/chat/files/${file?.name}`);
+    expect(served.status).toBe(200);
+    expect(served.headers.get("content-type")).toBe("image/png");
+    expect(new Uint8Array(await served.arrayBuffer())).toEqual(png);
     expect(existsSync(join(dataHome(), "chats"))).toBe(false);
   });
 

@@ -1,7 +1,7 @@
 // Follows the chat on screen: its running turn from GET live when it opens, each reply a send
 // starts, and a call this page holds in it. A dropped stream leaves the turn running on the server,
 // so live picks it up again once. Her voice messages answering a send from this tab play on their
-// own, one after another, while the tab has the focus.
+// own, one after another, while the tab has the focus and no call is on.
 import type { ChatEvent, ChatStreamLine } from "@eidolon/chat";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
@@ -20,7 +20,7 @@ import {
   Sends,
   type VoiceClip,
 } from "./stream";
-import { voiceReplies } from "./voice";
+import { afterAutoPlay, pausePlayback, queueReplies, voiceReplies } from "./voice";
 
 type Open = (signal: AbortSignal) => AsyncIterable<ChatStreamLine>;
 
@@ -38,17 +38,28 @@ export interface ChatTurns {
   stop(): void;
   /** The seq of her voice message to play now on its own; null for none. */
   readonly autoPlay: number | null;
-  /** It played through, and the next waiting plays; or it stopped, and none of them does. */
-  autoPlayEnded(finished: boolean): void;
+  /**
+   * It played through or broke off, and the next waiting plays while the tab has the focus; or it
+   * was paused or refused, and none of them does.
+   */
+  autoPlayEnded(next: boolean): void;
 }
 
-/** `calling`: this page holds a call in the chat, whose lines GET live carries as they are stored. */
+/** `calling`: a call is on in the chat, whose lines GET live carries as they are stored. */
 export function useChat(id: string, calling: boolean): ChatTurns {
   const queryClient = useQueryClient();
   const [live, dispatch] = useReducer(reduceLive, IDLE);
   const streams = useRef(new Set<AbortController>());
   const sends = useRef(new Sends());
   const [toPlay, setToPlay] = useState<readonly number[]>([]);
+  const callOn = useRef(calling);
+
+  useEffect(() => {
+    callOn.current = calling;
+    if (!calling) return;
+    pausePlayback();
+    setToPlay([]);
+  }, [calling]);
 
   const store = useCallback(
     (events: readonly ChatEvent[]) => {
@@ -95,12 +106,13 @@ export function useChat(id: string, calling: boolean): ChatTurns {
           if (line.type === "events") {
             store(line.events);
             const replies = key === null || superseded ? [] : voiceReplies(line.events);
-            if (replies.length > 0 && document.hasFocus()) {
-              setToPlay((waiting) => [...waiting, ...replies]);
+            if (replies.length > 0) {
+              const state = { focused: document.hasFocus(), calling: callOn.current };
+              setToPlay((waiting) => queueReplies(waiting, replies, state));
             }
           } else if (line.type === "started" && reached) [turn, ended] = [line.turn, false];
           else if (line.type === "ended" && line.turn === turn) ended = true;
-          if (reached) dispatch(line);
+          if (reached) dispatch(line.type === "events" && key !== null ? { ...line, key } : line);
         }
       } catch (error) {
         broke = !controller.signal.aborted;
@@ -145,6 +157,8 @@ export function useChat(id: string, calling: boolean): ChatTurns {
     void (async () => {
       while (on) {
         await follow((signal) => followLive(id, signal), null, false);
+        // follow reread the log as its stream ended; only a hang-up during the pause is unread.
+        if (!on) return;
         await pause(CALL_FEED_RETRY_MS);
       }
       void reread(queryClient, chatQuery(id).queryKey);
@@ -174,8 +188,9 @@ export function useChat(id: string, calling: boolean): ChatTurns {
     [queryClient, id, follow],
   );
 
-  const autoPlayEnded = useCallback((finished: boolean) => {
-    setToPlay((waiting) => (finished ? waiting.slice(1) : []));
+  const autoPlayEnded = useCallback((next: boolean) => {
+    const focused = document.hasFocus();
+    setToPlay((waiting) => afterAutoPlay(waiting, next, focused));
   }, []);
 
   const stop = useCallback(() => {
@@ -190,7 +205,7 @@ export function useChat(id: string, calling: boolean): ChatTurns {
     send,
     sendVoice: sendVoiceClip,
     stop,
-    autoPlay: toPlay[0] ?? null,
+    autoPlay: calling ? null : (toPlay[0] ?? null),
     autoPlayEnded,
   };
 }

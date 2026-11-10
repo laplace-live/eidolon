@@ -264,7 +264,9 @@ describe("a voice message", () => {
   test("waits with its recording until the server stores it, whatever its transcript", () => {
     const sent = run([{ type: "sending", key: 1, after: 2, text: "", voice: clip }]);
     expect(sent.pending).toEqual([{ key: 1, after: 2, text: "", voice: clip, failed: false }]);
-    expect(run([{ type: "events", events: [voiceLine(3, "你好")] }], sent).pending).toEqual([]);
+    expect(run([{ type: "events", key: 1, events: [voiceLine(3, "你好")] }], sent).pending).toEqual(
+      [],
+    );
   });
 
   test("and a typed line are each matched only by their own kind of message", () => {
@@ -273,12 +275,38 @@ describe("a voice message", () => {
       { type: "sending", key: 2, after: 2, text: "你好" },
     ]);
     expect(
-      run([{ type: "events", events: [voiceLine(3, "你好")] }], both).pending.map(
+      run([{ type: "events", key: 1, events: [voiceLine(3, "你好")] }], both).pending.map(
         (line) => line.key,
       ),
     ).toEqual([2]);
     expect(
       run([{ type: "events", events: [userLine(3, "你好")] }], both).pending.map(
+        (line) => line.key,
+      ),
+    ).toEqual([1]);
+  });
+
+  test("is cleared only by its own send's message, so one refused keeps its recording", () => {
+    const later = { audio: new Blob(["y"], { type: "audio/webm" }), durationMs: 900 };
+    const both = run([
+      { type: "sending", key: 1, after: 2, text: "", voice: clip },
+      { type: "sending", key: 2, after: 2, text: "", voice: later },
+    ]);
+    const refused = run(
+      [
+        { type: "send-failed", key: 1, error: { code: "upstream-failed", message: "unheard" } },
+        { type: "settled", key: 1, turn: null },
+        { type: "events", key: 2, events: [voiceLine(3, "你好")] },
+        { type: "settled", key: 2, turn: null },
+      ],
+      both,
+    );
+    expect(refused.pending).toEqual([{ key: 1, after: 2, text: "", voice: clip, failed: true }]);
+    // Live replays any send's message: it clears none, and each send's own stream clears its own.
+    const replayed = run([{ type: "events", events: [voiceLine(3, "你好")] }], both);
+    expect(replayed.pending.map((line) => line.key)).toEqual([1, 2]);
+    expect(
+      run([{ type: "events", key: 2, events: [voiceLine(3, "你好")] }], both).pending.map(
         (line) => line.key,
       ),
     ).toEqual([1]);

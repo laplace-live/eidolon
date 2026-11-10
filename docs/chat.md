@@ -390,6 +390,12 @@ pipedog; [providers.md](providers.md#voice-messages-batch-speech) has each provi
   The language hint is a call's (`STT_LANGUAGE`).
 - **`speechSupport(selection)`** says which of the two a role's provider offers. Every voice
   provider in the catalog synthesizes, and every hearing provider transcribes.
+- **Each has a time limit,** so a provider that never answers fails instead of holding the chat's
+  queue (`withTimeLimit`, `shared.ts`):
+  - **hearing a clip:** 30 s, and a second more for every two seconds of audio, at most 90 s, for
+    all of Soniox's requests together (`transcribeTimeoutMs`);
+  - **speaking a reply:** 30 s, and 0.1 s more for each character spoken, at most 2 minutes
+    (`synthesizeTimeoutMs`).
 
 The engine reaches them through `EngineDeps.speech` (`batchSpeech`), so tests stand in for both.
 
@@ -406,13 +412,14 @@ logged.
 
 **`auto`** lets the director choose, with `voice_moment`, asked once per decision while some
 candidate is `auto`:
-- she answers in voice when its score is `VOICE_THRESHOLD` (0.7) or more;
-- the bar drops to `VOICE_THRESHOLD_AFTER_VOICE` (0.4) while the viewer's last line was a voice
+- she answers in voice when its score is `VOICE_THRESHOLD` (0.42) or more;
+- the bar drops to `VOICE_THRESHOLD_AFTER_VOICE` (0.35) while the viewer's last line was a voice
   message, so she leans toward answering in kind, on the chain's hops too;
 - with no score (no gate key, a timeout, a failure, or a fallback decision), `auto` is text.
 
-**Both bars are placeholders.** The director benchmark has 24 `voice_moment` labels and no
-scored run yet ([its README](benchmarks/2026-11-10-director/README.md#voice-moments)).
+**Both bars answer the director benchmark's 24 `voice_moment` labels in the right mode**
+([its README](benchmarks/2026-11-10-director/README.md#voice-moments)). The first sits in a narrow
+gap: a goodnight scored 0.44, and a question about tickets 0.38.
 
 **In a chat of one,** the director sends one Decisions request per viewer line with only
 `voice_moment`, while her mode is `auto`, her voice can speak and the gate role has a key. The
@@ -443,12 +450,12 @@ as `（听不清）`, and the page says no words could be heard in it.
 | What | What happens |
 | --- | --- |
 | Her voice role has no key, or no batch synthesis | `voice` and `auto` replies are text; the chat's settings sheet says so |
-| Synthesis or saving its audio fails | Her message is stored as text, then a `turn-failed` with `code: "voice-failed"`; the page shows a quiet **Sent as text** |
+| Synthesis fails, answers with no audio or outlasts its time limit, or saving its audio fails | Her message is stored as text, then a `turn-failed` with `code: "voice-failed"`; the page shows a quiet **Sent as text** |
 | She is interrupted while she is spoken | Her words are stored as interrupted text, with no audio |
 | The director doesn't answer `voice_moment` within 2 s | `auto` replies are text |
 | A chat of one is interrupted while the director weighs her reply | The request is aborted. Her words so far are stored as interrupted text, after a `single` decision for text with no scores; with no words yet, nothing is stored |
 | The first persona's hearing role has no key | `POST voice` answers `409 missing-key`, and `GET chats/:id`'s `hearingRefusal` says why, which disables the microphone |
-| Her hearing provider fails | `POST voice` answers `502 upstream-failed`, and nothing is stored, so the recording can be sent again |
+| Her hearing provider fails, or outlasts its time limit | `POST voice` answers `502 upstream-failed`, and nothing is stored, so the recording can be sent again |
 
 ### Voice costs
 
@@ -479,6 +486,8 @@ interface CallBinding {
     line: { role: "user" | "assistant"; text: string; interrupted: boolean },
     client?: CallClient, // the call's browser; the session always passes it
   ): void;
+  // A tool's, as take_selfie's, with the same browser
+  onServerMessage?(data: Readonly<Record<string, unknown>>, client?: CallClient): void;
   onEnded(end: "hangup" | "error"): void; // once, after the last line
 }
 
@@ -513,6 +522,11 @@ interface CallClient {
   An empty line isn't reported, and neither is the greeting's kickoff or the empty-turn recovery
   prompt, which pipedog writes to the context itself. An `onTranscript` or `onEnded` that throws
   is logged, and the call goes on.
+- **Her photos:** each server message a tool sends the client, `take_selfie`'s `{ type: "selfie",
+  urls }`, reaches `onServerMessage` once it is sent, in order with the lines and with the same
+  `CallClient`. One that throws is
+  logged, and the tool still returns its result. A hang-up while a line is still held reports its
+  spoken part, `interrupted`, before `onEnded`.
 - **The end:** `onEnded("hangup")` once the session ran until either side hung up, `"error"` once
   it failed and its peer was closed.
 - **Mem0 stores only what is said on the call.** With a seed, the Mem0 processor hands Mem0 its
@@ -531,11 +545,15 @@ that chat; without a `chatId`, it is the standalone call, unbound.
    1. stops a running reply, which stores what she said as interrupted;
    2. stores `call-started { call, persona }`;
    3. seeds the call with her `viewOf` of the chat, the window her next text turn would read, a
-      viewer's voice message heard as nothing reading `（听不清）`;
+      viewer's voice message heard as nothing reading `（听不清）`, less her tool calls and their
+      results: the call may offer none, and Anthropic refuses a `tool_use` block then;
    4. stores each finished line as a `message` with `modality: "call"`, from the viewer or from
-      her, `interrupted` where she was cut off;
+      her, `interrupted` where she was cut off, and each selfie she sends as her photos alone,
+      `modality: "call"` and `text: ""`, copied from the in-process selfie store into the chat. A
+      photo takes its place among the lines as it arrives, while its files are saved;
    5. stores `call-ended { call, reason }` once the session ends: `hangup`, `error`, or `shutdown`
-      when the server stops mid-call. A line after it is dropped.
+      when the server stops mid-call. A line or photo after it is dropped. Shutdown waits up to 2 s
+      for it, after the call's last lines, a call hung up just before included.
 3. **An offer the signalling server refuses** still stores both ends, the second with `error`: a
    call of no length.
 4. **A renegotiation,** an offer for the call's own `pc_id`, passes through unbound and stores
@@ -591,7 +609,8 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
   it. Only stop, a new message, `DELETE` and the server's shutdown abort one. Shutdown waits up to
   2 s for what was said to be stored.
 - **A stop** waits its turn in the queue, so one that arrives while a send is still storing the
-  viewer's line, or hearing the viewer's clip, stops the reply that send starts.
+  viewer's line, or hearing the viewer's clip, stops the reply that send starts. Hearing's time
+  limit ([The clients](#the-clients)) bounds that wait.
 - **A selfie still rendering when its turn was interrupted** is the runner's until it ends, as
   `late` (step 8 above):
   - **Storing:** what it brings is numbered on from the log like any append. It always lands
@@ -613,7 +632,7 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
 | `POST chats/:id/stop` | | `204` once the stopped reply's words are stored |
 | `PATCH chats/:id` | `{ title }`, 1 to 80 characters on one line, `{ chainLimit }`, a whole number from 0 to 6, or `{ replyMode }`, `auto`, `text` or `voice`; one per request | Appends a `title`, or a `settings` that applies from the next viewer line |
 | `POST chats/:id/participants` | `{ add?: [id], remove?: [id] }`, at least one persona, none in both | `200 { ok }` and a `participants` event; `400` when it adds one already there, removes one who isn't, or leaves fewer than 1 or more than 6 |
-| `DELETE chats/:id` | | Stops any reply, then removes `chats/<id>/` and nothing else. `409 chat-in-call` during a call |
+| `DELETE chats/:id` | | Stops any reply and cancels a voice message being heard, whose `POST voice` answers `502`, then removes `chats/<id>/` and nothing else. `409 chat-in-call` during a call, stopping and cancelling nothing; a call still opening when it comes is refused `404 unknown-chat` |
 | `GET chats/:id/files/:name` | | The attachment: its type, `nosniff`, a sandbox CSP and `Cache-Control: private, max-age=31536000, immutable`; an `<img>` or `<audio>` reads it with the cookie alone. It answers `Range` requests with a `206` (Bun.serve's own, on a file) and sends `Accept-Ranges: bytes`, since Safari plays audio only from a server that takes ranges |
 
 - **Text** is trimmed. A message may hold tabs and line breaks, but no other control character.
@@ -651,7 +670,8 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
   - **A call,** with her hearing, mind and voice at the fake server: a line typed first, then Call,
     the dock, her greeting answering that line from the call's seed and landing in the log as a
     call line, the composer waiting and a send refused `chat-in-call`, then Hang Up, the
-    `call-ended`, the separators with the call's length, and the composer back.
+    `call-ended`, the separators with the call's length, and the composer back. A second tab, open
+    before the call and told of it by a refused send, gets its composer back at the hang-up too.
 - `bun run director-decisions` after changing the director's questions, state or thresholds
   ([Calibrating](#calibrating)).
 - **By hand, billed:** a chat with milky-green on OpenRouter. Ask a recall question (it must call
@@ -769,7 +789,8 @@ temporary data home and find it unchanged.
   - `503 unavailable` while the first persona's hearing role has no key.
 - **Multipart, not a header,** because a window of 256 KB is past what proxies take in a header.
 
-**`GET /api/chat/files/:name`** serves her selfies and voice replies (`files.ts`):
+**`GET /api/chat/files/:name`** serves her selfies, a call's included, and voice replies
+(`files.ts`):
 - **Where they live:** in the process's memory for her `SELFIE_TTL_SECONDS` (600), as
   `/api/selfie` keeps a selfie. A restart loses them, and so would a second instance.
 - **Names:** `<sha256>.<ext>`, the content's hash, as the local store names them, so a name can't
@@ -809,7 +830,7 @@ temporary data home and find it unchanged.
   `canonicalForSig` is the chat id, a newline, then the event without `sig` as JSON with its keys
   sorted and no whitespace.
 - **What carries one:** every event the server adds, but the viewer's: her messages, tool calls and
-  results, kickoffs, decisions, `turn-failed`s, and her lines on a call.
+  results, kickoffs, decisions, `turn-failed`s, and her lines and photos on a call.
 - **What never does:** the viewer's own events, which are their words and settings either way:
   their messages, `title`, `participants`, `settings`, `call-started` and `call-ended`. The browser
   writes the last two around a call, since the server can't sign `call-ended` once the call's peer
@@ -857,6 +878,12 @@ inside that chat (`bindChatCall`, `call.ts`):
   "chat-line", event }`, through the `CallClient` the session hands `onTranscript`: a `message`
   with `modality: "call"`, numbered on from the window, signed unless it is the viewer's. A line
   said after the browser hung up never arrives.
+- **Her photos,** each selfie she sends, go the same way, in their place among the lines, through
+  the `CallClient` the session hands `onServerMessage`: her signed `call` message with `text: ""`
+  and the images as attachments. Their files are copied from the selfie store into
+  `/api/chat/files`, in memory as a turn's are, for the browser to fetch; nothing is written to
+  disk. A photo whose selfie is gone is logged and skipped. The `selfie` server message itself
+  still reaches the browser, as on any call.
 - **The window leaves the admission** before the session sees it, so the session's log line
   doesn't carry the conversation.
 - **With the endpoint off,** `chat` is ignored and the call is an ordinary one.

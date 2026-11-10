@@ -63,6 +63,8 @@ export interface SessionDeps {
   readonly seedMessages?: readonly unknown[];
   /** Each line the viewer said or typed, and each she spoke, once it is finished. */
   readonly onTranscript?: CallBinding["onTranscript"];
+  /** Each server message a tool sends the client, as take_selfie's photos. */
+  readonly onServerMessage?: CallBinding["onServerMessage"];
   /** One realtime model hears, thinks and speaks, in place of the three below. */
   isRealtime(): boolean;
   createRealtime(systemInstruction: string): LLMService<any>;
@@ -230,6 +232,11 @@ class TypedLines extends BaseObserver {
     this.#report = report;
   }
 
+  // Else the worker wakes it for every frame's first push, audio included.
+  override acceptsPush(data: FramePushed): boolean {
+    return data.frame instanceof RTVISendTextFrame;
+  }
+
   override async onPushFrame(data: FramePushed): Promise<void> {
     if (data.frame instanceof RTVISendTextFrame) {
       reportLine(this.#report, "user", data.frame.text, false);
@@ -266,7 +273,14 @@ export async function buildSession(
   });
   const llm = realtime ? deps.createRealtime(systemInstruction) : deps.createLlm(systemInstruction);
 
-  const tools = new SessionTools(llm, tts);
+  const rtvi = new LaplaceRTVIProcessor();
+  const client: CallClient = { sendServerMessage: (data) => rtvi.sendServerMessage(data) };
+  const { onTranscript, onServerMessage } = deps;
+  const tools = new SessionTools(
+    llm,
+    tts,
+    onServerMessage && ((data) => onServerMessage(data, client)),
+  );
   if (voiceTool) tools.register(voiceTool);
   if (selfieTool) tools.register(selfieTool);
   const dbPath = deps.dbPath();
@@ -334,9 +348,6 @@ export async function buildSession(
     assistant: aggregators.assistant(),
   });
   const pipeline = new Pipeline(processors);
-  const rtvi = new LaplaceRTVIProcessor();
-  const client: CallClient = { sendServerMessage: (data) => rtvi.sendServerMessage(data) };
-  const { onTranscript } = deps;
   const report = onTranscript && ((line: TranscriptLine) => onTranscript(line, client));
   if (report) reportTurns(aggregators, report);
   const worker = new PipelineWorker(pipeline, {
@@ -432,6 +443,8 @@ export interface CallBinding {
   readonly seedMessages: readonly unknown[];
   /** `client` is the call's browser; the session always passes it, a caller standing in may not. */
   readonly onTranscript: (line: TranscriptLine, client?: CallClient) => void;
+  /** Each server message a tool sends the client, in order with the lines: take_selfie's photos. */
+  readonly onServerMessage?: (data: Readonly<Record<string, unknown>>, client?: CallClient) => void;
   /** Called once, after the session's last line, however it ended. */
   readonly onEnded: (end: CallEnd) => void;
 }
@@ -447,8 +460,10 @@ export function runBound<T>(
   run: (deps: SessionDeps) => T,
 ): T {
   if (binding === undefined) return run(deps);
-  const { persona, seedMessages, onTranscript } = binding;
-  return withPersona(persona, () => run({ ...deps, seedMessages, onTranscript }));
+  const { persona, seedMessages, onTranscript, onServerMessage } = binding;
+  return withPersona(persona, () =>
+    run({ ...deps, seedMessages, onTranscript, ...(onServerMessage ? { onServerMessage } : {}) }),
+  );
 }
 
 /** runSession for the background, bound to `binding` when there is one: never rejects. */

@@ -27,7 +27,7 @@ import type {
   TurnOutput,
   TurnRequest,
 } from "./types.ts";
-import { batchSpeech, timed, withUnheard } from "./voice.ts";
+import { timed, withUnheard } from "./voice.ts";
 
 /** The `tool` stream line's name while her voice role speaks a voice message. */
 const SPEAKING = "voice";
@@ -50,6 +50,19 @@ const CUT_OFF = new Map<string | null, CutOff>([
   ["content_filter", "refusal"],
   ["refusal", "refusal"],
 ]);
+
+/** Her view of `chat` as her turn reads it, with the seq each of her blocks came from. */
+export function turnView(
+  chat: TurnRequest["chat"],
+  persona: ParticipantId,
+  viewerName: string,
+): ReturnType<typeof viewWithBlocks> {
+  return viewWithBlocks(chat.header, withUnheard(chat.events), persona, {
+    windowMessages: CHAT_WINDOW_MESSAGES,
+    nameOf: (id) => readPersonaIdentity(id).name,
+    viewerName,
+  });
+}
 
 /** How a tool call ended: the result the mind sees, null when it timed out. */
 interface ToolOutcome {
@@ -223,16 +236,7 @@ class Turn {
       signal,
     );
     const mind = this.#deps.createMind();
-    const { messages, blocks } = viewWithBlocks(
-      chat.header,
-      withUnheard(chat.events),
-      this.#persona,
-      {
-        windowMessages: CHAT_WINDOW_MESSAGES,
-        nameOf: (id) => readPersonaIdentity(id).name,
-        viewerName,
-      },
-    );
+    const { messages, blocks } = turnView(chat, this.#persona, viewerName);
     const conversation = new TurnConversation(messages, {
       persona: this.#persona,
       turn: this.#id,
@@ -258,10 +262,12 @@ class Turn {
       this.#emit({ type: "tool", turn: this.#id, name: SPEAKING, state: s });
     state("running");
     try {
-      const speech = this.#deps.speech ?? batchSpeech;
       const voice = this.#voice;
       const spoken = await raceAbort(
-        speech.synthesize(this.#text, { ...(voice === undefined ? {} : { voice }), signal }),
+        this.#deps.speech.synthesize(this.#text, {
+          ...(voice === undefined ? {} : { voice }),
+          signal,
+        }),
         signal,
       );
       const saved = await raceAbort(this.#deps.saveAttachment(spoken.bytes, spoken.mime), signal);

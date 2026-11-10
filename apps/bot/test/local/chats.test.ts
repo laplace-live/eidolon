@@ -2,7 +2,7 @@
 // which order, and what each stream carries. The engine itself is never run here.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AllowedOffer } from "@eidolon/access";
 import {
@@ -23,8 +23,8 @@ import {
   runChat,
   type TurnOutput,
   type TurnRequest,
-  UNHEARD,
 } from "@eidolon/engine";
+import { selfieStore } from "@eidolon/imagegen";
 import {
   ProviderConfigError,
   ProviderHttpError,
@@ -940,6 +940,25 @@ describe("a voice message", () => {
     expect(after.filter((message) => message.interrupted !== true)).toEqual([]);
   });
 
+  test("a delete while it is heard cancels the hearing and removes the chat at once", async () => {
+    const id = await greeted();
+    hearing = async (request) => {
+      await aborted(request.signal);
+      throw request.signal.reason;
+    };
+    const posted = voice(id);
+    await until(() => heard.length === 1);
+    const deleted = await Promise.race([
+      server.call("DELETE", `/chats/${id}`),
+      Bun.sleep(1000).then(() => null),
+    ]);
+    expect(deleted).not.toBeNull();
+    expect(await json(deleted as Response)).toEqual({ ok: true });
+    expect((heard[0] as HearRequest).signal.aborted).toBe(true);
+    expect((await posted).status).toBe(502);
+    expect(existsSync(join(chatsRoot(), id))).toBe(false);
+  });
+
   test("one that can't be heard stores nothing: 502, or 409 for her settings", async () => {
     const id = await greeted();
     const before = (await log(id)).events;
@@ -1509,6 +1528,11 @@ test("the engine's runChat answers through the runner, each turn on the chat as 
     }),
     fetchImage: () => Promise.reject(new Error("no images here")),
     newId: () => crypto.randomUUID(),
+    speech: {
+      canSpeak: () => false,
+      synthesize: () => Promise.reject(new Error("no voice here")),
+      transcribe: () => Promise.reject(new Error("no ears here")),
+    },
   };
   const engine = serveChats({
     answer: (request, saveAttachment) =>
@@ -1730,6 +1754,68 @@ describe("a call in a chat", () => {
     }
   });
 
+  test("queued behind a voice message when a delete comes, is refused: the delete wins", async () => {
+    process.env.SONIOX_API_KEY = "soniox-test";
+    try {
+      const id = await greeted();
+      hearing = async (request) => {
+        await aborted(request.signal);
+        throw request.signal.reason;
+      };
+      const posted = voice(id);
+      await until(() => heard.length === 1);
+      const dialled = server.offer(offerBody({ chatId: id, persona: PERSONA }));
+      await Bun.sleep(20);
+      const deleted = await server.call("DELETE", `/chats/${id}`);
+      expect([deleted.status, await deleted.json()]).toEqual([200, { ok: true }]);
+      expect((await posted).status).toBe(502);
+      expect(await errorCode(await dialled)).toEqual([404, "unknown-chat"]);
+      expect(offered).toEqual([]);
+      expect(existsSync(join(chatsRoot(), id))).toBe(false);
+    } finally {
+      delete process.env.SONIOX_API_KEY;
+    }
+  });
+
+  test("stopping a reply when a delete comes, is refused: the delete wins", async () => {
+    const id = await greeted();
+    const hold = deferred();
+    scripts.set("讲个故事", reply("从前有座山", { untilAborted: true, hold: hold.promise }));
+    const posted = new Lines(
+      await server.call("POST", `/chats/${id}/messages`, { text: "讲个故事" }),
+    );
+    await posted.until((line) => line.type === "delta");
+    const dialled = server.offer(offerBody({ chatId: id, persona: PERSONA }));
+    await until(() => requests.at(-1)?.signal.aborted === true);
+    const deleted = server.call("DELETE", `/chats/${id}`);
+    // The chat's cancel, which the delete aborts before it queues.
+    await until(() => requests.at(-1)?.late?.signal.aborted === true);
+    hold.resolve();
+    expect(await errorCode(await dialled)).toEqual([404, "unknown-chat"]);
+    const done = await deleted;
+    expect([done.status, await done.json()]).toEqual([200, { ok: true }]);
+    expect(offered).toEqual([]);
+    expect(existsSync(join(chatsRoot(), id))).toBe(false);
+  });
+
+  test("a delete refused during it cancels nothing: a voice message after it is heard", async () => {
+    process.env.SONIOX_API_KEY = "soniox-test";
+    try {
+      const id = await greeted();
+      const binding = await dial(id);
+      expect(await errorCode(await server.call("DELETE", `/chats/${id}`))).toEqual([
+        409,
+        "chat-in-call",
+      ]);
+      binding.onEnded("hangup");
+      await new Lines(await voice(id)).all();
+      expect(heard).toHaveLength(1);
+      expect(heard[0]?.signal.aborted).toBe(false);
+    } finally {
+      delete process.env.SONIOX_API_KEY;
+    }
+  });
+
   test("is refused unless it names a chat and one of its personas, and nothing is stored", async () => {
     persona("beta", "贝塔");
     const id = await greeted();
@@ -1845,11 +1931,51 @@ describe("a call in a chat", () => {
       hearing = async () => ({ text: "" });
       await new Lines(await voice(id)).all();
       const binding = await dial(id);
-      expect(binding.seedMessages.slice(2, 3)).toEqual([{ role: "user", content: UNHEARD }]);
+      expect(binding.seedMessages.slice(2, 3)).toEqual([{ role: "user", content: "（听不清）" }]);
       binding.onEnded("hangup");
     } finally {
       delete process.env.SONIOX_API_KEY;
     }
+  });
+
+  test("opens on her view less her tool calls and their results, keeping her context blocks", async () => {
+    const id = await greeted();
+    scripts.set("拍张照", async function* (request) {
+      const turn = crypto.randomUUID();
+      const persona = request.persona;
+      yield { type: "started", turn, persona };
+      yield {
+        type: "events",
+        events: [
+          { type: "context", persona, turn, position: 2, role: "system", content: "猫叫坚果" },
+          { type: "tool-call", persona, turn, callId: "c1", name: "take_selfie", arguments: {} },
+          { type: "tool-result", persona, turn, callId: "c1", result: { ok: true } },
+          {
+            type: "message",
+            id: crypto.randomUUID(),
+            speaker: { kind: "persona", id: persona },
+            text: "拍好啦",
+          },
+        ],
+      };
+      yield { type: "ended", turn };
+    });
+    await new Lines(await server.call("POST", `/chats/${id}/messages`, { text: "拍张照" })).all();
+    const { header, events } = await log(id);
+    expect(viewOf(header, events, PERSONA, { windowMessages: 60, nameOf: String })).toContainEqual({
+      role: "tool",
+      tool_call_id: "c1",
+      content: '{"ok":true}',
+    });
+    const binding = await dial(id);
+    expect(binding.seedMessages).toEqual([
+      { role: "user", content: "打个招呼" },
+      { role: "assistant", content: "你好呀" },
+      { role: "system", content: "猫叫坚果" },
+      { role: "user", content: "拍张照" },
+      { role: "assistant", content: "拍好啦" },
+    ]);
+    binding.onEnded("hangup");
   });
 
   test("streams what an interrupted turn's selfie brings, as any event the chat stores meanwhile", async () => {
@@ -1887,5 +2013,63 @@ describe("a call in a chat", () => {
     binding.onEnded("hangup");
     await Bun.sleep(20);
     expect((await log(id)).events.at(-1)).toMatchObject({ type: "call-ended", reason: "shutdown" });
+  });
+
+  test("stores a photo she takes on it as her call message, in order with its lines", async () => {
+    const id = await greeted();
+    const binding = await dial(id);
+    const url = selfieStore.publish({ data: PNG, mediaType: "image/png" }, 600);
+    const live = new Lines(await server.call("GET", `/chats/${id}/live`));
+    binding.onTranscript({ role: "assistant", text: "拍给你看", interrupted: false });
+    binding.onServerMessage?.({ type: "selfie", urls: [url] });
+    binding.onTranscript({ role: "assistant", text: "好看吗", interrupted: false });
+    binding.onServerMessage?.({ type: "notice", urls: [url] });
+    binding.onEnded("hangup");
+    binding.onServerMessage?.({ type: "selfie", urls: [url] });
+    expect(shape(await live.all())).toEqual([
+      "events 3:call-started",
+      "events 4:message",
+      "events 5:message",
+      "events 6:message",
+      "events 7:call-ended",
+    ]);
+    const { events } = await log(id);
+    const name = `${new Bun.CryptoHasher("sha256").update(PNG).digest("hex")}.png`;
+    const her = { kind: "persona", id: PERSONA } as const;
+    expect(events.slice(3).map(({ seq, at, ...event }) => event)).toEqual([
+      { type: "message", id: expect.any(String), speaker: her, text: "拍给你看", modality: "call" },
+      {
+        type: "message",
+        id: expect.any(String),
+        speaker: her,
+        text: "",
+        attachments: [{ kind: "image", name, mime: "image/png" }],
+        modality: "call",
+      },
+      { type: "message", id: expect.any(String), speaker: her, text: "好看吗", modality: "call" },
+      { type: "call-ended", call: expect.any(String), reason: "hangup" },
+    ]);
+    const file = await server.call("GET", `/chats/${id}/files/${name}`);
+    expect(new Uint8Array(await file.arrayBuffer())).toEqual(PNG);
+    expect(logs.lines()).toContain(
+      `WARNING Chat ${id}: her photo came after call ${(events[2] as ChatEventOf<"call-started">).call} ended; dropped`,
+    );
+  });
+
+  test("shutdown right after a hang-up waits for the call's last line and its end to be stored", async () => {
+    const id = await greeted();
+    const binding = await dial(id);
+    binding.onTranscript({ role: "assistant", text: "拜拜", interrupted: false });
+    binding.onEnded("hangup");
+    await server.shutdown();
+    // From the disk: a read through the store would wait for the appends itself.
+    const stored = readFileSync(join(chatsRoot(), id, "chat.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as ChatEvent);
+    expect(stored.slice(-2)).toMatchObject([
+      { type: "message", text: "拜拜", modality: "call" },
+      { type: "call-ended", reason: "hangup" },
+    ]);
   });
 });

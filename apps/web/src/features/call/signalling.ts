@@ -33,9 +33,6 @@ export function offerRequest(target?: ChatCallRequestData): APIRequest {
   return {
     endpoint: OFFER_PATH,
     headers: new Headers(proofHeaders()),
-    requestData:
-      target === undefined
-        ? { audioQuality: AUDIO_QUALITY }
-        : { audioQuality: AUDIO_QUALITY, chatId: target.chatId, persona: target.persona },
+    requestData: { audioQuality: AUDIO_QUALITY, ...target },
   };
 }

@@ -2,6 +2,7 @@
 // a runtime by name at first use: onnxruntime-web when the native one can't load, and VAD-only
 // turn ends (one warning) when @pipedog/audio-smart-turn can't. Either is a silent behavior
 // change, so this module never takes a default.
+import { dlopen, FFIType } from "bun:ffi";
 import { SileroVADAnalyzer } from "@pipedog/audio-silero";
 import {
   createLocalSmartTurnAnalyzerV3,
@@ -17,14 +18,36 @@ import { createNativeBackend, type OnnxBackend, type OrtModuleLike } from "@pipe
 let nativeBackend: Promise<OnnxBackend> | null = null;
 
 /**
+ * Sets ORT_DISABLE_TELEMETRY=1 in the C environment, unless it is set there already. ORT's Linux and
+ * macOS builds upload telemetry to Microsoft by default, and on macOS the uploader aborts the process
+ * as it exits (134, "A C++ exception occurred" under Bun) when a response lands during its teardown:
+ * https://github.com/microsoft/onnxruntime/blob/main/docs/Privacy.md#disabling-telemetry,
+ * https://github.com/dfrostar/neuralmind/issues/547. ORT reads the variable with getenv, which Bun's
+ * process.env never reaches; Windows builds don't read it.
+ */
+function disableOrtTelemetry(): void {
+  if (process.platform === "win32") return;
+  const libc = dlopen(process.platform === "darwin" ? "libc.dylib" : "libc.so.6", {
+    setenv: { args: [FFIType.cstring, FFIType.cstring, FFIType.i32], returns: FFIType.i32 },
+  });
+  try {
+    libc.symbols.setenv(Buffer.from("ORT_DISABLE_TELEMETRY\0"), Buffer.from("1\0"), 0);
+  } finally {
+    libc.close();
+  }
+}
+
+/**
  * The process's ONNX backend: the onnxruntime-node this package pins, since a different ORT
  * build shifts Smart Turn's probabilities. Rejects when it can't load; there is no fallback.
  */
 export function onnxBackend(): Promise<OnnxBackend> {
-  nativeBackend ??= import("onnxruntime-node").then((mod) => {
+  nativeBackend ??= (async () => {
+    disableOrtTelemetry();
+    const mod = await import("onnxruntime-node");
     const ort: OrtModuleLike = mod.InferenceSession ? mod : mod.default;
     return createNativeBackend({ ort });
-  });
+  })();
   return nativeBackend;
 }
 

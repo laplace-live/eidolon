@@ -3,11 +3,15 @@ import { ChevronDownIcon, PauseIcon, PlayIcon } from "lucide-react";
 import { type ReactNode, type SyntheticEvent, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { formatDuration } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { claimPlayback, clock, knownDuration, releasePlayback } from "./voice";
+import { claimPlayback, knownDuration, playsNextAfter, releasePlayback } from "./voice";
 
-/** Ends a bubble's auto-play: it played through, or was paused, or couldn't start. */
-export type AutoPlayEnd = (finished: boolean) => void;
+/**
+ * Ends a bubble's auto-play: `next` when it played through or broke off, so the reply waiting next
+ * may play; not when it was paused or couldn't start.
+ */
+export type AutoPlayEnd = (next: boolean) => void;
 
 /** A recording made here, as a URL the bubble can play; null until it is made. */
 export function useObjectUrl(blob: Blob): string | null {
@@ -58,7 +62,9 @@ export function VoiceBubble({
     const audio = ref.current;
     if (!autoPlay || audio === null || src === null) return;
     auto.current = true;
+    // A file that can't load fails play() after its error event, which already passed it over.
     audio.play().catch(() => {
+      if (!auto.current) return;
       auto.current = false;
       onAutoPlayEnd?.(false);
     });
@@ -73,10 +79,24 @@ export function VoiceBubble({
     };
   }, []);
 
-  function endAuto(finished: boolean) {
-    if (!auto.current) return;
+  function endAuto(next: boolean | null) {
+    if (next === null || !auto.current) return;
     auto.current = false;
-    onAutoPlayEnd?.(finished);
+    onAutoPlayEnd?.(next);
+  }
+
+  /** It paused, played through, or broke off. */
+  function onStopped(event: SyntheticEvent<HTMLAudioElement>) {
+    const audio = event.currentTarget;
+    setPlaying(false);
+    releasePlayback(audio);
+    if (event.type === "ended") {
+      setPosition(0);
+      audio.currentTime = 0;
+    }
+    endAuto(playsNextAfter(event.type, audio.ended));
+    // An error leaves it unpaused, and a press would pause it instead of playing.
+    if (event.type === "error") audio.pause();
   }
 
   function toggle() {
@@ -115,7 +135,11 @@ export function VoiceBubble({
   }
 
   const shown =
-    playing || position > 0 ? clock(position) : duration === null ? "" : clock(duration);
+    playing || position > 0
+      ? formatDuration(position / 1000)
+      : duration === null
+        ? ""
+        : formatDuration(duration / 1000);
   return (
     <div className={cn("flex w-64 max-w-full flex-col gap-1", mine ? "items-end" : "items-start")}>
       <div
@@ -144,7 +168,11 @@ export function VoiceBubble({
           value={Math.min(position, duration ?? 0)}
           disabled={duration === null || src === null}
           aria-label={t`Playback Position`}
-          aria-valuetext={duration === null ? undefined : `${clock(position)} / ${clock(duration)}`}
+          aria-valuetext={
+            duration === null
+              ? undefined
+              : `${formatDuration(position / 1000)} / ${formatDuration(duration / 1000)}`
+          }
           onChange={(event) => {
             const at = Number(event.target.value);
             setPosition(at);
@@ -162,7 +190,8 @@ export function VoiceBubble({
         <audio
           ref={ref}
           src={src ?? undefined}
-          preload="metadata"
+          // Metadata only tells a length the message doesn't already have.
+          preload={durationMs === null ? "metadata" : "none"}
           onLoadedMetadata={onMetadata}
           onDurationChange={onDurationChange}
           onTimeUpdate={(event) => {
@@ -172,18 +201,9 @@ export function VoiceBubble({
             claimPlayback(event.currentTarget);
             setPlaying(true);
           }}
-          onPause={(event) => {
-            setPlaying(false);
-            releasePlayback(event.currentTarget);
-            // Playing through pauses too, just before it ends.
-            if (!event.currentTarget.ended) endAuto(false);
-          }}
-          onEnded={(event) => {
-            setPlaying(false);
-            setPosition(0);
-            event.currentTarget.currentTime = 0;
-            endAuto(true);
-          }}
+          onPause={onStopped}
+          onEnded={onStopped}
+          onError={onStopped}
         />
       </div>
       {transcript !== null && <Transcript mine={mine}>{transcript}</Transcript>}

@@ -10,6 +10,7 @@ import {
   isReplyMode,
   MAX_CHAIN_LIMIT,
   MAX_PARTICIPANTS,
+  MAX_VOICE_MS,
   type ReplyMode,
 } from "@eidolon/chat";
 import { isPlainObject, logger, withPersona } from "@eidolon/config";
@@ -33,7 +34,6 @@ const MAX_TITLE = 80;
 /** 4000 characters, each escaped as JSON at worst. */
 const BODY_LIMIT = 64 * 1024;
 const MAX_VOICE_BYTES = 10 * 1024 * 1024;
-const MAX_VOICE_MS = 2 * 60 * 1000;
 // Attachments are named by their content's hash: a name never changes what it serves.
 const IMMUTABLE = "private, max-age=31536000, immutable";
 /** Control characters other than a tab or a line break. */
@@ -134,18 +134,25 @@ function chatRefusal(id: string): Response | null {
   return isChatId(id) ? null : localError(400, "bad-request", "That is not a chat id");
 }
 
-/** `answer()`, with a chat the store doesn't have as a 404, and one in a call as a 409. */
+/** The 404 for a chat the store doesn't have, the 409 for one in a call, else null. */
+export function chatErrorResponse(error: unknown): Response | null {
+  if (error instanceof ChatStoreError && error.code === "not-found") {
+    return localError(404, "unknown-chat", "No chat has that id");
+  }
+  if (error instanceof ChatInCall) {
+    return localError(409, "chat-in-call", "The chat is in a call; hang up first");
+  }
+  return null;
+}
+
+/** `answer()`, with chatErrorResponse's answer for the errors it knows. */
 async function inChat(answer: () => Promise<Response>): Promise<Response> {
   try {
     return await answer();
   } catch (error) {
-    if (error instanceof ChatStoreError && error.code === "not-found") {
-      return localError(404, "unknown-chat", "No chat has that id");
-    }
-    if (error instanceof ChatInCall) {
-      return localError(409, "chat-in-call", "The chat is in a call; hang up first");
-    }
-    throw error;
+    const refused = chatErrorResponse(error);
+    if (refused === null) throw error;
+    return refused;
   }
 }
 
