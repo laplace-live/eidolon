@@ -487,6 +487,13 @@ describe("falling back to rules", () => {
     expect(late.replies.map((r) => r.persona)).toEqual(["milky", "ruby"]);
   });
 
+  test("a Latin name is named only as a whole word", async () => {
+    const lines = [viewer("hi"), from("milky", "Kenny说的token好贵")];
+    expect((await rules(lines, { hop: 1 })).replies).toEqual([]);
+    const named = [viewer("hi"), from("milky", "问问Ken吧")];
+    expect((await rules(named, { hop: 1 })).replies.map((r) => r.persona)).toEqual(["ken"]);
+  });
+
   test("then, after the viewer's line only, the most talkative", async () => {
     expect((await rules([viewer("大家好")])).replies.map((r) => r.persona)).toEqual(["ken"]);
     const lines = [viewer("大家好"), from("ken", "晚上好")];

@@ -1,6 +1,6 @@
-// What changes in her turn while the chat holds other personas: the prefix's line naming them, stop
-// sequences and a cut for a line she writes as one of them or as the viewer, and the lines Mem0 may
-// store.
+// What changes in her turn while the chat holds other personas or their lines: the prefix's line
+// naming them, stop sequences and a cut for a line she writes as one of them or as the viewer, and
+// the lines Mem0 may store.
 import {
   CHAT_WINDOW_MESSAGES,
   type ChatEvent,
@@ -15,7 +15,7 @@ import { readPersonaIdentity } from "@eidolon/config";
 const STOP_SPEAKERS = 2;
 
 export interface Group {
-  /** The others' names, as her prefix lists them. */
+  /** The names of the others in the chat now, as her prefix lists them. */
   readonly others: readonly string[];
   /** Ends her reply at a line written as one of the two others heard from last. */
   readonly stop: readonly string[];
@@ -26,20 +26,16 @@ export interface Group {
 }
 
 /**
- * Persona `persona`'s group in the chat as it stands, or null while she is its only persona.
- * `viewerName` is her view's, which labels the viewer's lines.
+ * Persona `persona`'s group in the chat as it stands, or null while no other persona is in it or
+ * has a line in it: one removed leaves her lines in the view. `viewerName` is her view's, which
+ * labels the viewer's lines.
  */
 export function groupOf(
   chat: { readonly header: ChatHeader; readonly events: readonly ChatEvent[] },
   persona: ParticipantId,
   viewerName: string,
 ): Group | null {
-  const others = new Map(
-    summarize(chat.header, chat.events)
-      .participants.filter((id) => id !== persona)
-      .map((id) => [id, readPersonaIdentity(id)]),
-  );
-  if (others.size === 0) return null;
+  const present = summarize(chat.header, chat.events).participants.filter((id) => id !== persona);
   const heard: ParticipantId[] = [];
   const memory: { role: "user" | "assistant"; content: string }[] = [];
   for (const event of chat.events) {
@@ -49,14 +45,18 @@ export function groupOf(
       memory.push({ role: "user", content: event.text });
     } else if (speaker.id === persona) {
       memory.push({ role: "assistant", content: event.text });
-    } else if (others.has(speaker.id)) {
+    } else {
       heard.push(speaker.id);
     }
   }
-  const lastHeard = [...new Set([...heard.reverse(), ...others.keys()])].slice(0, STOP_SPEAKERS);
+  const others = new Map(
+    [...new Set([...present, ...heard])].map((id) => [id, readPersonaIdentity(id)]),
+  );
+  if (others.size === 0) return null;
+  const lastHeard = [...new Set([...heard.reverse(), ...present])].slice(0, STOP_SPEAKERS);
   const identities = [...others.values()];
   return {
-    others: identities.map(({ name }) => name),
+    others: present.map((id) => others.get(id)?.name ?? id),
     stop: [
       ...new Set(
         lastHeard.flatMap((id) => {

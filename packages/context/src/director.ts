@@ -218,6 +218,23 @@ function choose(
   return { ids: toViewer ? ranked.slice(0, 1).map(({ p }) => p.id) : [], source: "model" };
 }
 
+const LATIN_WORD = /[a-z0-9_]/i;
+
+/**
+ * Where `text` first names `name`; -1 when it doesn't. A Latin edge must meet a word boundary, so
+ * "Kenny" and "token" don't name Ken, while Chinese runs on without one.
+ */
+function nameIndex(text: string, name: string): number {
+  const before = LATIN_WORD.test(name[0] as string);
+  const after = LATIN_WORD.test(name.at(-1) as string);
+  for (let at = text.indexOf(name); at >= 0; at = text.indexOf(name, at + 1)) {
+    if (before && LATIN_WORD.test(text[at - 1] ?? "")) continue;
+    if (after && LATIN_WORD.test(text[at + name.length] ?? "")) continue;
+    return at;
+  }
+  return -1;
+}
+
 /** Mentions, else the participants the line names, else, for the viewer's line, the most talkative. */
 function fallback(input: DirectorInput, candidates: readonly DirectorParticipant[]): string[] {
   const latest = latestOf(input);
@@ -230,7 +247,7 @@ function fallback(input: DirectorInput, candidates: readonly DirectorParticipant
     .map((p) => {
       const at = [p.name, p.shortName]
         .filter((name) => name !== "")
-        .map((name) => text.indexOf(name.toLowerCase()))
+        .map((name) => nameIndex(text, name.toLowerCase()))
         .filter((index) => index >= 0);
       return { id: p.id, at: at.length > 0 ? Math.min(...at) : -1 };
     })

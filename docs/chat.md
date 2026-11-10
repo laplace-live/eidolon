@@ -45,7 +45,7 @@ isn't stored, she never saw.
 | `kickoff` | the engine | The greeting prompt she answered |
 | `turn-failed` | the engine, or the runner when a turn throws | The failure, through `errorText`; the chat stays usable |
 | `decision` | the engine (`runChat`) | Who answers the line at seq `after`, and how: `source: "single"` in a chat of one persona, else `mention`, `model` or `fallback`, with the director's `scores` when it asked. Every reply follows one, and one may choose no one |
-| `title` | `PATCH`, or the runner for a new group | The chat's title; the last one wins |
+| `title` | `PATCH` | The chat's title; the last one wins. Until there is one, the page names the chat by who is in it now |
 | `participants` | `POST participants` | Personas added or removed |
 | `settings` | `PATCH` | The chat's `chainLimit`; the last one wins |
 | `call-started`, `call-ended` | nothing yet | Calls inside a chat |
@@ -301,6 +301,9 @@ every turn and hop still to come is dropped. An abort while the director decides
   `turn.metadata[MEM0_STORE_KEY]`: the viewer's lines, unlabelled, and hers, the last 60.
   `Mem0MemoryProvider` stores that list when it is there, and the context otherwise, so calls are
   unchanged.
+- **A persona removed from the chat still counts for both,** since her lines stay in the view: the
+  stop sequences and the cut include her, and Mem0 still gets its own list. Only the prefix's line
+  drops her.
 - **Recall runs on the latest line,** whoever wrote it, so another persona's question about a past
   stream recalls as the viewer's would.
 
@@ -338,8 +341,8 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
 
 **What a send does:**
 - **New chat:** with one persona, her greeting starts right after the `201`, and `GET live`
-  streams it. A group doesn't greet: it gets a `title` of the personas' short names, joined
-  with 、.
+  streams it. A group doesn't greet. Neither stores a `title`, so the name the page gives a chat
+  follows who is in it: her name, or the group's short names.
 - **New message:**
   1. It stops a running reply, and waits until what it said is stored as interrupted. The hops
      still to come are dropped.

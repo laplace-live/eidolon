@@ -6,6 +6,7 @@ import {
   type LiveAction,
   type LiveState,
   latePoll,
+  mayRunOn,
   mergeEvents,
   reaches,
   reduceLive,
@@ -346,5 +347,24 @@ describe("latePoll", () => {
     expect(latePoll(undefined)).toBe(false);
     expect(latePoll({ header: HEADER, events: [], lateTools: [] })).toBe(false);
     expect(latePoll({ header: HEADER, events: [], lateTools: ["take_selfie"] })).toBe(LATE_POLL_MS);
+  });
+});
+
+describe("mayRunOn", () => {
+  const broke = { turn: null, ended: false, broke: true, received: true };
+
+  test("a stream that broke while the director decided, before any turn, may have more", () => {
+    expect(mayRunOn(broke)).toBe(true);
+  });
+
+  test("so may one that broke after a turn ended, or closed before one did", () => {
+    expect(mayRunOn({ ...broke, turn: "t1", ended: true })).toBe(true);
+    expect(mayRunOn({ ...broke, turn: "t1", broke: false })).toBe(true);
+  });
+
+  test("but not one refused before its first line, or closed at the reply's end", () => {
+    expect(mayRunOn({ ...broke, received: false })).toBe(false);
+    expect(mayRunOn({ ...broke, broke: false })).toBe(false);
+    expect(mayRunOn({ ...broke, turn: "t1", ended: true, broke: false })).toBe(false);
   });
 });

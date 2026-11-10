@@ -277,17 +277,37 @@ describe("a turn in a group chat", () => {
     const { mind, requests } = fakeMind([text("嗨\n露比：你好"), DONE]);
     const seen: Seen = {};
     const outputs = await collect(
-      runTurn(request(SINGLE, user("你好"), from("bea", "我走啦"), user("嗯")), deps(mind, seen)),
+      runTurn(request(SINGLE, user("你好"), from("ann", "在呢"), user("嗯")), deps(mind, seen)),
     );
     expect("stop" in (requests[0] ?? {})).toBe(false);
     expect(seen.others).toEqual([]);
     expect(seen.metadata).toEqual({});
     expect(requests[0]?.messages).toEqual([
       { role: "user", content: "你好" },
-      { role: "user", content: "露比：我走啦" },
+      { role: "assistant", content: "在呢" },
       { role: "user", content: "嗯" },
     ]);
     expect(said(outputs)).toEqual(["嗨\n露比：你好"]);
+  });
+
+  test("one who left is no longer named, but her lines still stop, cut and stay out of Mem0", async () => {
+    const { mind, requests } = fakeMind([text("嗨\n露比：你好"), DONE]);
+    const seen: Seen = {};
+    const left: ChatEventDraft = { type: "participants", removed: ["bea"] };
+    const pair: ChatHeader = { ...GROUP, participants: ["ann", "bea"] };
+    const outputs = await collect(
+      runTurn(
+        request(pair, user("你好"), from("bea", "我走啦"), left, user("嗯")),
+        deps(mind, seen),
+      ),
+    );
+    expect(seen.others).toEqual([]);
+    expect(requests[0]?.stop).toEqual(["\n露比：", "\n露比:"]);
+    expect(seen.metadata?.[MEM0_STORE_KEY]).toEqual([
+      { role: "user", content: "你好" },
+      { role: "user", content: "嗯" },
+    ]);
+    expect(said(outputs)).toEqual(["嗨"]);
   });
 });
 

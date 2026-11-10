@@ -271,7 +271,7 @@ data home (`<data home>/chats/`). The format, the turn, the director and the API
     list is the page until a chat opens, and a sheet after.
   - **New Chat** ticks one to six personas, the active one listed first, then **Start Chat** or
     **Start Group Chat**. One persona's greeting then streams in, the way a call greets; a group
-    starts quiet, titled with their short names.
+    starts quiet, named by the short names of whoever is in it until it is renamed.
   - A row and the chat's header each have a menu with **Rename** and **Delete**. Delete confirms in
     the page. The header's menu also has **Chat Settings**, a sheet whose **Replies between
     Personas**, 0 to 6, is the chain limit, saved as soon as it's picked.
