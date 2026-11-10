@@ -1,4 +1,4 @@
-import type { ContextProvider, ConversationContext, FrameMetadata } from "@eidolon/core";
+import type { ContextProvider, ConversationContext, TurnGate } from "@eidolon/core";
 import { abortable, currentSignal, rethrowIfCancelled } from "@pipedog/asyncio";
 import { type Frame, LLMContextFrame } from "@pipedog/core/frames/frames";
 import type { LLMContext } from "@pipedog/core/processors/aggregators/llm_context";
@@ -52,11 +52,6 @@ export class ContextProviderProcessor extends FrameProcessor {
       await this.pushFrame(frame);
     }
   }
-}
-
-/** The retrieval gate as the processor sees it. */
-export interface TurnGate {
-  attach(messages: readonly unknown[], metadata: FrameMetadata): void;
 }
 
 /** Attaches the gate's decision for the current user turn to every context frame of that turn. */

@@ -196,13 +196,14 @@ keys in Settings and the wizard, and home's readiness drops the voice item.
 ## Usage and cost
 
 Every request that spends money reports what it used (tokens in, cached and out, characters,
-bytes, seconds of audio, images, searches) through `reportUsage`. A call, a job and an MCP request
-each run inside `withUsageScope`, so the code that spends needn't know who asked. A record's cost
-is, in order: what the provider's response says it billed (OpenRouter's `usage.cost`, the
-decisions API's), else the catalog's list price for that model on that day, promotions included,
-else the caller's own estimate, else none, and it is kept as `unpriced` with its usage. A record
-names the provider whose API the request reached, so a role's own base at another provider's API
-(`RERANK_BASE_URL` at Cohere's) is that provider's spend, priced from its models.
+bytes, seconds of audio, images, searches) through `reportUsage`. A call, a chat turn, a job and
+an MCP request each run inside `withUsageScope`, so the code that spends needn't know who asked.
+A record's cost is, in order: what the provider's response says it billed (OpenRouter's
+`usage.cost`, the decisions API's), else the catalog's list price for that model on that day,
+promotions included, else the caller's own estimate, else none, and it is kept as `unpriced` with
+its usage. A record names the provider whose API the request reached, so a role's own base at
+another provider's API (`RERANK_BASE_URL` at Cohere's) is that provider's spend, priced from its
+models.
 
 `@eidolon/usage` keeps the records in SQLite, at `EIDOLON_USAGE_DB` or `<data home>/usage.db`, in
 WAL mode with a busy timeout, because the bot, the local app and every job's CLI write to one file.

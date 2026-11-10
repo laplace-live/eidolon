@@ -11,6 +11,7 @@ export {
 export * from "./catalog.ts";
 export {
   type AbortableStream,
+  ANTHROPIC_FALLBACK_MODELS,
   AnthropicClient,
   anthropicUnits,
   type ChatClientOptions,

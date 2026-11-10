@@ -16,6 +16,28 @@ export function localJson(
   });
 }
 
+export function ndjsonResponse(body: ReadableStream<Uint8Array>): Response {
+  return new Response(body, {
+    headers: { "content-type": "application/x-ndjson", "x-content-type-options": "nosniff" },
+  });
+}
+
+/** An image served from the app's own origin: sandboxed, and of the type given, never sniffed. */
+export function imageResponse(
+  body: BodyInit,
+  type: string,
+  headers: Record<string, string> = {},
+): Response {
+  return new Response(body, {
+    headers: {
+      "content-type": type,
+      "x-content-type-options": "nosniff",
+      "content-security-policy": "default-src 'none'; sandbox",
+      ...headers,
+    },
+  });
+}
+
 /** `{error: {code, message}}`: the SPA shows its own string for the code, the message as detail. */
 export function localError(
   status: number,

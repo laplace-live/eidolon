@@ -8,8 +8,10 @@
   },
   "dependencies": {
     "@eidolon/access": "workspace:*",
+    "@eidolon/chat": "workspace:*",
     "@eidolon/config": "workspace:*",
     "@eidolon/context": "workspace:*",
+    "@eidolon/engine": "workspace:*",
     "@eidolon/imagegen": "workspace:*",
     "@eidolon/memory": "workspace:*",
     "@eidolon/providers": "workspace:*",

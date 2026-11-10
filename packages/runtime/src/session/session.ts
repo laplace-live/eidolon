@@ -1,6 +1,6 @@
 import type { AllowedOffer, UserContext } from "@eidolon/access";
 import { cpLen, errorText, logger, pyRepr } from "@eidolon/config";
-import type { ContextProvider, LlmTool } from "@eidolon/core";
+import type { ContextProvider, LlmTool, TurnGate } from "@eidolon/core";
 import { withUsageScope } from "@eidolon/providers";
 import { ingestHint, PERSONA_FACTS, STREAM_ARCHIVE } from "@eidolon/retrieval";
 import type { VoiceStyles } from "@eidolon/tools";
@@ -21,11 +21,7 @@ import { WorkerRunner } from "@pipedog/core/workers/runner";
 import type { OnnxBackend } from "@pipedog/onnx";
 import type { SmallWebRTCConnection } from "@pipedog/transport-smallwebrtc/connection";
 import { SmallWebRTCTransport } from "@pipedog/transport-smallwebrtc/transport";
-import {
-  ContextProviderProcessor,
-  RetrievalGateProcessor,
-  type TurnGate,
-} from "../adapters/context.ts";
+import { ContextProviderProcessor, RetrievalGateProcessor } from "../adapters/context.ts";
 import { SessionTools } from "../adapters/tools.ts";
 import { createUserTurnStrategies, createVadAnalyzer } from "../audio.ts";
 import { LaplaceRTVIProcessor } from "../rtvi.ts";

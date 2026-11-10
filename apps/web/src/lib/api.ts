@@ -116,7 +116,8 @@ export function url<R extends Route>(route: R, ...[input]: Args<R>): string {
   return urlOf(route, input);
 }
 
-async function send(route: string, input: Loose = {}): Promise<Response> {
+/** One request, its route unchecked: for an answer `call` and `stream` can't read, such as a 204. */
+export async function send(route: string, input: Loose = {}): Promise<Response> {
   const { body, signal } = input;
   const headers = proofHeaders();
   const init: RequestInit = {

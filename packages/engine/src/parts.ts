@@ -1,0 +1,247 @@
+// What a persona brings to a chat turn, built as a call builds it (runtime's session.ts): Mem0, the
+// stream archive, persona facts, the retrieval gate, take_selfie and recall_streams. These are kept
+// per chat and persona until the settings change, because the providers remember the conversation
+// they serve (the turn they last searched, the archive's recall scope), and what failed to open is
+// tried again later. The system instruction is rebuilt every turn, because it carries the clock.
+import { stat } from "node:fs/promises";
+import type { UserContext } from "@eidolon/access";
+import type { ParticipantId } from "@eidolon/chat";
+import { errorText, logger, pyRepr, settingsGeneration, withPersona } from "@eidolon/config";
+import {
+  buildSystemInstruction,
+  PersonaFacts,
+  retrievalGateFromEnv,
+  StreamArchive,
+} from "@eidolon/context";
+import type { ContextProvider, LlmTool, TurnGate } from "@eidolon/core";
+import { createMemoryProvider, isMemoryConfigured } from "@eidolon/memory";
+import { ingestHint, PERSONA_FACTS, resolveDbPath, STREAM_ARCHIVE } from "@eidolon/retrieval";
+import { createSelfieTool, selfiePromptHint } from "@eidolon/tools";
+import type { PersonaParts } from "./types.ts";
+
+/** The stream archive: a context provider that may also offer recall_streams. */
+export interface ArchiveProvider extends ContextProvider {
+  recallTool(): Promise<LlmTool | null>;
+}
+
+/** A viewer's Mem0 provider. */
+export interface MemoryProvider extends ContextProvider {
+  newestFirst(): Promise<readonly { readonly memory?: unknown }[]>;
+}
+
+/** Everything parts take from the other packages, so tests can stand in for any of it. */
+export interface PartsDeps {
+  createSelfieTool(): LlmTool | null;
+  selfiePromptHint(): string;
+  buildSystemInstruction(input: {
+    viewer: UserContext;
+    voiceHint: string;
+    selfieHint: string;
+  }): Promise<string>;
+  dbPath(): string;
+  dbPathExists(path: string): Promise<boolean>;
+  openArchive(dbPath: string): Promise<ArchiveProvider>;
+  openFacts(dbPath: string): Promise<ContextProvider>;
+  retrievalGateFromEnv(): TurnGate | null;
+  isMemoryConfigured(): boolean;
+  createMemoryProvider(options: { userId: string }): Promise<MemoryProvider>;
+  settingsGeneration(): number;
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export const productionPartsDeps: PartsDeps = {
+  createSelfieTool: () => createSelfieTool(),
+  selfiePromptHint: () => selfiePromptHint(),
+  buildSystemInstruction,
+  dbPath: resolveDbPath,
+  dbPathExists: pathExists,
+  openArchive: (dbPath) => StreamArchive.open({ dbPath }),
+  openFacts: (dbPath) => PersonaFacts.open({ dbPath }),
+  retrievalGateFromEnv,
+  isMemoryConfigured,
+  createMemoryProvider,
+  settingsGeneration,
+};
+
+/**
+ * Shares one open between the turns that wait for it. A null result is opened again by the first
+ * turn `retryMs` after it.
+ */
+class Retried<T> {
+  readonly #retryMs: number;
+  #pending: Promise<T | null> | null = null;
+  #failedAt = Number.NEGATIVE_INFINITY;
+
+  constructor(retryMs = 0) {
+    this.#retryMs = retryMs;
+  }
+
+  async get(open: () => Promise<T | null>): Promise<T | null> {
+    if (this.#pending === null && Date.now() - this.#failedAt < this.#retryMs) return null;
+    this.#pending ??= open();
+    const pending = this.#pending;
+    const value = await pending;
+    if (value === null && this.#pending === pending) {
+      this.#pending = null;
+      this.#failedAt = Date.now();
+    }
+    return value;
+  }
+}
+
+/** How many chats' parts are kept; the one used longest ago goes first. */
+const KEPT_CHATS = 32;
+
+/**
+ * Opening Mem0 reaches Qdrant, which can take its whole timeout when the host is down, and Qdrant's
+ * client warns on the console each time, so a chat tries again only this often.
+ */
+const MEMORY_RETRY_MS = 60_000;
+
+/** One persona's parts in one chat, for one settings generation. */
+class Pieces {
+  readonly generation: number;
+  readonly #deps: PartsDeps;
+  readonly #archive = new Retried<ArchiveProvider>();
+  readonly #facts = new Retried<ContextProvider>();
+  readonly #memories = new Map<string, Retried<MemoryProvider>>();
+  /** What is off and already said so: a chat logs it once, not every turn. */
+  readonly #missing = new Set<string>();
+  #selfie: { readonly tool: LlmTool | null; readonly hint: string } | null = null;
+  #recall: LlmTool | null = null;
+  #gate: TurnGate | null | undefined;
+
+  constructor(generation: number, deps: PartsDeps) {
+    this.generation = generation;
+    this.#deps = deps;
+  }
+
+  async parts(viewer: UserContext): Promise<PersonaParts> {
+    const deps = this.#deps;
+    this.#selfie ??= (() => {
+      const tool = deps.createSelfieTool();
+      return { tool, hint: tool ? deps.selfiePromptHint() : "" };
+    })();
+    const dbPath = deps.dbPath();
+    const [archive, memory, facts, systemInstruction] = await Promise.all([
+      this.#archive.get(() =>
+        this.#optional("Stream archive", STREAM_ARCHIVE.ingestCommand, dbPath, deps.openArchive),
+      ),
+      this.#memory(viewer),
+      this.#facts.get(() =>
+        this.#optional("Persona facts", PERSONA_FACTS.ingestCommand, dbPath, deps.openFacts),
+      ),
+      deps.buildSystemInstruction({ viewer, voiceHint: "", selfieHint: this.#selfie.hint }),
+    ]);
+    if (archive !== null) this.#recall ??= await archive.recallTool();
+    if (this.#gate === undefined && (archive !== null || facts !== null)) {
+      this.#gate = deps.retrievalGateFromEnv();
+    }
+    const providers: { label: string; provider: ContextProvider }[] = [];
+    if (memory) providers.push({ label: "LaplaceMem0MemoryService", provider: memory });
+    if (archive) providers.push({ label: "StreamArchiveService", provider: archive });
+    if (facts) providers.push({ label: "PersonaFactsService", provider: facts });
+    return {
+      systemInstruction,
+      providers,
+      gate: this.#gate ?? null,
+      tools: [this.#selfie.tool, this.#recall].filter((tool): tool is LlmTool => tool !== null),
+      memories: async () => (memory === null ? [] : memory.newestFirst()),
+    };
+  }
+
+  /** runtime's optionalProvider, logging the same lines. */
+  async #optional<T>(
+    label: string,
+    ingestCommand: string,
+    dbPath: string,
+    open: (dbPath: string) => Promise<T>,
+  ): Promise<T | null> {
+    if (!(await this.#deps.dbPathExists(dbPath))) {
+      this.#once(
+        label,
+        `${label} disabled: no LanceDB index at ${dbPath}. Run \`${ingestHint(ingestCommand)}\` to build it.`,
+      );
+      return null;
+    }
+    try {
+      return await open(dbPath);
+    } catch (e) {
+      this.#once(`${label} failed`, `${label} disabled: ${errorText(e)}`, "WARNING");
+      return null;
+    }
+  }
+
+  #once(key: string, message: string, level: "INFO" | "WARNING" = "INFO"): void {
+    if (this.#missing.has(key)) return;
+    this.#missing.add(key);
+    logger.log(level, message);
+  }
+
+  /** runtime's sessionMemory: an anonymous viewer or an unset vector store skips Mem0. */
+  async #memory(viewer: UserContext): Promise<MemoryProvider | null> {
+    if (!viewer.isLoggedIn) {
+      this.#once("anonymous", "Mem0 skipped: anonymous viewer");
+      return null;
+    }
+    const deps = this.#deps;
+    if (!deps.isMemoryConfigured()) {
+      this.#once("memory", "Mem0 skipped: MEM0_QDRANT_HOST is unset, so there is no vector store");
+      return null;
+    }
+    const userId = String(viewer.mid);
+    let slot = this.#memories.get(userId);
+    if (slot === undefined) {
+      slot = new Retried<MemoryProvider>(MEMORY_RETRY_MS);
+      this.#memories.set(userId, slot);
+    }
+    return slot.get(async () => {
+      try {
+        const memory = await deps.createMemoryProvider({ userId });
+        logger.info(
+          `Mem0 long-term memory enabled for user_id=${viewer.mid} (${pyRepr(viewer.uname)})`,
+        );
+        return memory;
+      } catch (e) {
+        // Constructing the engine reaches Qdrant, so an unreachable vector store surfaces here.
+        this.#once(
+          `memory ${userId}`,
+          `Mem0 unavailable, continuing without memory: ${errorText(e)}`,
+          "WARNING",
+        );
+        return null;
+      }
+    });
+  }
+}
+
+/** EngineDeps.parts over the cache of each chat's Pieces. */
+export function personaParts(
+  deps: PartsDeps = productionPartsDeps,
+): (persona: ParticipantId, viewer: UserContext, chat: string) => Promise<PersonaParts> {
+  const cache = new Map<string, Pieces>();
+  return (persona, viewer, chat) =>
+    withPersona(persona, () => {
+      const generation = deps.settingsGeneration();
+      const key = `${chat}/${persona}`;
+      let pieces = cache.get(key);
+      if (pieces === undefined || pieces.generation !== generation) {
+        pieces = new Pieces(generation, deps);
+      }
+      cache.delete(key);
+      cache.set(key, pieces);
+      for (const old of cache.keys()) {
+        if (cache.size <= KEPT_CHATS) break;
+        cache.delete(old);
+      }
+      return pieces.parts(viewer);
+    });
+}

@@ -1,10 +1,11 @@
 # The local web app
 
-Eidolon on your own computer, with a web app to set it up, build personas and call them: a setup
-wizard, a persona studio (identity, prompt, voice, facts, videos, glossary, pictures), a call page,
-settings, and the offline chain's commands run as jobs. It is a second entry point beside the bot,
-`apps/bot/src/local/`, serving the built app from `apps/web/` (Vite, React, shadcn, Tailwind) on
-loopback only. The bot that `bun run start` and the Docker image run never loads it.
+Eidolon on your own computer, with a web app to set it up, build personas, and call or text them: a
+setup wizard, a persona studio (identity, prompt, voice, facts, videos, glossary, pictures), a call
+page, text chats, settings, and the offline chain's commands run as jobs. It is a second entry
+point beside the bot, `apps/bot/src/local/`, serving the built app from `apps/web/` (Vite, React,
+shadcn, Tailwind) on loopback only. The bot that `bun run start` and the Docker image run never
+loads it.
 
 ## Running it
 
@@ -73,6 +74,9 @@ finishing an index. A tool that stops the app should send SIGTERM.
   `package.json`, which the frozen install needs. `docker.yml` skips the image build for changes
   under `apps/web/**` and `apps/bot/src/local/**`.
 - `local.viewerName` (`EIDOLON_LOCAL_VIEWER_NAME`) is read in local mode only.
+- **Chats stay out too.** Only `apps/bot/src/local` imports the turn engine (`@eidolon/engine`) and
+  the JSONL chat store (`@eidolon/chat/jsonl`); the same Biome rule and `boundaries.test.ts` hold
+  it.
 
 ## Security
 
@@ -148,7 +152,8 @@ the secret behind them, are the only boundary, so treat the link, the cookie, th
   only a picture whose bytes are one of the three is served. A persona's path settings must stay
   inside her folder, and `sources.ytDlp` can't be set through the API.
 - **Secrets at rest.** `credentials.json` is written 0600 from creation; no answer returns a key
-  or quotes what a request sent; the data home, `jobs/` and `locks/` are created 0700.
+  or quotes what a request sent; the data home, `jobs/`, `locks/` and `chats/` are created
+  0700, and a chat's files 0600.
 
 ## The API
 
@@ -174,6 +179,7 @@ terminal's log line that holds what went wrong, and the app shows it beside the 
 | Jobs | `POST jobs`, `GET jobs`, `GET jobs/:id`, `…/events?after=`, `…/log`, `DELETE jobs/:id`, `POST jobs/:id/resume` | [Jobs](#jobs) |
 | Memories | `GET`, `DELETE memories?persona=` | One persona's memories of you |
 | Usage | `GET usage?from=&to=&persona=` | The usage ledger's spend summed by day, persona, provider, task and model, every persona and provider it knows, and whether it records at all ([providers.md](providers.md#usage-and-cost)) |
+| Chats | `GET`, `POST chats`, `GET`, `PATCH`, `DELETE chats/:id`, `POST chats/:id/messages`, `GET chats/:id/live`, `POST chats/:id/stop`, `GET chats/:id/files/:name` | [Chats](#chats) |
 
 The bot's own routes stay, behind the guard: `POST /api/offer` and `/api/offer/preflight` take
 the session and call as [the local viewer](#the-local-viewer-and-memory), with no quota;
@@ -221,6 +227,8 @@ switch, a `persona` setting or a restart sent meanwhile is refused `call-active`
 | `unknown-job` | 404 | No job has that id |
 | `job-not-running` | 409 | Cancelling a job that ended |
 | `job-not-resumable` | 409 | Resuming a running or succeeded job, or one resumed already |
+| `unknown-chat` | 404 | No chat has that id |
+| `missing-key` | 409 | Starting a chat, or sending in one, while her mind's provider takes a key and has none |
 
 ## The local viewer and memory
 
@@ -251,6 +259,36 @@ use it instead. The step checks an address (127.0.0.1:6333 unless you change it)
 `memory.qdrant.host` and `memory.qdrant.port` only when Qdrant answers; once memory is on, an
 edited address is checked and saved the same way. No address needs a restart: the next call opens
 memory at the saved one.
+
+## Chats
+
+`/chats` texts the personas, no call needed, and keeps every chat in the data home
+(`<data home>/chats/`). The format, the turn and the API are in [chat.md](chat.md).
+
+- **The page:**
+  - The list of chats is on the left, newest first, and the open chat on the right. On a phone the
+    list is the page until a chat opens, and a sheet after.
+  - **New Chat** picks the persona, the active one first. Her greeting then streams in, the way a
+    call greets.
+  - A row and the chat's header each have a menu with **Rename** and **Delete**. Delete confirms in
+    the page.
+- **Her lines** render through `lib/markup.ts` like a call's transcript: cues as chips and
+  directions as small labels, never as HTML. A selfie shows as a photo, served from the chat's
+  `files/`.
+- **While she replies:**
+  - Her words stream in, and a quiet line names the tool she is using.
+  - **Stop** ends the reply, and what she said stays, marked **Interrupted**.
+  - Sending while she replies is allowed: the server stops her first.
+  - A selfie she was taking keeps rendering through either. Its quiet line stays, and the photo
+    arrives later as a message of its own ([chat.md](chat.md#the-local-api)).
+- **When a reply goes wrong:**
+  - A failed reply shows its error with **Retry**, which sends the viewer's last line again.
+  - A mind with no key shows a notice with a link to Settings → Providers.
+- **Reopening a chat mid-reply** picks the reply up again through `GET chats/:id/live`. The reply
+  keeps running when the tab closes.
+- **Call** opens `/call` while the chat's persona is the active one. A call doesn't share the
+  chat's history yet.
+- **Spend:** a chat's requests are recorded in the usage ledger with `source: "chat"`.
 
 ## Jobs
 
@@ -399,6 +437,9 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
 - a saved prompt landing in the temporary home, with `personas/` byte-identical;
 - an `ingest-facts` job over two fact lines against that server, with the model picked, and the
   jobs page showing it done;
+- a text chat with milky-green, her mind pointed at that server's streaming `/chat/completions`:
+  New Chat and her greeting, a reply that streams in with its cue as a chip, the history after a
+  reload, and Rename and Delete from the chat's menus, with `chats/` at 0700 and its log at 0600;
 
 then stops the server and deletes the home. It refuses to start when either `load-env.ts` would
 apply a `.env` or use another data home, and exits 0 when every check passes, else 1.

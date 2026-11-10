@@ -36,6 +36,11 @@ export interface ContextProvider {
   errorMessage(error: unknown): string;
 }
 
+/** The retrieval gate as a turn sees it: it attaches its decision to the turn's metadata. */
+export interface TurnGate {
+  attach(messages: readonly unknown[], metadata: FrameMetadata): void;
+}
+
 /** An OpenAI function schema, without the `type: "object"` wrapper. */
 export interface ToolSchema {
   readonly name: string;

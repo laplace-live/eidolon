@@ -45,6 +45,7 @@ set `EIDOLON_HOME=/data`.
   cache/embed_cache.db  the embedding cache every persona shares; its key holds the model
   bin/yt-dlp            the yt-dlp the offline tools install and keep current, with its stamp
   locks/                the offline tools' locks, released when their process exits
+  chats/<id>/           the local web app's text chats, 0700: chat.jsonl, meta.json, files/ (chat.md)
   mem0/history.db       Mem0's change log (the TypeScript bot's default)
 ```
 
@@ -285,8 +286,9 @@ The install's settings, for every persona. Paths resolve in the data home.
 `bun run start` and the Docker image run never reads it.
 `sources.ytDlp` replaces the yt-dlp the tools install and update under `<data home>/bin/`.
 `sources.cookiesFromBrowser` defaults to `chrome`; `none` reads no browser's cookies. yt-dlp writes
-the merged cookie jar back into `sources.cookiesFile`. `usage.db` is the SQLite file every call, job
-and MCP search records its spend in (default `<data home>/usage.db`; [providers.md](providers.md#usage-and-cost)).
+the merged cookie jar back into `sources.cookiesFile`. `usage.db` is the SQLite file every call,
+chat turn, job and MCP search records its spend in (default `<data home>/usage.db`;
+[providers.md](providers.md#usage-and-cost)).
 Each `providers.<id>` base moves that provider's API, for a proxy or another region; blank uses its
 own.
 

@@ -143,6 +143,7 @@ export {
   type SettingsFiles,
   type SettingsLayers,
   setSettingDefaults,
+  settingsGeneration,
   withPersona,
 } from "./settings.ts";
 export { type Clock, pyIsoformatUtc, utcDateParts, utcIsoDate, wallClockMicros } from "./utc.ts";

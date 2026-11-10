@@ -5,7 +5,7 @@ import { endOf } from "../jobs/events.ts";
 import { PlanCache } from "../jobs/plan.ts";
 import { type Job, JobRunner, type JobRunnerOptions } from "../jobs/runner.ts";
 import { JOB_ID, jobFiles } from "../jobs/store.ts";
-import { localError, localJson, readJson } from "../responses.ts";
+import { localError, localJson, ndjsonResponse, readJson } from "../responses.ts";
 import type { LocalApp, LocalRouteSpec } from "../router.ts";
 import { batchesRoutes } from "./batches.ts";
 
@@ -102,9 +102,7 @@ export function jobsRoutes(app: LocalApp, options: JobRunnerOptions = {}): Local
         if (!/^\d{1,15}$/.test(after) || Number(after) > size) {
           return localError(400, "bad-request", "`after` is a byte offset within the events");
         }
-        return new Response(runner.eventsStream(job, Number(after)), {
-          headers: { "content-type": "application/x-ndjson", "x-content-type-options": "nosniff" },
-        });
+        return ndjsonResponse(runner.eventsStream(job, Number(after)));
       },
     },
     {

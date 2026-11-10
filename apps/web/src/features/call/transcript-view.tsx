@@ -1,9 +1,9 @@
 import { useLingui } from "@lingui/react/macro";
 import { HourglassIcon } from "lucide-react";
-import { memo, type ReactNode, useEffect, useMemo, useRef } from "react";
+import { memo, type ReactNode, useMemo } from "react";
+import { Photo, Thinking, useStickToBottom } from "@/components/conversation";
 import { cn } from "@/lib/utils";
 import { BotText } from "./bot-text";
-import { SelfieImage } from "./selfie-image";
 import {
   type BotEntry,
   botRuns,
@@ -13,9 +13,6 @@ import {
   userText,
 } from "./transcript";
 import type { WaitState } from "./watchdog";
-
-/** Within this many pixels of the bottom, new lines keep the view scrolled down. */
-const PINNED_SLACK_PX = 48;
 
 function UserBubble({ entry }: { readonly entry: UserEntry }) {
   const { t } = useLingui();
@@ -62,30 +59,16 @@ const EntryView = memo(function EntryView({
   if (entry.kind === "user") return <UserBubble entry={entry} />;
   if (entry.kind === "bot") return <BotBubble entry={entry} name={name} />;
   const alt = t`A selfie from ${name}`;
+  // The bot keeps a selfie for 10 minutes, after which it 404s.
+  const expired = t`This photo has expired`;
   return (
     <div className="flex flex-wrap gap-2">
       {entry.paths.map((path) => (
-        <SelfieImage key={path} path={path} alt={alt} />
+        <Photo key={path} src={path} alt={alt} failed={expired} />
       ))}
     </div>
   );
 });
-
-function Thinking({ label }: { readonly label: string }) {
-  return (
-    <div className="flex">
-      <div
-        role="status"
-        className="flex items-center gap-1 rounded-2xl rounded-bl-md bg-muted px-3.5 py-3"
-      >
-        <span className="sr-only">{label}</span>
-        <span className="size-1.5 animate-pulse rounded-full bg-muted-foreground" />
-        <span className="size-1.5 animate-pulse rounded-full bg-muted-foreground [animation-delay:0.2s]" />
-        <span className="size-1.5 animate-pulse rounded-full bg-muted-foreground [animation-delay:0.4s]" />
-      </div>
-    </div>
-  );
-}
 
 /**
  * The call's transcript, kept scrolled to the newest line unless the viewer scrolls back. It fills
@@ -105,22 +88,7 @@ export function TranscriptView({
   readonly intro: ReactNode;
 }) {
   const { t } = useLingui();
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
-  const pinnedRef = useRef(true);
-  const lastTopRef = useRef(0);
-
-  useEffect(() => {
-    const scroller = scrollRef.current;
-    const content = contentRef.current;
-    if (scroller === null || content === null) return;
-    const observer = new ResizeObserver(() => {
-      if (pinnedRef.current) scroller.scrollTop = scroller.scrollHeight;
-    });
-    observer.observe(content);
-    return () => observer.disconnect();
-  }, []);
-
+  const { scrollRef, contentRef, onScroll } = useStickToBottom();
   const empty = transcript.entries.length === 0 && !wait.thinking && !wait.stuck;
   return (
     <>
@@ -128,14 +96,7 @@ export function TranscriptView({
         ref={scrollRef}
         role="log"
         aria-label={t`Conversation`}
-        onScroll={(event) => {
-          // Only scrolling up lets go: the event for a scroll to the bottom can arrive after more
-          // lines did, and would read as the viewer leaving the bottom.
-          const { scrollHeight, scrollTop, clientHeight } = event.currentTarget;
-          if (scrollHeight - scrollTop - clientHeight < PINNED_SLACK_PX) pinnedRef.current = true;
-          else if (scrollTop < lastTopRef.current) pinnedRef.current = false;
-          lastTopRef.current = scrollTop;
-        }}
+        onScroll={onScroll}
         className="absolute inset-0 overflow-y-auto px-4 pt-5 pb-12 sm:px-6"
       >
         <div ref={contentRef} className="flex min-h-full flex-col justify-end gap-3">

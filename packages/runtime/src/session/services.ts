@@ -3,6 +3,7 @@
 // place of the vendor SDKs they would otherwise build.
 import { envOptional, openrouterHeaders } from "@eidolon/config";
 import {
+  ANTHROPIC_FALLBACK_MODELS,
   AnthropicClient,
   hasKey,
   type Markup,
@@ -300,14 +301,6 @@ class GeminiLLM extends CompatibleLLM {
     return params;
   }
 }
-
-/** Models whose refusals Anthropic retries on another model when asked to. */
-const ANTHROPIC_FALLBACK_MODELS = new Set([
-  "claude-opus-5-5",
-  "claude-sonnet-5-5",
-  "claude-fable-5-1",
-  "claude-opus-5",
-]);
 
 export function createLlm(systemInstruction: string): LLMService<any> {
   const selection = keyed("mind");

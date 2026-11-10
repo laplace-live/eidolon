@@ -1,0 +1,20 @@
+{
+  "name": "@eidolon/engine",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@eidolon/access": "workspace:*",
+    "@eidolon/chat": "workspace:*",
+    "@eidolon/config": "workspace:*",
+    "@eidolon/context": "workspace:*",
+    "@eidolon/core": "workspace:*",
+    "@eidolon/imagegen": "workspace:*",
+    "@eidolon/memory": "workspace:*",
+    "@eidolon/providers": "workspace:*",
+    "@eidolon/retrieval": "workspace:*",
+    "@eidolon/tools": "workspace:*"
+  }
+}

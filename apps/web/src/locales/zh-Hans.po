@@ -187,6 +187,14 @@ msgstr "她从 {env} 继承的 {model} 不能演绎所有表演提示"
 msgid "{name} API Key"
 msgstr "{name} API 密钥"
 
+#: src/features/chats/chat-view.tsx
+msgid "{name} can't answer yet"
+msgstr "{name}暂时无法回复"
+
+#: src/features/chats/chat-log.tsx
+msgid "{name} couldn't answer."
+msgstr "{name}没能回复。"
+
 #: src/features/setup/new-persona.tsx
 msgid "{name} created."
 msgstr "已创建{name}。"
@@ -212,6 +220,7 @@ msgid "{name} is now the active persona."
 msgstr "当前人设已切换为{name}。"
 
 #: src/features/call/transcript-view.tsx
+#: src/features/chats/chat-log.tsx
 msgid "{name} is thinking…"
 msgstr "{name}正在思考…"
 
@@ -466,6 +475,10 @@ msgstr "有人设在使用这个账号：请先为她换一个。"
 msgid "A persona with that id already exists."
 msgstr "已存在相同 ID 的人设。"
 
+#: src/features/chats/chat-log.tsx
+msgid "A photo from {name}"
+msgstr "{name}发来的照片"
+
 #: src/features/setup/avatar-picker.tsx
 msgid "A PNG, JPEG or WebP image, up to {max}. Without one, her avatar shows her initials."
 msgstr "PNG、JPEG 或 WebP 图片，最大 {max}。不上传时，头像显示她的简称。"
@@ -535,6 +548,7 @@ msgid "Add Facts"
 msgstr "添加资料"
 
 #: src/features/call/call-page.tsx
+#: src/features/chats/chat-view.tsx
 #: src/features/home/readiness-labels.ts
 msgid "Add Keys"
 msgstr "添加密钥"
@@ -769,6 +783,7 @@ msgstr "按服务商"
 
 #: src/components/app-shell.tsx
 #: src/features/call/call-page.tsx
+#: src/features/chats/chat-view.tsx
 msgid "Call"
 msgstr "通话"
 
@@ -831,6 +846,10 @@ msgstr "服务商拒绝的密钥会导致通话失败。请修正上面标出的
 msgid "Calls go on without memory meanwhile."
 msgstr "在此期间通话照常进行，只是没有记忆。"
 
+#: src/features/chats/chat-view.tsx
+msgid "Calls use the active persona for now."
+msgstr "目前通话只能使用当前人设。"
+
 #: src/features/jobs/detail.tsx
 msgid "Can't be stopped from here"
 msgstr "无法在这里停止"
@@ -840,6 +859,7 @@ msgid "Can't reach Eidolon. Check that it's still running in the terminal."
 msgstr "无法连接 Eidolon，请确认它仍在终端中运行。"
 
 #: src/components/settings-form/reindex-dialog.tsx
+#: src/features/chats/chat-menu.tsx
 #: src/features/jobs/parts.tsx
 #: src/features/settings/accounts-card.tsx
 #: src/features/setup/new-persona.tsx
@@ -906,9 +926,23 @@ msgstr "对话"
 msgid "Chat Model"
 msgstr "对话模型"
 
+#: src/features/chats/chat-menu.tsx
+msgid "Chat Options"
+msgstr "聊天选项"
+
 #: src/components/settings-form/labels.ts
 msgid "Chat Provider"
 msgstr "对话服务商"
+
+#: src/features/chats/chat-list.tsx
+msgid "Chat With"
+msgstr "和谁聊天"
+
+#: src/components/app-shell.tsx
+#: src/features/chats/chat-list.tsx
+#: src/features/chats/route.tsx
+msgid "Chats"
+msgstr "聊天"
 
 #: src/components/settings-form/account-key-field.tsx
 #: src/features/home/readiness-labels.ts
@@ -1003,6 +1037,7 @@ msgid "Continue Anyway"
 msgstr "仍然继续"
 
 #: src/features/call/transcript-view.tsx
+#: src/features/chats/chat-log.tsx
 msgid "Conversation"
 msgstr "对话"
 
@@ -1128,10 +1163,12 @@ msgstr "默认为数据目录中的 mem0/history.db。"
 msgid "Default Opus Bitrate"
 msgstr "默认 Opus 码率"
 
+#: src/features/chats/chat-menu.tsx
 #: src/features/studio/facts-editor.tsx
 msgid "Delete"
 msgstr "删除"
 
+#: src/features/chats/chat-menu.tsx
 #: src/features/studio/facts-editor.tsx
 msgid "Delete {name}?"
 msgstr "删除 {name}？"
@@ -1590,6 +1627,10 @@ msgstr "正在挂断…"
 msgid "Her avatar is built in. Upload one to use your own instead."
 msgstr "她有内置头像。上传一张即可换成你自己的。"
 
+#: src/lib/labels.ts
+msgid "Her chat model has no key yet. Add one in Settings."
+msgstr "她的对话模型还没有密钥，请在设置中添加。"
+
 #: src/features/setup/persona-fields.tsx
 msgid "Her clock, for the date and time she knows. Starts as yours."
 msgstr "她的时钟，决定她知道的日期和时间。默认与你相同。"
@@ -1798,6 +1839,7 @@ msgstr "会在第一次下载时自动安装。"
 msgid "Installs on the first download"
 msgstr "首次下载时安装"
 
+#: src/features/chats/chat-log.tsx
 #: src/features/jobs/labels.ts
 msgid "Interrupted"
 msgstr "已中断"
@@ -1813,6 +1855,10 @@ msgstr "它在报告结果之前就结束了。技术日志的末尾通常会说
 #: src/features/jobs/detail.tsx
 msgid "It keeps running when you close this page."
 msgstr "关闭这个页面，任务也会继续运行。"
+
+#: src/features/chats/chat-view.tsx
+msgid "It may have been deleted. Pick another, or start a new one."
+msgstr "它可能已被删除。请选择其他聊天，或开始新的聊天。"
 
 #: src/features/jobs/parts.tsx
 msgid "It still hasn't stopped since you cancelled it. Force Stop ends it at once, without letting it finish what it is writing: an index it was building can be left half built, so run that job again afterwards."
@@ -1837,6 +1883,10 @@ msgstr "密钥只会发送给 {provider}，并且只保存在这台电脑上。"
 #: src/features/studio/video-table.tsx
 msgid "Its length is unknown until it downloads."
 msgstr "下载之前不知道它的时长。"
+
+#: src/features/chats/chat-menu.tsx
+msgid "Its messages and photos are deleted from this computer. What she remembers about you stays."
+msgstr "这个聊天的消息和照片会从这台电脑上删除。她对你的记忆会保留。"
 
 #: src/components/voice-picker/index.tsx
 msgid "Japanese"
@@ -1964,6 +2014,7 @@ msgstr "正在聆听…"
 
 #: src/components/section-card.tsx
 #: src/components/settings-form/settings-card.tsx
+#: src/features/chats/chat-list.tsx
 #: src/features/jobs/detail.tsx
 #: src/features/jobs/list.tsx
 #: src/features/studio/route.tsx
@@ -1977,6 +2028,10 @@ msgstr "日志"
 #: src/components/settings-form/labels.ts
 msgid "Login Cache Seconds"
 msgstr "登录缓存秒数"
+
+#: src/features/chats/labels.ts
+msgid "Looking through the stream archive…"
+msgstr "正在翻看直播回放…"
 
 #: src/features/studio/videos-section.tsx
 msgid "macOS: brew install ffmpeg · Windows: winget install ffmpeg · Linux: your package manager's ffmpeg."
@@ -2088,6 +2143,10 @@ msgstr "记忆已开启"
 msgid "Memory Score Threshold"
 msgstr "记忆相关度阈值"
 
+#: src/features/chats/composer.tsx
+msgid "Message {name}"
+msgstr "给{name}发消息"
+
 #: src/features/studio/route.tsx
 msgid "Mind"
 msgstr "思维"
@@ -2154,6 +2213,10 @@ msgstr "需要 ffmpeg"
 msgid "Needs prepaid credit."
 msgstr "需要预付余额。"
 
+#: src/features/chats/chat-list.tsx
+msgid "New Chat"
+msgstr "新聊天"
+
 #: src/features/studio/facts-editor.tsx
 msgid "New Fact File"
 msgstr "新建资料文件"
@@ -2175,6 +2238,10 @@ msgstr "还没有账号"
 #: src/components/settings-form/check-labels.ts
 msgid "No API credit, and the voice model is a paid one. Add credit on fish.audio."
 msgstr "没有 API 余额，而当前声音模型需要付费。请在 fish.audio 充值。"
+
+#: src/features/chats/chat-list.tsx
+msgid "No chats yet"
+msgstr "还没有聊天"
 
 #: src/features/studio/knowledge-section.tsx
 msgid "No fact files yet"
@@ -2318,6 +2385,7 @@ msgid "Not saved: this glossary doesn't parse"
 msgstr "未保存：词汇表无法解析"
 
 #: src/features/call/transcript-view.tsx
+#: src/features/chats/chat-log.tsx
 msgid "Not sent"
 msgstr "未发送"
 
@@ -2548,6 +2616,10 @@ msgstr "人设"
 #: src/features/setup/persona-fields.tsx
 msgid "Personas speak Mandarin, and the videos you build one from should be Mandarin streams."
 msgstr "人设使用普通话交流，用来构建人设的视频也应当是普通话直播。"
+
+#: src/features/chats/route.tsx
+msgid "Pick a chat, or start a new one"
+msgstr "选择一个聊天，或开始新的聊天"
 
 #: src/features/setup/avatar-picker.tsx
 msgid "Pick a PNG, JPEG or WebP image."
@@ -2808,6 +2880,14 @@ msgstr "移除她的头像？"
 msgid "Remove Key"
 msgstr "删除密钥"
 
+#: src/features/chats/chat-menu.tsx
+msgid "Rename"
+msgstr "重命名"
+
+#: src/features/chats/chat-menu.tsx
+msgid "Rename Chat"
+msgstr "重命名聊天"
+
 #: src/features/setup/avatar-picker.tsx
 msgid "Replace"
 msgstr "更换"
@@ -2899,6 +2979,10 @@ msgstr "检索门控模型"
 msgid "Retrieval Gate Provider"
 msgstr "检索门控服务商"
 
+#: src/features/chats/chat-log.tsx
+msgid "Retry"
+msgstr "重试"
+
 #: src/features/studio/text-editor.tsx
 msgid "Revert"
 msgstr "还原"
@@ -2941,6 +3025,7 @@ msgid "Same as {role} ({value})"
 msgstr "与{role}相同（{value}）"
 
 #: src/components/settings-form/settings-card.tsx
+#: src/features/chats/chat-menu.tsx
 #: src/features/settings/account-dialog.tsx
 #: src/features/studio/text-editor.tsx
 msgid "Save"
@@ -2992,6 +3077,10 @@ msgstr "已保存。重启 Eidolon 后生效。"
 #: src/components/settings-form/settings-card.tsx
 msgid "Saving clears {fields}, which belonged to the old provider."
 msgstr "保存后会清除 {fields}，它们属于原来的服务商。"
+
+#: src/features/chats/chat-log.tsx
+msgid "Say something to {name}. She answers in text, and this chat keeps what you both said."
+msgstr "和{name}说点什么吧。她会用文字回复，这个聊天会保存你们说过的话。"
 
 #: src/components/settings-form/labels.ts
 msgid "Scene Types Left Out of the Index"
@@ -3049,6 +3138,7 @@ msgid "Selfies"
 msgstr "自拍"
 
 #: src/features/call/call-controls.tsx
+#: src/features/chats/composer.tsx
 msgid "Send"
 msgstr "发送"
 
@@ -3193,6 +3283,10 @@ msgstr "再显示 {count} 个"
 msgid "Show All {count}"
 msgstr "显示全部 {count} 条"
 
+#: src/features/chats/chat-view.tsx
+msgid "Show Chats"
+msgstr "显示聊天列表"
+
 #: src/features/studio/video-table.tsx
 msgid "Show Finished"
 msgstr "显示已完成的"
@@ -3319,6 +3413,14 @@ msgstr "通话语言"
 msgid "Stacked by provider."
 msgstr "按服务商堆叠。"
 
+#: src/features/home/hero.tsx
+msgid "Start Chatting"
+msgstr "开始聊天"
+
+#: src/features/chats/chat-list.tsx
+msgid "Start one with any persona. Each chat keeps its own history."
+msgstr "和任意人设开始聊天。每个聊天都有自己的记录。"
+
 #: src/features/studio/videos-section.tsx
 msgid "Start the billed run?"
 msgstr "开始收费的运行？"
@@ -3352,6 +3454,7 @@ msgstr "状态"
 msgid "Still waiting for {name}. If nothing comes, say it again."
 msgstr "还在等{name}回应。如果一直没有回应，请再说一遍。"
 
+#: src/features/chats/composer.tsx
 #: src/features/studio/add-videos.tsx
 msgid "Stop"
 msgstr "停止"
@@ -3439,6 +3542,10 @@ msgstr "表"
 msgid "Takes no key"
 msgstr "不需要密钥"
 
+#: src/features/chats/labels.ts
+msgid "Taking a selfie…"
+msgstr "正在自拍…"
+
 #: src/features/home/hero.tsx
 msgid "Talking to"
 msgstr "正在和她聊天"
@@ -3454,6 +3561,10 @@ msgstr "技术日志"
 #: src/features/studio/glossary-section.tsx
 msgid "terms = [\"奶绿\", \"奶糖花\"]"
 msgstr "terms = [\"奶绿\", \"奶糖花\"]"
+
+#: src/features/chats/route.tsx
+msgid "Text a persona any time, no call needed. Each chat keeps its own history."
+msgstr "随时给人设发消息，无需通话。每个聊天都有自己的记录。"
 
 #: src/lib/labels.ts
 msgid "That action isn't supported here."
@@ -3744,6 +3855,10 @@ msgstr "系统提示词：她是谁、怎么说话、要遵守哪些规则。保
 msgid "The technical log is empty."
 msgstr "技术日志是空的。"
 
+#: src/features/chats/chat-menu.tsx
+msgid "The title shows in the chat list."
+msgstr "标题会显示在聊天列表中。"
+
 #: src/features/studio/voice-section.tsx
 msgid "The voice below applies only when she talks with three models. Her realtime voice is set under <0>Mind</0>."
 msgstr "下面的声音只在使用三个模型通话时生效。她的实时语音声音在「<0>思维</0>」中设置。"
@@ -3776,6 +3891,10 @@ msgstr "没有名为 {id} 的人设。"
 msgid "There is no persona with that id."
 msgstr "没有这个 ID 的人设。"
 
+#: src/lib/labels.ts
+msgid "There is no such chat."
+msgstr "没有这个聊天。"
+
 #: src/features/jobs/detail.tsx
 msgid "There is no such job"
 msgstr "没有这个任务"
@@ -3807,6 +3926,10 @@ msgstr "这些文件已被删除，或不再符合规则。重新索引资料，
 #: src/features/studio/videos-section.tsx
 msgid "This bills your Soniox, OpenRouter and embedding accounts: about {usd} by the estimate."
 msgstr "这会向你的 Soniox、OpenRouter 和嵌入服务账户收费：按估价约 {usd}。"
+
+#: src/features/chats/chat-view.tsx
+msgid "This chat doesn't exist"
+msgstr "这个聊天不存在"
 
 #: src/components/settings-form/check-result.tsx
 msgid "This checked the key from the environment, which wins over the one saved here."
@@ -3869,7 +3992,11 @@ msgstr "这个人设还没有提示词。写一份并保存吧。"
 msgid "This persona's voice belongs to another account. Pick a public one."
 msgstr "这个人设的声音属于其他账户，请选择公开的声音。"
 
-#: src/features/call/selfie-image.tsx
+#: src/features/chats/chat-log.tsx
+msgid "This photo couldn't be loaded"
+msgstr "这张照片无法加载"
+
+#: src/features/call/transcript-view.tsx
 msgid "This photo has expired"
 msgstr "这张照片已经过期了"
 
@@ -3906,6 +4033,10 @@ msgstr "默认由三个模型依次为{name}听、思考和说话。实时语音
 #: src/features/studio/identity-section.tsx
 msgid "Time Zone"
 msgstr "时区"
+
+#: src/features/chats/chat-menu.tsx
+msgid "Title"
+msgstr "标题"
 
 #: src/features/studio/video-table.tsx
 msgid "To index"
@@ -4082,6 +4213,10 @@ msgstr "使用这个声音"
 #: src/components/settings-form/account-key-field.tsx
 msgid "Used for: {roles}."
 msgstr "用于：{roles}。"
+
+#: src/features/chats/labels.ts
+msgid "Using a tool…"
+msgstr "正在使用工具…"
 
 #: src/features/settings/yt-dlp-state.tsx
 msgid "Version {tag}"
@@ -4293,6 +4428,11 @@ msgctxt "call transcript speaker"
 msgid "You"
 msgstr "我"
 
+#: src/features/chats/chat-log.tsx
+msgctxt "chat speaker"
+msgid "You"
+msgstr "我"
+
 #: src/features/setup/done-step.tsx
 msgid "You're all set"
 msgstr "设置完成"
@@ -4304,6 +4444,10 @@ msgstr "你的 API 密钥"
 #: src/features/call/call-notices.tsx
 msgid "Your browser is holding back {name}'s voice."
 msgstr "浏览器暂停了{name}的声音。"
+
+#: src/features/chats/route.tsx
+msgid "Your chats, newest first."
+msgstr "你的聊天，最新的在前。"
 
 #: src/features/settings/route.tsx
 msgid "Your keys and the settings every persona shares."

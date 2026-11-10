@@ -9,6 +9,7 @@
   },
   "devDependencies": {
     "@babel/parser": "7.29.9",
+    "@eidolon/chat": "workspace:*",
     "@eidolon/config": "workspace:*",
     "@eidolon/ingest": "workspace:*",
     "@eidolon/providers": "workspace:*",

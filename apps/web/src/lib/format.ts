@@ -1,13 +1,12 @@
 // Amounts, sizes, counts and times, written for the viewer's language.
 import type { Lang } from "@/locales/i18n";
 
-const formats = new Map<string, Intl.NumberFormat | Intl.DateTimeFormat>();
+type Format = Intl.NumberFormat | Intl.DateTimeFormat | Intl.RelativeTimeFormat;
+
+const formats = new Map<string, Format>();
 
 /** Building an Intl formatter costs far more than using one, and a job's log formats hundreds. */
-export function cached<F extends Intl.NumberFormat | Intl.DateTimeFormat>(
-  key: string,
-  make: () => F,
-): F {
+export function cached<F extends Format>(key: string, make: () => F): F {
   let format = formats.get(key) as F | undefined;
   if (format === undefined) {
     format = make();

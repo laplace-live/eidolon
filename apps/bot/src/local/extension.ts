@@ -17,6 +17,7 @@ import {
   localRoute,
 } from "./router.ts";
 import { accountsRoutes } from "./routes/accounts.ts";
+import { chatsRoutes } from "./routes/chats.ts";
 import { credentialsRoutes } from "./routes/credentials.ts";
 import { jobsRoutes } from "./routes/jobs.ts";
 import { memoriesRoutes } from "./routes/memories.ts";
@@ -41,6 +42,7 @@ export function localRouteModules(app: LocalApp): LocalRouteSpec[] {
     ...jobsRoutes(app),
     ...memoriesRoutes(app),
     ...usageRoutes(),
+    ...chatsRoutes(app),
   ];
 }
 

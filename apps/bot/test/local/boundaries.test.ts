@@ -1,5 +1,6 @@
-// What keeps the local app out of production: main.ts reaches none of it, nothing outside
-// apps/bot/src/local names it, apps/bot gains no dependency, and the SPA's leaves import nothing.
+// What keeps the local app out of production: main.ts reaches none of it, nor the chats it keeps,
+// nothing outside apps/bot/src/local names it, apps/bot gains no dependency, and the SPA's leaves
+// import nothing but @eidolon/chat's types.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -85,7 +86,7 @@ function sources(dir: string): string[] {
 }
 
 describe("production never loads the local app", () => {
-  test("main.ts reaches nothing under local/, @eidolon/ingest, @eidolon/cli or apps/web", () => {
+  test("main.ts reaches none of local/, ingest, cli, apps/web, the engine or the chat store", () => {
     const { files, specifiers } = importGraph(join(BOT_SRC, "main.ts"));
     const reached = [...files].map((file) => relative(ROOT, file));
     expect(reached).toContain("apps/bot/src/server.ts");
@@ -96,12 +97,17 @@ describe("production never loads the local app", () => {
         file.startsWith("apps/bot/src/local/") ||
         file.startsWith("apps/web/") ||
         file.startsWith("apps/cli/") ||
-        file.startsWith("packages/ingest/"),
+        file.startsWith("packages/ingest/") ||
+        file.startsWith("packages/engine/") ||
+        file === "packages/chat/src/jsonl.ts",
     );
     expect(forbidden).toEqual([]);
     expect(
       [...specifiers].filter(
-        (s) => /^@eidolon\/(ingest|cli)(\/|$)/.test(s) || s.includes("/local"),
+        (s) =>
+          /^@eidolon\/(ingest|cli|engine)(\/|$)/.test(s) ||
+          s === "@eidolon/chat/jsonl" ||
+          s.includes("/local"),
       ),
     ).toEqual([]);
   });
@@ -161,14 +167,32 @@ describe("the local entries", () => {
 
 describe("the SPA's leaves", () => {
   test("import nothing, so the browser build sees no Bun or Node", () => {
-    for (const leaf of [
-      "apps/bot/src/local/api.ts",
-      "packages/ingest/src/progress.ts",
-      "apps/cli/src/job.ts",
-    ]) {
+    for (const leaf of ["packages/ingest/src/progress.ts", "apps/cli/src/job.ts"]) {
       const text = readFileSync(join(ROOT, leaf), "utf8");
       expect([leaf, scan(join(ROOT, leaf)), /^\s*import\s/m.test(text)]).toEqual([leaf, [], false]);
     }
+  });
+
+  test("api.ts imports only types, and only from @eidolon/chat's main entry", () => {
+    const file = join(LOCAL_SRC, "api.ts");
+    const text = readFileSync(file, "utf8");
+    // scan() sees every import a build keeps, so what is left is type-only.
+    expect(scan(file)).toEqual([]);
+    expect(/^\s*import\s+(?!type\s)/m.test(text)).toBe(false);
+    const from = [...text.matchAll(/\bfrom\s*["']([^"']+)["']/g)].map((match) => match[1]);
+    expect(from).toEqual(["@eidolon/chat"]);
+  });
+
+  test("@eidolon/chat's main entry reaches only its own modules, never the JSONL store", () => {
+    const { files, specifiers } = importGraph(join(ROOT, "packages/chat/src/index.ts"));
+    expect([...specifiers].filter((specifier) => !specifier.startsWith("./"))).toEqual([]);
+    expect([...files].map((file) => relative(ROOT, file)).toSorted()).toEqual([
+      "packages/chat/src/format.ts",
+      "packages/chat/src/index.ts",
+      "packages/chat/src/sig.ts",
+      "packages/chat/src/summary.ts",
+      "packages/chat/src/view.ts",
+    ]);
   });
 });
 

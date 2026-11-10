@@ -12,7 +12,7 @@ Bun workspaces, one package per subsystem. Dependencies point down this list; no
 
 | Package | Owns |
 | --- | --- |
-| `packages/core` | the extension contracts: `ContextProvider`, `LlmTool`, `ConversationContext` |
+| `packages/core` | the extension contracts: `ContextProvider`, `LlmTool`, `ConversationContext`, `TurnGate` |
 | `packages/config` | `.env` loading (python-dotenv rules), env readers, settings and the data home, the logger, Python-compatible helpers, the OpenAI-compatible HTTP client, the persona clock |
 | `packages/providers` | the provider catalog and the roles a persona fills with it, resolving a role's provider, model and key, the fetch clients that stand in for vendor SDKs, prices and usage reports ([providers.md](providers.md)) |
 | `packages/usage` | the usage ledger: SQLite records of what each request cost, and their sums |
@@ -22,6 +22,8 @@ Bun workspaces, one package per subsystem. Dependencies point down this list; no
 | `packages/memory` | Mem0's engine over Qdrant: mem0's payloads, its `history.db` |
 | `packages/context` | the retrieval gate, both RAG providers, the recall tool, the system instruction, the greeting |
 | `packages/tools`, `packages/imagegen` | `change_voice_style`, `take_selfie`, the selfie store |
+| `packages/chat` | the chat log's format, browser-safe: its events, `viewOf`, the `ChatStore` interface and its contract suite; `@eidolon/chat/jsonl` is the local store ([chat.md](chat.md)) |
+| `packages/engine` | the turn engine: one persona's text turn, her mind per provider without pipedog, the tool loop and her context providers ([chat.md](chat.md#a-turn-runturn)) |
 | `packages/ingest` | the offline chain: download, transcribe, refine, both ingests, the stream catalog and the pipeline ([below](#the-offline-chain)) |
 | `packages/runtime` | the only pipedog importer: the pipeline, adapters from `core` contracts to pipedog, WebRTC signalling |
 | `apps/bot` | `Bun.serve`, the routes, MCP, the entry point |

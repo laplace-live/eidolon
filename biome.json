@@ -111,6 +111,10 @@
                   {
                     "group": ["**/local", "**/local/**"],
                     "message": "The image leaves apps/bot/src/local out: production code never imports the local entry."
+                  },
+                  {
+                    "group": ["@eidolon/engine", "@eidolon/engine/**", "@eidolon/chat/jsonl"],
+                    "message": "Production keeps no chats yet: only apps/bot/src/local imports the turn engine and the JSONL chat store."
                   }
                 ]
               }
@@ -144,6 +148,36 @@
       }
     },
     {
+      "includes": ["packages/chat/src/**", "!packages/chat/src/jsonl.ts"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noNodejsModules": "error"
+          },
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "bun": "Browsers import @eidolon/chat: only src/jsonl.ts, its own subpath export, may use Bun or Node."
+                },
+                "patterns": [
+                  {
+                    "group": ["bun:*", "node:*"],
+                    "message": "Browsers import @eidolon/chat: only src/jsonl.ts, its own subpath export, may use Bun or Node."
+                  },
+                  {
+                    "group": ["@eidolon/*", "@eidolon/**", "@pipedog/*", "@pipedog/**"],
+                    "message": "Browsers import @eidolon/chat, so it imports no other package."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "includes": ["apps/web/**", "!apps/web/vite.config.ts", "!apps/web/**/*.test.ts"],
       "linter": {
         "rules": {
@@ -168,9 +202,10 @@
                       "@eidolon/**",
                       "!@eidolon/ingest/progress",
                       "!@eidolon/cli/job",
-                      "!@eidolon/providers/catalog"
+                      "!@eidolon/providers/catalog",
+                      "!@eidolon/chat"
                     ],
-                    "message": "The web app imports only the import-free leaves: @eidolon/ingest/progress and @eidolon/cli/job with `import type`, and the provider catalog @eidolon/providers/catalog; it gets everything else from the admin API."
+                    "message": "The web app imports only the import-free leaves: @eidolon/ingest/progress and @eidolon/cli/job with `import type`, the provider catalog @eidolon/providers/catalog and the chat format @eidolon/chat; it gets everything else from the admin API."
                   },
                   {
                     "group": ["**/src/**", "!**/bot/src/local/api.ts"],

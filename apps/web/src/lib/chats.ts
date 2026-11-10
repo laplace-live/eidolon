@@ -1,0 +1,63 @@
+// The chats API at /api/local/chats, whose wire types carry @eidolon/chat's format.
+import type { ChatStreamLine, ChatSummary, ParticipantId } from "@eidolon/chat";
+import { ApiError, type ChatContents, call, send, stream, url } from "./api";
+import { readNdjson } from "./ndjson";
+
+export type { ChatContents };
+
+async function* lines(body: ReadableStream<Uint8Array>): AsyncGenerator<ChatStreamLine> {
+  for await (const { value } of readNdjson<ChatStreamLine>(body)) yield value;
+}
+
+export function listChats(signal?: AbortSignal): Promise<readonly ChatSummary[]> {
+  return call("GET /api/local/chats", { signal });
+}
+
+/** A new chat with `persona`; her greeting starts at once, and GET live streams it. */
+export function createChat(persona: ParticipantId): Promise<{ readonly id: string }> {
+  return call("POST /api/local/chats", { body: { participants: [persona] } });
+}
+
+export function readChat(id: string, signal?: AbortSignal): Promise<ChatContents> {
+  return call("GET /api/local/chats/:id", { params: { id }, signal });
+}
+
+/**
+ * Sends the viewer's line, interrupting any reply still running, and yields the new reply's lines.
+ * Aborting `signal` only stops the reading: the reply runs on, and GET live replays it.
+ */
+export async function* sendMessage(
+  id: string,
+  text: string,
+  signal: AbortSignal,
+): AsyncGenerator<ChatStreamLine> {
+  yield* lines(
+    await stream("POST /api/local/chats/:id/messages", { params: { id }, body: { text }, signal }),
+  );
+}
+
+/** The running turn's lines from its start; none when the chat is idle, which answers 204. */
+export async function* followLive(id: string, signal: AbortSignal): AsyncGenerator<ChatStreamLine> {
+  const response = await send("GET /api/local/chats/:id/live", { params: { id }, signal });
+  if (response.status === 204) return;
+  if (!response.body) throw new ApiError(response.status, "bad-response", "no body");
+  yield* lines(response.body);
+}
+
+/** Resolves once the stopped reply's words are stored. */
+export async function stopChat(id: string): Promise<void> {
+  await send("POST /api/local/chats/:id/stop", { params: { id } });
+}
+
+export async function renameChat(id: string, title: string): Promise<void> {
+  await call("PATCH /api/local/chats/:id", { params: { id }, body: { title } });
+}
+
+export async function deleteChat(id: string): Promise<void> {
+  await call("DELETE /api/local/chats/:id", { params: { id } });
+}
+
+/** An attachment's path, which an <img> loads with the session cookie alone. */
+export function chatFilePath(id: string, name: string): string {
+  return url("GET /api/local/chats/:id/files/:name", { params: { id, name } });
+}

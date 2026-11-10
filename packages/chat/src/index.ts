@@ -1,0 +1,32 @@
+// The chat log's format, browser-safe: apps/web and laplace's client import it, so nothing here
+// imports Bun, Node or another workspace package. The local store is `@eidolon/chat/jsonl`.
+export {
+  type Attachment,
+  attachmentExtension,
+  attachmentMime,
+  CHAT_FORMAT,
+  type ChatEvent,
+  type ChatEventDraft,
+  type ChatEventOf,
+  type ChatHeader,
+  type ChatStore,
+  ChatStoreError,
+  type ChatStoreErrorCode,
+  type ChatStreamLine,
+  type ChatSummary,
+  isChatId,
+  type ParticipantId,
+  type Speaker,
+  stampEvents,
+} from "./format.ts";
+export { canonicalForSig } from "./sig.ts";
+export { summarize } from "./summary.ts";
+export {
+  CHAT_WINDOW_MESSAGES,
+  toolCallMessages,
+  type ViewMessage,
+  type ViewOptions,
+  type ViewToolCall,
+  viewOf,
+  viewWithBlocks,
+} from "./view.ts";

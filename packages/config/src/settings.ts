@@ -826,6 +826,20 @@ let defaults: SettingDefaults | null = null;
 let reported = "";
 /** The personas withPersona has run as since the settings or their defaults last changed, by id. */
 const scopes = new Map<string, PersonaScope>();
+let generation = 0;
+
+function dropScopes(): void {
+  scopes.clear();
+  generation++;
+}
+
+/**
+ * A number that changes whenever the settings or their defaults do, so a cache of what a persona's
+ * settings built can key on it.
+ */
+export function settingsGeneration(): number {
+  return generation;
+}
 
 function fileLayer(loaded: LoadedSettings): ReadonlyMap<string, string> {
   if (defaults === null) return loaded.values;
@@ -840,7 +854,7 @@ function fileLayer(loaded: LoadedSettings): ReadonlyMap<string, string> {
 export function installSettings(): LoadedSettings {
   installed = loadSettings();
   setFileLayer(fileLayer(installed), installed.owned);
-  scopes.clear();
+  dropScopes();
   const id = installed.persona.id;
   const ignored = [...installed.owned].filter((name) => envVariable(name) !== undefined);
   // The local app reinstalls on every save: say it once, until the persona or the list changes.
@@ -862,7 +876,7 @@ export function installSettings(): LoadedSettings {
 export function setSettingDefaults(derive: SettingDefaults | null): void {
   defaults = derive;
   if (installed !== null) setFileLayer(fileLayer(installed), installed.owned);
-  scopes.clear();
+  dropScopes();
 }
 
 /**
@@ -921,5 +935,5 @@ export function resetSettings(): void {
   installed = null;
   reported = "";
   setFileLayer(new Map(), new Set());
-  scopes.clear();
+  dropScopes();
 }

@@ -55,24 +55,31 @@ export interface LocalRouteSpec {
   readonly public?: boolean;
   /** A picture the app shows as an <img>, which can't send the proof: the cookie alone reads it. */
   readonly image?: boolean;
+  /** The Cache-Control of a 2xx answer, in place of no-store. */
+  readonly cache?: string;
 }
 
 const SAFE_METHODS = new Set(["GET", "HEAD"]);
 
-function withNoStore(response: Response): Response {
+function withCacheControl(response: Response, value: string): Response {
   try {
-    response.headers.set("cache-control", NO_STORE);
+    response.headers.set("cache-control", value);
     return response;
   } catch {
     // A response another fetch produced has immutable headers.
     const copy = new Response(response.body, response);
-    copy.headers.set("cache-control", NO_STORE);
+    copy.headers.set("cache-control", value);
     return copy;
   }
 }
 
-function finish(request: Request, server: RouteServer, response: Response): Response {
-  const sent = withNoStore(response);
+function finish(
+  request: Request,
+  server: RouteServer,
+  response: Response,
+  cache?: string,
+): Response {
+  const sent = withCacheControl(response, cache !== undefined && response.ok ? cache : NO_STORE);
   logAccess(request, server, sent);
   return sent;
 }
@@ -221,6 +228,7 @@ export function createLocalRouter(
       request,
       server,
       await respond(request, server, chosen.route, params, authenticate),
+      chosen.route.cache,
     );
   };
 }

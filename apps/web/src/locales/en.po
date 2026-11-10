@@ -187,6 +187,14 @@ msgstr "{model}, which she inherits from {env}, doesn't perform every delivery c
 msgid "{name} API Key"
 msgstr "{name} API Key"
 
+#: src/features/chats/chat-view.tsx
+msgid "{name} can't answer yet"
+msgstr "{name} can't answer yet"
+
+#: src/features/chats/chat-log.tsx
+msgid "{name} couldn't answer."
+msgstr "{name} couldn't answer."
+
 #: src/features/setup/new-persona.tsx
 msgid "{name} created."
 msgstr "{name} created."
@@ -212,6 +220,7 @@ msgid "{name} is now the active persona."
 msgstr "{name} is now the active persona."
 
 #: src/features/call/transcript-view.tsx
+#: src/features/chats/chat-log.tsx
 msgid "{name} is thinking…"
 msgstr "{name} is thinking…"
 
@@ -466,6 +475,10 @@ msgstr "A persona uses this account: pick another for her first."
 msgid "A persona with that id already exists."
 msgstr "A persona with that id already exists."
 
+#: src/features/chats/chat-log.tsx
+msgid "A photo from {name}"
+msgstr "A photo from {name}"
+
 #: src/features/setup/avatar-picker.tsx
 msgid "A PNG, JPEG or WebP image, up to {max}. Without one, her avatar shows her initials."
 msgstr "A PNG, JPEG or WebP image, up to {max}. Without one, her avatar shows her initials."
@@ -535,6 +548,7 @@ msgid "Add Facts"
 msgstr "Add Facts"
 
 #: src/features/call/call-page.tsx
+#: src/features/chats/chat-view.tsx
 #: src/features/home/readiness-labels.ts
 msgid "Add Keys"
 msgstr "Add Keys"
@@ -769,6 +783,7 @@ msgstr "By Provider"
 
 #: src/components/app-shell.tsx
 #: src/features/call/call-page.tsx
+#: src/features/chats/chat-view.tsx
 msgid "Call"
 msgstr "Call"
 
@@ -831,6 +846,10 @@ msgstr "Calls fail with a key the provider refuses. Fix the keys marked above, o
 msgid "Calls go on without memory meanwhile."
 msgstr "Calls go on without memory meanwhile."
 
+#: src/features/chats/chat-view.tsx
+msgid "Calls use the active persona for now."
+msgstr "Calls use the active persona for now."
+
 #: src/features/jobs/detail.tsx
 msgid "Can't be stopped from here"
 msgstr "Can't be stopped from here"
@@ -840,6 +859,7 @@ msgid "Can't reach Eidolon. Check that it's still running in the terminal."
 msgstr "Can't reach Eidolon. Check that it's still running in the terminal."
 
 #: src/components/settings-form/reindex-dialog.tsx
+#: src/features/chats/chat-menu.tsx
 #: src/features/jobs/parts.tsx
 #: src/features/settings/accounts-card.tsx
 #: src/features/setup/new-persona.tsx
@@ -906,9 +926,23 @@ msgstr "Chat"
 msgid "Chat Model"
 msgstr "Chat Model"
 
+#: src/features/chats/chat-menu.tsx
+msgid "Chat Options"
+msgstr "Chat Options"
+
 #: src/components/settings-form/labels.ts
 msgid "Chat Provider"
 msgstr "Chat Provider"
+
+#: src/features/chats/chat-list.tsx
+msgid "Chat With"
+msgstr "Chat With"
+
+#: src/components/app-shell.tsx
+#: src/features/chats/chat-list.tsx
+#: src/features/chats/route.tsx
+msgid "Chats"
+msgstr "Chats"
 
 #: src/components/settings-form/account-key-field.tsx
 #: src/features/home/readiness-labels.ts
@@ -1003,6 +1037,7 @@ msgid "Continue Anyway"
 msgstr "Continue Anyway"
 
 #: src/features/call/transcript-view.tsx
+#: src/features/chats/chat-log.tsx
 msgid "Conversation"
 msgstr "Conversation"
 
@@ -1128,10 +1163,12 @@ msgstr "Default mem0/history.db in the data home."
 msgid "Default Opus Bitrate"
 msgstr "Default Opus Bitrate"
 
+#: src/features/chats/chat-menu.tsx
 #: src/features/studio/facts-editor.tsx
 msgid "Delete"
 msgstr "Delete"
 
+#: src/features/chats/chat-menu.tsx
 #: src/features/studio/facts-editor.tsx
 msgid "Delete {name}?"
 msgstr "Delete {name}?"
@@ -1590,6 +1627,10 @@ msgstr "Hanging up…"
 msgid "Her avatar is built in. Upload one to use your own instead."
 msgstr "Her avatar is built in. Upload one to use your own instead."
 
+#: src/lib/labels.ts
+msgid "Her chat model has no key yet. Add one in Settings."
+msgstr "Her chat model has no key yet. Add one in Settings."
+
 #: src/features/setup/persona-fields.tsx
 msgid "Her clock, for the date and time she knows. Starts as yours."
 msgstr "Her clock, for the date and time she knows. Starts as yours."
@@ -1798,6 +1839,7 @@ msgstr "Installs itself on the first download."
 msgid "Installs on the first download"
 msgstr "Installs on the first download"
 
+#: src/features/chats/chat-log.tsx
 #: src/features/jobs/labels.ts
 msgid "Interrupted"
 msgstr "Interrupted"
@@ -1813,6 +1855,10 @@ msgstr "It ended before reporting a result. The end of its technical log usually
 #: src/features/jobs/detail.tsx
 msgid "It keeps running when you close this page."
 msgstr "It keeps running when you close this page."
+
+#: src/features/chats/chat-view.tsx
+msgid "It may have been deleted. Pick another, or start a new one."
+msgstr "It may have been deleted. Pick another, or start a new one."
 
 #: src/features/jobs/parts.tsx
 msgid "It still hasn't stopped since you cancelled it. Force Stop ends it at once, without letting it finish what it is writing: an index it was building can be left half built, so run that job again afterwards."
@@ -1837,6 +1883,10 @@ msgstr "Its key goes only to {provider}, and stays on this machine."
 #: src/features/studio/video-table.tsx
 msgid "Its length is unknown until it downloads."
 msgstr "Its length is unknown until it downloads."
+
+#: src/features/chats/chat-menu.tsx
+msgid "Its messages and photos are deleted from this computer. What she remembers about you stays."
+msgstr "Its messages and photos are deleted from this computer. What she remembers about you stays."
 
 #: src/components/voice-picker/index.tsx
 msgid "Japanese"
@@ -1964,6 +2014,7 @@ msgstr "Listening…"
 
 #: src/components/section-card.tsx
 #: src/components/settings-form/settings-card.tsx
+#: src/features/chats/chat-list.tsx
 #: src/features/jobs/detail.tsx
 #: src/features/jobs/list.tsx
 #: src/features/studio/route.tsx
@@ -1977,6 +2028,10 @@ msgstr "Log"
 #: src/components/settings-form/labels.ts
 msgid "Login Cache Seconds"
 msgstr "Login Cache Seconds"
+
+#: src/features/chats/labels.ts
+msgid "Looking through the stream archive…"
+msgstr "Looking through the stream archive…"
 
 #: src/features/studio/videos-section.tsx
 msgid "macOS: brew install ffmpeg · Windows: winget install ffmpeg · Linux: your package manager's ffmpeg."
@@ -2088,6 +2143,10 @@ msgstr "Memory on"
 msgid "Memory Score Threshold"
 msgstr "Memory Score Threshold"
 
+#: src/features/chats/composer.tsx
+msgid "Message {name}"
+msgstr "Message {name}"
+
 #: src/features/studio/route.tsx
 msgid "Mind"
 msgstr "Mind"
@@ -2154,6 +2213,10 @@ msgstr "Needs ffmpeg"
 msgid "Needs prepaid credit."
 msgstr "Needs prepaid credit."
 
+#: src/features/chats/chat-list.tsx
+msgid "New Chat"
+msgstr "New Chat"
+
 #: src/features/studio/facts-editor.tsx
 msgid "New Fact File"
 msgstr "New Fact File"
@@ -2175,6 +2238,10 @@ msgstr "No accounts yet"
 #: src/components/settings-form/check-labels.ts
 msgid "No API credit, and the voice model is a paid one. Add credit on fish.audio."
 msgstr "No API credit, and the voice model is a paid one. Add credit on fish.audio."
+
+#: src/features/chats/chat-list.tsx
+msgid "No chats yet"
+msgstr "No chats yet"
 
 #: src/features/studio/knowledge-section.tsx
 msgid "No fact files yet"
@@ -2318,6 +2385,7 @@ msgid "Not saved: this glossary doesn't parse"
 msgstr "Not saved: this glossary doesn't parse"
 
 #: src/features/call/transcript-view.tsx
+#: src/features/chats/chat-log.tsx
 msgid "Not sent"
 msgstr "Not sent"
 
@@ -2548,6 +2616,10 @@ msgstr "Personas"
 #: src/features/setup/persona-fields.tsx
 msgid "Personas speak Mandarin, and the videos you build one from should be Mandarin streams."
 msgstr "Personas speak Mandarin, and the videos you build one from should be Mandarin streams."
+
+#: src/features/chats/route.tsx
+msgid "Pick a chat, or start a new one"
+msgstr "Pick a chat, or start a new one"
 
 #: src/features/setup/avatar-picker.tsx
 msgid "Pick a PNG, JPEG or WebP image."
@@ -2808,6 +2880,14 @@ msgstr "Remove her avatar?"
 msgid "Remove Key"
 msgstr "Remove Key"
 
+#: src/features/chats/chat-menu.tsx
+msgid "Rename"
+msgstr "Rename"
+
+#: src/features/chats/chat-menu.tsx
+msgid "Rename Chat"
+msgstr "Rename Chat"
+
 #: src/features/setup/avatar-picker.tsx
 msgid "Replace"
 msgstr "Replace"
@@ -2899,6 +2979,10 @@ msgstr "Retrieval Gate Model"
 msgid "Retrieval Gate Provider"
 msgstr "Retrieval Gate Provider"
 
+#: src/features/chats/chat-log.tsx
+msgid "Retry"
+msgstr "Retry"
+
 #: src/features/studio/text-editor.tsx
 msgid "Revert"
 msgstr "Revert"
@@ -2941,6 +3025,7 @@ msgid "Same as {role} ({value})"
 msgstr "Same as {role} ({value})"
 
 #: src/components/settings-form/settings-card.tsx
+#: src/features/chats/chat-menu.tsx
 #: src/features/settings/account-dialog.tsx
 #: src/features/studio/text-editor.tsx
 msgid "Save"
@@ -2992,6 +3077,10 @@ msgstr "Saved. Restart Eidolon to apply it."
 #: src/components/settings-form/settings-card.tsx
 msgid "Saving clears {fields}, which belonged to the old provider."
 msgstr "Saving clears {fields}, which belonged to the old provider."
+
+#: src/features/chats/chat-log.tsx
+msgid "Say something to {name}. She answers in text, and this chat keeps what you both said."
+msgstr "Say something to {name}. She answers in text, and this chat keeps what you both said."
 
 #: src/components/settings-form/labels.ts
 msgid "Scene Types Left Out of the Index"
@@ -3049,6 +3138,7 @@ msgid "Selfies"
 msgstr "Selfies"
 
 #: src/features/call/call-controls.tsx
+#: src/features/chats/composer.tsx
 msgid "Send"
 msgstr "Send"
 
@@ -3193,6 +3283,10 @@ msgstr "Show {count} More"
 msgid "Show All {count}"
 msgstr "Show All {count}"
 
+#: src/features/chats/chat-view.tsx
+msgid "Show Chats"
+msgstr "Show Chats"
+
 #: src/features/studio/video-table.tsx
 msgid "Show Finished"
 msgstr "Show Finished"
@@ -3319,6 +3413,14 @@ msgstr "Spoken Language"
 msgid "Stacked by provider."
 msgstr "Stacked by provider."
 
+#: src/features/home/hero.tsx
+msgid "Start Chatting"
+msgstr "Start Chatting"
+
+#: src/features/chats/chat-list.tsx
+msgid "Start one with any persona. Each chat keeps its own history."
+msgstr "Start one with any persona. Each chat keeps its own history."
+
 #: src/features/studio/videos-section.tsx
 msgid "Start the billed run?"
 msgstr "Start the billed run?"
@@ -3352,6 +3454,7 @@ msgstr "State"
 msgid "Still waiting for {name}. If nothing comes, say it again."
 msgstr "Still waiting for {name}. If nothing comes, say it again."
 
+#: src/features/chats/composer.tsx
 #: src/features/studio/add-videos.tsx
 msgid "Stop"
 msgstr "Stop"
@@ -3439,6 +3542,10 @@ msgstr "Table"
 msgid "Takes no key"
 msgstr "Takes no key"
 
+#: src/features/chats/labels.ts
+msgid "Taking a selfie…"
+msgstr "Taking a selfie…"
+
 #: src/features/home/hero.tsx
 msgid "Talking to"
 msgstr "Talking to"
@@ -3454,6 +3561,10 @@ msgstr "Technical Log"
 #: src/features/studio/glossary-section.tsx
 msgid "terms = [\"奶绿\", \"奶糖花\"]"
 msgstr "terms = [\"奶绿\", \"奶糖花\"]"
+
+#: src/features/chats/route.tsx
+msgid "Text a persona any time, no call needed. Each chat keeps its own history."
+msgstr "Text a persona any time, no call needed. Each chat keeps its own history."
 
 #: src/lib/labels.ts
 msgid "That action isn't supported here."
@@ -3744,6 +3855,10 @@ msgstr "The system prompt: who she is, how she talks and the rules she keeps. Ca
 msgid "The technical log is empty."
 msgstr "The technical log is empty."
 
+#: src/features/chats/chat-menu.tsx
+msgid "The title shows in the chat list."
+msgstr "The title shows in the chat list."
+
 #: src/features/studio/voice-section.tsx
 msgid "The voice below applies only when she talks with three models. Her realtime voice is set under <0>Mind</0>."
 msgstr "The voice below applies only when she talks with three models. Her realtime voice is set under <0>Mind</0>."
@@ -3776,6 +3891,10 @@ msgstr "There is no persona called {id}."
 msgid "There is no persona with that id."
 msgstr "There is no persona with that id."
 
+#: src/lib/labels.ts
+msgid "There is no such chat."
+msgstr "There is no such chat."
+
 #: src/features/jobs/detail.tsx
 msgid "There is no such job"
 msgstr "There is no such job"
@@ -3807,6 +3926,10 @@ msgstr "They were deleted, or no longer match the patterns. Index facts again so
 #: src/features/studio/videos-section.tsx
 msgid "This bills your Soniox, OpenRouter and embedding accounts: about {usd} by the estimate."
 msgstr "This bills your Soniox, OpenRouter and embedding accounts: about {usd} by the estimate."
+
+#: src/features/chats/chat-view.tsx
+msgid "This chat doesn't exist"
+msgstr "This chat doesn't exist"
 
 #: src/components/settings-form/check-result.tsx
 msgid "This checked the key from the environment, which wins over the one saved here."
@@ -3869,7 +3992,11 @@ msgstr "This persona has no prompt yet. Write one and save it."
 msgid "This persona's voice belongs to another account. Pick a public one."
 msgstr "This persona's voice belongs to another account. Pick a public one."
 
-#: src/features/call/selfie-image.tsx
+#: src/features/chats/chat-log.tsx
+msgid "This photo couldn't be loaded"
+msgstr "This photo couldn't be loaded"
+
+#: src/features/call/transcript-view.tsx
 msgid "This photo has expired"
 msgstr "This photo has expired"
 
@@ -3906,6 +4033,10 @@ msgstr "Three models take turns to hear you, think and speak for {name}. A realt
 #: src/features/studio/identity-section.tsx
 msgid "Time Zone"
 msgstr "Time Zone"
+
+#: src/features/chats/chat-menu.tsx
+msgid "Title"
+msgstr "Title"
 
 #: src/features/studio/video-table.tsx
 msgid "To index"
@@ -4082,6 +4213,10 @@ msgstr "Use This Voice"
 #: src/components/settings-form/account-key-field.tsx
 msgid "Used for: {roles}."
 msgstr "Used for: {roles}."
+
+#: src/features/chats/labels.ts
+msgid "Using a tool…"
+msgstr "Using a tool…"
 
 #: src/features/settings/yt-dlp-state.tsx
 msgid "Version {tag}"
@@ -4293,6 +4428,11 @@ msgctxt "call transcript speaker"
 msgid "You"
 msgstr "You"
 
+#: src/features/chats/chat-log.tsx
+msgctxt "chat speaker"
+msgid "You"
+msgstr "You"
+
 #: src/features/setup/done-step.tsx
 msgid "You're all set"
 msgstr "You're all set"
@@ -4304,6 +4444,10 @@ msgstr "Your API Keys"
 #: src/features/call/call-notices.tsx
 msgid "Your browser is holding back {name}'s voice."
 msgstr "Your browser is holding back {name}'s voice."
+
+#: src/features/chats/route.tsx
+msgid "Your chats, newest first."
+msgstr "Your chats, newest first."
 
 #: src/features/settings/route.tsx
 msgid "Your keys and the settings every persona shares."

@@ -1,8 +1,9 @@
 // A browser walk through the local web app on a throwaway data home: sign-in, the wizard's keys step
 // in English and 简体中文, saved keys, an embeddings account added and picked in Settings, a saved
-// prompt, and a facts index built through the studio. The keys are fake, so the providers refuse
-// them for free, and the embeddings come from a fake server, so nothing is billed. --call instead places a real call from the call page with the
-// .env's keys, which bills them.
+// prompt, a facts index built through the studio, and a text chat from greeting to delete. The keys
+// are fake, so the providers refuse them for free, and the embeddings and the chat's replies come
+// from a fake server, so nothing is billed. --call instead places a real call from the call page
+// with the .env's keys, which bills them.
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import {
   existsSync,
@@ -25,7 +26,7 @@ import {
   type Locator,
   type Page,
 } from "playwright-core";
-import type { JobSnapshot, Status } from "../src/local/api.ts";
+import type { JobSnapshot, PersonasResponse, Status } from "../src/local/api.ts";
 import { Output, READY_LINE } from "./output.ts";
 
 const ROOT = resolve(import.meta.dir, "../../..");
@@ -188,6 +189,16 @@ const EMBED_ACCOUNT = "openai-compatible";
 const EMBED_ACCOUNT_NAME = "Local smoke embeddings";
 const FAKE_MODELS = ["fake-embedding-small", "fake-embedding-large"];
 const FAKE_MODEL = "fake-embedding-large";
+/** The chat model the fake server streams from, which the chat walk gives her mind. */
+const MIND_MODEL = "fake-chat";
+/** What the fake mind answers a greeting kickoff with. */
+const GREETING = "晚上好呀，今天也来陪我聊天啦？";
+const CHAT_MESSAGE = "今天过得怎么样？";
+/** Its reply to CHAT_MESSAGE, in two chunks: the second waits REPLY_HOLD_MS, so the page shows
+ * the first alone. */
+const REPLY = ["还不错哦，", "[laughing] 刚刚在看猫猫视频。"] as const;
+const REPLY_HOLD_MS = 2000;
+const CHAT_TITLE = "Local smoke chat";
 
 interface Check {
   readonly name: string;
@@ -249,20 +260,81 @@ function fakeVector(text: string, dimensions: number): number[] {
   return vector.map((value) => value / norm);
 }
 
-/** An OpenAI-compatible server, its embeddings and its model list, that answers the fake key only. */
+/** One chat completion request the fake server took, as far as the walk reads it. */
+interface ChatRequest {
+  readonly model?: unknown;
+  readonly stream?: unknown;
+  readonly messages?: readonly { readonly role?: unknown; readonly content?: unknown }[];
+}
+
+/** An OpenAI chat completion stream of `texts`, each after the one before by `holdMs`. */
+function completionStream(texts: readonly string[], holdMs: number): Response {
+  const encoder = new TextEncoder();
+  const data = (value: unknown) => encoder.encode(`data: ${JSON.stringify(value)}\n\n`);
+  const chunk = (delta: object, finish: string | null) =>
+    data({
+      id: "chatcmpl-local-smoke",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: MIND_MODEL,
+      choices: [{ index: 0, delta, finish_reason: finish }],
+    });
+  const body = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        for (const [i, content] of texts.entries()) {
+          if (i > 0) await Bun.sleep(holdMs);
+          controller.enqueue(chunk(i === 0 ? { role: "assistant", content } : { content }, null));
+        }
+        controller.enqueue(chunk({}, "stop"));
+        const usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+        controller.enqueue(data({ id: "chatcmpl-local-smoke", choices: [], usage }));
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controller.close();
+      } catch {
+        // The turn was stopped, which cancels the stream.
+      }
+    },
+  });
+  return new Response(body, { headers: { "content-type": "text/event-stream" } });
+}
+
+/**
+ * An OpenAI-compatible server that answers the fake key only: its embeddings, its model list, and
+ * streaming chat completions, which greet a kickoff and answer CHAT_MESSAGE.
+ */
 function fakeEmbeddings(key: string) {
-  const seen = { requests: 0, inputs: 0, refused: 0, listed: 0, models: new Set<string>() };
+  const seen = {
+    requests: 0,
+    inputs: 0,
+    refused: 0,
+    listed: 0,
+    models: new Set<string>(),
+    chats: [] as ChatRequest[],
+  };
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       const route = `${request.method} ${new URL(request.url).pathname}`;
-      if (route !== "POST /v1/embeddings" && route !== "GET /v1/models") {
+      if (
+        route !== "POST /v1/embeddings" &&
+        route !== "GET /v1/models" &&
+        route !== "POST /v1/chat/completions"
+      ) {
         return new Response(null, { status: 404 });
       }
       if (request.headers.get("authorization") !== `Bearer ${key}`) {
         seen.refused++;
         return Response.json({ error: { message: "Invalid API key" } }, { status: 401 });
+      }
+      if (route === "POST /v1/chat/completions") {
+        const body = (await request.json()) as ChatRequest;
+        seen.chats.push(body);
+        const last = body.messages?.at(-1);
+        return last?.role === "user" && last.content === CHAT_MESSAGE
+          ? completionStream(REPLY, REPLY_HOLD_MS)
+          : completionStream([GREETING], 0);
       }
       if (route === "GET /v1/models") {
         seen.listed++;
@@ -929,6 +1001,224 @@ async function jobsPage(walk: Walk): Promise<void> {
   );
 }
 
+/** One event of a chat's log, as far as the walk reads it. */
+interface LoggedEvent {
+  readonly seq: number;
+  readonly type: string;
+  readonly text?: string;
+  readonly speaker?: { readonly kind: string };
+  readonly after?: number;
+  readonly source?: string;
+  readonly title?: string;
+}
+
+async function chatLog(walk: Walk, id: string): Promise<readonly LoggedEvent[]> {
+  const response = await walk.api("GET", `/api/local/chats/${id}`);
+  if (!response.ok) return [];
+  return ((await response.json()) as { events: readonly LoggedEvent[] }).events;
+}
+
+function said(events: readonly LoggedEvent[], kind: "user" | "persona", text: string): boolean {
+  return events.some((e) => e.type === "message" && e.speaker?.kind === kind && e.text === text);
+}
+
+/** A request's message roles in order, for a check's detail. */
+function roles(request: ChatRequest | undefined): string {
+  return (request?.messages ?? []).map((message) => String(message.role)).join(", ") || "none";
+}
+
+/**
+ * A text chat with her mind on the fake server: New Chat and its greeting, a reply that streams in,
+ * the history after a reload, then Rename and Delete from the chat's menus.
+ */
+async function chatWalk(walk: Walk): Promise<void> {
+  const { page, checks, origin } = walk;
+  const { chats } = walk.embeddings.seen;
+  // Off, since her gate and reranker would ask OpenRouter with the fake key.
+  const configured = await walk.api(
+    "PUT",
+    "/api/local/settings",
+    JSON.stringify({
+      scope: "persona",
+      persona: PERSONA,
+      values: {
+        "mind.provider": EMBED_ACCOUNT,
+        "mind.model": MIND_MODEL,
+        "knowledge.gate.enabled": false,
+        "knowledge.rerank.enabled": false,
+      },
+    }),
+  );
+  if (!configured.ok) throw new Error(`PUT settings for her mind answered ${configured.status}`);
+  const listed = (await (await walk.api("GET", "/api/local/personas")).json()) as PersonasResponse;
+  const persona = listed.personas.find((entry) => entry.id === PERSONA);
+  if (persona === undefined) throw new Error(`GET personas has no ${PERSONA}`);
+  const short = persona.shortName.trim() || persona.name;
+
+  await page.goto(`${origin}/`);
+  await page
+    .getByRole("link", { name: t("en", "Chats"), exact: true })
+    .first()
+    .click();
+  await page.waitForURL(`${origin}/chats`);
+  await page
+    .getByRole("button", { name: t("en", "New Chat"), exact: true })
+    .first()
+    .click();
+  const created = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" && response.url() === `${origin}/api/local/chats`,
+  );
+  await page.getByRole("menuitem").filter({ hasText: persona.name }).click();
+  const createStatus = (await created).status();
+  await page.waitForURL(/\/chats\/[0-9a-f-]{36}$/);
+  const id = new URL(page.url()).pathname.split("/").at(-1) as string;
+  const log = page.getByRole("log", { name: t("en", "Conversation"), exact: true });
+  const greeted = await shows(log.getByText(GREETING, { exact: true }), 30_000);
+  const kickoff = chats[0];
+  const greetingStored = said(
+    await poll(
+      () => chatLog(walk, id),
+      (events) => said(events, "persona", GREETING),
+      10_000,
+    ),
+    "persona",
+    GREETING,
+  );
+  const events = await chatLog(walk, id);
+  checks.add(
+    "chat greeting",
+    createStatus === 201 &&
+      greeted &&
+      greetingStored &&
+      events[0]?.type === "kickoff" &&
+      chats.length === 1 &&
+      kickoff?.model === MIND_MODEL &&
+      kickoff.stream === true &&
+      kickoff.messages?.[0]?.role === "system",
+    `POST chats ${createStatus}; the page ${greeted ? "shows" : "doesn't show"} her greeting, ` +
+      `the log ${greetingStored ? "stores" : "lacks"} it after a ` +
+      `${events[0]?.type ?? "missing"} event; ` +
+      `the fake server took ${chats.length} request(s), the first for ` +
+      `${String(kickoff?.model)} with ${roles(kickoff)}`,
+  );
+
+  const box = page.getByRole("textbox", {
+    name: t("en", "Message {name}", { name: short }),
+    exact: true,
+  });
+  await box.fill(CHAT_MESSAGE);
+  await box.press("Enter");
+  const [head, tail] = [REPLY[0], "刚刚在看猫猫视频"];
+  const partial = await waitFor(async () => {
+    const shown = await visibleText(log);
+    return shown.includes(head) && !shown.includes(tail);
+  }, REPLY_HOLD_MS + 20_000);
+  const whole = await waitFor(async () => (await visibleText(log)).includes(tail), 20_000);
+  const chip = await shows(log.getByRole("img", { name: "laughing", exact: true }), 5_000);
+  const shownText = await visibleText(log);
+  const raw = RAW_MARKUP.exec(shownText)?.[0] ?? null;
+  const reply = chats[1];
+  const messages = reply?.messages ?? [];
+  const seesGreeting = messages.some((m) => m.role === "assistant" && m.content === GREETING);
+  const asked = messages.at(-1)?.content === CHAT_MESSAGE;
+  const streamed =
+    partial === null ? "never showed its first chunk alone" : "streamed in, its first chunk alone";
+  checks.add(
+    "chat reply",
+    partial !== null && whole !== null && chip && raw === null && seesGreeting && asked,
+    `her reply ${streamed} and ${whole === null ? "never finished" : "then whole"}; the cue ` +
+      (raw !== null ? `shows as written: ${raw}` : chip ? "shows as a chip" : "is missing") +
+      `; the mind's second request ${seesGreeting ? "has" : "lacks"} her greeting and ` +
+      `${asked ? "ends on" : "doesn't end on"} the viewer's line (${roles(reply)})`,
+  );
+
+  const stored = await poll(
+    () => chatLog(walk, id),
+    (logged) => said(logged, "persona", REPLY.join("")),
+    10_000,
+  );
+  const viewerLine = stored.find((e) => e.type === "message" && e.text === CHAT_MESSAGE);
+  const decision = stored.find((e) => e.type === "decision");
+  const chatDir = join(walk.home, "chats", id);
+  const logFile = join(chatDir, "chat.jsonl");
+  await page.reload();
+  const history = await Promise.all(
+    [GREETING, CHAT_MESSAGE, tail].map((text) => shows(log.getByText(text), 15_000)),
+  );
+  const row = page
+    .getByRole("list", { name: t("en", "Chats"), exact: true })
+    .getByRole("listitem")
+    .filter({ hasText: tail });
+  const inList = await shows(row);
+  checks.add(
+    "chat history",
+    said(stored, "persona", REPLY.join("")) &&
+      decision?.after === viewerLine?.seq &&
+      decision?.source === "single" &&
+      history.every(Boolean) &&
+      inList &&
+      modeOf(join(walk.home, "chats")) === "0700" &&
+      modeOf(logFile) === "0600",
+    `the log ${said(stored, "persona", REPLY.join("")) ? "stores" : "lacks"} her reply after a ` +
+      `${decision?.source ?? "missing"} decision on seq ${String(decision?.after)}; ` +
+      `after a reload ` +
+      `the page shows ${history.filter(Boolean).length} of 3 lines and the list ` +
+      `${inList ? "previews" : "doesn't preview"} her reply; ` +
+      `chats/ ${modeOf(join(walk.home, "chats"))}, ` +
+      `chat.jsonl ${modeOf(logFile)}`,
+  );
+
+  await row.getByRole("button", { name: t("en", "Chat Options"), exact: true }).click();
+  await page.getByRole("menuitem", { name: t("en", "Rename"), exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel(t("en", "Title"), { exact: true }).fill(CHAT_TITLE);
+  const renamed = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      response.url() === `${origin}/api/local/chats/${id}`,
+  );
+  await dialog.getByRole("button", { name: t("en", "Save"), exact: true }).click();
+  const renameStatus = (await renamed).status();
+  const headed = await shows(page.getByRole("heading", { name: CHAT_TITLE, exact: true }));
+  const titled = await shows(row.filter({ hasText: CHAT_TITLE }));
+  const titleStored = (await chatLog(walk, id)).some(
+    (e) => e.type === "title" && e.title === CHAT_TITLE,
+  );
+  checks.add(
+    "chat rename",
+    renameStatus === 200 && headed && titled && titleStored,
+    `PATCH ${renameStatus}; the header ${headed ? "shows" : "doesn't show"} the title, the list ` +
+      `${titled ? "shows" : "doesn't show"} it, the log ${titleStored ? "stores" : "lacks"} it`,
+  );
+
+  // The chat's own header menu, after the list row's.
+  await page
+    .getByRole("button", { name: t("en", "Chat Options"), exact: true })
+    .last()
+    .click();
+  await page.getByRole("menuitem", { name: t("en", "Delete"), exact: true }).click();
+  const deleted = page.waitForResponse(
+    (response) =>
+      response.request().method() === "DELETE" &&
+      response.url() === `${origin}/api/local/chats/${id}`,
+  );
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: t("en", "Delete"), exact: true })
+    .click();
+  const deleteStatus = (await deleted).status();
+  await page.waitForURL(`${origin}/chats`);
+  const empty = await shows(page.getByText(t("en", "No chats yet"), { exact: true }));
+  const gone = (await walk.api("GET", `/api/local/chats/${id}`)).status;
+  checks.add(
+    "chat delete",
+    deleteStatus === 200 && empty && gone === 404 && !existsSync(chatDir),
+    `DELETE ${deleteStatus}; the page ${empty ? "lists no chats" : "still lists one"}; GET the ` +
+      `chat ${gone}; its folder ${existsSync(chatDir) ? "remains" : "is gone"}`,
+  );
+}
+
 /** Settles the bodies read so far; null for one the browser couldn't give. */
 async function settled(bodies: readonly Promise<string | null>[]): Promise<(string | null)[]> {
   const all = Promise.all(bodies);
@@ -1018,6 +1308,7 @@ async function smoke(options: Options): Promise<Checks> {
       if (embedder && (await checks.step("ingest-facts", () => indexFacts(walk)))) {
         await checks.step("jobs page", () => jobsPage(walk));
       }
+      if (embedder) await checks.step("chat", () => chatWalk(walk));
     }
     checks.add(
       "page health",

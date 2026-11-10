@@ -1,6 +1,6 @@
 import { msg, ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
-import { BookOpenIcon, PhoneIcon } from "lucide-react";
+import { BookOpenIcon, MessageCircleIcon, PhoneIcon } from "lucide-react";
 import { Link } from "react-router";
 import { PersonaAvatar } from "@/components/avatar";
 import { PageHeader } from "@/components/page-header";
@@ -68,6 +68,12 @@ export function Hero({
             <Link to={studioPath(persona.id)}>
               <BookOpenIcon />
               {t`Open the Studio`}
+            </Link>
+          </Button>
+          <Button size="lg" variant="outline" asChild>
+            <Link to="/chats">
+              <MessageCircleIcon />
+              {t`Start Chatting`}
             </Link>
           </Button>
           <Button size="lg" asChild>

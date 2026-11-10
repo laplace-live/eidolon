@@ -56,6 +56,7 @@ export function createRouter({ queryClient, exchanged }: RouterDeps) {
           ErrorBoundary: RouteError,
           children: [
             { index: true, lazy: () => import("@/features/home/route") },
+            { path: "chats/:id?", lazy: () => import("@/features/chats/route") },
             { path: "call", lazy: () => import("@/features/call/route") },
             { path: "personas/:id/:tab?", lazy: () => import("@/features/studio/route") },
             { path: "settings", lazy: () => import("@/features/settings/route") },

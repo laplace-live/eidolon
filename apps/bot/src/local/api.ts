@@ -1,6 +1,7 @@
 // The local web app's admin API on the wire, under /api/local: what apps/bot/src/local serves and
-// apps/web imports with `import type`. Keep this module import-free, so the SPA's typecheck sees no
-// Bun or Node.
+// apps/web imports with `import type`. Its only import is @eidolon/chat's types, which are
+// browser-safe and erased, so the SPA's typecheck sees no Bun or Node.
+import type { ChatEvent, ChatHeader, ChatSummary, ParticipantId } from "@eidolon/chat";
 
 /** Every route the local router serves, as `<METHOD> <path>`; `:name` is one path segment. */
 export const LOCAL_ROUTES = [
@@ -52,6 +53,15 @@ export const LOCAL_ROUTES = [
   "GET /api/local/memories",
   "DELETE /api/local/memories",
   "GET /api/local/usage",
+  "GET /api/local/chats",
+  "POST /api/local/chats",
+  "GET /api/local/chats/:id",
+  "PATCH /api/local/chats/:id",
+  "DELETE /api/local/chats/:id",
+  "POST /api/local/chats/:id/messages",
+  "GET /api/local/chats/:id/live",
+  "POST /api/local/chats/:id/stop",
+  "GET /api/local/chats/:id/files/:name",
 ] as const satisfies readonly (keyof LocalApi)[];
 
 export type LocalRoute = (typeof LOCAL_ROUTES)[number];
@@ -96,6 +106,8 @@ export const ERROR_CODES = [
   "unknown-job",
   "job-not-running",
   "job-not-resumable",
+  "unknown-chat",
+  "missing-key",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -899,6 +911,56 @@ export interface LocalApi {
   "GET /api/local/memories": Endpoint<undefined, MemoriesResponse, MemoriesQuery>;
   "DELETE /api/local/memories": Endpoint<undefined, Ok, MemoriesQuery>;
   "GET /api/local/usage": Endpoint<undefined, UsageSummary, UsageQuery>;
+  /** Newest activity first. */
+  "GET /api/local/chats": Endpoint<undefined, readonly ChatSummary[]>;
+  "POST /api/local/chats": Endpoint<ChatCreateRequest, ChatCreated>;
+  "GET /api/local/chats/:id": Endpoint<undefined, ChatContents, ChatReadQuery>;
+  "PATCH /api/local/chats/:id": Endpoint<ChatRenameRequest, Ok>;
+  "DELETE /api/local/chats/:id": Endpoint<undefined, Ok>;
+  "POST /api/local/chats/:id/messages": Endpoint<ChatMessageRequest, Raw<"ndjson">>;
+  /** A 204 with no body while no turn runs. */
+  "GET /api/local/chats/:id/live": Endpoint<undefined, Raw<"ndjson">>;
+  /** A 204 with no body, once the turn has stopped and what it said is stored. */
+  "POST /api/local/chats/:id/stop": Endpoint<undefined, undefined>;
+  "GET /api/local/chats/:id/files/:name": Endpoint<undefined, Raw<"image">>;
+}
+
+/** POST chats: exactly one persona for now. Her greeting then runs; GET live streams it. */
+export interface ChatCreateRequest {
+  readonly participants: readonly ParticipantId[];
+}
+
+export interface ChatCreated {
+  readonly id: string;
+}
+
+/** GET chats/:id. */
+export interface ChatContents {
+  readonly header: ChatHeader;
+  readonly events: readonly ChatEvent[];
+  /**
+   * Tools her interrupted turns left running, by name, such as a selfie still rendering: what they
+   * bring is stored after the turn, and each leaves the list once it is.
+   */
+  readonly lateTools: readonly string[];
+}
+
+export interface ChatReadQuery {
+  /** Only the events after this seq; every one when absent. */
+  readonly afterSeq?: number;
+}
+
+/**
+ * POST chats/:id/messages: 1 to 4000 characters, answered with ChatStreamLines. A turn still
+ * running is stopped first, and what it said is stored as interrupted.
+ */
+export interface ChatMessageRequest {
+  readonly text: string;
+}
+
+/** PATCH chats/:id: 1 to 80 characters on one line. */
+export interface ChatRenameRequest {
+  readonly title: string;
 }
 
 /** One day's spend for one persona, role and model, summed. */

@@ -181,6 +181,25 @@ async function checkPackage(tarball: string, temp: string): Promise<void> {
       alone.status === 401 && refusal === "proof-missing",
       `the cookie alone: ${alone.status} ${refusal ?? ""}`,
     );
+    const chats = await fetch(`${app.origin}/api/local/chats`, { headers: session });
+    const listed = (await chats.json().catch(() => null)) as unknown;
+    // A first run has no keys, so a new chat is refused before anything is written.
+    const create = await fetch(`${app.origin}/api/local/chats`, {
+      method: "POST",
+      headers: { ...session, "Content-Type": "application/json" },
+      body: JSON.stringify({ participants: ["milky-green"] }),
+    });
+    const refused = ((await create.json().catch(() => ({}))) as Partial<ErrorBody>).error?.code;
+    check(
+      "chats",
+      chats.status === 200 &&
+        Array.isArray(listed) &&
+        listed.length === 0 &&
+        create.status === 409 &&
+        refused === "missing-key",
+      `GET /api/local/chats: ${chats.status}, ${JSON.stringify(listed)}; a new chat without ` +
+        `keys: ${create.status} ${refused ?? ""}`,
+    );
     const help = await run([bin, "search", "--help"], env, temp);
     check(
       "search --help",

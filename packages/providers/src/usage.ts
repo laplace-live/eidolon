@@ -1,17 +1,17 @@
 // Every request that spends money reports what it used here; an app that keeps a ledger installs
-// the sink, and without one a report costs nothing. A call, a job or an MCP request runs inside a
-// scope that says which, so the code that spends needn't know who asked.
+// the sink, and without one a report costs nothing. A call, a chat turn, a job or an MCP request
+// runs inside a scope that says which, so the code that spends needn't know who asked.
 import { AsyncLocalStorage } from "node:async_hooks";
 import { errorText, logger } from "@eidolon/config";
 import { type Category, PROVIDERS, providerById, type RoleId, roleById } from "./catalog.ts";
 import type { UsageHook } from "./http/chat.ts";
 import { costOf, priceOf, type Units } from "./pricing.ts";
 
-export type UsageSource = "call" | "mcp" | "job";
+export type UsageSource = "call" | "chat" | "mcp" | "job";
 
 export interface UsageScope {
   readonly source: UsageSource;
-  /** The call's or job's id. */
+  /** The call's, chat's or job's id. */
   readonly session?: string;
 }
 

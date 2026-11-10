@@ -69,6 +69,7 @@ a row here and writing the prose there — not a new section in this file.**
 | settings files, credentials, the data home, a persona's folder or its sources | [personas.md](docs/personas.md) |
 | the offline chain (`packages/ingest` and its `laplace-*` commands) or their `--json` events | [typescript.md](docs/typescript.md#the-offline-chain) |
 | the local web app (`apps/web`, `apps/bot/src/local`): local mode, its API, jobs or security | [web-app.md](docs/web-app.md) |
+| chats, the chat log format, or the turn engine (`packages/chat`, `packages/engine`) | [chat.md](docs/chat.md) |
 | a string the web app shows, its languages, or its `.po` catalogs | [web-app.md](docs/web-app.md#strings-and-languages) |
 | changesets, the version PR, tags, or publishing the npm package (`apps/eidolon`) | [releasing.md](docs/releasing.md) |
 | any env var — all 50-odd are documented there | `.env.example` |
@@ -143,7 +144,7 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | an env var | document it in `.env.example` in the same commit |
 | anything under `apps/` or `packages/` | `bun run typecheck`, `bun run lint`, `bun run test`; for retrieval, the gate or the bot's pipeline, also the row above that names it |
 | anything under `apps/web` | the row above, whose typecheck also runs both `apps/web` tsconfigs, then `bun run build:web`; after changing a string, `bun run i18n` and its `msgstr` in `zh-Hans.po` |
-| local mode (`apps/bot/src/local`) | `bun test --no-env-file apps/bot/test/local` from the repository root, then `bun apps/bot/scripts/local-smoke.ts --headful`: a browser walk on a temporary data home that bills nothing |
+| local mode (`apps/bot/src/local`), or chats (`packages/chat`, `packages/engine`) | `bun test --no-env-file apps/bot/test/local` from the repository root, then `bun apps/bot/scripts/local-smoke.ts --headful`: a browser walk on a temporary data home that bills nothing, a chat with a fake mind included |
 | `apps/eidolon`, or a file the package bundles or copies | the gates above, then `bun run pack:npm` and `bun apps/eidolon/scripts/ci-install-check.ts apps/eidolon/<tarball>`, which CI runs on Linux x64: it installs the tarball with npm, boots it on a temporary home, signs in, and stops it |
 
 ## Rules
@@ -211,6 +212,11 @@ the layout's one line.
   import `apps/bot/src/local/` (Biome and `boundaries.test.ts` hold it), and
   nothing but that separate entry turns it on: no flag, setting or env var,
   which a server's mounted `settings.yaml` could flip.
+- **Only `@eidolon/engine` talks to a mind outside the voice pipeline**, and a chat's log
+  stores what was said and recalled, never stream deltas. Its `createMind` sends what a call's
+  `createLlm` does, and each persona's view is rebuilt from the log, so what isn't stored she
+  never saw. Only `apps/bot/src/local` imports the engine and `@eidolon/chat/jsonl` (Biome and
+  `boundaries.test.ts` hold it); see [chat.md](docs/chat.md).
 - **No vendor SDK sends a request.** A provider is reached with `fetch`, through the
   clients in `packages/providers`, and every request that bills reports it with
   `reportUsage`, or the usage ledger misses it. `@eidolon/providers/catalog`

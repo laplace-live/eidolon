@@ -18,6 +18,7 @@ import {
   resetSettings,
   SETTINGS,
   setSettingDefaults,
+  settingsGeneration,
   withPersona,
 } from "../src/index.ts";
 
@@ -238,6 +239,20 @@ describe("the scopes' settings", () => {
     expect(withPersona("alice", reads).agent).toBe("alice-memories");
     resetSettings();
     expect(withPersona("alice", activePersona)).not.toBe(first);
+  });
+
+  test("settingsGeneration moves whenever they are dropped, and only then", () => {
+    twoPersonas();
+    const seen = [settingsGeneration()];
+    withPersona("alice", activePersona);
+    expect(settingsGeneration()).toBe(seen[0] as number);
+    installSettings();
+    seen.push(settingsGeneration());
+    setSettingDefaults(null);
+    seen.push(settingsGeneration());
+    resetSettings();
+    seen.push(settingsGeneration());
+    expect(new Set(seen).size).toBe(4);
   });
 });
 
