@@ -65,8 +65,6 @@ export interface MouthOptions {
   readonly speech: SpeechStream;
   /** The cues her voice model reads (`voiceTraits`): her played words count past the others. */
   readonly markup: Markup | undefined;
-  /** Whether her voice marks where each segment's audio ends (`voiceTraits`). */
-  readonly boundaries: boolean;
   readonly speaker: Speaker;
   readonly join: JoinSegments;
   readonly clock: Clock;
@@ -74,12 +72,8 @@ export interface MouthOptions {
 }
 
 /** What `MouthOptions` takes from her voice role's selection. */
-export function voiceTraits(selection: Selection): Pick<MouthOptions, "markup" | "boundaries"> {
-  return {
-    markup: modelInfo(selection.provider.id, "tts", selection.model)?.markup,
-    // Fish's audio carries no segment boundaries.
-    boundaries: selection.provider.id !== "fish",
-  };
+export function voiceTraits(selection: Selection): Pick<MouthOptions, "markup"> {
+  return { markup: modelInfo(selection.provider.id, "tts", selection.model)?.markup };
 }
 
 /** A persona's voice for one call: her replies one at a time, in the voice she last chose. */
@@ -112,11 +106,6 @@ export class Mouth {
   }
 }
 
-interface Said {
-  readonly text: string;
-  readonly voiced: Voiced;
-}
-
 class Reply implements SpokenReply {
   readonly #o: MouthOptions;
   readonly #voice: { current: string | null };
@@ -127,9 +116,6 @@ class Reply implements SpokenReply {
   readonly #tracker: SpokenTracker;
   readonly #unread: RegExp | null;
   readonly #done = Promise.withResolvers<Heard>();
-  readonly #said = new Map<number, Said>();
-  /** Segments, and boundary-less utterances' first, whose end the cursor has yet to pass. */
-  readonly #unpassed = new Set<number>();
   /** Utterances whose audio hasn't all been queued, oldest first; only the first's is queued. */
   #voices: Voiced[] = [];
   /** The utterance her next segment goes to. */
@@ -138,7 +124,6 @@ class Reply implements SpokenReply {
   /** With `audio` false, all that was pushed. */
   #pushed = "";
   #nextSeg = 1;
-  #nextUtterance = 1;
   #ttsStarted = false;
   #ttsStopped = false;
   #ended = false;
@@ -215,24 +200,16 @@ class Reply implements SpokenReply {
     if (this.#cancelled || !("tag" in event) || event.tag.reply !== this.#id) return;
     this.#tracker.cursor(event);
     const { tag } = event;
-    const said = this.#said.get(tag.seg);
-    if (said === undefined) return;
-    if (this.#o.boundaries) {
-      if (event.type === "seg-start") {
-        this.#note({ type: "segment-started", tag });
-      } else if (event.type === "words") {
-        const to = spokenTo(said.text, event.chars, this.#unread);
-        this.#note({ type: "segment-progress", tag, spokenTo: to });
-      } else {
-        this.#note({ type: "segment-ended", tag });
-        this.#passed(tag.seg);
-      }
-    } else if (event.type === "seg-start" && !said.voiced.playing) {
-      // Its utterance's first sample: every segment said in it counts as heard, as each said later.
-      said.voiced.playing = true;
-      for (const seg of said.voiced.segs) this.#heardWhole(seg);
-    } else if (event.type === "seg-end") {
-      this.#passed(tag.seg);
+    const text = this.#tracker.textOf(tag.seg);
+    if (text === undefined) return;
+    if (event.type === "seg-start") {
+      this.#note({ type: "segment-started", tag });
+    } else if (event.type === "words") {
+      const to = spokenTo(text, event.chars, this.#unread);
+      this.#note({ type: "segment-progress", tag, spokenTo: to });
+    } else {
+      this.#note({ type: "segment-ended", tag });
+      this.#settle();
     }
   }
 
@@ -250,17 +227,13 @@ class Reply implements SpokenReply {
     const seg = this.#nextSeg++;
     const voiced = this.#current ?? this.#open();
     this.#current = voiced;
-    this.#said.set(seg, { text, voiced });
     this.#note({ type: "segment", tag: this.#tag(seg), text });
     if (!this.#ttsStarted) {
       this.#ttsStarted = true;
       this.#note({ type: "tts-started" });
     }
-    const { boundaries } = this.#o;
-    const first = voiced.said(seg);
-    this.#tracker.say(seg, text, voiced.id, boundaries);
-    if (boundaries || first) this.#unpassed.add(seg);
-    if (!boundaries && voiced.playing) this.#heardWhole(seg);
+    voiced.said();
+    this.#tracker.say(seg, text);
     voiced.utterance.say({ id: seg, text });
   }
 
@@ -268,7 +241,6 @@ class Reply implements SpokenReply {
     const { speech, speaker } = this.#o;
     const rate = speech.sampleRate;
     const voiced = new Voiced(
-      this.#nextUtterance++,
       speech.utterance(this.#voice.current),
       rate === speaker.rate ? null : resampler().createStream(rate, speaker.rate),
       this.#o.clock,
@@ -305,12 +277,10 @@ class Reply implements SpokenReply {
         continue;
       }
       switch (item.kind) {
-        case "pcm": {
-          const seg = (item.seg ?? voiced.first) as number;
-          voiced.last = seg;
-          speaker.enqueue(this.#tag(seg), voiced.resample(item.pcm));
+        case "pcm":
+          voiced.last = item.seg;
+          speaker.enqueue(this.#tag(item.seg), voiced.resample(item.pcm));
           break;
-        }
         case "words": {
           const words = item.words.map((word) => ({
             chars: word.chars,
@@ -334,32 +304,16 @@ class Reply implements SpokenReply {
 
   /** All of the first utterance's audio is queued, or its voice failed with `error`. */
   #finish(voiced: Voiced, error: string | null): void {
-    const { speaker, boundaries } = this.#o;
     this.#voices.shift();
     const tail = voiced.close(error !== null);
-    if (error !== null) {
-      this.#note({ type: "tts-error", message: error });
-    } else {
-      if (voiced.last !== null) speaker.enqueue(this.#tag(voiced.last), tail);
-      if (!boundaries && voiced.first !== null) speaker.markSegEnd(this.#tag(voiced.first));
-    }
+    if (error !== null) this.#note({ type: "tts-error", message: error });
+    else if (voiced.last !== null) this.#o.speaker.enqueue(this.#tag(voiced.last), tail);
     this.#settle();
   }
 
   #stalled(): void {
     if (this.#cancelled) return;
     this.#note({ type: "tts-error", message: SPEECH_STALLED });
-  }
-
-  #heardWhole(seg: number): void {
-    const tag = this.#tag(seg);
-    this.#note({ type: "segment-started", tag });
-    this.#note({ type: "segment-ended", tag });
-  }
-
-  #passed(seg: number): void {
-    this.#unpassed.delete(seg);
-    this.#settle();
   }
 
   /** Once the speech has ended: `tts-stopped` when all its audio is queued, heard when played. */
@@ -369,7 +323,7 @@ class Reply implements SpokenReply {
       this.#ttsStopped = true;
       this.#note({ type: "tts-stopped" });
     }
-    if (this.#unpassed.size === 0) this.#resolve(true);
+    if (this.#tracker.heardAll()) this.#resolve(true);
   }
 
   #resolve(complete: boolean): void {
@@ -392,18 +346,12 @@ class Reply implements SpokenReply {
 
 /** One utterance of a reply, and its audio until all of it is queued. */
 class Voiced {
-  readonly id: number;
   readonly utterance: Utterance;
   readonly items: UtteranceAudio[] = [];
   /** Its audio has ended: no more items come. */
   over = false;
-  readonly segs: number[] = [];
-  /** The first segment said in it, whose tag a boundary-less utterance's audio carries. */
-  first: number | null = null;
   /** The segment its latest audio was queued under, which the resampler's tail joins. */
   last: number | null = null;
-  /** A boundary-less utterance the cursor has reached. */
-  playing = false;
   readonly #resampler: RubatoStream | null;
   readonly #clock: Clock;
   readonly #stalled: () => void;
@@ -411,26 +359,20 @@ class Voiced {
   #ending = false;
 
   constructor(
-    id: number,
     utterance: Utterance,
     resampler: RubatoStream | null,
     clock: Clock,
     stalled: () => void,
   ) {
-    this.id = id;
     this.utterance = utterance;
     this.#resampler = resampler;
     this.#clock = clock;
     this.#stalled = stalled;
   }
 
-  /** Segment `seg` goes to it, which owes audio; whether it is the first. */
-  said(seg: number): boolean {
-    this.segs.push(seg);
+  /** A segment goes to it, which owes audio. */
+  said(): void {
     if (this.#cancelStall === null) this.#owe();
-    if (this.first !== null) return false;
-    this.first = seg;
-    return true;
   }
 
   /** No more segments: it owes its end. */

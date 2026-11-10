@@ -59,6 +59,7 @@ export function sleep(ms: number, signal: AbortSignal): Promise<void> {
 export abstract class SttBase implements SttStream {
   abstract readonly inputRate: 16000 | 24000;
   abstract readonly ttfsP99: number;
+  abstract readonly acknowledgesFinalize: boolean;
   /** pipedog's service name, which its log lines and error texts carry. */
   protected abstract readonly label: string;
   readonly events: AsyncIterable<SttEvent>;

@@ -20,25 +20,28 @@ const words = (seg: number, chars: number): CursorEvent => ({
   chars,
 });
 
-describe("a voice that marks where each segment ends", () => {
+describe("segments and their words", () => {
   test("a segment counts once the cursor passes its end, raw text and cues included", () => {
     const tracker = new SpokenTracker("r1", join);
-    tracker.say(1, "[开心] 你好。", 1, true);
-    tracker.say(2, "今天天气不错。", 1, true);
+    tracker.say(1, "[开心] 你好。");
+    tracker.say(2, "今天天气不错。");
     expect(tracker.text()).toBe("");
     tracker.cursor(segStart(1));
     expect(tracker.text()).toBe("");
     tracker.cursor(segEnd(1));
     expect(tracker.text()).toBe("[开心] 你好。");
     tracker.cursor(segStart(2));
+    expect(tracker.text()).toBe("[开心] 你好。");
+    tracker.say(3, "我们出去吧。");
+    expect(tracker.text()).toBe("[开心] 你好。");
     tracker.cursor(segEnd(2));
     expect(tracker.text()).toBe("[开心] 你好。|今天天气不错。");
   });
 
   test("words played of the segment still playing count, counted past cues", () => {
     const tracker = new SpokenTracker("r1", join);
-    tracker.say(1, "你好。", 1, true);
-    tracker.say(2, "[开心地] 今天<emphasis>天气</emphasis>不错。", 1, true);
+    tracker.say(1, "你好。");
+    tracker.say(2, "[开心地] 今天<emphasis>天气</emphasis>不错。");
     tracker.cursor(segEnd(1));
     tracker.cursor(segStart(2));
     tracker.cursor(words(2, 3));
@@ -51,7 +54,7 @@ describe("a voice that marks where each segment ends", () => {
 
   test("a voice that reads brackets was sent their letters, so they count", () => {
     const tracker = new SpokenTracker("r1", join, "brackets");
-    tracker.say(1, "[开心] 你<emphasis>好</emphasis>今天。", 1, true);
+    tracker.say(1, "[开心] 你<emphasis>好</emphasis>今天。");
     tracker.cursor(segStart(1));
     tracker.cursor(words(1, 3));
     expect(tracker.text()).toBe("[开心] 你");
@@ -60,34 +63,10 @@ describe("a voice that marks where each segment ends", () => {
   });
 });
 
-describe("a voice that marks no boundaries (Fish)", () => {
-  test("a segment counts once said and its utterance has started playing", () => {
-    const tracker = new SpokenTracker("r1", join);
-    tracker.say(1, "你好。", 1, false);
-    tracker.say(2, "今天天气不错。", 1, false);
-    expect(tracker.text()).toBe("");
-    tracker.cursor(segStart(1));
-    expect(tracker.text()).toBe("你好。|今天天气不错。");
-    tracker.say(3, "我们出去吧。", 1, false);
-    expect(tracker.text()).toBe("你好。|今天天气不错。|我们出去吧。");
-  });
-
-  test("an utterance in another voice counts from its own first sample", () => {
-    const tracker = new SpokenTracker("r1", join);
-    tracker.say(1, "你好。", 1, false);
-    tracker.cursor(segStart(1));
-    tracker.say(2, "[小声] 秘密。", 2, false);
-    expect(tracker.text()).toBe("你好。");
-    tracker.cursor(segEnd(1));
-    tracker.cursor(segStart(2));
-    expect(tracker.text()).toBe("你好。|[小声] 秘密。");
-  });
-});
-
 describe("the tail and a barge-in", () => {
   test("the tail with no words joins once everything said was heard", () => {
     const tracker = new SpokenTracker("r1", join);
-    tracker.say(1, "<whisper>悄悄告诉你。", 1, true);
+    tracker.say(1, "<whisper>悄悄告诉你。");
     tracker.attach("</whisper>");
     expect(tracker.text()).toBe("");
     tracker.cursor(segEnd(1));
@@ -96,20 +75,20 @@ describe("the tail and a barge-in", () => {
 
   test("after a freeze nothing more counts", () => {
     const tracker = new SpokenTracker("r1", join);
-    tracker.say(1, "你好。", 1, true);
-    tracker.say(2, "今天天气不错。", 1, true);
+    tracker.say(1, "你好。");
+    tracker.say(2, "今天天气不错。");
     tracker.cursor(segEnd(1));
     tracker.cursor(words(2, 2));
     tracker.freeze();
     tracker.cursor(segEnd(2));
-    tracker.say(3, "再见。", 1, false);
+    tracker.say(3, "再见。");
     tracker.attach("</whisper>");
     expect(tracker.text()).toBe("你好。|今天");
   });
 
   test("events of another reply, and of segments never said, change nothing", () => {
     const tracker = new SpokenTracker("r1", join);
-    tracker.say(1, "你好。", 1, false);
+    tracker.say(1, "你好。");
     tracker.cursor(segStart(1, "r2"));
     tracker.cursor(segEnd(9));
     tracker.cursor({ type: "reply-start", reply: "r1", persona: "milky-green" });

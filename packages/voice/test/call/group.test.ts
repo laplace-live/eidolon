@@ -198,7 +198,6 @@ function startGroup(
         persona,
         speech,
         markup: undefined,
-        boundaries: true,
         speaker,
         join: joinSegments,
         clock,

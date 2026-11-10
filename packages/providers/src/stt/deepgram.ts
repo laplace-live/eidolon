@@ -57,12 +57,13 @@ interface Results {
 class DeepgramStt extends SttBase {
   readonly inputRate = 16000;
   readonly ttfsP99 = 0.35;
+  readonly acknowledgesFinalize = true;
   protected readonly label = "DeepgramSTTService";
   readonly #url: string;
   readonly #headers: Readonly<Record<string, string>>;
   readonly #ready = Promise.withResolvers<void>();
-  /** `finalize()` was sent and Deepgram hasn't answered it yet. */
-  #requested = false;
+  /** `finalize()`s sent that Deepgram hasn't answered yet: it answers each, in order. */
+  #requested = 0;
   /** Deepgram answered it: the next final is the finalized one. */
   #pending = false;
 
@@ -84,7 +85,7 @@ class DeepgramStt extends SttBase {
 
   finalize(): void {
     if (!this.socket?.open) return;
-    this.#requested = true;
+    this.#requested++;
     this.socket.send(FINALIZE);
   }
 
@@ -170,9 +171,11 @@ class DeepgramStt extends SttBase {
       this.emit({ type: "interim", text: transcript });
       return;
     }
-    if (message.from_finalize && this.#requested) {
-      this.#requested = false;
+    if (message.from_finalize && this.#requested > 0) {
+      this.#requested--;
       this.#pending = true;
+      // Answered with no words. pipedog still passes the mark to the turn's next final.
+      if (transcript.length === 0) this.emit({ type: "finalized" });
     }
     if (transcript.length === 0) return;
     this.emit({ type: "final", text: transcript, finalized: this.#pending });

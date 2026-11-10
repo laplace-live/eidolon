@@ -39,7 +39,7 @@ test("connects under the account's API base, with the key on the handshake", asy
   const peer = await server.connection();
   expect(`${peer.url.pathname}${peer.url.search}`).toBe("/v1/realtime?intent=transcription");
   expect(peer.headers.get("authorization")).toBe(`Bearer ${KEY}`);
-  expect([stt.inputRate, stt.ttfsP99]).toEqual([24000, 1.66]);
+  expect([stt.inputRate, stt.ttfsP99, stt.acknowledgesFinalize]).toEqual([24000, 1.66, false]);
   await stt.close();
 });
 

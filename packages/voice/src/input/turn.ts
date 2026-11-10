@@ -5,7 +5,8 @@
 // Ported from pipedog packages/core/src/turns/user_turn_controller.ts@ce8f8bc, packages/core/src/turns/user_stop/turn_analyzer_user_turn_stop_strategy.ts@ce8f8bc, packages/core/src/turns/user_start/vad_user_turn_start_strategy.ts@ce8f8bc, packages/core/src/turns/user_start/transcription_user_turn_start_strategy.ts@ce8f8bc and packages/core/src/processors/aggregators/llm_response_universal.ts@ce8f8bc
 //
 // When the caller's turn starts and ends: pipedog's user turn controller with the strategies a
-// call runs (a VAD or transcript start, the Smart Turn stop) and its stop watchdog.
+// call runs (a VAD or transcript start, the Smart Turn stop) and its stop watchdog, plus an end as
+// soon as the recognizer acknowledges the turn's finalize, words or none.
 import type { Clock, EarEvent, JoinSegments } from "../types.ts";
 import type { EndOfTurn } from "./smart_turn.ts";
 import { VAD_STOP_SECS } from "./vad.ts";
@@ -13,10 +14,18 @@ import { VAD_STOP_SECS } from "./vad.ts";
 /** A turn with no VAD edge or transcript for this long ends, once the VAD isn't hearing speech. */
 const STOP_TIMEOUT_MS = 5_000;
 
+/** Soniox's p99 from finalize() to its answer, plus 1 s: docs/benchmarks/2026-11-10-finalize-ack. */
+export const FINALIZE_ACK_CAP_MS = 1_910;
+
 export interface TurnDetectorOptions {
   readonly clock: Clock;
   /** The recognizer's p99 seconds from the end of speech to its last final. */
   readonly ttfsP99: number;
+  /**
+   * The recognizer answers every finalize (`SttStream.acknowledgesFinalize`), so its silence past
+   * FINALIZE_ACK_CAP_MS means no words. One that doesn't may still send words later.
+   */
+  readonly acknowledgesFinalize: boolean;
   readonly join: JoinSegments;
   readonly post: (event: EarEvent) => void;
   /** Smart Turn forgets the turn's speech when the turn ends. */
@@ -25,8 +34,9 @@ export interface TurnDetectorOptions {
 
 /**
  * The turn state machine, fed the VAD's edges, Smart Turn's verdicts and the transcripts. A turn
- * ends once Smart Turn calls it complete and a final has come, finalized or past the recognizer's
- * p99; never while the VAD hears speech.
+ * ends once Smart Turn calls it complete and the recognizer has acknowledged its finalize, said
+ * nothing for FINALIZE_ACK_CAP_MS after it (one that acknowledges every finalize), or sent a final
+ * and had its p99; never while the VAD hears speech.
  */
 export class TurnDetector {
   readonly #options: TurnDetectorOptions;
@@ -40,7 +50,13 @@ export class TurnDetector {
   #text = "";
   #turnComplete = false;
   #vadStopped = false;
-  #transcriptFinalized = false;
+  /** The last stop's finalize was answered, or the cap passed, and no interim since. */
+  #acknowledged = false;
+  #cancelAckCap: (() => void) | null = null;
+  /** Finalizes called and not yet answered, each answered in turn; the cap forgets them. */
+  #unanswered = 0;
+  /** An interim has come since the last final: words the recognizer has yet to finish. */
+  #wordsPending = false;
   #timeoutExpired = false;
   #cancelTimeout: (() => void) | null = null;
   // The last VAD stop's delay in seconds: 0 until the first one.
@@ -71,6 +87,18 @@ export class TurnDetector {
     this.#vadStopped = true;
     // The p99 counts from when speech ended, which the VAD reports its stop delay later.
     this.#sttDeadline = this.#options.clock.now() + (this.#options.ttfsP99 - this.#stopSecs) * 1000;
+    // The Ear has just called finalize(): a recognizer that answers every one and is silent past
+    // the cap has nothing to add.
+    if (!this.#options.acknowledgesFinalize) return;
+    this.#unanswered++;
+    this.#cancelAckCap?.();
+    this.#cancelAckCap = this.#options.clock.setTimer(FINALIZE_ACK_CAP_MS, () => {
+      this.#cancelAckCap = null;
+      // An answer still owed was lost, as a reconnect loses them.
+      this.#unanswered = 0;
+      // Words it heard and hasn't finished are still coming: their final, or the watchdog, ends it.
+      if (!this.#wordsPending) this.#acknowledge();
+    });
   }
 
   analyzed(state: EndOfTurn): void {
@@ -89,8 +117,12 @@ export class TurnDetector {
     this.#activity();
     this.#startTurn();
     this.#options.post({ type: "interim", text });
-    // More words are coming, so an earlier finalized final no longer covers the speech.
-    this.#transcriptFinalized = false;
+    this.#wordsPending = true;
+    // More words are coming, so an earlier acknowledgement no longer covers the speech, and their
+    // final, not the cap, ends the turn.
+    this.#acknowledged = false;
+    this.#cancelAckCap?.();
+    this.#cancelAckCap = null;
   }
 
   final(text: string, finalized: boolean): void {
@@ -99,9 +131,11 @@ export class TurnDetector {
     this.#startTurn();
     this.#options.post({ type: "final", text });
     this.#text = text;
-    if (finalized) {
-      this.#transcriptFinalized = true;
-      this.#maybeStop();
+    this.#wordsPending = false;
+    if (finalized) this.#unanswered = Math.max(0, this.#unanswered - 1);
+    // An earlier stop's answer, with the last stop's still owed, is a final like any other.
+    if (finalized && this.#unanswered === 0) {
+      this.#acknowledge();
       if (!this.#inTurn) return;
     } else if (this.#timeoutExpired && this.#turnComplete) {
       this.#stop();
@@ -114,10 +148,22 @@ export class TurnDetector {
     }
   }
 
+  /**
+   * The recognizer answered a finalize() with no words. Only the answer to the last stop's ends
+   * the turn: one with answers still owed, that comes while the VAD hears speech again, or with
+   * words heard since the last final, answered an earlier stop's.
+   */
+  finalized(): void {
+    this.#unanswered = Math.max(0, this.#unanswered - 1);
+    if (this.#unanswered === 0 && this.#vadStopped && !this.#wordsPending) this.#acknowledge();
+  }
+
   /** Cancels the timers. */
   close(): void {
     this.#cancelTimeout?.();
     this.#cancelTimeout = null;
+    this.#cancelAckCap?.();
+    this.#cancelAckCap = null;
     this.#cancelWatchdog?.();
     this.#cancelWatchdog = null;
   }
@@ -127,6 +173,7 @@ export class TurnDetector {
     this.#inTurn = true;
     this.#activity();
     this.#text = "";
+    this.#wordsPending = false;
     this.#discardPendingEndOfTurn();
     this.#options.post({ type: "user-started" });
   }
@@ -144,24 +191,32 @@ export class TurnDetector {
     this.#options.post({ type: "user-stopped", text });
   }
 
+  #acknowledge(): void {
+    this.#acknowledged = true;
+    this.#maybeStop();
+  }
+
   #maybeStop(): void {
-    if (!this.#turnComplete || !this.#text) return;
-    if (this.#transcriptFinalized) {
+    if (!this.#turnComplete) return;
+    // Acknowledged, the turn ends with or without words: one with none (a cough) as an empty turn.
+    if (this.#acknowledged) {
       this.#cancelTimeout?.();
       this.#cancelTimeout = null;
       this.#stop();
-    } else if (this.#cancelTimeout === null) {
+    } else if (this.#text && this.#cancelTimeout === null) {
       this.#stop();
     }
   }
 
   #discardPendingEndOfTurn(): void {
     this.#turnComplete = false;
-    this.#transcriptFinalized = false;
+    this.#acknowledged = false;
     this.#timeoutExpired = false;
     this.#vadStopped = false;
     this.#cancelTimeout?.();
     this.#cancelTimeout = null;
+    this.#cancelAckCap?.();
+    this.#cancelAckCap = null;
   }
 
   #armTimeout(ms: number): void {

@@ -53,6 +53,7 @@ export function sonioxConfig(model: string, language: string | null): string {
 class SonioxStt extends WebsocketStt {
   readonly inputRate = 16000;
   readonly ttfsP99 = 0.35;
+  readonly acknowledgesFinalize = true;
   protected readonly label = "SonioxSTTService";
   protected readonly url: string;
   protected readonly headers: Readonly<Record<string, string>>;
@@ -110,6 +111,8 @@ class SonioxStt extends WebsocketStt {
     const pending: string[] = [];
     for (const token of content.tokens ?? []) {
       if (!token.is_final) pending.push(token.text);
+      else if (token.text === FINALIZED_TOKEN && this.#final.length === 0)
+        this.emit({ type: "finalized" });
       else if (token.text === END_TOKEN || token.text === FINALIZED_TOKEN) this.#endpoint();
       else this.#final.push(token.text);
     }

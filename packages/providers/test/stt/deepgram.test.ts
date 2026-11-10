@@ -52,7 +52,7 @@ test("connects where pipedog does, with its query, and the key on the handshake"
   expect(peer.url.pathname).toBe("/v1/listen");
   expect(peer.url.searchParams.get("language")).toBe("zh");
   expect(peer.headers.get("authorization")).toBe(`Token ${KEY}`);
-  expect([stt.inputRate, stt.ttfsP99]).toEqual([16000, 0.35]);
+  expect([stt.inputRate, stt.ttfsP99, stt.acknowledgesFinalize]).toEqual([16000, 0.35, true]);
   await stt.close();
 });
 
@@ -79,7 +79,8 @@ test("a final is finalized only when it answers this turn's finalize", async () 
   await peer.next();
   peer.send(results("吗", { is_final: true, from_finalize: true }));
   await heard("吗");
-  // An empty answer passes the mark to the turn's next final, unless new words come first.
+  // An empty answer is a bare acknowledgement, and passes the mark to the turn's next final,
+  // unless new words come first.
   stt.finalize();
   await peer.next();
   peer.send(results("", { is_final: true, from_finalize: true }));
@@ -96,9 +97,58 @@ test("a final is finalized only when it answers this turn's finalize", async () 
     { type: "interim", text: "你好" },
     { type: "final", text: "你好", finalized: false },
     { type: "final", text: "吗", finalized: true },
+    { type: "finalized" },
     { type: "final", text: "晚了", finalized: true },
+    { type: "finalized" },
     { type: "interim", text: "新的" },
     { type: "final", text: "新的话", finalized: false },
+  ]);
+  await stt.close();
+});
+
+test("an empty answer acknowledges only a finalize this client sent, once", async () => {
+  const stt = await open();
+  const events = watch(stt);
+  const peer = await server.connection();
+  const empty = () => peer.send(results("", { is_final: true, from_finalize: true }));
+  const heard = (text: string) =>
+    events.until((event) => event.type === "final" && event.text === text);
+  empty();
+  peer.send(results("先", { is_final: true }));
+  await heard("先");
+  stt.finalize();
+  await peer.next();
+  empty();
+  empty();
+  peer.send(results("好", { is_final: true }));
+  await heard("好");
+  expect(events.seen).toEqual([
+    { type: "final", text: "先", finalized: false },
+    { type: "finalized" },
+    { type: "final", text: "好", finalized: true },
+  ]);
+  await stt.close();
+});
+
+test("two finalizes sent before either is answered get an acknowledgement each", async () => {
+  const stt = await open();
+  const events = watch(stt);
+  const peer = await server.connection();
+  const empty = () => peer.send(results("", { is_final: true, from_finalize: true }));
+  stt.finalize();
+  stt.finalize();
+  await peer.next();
+  await peer.next();
+  empty();
+  empty();
+  // One more than it sent.
+  empty();
+  peer.send(results("好", { is_final: true }));
+  await events.until((event) => event.type === "final");
+  expect(events.seen).toEqual([
+    { type: "finalized" },
+    { type: "finalized" },
+    { type: "final", text: "好", finalized: true },
   ]);
   await stt.close();
 });

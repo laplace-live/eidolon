@@ -1,0 +1,564 @@
+{
+  "date": "2026-11-10T16:11:14.796Z",
+  "persona": "milky-green",
+  "account": "fish",
+  "model": "drama-3",
+  "settleMs": 2500,
+  "warmMs": 2000,
+  "sentences": [
+    {
+      "text": "[压低声音，像在说悄悄话] 跟你说个秘密哦。",
+      "listen": "a whisper"
+    },
+    {
+      "text": "其实我昨天背着店长，偷偷吃了三块小蛋糕。",
+      "listen": "carry: still a whisper, from the flush before"
+    },
+    {
+      "text": "[正常音量，轻松自然] 好啦，不说这个了。",
+      "listen": "plain again"
+    },
+    {
+      "text": "[懒洋洋的，带点笑意] 嗯……今天花店人好多。",
+      "listen": "lazy, smiling"
+    },
+    {
+      "text": "[chuckling] 嘿嘿，我一个人包了二十多束花，<emphasis>手都酸了</emphasis>。",
+      "listen": "a laugh on 嘿嘿; 手都酸了 stressed; no tag read aloud"
+    },
+    {
+      "text": "嗯，好。",
+      "listen": "short"
+    },
+    {
+      "text": "[语速很慢，一字一顿] 你、听、好、了。",
+      "listen": "slow, one word at a time"
+    },
+    {
+      "text": "明天下午三点，花店门口，不见不散。",
+      "listen": "carry: still slower than plain, from the flush before"
+    },
+    {
+      "text": "[正常音量，轻松自然] 开玩笑的啦，你别当真，嗯。",
+      "listen": "plain again"
+    },
+    {
+      "text": "[温柔地安慰] 别难过了，我在呢。",
+      "listen": "gentle, comforting"
+    },
+    {
+      "text": "我没事，<whisper>你先走吧</whisper>。",
+      "listen": "carry: still gentle; whispered from 你先走吧 on"
+    },
+    {
+      "text": "一会儿我就过来找你，记得给我留一杯奶绿，少糖少冰，嗯。",
+      "listen": "voiced: the whisper closed in the flush before"
+    },
+    {
+      "text": "[突然来劲，语速变快] 哎呀你知道吗！",
+      "listen": "suddenly fast and excited"
+    },
+    {
+      "text": "坚果以前最喜欢趴在收银台上晒太阳，谁摸它它就翻肚皮，客人都说它才是真店长，对吧。",
+      "listen": "carry: still fast, from the flush before"
+    },
+    {
+      "text": "[有点失落，慢慢地说] [sighing] 唉…它跑路那天，我也是这种感觉，嗯。",
+      "listen": "a sigh on 唉, then slow and low"
+    },
+    {
+      "text": "[laughing] 哈哈哈，好啦好啦，不聊了，晚安！",
+      "listen": "a laugh on 哈哈哈"
+    }
+  ],
+  "pipelinedSentences": 4,
+  "serial": {
+    "settleMs": 2500,
+    "flushes": [
+      {
+        "text": "[压低声音，像在说悄悄话] 跟你说个秘密哦。",
+        "listen": "a whisper",
+        "sentAt": 2008.2,
+        "arrivals": [
+          {
+            "t": 3213.3,
+            "bytes": 151552
+          }
+        ],
+        "movedOnAt": 5713.6
+      },
+      {
+        "text": "其实我昨天背着店长，偷偷吃了三块小蛋糕。",
+        "listen": "carry: still a whisper, from the flush before",
+        "sentAt": 5713.8,
+        "arrivals": [
+          {
+            "t": 7215.2,
+            "bytes": 397312
+          }
+        ],
+        "movedOnAt": 9715.4
+      },
+      {
+        "text": "[正常音量，轻松自然] 好啦，不说这个了。",
+        "listen": "plain again",
+        "sentAt": 9715.5,
+        "arrivals": [
+          {
+            "t": 10423.1,
+            "bytes": 167936
+          }
+        ],
+        "movedOnAt": 12924.7
+      },
+      {
+        "text": "[懒洋洋的，带点笑意] 嗯……今天花店人好多。",
+        "listen": "lazy, smiling",
+        "sentAt": 12924.9,
+        "arrivals": [
+          {
+            "t": 14156.8,
+            "bytes": 389120
+          }
+        ],
+        "movedOnAt": 16658.1
+      },
+      {
+        "text": "[chuckling] 嘿嘿，我一个人包了二十多束花，<emphasis>手都酸了</emphasis>。",
+        "listen": "a laugh on 嘿嘿; 手都酸了 stressed; no tag read aloud",
+        "sentAt": 16658.2,
+        "arrivals": [
+          {
+            "t": 18027.5,
+            "bytes": 454656
+          }
+        ],
+        "movedOnAt": 20527.6
+      },
+      {
+        "text": "嗯，好。",
+        "listen": "short",
+        "sentAt": 20527.7,
+        "arrivals": [
+          {
+            "t": 21077.1,
+            "bytes": 102400
+          }
+        ],
+        "movedOnAt": 23577.3
+      },
+      {
+        "text": "[语速很慢，一字一顿] 你、听、好、了。",
+        "listen": "slow, one word at a time",
+        "sentAt": 23577.3,
+        "arrivals": [
+          {
+            "t": 24524,
+            "bytes": 299008
+          }
+        ],
+        "movedOnAt": 27024.5
+      },
+      {
+        "text": "明天下午三点，花店门口，不见不散。",
+        "listen": "carry: still slower than plain, from the flush before",
+        "sentAt": 27024.5,
+        "arrivals": [
+          {
+            "t": 28122.8,
+            "bytes": 352256
+          }
+        ],
+        "movedOnAt": 30623.9
+      },
+      {
+        "text": "[正常音量，轻松自然] 开玩笑的啦，你别当真，嗯。",
+        "listen": "plain again",
+        "sentAt": 30623.9,
+        "arrivals": [
+          {
+            "t": 31523.4,
+            "bytes": 253952
+          }
+        ],
+        "movedOnAt": 34023.7
+      },
+      {
+        "text": "[温柔地安慰] 别难过了，我在呢。",
+        "listen": "gentle, comforting",
+        "sentAt": 34023.7,
+        "arrivals": [
+          {
+            "t": 34890.4,
+            "bytes": 237568
+          }
+        ],
+        "movedOnAt": 37391.5
+      },
+      {
+        "text": "我没事，<whisper>你先走吧</whisper>。",
+        "listen": "carry: still gentle; whispered from 你先走吧 on",
+        "sentAt": 37391.6,
+        "arrivals": [
+          {
+            "t": 38222.8,
+            "bytes": 266240
+          }
+        ],
+        "movedOnAt": 40723.7
+      },
+      {
+        "text": "一会儿我就过来找你，记得给我留一杯奶绿，少糖少冰，嗯。",
+        "listen": "voiced: the whisper closed in the flush before",
+        "sentAt": 40723.8,
+        "arrivals": [
+          {
+            "t": 42178.6,
+            "bytes": 561152
+          }
+        ],
+        "movedOnAt": 44679.4
+      },
+      {
+        "text": "[突然来劲，语速变快] 哎呀你知道吗！",
+        "listen": "suddenly fast and excited",
+        "sentAt": 44679.5,
+        "arrivals": [
+          {
+            "t": 45358.8,
+            "bytes": 135168
+          }
+        ],
+        "movedOnAt": 47859.9
+      },
+      {
+        "text": "坚果以前最喜欢趴在收银台上晒太阳，谁摸它它就翻肚皮，客人都说它才是真店长，对吧。",
+        "listen": "carry: still fast, from the flush before",
+        "sentAt": 47859.9,
+        "arrivals": [
+          {
+            "t": 49767,
+            "bytes": 819200
+          }
+        ],
+        "movedOnAt": 52268.3
+      },
+      {
+        "text": "[有点失落，慢慢地说] [sighing] 唉…它跑路那天，我也是这种感觉，嗯。",
+        "listen": "a sigh on 唉, then slow and low",
+        "sentAt": 52268.5,
+        "arrivals": [
+          {
+            "t": 53542.7,
+            "bytes": 491520
+          }
+        ],
+        "movedOnAt": 56043.8
+      },
+      {
+        "text": "[laughing] 哈哈哈，好啦好啦，不聊了，晚安！",
+        "listen": "a laugh on 哈哈哈",
+        "sentAt": 56043.8,
+        "arrivals": [
+          {
+            "t": 56813,
+            "bytes": 258048
+          }
+        ],
+        "movedOnAt": 59314.1
+      }
+    ],
+    "stopAt": 59314.1,
+    "afterStop": [],
+    "finishAt": 59519.3,
+    "error": null
+  },
+  "pipelined": {
+    "texts": [
+      "[压低声音，像在说悄悄话] 跟你说个秘密哦。",
+      "其实我昨天背着店长，偷偷吃了三块小蛋糕。",
+      "[正常音量，轻松自然] 好啦，不说这个了。",
+      "[懒洋洋的，带点笑意] 嗯……今天花店人好多。"
+    ],
+    "sentAt": 61521,
+    "arrivals": [
+      {
+        "t": 62599.6,
+        "bytes": 151552
+      },
+      {
+        "t": 63465,
+        "bytes": 516096
+      },
+      {
+        "t": 63520.3,
+        "bytes": 163840
+      },
+      {
+        "t": 64215.7,
+        "bytes": 339968
+      }
+    ],
+    "finishAt": 64215.8,
+    "error": null
+  },
+  "summary": {
+    "serial": {
+      "flushes": [
+        {
+          "flush": 1,
+          "messages": 1,
+          "firstMs": 1205.1,
+          "burstMs": 0,
+          "maxGapMs": null,
+          "audioSeconds": 1.7183,
+          "slackMs": 1718.3,
+          "waitMs": 2500.3,
+          "wavSeconds": 0
+        },
+        {
+          "flush": 2,
+          "messages": 1,
+          "firstMs": 1501.4,
+          "burstMs": 0,
+          "maxGapMs": null,
+          "audioSeconds": 4.5047,
+          "slackMs": 4504.7,
+          "waitMs": 2500.2,
+          "wavSeconds": 1.7183
+        },
+        {
+          "flush": 3,
+          "messages": 1,
+          "firstMs": 707.6,
+          "burstMs": 0,
+          "maxGapMs": null,
+          "audioSeconds": 1.904,
+          "slackMs": 1904,
+          "waitMs": 2501.6,
+          "wavSeconds": 6.2229
+        },
+        {
+          "flush": 4,
+          "messages": 1,
+          "firstMs": 1231.9,
+          "burstMs": 0,
+          "maxGapMs": null,
+          "audioSeconds": 4.4118,
+          "slackMs": 4411.8,
+          "waitMs": 2501.3,
+          "wavSeconds": 8.127
+        },
+        {
+          "flush": 5,
+          "messages": 1,
+          "firstMs": 1369.3,
+          "burstMs": 0,
+          "maxGapMs": null,
+          "audioSeconds": 5.1548,
+          "slackMs": 5154.8,
+          "waitMs": 2500.1,
+          "wavSeconds": 12.5388
+        },
+        {
+          "flush": 6,
+          "messages": 1,
+          "firstMs": 549.4,
+          "burstMs": 0,
+          "maxGapMs": null,
+          "audioSeconds": 1.161,
+          "slackMs": 1161,
+          "waitMs": 2500.2,
+          "wavSeconds": 17.6936
+        },
+        {
+          "flush": 7,
+          "messages": 1,
+          "firstMs": 946.7,
+          "burstMs": 0,
+          "maxGapMs": null,
+          "audioSeconds": 3.3901,
+          "slackMs": 3390.1,
+          "waitMs": 2500.5,
+          "wavSeconds": 18.8546
+        },
+        {
+          "flush": 8,
+          "messages": 1,
+          "firstMs": 1098.3,
+          "burstMs": 0,
+          "maxGapMs": null,
+          "audioSeconds": 3.9938,
+          "slackMs": 3993.8,
+          "waitMs": 2501.1,
+          "wavSeconds": 22.2447
+        },
+        {
+          "flush": 9,
+          "messages": 1,
+          "firstMs": 899.5,
+          "burstMs": 0,
+          "maxGapMs": null,
+          "audioSeconds": 2.8793,
+          "slackMs": 2879.3,
+          "waitMs": 2500.3,
+          "wavSeconds": 26.2385
+        },
+        {
+          "flush": 10,
+          "messages": 1,
+          "firstMs": 866.7,
+          "burstMs": 0,
+          "maxGapMs": null,
+          "audioSeconds": 2.6935,
+          "slackMs": 2693.5,
+          "waitMs": 2501.1,
+          "wavSeconds": 29.1178
+        },
+        {
+          "flush": 11,
+          "messages": 1,
+          "firstMs": 831.2,
+          "burstMs": 0,
+          "maxGapMs": null,
+          "audioSeconds": 3.0186,
+          "slackMs": 3018.6,
+          "waitMs": 2500.9,
+          "wavSeconds": 31.8113
+        },
+        {
+          "flush": 12,
+          "messages": 1,
+          "firstMs": 1454.8,
+          "burstMs": 0,
+          "maxGapMs": null,
+          "audioSeconds": 6.3623,
+          "slackMs": 6362.3,
+          "waitMs": 2500.8,
+          "wavSeconds": 34.8299
+        },
+        {
+          "flush": 13,
+          "messages": 1,
+          "firstMs": 679.3,
+          "burstMs": 0,
+          "maxGapMs": null,
+          "audioSeconds": 1.5325,
+          "slackMs": 1532.5,
+          "waitMs": 2501.1,
+          "wavSeconds": 41.1922
+        },
+        {
+          "flush": 14,
+          "messages": 1,
+          "firstMs": 1907.1,
+          "burstMs": 0,
+          "maxGapMs": null,
+          "audioSeconds": 9.288,
+          "slackMs": 9288,
+          "waitMs": 2501.3,
+          "wavSeconds": 42.7247
+        },
+        {
+          "flush": 15,
+          "messages": 1,
+          "firstMs": 1274.2,
+          "burstMs": 0,
+          "maxGapMs": null,
+          "audioSeconds": 5.5728,
+          "slackMs": 5572.8,
+          "waitMs": 2501.1,
+          "wavSeconds": 52.0127
+        },
+        {
+          "flush": 16,
+          "messages": 1,
+          "firstMs": 769.2,
+          "burstMs": 0,
+          "maxGapMs": null,
+          "audioSeconds": 2.9257,
+          "slackMs": 2925.7,
+          "waitMs": 2501.1,
+          "wavSeconds": 57.5855
+        }
+      ],
+      "gaps": null,
+      "first": {
+        "n": 16,
+        "p50": 946.7,
+        "p90": 1501.4,
+        "p99": 1907.1,
+        "max": 1907.1
+      },
+      "suggestion": {
+        "largestGapMs": 0,
+        "roundedMs": 0,
+        "marginMs": 100,
+        "idleMs": 100
+      },
+      "projection": {
+        "idleMs": 100,
+        "boundaryMs": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "boundary": {
+          "n": 15,
+          "p50": 0,
+          "p90": 0,
+          "p99": 0,
+          "max": 0
+        },
+        "insideMs": 0
+      },
+      "afterStop": {
+        "messages": 0,
+        "bytes": 0
+      },
+      "finishAfterStopMs": 205.2,
+      "clean": true,
+      "reasons": []
+    },
+    "pipelined": {
+      "messages": 4,
+      "firstMs": 1078.6,
+      "burstMs": 1616.1,
+      "gaps": {
+        "n": 3,
+        "p50": 695.4,
+        "p90": 865.4,
+        "p99": 865.4,
+        "max": 865.4
+      },
+      "largestGaps": [
+        {
+          "ms": 865.4,
+          "atSeconds": 1.7183
+        },
+        {
+          "ms": 695.4,
+          "atSeconds": 9.4273
+        },
+        {
+          "ms": 55.3,
+          "atSeconds": 7.5697
+        }
+      ],
+      "audioSeconds": 13.2818,
+      "stallMs": 0
+    }
+  }
+}

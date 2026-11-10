@@ -3,7 +3,8 @@
 A call runs on eidolon's own loop around `@eidolon/engine`, so its turns run through the same
 engine, log format and `viewOf` as a text chat. It replaced pipedog's frame pipeline as every
 call's engine on <the G7 date>, and pipedog left the repository after 14 more days; clients needed
-no change ([Differences from pipedog](#differences-from-pipedog)).
+no change ([Differences from pipedog](#differences-from-pipedog)). [RTVI](#rtvi) lists what they
+saw change, and [frontend-loading-state.md](frontend-loading-state.md) tells them.
 
 ```text
 @eidolon/voice                  the loop; only packages/runtime imports it
@@ -185,13 +186,41 @@ The constants are pipedog's at ce8f8bc:
 | Start, stop | 0.2 s each: 6 windows |
 | A muted mic | no audio for 1 s while speaking forces the stop |
 | Smart Turn | the last 8 s from 0.7 s before speech, zero-padded, 80×800 log-mel; complete when p > 0.5; 3 s of silence is complete without the model |
-| Ending the turn | Smart Turn complete, the turn has finals, and the last final was finalized or the recognizer's p99 has passed since the stop (minus 0.2 s); never while the VAD hears speech |
+| Ending the turn | Smart Turn complete, the turn has finals, and the last final was finalized or the recognizer's p99 has passed since the stop (minus 0.2 s), or the finalize was acknowledged (below); never while the VAD hears speech |
 | A final with no VAD stop | complete after max(0, p99 − 0.2 s) |
 | Watchdog | the turn ends 5 s after the last VAD or STT event |
 | Joining | the turn's finals with `joinSegments`: a space between two segments unless either side is CJK |
 
 Each turn's end costs about 88 ms of main-thread work on an M4 Max, 52 ms of it Smart Turn's naive
 DFT, as in pipedog.
+
+**The acknowledgement** (U20) is eidolon's own; pipedog had no such rule. Soniox and Deepgram answer
+every `finalize()`, words or none: Soniox with its `<fin>`, Deepgram with a `from_finalize` result.
+A `<fin>` with no final words before it, or an empty `from_finalize` answering a finalize the
+client sent (it counts them, so two stops before either answer get an answer each), is the bare
+`finalized` event; one with words is the `final {finalized: true}` it always was.
+
+- **Once the stop's finalize is acknowledged,** the turn ends as soon as Smart Turn says complete,
+  with no wait for the p99. A turn with no words (a cough) ends then as an empty turn, so the
+  Floor's empty-turn rules (the recovery prompt, D13) run at once, not after the 5 s watchdog.
+- **The cap:** a recognizer that answers every `finalize()` (`acknowledgesFinalize`: Soniox,
+  Deepgram) and has said nothing 1.91 s (`FINALIZE_ACK_CAP_MS`) after it counts as having answered
+  it. That is Soniox's p99 of 0.91 s plus 1 s, measured in
+  [`2026-11-10-finalize-ack`](benchmarks/2026-11-10-finalize-ack/README.md). ElevenLabs and
+  OpenAI answer a commit with no words with nothing, and OpenAI's first words can come later than
+  the cap with no interim before them (its p99 is 1.66 s from the end of speech), so they get no
+  cap: their turns end on a final and its p99, or at the 5 s watchdog, as before U20.
+- **What clears it:** an interim (words are coming: their final, or the watchdog, ends the turn,
+  not the cap, whether the interim came before the stop or after it), and a VAD start, which drops
+  a pending stop as before.
+- **Which stop it answers:** the recognizer answers finalizes in order, so the TurnDetector counts
+  the ones still owed an answer (a bare acknowledgement or a finalized final). An answer ends the
+  turn only when it answers the last stop's: one that comes with answers still owed (a cough, then
+  a word stopped before the cough's answer came) answered an earlier stop. A bare one is then
+  ignored, and a finalized final is kept as a final like any other, which the last answer, the
+  cap, the p99 or the watchdog ends. A bare acknowledgement that comes while the VAD hears speech
+  again, or with an interim since the last final (words it can't be the answer for), answered an
+  earlier stop too. The cap forgets answers still owed, which a reconnect loses.
 
 ## Speaking
 
@@ -206,9 +235,17 @@ the audio on the Speaker, tagged with its reply and segment.
 
 | Provider | Utterance | Where a segment's audio ends |
 | --- | --- | --- |
-| Fish | one session per utterance; each segment is sent as `text` and `flush` at once, `stop` at the end, and `finish` marks the end of its audio | unmarked: a segment counts as heard once said and the utterance has started playing, which is pipedog's behavior |
+| Fish | one session per utterance, its segments sent one at a time: each as `text` and `flush` once the one before it has had no audio for `FISH_SEGMENT_IDLE_MS` (100 ms), `stop` once the last is flushed, and `finish` marks the end of its audio | exact: that quiet, or the `finish` |
 | MiniMax, OpenAI | one HTTP request per segment, two at most in flight, played in order | exact |
 | ElevenLabs, Cartesia, Soniox | one context or stream per utterance | words timed by their letters and digits; a segment ends at its last word or the utterance's end |
+
+**Fish's serial flushes** rest on [`2026-11-10-fish-flush`](benchmarks/2026-11-10-fish-flush/README.md):
+on Fish's live socket each flush's audio came as one message, 0.5–1.9 s after it (947 ms at the
+median), and nothing more until the next flush, so 100 ms of quiet is only the event loop's
+margin. Projected at that value, sending one segment at a time adds no silence between
+sentences: each one's audio arrives while the ones before it still play. A flush that brings no
+audio for 15 s fails the utterance, as any speech that owes audio does, so no segment waits behind
+it for ever; a barge-in drops the segments still waiting and sends nothing more on the session.
 
 **The Speaker** is the call's one output queue. The transport's 10 ms clock pulls 240 samples,
 silence when it is empty. As its cursor plays, it posts `reply-start`, each segment's start and end,
@@ -444,7 +481,8 @@ Messages go out as `JSON.stringify` writes them, where pipedog's transport wrote
 ## Differences from pipedog
 
 eidolon's engine replaced pipedog's pipeline on <the G7 date>, after the user signed off each
-difference below. Each fixed a defect with the trigger it names; code and docs cite them by id.
+difference below, and what [frontend-loading-state.md](frontend-loading-state.md) tells clients of
+them. Each fixed a defect with the trigger it names; code and docs cite them by id.
 
 | Id | Difference | Trigger |
 | --- | --- | --- |
@@ -458,8 +496,8 @@ difference below. Each fixed a defect with the trigger it names; code and docs c
 | D8 | OpenAI's STT interims are cumulative | on pipedog the call page showed only the latest delta |
 | D9 | unsupported inbound types get `error-response` | no client sends them |
 | D10 | her audio pauses during `restart_pc` or a lost ping instead of being dropped | a reconnect mid-sentence |
-| D11 | an interrupted message keeps the heard text: per utterance for Fish, per segment for the others | a barge-in |
-| D12 | Fish's "completed" spread across the audio (from G5) | any Fish reply of several sentences |
+| D11 | an interrupted message keeps the sentences heard whole, Fish's too; pipedog's Fish kept every sentence said once her audio had started | a barge-in before her last sentence has played |
+| D12 | Fish's "completed" spread across the audio: each sentence new as its audio starts, completed as it ends, where pipedog reported all at her first audio | every Fish reply: anything said meanwhile lands among her reports, which keep their order, and a reply cut off reports fewer sentences, so the later ones' segment ordinals run behind |
 | D13 | `interruptedBot` is exact | an empty turn within 3 s after Fish's audio ends |
 | D14 | no 15 s hold on a second reply in one turn | a follow-up after a tool call |
 | D15 | voices other than Fish keep her cues in the stored text | matches text chats; pipedog stored the filtered text |
@@ -511,7 +549,3 @@ bun run dev                                            # the change, on :7860
 bun apps/bot/scripts/e2e-call.ts --barge-in --headful --out b1.json
 bun apps/bot/scripts/e2e-compare.ts a1.json a2.json … --vs b1.json b2.json …   # a*: a baseline
 ```
-
-## Not yet native
-
-- **Fish's exact segment ends** (G5): serial flushes, once measured.

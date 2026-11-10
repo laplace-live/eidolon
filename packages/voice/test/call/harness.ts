@@ -74,7 +74,7 @@ export class FakeUtterance implements Utterance {
     this.audio.drop();
   }
 
-  pcm(seg: number | null, samples: number): void {
+  pcm(seg: number, samples: number): void {
     this.audio.push({ kind: "pcm", seg, pcm: new Int16Array(samples).fill(1) });
   }
 
@@ -220,8 +220,6 @@ export interface CallOptions {
   readonly greet?: boolean;
   /** Her turns ignore an abort. */
   readonly stubborn?: boolean;
-  /** Whether her voice marks each segment's end (Fish's doesn't). */
-  readonly boundaries?: boolean;
   /** Runs her turns instead of scripting them. */
   readonly turn?: FloorOptions["turn"];
 }
@@ -267,7 +265,6 @@ export function startCall(options: CallOptions = {}) {
     persona: HOST,
     speech,
     markup: undefined,
-    boundaries: options.boundaries ?? true,
     speaker,
     join: joinSegments,
     clock,
@@ -444,6 +441,7 @@ export class FakeTransport implements CallTransport {
 export class FakeStt implements SttStream {
   readonly inputRate = 16_000;
   readonly ttfsP99 = 0.35;
+  readonly acknowledgesFinalize = true;
   readonly events = new AsyncQueue<SttEvent>();
   samples = 0;
   closed = false;

@@ -101,11 +101,14 @@ test("each line and photo reaches the browser through the call, numbered on from
       () => speech.utterances.length > before && speech.utterances.at(-1)?.ended === true,
     );
     const utterance = speech.utterances.at(-1);
-    utterance?.pcm(1, 480);
-    utterance?.segEnd(1);
+    const segments = utterance?.said.length ?? 0;
+    for (let seg = 1; seg <= segments; seg++) {
+      utterance?.pcm(seg, 480);
+      utterance?.segEnd(seg);
+    }
     utterance?.finish();
     await settle();
-    for (let pulled = 0; pulled < 480; pulled += 240) transport.source?.pull(240);
+    for (let pulled = 0; pulled < 480 * segments; pulled += 240) transport.source?.pull(240);
     await ending;
   };
 
