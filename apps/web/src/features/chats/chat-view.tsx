@@ -145,6 +145,11 @@ export function ChatView({
   const turns = useChat(id);
   const events = chat.data?.events;
   const items = useMemo(() => chatItems(events ?? []), [events]);
+  const header = chat.data?.header;
+  const title = useMemo(
+    () => (header === undefined ? null : summarize(header, events ?? []).title),
+    [header, events],
+  );
 
   if (chat.data === undefined) {
     const state =
@@ -156,12 +161,11 @@ export function ChatView({
     return <ChatPlaceholder state={state} onShowList={onShowList} />;
   }
 
-  const { header } = chat.data;
-  const persona = personaOf(header.participants[0] ?? "");
+  const { header: loaded } = chat.data;
+  const persona = personaOf(loaded.participants[0] ?? "");
   const name = shortNameOf(persona);
-  const { title } = summarize(header, chat.data.events);
   const now = Date.now();
-  const menuName = chatName(title, persona.name, header.createdAt, lang, now);
+  const menuName = chatName(title, persona.name, loaded.createdAt, lang, now);
   const retry = turns.busy ? null : retryText(items);
 
   return (
@@ -172,7 +176,7 @@ export function ChatView({
         <div className="min-w-0 flex-1">
           <h2 className="truncate font-semibold text-sm leading-tight">{title ?? persona.name}</h2>
           <p className="truncate text-muted-foreground text-xs">
-            {title === null ? shortDate(header.createdAt, lang, now) : persona.name}
+            {title === null ? shortDate(loaded.createdAt, lang, now) : persona.name}
           </p>
         </div>
         <CallButton persona={persona} />

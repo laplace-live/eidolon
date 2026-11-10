@@ -320,6 +320,7 @@ export class StreamArchive implements ContextProvider {
   readonly #retriever: Retriever;
   readonly #catalog: ArchiveCatalog;
   #turnKey: TurnKey | null = null;
+  #turnId: string | undefined;
   #toolCalls = 0;
   #tool: LlmTool | null = null;
 
@@ -490,8 +491,9 @@ export class StreamArchive implements ContextProvider {
 
   #beginTurn(context: ConversationContext): boolean {
     const key = turnKeyOf(context.getMessages());
-    if (sameTurn(this.#turnKey, key)) return false;
+    if (sameTurn(this.#turnKey, key) && this.#turnId === context.turn) return false;
     this.#turnKey = key;
+    this.#turnId = context.turn;
     this.#toolCalls = 0;
     if (this.#tool !== null) context.setHiddenTools([]);
     return true;

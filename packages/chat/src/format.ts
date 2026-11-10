@@ -143,7 +143,7 @@ export interface ChatSummary {
   readonly createdAt: number;
   /** The last event's `at`, else `createdAt`. */
   readonly updatedAt: number;
-  /** The last message's text. */
+  /** The text of the last message that has any. */
   readonly lastText: string | null;
   /** 0 before the first event. */
   readonly lastSeq: number;

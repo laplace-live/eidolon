@@ -22,9 +22,15 @@ import {
   type LogRecord,
   logger,
 } from "@eidolon/config";
-import { buildGreetingKickoff, GREETING_KICKOFF } from "@eidolon/context";
+import {
+  buildGreetingKickoff,
+  GREETING_KICKOFF,
+  RECALL_TOOL_NAME,
+  StreamArchive,
+} from "@eidolon/context";
 import type { ContextProvider, LlmTool, ToolResult, TurnGate } from "@eidolon/core";
 import { usageRecord } from "@eidolon/providers";
+import { broadcast, FakeRetriever, MemoryCatalog, TODAY } from "../../context/test/helpers.ts";
 import { MAX_ROUNDS, runTurn } from "../src/turn.ts";
 import type {
   EngineDeps,
@@ -913,5 +919,52 @@ describe("a tool that runs on past an interruption", () => {
     cancel.abort();
     expect(toolSignal?.aborted).toBe(true);
     expect(await (added[0] as (typeof added)[number]).events).toEqual([]);
+  });
+});
+
+describe("the stream archive across a chat's turns", () => {
+  test("gives a line repeated in a full window a new recall_streams budget", async () => {
+    const archive = new StreamArchive({
+      retriever: new FakeRetriever([]),
+      catalog: new MemoryCatalog([broadcast("2026-09-08")]),
+      timeZone: "UTC",
+      today: () => TODAY,
+    });
+    const recall = (await archive.recallTool()) as LlmTool;
+    const persona = parts({
+      providers: [{ label: "StreamArchiveService", provider: archive }],
+      tools: [recall],
+    });
+    const args = { query: "recap", mode: "overview", period: "latest" };
+    const line = "还记得上次直播吗";
+    // Past the window, each view holds as many of the viewer's lines as the last one did.
+    const earlier = Array.from({ length: CHAT_WINDOW_MESSAGES }, (_, i) => [
+      user(`问${i}`),
+      alice(`答${i}`),
+    ]).flat();
+    const log = chat(...earlier, user(line));
+    // Both turns spend the budget: two calls, then her answer.
+    const turn: Round[] = [
+      [call("c1", RECALL_TOOL_NAME, args), DONE],
+      [call("c2", RECALL_TOOL_NAME, args), DONE],
+      [{ type: "text", text: "记得" }, DONE],
+    ];
+    const { mind } = fakeMind(...turn, ...turn);
+    const engine = deps(mind, persona);
+    const results = (outputs: readonly TurnOutput[]) =>
+      eventsOf(outputs).flatMap((event) => (event.type === "tool-result" ? [event.result] : []));
+    const answered = await collect(runTurn(request({ chat: log }), engine));
+    expect(results(answered).map((result) => "content" in result)).toEqual([true, true]);
+
+    let events = [...log.events, ...stampEvents(eventsOf(answered), log.events.length, 2000)];
+    const again: ChatEventDraft = {
+      type: "message",
+      id: "u-again",
+      speaker: { kind: "user" },
+      text: line,
+    };
+    events = [...events, ...stampEvents([again], events.length, 3000)];
+    const outputs = await collect(runTurn(request({ chat: { header: HEADER, events } }), engine));
+    expect(results(outputs).map((result) => "content" in result)).toEqual([true, true]);
   });
 });

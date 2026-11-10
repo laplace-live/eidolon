@@ -203,7 +203,8 @@ export function ChatLog({
     if (sentKey !== undefined) pinnedRef.current = true;
   }, [sentKey, pinnedRef]);
 
-  const retryLast = retry === null ? null : () => onSend(retry);
+  // Stable, so the memoized last item doesn't re-render with every streamed delta.
+  const retryLast = useMemo(() => (retry === null ? null : () => onSend(retry)), [retry, onSend]);
   const streamed = turn === null ? "" : withoutPartialMarkup(turn.text);
   const waiting = pending !== null && !pending.failed && turn === null;
   const thinking = waiting || (turn !== null && streamed === "" && turn.tool === null);

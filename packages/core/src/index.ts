@@ -11,6 +11,11 @@ export interface ConversationContext {
    * the full list, so callers never need to snapshot it.
    */
   setHiddenTools(names: readonly string[]): void;
+  /**
+   * The user turn's id, from a caller that knows its turns: a chat's windowed view can repeat the
+   * last turn's messages exactly, so a new id is a new turn even then.
+   */
+  readonly turn?: string;
 }
 
 /** Per-frame metadata shared down the pipeline, e.g. the retrieval gate's decision. */
