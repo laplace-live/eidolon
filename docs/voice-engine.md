@@ -2,7 +2,7 @@
 
 A call runs on eidolon's own loop around `@eidolon/engine`, so its turns run through the same
 engine, log format and `viewOf` as a text chat. It replaced pipedog's frame pipeline as every
-call's engine on <the G7 date>, and pipedog left the repository after 14 more days; clients needed
+call's engine with #39, and pipedog left the repository 14 days later with #40; clients needed
 no change ([Differences from pipedog](#differences-from-pipedog)). [RTVI](#rtvi) lists what they
 saw change, and [frontend-loading-state.md](frontend-loading-state.md) tells them.
 
@@ -480,7 +480,7 @@ Messages go out as `JSON.stringify` writes them, where pipedog's transport wrote
 
 ## Differences from pipedog
 
-eidolon's engine replaced pipedog's pipeline on <the G7 date>, after the user signed off each
+eidolon's engine replaced pipedog's pipeline with #39, after the user signed off each
 difference below, and what [frontend-loading-state.md](frontend-loading-state.md) tells clients of
 them. Each fixed a defect with the trigger it names; code and docs cite them by id.
 
