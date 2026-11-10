@@ -279,10 +279,13 @@ export async function runOn(engine: VoiceEngine, scenario: Scenario): Promise<Ca
     soniox: fakes.soniox.connections,
     realtime: fakes.realtime?.received ?? [],
     usage,
+    // A realtime call's conversation is what its server got, compared as `realtime`.
     conversation:
-      engine === "pipedog"
-        ? (pipedogSeen.context?.getMessages() ?? [])
-        : nativeConversation(nativeLog),
+      scenario.realtime !== undefined
+        ? []
+        : engine === "pipedog"
+          ? (pipedogSeen.context?.getMessages() ?? [])
+          : nativeConversation(nativeLog),
     logs: logs.records,
     ended,
     failed,
