@@ -116,10 +116,6 @@ class Reply implements SpokenReply {
   readonly #tracker: SpokenTracker;
   readonly #unread: RegExp | null;
   readonly #done = Promise.withResolvers<Heard>();
-  /** Each segment's text, by its seg. */
-  readonly #said = new Map<number, string>();
-  /** Segments whose end the cursor has yet to pass. */
-  readonly #unpassed = new Set<number>();
   /** Utterances whose audio hasn't all been queued, oldest first; only the first's is queued. */
   #voices: Voiced[] = [];
   /** The utterance her next segment goes to. */
@@ -204,7 +200,7 @@ class Reply implements SpokenReply {
     if (this.#cancelled || !("tag" in event) || event.tag.reply !== this.#id) return;
     this.#tracker.cursor(event);
     const { tag } = event;
-    const text = this.#said.get(tag.seg);
+    const text = this.#tracker.textOf(tag.seg);
     if (text === undefined) return;
     if (event.type === "seg-start") {
       this.#note({ type: "segment-started", tag });
@@ -213,7 +209,6 @@ class Reply implements SpokenReply {
       this.#note({ type: "segment-progress", tag, spokenTo: to });
     } else {
       this.#note({ type: "segment-ended", tag });
-      this.#unpassed.delete(tag.seg);
       this.#settle();
     }
   }
@@ -232,7 +227,6 @@ class Reply implements SpokenReply {
     const seg = this.#nextSeg++;
     const voiced = this.#current ?? this.#open();
     this.#current = voiced;
-    this.#said.set(seg, text);
     this.#note({ type: "segment", tag: this.#tag(seg), text });
     if (!this.#ttsStarted) {
       this.#ttsStarted = true;
@@ -240,7 +234,6 @@ class Reply implements SpokenReply {
     }
     voiced.said();
     this.#tracker.say(seg, text);
-    this.#unpassed.add(seg);
     voiced.utterance.say({ id: seg, text });
   }
 
@@ -330,7 +323,7 @@ class Reply implements SpokenReply {
       this.#ttsStopped = true;
       this.#note({ type: "tts-stopped" });
     }
-    if (this.#unpassed.size === 0) this.#resolve(true);
+    if (this.#tracker.heardAll()) this.#resolve(true);
   }
 
   #resolve(complete: boolean): void {

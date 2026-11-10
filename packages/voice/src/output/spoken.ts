@@ -62,6 +62,17 @@ export class SpokenTracker {
     else if (event.type === "words") said.chars = Math.max(said.chars, event.chars);
   }
 
+  /** Segment `seg`'s raw text, once it went to the voice. */
+  textOf(seg: number): string | undefined {
+    return this.#said.get(seg)?.text;
+  }
+
+  /** Whether the cursor has passed the end of every segment said. */
+  heardAll(): boolean {
+    for (const said of this.#said.values()) if (!said.heard) return false;
+    return true;
+  }
+
   /** The reply's wordless last text, such as a closing `</whisper>`, which was never said. */
   attach(text: string): void {
     if (!this.#frozen) this.#tail = text;

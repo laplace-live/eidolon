@@ -75,12 +75,12 @@ class FishUtterance implements Utterance {
   readonly #pcm = new PcmBytes();
   /** Said, waiting for the segment flushed before them to end. */
   #queue: { readonly id: number; readonly text: string }[] = [];
-  /** The segment flushed whose audio hasn't ended, and the last one flushed. */
+  /** The segment flushed whose audio hasn't ended. */
   #flushed: number | null = null;
+  /** The last segment flushed: null while nothing has been said. */
   #last: number | null = null;
   /** The flushed segment's stall until its first audio, then its idle after each. */
   #timer: ReturnType<typeof setTimeout> | undefined;
-  #said = false;
   #ended = false;
   #stopped = false;
 
@@ -99,20 +99,26 @@ class FishUtterance implements Utterance {
   end(): void {
     if (this.#ended || this.audio.closed) return;
     this.#ended = true;
+    if (this.#last === null) {
+      this.#release();
+      this.audio.finish({ kind: "end" });
+      this.#stream.keep(this.#session);
+      return;
+    }
     this.#next();
     // Here, not at the deferred stop: by then a voice switch's utterance may have ended and left
     // the spare in its voice, which this would replace.
-    if (this.#said) this.#stream.preopen(this.#session.voice);
+    this.#stream.preopen(this.#session.voice);
   }
 
   cancel(): void {
     if (this.audio.closed) return;
     this.#ended = true;
     this.#queue = [];
-    this.#disarm();
+    clearTimeout(this.#timer);
     this.audio.drop();
     this.#release();
-    if (this.#said) {
+    if (this.#last !== null) {
       void this.#session.link.close();
       this.#stream.preopen(this.#session.voice);
     } else {
@@ -129,9 +135,9 @@ class FishUtterance implements Utterance {
       if (seg === null) return;
       const pcm = this.#pcm.push(message.audio);
       if (pcm.length > 0) this.audio.push({ kind: "pcm", seg, pcm });
-      if (this.#flushed !== null) this.#arm(FISH_SEGMENT_IDLE_MS, () => this.#segmentEnded());
+      if (this.#flushed !== null) this.#arm(FISH_SEGMENT_IDLE_MS, () => this.#segmentEnded(seg));
     } else if (message.event === "finish") {
-      this.#disarm();
+      clearTimeout(this.#timer);
       this.#release();
       void this.#session.link.close();
       if (message.reason === "error") {
@@ -145,7 +151,7 @@ class FishUtterance implements Utterance {
   }
 
   lost(error: string | null): void {
-    this.#disarm();
+    clearTimeout(this.#timer);
     this.#release();
     if (error === null) this.audio.drop();
     else this.audio.finish({ kind: "error", message: error });
@@ -161,7 +167,6 @@ class FishUtterance implements Utterance {
         this.audio.push({ kind: "seg-end", seg: segment.id });
         continue;
       }
-      this.#said = true;
       this.#flushed = segment.id;
       this.#last = segment.id;
       this.#session.link.send(packMsg({ event: "text", text }));
@@ -170,24 +175,16 @@ class FishUtterance implements Utterance {
     }
     if (!this.#ended || this.#stopped || this.#queue.length > 0) return;
     this.#stopped = true;
-    if (!this.#said) {
-      this.#release();
-      this.audio.finish({ kind: "end" });
-      this.#stream.keep(this.#session);
-      return;
-    }
     this.#session.link.send(packMsg({ event: "stop" }));
   }
 
-  #segmentEnded(): void {
-    if (this.#flushed === null || this.audio.closed) return;
-    this.audio.push({ kind: "seg-end", seg: this.#flushed });
+  #segmentEnded(seg: number): void {
+    this.audio.push({ kind: "seg-end", seg });
     this.#flushed = null;
     this.#next();
   }
 
   #stalled(): void {
-    if (this.audio.closed) return;
     this.#queue = [];
     this.#release();
     this.audio.finish({ kind: "error", message: SPEECH_STALLED });
@@ -198,11 +195,6 @@ class FishUtterance implements Utterance {
   #arm(ms: number, then: () => void): void {
     clearTimeout(this.#timer);
     this.#timer = setTimeout(then, ms);
-  }
-
-  #disarm(): void {
-    clearTimeout(this.#timer);
-    this.#timer = undefined;
   }
 
   #release(): void {

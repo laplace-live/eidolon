@@ -86,12 +86,9 @@ class SonioxStt extends WebsocketStt {
     if (this.socket?.open) this.socket.send(FINALIZE);
   }
 
-  /** The segment heard up to an endpoint; a `<fin>` with none is `finalize()` answered bare. */
-  #endpoint(finalized = false): void {
-    if (this.#final.length === 0) {
-      if (finalized) this.emit({ type: "finalized" });
-      return;
-    }
+  /** The segment heard up to an endpoint, if any. */
+  #endpoint(): void {
+    if (this.#final.length === 0) return;
     this.emit({ type: "final", text: this.#final.join(""), finalized: true });
     this.#final = [];
   }
@@ -113,8 +110,9 @@ class SonioxStt extends WebsocketStt {
     const pending: string[] = [];
     for (const token of content.tokens ?? []) {
       if (!token.is_final) pending.push(token.text);
-      else if (token.text === FINALIZED_TOKEN) this.#endpoint(true);
-      else if (token.text === END_TOKEN) this.#endpoint();
+      else if (token.text === FINALIZED_TOKEN && this.#final.length === 0)
+        this.emit({ type: "finalized" });
+      else if (token.text === END_TOKEN || token.text === FINALIZED_TOKEN) this.#endpoint();
       else this.#final.push(token.text);
     }
     // Final tokens go out as interim text too, until an endpoint makes them a segment.
