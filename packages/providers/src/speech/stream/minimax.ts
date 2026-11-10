@@ -16,6 +16,17 @@ const SAMPLE_RATE = 24000;
 const DEFAULT_VOICE = "Calm_Woman";
 const MARKER = "data:";
 
+// MiniMax answers 200 to a request it refuses, with the reason in base_resp: in a reply of its own,
+// not blocks, or in a streamed block.
+function refuse(data: object): void {
+  const status = (data as { base_resp?: { status_code?: unknown; status_msg?: unknown } })
+    .base_resp;
+  const code = status?.status_code;
+  if (typeof code !== "number" || code === 0) return;
+  const message = typeof status?.status_msg === "string" ? status.status_msg : "no audio";
+  throw new SpeechError(`MiniMax TTS error: ${message} (${code})`);
+}
+
 /** A block's audio; nothing for one that carries `extra_info`, the whole reply's audio again. */
 function audioOf(block: string): Uint8Array | null {
   let data: unknown;
@@ -25,7 +36,9 @@ function audioOf(block: string): Uint8Array | null {
     logger.error(`MiniMax sent a block that isn't JSON: ${block.slice(0, 100)}`);
     return null;
   }
-  if (typeof data !== "object" || data === null || "extra_info" in data) return null;
+  if (typeof data !== "object" || data === null) return null;
+  refuse(data);
+  if ("extra_info" in data) return null;
   const audio = (data as { data?: { audio?: unknown } }).data?.audio;
   return typeof audio === "string" && audio !== ""
     ? new Uint8Array(Buffer.from(audio, "hex"))
@@ -112,6 +125,8 @@ export class MiniMaxSpeech implements SpeechStream {
     if (buffer.startsWith(MARKER)) {
       const audio = audioOf(buffer.slice(MARKER.length));
       if (audio !== null) yield audio;
+    } else if (buffer.trim() !== "") {
+      audioOf(buffer);
     }
   }
 }

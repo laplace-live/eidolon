@@ -1,9 +1,16 @@
 // An utterance over an HTTP speech API: a request per segment, at most two in flight, their audio
-// played in the order the segments were said as it arrives.
+// played in the order the segments were said as it arrives. A request that goes SPEECH_STALL_MS
+// without audio fails the utterance.
 import { errorText } from "@eidolon/config";
 import { PcmBytes } from "../pcm.ts";
 import type { Utterance } from "./index.ts";
-import { AudioQueue, type SpokenText, scrubbed } from "./shared.ts";
+import {
+  AudioQueue,
+  SPEECH_STALL_MS,
+  SPEECH_STALLED,
+  type SpokenText,
+  scrubbed,
+} from "./shared.ts";
 
 const IN_FLIGHT = 2;
 
@@ -96,8 +103,16 @@ export class HttpUtterance implements Utterance {
 
   async #run(job: Job, text: string): Promise<void> {
     const { signal } = this.#controller;
+    const stall = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const wait = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => stall.abort(), SPEECH_STALL_MS);
+    };
+    wait();
     try {
-      for await (const bytes of this.#fetchAudio(text, signal)) {
+      for await (const bytes of this.#fetchAudio(text, AbortSignal.any([signal, stall.signal]))) {
+        wait();
         const pcm = job.pcm.push(bytes);
         if (pcm.length === 0) continue;
         if (job === this.#jobs[0]) this.audio.push({ kind: "pcm", seg: job.id, pcm });
@@ -105,14 +120,16 @@ export class HttpUtterance implements Utterance {
       }
     } catch (error) {
       if (signal.aborted) return;
-      const message =
-        error instanceof SpeechError
+      const message = stall.signal.aborted
+        ? SPEECH_STALLED
+        : error instanceof SpeechError
           ? error.message
           : `Unknown error occurred: ${errorText(error)}`;
       this.audio.finish({ kind: "error", message: scrubbed(message, this.#secret) });
       this.#stop();
       return;
     } finally {
+      clearTimeout(timer);
       this.#running--;
     }
     if (signal.aborted) return;
