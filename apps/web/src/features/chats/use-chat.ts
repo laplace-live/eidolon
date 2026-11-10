@@ -7,7 +7,7 @@ import { asApiError } from "@/lib/api";
 import { followLive, sendMessage, stopChat } from "@/lib/chats";
 import { toastError } from "@/lib/feedback";
 import { chatQuery, chatsQuery } from "./queries";
-import { IDLE, type LiveState, mergeEvents, reaches, reduceLive } from "./stream";
+import { IDLE, type LiveState, mergeEvents, reaches, reduceLive, Sends } from "./stream";
 
 type Open = (signal: AbortSignal) => AsyncIterable<ChatStreamLine>;
 
@@ -23,7 +23,7 @@ export function useChat(id: string): ChatTurns {
   const queryClient = useQueryClient();
   const [live, dispatch] = useReducer(reduceLive, IDLE);
   const streams = useRef(new Set<AbortController>());
-  const sends = useRef(0);
+  const sends = useRef(new Sends());
 
   const store = useCallback(
     (events: readonly ChatEvent[]) => {
@@ -48,13 +48,13 @@ export function useChat(id: string): ChatTurns {
     async (open: Open, key: number | null, rejoin: boolean): Promise<void> => {
       const controller = new AbortController();
       streams.current.add(controller);
-      // Each send counts one: a send since this stream opened supersedes it.
-      const opened = sends.current;
+      const opened = sends.current.mark(key);
       let turn: string | null = null;
       let ended = false;
       try {
         for await (const line of open(controller.signal)) {
-          const reached = reaches(line, sends.current !== opened);
+          if (key !== null) sends.current.accept(key);
+          const reached = reaches(line, sends.current.superseded(opened));
           if (line.type === "events") store(line.events);
           else if (line.type === "started" && reached) [turn, ended] = [line.turn, false];
           else if (line.type === "ended" && line.turn === turn) ended = true;
@@ -75,7 +75,7 @@ export function useChat(id: string): ChatTurns {
       void queryClient.invalidateQueries({ queryKey: chatQuery(id).queryKey });
       void queryClient.invalidateQueries({ queryKey: chatsQuery.queryKey, exact: true });
       if (turn !== null && !ended) {
-        if (rejoin && sends.current === opened) {
+        if (rejoin && !sends.current.superseded(opened)) {
           await follow((signal) => followLive(id, signal), null, false);
         }
         dispatch({ type: "settled", key: null, turn });
@@ -95,7 +95,7 @@ export function useChat(id: string): ChatTurns {
 
   const send = useCallback(
     (text: string) => {
-      const key = ++sends.current;
+      const key = sends.current.issue();
       const after = queryClient.getQueryData(chatQuery(id).queryKey)?.events.at(-1)?.seq ?? 0;
       dispatch({ type: "sending", key, after, text });
       void follow((signal) => sendMessage(id, text, signal), key, true);

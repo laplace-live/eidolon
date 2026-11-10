@@ -179,6 +179,34 @@ function extended(log: ChatContents, added: readonly ChatEvent[]): ChatContents 
 }
 
 /**
+ * Which streams a send supersedes. A send counts once the server accepts it, at its stream's first
+ * line: one refused before it starts (a 400, say) never ran, so the reply on screen carries on.
+ */
+export class Sends {
+  #issued = 0;
+  #accepted = 0;
+
+  /** A new send's key. */
+  issue(): number {
+    this.#issued += 1;
+    return this.#issued;
+  }
+
+  /** What a stream opening now is superseded after: its own key, or for live every send so far. */
+  mark(key: number | null): number {
+    return key ?? this.#issued;
+  }
+
+  accept(key: number): void {
+    this.#accepted = Math.max(this.#accepted, key);
+  }
+
+  superseded(mark: number): boolean {
+    return this.#accepted > mark;
+  }
+}
+
+/**
  * Whether a stream's line reaches the reducer. A send supersedes every stream open before it, and
  * its own carries her reply from its start: a superseded one only stores what it brings, whether
  * it replays that same reply or still carries the one the send interrupted.

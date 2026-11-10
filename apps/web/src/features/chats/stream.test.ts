@@ -9,6 +9,7 @@ import {
   mergeEvents,
   reaches,
   reduceLive,
+  Sends,
 } from "./stream";
 
 const HEADER: ChatHeader = {
@@ -197,6 +198,38 @@ describe("reduceLive", () => {
     ]);
     expect(state.pending.map((line) => line.text)).toEqual(["new"]);
     expect(state.seen).toBe(4);
+  });
+});
+
+describe("Sends", () => {
+  test("a send supersedes the streams open before it once the server accepts it", () => {
+    const sends = new Sends();
+    const live = sends.mark(null);
+    const key = sends.issue();
+    const own = sends.mark(key);
+    expect(sends.superseded(live)).toBe(false);
+    sends.accept(key);
+    expect(sends.superseded(live)).toBe(true);
+    expect(sends.superseded(own)).toBe(false);
+  });
+
+  test("a send refused before its stream starts supersedes nothing", () => {
+    const sends = new Sends();
+    const first = sends.issue();
+    const reply = sends.mark(first);
+    sends.accept(first);
+    sends.issue();
+    expect(sends.superseded(reply)).toBe(false);
+  });
+
+  test("a later accepted send supersedes an earlier one", () => {
+    const sends = new Sends();
+    const first = sends.issue();
+    const mark = sends.mark(first);
+    sends.accept(first);
+    const second = sends.issue();
+    sends.accept(second);
+    expect(sends.superseded(mark)).toBe(true);
   });
 });
 
