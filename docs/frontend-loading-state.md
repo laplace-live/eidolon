@@ -18,8 +18,9 @@ toggle a "thinking…" indicator between them. Start it on the turn's end rather
 `BotLlmStarted`, which fires only after the context providers' searches, so a slow retrieval
 would show nothing.
 
-A turn with no words runs no LLM, so nothing would end the indicator. The final transcript
-arrives before `UserStoppedSpeaking`, so start the indicator only for a turn that has one.
+A turn with no words runs no LLM unless it cut her off, so nothing would end the indicator. The
+final transcript arrives before `UserStoppedSpeaking` (not on a realtime model's call,
+[below](#full-per-turn-event-timeline)), so start the indicator only for a turn that has one.
 Clear it when the next turn starts or the call ends.
 
 ```ts
@@ -317,6 +318,11 @@ judges it complete and a final transcript is in (the TurnDetector,
 `packages/voice/src/input/turn.ts`). And the call opens with the bot's greeting: on `client-ready`,
 after `bot-ready`, she answers a kickoff prompt, which never reaches the client as `user-llm-text`,
 so steps 5–13 happen once before the user has said anything. A group call doesn't greet.
+
+On a call to a persona who talks through a realtime model, the model's own VAD starts and ends
+the user's turn, not Silero and Smart Turn, and it answers before it has transcribed the turn:
+`UserStoppedSpeaking` comes as it hears the user stop, and the final transcript after it. The
+TL;DR's indicator, which waits for that transcript, doesn't start on such a call.
 
 ---
 
