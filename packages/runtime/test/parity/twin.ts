@@ -447,6 +447,8 @@ export type Difference =
       readonly change: Change;
       readonly pipedog: unknown;
       readonly native: unknown;
+      /** pipedog's message's index in its list, system messages included; null for native-only. */
+      readonly at: number | null;
     }
   | {
       /** A request field other than the messages, a Fish start or text, the Soniox config. */
@@ -596,6 +598,7 @@ function compareMessages(
     change: c.change,
     pipedog: c.change === "native-only" ? null : c.item,
     native: c.change === "changed" ? c.other : c.change === "pipedog-only" ? null : c.item,
+    at: c.pipedog,
   }));
 }
 

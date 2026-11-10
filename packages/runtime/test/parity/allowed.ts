@@ -506,7 +506,11 @@ function spreadReports(d: Difference, twin: Twin): boolean {
       if (d.pipedog === null || d.native === null) return false;
       if (!spokenReport(d.message)) return besideReports(twin, d.pipedog, d.native);
       const span = spans(pipedog)[d.pipedog] as number;
-      return span > 0 && span === spans(native)[d.native];
+      if (span === 0 || span !== spans(native)[d.native]) return false;
+      // Past other messages, but in its place among the span's reports.
+      return (
+        reportsIn(pipedog, span).indexOf(d.pipedog) === reportsIn(native, span).indexOf(d.native)
+      );
     }
     case "changed":
       return d.pipedog !== null && d.native !== null && renumbered(twin, d.pipedog, d.native);
@@ -522,17 +526,26 @@ function spreadReports(d: Difference, twin: Twin): boolean {
   }
 }
 
-/** On native, the sentences she said in each reply the caller cut off while she spoke. */
-function cutSentences(seq: readonly Normalized[]): string[][] {
-  const cut: string[][] = [];
+/** A reply native's caller cut off while she spoke. */
+interface Cut {
+  /** The mind request it answered: the k-th bot-llm-started is the k-th request's. */
+  readonly request: number;
+  readonly said: readonly string[];
+}
+
+/** On native, each reply the caller cut off while she spoke, with the sentences she said in it. */
+function cutReplies(seq: readonly Normalized[]): Cut[] {
+  const cut: Cut[] = [];
   let said: string[] = [];
   let speaking = false;
+  let requests = 0;
   for (const m of seq) {
     if (m.type === "bot-transcription") said.push(text(m.data));
+    else if (m.type === "bot-llm-started") requests++;
     else if (m.type === "bot-started-speaking") speaking = true;
     else if (m.type === "bot-stopped-speaking") speaking = false;
     else if (m.type === "bot-interrupted") {
-      if (speaking) cut.push(said);
+      if (speaking) cut.push({ request: requests - 1, said });
       said = [];
     }
   }
@@ -550,8 +563,16 @@ function heardOfCut(d: Difference, twin: Twin): boolean {
   const whole = contentOf(d.pipedog);
   const kept =
     d.change === "pipedog-only" ? "" : sameRole(d.pipedog, d.native) ? contentOf(d.native) : null;
-  if (whole === null || kept === null) return false;
-  return cutSentences(rtvi(twin, "native")).some((said) => {
+  if (whole === null || kept === null || d.at === null) return false;
+  const lines =
+    d.kind === "conversation"
+      ? twin.pipedog.conversation
+      : twin.pipedog.mind[d.request]?.body.messages;
+  if (!Array.isArray(lines)) return false;
+  const line = lines.slice(0, d.at).filter((m) => field(m, "role") !== "system").length;
+  return cutReplies(rtvi(twin, "native")).some(({ request, said }) => {
+    // The cut message is the one right after the lines of the request it answered.
+    if (line !== messagesOf("mind", request, twin.pipedog).length) return false;
     const prefixes = said.map((_, i) => unspaced(said.slice(0, i + 1).join("")));
     const all = ["", ...prefixes];
     const p = all.indexOf(unspaced(whole));
