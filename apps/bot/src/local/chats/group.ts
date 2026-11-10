@@ -20,7 +20,7 @@ export function groupCallRefusal(personas: readonly ParticipantId[]): GroupCallR
     return {
       status: 400,
       code: "bad-request",
-      message: "Group calls need the native voice engine: unset EIDOLON_VOICE_ENGINE=pipedog",
+      message: "Group calls need the native voice engine, not EIDOLON_VOICE_ENGINE=pipedog",
     };
   }
   const on = realtimeIn(personas);

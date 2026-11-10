@@ -21,7 +21,8 @@ Everything else — Mem0, the reranker, the retrieval gate, both RAG indexes —
 degrades quietly when its key, table, or vector store is missing, so a fresh
 checkout runs.
 
-The bot is TypeScript on Bun, built on pipedog (a TypeScript port of Pipecat),
+The bot is TypeScript on Bun, its calls on its own voice engine (`packages/voice`),
+with pipedog (a TypeScript port of Pipecat) as the rollback until it is removed,
 in `apps/` and `packages/`; production has run it (`ghcr.io/laplace-live/eidolon`)
 since 2026-11-04. The offline chain is TypeScript too: `packages/ingest`, run
 through the `laplace-*` commands in `apps/cli`. The local web app and the

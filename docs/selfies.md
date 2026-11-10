@@ -62,12 +62,13 @@ worker's ids.
 
 ## Why the call is asynchronous
 
-The tool's `cancelOnInterruption: false` makes pipedog run the call
-asynchronously: the LLM continues the conversation immediately rather than
-holding the turn, and the result is injected later as a developer message. A
-render takes ten-odd seconds, and a voice bot that goes silent that long sounds
-broken. The persona prompt tells it to say something like 等我一下 on the way
-out, and the schema description tells it not to read the URL aloud.
+The tool's `cancelOnInterruption: false` makes the turn engine run the call
+asynchronously (pipedog too, under the rollback): the LLM continues the
+conversation immediately rather than holding the turn, and the result is
+injected later as a developer message. A render takes ten-odd seconds, and a
+voice bot that goes silent that long sounds broken. The persona prompt tells it
+to say something like 等我一下 on the way out, and the schema description tells
+it not to read the URL aloud.
 
 `timeoutSecs` (`SELFIE_TIMEOUT_SECONDS`, 120 by default) bounds it. The
 request's own idle timeout (`IMAGE_REQUEST_IDLE_TIMEOUT_MS`, 600 s) is

@@ -4,9 +4,9 @@ A voice bot for a streamer roleplay persona, with optional RAG over
 hand-compiled persona facts and refined past-stream transcripts, and optional
 per-viewer long-term memory via Mem0.
 
-The bot is TypeScript on [Bun](https://bun.sh), built on
-[pipedog](https://github.com/polvallverdu/pipedog), a TypeScript port of
-[Pipecat](https://docs.pipecat.ai/); it lives in `apps/` and `packages/`, and
+The bot is TypeScript on [Bun](https://bun.sh), its calls on its own voice
+engine, ported from [pipedog](https://github.com/polvallverdu/pipedog), a
+TypeScript port of [Pipecat](https://docs.pipecat.ai/); it lives in `apps/` and `packages/`, and
 has run production since 2026-11-04. The offline chain that builds its indexes
 is TypeScript too (`packages/ingest`).
 
@@ -338,7 +338,7 @@ jieba's dictionary and the Geist font, keep their own licenses, in [`NOTICE`](NO
 
 ## References
 
-- [pipedog](https://github.com/polvallverdu/pipedog) — the TypeScript Pipecat port the bot runs on
+- [pipedog](https://github.com/polvallverdu/pipedog) — the TypeScript Pipecat port the voice engine is ported from, and the calls' rollback
 - [Pipecat docs](https://docs.pipecat.ai/)
 - [Pipecat client SDK (JS)](https://docs.pipecat.ai/client/js/introduction)
 - [Cloudflare Realtime TURN](https://developers.cloudflare.com/realtime/turn/)
