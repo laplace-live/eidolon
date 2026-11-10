@@ -140,6 +140,11 @@ function deps(mind: Mind, seen: Seen = {}, tools: LlmTool[] = []): EngineDeps {
       throw new Error("no images here");
     },
     newId: () => `id-${++n}`,
+    speech: {
+      canSpeak: () => false,
+      synthesize: () => Promise.reject(new Error("no voice here")),
+      transcribe: () => Promise.reject(new Error("no ears here")),
+    },
   };
 }
 

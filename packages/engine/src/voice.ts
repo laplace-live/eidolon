@@ -83,10 +83,9 @@ export async function hearVoiceMessage(
   deps: Pick<EngineDeps, "saveAttachment" | "newId" | "speech">,
 ): Promise<Extract<ChatEventDraft, { readonly type: "message" }>> {
   const { chat, clip, signal } = request;
-  const speech = deps.speech ?? batchSpeech;
   const heard = await withPersona(voiceHearer(chat), () =>
     withUsageScope({ source: "chat", session: chat.header.id }, () =>
-      speech.transcribe(clip, { signal }),
+      deps.speech.transcribe(clip, { signal }),
     ),
   );
   signal.throwIfAborted();
@@ -97,7 +96,7 @@ export async function hearVoiceMessage(
     speaker: { kind: "user" },
     text: heard.text,
     modality: "voice",
-    attachments: [timed(saved, heard.durationMs ?? clip.durationMs ?? null)],
+    attachments: [timed(saved, heard.durationMs)],
   };
 }
 

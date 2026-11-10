@@ -27,7 +27,7 @@ import type {
   TurnOutput,
   TurnRequest,
 } from "./types.ts";
-import { batchSpeech, timed, withUnheard } from "./voice.ts";
+import { timed, withUnheard } from "./voice.ts";
 
 /** The `tool` stream line's name while her voice role speaks a voice message. */
 const SPEAKING = "voice";
@@ -258,10 +258,12 @@ class Turn {
       this.#emit({ type: "tool", turn: this.#id, name: SPEAKING, state: s });
     state("running");
     try {
-      const speech = this.#deps.speech ?? batchSpeech;
       const voice = this.#voice;
       const spoken = await raceAbort(
-        speech.synthesize(this.#text, { ...(voice === undefined ? {} : { voice }), signal }),
+        this.#deps.speech.synthesize(this.#text, {
+          ...(voice === undefined ? {} : { voice }),
+          signal,
+        }),
         signal,
       );
       const saved = await raceAbort(this.#deps.saveAttachment(spoken.bytes, spoken.mime), signal);

@@ -2,8 +2,6 @@
 // on their own, and the one bubble playing at a time.
 import type { ChatEvent } from "@eidolon/chat";
 
-/** The server takes two minutes at most. */
-export const MAX_RECORDING_MS = 120_000;
 /** Shorter than this is a slip of the finger, not a message. */
 export const MIN_RECORDING_MS = 500;
 /** A press held this long is hold-to-talk, and letting go sends; a shorter one is a click. */
@@ -17,10 +15,12 @@ export function recordingType(isTypeSupported: (type: string) => boolean): strin
   return RECORDING_TYPES.find((type) => isTypeSupported(type)) ?? null;
 }
 
-/** A length as `m:ss`. */
-export function clock(ms: number): string {
-  const seconds = Math.max(0, Math.round(ms / 1000));
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+/**
+ * Whether a key press throws the take away: an Escape that no menu or sheet took to close itself,
+ * which Radix marks with preventDefault before it reaches the window.
+ */
+export function cancelsTake(event: Pick<KeyboardEvent, "key" | "defaultPrevented">): boolean {
+  return event.key === "Escape" && !event.defaultPrevented;
 }
 
 /** An audio element's `duration` in ms, or null while it isn't known (NaN, or Infinity). */

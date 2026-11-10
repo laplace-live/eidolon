@@ -16,6 +16,12 @@ const clip = {
 };
 const noWait = async () => {};
 
+/** Soniox deletes after it answers: what reached the fake once `count` requests have. */
+async function requests(count: number): Promise<string[]> {
+  for (let waited = 0; fake.seen.length < count && waited < 2000; waited += 5) await Bun.sleep(5);
+  return fake.seen.map(({ method, url }) => `${method} ${new URL(url).pathname}`);
+}
+
 /** The upload's name, its type as sent (Bun's parse guesses one from the name), and its bytes. */
 async function fileOf(seen: Seen | undefined): Promise<[string, string, number[]]> {
   const file = seen?.form?.get("file");
@@ -171,15 +177,16 @@ describe("transcribe", () => {
     } finally {
       delete process.env.STT_LANGUAGE;
     }
-    expect(fake.seen.map(({ method, url }) => `${method} ${url}`)).toEqual([
-      "POST https://api.soniox.com/v1/files",
-      "POST https://api.soniox.com/v1/transcriptions",
-      "GET https://api.soniox.com/v1/transcriptions/t1",
-      "GET https://api.soniox.com/v1/transcriptions/t1",
-      "GET https://api.soniox.com/v1/transcriptions/t1/transcript",
-      "DELETE https://api.soniox.com/v1/transcriptions/t1",
-      "DELETE https://api.soniox.com/v1/files/f1",
+    expect(await requests(7)).toEqual([
+      "POST /v1/files",
+      "POST /v1/transcriptions",
+      "GET /v1/transcriptions/t1",
+      "GET /v1/transcriptions/t1",
+      "GET /v1/transcriptions/t1/transcript",
+      "DELETE /v1/transcriptions/t1",
+      "DELETE /v1/files/f1",
     ]);
+    expect(fake.seen[0]?.url).toBe("https://api.soniox.com/v1/files");
     expect(waits).toEqual([500, 500]);
     expect(fake.seen.every((seen) => seen.headers.get("authorization") === "Bearer sk")).toBe(true);
     expect(await fileOf(fake.seen[0])).toEqual(["voice.webm", "audio/webm", [...clip.bytes]]);
@@ -216,6 +223,7 @@ describe("transcribe", () => {
     } finally {
       delete process.env.TRANSCRIBE_LANGUAGE;
     }
+    await requests(5);
     expect(fake.seen[1]?.json).toEqual({ model: "stt-async-v5", file_id: "f2" });
   });
 
@@ -239,13 +247,35 @@ describe("transcribe", () => {
       sleep: noWait,
     });
     await expect(failed).rejects.toThrow("Soniox answered 200: audio_decode_error: can't decode");
-    expect(fake.seen.map(({ method, url }) => `${method} ${new URL(url).pathname}`)).toEqual([
+    expect(await requests(4)).toEqual([
       "POST /v1/files",
       "POST /v1/transcriptions",
       "DELETE /v1/transcriptions/t3",
       "DELETE /v1/files/f3",
     ]);
     expect(fake.usage).toEqual([]);
+  });
+
+  test("a Soniox job in a status it doesn't know is an error, not polled forever", async () => {
+    fake.answer(({ method, url }) => {
+      const path = new URL(url).pathname;
+      if (path === "/v1/files") return Response.json({ id: "f9" });
+      if (method === "POST") return Response.json({ id: "t9", status: "queued" });
+      if (method === "GET") return Response.json({ id: "t9" });
+      return new Response(null, { status: 204 });
+    });
+    const failed = transcribe(hearing({ SONIOX_API_KEY: "sk" }), clip, {
+      fetch: fake.fetch,
+      sleep: noWait,
+    });
+    await expect(failed).rejects.toThrow("Soniox answered 200: a transcription in status null");
+    expect(await requests(5)).toEqual([
+      "POST /v1/files",
+      "POST /v1/transcriptions",
+      "GET /v1/transcriptions/t9",
+      "DELETE /v1/transcriptions/t9",
+      "DELETE /v1/files/f9",
+    ]);
   });
 
   test("an abort mid-poll still deletes the upload", async () => {
@@ -265,7 +295,7 @@ describe("transcribe", () => {
       },
     });
     await expect(failed).rejects.toThrow("stopped");
-    expect(fake.seen.map(({ method, url }) => `${method} ${new URL(url).pathname}`)).toEqual([
+    expect(await requests(4)).toEqual([
       "POST /v1/files",
       "POST /v1/transcriptions",
       "DELETE /v1/transcriptions/t4",

@@ -3,8 +3,9 @@ import { ChevronDownIcon, PauseIcon, PlayIcon } from "lucide-react";
 import { type ReactNode, type SyntheticEvent, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { formatDuration } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { claimPlayback, clock, knownDuration, releasePlayback } from "./voice";
+import { claimPlayback, knownDuration, releasePlayback } from "./voice";
 
 /** Ends a bubble's auto-play: it played through, or was paused, or couldn't start. */
 export type AutoPlayEnd = (finished: boolean) => void;
@@ -115,7 +116,11 @@ export function VoiceBubble({
   }
 
   const shown =
-    playing || position > 0 ? clock(position) : duration === null ? "" : clock(duration);
+    playing || position > 0
+      ? formatDuration(position / 1000)
+      : duration === null
+        ? ""
+        : formatDuration(duration / 1000);
   return (
     <div className={cn("flex w-64 max-w-full flex-col gap-1", mine ? "items-end" : "items-start")}>
       <div
@@ -144,7 +149,11 @@ export function VoiceBubble({
           value={Math.min(position, duration ?? 0)}
           disabled={duration === null || src === null}
           aria-label={t`Playback Position`}
-          aria-valuetext={duration === null ? undefined : `${clock(position)} / ${clock(duration)}`}
+          aria-valuetext={
+            duration === null
+              ? undefined
+              : `${formatDuration(position / 1000)} / ${formatDuration(duration / 1000)}`
+          }
           onChange={(event) => {
             const at = Number(event.target.value);
             setPosition(at);
@@ -162,7 +171,8 @@ export function VoiceBubble({
         <audio
           ref={ref}
           src={src ?? undefined}
-          preload="metadata"
+          // Metadata only tells a length the message doesn't already have.
+          preload={durationMs === null ? "metadata" : "none"}
           onLoadedMetadata={onMetadata}
           onDurationChange={onDurationChange}
           onTimeUpdate={(event) => {

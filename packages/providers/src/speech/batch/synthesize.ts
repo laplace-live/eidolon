@@ -1,6 +1,5 @@
 // A whole reply as one audio file in her voice role's voice, for a chat's voice message. Each
 // provider is asked for MP3, the one format every one of them offers and every browser plays.
-import { isPlainObject } from "@eidolon/config";
 import { modelInfo } from "../../catalog.ts";
 import { ProviderHttpError } from "../../http/errors.ts";
 import { stripMarkup } from "../../markup.ts";
@@ -8,7 +7,7 @@ import { textUnits } from "../../pricing.ts";
 import { hasKey, missingKey, ProviderConfigError, type Selection, voiceOf } from "../../resolve.ts";
 import { reportUsage } from "../../usage.ts";
 import { mp3DurationMs } from "./mp3.ts";
-import { baseOf, type FetchOptions, send, spokenLanguage } from "./shared.ts";
+import { baseOf, type FetchOptions, record, send, spokenLanguage } from "./shared.ts";
 
 export interface SynthesizeOptions extends FetchOptions {
   /** The voice for this reply alone, as her voice-style tool picks it; else her role's. */
@@ -36,23 +35,12 @@ async function mp3(response: Response): Promise<Speech> {
   return { bytes, mime: MP3, durationMs: mp3DurationMs(bytes) };
 }
 
-function json(body: unknown): string {
-  return JSON.stringify(body);
-}
-
 /** A voice the provider can't speak without. */
 function named(voice: string | undefined, selection: Selection): string {
   if (voice !== undefined) return voice;
   throw new ProviderConfigError(
     `${selection.provider.name} needs a voice: set TTS_VOICE_ID, or pick one in her voice settings`,
   );
-}
-
-function fromHex(hex: string): Uint8Array {
-  if (hex.length % 2 !== 0 || !/^[0-9a-f]*$/i.test(hex)) throw new Error("audio that isn't hex");
-  const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i++) out[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  return out;
 }
 
 // The voices pipedog's MiniMax and Soniox services speak in when none is named, so a voice message
@@ -76,7 +64,7 @@ const SYNTHESIZERS: Readonly<Record<string, (job: Job) => Promise<Speech>>> = {
           model: selection.model,
         },
         // As a call asks: Fish's best-quality latency, and no normalization, which reads years badly.
-        body: json({
+        body: JSON.stringify({
           text,
           ...(voice === undefined ? {} : { reference_id: voice }),
           format: "mp3",
@@ -99,7 +87,7 @@ const SYNTHESIZERS: Readonly<Record<string, (job: Job) => Promise<Speech>>> = {
           Authorization: `Bearer ${selection.apiKey}`,
           "Content-Type": "application/json",
         },
-        body: json({
+        body: JSON.stringify({
           model: selection.model,
           input: text,
           voice: named(voice, selection),
@@ -118,7 +106,7 @@ const SYNTHESIZERS: Readonly<Record<string, (job: Job) => Promise<Speech>>> = {
       `${baseOf(selection)}${path}?output_format=mp3_44100_128`,
       {
         headers: { "xi-api-key": selection.apiKey, "Content-Type": "application/json" },
-        body: json({ text, model_id: selection.model }),
+        body: JSON.stringify({ text, model_id: selection.model }),
       },
       options,
     );
@@ -136,7 +124,7 @@ const SYNTHESIZERS: Readonly<Record<string, (job: Job) => Promise<Speech>>> = {
           "Cartesia-Version": CARTESIA_VERSION,
           "Content-Type": "application/json",
         },
-        body: json({
+        body: JSON.stringify({
           model_id: selection.model,
           transcript: text,
           voice: { mode: "id", id: named(voice, selection) },
@@ -166,7 +154,7 @@ const SYNTHESIZERS: Readonly<Record<string, (job: Job) => Promise<Speech>>> = {
           Authorization: `Bearer ${selection.apiKey}`,
           "Content-Type": "application/json",
         },
-        body: json({
+        body: JSON.stringify({
           model: selection.model,
           text,
           stream: false,
@@ -178,8 +166,8 @@ const SYNTHESIZERS: Readonly<Record<string, (job: Job) => Promise<Speech>>> = {
       options,
     );
     // MiniMax answers 200 to a request it refuses, with the reason in base_resp.
-    const body: unknown = await response.json();
-    const status = isPlainObject(body) && isPlainObject(body.base_resp) ? body.base_resp : {};
+    const body = record(await response.json());
+    const status = record(body.base_resp);
     if (status.status_code !== 0) {
       const message = typeof status.status_msg === "string" ? status.status_msg : "no audio";
       throw new ProviderHttpError(
@@ -188,10 +176,9 @@ const SYNTHESIZERS: Readonly<Record<string, (job: Job) => Promise<Speech>>> = {
         `${message} (${String(status.status_code)})`,
       );
     }
-    const data = isPlainObject(body) && isPlainObject(body.data) ? body.data : {};
-    const extra = isPlainObject(body) && isPlainObject(body.extra_info) ? body.extra_info : {};
-    const bytes = fromHex(typeof data.audio === "string" ? data.audio : "");
-    const length = extra.audio_length;
+    const data = record(body.data);
+    const bytes = Uint8Array.fromHex(typeof data.audio === "string" ? data.audio : "");
+    const length = record(body.extra_info).audio_length;
     return {
       bytes,
       mime: MP3,
@@ -209,7 +196,7 @@ const SYNTHESIZERS: Readonly<Record<string, (job: Job) => Promise<Speech>>> = {
           Authorization: `Bearer ${selection.apiKey}`,
           "Content-Type": "application/json",
         },
-        body: json({
+        body: JSON.stringify({
           model: selection.model,
           voice: voice ?? SONIOX_DEFAULT_VOICE,
           text,

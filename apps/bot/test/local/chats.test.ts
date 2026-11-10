@@ -1473,6 +1473,11 @@ test("the engine's runChat answers through the runner, each turn on the chat as 
     }),
     fetchImage: () => Promise.reject(new Error("no images here")),
     newId: () => crypto.randomUUID(),
+    speech: {
+      canSpeak: () => false,
+      synthesize: () => Promise.reject(new Error("no voice here")),
+      transcribe: () => Promise.reject(new Error("no ears here")),
+    },
   };
   const engine = serveChats({
     answer: (request, saveAttachment) =>

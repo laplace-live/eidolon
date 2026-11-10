@@ -9,6 +9,7 @@ import {
   isReplyMode,
   MAX_CHAIN_LIMIT,
   MAX_PARTICIPANTS,
+  MAX_VOICE_MS,
   type ReplyMode,
 } from "@eidolon/chat";
 import { isPlainObject, logger, withPersona } from "@eidolon/config";
@@ -32,7 +33,6 @@ const MAX_TITLE = 80;
 /** 4000 characters, each escaped as JSON at worst. */
 const BODY_LIMIT = 64 * 1024;
 const MAX_VOICE_BYTES = 10 * 1024 * 1024;
-const MAX_VOICE_MS = 2 * 60 * 1000;
 // Attachments are named by their content's hash: a name never changes what it serves.
 const IMMUTABLE = "private, max-age=31536000, immutable";
 /** Control characters other than a tab or a line break. */

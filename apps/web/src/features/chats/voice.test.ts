@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatEvent } from "@eidolon/chat";
 import {
+  cancelsTake,
   claimPlayback,
-  clock,
   knownDuration,
   recordingType,
   releasePlayback,
@@ -17,13 +17,11 @@ describe("recordingType", () => {
   });
 });
 
-describe("clock", () => {
-  test("writes minutes and two-digit seconds, rounded", () => {
-    expect(clock(0)).toBe("0:00");
-    expect(clock(7_400)).toBe("0:07");
-    expect(clock(59_600)).toBe("1:00");
-    expect(clock(125_000)).toBe("2:05");
-    expect(clock(-1)).toBe("0:00");
+describe("cancelsTake", () => {
+  test("Escape throws the take away, unless a menu or sheet took it to close itself", () => {
+    expect(cancelsTake({ key: "Escape", defaultPrevented: false })).toBe(true);
+    expect(cancelsTake({ key: "Escape", defaultPrevented: true })).toBe(false);
+    expect(cancelsTake({ key: "Enter", defaultPrevented: false })).toBe(false);
   });
 });
 

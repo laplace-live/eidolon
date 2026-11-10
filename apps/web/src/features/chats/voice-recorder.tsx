@@ -1,14 +1,16 @@
 // The composer's microphone: hold it to talk and let go to send, or click it to start and click
 // again to send. Letting go away from it, Escape or the cancel button throws the take away.
+import { MAX_VOICE_MS } from "@eidolon/chat";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { ArrowUpIcon, MicIcon, XIcon } from "lucide-react";
 import { type PointerEvent, useEffect, useRef } from "react";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { UnavailableButton } from "@/components/unavailable-button";
+import { formatDuration } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Recorder } from "./use-recorder";
-import { clock, HOLD_MS, MAX_RECORDING_MS } from "./voice";
+import { cancelsTake, HOLD_MS } from "./voice";
 
 /** Whether the viewer can send a voice message: a hearing key and a browser that records. */
 export type MicState = "ready" | "no-key" | "unsupported";
@@ -26,24 +28,14 @@ function released(event: PointerEvent<HTMLElement>): "inside" | "outside" {
 /** The microphone while it can't be used, saying why. */
 function MicUnavailable({ state }: { readonly state: Exclude<MicState, "ready"> }) {
   const { t } = useLingui();
-  // aria-disabled rather than disabled, which would take the tooltip's hover and focus too.
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          size="icon-lg"
-          aria-disabled
-          aria-label={t`Record Voice Message`}
-          className="shrink-0 cursor-not-allowed opacity-50 hover:bg-card"
-          onClick={(event) => event.preventDefault()}
-        >
-          <MicIcon />
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent className="max-w-64">
-        {state === "no-key" ? (
+    <UnavailableButton
+      type="button"
+      size="icon-lg"
+      aria-label={t`Record Voice Message`}
+      className="shrink-0"
+      reason={
+        state === "no-key" ? (
           <span>
             <Trans>
               Voice messages need a key for speech recognition.{" "}
@@ -55,9 +47,11 @@ function MicUnavailable({ state }: { readonly state: Exclude<MicState, "ready"> 
           </span>
         ) : (
           t`This browser can't record audio here.`
-        )}
-      </TooltipContent>
-    </Tooltip>
+        )
+      }
+    >
+      <MicIcon />
+    </UnavailableButton>
   );
 }
 
@@ -164,7 +158,7 @@ export function RecordingBar({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      if (!cancelsTake(event)) return;
       event.preventDefault();
       stop(false);
     };
@@ -198,7 +192,7 @@ export function RecordingBar({
             : t`Recording a voice message…`}
       </span>
       <span role="timer" className="ml-auto shrink-0 text-xs tabular-nums">
-        {clock(elapsed)} / {clock(MAX_RECORDING_MS)}
+        {formatDuration(elapsed / 1000)} / {formatDuration(MAX_VOICE_MS / 1000)}
       </span>
     </div>
   );

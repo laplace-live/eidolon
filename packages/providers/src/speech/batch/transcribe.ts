@@ -1,9 +1,9 @@
 // A recorded clip as text, through her hearing role's provider, for a chat's voice message.
-import { envOptional, isPlainObject } from "@eidolon/config";
+import { envOptional } from "@eidolon/config";
 import { costOf, priceOf, type Units } from "../../pricing.ts";
 import { hasKey, missingKey, ProviderConfigError, type Selection } from "../../resolve.ts";
 import { reportUsage } from "../../usage.ts";
-import { baseMime, baseOf, fileName, send, spokenLanguage } from "./shared.ts";
+import { baseMime, baseOf, record, send, spokenLanguage, upload } from "./shared.ts";
 import { type SonioxOptions, sonioxTranscribe } from "./soniox.ts";
 
 export interface AudioClip {
@@ -38,21 +38,6 @@ interface Job {
   readonly model: string;
   readonly language: string | null;
   readonly options: TranscribeOptions;
-}
-
-function record(value: unknown): Record<string, unknown> {
-  return isPlainObject(value) ? value : {};
-}
-
-function upload(audio: AudioClip, fields: Readonly<Record<string, string | null>>): FormData {
-  const form = new FormData();
-  for (const [name, value] of Object.entries(fields)) if (value !== null) form.append(name, value);
-  form.append(
-    "file",
-    new Blob([audio.bytes as Uint8Array<ArrayBuffer>], { type: baseMime(audio.mime) }),
-    fileName(audio.mime),
-  );
-  return form;
 }
 
 const count = (value: unknown): number | undefined =>

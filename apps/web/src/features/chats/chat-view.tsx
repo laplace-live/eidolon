@@ -10,7 +10,7 @@ import { ErrorAlert } from "@/components/error-alert";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { UnavailableButton } from "@/components/unavailable-button";
 import { ApiError, type ErrorCode } from "@/lib/api";
 import { listOf } from "@/lib/labels";
 import { statusQuery } from "@/lib/query";
@@ -45,23 +45,11 @@ function CallButton({ persona }: { readonly persona: ChatPersona }) {
       </Button>
     );
   }
-  // aria-disabled rather than disabled, which would take the tooltip's hover and focus too.
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          aria-disabled
-          className="cursor-not-allowed opacity-50 hover:bg-card"
-          onClick={(event) => event.preventDefault()}
-        >
-          <PhoneIcon />
-          {label}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent className="max-w-64">{t`Calls use the active persona for now.`}</TooltipContent>
-    </Tooltip>
+    <UnavailableButton size="sm" reason={t`Calls use the active persona for now.`}>
+      <PhoneIcon />
+      {label}
+    </UnavailableButton>
   );
 }
 

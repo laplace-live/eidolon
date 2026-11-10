@@ -122,6 +122,6 @@ export interface EngineDeps {
   saveAttachment(bytes: Uint8Array, mime: string): Promise<Attachment>;
   fetchImage(url: string, signal: AbortSignal): Promise<{ bytes: Uint8Array; mime: string }>;
   newId(): string;
-  /** Default: `@eidolon/providers/speech-batch` on her voice and hearing roles. */
-  readonly speech?: SpeechDeps;
+  /** Production's is `batchSpeech`, on her voice and hearing roles. */
+  readonly speech: SpeechDeps;
 }

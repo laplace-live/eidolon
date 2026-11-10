@@ -1,6 +1,6 @@
 // What every batch speech request shares: the account's API base, one fetch that turns an error
 // status into a ProviderHttpError, and the spoken language a call would use.
-import { envOptional } from "@eidolon/config";
+import { envOptional, isPlainObject } from "@eidolon/config";
 import { httpError } from "../../http/errors.ts";
 import { ProviderConfigError, type Selection } from "../../resolve.ts";
 
@@ -46,6 +46,11 @@ export function spokenLanguage(): string | null {
   return language.toLowerCase() === "none" ? null : language;
 }
 
+/** A JSON body's object, or an empty one for anything else. */
+export function record(value: unknown): Record<string, unknown> {
+  return isPlainObject(value) ? value : {};
+}
+
 /** `audio/webm;codecs=opus` as `audio/webm`. */
 export function baseMime(mime: string): string {
   return (mime.split(";")[0] as string).trim().toLowerCase();
@@ -60,4 +65,19 @@ const EXTENSIONS: ReadonlyMap<string, string> = new Map([
 export function fileName(mime: string): string {
   const subtype = baseMime(mime).split("/")[1] ?? "";
   return `voice.${EXTENSIONS.get(subtype) ?? (subtype.replace(/^x-/, "") || "bin")}`;
+}
+
+/** A multipart upload of `audio` as `file`, with each field that isn't null. */
+export function upload(
+  audio: { readonly bytes: Uint8Array; readonly mime: string },
+  fields: Readonly<Record<string, string | null>> = {},
+): FormData {
+  const form = new FormData();
+  for (const [name, value] of Object.entries(fields)) if (value !== null) form.append(name, value);
+  form.append(
+    "file",
+    new Blob([audio.bytes as Uint8Array<ArrayBuffer>], { type: baseMime(audio.mime) }),
+    fileName(audio.mime),
+  );
+  return form;
 }

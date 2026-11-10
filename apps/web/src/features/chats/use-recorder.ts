@@ -1,8 +1,9 @@
 // The microphone, recorded into one voice message at a time with MediaRecorder.
+import { MAX_VOICE_MS } from "@eidolon/chat";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type MicProblem, micProblemOf } from "@/features/call/media";
 import type { VoiceClip } from "./stream";
-import { MAX_RECORDING_MS, MIN_RECORDING_MS, recordingType } from "./voice";
+import { MIN_RECORDING_MS, recordingType } from "./voice";
 
 export type RecorderPhase = "idle" | "starting" | "recording";
 
@@ -31,7 +32,7 @@ function release(stream: MediaStream): void {
 
 export interface Recorder {
   readonly phase: RecorderPhase;
-  /** How long the take has run, in ms. */
+  /** How long the take has run, in whole seconds' ms. */
   readonly elapsed: number;
   start(): void;
   /** Ends the take: `send` hands it to `onClip`, else it is thrown away. */
@@ -39,7 +40,7 @@ export interface Recorder {
 }
 
 /**
- * One take at a time. It stops on its own at MAX_RECORDING_MS and sends what it has; the
+ * One take at a time. It stops on its own at MAX_VOICE_MS and sends what it has; the
  * microphone is let go as soon as a take ends, and when the component unmounts.
  */
 export function useRecorder({
@@ -66,7 +67,7 @@ export function useRecorder({
     setPhase("idle");
     setElapsed(0);
     if (current === null) return;
-    const durationMs = Math.min(performance.now() - current.startedAt, MAX_RECORDING_MS);
+    const durationMs = Math.min(performance.now() - current.startedAt, MAX_VOICE_MS);
     const { recorder } = current;
     // The last chunk arrives just before "stop".
     const finish = () => {
@@ -91,14 +92,7 @@ export function useRecorder({
     if (starting.current || take.current !== null) return;
     starting.current = true;
     setPhase("starting");
-    const media = navigator.mediaDevices;
-    if (media === undefined) {
-      starting.current = false;
-      setPhase("idle");
-      handlers.current.onProblem("insecure");
-      return;
-    }
-    media.getUserMedia({ audio: true }).then(
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(
       (stream) => {
         if (!starting.current) {
           release(stream);
@@ -143,8 +137,9 @@ export function useRecorder({
       const current = take.current;
       if (current === null) return;
       const ran = performance.now() - current.startedAt;
-      if (ran >= MAX_RECORDING_MS) stop(true);
-      else setElapsed(ran);
+      if (ran >= MAX_VOICE_MS) stop(true);
+      // The bar shows whole seconds: an unchanged value skips the Composer's render.
+      else setElapsed(Math.floor(ran / 1000) * 1000);
     }, 200);
     return () => clearInterval(timer);
   }, [phase, stop]);
