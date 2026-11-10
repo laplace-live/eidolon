@@ -214,8 +214,12 @@ function choose(
   if (keen.length > 0) return { ids: keen.slice(0, cap).map(({ p }) => p.id), source: "model" };
   // The viewer is never left unanswered, so the keenest answers below the bar; the most talkative
   // instead sent the benchmark's cooking question to the idol (interest 0.08) over the cook (0.94).
-  // A persona's line may go unanswered.
-  return { ids: toViewer ? ranked.slice(0, 1).map(({ p }) => p.id) : [], source: "model" };
+  // The just-spoke penalty can sink a talkative persona under a silent one's 0, so a persona at 0
+  // answers only when everyone is. A persona's line may go unanswered.
+  if (!toViewer) return { ids: [], source: "model" };
+  const willing = ranked.filter(({ p }) => p.talkativeness > 0);
+  const forced = willing.length > 0 ? willing : ranked;
+  return { ids: forced.slice(0, 1).map(({ p }) => p.id), source: "model" };
 }
 
 const LATIN_WORD = /[a-z0-9_]/i;

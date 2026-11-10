@@ -232,7 +232,8 @@ the gate's plumbing: the active persona's `gate` role and its key, `decisionsUrl
   2. Otherwise each candidate scores `interested × chat.talkativeness`, less 0.1 for whoever
      spoke the persona line before. Those at 0.3 or more answer, keenest first.
   3. With no one at that bar, the keenest answers anyway, the more talkative of a tie, because the
-     viewer is never left unanswered.
+     viewer is never left unanswered. A persona whose talkativeness is 0 is passed over unless
+     everyone's is, even when the penalty sinks the others below her.
   4. Two replies at most.
 - **Who answers a persona's line:** someone answers only if `invites_reply` is 0.3 or more, then by
   the same rules, but with one reply at most and none forced. Each hop raises every bar by 0.1

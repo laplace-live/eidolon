@@ -89,7 +89,7 @@
    },
    "labelled_no": {
     "n": 55,
-    "min": -0.21,
+    "min": -0.11,
     "median": 0.036,
     "max": 0.148
    },
@@ -114,7 +114,7 @@
    "labelled_no": {
     "n": 9,
     "min": -0.18,
-    "median": 0.02,
+    "median": 0.08,
     "max": 0.24
    },
    "wrong": 3,
@@ -1995,7 +1995,7 @@
   {
    "id": "persona-04",
    "kind": "persona-closing",
-   "hop": 2,
+   "hop": 1,
    "latest": "奶绿：晚安～明天花店见哦",
    "mentions": [],
    "responders": [],

@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { listOf } from "@/lib/labels";
 import { cn } from "@/lib/utils";
-import { insertMention, mentionAt, mentionOptions } from "./autocomplete";
+import { EMPTY_DRAFT, mentionName, picked, retyped, suggestions } from "./autocomplete";
 import { type ChatPersona, shortNameOf } from "./persona";
 
 /** The server's limit, in code points; maxLength counts UTF-16 units, which is stricter. */
@@ -41,21 +41,19 @@ export function Composer({
   readonly onStop: () => void;
 }) {
   const { t } = useLingui();
-  const [text, setText] = useState("");
-  const [caret, setCaret] = useState(0);
+  const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [highlight, setHighlight] = useState(0);
   const [focused, setFocused] = useState(false);
-  // The `@` whose suggestions Escape closed.
-  const [dismissed, setDismissed] = useState<number | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
   const placeCaret = useRef<number | null>(null);
   const listId = useId();
+  const { text } = draft;
   const trimmed = text.trim();
 
   const group = participants.length > 1;
-  const at = group && focused ? mentionAt(text, caret) : null;
-  const options =
-    at === null || at.start === dismissed ? [] : mentionOptions(at.query, participants);
+  const open = group && focused ? suggestions(draft, participants) : null;
+  const at = open?.at ?? null;
+  const options = open?.options ?? [];
   const active = Math.min(highlight, options.length - 1);
   const mentioned = group ? parseMentions(text, participants) : [];
 
@@ -72,17 +70,16 @@ export function Composer({
   });
 
   function edit(next: string, position: number) {
-    setText(next);
-    setCaret(position);
+    setDraft(retyped(draft, next, position));
     setHighlight(0);
-    if (dismissed !== null && mentionAt(next, position)?.start !== dismissed) setDismissed(null);
   }
 
   function pick(target: ChatPersona) {
     if (at === null) return;
-    const next = insertMention(text, at, shortNameOf(target));
+    const next = picked(draft, at, mentionName(target, participants));
     placeCaret.current = next.caret;
-    edit(next.text, next.caret);
+    setDraft(next);
+    setHighlight(0);
   }
 
   function submit(event?: FormEvent) {
@@ -110,7 +107,7 @@ export function Composer({
       }
       if (event.key === "Escape") {
         event.preventDefault();
-        setDismissed(at.start);
+        setDraft({ ...draft, closed: at.start });
         return;
       }
     }
@@ -159,9 +156,9 @@ export function Composer({
                 >
                   <PersonaAvatar persona={persona} size="xs" />
                   <span className="truncate">{persona.name}</span>
-                  {shortNameOf(persona) !== persona.name && (
+                  {mentionName(persona, participants) !== persona.name && (
                     <span className="ml-auto shrink-0 text-muted-foreground text-xs">
-                      @{shortNameOf(persona)}
+                      @{mentionName(persona, participants)}
                     </span>
                   )}
                 </div>
@@ -172,7 +169,10 @@ export function Composer({
             ref={ref}
             value={text}
             onChange={(event) => edit(event.target.value, event.target.selectionStart)}
-            onSelect={(event) => setCaret(event.currentTarget.selectionStart)}
+            onSelect={(event) => {
+              const caret = event.currentTarget.selectionStart;
+              setDraft((current) => ({ ...current, caret }));
+            }}
             onKeyDown={onKeyDown}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ChatEvent } from "@eidolon/chat";
+import type { ChatEvent, ChatEventOf } from "@eidolon/chat";
 import {
   chatItems,
   manyVoices,
@@ -182,6 +182,56 @@ describe("a group's lines", () => {
       ],
       ["mio", { source: "fallback", scores: {}, to: { kind: "persona", id: "ken" } }],
       ["mio", { source: "fallback", scores: {}, to: { kind: "persona", id: "ken" } }],
+    ]);
+  });
+
+  test("a photo landing after her interrupted turn carries that turn's decision", () => {
+    const decision = (seq: number, after: number, persona: string, source: "mention" | "model") =>
+      ({
+        type: "decision",
+        seq,
+        at: seq,
+        after,
+        replies: [{ persona, mode: "text" }],
+        source,
+      }) as const;
+    const photo: ChatEvent = {
+      type: "message",
+      seq: 8,
+      at: 8,
+      id: "m8",
+      speaker: { kind: "persona", id: "mio" },
+      text: "",
+      attachments: [IMAGE],
+    };
+    const events: ChatEvent[] = [
+      user(1),
+      decision(2, 1, "mio", "mention"),
+      {
+        type: "tool-call",
+        seq: 3,
+        at: 3,
+        persona: "mio",
+        turn: "t1",
+        callId: "c1",
+        name: "take_selfie",
+        arguments: {},
+      },
+      { ...(her(4, "mio") as ChatEventOf<"message">), interrupted: true },
+      user(5),
+      decision(6, 5, "mio", "model"),
+      { type: "tool-result", seq: 7, at: 7, persona: "mio", turn: "t1", callId: "c1", result: {} },
+      photo,
+      her(9, "mio"),
+    ];
+    const reasons = (log: ChatEvent[]) =>
+      chatItems(log).flatMap((item) => (item.kind === "persona" ? [item.reason?.source] : []));
+    expect(reasons(events)).toEqual(["mention", "mention", "model"]);
+    // Timed out, it brings no result to tie the photo to her turn.
+    expect(reasons(events.filter((event) => event.seq !== 7))).toEqual([
+      "mention",
+      undefined,
+      "model",
     ]);
   });
 

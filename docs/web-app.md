@@ -280,7 +280,9 @@ data home (`<data home>/chats/`). The format, the turn, the director and the API
   - Each run of a persona's lines starts with her avatar and short name, and the streaming text
     and the thinking dots name whoever answers next, from the decision before her turn.
   - The composer offers the participants' names after `@` (arrow keys, Enter or Tab, Escape),
-    inserting one `parseMentions` reads back, and a quiet line names whom the message mentions.
+    inserting one `parseMentions` reads back: her short name, or her name when another
+    participant answers to the short one too. A pick closes the list, so the next Enter sends, and
+    a quiet line names whom the message mentions.
   - **Stop** and the thinking dots stay up across the whole chain, while the director decides
     between turns.
   - A chain that ends with no one answering shows nothing more.

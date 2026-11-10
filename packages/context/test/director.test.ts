@@ -347,6 +347,17 @@ describe("after the viewer's line", () => {
     const quiet = [persona("a", "A", 0), persona("b", "B", 0.1)];
     expect(await who({ interested_a: 1 }, line, { participants: quiet })).toEqual(["b"]);
   });
+
+  test("the forced answer passes over a persona at 0 unless everyone is", async () => {
+    const room = [persona("chatty", "Chatty", 0.5), persona("mute", "Mute", 0)];
+    // Marked down, Chatty's 0.1 × 0.5 − 0.1 ranks under Mute's 0.
+    const lines = [viewer("hi"), from("chatty", "嗨"), viewer("嗯嗯")];
+    expect(
+      await who({ interested_chatty: 0.1, interested_mute: 1 }, lines, { participants: room }),
+    ).toEqual(["chatty"]);
+    const silent = [persona("a", "A", 0), persona("b", "B", 0)];
+    expect(await who({ interested_b: 1 }, line, { participants: silent })).toHaveLength(1);
+  });
 });
 
 describe("after a persona's line", () => {
