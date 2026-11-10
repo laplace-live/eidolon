@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { MediaStreamTrack, RTCRtpSender, RtpPacket } from "werift";
 import { AUDIO_IN_RATE, AudioIn, type AudioPacket } from "../src/audio_in.ts";
 import { AudioOut } from "../src/audio_out.ts";
-import { libopusWasmCodec, type OpusEncoder } from "../src/opus.ts";
+import { libopusWasmCodec, type OpusCodec, type OpusEncoder } from "../src/opus.ts";
 import { captureLogs, type LogCapture, loud, ToneSource, until } from "./support.ts";
 
 let logs: LogCapture;
@@ -33,11 +33,48 @@ async function packets(count: number, first = 0): Promise<AudioPacket[]> {
 }
 
 /** An AudioIn started, and the frames it decodes. */
-function started(): { audioIn: AudioIn; frames: Int16Array[] } {
+function started(codec: OpusCodec = libopusWasmCodec): { audioIn: AudioIn; frames: Int16Array[] } {
   const frames: Int16Array[] = [];
-  const audioIn = new AudioIn(libopusWasmCodec);
+  const audioIn = new AudioIn(codec);
   audioIn.start((pcm) => frames.push(pcm));
   return { audioIn, frames };
+}
+
+type DecoderCall =
+  | {
+      readonly op: "decode";
+      readonly packet: number;
+      readonly options?: { fec?: boolean; frameSize?: number };
+    }
+  | { readonly op: "plc"; readonly frameSize: number };
+
+/** libopus, with every decoder call recorded; a packet is named by its index in `sent`. */
+function recording(sent: readonly AudioPacket[]): { codec: OpusCodec; calls: DecoderCall[] } {
+  const calls: DecoderCall[] = [];
+  const index = new Map(sent.map((packet, i) => [packet.payload, i]));
+  const codec: OpusCodec = {
+    createEncoder: (options) => libopusWasmCodec.createEncoder(options),
+    async createDecoder(options) {
+      const decoder = await libopusWasmCodec.createDecoder(options);
+      return {
+        ...decoder,
+        decode(packet, opts) {
+          const packetIndex = index.get(packet) ?? -1;
+          calls.push(
+            opts === undefined
+              ? { op: "decode", packet: packetIndex }
+              : { op: "decode", packet: packetIndex, options: opts },
+          );
+          return decoder.decode(packet, opts);
+        },
+        decodePacketLoss(frameSize) {
+          calls.push({ op: "plc", frameSize });
+          return decoder.decodePacketLoss(frameSize);
+        },
+      };
+    },
+  };
+  return { codec, calls };
 }
 
 describe("AudioIn", () => {
@@ -59,6 +96,29 @@ describe("AudioIn", () => {
     for (const packet of [all[1]!, ...all.slice(3)]) audioIn.handle(packet);
     expect(frames).toHaveLength(7);
     expect(frames.every((f) => f.length === 320)).toBe(true);
+    audioIn.stop();
+  });
+
+  test("conceals a gap's earlier packets, recovers its last from the next one's FEC, then decodes that one", async () => {
+    const all = await packets(9);
+    const { codec, calls } = recording(all);
+    const { audioIn, frames } = started(codec);
+    audioIn.handle(all[0]!);
+    await until(() => frames.length === 1);
+    // Packets 2 to 4 never come.
+    for (const packet of [all[1]!, ...all.slice(5)]) audioIn.handle(packet);
+    expect(calls).toEqual([
+      { op: "decode", packet: 0 },
+      { op: "decode", packet: 1 },
+      { op: "plc", frameSize: 320 },
+      { op: "plc", frameSize: 320 },
+      { op: "decode", packet: 5, options: { fec: true, frameSize: 320 } },
+      { op: "decode", packet: 5 },
+      { op: "decode", packet: 6 },
+      { op: "decode", packet: 7 },
+      { op: "decode", packet: 8 },
+    ]);
+    expect(frames).toHaveLength(9);
     audioIn.stop();
   });
 
