@@ -235,6 +235,53 @@ describe("a group's lines", () => {
     ]);
   });
 
+  test("a reply after a late result that brought no photo keeps its own decision", () => {
+    const events: ChatEvent[] = [
+      user(1),
+      {
+        type: "decision",
+        seq: 2,
+        at: 2,
+        after: 1,
+        replies: [{ persona: "mio", mode: "text" }],
+        source: "mention",
+      },
+      {
+        type: "tool-call",
+        seq: 3,
+        at: 3,
+        persona: "mio",
+        turn: "t1",
+        callId: "c1",
+        name: "take_selfie",
+        arguments: {},
+      },
+      { ...(her(4, "mio") as ChatEventOf<"message">), interrupted: true },
+      user(5),
+      {
+        type: "decision",
+        seq: 6,
+        at: 6,
+        after: 5,
+        replies: [{ persona: "mio", mode: "text" }],
+        source: "model",
+      },
+      {
+        type: "tool-result",
+        seq: 7,
+        at: 7,
+        persona: "mio",
+        turn: "t1",
+        callId: "c1",
+        result: { ok: false },
+      },
+      her(8, "mio"),
+    ];
+    expect(
+      chatItems(events).flatMap((item) => (item.kind === "persona" ? [item.reason?.source] : [])),
+    ).toEqual(["mention", "model"]);
+  });
+
   test("a run of one speaker's lines starts where the speaker changes", () => {
     const items = chatItems(GROUP);
     expect(items.map((_, index) => startsRun(items, index))).toEqual([true, true, true, false]);

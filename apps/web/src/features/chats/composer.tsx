@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { listOf } from "@/lib/labels";
 import { cn } from "@/lib/utils";
-import { EMPTY_DRAFT, mentionName, picked, retyped, suggestions } from "./autocomplete";
+import { closedAt, EMPTY_DRAFT, mentionName, picked, retyped, suggestions } from "./autocomplete";
 import { type ChatPersona, shortNameOf } from "./persona";
 
 /** The server's limit, in code points; maxLength counts UTF-16 units, which is stricter. */
@@ -107,7 +107,7 @@ export function Composer({
       }
       if (event.key === "Escape") {
         event.preventDefault();
-        setDraft({ ...draft, closed: at.start });
+        setDraft({ ...draft, closed: closedAt(draft.text, at) });
         return;
       }
     }

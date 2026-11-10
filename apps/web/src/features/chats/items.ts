@@ -46,11 +46,11 @@ export function chatItems(events: readonly ChatEvent[]): ChatItem[] {
       } else if (event.text !== "" || images.length > 0 || event.cutOff !== undefined) {
         // Photos that land after her interrupted turn follow its result, when it brought one, and
         // a decision since may have chosen her again: they take her turn's decision, or none.
+        const late = event.text === "" && !event.interrupted && event.cutOff === undefined;
         const turn =
-          previous?.type === "tool-result" && previous.persona === event.speaker.id
+          late && previous?.type === "tool-result" && previous.persona === event.speaker.id
             ? previous.turn
             : null;
-        const late = event.text === "" && !event.interrupted && event.cutOff === undefined;
         items.push({
           kind: "persona",
           seq: event.seq,

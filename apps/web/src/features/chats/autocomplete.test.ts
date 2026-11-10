@@ -113,4 +113,11 @@ describe("picking a mention", () => {
     expect(suggestions(retyped(done, "@Ken T", 6), room).options).toEqual([]);
     expect(suggestions(retyped(done, "@Ken @", 6), room).options).toEqual(room);
   });
+
+  test("an @ typed over a picked mention, in its place, opens again", () => {
+    const room = [TAKAGI, MIO];
+    const done = pick("@Ke", TAKAGI, room);
+    expect(suggestions(retyped(done, "@", 1), room).options).toEqual(room);
+    expect(suggestions(retyped(done, "@澪", 2), room).options).toEqual([MIO]);
+  });
 });
