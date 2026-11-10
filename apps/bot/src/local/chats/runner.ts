@@ -5,7 +5,6 @@
 import { join } from "node:path";
 import {
   CHAT_FORMAT,
-  CHAT_WINDOW_MESSAGES,
   type ChatEvent,
   type ChatEventDraft,
   type ChatHeader,
@@ -16,10 +15,9 @@ import {
   type ReplyMode,
   stampEvents,
   type ViewMessage,
-  viewOf,
 } from "@eidolon/chat";
 import { JsonlChatStore } from "@eidolon/chat/jsonl";
-import { dataHome, errorText, logger, readPersonaIdentity } from "@eidolon/config";
+import { dataHome, errorText, logger } from "@eidolon/config";
 import {
   type ChatOutput,
   type ChatRequest,
@@ -32,10 +30,10 @@ import {
   runTurn,
   type TurnOutput,
   type TurnRequest,
-  UNHEARD,
+  turnView,
 } from "@eidolon/engine";
 import type { AudioClip } from "@eidolon/providers/speech-batch";
-import type { TranscriptLine } from "@eidolon/runtime";
+import type { CallBinding, CallEnd, TranscriptLine } from "@eidolon/runtime";
 import type { ChatCallInfo, ChatContents } from "../api.ts";
 import { localViewer } from "../identity.ts";
 import { HearingFailed, hearingRefusal } from "./hearing.ts";
@@ -62,20 +60,20 @@ export class NotInChat extends Error {
 }
 
 /** Why a call ended, as its call-ended holds it. */
-export type CallEndReason = "hangup" | "error" | "shutdown";
+export type CallEndReason = CallEnd | "shutdown";
 
-/** A call the runner opened in a chat; the session bound to it reports back through it. */
-export interface ChatCall {
+/**
+ * A call the runner opened in a chat, and the binding of the session that runs it: the session
+ * opens on her view of the chat as the call starts, and each finished line it reports, the viewer's
+ * or hers, is stored as a `call` message.
+ */
+export interface ChatCall extends CallBinding {
   readonly id: string;
-  readonly persona: ParticipantId;
-  /** Her view of the chat as the call starts: the session's first messages. */
-  readonly seed: readonly ViewMessage[];
-  /** Stores a finished line of the call as a `call` message, the viewer's or hers. */
-  line(line: TranscriptLine): void;
+  readonly seedMessages: readonly ViewMessage[];
   /** The offer was answered on peer connection `pcId`, which a renegotiation names. */
   connected(pcId: string): void;
   /** Stores call-ended, once; a line after it is dropped. Resolves once it is stored or failed. */
-  end(reason: CallEndReason): Promise<void>;
+  readonly onEnded: (reason: CallEndReason) => Promise<void>;
 }
 
 /** The call on in chat `id`, with the connection it was answered on, if it was yet. */
@@ -150,24 +148,15 @@ interface ActiveCall {
   ending: Promise<void> | null;
 }
 
-/** Her view of the chat as her next turn would read it: what a call bound to it opens on. */
-function callSeed(
-  chat: { readonly header: ChatHeader; readonly events: readonly ChatEvent[] },
-  persona: ParticipantId,
-): ViewMessage[] {
-  const events = chat.events.map((event) =>
-    event.type === "message" &&
-    event.speaker.kind === "user" &&
-    event.modality === "voice" &&
-    event.text === ""
-      ? { ...event, text: UNHEARD }
-      : event,
+/**
+ * Her view of the chat as her next turn would read it, less her tool calls and their results: what
+ * a call bound to it opens on. The call may offer no tools, and Anthropic refuses a request that
+ * holds a tool_use block then.
+ */
+function callSeed(chat: TurnRequest["chat"], persona: ParticipantId): ViewMessage[] {
+  return turnView(chat, persona, localViewer().uname ?? "").messages.filter(
+    (message) => message.role !== "tool" && !("tool_calls" in message),
   );
-  return viewOf(chat.header, events, persona, {
-    windowMessages: CHAT_WINDOW_MESSAGES,
-    nameOf: (id) => readPersonaIdentity(id).name,
-    viewerName: localViewer().uname ?? "",
-  });
 }
 
 /** The turn a reply is in, from its `started` to its `ended`. */
@@ -353,23 +342,23 @@ export class ChatRunner {
         call.live.end();
         throw error;
       }
-      const end = (reason: CallEndReason) => this.#endCall(id, chat, call, reason);
-      let seed: ViewMessage[];
+      const onEnded = (reason: CallEndReason) => this.#endCall(id, chat, call, reason);
+      let seedMessages: ViewMessage[];
       try {
-        seed = callSeed(await this.store.read(id), persona);
+        seedMessages = callSeed(await this.store.read(id), persona);
       } catch (error) {
-        await end("error");
+        await onEnded("error");
         throw error;
       }
       return {
         id: call.id,
         persona,
-        seed,
-        line: (line) => this.#callLine(id, chat, call, line),
+        seedMessages,
+        onTranscript: (line) => this.#callLine(id, chat, call, line),
         connected: (pcId) => {
           call.pcId = pcId;
         },
-        end,
+        onEnded,
       };
     });
   }
@@ -519,7 +508,7 @@ export class ChatRunner {
   #endCall(id: string, chat: Chat, call: ActiveCall, reason: CallEndReason): Promise<void> {
     if (call.ending !== null) return call.ending;
     const stored = this.#append(id, chat, [{ type: "call-ended", call: call.id, reason }]);
-    if (chat.call === call) chat.call = null;
+    chat.call = null;
     call.ending = stored
       .then(
         () => {},

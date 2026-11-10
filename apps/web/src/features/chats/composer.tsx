@@ -39,7 +39,7 @@ export function Composer({
   participants,
   busy,
   mic,
-  inCall = false,
+  inCall,
   onSend,
   onSendVoice,
   onStop,
@@ -48,7 +48,7 @@ export function Composer({
   readonly participants: readonly ChatPersona[];
   readonly busy: boolean;
   readonly mic: MicState;
-  readonly inCall?: boolean;
+  readonly inCall: boolean;
   readonly onSend: (text: string) => void;
   readonly onSendVoice: (clip: VoiceClip) => void;
   readonly onStop: () => void;
@@ -224,15 +224,17 @@ export function Composer({
             {t`Stop`}
           </Button>
         )}
-        {inCall ? (
-          <Button type="button" size="icon-lg" className="shrink-0" disabled aria-label={t`Send`}>
-            <ArrowUpIcon />
-          </Button>
-        ) : trimmed === "" ? (
+        {trimmed === "" && !inCall ? (
           // A take under way can always be sent, whatever the chat learned since it started.
           <MicButton recorder={recorder} state={recording ? "ready" : mic} onHolding={setHolding} />
         ) : (
-          <Button type="submit" size="icon-lg" className="shrink-0" aria-label={t`Send`}>
+          <Button
+            type="submit"
+            size="icon-lg"
+            className="shrink-0"
+            disabled={inCall}
+            aria-label={t`Send`}
+          >
             <ArrowUpIcon />
           </Button>
         )}

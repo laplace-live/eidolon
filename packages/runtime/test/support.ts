@@ -1,3 +1,4 @@
+import { CString, dlopen, FFIType } from "bun:ffi";
 import { consoleSink, type LogLevel, type LogRecord, logger } from "@eidolon/config";
 import type { Frame } from "@pipedog/core/frames/frames";
 import { type FrameDirection, FrameProcessor } from "@pipedog/core/processors/frame_processor";
@@ -34,6 +35,19 @@ export function setEnv(vars: Record<string, string | undefined>): () => void {
   };
   apply(Object.entries(vars));
   return () => apply(saved);
+}
+
+/** `name` as getenv reads it, which process.env doesn't change under Bun; null when unset. */
+export function cEnv(name: string): string | null {
+  const libc = dlopen(process.platform === "darwin" ? "libc.dylib" : "libc.so.6", {
+    getenv: { args: [FFIType.cstring], returns: FFIType.ptr },
+  });
+  try {
+    const value = libc.symbols.getenv(Buffer.from(`${name}\0`));
+    return value === null ? null : new CString(value).toString();
+  } finally {
+    libc.close();
+  }
 }
 
 export interface Deferred<T> {

@@ -225,6 +225,11 @@ class TypedLines extends BaseObserver {
     this.#report = report;
   }
 
+  // Else the worker wakes it for every frame's first push, audio included.
+  override acceptsPush(data: FramePushed): boolean {
+    return data.frame instanceof RTVISendTextFrame;
+  }
+
   override async onPushFrame(data: FramePushed): Promise<void> {
     if (data.frame instanceof RTVISendTextFrame) {
       reportLine(this.#report, "user", data.frame.text, false);

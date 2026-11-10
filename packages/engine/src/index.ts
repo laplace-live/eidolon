@@ -4,7 +4,7 @@
 export { type ChatDeps, type ChatOutput, type ChatRequest, runChat } from "./chat.ts";
 export { defaultEngineDeps } from "./deps.ts";
 export { createMind } from "./mind/index.ts";
-export { runTurn } from "./turn.ts";
+export { runTurn, turnView } from "./turn.ts";
 export type {
   EngineDeps,
   LateTools,

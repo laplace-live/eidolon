@@ -517,7 +517,8 @@ that chat; without a `chatId`, it is the standalone call, unbound.
    1. stops a running reply, which stores what she said as interrupted;
    2. stores `call-started { call, persona }`;
    3. seeds the call with her `viewOf` of the chat, the window her next text turn would read, a
-      viewer's voice message heard as nothing reading `（听不清）`;
+      viewer's voice message heard as nothing reading `（听不清）`, less her tool calls and their
+      results: the call may offer none, and Anthropic refuses a `tool_use` block then;
    4. stores each finished line as a `message` with `modality: "call"`, from the viewer or from
       her, `interrupted` where she was cut off;
    5. stores `call-ended { call, reason }` once the session ends: `hangup`, `error`, or `shutdown`

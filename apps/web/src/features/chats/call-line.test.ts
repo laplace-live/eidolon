@@ -11,6 +11,7 @@ test("a call's start names her, and how long it ran once it has ended", () => {
   expect(line({ ...started, durationMs: null }, "奶绿")).toBe("Call with 奶绿");
   expect(line({ ...started, durationMs: 192_000 }, "奶绿")).toBe("Call with 奶绿 · 3:12");
   expect(line({ ...started, durationMs: 5_400 }, "奶绿")).toBe("Call with 奶绿 · 0:05");
+  expect(line({ ...started, durationMs: 4_500_000 }, "奶绿")).toBe("Call with 奶绿 · 1:15:00");
 });
 
 test("its end says only that it ended", () => {

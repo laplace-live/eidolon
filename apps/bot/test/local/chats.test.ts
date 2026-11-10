@@ -1852,6 +1852,46 @@ describe("a call in a chat", () => {
     }
   });
 
+  test("opens on her view less her tool calls and their results, keeping her context blocks", async () => {
+    const id = await greeted();
+    scripts.set("拍张照", async function* (request) {
+      const turn = crypto.randomUUID();
+      const persona = request.persona;
+      yield { type: "started", turn, persona };
+      yield {
+        type: "events",
+        events: [
+          { type: "context", persona, turn, position: 2, role: "system", content: "猫叫坚果" },
+          { type: "tool-call", persona, turn, callId: "c1", name: "take_selfie", arguments: {} },
+          { type: "tool-result", persona, turn, callId: "c1", result: { ok: true } },
+          {
+            type: "message",
+            id: crypto.randomUUID(),
+            speaker: { kind: "persona", id: persona },
+            text: "拍好啦",
+          },
+        ],
+      };
+      yield { type: "ended", turn };
+    });
+    await new Lines(await server.call("POST", `/chats/${id}/messages`, { text: "拍张照" })).all();
+    const { header, events } = await log(id);
+    expect(viewOf(header, events, PERSONA, { windowMessages: 60, nameOf: String })).toContainEqual({
+      role: "tool",
+      tool_call_id: "c1",
+      content: '{"ok":true}',
+    });
+    const binding = await dial(id);
+    expect(binding.seedMessages).toEqual([
+      { role: "user", content: "打个招呼" },
+      { role: "assistant", content: "你好呀" },
+      { role: "system", content: "猫叫坚果" },
+      { role: "user", content: "拍张照" },
+      { role: "assistant", content: "拍好啦" },
+    ]);
+    binding.onEnded("hangup");
+  });
+
   test("streams what an interrupted turn's selfie brings, as any event the chat stores meanwhile", async () => {
     const photo = deferred();
     const id = await greeted();

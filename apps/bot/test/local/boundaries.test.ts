@@ -14,6 +14,7 @@ import {
 } from "../../src/local/api.ts";
 import { localRouteModules } from "../../src/local/extension.ts";
 import type { LocalApp } from "../../src/local/router.ts";
+import { chatRunner } from "../../src/local/routes/chats.ts";
 import { sessionRoutes } from "../../src/local/session.ts";
 import { LocalToken } from "../../src/local/token.ts";
 
@@ -208,7 +209,7 @@ describe("the route table", () => {
     };
     const registered = [
       ...sessionRoutes(app, new LocalToken("s".repeat(43))),
-      ...localRouteModules(app),
+      ...localRouteModules(app, chatRunner(app)),
     ].map((spec) => spec.route);
     expect(registered.toSorted()).toEqual([...LOCAL_ROUTES].toSorted());
     expect(new Set(registered).size).toBe(registered.length);

@@ -32,10 +32,7 @@ import type { StaticSite } from "./static.ts";
 import type { LocalToken } from "./token.ts";
 
 /** Every route module the local API serves, besides the session exchange. */
-export function localRouteModules(
-  app: LocalApp,
-  chats: () => ChatRunner = chatRunner(app),
-): LocalRouteSpec[] {
+export function localRouteModules(app: LocalApp, chats: () => ChatRunner): LocalRouteSpec[] {
   return [
     ...statusRoutes(app),
     ...settingsRoutes(app),
@@ -80,11 +77,10 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalExten
 
   return {
     routes(botRoutes, context) {
-      const chats = chatRunner({
-        onStop: (hook) => {
-          stopHooks.push(hook);
-        },
-      });
+      const onStop = (hook: () => Promise<void>): void => {
+        stopHooks.push(hook);
+      };
+      const chats = chatRunner({ onStop });
       const identity = identityHandlers({
         signalling: context.signalling,
         memoryAdmin: options.memoryAdmin,
@@ -95,9 +91,7 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalExten
         // A connecting offer is a call already: a switch or restart now would cut it off.
         activeCalls: () => context.signalling.activeSessions + identity.pendingOffers(),
         restart: options.restart,
-        onStop: (hook) => {
-          stopHooks.push(hook);
-        },
+        onStop,
         memoryAdmin: options.memoryAdmin,
       };
       const routes: Record<string, RouteHandler | MethodRoutes> = {};

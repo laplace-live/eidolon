@@ -145,6 +145,8 @@ export function useChat(id: string, calling: boolean): ChatTurns {
     void (async () => {
       while (on) {
         await follow((signal) => followLive(id, signal), null, false);
+        // follow reread the log as its stream ended; only a hang-up during the pause is unread.
+        if (!on) return;
         await pause(CALL_FEED_RETRY_MS);
       }
       void reread(queryClient, chatQuery(id).queryKey);

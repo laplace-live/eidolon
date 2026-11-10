@@ -128,17 +128,12 @@ export function identityHandlers(parts: IdentityParts): IdentityHandlers {
         clientIp: server.requestIP(request)?.address ?? UNKNOWN_CLIENT_IP,
         quota: null,
       };
-      if (target !== null) {
-        pending++;
-        try {
-          return await offerChatCall(parts.chats(), parts.signalling, admission, target);
-        } finally {
-          pending--;
-        }
-      }
-      logger.info(`[local] Offer from the local viewer to ${pyRepr(activePersona().id)}`);
       pending++;
       try {
+        if (target !== null) {
+          return await offerChatCall(parts.chats(), parts.signalling, admission, target);
+        }
+        logger.info(`[local] Offer from the local viewer to ${pyRepr(activePersona().id)}`);
         const result = await parts.signalling.offer(admission);
         return jsonResponse(result.status, result.body);
       } finally {
