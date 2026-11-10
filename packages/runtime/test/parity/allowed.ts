@@ -7,7 +7,7 @@
 import { CHAT_WINDOW_MESSAGES } from "@eidolon/chat";
 import { INTERRUPTED_EMPTY_TURN_PROMPT } from "@eidolon/context";
 import type { Capture, Difference, Normalized, Twin } from "./twin.ts";
-import { canonical, differences, normalizeRtvi } from "./twin.ts";
+import { canonical, differences, normalizeRtvi, usageKey } from "./twin.ts";
 
 export interface Allowance {
   readonly id: `D${number}`;
@@ -219,7 +219,18 @@ function partOfRecovery(d: Difference, twin: Twin): boolean {
     }
     case "usage": {
       const own = usageOf(d.record);
-      if (own.role === "mind") return d.change === "pipedog-only";
+      if (own.role === "mind") {
+        // One record per recovery request at most, each the usage native's requests report: the
+        // twin's mind reports the same for every request.
+        if (d.change !== "pipedog-only") return false;
+        const records = differences(twin).filter(
+          (u) =>
+            u.kind === "usage" && u.change === "pipedog-only" && usageOf(u.record).role === "mind",
+        );
+        return (
+          records.length <= found.length && twin.native.usage.some((r) => usageKey(r) === d.record)
+        );
+      }
       if (own.role !== "voice" || own.characters === null) return false;
       // The call's one batched voice record: pipedog's counts what the recovery said too.
       const extra = spoken.reduce((n, s) => n + [...s].length, 0);

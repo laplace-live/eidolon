@@ -582,6 +582,58 @@ describe("tools and async results (rows 16, 17, 23)", () => {
     expect(call.sent.at(-1)?.data).toEqual({ tool_call_id: "c2", cancelled: true });
   });
 
+  test("row 17: a tool she doesn't have stops after its in-progress, as pipedog's does", async () => {
+    const call = startCall();
+    await call.ready();
+    await call.says("帮我浇浇花");
+    call.news();
+    // The engine settles a call naming no tool of hers before its round's mind ends.
+    call.turn.mind("started");
+    call.turn.tool("a", "running", false, "water_the_plants");
+    call.turn.tool("a", "failed", false, "water_the_plants");
+    call.turn.tool("b", "running", false, "feed_the_cat");
+    call.turn.tool("b", "failed", false, "feed_the_cat");
+    await settle();
+    expect(call.news()).toEqual([
+      "bot-llm-started",
+      "llm-function-call-started",
+      "llm-function-call-started",
+    ]);
+    call.turn.mind("ended");
+    await settle();
+    expect(call.news()).toEqual([
+      "bot-llm-stopped",
+      "llm-function-call-in-progress a",
+      "llm-function-call-stopped a",
+      "llm-function-call-in-progress b",
+      "llm-function-call-stopped b",
+    ]);
+    // Neither held the floor: an empty turn that cuts her off still gets the recovery prompt.
+    await call.ear({ type: "user-started" }, { type: "user-stopped", text: null });
+    expect(call.turn.request.nudge).toBe(NUDGE);
+  });
+
+  test("a barge-in before the round ends drops the stop with its in-progress", async () => {
+    const call = startCall();
+    await call.ready();
+    await call.says("帮我浇浇花");
+    call.news();
+    call.turn.mind("started");
+    call.turn.tool("a", "running", false, "water_the_plants");
+    call.turn.tool("a", "failed", false, "water_the_plants");
+    await settle();
+    await call.ear({ type: "user-started" });
+    call.turns[0]?.mind("ended");
+    await settle();
+    expect(call.news()).toEqual([
+      "bot-llm-started",
+      "llm-function-call-started",
+      "user-started-speaking",
+      "bot-interrupted",
+      "bot-llm-stopped",
+    ]);
+  });
+
   test("change_voice_style speaks what follows in the new voice, and keeps it", async () => {
     const call = startCall();
     await call.ready();

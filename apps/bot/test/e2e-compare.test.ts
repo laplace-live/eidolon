@@ -43,8 +43,60 @@ function report(spans: [number, number][][], stoppedAfter = 50): unknown {
   };
 }
 
+/**
+ * A barge-in report: her reply cut off once the server hears the caller, after the browser starts
+ * talking, its stop as given; then her answer to the barge-in.
+ */
+function bargeInReport(cutOff: readonly string[]): unknown {
+  const rtvi = (t: number, event: string) => ({ t, source: "rtvi", event });
+  const timeline: unknown[] = [
+    { t: 0, source: "rtvi", event: "transportStateChanged", data: "connected" },
+    rtvi(100, "botTtsStarted"),
+    rtvi(300, "botStartedSpeaking"),
+    rtvi(400, "botTtsStopped"),
+    rtvi(2_050, "botStoppedSpeaking"),
+    { t: 5_000, source: "harness", event: "askText" },
+    rtvi(5_100, "botTtsStarted"),
+    rtvi(5_300, "botStartedSpeaking"),
+    { t: 6_000, source: "harness", event: "bargeIn" },
+    rtvi(6_300, "userStartedSpeaking"),
+    rtvi(6_300, "botInterrupted"),
+    ...cutOff.map((event) => rtvi(6_310, event)),
+    rtvi(7_000, "userStoppedSpeaking"),
+    rtvi(7_400, "botTtsStarted"),
+    rtvi(7_600, "botStartedSpeaking"),
+    rtvi(7_700, "botTtsStopped"),
+    rtvi(9_050, "botStoppedSpeaking"),
+  ];
+  return {
+    harness: {
+      mode: "barge-in",
+      engine: null,
+      baseUrl: "http://x",
+      startedAt: "2026-11-10T00:00:00Z",
+    },
+    checks: [],
+    latencyMs: { questionEndToReplyAudio: 1_000 },
+    stagesMs: {},
+    invariants: [],
+    audibleSpans: {
+      bot: [
+        [300, 2_000],
+        [5_300, 6_300],
+        [7_600, 9_000],
+      ],
+      mic: [],
+    },
+    timeline,
+  };
+}
+
 /** The candidate's pass bar against the baseline, by check name. */
-async function bar(baseline: unknown, candidate: unknown): Promise<Record<string, boolean>> {
+async function bar(
+  baseline: unknown,
+  candidate: unknown,
+  mode = "text",
+): Promise<Record<string, boolean>> {
   const files = ["base.json", "cand.json", "out.json"].map((name) => join(dir, name));
   await Bun.write(files[0] as string, JSON.stringify(baseline));
   await Bun.write(files[1] as string, JSON.stringify(candidate));
@@ -57,9 +109,10 @@ async function bar(baseline: unknown, candidate: unknown): Promise<Record<string
   );
   await run.exited;
   const out = (await Bun.file(files[2] as string).json()) as {
-    modes: { text: { bar: { name: string; pass: boolean }[] } };
+    modes: Record<string, { bar: { name: string; pass: boolean }[] }>;
   };
-  return Object.fromEntries(out.modes.text.bar.map((check) => [check.name, check.pass]));
+  const checks = out.modes[mode]?.bar ?? [];
+  return Object.fromEntries(checks.map((check) => [check.name, check.pass]));
 }
 
 const SMOOTH = [[[300, 2_000]], [[5_300, 7_000]]] as [number, number][][];
@@ -82,4 +135,12 @@ test("bot-stopped-speaking may come early only by the recorder's sampling interv
     (await bar(report(SMOOTH), report(SMOOTH, stoppedAfter)))["stopped speaking on time"];
   expect([await onTime(500), await onTime(501)]).toEqual([true, false]);
   expect([await onTime(-100), await onTime(-101)]).toEqual([true, false]);
+});
+
+test("an interrupted reply's bot-tts-stopped counts once the server hears the barge-in", async () => {
+  const stopped = async (cutOff: string[]) =>
+    (await bar(bargeInReport(cutOff), bargeInReport(cutOff), "barge-in"))["bot-tts-stopped"];
+  expect(await stopped(["botLlmStopped", "botTtsStopped", "botStoppedSpeaking"])).toBe(true);
+  // Her answer to the barge-in stops its own speech, not the reply it cut off.
+  expect(await stopped(["botStoppedSpeaking"])).toBe(false);
 });

@@ -500,7 +500,7 @@ function compareMessages(
 }
 
 /** How a usage record compares: the audio a recognizer heard follows the call's length. */
-function usageKey(record: UsageRecord): string {
+export function usageKey(record: UsageRecord): string {
   const { audioSeconds, ...units } = record.units as Record<string, unknown>;
   const heard = audioSeconds === undefined ? {} : { audioSeconds: Number(audioSeconds) > 0 };
   return json([record.role, record.provider, record.model, record.source, { ...units, ...heard }]);

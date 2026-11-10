@@ -1,7 +1,15 @@
 // What a call does when a provider fails: a mind role with no key, a mind request that errors, a
-// recognizer socket that drops and comes back.
+// call naming a tool she doesn't have, a recognizer socket that drops and comes back.
 import { describe, expect, test } from "bun:test";
-import { assertParity, type Capture, runTwin } from "../twin.ts";
+import {
+  assertParity,
+  type Capture,
+  type Difference,
+  judge,
+  report,
+  runTwin,
+  violations,
+} from "../twin.ts";
 import {
   clientReady,
   finished,
@@ -58,6 +66,55 @@ describe.skipIf(!TWIN)("twin: failures", () => {
         },
       });
       assertParity(twin);
+    },
+    SCENARIO_MS,
+  );
+
+  // The engines also differ beyond allowed.ts in that call's result, which pipedog's
+  // missing-function handler gives as a bare string and native as `{"error": …}`: the user's call.
+  // Everything else must hold as assertParity holds it.
+  test(
+    "a call naming a tool she doesn't have is in progress, then stopped, after her round",
+    async () => {
+      const twin = await runTwin({
+        name: "unknown tool",
+        mind: [
+          GREETING,
+          {
+            toolCalls: [
+              { id: "call_missing_1", name: "water_the_plants", arguments: {} },
+              { id: "call_missing_2", name: "feed_the_cat", arguments: {} },
+            ],
+          },
+          SHORT_REPLY,
+        ],
+        async run({ peer }) {
+          await greeted(peer);
+          sendText(peer, "帮我浇浇花");
+          await finished(peer, 2);
+        },
+      });
+      const result = (d: Difference) =>
+        (d.kind === "mind" || d.kind === "conversation") &&
+        d.change === "changed" &&
+        /^call_missing_/.test(String((d.native as { tool_call_id?: unknown }).tool_call_id));
+      const unexplained = judge(twin).filter((j) => j.rule === null && !result(j.difference));
+      const broken = violations(twin);
+      const ended = twin.pipedog.ended && twin.native.ended;
+      const failed = twin.pipedog.failed ?? twin.native.failed;
+      if (
+        unexplained.length + broken.pipedog.length + broken.native.length > 0 ||
+        !ended ||
+        failed
+      ) {
+        throw new Error(`the engines differ beyond allowed.ts:\n${report(twin)}`);
+      }
+      const tools = (c: Capture) =>
+        c.received
+          .map((r) => r.message)
+          .filter((m) => m.type === "bot-llm-stopped" || /^llm-function-call-/.test(String(m.type)))
+          .map((m) => `${m.type} ${String((m.data as { tool_call_id?: unknown })?.tool_call_id)}`);
+      expect(tools(twin.native)).toEqual(tools(twin.pipedog));
     },
     SCENARIO_MS,
   );

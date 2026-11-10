@@ -136,7 +136,7 @@ The Floor's state is three regions, plus counters:
 | 14 | BOT speaking | Speaker `seg-start` / `words` / `seg-end` | — | emit `bot-output` new / in-progress / completed, the last with `bot-tts-text` | — |
 | 15 | — | reply `mind ended(error?)` | — | emit `bot-llm-stopped`, and `error` on a failure; flush her speech | — |
 | 16 | — | reply `tool running` | — | emit `llm-function-call-started`, and `-in-progress` once the round's `bot-llm-stopped` is out, as pipedog orders them; a sync tool counts | — |
-| 17 | — | reply `tool done / failed / cancelled` | — | emit `llm-function-call-stopped{cancelled}`; a sync tool uncounts | — |
+| 17 | — | reply `tool done / failed / cancelled` | — | emit `llm-function-call-stopped{cancelled}`, after its `-in-progress` if that still waits (a call naming a tool she doesn't have ends before its round does); a sync tool uncounts | — |
 | 18 | — | reply `notice`, or a `turn-failed` no mind request reported | — | emit `error` | — |
 | 19 | — | Mouth `tts-stopped` | the reply's last utterance | emit `bot-tts-stopped`; the reply is spoken once the mind is done | — |
 | 20 | BOT speaking | Speaker `drained` | spoken | emit `bot-stopped-speaking` | BOT thinking until `ended` |
@@ -374,11 +374,13 @@ without `run_immediately`, left for the next turn, and one typed during her last
 with `audio_response: false`; a spoken question and a two-sentence reply; a barge-in mid-sentence
 and before her first audio; an empty turn while idle, after cutting her off, and just after her
 audio ended (D13); `change_voice_style`; a mind account with no key; a mind request that fails;
-the recognizer's socket dropping and reconnecting; a call longer than the 60-line window (D1). One
-is skipped, its difference noted where it is written: a line typed without `run_immediately` within
-15 s of her Fish reply, which pipedog stores before that reply, since it stores her reply only when
-Fish's audio context times out. `scenarios/checks.test.ts` tests the harness itself on made-up
-sequences, and runs without the variable.
+calls naming tools she doesn't have; the recognizer's socket dropping and reconnecting; a call
+longer than the 60-line window (D1). One is skipped, its difference noted where it is written: a
+line typed without `run_immediately` within 15 s of her Fish reply, which pipedog stores before
+that reply, since it stores her reply only when Fish's audio context times out. One holds parity
+but for its noted difference: those tools' results, a bare string from pipedog and `{"error": …}`
+from native. `scenarios/checks.test.ts` tests the harness itself on made-up sequences, and runs
+without the variable.
 
 ### Real calls
 
@@ -392,7 +394,8 @@ spans, then the pass bar:
 - question end → first reply audio, TTS start → `bot-started-speaking`, and the gap between
   sentences (0 when her audio has none), each no worse than the baseline's median + 100 ms;
 - `bot-stopped-speaking` from 0.1 s before her last audible audio ends (a level sample's window)
-  to 0.5 s after, and `bot-tts-stopped` in every turn.
+  to 0.5 s after, and `bot-tts-stopped` in every turn: a reply cut off by the barge-in stops
+  once the server hears the caller, so its stops count until the caller's turn ends.
 
 ```bash
 bun run dev                                            # pipedog, on :7860
