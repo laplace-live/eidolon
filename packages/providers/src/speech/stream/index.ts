@@ -27,8 +27,8 @@ export interface Utterance {
    */
   say(segment: { readonly id: number; readonly text: string }): void;
   /**
-   * No more segments: Fish `stop`, ElevenLabs `close_context`, Cartesia `continue: false`, Soniox
-   * `text_end`; over HTTP, the requests made are the last.
+   * No more segments: Fish `stop` once the last is flushed, ElevenLabs `close_context`, Cartesia
+   * `continue: false`, Soniox `text_end`; over HTTP, the requests made are the last.
    */
   end(): void;
   /** Stops at once: `audio` ends without an `end`. */
@@ -38,8 +38,7 @@ export interface Utterance {
 }
 
 export type UtteranceAudio =
-  /** `seg` is null from a provider that marks no segment boundaries (Fish). */
-  | { readonly kind: "pcm"; readonly seg: number | null; readonly pcm: Int16Array }
+  | { readonly kind: "pcm"; readonly seg: number; readonly pcm: Int16Array }
   /**
    * Words of segment `seg` as they start: `chars` counts its letters and digits (`\p{L}`, `\p{N}`)
    * through each word, in the text it was sent with; `startMs` is from the segment's first sample

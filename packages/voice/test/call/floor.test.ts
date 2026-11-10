@@ -303,26 +303,32 @@ describe("her reply (rows 9-15, 18-22)", () => {
     ]);
   });
 
-  test("row 14 for Fish: each segment said goes out new and completed as her audio starts", async () => {
-    const call = startCall({ boundaries: false });
+  test("row 14: each segment goes out new as its audio starts and completed as it ends", async () => {
+    const call = startCall();
     await call.ready();
     await call.says("你好");
     call.turn.round("第一句。第二句。");
     await settle();
     const ending = call.turn.end();
     await settle();
-    call.utterance().pcm(null, 480);
+    for (const seg of [1, 2]) {
+      call.utterance().pcm(seg, 480);
+      call.utterance().segEnd(seg);
+    }
     call.utterance().finish();
     await settle();
     call.news();
+    await call.play(240);
+    expect(call.news()).toEqual(["bot-started-speaking", "bot-output new 第一句。"]);
     await call.play(480);
-    await ending;
     expect(call.news()).toEqual([
-      "bot-started-speaking",
-      "bot-output new 第一句。",
       "bot-output completed 第一句。",
       "bot-tts-text 第一句。",
       "bot-output new 第二句。",
+    ]);
+    await call.play(480);
+    await ending;
+    expect(call.news()).toEqual([
       "bot-output completed 第二句。",
       "bot-tts-text 第二句。",
       "bot-stopped-speaking",

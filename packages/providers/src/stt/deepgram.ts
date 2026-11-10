@@ -173,6 +173,8 @@ class DeepgramStt extends SttBase {
     if (message.from_finalize && this.#requested) {
       this.#requested = false;
       this.#pending = true;
+      // Answered with no words. pipedog still passes the mark to the turn's next final.
+      if (transcript.length === 0) this.emit({ type: "finalized" });
     }
     if (transcript.length === 0) return;
     this.emit({ type: "final", text: transcript, finalized: this.#pending });

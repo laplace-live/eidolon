@@ -168,6 +168,11 @@ needs a decision, not a bigger margin.
 
 ## Reproduce
 
+The script speaks through the bot's own Fish client. The run above used G2's client, which sent a
+reply's sentences as they came. Since G5 that client sends each sentence only once the last has
+gone quiet, so a rerun's pipelined pass is serial too, and only its serial pass still measures
+what it did here.
+
 From the repository root, with the voice role's key (`FISH_API_KEY` by default) in `.env`,
 `credentials.json` or the environment:
 

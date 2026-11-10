@@ -11,7 +11,7 @@ export type SttEvent =
   | { readonly type: "interim"; readonly text: string }
   /** One segment. */
   | { readonly type: "final"; readonly text: string; readonly finalized: boolean }
-  /** `finalize()` acknowledged with no words (Soniox's `<fin>` on an empty turn). */
+  /** `finalize()` answered with no words: Soniox's bare `<fin>`, Deepgram's empty answer. */
   | { readonly type: "finalized" }
   | { readonly type: "error"; readonly message: string; readonly fatal: boolean };
 

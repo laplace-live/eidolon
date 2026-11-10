@@ -1,7 +1,8 @@
 // The turn rules pipedog 0.10.0 runs a call with (a VAD or transcript start, the Smart Turn stop,
-// the 5 s watchdog), on scripted timelines and a fake clock.
+// the 5 s watchdog), and the end on the recognizer's acknowledgement, on scripted timelines and a
+// fake clock.
 import { describe, expect, test } from "bun:test";
-import { TurnDetector } from "../../src/input/turn.ts";
+import { FINALIZE_ACK_CAP_MS, TurnDetector } from "../../src/input/turn.ts";
 import type { EarEvent } from "../../src/types.ts";
 import { FakeClock } from "./clock.ts";
 
@@ -99,7 +100,7 @@ describe("a spoken turn", () => {
     turn.speechStarted();
     turn.speechStopped();
     turn.analyzed("complete");
-    clock.advance(2_000);
+    clock.advance(1_000);
     expect(events).toEqual(["user-started"]);
     turn.final("迟到", false);
     expect(events).toEqual(["user-started", "final 迟到", "user-stopped 迟到"]);
@@ -247,12 +248,12 @@ describe("a turn a transcript starts", () => {
 });
 
 describe("the watchdog", () => {
-  test("ends a turn with no final 5 s after the VAD's stop, with no text", () => {
+  test("ends a turn Smart Turn holds 5 s after the VAD's stop, with no text", () => {
     const { turn, clock, events, counts } = detector();
     turn.speechStarted();
     clock.advance(700);
     turn.speechStopped();
-    turn.analyzed("complete");
+    turn.analyzed("incomplete");
     clock.advance(STOP_TIMEOUT_MS - 1);
     expect(events).toEqual(["user-started"]);
     clock.advance(1);
@@ -286,12 +287,173 @@ describe("the watchdog", () => {
   });
 });
 
+describe("the recognizer's acknowledgement of finalize", () => {
+  test("ends a turn of no words at once, as an empty turn", () => {
+    const { turn, clock, events, counts } = detector();
+    turn.speechStarted();
+    clock.advance(300);
+    turn.speechStopped();
+    turn.analyzed("complete");
+    clock.advance(320);
+    expect(events).toEqual(["user-started"]);
+    turn.finalized();
+    expect(events).toEqual(["user-started", "user-stopped null"]);
+    expect(counts.cleared).toBe(1);
+    expect(clock.pending).toBe(0);
+  });
+
+  test("one that beats the verdict ends the turn as the verdict comes", () => {
+    const { turn, events } = detector();
+    turn.speechStarted();
+    turn.speechStopped();
+    turn.finalized();
+    expect(events).toEqual(["user-started"]);
+    turn.analyzed("complete");
+    expect(events.at(-1)).toBe("user-stopped null");
+  });
+
+  test("ends a turn whose final wasn't finalized before the p99", () => {
+    const { turn, clock, events } = detector();
+    turn.speechStarted();
+    turn.final("你好", false);
+    turn.speechStopped();
+    turn.analyzed("complete");
+    clock.advance(50);
+    turn.finalized();
+    expect(events.at(-1)).toBe("user-stopped 你好");
+  });
+
+  test("still waits for Smart Turn, and never ends while the VAD hears speech", () => {
+    const held = detector();
+    held.turn.speechStarted();
+    held.turn.speechStopped();
+    held.turn.analyzed("incomplete");
+    held.turn.finalized();
+    held.clock.advance(FINALIZE_ACK_CAP_MS);
+    expect(held.events).toEqual(["user-started"]);
+    held.turn.silenceComplete();
+    expect(held.events.at(-1)).toBe("user-stopped null");
+
+    // A verdict on the last stop that comes once speech has resumed.
+    const { turn, events } = detector();
+    turn.speechStarted();
+    turn.speechStopped();
+    turn.speechStarted();
+    turn.analyzed("complete");
+    turn.finalized();
+    expect(events).toEqual(["user-started"]);
+  });
+
+  test("an interim after it clears it, and leaves the turn to its final", () => {
+    const { turn, clock, events } = detector();
+    turn.speechStarted();
+    turn.speechStopped();
+    turn.finalized();
+    turn.interim("等");
+    turn.analyzed("complete");
+    clock.advance(FINALIZE_ACK_CAP_MS);
+    expect(events).toEqual(["user-started", "interim 等"]);
+    turn.final("等一下", true);
+    expect(events.at(-1)).toBe("user-stopped 等一下");
+  });
+
+  test("an interim with no final after it leaves the turn to the watchdog", () => {
+    const { turn, clock, events } = detector();
+    turn.speechStarted();
+    turn.speechStopped();
+    turn.analyzed("complete");
+    turn.interim("嗯");
+    clock.advance(STOP_TIMEOUT_MS - 1);
+    expect(events).toEqual(["user-started", "interim 嗯"]);
+    clock.advance(1);
+    expect(events.at(-1)).toBe("user-stopped null");
+  });
+
+  test("speech resuming drops it: the next stop waits for its own", () => {
+    const { turn, clock, events } = detector();
+    turn.speechStarted();
+    turn.speechStopped();
+    turn.analyzed("incomplete");
+    turn.finalized();
+    clock.advance(200);
+    turn.speechStarted();
+    // The first stop's, late: speech has resumed since.
+    turn.finalized();
+    clock.advance(500);
+    turn.speechStopped();
+    turn.analyzed("complete");
+    clock.advance(300);
+    expect(events).toEqual(["user-started"]);
+    turn.finalized();
+    expect(events.at(-1)).toBe("user-stopped null");
+  });
+
+  test("one with no turn, or after the turn ended, changes nothing", () => {
+    const { turn, clock, events } = detector();
+    turn.finalized();
+    turn.speechStarted();
+    turn.speechStopped();
+    turn.analyzed("complete");
+    turn.final("好", true);
+    turn.finalized();
+    clock.advance(STOP_TIMEOUT_MS);
+    expect(events).toEqual(["user-started", "final 好", "user-stopped 好"]);
+  });
+
+  test("past the cap with no word from the recognizer, the turn ends as if acknowledged", () => {
+    const { turn, clock, events } = detector();
+    turn.speechStarted();
+    turn.speechStopped();
+    clock.advance(90);
+    turn.analyzed("complete");
+    clock.advance(FINALIZE_ACK_CAP_MS - 91);
+    expect(events).toEqual(["user-started"]);
+    clock.advance(1);
+    expect(events).toEqual(["user-started", "user-stopped null"]);
+    expect(clock.pending).toBe(0);
+  });
+
+  test("past the cap, words heard during the speech still wait for their final", () => {
+    const { turn, clock, events } = detector();
+    turn.speechStarted();
+    turn.interim("我想");
+    turn.speechStopped();
+    turn.analyzed("complete");
+    clock.advance(FINALIZE_ACK_CAP_MS + 500);
+    expect(events).toEqual(["user-started", "interim 我想"]);
+    turn.final("我想问一下", true);
+    expect(events).toEqual([
+      "user-started",
+      "interim 我想",
+      "final 我想问一下",
+      "user-stopped 我想问一下",
+    ]);
+  });
+
+  test("the cap counts from the last stop", () => {
+    const { turn, clock, events } = detector();
+    turn.speechStarted();
+    turn.speechStopped();
+    turn.analyzed("incomplete");
+    clock.advance(1_000);
+    turn.speechStarted();
+    // Past the first stop's cap.
+    clock.advance(1_500);
+    turn.speechStopped();
+    turn.analyzed("complete");
+    clock.advance(FINALIZE_ACK_CAP_MS - 1);
+    expect(events).toEqual(["user-started"]);
+    clock.advance(1);
+    expect(events.at(-1)).toBe("user-stopped null");
+  });
+});
+
 test("close cancels every timer", () => {
   const { turn, clock } = detector();
   turn.speechStarted();
   turn.speechStopped();
   turn.analyzed("complete");
-  expect(clock.pending).toBe(2);
+  expect(clock.pending).toBe(3);
   turn.close();
   expect(clock.pending).toBe(0);
 });

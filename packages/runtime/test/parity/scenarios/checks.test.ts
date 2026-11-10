@@ -406,6 +406,221 @@ describe("allowed.ts", () => {
   });
 });
 
+describe("allowed.ts: Fish's sentences reported as they play (D11, D12)", () => {
+  const A = "嗯，今天花店来了好多新的花。";
+  const B = "你想先看哪一种呢？";
+  const C = "好呀，那我们慢慢聊。";
+  const session: FishSession = {
+    path: "/v1/tts/live",
+    authorization: null,
+    model: null,
+    start: null,
+    request: null,
+    flushed: [A, B, C],
+    stopped: true,
+  };
+  const fish = { fish: [session] };
+  const report = (id: number, text: string, status: "new" | "completed") =>
+    rtvi("bot-output", {
+      text,
+      text_type: "sentence",
+      aggregated_by: "sentence",
+      segment_id: id,
+      spoken: status === "completed",
+      will_be_spoken: true,
+      spoken_status: status,
+      spoken_progress: {
+        accumulated_text: status === "new" ? "" : text,
+        remaining_text: status === "new" ? text : "",
+      },
+    });
+  /** A sentence reported whole: new, completed, and its bot-tts-text. */
+  const played = (id: number, text: string) => [
+    report(id, text, "new"),
+    report(id, text, "completed"),
+    rtvi("bot-tts-text", { text }),
+  ];
+  const answer = (...sentences: string[]) => [
+    rtvi("bot-llm-started"),
+    rtvi("bot-llm-text", { text: sentences.join("") }),
+    ...sentences.flatMap((text, i) =>
+      i === 0
+        ? [rtvi("bot-transcription", { text }), rtvi("bot-tts-started")]
+        : [rtvi("bot-transcription", { text })],
+    ),
+    rtvi("bot-llm-stopped"),
+    rtvi("bot-started-speaking"),
+  ];
+  const typed = (text: string) => rtvi("user-input", { text, input_type: "chat", final: true });
+
+  test("D12: lines typed while she speaks land among native's later reports, whichever side moves", () => {
+    const [x, y, z] = [typed("一"), typed("二"), typed("三")];
+    const pipedog = (...meanwhile: Received[]) =>
+      capture(
+        "pipedog",
+        [rtvi("bot-ready"), ...answer(A, B), ...played(1, A), ...played(2, B), ...meanwhile],
+        fish,
+      );
+    const native = (...meanwhile: Received[]) =>
+      capture(
+        "native",
+        [
+          rtvi("bot-ready"),
+          ...answer(A, B),
+          ...played(1, A),
+          report(2, B, "new"),
+          ...meanwhile,
+          report(2, B, "completed"),
+          rtvi("bot-tts-text", { text: B }),
+        ],
+        fish,
+      );
+    // The alignment moves the line in one, and the two reports in the other.
+    expect(rules({ pipedog: pipedog(x), native: native(x) })).toEqual(["D12"]);
+    expect(rules({ pipedog: pipedog(x, y, z), native: native(x, y, z) })).toEqual(["D12", "D12"]);
+    // Without Fish, as on a realtime call, or moved past a message other than a report, no.
+    const elsewhere = { fish: [] };
+    expect(
+      rules({
+        pipedog: capture("pipedog", [...pipedog(x).received], elsewhere),
+        native: capture("native", [...native(x).received], elsewhere),
+      }),
+    ).toEqual(["UNEXPLAINED"]);
+    const early = capture(
+      "native",
+      [rtvi("bot-ready"), x, ...answer(A, B), ...played(1, A), ...played(2, B)],
+      fish,
+    );
+    expect(rules({ pipedog: pipedog(x), native: early })).toEqual(["UNEXPLAINED"]);
+    // A report that lands in her next reply is no allowed difference either.
+    const replies = (late: boolean) => [
+      rtvi("bot-ready"),
+      ...answer(A),
+      report(1, A, "new"),
+      ...(late ? [] : [report(1, A, "completed"), rtvi("bot-tts-text", { text: A })]),
+      rtvi("bot-stopped-speaking"),
+      x,
+      y,
+      z,
+      ...answer(C),
+      ...(late ? [report(1, A, "completed"), rtvi("bot-tts-text", { text: A })] : []),
+      ...played(2, C),
+    ];
+    expect(
+      rules({
+        pipedog: capture("pipedog", replies(false), fish),
+        native: capture("native", replies(true), fish),
+      }),
+    ).toEqual(["UNEXPLAINED", "UNEXPLAINED"]);
+  });
+
+  // Her reply of A and B cut off while A plays, then C: pipedog reported A and B whole at her first
+  // audio and kept both; native reported A new, kept nothing, and numbers C one sentence earlier.
+  const cut = [rtvi("user-started-speaking"), rtvi("bot-interrupted")];
+  const after = (...reports: Received[]) => [
+    rtvi("bot-stopped-speaking"),
+    rtvi("user-stopped-speaking"),
+    ...answer(C),
+    ...reports,
+    rtvi("bot-stopped-speaking"),
+  ];
+  const lines = (kept: string | null) => [
+    { role: "user", content: "给我讲讲花店" },
+    ...(kept === null ? [] : [{ role: "assistant", content: kept }]),
+    { role: "user", content: "等一下" },
+  ];
+  const asked = (kept: string | null) => ({
+    mind: [{ path: "/chat/completions", headers: {}, body: { messages: lines(kept) } }],
+    conversation: lines(kept),
+  });
+  const bargeIn = {
+    pipedog: capture(
+      "pipedog",
+      [
+        rtvi("bot-ready"),
+        ...answer(A, B),
+        ...played(1, A),
+        ...played(2, B),
+        ...cut,
+        ...after(...played(3, C)),
+      ],
+      { ...fish, ...asked(`${A} ${B}`) },
+    ),
+    native: (
+      o: {
+        readonly heard?: Received[];
+        readonly kept?: string | null;
+        /** The segment id native gives C. */
+        readonly next?: number;
+      } = {},
+    ) =>
+      capture(
+        "native",
+        [
+          rtvi("bot-ready"),
+          ...answer(A, B),
+          ...(o.heard ?? [report(1, A, "new")]),
+          ...cut,
+          ...after(...played(o.next ?? 7, C)),
+        ],
+        { ...fish, ...asked(o.kept === undefined ? null : o.kept) },
+      ),
+  };
+
+  /** The rules for the RTVI differences against `bargeIn.pipedog`, or for the others. */
+  const kept = (rtviOnly: boolean, native: Capture) =>
+    judge({ pipedog: bargeIn.pipedog, native })
+      .filter((j) => (j.difference.kind === "rtvi") === rtviOnly)
+      .map((j) => j.rule?.id ?? "UNEXPLAINED");
+
+  test("D12: a cut reply reports fewer sentences on native, and its next ones run an ordinal behind", () => {
+    const twin = { pipedog: bargeIn.pipedog, native: bargeIn.native() };
+    const judged = judge(twin).filter((j) => j.difference.kind === "rtvi");
+    expect(judged.map((j) => j.rule?.id ?? "UNEXPLAINED")).toEqual(Array(7).fill("D12"));
+    expect(
+      judged.map((j) => (j.difference.kind === "rtvi" ? j.difference.change : null)).sort(),
+    ).toEqual(["changed", "changed", ...Array(5).fill("pipedog-only")]);
+    // Reports native had that aren't the first of pipedog's are no allowed difference, nor C
+    // numbered further back than the sentences native never reported.
+    expect(kept(true, bargeIn.native({ heard: [report(2, B, "new")] }))).toContain("UNEXPLAINED");
+    expect(kept(true, bargeIn.native({ next: 1 }))).toEqual([
+      "UNEXPLAINED",
+      "UNEXPLAINED",
+      ...Array(5).fill("D12"),
+    ]);
+    // Nor are sentences missing from a reply that played out before the caller spoke.
+    const unreported = capture(
+      "native",
+      [
+        rtvi("bot-ready"),
+        ...answer(A, B),
+        ...played(1, A),
+        rtvi("bot-stopped-speaking"),
+        ...cut,
+        ...after(...played(7, C)).slice(1),
+      ],
+      fish,
+    );
+    expect(kept(true, unreported)).toContain("UNEXPLAINED");
+  });
+
+  test("D11: her cut message keeps fewer whole sentences on native, or none, and nothing else", () => {
+    expect(kept(false, bargeIn.native())).toEqual(["D11", "D11"]);
+    expect(kept(false, bargeIn.native({ kept: A }))).toEqual(["D11", "D11"]);
+    expect(kept(false, bargeIn.native({ kept: "嗯，今天" }))).toEqual([
+      "UNEXPLAINED",
+      "UNEXPLAINED",
+    ]);
+    // A reply that played out before the caller spoke was not cut off.
+    const whole = capture(
+      "native",
+      [rtvi("bot-ready"), ...answer(A, B), ...played(1, A), rtvi("bot-stopped-speaking"), ...cut],
+      { ...fish, ...asked(null) },
+    );
+    expect(kept(false, whole)).toEqual(["UNEXPLAINED", "UNEXPLAINED"]);
+  });
+});
+
 describe("a realtime call's invariants", () => {
   // The server ends the turn on its VAD and answers before it has transcribed it.
   const turn = [

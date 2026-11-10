@@ -333,7 +333,19 @@ describe("a turn", () => {
 });
 
 describe("the recognizer's events", () => {
-  test("an error passes through; a finalize acknowledgement changes nothing yet", async () => {
+  test("a turn of no words ends as the recognizer acknowledges its finalize", async () => {
+    const e = ear();
+    e.vad.edges.set(1, "started");
+    e.vad.edges.set(10, "stopped");
+    e.stt.onFinalize = () => e.stt.events.push({ type: "finalized" });
+    await e.speak(11);
+    expect(e.log).toEqual(["finalize", "analyze"]);
+    expect(e.events()).toEqual(["user-started", "user-stopped null"]);
+    expect(e.turn.cleared).toBe(1);
+    await e.end();
+  });
+
+  test("an error passes through; an acknowledgement with no turn changes nothing", async () => {
     const e = ear();
     e.stt.events.push({ type: "finalized" });
     e.stt.events.push({ type: "error", message: "Soniox dropped", fatal: false });

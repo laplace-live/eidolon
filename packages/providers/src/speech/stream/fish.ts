@@ -6,8 +6,9 @@
 //
 // Fish Audio's live socket, one session per utterance: `start` names the voice, each segment goes
 // as `text` and `flush`, and `stop` ends it, after which `finish` marks the exact end of its audio.
-// Fish marks no segment boundaries. A session for the next utterance opens as one ends, so an
-// utterance rarely waits for a handshake.
+// Fish marks no segment boundaries, so segments go one at a time: the next is flushed once the
+// last one's audio has gone quiet, which is where that segment ends. A session for the next
+// utterance opens as one ends, so an utterance rarely waits for a handshake.
 import { isPlainObject, logger } from "@eidolon/config";
 import { voiceOf } from "../../resolve.ts";
 import { accountUrl } from "../../stt/stream.ts";
@@ -15,10 +16,21 @@ import type { WsData } from "../../ws.ts";
 import { PcmBytes } from "../pcm.ts";
 import type { SpeechStream, Utterance } from "./index.ts";
 import { packMsg, unpackMsg } from "./msgpack.ts";
-import { AudioQueue, type KeyedSelection, SocketLink, SpokenText, scrubbed } from "./shared.ts";
+import {
+  AudioQueue,
+  type KeyedSelection,
+  SocketLink,
+  SPEECH_STALL_MS,
+  SPEECH_STALLED,
+  SpokenText,
+  scrubbed,
+} from "./shared.ts";
 
 export const FISH_URL = "wss://api.fish.audio/v1/tts/live";
 const SAMPLE_RATE = 44100;
+// A flush's audio came in one burst, so this is the event loop's margin alone
+// (docs/benchmarks/2026-11-10-fish-flush).
+export const FISH_SEGMENT_IDLE_MS = 100;
 
 class Session {
   readonly voice: string | null;
@@ -61,8 +73,16 @@ class FishUtterance implements Utterance {
   readonly #stream: FishSpeech;
   readonly #session: Session;
   readonly #pcm = new PcmBytes();
+  /** Said, waiting for the segment flushed before them to end. */
+  #queue: { readonly id: number; readonly text: string }[] = [];
+  /** The segment flushed whose audio hasn't ended, and the last one flushed. */
+  #flushed: number | null = null;
+  #last: number | null = null;
+  /** The flushed segment's stall until its first audio, then its idle after each. */
+  #timer: ReturnType<typeof setTimeout> | undefined;
   #said = false;
   #ended = false;
+  #stopped = false;
 
   constructor(stream: FishSpeech, session: Session) {
     this.#stream = stream;
@@ -72,29 +92,24 @@ class FishUtterance implements Utterance {
 
   say(segment: { readonly id: number; readonly text: string }): void {
     if (this.#ended || this.audio.closed) return;
-    const text = this.#stream.text.take(segment.text);
-    if (text === null) return;
-    this.#said = true;
-    this.#session.link.send(packMsg({ event: "text", text }));
-    this.#session.link.send(packMsg({ event: "flush" }));
+    this.#queue.push(segment);
+    this.#next();
   }
 
   end(): void {
     if (this.#ended || this.audio.closed) return;
     this.#ended = true;
-    if (!this.#said) {
-      this.#release();
-      this.audio.finish({ kind: "end" });
-      this.#stream.keep(this.#session);
-      return;
-    }
-    this.#session.link.send(packMsg({ event: "stop" }));
-    this.#stream.preopen(this.#session.voice);
+    this.#next();
+    // Here, not at the deferred stop: by then a voice switch's utterance may have ended and left
+    // the spare in its voice, which this would replace.
+    if (this.#said) this.#stream.preopen(this.#session.voice);
   }
 
   cancel(): void {
     if (this.audio.closed) return;
     this.#ended = true;
+    this.#queue = [];
+    this.#disarm();
     this.audio.drop();
     this.#release();
     if (this.#said) {
@@ -110,24 +125,84 @@ class FishUtterance implements Utterance {
     const message = unpackMsg(data);
     if (!isPlainObject(message)) return;
     if (message.event === "audio" && message.audio instanceof Uint8Array) {
+      const seg = this.#flushed ?? this.#last;
+      if (seg === null) return;
       const pcm = this.#pcm.push(message.audio);
-      if (pcm.length > 0) this.audio.push({ kind: "pcm", seg: null, pcm });
+      if (pcm.length > 0) this.audio.push({ kind: "pcm", seg, pcm });
+      if (this.#flushed !== null) this.#arm(FISH_SEGMENT_IDLE_MS, () => this.#segmentEnded());
     } else if (message.event === "finish") {
+      this.#disarm();
       this.#release();
       void this.#session.link.close();
       if (message.reason === "error") {
         this.audio.finish({ kind: "error", message: "Fish Audio server error during synthesis" });
       } else {
         logger.debug(`Fish Audio session finished: ${String(message.reason ?? "unknown")}`);
+        if (this.#flushed !== null) this.audio.push({ kind: "seg-end", seg: this.#flushed });
         this.audio.finish({ kind: "end" });
       }
     }
   }
 
   lost(error: string | null): void {
+    this.#disarm();
     this.#release();
     if (error === null) this.audio.drop();
     else this.audio.finish({ kind: "error", message: error });
+  }
+
+  /** Flushes the next segment once none is in flight, and stops once the last has been flushed. */
+  #next(): void {
+    while (this.#flushed === null) {
+      const segment = this.#queue.shift();
+      if (segment === undefined) break;
+      const text = this.#stream.text.take(segment.text);
+      if (text === null) {
+        this.audio.push({ kind: "seg-end", seg: segment.id });
+        continue;
+      }
+      this.#said = true;
+      this.#flushed = segment.id;
+      this.#last = segment.id;
+      this.#session.link.send(packMsg({ event: "text", text }));
+      this.#session.link.send(packMsg({ event: "flush" }));
+      this.#arm(SPEECH_STALL_MS, () => this.#stalled());
+    }
+    if (!this.#ended || this.#stopped || this.#queue.length > 0) return;
+    this.#stopped = true;
+    if (!this.#said) {
+      this.#release();
+      this.audio.finish({ kind: "end" });
+      this.#stream.keep(this.#session);
+      return;
+    }
+    this.#session.link.send(packMsg({ event: "stop" }));
+  }
+
+  #segmentEnded(): void {
+    if (this.#flushed === null || this.audio.closed) return;
+    this.audio.push({ kind: "seg-end", seg: this.#flushed });
+    this.#flushed = null;
+    this.#next();
+  }
+
+  #stalled(): void {
+    if (this.audio.closed) return;
+    this.#queue = [];
+    this.#release();
+    this.audio.finish({ kind: "error", message: SPEECH_STALLED });
+    void this.#session.link.close();
+    this.#stream.preopen(this.#session.voice);
+  }
+
+  #arm(ms: number, then: () => void): void {
+    clearTimeout(this.#timer);
+    this.#timer = setTimeout(then, ms);
+  }
+
+  #disarm(): void {
+    clearTimeout(this.#timer);
+    this.#timer = undefined;
   }
 
   #release(): void {

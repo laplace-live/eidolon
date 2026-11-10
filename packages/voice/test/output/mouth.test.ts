@@ -49,7 +49,7 @@ class FakeUtterance implements Utterance {
     this.audio.drop();
   }
 
-  pcm(seg: number | null, samples: number | Int16Array, value = 1): void {
+  pcm(seg: number, samples: number | Int16Array, value = 1): void {
     const pcm = typeof samples === "number" ? new Int16Array(samples).fill(value) : samples;
     this.audio.push({ kind: "pcm", seg, pcm });
   }
@@ -90,9 +90,7 @@ class FakeSpeech implements SpeechStream {
 
 const keyOf = (tag: Tag) => `${tag.reply}/${tag.seg}`;
 
-function harness(
-  o: { readonly boundaries?: boolean; readonly markup?: Markup; readonly sampleRate?: number } = {},
-) {
+function harness(o: { readonly markup?: Markup; readonly sampleRate?: number } = {}) {
   const clock = new FakeClock();
   const cursor: CursorEvent[] = [];
   const real = createSpeaker((event) => cursor.push(event));
@@ -110,7 +108,6 @@ function harness(
     persona: "milky-green",
     speech,
     markup: o.markup,
-    boundaries: o.boundaries ?? true,
     speaker,
     join,
     clock,
@@ -352,71 +349,19 @@ describe("a voice that marks where each segment ends", () => {
   });
 });
 
-describe("a voice that marks no boundaries (Fish)", () => {
-  test("its audio carries the first segment's tag, and all said in it counts from its first sample", async () => {
-    const h = harness({ boundaries: false });
+describe("a voice at another rate (Fish)", () => {
+  test("its audio reaches the Speaker at 24 kHz, each segment's under its tag, the resampler's tail at its end", async () => {
+    const h = harness({ sampleRate: 44_100 });
     const reply = h.begin();
     reply.push("你好。今天天气不错。");
-    reply.flush();
-    const [utterance] = h.speech.utterances as [FakeUtterance];
-    utterance.pcm(null, 480);
-    await settle();
-    h.take();
-    h.play(10);
-    reply.push("我们出去吧。");
-    reply.flush();
-    h.take();
     const heard = reply.heard();
-    utterance.pcm(null, 240);
-    utterance.finish();
-    await settle();
-    h.take();
-    h.play(20);
-    expect(h.notes).toEqual([
-      "segment 1 你好。",
-      "tts-started",
-      "segment 2 今天天气不错。",
-      "new 1",
-      "done 1",
-      "new 2",
-      "done 2",
-      "segment 3 我们出去吧。",
-      "new 3",
-      "done 3",
-      "tts-stopped",
-    ]);
-    expect(await heard).toEqual({ text: "你好。|今天天气不错。|我们出去吧。", complete: true });
-  });
-
-  test("after a voice switch, the new voice's segments count once its own audio plays", async () => {
-    const h = harness({ boundaries: false });
-    const reply = h.begin();
-    reply.push("你好。");
-    reply.switchVoice("voice-b");
-    reply.push("秘密。");
-    reply.flush();
-    const [first, second] = h.speech.utterances as [FakeUtterance, FakeUtterance];
-    first.pcm(null, 240);
-    first.finish();
-    second.pcm(null, 240);
-    second.finish();
-    await settle();
-    h.take();
-    const said = h.notes.length;
-    h.play(10);
-    expect(h.notes.slice(said)).toEqual(["new 1", "done 1"]);
-    h.play(10);
-    expect(h.notes.slice(said + 2)).toEqual(["new 2", "done 2"]);
-  });
-
-  test("audio at another rate reaches the Speaker at 24 kHz, the resampler's tail at its end", async () => {
-    const h = harness({ boundaries: false, sampleRate: 44_100 });
-    const reply = h.begin();
-    reply.push("你好。");
-    void reply.heard();
     const [utterance] = h.speech.utterances as [FakeUtterance];
     const chunks = [sine(1000), sine(2000, 1000), sine(1410, 3000)];
-    for (const chunk of chunks) utterance.pcm(null, chunk);
+    utterance.pcm(1, chunks[0] as Int16Array);
+    utterance.segEnd(1);
+    utterance.pcm(2, chunks[1] as Int16Array);
+    utterance.pcm(2, chunks[2] as Int16Array);
+    utterance.segEnd(2);
     utterance.finish();
     await settle();
     const reference = resampler().createStream(44_100, 24_000);
@@ -427,6 +372,13 @@ describe("a voice that marks no boundaries (Fish)", () => {
     reference.destroy();
     expect(expected).toHaveLength(2400);
     expect(concat(h.enqueued)).toEqual(expected);
+    h.take();
+    const said = h.notes.length;
+    h.play(20);
+    expect(h.notes.slice(said)).toEqual(["new 1", "done 1", "new 2"]);
+    h.play(100);
+    expect(h.notes.slice(said + 3)).toEqual(["done 2"]);
+    expect(await heard).toEqual({ text: "你好。|今天天气不错。", complete: true });
   });
 });
 
@@ -559,16 +511,10 @@ test("closing her Mouth cancels what she is saying and closes her speech stream"
 });
 
 test.each<[Record<string, string>, ReturnType<typeof voiceTraits>]>([
-  [{ TTS_PROVIDER: "fish" }, { markup: "fish-drama", boundaries: false }],
-  [
-    { TTS_PROVIDER: "fish", TTS_MODEL: "s2-pro" },
-    { markup: "brackets", boundaries: false },
-  ],
-  [
-    { TTS_PROVIDER: "elevenlabs", TTS_MODEL: "eleven_v3" },
-    { markup: "brackets", boundaries: true },
-  ],
-  [{ TTS_PROVIDER: "minimax" }, { markup: undefined, boundaries: true }],
+  [{ TTS_PROVIDER: "fish" }, { markup: "fish-drama" }],
+  [{ TTS_PROVIDER: "fish", TTS_MODEL: "s2-pro" }, { markup: "brackets" }],
+  [{ TTS_PROVIDER: "elevenlabs", TTS_MODEL: "eleven_v3" }, { markup: "brackets" }],
+  [{ TTS_PROVIDER: "minimax" }, { markup: undefined }],
 ])("voiceTraits for %p", (variables, traits) => {
   const selection = select("voice", (name) => variables[name]);
   expect(selection).not.toBeNull();

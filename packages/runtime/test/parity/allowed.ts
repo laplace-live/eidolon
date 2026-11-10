@@ -8,7 +8,14 @@ import { CHAT_WINDOW_MESSAGES } from "@eidolon/chat";
 import { INTERRUPTED_EMPTY_TURN_PROMPT } from "@eidolon/context";
 import type { Violation } from "./invariants.ts";
 import type { Capture, Difference, Engine, Normalized, Twin } from "./twin.ts";
-import { canonical, differences, normalizeRealtime, normalizeRtvi, usageKey } from "./twin.ts";
+import {
+  align,
+  canonical,
+  differences,
+  normalizeRealtime,
+  normalizeRtvi,
+  usageKey,
+} from "./twin.ts";
 
 export interface Allowance {
   /** D: the cascade's differences; E: a realtime call's (§9 of the contract). */
@@ -380,6 +387,179 @@ function interimsSoFar(seq: readonly Normalized[], index: number, type: string):
   return joined;
 }
 
+/** Both runs spoke through Fish: a cascade call, not a realtime one. */
+const fishCall = (twin: Twin): boolean =>
+  twin.pipedog.fish.length > 0 && twin.native.fish.length > 0 && !realtime(twin);
+
+/** What the cursor reports of a sentence she speaks as it passes: its bot-output or bot-tts-text. */
+function spokenReport(m: Normalized | undefined): boolean {
+  if (m?.type === "bot-tts-text") return true;
+  return m?.type === "bot-output" && field(m.data, "will_be_spoken") === true;
+}
+
+/** A bot-output's key without its segment ordinal. */
+function unnumbered(m: Normalized): string {
+  return `${m.type} ${JSON.stringify({ ...(m.data as object), segment_id: null })}`;
+}
+
+/** Which of her speaking spans each message falls in: how many bot-started-speaking came by it. */
+function spans(seq: readonly Normalized[]): number[] {
+  let k = 0;
+  return seq.map((m) => (m.type === "bot-started-speaking" ? ++k : k));
+}
+
+/** The spoken reports of span `k`, by index. */
+function reportsIn(seq: readonly Normalized[], k: number): number[] {
+  const span = spans(seq);
+  return seq.flatMap((m, i) => (spokenReport(m) && span[i] === k ? [i] : []));
+}
+
+/** The spans native's caller cut off: a bot-interrupted came while she was speaking. */
+function cutSpans(seq: readonly Normalized[]): Set<number> {
+  const cut = new Set<number>();
+  let span = 0;
+  let speaking = false;
+  for (const m of seq) {
+    if (m.type === "bot-started-speaking") {
+      span++;
+      speaking = true;
+    } else if (m.type === "bot-stopped-speaking") {
+      speaking = false;
+    } else if (m.type === "bot-interrupted" && speaking) {
+      cut.add(span);
+    }
+  }
+  return cut;
+}
+
+/**
+ * pipedog's reports of sentences native's cursor never passed, by index: in a span native's caller
+ * cut off, those past as many as native sent there. Any of native's own that differ from the
+ * first of pipedog's are differences of their own, which nothing here allows.
+ */
+function unheardReports(twin: Twin): Set<number> {
+  const pipedog = rtvi(twin, "pipedog");
+  const native = rtvi(twin, "native");
+  const unheard = new Set<number>();
+  for (const k of cutSpans(native)) {
+    for (const i of reportsIn(pipedog, k).slice(reportsIn(native, k).length)) unheard.add(i);
+  }
+  return unheard;
+}
+
+/**
+ * Whether pipedog's bot-output `p` and native's `n` are one report numbered apart only by the
+ * sentences pipedog reported that native never did: normalizeRtvi numbers segments as they first
+ * appear, so each unheard sentence before it moves pipedog's ordinals one on.
+ */
+function renumbered(twin: Twin, p: number, n: number): boolean {
+  const pipedog = rtvi(twin, "pipedog");
+  const native = rtvi(twin, "native");
+  const a = pipedog[p];
+  const b = native[n];
+  if (a?.type !== "bot-output" || b?.type !== "bot-output" || unnumbered(a) !== unnumbered(b)) {
+    return false;
+  }
+  const unheard = unheardReports(twin);
+  const ordinals = new Map<unknown, boolean>();
+  for (const [i, m] of pipedog.entries()) {
+    if (m.type !== "bot-output") continue;
+    const ordinal = field(m.data, "segment_id");
+    ordinals.set(ordinal, (ordinals.get(ordinal) ?? true) && unheard.has(i));
+  }
+  const ordinal = Number(field(a.data, "segment_id"));
+  const missing = [...ordinals].filter(([o, gone]) => gone && Number(o) < ordinal).length;
+  return missing > 0 && ordinal - Number(field(b.data, "segment_id")) === missing;
+}
+
+/**
+ * Whether the messages at `p` and `n` line up once every spoken report is set aside: they moved
+ * only past reports that native sent later.
+ */
+function besideReports(twin: Twin, p: number, n: number): boolean {
+  const pipedog = rtvi(twin, "pipedog");
+  const native = rtvi(twin, "native");
+  const kept = (seq: readonly Normalized[]) => seq.flatMap((m, i) => (spokenReport(m) ? [] : [i]));
+  const keptP = kept(pipedog);
+  const keptN = kept(native);
+  const ops = align(
+    keptP.map((i) => pipedog[i] as Normalized),
+    keptN.map((i) => native[i] as Normalized),
+    (m) => m.key,
+  ).filter((op) => op.change === "same");
+  return (
+    ops.some((op) => keptP[op.pipedog as number] === p) &&
+    ops.some((op) => keptN[op.native as number] === n)
+  );
+}
+
+/**
+ * D12: native reports each Fish sentence "new" as its audio starts, and "completed" with its
+ * bot-tts-text as its audio ends; pipedog reported every sentence said at her first audio.
+ */
+function spreadReports(d: Difference, twin: Twin): boolean {
+  if (d.kind !== "rtvi" || !fishCall(twin)) return false;
+  const pipedog = rtvi(twin, "pipedog");
+  const native = rtvi(twin, "native");
+  switch (d.change) {
+    case "moved": {
+      if (d.pipedog === null || d.native === null) return false;
+      if (!spokenReport(d.message)) return besideReports(twin, d.pipedog, d.native);
+      const span = spans(pipedog)[d.pipedog] as number;
+      return span > 0 && span === spans(native)[d.native];
+    }
+    case "changed":
+      return d.pipedog !== null && d.native !== null && renumbered(twin, d.pipedog, d.native);
+    case "pipedog-only": {
+      const p = d.pipedog;
+      if (p === null) return false;
+      return unheardReports(twin).has(p) || native.some((_, n) => renumbered(twin, p, n));
+    }
+    case "native-only": {
+      const n = d.native;
+      return n !== null && pipedog.some((_, p) => renumbered(twin, p, n));
+    }
+  }
+}
+
+/** On native, the sentences she said in each reply the caller cut off while she spoke. */
+function cutSentences(seq: readonly Normalized[]): string[][] {
+  const cut: string[][] = [];
+  let said: string[] = [];
+  let speaking = false;
+  for (const m of seq) {
+    if (m.type === "bot-transcription") said.push(text(m.data));
+    else if (m.type === "bot-started-speaking") speaking = true;
+    else if (m.type === "bot-stopped-speaking") speaking = false;
+    else if (m.type === "bot-interrupted") {
+      if (speaking) cut.push(said);
+      said = [];
+    }
+  }
+  return cut;
+}
+
+/**
+ * D11: her interrupted message as each engine keeps it. pipedog's holds every sentence said
+ * before the cut, native's those whose audio played whole: fewer of the same sentences, or none.
+ */
+function heardOfCut(d: Difference, twin: Twin): boolean {
+  if ((d.kind !== "mind" && d.kind !== "conversation") || !fishCall(twin)) return false;
+  if (d.change !== "pipedog-only" && d.change !== "changed") return false;
+  if (field(d.pipedog, "role") !== "assistant") return false;
+  const whole = contentOf(d.pipedog);
+  const kept =
+    d.change === "pipedog-only" ? "" : sameRole(d.pipedog, d.native) ? contentOf(d.native) : null;
+  if (whole === null || kept === null) return false;
+  return cutSentences(rtvi(twin, "native")).some((said) => {
+    const prefixes = said.map((_, i) => unspaced(said.slice(0, i + 1).join("")));
+    const all = ["", ...prefixes];
+    const p = all.indexOf(unspaced(whole));
+    const n = all.indexOf(unspaced(kept));
+    return p > 0 && n >= 0 && n < p;
+  });
+}
+
 export const ALLOWED: readonly Allowance[] = [
   {
     id: "D1",
@@ -502,16 +682,19 @@ export const ALLOWED: readonly Allowance[] = [
   {
     id: "D11",
     difference:
-      "an interrupted message keeps the text heard: per utterance for Fish (until G5), per " +
-      "segment for the others",
-    trigger: "a barge-in",
-    matches: () => false,
+      "an interrupted message keeps the sentences heard whole; pipedog's Fish kept every " +
+      "sentence said once her audio had started",
+    trigger: "a barge-in while a Fish reply plays, before its last sentence has played",
+    matches: (d, twin) => heardOfCut(d, twin),
   },
   {
     id: "D12",
-    difference: "Fish's completed bot-output spread across her audio",
-    trigger: "any Fish reply of several sentences, from G5: not allowed yet",
-    matches: () => false,
+    difference:
+      "Fish's bot-output spread across her audio: each sentence new as its audio starts, " +
+      "completed with its bot-tts-text as it ends; pipedog reported all at her first audio, so " +
+      "a cut reply reports fewer sentences and the later ones' segment ordinals run behind",
+    trigger: "every Fish reply (required from G5): her reports move past what comes meanwhile",
+    matches: (d, twin) => spreadReports(d, twin),
   },
   {
     id: "D13",

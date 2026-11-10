@@ -122,6 +122,7 @@ class Ear {
           this.#detector.final(event.text, event.finalized);
           break;
         case "finalized":
+          this.#detector.finalized();
           break;
         case "error":
           this.#post({ type: "stt-error", message: event.message, fatal: event.fatal });

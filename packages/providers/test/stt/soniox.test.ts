@@ -87,8 +87,9 @@ test("final tokens stay interim text until an endpoint makes them one finalized 
       { text: "再", is_final: false },
     ],
   });
-  // An endpoint with nothing before it says nothing.
+  // A finalize with nothing before it is answered bare; an <end> with nothing says nothing.
   peer.send({ tokens: [{ text: "<fin>", is_final: true }] });
+  peer.send({ tokens: [{ text: "<end>", is_final: true }] });
   peer.send({
     tokens: [
       { text: "见", is_final: true },
@@ -100,7 +101,20 @@ test("final tokens stay interim text until an endpoint makes them one finalized 
     { type: "interim", text: "你好" },
     { type: "final", text: "你好", finalized: true },
     { type: "interim", text: "再" },
+    { type: "finalized" },
     { type: "final", text: "见", finalized: true },
+  ]);
+  await stt.close();
+});
+
+test("an error with nothing pending answers no finalize", async () => {
+  const stt = await open();
+  const events = watch(stt);
+  const peer = await server.connection();
+  peer.send({ tokens: [], error_code: 503, error_message: "busy" });
+  await events.until((event) => event.type === "error");
+  expect(events.seen).toEqual([
+    { type: "error", message: "Error: 503 (_receive_messages) - busy", fatal: false },
   ]);
   await stt.close();
 });

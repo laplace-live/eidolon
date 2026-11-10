@@ -73,8 +73,9 @@ describe.skipIf(!TWIN)("twin: the greeting and typed text", () => {
         mind: [GREETING],
         async run({ peer }) {
           clientReady(peer);
-          // Once both sentences are reported, so the line comes after them on either engine.
-          await peer.waitFor("bot-tts-text", 2);
+          // Once her second sentence is reported new, so the line comes while she says it on
+          // either engine: native reports each sentence as it plays (D12), pipedog all at once.
+          await peer.waitFor("bot-output", 3);
           sendText(peer, "我们聊聊天吧", { runImmediately: false });
           await finished(peer, 1);
         },
