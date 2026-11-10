@@ -89,6 +89,8 @@ export interface PartsOptions {
   readonly others?: readonly string[];
   /** The voice variant: her voice-style tool, and its hint in her system instruction. */
   readonly voice?: boolean;
+  /** What the chat's parts are kept under, by default its id. */
+  readonly chatKey?: string;
 }
 
 /** A persona's whole-message speech, through the roles of the persona whose scope it runs in. */

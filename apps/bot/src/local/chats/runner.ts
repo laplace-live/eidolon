@@ -21,18 +21,18 @@ import { dataHome, errorText, logger } from "@eidolon/config";
 import {
   type ChatOutput,
   type ChatRequest,
+  callLine,
+  callPhotos,
+  callSeed,
   defaultEngineDeps,
   type EngineDeps,
-  fetchStoredSelfie,
   hearVoiceMessage,
   type LateTools,
   replyModeFor,
   runChat,
   runTurn,
-  saveSelfies,
   type TurnOutput,
   type TurnRequest,
-  turnView,
 } from "@eidolon/engine";
 import type { AudioClip } from "@eidolon/providers/speech-batch";
 import type { CallBinding, CallEnd, TranscriptLine } from "@eidolon/runtime";
@@ -148,17 +148,6 @@ interface ActiveCall {
   pcId: string | null;
   /** Set by the first end; it resolves once call-ended is stored or has failed. */
   ending: Promise<void> | null;
-}
-
-/**
- * Her view of the chat as her next turn would read it, less her tool calls and their results: what
- * a call bound to it opens on. The call may offer no tools, and Anthropic refuses a request that
- * holds a tool_use block then.
- */
-function callSeed(chat: TurnRequest["chat"], persona: ParticipantId): ViewMessage[] {
-  return turnView(chat, persona, localViewer().uname ?? "").messages.filter(
-    (message) => message.role !== "tool" && !("tool_calls" in message),
-  );
 }
 
 /** The turn a reply is in, from its `started` to its `ended`. */
@@ -352,7 +341,7 @@ export class ChatRunner {
       const onEnded = (reason: CallEndReason) => this.#endCall(id, chat, call, reason);
       let seedMessages: ViewMessage[];
       try {
-        seedMessages = callSeed(await this.store.read(id), persona);
+        seedMessages = callSeed(await this.store.read(id), persona, localViewer().uname ?? "");
       } catch (error) {
         await onEnded("error");
         throw error;
@@ -510,20 +499,7 @@ export class ChatRunner {
   /** Stores a finished line of `call` as a `call` message; one after its end is dropped. */
   #callLine(id: string, chat: Chat, call: ActiveCall, line: TranscriptLine): void {
     if (!this.#takes(id, call, `${line.role === "user" ? "the viewer's" : "her"} line`)) return;
-    const speaker =
-      line.role === "user"
-        ? { kind: "user" as const }
-        : { kind: "persona" as const, id: call.persona };
-    void this.#append(id, chat, [
-      {
-        type: "message",
-        id: Bun.randomUUIDv7(),
-        speaker,
-        text: line.text,
-        modality: "call",
-        ...(line.interrupted ? { interrupted: true } : {}),
-      },
-    ]).catch((error: unknown) => {
+    void this.#append(id, chat, [callLine(line, call.persona)]).catch((error: unknown) => {
       logger.exception(`Chat ${id}: a line of call ${call.id} wasn't stored`, error);
     });
   }
@@ -539,25 +515,9 @@ export class ChatRunner {
     data: Readonly<Record<string, unknown>>,
   ): void {
     if (data.type !== "selfie" || !this.#takes(id, call, "her photo")) return;
-    const deps = {
-      fetchImage: (url: string) => fetchStoredSelfie(url),
-      saveAttachment: this.#saver(id),
-    };
-    // Never aborted: the photo is rendered and billed, and shutdown waits for it as for her lines.
-    const photos = saveSelfies(data, new AbortController().signal, deps).then(
-      (attachments): ChatEventDraft[] =>
-        attachments.length === 0
-          ? []
-          : [
-              {
-                type: "message",
-                id: Bun.randomUUIDv7(),
-                speaker: { kind: "persona", id: call.persona },
-                text: "",
-                attachments,
-                modality: "call",
-              },
-            ],
+    // Shutdown waits for it as for her lines.
+    const photos = callPhotos(data, call.persona, this.#saver(id)).then((draft) =>
+      draft === null ? [] : [draft],
     );
     void this.#append(id, chat, photos).catch((error: unknown) => {
       logger.exception(`Chat ${id}: a photo of call ${call.id} wasn't stored`, error);

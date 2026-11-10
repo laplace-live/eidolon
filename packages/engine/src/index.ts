@@ -1,11 +1,11 @@
 // The turn engine: one persona's turn in a chat, from her view of its log to the events the turn
 // adds, and a chat's answer to the viewer, turn by turn, in text or voice messages. Chats run on
 // it; it never imports pipedog.
-export { fetchStoredSelfie, saveSelfies } from "./attachments.ts";
+export { callLine, callPhotos, callSeed } from "./call.ts";
 export { type ChatDeps, type ChatOutput, type ChatRequest, runChat } from "./chat.ts";
 export { defaultEngineDeps } from "./deps.ts";
 export { createMind } from "./mind/index.ts";
-export { runTurn, turnView } from "./turn.ts";
+export { runTurn } from "./turn.ts";
 export type {
   EngineDeps,
   LateTools,

@@ -254,6 +254,18 @@ describe("personaParts", () => {
     ]);
   });
 
+  test("a chat key keeps apart chats that share an id", async () => {
+    const { deps, calls } = fake();
+    const parts = personaParts(deps);
+    const id = CHAT.header.id;
+    await parts(PERSONA, VIEWER, CHAT, { chatKey: `mid:0/${id}` });
+    await parts(PERSONA, ANONYMOUS, CHAT, { chatKey: `ip:203.0.113.9/${id}` });
+    await parts(PERSONA, VIEWER, CHAT, { chatKey: `mid:0/${id}` });
+    expect(calls.archive).toHaveLength(2);
+    await parts(PERSONA, VIEWER, CHAT);
+    expect(calls.archive).toHaveLength(3);
+  });
+
   test("keeps the 32 chats used last", async () => {
     const { deps, calls } = fake();
     const parts = personaParts(deps);

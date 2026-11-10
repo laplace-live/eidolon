@@ -318,7 +318,7 @@ export function personaParts(deps: PartsDeps = productionPartsDeps): EngineDeps[
   return (persona, viewer, chat, options = {}) =>
     withPersona(persona, () => {
       const generation = deps.settingsGeneration();
-      const key = `${chat.header.id}/${persona}`;
+      const key = `${options.chatKey ?? chat.header.id}/${persona}`;
       let pieces = cache.get(key);
       if (pieces === undefined || pieces.generation !== generation) {
         pieces = new Pieces(generation, persona, deps);

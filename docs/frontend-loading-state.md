@@ -375,8 +375,8 @@ pcClient.on(RTVIEvent.ServerMessage, (data) => {
   (`{ error: { code, message } }`): `400 bad-request` for a window that isn't a chat's, or a
   `persona` missing or not in it, and `403 persona-not-served`.
 - **With the endpoint off,** `chat` is ignored and the call is an ordinary one that sends no
-  `chat-line`. Its `requestData` is then logged whole for an anonymous viewer, so send `chat` only
-  to a server whose chat routes answer.
+  `chat-line`. The session's log line for an anonymous viewer, which carries `requestData`, holds
+  the chat as its size alone, `<chat: N events>`.
 
 ---
 

@@ -557,6 +557,33 @@ describe("runTransportSession", () => {
     ]);
   });
 
+  test("a chat in the request body is logged by its size alone, every other field as it came", async () => {
+    const { deps } = fakeDeps({
+      createStt: () => {
+        throw new Error("stop here");
+      },
+    });
+    const events = [
+      { seq: 1, type: "message", speaker: { kind: "user" }, text: "我家住在幸福路3号" },
+      { seq: 2, type: "message", speaker: { kind: "persona", id: "milky-green" }, text: "记住了" },
+    ];
+    const bodies = [
+      { audioQuality: "high", chat: { header: { id: "c-1" }, events }, persona: "milky-green" },
+      { chat: "我家住在幸福路3号" },
+      { chat: { header: { id: "c-1" }, events: "我家住在幸福路3号" } },
+    ];
+    for (const body of bodies) {
+      await expect(
+        runTransportSession(new FakeTransport(), offer(null, body), deps),
+      ).rejects.toThrow("stop here");
+    }
+    expect(sessionLines().filter((line) => line.startsWith("[bot] Session start"))).toEqual([
+      "[bot] Session start without loginSyncToken; runner_args.body={'audioQuality': 'high', 'chat': '<chat: 2 events>', 'persona': 'milky-green'}",
+      "[bot] Session start without loginSyncToken; runner_args.body={'chat': '<chat: not a window>'}",
+      "[bot] Session start without loginSyncToken; runner_args.body={'chat': '<chat: not a window>'}",
+    ]);
+  });
+
   test("an empty request body logs Python's None", async () => {
     const { deps } = fakeDeps({
       createStt: () => {

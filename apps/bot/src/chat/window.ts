@@ -156,7 +156,7 @@ async function verified(signer: ChatSigner, chatId: string, event: ChatEvent): P
   }
 }
 
-export type OpenedChat =
+type OpenedChat =
   | { readonly ok: true; readonly store: RequestChatStore }
   | { readonly ok: false; readonly message: string };
 
@@ -246,16 +246,17 @@ export class RequestChatStore implements ChatStore {
   #removed = false;
   #adding: Promise<unknown> = Promise.resolve();
 
+  /** `lastSeq` is the newest seq the browser sent, at least the last of `events`. */
   constructor(
     header: ChatHeader,
     events: readonly ChatEvent[],
     lastSeq: number,
     signer: ChatSigner,
-    now: () => number = Date.now,
+    now: () => number,
   ) {
     this.header = header;
     this.#events = [...events];
-    this.#lastSeq = Math.max(lastSeq, events.at(-1)?.seq ?? 0);
+    this.#lastSeq = lastSeq;
     this.#signer = signer;
     this.#now = now;
   }

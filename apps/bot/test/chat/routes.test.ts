@@ -3,7 +3,7 @@
 // nothing to the data home.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as access from "@eidolon/access";
 import {
@@ -43,6 +43,7 @@ import {
   eventsIn,
   type FakeEngineOptions,
   fakeEngine,
+  homeFiles,
   linesOf,
   MILKY,
   productionDeps,
@@ -185,12 +186,6 @@ function postTurn(
 async function errorOf(response: Response): Promise<[number, string]> {
   const body = (await response.json()) as { error: { code: string } };
   return [response.status, body.error.code];
-}
-
-/** Every file under the data home, as paths relative to it. */
-function homeFiles(): string[] {
-  const home = dataHome();
-  return existsSync(home) ? (readdirSync(home, { recursive: true }) as string[]).toSorted() : [];
 }
 
 describe("with EIDOLON_CHAT_SECRET unset, as production runs today", () => {
@@ -482,6 +477,32 @@ describe("POST /api/chat/turn", () => {
     expect(record.minds.map((mind) => mind.scope)).toEqual(
       Array(3).fill({ source: "chat", session: CHAT_ID }),
     );
+  });
+
+  test("her parts are kept per viewer and chat: a logged-in viewer's by mid, anyone else's by IP", async () => {
+    const { url, record } = start();
+    const chat = { header: HEADER, events: [] };
+    const turns: [string, string?][] = [
+      ["203.0.113.1"],
+      ["203.0.113.2"],
+      ["203.0.113.1", "good-token"],
+      ["203.0.113.3", "good-token"],
+      ["203.0.113.1", "other-token"],
+      ["203.0.113.1"],
+    ];
+    for (const [ip, token] of turns) {
+      const body = { chat, text: "嗨", ...(token ? { loginSyncToken: token } : {}) };
+      const events = eventsIn(await linesOf(await postTurn(url, body, { "x-test-ip": ip })));
+      expect(await signer.verify(CHAT_ID, events.at(-1) as ChatEvent)).toBe(true);
+    }
+    expect(record.chatKeys).toEqual([
+      `ip:203.0.113.1/${CHAT_ID}`,
+      `ip:203.0.113.2/${CHAT_ID}`,
+      `mid:${VIEWER.mid}/${CHAT_ID}`,
+      `mid:${VIEWER.mid}/${CHAT_ID}`,
+      `mid:${OTHER_VIEWER.mid}/${CHAT_ID}`,
+      `ip:203.0.113.1/${CHAT_ID}`,
+    ]);
   });
 
   test("a reader that goes away stops her turn", async () => {

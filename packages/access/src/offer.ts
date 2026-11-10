@@ -2,14 +2,19 @@
 // per-IP quota, everything else is charged one slot before any WebRTC pipeline spawns. Token
 // presence alone is never enough: an unvalidated string would let anyone skip the quota and spawn
 // a full STT+LLM+TTS pipeline per probe.
-import { cpLen, isJsonObject, logger, pyJsonDumps, pyStr, pyStrip } from "@eidolon/config";
+import { cpLen, isJsonObject, logger, pyStr, pyStrip } from "@eidolon/config";
 import {
   type AudioQualitySettings,
   audioQualitySettings,
   sessionBitrateFor,
 } from "./audio-quality.ts";
 import type { JsonObject } from "./json.ts";
-import { anonOfferQuota, type RateLimitResult, type SlidingWindowQuota } from "./rate-limit.ts";
+import {
+  anonOfferQuota,
+  quotaExceededResponse,
+  type RateLimitResult,
+  type SlidingWindowQuota,
+} from "./rate-limit.ts";
 import { ANONYMOUS, resolveUserContext, type UserContext } from "./user-context.ts";
 
 export type { JsonObject };
@@ -96,18 +101,7 @@ export type OfferAdmission = AllowedOffer | RejectedOffer;
 
 /** 429 `{"error": …, "retry_after": R}` with Retry-After, in Python json.dumps bytes. */
 export function anonQuotaExceededResponse(result: RateLimitResult): Response {
-  const retryAfter = result.retryAfterSeconds;
-  const body = pyJsonDumps(
-    { error: ANON_QUOTA_EXHAUSTED_ERROR, retry_after: retryAfter },
-    { ensureAscii: false },
-  );
-  return new Response(body, {
-    status: 429,
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      "retry-after": String(retryAfter),
-    },
-  });
+  return quotaExceededResponse(result, ANON_QUOTA_EXHAUSTED_ERROR);
 }
 
 /**

@@ -159,7 +159,8 @@ aborts the turn. The engine never rejects for the turn's own failures.
      text reply never reads them.
    - **How long they last:** they are kept per chat and persona until the settings generation
      changes, for the 32 chats used last. Providers remember the conversation they serve (the turn
-     they last searched, the archive's recall scope), so two chats never share them.
+     they last searched, the archive's recall scope), so two chats never share them. A chat is
+     its id unless the caller passes a `chatKey` (`PartsOptions`), as production does.
    - **Opened on a chat under way,** after a restart, a settings save or an eviction, the archive
      takes up as its recall scope the broadcasts her last `recall_streams` call returned, so
      `period: "selected"` still works. It doesn't when a recall block came after that call: the
@@ -865,6 +866,12 @@ the same request doesn't see them either. **Her view in production** is the requ
 tool events and kickoffs, plus this turn's fresh context; earlier turns' blocks aren't replayed, as
 they are in the local app, where they accumulate as a call's do.
 
+**A known gap:** with no recall blocks in the log, an archive opened on a chat under way (her parts
+rebuilt after an eviction, a settings save, a restart or the viewer's new IP) takes up her last
+`recall_streams` selection even when a later turn's own recall had moved it, so `period:
+"selected"` can read the older broadcasts. Closing it needs a marker of that recall in the window,
+which the browser would have to store.
+
 ### A call inside a chat
 
 `POST /api/offer` with `requestData: { chat, persona }`, the window as the routes take it, calls her
@@ -886,16 +893,21 @@ inside that chat (`bindChatCall`, `call.ts`):
   still reaches the browser, as on any call.
 - **The window leaves the admission** before the session sees it, so the session's log line
   doesn't carry the conversation.
-- **With the endpoint off,** `chat` is ignored and the call is an ordinary one.
+- **With the endpoint off,** `chat` is ignored and the call is an ordinary one. The session's
+  start line, which logs an anonymous viewer's `requestData`, still holds the window as its size
+  alone, `<chat: N events>`.
 
 The browser's side is in
 [frontend-loading-state.md](frontend-loading-state.md#a-call-inside-a-chat-chat-line).
 
 ### Before turning it on
 
-- **Her parts are kept per chat id and persona** ([step 2](#a-turn-runturn)), for the 32 chats
-  used last. With more chats active than that, a turn opens the stream archive's and the facts'
-  LanceDB tables again. Measure that under load before setting the secret on the server.
+- **Her parts are kept per viewer, chat id and persona** ([step 2](#a-turn-runturn)), for the 32
+  chats used last. The browser picks a chat's id, so the key adds the viewer, a logged-in one's
+  mid or anyone else's client IP (`chatKey`, `mid:<mid>/<id>` or `ip:<ip>/<id>`): two viewers
+  sending the same id never share recall. The signed events keep the chat's own id. With more
+  chats active than that, a turn opens the stream archive's and the facts' LanceDB tables again.
+  Measure that under load before setting the secret on the server.
 - **Files live in one process.** A second instance behind a load balancer would answer `404` for
   another's files.
 

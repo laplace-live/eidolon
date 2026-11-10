@@ -2,6 +2,7 @@
 // keeps each chat and sends its newest events with every line; the server answers with what the
 // turn adds, signed, and keeps no transcript. A persona's files wait in memory for it to fetch.
 import {
+  type AllowedOffer,
   admitChatTurn,
   type ChatAdmission,
   type ChatTurnInput,
@@ -16,6 +17,7 @@ import {
   type ChatEventDraft,
   type ChatStreamLine,
   MAX_PARTICIPANTS,
+  MAX_VOICE_MS,
   type ParticipantId,
   summarize,
 } from "@eidolon/chat";
@@ -29,10 +31,13 @@ import {
   replyModeFor,
   runChat,
   runTurn,
+  type TurnRequest,
 } from "@eidolon/engine";
 import { ProviderConfigError } from "@eidolon/providers";
 import type { MethodRoutes, RouteServer } from "../app.ts";
-import { jsonResponse } from "../responses.ts";
+import { readBytes } from "../responses.ts";
+import { type BoundOffer, bindChatCall } from "./call.ts";
+import { chatError } from "./errors.ts";
 import {
   attachmentOf,
   CHAT_FILES_PATH,
@@ -43,14 +48,13 @@ import {
 import { ChatSigner, chatSecretFromEnv } from "./sig.ts";
 import { openChatWindow, type RequestChatStore } from "./window.ts";
 
-export const CHAT_TURN_PATH = "/api/chat/turn";
-export const CHAT_VOICE_PATH = "/api/chat/voice";
+const CHAT_TURN_PATH = "/api/chat/turn";
+const CHAT_VOICE_PATH = "/api/chat/voice";
 
 const MAX_TEXT = 4000;
 /** A window is at most 256 KB of events; this leaves room for the rest of the body. */
 const BODY_LIMIT = 1024 * 1024;
 const MAX_VOICE_BYTES = 10 * 1024 * 1024;
-const MAX_VOICE_MS = 2 * 60 * 1000;
 /** Control characters other than a tab or a line break. */
 const CONTROL_IN_TEXT = /(?![\t\n\r])\p{Cc}/u;
 /** What the browser is told when a reply fails; the log has the rest. */
@@ -78,35 +82,10 @@ export interface ChatEndpointOptions {
 }
 
 export interface ChatEndpoint {
-  /** What signs the events it answers with, keyed by EIDOLON_CHAT_SECRET. */
-  readonly signer: ChatSigner;
   /** For createBotApp's route table, which wraps each handler in its CORS and logging. */
   routes(clientIp: (request: Request, server: RouteServer) => string): Record<string, MethodRoutes>;
-}
-
-function chatError(status: number, code: string, message: string): Response {
-  return jsonResponse(status, { error: { code, message } }, { "cache-control": "no-store" });
-}
-
-/** The body's bytes, or null once it passes `limit` bytes, counted while it streams. */
-async function readBody(request: Request, limit: number): Promise<Buffer | null> {
-  const declared = Number(request.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > limit) return null;
-  if (request.body === null) return Buffer.alloc(0);
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > limit) {
-      await reader.cancel();
-      return null;
-    }
-    chunks.push(value);
-  }
-  return Buffer.concat(chunks);
+  /** bindChatCall with the endpoint's signer, files and personas. */
+  bindCall(admission: AllowedOffer): Promise<BoundOffer | Response | null>;
 }
 
 /** `value` trimmed, when it is 1 to MAX_TEXT characters of text; else null. */
@@ -269,17 +248,20 @@ export function createChatEndpoint(options: ChatEndpointOptions): ChatEndpoint {
     async (bytes, mime) => files.save(bytes, mime),
   );
 
-  /** The request's window, and the personas in the chat now, all of them served here. */
-  async function open(
-    chat: unknown,
-  ): Promise<
-    | { readonly store: RequestChatStore; readonly participants: readonly ParticipantId[] }
+  /** The request's window, as read, and the personas in the chat now, all of them served here. */
+  async function open(window: unknown): Promise<
+    | {
+        readonly store: RequestChatStore;
+        readonly chat: TurnRequest["chat"];
+        readonly participants: readonly ParticipantId[];
+      }
     | { readonly refused: Response }
   > {
-    const opened = await openChatWindow(chat, signer);
+    const opened = await openChatWindow(window, signer);
     if (!opened.ok) return { refused: chatError(400, "bad-request", opened.message) };
     const { store } = opened;
-    const { participants } = summarize(store.header, (await store.read(store.header.id)).events);
+    const chat = await store.read(store.header.id);
+    const { participants } = summarize(chat.header, chat.events);
     if (participants.length === 0 || participants.length > MAX_PARTICIPANTS) {
       return { refused: chatError(400, "bad-request", "A chat holds 1 to 6 personas") };
     }
@@ -289,39 +271,53 @@ export function createChatEndpoint(options: ChatEndpointOptions): ChatEndpoint {
         refused: chatError(403, "persona-not-served", "A persona in the chat isn't served here"),
       };
     }
-    return { store, participants };
+    return { store, chat, participants };
+  }
+
+  /**
+   * The engine for one viewer's turns. The browser picks a chat's id, so her parts, which keep what
+   * they saw of a chat, are kept per viewer too: by mid when logged in, else by client IP.
+   */
+  function engineFor(viewer: UserContext, clientIp: string): ChatDeps {
+    const who = viewer.isLoggedIn ? `mid:${viewer.mid}` : `ip:${clientIp}`;
+    return {
+      ...engine,
+      parts: (persona, user, chat, options) =>
+        engine.parts(persona, user, chat, { ...options, chatKey: `${who}/${chat.header.id}` }),
+    };
   }
 
   /** The answer to the viewer's line at seq `after`, as runChat gives it. */
   function answer(
     store: RequestChatStore,
     viewer: UserContext,
+    deps: ChatDeps,
     after: number,
     signal: AbortSignal,
   ): AsyncIterable<ChatOutput> {
     const id = store.header.id;
     return (async function* () {
       const chat = await store.read(id);
-      yield* runChat({ chat, read: () => store.read(id), viewer, after, signal }, engine);
+      yield* runChat({ chat, read: () => store.read(id), viewer, after, signal }, deps);
     })();
   }
 
   /** Her greeting in a new chat of one, in voice only when her reply mode is voice. */
   function greet(
-    store: RequestChatStore,
+    chat: TurnRequest["chat"],
     persona: ParticipantId,
     viewer: UserContext,
+    deps: ChatDeps,
     signal: AbortSignal,
   ): AsyncIterable<ChatOutput> {
     return (async function* () {
-      const chat = await store.read(store.header.id);
-      const mode = replyModeFor(chat, persona, engine.speech) === "voice" ? "voice" : "text";
-      yield* runTurn({ chat, persona, viewer, kickoff: true, signal, mode }, engine);
+      const mode = replyModeFor(chat, persona, deps.speech) === "voice" ? "voice" : "text";
+      yield* runTurn({ chat, persona, viewer, kickoff: true, signal, mode }, deps);
     })();
   }
 
   const turn = async (request: Request, clientIp: string): Promise<Response> => {
-    const bytes = await readBody(request, BODY_LIMIT);
+    const bytes = await readBytes(request, BODY_LIMIT);
     if (bytes === null) return chatError(413, "payload-too-large", "The body is too large");
     let body: unknown;
     try {
@@ -338,10 +334,10 @@ export function createChatEndpoint(options: ChatEndpointOptions): ChatEndpoint {
     }
     const opened = await open(body.chat);
     if ("refused" in opened) return opened.refused;
-    const { store, participants } = opened;
+    const { store, chat, participants } = opened;
     const [persona] = participants;
     if (text === null) {
-      const said = (await store.read(store.header.id)).events.some((e) => e.type === "message");
+      const said = chat.events.some((e) => e.type === "message");
       if (participants.length > 1 || said || persona === undefined) {
         return chatError(400, "bad-request", "Send `text`: only a new chat of one persona greets");
       }
@@ -349,10 +345,11 @@ export function createChatEndpoint(options: ChatEndpointOptions): ChatEndpoint {
     const admission = await admit({ token: loginSyncTokenFrom(body), clientIp });
     if (!admission.allowed) return admission.response;
     const viewer = admission.user;
+    const deps = engineFor(viewer, clientIp);
     if (text === null) {
       const greeter = persona as ParticipantId;
       return ndjson(request.signal, (send, signal) =>
-        relay(store, [], greet(store, greeter, viewer, signal), greeter, send),
+        relay(store, [], greet(chat, greeter, viewer, deps, signal), greeter, send),
       );
     }
     const first = await store.add([
@@ -360,7 +357,7 @@ export function createChatEndpoint(options: ChatEndpointOptions): ChatEndpoint {
     ]);
     const after = (first[0] as ChatEvent).seq;
     return ndjson(request.signal, (send, signal) =>
-      relay(store, first, answer(store, viewer, after, signal), null, send),
+      relay(store, first, answer(store, viewer, deps, after, signal), null, send),
     );
   };
 
@@ -373,7 +370,7 @@ export function createChatEndpoint(options: ChatEndpointOptions): ChatEndpoint {
         "Send multipart/form-data: chat, audio and durationMs",
       );
     }
-    const bytes = await readBody(request, MAX_VOICE_BYTES + BODY_LIMIT);
+    const bytes = await readBytes(request, MAX_VOICE_BYTES + BODY_LIMIT);
     if (bytes === null) return chatError(413, "payload-too-large", "The body is too large");
     const form = formParts(bytes, type);
     if (form === null) {
@@ -403,15 +400,15 @@ export function createChatEndpoint(options: ChatEndpointOptions): ChatEndpoint {
     if (durationMs > MAX_VOICE_MS) {
       return chatError(413, "payload-too-large", "A voice message is at most 2 minutes");
     }
-    let chat: unknown;
+    let window: unknown;
     try {
-      chat = JSON.parse(field("chat") ?? "null");
+      window = JSON.parse(field("chat") ?? "null");
     } catch {
       return chatError(400, "bad-json", "`chat` is not valid JSON");
     }
-    const opened = await open(chat);
+    const opened = await open(window);
     if ("refused" in opened) return opened.refused;
-    const { store } = opened;
+    const { store, chat } = opened;
     // Charged before the clip is heard, which bills.
     const admission = await admit({
       token: loginSyncTokenFrom({ loginSyncToken: field("loginSyncToken") }),
@@ -422,7 +419,7 @@ export function createChatEndpoint(options: ChatEndpointOptions): ChatEndpoint {
     try {
       message = await hearVoiceMessage(
         {
-          chat: await store.read(store.header.id),
+          chat,
           clip: { bytes: audio.bytes, mime, durationMs },
           signal: request.signal,
         },
@@ -439,13 +436,13 @@ export function createChatEndpoint(options: ChatEndpointOptions): ChatEndpoint {
     }
     const first = await store.add([message]);
     const after = (first[0] as ChatEvent).seq;
+    const deps = engineFor(admission.user, clientIp);
     return ndjson(request.signal, (send, signal) =>
-      relay(store, first, answer(store, admission.user, after, signal), null, send),
+      relay(store, first, answer(store, admission.user, deps, after, signal), null, send),
     );
   };
 
   return {
-    signer,
     routes: (clientIp) => ({
       [CHAT_TURN_PATH]: { POST: (request, server) => turn(request, clientIp(request, server)) },
       [CHAT_VOICE_PATH]: { POST: (request, server) => voice(request, clientIp(request, server)) },
@@ -453,6 +450,7 @@ export function createChatEndpoint(options: ChatEndpointOptions): ChatEndpoint {
         GET: async (request) => chatFileResponse(request.params.name as string, files),
       },
     }),
+    bindCall: (admission) => bindChatCall(admission, { signer, files, personas: served }),
   };
 }
 

@@ -1,6 +1,7 @@
 // The local API's response bytes: compact JSON that no cache keeps, and one error shape.
 import { randomBytes } from "node:crypto";
 import { logger } from "@eidolon/config";
+import { readBytes } from "../responses.ts";
 import type { ErrorBody, ErrorCode } from "./api.ts";
 
 export const NO_STORE = "no-store";
@@ -95,27 +96,6 @@ export async function readJson(
   } catch {
     return { ok: false, response: localError(400, "bad-json", "The body is not valid JSON") };
   }
-}
-
-/** The body's bytes, or null once it passes `limit` bytes, counted while it streams. */
-export async function readBytes(request: Request, limit: number): Promise<Uint8Array | null> {
-  const declared = Number(request.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > limit) return null;
-  if (request.body === null) return new Uint8Array();
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > limit) {
-      await reader.cancel();
-      return null;
-    }
-    chunks.push(value);
-  }
-  return Buffer.concat(chunks);
 }
 
 /** The body as UTF-8 text, or null once it passes `limit` bytes. */

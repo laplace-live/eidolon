@@ -3,7 +3,7 @@
 // client will; the server keeps nothing. With EIDOLON_CHAT_SECRET unset, none of it exists.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import {
   CHAT_FORMAT,
@@ -20,7 +20,7 @@ import { ChatSigner, fromViewer, MIN_CHAT_SECRET_LENGTH } from "../../src/chat/s
 import { type BotServer, startBotServer } from "../../src/server.ts";
 import { type CapturedLogs, captureLogs, ORIGIN } from "../fakes.ts";
 import { type Fakes, fakeModules } from "../local/harness.ts";
-import { eventsIn, linesOf } from "./harness.ts";
+import { eventsIn, homeFiles, linesOf } from "./harness.ts";
 
 const SECRET = "e".repeat(MIN_CHAT_SECRET_LENGTH);
 const CHAT_ID = "0190f5c8-0000-7000-8000-0000000000ee";
@@ -112,21 +112,19 @@ async function boot(): Promise<string> {
   return `http://127.0.0.1:${bot.server.port}`;
 }
 
-/** Every file under the data home, as paths relative to it. */
-function homeFiles(): string[] {
-  const home = dataHome();
-  return existsSync(home) ? (readdirSync(home, { recursive: true }) as string[]).toSorted() : [];
-}
-
 /** A browser that keeps one chat, stores what each answer adds, and sends it all back. */
 class Browser {
   readonly header: ChatHeader;
   readonly events: unknown[] = [];
   readonly #base: string;
 
-  constructor(base: string, persona: string) {
+  readonly #ip: string;
+
+  constructor(base: string, persona: string, options: { id?: string; ip?: string } = {}) {
     this.#base = base;
-    this.header = { format: CHAT_FORMAT, id: CHAT_ID, createdAt: 1000, participants: [persona] };
+    this.#ip = options.ip ?? IP;
+    const id = options.id ?? CHAT_ID;
+    this.header = { format: CHAT_FORMAT, id, createdAt: 1000, participants: [persona] };
   }
 
   get lastSeq(): number {
@@ -143,7 +141,7 @@ class Browser {
   async send(text?: string): Promise<ChatStreamLine[]> {
     const response = await fetch(`${this.#base}/api/chat/turn`, {
       method: "POST",
-      headers: { "content-type": "application/json", Origin: ORIGIN, [IP_HEADER]: IP },
+      headers: { "content-type": "application/json", Origin: ORIGIN, [IP_HEADER]: this.#ip },
       body: this.body(text),
     });
     expect(response.status).toBe(200);
@@ -268,6 +266,23 @@ describe("with EIDOLON_CHAT_SECRET set", () => {
     );
     expect(homeFiles()).toEqual(before);
     expect(existsSync(join(dataHome(), "chats"))).toBe(false);
+  });
+
+  test("two viewers who send the same chat id each get parts of their own", async () => {
+    process.env.EIDOLON_CHAT_SECRET = SECRET;
+    const base = await boot();
+    const persona = activePersona().id;
+    const id = "0190f5c8-0000-7000-8000-0000000000ef";
+    const first = new Browser(base, persona, { id, ip: "198.51.100.1" });
+    const second = new Browser(base, persona, { id, ip: "198.51.100.2" });
+    // A fresh set of parts finds no stream archive in the temporary data home, and says so once.
+    const opened = () => logs.lines().filter((line) => line.includes("Stream archive disabled"));
+    await first.send("在吗");
+    expect(opened()).toHaveLength(1);
+    await second.send("在吗");
+    expect(opened()).toHaveLength(2);
+    await first.send("还在吗");
+    expect(opened()).toHaveLength(2);
   });
 });
 

@@ -1,10 +1,11 @@
 // Fakes for the chat endpoint's tests: an engine whose minds, recall, director and speech are
 // scripted and record what they were given, and the boot deps of a production server.
 
+import { existsSync, readdirSync } from "node:fs";
 import type { UserContext } from "@eidolon/access";
 import * as access from "@eidolon/access";
 import type { ChatEvent, ChatStreamLine } from "@eidolon/chat";
-import { activePersona } from "@eidolon/config";
+import { activePersona, dataHome } from "@eidolon/config";
 import type { DirectorDecision, DirectorInput } from "@eidolon/context";
 import type { ChatDeps, EngineDeps, MindChunk, MindRequest, PersonaParts } from "@eidolon/engine";
 import { usageRecord } from "@eidolon/providers";
@@ -29,6 +30,8 @@ export interface EngineRecord {
   readonly minds: MindCall[];
   /** The viewer each turn's parts were built for. */
   readonly viewers: UserContext[];
+  /** The key each turn's parts were asked under. */
+  readonly chatKeys: (string | undefined)[];
   readonly spoken: string[];
   readonly heard: AudioClip[];
   readonly decisions: DirectorInput[];
@@ -51,7 +54,14 @@ export function fakeEngine(options: FakeEngineOptions = {}): {
   engine: (saveAttachment: EngineDeps["saveAttachment"]) => ChatDeps;
   record: EngineRecord;
 } {
-  const record: EngineRecord = { minds: [], viewers: [], spoken: [], heard: [], decisions: [] };
+  const record: EngineRecord = {
+    minds: [],
+    viewers: [],
+    chatKeys: [],
+    spoken: [],
+    heard: [],
+    decisions: [],
+  };
   // What the stream archive does each turn: a block of recall at the top of her view.
   const recall: ContextProvider = {
     onContext: async ({ context }) => {
@@ -79,8 +89,9 @@ export function fakeEngine(options: FakeEngineOptions = {}): {
         })();
       },
     }),
-    parts: async (_persona, viewer) => {
+    parts: async (_persona, viewer, _chat, options) => {
       record.viewers.push(viewer);
+      record.chatKeys.push(options?.chatKey);
       return {
         systemInstruction: "SYSTEM",
         providers: [{ label: "Recall", provider: recall }],
@@ -133,6 +144,12 @@ export function fakeEngine(options: FakeEngineOptions = {}): {
     },
   });
   return { engine, record };
+}
+
+/** Every file under the data home, as paths relative to it. */
+export function homeFiles(): string[] {
+  const home = dataHome();
+  return existsSync(home) ? (readdirSync(home, { recursive: true }) as string[]).toSorted() : [];
 }
 
 /** Every NDJSON line of a response. */

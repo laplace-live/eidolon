@@ -18,6 +18,7 @@ import {
 } from "@eidolon/config";
 import { REFERENCE_EXTENSIONS } from "@eidolon/imagegen";
 import { transcribe } from "@eidolon/ingest";
+import { readBytes } from "../../responses.ts";
 import {
   type IdentityUpdate,
   LOCAL_ROUTES,
@@ -48,14 +49,7 @@ import {
   writeIdentityFields,
   writeNewPersona,
 } from "../personas.ts";
-import {
-  imageResponse,
-  localError,
-  localJson,
-  NO_STORE,
-  readBytes,
-  readJson,
-} from "../responses.ts";
+import { imageResponse, localError, localJson, NO_STORE, readJson } from "../responses.ts";
 import { reinstallSettings } from "../restart.ts";
 import type { LocalApp, LocalRouteSpec } from "../router.ts";
 import {

@@ -1,8 +1,8 @@
 // Who may use the production chat endpoint, and how much: each viewer line costs a slot, a
 // validated loginSyncToken's from its mid's quota, everyone else's from their IP's. Token presence
 // alone is never enough: an unvalidated string would buy any probe the logged-in quota.
-import { activePersona, cpLen, envInt, envOptional, logger, pyJsonDumps } from "@eidolon/config";
-import { type RateLimitResult, SlidingWindowQuota } from "./rate-limit.ts";
+import { activePersona, cpLen, envInt, envOptional, logger } from "@eidolon/config";
+import { quotaExceededResponse, type RateLimitResult, SlidingWindowQuota } from "./rate-limit.ts";
 import { ANONYMOUS, resolveUserContext, type UserContext } from "./user-context.ts";
 
 export const CHAT_ANON_DEFAULT_PER_HOUR = 20;
@@ -71,15 +71,7 @@ export type ChatAdmission =
 
 /** 429 `{"error": …, "retry_after": R}` with Retry-After, as the offer's anonymous 429 is shaped. */
 export function chatQuotaExceededResponse(result: RateLimitResult, loggedIn: boolean): Response {
-  const retryAfter = result.retryAfterSeconds;
-  const error = loggedIn ? CHAT_USER_QUOTA_ERROR : CHAT_ANON_QUOTA_ERROR;
-  return new Response(pyJsonDumps({ error, retry_after: retryAfter }, { ensureAscii: false }), {
-    status: 429,
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      "retry-after": String(retryAfter),
-    },
-  });
+  return quotaExceededResponse(result, loggedIn ? CHAT_USER_QUOTA_ERROR : CHAT_ANON_QUOTA_ERROR);
 }
 
 /**

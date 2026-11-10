@@ -16,7 +16,6 @@ import type { MemoryAdmin } from "@eidolon/memory";
 import type { SignallingResult, SignallingServer } from "@eidolon/runtime";
 import type { IceService } from "@eidolon/turn";
 import type { BunRequest, Server } from "bun";
-import { bindChatCall } from "./chat/call.ts";
 import type { ChatEndpoint } from "./chat/routes.ts";
 import type { McpHandler } from "./mcp/index.ts";
 import {
@@ -152,7 +151,7 @@ export function createBotApp(parts: BotAppParts): BotApp {
     const bodyText = await request.text();
     const admission = await access.admitOffer({ bodyText, clientIp: clientIp(request, server) });
     if (!admission.allowed) return admission.response;
-    const call = parts.chat ? await bindChatCall(admission, parts.chat.signer) : null;
+    const call = parts.chat ? await parts.chat.bindCall(admission) : null;
     if (call === null) return signallingResponse(await parts.signalling.offer(admission));
     if (call instanceof Response) return call;
     return signallingResponse(await parts.signalling.offer(call.admission, call.binding));

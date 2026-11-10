@@ -85,7 +85,7 @@ export const chatFiles: ChatFiles = new ChatFiles();
  * `GET /api/chat/files/:name`: the bytes, of their type and never sniffed, or the selfie route's
  * empty 404 once they are gone.
  */
-export function chatFileResponse(name: string, files: ChatFiles = chatFiles): Response {
+export function chatFileResponse(name: string, files: ChatFiles): Response {
   const file = files.lookup(name);
   if (file === null) return new Response(null, { status: 404 });
   return new Response(file.bytes as Uint8Array<ArrayBuffer>, {

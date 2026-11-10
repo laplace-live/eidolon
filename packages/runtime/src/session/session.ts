@@ -1,5 +1,5 @@
 import type { AllowedOffer, UserContext } from "@eidolon/access";
-import { cpLen, errorText, logger, pyRepr, withPersona } from "@eidolon/config";
+import { cpLen, errorText, isJsonObject, logger, pyRepr, withPersona } from "@eidolon/config";
 import type { ContextProvider, LlmTool, TurnGate } from "@eidolon/core";
 import { MEM0_STORE_KEY } from "@eidolon/memory";
 import { withUsageScope } from "@eidolon/providers";
@@ -276,6 +276,7 @@ export async function buildSession(
   const rtvi = new LaplaceRTVIProcessor();
   const client: CallClient = { sendServerMessage: (data) => rtvi.sendServerMessage(data) };
   const { onTranscript, onServerMessage } = deps;
+  const report = onTranscript && ((line: TranscriptLine) => onTranscript(line, client));
   const tools = new SessionTools(
     llm,
     tts,
@@ -314,6 +315,7 @@ export async function buildSession(
       emptyUserTurn,
     }),
   });
+  if (report) reportTurns(aggregators, report);
 
   const memory = await sessionMemory(user, deps);
   const facts = await optionalProvider(
@@ -347,10 +349,7 @@ export async function buildSession(
     output: transport.output(),
     assistant: aggregators.assistant(),
   });
-  const pipeline = new Pipeline(processors);
-  const report = onTranscript && ((line: TranscriptLine) => onTranscript(line, client));
-  if (report) reportTurns(aggregators, report);
-  const worker = new PipelineWorker(pipeline, {
+  const worker = new PipelineWorker(new Pipeline(processors), {
     params: new PipelineParams({ enableMetrics: true, enableUsageMetrics: true }),
     observers: report ? [new TypedLines(report)] : [],
     rtviProcessor: rtvi,
@@ -392,6 +391,14 @@ export async function runTransportSession(
   );
 }
 
+/** `requestData` as the log may carry it: a chat window, the viewer's conversation, by size alone. */
+function loggedRequestData(requestData: AllowedOffer["requestData"]): unknown {
+  if (requestData === null || !("chat" in requestData)) return requestData;
+  const events = isJsonObject(requestData.chat) ? requestData.chat.events : undefined;
+  const chat = Array.isArray(events) ? `<chat: ${events.length} events>` : "<chat: not a window>";
+  return { ...requestData, chat };
+}
+
 async function runScopedSession(
   transport: BaseTransport,
   admission: Pick<AllowedOffer, "user" | "token" | "requestData">,
@@ -402,9 +409,8 @@ async function runScopedSession(
   if (admission.token) {
     logger.info(`[bot] Session start with loginSyncToken (len=${cpLen(admission.token)})`);
   } else {
-    logger.info(
-      `[bot] Session start without loginSyncToken; runner_args.body=${pyRepr(admission.requestData)}`,
-    );
+    const body = pyRepr(loggedRequestData(admission.requestData));
+    logger.info(`[bot] Session start without loginSyncToken; runner_args.body=${body}`);
   }
   logger.info("Starting bot");
   const session = await buildSession(transport, admission.user, deps);

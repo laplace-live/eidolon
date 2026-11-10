@@ -6,21 +6,26 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { type AllowedOffer, ANONYMOUS, type JsonObject } from "@eidolon/access";
+import { type AllowedOffer, ANONYMOUS, chatPersonas, type JsonObject } from "@eidolon/access";
 import { CHAT_FORMAT, type ChatEvent, type ChatEventOf, type ChatHeader } from "@eidolon/chat";
 import { dataHome, readPersonaIdentity } from "@eidolon/config";
 import { selfieStore } from "@eidolon/imagegen";
 import type { CallBinding, CallClient } from "@eidolon/runtime";
-import { type BoundOffer, bindChatCall, CHAT_LINE_MESSAGE } from "../../src/chat/call.ts";
+import {
+  type BoundOffer,
+  bindChatCall,
+  CHAT_LINE_MESSAGE,
+  type ChatCallOptions,
+} from "../../src/chat/call.ts";
 import { ChatFiles } from "../../src/chat/files.ts";
 import { ChatSigner, MIN_CHAT_SECRET_LENGTH } from "../../src/chat/sig.ts";
 import { openChatWindow } from "../../src/chat/window.ts";
 import { type BotServer, startBotServer } from "../../src/server.ts";
 import { type CapturedLogs, captureLogs, ORIGIN, VIEWER } from "../fakes.ts";
 import { type Fakes, fakeModules } from "../local/harness.ts";
+import { MILKY } from "./harness.ts";
 
 const SECRET = "s".repeat(MIN_CHAT_SECRET_LENGTH);
-const MILKY = "milky-green";
 const CHAT = "0190f5c8-0000-7000-8000-0000000000dd";
 const HEADER: ChatHeader = {
   format: CHAT_FORMAT,
@@ -135,20 +140,25 @@ async function until(check: () => boolean): Promise<void> {
   }
 }
 
+/** The endpoint's options, as production makes them, with files of the test's own. */
+function options(files = new ChatFiles()): ChatCallOptions {
+  return { signer, files, personas: chatPersonas };
+}
+
 async function bound(
   requestData: JsonObject,
   user = ANONYMOUS,
   files = new ChatFiles(),
 ): Promise<BoundOffer> {
-  const result = await bindChatCall(admissionWith(requestData, user), signer, files);
+  const result = await bindChatCall(admissionWith(requestData, user), options(files));
   if (result === null || result instanceof Response) throw new Error("the call wasn't bound");
   return result;
 }
 
 describe("bindChatCall", () => {
   test("an offer with no chat isn't a chat's call", async () => {
-    expect(await bindChatCall(admissionWith(null), signer)).toBeNull();
-    expect(await bindChatCall(admissionWith({ persona: MILKY }), signer)).toBeNull();
+    expect(await bindChatCall(admissionWith(null), options())).toBeNull();
+    expect(await bindChatCall(admissionWith({ persona: MILKY }), options())).toBeNull();
   });
 
   test("runs as her, on her view of what verifies, less tool calls, a clip heard as nothing as （听不清）", async () => {
@@ -335,7 +345,7 @@ describe("bindChatCall", () => {
       ],
     ];
     for (const [requestData, status, code] of cases) {
-      const refused = await bindChatCall(admissionWith(requestData), signer);
+      const refused = await bindChatCall(admissionWith(requestData), options());
       expect(refused).toBeInstanceOf(Response);
       const response = refused as Response;
       const body = (await response.json()) as { error: { code: string } };
@@ -345,7 +355,7 @@ describe("bindChatCall", () => {
     process.env.EIDOLON_CHAT_PERSONAS = `${MILKY},bob`;
     const outside = await bindChatCall(
       admissionWith({ chat: { header: HEADER, events }, persona: "bob" }),
-      signer,
+      options(),
     );
     expect([(outside as Response).status, await (outside as Response).json()]).toEqual([
       400,

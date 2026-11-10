@@ -15,6 +15,7 @@ import {
 } from "@eidolon/chat";
 import { isPlainObject, logger, withPersona } from "@eidolon/config";
 import { hasKey, missingKey, ProviderConfigError, trySelect } from "@eidolon/providers";
+import { readBytes } from "../../responses.ts";
 import { HearingFailed, hearingRefusal } from "../chats/hearing.ts";
 import { ChatInCall, ChatRunner, type ChatRunnerOptions } from "../chats/runner.ts";
 import { personaRefusal } from "../personas.ts";
@@ -24,7 +25,6 @@ import {
   localFailure,
   localJson,
   ndjsonResponse,
-  readBytes,
   readJson,
 } from "../responses.ts";
 import type { LocalApp, LocalRouteSpec } from "../router.ts";
