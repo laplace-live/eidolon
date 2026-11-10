@@ -9,10 +9,10 @@
 // candidate rules for offers and PATCHes alike.
 import type { AllowedOffer } from "@eidolon/access";
 import { logger } from "@eidolon/config";
-import type { IceService, ServerIcePlan } from "@eidolon/turn";
+import type { IceService } from "@eidolon/turn";
 import { libopusWasmCodec, type OpusCodec, opusCodecAtBitrate } from "./opus.ts";
 import { type CandidateRules, closeWhenDtlsCloses, TURN_CANDIDATE_RULES } from "./patches.ts";
-import { candidateFromSdp, type IceCandidate, Peer, type PeerOptions } from "./peer.ts";
+import { candidateFromSdp, type IceCandidate, Peer } from "./peer.ts";
 
 /** An HTTP answer for apps/bot to serialize as JSON (it adds CORS). */
 export interface SignallingResult {
@@ -58,30 +58,6 @@ export class HttpError extends Error {
     this.status = status;
     this.detail = detail;
   }
-}
-
-/** What a new peer is built with. */
-export interface PeerPlan {
-  readonly options: PeerOptions;
-  /** A TURN URL is configured without a username or credential, so werift won't relay. */
-  readonly turnWithoutCredentials: boolean;
-}
-
-export function peerPlan(
-  plan: ServerIcePlan,
-  opusBitrateBps: number,
-  opusBase: OpusCodec,
-): PeerPlan {
-  const turn = plan.iceServers.find((server) => server.urls === plan.turnUrl);
-  return {
-    options: {
-      iceServers: plan.iceServers,
-      opusCodec: opusCodecAtBitrate(opusBase, opusBitrateBps),
-      relayOnly: plan.relayOnly,
-    },
-    turnWithoutCredentials:
-      !plan.relayOnly && turn !== undefined && !(turn.username && turn.credential),
-  };
 }
 
 function invalidRequest(reason: string): SignallingResult {
@@ -169,16 +145,20 @@ export function createSignallingServerWith<B = never>(
           if (restartPc) closeWhenDtlsCloses(existing);
           return { status: 200, body: answered(existing) };
         }
-        const plan = peerPlan(
-          await options.ice.serverPlan(),
-          admission.opusBitrateBps,
-          deps.opusCodec ?? libopusWasmCodec,
-        );
-        if (plan.turnWithoutCredentials) {
+        const plan = await options.ice.serverPlan();
+        const turn = plan.iceServers.find((server) => server.urls === plan.turnUrl);
+        if (!plan.relayOnly && turn !== undefined && !(turn.username && turn.credential)) {
           logger.warning("[WebRTC] TURN server has no credentials; relay-only gathering is off");
         }
-        const peer = new Peer(plan.options);
-        await peer.initialize(plan.options.relayOnly ? withoutUnreachable(sdp) : sdp, type);
+        const peer = new Peer({
+          iceServers: plan.iceServers,
+          opusCodec: opusCodecAtBitrate(
+            deps.opusCodec ?? libopusWasmCodec,
+            admission.opusBitrateBps,
+          ),
+          relayOnly: plan.relayOnly,
+        });
+        await peer.initialize(plan.relayOnly ? withoutUnreachable(sdp) : sdp, type);
         peer.on("closed", () => {
           logger.info(`Discarding peer connection for pc_id: ${peer.pcId}`);
           forget(peer);

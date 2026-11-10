@@ -229,8 +229,8 @@ the layout's one line.
   HMAC `sig`, one that fails is dropped from her view, and context blocks never leave the server.
   Only `apps/bot/src/local` imports `@eidolon/chat/jsonl` (Biome and `boundaries.test.ts` hold it).
 - **Only `packages/runtime` imports `@eidolon/voice` and `@eidolon/webrtc`.** Biome enforces it;
-  under `packages/runtime/src/native`, only `transport_pipedog.ts` imports `@pipedog/*`
-  (`native_boundaries.test.ts`). See [voice-engine.md](docs/voice-engine.md).
+  nothing under `packages/runtime/src/native` imports `@pipedog/*` (`native_boundaries.test.ts`).
+  See [voice-engine.md](docs/voice-engine.md).
 - **In the voice loop, transport, provider and timer callbacks only post to the call's
   mailbox;** only the Floor changes call state, and it never awaits. A billable request started
   anywhere else falls outside the call's usage scope.

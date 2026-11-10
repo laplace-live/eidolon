@@ -173,7 +173,7 @@ export class Peer {
       logger.debug("Closing old peer connection");
       // The old peer's closing is no hang-up.
       for (const unsubscribe of this.#unsubscribe) unsubscribe();
-      await this.#closePc();
+      await this.#close();
       this.#build();
     }
     await this.#answerOffer(options.sdp, options.type);
@@ -336,17 +336,7 @@ export class Peer {
     logger.debug("Creating answer");
     await pc.setLocalDescription(await pc.createAnswer());
     if (pc.iceGatheringState !== "complete") {
-      await new Promise<void>((resolve) => {
-        const subscription = pc.iceGatheringStateChange.subscribe((state) => {
-          if (state !== "complete") return;
-          subscription.unSubscribe();
-          resolve();
-        });
-        if (pc.iceGatheringState === "complete") {
-          subscription.unSubscribe();
-          resolve();
-        }
-      });
+      await pc.iceGatheringStateChange.watch((state) => state === "complete");
     }
     const local = pc.localDescription;
     this.#answer = local === null ? null : { sdp: local.sdp, type: local.type };
@@ -390,10 +380,6 @@ export class Peer {
 
   async #close(): Promise<void> {
     this.#pendingMessages = [];
-    await this.#closePc();
-  }
-
-  async #closePc(): Promise<void> {
     this.#stopWatchingConnecting();
     this.#audioIn?.stop();
     this.#audioOut?.stop();
@@ -442,8 +428,8 @@ class PeerCallTransport implements PeerCall {
   readonly #peer: Peer;
   readonly #audio = new AsyncQueue<Int16Array>();
   readonly #messages = new AsyncQueue<unknown>();
-  readonly closed: Promise<"client">;
-  #leave: () => void = () => {};
+  readonly #left = Promise.withResolvers<"client">();
+  readonly closed = this.#left.promise;
   #speaker: PcmSource | null = null;
   #stopIn: (() => void) | null = null;
   #stopOut: (() => void) | null = null;
@@ -453,9 +439,6 @@ class PeerCallTransport implements PeerCall {
 
   constructor(peer: Peer) {
     this.#peer = peer;
-    this.closed = new Promise((resolve) => {
-      this.#leave = () => resolve("client");
-    });
     peer.on("connected", () => this.#connected());
     peer.on("disconnected", () => this.#stopAudio());
     peer.on("closed", () => this.#closed());
@@ -498,11 +481,9 @@ class PeerCallTransport implements PeerCall {
     this.#stopIn = this.#peer.receiveAudio((pcm) => this.#audio.push(pcm));
     const speaker = this.#speaker;
     // While the client sends no ping, her audio waits instead of playing to no one (D10).
-    if (speaker !== null) this.#stopOut = this.#peer.playAudio(speaker, () => this.#live());
-  }
-
-  #live(): boolean {
-    return this.#peer.isConnected();
+    if (speaker !== null) {
+      this.#stopOut = this.#peer.playAudio(speaker, () => this.#peer.isConnected());
+    }
   }
 
   #stopAudio(): void {
@@ -515,7 +496,7 @@ class PeerCallTransport implements PeerCall {
   #closed(): void {
     const left = !this.#closing;
     this.#end();
-    if (left) this.#leave();
+    if (left) this.#left.resolve("client");
   }
 
   #end(): void {

@@ -9,7 +9,7 @@ import { logger } from "@eidolon/config";
 import { Application, createDecoder, createEncoder, type SampleRate } from "libopus-wasm";
 
 /** The sample rates libopus encodes from and decodes to directly. */
-export const OPUS_SAMPLE_RATES: readonly number[] = [8000, 12000, 16000, 24000, 48000];
+const OPUS_SAMPLE_RATES: readonly number[] = [8000, 12000, 16000, 24000, 48000];
 
 /** The RTP clock rate of Opus, whatever the audio's sample rate (RFC 7587). */
 export const OPUS_RTP_CLOCK_RATE = 48000;

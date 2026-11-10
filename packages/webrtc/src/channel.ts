@@ -11,9 +11,9 @@ import type { RTCDataChannel } from "werift";
 
 export const SIGNALLING_TYPE = "signalling";
 /** Messages kept while the channel isn't open yet. */
-export const MAX_MESSAGE_QUEUE_SIZE = 50;
+const MAX_MESSAGE_QUEUE_SIZE = 50;
 /** How long after the peer connects the channel may take to open before sends stop queueing. */
-export const DATA_CHANNEL_TIMEOUT_MS = 10_000;
+const DATA_CHANNEL_TIMEOUT_MS = 10_000;
 
 export class Channel {
   readonly #onMessage: (message: unknown) => void;

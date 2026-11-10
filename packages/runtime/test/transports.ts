@@ -1,6 +1,7 @@
 // The two transports an offer can be answered over until pipedog goes: pipedog's, behind
 // src/webrtc, and @eidolon/webrtc's. The signalling, loopback, werift and Opus tests run against
 // both through what this reads of each.
+import { spyOn } from "bun:test";
 import type { AllowedOffer } from "@eidolon/access";
 import type { IceService } from "@eidolon/turn";
 import * as webrtc from "@eidolon/webrtc";
@@ -47,13 +48,7 @@ export interface ConnectionHooks {
 }
 
 /** What closeWhenDtlsCloses watches: a werift peer's state and DTLS transports. */
-export interface DtlsPeer {
-  readonly connectionState: string;
-  readonly dtlsTransports: readonly {
-    readonly state: string;
-    readonly onStateChange: { subscribe(handler: (state: string) => void): unknown };
-  }[];
-}
+export type DtlsPeer = webrtc.DtlsClosable["pc"];
 
 export interface Transport {
   readonly name: "pipedog" | "webrtc";
@@ -93,16 +88,24 @@ const pipedog: Transport = {
   mock(hooks) {
     const proto = SmallWebRTCConnection.prototype;
     const spies = [
-      spyOn(proto, "initialize", async function (this: SmallWebRTCConnection, sdp: string) {
+      spyOn(proto, "initialize").mockImplementation(async function (
+        this: SmallWebRTCConnection,
+        sdp: string,
+      ) {
         (this as unknown as Private)._answer = await hooks.initialize(this, sdp);
       }),
-      spyOn(proto, "renegotiate", function (this: SmallWebRTCConnection, options: any) {
+      spyOn(proto, "renegotiate").mockImplementation(function (
+        this: SmallWebRTCConnection,
+        options,
+      ) {
         return hooks.renegotiate(this, options);
       }),
-      spyOn(proto, "addIceCandidate", (candidate: any) => hooks.addIceCandidate(candidate)),
+      spyOn(proto, "addIceCandidate").mockImplementation((candidate) =>
+        hooks.addIceCandidate(candidate),
+      ),
     ];
     return () => {
-      for (const restore of spies) restore();
+      for (const spy of spies) spy.mockRestore();
     };
   },
   httpError: (statusCode, detail) => new HTTPException({ statusCode, detail }),
@@ -138,20 +141,25 @@ const eidolon: Transport = {
     const proto = webrtc.Peer.prototype;
     const answers = new WeakMap<webrtc.Peer, { sdp: string; type: string }>();
     const spies = [
-      spyOn(proto, "initialize", async function (this: webrtc.Peer, sdp: string) {
+      spyOn(proto, "initialize").mockImplementation(async function (
+        this: webrtc.Peer,
+        sdp: string,
+      ) {
         answers.set(this, await hooks.initialize(this, sdp));
       }),
-      spyOn(proto, "getAnswer", function (this: webrtc.Peer) {
+      spyOn(proto, "getAnswer").mockImplementation(function (this: webrtc.Peer) {
         const answer = answers.get(this);
         return answer === undefined ? null : { ...answer, pc_id: this.pcId };
       }),
-      spyOn(proto, "renegotiate", function (this: webrtc.Peer, options: any) {
+      spyOn(proto, "renegotiate").mockImplementation(function (this: webrtc.Peer, options) {
         return hooks.renegotiate(this, options);
       }),
-      spyOn(proto, "addIceCandidate", (candidate: any) => hooks.addIceCandidate(candidate)),
+      spyOn(proto, "addIceCandidate").mockImplementation((candidate) =>
+        hooks.addIceCandidate(candidate),
+      ),
     ];
     return () => {
-      for (const restore of spies) restore();
+      for (const spy of spies) spy.mockRestore();
     };
   },
   httpError: (status, detail) => new webrtc.HttpError(status, detail),
@@ -173,13 +181,3 @@ const eidolon: Transport = {
 };
 
 export const TRANSPORTS: readonly Transport[] = [pipedog, eidolon];
-
-/** Replaces `name` on `proto` until the returned restore, as bun:test's spyOn would. */
-function spyOn(proto: object, name: string, implementation: (...args: any[]) => unknown) {
-  const target = proto as Private;
-  const original = target[name];
-  target[name] = implementation;
-  return () => {
-    target[name] = original;
-  };
-}

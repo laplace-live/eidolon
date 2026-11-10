@@ -80,12 +80,12 @@ export class AudioOut {
           if (wait > 0) await Bun.sleep(wait);
           if (this.#run !== run) break;
         }
-        const pcm = live() ? source.pull(per10ms) : new Int16Array(per10ms);
-        packet.set(pcm.subarray(0, per10ms), filled);
+        if (live()) packet.set(source.pull(per10ms), filled);
+        else packet.fill(0, filled, filled + per10ms);
         filled += per10ms;
         pulled += per10ms;
         if (filled === packet.length) {
-          this.#send(encoder.encode(packet.slice()));
+          this.#send(encoder.encode(packet));
           this.#timestamp += Math.round((packet.length * OPUS_RTP_CLOCK_RATE) / rate);
           filled = 0;
         }

@@ -34,7 +34,6 @@ export interface AudioPacket {
 export class AudioIn {
   readonly #codec: OpusCodec;
   readonly #jitter = new AudioJitterBuffer<AudioPacket>(JITTER_LATENCY);
-  readonly #subscribed = new WeakSet<MediaStreamTrack>();
   #onPcm: ((pcm: Int16Array) => void) | null = null;
   #stopped = false;
   #decoder: OpusDecoder | null = null;
@@ -82,14 +81,12 @@ export class AudioIn {
   }
 
   #subscribe(track: MediaStreamTrack): void {
-    if (this.#subscribed.has(track)) return;
-    this.#subscribed.add(track);
     track.onReceiveRtp.subscribe((rtp) => {
       try {
         this.handle({
           sequenceNumber: rtp.header.sequenceNumber,
           timestamp: rtp.header.timestamp,
-          payload: new Uint8Array(rtp.payload.buffer, rtp.payload.byteOffset, rtp.payload.length),
+          payload: rtp.payload,
         });
       } catch (error) {
         logger.debug(`[WebRTC] Handling an RTP packet failed: ${errorText(error)}`);

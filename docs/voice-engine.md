@@ -20,8 +20,8 @@ chat. It is experimental and off by default: `EIDOLON_VOICE_ENGINE=native` turns
 @eidolon/webrtc                 a call's WebRTC on werift: signalling, the peer, its data channel and
                                 audio, the werift patches; no pipedog, and only packages/runtime imports it
 @eidolon/engine                 runTurn in call mode (CallHooks)
-packages/runtime/src/native/    the bridge: the switch, deps, a call inside a chat (binding.ts), and
-                                the transport over pipedog's connection native calls used until G6
+packages/runtime/src/native/    the bridge: the switch, deps, a call inside a chat (binding.ts); no
+                                pipedog
 ```
 
 Code ported from pipedog keeps pipedog's BSD-2 header, then `Ported from pipedog <path>@ce8f8bc`.
@@ -47,10 +47,10 @@ A group call ([Group calls](#group-calls)) runs only on `native`. As it starts,
 fails the check fails as `Bot session failed: <why>`. Under
 `pipedog`, nothing offers one: the local app refuses it first, and the server fails one it gets.
 
-**Warm-up:** `warmAudioModels()` loads pipedog's models on both engines, since its backend turns
-ORT's telemetry off before ORT first loads, and under `native` the native Ear's too. Both engines
-load the same two `.onnx` files, from pipedog's packages (`voiceModels()`), on the same pinned
-onnxruntime-node.
+**Warm-up:** `warmAudioModels()` loads the running engine's models: pipedog's, or under `native`
+the native Ear's. pipedog's ONNX backend loads first on both, since it turns ORT's telemetry off
+before ORT first loads. Both engines load the same two `.onnx` files, from pipedog's packages
+(`voiceModels()`), on the same pinned onnxruntime-node.
 
 **Logs:** a native call logs what the local app and the e2e notes read from pipedog's:
 - the `[bot] Session start …` line and `Starting bot`, through the `logSessionStart` pipedog's
@@ -452,10 +452,6 @@ G8. What a client sees is the same on both:
 Messages go out as `JSON.stringify` writes them, where pipedog's transport writes Python's
 `json.dumps` form; clients parse both alike.
 
-**Phase 1** (G2 to G5) ran native calls on the `SmallWebRTCConnection` pipedog's signalling built
-(`packages/runtime/src/native/transport_pipedog.ts`). It stays in the tree until G8, though no
-server starts it any more.
-
 ## Allowed differences
 
 Every difference between the engines must be one of these, each with what triggers it:
@@ -497,12 +493,12 @@ A realtime call's differences, each a fix of pipedog's realtime path:
 | `packages/runtime/test/parity/` | the ported leaves against the installed pipedog: VAD and Smart Turn probabilities, loudness, the segmenter on every reply production recorded, RTVI messages against pipedog's observer, the async envelopes. The only tests that import both engines |
 | `packages/runtime/test/parity/twin.ts` | the twin harness: one scripted call on each engine ([below](#the-twin-harness)) |
 | `packages/voice/test/` | each leaf on its own; the Floor row by row on a fake engine and clock; the real `runTurn` with a scripted mind; whole calls on a fake transport with the real hearing models; a realtime call on a scripted session, with the real `prepareTurn` and `runTool`; a group call's floor on the real `runChat` with a scripted director (`group.test.ts`) |
-| `packages/runtime/test/native/` | the switch and the server each engine gets, a native call's start, the phase-1 transport against a real werift peer, a call inside a chat reporting what pipedog's binding tests expect (once over `@eidolon/webrtc`), and a group call's binding (`group.test.ts`) |
+| `packages/runtime/test/native/` | the switch and the server each engine gets, a native call's start, a call inside a chat reporting what pipedog's binding tests expect (once over `@eidolon/webrtc`), and a group call's binding (`group.test.ts`) |
 | `packages/webrtc/test/` | pipedog's transport tests, ported (`rtc_media`, `test_smallwebrtc_request_handler`); the caller's audio and hers against libopus; a call's transport on a fake peer, and against a real werift client: both ways, liveness, a hang-up from either side, `restart_pc` |
 | `packages/runtime/test/{signalling,loopback,werift,opus}.test.ts` | each on both transports (`transports.ts`) until G8; `werift.test.ts` also holds that both resolve one werift and patch it once |
 | `apps/bot/test/{chat,local}/native_call.test.ts` | production's `bindChatCall` and the local runner's binding, unchanged, on a native call |
 | `apps/bot/test/local/group_call.test.ts` | the local offer route's group checks, and the runner storing a native group call's lines and decisions |
-| `packages/runtime/test/native_boundaries.test.ts` | under `src/native/`, only the transport imports pipedog |
+| `packages/runtime/test/native_boundaries.test.ts` | nothing under `src/native/` imports pipedog |
 
 `bun test --no-env-file packages/runtime/test/parity` runs the first; with `EIDOLON_TWIN=1` it runs
 the twin harness's scenarios too, about ten minutes of real-time calls. A change to the loop or its
