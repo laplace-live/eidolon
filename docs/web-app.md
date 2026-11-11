@@ -325,13 +325,22 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
   `files/`.
 - **While she replies:**
   - Her words stream in, and a quiet line names the tool she is using.
-  - **Stop** ends the reply, and what she said stays, marked **Interrupted**.
-  - Sending while she replies is allowed: the server stops her first. Each line sent shows until
-    it is stored, and one that fails stays, marked **Not sent**, with **Retry**.
-  - A send supersedes the streams open before it: its own carries her reply from its start, so
-    the older ones only store what they bring.
-  - A selfie she was taking keeps rendering through either. Its quiet line stays, and the photo
-    arrives later as a message of its own ([chat.md](chat.md#the-local-api)).
+  - **Stop** cuts everyone off at once, even one finishing her message before a line just sent:
+    what she said stays, marked **Interrupted**, and no line still waiting is answered.
+  - Sending while she replies is allowed, and cuts no one off mid-sentence: a persona whose words
+    have started streaming finishes her message, voice included, and the reply stops there; a
+    reply still thinking or deciding who answers stops at once. Everyone chosen still answers:
+    whoever an earlier line chose and hadn't answered goes first in the next reply, oldest line
+    first, then whoever the new line chooses, each once. A line the director hadn't decided is
+    decided again, and in a chat of one her next reply answers them all. A server restart forgets
+    what it owes.
+  - Each line sent shows below her words until it is stored, after the message she finishes, and
+    one that fails stays, marked **Not sent**, with **Retry**.
+  - A send supersedes the streams open before it once its own starts, with the viewer's stored
+    line: until then the older one carries the words she is finishing, and after it only stores
+    what it brings.
+  - A selfie she was taking when Stop or a send stops her keeps rendering. Its quiet line stays,
+    and the photo arrives later as a message of its own ([chat.md](chat.md#the-local-api)).
 - **When a reply goes wrong:**
   - A failed reply shows its error with **Retry**, which sends the viewer's last line again.
   - A reply her provider stopped short, at its token limit or refusing, is marked **Cut off**, with

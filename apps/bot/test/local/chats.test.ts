@@ -39,14 +39,17 @@ import type {
 } from "@eidolon/runtime";
 import type { RouteHandler } from "../../src/app.ts";
 import type { ChatContents } from "../../src/local/api.ts";
+import type { LiveTurn } from "../../src/local/chats/live.ts";
 import {
   type ChatAnswer,
   type ChatHear,
   ChatRunner,
   type ChatRunnerOptions,
   type ChatTurn,
+  NotInChat,
 } from "../../src/local/chats/runner.ts";
 import { identityHandlers } from "../../src/local/identity.ts";
+import { ndjsonResponse } from "../../src/local/responses.ts";
 import { createLocalRouter, type LocalApp, localRoute } from "../../src/local/router.ts";
 import { chatRunner, chatsRoutes } from "../../src/local/routes/chats.ts";
 import { ANSWER, type CapturedLogs, captureLogs, deferred } from "../fakes.ts";
@@ -82,12 +85,15 @@ interface Hop {
   readonly replies: readonly ParticipantId[];
   readonly source: ChatEventOf<"decision">["source"];
   readonly scores?: Readonly<Record<string, number>>;
+  /** Waited for, or the abort, before it is decided. */
+  readonly deciding?: Promise<void>;
 }
 
 /**
  * The fake director's decisions by the viewer's line, each followed by its turns; "throw" throws
  * before any. The default is the chat's first persona alone. Like the engine's, each turn reads the
- * chat as stored.
+ * chat as stored, and each hop after the first answers the last persona line. Unlike it, owed lines
+ * are left unanswered: the runner's part is only to hand them over.
  */
 let plans: Map<string, readonly Hop[] | "throw">;
 let answers: ChatRequest[];
@@ -105,11 +111,13 @@ const fakeAnswer: ChatAnswer = (request, save) => {
       },
     ];
     if (plan === "throw") throw new Error("the chain fell over");
+    let after = request.after;
     for (const hop of plan) {
+      if (hop.deciding) await Promise.race([hop.deciding, aborted(request.signal)]);
       if (request.signal.aborted) return;
       yield {
         type: "decision",
-        after: request.after,
+        after,
         replies: hop.replies.map((persona) => ({ persona, mode: "text" }) as const),
         source: hop.source,
         ...(hop.scores ? { scores: hop.scores } : {}),
@@ -120,6 +128,10 @@ const fakeAnswer: ChatAnswer = (request, save) => {
         const { viewer, signal, late } = request;
         yield* fakeTurn({ chat, persona, viewer, signal, ...(late ? { late } : {}) }, save);
       }
+      const spoken = (await request.read()).events.findLast(
+        (event) => event.type === "message" && event.speaker.kind === "persona",
+      );
+      after = spoken?.seq ?? after;
     }
   })();
 };
@@ -192,17 +204,26 @@ function reply(text: string, options: ReplyOptions = {}): Script {
   };
 }
 
+/** Her turn still thinking until it is aborted, having said nothing, so it stores nothing. */
+const thinking: Script = async function* (request) {
+  const turn = crypto.randomUUID();
+  yield { type: "started", turn, persona: request.persona };
+  await aborted(request.signal);
+  yield { type: "ended", turn };
+};
+
 /**
- * Her reply that takes a selfie and is interrupted while it renders. The render runs on until
- * `photo` resolves, then brings its result and the photo, or nothing once the chat cancels it.
+ * Her reply that says `says` and takes a selfie, and is interrupted while it renders. The render
+ * runs on until `photo` resolves, then brings its result and the photo, or nothing once the chat
+ * cancels it.
  */
-function selfie(photo: Promise<void>): Script {
+function selfie(photo: Promise<void>, says = "等我"): Script {
   return async function* (request, save) {
     const turn = crypto.randomUUID();
     const persona = request.persona;
     const speaker = { kind: "persona", id: persona } as const;
     yield { type: "started", turn, persona };
-    yield { type: "delta", turn, text: "等我" };
+    if (says !== "") yield { type: "delta", turn, text: says };
     yield {
       type: "events",
       events: [
@@ -221,12 +242,14 @@ function selfie(photo: Promise<void>): Script {
       ];
     };
     late.add("take_selfie", brought());
-    yield {
-      type: "events",
-      events: [
-        { type: "message", id: crypto.randomUUID(), speaker, text: "等我", interrupted: true },
-      ],
-    };
+    if (says !== "") {
+      yield {
+        type: "events",
+        events: [
+          { type: "message", id: crypto.randomUUID(), speaker, text: says, interrupted: true },
+        ],
+      };
+    }
     yield { type: "ended", turn };
   };
 }
@@ -375,6 +398,40 @@ async function until(check: () => boolean | Promise<boolean>, ms = 3000): Promis
   while (!(await check())) {
     if (Date.now() > deadline) throw new Error("timed out waiting");
     await Bun.sleep(5);
+  }
+}
+
+/** Whether `promise` settles within `ms`. */
+function settles(promise: Promise<unknown>, ms = 50): Promise<boolean> {
+  return Promise.race([
+    promise.then(
+      () => true,
+      () => true,
+    ),
+    Bun.sleep(ms).then(() => false),
+  ]);
+}
+
+/** A reply's stream, read straight from the runner. */
+function linesOf(live: LiveTurn): Lines {
+  return new Lines(ndjsonResponse(live.stream()));
+}
+
+/**
+ * A runner of its own on the fakes, for a test that must time a stop or a delete against a send
+ * waiting for her to finish.
+ */
+async function ownRunner(test: (runner: ChatRunner) => Promise<void>): Promise<void> {
+  const runner = new ChatRunner({
+    root: chatsRoot(),
+    turn: fakeTurn,
+    answer: fakeAnswer,
+    hear: fakeHear,
+  });
+  try {
+    await test(runner);
+  } finally {
+    await runner.shutdown();
   }
 }
 
@@ -606,15 +663,17 @@ describe("a message", () => {
     expect(tail.events.map((event) => event.seq)).toEqual([4, 5]);
   });
 
-  test("interrupts a reply still streaming: her partial line, then the viewer's, then the new reply", async () => {
+  test("waits for the reply she is writing: her whole line, then the viewer's, then the new reply", async () => {
     const id = await greeted();
-    scripts.set("第一句", reply("我想想看哦", { untilAborted: true }));
+    const hold = deferred();
+    scripts.set("第一句", reply("我想想看哦", { hold: hold.promise }));
     const first = new Lines(await server.call("POST", `/chats/${id}/messages`, { text: "第一句" }));
     await first.until((line) => line.type === "delta");
-    const second = await new Lines(
-      await server.call("POST", `/chats/${id}/messages`, { text: "第二句" }),
-    ).all();
-    expect(requests[1]?.signal.aborted).toBe(true);
+    const posted = server.call("POST", `/chats/${id}/messages`, { text: "第二句" });
+    expect(await settles(posted)).toBe(false);
+    expect(requests[1]?.signal.aborted).toBe(false);
+    hold.resolve();
+    const second = await new Lines(await posted).all();
     expect(shape(await first.all())).toEqual([
       "events 3:message",
       "events 4:decision",
@@ -631,12 +690,14 @@ describe("a message", () => {
       "events 8:message",
       "ended",
     ]);
+    // She finished, so the line she answered is owed nothing.
+    expect(answers[1]?.owed).toBeUndefined();
     const { events } = await log(id);
     expectContiguous(events);
     expect(messages(events).map((m) => [m.speaker.kind, m.text, m.interrupted ?? false])).toEqual([
       ["persona", "你好呀", false],
       ["user", "第一句", false],
-      ["persona", "我想想", true],
+      ["persona", "我想想看哦", false],
       ["user", "第二句", false],
       ["persona", "收到啦", false],
     ]);
@@ -645,11 +706,12 @@ describe("a message", () => {
   test("a selfie her interrupted turn left running lands later, after the viewer's next line", async () => {
     const id = await greeted();
     const photo = deferred();
-    scripts.set("发张自拍", selfie(photo.promise));
+    // With no words yet, the next line interrupts her at once.
+    scripts.set("发张自拍", selfie(photo.promise, ""));
     const first = new Lines(
       await server.call("POST", `/chats/${id}/messages`, { text: "发张自拍" }),
     );
-    await first.until((line) => line.type === "delta");
+    await first.until((line) => line.type === "events" && line.events[0]?.type === "tool-call");
     const second = await new Lines(
       await server.call("POST", `/chats/${id}/messages`, { text: "快点嘛" }),
     ).all();
@@ -657,17 +719,15 @@ describe("a message", () => {
       "events 3:message",
       "events 4:decision",
       "started",
-      "delta 等我",
       "events 5:tool-call",
-      "events 6:message",
       "ended",
     ]);
     expect(shape(second)).toEqual([
-      "events 7:message",
-      "events 8:decision",
+      "events 6:message",
+      "events 7:decision",
       "started",
       "delta 收到",
-      "events 9:message",
+      "events 8:message",
       "ended",
     ]);
     expect((await log(id)).lateTools).toEqual(["take_selfie"]);
@@ -676,16 +736,15 @@ describe("a message", () => {
     await until(async () => (await log(id)).lateTools.length === 0);
     const { events } = await log(id);
     expectContiguous(events);
-    expect(events.slice(9)).toMatchObject([
-      { seq: 10, type: "tool-result", callId: "c1", result: { ok: true, count: 1 } },
-      { seq: 11, type: "message", speaker: { kind: "persona" }, text: "" },
+    expect(events.slice(8)).toMatchObject([
+      { seq: 9, type: "tool-result", callId: "c1", result: { ok: true, count: 1 } },
+      { seq: 10, type: "message", speaker: { kind: "persona" }, text: "" },
     ]);
     expect(
       messages(events).map((m) => [m.speaker.kind, m.text, m.interrupted ?? false, m.attachments]),
     ).toEqual([
       ["persona", "你好呀", false, undefined],
       ["user", "发张自拍", false, undefined],
-      ["persona", "等我", true, undefined],
       ["user", "快点嘛", false, undefined],
       ["persona", "收到啦", false, undefined],
       ["persona", "", false, [{ kind: "image", name: expect.any(String), mime: "image/png" }]],
@@ -869,12 +928,17 @@ describe("a voice message", () => {
     delete process.env.SONIOX_API_KEY;
   });
 
-  test("stops the running reply, then is heard, stored with its audio and transcript, and answered", async () => {
+  test("waits for the reply she is writing, then is heard, stored with its audio and transcript, and answered", async () => {
     const id = await greeted();
-    scripts.set("第一句", reply("我想想看哦", { untilAborted: true }));
+    const hold = deferred();
+    scripts.set("第一句", reply("我想想看哦", { hold: hold.promise }));
     const first = new Lines(await server.call("POST", `/chats/${id}/messages`, { text: "第一句" }));
     await first.until((line) => line.type === "delta");
-    const lines = await new Lines(await voice(id)).all();
+    const posted = voice(id);
+    expect(await settles(posted)).toBe(false);
+    expect(heard).toEqual([]);
+    hold.resolve();
+    const lines = await new Lines(await posted).all();
     expect(shape(await first.all()).at(-2)).toBe("events 5:message");
     expect(shape(lines)).toEqual([
       "events 6:message",
@@ -885,13 +949,11 @@ describe("a voice message", () => {
       "ended",
     ]);
 
-    // Heard on the chat as stored once the reply it interrupted had kept what it said.
+    // Heard on the chat as stored once the reply it waited for had kept what it said.
     expect(heard).toHaveLength(1);
     const [request] = heard as [HearRequest];
-    expect(messages(request.chat.events).at(-1)).toMatchObject({
-      text: "我想想",
-      interrupted: true,
-    });
+    expect(messages(request.chat.events).at(-1)).toMatchObject({ text: "我想想看哦" });
+    expect(messages(request.chat.events).at(-1)?.interrupted).toBeUndefined();
     expect(new Uint8Array(request.clip.bytes)).toEqual(WEBM);
     expect(request.clip).toMatchObject({ mime: "audio/webm;codecs=opus", durationMs: 2500 });
     expect(request.signal.aborted).toBe(false);
@@ -1305,16 +1367,19 @@ describe("a group chat", () => {
     expect((await server.call("GET", `/chats/${id}/live`)).status).toBe(204);
   });
 
-  test("a new line interrupts the whole chain: her partial line is kept, and the hops after it dropped", async () => {
+  test("a new line lets her finish what she is writing, then stops the chain, owing the rest of its replies", async () => {
     persona("beta", "贝塔");
     const id = await group("beta");
+    const hold = deferred();
     plans.set("聊聊天", [{ replies: [PERSONA, "beta"], source: "model" }]);
-    scripts.set(`${PERSONA} 聊聊天`, reply("我先说两句", { untilAborted: true }));
+    scripts.set(`${PERSONA} 聊聊天`, reply("我先说两句", { hold: hold.promise }));
     const first = new Lines(await server.call("POST", `/chats/${id}/messages`, { text: "聊聊天" }));
     await first.until((line) => line.type === "delta");
-    const second = await new Lines(
-      await server.call("POST", `/chats/${id}/messages`, { text: "停一下" }),
-    ).all();
+    const posted = server.call("POST", `/chats/${id}/messages`, { text: "停一下" });
+    expect(await settles(posted)).toBe(false);
+    expect(answers[0]?.signal.aborted).toBe(false);
+    hold.resolve();
+    const second = await new Lines(await posted).all();
     expect(answers[0]?.signal.aborted).toBe(true);
     expect(shape(await first.all())).toEqual([
       "events 1:message",
@@ -1332,12 +1397,14 @@ describe("a group chat", () => {
       "events 6:message",
       "ended",
     ]);
+    // Beta never started in the first answer: the second owes her reply to the first line.
     expect(requests.map((request) => request.persona)).toEqual([PERSONA, PERSONA]);
+    expect(answers[1]?.owed).toEqual([{ line: 1, replies: [{ persona: "beta", mode: "text" }] }]);
     const { events } = await log(id);
     expectContiguous(events);
     expect(messages(events).map((m) => [m.text, m.interrupted ?? false])).toEqual([
       ["聊聊天", false],
-      ["我先说", true],
+      ["我先说两句", false],
       ["停一下", false],
       ["收到啦", false],
     ]);
@@ -1510,16 +1577,21 @@ describe("a group chat", () => {
   });
 });
 
-test("the engine's runChat answers through the runner, each turn on the chat as stored", async () => {
-  persona("beta", "贝塔");
-  /** What each persona says, whatever she is asked. */
-  const says: Record<string, string> = { [PERSONA]: "好呀", beta: "奶绿你说呢" };
-  const deps: Omit<EngineDeps, "saveAttachment"> = {
+/**
+ * The engine's parts, faked: each persona says `says[id]`, whatever she is asked, once her mind's
+ * `ready` lets her.
+ */
+function engineDeps(
+  says: Readonly<Record<string, string>>,
+  ready: (persona: string, signal: AbortSignal) => Promise<void> = async () => {},
+): Omit<EngineDeps, "saveAttachment"> {
+  return {
     createMind: () => {
-      const text = says[activePersona().id] ?? "";
+      const persona = activePersona().id;
       return {
-        async *stream() {
-          yield { type: "text", text };
+        async *stream(request) {
+          await ready(persona, request.signal);
+          yield { type: "text", text: says[persona] ?? "" };
           yield { type: "done", finishReason: "stop" };
         },
       };
@@ -1539,6 +1611,13 @@ test("the engine's runChat answers through the runner, each turn on the chat as 
       transcribe: () => Promise.reject(new Error("no ears here")),
     },
   };
+}
+
+/** A server answering with the engine's runChat on `deps`, and a chat on it with Milky Green and Beta. */
+async function engineChat(
+  deps: Omit<EngineDeps, "saveAttachment">,
+  test: (engine: ChatsServer, id: string) => Promise<void>,
+): Promise<void> {
   const engine = serveChats({
     answer: (request, saveAttachment) =>
       runChat(request, { ...deps, saveAttachment, director: new Director(null) }),
@@ -1548,6 +1627,21 @@ test("the engine's runChat answers through the runner, each turn on the chat as 
       await engine.call("POST", "/chats", { participants: [PERSONA, "beta"] }),
       201,
     );
+    await test(engine, id);
+  } finally {
+    await engine.close();
+  }
+}
+
+/** Each decision's line, and who it chose. */
+const choices = (events: readonly ChatEvent[]) =>
+  events.flatMap((event) =>
+    event.type === "decision" ? [[event.after, event.replies.map((r) => r.persona)]] : [],
+  );
+
+test("the engine's runChat answers through the runner, each turn on the chat as stored", async () => {
+  persona("beta", "贝塔");
+  await engineChat(engineDeps({ [PERSONA]: "好呀", beta: "奶绿你说呢" }), async (engine, id) => {
     const lines = await new Lines(
       await engine.call("POST", `/chats/${id}/messages`, { text: "@贝塔 在吗" }),
     ).all();
@@ -1555,11 +1649,7 @@ test("the engine's runChat answers through the runner, each turn on the chat as 
     expectContiguous(events);
     expect(events).toEqual(lines.flatMap((line) => (line.type === "events" ? line.events : [])));
     // Beta answers the mention, Milky Green the name in Beta's line, and no one hers.
-    expect(
-      events.flatMap((event) =>
-        event.type === "decision" ? [[event.after, event.replies.map((r) => r.persona)]] : [],
-      ),
-    ).toEqual([
+    expect(choices(events)).toEqual([
       [1, ["beta"]],
       [3, [PERSONA]],
       [5, []],
@@ -1569,9 +1659,305 @@ test("the engine's runChat answers through the runner, each turn on the chat as 
       [{ kind: "persona", id: "beta" }, "奶绿你说呢"],
       [{ kind: "persona", id: PERSONA }, "好呀"],
     ]);
-  } finally {
-    await engine.close();
-  }
+  });
+});
+
+describe("a line sent while they answer", () => {
+  const MILKY = { persona: PERSONA, mode: "text" } as const;
+  const BETA = { persona: "beta", mode: "text" } as const;
+  const BOTH = [MILKY, BETA];
+
+  beforeEach(() => {
+    persona("beta", "贝塔");
+  });
+
+  test("while the director decides, stops the answer at once, owing the line undecided", async () => {
+    const id = await group("beta");
+    plans.set("贝塔在吗", [
+      { replies: ["beta"], source: "model", deciding: new Promise(() => {}) },
+    ]);
+    const first = new Lines(
+      await server.call("POST", `/chats/${id}/messages`, { text: "贝塔在吗" }),
+    );
+    await until(() => answers.length === 1);
+    await new Lines(await server.call("POST", `/chats/${id}/messages`, { text: "奶绿呢" })).all();
+    expect(answers[0]?.signal.aborted).toBe(true);
+    expect(shape(await first.all())).toEqual(["events 1:message"]);
+    expect(answers.map((answer) => [answer.after, answer.owed])).toEqual([
+      [1, undefined],
+      [2, [{ line: 1 }]],
+    ]);
+  });
+
+  test("stops a turn that hasn't written at once, owing her line everyone its decision chose", async () => {
+    const id = await group("beta");
+    plans.set("聊聊天", [{ replies: [PERSONA, "beta"], source: "model" }]);
+    scripts.set(`${PERSONA} 聊聊天`, thinking);
+    const first = new Lines(await server.call("POST", `/chats/${id}/messages`, { text: "聊聊天" }));
+    await first.until((line) => line.type === "started");
+    await new Lines(await server.call("POST", `/chats/${id}/messages`, { text: "等等" })).all();
+    expect(shape(await first.all())).toEqual([
+      "events 1:message",
+      "events 2:decision",
+      "started",
+      "ended",
+    ]);
+    expect(requests.map((request) => request.persona)).toEqual([PERSONA, PERSONA]);
+    expect(answers[1]?.owed).toEqual([{ line: 1, replies: BOTH }]);
+  });
+
+  test("never owes a hop: whoever answers a persona line is dropped with the chain", async () => {
+    const id = await group("beta");
+    plans.set("奶绿在吗", [{ replies: [PERSONA], source: "model" }]);
+    plans.set("贝塔呢", [
+      { replies: ["beta"], source: "model" },
+      { replies: [PERSONA], source: "model" },
+    ]);
+    scripts.set(`${PERSONA} 奶绿在吗`, thinking);
+    scripts.set(`${PERSONA} 贝塔呢`, thinking);
+    const first = new Lines(
+      await server.call("POST", `/chats/${id}/messages`, { text: "奶绿在吗" }),
+    );
+    await first.until((line) => line.type === "started");
+    const second = new Lines(
+      await server.call("POST", `/chats/${id}/messages`, { text: "贝塔呢" }),
+    );
+    await second.until((line) => line.type === "started" && line.persona === PERSONA);
+    await new Lines(await server.call("POST", `/chats/${id}/messages`, { text: "等等" })).all();
+    expect((await log(id)).events.slice(3, 7)).toMatchObject([
+      { seq: 4, type: "decision", after: 3, replies: [{ persona: "beta" }] },
+      { seq: 5, type: "message", speaker: { kind: "persona", id: "beta" }, text: "收到啦" },
+      { seq: 6, type: "decision", after: 5, replies: [{ persona: PERSONA }] },
+      { seq: 7, type: "message", speaker: { kind: "user" }, text: "等等" },
+    ]);
+    // Her hop turn didn't finish, but only the first line's reply is owed.
+    expect(answers[2]?.owed).toEqual([{ line: 1, replies: [MILKY] }]);
+  });
+
+  test("a turn that fails while a send waits for her counts as her reply", async () => {
+    const id = await group("beta");
+    const hold = deferred();
+    plans.set("聊聊天", [{ replies: [PERSONA, "beta"], source: "model" }]);
+    scripts.set(`${PERSONA} 聊聊天`, async function* (request) {
+      yield { type: "started", turn: "t-1", persona: request.persona };
+      yield { type: "delta", turn: "t-1", text: "我先" };
+      await hold.promise;
+      throw new Error("the mind fell over");
+    });
+    const first = new Lines(await server.call("POST", `/chats/${id}/messages`, { text: "聊聊天" }));
+    await first.until((line) => line.type === "delta");
+    const posted = server.call("POST", `/chats/${id}/messages`, { text: "等等" });
+    expect(await settles(posted)).toBe(false);
+    hold.resolve();
+    await new Lines(await posted).all();
+    expect(shape(await first.all()).slice(-2)).toEqual(["events 3:turn-failed", "ended"]);
+    expect(answers[1]?.owed).toEqual([{ line: 1, replies: [BETA] }]);
+  });
+
+  test("a stop while a send waits for her interrupts her at once, owes nothing, and stops the answer the send starts", async () => {
+    await ownRunner(async (runner) => {
+      const id = await runner.create([PERSONA, "beta"]);
+      plans.set("聊聊天", [{ replies: [PERSONA, "beta"], source: "model" }]);
+      // She never finishes on her own.
+      scripts.set(`${PERSONA} 聊聊天`, reply("我先说两句", { untilAborted: true }));
+      await linesOf(await runner.send(id, "聊聊天")).until((line) => line.type === "delta");
+      const sent = runner.send(id, "等等");
+      // The send is waiting for her.
+      await Bun.sleep(0);
+      await runner.stop(id);
+      await (await sent).ended;
+      expect(answers[1]?.owed).toBeUndefined();
+      expect(answers[1]?.signal.aborted).toBe(true);
+      expect(messages((await runner.read(id)).events).map((m) => [m.text, m.interrupted])).toEqual([
+        ["聊聊天", undefined],
+        ["我先说", true],
+        ["等等", undefined],
+      ]);
+    });
+  });
+
+  test("a call while a send waits for her interrupts her at once, owes nothing, and stops the answer the send starts", async () => {
+    await ownRunner(async (runner) => {
+      const id = await runner.create([PERSONA, "beta"]);
+      plans.set("聊聊天", [{ replies: [PERSONA, "beta"], source: "model" }]);
+      // She never finishes on her own.
+      scripts.set(`${PERSONA} 聊聊天`, reply("我先说两句", { untilAborted: true }));
+      await linesOf(await runner.send(id, "聊聊天")).until((line) => line.type === "delta");
+      const sent = runner.send(id, "等等");
+      // The send is waiting for her.
+      await Bun.sleep(0);
+      const dialled = runner.startCall(id, PERSONA);
+      expect(await settles(dialled, 1000)).toBe(true);
+      await (await sent).ended;
+      expect(answers[1]?.owed).toBeUndefined();
+      expect(answers[1]?.signal.aborted).toBe(true);
+      const { events } = await runner.read(id);
+      expect(messages(events).map((m) => [m.text, m.interrupted])).toEqual([
+        ["聊聊天", undefined],
+        ["我先说", true],
+        ["等等", undefined],
+      ]);
+      expect(events.at(-1)).toMatchObject({ type: "call-started", persona: PERSONA });
+      await (await dialled).onEnded("hangup");
+    });
+  });
+
+  test("a call refused while a send waits for her leaves her writing", async () => {
+    await ownRunner(async (runner) => {
+      const id = await runner.create([PERSONA, "beta"]);
+      plans.set("聊聊天", [{ replies: [PERSONA, "beta"], source: "model" }]);
+      const hold = deferred();
+      scripts.set(`${PERSONA} 聊聊天`, reply("我先说两句", { hold: hold.promise }));
+      await linesOf(await runner.send(id, "聊聊天")).until((line) => line.type === "delta");
+      const sent = runner.send(id, "等等");
+      await Bun.sleep(0);
+      expect(await runner.startCall(id, "gamma").catch((error: unknown) => error)).toBeInstanceOf(
+        NotInChat,
+      );
+      expect(requests[0]?.signal.aborted).toBe(false);
+      hold.resolve();
+      await (await sent).ended;
+      expect(answers[1]?.owed).toEqual([{ line: 1, replies: [{ persona: "beta", mode: "text" }] }]);
+    });
+  });
+
+  test("a call or a delete owes nothing", async () => {
+    const id = await group("beta");
+    plans.set("聊聊天", [{ replies: [PERSONA, "beta"], source: "model" }]);
+    scripts.set(`${PERSONA} 聊聊天`, thinking);
+    const first = new Lines(await server.call("POST", `/chats/${id}/messages`, { text: "聊聊天" }));
+    await first.until((line) => line.type === "started");
+    const binding = await dial(id);
+    await first.all();
+    await binding.onEnded("hangup");
+    await new Lines(await server.call("POST", `/chats/${id}/messages`, { text: "挂了" })).all();
+    expect(answers[1]?.owed).toBeUndefined();
+
+    await ownRunner(async (runner) => {
+      const other = await runner.create([PERSONA, "beta"]);
+      scripts.set(`${PERSONA} 聊聊天`, reply("我先说两句", { untilAborted: true }));
+      await linesOf(await runner.send(other, "聊聊天")).until((line) => line.type === "delta");
+      const sent = runner.send(other, "等等");
+      await Bun.sleep(0);
+      await runner.remove(other);
+      await sent;
+      expect(answers.at(-1)?.after).toBe(4);
+      expect(answers.at(-1)?.owed).toBeUndefined();
+    });
+  });
+
+  test("carries owed lines on: one sent before anyone writes owes what the stopped answer owed, then that answer's own", async () => {
+    const id = await group("beta");
+    plans.set("奶绿在吗", [{ replies: [PERSONA], source: "model" }]);
+    plans.set("贝塔呢", [{ replies: ["beta"], source: "model" }]);
+    scripts.set(`${PERSONA} 奶绿在吗`, thinking);
+    scripts.set("beta 贝塔呢", thinking);
+    const first = new Lines(
+      await server.call("POST", `/chats/${id}/messages`, { text: "奶绿在吗" }),
+    );
+    await first.until((line) => line.type === "started");
+    const second = new Lines(
+      await server.call("POST", `/chats/${id}/messages`, { text: "贝塔呢" }),
+    );
+    await second.until((line) => line.type === "started");
+    await new Lines(await server.call("POST", `/chats/${id}/messages`, { text: "你们呢" })).all();
+    expect(answers.map((answer) => [answer.after, answer.owed])).toEqual([
+      [1, undefined],
+      [3, [{ line: 1, replies: [MILKY] }]],
+      [
+        5,
+        [
+          { line: 1, replies: [MILKY] },
+          { line: 3, replies: [BETA] },
+        ],
+      ],
+    ]);
+  });
+
+  test("in a chat of one, her finished turn answers every line, owed ones too", async () => {
+    await ownRunner(async (runner) => {
+      const id = await runner.create([PERSONA]);
+      await runner.live(id)?.ended;
+      plans.set("第一句", [
+        { replies: [PERSONA], source: "single", deciding: new Promise(() => {}) },
+      ]);
+      const hold = deferred();
+      scripts.set("第二句", reply("一起回答", { hold: hold.promise }));
+      await runner.send(id, "第一句");
+      await linesOf(await runner.send(id, "第二句")).until((line) => line.type === "delta");
+      const third = runner.send(id, "第三句");
+      await Bun.sleep(0);
+      hold.resolve();
+      await (await third).ended;
+      expect(answers.map((answer) => [answer.after, answer.owed])).toEqual([
+        [3, undefined],
+        [4, [{ line: 3 }]],
+        [7, undefined],
+      ]);
+    });
+  });
+
+  test("a voice message that can't be heard leaves what it stopped owed to the next line, and a stop drops it", async () => {
+    process.env.SONIOX_API_KEY = "soniox-test";
+    try {
+      const id = await group("beta");
+      hearing = async () => {
+        throw new ProviderHttpError("Soniox", 500, "the transcriber fell over");
+      };
+      /** Sends `text`, then a voice message while she thinks about it. */
+      const unheard = async (text: string) => {
+        plans.set(text, [{ replies: [PERSONA, "beta"], source: "model" }]);
+        scripts.set(`${PERSONA} ${text}`, thinking);
+        const lines = new Lines(await server.call("POST", `/chats/${id}/messages`, { text }));
+        await lines.until((line) => line.type === "started");
+        expect((await voice(id)).status).toBe(502);
+      };
+      await unheard("聊聊天");
+      await new Lines(await server.call("POST", `/chats/${id}/messages`, { text: "听到吗" })).all();
+      expect(answers.at(-1)?.owed).toEqual([{ line: 1, replies: BOTH }]);
+
+      await unheard("再聊聊");
+      expect((await server.call("POST", `/chats/${id}/stop`)).status).toBe(204);
+      await new Lines(await server.call("POST", `/chats/${id}/messages`, { text: "还在吗" })).all();
+      expect(answers.at(-1)?.owed).toBeUndefined();
+    } finally {
+      delete process.env.SONIOX_API_KEY;
+    }
+  });
+});
+
+test("the engine answers a line whose persona was still thinking when the next came, ahead of the next's", async () => {
+  persona("beta", "贝塔");
+  const thought = deferred();
+  let held = false;
+  const deps = engineDeps({ [PERSONA]: "我也在", beta: "在呢" }, async (who, signal) => {
+    if (who !== "beta" || held) return;
+    held = true;
+    thought.resolve();
+    await aborted(signal);
+    throw signal.reason;
+  });
+  await engineChat(deps, async (engine, id) => {
+    const first = new Lines(
+      await engine.call("POST", `/chats/${id}/messages`, { text: "贝塔在吗" }),
+    );
+    await thought.promise;
+    await new Lines(await engine.call("POST", `/chats/${id}/messages`, { text: "奶绿呢" })).all();
+    await first.all();
+    const { events } = await json<ChatContents>(await engine.call("GET", `/chats/${id}`));
+    expectContiguous(events);
+    expect(choices(events)).toEqual([
+      [1, ["beta"]],
+      [3, [PERSONA]],
+      [6, []],
+    ]);
+    expect(messages(events).map((m) => [m.speaker, m.text])).toEqual([
+      [{ kind: "user" }, "贝塔在吗"],
+      [{ kind: "user" }, "奶绿呢"],
+      [{ kind: "persona", id: "beta" }, "在呢"],
+      [{ kind: "persona", id: PERSONA }, "我也在"],
+    ]);
+  });
 });
 
 test("shutdown aborts every turn and waits for what it said", async () => {

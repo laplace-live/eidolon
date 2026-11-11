@@ -29,10 +29,11 @@ const TEXT_MAX = 4000;
 
 /**
  * The text box: Enter sends and Shift+Enter breaks the line. A send while a reply runs is allowed,
- * since the server interrupts it; Stop shows while one does. With two or more personas, an `@`
- * offers their names, and whoever the line mentions answers first. While the box is empty, the
- * microphone takes the send button's place, and a take replaces the box while it records. During a
- * call it is disabled, keeping any draft, and it takes the focus back when the call ends.
+ * since the server stops it and still answers every line; Stop shows while one does. With two or
+ * more personas, an `@` offers their names, and whoever the line mentions answers first. While the
+ * box is empty, the microphone takes the send button's place, and a take replaces the box while it
+ * records. During a call it is disabled, keeping any draft, and it takes the focus back when the
+ * call ends.
  */
 export function Composer({
   placeholder,
