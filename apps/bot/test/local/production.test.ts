@@ -2,7 +2,7 @@
 // path the local app adds exactly as it did before the app existed.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ANONYMOUS } from "@eidolon/access";
 import { dataHome } from "@eidolon/config";
@@ -82,6 +82,22 @@ describe("the production surface", () => {
     expect(
       fakes.offers.map(({ admission }) => [admission.user, admission.quota?.remaining]),
     ).toEqual([[ANONYMOUS, 4]]);
+  });
+
+  test("an offer naming a chat and a persona is still an unbound call to the active persona", async () => {
+    const offer = JSON.stringify({
+      sdp: "v=0\r\n",
+      type: "offer",
+      requestData: { chatId: "0190f2a4-1c3b-7d4e-8f5a-6b7c8d9e0f1a", persona: "someone-else" },
+    });
+    const { response } = await call("/api/offer", {
+      method: "POST",
+      body: offer,
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(response.status).toBe(200);
+    expect(fakes.offers.map(({ binding }) => binding)).toEqual([undefined]);
+    expect(existsSync(join(dataHome(), "chats"))).toBe(false);
   });
 
   test("a local name and a local token change nothing: offers stay anonymous, memories 401", async () => {

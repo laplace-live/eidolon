@@ -2,7 +2,7 @@
 
 Build a voice persona and call her from your browser, on your own computer: a setup wizard for
 your Soniox, OpenRouter and Fish Audio keys, a studio for her prompt, voice, facts and stream
-videos, and a call page.
+videos, a call page, and text chats that keep their history.
 
 ```bash
 npx @laplace.live/eidolon

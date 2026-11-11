@@ -11,6 +11,11 @@ export interface ConversationContext {
    * the full list, so callers never need to snapshot it.
    */
   setHiddenTools(names: readonly string[]): void;
+  /**
+   * The user turn's id, from a caller that knows its turns: a chat's windowed view can repeat the
+   * last turn's messages exactly, so a new id is a new turn even then.
+   */
+  readonly turn?: string;
 }
 
 /** Per-frame metadata shared down the pipeline, e.g. the retrieval gate's decision. */
@@ -34,6 +39,12 @@ export interface ContextProvider {
   onContext(turn: ContextTurn): Promise<void>;
   /** The error text for a rejection. */
   errorMessage(error: unknown): string;
+}
+
+/** The retrieval gate as a turn sees it: it attaches its decision to the turn's metadata. */
+export interface TurnGate {
+  /** `turn` is `ConversationContext.turn`, from a caller that knows its turns. */
+  attach(messages: readonly unknown[], metadata: FrameMetadata, turn?: string): void;
 }
 
 /** An OpenAI function schema, without the `type: "object"` wrapper. */

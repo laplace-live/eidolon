@@ -205,6 +205,7 @@ describe("createLlm", () => {
     setUsageSink((record) => records.push(record));
     const seen: { url: string; headers: Headers; body: Record<string, unknown> }[] = [];
     const server = Bun.serve({
+      hostname: "127.0.0.1",
       port: 0,
       async fetch(request) {
         seen.push({

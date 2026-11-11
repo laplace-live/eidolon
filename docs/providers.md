@@ -19,11 +19,11 @@ packages, for their types; no request goes through them.
 
 | Role | Settings | Variables | Default | Spends |
 | --- | --- | --- | --- | --- |
-| hearing | `hearing.provider`, `hearing.model`, `hearing.language` | `STT_PROVIDER`, `STT_MODEL`, `STT_LANGUAGE` | Soniox `stt-rt-v5` | in a call |
+| hearing | `hearing.provider`, `hearing.model`, `hearing.language` | `STT_PROVIDER`, `STT_MODEL`, `STT_LANGUAGE` | Soniox `stt-rt-v5` | in a call, a chat's voice message |
 | mind | `mind.provider`, `mind.model` | `LLM_PROVIDER`, `LLM_MODEL` | OpenRouter `~google/gemini-flash-latest` | in a call |
-| voice | `voice.provider`, `voice.model`, `voice.voiceId` | `TTS_PROVIDER`, `TTS_MODEL`, `TTS_VOICE_ID` | Fish Audio `drama-3` | in a call |
+| voice | `voice.provider`, `voice.model`, `voice.voiceId` | `TTS_PROVIDER`, `TTS_MODEL`, `TTS_VOICE_ID` | Fish Audio `drama-3` | in a call, a chat's voice reply |
 | realtime | `realtime.provider`, `realtime.model`, `realtime.voice` | `REALTIME_PROVIDER`, `REALTIME_MODEL`, `REALTIME_VOICE` | off | in a call |
-| gate | `knowledge.gate.provider`, `.model` | `RETRIEVAL_GATE_PROVIDER`, `RETRIEVAL_GATE_MODEL` | OpenRouter `~typesafe/jev-latest` | in a call |
+| gate | `knowledge.gate.provider`, `.model` | `RETRIEVAL_GATE_PROVIDER`, `RETRIEVAL_GATE_MODEL` | OpenRouter `~typesafe/jev-latest` | in a call, a chat's director |
 | rerank | `knowledge.rerank.provider`, `.model` | `RERANK_PROVIDER`, `RERANK_MODEL` | OpenRouter `cohere/rerank-4-fast` | in a call, MCP |
 | memory | `memory.provider`, `memory.model` | `MEM0_LLM_PROVIDER`, `MEM0_LLM_MODEL` | her chat provider and model | after a turn |
 | selfie | `selfie.provider`, `selfie.model` | `SELFIE_PROVIDER`, `SELFIE_MODEL` | OpenRouter `openai/gpt-image-2.5-flare` | in a call |
@@ -170,6 +170,55 @@ Delivery cues are the other difference between voices. Her prompt may teach Fish
 spoken (`markup` in the catalog says which a model reads), and the studio says so beside the
 voice model.
 
+## Voice messages: batch speech
+
+A chat's voice messages ([chat.md](chat.md#voice-messages)) are made and heard whole, one request
+each, by `@eidolon/providers/speech-batch` (`packages/providers/src/speech/batch/`), without
+pipedog. A role's account, model and voice are the ones a call uses, and `speechSupport` says
+whether its provider offers each. Every voice provider in the catalog synthesizes and every
+hearing provider transcribes; a provider added later without a client falls back to text, and to
+`409 missing-key` for the viewer's voice messages.
+
+**Synthesis,** `synthesize`, on the voice role, always asks for MP3, which every one of them offers
+and every browser plays. The voice is `voiceOf`, as a call picks it, unless her voice-style tool
+switched it for that reply.
+
+| Provider | Request | Voice | Notes |
+| --- | --- | --- | --- |
+| Fish Audio | `POST {base}/v1/tts`, the model in the `model` header | `reference_id` | 128 kbps, `latency: "normal"` and no `normalize`, as a call asks; `drama-3` gets her cues as written |
+| OpenAI | `POST {base}/audio/speech` | `voice`, else `marin` | `response_format: "mp3"` |
+| ElevenLabs | `POST {base}/v1/text-to-speech/{voice}?output_format=mp3_44100_128` | in the path | `model_id` |
+| Cartesia | `POST {base}/tts/bytes` | `{ mode: "id", id }` | `Cartesia-Version: 2026-03-01`, as pipedog's service speaks; the spoken language |
+| MiniMax | `POST {base}/t2a_v2?GroupId=…` with `stream: false` | `voice_setting.voice_id`, else `Calm_Woman` | The account needs a group id. The audio comes back as hex, its length in `extra_info`; a `200` whose `base_resp.status_code` isn't 0 is a refusal |
+| Soniox | `POST https://tts-rt.soniox.com/tts`, its own host | `voice`, else `Bryce` | The spoken language |
+
+ElevenLabs and Cartesia have no default voice, so a role with none set fails there, and her reply
+goes as text, as it does when a provider answers with no audio. Her text goes through
+`stripMarkup` with the model's `markup` from the catalog, as a call's does: `drama-3` keeps all her
+cues, a model that reads `[…]` (Fish's `s2` models, ElevenLabs' `eleven_v3`) keeps those and loses
+the paired tags, and any other loses both. Each request reports the characters and UTF-8 bytes it
+spoke, under the voice role, priced by the catalog: Fish by the byte, ElevenLabs by the character.
+Its length is the provider's figure (MiniMax's) or counted from the MP3's frame headers.
+
+**Transcription,** `transcribe`, on the hearing role, takes the clip as the browser recorded it
+(WebM with Opus, MP4 on Safari, Ogg or MP3). The language hint is a call's: `STT_LANGUAGE`, else
+`TRANSCRIBE_LANGUAGE`, else `zh`, and `none` lets the provider detect it.
+
+| Provider | Request | Model | Notes |
+| --- | --- | --- | --- |
+| OpenAI | `POST {base}/audio/transcriptions`, multipart, the file named `voice.<ext>` | `gpt-realtime-whisper`, which serves Realtime sessions alone, becomes `gpt-4o-transcribe` | Its length when `usage` is in seconds; token usage is reported as tokens |
+| Deepgram | `POST {base}/v1/listen?model=…&punctuate=true`, the raw clip | as set | `detect_language` without a hint; the length from `metadata.duration` |
+| ElevenLabs | `POST {base}/v1/speech-to-text`, multipart | `_realtime` dropped | `tag_audio_events: false`, so the transcript holds only words, as a call's does |
+| Soniox | Its async files API: upload, create a transcription, poll every 500 ms, fetch the transcript, then delete both | `stt-rt-*` becomes `stt-async-*` | Only `STT_LANGUAGE` becomes a hint, as in a call. The deletes run after the transcript is returned, without holding it up, and even when the request fails or is abandoned, each with 10 s of its own; a 404 is quiet. It is its own client: `@eidolon/ingest`'s never reaches the bot image |
+
+Each request reports the clip's seconds, the provider's figure else the recorder's, under the
+hearing role, priced as the transcription role prices that model: Soniox's async models by the
+hour. A failed request is a `ProviderHttpError` (`httpError`), and a missing key or group id a
+`ProviderConfigError`. A request that outlasts its time limit
+([chat.md](chat.md#the-clients)) fails with `<provider> didn't answer within <n> s`. For a viewer's
+voice message, `POST voice` answers them `502 upstream-failed` and `409 missing-key`; her
+voice reply goes as text after either.
+
 ## Realtime models
 
 A realtime model hears, thinks and speaks in one session: OpenAI's `gpt-realtime` models and
@@ -196,13 +245,14 @@ keys in Settings and the wizard, and home's readiness drops the voice item.
 ## Usage and cost
 
 Every request that spends money reports what it used (tokens in, cached and out, characters,
-bytes, seconds of audio, images, searches) through `reportUsage`. A call, a job and an MCP request
-each run inside `withUsageScope`, so the code that spends needn't know who asked. A record's cost
-is, in order: what the provider's response says it billed (OpenRouter's `usage.cost`, the
-decisions API's), else the catalog's list price for that model on that day, promotions included,
-else the caller's own estimate, else none, and it is kept as `unpriced` with its usage. A record
-names the provider whose API the request reached, so a role's own base at another provider's API
-(`RERANK_BASE_URL` at Cohere's) is that provider's spend, priced from its models.
+bytes, seconds of audio, images, searches) through `reportUsage`. A call, a chat turn, a job and
+an MCP request each run inside `withUsageScope`, so the code that spends needn't know who asked.
+A record's cost is, in order: what the provider's response says it billed (OpenRouter's
+`usage.cost`, the decisions API's), else the catalog's list price for that model on that day,
+promotions included, else the caller's own estimate, else none, and it is kept as `unpriced` with
+its usage. A record names the provider whose API the request reached, so a role's own base at
+another provider's API (`RERANK_BASE_URL` at Cohere's) is that provider's spend, priced from its
+models.
 
 `@eidolon/usage` keeps the records in SQLite, at `EIDOLON_USAGE_DB` or `<data home>/usage.db`, in
 WAL mode with a busy timeout, because the bot, the local app and every job's CLI write to one file.

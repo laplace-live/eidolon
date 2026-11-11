@@ -229,6 +229,8 @@ __marimo__/
 *.mkv
 *.webm
 *.flac
+# But for the second-long tones the voice routes' recording parser is tested on.
+!packages/providers/test/speech/batch/fixtures/*
 
 # Default output of laplace-generate-image.
 data/generated/

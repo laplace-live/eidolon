@@ -14,6 +14,7 @@ import type { IceService } from "@eidolon/turn";
 import type { Server } from "bun";
 import { type BotAccess, type BotApp, createBotApp } from "./app.ts";
 import type { BotArgs } from "./args.ts";
+import { chatEndpointFromEnv } from "./chat/routes.ts";
 import type { McpHandler } from "./mcp/index.ts";
 import { FORGET_MEMORIES_PATH, LIST_MEMORIES_PATH } from "./memory-admin.ts";
 
@@ -86,6 +87,7 @@ export async function startBotServer(args: BotArgs, deps: BotDeps): Promise<BotS
     `[memory-admin] Installed routes: GET ${LIST_MEMORIES_PATH}, POST ${FORGET_MEMORIES_PATH}`,
   );
   logger.info(`[selfie] Installed route: GET ${SELFIE_PATH}/{selfie_id}`);
+  const chat = await chatEndpointFromEnv();
   const app = createBotApp({
     access,
     cors: access.corsPolicyFromEnv(),
@@ -94,6 +96,7 @@ export async function startBotServer(args: BotArgs, deps: BotDeps): Promise<BotS
     memoryAdmin: deps.memory.memoryAdmin(),
     selfieResponse: (segment) => deps.imagegen.selfieResponse(segment),
     mcp: await deps.mcp.createMcpHandler(),
+    chat,
   });
 
   const local = deps.local;

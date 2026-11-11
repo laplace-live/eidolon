@@ -1,0 +1,15 @@
+{
+  "name": "@eidolon/webrtc",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@eidolon/access": "workspace:*",
+    "@eidolon/config": "workspace:*",
+    "@eidolon/turn": "workspace:*",
+    "libopus-wasm": "0.4.1",
+    "werift": "0.25.0"
+  }
+}

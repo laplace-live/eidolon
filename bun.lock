@@ -16,8 +16,10 @@
       "version": "0.6.0",
       "dependencies": {
         "@eidolon/access": "workspace:*",
+        "@eidolon/chat": "workspace:*",
         "@eidolon/config": "workspace:*",
         "@eidolon/context": "workspace:*",
+        "@eidolon/engine": "workspace:*",
         "@eidolon/imagegen": "workspace:*",
         "@eidolon/memory": "workspace:*",
         "@eidolon/providers": "workspace:*",
@@ -61,6 +63,7 @@
       "name": "@eidolon/web",
       "devDependencies": {
         "@babel/parser": "7.29.9",
+        "@eidolon/chat": "workspace:*",
         "@eidolon/config": "workspace:*",
         "@eidolon/ingest": "workspace:*",
         "@eidolon/providers": "workspace:*",
@@ -101,6 +104,9 @@
         "@eidolon/config": "workspace:*",
       },
     },
+    "packages/chat": {
+      "name": "@eidolon/chat",
+    },
     "packages/config": {
       "name": "@eidolon/config",
     },
@@ -115,6 +121,21 @@
     },
     "packages/core": {
       "name": "@eidolon/core",
+    },
+    "packages/engine": {
+      "name": "@eidolon/engine",
+      "dependencies": {
+        "@eidolon/access": "workspace:*",
+        "@eidolon/chat": "workspace:*",
+        "@eidolon/config": "workspace:*",
+        "@eidolon/context": "workspace:*",
+        "@eidolon/core": "workspace:*",
+        "@eidolon/imagegen": "workspace:*",
+        "@eidolon/memory": "workspace:*",
+        "@eidolon/providers": "workspace:*",
+        "@eidolon/retrieval": "workspace:*",
+        "@eidolon/tools": "workspace:*",
+      },
     },
     "packages/imagegen": {
       "name": "@eidolon/imagegen",
@@ -144,6 +165,7 @@
       "name": "@eidolon/providers",
       "dependencies": {
         "@eidolon/config": "workspace:*",
+        "@eidolon/core": "workspace:*",
       },
     },
     "packages/retrieval": {
@@ -159,15 +181,19 @@
       "name": "@eidolon/runtime",
       "dependencies": {
         "@eidolon/access": "workspace:*",
+        "@eidolon/chat": "workspace:*",
         "@eidolon/config": "workspace:*",
         "@eidolon/context": "workspace:*",
         "@eidolon/core": "workspace:*",
+        "@eidolon/engine": "workspace:*",
         "@eidolon/imagegen": "workspace:*",
         "@eidolon/memory": "workspace:*",
         "@eidolon/providers": "workspace:*",
         "@eidolon/retrieval": "workspace:*",
         "@eidolon/tools": "workspace:*",
         "@eidolon/turn": "workspace:*",
+        "@eidolon/voice": "workspace:*",
+        "@eidolon/webrtc": "workspace:*",
         "@pipedog/anthropic": "0.10.0",
         "@pipedog/asyncio": "0.10.0",
         "@pipedog/audio-silero": "0.10.0",
@@ -210,6 +236,29 @@
       "dependencies": {
         "@eidolon/config": "workspace:*",
         "@eidolon/providers": "workspace:*",
+      },
+    },
+    "packages/voice": {
+      "name": "@eidolon/voice",
+      "dependencies": {
+        "@eidolon/access": "workspace:*",
+        "@eidolon/chat": "workspace:*",
+        "@eidolon/config": "workspace:*",
+        "@eidolon/context": "workspace:*",
+        "@eidolon/core": "workspace:*",
+        "@eidolon/engine": "workspace:*",
+        "@eidolon/providers": "workspace:*",
+        "onnxruntime-node": "1.30.0",
+      },
+    },
+    "packages/webrtc": {
+      "name": "@eidolon/webrtc",
+      "dependencies": {
+        "@eidolon/access": "workspace:*",
+        "@eidolon/config": "workspace:*",
+        "@eidolon/turn": "workspace:*",
+        "libopus-wasm": "0.4.1",
+        "werift": "0.25.0",
       },
     },
   },
@@ -336,6 +385,8 @@
 
     "@eidolon/access": ["@eidolon/access@workspace:packages/access"],
 
+    "@eidolon/chat": ["@eidolon/chat@workspace:packages/chat"],
+
     "@eidolon/cli": ["@eidolon/cli@workspace:apps/cli"],
 
     "@eidolon/config": ["@eidolon/config@workspace:packages/config"],
@@ -343,6 +394,8 @@
     "@eidolon/context": ["@eidolon/context@workspace:packages/context"],
 
     "@eidolon/core": ["@eidolon/core@workspace:packages/core"],
+
+    "@eidolon/engine": ["@eidolon/engine@workspace:packages/engine"],
 
     "@eidolon/imagegen": ["@eidolon/imagegen@workspace:packages/imagegen"],
 
@@ -362,7 +415,11 @@
 
     "@eidolon/usage": ["@eidolon/usage@workspace:packages/usage"],
 
+    "@eidolon/voice": ["@eidolon/voice@workspace:packages/voice"],
+
     "@eidolon/web": ["@eidolon/web@workspace:apps/web"],
+
+    "@eidolon/webrtc": ["@eidolon/webrtc@workspace:packages/webrtc"],
 
     "@emnapi/runtime": ["@emnapi/runtime@1.11.3", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-Xz4Tpyki7XyrpbUK1jR1AhdAdaXyhhY4lZ3neLodmhpuWfy2PAQN5B46sAiU4liOXGLkHypn/qU+jvfWSCYYLA=="],
 

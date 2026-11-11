@@ -96,7 +96,7 @@ Where the events come from (for reference only):
 | `user-started-speaking` | `UserStartedSpeakingFrame` | Silero VAD hears speech (or a transcript arrives first) |
 | `user-stopped-speaking` | `UserStoppedSpeakingFrame` | Smart Turn judges the turn complete *and* a final transcript is in |
 | `user-input`, `user-transcription` | `TranscriptionFrame` / `InterimTranscriptionFrame` | Soniox emits text |
-| `server-message` | `RTVIServerMessageFrame` | An LLM tool sends one ([below](#custom-server-messages)) |
+| `server-message` | `RTVIServerMessageFrame`, or the RTVI processor itself | An LLM tool sends one, or a call inside a chat sends a line ([below](#custom-server-messages)) |
 | `error` | `ErrorFrame` | A service or a context provider reports an error |
 
 The bot also sends `bot-llm-text` (each chunk of the LLM's text), `bot-transcription` (the same,
@@ -332,6 +332,51 @@ Of the extension contracts in `packages/core/src/index.ts`, only an LLM tool can
 `take_selfie` sends `{ type: "selfie", urls: [...] }` ([selfies.md](selfies.md)). A context
 provider's `ContextTurn` has no such effect, so the bot sends no progress messages like "RAG
 retrieving from stream archive…" or "checking long-term memory…" — flag it if you want them.
+
+### A call inside a chat: `chat-line`
+
+While the production chat endpoint is on (`EIDOLON_CHAT_SECRET`,
+[chat.md](chat.md#production-the-browser-keeps-the-chat)), the browser
+can call a persona from inside a chat it keeps. The offer's `requestData` carries the chat, as
+`POST /api/chat/turn` takes it, and whom the call is to:
+
+```ts
+requestData: {
+  loginSyncToken,             // as on any call
+  chat: { header, events },   // as POST /api/chat/turn takes it, the call's own call-started last
+  persona: "milky-green",     // one of the chat's personas, served by the endpoint
+}
+```
+
+She answers as that persona, opening on her view of the chat: the viewer's messages, and the
+events the server signed whose `sig` still verifies, less her tool calls. Each finished line of the
+call, the viewer's and hers, arrives as a server message for the browser to store as it is:
+
+```ts
+pcClient.on(RTVIEvent.ServerMessage, (data) => {
+  if (data.type === "chat-line") appendToChat(chatId, data.event);
+});
+```
+
+- **`event`** is a `message` with `modality: "call"`, from the viewer or from her. A reply the
+  viewer cut off has `interrupted: true`, and its `text` is what she said before it.
+- **A selfie she takes** arrives as her `message` with `text: ""` and the images in
+  `attachments`, in its place among the lines. Fetch each from `/api/chat/files/<name>` as a chat
+  turn's, before it expires. The call's `selfie` server message still comes first, to show at
+  once; the `chat-line` is the one to keep.
+- **Its `seq`** follows the newest `seq` in the offer's window, kept or not, then each line the one
+  before. So the browser stores the call's `call-started` before it offers, and sends it in the
+  window, and sends no turn in that chat until it hangs up. It stores `call-ended` after the last
+  line it got.
+- **Her lines carry `sig`;** the viewer's don't, and neither do the browser's own `call-started`
+  and `call-ended`. All of them go back in the next window unchanged.
+- **A line said as the call ends,** such as her reply cut off by the hang-up, never arrives.
+- **A chat that won't do** is refused before any call starts, in the chat routes' words
+  (`{ error: { code, message } }`): `400 bad-request` for a window that isn't a chat's, or a
+  `persona` missing or not in it, and `403 persona-not-served`.
+- **With the endpoint off,** `chat` is ignored and the call is an ordinary one that sends no
+  `chat-line`. The session's log line for an anonymous viewer, which carries `requestData`, holds
+  the chat as its size alone, `<chat: N events>`.
 
 ---
 

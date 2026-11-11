@@ -2,6 +2,7 @@
 // groups, option labels, flags and why a value is refused.
 import type { MessageDescriptor } from "@lingui/core";
 import { msg } from "@lingui/core/macro";
+import { REPLY_MODE_LABELS } from "@/features/chats/labels";
 import type { RoleId } from "@/lib/providers";
 
 /** Each row's title. */
@@ -14,6 +15,9 @@ export const SETTING_TITLES: Readonly<Record<string, MessageDescriptor>> = {
   "access.anonRateLimitWindowSec": msg`Anonymous Window Seconds`,
   "access.realIpHeader": msg`Client IP Header`,
   "access.allowedOrigins": msg`Allowed Browser Origins`,
+  "access.chatPersonas": msg`Public Chat Personas`,
+  "access.chatAnonQuota": msg`Anonymous Chat Turns per Hour`,
+  "access.chatUserQuota": msg`Logged-in Chat Turns per Hour`,
   "network.cloudflareTurn.keyId": msg`Cloudflare TURN Key ID`,
   "network.cloudflareTurn.ttlSec": msg`TURN Credential Lifetime`,
   "network.stunUrl": msg`STUN URL`,
@@ -90,6 +94,9 @@ export const SETTING_TITLES: Readonly<Record<string, MessageDescriptor>> = {
   "selfie.ttlSeconds": msg`Selfie Lifetime`,
   "selfie.timeoutSeconds": msg`Selfie Timeout`,
   "selfie.references": msg`Selfie References`,
+  "chat.interests": msg`Interests`,
+  "chat.talkativeness": msg`Talkativeness`,
+  "chat.replyMode": msg`Reply Mode`,
 };
 
 /** The line under a row, for the rows that have one. */
@@ -120,6 +127,9 @@ export const SETTING_HELP: Readonly<Record<string, MessageDescriptor>> = {
   "transcription.language": msg`The language of her videos as a two-letter code, or none. Default zh.`,
   "selfie.quality": msg`Higher costs more and takes longer while you wait in the call.`,
   "selfie.references": msg`One per line, relative to her folder.`,
+  "chat.interests": msg`Topics she cares about, separated by commas or 、. The director reads them with her summary to tell when a group's line is one she'd join in on. Empty means her summary alone.`,
+  "chat.talkativeness": msg`How readily she joins in when no one addressed her, from 0 to 1. At 0 she answers only when she's addressed, or when no one else will answer you. Default 0.5.`,
+  "chat.replyMode": msg`Whether she answers in text or with a voice message. Auto lets the director choose voice when a line suits it, more often after a voice message of yours. A chat's own reply mode overrides hers, and without a key for her voice she answers in text.`,
 };
 
 /** A choice's label by row and value; a value without one shows as it is. */
@@ -133,6 +143,7 @@ export const SETTING_OPTION_LABELS: Readonly<
     s1: msg`s1 (Retires 2026-12-31)`,
     "s2.1-pro-free": msg`s2.1-pro-free (Free, under Fair Use)`,
   },
+  "chat.replyMode": REPLY_MODE_LABELS,
 };
 
 /** The headings a card's rows are grouped under. */

@@ -11,6 +11,7 @@ export {
 export * from "./catalog.ts";
 export {
   type AbortableStream,
+  ANTHROPIC_FALLBACK_MODELS,
   AnthropicClient,
   anthropicUnits,
   type ChatClientOptions,
@@ -29,7 +30,8 @@ export {
   toAnthropicRequest,
 } from "./http/json.ts";
 export { type SseEvent, sseEvents } from "./http/sse.ts";
-export { stripMarkup } from "./markup.ts";
+export { stripMarkup, unreadCues } from "./markup.ts";
+export { Meter } from "./meter.ts";
 export { type ListedModel, listModels, type ModelListing } from "./models.ts";
 export { costOf, priceOf, textUnits, type Units } from "./pricing.ts";
 export {
@@ -39,6 +41,7 @@ export {
   hasKey,
   missingKey,
   ProviderConfigError,
+  realtimeIn,
   realtimeVoiceOf,
   type Selection,
   select,
@@ -62,3 +65,11 @@ export {
   usageRecord,
   withUsageScope,
 } from "./usage.ts";
+export {
+  backoffMs,
+  connectWs,
+  QuickFailureTracker,
+  type WsConnection,
+  type WsData,
+  WsHandshakeError,
+} from "./ws.ts";

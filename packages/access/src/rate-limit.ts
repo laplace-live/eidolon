@@ -1,6 +1,6 @@
-// Per-key sliding-window quota: the anonymous offer limit and both MCP tiers. A quota's map grows
-// with the number of distinct keys seen and is reclaimed only by a process restart.
-import { envInt } from "@eidolon/config";
+// Per-key sliding-window quota: the anonymous offer limit, both MCP tiers and both chat quotas. A
+// quota's map grows with the number of distinct keys seen and is reclaimed only by a restart.
+import { envInt, pyJsonDumps } from "@eidolon/config";
 
 export interface RateLimitResult {
   readonly allowed: boolean;
@@ -8,6 +8,19 @@ export interface RateLimitResult {
   readonly remaining: number;
   /** Seconds until the oldest in-window attempt ages out; 0 when allowed. */
   readonly retryAfterSeconds: number;
+}
+
+/** 429 `{"error": …, "retry_after": R}` with Retry-After, in Python json.dumps bytes. */
+export function quotaExceededResponse(result: RateLimitResult, error: string): Response {
+  const retryAfter = result.retryAfterSeconds;
+  const body = pyJsonDumps({ error, retry_after: retryAfter }, { ensureAscii: false });
+  return new Response(body, {
+    status: 429,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "retry-after": String(retryAfter),
+    },
+  });
 }
 
 /** Monotonic seconds. */

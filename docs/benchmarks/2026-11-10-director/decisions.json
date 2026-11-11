@@ -1,0 +1,2992 @@
+{
+ "model": [
+  "typesafe/jev-1.14-20261014"
+ ],
+ "thresholds": {
+  "addressed": 0.5,
+  "interest": 0.3,
+  "invites": 0.3,
+  "hop_step": 0.1,
+  "just_spoke_penalty": 0.1,
+  "voice": 0.42,
+  "voice_after_voice": 0.35
+ },
+ "latency_ms": {
+  "p50": 391,
+  "p90": 451,
+  "max": 572,
+  "over_timeout": 0
+ },
+ "decided_right": {
+  "all": "100/100",
+  "mention": "11/11",
+  "name": "11/11",
+  "reply": "10/10",
+  "interest": "17/17",
+  "off-topic": "7/7",
+  "closing": "6/6",
+  "group": "3/3",
+  "persona-addresses": "13/13",
+  "persona-to-viewer": "8/8",
+  "persona-closing": "6/6",
+  "persona-opinion": "6/6",
+  "persona-answers": "2/2"
+ },
+ "voice_right": {
+  "scored": "24/24",
+  "unscored": 0
+ },
+ "questions": {
+  "addressed": {
+   "threshold": 0.5,
+   "labelled_yes": {
+    "n": 57,
+    "min": 0.06,
+    "median": 0.93,
+    "max": 0.98
+   },
+   "labelled_no": {
+    "n": 136,
+    "min": -0.29,
+    "median": 0.02,
+    "max": 0.37
+   },
+   "wrong": 3,
+   "suggests": {
+    "threshold": 0.39,
+    "wrong": 2,
+    "range": [
+     0.38,
+     0.4
+    ]
+   }
+  },
+  "interested": {
+   "threshold": null,
+   "labelled_yes": {
+    "n": 71,
+    "min": 0.25,
+    "median": 0.88,
+    "max": 0.97
+   },
+   "labelled_no": {
+    "n": 153,
+    "min": 0.03,
+    "median": 0.08,
+    "max": 0.9
+   },
+   "wrong": null,
+   "suggests": {
+    "threshold": 0.46,
+    "wrong": 8,
+    "range": [
+     0.46,
+     0.46
+    ]
+   }
+  },
+  "interested_x_talkativeness": {
+   "threshold": 0.3,
+   "labelled_yes": {
+    "n": 15,
+    "min": 0.125,
+    "median": 0.364,
+    "max": 0.846
+   },
+   "labelled_no": {
+    "n": 55,
+    "min": -0.101,
+    "median": 0.036,
+    "max": 0.152
+   },
+   "wrong": 6,
+   "suggests": {
+    "threshold": 0.16,
+    "wrong": 1,
+    "range": [
+     0.16,
+     0.16
+    ]
+   }
+  },
+  "invites_reply_after_persona": {
+   "threshold": 0.3,
+   "labelled_yes": {
+    "n": 26,
+    "min": 0.07,
+    "median": 0.76,
+    "max": 0.88
+   },
+   "labelled_no": {
+    "n": 9,
+    "min": -0.17,
+    "median": 0.07,
+    "max": 0.23
+   },
+   "wrong": 3,
+   "suggests": {
+    "threshold": 0.25,
+    "wrong": 2,
+    "range": [
+     0.2,
+     0.29
+    ]
+   }
+  },
+  "invites_reply_after_viewer": {
+   "threshold": null,
+   "labelled_yes": {
+    "n": 59,
+    "min": 0.41,
+    "median": 0.94,
+    "max": 0.98
+   },
+   "labelled_no": {
+    "n": 6,
+    "min": 0.07,
+    "median": 0.14,
+    "max": 0.22
+   },
+   "wrong": null,
+   "suggests": {
+    "threshold": 0.32,
+    "wrong": 0,
+    "range": [
+     0.23,
+     0.41
+    ]
+   }
+  },
+  "voice_moment": {
+   "threshold": 0.42,
+   "labelled_yes": {
+    "n": 10,
+    "min": 0.44,
+    "median": 0.6,
+    "max": 0.75
+   },
+   "labelled_no": {
+    "n": 8,
+    "min": 0.1,
+    "median": 0.25,
+    "max": 0.38
+   },
+   "wrong": 0,
+   "suggests": {
+    "threshold": 0.42,
+    "wrong": 0,
+    "range": [
+     0.39,
+     0.44
+    ]
+   }
+  },
+  "voice_moment_after_voice": {
+   "threshold": 0.35,
+   "labelled_yes": {
+    "n": 4,
+    "min": 0.6,
+    "median": 0.65,
+    "max": 0.73
+   },
+   "labelled_no": {
+    "n": 2,
+    "min": 0.22,
+    "median": 0.22,
+    "max": 0.28
+   },
+   "wrong": 0,
+   "suggests": {
+    "threshold": 0.45,
+    "wrong": 0,
+    "range": [
+     0.29,
+     0.6
+    ]
+   }
+  }
+ },
+ "lines": [
+  {
+   "id": "mention-01",
+   "kind": "mention",
+   "hop": 0,
+   "latest": "viewer：@奶绿 坚果今天乖不乖呀",
+   "mentions": [
+    "milky-green"
+   ],
+   "responders": [
+    "milky-green"
+   ],
+   "maybe": [],
+   "decided": [
+    "milky-green"
+   ],
+   "source": "mention",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.95,
+    "interested_milky-green": 0.84,
+    "addressed_kuro": 0.01,
+    "interested_kuro": 0.04,
+    "invites_reply": 0.97
+   },
+   "ms": 353,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "mention-02",
+   "kind": "mention",
+   "hop": 0,
+   "latest": "viewer：@茶茶 你呢，是不是又在熬夜打恐怖游戏",
+   "mentions": [
+    "kuro"
+   ],
+   "responders": [
+    "kuro"
+   ],
+   "maybe": [],
+   "decided": [
+    "kuro"
+   ],
+   "source": "mention",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.01,
+    "interested_milky-green": 0.07,
+    "addressed_kuro": 0.97,
+    "interested_kuro": 0.95,
+    "addressed_lumi": 0.01,
+    "interested_lumi": 0.05,
+    "invites_reply": 0.97
+   },
+   "ms": 425,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "mention-03",
+   "kind": "mention",
+   "hop": 0,
+   "latest": "viewer：@lumi 下周的生日会还有票吗",
+   "mentions": [
+    "lumi"
+   ],
+   "responders": [
+    "lumi"
+   ],
+   "maybe": [],
+   "decided": [
+    "lumi"
+   ],
+   "source": "mention",
+   "right": true,
+   "voice": {
+    "label": false,
+    "decided": "text",
+    "right": true
+   },
+   "scores": {
+    "addressed_lumi": 0.98,
+    "interested_lumi": 0.95,
+    "addressed_xiaoman": 0.01,
+    "interested_xiaoman": 0.05,
+    "invites_reply": 0.97,
+    "voice_moment": 0.38
+   },
+   "ms": 377,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "mention-04",
+   "kind": "mention",
+   "hop": 0,
+   "latest": "viewer：@小满 @奶绿 你们俩谁做饭更好吃",
+   "mentions": [
+    "xiaoman",
+    "milky-green"
+   ],
+   "responders": [
+    "xiaoman",
+    "milky-green"
+   ],
+   "maybe": [],
+   "decided": [
+    "xiaoman",
+    "milky-green"
+   ],
+   "source": "mention",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.81,
+    "interested_milky-green": 0.44,
+    "addressed_kuro": 0.01,
+    "interested_kuro": 0.07,
+    "addressed_lumi": 0.03,
+    "interested_lumi": 0.19,
+    "addressed_xiaoman": 0.93,
+    "interested_xiaoman": 0.94,
+    "invites_reply": 0.98
+   },
+   "ms": 384,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "mention-05",
+   "kind": "mention",
+   "hop": 0,
+   "latest": "viewer：＠茶茶 最近有什么好看的悬疑小说推荐吗",
+   "mentions": [
+    "kuro"
+   ],
+   "responders": [
+    "kuro"
+   ],
+   "maybe": [],
+   "decided": [
+    "kuro"
+   ],
+   "source": "mention",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_kuro": 0.97,
+    "interested_kuro": 0.97,
+    "addressed_xiaoman": 0.01,
+    "interested_xiaoman": 0.15,
+    "invites_reply": 0.98
+   },
+   "ms": 360,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "mention-06",
+   "kind": "mention",
+   "hop": 0,
+   "latest": "viewer：@小满 你新配的那台电脑打恐怖游戏卡不卡",
+   "mentions": [
+    "xiaoman"
+   ],
+   "responders": [
+    "xiaoman"
+   ],
+   "maybe": [],
+   "decided": [
+    "xiaoman"
+   ],
+   "source": "mention",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.01,
+    "interested_milky-green": 0.06,
+    "addressed_kuro": 0.01,
+    "interested_kuro": 0.81,
+    "addressed_xiaoman": 0.98,
+    "interested_xiaoman": 0.91,
+    "invites_reply": 0.98
+   },
+   "ms": 361,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "mention-07",
+   "kind": "mention",
+   "hop": 0,
+   "latest": "viewer：@明前奶绿 你会去看露米的演唱会吗",
+   "mentions": [
+    "milky-green"
+   ],
+   "responders": [
+    "milky-green"
+   ],
+   "maybe": [
+    "lumi"
+   ],
+   "decided": [
+    "milky-green"
+   ],
+   "source": "mention",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.97,
+    "interested_milky-green": 0.16,
+    "addressed_lumi": 0.08,
+    "interested_lumi": 0.96,
+    "invites_reply": 0.97
+   },
+   "ms": 420,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "mention-08",
+   "kind": "mention",
+   "hop": 0,
+   "latest": "viewer：@露米 @茶茶 你们俩谁更怕鬼",
+   "mentions": [
+    "lumi",
+    "kuro"
+   ],
+   "responders": [
+    "lumi",
+    "kuro"
+   ],
+   "maybe": [],
+   "decided": [
+    "lumi",
+    "kuro"
+   ],
+   "source": "mention",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.01,
+    "interested_milky-green": 0.09,
+    "addressed_kuro": 0.86,
+    "interested_kuro": 0.94,
+    "addressed_lumi": 0.94,
+    "interested_lumi": 0.26,
+    "invites_reply": 0.98
+   },
+   "ms": 366,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "mention-09",
+   "kind": "mention",
+   "hop": 0,
+   "latest": "viewer：@奶绿 花店最近进了什么新花",
+   "mentions": [
+    "milky-green"
+   ],
+   "responders": [
+    "milky-green"
+   ],
+   "maybe": [],
+   "decided": [
+    "milky-green"
+   ],
+   "source": "mention",
+   "right": true,
+   "voice": {
+    "label": false,
+    "decided": "text",
+    "right": true
+   },
+   "scores": {
+    "addressed_milky-green": 0.96,
+    "interested_milky-green": 0.88,
+    "addressed_kuro": 0.01,
+    "interested_kuro": 0.04,
+    "addressed_xiaoman": 0.01,
+    "interested_xiaoman": 0.05,
+    "invites_reply": 0.98,
+    "voice_moment": 0.3
+   },
+   "ms": 399,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "mention-10",
+   "kind": "mention",
+   "hop": 0,
+   "latest": "viewer：@坚果 快过来让我摸摸",
+   "mentions": [],
+   "responders": [
+    "milky-green"
+   ],
+   "maybe": [],
+   "decided": [
+    "milky-green"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": {
+    "label": true,
+    "decided": "voice",
+    "right": true
+   },
+   "scores": {
+    "addressed_milky-green": 0.15,
+    "interested_milky-green": 0.8,
+    "addressed_kuro": 0.01,
+    "interested_kuro": 0.05,
+    "invites_reply": 0.66,
+    "voice_moment": 0.58
+   },
+   "ms": 379,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "mention-11",
+   "kind": "mention",
+   "hop": 0,
+   "latest": "viewer：今天的舞台太燃了 @LUMI 你是怎么做到边跳边唱还不喘的",
+   "mentions": [
+    "lumi"
+   ],
+   "responders": [
+    "lumi"
+   ],
+   "maybe": [],
+   "decided": [
+    "lumi"
+   ],
+   "source": "mention",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_kuro": 0.01,
+    "interested_kuro": 0.06,
+    "addressed_lumi": 0.98,
+    "interested_lumi": 0.97,
+    "invites_reply": 0.97
+   },
+   "ms": 379,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "name-01",
+   "kind": "name",
+   "hop": 0,
+   "latest": "viewer：奶绿，你家坚果最近是不是又胖了",
+   "mentions": [],
+   "responders": [
+    "milky-green"
+   ],
+   "maybe": [],
+   "decided": [
+    "milky-green"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.97,
+    "interested_milky-green": 0.83,
+    "addressed_kuro": 0.01,
+    "interested_kuro": 0.03,
+    "invites_reply": 0.97
+   },
+   "ms": 382,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "name-02",
+   "kind": "name",
+   "hop": 0,
+   "latest": "viewer：茶茶昨晚又熬到四点吧，黑眼圈都藏不住了",
+   "mentions": [],
+   "responders": [
+    "kuro"
+   ],
+   "maybe": [],
+   "decided": [
+    "kuro"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.04,
+    "interested_milky-green": 0.1,
+    "addressed_kuro": 0.4,
+    "interested_kuro": 0.92,
+    "addressed_lumi": 0.02,
+    "interested_lumi": 0.05,
+    "invites_reply": 0.82
+   },
+   "ms": 415,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "name-03",
+   "kind": "name",
+   "hop": 0,
+   "latest": "viewer：露米你每天练舞要练几个小时啊",
+   "mentions": [],
+   "responders": [
+    "lumi"
+   ],
+   "maybe": [],
+   "decided": [
+    "lumi"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_lumi": 0.98,
+    "interested_lumi": 0.97,
+    "addressed_xiaoman": 0.01,
+    "interested_xiaoman": 0.04,
+    "invites_reply": 0.98
+   },
+   "ms": 382,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "name-04",
+   "kind": "name",
+   "hop": 0,
+   "latest": "viewer：小满，你那把键盘是什么轴的，声音好好听",
+   "mentions": [],
+   "responders": [
+    "xiaoman"
+   ],
+   "maybe": [],
+   "decided": [
+    "xiaoman"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": {
+    "label": false,
+    "decided": "text",
+    "right": true
+   },
+   "scores": {
+    "addressed_kuro": 0.01,
+    "interested_kuro": 0.07,
+    "addressed_xiaoman": 0.98,
+    "interested_xiaoman": 0.91,
+    "invites_reply": 0.96,
+    "voice_moment": 0.32
+   },
+   "ms": 393,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "name-05",
+   "kind": "name",
+   "hop": 0,
+   "latest": "viewer：这周末想去看樱花，奶绿你说哪里的樱花最好看",
+   "mentions": [],
+   "responders": [
+    "milky-green"
+   ],
+   "maybe": [],
+   "decided": [
+    "milky-green"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.95,
+    "interested_milky-green": 0.25,
+    "addressed_kuro": 0.01,
+    "interested_kuro": 0.06,
+    "addressed_xiaoman": 0.01,
+    "interested_xiaoman": 0.09,
+    "invites_reply": 0.98
+   },
+   "ms": 362,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "name-06",
+   "kind": "name",
+   "hop": 0,
+   "latest": "viewer：奶绿和茶茶，你们俩谁胆子更小",
+   "mentions": [],
+   "responders": [
+    "milky-green",
+    "kuro"
+   ],
+   "maybe": [],
+   "decided": [
+    "kuro",
+    "milky-green"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.69,
+    "interested_milky-green": 0.45,
+    "addressed_kuro": 0.7,
+    "interested_kuro": 0.64,
+    "addressed_lumi": 0.01,
+    "interested_lumi": 0.03,
+    "addressed_xiaoman": 0.01,
+    "interested_xiaoman": 0.04,
+    "invites_reply": 0.98
+   },
+   "ms": 363,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "name-07",
+   "kind": "name",
+   "hop": 0,
+   "latest": "viewer：小满，奶绿家的坚果是什么品种的猫你知道吗",
+   "mentions": [],
+   "responders": [
+    "xiaoman"
+   ],
+   "maybe": [
+    "milky-green"
+   ],
+   "decided": [
+    "xiaoman"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.08,
+    "interested_milky-green": 0.83,
+    "addressed_lumi": 0.01,
+    "interested_lumi": 0.04,
+    "addressed_xiaoman": 0.94,
+    "interested_xiaoman": 0.12,
+    "invites_reply": 0.98
+   },
+   "ms": 412,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "name-08",
+   "kind": "name",
+   "hop": 0,
+   "latest": "viewer：Lumi今天的妆好好看！ (voice)",
+   "mentions": [],
+   "responders": [
+    "lumi"
+   ],
+   "maybe": [],
+   "decided": [
+    "lumi"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": {
+    "label": true,
+    "decided": "voice",
+    "right": true
+   },
+   "scores": {
+    "addressed_milky-green": 0.01,
+    "interested_milky-green": 0.08,
+    "addressed_kuro": 0.01,
+    "interested_kuro": 0.04,
+    "addressed_lumi": 0.92,
+    "interested_lumi": 0.84,
+    "invites_reply": 0.53,
+    "voice_moment": 0.6
+   },
+   "ms": 366,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "name-09",
+   "kind": "name",
+   "hop": 0,
+   "latest": "viewer：茶茶，昨天直播那个结局我真的被吓哭了",
+   "mentions": [],
+   "responders": [
+    "kuro"
+   ],
+   "maybe": [],
+   "decided": [
+    "kuro"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": {
+    "label": true,
+    "decided": "voice",
+    "right": true
+   },
+   "scores": {
+    "addressed_kuro": 0.97,
+    "interested_kuro": 0.96,
+    "addressed_lumi": 0.01,
+    "interested_lumi": 0.04,
+    "invites_reply": 0.76,
+    "voice_moment": 0.71
+   },
+   "ms": 372,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "name-10",
+   "kind": "name",
+   "hop": 0,
+   "latest": "viewer：奶绿你快劝劝茶茶，她又通宵了",
+   "mentions": [],
+   "responders": [
+    "milky-green"
+   ],
+   "maybe": [
+    "kuro"
+   ],
+   "decided": [
+    "milky-green"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.93,
+    "interested_milky-green": 0.39,
+    "addressed_kuro": 0.07,
+    "interested_kuro": 0.91,
+    "invites_reply": 0.87
+   },
+   "ms": 455,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "name-11",
+   "kind": "name",
+   "hop": 0,
+   "latest": "viewer：这个周末的火锅局你来不来啊小满",
+   "mentions": [],
+   "responders": [
+    "xiaoman"
+   ],
+   "maybe": [],
+   "decided": [
+    "xiaoman"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_kuro": 0.01,
+    "interested_kuro": 0.12,
+    "addressed_lumi": 0.01,
+    "interested_lumi": 0.05,
+    "addressed_xiaoman": 0.98,
+    "interested_xiaoman": 0.77,
+    "invites_reply": 0.97
+   },
+   "ms": 463,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "reply-01",
+   "kind": "reply",
+   "hop": 0,
+   "latest": "viewer：还没呢，冰箱里只剩两个鸡蛋了",
+   "mentions": [],
+   "responders": [
+    "xiaoman"
+   ],
+   "maybe": [],
+   "decided": [
+    "xiaoman"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_kuro": 0.04,
+    "interested_kuro": 0.12,
+    "addressed_xiaoman": 0.96,
+    "interested_xiaoman": 0.86,
+    "invites_reply": 0.66
+   },
+   "ms": 414,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "reply-02",
+   "kind": "reply",
+   "hop": 0,
+   "latest": "viewer：我想听情歌！",
+   "mentions": [],
+   "responders": [
+    "lumi"
+   ],
+   "maybe": [],
+   "decided": [
+    "lumi"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": {
+    "label": true,
+    "decided": "voice",
+    "right": true
+   },
+   "scores": {
+    "addressed_milky-green": 0.02,
+    "interested_milky-green": 0.09,
+    "addressed_kuro": 0.03,
+    "interested_kuro": 0.1,
+    "addressed_lumi": 0.95,
+    "interested_lumi": 0.94,
+    "invites_reply": 0.41,
+    "voice_moment": 0.75
+   },
+   "ms": 370,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "reply-03",
+   "kind": "reply",
+   "hop": 0,
+   "latest": "viewer：怪谈怪谈！要那种细思极恐的",
+   "mentions": [],
+   "responders": [
+    "kuro"
+   ],
+   "maybe": [],
+   "decided": [
+    "kuro"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.02,
+    "interested_milky-green": 0.07,
+    "addressed_kuro": 0.95,
+    "interested_kuro": 0.97,
+    "addressed_lumi": 0.02,
+    "interested_lumi": 0.05,
+    "invites_reply": 0.61
+   },
+   "ms": 469,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "reply-04",
+   "kind": "reply",
+   "hop": 0,
+   "latest": "viewer：我想去撸猫！",
+   "mentions": [],
+   "responders": [
+    "milky-green"
+   ],
+   "maybe": [],
+   "decided": [
+    "milky-green"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": {
+    "label": true,
+    "decided": "voice",
+    "right": true
+   },
+   "scores": {
+    "addressed_milky-green": 0.72,
+    "interested_milky-green": 0.81,
+    "addressed_xiaoman": 0.07,
+    "interested_xiaoman": 0.12,
+    "invites_reply": 0.64,
+    "voice_moment": 0.62
+   },
+   "ms": 411,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "reply-05",
+   "kind": "reply",
+   "hop": 0,
+   "latest": "viewer：我最怕半夜有人敲门",
+   "mentions": [],
+   "responders": [
+    "kuro"
+   ],
+   "maybe": [],
+   "decided": [
+    "kuro"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.02,
+    "interested_milky-green": 0.08,
+    "addressed_kuro": 0.95,
+    "interested_kuro": 0.91,
+    "addressed_xiaoman": 0.02,
+    "interested_xiaoman": 0.1,
+    "invites_reply": 0.47
+   },
+   "ms": 458,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "reply-06",
+   "kind": "reply",
+   "hop": 0,
+   "latest": "viewer：完全不运动，只想躺着",
+   "mentions": [],
+   "responders": [
+    "lumi"
+   ],
+   "maybe": [],
+   "decided": [
+    "lumi"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_lumi": 0.93,
+    "interested_lumi": 0.8,
+    "addressed_xiaoman": 0.04,
+    "interested_xiaoman": 0.17,
+    "invites_reply": 0.42
+   },
+   "ms": 408,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "reply-07",
+   "kind": "reply",
+   "hop": 0,
+   "latest": "viewer：我我我！给我留一块",
+   "mentions": [],
+   "responders": [
+    "xiaoman"
+   ],
+   "maybe": [],
+   "decided": [
+    "xiaoman"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.02,
+    "interested_milky-green": 0.12,
+    "addressed_kuro": 0.01,
+    "interested_kuro": 0.12,
+    "addressed_lumi": 0.03,
+    "interested_lumi": 0.05,
+    "addressed_xiaoman": 0.95,
+    "interested_xiaoman": 0.95,
+    "invites_reply": 0.52
+   },
+   "ms": 399,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "reply-08",
+   "kind": "reply",
+   "hop": 0,
+   "latest": "viewer：我喜欢满天星",
+   "mentions": [],
+   "responders": [
+    "milky-green"
+   ],
+   "maybe": [],
+   "decided": [
+    "milky-green"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.97,
+    "interested_milky-green": 0.83,
+    "addressed_kuro": 0.02,
+    "interested_kuro": 0.06,
+    "invites_reply": 0.5
+   },
+   "ms": 390,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "reply-09",
+   "kind": "reply",
+   "hop": 0,
+   "latest": "viewer：哈哈茶茶说得有道理，一个人住晚上确实怕",
+   "mentions": [],
+   "responders": [
+    "kuro"
+   ],
+   "maybe": [],
+   "decided": [
+    "kuro"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.03,
+    "interested_milky-green": 0.22,
+    "addressed_kuro": 0.95,
+    "interested_kuro": 0.83,
+    "addressed_lumi": 0.01,
+    "interested_lumi": 0.04,
+    "invites_reply": 0.46
+   },
+   "ms": 394,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "reply-10",
+   "kind": "reply",
+   "hop": 0,
+   "latest": "viewer：我喜欢摇滚！",
+   "mentions": [],
+   "responders": [
+    "lumi"
+   ],
+   "maybe": [],
+   "decided": [
+    "lumi"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.13,
+    "interested_milky-green": 0.25,
+    "addressed_kuro": 0.02,
+    "interested_kuro": 0.18,
+    "addressed_lumi": 0.92,
+    "interested_lumi": 0.87,
+    "invites_reply": 0.58
+   },
+   "ms": 379,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "interest-01",
+   "kind": "interest",
+   "hop": 0,
+   "latest": "viewer：最近有什么好玩的恐怖游戏推荐吗",
+   "mentions": [],
+   "responders": [
+    "kuro"
+   ],
+   "maybe": [],
+   "decided": [
+    "kuro"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.03,
+    "interested_milky-green": 0.07,
+    "addressed_kuro": 0.22,
+    "interested_kuro": 0.97,
+    "addressed_lumi": 0.02,
+    "interested_lumi": 0.04,
+    "invites_reply": 0.98
+   },
+   "ms": 368,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "interest-02",
+   "kind": "interest",
+   "hop": 0,
+   "latest": "viewer：下个月有谁去看偶像演唱会吗，我抢到内场票了",
+   "mentions": [],
+   "responders": [
+    "lumi"
+   ],
+   "maybe": [],
+   "decided": [
+    "lumi"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.02,
+    "interested_milky-green": 0.09,
+    "addressed_lumi": 0.09,
+    "interested_lumi": 0.94,
+    "addressed_xiaoman": 0.02,
+    "interested_xiaoman": 0.13,
+    "invites_reply": 0.97
+   },
+   "ms": 389,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "interest-03",
+   "kind": "interest",
+   "hop": 0,
+   "latest": "viewer：红烧肉怎么做才不腻啊 (voice)",
+   "mentions": [],
+   "responders": [
+    "xiaoman"
+   ],
+   "maybe": [],
+   "decided": [
+    "xiaoman"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": {
+    "label": false,
+    "decided": "text",
+    "right": true
+   },
+   "scores": {
+    "addressed_lumi": 0.03,
+    "interested_lumi": 0.07,
+    "addressed_xiaoman": 0.23,
+    "interested_xiaoman": 0.94,
+    "invites_reply": 0.98,
+    "voice_moment": 0.22
+   },
+   "ms": 372,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "interest-04",
+   "kind": "interest",
+   "hop": 0,
+   "latest": "viewer：楼下花店的绣球开得好漂亮，好想买一束",
+   "mentions": [],
+   "responders": [
+    "milky-green"
+   ],
+   "maybe": [],
+   "decided": [
+    "milky-green"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.37,
+    "interested_milky-green": 0.75,
+    "addressed_kuro": 0.02,
+    "interested_kuro": 0.06,
+    "addressed_xiaoman": 0.02,
+    "interested_xiaoman": 0.1,
+    "invites_reply": 0.73
+   },
+   "ms": 383,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "interest-05",
+   "kind": "interest",
+   "hop": 0,
+   "latest": "viewer：我想养只猫，布偶和英短哪个好养 (voice)",
+   "mentions": [],
+   "responders": [
+    "milky-green"
+   ],
+   "maybe": [],
+   "decided": [
+    "milky-green"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": {
+    "label": false,
+    "decided": "text",
+    "right": true
+   },
+   "scores": {
+    "addressed_milky-green": 0.04,
+    "interested_milky-green": 0.33,
+    "addressed_kuro": 0.02,
+    "interested_kuro": 0.07,
+    "addressed_lumi": 0.01,
+    "interested_lumi": 0.04,
+    "addressed_xiaoman": 0.02,
+    "interested_xiaoman": 0.12,
+    "invites_reply": 0.98,
+    "voice_moment": 0.28
+   },
+   "ms": 428,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "interest-06",
+   "kind": "interest",
+   "hop": 0,
+   "latest": "viewer：有人看过《白夜行》吗，结局好压抑",
+   "mentions": [],
+   "responders": [
+    "kuro"
+   ],
+   "maybe": [],
+   "decided": [
+    "kuro"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_kuro": 0.07,
+    "interested_kuro": 0.91,
+    "addressed_lumi": 0.03,
+    "interested_lumi": 0.05,
+    "invites_reply": 0.94
+   },
+   "ms": 422,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "interest-07",
+   "kind": "interest",
+   "hop": 0,
+   "latest": "viewer：新出的那款机械键盘值得入手吗",
+   "mentions": [],
+   "responders": [
+    "xiaoman"
+   ],
+   "maybe": [],
+   "decided": [
+    "xiaoman"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": {
+    "label": false,
+    "decided": "text",
+    "right": true
+   },
+   "scores": {
+    "addressed_milky-green": 0.03,
+    "interested_milky-green": 0.08,
+    "addressed_kuro": 0.02,
+    "interested_kuro": 0.09,
+    "addressed_xiaoman": 0.13,
+    "interested_xiaoman": 0.77,
+    "invites_reply": 0.98,
+    "voice_moment": 0.1
+   },
+   "ms": 406,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "interest-08",
+   "kind": "interest",
+   "hop": 0,
+   "latest": "viewer：最近在学跳宅舞，腿酸得下不了楼",
+   "mentions": [],
+   "responders": [
+    "lumi"
+   ],
+   "maybe": [],
+   "decided": [
+    "lumi"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_kuro": 0.02,
+    "interested_kuro": 0.12,
+    "addressed_lumi": 0.14,
+    "interested_lumi": 0.91,
+    "addressed_xiaoman": 0.02,
+    "interested_xiaoman": 0.13,
+    "invites_reply": 0.73
+   },
+   "ms": 384,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "interest-09",
+   "kind": "interest",
+   "hop": 0,
+   "latest": "viewer：深夜一个人喝着咖啡听雨，好有感觉",
+   "mentions": [],
+   "responders": [
+    "kuro"
+   ],
+   "maybe": [],
+   "decided": [
+    "kuro"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_kuro": 0.13,
+    "interested_kuro": 0.91,
+    "addressed_xiaoman": 0.03,
+    "interested_xiaoman": 0.25,
+    "invites_reply": 0.61
+   },
+   "ms": 512,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "interest-10",
+   "kind": "interest",
+   "hop": 0,
+   "latest": "viewer：推荐几首适合睡前听的歌吧",
+   "mentions": [],
+   "responders": [
+    "lumi"
+   ],
+   "maybe": [],
+   "decided": [
+    "lumi"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.04,
+    "interested_milky-green": 0.1,
+    "addressed_lumi": 0.04,
+    "interested_lumi": 0.81,
+    "addressed_xiaoman": 0.03,
+    "interested_xiaoman": 0.33,
+    "invites_reply": 0.97
+   },
+   "ms": 380,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "interest-11",
+   "kind": "interest",
+   "hop": 0,
+   "latest": "viewer：你们看过《三体》吗，觉得拍得怎么样",
+   "mentions": [],
+   "responders": [
+    "xiaoman"
+   ],
+   "maybe": [
+    "milky-green",
+    "kuro",
+    "lumi"
+   ],
+   "decided": [
+    "xiaoman"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": {
+    "label": false,
+    "decided": "text",
+    "right": true
+   },
+   "scores": {
+    "addressed_milky-green": 0.03,
+    "interested_milky-green": 0.09,
+    "addressed_kuro": 0.02,
+    "interested_kuro": 0.17,
+    "addressed_lumi": 0.02,
+    "interested_lumi": 0.05,
+    "addressed_xiaoman": 0.03,
+    "interested_xiaoman": 0.7,
+    "invites_reply": 0.98,
+    "voice_moment": 0.15
+   },
+   "ms": 418,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "interest-12",
+   "kind": "interest",
+   "hop": 0,
+   "latest": "viewer：情人节想送女朋友花，送什么好呢",
+   "mentions": [],
+   "responders": [
+    "milky-green"
+   ],
+   "maybe": [],
+   "decided": [
+    "milky-green"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.06,
+    "interested_milky-green": 0.46,
+    "addressed_kuro": 0.02,
+    "interested_kuro": 0.08,
+    "addressed_lumi": 0.02,
+    "interested_lumi": 0.11,
+    "invites_reply": 0.98
+   },
+   "ms": 351,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "interest-13",
+   "kind": "interest",
+   "hop": 0,
+   "latest": "viewer：凌晨三点了还睡不着，有人陪我聊会儿吗 (voice)",
+   "mentions": [],
+   "responders": [
+    "kuro"
+   ],
+   "maybe": [
+    "xiaoman"
+   ],
+   "decided": [
+    "kuro"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": {
+    "label": true,
+    "decided": "voice",
+    "right": true
+   },
+   "scores": {
+    "addressed_kuro": 0.05,
+    "interested_kuro": 0.85,
+    "addressed_xiaoman": 0.03,
+    "interested_xiaoman": 0.16,
+    "invites_reply": 0.97,
+    "voice_moment": 0.71
+   },
+   "ms": 417,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "interest-14",
+   "kind": "interest",
+   "hop": 0,
+   "latest": "viewer：健身完吃什么比较好",
+   "mentions": [],
+   "responders": [
+    "lumi"
+   ],
+   "maybe": [
+    "xiaoman"
+   ],
+   "decided": [
+    "lumi"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": {
+    "label": false,
+    "decided": "text",
+    "right": true
+   },
+   "scores": {
+    "addressed_lumi": 0.11,
+    "interested_lumi": 0.87,
+    "addressed_xiaoman": 0.09,
+    "interested_xiaoman": 0.65,
+    "invites_reply": 0.98,
+    "voice_moment": 0.18
+   },
+   "ms": 433,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "interest-15",
+   "kind": "interest",
+   "hop": 0,
+   "latest": "viewer：今晚的月亮好圆，适合讲鬼故事",
+   "mentions": [],
+   "responders": [
+    "kuro"
+   ],
+   "maybe": [],
+   "decided": [
+    "kuro"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.02,
+    "interested_milky-green": 0.1,
+    "addressed_kuro": 0.11,
+    "interested_kuro": 0.95,
+    "addressed_lumi": 0.02,
+    "interested_lumi": 0.04,
+    "addressed_xiaoman": 0.01,
+    "interested_xiaoman": 0.11,
+    "invites_reply": 0.85
+   },
+   "ms": 368,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "interest-16",
+   "kind": "interest",
+   "hop": 0,
+   "latest": "viewer：刚看完《星际穿越》，到现在还没缓过来",
+   "mentions": [],
+   "responders": [
+    "xiaoman"
+   ],
+   "maybe": [],
+   "decided": [
+    "xiaoman"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.04,
+    "interested_milky-green": 0.08,
+    "addressed_xiaoman": 0.06,
+    "interested_xiaoman": 0.84,
+    "invites_reply": 0.74
+   },
+   "ms": 413,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "interest-17",
+   "kind": "interest",
+   "hop": 0,
+   "latest": "viewer：我家猫今天把花瓶打碎了",
+   "mentions": [],
+   "responders": [
+    "milky-green"
+   ],
+   "maybe": [],
+   "decided": [
+    "milky-green"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.05,
+    "interested_milky-green": 0.25,
+    "addressed_lumi": 0.03,
+    "interested_lumi": 0.05,
+    "invites_reply": 0.73
+   },
+   "ms": 381,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "off-topic-01",
+   "kind": "off-topic",
+   "hop": 0,
+   "latest": "viewer：今天加班到十点，累死了",
+   "mentions": [],
+   "responders": [],
+   "maybe": [
+    "milky-green",
+    "kuro",
+    "lumi"
+   ],
+   "decided": [
+    "kuro"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": {
+    "label": true,
+    "decided": "voice",
+    "right": true
+   },
+   "scores": {
+    "addressed_milky-green": 0.02,
+    "interested_milky-green": 0.07,
+    "addressed_kuro": 0.02,
+    "interested_kuro": 0.38,
+    "addressed_lumi": 0.02,
+    "interested_lumi": 0.08,
+    "invites_reply": 0.66,
+    "voice_moment": 0.58
+   },
+   "ms": 440,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "off-topic-02",
+   "kind": "off-topic",
+   "hop": 0,
+   "latest": "viewer：外面下好大的雨，我还忘带伞了",
+   "mentions": [],
+   "responders": [],
+   "maybe": [
+    "kuro",
+    "xiaoman"
+   ],
+   "decided": [
+    "kuro"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_kuro": 0.04,
+    "interested_kuro": 0.17,
+    "addressed_xiaoman": 0.03,
+    "interested_xiaoman": 0.14,
+    "invites_reply": 0.73
+   },
+   "ms": 471,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "off-topic-03",
+   "kind": "off-topic",
+   "hop": 0,
+   "latest": "viewer：刚考完四级，感觉要挂",
+   "mentions": [],
+   "responders": [],
+   "maybe": [
+    "milky-green",
+    "kuro"
+   ],
+   "decided": [
+    "milky-green"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": {
+    "label": true,
+    "decided": "voice",
+    "right": true
+   },
+   "scores": {
+    "addressed_milky-green": 0.05,
+    "interested_milky-green": 0.08,
+    "addressed_kuro": 0.04,
+    "interested_kuro": 0.07,
+    "invites_reply": 0.81,
+    "voice_moment": 0.57
+   },
+   "ms": 379,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "off-topic-04",
+   "kind": "off-topic",
+   "hop": 0,
+   "latest": "viewer：我们公司今天发年终奖了！ (voice)",
+   "mentions": [],
+   "responders": [],
+   "maybe": [
+    "milky-green",
+    "kuro",
+    "lumi",
+    "xiaoman"
+   ],
+   "decided": [
+    "lumi"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": {
+    "label": true,
+    "decided": "voice",
+    "right": true
+   },
+   "scores": {
+    "addressed_milky-green": 0.03,
+    "interested_milky-green": 0.07,
+    "addressed_kuro": 0.02,
+    "interested_kuro": 0.07,
+    "addressed_lumi": 0.02,
+    "interested_lumi": 0.09,
+    "addressed_xiaoman": 0.02,
+    "interested_xiaoman": 0.18,
+    "invites_reply": 0.62,
+    "voice_moment": 0.65
+   },
+   "ms": 433,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "off-topic-05",
+   "kind": "off-topic",
+   "hop": 0,
+   "latest": "viewer：地铁上有人一直外放短视频，好烦",
+   "mentions": [],
+   "responders": [],
+   "maybe": [
+    "kuro",
+    "xiaoman"
+   ],
+   "decided": [
+    "kuro"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_kuro": 0.03,
+    "interested_kuro": 0.17,
+    "addressed_xiaoman": 0.02,
+    "interested_xiaoman": 0.11,
+    "invites_reply": 0.81
+   },
+   "ms": 437,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "off-topic-06",
+   "kind": "off-topic",
+   "hop": 0,
+   "latest": "viewer：明天要早起去面试，好紧张 (voice)",
+   "mentions": [],
+   "responders": [],
+   "maybe": [
+    "milky-green",
+    "xiaoman"
+   ],
+   "decided": [
+    "xiaoman"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": {
+    "label": true,
+    "decided": "voice",
+    "right": true
+   },
+   "scores": {
+    "addressed_milky-green": 0.04,
+    "interested_milky-green": 0.07,
+    "addressed_xiaoman": 0.04,
+    "interested_xiaoman": 0.16,
+    "invites_reply": 0.82,
+    "voice_moment": 0.73
+   },
+   "ms": 413,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "off-topic-07",
+   "kind": "off-topic",
+   "hop": 0,
+   "latest": "viewer：我刚搬完家，腰快断了",
+   "mentions": [],
+   "responders": [],
+   "maybe": [
+    "milky-green",
+    "kuro",
+    "lumi"
+   ],
+   "decided": [
+    "lumi"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.03,
+    "interested_milky-green": 0.06,
+    "addressed_kuro": 0.02,
+    "interested_kuro": 0.06,
+    "addressed_lumi": 0.02,
+    "interested_lumi": 0.15,
+    "invites_reply": 0.71
+   },
+   "ms": 452,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "closing-01",
+   "kind": "closing",
+   "hop": 0,
+   "latest": "viewer：好的晚安～",
+   "mentions": [],
+   "responders": [
+    "kuro"
+   ],
+   "maybe": [],
+   "decided": [
+    "kuro"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": {
+    "label": true,
+    "decided": "voice",
+    "right": true
+   },
+   "scores": {
+    "addressed_milky-green": 0.04,
+    "interested_milky-green": 0.08,
+    "addressed_kuro": 0.87,
+    "interested_kuro": 0.19,
+    "invites_reply": 0.11,
+    "voice_moment": 0.44
+   },
+   "ms": 389,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "closing-02",
+   "kind": "closing",
+   "hop": 0,
+   "latest": "viewer：好的，那我先下线啦，大家拜拜",
+   "mentions": [],
+   "responders": [],
+   "maybe": [
+    "milky-green",
+    "kuro",
+    "lumi"
+   ],
+   "decided": [
+    "lumi"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.15,
+    "interested_milky-green": 0.25,
+    "addressed_kuro": 0.03,
+    "interested_kuro": 0.07,
+    "addressed_lumi": 0.14,
+    "interested_lumi": 0.19,
+    "invites_reply": 0.07
+   },
+   "ms": 380,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "closing-03",
+   "kind": "closing",
+   "hop": 0,
+   "latest": "viewer：超好吃！谢谢小满",
+   "mentions": [],
+   "responders": [
+    "xiaoman"
+   ],
+   "maybe": [],
+   "decided": [
+    "xiaoman"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_lumi": 0.02,
+    "interested_lumi": 0.05,
+    "addressed_xiaoman": 0.97,
+    "interested_xiaoman": 0.96,
+    "invites_reply": 0.22
+   },
+   "ms": 352,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "closing-04",
+   "kind": "closing",
+   "hop": 0,
+   "latest": "viewer：嗯嗯，一会儿回来",
+   "mentions": [],
+   "responders": [
+    "milky-green"
+   ],
+   "maybe": [],
+   "decided": [
+    "milky-green"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.74,
+    "interested_milky-green": 0.21,
+    "addressed_kuro": 0.02,
+    "interested_kuro": 0.05,
+    "addressed_xiaoman": 0.03,
+    "interested_xiaoman": 0.05,
+    "invites_reply": 0.2
+   },
+   "ms": 388,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "closing-05",
+   "kind": "closing",
+   "hop": 0,
+   "latest": "viewer：哈哈哈好吧，下次吧",
+   "mentions": [],
+   "responders": [
+    "lumi"
+   ],
+   "maybe": [],
+   "decided": [
+    "lumi"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.02,
+    "interested_milky-green": 0.06,
+    "addressed_kuro": 0.02,
+    "interested_kuro": 0.04,
+    "addressed_lumi": 0.94,
+    "interested_lumi": 0.75,
+    "addressed_xiaoman": 0.02,
+    "interested_xiaoman": 0.04,
+    "invites_reply": 0.2
+   },
+   "ms": 430,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "closing-06",
+   "kind": "closing",
+   "hop": 0,
+   "latest": "viewer：不卡了，好的谢谢",
+   "mentions": [],
+   "responders": [
+    "xiaoman"
+   ],
+   "maybe": [],
+   "decided": [
+    "xiaoman"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_kuro": 0.02,
+    "interested_kuro": 0.04,
+    "addressed_xiaoman": 0.97,
+    "interested_xiaoman": 0.92,
+    "invites_reply": 0.14
+   },
+   "ms": 378,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "group-01",
+   "kind": "group",
+   "hop": 0,
+   "latest": "viewer：大家晚上好！",
+   "mentions": [],
+   "responders": [],
+   "maybe": [
+    "milky-green",
+    "kuro",
+    "lumi"
+   ],
+   "decided": [
+    "lumi"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.03,
+    "interested_milky-green": 0.14,
+    "addressed_kuro": 0.02,
+    "interested_kuro": 0.19,
+    "addressed_lumi": 0.02,
+    "interested_lumi": 0.1,
+    "invites_reply": 0.48
+   },
+   "ms": 426,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "group-02",
+   "kind": "group",
+   "hop": 0,
+   "latest": "viewer：你们俩今天晚饭吃的什么",
+   "mentions": [],
+   "responders": [
+    "xiaoman"
+   ],
+   "maybe": [
+    "kuro"
+   ],
+   "decided": [
+    "xiaoman"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_kuro": 0.06,
+    "interested_kuro": 0.24,
+    "addressed_xiaoman": 0.08,
+    "interested_xiaoman": 0.73,
+    "invites_reply": 0.98
+   },
+   "ms": 382,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "group-03",
+   "kind": "group",
+   "hop": 0,
+   "latest": "viewer：我回来啦，有人想我吗",
+   "mentions": [],
+   "responders": [],
+   "maybe": [
+    "milky-green",
+    "lumi",
+    "xiaoman"
+   ],
+   "decided": [
+    "lumi"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": {
+    "label": true,
+    "decided": "voice",
+    "right": true
+   },
+   "scores": {
+    "addressed_milky-green": 0.06,
+    "interested_milky-green": 0.25,
+    "addressed_lumi": 0.04,
+    "interested_lumi": 0.17,
+    "addressed_xiaoman": 0.03,
+    "interested_xiaoman": 0.08,
+    "invites_reply": 0.97,
+    "voice_moment": 0.62
+   },
+   "ms": 436,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-01",
+   "kind": "persona-addresses",
+   "hop": 1,
+   "latest": "奶绿：怕死了，我连恐怖片的预告都不敢看。茶茶你是不是一点都不怕？",
+   "mentions": [],
+   "responders": [
+    "kuro"
+   ],
+   "maybe": [],
+   "decided": [
+    "kuro"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_kuro": 0.78,
+    "interested_kuro": 0.88,
+    "invites_reply": 0.98
+   },
+   "ms": 432,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-02",
+   "kind": "persona-addresses",
+   "hop": 1,
+   "latest": "奶绿：当然是猫！坚果天下第一可爱。小满你呢？",
+   "mentions": [],
+   "responders": [
+    "xiaoman"
+   ],
+   "maybe": [],
+   "decided": [
+    "xiaoman"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_kuro": 0.03,
+    "interested_kuro": 0.07,
+    "addressed_xiaoman": 0.88,
+    "interested_xiaoman": 0.16,
+    "invites_reply": 0.98
+   },
+   "ms": 400,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-03",
+   "kind": "persona-to-viewer",
+   "hop": 1,
+   "latest": "奶绿：坚果今天吃了两碗猫粮，现在趴在收银台上睡觉呢。",
+   "mentions": [],
+   "responders": [],
+   "maybe": [],
+   "decided": [],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_kuro": 0.04,
+    "interested_kuro": 0.06,
+    "invites_reply": 0.29
+   },
+   "ms": 359,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-04",
+   "kind": "persona-closing",
+   "hop": 1,
+   "latest": "奶绿：晚安～明天花店见哦",
+   "mentions": [],
+   "responders": [],
+   "maybe": [],
+   "decided": [],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_kuro": 0.03,
+    "interested_kuro": 0.06,
+    "addressed_lumi": 0.07,
+    "interested_lumi": 0.11,
+    "invites_reply": 0.22
+   },
+   "ms": 440,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-05",
+   "kind": "persona-addresses",
+   "hop": 1,
+   "latest": "茶茶：一个新出的恐怖游戏……露米肯定连标题画面都不敢看吧",
+   "mentions": [],
+   "responders": [
+    "lumi"
+   ],
+   "maybe": [],
+   "decided": [
+    "lumi"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": {
+    "label": true,
+    "decided": "voice",
+    "right": true
+   },
+   "scores": {
+    "addressed_lumi": 0.71,
+    "interested_lumi": 0.27,
+    "invites_reply": 0.94,
+    "voice_moment": 0.65
+   },
+   "ms": 376,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-06",
+   "kind": "persona-opinion",
+   "hop": 2,
+   "latest": "奶绿：恐怖游戏我真的不行，光听名字就起鸡皮疙瘩了",
+   "mentions": [],
+   "responders": [],
+   "maybe": [
+    "kuro"
+   ],
+   "decided": [
+    "kuro"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_kuro": 0.83,
+    "interested_kuro": 0.9,
+    "addressed_lumi": 0.02,
+    "interested_lumi": 0.04,
+    "invites_reply": 0.58
+   },
+   "ms": 373,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-07",
+   "kind": "persona-to-viewer",
+   "hop": 1,
+   "latest": "露米：我吃得超多的！全靠跳舞消耗～你呢，你平时喜欢吃什么？",
+   "mentions": [],
+   "responders": [],
+   "maybe": [
+    "xiaoman"
+   ],
+   "decided": [],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_xiaoman": 0.23,
+    "interested_xiaoman": 0.57,
+    "invites_reply": 0.98
+   },
+   "ms": 370,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-08",
+   "kind": "persona-addresses",
+   "hop": 2,
+   "latest": "茶茶：怕呀，只是越怕越想玩。奶绿下次要不要跟我连麦一起玩？",
+   "mentions": [],
+   "responders": [
+    "milky-green"
+   ],
+   "maybe": [],
+   "decided": [
+    "milky-green"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.97,
+    "interested_milky-green": 0.62,
+    "invites_reply": 0.96
+   },
+   "ms": 377,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-09",
+   "kind": "persona-closing",
+   "hop": 3,
+   "latest": "奶绿：不要不要不要！我会被吓哭的！",
+   "mentions": [],
+   "responders": [],
+   "maybe": [
+    "kuro"
+   ],
+   "decided": [],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_kuro": 0.93,
+    "interested_kuro": 0.89,
+    "invites_reply": 0.23
+   },
+   "ms": 403,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-10",
+   "kind": "persona-addresses",
+   "hop": 1,
+   "latest": "露米：我要去练歌房唱一整天！你们谁要一起？",
+   "mentions": [],
+   "responders": [],
+   "maybe": [
+    "milky-green",
+    "kuro",
+    "xiaoman"
+   ],
+   "decided": [],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.02,
+    "interested_milky-green": 0.08,
+    "addressed_kuro": 0.02,
+    "interested_kuro": 0.11,
+    "addressed_xiaoman": 0.03,
+    "interested_xiaoman": 0.14,
+    "invites_reply": 0.97
+   },
+   "ms": 419,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-11",
+   "kind": "persona-to-viewer",
+   "hop": 1,
+   "latest": "露米：明天想去吃那家新开的火锅，听说他们家的毛肚超好吃！",
+   "mentions": [],
+   "responders": [],
+   "maybe": [
+    "xiaoman"
+   ],
+   "decided": [],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_xiaoman": 0.05,
+    "interested_xiaoman": 0.6,
+    "invites_reply": 0.58
+   },
+   "ms": 373,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-12",
+   "kind": "persona-closing",
+   "hop": 1,
+   "latest": "露米：谢谢你！！今天收到好多祝福，好幸福～",
+   "mentions": [],
+   "responders": [],
+   "maybe": [
+    "milky-green",
+    "kuro"
+   ],
+   "decided": [],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.02,
+    "interested_milky-green": 0.09,
+    "addressed_kuro": 0.02,
+    "interested_kuro": 0.05,
+    "invites_reply": 0.17
+   },
+   "ms": 382,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-13",
+   "kind": "persona-addresses",
+   "hop": 1,
+   "latest": "奶绿：有点饿了……小满，花店附近有什么好吃的推荐吗？",
+   "mentions": [],
+   "responders": [
+    "xiaoman"
+   ],
+   "maybe": [],
+   "decided": [
+    "xiaoman"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": {
+    "label": false,
+    "decided": "text",
+    "right": true
+   },
+   "scores": {
+    "addressed_kuro": 0.01,
+    "interested_kuro": 0.09,
+    "addressed_xiaoman": 0.95,
+    "interested_xiaoman": 0.82,
+    "invites_reply": 0.98,
+    "voice_moment": 0.36
+   },
+   "ms": 383,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-14",
+   "kind": "persona-opinion",
+   "hop": 1,
+   "latest": "奶绿：是露米唱的！她飙高音的时候我鸡皮疙瘩都起来了",
+   "mentions": [],
+   "responders": [
+    "lumi"
+   ],
+   "maybe": [],
+   "decided": [
+    "lumi"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_lumi": 0.07,
+    "interested_lumi": 0.95,
+    "invites_reply": 0.44
+   },
+   "ms": 476,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-15",
+   "kind": "persona-addresses",
+   "hop": 1,
+   "latest": "露米：当然是爱情片啦！看恐怖片多煞风景，茶茶你说是吧？",
+   "mentions": [],
+   "responders": [
+    "kuro"
+   ],
+   "maybe": [],
+   "decided": [
+    "kuro"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_kuro": 0.9,
+    "interested_kuro": 0.7,
+    "invites_reply": 0.96
+   },
+   "ms": 410,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-16",
+   "kind": "persona-opinion",
+   "hop": 1,
+   "latest": "露米：当然是爱情片！恐怖片只会把人吓跑",
+   "mentions": [],
+   "responders": [],
+   "maybe": [
+    "kuro"
+   ],
+   "decided": [],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_kuro": 0.03,
+    "interested_kuro": 0.63,
+    "invites_reply": 0.45
+   },
+   "ms": 384,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-17",
+   "kind": "persona-to-viewer",
+   "hop": 1,
+   "latest": "奶绿：好羡慕！拍照了吗？是粉色的还是白色的？",
+   "mentions": [],
+   "responders": [],
+   "maybe": [],
+   "decided": [],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_kuro": 0.03,
+    "interested_kuro": 0.06,
+    "invites_reply": 0.98
+   },
+   "ms": 440,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-18",
+   "kind": "persona-addresses",
+   "hop": 2,
+   "latest": "茶茶：喜欢……配黑咖啡刚刚好。做好了能分我一块吗？",
+   "mentions": [],
+   "responders": [
+    "xiaoman"
+   ],
+   "maybe": [],
+   "decided": [
+    "xiaoman"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_xiaoman": 0.96,
+    "interested_xiaoman": 0.88,
+    "invites_reply": 0.96
+   },
+   "ms": 436,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-19",
+   "kind": "persona-closing",
+   "hop": 3,
+   "latest": "小满：好呀，做好了给你留最大的那块",
+   "mentions": [],
+   "responders": [],
+   "maybe": [
+    "kuro"
+   ],
+   "decided": [],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_kuro": 0.96,
+    "interested_kuro": 0.9,
+    "invites_reply": 0.28
+   },
+   "ms": 413,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-20",
+   "kind": "persona-to-viewer",
+   "hop": 1,
+   "latest": "露米：欢迎小林！！你喜欢听什么歌呀？",
+   "mentions": [],
+   "responders": [],
+   "maybe": [
+    "milky-green"
+   ],
+   "decided": [],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.02,
+    "interested_milky-green": 0.13,
+    "invites_reply": 0.98
+   },
+   "ms": 412,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-21",
+   "kind": "persona-opinion",
+   "hop": 1,
+   "latest": "奶绿：当然是花店！再加个甜品区，小满做甜点，露米在门口唱歌招揽客人～",
+   "mentions": [],
+   "responders": [],
+   "maybe": [
+    "xiaoman",
+    "lumi",
+    "kuro"
+   ],
+   "decided": [
+    "lumi"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_kuro": 0.02,
+    "interested_kuro": 0.11,
+    "addressed_lumi": 0.06,
+    "interested_lumi": 0.92,
+    "addressed_xiaoman": 0.11,
+    "interested_xiaoman": 0.84,
+    "invites_reply": 0.4
+   },
+   "ms": 389,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-22",
+   "kind": "persona-addresses",
+   "hop": 1,
+   "latest": "茶茶：我也不太懂电脑……小满，这种是不是要加内存条？",
+   "mentions": [],
+   "responders": [
+    "xiaoman"
+   ],
+   "maybe": [],
+   "decided": [
+    "xiaoman"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": {
+    "label": false,
+    "decided": "text",
+    "right": true
+   },
+   "scores": {
+    "addressed_xiaoman": 0.85,
+    "interested_xiaoman": 0.89,
+    "invites_reply": 0.96,
+    "voice_moment": 0.25
+   },
+   "ms": 462,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-23",
+   "kind": "persona-answers",
+   "hop": 2,
+   "latest": "奶绿：我只会煮奶茶哈哈，上次煮粥还把锅烧糊了",
+   "mentions": [],
+   "responders": [],
+   "maybe": [
+    "lumi"
+   ],
+   "decided": [],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_lumi": 0.91,
+    "interested_lumi": 0.17,
+    "invites_reply": 0.43
+   },
+   "ms": 451,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-24",
+   "kind": "persona-closing",
+   "hop": 1,
+   "latest": "小满：拜拜～路上小心",
+   "mentions": [],
+   "responders": [],
+   "maybe": [],
+   "decided": [],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.02,
+    "interested_milky-green": 0.05,
+    "addressed_kuro": 0.02,
+    "interested_kuro": 0.05,
+    "invites_reply": 0.08
+   },
+   "ms": 366,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-25",
+   "kind": "persona-addresses",
+   "hop": 1,
+   "latest": "茶茶：适合窝在被子里看恐怖片。你们下雨天都干嘛？",
+   "mentions": [],
+   "responders": [],
+   "maybe": [
+    "milky-green",
+    "lumi"
+   ],
+   "decided": [],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.04,
+    "interested_milky-green": 0.08,
+    "addressed_lumi": 0.02,
+    "interested_lumi": 0.07,
+    "invites_reply": 0.98
+   },
+   "ms": 371,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-26",
+   "kind": "persona-to-viewer",
+   "hop": 1,
+   "latest": "小满：先炒蛋，盛出来，再把番茄炒出汁，最后把蛋倒回去。",
+   "mentions": [],
+   "responders": [],
+   "maybe": [],
+   "decided": [],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_lumi": 0.03,
+    "interested_lumi": 0.06,
+    "invites_reply": 0.19
+   },
+   "ms": 358,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-27",
+   "kind": "persona-to-viewer",
+   "hop": 1,
+   "latest": "茶茶：嗯……昨晚做噩梦了，一直没睡好。",
+   "mentions": [],
+   "responders": [],
+   "maybe": [
+    "milky-green"
+   ],
+   "decided": [],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.06,
+    "interested_milky-green": 0.07,
+    "invites_reply": 0.52
+   },
+   "ms": 391,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-28",
+   "kind": "persona-addresses",
+   "hop": 1,
+   "latest": "露米：想！茶茶要不要一起，你唱歌其实超好听的！",
+   "mentions": [],
+   "responders": [
+    "kuro"
+   ],
+   "maybe": [],
+   "decided": [
+    "kuro"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": {
+    "label": true,
+    "decided": "voice",
+    "right": true
+   },
+   "scores": {
+    "addressed_kuro": 0.79,
+    "interested_kuro": 0.27,
+    "invites_reply": 0.96,
+    "voice_moment": 0.6
+   },
+   "ms": 384,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-29",
+   "kind": "persona-addresses",
+   "hop": 1,
+   "latest": "奶绿：完全不会……小满你会吗？教教我！",
+   "mentions": [],
+   "responders": [
+    "xiaoman"
+   ],
+   "maybe": [],
+   "decided": [
+    "xiaoman"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_xiaoman": 0.77,
+    "interested_xiaoman": 0.78,
+    "invites_reply": 0.97
+   },
+   "ms": 383,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-30",
+   "kind": "persona-to-viewer",
+   "hop": 1,
+   "latest": "奶绿：对呀，樱花季最好了",
+   "mentions": [],
+   "responders": [],
+   "maybe": [],
+   "decided": [],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_kuro": 0.05,
+    "interested_kuro": 0.08,
+    "invites_reply": 0.33
+   },
+   "ms": 407,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-31",
+   "kind": "persona-answers",
+   "hop": 2,
+   "latest": "小满：我也喜欢猫，可惜我家只有一台会叫的电脑。",
+   "mentions": [],
+   "responders": [],
+   "maybe": [
+    "milky-green"
+   ],
+   "decided": [
+    "milky-green"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.87,
+    "interested_milky-green": 0.6,
+    "addressed_kuro": 0.03,
+    "interested_kuro": 0.06,
+    "invites_reply": 0.66
+   },
+   "ms": 395,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-32",
+   "kind": "persona-opinion",
+   "hop": 1,
+   "latest": "茶茶：看过……人太多我有点紧张，但是她跳舞的时候真的很耀眼",
+   "mentions": [],
+   "responders": [
+    "lumi"
+   ],
+   "maybe": [],
+   "decided": [
+    "lumi"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_lumi": 0.19,
+    "interested_lumi": 0.96,
+    "invites_reply": 0.59
+   },
+   "ms": 401,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-33",
+   "kind": "persona-addresses",
+   "hop": 2,
+   "latest": "奶绿：露米加油！我一定去现场给你应援！",
+   "mentions": [],
+   "responders": [],
+   "maybe": [
+    "lumi"
+   ],
+   "decided": [],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_kuro": 0.01,
+    "interested_kuro": 0.05,
+    "addressed_lumi": 0.98,
+    "interested_lumi": 0.97,
+    "invites_reply": 0.27
+   },
+   "ms": 572,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-34",
+   "kind": "persona-opinion",
+   "hop": 2,
+   "latest": "奶绿：这首我也超喜欢，副歌一出来就想哭",
+   "mentions": [],
+   "responders": [],
+   "maybe": [
+    "lumi"
+   ],
+   "decided": [],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_kuro": 0.02,
+    "interested_kuro": 0.08,
+    "addressed_lumi": 0.93,
+    "interested_lumi": 0.92,
+    "invites_reply": 0.49
+   },
+   "ms": 434,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-35",
+   "kind": "persona-closing",
+   "hop": 3,
+   "latest": "小满：那就这么说定了",
+   "mentions": [],
+   "responders": [],
+   "maybe": [],
+   "decided": [],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.02,
+    "interested_milky-green": 0.06,
+    "addressed_kuro": 0.86,
+    "interested_kuro": 0.88,
+    "addressed_lumi": 0.01,
+    "interested_lumi": 0.03,
+    "invites_reply": 0.13
+   },
+   "ms": 377,
+   "model": "typesafe/jev-1.14-20261014"
+  }
+ ]
+}

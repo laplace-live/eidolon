@@ -1,5 +1,6 @@
-// What keeps the local app out of production: main.ts reaches none of it, nothing outside
-// apps/bot/src/local names it, apps/bot gains no dependency, and the SPA's leaves import nothing.
+// What keeps the local app out of production: main.ts reaches none of it, nor the store it keeps
+// chats in, nothing outside apps/bot/src/local names it, apps/bot gains no dependency, and the
+// SPA's leaves import nothing but @eidolon/chat's types.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -13,6 +14,7 @@ import {
 } from "../../src/local/api.ts";
 import { localRouteModules } from "../../src/local/extension.ts";
 import type { LocalApp } from "../../src/local/router.ts";
+import { chatRunner } from "../../src/local/routes/chats.ts";
 import { sessionRoutes } from "../../src/local/session.ts";
 import { LocalToken } from "../../src/local/token.ts";
 
@@ -85,25 +87,54 @@ function sources(dir: string): string[] {
 }
 
 describe("production never loads the local app", () => {
-  test("main.ts reaches nothing under local/, @eidolon/ingest, @eidolon/cli or apps/web", () => {
+  test("main.ts reaches the engine and the chat format, but none of local/, ingest, cli, apps/web or the chat store", () => {
     const { files, specifiers } = importGraph(join(BOT_SRC, "main.ts"));
     const reached = [...files].map((file) => relative(ROOT, file));
     expect(reached).toContain("apps/bot/src/server.ts");
     expect(reached).toContain("packages/runtime/src/index.ts");
     expect(reached).toContain("packages/memory/src/admin.ts");
+    // The production chat endpoint (apps/bot/src/chat) runs turns, and keeps nothing.
+    expect(reached).toContain("apps/bot/src/chat/routes.ts");
+    expect(reached).toContain("packages/engine/src/index.ts");
+    expect(reached).toContain("packages/chat/src/index.ts");
     const forbidden = reached.filter(
       (file) =>
         file.startsWith("apps/bot/src/local/") ||
         file.startsWith("apps/web/") ||
         file.startsWith("apps/cli/") ||
-        file.startsWith("packages/ingest/"),
+        file.startsWith("packages/ingest/") ||
+        file === "packages/chat/src/jsonl.ts" ||
+        file === "packages/chat/src/contract.ts",
     );
     expect(forbidden).toEqual([]);
     expect(
       [...specifiers].filter(
-        (s) => /^@eidolon\/(ingest|cli)(\/|$)/.test(s) || s.includes("/local"),
+        (s) =>
+          /^@eidolon\/(ingest|cli)(\/|$)/.test(s) ||
+          /^@eidolon\/chat\/(jsonl|contract)$/.test(s) ||
+          s.includes("/local"),
       ),
     ).toEqual([]);
+  });
+
+  test("main.ts reaches the voice engine only through runtime, and the turn engine through it or the chat endpoint", () => {
+    const { files } = importGraph(join(BOT_SRC, "main.ts"));
+    const reached = [...files].map((file) => relative(ROOT, file));
+    expect(reached).toContain("packages/runtime/src/native/engine.ts");
+    expect(reached).toContain("packages/engine/src/index.ts");
+    const importers = (pattern: RegExp): string[] =>
+      [...files]
+        .filter((file) => scan(file).some((s) => pattern.test(s)))
+        .map((file) => relative(ROOT, file))
+        .filter(
+          (file) =>
+            !file.startsWith("packages/runtime/src/") && !file.startsWith("packages/voice/src/"),
+        );
+    expect(importers(/^@eidolon\/voice(\/|$)/)).toEqual([]);
+    expect(importers(/^@eidolon\/engine(\/|$)/).toSorted()).toEqual([
+      "apps/bot/src/chat/call.ts",
+      "apps/bot/src/chat/routes.ts",
+    ]);
   });
 
   test("no file outside local/ names it", () => {
@@ -161,14 +192,36 @@ describe("the local entries", () => {
 
 describe("the SPA's leaves", () => {
   test("import nothing, so the browser build sees no Bun or Node", () => {
-    for (const leaf of [
-      "apps/bot/src/local/api.ts",
-      "packages/ingest/src/progress.ts",
-      "apps/cli/src/job.ts",
-    ]) {
+    for (const leaf of ["packages/ingest/src/progress.ts", "apps/cli/src/job.ts"]) {
       const text = readFileSync(join(ROOT, leaf), "utf8");
       expect([leaf, scan(join(ROOT, leaf)), /^\s*import\s/m.test(text)]).toEqual([leaf, [], false]);
     }
+  });
+
+  test("api.ts imports only types, and only from @eidolon/chat's main entry", () => {
+    const file = join(LOCAL_SRC, "api.ts");
+    const text = readFileSync(file, "utf8");
+    // scan() sees every import a build keeps, so what is left is type-only.
+    expect(scan(file)).toEqual([]);
+    expect(/^\s*import\s+(?!type\s)/m.test(text)).toBe(false);
+    const from = [...text.matchAll(/\bfrom\s*["']([^"']+)["']/g)].map((match) => match[1]);
+    expect(from).toEqual(["@eidolon/chat"]);
+  });
+
+  test("@eidolon/chat's main entry reaches only its own modules, never the JSONL store", () => {
+    const { files, specifiers } = importGraph(join(ROOT, "packages/chat/src/index.ts"));
+    expect([...specifiers].filter((specifier) => !specifier.startsWith("./"))).toEqual([]);
+    expect([...files].map((file) => relative(ROOT, file)).toSorted()).toEqual([
+      "packages/chat/src/async_tool.ts",
+      "packages/chat/src/format.ts",
+      "packages/chat/src/index.ts",
+      "packages/chat/src/join.ts",
+      "packages/chat/src/memory.ts",
+      "packages/chat/src/mentions.ts",
+      "packages/chat/src/sig.ts",
+      "packages/chat/src/summary.ts",
+      "packages/chat/src/view.ts",
+    ]);
   });
 });
 
@@ -183,7 +236,7 @@ describe("the route table", () => {
     };
     const registered = [
       ...sessionRoutes(app, new LocalToken("s".repeat(43))),
-      ...localRouteModules(app),
+      ...localRouteModules(app, chatRunner(app)),
     ].map((spec) => spec.route);
     expect(registered.toSorted()).toEqual([...LOCAL_ROUTES].toSorted());
     expect(new Set(registered).size).toBe(registered.length);

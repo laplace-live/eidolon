@@ -1,8 +1,37 @@
+import { CString, dlopen, FFIType } from "bun:ffi";
+import { networkInterfaces } from "node:os";
+import type { AllowedOffer } from "@eidolon/access";
 import { consoleSink, type LogLevel, type LogRecord, logger } from "@eidolon/config";
-import type { Frame } from "@pipedog/core/frames/frames";
+import { type Frame, OutputTransportMessageUrgentFrame } from "@pipedog/core/frames/frames";
 import { type FrameDirection, FrameProcessor } from "@pipedog/core/processors/frame_processor";
 import { BaseTransport } from "@pipedog/core/transports/base_transport";
 import { configureLogging } from "../src/logging.ts";
+
+/** werift offers no loopback host candidate, so a peer on this machine needs another interface. */
+export const CAN_DIAL = Object.values(networkInterfaces()).some((addresses) =>
+  addresses?.some((a) => a.family === "IPv4" && !a.internal),
+);
+
+/** Candidate rules that keep every candidate, for a peer on this machine. */
+export const PASS_THROUGH_RULES = {
+  dropUnreachableCandidates: (sdp: string) => ({ sdp, dropped: [] }),
+  candidateReachable: () => true,
+  scrubRelayRelatedAddresses: (sdp: string) => sdp,
+};
+
+/** An anonymous viewer's offer, let through. */
+export function admission(body: Record<string, unknown>): AllowedOffer {
+  return {
+    allowed: true,
+    user: { mid: null, uname: null, face: null, isLoggedIn: false },
+    token: null,
+    body,
+    requestData: { audioQuality: "medium" },
+    opusBitrateBps: 96000,
+    clientIp: "127.0.0.1",
+    quota: null,
+  };
+}
 
 export interface LogCapture {
   readonly records: LogRecord[];
@@ -36,6 +65,19 @@ export function setEnv(vars: Record<string, string | undefined>): () => void {
   return () => apply(saved);
 }
 
+/** `name` as getenv reads it, which process.env doesn't change under Bun; null when unset. */
+export function cEnv(name: string): string | null {
+  const libc = dlopen(process.platform === "darwin" ? "libc.dylib" : "libc.so.6", {
+    getenv: { args: [FFIType.cstring], returns: FFIType.ptr },
+  });
+  try {
+    const value = libc.symbols.getenv(Buffer.from(`${name}\0`));
+    return value === null ? null : new CString(value).toString();
+  } finally {
+    libc.close();
+  }
+}
+
 export interface Deferred<T> {
   readonly promise: Promise<T>;
   resolve(value: T): void;
@@ -63,20 +105,28 @@ export async function until(check: () => boolean, timeoutMs = 2000): Promise<voi
 
 /** A processor that passes every frame on, standing in for a service. */
 export class PassThrough extends FrameProcessor {
-  constructor(name: string) {
+  readonly #seen: ((frame: Frame) => void) | undefined;
+
+  constructor(name: string, seen?: (frame: Frame) => void) {
     super({ name });
+    this.#seen = seen;
   }
 
   override async processFrame(frame: Frame, direction: FrameDirection): Promise<void> {
     await super.processFrame(frame, direction);
+    this.#seen?.(frame);
     await this.pushFrame(frame, direction);
   }
 }
 
 /** A transport whose input and output pass frames through and whose events tests fire. */
 export class FakeTransport extends BaseTransport {
+  /** The urgent messages the output would send the browser, as RTVI's server messages are. */
+  readonly sent: unknown[] = [];
   readonly #input = new PassThrough("FakeInput");
-  readonly #output = new PassThrough("FakeOutput");
+  readonly #output = new PassThrough("FakeOutput", (frame) => {
+    if (frame instanceof OutputTransportMessageUrgentFrame) this.sent.push(frame.message);
+  });
 
   constructor() {
     super();

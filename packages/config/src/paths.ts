@@ -39,6 +39,11 @@ export function jiebaDir(): string {
   return shippedPath("data/jieba", "packages/retrieval/data/jieba");
 }
 
+/** @eidolon/voice's resampler.wasm, with its license and notices. */
+export function resamplerDir(): string {
+  return shippedPath("data/resampler", "packages/voice/src/dsp/resampler/wasm");
+}
+
 /** `os.path.expanduser` for the current user's `~`. */
 export function expandUser(path: string): string {
   if (path === "~") return homedir();

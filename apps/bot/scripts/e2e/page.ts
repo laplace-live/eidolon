@@ -151,6 +151,17 @@ class ObservedPeerConnection extends RTCPeerConnection {
     const channel = super.createDataChannel(label, init);
     channel.addEventListener("open", () => emit("pc", "dataChannelOpen", { label }));
     channel.addEventListener("close", () => emit("pc", "dataChannelClose", { label }));
+    // The bot's messages as sent, in order, for the RTVI invariants: client-js's events rename,
+    // drop and reorder some of them.
+    channel.addEventListener("message", ({ data }) => {
+      if (typeof data !== "string" || data.startsWith("ping")) return;
+      try {
+        const message = JSON.parse(data);
+        if (message?.label === "rtvi-ai") emit("wire", String(message.type), message.data);
+      } catch {
+        // Not JSON: nothing the bot sends.
+      }
+    });
     return channel;
   }
 }
@@ -291,6 +302,35 @@ async function askByVoice(): Promise<void> {
   client.enableMic(true);
 }
 
+/**
+ * Plays the WAV at `url` into the call in place of the mic, as a caller talking over her, then
+ * puts the mic back. WebAudio's track skips Chrome's capture AGC, so it arrives at its own level.
+ */
+async function bargeIn(url: string): Promise<{ durationMs: number }> {
+  const pc = Reflect.get(transport, "pc");
+  if (!(pc instanceof RTCPeerConnection)) throw new Error("no call to talk over");
+  const sender = pc.getTransceivers()[0]?.sender;
+  if (sender === undefined) throw new Error("the call has no audio sender");
+  const buffer = await context.decodeAudioData(await (await fetch(url)).arrayBuffer());
+  const destination = context.createMediaStreamDestination();
+  const source = context.createBufferSource();
+  source.buffer = buffer;
+  source.connect(destination);
+  const mic = sender.track;
+  const voice = destination.stream.getAudioTracks()[0] as MediaStreamTrack;
+  await sender.replaceTrack(voice);
+  meters.mic.attach(voice);
+  const durationMs = Math.round(buffer.duration * 1000);
+  const played = new Promise<void>((resolve) => source.addEventListener("ended", () => resolve()));
+  source.start();
+  emit("harness", "bargeIn", { url, durationMs });
+  await played;
+  emit("harness", "bargeInEnded");
+  await sender.replaceTrack(mic);
+  if (mic) meters.mic.attach(mic);
+  return { durationMs };
+}
+
 async function stats(): Promise<unknown> {
   const pc = Reflect.get(transport, "pc");
   if (!(pc instanceof RTCPeerConnection)) return null;
@@ -335,7 +375,7 @@ async function disconnect(): Promise<void> {
   sampler = undefined;
 }
 
-const api: E2EPage = { connect, sendText, askByVoice, stats, disconnect };
+const api: E2EPage = { connect, sendText, askByVoice, bargeIn, stats, disconnect };
 window.e2e = api;
 emit("harness", "pageReady", {
   clientVersion: client.version,

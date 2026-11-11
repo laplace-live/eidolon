@@ -455,11 +455,14 @@ describe("PUT settings", () => {
   });
 
   test("the answer says when a value waits for a restart", async () => {
-    // Memory was off at boot, so its first host needs none.
-    const host = await put({ scope: "app", values: { "memory.qdrant.host": "127.0.0.1" } });
-    expect(host.body.restartRequired).toBe(false);
-    const port = await put({ scope: "app", values: { "memory.qdrant.port": 6334 } });
-    expect(port.body.restartRequired).toBe(true);
+    // Retrieval builds no embedding client before it has a key, so a base saved before one needs
+    // none.
+    const embedBase = (url: string) => put({ scope: "app", values: { "embeddings.baseUrl": url } });
+    expect((await embedBase("https://a.example/v1")).body.restartRequired).toBe(false);
+    expect((await api("POST", "/accounts", { provider: "openrouter", apiKey: "k" })).status).toBe(
+      201,
+    );
+    expect((await embedBase("https://b.example/v1")).body.restartRequired).toBe(true);
   });
 
   test("a value read at boot needs a restart; one read per call doesn't", async () => {

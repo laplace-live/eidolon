@@ -45,6 +45,7 @@ set `EIDOLON_HOME=/data`.
   cache/embed_cache.db  the embedding cache every persona shares; its key holds the model
   bin/yt-dlp            the yt-dlp the offline tools install and keep current, with its stamp
   locks/                the offline tools' locks, released when their process exits
+  chats/<id>/           the local web app's text chats, 0700: chat.jsonl, meta.json, files/ (chat.md)
   mem0/history.db       Mem0's change log (the TypeScript bot's default)
 ```
 
@@ -125,6 +126,10 @@ moves it into the entry when it saves a new one. The names it accepts: each prov
 `ELEVENLABS_API_KEY`, `DEEPGRAM_API_KEY`, `CARTESIA_API_KEY`, `MINIMAX_API_KEY`, `COHERE_API_KEY`),
 a role's own (`RERANK_API_KEY`, `EMBED_API_KEY`, `REFINE_API_KEY`), and production's
 (`CLOUDFLARE_TURN_KEY_API_TOKEN`, `WEBRTC_TURN_CREDENTIAL`, `CF_WAF_BYPASS_TOKEN`).
+
+`EIDOLON_CHAT_SECRET`, the key the production chat endpoint signs with, comes from the environment
+alone: `credentials.json` ignores it with a warning, and no YAML file has a setting for it. While
+it is unset, or shorter than 32 characters, the endpoint stays off ([chat.md](chat.md)).
 
 The offline commands read these files as the bot does, for the persona `--persona` names.
 
@@ -219,6 +224,9 @@ is unset, and the other providers use `transcription.language`, else `zh`.
 | `selfie.ttlSeconds` | `SELFIE_TTL_SECONDS` | int | Selfie lifetime |
 | `selfie.timeoutSeconds` | `SELFIE_TIMEOUT_SECONDS` | int | Selfie timeout |
 | `selfie.references` | `SELFIE_REFERENCE_IMAGES` | paths | Selfie references |
+| `chat.interests` | `CHAT_INTERESTS` | string | Chat interests |
+| `chat.talkativeness` | `CHAT_TALKATIVENESS` | float | Chat talkativeness |
+| `chat.replyMode` | `CHAT_REPLY_MODE` | string | Chat reply mode |
 
 `knowledge.facts.files` lists name patterns for the fact files in `sources/<id>/facts/` (default
 `*.txt`). A pattern matches a file name as Python's pathlib glob does: `*`, `?`, `[…]` and `[!…]`,
@@ -234,6 +242,19 @@ and the punctuation that follows.
 `refine.concurrency` to 8. `transcription.language` is the two-letter language hint Soniox gets for
 the persona's videos (default `zh`; `none` sends none), as `--language` sets it for one run.
 
+`chat.*` is how she joins a chat ([chat.md](chat.md)). `chat.interests` names the
+topics she cares about, separated by commas or 、 (`游戏、猫、深夜聊天`); the director reads them
+with `identity.summary` to judge whether a line is something she'd join in on, and reads the
+summary alone when they're unset. `chat.talkativeness`, from 0 to 1 (default 0.5; a value
+outside is clamped), weighs that interest: the director ranks the personas who weren't addressed
+by interest times talkativeness. At 0 she joins in only when a line mentions or addresses her,
+or when everyone else there is at 0 too, since someone always answers the viewer.
+`chat.replyMode` is how she answers in a chat: `text`, `voice` (a voice message in her voice role,
+with its transcript), or `auto` (the default), where the director judges whether a line suits a
+voice message. A chat's own reply mode, from its settings, overrides hers. `voice` and `auto` fall
+back to text while her voice role has no key or its provider can't speak a whole reply; any other
+value reads as `auto`, with a warning.
+
 ## settings.yaml
 
 The install's settings, for every persona. Paths resolve in the data home.
@@ -248,6 +269,9 @@ The install's settings, for every persona. Paths resolve in the data home.
 | `access.anonRateLimitWindowSec` | `EIDOLON_ANON_RATE_LIMIT_WINDOW_SEC` | int | Anonymous window seconds |
 | `access.realIpHeader` | `EIDOLON_REAL_IP_HEADER` | string | Client IP header |
 | `access.allowedOrigins` | `PIPECAT_ALLOWED_ORIGINS` | list | Allowed browser origins |
+| `access.chatPersonas` | `EIDOLON_CHAT_PERSONAS` | list | Public chat personas |
+| `access.chatAnonQuota` | `EIDOLON_CHAT_ANON_QUOTA` | int | Anonymous chat turns per hour |
+| `access.chatUserQuota` | `EIDOLON_CHAT_USER_QUOTA` | int | Logged-in chat turns per hour |
 | `network.cloudflareTurn.keyId` | `CLOUDFLARE_TURN_KEY_ID` | string | Cloudflare TURN key id |
 | `network.cloudflareTurn.ttlSec` | `CLOUDFLARE_TURN_TTL_SEC` | int | TURN credential lifetime |
 | `network.stunUrl` | `WEBRTC_STUN_URL` | string | STUN URL |
@@ -285,10 +309,16 @@ The install's settings, for every persona. Paths resolve in the data home.
 `bun run start` and the Docker image run never reads it.
 `sources.ytDlp` replaces the yt-dlp the tools install and update under `<data home>/bin/`.
 `sources.cookiesFromBrowser` defaults to `chrome`; `none` reads no browser's cookies. yt-dlp writes
-the merged cookie jar back into `sources.cookiesFile`. `usage.db` is the SQLite file every call, job
-and MCP search records its spend in (default `<data home>/usage.db`; [providers.md](providers.md#usage-and-cost)).
+the merged cookie jar back into `sources.cookiesFile`. `usage.db` is the SQLite file every call,
+chat turn, job and MCP search records its spend in (default `<data home>/usage.db`;
+[providers.md](providers.md#usage-and-cost)).
 Each `providers.<id>` base moves that provider's API, for a proxy or another region; blank uses its
 own.
+The `access.chat*` rows apply only once `EIDOLON_CHAT_SECRET` turns the production chat endpoint on
+([chat.md](chat.md)). `access.chatPersonas` lists the persona ids it serves, by default the
+installed persona alone. Each viewer line costs one turn of a quota counted over the last hour:
+`access.chatAnonQuota` (default 20) per client IP for anonymous viewers, and `access.chatUserQuota`
+(default 200) per mid for logged-in ones. Both quotas are read once, on the first chat turn.
 
 ## Deploying a persona
 

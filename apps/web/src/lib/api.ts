@@ -79,7 +79,9 @@ export type Input<R extends Route> = ([ParamName<R>] extends [never]
     : { readonly query?: Spec<R>["query"] }) &
   (Spec<R>["body"] extends undefined
     ? { readonly body?: undefined }
-    : { readonly body: Spec<R>["body"] extends Raw<"image"> ? Blob : Spec<R>["body"] }) & {
+    : {
+        readonly body: Spec<R>["body"] extends Raw<"image" | "audio"> ? Blob : Spec<R>["body"];
+      }) & {
     readonly signal?: AbortSignal;
   };
 
@@ -88,7 +90,7 @@ type Args<R extends Route> =
 
 /** Routes that answer with bytes or lines rather than JSON. */
 export type RawRoute = {
-  [R in Route]: Spec<R>["response"] extends Raw<"image" | "ndjson" | "text"> ? R : never;
+  [R in Route]: Spec<R>["response"] extends Raw<"image" | "audio" | "ndjson" | "text"> ? R : never;
 }[Route];
 export type JsonRoute = Exclude<Route, RawRoute>;
 
@@ -116,7 +118,8 @@ export function url<R extends Route>(route: R, ...[input]: Args<R>): string {
   return urlOf(route, input);
 }
 
-async function send(route: string, input: Loose = {}): Promise<Response> {
+/** One request, its route unchecked: for an answer `call` and `stream` can't read, such as a 204. */
+export async function send(route: string, input: Loose = {}): Promise<Response> {
   const { body, signal } = input;
   const headers = proofHeaders();
   const init: RequestInit = {

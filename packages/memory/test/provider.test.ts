@@ -1,9 +1,13 @@
+import "../../config/test/isolated-guard.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { activePersona, dataHome, resetSettings, withPersona } from "@eidolon/config";
 import type { ContextTurn, ConversationContext } from "@eidolon/core";
-import type { MemoryConfig } from "../src/config.ts";
+import type { LlmSettings, MemoryConfig } from "../src/config.ts";
 import { MemoryEngine, SharedEngine } from "../src/engine.ts";
 import { HistoryStore } from "../src/history.ts";
-import { createMemoryProvider } from "../src/index.ts";
+import { createMemoryProvider, MEM0_STORE_KEY } from "../src/index.ts";
 import { OpenAICompatibleChat, OpenAICompatibleEmbedder } from "../src/openai.ts";
 import { Mem0MemoryProvider, openMemoryProvider } from "../src/provider.ts";
 import { QdrantVectorStore } from "../src/qdrant.ts";
@@ -261,6 +265,29 @@ describe("the background store", () => {
     expect(logs.at("DEBUG")).toContainEqual(["DEBUG", "Storing 3 messages in Mem0"]);
   });
 
+  test("a turn's own list is stored in place of its context, and searching is unchanged", async () => {
+    const { engine, calls } = stubEngine();
+    const provider = new Mem0MemoryProvider(engine, SCOPE, SEARCH);
+    const listed = [
+      { role: "user", content: "我养了猫" },
+      { role: "assistant", content: "好可爱" },
+      { role: "assistant", content: " " },
+    ];
+    const { turn, spawned } = turnFor(
+      new FakeContext([
+        { role: "user", content: "观众：我养了猫" },
+        { role: "assistant", content: "好可爱" },
+        { role: "user", content: "露比：我最喜欢狗" },
+      ]),
+    );
+    await provider.onContext({ ...turn, metadata: { [MEM0_STORE_KEY]: listed } });
+    await Promise.all(spawned.map(([, job]) => job));
+    expect(calls.search.map(([query]) => query)).toEqual(["露比：我最喜欢狗"]);
+    expect(calls.add).toEqual([
+      [listed.slice(0, 2), { scope: SCOPE, metadata: { platform: "pipecat" } }],
+    ]);
+  });
+
   test("a batch that filters down to nothing skips mem0", async () => {
     const { engine, calls } = stubEngine();
     const provider = new Mem0MemoryProvider(engine, SCOPE, SEARCH);
@@ -444,5 +471,158 @@ describe("openMemoryProvider", () => {
     await expect(createMemoryProvider({ userId: "1" })).rejects.toThrow(
       "MEM0_QDRANT_HOST is unset",
     );
+  });
+});
+
+describe("SharedEngine", () => {
+  const BASE = "https://openrouter.ai/api/v1";
+  const CONFIG: MemoryConfig = {
+    qdrant: { host: "qdrant", port: 6333, collection: "eidolon_memories", vectorSize: 1536 },
+    embedder: {
+      provider: "openrouter",
+      model: "embed",
+      apiKey: "sk-or",
+      baseUrl: BASE,
+      dims: 1536,
+    },
+    llm: {
+      provider: "openrouter",
+      model: "alice/chat",
+      apiKey: "sk-or",
+      baseUrl: BASE,
+      keyMissing: null,
+    },
+    historyDbPath: "/h.db",
+  };
+  const withLlm = (llm: Partial<LlmSettings>): MemoryConfig => ({
+    ...CONFIG,
+    llm: { ...CONFIG.llm, ...llm },
+  });
+
+  /** A new engine per open, with every configuration it opened. */
+  function opener(fails: (config: MemoryConfig) => boolean = () => false) {
+    const opened: MemoryConfig[] = [];
+    const shared = new SharedEngine(async (config) => {
+      opened.push(config);
+      if (fails(config)) throw new Error(`cannot open ${config.llm.model}`);
+      return stubEngine().engine;
+    });
+    return { shared, opened };
+  }
+
+  test("a configuration that differs only in its memory model or provider opens its own engine", async () => {
+    const { shared, opened } = opener();
+    const first = await shared.get(CONFIG);
+    const model = await shared.get(withLlm({ model: "bob/chat" }));
+    const provider = await shared.get(withLlm({ provider: "deepseek" }));
+    expect(new Set([first.engine, model.engine, provider.engine]).size).toBe(3);
+    expect([first.fresh, model.fresh, provider.fresh]).toEqual([true, true, true]);
+    expect(opened.map((c) => [c.llm.provider, c.llm.model])).toEqual([
+      ["openrouter", "alice/chat"],
+      ["openrouter", "bob/chat"],
+      ["deepseek", "alice/chat"],
+    ]);
+  });
+
+  test("an equal configuration shares the engine, fresh only on its first open", async () => {
+    const { shared, opened } = opener();
+    const first = await shared.get(CONFIG);
+    const again = await shared.get(withLlm({}));
+    expect(again.engine).toBe(first.engine);
+    expect([first.fresh, again.fresh]).toEqual([true, false]);
+    expect(opened).toHaveLength(1);
+  });
+
+  test("concurrent gets of one configuration open it once", async () => {
+    const { shared, opened } = opener();
+    const [a, b] = await Promise.all([shared.get(CONFIG), shared.get(withLlm({}))]);
+    expect(b.engine).toBe(a.engine);
+    expect([a.fresh, b.fresh]).toEqual([true, true]);
+    expect(opened).toHaveLength(1);
+  });
+
+  test("a failed open blocks no other configuration and is retried", async () => {
+    let down = true;
+    const { shared, opened } = opener((config) => down && config.llm.model === "alice/chat");
+    const [failed, bob] = await Promise.allSettled([
+      shared.get(CONFIG),
+      shared.get(withLlm({ model: "bob/chat" })),
+    ]);
+    expect(failed.status).toBe("rejected");
+    expect(bob.status).toBe("fulfilled");
+    down = false;
+    const alice = await shared.get(CONFIG);
+    expect(alice.fresh).toBe(true);
+    expect(alice.engine).not.toBe(
+      (bob as PromiseFulfilledResult<{ engine: MemoryEngine }>).value.engine,
+    );
+    expect(opened.map((c) => c.llm.model)).toEqual(["alice/chat", "bob/chat", "alice/chat"]);
+  });
+});
+
+describe("openMemoryProvider per persona", () => {
+  function writePersona(id: string, yaml: string): void {
+    const dir = join(dataHome(), "personas", id);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "persona.yaml"), yaml);
+  }
+
+  beforeEach(() => {
+    clearMemoryEnv();
+    setEnv({
+      MEM0_QDRANT_HOST: "qdrant",
+      OPENROUTER_API_KEY: "sk-or",
+      MEM0_HISTORY_DB_PATH: tempPath("h.db"),
+      LLM_PROVIDER: undefined,
+      LLM_MODEL: undefined,
+      MEM0_LLM_PROVIDER: undefined,
+    });
+    writePersona("alice", "identity:\n  name: Alice\nmind:\n  model: alice/chat\n");
+    writePersona(
+      "bob",
+      "identity:\n  name: Bob\nmind:\n  model: bob/chat\nmemory:\n  model: bob/memory\n",
+    );
+    resetSettings();
+  });
+
+  afterEach(() => {
+    resetEnv();
+    resetSettings();
+    rmSync(join(dataHome(), "personas"), { recursive: true, force: true });
+  });
+
+  /** Engines labelled by the memory model they were opened with, and each reuse's label. */
+  function engines() {
+    const opened: string[] = [];
+    const reused: string[] = [];
+    const shared = new SharedEngine(async (config) => {
+      opened.push(config.llm.model);
+      return Object.assign(stubEngine().engine, {
+        ensureCollection: async () => {
+          reused.push(config.llm.model);
+        },
+      });
+    });
+    return { shared, opened, reused };
+  }
+
+  test("each persona's sessions run on an engine with her own memory model", async () => {
+    const e = engines();
+    const session = (persona: string) =>
+      withPersona(persona, () => openMemoryProvider({ userId: "1" }, e.shared));
+    await Promise.all([session("alice"), session("bob")]);
+    expect(e.opened.toSorted()).toEqual(["alice/chat", "bob/memory"]);
+    await session("bob");
+    await session("alice");
+    expect(e.opened).toHaveLength(2);
+    expect(e.reused).toEqual(["bob/memory", "alice/chat"]);
+  });
+
+  test("a scope of the active persona shares the engine her unscoped sessions opened", async () => {
+    const e = engines();
+    await openMemoryProvider({ userId: "1" }, e.shared);
+    await withPersona(activePersona().id, () => openMemoryProvider({ userId: "2" }, e.shared));
+    expect(e.opened).toHaveLength(1);
+    expect(e.reused).toHaveLength(1);
   });
 });

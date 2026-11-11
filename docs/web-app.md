@@ -1,10 +1,11 @@
 # The local web app
 
-Eidolon on your own computer, with a web app to set it up, build personas and call them: a setup
-wizard, a persona studio (identity, prompt, voice, facts, videos, glossary, pictures), a call page,
-settings, and the offline chain's commands run as jobs. It is a second entry point beside the bot,
-`apps/bot/src/local/`, serving the built app from `apps/web/` (Vite, React, shadcn, Tailwind) on
-loopback only. The bot that `bun run start` and the Docker image run never loads it.
+Eidolon on your own computer, with a web app to set it up, build personas, and call or text them: a
+setup wizard, a persona studio (identity, prompt, voice, facts, videos, glossary, pictures), a call
+page, text chats, settings, and the offline chain's commands run as jobs. It is a second entry
+point beside the bot, `apps/bot/src/local/`, serving the built app from `apps/web/` (Vite, React,
+shadcn, Tailwind) on loopback only. The bot that `bun run start` and the Docker image run never
+loads it.
 
 ## Running it
 
@@ -73,6 +74,12 @@ finishing an index. A tool that stops the app should send SIGTERM.
   `package.json`, which the frozen install needs. `docker.yml` skips the image build for changes
   under `apps/web/**` and `apps/bot/src/local/**`.
 - `local.viewerName` (`EIDOLON_LOCAL_VIEWER_NAME`) is read in local mode only.
+- **The app's chats stay out too.** Only `apps/bot/src/local` imports the JSONL chat store
+  (`@eidolon/chat/jsonl`); the same Biome rule and `boundaries.test.ts` hold it. Production runs
+  the turn engine only for its own chat endpoint, which keeps no transcripts and is off until
+  `EIDOLON_CHAT_SECRET` is set ([chat.md](chat.md#production-the-browser-keeps-the-chat)). Until
+  then, production's offer never binds a call to a chat, whatever its request data says, which
+  `production.test.ts` pins.
 
 ## Security
 
@@ -148,7 +155,8 @@ the secret behind them, are the only boundary, so treat the link, the cookie, th
   only a picture whose bytes are one of the three is served. A persona's path settings must stay
   inside her folder, and `sources.ytDlp` can't be set through the API.
 - **Secrets at rest.** `credentials.json` is written 0600 from creation; no answer returns a key
-  or quotes what a request sent; the data home, `jobs/` and `locks/` are created 0700.
+  or quotes what a request sent; the data home, `jobs/`, `locks/` and `chats/` are created
+  0700, and a chat's files 0600.
 
 ## The API
 
@@ -174,13 +182,16 @@ terminal's log line that holds what went wrong, and the app shows it beside the 
 | Jobs | `POST jobs`, `GET jobs`, `GET jobs/:id`, `…/events?after=`, `…/log`, `DELETE jobs/:id`, `POST jobs/:id/resume` | [Jobs](#jobs) |
 | Memories | `GET`, `DELETE memories?persona=` | One persona's memories of you |
 | Usage | `GET usage?from=&to=&persona=` | The usage ledger's spend summed by day, persona, provider, task and model, every persona and provider it knows, and whether it records at all ([providers.md](providers.md#usage-and-cost)) |
+| Chats | `GET`, `POST chats`, `GET`, `PATCH`, `DELETE chats/:id`, `POST chats/:id/messages`, `GET chats/:id/live`, `POST chats/:id/stop`, `POST chats/:id/participants`, `GET chats/:id/files/:name` | [Chats](#chats) |
 
 The bot's own routes stay, behind the guard: `POST /api/offer` and `/api/offer/preflight` take
 the session and call as [the local viewer](#the-local-viewer-and-memory), with no quota;
 `GET /api/memories` and `POST /api/memories/forget` take the session and act on the active
 persona; `PATCH /api/offer`, `/api/selfie/:id`, `/api/ice-servers` and `/mcp` are unchanged. An
 offer counts as a call from the moment it is admitted, before its session starts, so a persona
-switch, a `persona` setting or a restart sent meanwhile is refused `call-active` too.
+switch, a `persona` setting or a restart sent meanwhile is refused `call-active` too. An offer
+whose `requestData` names a `chatId` and a `persona` calls her inside that chat, as herself,
+whether or not she is the active persona ([chat.md](chat.md#calls)).
 
 `ERROR_CODES` in `api.ts`:
 
@@ -221,6 +232,9 @@ switch, a `persona` setting or a restart sent meanwhile is refused `call-active`
 | `unknown-job` | 404 | No job has that id |
 | `job-not-running` | 409 | Cancelling a job that ended |
 | `job-not-resumable` | 409 | Resuming a running or succeeded job, or one resumed already |
+| `unknown-chat` | 404 | No chat has that id |
+| `missing-key` | 409 | Starting a chat, or sending in one, while her mind's provider takes a key and has none |
+| `chat-in-call` | 409 | Sending a message or a voice message, deleting the chat, or calling into it while it is in a call |
 
 ## The local viewer and memory
 
@@ -249,8 +263,113 @@ docker run -d --name eidolon-qdrant --restart unless-stopped -p 127.0.0.1:6333:6
 Keep the tag in step with `docker-compose.yml`'s; if compose's `qdrant` already answers on 6333,
 use it instead. The step checks an address (127.0.0.1:6333 unless you change it) and saves it as
 `memory.qdrant.host` and `memory.qdrant.port` only when Qdrant answers; once memory is on, an
-edited address is checked and saved the same way. The first address needs no restart; a later
-change does.
+edited address is checked and saved the same way. No address needs a restart: the next call opens
+memory at the saved one.
+
+## Chats
+
+`/chats` talks with the personas, one or several at once, in text and voice messages or on a call
+inside the chat, and keeps every chat in the data home (`<data home>/chats/`). The format, the
+turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
+
+- **The page:**
+  - The list of chats is on the left, newest first, and the open chat on the right. On a phone the
+    list is the page until a chat opens, and a sheet after.
+  - **New Chat** ticks one to six personas, the active one listed first, then **Start Chat** or
+    **Start Group Chat**. One persona's greeting then streams in, the way a call greets; a group
+    starts quiet, named by the short names of whoever is in it until it is renamed.
+  - A row and the chat's header each have a menu with **Rename** and **Delete**. Delete confirms in
+    the page. The header's menu also has **Chat Settings**, a sheet saved as soon as a value is
+    picked: **Reply Mode** (Auto, Text or Voice), which overrides every persona's own until it is
+    changed, and **Replies between Personas**, 0 to 6, the chain limit.
+- **A group chat:**
+  - The header's avatars open **In This Chat**, with **Add Persona** and **Remove Persona**.
+  - Each run of a persona's lines starts with her avatar and short name, and the streaming text
+    and the thinking dots name whoever answers next, from the decision before her turn.
+  - The composer offers the participants' names after `@` (arrow keys, Enter or Tab, Escape),
+    inserting one `parseMentions` reads back: her short name, or her name when another
+    participant answers to the short one too. A pick closes the list, so the next Enter sends, and
+    a quiet line names whom the message mentions.
+  - **Stop** and the thinking dots stay up across the whole chain, while the director decides
+    between turns.
+  - A chain that ends with no one answering shows nothing more.
+- **Why She Answered:** a quiet info button beside each reply the director chose opens
+  **Why <name> Answered**, its decision: the source (mention, model or fallback), whose line she answered, and each persona's
+  Addressed and Interested scores, with Invites a Reply.
+- **Voice messages** ([chat.md](chat.md#voice-messages)):
+  - **Recording:** while the text box is empty, a microphone takes the Send button's place.
+    Holding it 350 ms or more records until it is let go, then sends; letting go off the button,
+    Escape (unless it closes a menu or sheet) or the cancel button throws the take away. A shorter
+    press is a click: it records until the next click, Enter or Space. A bar replaces the text box
+    while it records, with its time out of 2:00, where it sends itself. A take under 0.5 s is
+    dropped with a toast.
+  - **What is recorded:** `audio/webm;codecs=opus`, else `audio/mp4` on Safari, sent to
+    `POST voice` with the recorder's clock as `durationMs`.
+  - **Without a hearing key** (`ChatContents.hearingRefusal`) or a browser that records, the
+    microphone is disabled, with a tooltip linking to Settings → Providers. A take already
+    recording can still be sent.
+  - **The bubble:** play and pause, a seekable bar and the length, and the transcript folded under
+    it, her cues as chips. Only one bubble plays at a time. The viewer's own shows **Transcribing…**
+    until it is stored, then its transcript, or that no words could be heard in it; one the server
+    refused stays, marked **Not sent**, with **Retry** sending the same recording again.
+  - **Her voice replies** show **Recording a voice message…** while her voice speaks them, and
+    play on their own, in order, when they answer a send from this tab while it has the focus.
+    Pausing one, or playing another, stops the rest. One whose voice failed is text, marked
+    **Sent as text**.
+  - **Retry** after a failed reply sends a voice message's transcript as text.
+- **The studio's Chats section** edits a persona's `chat.replyMode`, `chat.interests` and
+  `chat.talkativeness` ([personas.md](personas.md#personayaml)), showing where each value
+  comes from.
+- **Her lines** render through `lib/markup.ts` like a call's transcript: cues as chips and
+  directions as small labels, never as HTML. A selfie shows as a photo, served from the chat's
+  `files/`.
+- **While she replies:**
+  - Her words stream in, and a quiet line names the tool she is using.
+  - **Stop** cuts everyone off at once, even one finishing her message before a line just sent:
+    what she said stays, marked **Interrupted**, and no line still waiting is answered.
+  - Sending while she replies is allowed, and cuts no one off mid-sentence: a persona whose words
+    have started streaming finishes her message, voice included, and the reply stops there; a
+    reply still thinking or deciding who answers stops at once. Everyone chosen still answers:
+    whoever an earlier line chose and hadn't answered goes first in the next reply, oldest line
+    first, then whoever the new line chooses, each once. A line the director hadn't decided is
+    decided again, and in a chat of one her next reply answers them all. A server restart forgets
+    what it owes.
+  - Each line sent shows below her words until it is stored, after the message she finishes, and
+    one that fails stays, marked **Not sent**, with **Retry**.
+  - A send supersedes the streams open before it once its own starts, with the viewer's stored
+    line: until then the older one carries the words she is finishing, and after it only stores
+    what it brings.
+  - A selfie she was taking when Stop or a send stops her keeps rendering. Its quiet line stays,
+    and the photo arrives later as a message of its own ([chat.md](chat.md#the-local-api)).
+- **When a reply goes wrong:**
+  - A failed reply shows its error with **Retry**, which sends the viewer's last line again.
+  - A reply her provider stopped short, at its token limit or refusing, is marked **Cut off**, with
+    the same **Retry**.
+  - A mind with no key shows a notice with a link to Settings → Providers.
+- **Reopening a chat mid-reply** picks the reply up again through `GET chats/:id/live`. The reply
+  keeps running when the tab closes.
+- **A call in the chat** ([chat.md](chat.md#calls)):
+  - **Call** in the header calls her in a chat of one; in a group it opens **Who to Call**. She
+    needn't be the active persona. It is disabled while the chat is in a call, by this page's word
+    or by `ChatContents.call`.
+  - **The dock** above the composer shows her avatar, ringed while she speaks, the call's state
+    line, the call's notices, the mic's mute toggle and **Hang Up**. Hanging up closes it. A call
+    that ends any other way stays docked with why, **Call Again** and **Close**.
+  - **The composer** waits, disabled and reading **In a call**, keeping any draft; Stop and the
+    microphone are hidden, and a recording under way is thrown away. It takes the focus back when
+    the call ends.
+  - **What is said** arrives through `GET chats/:id/live` as call lines: messages with a small
+    phone mark, her cut-off ones marked **Interrupted**, with no Why She Answered, and her selfies
+    as photos. The call's start and end are quiet centred lines, "Call with 奶绿 · 3:12" and "Call
+    ended".
+  - **Voice messages** stay quiet, since the microphone would hear them: a call starting pauses the
+    one playing and drops those waiting to play on their own, and none plays on its own until the
+    call ends. Play still plays one.
+  - **Another tab** that learns of the call from `ChatContents.call`, as a refused send rereads it,
+    follows it too, and gets its composer back when the call ends.
+  - **Leaving the page,** or opening another chat, hangs up, as leaving `/call` does.
+  - `/call` stays the standalone call to the active persona, with no chat.
+- **Spend:** a chat's requests are recorded in the usage ledger with `source: "chat"`.
 
 ## Jobs
 
@@ -399,9 +518,31 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
 - a saved prompt landing in the temporary home, with `personas/` byte-identical;
 - an `ingest-facts` job over two fact lines against that server, with the model picked, and the
   jobs page showing it done;
+- a text chat with milky-green, her mind pointed at that server's streaming `/chat/completions`:
+  New Chat and her greeting, a reply that streams in with its cue as a chip, the history after a
+  reload, and Rename and Delete from the chat's menus, with `chats/` at 0700 and its log at 0600;
+- a group chat with a second persona made from no template, the director's Decisions requests
+  answered by that server through an OpenRouter account pointed at it (the text chat already
+  asks it `voice_moment`): no greeting, an @-mention the composer completes, the second persona's
+  answer with her stop sequences and the group line in her request, the first's answer to her a
+  hop later, and each line under its persona's name, before and after a reload;
+- voice messages, with milky-green's voice and hearing on an OpenAI account pointed at that
+  server's `/audio/speech` and `/audio/transcriptions` (OpenAI-compatible accounts offer
+  neither): the microphone held down through Chrome's fake microphone, which plays a WAV the walk
+  writes, the upload heard as `voice.webm` and its transcript shown, her text answer, then
+  **Voice** in the chat's settings, her voice reply spoken with its cue taken out, playing on its
+  own to its end, its file answering the player's `Range` request with a `206`, both bubbles after
+  a reload, and the voice and hearing spend in the ledger;
+- a call inside a chat, on the same OpenAI account, whose realtime transcription session the
+  server accepts and hears nothing on, and whose speech it answers as a call's PCM: a line typed
+  first, then **Call**, the dock, her greeting answering that line from the call's history and
+  landing in the log with its phone mark under its separator, the composer waiting and a send
+  refused `chat-in-call`, then **Hang Up**, the log's `call-ended` with `hangup`, the separators
+  with the call's length, the composer back, and no server error during the call;
 
 then stops the server and deletes the home. It refuses to start when either `load-env.ts` would
-apply a `.env` or use another data home, and exits 0 when every check passes, else 1.
+apply a `.env` or use another data home, and exits 0 when every check passes, else 1, after the
+server's last warnings.
 
 ### A real call: `--call`
 

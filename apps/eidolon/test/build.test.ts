@@ -70,6 +70,7 @@ describe("the bundles", () => {
     const server = bareImports(join(root, "dist", "server.js"));
     for (const name of [
       "werift",
+      "libopus-wasm",
       "apache-arrow",
       "onnxruntime-node",
       "@pipedog/core/frames/frames",
@@ -77,7 +78,13 @@ describe("the bundles", () => {
       expect([name, server.has(name)]).toEqual([name, true]);
     }
     expect([...inlined.keys()]).toContain("@lancedb/lancedb");
-    for (const name of ["werift", "apache-arrow", "onnxruntime-node", "@pipedog/core"]) {
+    for (const name of [
+      "werift",
+      "libopus-wasm",
+      "apache-arrow",
+      "onnxruntime-node",
+      "@pipedog/core",
+    ]) {
       expect([name, inlined.has(name)]).toEqual([name, false]);
     }
     expect([...inlined.keys()].filter((name) => name.startsWith("@eidolon/"))).toEqual([]);
@@ -143,6 +150,20 @@ describe("the third-party notices", () => {
     );
     expect(text.match(/^### /gm)?.length).toBe(dist.length);
   });
+
+  test("NOTICE, which the package ships, names every copyright a ported file's BSD-2 header does", () => {
+    const notice = readFileSync(join(ROOT, "NOTICE"), "utf8");
+    const holders = new Set<string>();
+    for (const file of new Bun.Glob("packages/*/src/**/*.ts").scanSync(ROOT)) {
+      const source = readFileSync(join(ROOT, file), "utf8");
+      if (!source.includes("SPDX-License-Identifier: BSD-2-Clause")) continue;
+      for (const [, line] of source.matchAll(/^\/\/ (Copyright \(c\) .+)$/gm)) {
+        holders.add(line as string);
+      }
+    }
+    expect(holders.size).toBeGreaterThan(0);
+    expect([...holders].filter((line) => !notice.includes(line))).toEqual([]);
+  });
 });
 
 describe("the published manifest", () => {
@@ -170,6 +191,7 @@ describe("the published manifest", () => {
   test("depends on the externals at the workspaces' pins, and each platform's Bun and LanceDB", () => {
     const runtime = manifestOf<{ dependencies: Record<string, string> }>("packages/runtime");
     const retrieval = manifestOf<{ dependencies: Record<string, string> }>("packages/retrieval");
+    const webrtc = manifestOf<{ dependencies: Record<string, string> }>("packages/webrtc");
     const pipedog = Object.entries(runtime.dependencies).filter(([name]) =>
       name.startsWith("@pipedog/"),
     );
@@ -177,8 +199,10 @@ describe("the published manifest", () => {
       ...Object.fromEntries(pipedog),
       "onnxruntime-node": runtime.dependencies["onnxruntime-node"],
       werift: runtime.dependencies.werift,
+      "libopus-wasm": webrtc.dependencies["libopus-wasm"],
       "apache-arrow": retrieval.dependencies["apache-arrow"],
     });
+    expect(webrtc.dependencies.werift).toBe(runtime.dependencies.werift);
     expect(manifest.optionalDependencies).toEqual({
       "@lancedb/lancedb-darwin-arm64": retrieval.dependencies["@lancedb/lancedb"],
       "@lancedb/lancedb-linux-arm64-gnu": retrieval.dependencies["@lancedb/lancedb"],

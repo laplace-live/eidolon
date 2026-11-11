@@ -12,6 +12,7 @@ import { DEFAULT_PERSONA, dataHome, personaDirs, personaIds, resolvePersonaPath 
 import { logger } from "./logger.ts";
 import { expandUser } from "./paths.ts";
 import { isPlainObject } from "./py.ts";
+import { type PersonaScope, personaScopes } from "./scope.ts";
 
 export type SettingScope = "app" | "persona";
 export type SettingKind = "string" | "int" | "float" | "flag" | "list" | "path" | "paths";
@@ -71,6 +72,21 @@ export const SETTINGS: readonly SettingField[] = [
     "PIPECAT_ALLOWED_ORIGINS",
     "list",
     "Allowed browser origins",
+  ),
+  field("app", "access.chatPersonas", "EIDOLON_CHAT_PERSONAS", "list", "Public chat personas"),
+  field(
+    "app",
+    "access.chatAnonQuota",
+    "EIDOLON_CHAT_ANON_QUOTA",
+    "int",
+    "Anonymous chat turns per hour",
+  ),
+  field(
+    "app",
+    "access.chatUserQuota",
+    "EIDOLON_CHAT_USER_QUOTA",
+    "int",
+    "Logged-in chat turns per hour",
   ),
   field(
     "app",
@@ -315,6 +331,9 @@ export const SETTINGS: readonly SettingField[] = [
   field("persona", "selfie.ttlSeconds", "SELFIE_TTL_SECONDS", "int", "Selfie lifetime"),
   field("persona", "selfie.timeoutSeconds", "SELFIE_TIMEOUT_SECONDS", "int", "Selfie timeout"),
   field("persona", "selfie.references", "SELFIE_REFERENCE_IMAGES", "paths", "Selfie references"),
+  field("persona", "chat.interests", "CHAT_INTERESTS", "string", "Chat interests"),
+  field("persona", "chat.talkativeness", "CHAT_TALKATIVENESS", "float", "Chat talkativeness"),
+  field("persona", "chat.replyMode", "CHAT_REPLY_MODE", "string", "Chat reply mode"),
 ];
 
 /** `voice.styles.<name>` sets `TTS_VOICE_ID_<NAME>`. */
@@ -794,9 +813,12 @@ export interface LoadedSettings {
   readonly files: SettingsFiles;
 }
 
-/** Reads every layer without installing it. */
-export function loadSettings(): LoadedSettings {
-  const read = readLayers(null, logWarning);
+/**
+ * Reads every layer, for persona `personaId` or else the active one, without installing it. The
+ * caller validates the id, which becomes a folder name.
+ */
+export function loadSettings(personaId?: string): LoadedSettings {
+  const read = readLayers(personaId ?? null, logWarning);
   const values = new Map<string, string>();
   for (const [env, layer] of read.values) if (layer.value !== null) values.set(env, layer.value);
   return {
@@ -820,6 +842,22 @@ let installed: LoadedSettings | null = null;
 let defaults: SettingDefaults | null = null;
 /** The persona and variables installSettings last reported ignoring. */
 let reported = "";
+/** The personas withPersona has run as since the settings or their defaults last changed, by id. */
+const scopes = new Map<string, PersonaScope>();
+let generation = 0;
+
+function dropScopes(): void {
+  scopes.clear();
+  generation++;
+}
+
+/**
+ * A number that changes whenever the settings or their defaults do, so a cache of what a persona's
+ * settings built can key on it.
+ */
+export function settingsGeneration(): number {
+  return generation;
+}
 
 function fileLayer(loaded: LoadedSettings): ReadonlyMap<string, string> {
   if (defaults === null) return loaded.values;
@@ -834,6 +872,7 @@ function fileLayer(loaded: LoadedSettings): ReadonlyMap<string, string> {
 export function installSettings(): LoadedSettings {
   installed = loadSettings();
   setFileLayer(fileLayer(installed), installed.owned);
+  dropScopes();
   const id = installed.persona.id;
   const ignored = [...installed.owned].filter((name) => envVariable(name) !== undefined);
   // The local app reinstalls on every save: say it once, until the persona or the list changes.
@@ -855,18 +894,41 @@ export function installSettings(): LoadedSettings {
 export function setSettingDefaults(derive: SettingDefaults | null): void {
   defaults = derive;
   if (installed !== null) setFileLayer(fileLayer(installed), installed.owned);
+  dropScopes();
 }
 
-/** The active persona: the installed one, or one read on demand where nothing installed it. */
+/**
+ * Runs `fn`, and everything it starts, as persona `id`: inside, the env readers and the persona
+ * lookups resolve her settings as installing her would, and nothing is installed. The caller
+ * validates the id, which becomes a folder name.
+ */
+export function withPersona<T>(id: string, fn: () => T): T {
+  let scope = scopes.get(id);
+  if (scope === undefined) {
+    // The installed persona's own settings, so her scope resolves exactly what is installed.
+    const settings = installed?.persona.id === id ? installed : loadSettings(id);
+    scope = { settings, values: fileLayer(settings), owned: settings.owned };
+    scopes.set(id, scope);
+  }
+  return personaScopes.run(scope, fn);
+}
+
+/** withPersona's persona, else the installed one, else one read on demand. */
+function current(): LoadedSettings {
+  const scope = personaScopes.getStore();
+  if (scope !== undefined) return scope.settings;
+  installed ??= loadSettings();
+  return installed;
+}
+
+/** The active persona: withPersona's, else the installed one. */
 export function activePersona(): PersonaSettings {
-  installed ??= loadSettings();
-  return installed.persona;
+  return current().persona;
 }
 
-/** credentials.json's provider accounts as installed, by id. */
+/** credentials.json's provider accounts, by id, as the active persona's settings read them. */
 export function accountEntries(): ReadonlyMap<string, AccountEntry> {
-  installed ??= loadSettings();
-  return installed.accounts;
+  return current().accounts;
 }
 
 /** The active persona's file or folder at `rel` (see resolvePersonaPath). */
@@ -891,4 +953,5 @@ export function resetSettings(): void {
   installed = null;
   reported = "";
   setFileLayer(new Map(), new Set());
+  dropScopes();
 }

@@ -1,54 +1,12 @@
 // What a call's speech recognition and synthesis use, reported to the usage ledger. LLM requests
 // report themselves from their HTTP client; audio and spoken text are counted here, as each
-// service takes them, and reported in batches so a long call writes a handful of records.
-import { priceOf, reportUsage, type Selection, textUnits, type Units } from "@eidolon/providers";
+// service takes them, through a `Meter`.
+import { Meter, priceOf, reportUsage, type Selection, textUnits } from "@eidolon/providers";
 import { type Frame, InputAudioRawFrame } from "@pipedog/core/frames/frames";
 import type { LLMTokenUsage } from "@pipedog/core/metrics/metrics";
 import type { FrameDirection, FrameProcessor } from "@pipedog/core/processors/frame_processor";
 import type { LLMService } from "@pipedog/core/services/llm_service";
 import type { TTSService } from "@pipedog/core/services/tts_service";
-
-/** Report once this much audio, or text, has piled up, and at the end of the call. */
-const AUDIO_BATCH_SECONDS = 300;
-const TEXT_BATCH_CHARACTERS = 2000;
-
-class Meter {
-  #units: { audioSeconds: number; characters: number; bytes: number } = {
-    audioSeconds: 0,
-    characters: 0,
-    bytes: 0,
-  };
-  readonly #selection: Selection;
-
-  constructor(selection: Selection) {
-    this.#selection = selection;
-  }
-
-  add(units: Pick<Units, "audioSeconds" | "characters" | "bytes">): void {
-    this.#units.audioSeconds += units.audioSeconds ?? 0;
-    this.#units.characters += units.characters ?? 0;
-    this.#units.bytes += units.bytes ?? 0;
-    if (
-      this.#units.audioSeconds >= AUDIO_BATCH_SECONDS ||
-      this.#units.characters >= TEXT_BATCH_CHARACTERS
-    ) {
-      this.flush();
-    }
-  }
-
-  flush(): void {
-    const { audioSeconds, characters, bytes } = this.#units;
-    if (audioSeconds === 0 && characters === 0) return;
-    this.#units = { audioSeconds: 0, characters: 0, bytes: 0 };
-    const { role, provider, model } = this.#selection;
-    reportUsage({
-      role: role.id,
-      provider: provider.id,
-      model,
-      units: audioSeconds > 0 ? { audioSeconds } : { characters, bytes },
-    });
-  }
-}
 
 /** Counts the audio `processor` hears, once as it arrives: a reconnect replays what it buffered. */
 export function meterAudio<T extends FrameProcessor>(processor: T, selection: Selection): T {

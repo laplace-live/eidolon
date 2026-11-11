@@ -23,12 +23,18 @@ import { opusCodecAtBitrate } from "./opus.ts";
 // werift queries stun.l.google.com when a connection has no STUN server (ice.ts,
 // applyStunTurnServersFromOptions), where aiortc and browsers gather no server-reflexive candidate
 // at all. That candidate is this host's public IP, and where UDP to Google is blocked its 5 s
-// timeout stalls every answer. Only a STUN server the plan names may be queried.
-const gatherCandidates = Connection.prototype.gatherCandidates;
-Connection.prototype.gatherCandidates = function (this: Connection) {
-  if (this.options.stunServer === undefined) this.stunServer = undefined;
-  return gatherCandidates.call(this);
-};
+// timeout stalls every answer. Only a STUN server the plan names may be queried. @eidolon/webrtc's
+// patches.ts patches the same werift under the same symbol, so whichever loads first patches.
+const PATCHED = Symbol.for("eidolon.werift.patched");
+const ice = Connection.prototype as Connection & Record<symbol, unknown>;
+if (ice[PATCHED] !== true) {
+  ice[PATCHED] = true;
+  const gatherCandidates = ice.gatherCandidates;
+  ice.gatherCandidates = function (this: Connection) {
+    if (this.options.stunServer === undefined) this.stunServer = undefined;
+    return gatherCandidates.call(this);
+  };
+}
 
 /** The SDP rules for relay-only connections. */
 export interface CandidateRules {

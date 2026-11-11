@@ -7,6 +7,7 @@ import type { MemoryAdmin } from "@eidolon/memory";
 import { logAccess, type MethodRoutes, type RouteHandler, type RouteMethod } from "../app.ts";
 import { FORGET_MEMORIES_PATH, LIST_MEMORIES_PATH } from "../memory-admin.ts";
 import type { LocalContext, LocalExtension } from "../server.ts";
+import type { ChatRunner } from "./chats/runner.ts";
 import { allowedHosts, guardRequest, isApiPath, logRefused } from "./guard.ts";
 import { identityHandlers } from "./identity.ts";
 import {
@@ -17,6 +18,7 @@ import {
   localRoute,
 } from "./router.ts";
 import { accountsRoutes } from "./routes/accounts.ts";
+import { chatRunner, chatsRoutes } from "./routes/chats.ts";
 import { credentialsRoutes } from "./routes/credentials.ts";
 import { jobsRoutes } from "./routes/jobs.ts";
 import { memoriesRoutes } from "./routes/memories.ts";
@@ -30,7 +32,7 @@ import type { StaticSite } from "./static.ts";
 import type { LocalToken } from "./token.ts";
 
 /** Every route module the local API serves, besides the session exchange. */
-export function localRouteModules(app: LocalApp): LocalRouteSpec[] {
+export function localRouteModules(app: LocalApp, chats: () => ChatRunner): LocalRouteSpec[] {
   return [
     ...statusRoutes(app),
     ...settingsRoutes(app),
@@ -41,6 +43,7 @@ export function localRouteModules(app: LocalApp): LocalRouteSpec[] {
     ...jobsRoutes(app),
     ...memoriesRoutes(app),
     ...usageRoutes(),
+    ...chatsRoutes(chats),
   ];
 }
 
@@ -74,18 +77,21 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalExten
 
   return {
     routes(botRoutes, context) {
+      const onStop = (hook: () => Promise<void>): void => {
+        stopHooks.push(hook);
+      };
+      const chats = chatRunner({ onStop });
       const identity = identityHandlers({
         signalling: context.signalling,
         memoryAdmin: options.memoryAdmin,
+        chats,
       });
       const app: LocalApp = {
         port: context.port,
         // A connecting offer is a call already: a switch or restart now would cut it off.
         activeCalls: () => context.signalling.activeSessions + identity.pendingOffers(),
         restart: options.restart,
-        onStop: (hook) => {
-          stopHooks.push(hook);
-        },
+        onStop,
         memoryAdmin: options.memoryAdmin,
       };
       const routes: Record<string, RouteHandler | MethodRoutes> = {};
@@ -115,7 +121,7 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalExten
 
       const specs = [
         ...sessionRoutes(app, options.token, options.nowSeconds),
-        ...localRouteModules(app),
+        ...localRouteModules(app, chats),
       ];
       routes[`${LOCAL_PREFIX}/*`] = guarded(createLocalRouter(specs, authenticate), context);
       return routes;

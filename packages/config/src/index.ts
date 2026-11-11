@@ -7,6 +7,13 @@ export {
   parseAccounts,
 } from "./accounts.ts";
 export { daysInMonth, isLeap, ordinalToYmd, ymdToOrdinal } from "./calendar.ts";
+export {
+  chatInterests,
+  chatReplyMode,
+  chatTalkativeness,
+  DEFAULT_CHAT_REPLY_MODE,
+  DEFAULT_CHAT_TALKATIVENESS,
+} from "./chat.ts";
 export { isValidTimeZone, personaTimeZone, type ZonedClock, zonedClock } from "./clock.ts";
 export { type DotenvEntry, findDotenv, loadDotenv, parseDotenv } from "./dotenv.ts";
 export { DEFAULT_EMBED_MODEL, embedDim } from "./embed.ts";
@@ -60,6 +67,7 @@ export {
   expandUser,
   jiebaDir,
   PROJECT_ROOT,
+  resamplerDir,
   resolveProjectPath,
   serverEntry,
   shippedPath,
@@ -115,6 +123,7 @@ export {
   pyPathWithName,
   pyPathWithSuffix,
 } from "./pypath.ts";
+export { AsyncQueue } from "./queue.ts";
 export {
   accountEntries,
   activePersona,
@@ -143,5 +152,7 @@ export {
   type SettingsFiles,
   type SettingsLayers,
   setSettingDefaults,
+  settingsGeneration,
+  withPersona,
 } from "./settings.ts";
 export { type Clock, pyIsoformatUtc, utcDateParts, utcIsoDate, wallClockMicros } from "./utc.ts";

@@ -13,6 +13,25 @@ export {
   streamArchiveParams,
 } from "./archive.ts";
 export {
+  ADDRESSED_THRESHOLD,
+  DIRECTOR_TIMEOUT_SEC,
+  Director,
+  type DirectorDecision,
+  type DirectorInput,
+  type DirectorLine,
+  type DirectorParticipant,
+  type DirectorReply,
+  directorFromEnv,
+  directorParticipant,
+  directorQuestions,
+  directorState,
+  HOP_STEP,
+  INTEREST_THRESHOLD,
+  INVITES_THRESHOLD,
+  JUST_SPOKE_PENALTY,
+  MAX_REPLIES_TO_USER,
+} from "./director.ts";
+export {
   formatFacts,
   PersonaFacts,
   type PersonaFactsOptions,
@@ -21,6 +40,7 @@ export {
 } from "./facts.ts";
 export {
   DEFAULT_GATE_MODEL,
+  type DecisionsOptions,
   GATE_FRAME_KEY,
   GATE_QUESTIONS,
   GATE_THRESHOLD,
@@ -32,10 +52,10 @@ export {
   type GateTurn,
   type GateVerdict,
   gateQuestions,
+  gateRoleDecisions,
   gateState,
   gateStreamer,
   RetrievalGate,
-  type RetrievalGateOptions,
   reportDecision,
   retrievalGateFromEnv,
   TIMELINE_QUESTIONS,

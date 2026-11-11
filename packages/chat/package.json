@@ -1,0 +1,10 @@
+{
+  "name": "@eidolon/chat",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./jsonl": "./src/jsonl.ts",
+    "./contract": "./src/contract.ts"
+  }
+}

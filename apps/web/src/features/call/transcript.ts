@@ -1,5 +1,7 @@
 // What the call page shows of a call, rebuilt from its RTVI events: the viewer's speech and typed
 // messages, the bot's replies sentence by sentence as the TTS says them, and the selfies it sends.
+// On a group call, each reply names the persona who said it.
+import { separator } from "@eidolon/chat";
 import type { BotOutputData, TranscriptData, UserInputData } from "@pipecat-ai/client-js";
 import { type MarkupToken, parseMarkup } from "../../lib/markup";
 
@@ -28,9 +30,17 @@ export interface BotSegment {
   readonly voiced: boolean;
 }
 
+/** Who a group call's server says is speaking, as her audio starts. */
+export interface Speaker {
+  readonly persona: string;
+  readonly name: string;
+}
+
 export interface BotEntry {
   readonly kind: "bot";
   readonly id: number;
+  /** Who said it on a group call; null on a call with her alone. */
+  readonly speaker: Speaker | null;
   readonly segments: readonly BotSegment[];
 }
 
@@ -52,6 +62,8 @@ export interface Transcript {
   readonly openBot: number | null;
   /** Transcriptions arrive as user-input, so their user-transcription copies are skipped. */
   readonly userInput: boolean;
+  /** On a group call, the persona the caller hears now, or heard last. */
+  readonly speaker: Speaker | null;
 }
 
 export const EMPTY_TRANSCRIPT: Transcript = {
@@ -60,6 +72,7 @@ export const EMPTY_TRANSCRIPT: Transcript = {
   openUser: null,
   openBot: null,
   userInput: false,
+  speaker: null,
 };
 
 export type TranscriptEvent =
@@ -74,6 +87,8 @@ export type TranscriptEvent =
   /** The bot was cut off: what it says next is a new reply. */
   | { readonly type: "interrupted" }
   | { readonly type: "selfie"; readonly paths: readonly string[] }
+  /** A group call's persona starts speaking: her replies are entries of her own. */
+  | { readonly type: "speaker"; readonly speaker: Speaker }
   | { readonly type: "reset" };
 
 // Word and token output repeats the sentences, and backchannels and expressions sit outside a reply.
@@ -84,18 +99,6 @@ const SKIPPED_OUTPUT = new Set([
   "expression_sound",
   "expression_pause",
 ]);
-
-const CJK =
-  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3000-\u303f\uff00-\uffef]/u;
-
-/** The space two pieces of text need between them: none beside a space or CJK. */
-export function separator(left: string, right: string): "" | " " {
-  const before = left.at(-1);
-  const after = right[0];
-  if (before === undefined || after === undefined) return "";
-  if (/\s/.test(before) || /\s/.test(after) || CJK.test(before) || CJK.test(after)) return "";
-  return " ";
-}
 
 function append(state: Transcript, entry: Entry, open?: "user" | "bot"): Transcript {
   return {
@@ -150,7 +153,12 @@ function spokenLength(text: string, accumulated: string): number {
 function addSegment(state: Transcript, segment: BotSegment): Transcript {
   const open = entryOf(state, state.openBot, "bot");
   if (open === undefined) {
-    const entry: BotEntry = { kind: "bot", id: state.nextId, segments: [segment] };
+    const entry: BotEntry = {
+      kind: "bot",
+      id: state.nextId,
+      speaker: state.speaker,
+      segments: [segment],
+    };
     return append({ ...state, openUser: null }, entry, "bot");
   }
   return { ...replace(state, { ...open, segments: [...open.segments, segment] }), openUser: null };
@@ -236,9 +244,27 @@ export function reduceTranscript(state: Transcript, event: TranscriptEvent): Tra
       const entry: SelfieEntry = { kind: "selfie", id: state.nextId, paths: event.paths };
       return append({ ...state, openBot: null }, entry);
     }
+    case "speaker": {
+      // The director can hand the floor on with no word from the viewer between two replies.
+      const open = entryOf(state, state.openBot, "bot");
+      const handedOn = open !== undefined && open.speaker?.persona !== event.speaker.persona;
+      return { ...state, speaker: event.speaker, openBot: handedOn ? null : state.openBot };
+    }
     case "reset":
       return EMPTY_TRANSCRIPT;
   }
+}
+
+/** Who a server message says is speaking now; null for any message but a group call's label. */
+export function speakerOf(data: unknown): Speaker | null {
+  if (typeof data !== "object" || data === null) return null;
+  const { type, persona, name } = data as {
+    readonly type?: unknown;
+    readonly persona?: unknown;
+    readonly name?: unknown;
+  };
+  if (type !== "speaker" || typeof persona !== "string" || persona === "") return null;
+  return { persona, name: typeof name === "string" && name.trim() !== "" ? name : persona };
 }
 
 /** A user entry's words: what was said, and the part still being heard with its leading space. */
@@ -270,7 +296,8 @@ export function botRuns(entry: BotEntry): BotRun[] {
     source += segment.text;
   }
   const isPending = (at: number) => pending.some(([from, to]) => from <= at && at < to);
-  const bounds = pending.flat();
+  // Unspaced sentences pending back to back share a bound, which would cut an empty run.
+  const bounds = [...new Set(pending.flat())];
 
   const runs: BotRun[] = [];
   for (const token of parseMarkup(source)) {

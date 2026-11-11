@@ -78,6 +78,7 @@ export const RECALL_HINT =
   "不要把不同时期的直播混在一起，也不要还没查询就说记不清。";
 export const CHUNK_SCOPE_LABEL = "刚才查到的直播片段";
 const TIMELINE_SCOPE_LABEL = "刚才查到的场次";
+const SELECTED_SCOPE_LABEL = "选定的归档直播";
 export const RENDER_HEADER =
   "以下是已归档直播的记录，用来 ground 回复，不要照念，也不要主动念日期。";
 
@@ -320,6 +321,7 @@ export class StreamArchive implements ContextProvider {
   readonly #retriever: Retriever;
   readonly #catalog: ArchiveCatalog;
   #turnKey: TurnKey | null = null;
+  #turnId: string | undefined;
   #toolCalls = 0;
   #tool: LlmTool | null = null;
 
@@ -367,6 +369,16 @@ export class StreamArchive implements ContextProvider {
       run: (call) => this.#runTool(call),
     };
     return this.#tool;
+  }
+
+  /**
+   * Takes up the selection a recall_streams call left in a conversation this archive didn't serve,
+   * such as a chat's after a restart: `broadcastIds` are the broadcasts that call returned.
+   */
+  async resumeSelection(broadcastIds: readonly string[]): Promise<void> {
+    const scope = streamScope({ streamIds: broadcastIds, label: SELECTED_SCOPE_LABEL });
+    const broadcasts = await this.recall.select(scope);
+    this.recall.remember(recallResult({ scope, overview: false, broadcasts }));
   }
 
   /** Returns whether the turn was a recap, which makes the facts provider skip it. */
@@ -490,8 +502,9 @@ export class StreamArchive implements ContextProvider {
 
   #beginTurn(context: ConversationContext): boolean {
     const key = turnKeyOf(context.getMessages());
-    if (sameTurn(this.#turnKey, key)) return false;
+    if (sameTurn(this.#turnKey, key) && this.#turnId === context.turn) return false;
     this.#turnKey = key;
+    this.#turnId = context.turn;
     this.#toolCalls = 0;
     if (this.#tool !== null) context.setHiddenTools([]);
     return true;
@@ -548,7 +561,7 @@ export class StreamArchive implements ContextProvider {
         if (!request.broadcastIds.every((id) => known.has(id))) {
           throw new Error("场次 ID 不在归档中，请使用日期范围查找");
         }
-        return streamScope({ streamIds: request.broadcastIds, label: "选定的归档直播" });
+        return streamScope({ streamIds: request.broadcastIds, label: SELECTED_SCOPE_LABEL });
       }
       case "date_range": {
         const start = request.startDate;

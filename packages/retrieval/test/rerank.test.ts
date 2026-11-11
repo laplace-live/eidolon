@@ -1,4 +1,8 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import "../../config/test/isolated-guard.ts";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { dataHome, installSettings, resetSettings, withPersona } from "@eidolon/config";
 import { setUsageSink, type UsageRecord } from "@eidolon/providers";
 import {
   DEFAULT_RERANK_BASE_URL,
@@ -14,6 +18,22 @@ const env = isolateEnv();
 
 const ok = (results: unknown) => Response.json({ results, meta: { billed_units: 1 } });
 const tooMany = () => new Response("{}", { status: 429, statusText: "Too Many Requests" });
+
+const ENV_NAMES = [
+  "OPENROUTER_API_KEY",
+  "RERANK_API_KEY",
+  "RERANK_BASE_URL",
+  "RERANK_ENABLED",
+  "RERANK_MODEL",
+] as const;
+const envBefore = new Map(ENV_NAMES.map((name) => [name, process.env[name]]));
+
+afterEach(() => {
+  for (const [name, value] of envBefore) {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  }
+});
 
 describe("OpenRouterReranker", () => {
   test("posts the Cohere body with OpenRouter attribution", async () => {
@@ -206,11 +226,69 @@ describe("makeReranker", () => {
     ]);
   });
 
-  test("the first call fixes the reranker", () => {
+  test("each settings state builds and logs its reranker once", () => {
     process.env.OPENROUTER_API_KEY = "k";
-    const first = makeReranker("model-a");
-    expect(first?.modelName).toBe("model-a");
+    const a = makeReranker("model-a");
+    const b = makeReranker("model-b");
+    expect([a?.modelName, b?.modelName]).toEqual(["model-a", "model-b"]);
     process.env.RERANK_ENABLED = "off";
-    expect(makeReranker("model-b")).toBe(first);
+    expect(makeReranker("model-a")).toBeNull();
+    expect(makeReranker("model-a")).toBeNull();
+    delete process.env.RERANK_ENABLED;
+    expect(makeReranker("model-a")).toBe(a as OpenRouterReranker);
+    expect(makeReranker("model-b")).toBe(b as OpenRouterReranker);
+    expect(messages(records, "INFO")).toEqual([
+      "Reranker enabled: model='model-a' via https://openrouter.ai/api/v1",
+      "Reranker enabled: model='model-b' via https://openrouter.ai/api/v1",
+      "RERANK_ENABLED is off — hybrid retrieval will use RRF fusion",
+    ]);
+  });
+
+  test("a new key or model builds a new reranker", () => {
+    process.env.OPENROUTER_API_KEY = "k1";
+    const first = makeReranker();
+    process.env.OPENROUTER_API_KEY = "k2";
+    const rekeyed = makeReranker();
+    process.env.RERANK_MODEL = "cohere/rerank-v4.0-pro";
+    const remodelled = makeReranker();
+    expect(new Set([first, rekeyed, remodelled]).size).toBe(3);
+    expect(remodelled?.modelName).toBe("cohere/rerank-v4.0-pro");
+  });
+});
+
+describe("makeReranker per persona", () => {
+  afterEach(() => {
+    resetSettings();
+    rmSync(dataHome(), { recursive: true, force: true });
+  });
+
+  function write(rel: string, text: string): void {
+    const path = join(dataHome(), rel);
+    mkdirSync(join(path, ".."), { recursive: true });
+    writeFileSync(path, text);
+  }
+
+  function personas(): void {
+    write(
+      "personas/alice/persona.yaml",
+      "identity:\n  name: Alice\nknowledge:\n  rerank:\n    model: alice/rerank\n",
+    );
+    write(
+      "personas/bob/persona.yaml",
+      "identity:\n  name: Bob\nknowledge:\n  rerank:\n    enabled: false\n",
+    );
+    process.env.OPENROUTER_API_KEY = "k";
+    installSettings();
+  }
+
+  test("each persona gets her own reranker, or none", () => {
+    personas();
+    const alice = withPersona("alice", () => makeReranker());
+    expect(alice?.modelName).toBe("alice/rerank");
+    expect(withPersona("bob", () => makeReranker())).toBeNull();
+    const installed = makeReranker();
+    expect(installed?.modelName).toBe(DEFAULT_RERANK_MODEL);
+    expect(withPersona("alice", () => makeReranker())).toBe(alice as OpenRouterReranker);
+    expect(makeReranker()).toBe(installed as OpenRouterReranker);
   });
 });

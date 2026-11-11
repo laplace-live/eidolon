@@ -1,6 +1,7 @@
 // How the settings form shows a SETTINGS row and what it saves. A value is written so the bot reads
 // it back from the file exactly as from the variable: @eidolon/config's asEnvValue joins a list
 // with "," and resolves each path, and the readers split on "," and strip Python whitespace.
+import { REPLY_MODES } from "@eidolon/chat";
 import type { SettingKind, SettingRow, SettingScope } from "@/lib/api";
 import {
   defaultModel,
@@ -17,12 +18,13 @@ export type Control =
   /** `placeholder`: what applies while it is empty, where that is a value, such as an API base. */
   | { readonly type: "text"; readonly placeholder?: string }
   | { readonly type: "integer"; readonly min?: number; readonly max?: number }
-  | { readonly type: "number" }
+  | { readonly type: "number"; readonly slider?: Slider }
   | { readonly type: "flag" }
   | { readonly type: "list" }
   | { readonly type: "path"; readonly inPersona: boolean }
   | { readonly type: "paths"; readonly inPersona: boolean }
-  | { readonly type: "select"; readonly options: readonly string[] }
+  /** `fallback`: what applies while nothing sets it, where that is one of its options. */
+  | { readonly type: "select"; readonly options: readonly string[]; readonly fallback?: string }
   | { readonly type: "timezone" }
   | { readonly type: "language" }
   /** Which provider fills a role: the catalog's that offer what it needs. */
@@ -31,6 +33,20 @@ export type Control =
   | { readonly type: "model"; readonly role: Role }
   /** A voice: a provider's fixed set, or its id. */
   | { readonly type: "voice"; readonly role: Role };
+
+/** A number set on a slider, which stands at `fallback` while nothing sets it. */
+export interface Slider {
+  readonly min: number;
+  readonly max: number;
+  readonly step: number;
+  readonly fallback: number;
+}
+
+/** @eidolon/config's DEFAULT_CHAT_TALKATIVENESS: hers while nothing sets one. */
+export const DEFAULT_TALKATIVENESS = 0.5;
+
+/** @eidolon/config's DEFAULT_CHAT_REPLY_MODE. */
+export const DEFAULT_REPLY_MODE = "auto";
 
 /** The browsers yt-dlp's --cookies-from-browser reads, and `none` for no cookies. */
 export const COOKIE_BROWSERS = [
@@ -57,6 +73,11 @@ const BY_PATH: Readonly<Record<string, Control>> = {
   "memory.qdrant.port": { type: "integer", min: 1, max: 65535 },
   "embeddings.dim": { type: "integer", min: 1 },
   "refine.concurrency": { type: "integer", min: 1 },
+  "chat.talkativeness": {
+    type: "number",
+    slider: { min: 0, max: 1, step: 0.05, fallback: DEFAULT_TALKATIVENESS },
+  },
+  "chat.replyMode": { type: "select", options: REPLY_MODES, fallback: DEFAULT_REPLY_MODE },
 };
 
 function byKind(kind: SettingKind, scope: SettingScope): Control {
@@ -340,6 +361,19 @@ export function parseDraft(draft: string, control: Control): Parsed {
   }
 }
 
+/**
+ * Where a slider stands: the draft's number, else the inherited value's, else its fallback, clamped
+ * to its range as the bot clamps the value. A draft that isn't a number counts as unset.
+ */
+export function sliderValue(slider: Slider, draft: string, inherited: string | null): number {
+  const number = (text: string): number | null => {
+    const parsed = parseDraft(text, { type: "number" });
+    return parsed.ok && typeof parsed.value === "number" ? parsed.value : null;
+  };
+  const value = number(draft) ?? number(inherited ?? "") ?? slider.fallback;
+  return Math.min(slider.max, Math.max(slider.min, value));
+}
+
 /** A select's choices: its own, then the file's value when it is none of them, so it isn't lost. */
 export function optionsOf(control: Control & { type: "select" }, current: string): string[] {
   const options = [...control.options];
@@ -387,6 +421,7 @@ const GROUP_OF: Readonly<Record<string, Group>> = {
   voice: "voice",
   identity: "persona",
   prompt: "persona",
+  chat: "persona",
   hearing: "models",
   mind: "models",
   realtime: "models",

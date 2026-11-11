@@ -18,6 +18,7 @@ import {
 } from "@eidolon/config";
 import { REFERENCE_EXTENSIONS } from "@eidolon/imagegen";
 import { transcribe } from "@eidolon/ingest";
+import { readBytes } from "../../responses.ts";
 import {
   type IdentityUpdate,
   LOCAL_ROUTES,
@@ -48,7 +49,7 @@ import {
   writeIdentityFields,
   writeNewPersona,
 } from "../personas.ts";
-import { localError, localJson, readBytes, readJson } from "../responses.ts";
+import { imageResponse, localError, localJson, NO_STORE, readJson } from "../responses.ts";
 import { reinstallSettings } from "../restart.ts";
 import type { LocalApp, LocalRouteSpec } from "../router.ts";
 import {
@@ -79,25 +80,14 @@ const RESERVED_IDS = new Set(
 
 const CONTROL = /\p{Cc}/u;
 
-/** Sandboxed, and typed by the bytes, never by the name. */
-function imageResponse(bytes: Uint8Array<ArrayBuffer>, image: SniffedImage): Response {
-  return new Response(bytes, {
-    headers: {
-      "content-type": image.type,
-      "x-content-type-options": "nosniff",
-      "content-security-policy": "default-src 'none'; sandbox",
-      "cache-control": "no-store",
-    },
-  });
-}
-
+/** Typed by the bytes, never by the name. */
 async function serveImage(path: string): Promise<Response> {
   const bytes = await Bun.file(path).bytes();
   const image = sniffImage(bytes);
   if (image === null) {
     return localError(415, "unsupported-media-type", "Only PNG, JPEG and WebP images are shown");
   }
-  return imageResponse(bytes, image);
+  return imageResponse(bytes, image.type, { "cache-control": NO_STORE });
 }
 
 /** An upload's bytes and type, or the 413 or 415 to answer. */

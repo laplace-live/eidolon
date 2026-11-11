@@ -1,6 +1,7 @@
 // The local web app's admin API on the wire, under /api/local: what apps/bot/src/local serves and
-// apps/web imports with `import type`. Keep this module import-free, so the SPA's typecheck sees no
-// Bun or Node.
+// apps/web imports with `import type`. Its only import is @eidolon/chat's types, which are
+// browser-safe and erased, so the SPA's typecheck sees no Bun or Node.
+import type { ChatEvent, ChatHeader, ChatSummary, ParticipantId, ReplyMode } from "@eidolon/chat";
 
 /** Every route the local router serves, as `<METHOD> <path>`; `:name` is one path segment. */
 export const LOCAL_ROUTES = [
@@ -52,6 +53,17 @@ export const LOCAL_ROUTES = [
   "GET /api/local/memories",
   "DELETE /api/local/memories",
   "GET /api/local/usage",
+  "GET /api/local/chats",
+  "POST /api/local/chats",
+  "GET /api/local/chats/:id",
+  "PATCH /api/local/chats/:id",
+  "DELETE /api/local/chats/:id",
+  "POST /api/local/chats/:id/messages",
+  "POST /api/local/chats/:id/voice",
+  "GET /api/local/chats/:id/live",
+  "POST /api/local/chats/:id/stop",
+  "POST /api/local/chats/:id/participants",
+  "GET /api/local/chats/:id/files/:name",
 ] as const satisfies readonly (keyof LocalApi)[];
 
 export type LocalRoute = (typeof LOCAL_ROUTES)[number];
@@ -96,6 +108,10 @@ export const ERROR_CODES = [
   "unknown-job",
   "job-not-running",
   "job-not-resumable",
+  "unknown-chat",
+  "missing-key",
+  "chat-in-call",
+  "realtime-in-group",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -113,7 +129,7 @@ export interface ErrorBody {
 }
 
 /** A body or response that is not JSON: an upload's bytes, a job's NDJSON events, a log's text. */
-export interface Raw<Kind extends "image" | "ndjson" | "text"> {
+export interface Raw<Kind extends "image" | "audio" | "ndjson" | "text"> {
   readonly raw: Kind;
 }
 
@@ -310,9 +326,9 @@ export interface MemoryStatus {
 export interface Status {
   readonly version: string;
   /**
-   * A setting or credential that calls read once changed since: at boot, or when memory or
-   * retrieval first ran. It stays set until POST restart, even if the value is set back: a
-   * reader may hold the changed one.
+   * A setting or credential that calls read once changed since: at boot, or when retrieval first
+   * embedded. It stays set until POST restart, even if the value is set back: a reader may hold
+   * the changed one.
    */
   readonly restartRequired: boolean;
   /** Only the MCP server keeps what it read at boot, such as which persona's index it serves. */
@@ -899,6 +915,137 @@ export interface LocalApi {
   "GET /api/local/memories": Endpoint<undefined, MemoriesResponse, MemoriesQuery>;
   "DELETE /api/local/memories": Endpoint<undefined, Ok, MemoriesQuery>;
   "GET /api/local/usage": Endpoint<undefined, UsageSummary, UsageQuery>;
+  /** Newest activity first. */
+  "GET /api/local/chats": Endpoint<undefined, readonly ChatSummary[]>;
+  "POST /api/local/chats": Endpoint<ChatCreateRequest, ChatCreated>;
+  "GET /api/local/chats/:id": Endpoint<undefined, ChatContents, ChatReadQuery>;
+  "PATCH /api/local/chats/:id": Endpoint<ChatUpdateRequest, Ok>;
+  /** 409 chat-in-call during a call. */
+  "DELETE /api/local/chats/:id": Endpoint<undefined, Ok>;
+  "POST /api/local/chats/:id/messages": Endpoint<ChatMessageRequest, Raw<"ndjson">>;
+  "POST /api/local/chats/:id/voice": Endpoint<Raw<"audio">, Raw<"ndjson">, ChatVoiceQuery>;
+  /**
+   * The running reply from its start; during a call, each event the chat stores, from its
+   * call-started to its call-ended, where the stream ends. A 204 with no body while neither runs.
+   */
+  "GET /api/local/chats/:id/live": Endpoint<undefined, Raw<"ndjson">>;
+  /** A 204 with no body, once the turn has stopped and what it said is stored. */
+  "POST /api/local/chats/:id/stop": Endpoint<undefined, undefined>;
+  "POST /api/local/chats/:id/participants": Endpoint<ChatParticipantsRequest, Ok>;
+  /** Audio answers Range requests, so a player can seek. */
+  "GET /api/local/chats/:id/files/:name": Endpoint<undefined, Raw<"image" | "audio">>;
+}
+
+/**
+ * POST chats: 1 to 6 personas, each once. One persona's greeting then runs, and GET live streams it;
+ * a group chat doesn't greet, and is titled with their short names.
+ */
+export interface ChatCreateRequest {
+  readonly participants: readonly ParticipantId[];
+}
+
+export interface ChatCreated {
+  readonly id: string;
+}
+
+/** GET chats/:id. */
+export interface ChatContents {
+  readonly header: ChatHeader;
+  readonly events: readonly ChatEvent[];
+  /**
+   * Tools her interrupted turns left running, by name, such as a selfie still rendering: what they
+   * bring is stored after the turn, and each leaves the list once it is.
+   */
+  readonly lateTools: readonly string[];
+  /**
+   * Why the viewer can't send a voice message now, in English: the hearing role of the chat's first
+   * persona, which hears them, has no key or can't be resolved, and POST voice answers 409
+   * missing-key with this message. null when it can hear one.
+   */
+  readonly hearingRefusal: string | null;
+  /** The call on in this chat, from its call-started until its call-ended is stored; else null. */
+  readonly call: ChatCallInfo | null;
+  /**
+   * Whether the viewer can call every persona in the chat at once (`group` in the offer): a chat of
+   * two or more, on the native voice engine, none of them on a realtime model.
+   */
+  readonly groupCall: boolean;
+}
+
+export interface ChatCallInfo {
+  /** The `call` its call-started and call-ended carry. */
+  readonly id: string;
+  /** Whom the viewer called; in a group call, the host. */
+  readonly persona: ParticipantId;
+  /** Every persona in the chat is on the call. */
+  readonly group?: true;
+}
+
+/**
+ * The `requestData` of a local POST /api/offer that calls a persona inside a chat. The call runs as
+ * `persona`, active or not, opens on her view of the chat, and stores each finished line in it as a
+ * `call` message; GET chats/:id/live streams them. Without `chatId`, the call is the standalone
+ * one to the active persona. Refused with 400 bad-request (no persona, or one not in the chat),
+ * 404 unknown-chat, 400 invalid-persona-id or 404 unknown-persona, and 409 chat-in-call while
+ * the chat is in another call.
+ *
+ * With `group`, every persona in the chat is on the call, `persona` hosting: her hearing role hears
+ * the viewer, the director chooses who answers each line, and each decision is stored too. Refused
+ * with 400 bad-request in a chat of one or off the native voice engine, and 409 realtime-in-group
+ * when a persona in the chat talks through a realtime model.
+ */
+export interface ChatCallRequestData {
+  readonly chatId: string;
+  readonly persona: ParticipantId;
+  readonly group?: boolean;
+}
+
+export interface ChatReadQuery {
+  /** Only the events after this seq; every one when absent. */
+  readonly afterSeq?: number;
+}
+
+/**
+ * POST chats/:id/messages: 1 to 4000 characters, answered with ChatStreamLines: the viewer's line,
+ * then for each line the director answers, its `decision` and every chosen persona's turn. A reply
+ * still running is stopped first, with the hops queued after it, and what it said is stored as
+ * interrupted. 409 chat-in-call during a call, as for POST voice.
+ */
+export interface ChatMessageRequest {
+  readonly text: string;
+}
+
+/**
+ * POST chats/:id/voice: a recorded voice message as the body, of type audio/webm, audio/ogg,
+ * audio/mp4 or audio/mpeg, codecs and all, at most 10 MB, else 415 or 413. As POST messages, it
+ * stops a reply still running; the clip is then heard through the hearing role of the chat's first
+ * persona, stored with its transcript, which is empty when nothing was heard, and answered. The
+ * stream is POST messages'. 409 missing-key while that role can't hear (ChatContents'
+ * `hearingRefusal`) or a mind has no key; 502 upstream-failed, with nothing stored, when the
+ * hearing provider fails.
+ */
+export interface ChatVoiceQuery {
+  /** The clip's length by the recorder's clock, a whole number of ms up to 120000 (2 minutes). */
+  readonly durationMs: number;
+}
+
+/**
+ * PATCH chats/:id, one field at a time: a `title` of 1 to 80 characters on one line, the
+ * `chainLimit` of persona-to-persona hops after each viewer line, 0 to 6, or the `replyMode` that
+ * overrides every persona's own; each setting is kept as a `settings` event.
+ */
+export type ChatUpdateRequest =
+  | { readonly title: string }
+  | { readonly chainLimit: number }
+  | { readonly replyMode: ReplyMode };
+
+/**
+ * POST chats/:id/participants: personas to add, who aren't in the chat, and to remove, who are,
+ * leaving 1 to 6. Kept as a `participants` event; a reply already running is left to finish.
+ */
+export interface ChatParticipantsRequest {
+  readonly add?: readonly ParticipantId[];
+  readonly remove?: readonly ParticipantId[];
 }
 
 /** One day's spend for one persona, role and model, summed. */

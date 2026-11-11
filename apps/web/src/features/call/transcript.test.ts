@@ -5,7 +5,7 @@ import {
   botRuns,
   EMPTY_TRANSCRIPT,
   reduceTranscript,
-  separator,
+  speakerOf,
   type Transcript,
   type TranscriptEvent,
   userText,
@@ -86,9 +86,15 @@ function view(transcript: Transcript): string[] {
         return run.pending ? `~${shown}~` : shown;
       })
       .join("");
-    return `bot: ${text}`;
+    return `${entry.speaker === null ? "bot" : entry.speaker.name}: ${text}`;
   });
 }
+
+/** A group call's label, as the persona's first sample plays. */
+const speaking = (persona: string, name: string): TranscriptEvent => ({
+  type: "speaker",
+  speaker: { persona, name },
+});
 
 describe("speech", () => {
   test("interim words stand in until the final, and finals add up until the bot answers", () => {
@@ -249,22 +255,76 @@ describe("selfies and resets", () => {
   });
 });
 
-describe("separator", () => {
-  test("spaces only between two non-CJK words", () => {
-    expect(separator("Hi there.", "How")).toBe(" ");
-    expect(separator("你好。", "我是")).toBe("");
-    expect(separator("OK,", "你好")).toBe("");
-    expect(separator("好的", "OK")).toBe("");
-    expect(separator("Hi ", "there")).toBe("");
-    expect(separator("Hi", " there")).toBe("");
-    expect(separator("", "x")).toBe("");
-    expect(separator("x", "")).toBe("");
+describe("group calls", () => {
+  test("each persona's reply is her own entry under her name, even with no word between", () => {
+    const call = run(
+      said("你们好"),
+      speaking("milky-green", "奶绿"),
+      announce(1, "你好呀。"),
+      spoke(1, "你好呀。"),
+      speaking("mint", "薄荷"),
+      announce(2, "我也在。"),
+    );
+    expect(view(call)).toEqual(["you: 你们好", "奶绿: 你好呀。", "薄荷: ~我也在。~"]);
+    expect(call.speaker).toEqual({ persona: "mint", name: "薄荷" });
+  });
+
+  test("her label again keeps her reply open, and she keeps her name after the viewer speaks", () => {
+    const call = run(
+      speaking("milky-green", "奶绿"),
+      announce(1, "第一句。"),
+      speaking("milky-green", "奶绿"),
+      announce(2, "第二句。"),
+      said("嗯"),
+      announce(3, "还有呢。"),
+    );
+    expect(view(call)).toEqual(["奶绿: ~第一句。~~第二句。~", "you: 嗯", "奶绿: ~还有呢。~"]);
+  });
+
+  test("a late completion lands in the earlier persona's reply", () => {
+    const call = run(
+      speaking("milky-green", "奶绿"),
+      announce(1, "A。"),
+      speaking("mint", "薄荷"),
+      announce(2, "B。"),
+      spoke(1, "A。"),
+    );
+    expect(view(call)).toEqual(["奶绿: A。", "薄荷: ~B。~"]);
+  });
+
+  test("a call with her alone has no labels, and reset forgets the last speaker", () => {
+    expect(run(announce(1, "你好。")).entries[0]).toMatchObject({ speaker: null });
+    const labeled = run(speaking("mint", "薄荷"), announce(1, "你好。"));
+    expect(reduceTranscript(labeled, { type: "reset" })).toBe(EMPTY_TRANSCRIPT);
+  });
+
+  test("speakerOf reads the group call's label and nothing else", () => {
+    expect(speakerOf({ type: "speaker", persona: "mint", name: "薄荷" })).toEqual({
+      persona: "mint",
+      name: "薄荷",
+    });
+    expect(speakerOf({ type: "speaker", persona: "mint", name: " " })).toEqual({
+      persona: "mint",
+      name: "mint",
+    });
+    expect(speakerOf({ type: "speaker", persona: "mint" })).toEqual({
+      persona: "mint",
+      name: "mint",
+    });
+    expect(speakerOf({ type: "speaker", persona: "", name: "薄荷" })).toBeNull();
+    expect(speakerOf({ type: "speaker", persona: 7, name: "薄荷" })).toBeNull();
+    expect(speakerOf({ type: "selfie", urls: ["/api/selfie/a.png"], persona: "mint" })).toBeNull();
+    expect(speakerOf(null)).toBeNull();
+    expect(speakerOf("speaker")).toBeNull();
   });
 });
 
 test("botRuns keeps every run's offset unique, so it can key the run", () => {
-  const entry = run(announce(1, "[温暖] 你好。"), announce(2, "<emphasis>再见</emphasis>。"))
-    .entries[0] as BotEntry;
-  const starts = botRuns(entry).map((piece) => piece.start);
-  expect(new Set(starts).size).toBe(starts.length);
+  for (const reply of [
+    run(announce(1, "[温暖] 你好。"), announce(2, "<emphasis>再见</emphasis>。")),
+    run(announce(1, "第一句。"), announce(2, "第二句。")),
+  ]) {
+    const starts = botRuns(reply.entries[0] as BotEntry).map((piece) => piece.start);
+    expect(new Set(starts).size).toBe(starts.length);
+  }
 });

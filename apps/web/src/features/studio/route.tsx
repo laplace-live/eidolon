@@ -9,6 +9,7 @@ import {
   ClapperboardIcon,
   ImagesIcon,
   LanguagesIcon,
+  MessagesSquareIcon,
   PhoneIcon,
   ScrollTextIcon,
   SlidersHorizontalIcon,
@@ -31,6 +32,7 @@ import { useActivatePersona } from "@/features/setup/personas";
 import type { PersonaSummary } from "@/lib/api";
 import { studioPath } from "@/lib/paths";
 import { AdvancedSection } from "./advanced-section";
+import { ChatSection } from "./chat-section";
 import { GlossarySection } from "./glossary-section";
 import { IdentitySection } from "./identity-section";
 import { KnowledgeSection } from "./knowledge-section";
@@ -47,6 +49,7 @@ const SECTION_LABELS: Readonly<Record<SectionId, MessageDescriptor>> = {
   prompt: msg`Prompt`,
   voice: msg`Voice`,
   models: msg`Mind`,
+  chat: msg`Chats`,
   knowledge: msg`Knowledge`,
   videos: msg`Videos`,
   glossary: msg`Glossary`,
@@ -59,6 +62,7 @@ const ICONS: Readonly<Record<SectionId, ReactNode>> = {
   prompt: <ScrollTextIcon />,
   voice: <AudioLinesIcon />,
   models: <BrainIcon />,
+  chat: <MessagesSquareIcon />,
   knowledge: <BookOpenIcon />,
   videos: <ClapperboardIcon />,
   glossary: <LanguagesIcon />,
@@ -71,6 +75,7 @@ const PANELS: Readonly<Record<SectionId, ComponentType<{ readonly persona: Perso
   prompt: PromptSection,
   voice: VoiceSection,
   models: ModelsSection,
+  chat: ChatSection,
   knowledge: KnowledgeSection,
   videos: VideosSection,
   glossary: GlossarySection,

@@ -1,7 +1,10 @@
 // A browser walk through the local web app on a throwaway data home: sign-in, the wizard's keys step
 // in English and 简体中文, saved keys, an embeddings account added and picked in Settings, a saved
-// prompt, and a facts index built through the studio. The keys are fake, so the providers refuse
-// them for free, and the embeddings come from a fake server, so nothing is billed. --call instead places a real call from the call page with the
+// prompt, a facts index built through the studio, a text chat from greeting to delete, a group chat
+// with a second persona, voice messages both ways, and a call inside a chat. The keys are fake, so
+// the providers refuse them for free, and the embeddings, the chats' replies, the director's
+// decisions, the voice messages' speech and the call's hearing, mind and voice come from a fake
+// server, so nothing is billed. --call instead places a real call from the call page with the
 // .env's keys, which bills them.
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import {
@@ -25,7 +28,15 @@ import {
   type Locator,
   type Page,
 } from "playwright-core";
-import type { JobSnapshot, Status } from "../src/local/api.ts";
+import type {
+  AccountsResponse,
+  AccountView,
+  ChatContents,
+  JobSnapshot,
+  PersonasResponse,
+  Status,
+  UsageSummary,
+} from "../src/local/api.ts";
 import { Output, READY_LINE } from "./output.ts";
 
 const ROOT = resolve(import.meta.dir, "../../..");
@@ -188,6 +199,53 @@ const EMBED_ACCOUNT = "openai-compatible";
 const EMBED_ACCOUNT_NAME = "Local smoke embeddings";
 const FAKE_MODELS = ["fake-embedding-small", "fake-embedding-large"];
 const FAKE_MODEL = "fake-embedding-large";
+/** The chat model the fake server streams from, which the chat walk gives her mind. */
+const MIND_MODEL = "fake-chat";
+/** What the fake mind answers a greeting kickoff with. */
+const GREETING = "晚上好呀，今天也来陪我聊天啦？";
+const CHAT_MESSAGE = "今天过得怎么样？";
+/** Its reply to CHAT_MESSAGE, in two chunks: the second waits REPLY_HOLD_MS, so the page shows
+ * the first alone. */
+const REPLY = ["还不错哦，", "[laughing] 刚刚在看猫猫视频。"] as const;
+const REPLY_HOLD_MS = 2000;
+const CHAT_TITLE = "Local smoke chat";
+/** The group chat's second persona, made from no template. */
+const SECOND = {
+  id: "local-smoke-kuro",
+  name: "黑川茶茶",
+  shortName: "茶茶",
+  summary: "A horror-game streamer who stays up late",
+} as const;
+/** The OpenRouter account the director's Decisions requests reach the fake server through. */
+const DECISIONS_ACCOUNT_NAME = "Local smoke decisions";
+/** The viewer's group line after the mention the composer completes. */
+const GROUP_TEXT = "你今晚玩什么？";
+const GROUP_MESSAGE = `@${SECOND.shortName} ${GROUP_TEXT}`;
+/** The second persona's answer, which invites the first. */
+const SECOND_REPLY = "在玩恐怖游戏呢，奶绿要一起吗？";
+/** The first persona's answer to her, a hop later. */
+const HOP_REPLY = "不要不要，我最怕黑了！";
+/** The OpenAI account her voice and hearing reach the fake server through; an OpenAI-compatible
+ * endpoint offers neither. */
+const SPEECH_ACCOUNT_NAME = "Local smoke speech";
+/** How long the walk holds the microphone down, past the composer's 350 ms hold. */
+const HOLD_MIC_MS = 1500;
+/** What the fake server hears in any voice message. */
+const VOICE_TRANSCRIPT = "你听得到我说话吗？";
+/** Her answer to it, in text. */
+const HEARD_REPLY = "听得到呀，声音很清楚。";
+/** The viewer's line once the chat answers in voice. */
+const VOICE_ASK = "用语音跟我说句话吧";
+/** Her voice reply; the fake voice's model reads no cues, so it is sent VOICE_SPOKEN. */
+const VOICE_REPLY = "[sighing] 好吧好吧，就说一句哦。";
+const VOICE_SPOKEN = "好吧好吧，就说一句哦。";
+/** How long the fake voice speaks. */
+const SPEECH_SECONDS = 1;
+/** What the viewer types before calling her, and her text answer. */
+const CALL_TOLD = "我家的猫叫团子。";
+const CALL_TOLD_REPLY = "团子这名字好可爱！";
+/** Her greeting on the call, which the fake mind gives only when the call's history holds CALL_TOLD. */
+const CALL_GREETING = "团子今天乖不乖呀？";
 
 interface Check {
   readonly name: string;
@@ -249,20 +307,210 @@ function fakeVector(text: string, dimensions: number): number[] {
   return vector.map((value) => value / norm);
 }
 
-/** An OpenAI-compatible server, its embeddings and its model list, that answers the fake key only. */
+/** One chat completion request the fake server took, as far as the walk reads it. */
+interface ChatRequest {
+  readonly model?: unknown;
+  readonly stream?: unknown;
+  readonly stop?: unknown;
+  readonly messages?: readonly { readonly role?: unknown; readonly content?: unknown }[];
+}
+
+/** One Decisions request the fake server took, as far as the walk reads it. */
+interface DecisionsRequest {
+  readonly state?: {
+    readonly latest?: {
+      readonly speaker?: unknown;
+      readonly text?: unknown;
+      readonly modality?: unknown;
+    };
+  };
+  readonly questions?: Readonly<Record<string, unknown>>;
+}
+
+/** One speech request the fake server took. */
+interface SpeechRequest {
+  readonly model?: unknown;
+  readonly input?: unknown;
+  readonly voice?: unknown;
+  readonly response_format?: unknown;
+}
+
+/** One realtime transcription session the fake server opened, as far as the walk reads it. */
+interface Listening {
+  readonly model: unknown;
+  /** The audio appended to its buffer, in messages. */
+  appended: number;
+}
+
+/** One transcription upload the fake server took. */
+interface HeardUpload {
+  readonly model: string | null;
+  readonly language: string | null;
+  readonly name: string | null;
+  readonly bytes: number;
+}
+
+/** Whether a user message of the request holds `text`. */
+function heard(request: ChatRequest, text: string): boolean {
+  return (request.messages ?? []).some(
+    (message) => message.role === "user" && String(message.content).includes(text),
+  );
+}
+
+/**
+ * The director's answer: SECOND_REPLY is addressed to the first persona and invites a reply, and
+ * every other noul is 0, so the viewer's line goes to whoever it mentions and the chain then ends.
+ */
+function decisionsAnswer(request: DecisionsRequest): Response {
+  const invited = request.state?.latest?.text === SECOND_REPLY;
+  const noul = (key: string) =>
+    invited && (key === "invites_reply" || key === `addressed_${PERSONA}`) ? 0.9 : 0;
+  return Response.json({
+    model: "fake-decider",
+    answers: Object.fromEntries(
+      Object.keys(request.questions ?? {}).map((key) => [key, { type: "noul", noul: noul(key) }]),
+    ),
+    usage: { input_tokens: 0, output_tokens: 0, cost: 0 },
+  });
+}
+
+/** An OpenAI chat completion stream of `texts`, each after the one before by `holdMs`. */
+function completionStream(texts: readonly string[], holdMs: number): Response {
+  const encoder = new TextEncoder();
+  const data = (value: unknown) => encoder.encode(`data: ${JSON.stringify(value)}\n\n`);
+  const chunk = (delta: object, finish: string | null) =>
+    data({
+      id: "chatcmpl-local-smoke",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: MIND_MODEL,
+      choices: [{ index: 0, delta, finish_reason: finish }],
+    });
+  const body = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        for (const [i, content] of texts.entries()) {
+          if (i > 0) await Bun.sleep(holdMs);
+          controller.enqueue(chunk(i === 0 ? { role: "assistant", content } : { content }, null));
+        }
+        controller.enqueue(chunk({}, "stop"));
+        const usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+        controller.enqueue(data({ id: "chatcmpl-local-smoke", choices: [], usage }));
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controller.close();
+      } catch {
+        // The turn was stopped, which cancels the stream.
+      }
+    },
+  });
+  return new Response(body, { headers: { "content-type": "text/event-stream" } });
+}
+
+/** `seconds` of silent MPEG-1 Layer III frames, mono, 44.1 kHz at 128 kbps: the fake voice. */
+function silentMp3(seconds: number): Uint8Array<ArrayBuffer> {
+  // 144 × 128000 / 44100, unpadded; all-zero side info decodes as silence.
+  const frame = 417;
+  const frames = Math.ceil((seconds * 44_100) / 1152);
+  const bytes = new Uint8Array(frames * frame);
+  for (let i = 0; i < frames; i++) bytes.set([0xff, 0xfb, 0x90, 0xc4], i * frame);
+  return bytes;
+}
+
+const ROUTES = new Set([
+  "POST /v1/embeddings",
+  "GET /v1/models",
+  "POST /v1/chat/completions",
+  "POST /v1/audio/speech",
+  "POST /v1/audio/transcriptions",
+  "POST /alpha/decisions",
+  "GET /v1/realtime",
+]);
+
+/**
+ * An OpenAI-compatible server that answers the fake key only: its embeddings, its model list,
+ * streaming chat completions, which greet a kickoff and answer CHAT_MESSAGE, the group's lines and
+ * the voice and call walks', OpenAI's speech, as MP3 or a call's PCM, its transcriptions, its
+ * realtime transcription sessions, which hear nothing, and OpenRouter's Decisions route beside its
+ * v1 API.
+ */
 function fakeEmbeddings(key: string) {
-  const seen = { requests: 0, inputs: 0, refused: 0, listed: 0, models: new Set<string>() };
-  const server = Bun.serve({
+  const seen = {
+    requests: 0,
+    inputs: 0,
+    refused: 0,
+    listed: 0,
+    models: new Set<string>(),
+    chats: [] as ChatRequest[],
+    decisions: [] as DecisionsRequest[],
+    speech: [] as SpeechRequest[],
+    heard: [] as HeardUpload[],
+    listening: [] as Listening[],
+  };
+  const server = Bun.serve<{ session: Listening | null }>({
     hostname: "127.0.0.1",
     port: 0,
-    async fetch(request) {
+    async fetch(request, server) {
       const route = `${request.method} ${new URL(request.url).pathname}`;
-      if (route !== "POST /v1/embeddings" && route !== "GET /v1/models") {
-        return new Response(null, { status: 404 });
-      }
+      if (!ROUTES.has(route)) return new Response(null, { status: 404 });
       if (request.headers.get("authorization") !== `Bearer ${key}`) {
         seen.refused++;
         return Response.json({ error: { message: "Invalid API key" } }, { status: 401 });
+      }
+      if (route === "POST /v1/chat/completions") {
+        const body = (await request.json()) as ChatRequest;
+        seen.chats.push(body);
+        const last = body.messages?.at(-1);
+        const asked = last?.role === "user" ? last.content : undefined;
+        if (asked === CHAT_MESSAGE) return completionStream(REPLY, REPLY_HOLD_MS);
+        if (asked === VOICE_TRANSCRIPT) return completionStream([HEARD_REPLY], 0);
+        if (asked === VOICE_ASK) return completionStream([VOICE_REPLY], 0);
+        if (asked === CALL_TOLD) return completionStream([CALL_TOLD_REPLY], 0);
+        if (heard(body, CALL_TOLD)) return completionStream([CALL_GREETING], 0);
+        if (heard(body, SECOND_REPLY)) return completionStream([HOP_REPLY], 0);
+        if (heard(body, GROUP_MESSAGE)) return completionStream([SECOND_REPLY], 0);
+        return completionStream([GREETING], 0);
+      }
+      if (route === "POST /alpha/decisions") {
+        const body = (await request.json()) as DecisionsRequest;
+        seen.decisions.push(body);
+        return decisionsAnswer(body);
+      }
+      if (route === "POST /v1/audio/speech") {
+        const body = (await request.json()) as SpeechRequest;
+        seen.speech.push(body);
+        if (body.response_format === "pcm") {
+          // A call's: 16-bit mono at 24 kHz, OpenAI's rate.
+          return new Response(new Uint8Array(SPEECH_SECONDS * 24_000 * 2), {
+            headers: { "content-type": "audio/pcm" },
+          });
+        }
+        return new Response(silentMp3(SPEECH_SECONDS), {
+          headers: { "content-type": "audio/mpeg" },
+        });
+      }
+      if (route === "GET /v1/realtime") {
+        return server.upgrade(request, { data: { session: null } })
+          ? undefined
+          : new Response(null, { status: 400 });
+      }
+      if (route === "POST /v1/audio/transcriptions") {
+        const form = await request.formData();
+        const file = form.get("file");
+        const text = (name: string) => {
+          const value = form.get(name);
+          return typeof value === "string" ? value : null;
+        };
+        seen.heard.push({
+          model: text("model"),
+          language: text("language"),
+          name: file instanceof File ? file.name : null,
+          bytes: file instanceof File ? file.size : 0,
+        });
+        // As gpt-4o-transcribe answers: usage in tokens, so the clip's length is the recorder's.
+        return Response.json({
+          text: VOICE_TRANSCRIPT,
+          usage: { type: "tokens", input_tokens: 0, output_tokens: 0, total_tokens: 0 },
+        });
       }
       if (route === "GET /v1/models") {
         seen.listed++;
@@ -291,6 +539,31 @@ function fakeEmbeddings(key: string) {
         })),
         usage: { prompt_tokens: 0, total_tokens: 0 },
       });
+    },
+    websocket: {
+      open(ws) {
+        ws.send(JSON.stringify({ type: "session.created" }));
+      },
+      message(ws, message) {
+        const event = JSON.parse(String(message)) as {
+          readonly type?: unknown;
+          readonly session?: {
+            readonly audio?: { readonly input?: { readonly transcription?: { model?: unknown } } };
+          };
+        };
+        if (event.type === "session.update") {
+          if (ws.data.session === null) {
+            ws.data.session = {
+              model: event.session?.audio?.input?.transcription?.model,
+              appended: 0,
+            };
+            seen.listening.push(ws.data.session);
+          }
+          ws.send(JSON.stringify({ type: "session.updated" }));
+        } else if (event.type === "input_audio_buffer.append" && ws.data.session !== null) {
+          ws.data.session.appended++;
+        }
+      },
     },
   });
   return { url: `http://127.0.0.1:${server.port}/v1`, seen, stop: () => server.stop(true) };
@@ -568,8 +841,17 @@ interface Walk {
   readonly home: string;
   readonly keys: Readonly<Record<string, string>>;
   readonly embeddings: FakeEmbeddings;
+  /** The WAV Chrome's fake microphone plays. */
+  readonly mic: string;
+  /** The server's output so far, stdout then stderr. */
+  readonly serverLog: () => string;
   /** A call with the Bearer token, as a CLI makes one; its answer joins the echo scan. */
-  readonly api: (method: string, path: string, body?: string) => Promise<Response>;
+  readonly api: (
+    method: string,
+    path: string,
+    body?: string,
+    headers?: Readonly<Record<string, string>>,
+  ) => Promise<Response>;
 }
 
 /** The field an account's key sits in, with its Check button and its verdict. */
@@ -929,6 +1211,977 @@ async function jobsPage(walk: Walk): Promise<void> {
   );
 }
 
+/** One event of a chat's log, as far as the walk reads it. */
+interface LoggedEvent {
+  readonly seq: number;
+  readonly type: string;
+  readonly text?: string;
+  readonly speaker?: { readonly kind: string; readonly id?: string };
+  readonly after?: number;
+  readonly source?: string;
+  readonly replies?: readonly { readonly persona: string }[];
+  readonly scores?: Readonly<Record<string, number>>;
+  readonly title?: string;
+  readonly modality?: string;
+  readonly attachments?: readonly {
+    readonly kind: string;
+    readonly name: string;
+    readonly mime: string;
+    readonly durationMs?: number;
+  }[];
+  readonly code?: string;
+  readonly replyMode?: string;
+  readonly call?: string;
+  readonly persona?: string;
+  readonly reason?: string;
+  readonly interrupted?: boolean;
+}
+
+async function chatLog(walk: Walk, id: string): Promise<readonly LoggedEvent[]> {
+  const response = await walk.api("GET", `/api/local/chats/${id}`);
+  if (!response.ok) return [];
+  return ((await response.json()) as { events: readonly LoggedEvent[] }).events;
+}
+
+function said(events: readonly LoggedEvent[], kind: "user" | "persona", text: string): boolean {
+  return events.some((e) => e.type === "message" && e.speaker?.kind === kind && e.text === text);
+}
+
+/** A request's message roles in order, for a check's detail. */
+function roles(request: ChatRequest | undefined): string {
+  return (request?.messages ?? []).map((message) => String(message.role)).join(", ") || "none";
+}
+
+/** The id of `provider`'s account named `name` at the fake server, added the first time. */
+async function fakeAccount(walk: Walk, provider: string, name: string): Promise<string> {
+  const listed = (await (await walk.api("GET", "/api/local/accounts")).json()) as AccountsResponse;
+  const found = listed.accounts.find((account) => account.name === name);
+  if (found !== undefined) return found.id;
+  const added = await walk.api(
+    "POST",
+    "/api/local/accounts",
+    JSON.stringify({ provider, name, apiKey: walk.keys.embed, baseUrl: walk.embeddings.url }),
+  );
+  if (added.status !== 201) throw new Error(`POST accounts for ${name} answered ${added.status}`);
+  return ((await added.json()) as AccountView).id;
+}
+
+/** Persona `persona`'s settings `values`, saved through PUT settings. */
+async function configure(
+  walk: Walk,
+  persona: string,
+  values: Readonly<Record<string, unknown>>,
+): Promise<void> {
+  const body = JSON.stringify({ scope: "persona", persona, values });
+  const saved = await walk.api("PUT", "/api/local/settings", body);
+  if (!saved.ok) throw new Error(`PUT settings for ${persona} answered ${saved.status}`);
+}
+
+/**
+ * A text chat with her mind on the fake server: New Chat and its greeting, a reply that streams in,
+ * the history after a reload, then Rename and Delete from the chat's menus.
+ */
+async function chatWalk(walk: Walk): Promise<void> {
+  const { page, checks, origin } = walk;
+  const { chats, decisions } = walk.embeddings.seen;
+  const gate = await fakeAccount(walk, "openrouter", DECISIONS_ACCOUNT_NAME);
+  await configure(walk, PERSONA, {
+    "mind.provider": EMBED_ACCOUNT,
+    "mind.model": MIND_MODEL,
+    // Off, since her retrieval gate and reranker would ask OpenRouter with the fake key.
+    "knowledge.gate.enabled": false,
+    "knowledge.rerank.enabled": false,
+    // The director asks the active persona's gate role, on, though her retrieval gate is off: in a
+    // chat of one, whether to answer in voice, since her reply mode is auto and Fish has a key.
+    "knowledge.gate.provider": gate,
+  });
+  const listed = (await (await walk.api("GET", "/api/local/personas")).json()) as PersonasResponse;
+  const persona = listed.personas.find((entry) => entry.id === PERSONA);
+  if (persona === undefined) throw new Error(`GET personas has no ${PERSONA}`);
+  const short = persona.shortName.trim() || persona.name;
+
+  await page.goto(`${origin}/`);
+  await page
+    .getByRole("link", { name: t("en", "Chats"), exact: true })
+    .first()
+    .click();
+  await page.waitForURL(`${origin}/chats`);
+  await page
+    .getByRole("button", { name: t("en", "New Chat"), exact: true })
+    .first()
+    .click();
+  await page.getByRole("menuitemcheckbox").filter({ hasText: persona.name }).click();
+  const created = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" && response.url() === `${origin}/api/local/chats`,
+  );
+  await page.getByRole("menuitem", { name: t("en", "Start Chat"), exact: true }).click();
+  const createStatus = (await created).status();
+  await page.waitForURL(/\/chats\/[0-9a-f-]{36}$/);
+  const id = new URL(page.url()).pathname.split("/").at(-1) as string;
+  const log = page.getByRole("log", { name: t("en", "Conversation"), exact: true });
+  const greeted = await shows(log.getByText(GREETING, { exact: true }), 30_000);
+  const kickoff = chats[0];
+  const greetingStored = said(
+    await poll(
+      () => chatLog(walk, id),
+      (events) => said(events, "persona", GREETING),
+      10_000,
+    ),
+    "persona",
+    GREETING,
+  );
+  const events = await chatLog(walk, id);
+  checks.add(
+    "chat greeting",
+    createStatus === 201 &&
+      greeted &&
+      greetingStored &&
+      events[0]?.type === "kickoff" &&
+      chats.length === 1 &&
+      kickoff?.model === MIND_MODEL &&
+      kickoff.stream === true &&
+      kickoff.messages?.[0]?.role === "system",
+    `POST chats ${createStatus}; the page ${greeted ? "shows" : "doesn't show"} her greeting, ` +
+      `the log ${greetingStored ? "stores" : "lacks"} it after a ` +
+      `${events[0]?.type ?? "missing"} event; ` +
+      `the fake server took ${chats.length} request(s), the first for ` +
+      `${String(kickoff?.model)} with ${roles(kickoff)}`,
+  );
+
+  const box = page.getByRole("textbox", {
+    name: t("en", "Message {name}", { name: short }),
+    exact: true,
+  });
+  const decided = decisions.length;
+  await box.fill(CHAT_MESSAGE);
+  await box.press("Enter");
+  const [head, tail] = [REPLY[0], "刚刚在看猫猫视频"];
+  const partial = await waitFor(async () => {
+    const shown = await visibleText(log);
+    return shown.includes(head) && !shown.includes(tail);
+  }, REPLY_HOLD_MS + 20_000);
+  const whole = await waitFor(async () => (await visibleText(log)).includes(tail), 20_000);
+  const chip = await shows(log.getByRole("img", { name: "laughing", exact: true }), 5_000);
+  const shownText = await visibleText(log);
+  const raw = RAW_MARKUP.exec(shownText)?.[0] ?? null;
+  const reply = chats[1];
+  const messages = reply?.messages ?? [];
+  const seesGreeting = messages.some((m) => m.role === "assistant" && m.content === GREETING);
+  const asked = messages.at(-1)?.content === CHAT_MESSAGE;
+  const streamed =
+    partial === null ? "never showed its first chunk alone" : "streamed in, its first chunk alone";
+  checks.add(
+    "chat reply",
+    partial !== null && whole !== null && chip && raw === null && seesGreeting && asked,
+    `her reply ${streamed} and ${whole === null ? "never finished" : "then whole"}; the cue ` +
+      (raw !== null ? `shows as written: ${raw}` : chip ? "shows as a chip" : "is missing") +
+      `; the mind's second request ${seesGreeting ? "has" : "lacks"} her greeting and ` +
+      `${asked ? "ends on" : "doesn't end on"} the viewer's line (${roles(reply)})`,
+  );
+
+  const stored = await poll(
+    () => chatLog(walk, id),
+    (logged) => said(logged, "persona", REPLY.join("")),
+    10_000,
+  );
+  const viewerLine = stored.find((e) => e.type === "message" && e.text === CHAT_MESSAGE);
+  const decision = stored.find((e) => e.type === "decision");
+  const chatDir = join(walk.home, "chats", id);
+  const logFile = join(chatDir, "chat.jsonl");
+  await page.reload();
+  const history = await Promise.all(
+    [GREETING, CHAT_MESSAGE, tail].map((text) => shows(log.getByText(text), 15_000)),
+  );
+  const row = page
+    .getByRole("list", { name: t("en", "Chats"), exact: true })
+    .getByRole("listitem")
+    .filter({ hasText: tail });
+  const inList = await shows(row);
+  const weighed = decisions.slice(decided).map((d) => Object.keys(d.questions ?? {}).join(" "));
+  checks.add(
+    "chat history",
+    said(stored, "persona", REPLY.join("")) &&
+      decision?.after === viewerLine?.seq &&
+      decision?.source === "single" &&
+      decision.scores?.voice_moment === 0 &&
+      JSON.stringify(weighed) === JSON.stringify(["voice_moment"]) &&
+      history.every(Boolean) &&
+      inList &&
+      modeOf(join(walk.home, "chats")) === "0700" &&
+      modeOf(logFile) === "0600",
+    `the log ${said(stored, "persona", REPLY.join("")) ? "stores" : "lacks"} her reply after a ` +
+      `${decision?.source ?? "missing"} decision on seq ${String(decision?.after)} with ` +
+      `${JSON.stringify(decision?.scores ?? {})}, from ${weighed.length} Decisions request(s) ` +
+      `asking ${JSON.stringify(weighed)}; after a reload ` +
+      `the page shows ${history.filter(Boolean).length} of 3 lines and the list ` +
+      `${inList ? "previews" : "doesn't preview"} her reply; ` +
+      `chats/ ${modeOf(join(walk.home, "chats"))}, ` +
+      `chat.jsonl ${modeOf(logFile)}`,
+  );
+
+  await row.getByRole("button", { name: t("en", "Chat Options"), exact: true }).click();
+  await page.getByRole("menuitem", { name: t("en", "Rename"), exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel(t("en", "Title"), { exact: true }).fill(CHAT_TITLE);
+  const renamed = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      response.url() === `${origin}/api/local/chats/${id}`,
+  );
+  await dialog.getByRole("button", { name: t("en", "Save"), exact: true }).click();
+  const renameStatus = (await renamed).status();
+  const headed = await shows(page.getByRole("heading", { name: CHAT_TITLE, exact: true }));
+  const titled = await shows(row.filter({ hasText: CHAT_TITLE }));
+  const titleStored = (await chatLog(walk, id)).some(
+    (e) => e.type === "title" && e.title === CHAT_TITLE,
+  );
+  checks.add(
+    "chat rename",
+    renameStatus === 200 && headed && titled && titleStored,
+    `PATCH ${renameStatus}; the header ${headed ? "shows" : "doesn't show"} the title, the list ` +
+      `${titled ? "shows" : "doesn't show"} it, the log ${titleStored ? "stores" : "lacks"} it`,
+  );
+
+  // The chat's own header menu, after the list row's.
+  await page
+    .getByRole("button", { name: t("en", "Chat Options"), exact: true })
+    .last()
+    .click();
+  await page.getByRole("menuitem", { name: t("en", "Delete"), exact: true }).click();
+  const deleted = page.waitForResponse(
+    (response) =>
+      response.request().method() === "DELETE" &&
+      response.url() === `${origin}/api/local/chats/${id}`,
+  );
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: t("en", "Delete"), exact: true })
+    .click();
+  const deleteStatus = (await deleted).status();
+  await page.waitForURL(`${origin}/chats`);
+  const empty = await shows(page.getByText(t("en", "No chats yet"), { exact: true }));
+  const gone = (await walk.api("GET", `/api/local/chats/${id}`)).status;
+  checks.add(
+    "chat delete",
+    deleteStatus === 200 && empty && gone === 404 && !existsSync(chatDir),
+    `DELETE ${deleteStatus}; the page ${empty ? "lists no chats" : "still lists one"}; GET the ` +
+      `chat ${gone}; its folder ${existsSync(chatDir) ? "remains" : "is gone"}`,
+  );
+}
+
+/** The short name over the run of lines that `text` is in, as the page labels a group's lines. */
+async function speakerShown(
+  log: Locator,
+  text: string,
+  names: readonly string[],
+): Promise<string | null> {
+  return log.evaluate(
+    (root, [text, names]) => {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let element: Element | null = null;
+      for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+        if (node.textContent?.includes(text)) {
+          element = node.parentElement;
+          break;
+        }
+      }
+      // The run's label is hidden from a screen reader, whom her bubble names instead.
+      for (; element !== null && element !== root; element = element.parentElement) {
+        const labels = [...element.querySelectorAll("[aria-hidden='true']")]
+          .map((label) => label.textContent?.trim() ?? "")
+          .filter((label) => names.includes(label));
+        if (labels.length > 0) return labels.length === 1 ? (labels[0] as string) : null;
+      }
+      return null;
+    },
+    [text, names] as const,
+  );
+}
+
+/** The system message of a request, or "". */
+function systemOf(request: ChatRequest | undefined): string {
+  const first = request?.messages?.[0];
+  return first?.role === "system" ? String(first.content) : "";
+}
+
+/**
+ * A group chat of her and a persona made from no template, with the director on the fake server:
+ * New Chat with both and no greeting, an @-mention the composer completes, the second persona's
+ * answer, the first's answer to her a hop later, and each line under its persona's name.
+ */
+async function groupChatWalk(walk: Walk): Promise<void> {
+  const { page, checks, origin } = walk;
+  const { chats, decisions } = walk.embeddings.seen;
+  const made = await walk.api(
+    "POST",
+    "/api/local/personas",
+    JSON.stringify({ ...SECOND, voiceId: "0".repeat(32) }),
+  );
+  if (made.status !== 201) throw new Error(`POST personas answered ${made.status}`);
+  // The first persona's, and the director's gate, are the chat walk's.
+  await configure(walk, SECOND.id, {
+    "mind.provider": EMBED_ACCOUNT,
+    "mind.model": MIND_MODEL,
+    "knowledge.gate.enabled": false,
+    "knowledge.rerank.enabled": false,
+  });
+  const listed = (await (await walk.api("GET", "/api/local/personas")).json()) as PersonasResponse;
+  const first = listed.personas.find((entry) => entry.id === PERSONA);
+  const second = listed.personas.find((entry) => entry.id === SECOND.id);
+  if (first === undefined || second === undefined) {
+    throw new Error(`GET personas lacks ${first === undefined ? PERSONA : SECOND.id}`);
+  }
+  const short = (persona: typeof first) => persona.shortName.trim() || persona.name;
+
+  await page.goto(`${origin}/chats`);
+  await page
+    .getByRole("button", { name: t("en", "New Chat"), exact: true })
+    .first()
+    .click();
+  for (const persona of [first, second]) {
+    await page.getByRole("menuitemcheckbox").filter({ hasText: persona.name }).click();
+  }
+  const posted = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" && response.url() === `${origin}/api/local/chats`,
+  );
+  const asked = chats.length;
+  await page.getByRole("menuitem", { name: t("en", "Start Group Chat"), exact: true }).click();
+  const createStatus = (await posted).status();
+  await page.waitForURL(/\/chats\/[0-9a-f-]{36}$/);
+  const id = new URL(page.url()).pathname.split("/").at(-1) as string;
+  // Untitled, the page names it by who is in it.
+  const title = [short(first), short(second)].join(t("en", ", ", {}, "list separator"));
+  const headed = await shows(page.getByRole("heading", { name: title, exact: true }));
+  const opened = await chatLog(walk, id);
+  const live = (await walk.api("GET", `/api/local/chats/${id}/live`)).status;
+  checks.add(
+    "group chat",
+    createStatus === 201 && headed && opened.length === 0 && live === 204 && chats.length === asked,
+    `POST chats ${createStatus} with ${first.id} and ${second.id}, the template-free one; the ` +
+      `header ${headed ? "shows" : "doesn't show"} ${title}; the log holds ` +
+      `${opened.map((e) => e.type).join(", ") || "nothing"}; GET live ${live}, and the fake ` +
+      `server took ${chats.length - asked} greeting request(s)`,
+  );
+
+  const box = page.getByRole("textbox", { name: t("en", "Message everyone"), exact: true });
+  await box.click();
+  await box.pressSequentially(`@${SECOND.shortName.slice(0, 1)}`);
+  const offered = await shows(
+    page
+      .getByRole("listbox", { name: t("en", "Mention"), exact: true })
+      .getByRole("option")
+      .filter({ hasText: second.name }),
+  );
+  await box.press("Tab");
+  await box.pressSequentially(GROUP_TEXT);
+  const typed = await box.inputValue();
+  const noted = await shows(
+    page.getByText(t("en", "Mentioned: {names}", { names: short(second) }), { exact: true }),
+  );
+  const decided = decisions.length;
+  await box.press("Enter");
+  const log = page.getByRole("log", { name: t("en", "Conversation"), exact: true });
+  const answered = await shows(log.getByText(SECOND_REPLY), 30_000);
+  const followed = await shows(log.getByText(HOP_REPLY), 30_000);
+  const stored = await poll(
+    () => chatLog(walk, id),
+    (events) =>
+      said(events, "persona", HOP_REPLY) &&
+      events.filter((e) => e.type === "decision").length === 3,
+    10_000,
+  );
+  const line = (text: string) => stored.find((e) => e.type === "message" && e.text === text);
+  const [viewerLine, secondLine, hopLine] = [GROUP_MESSAGE, SECOND_REPLY, HOP_REPLY].map(line);
+  const picks = stored
+    .filter((e) => e.type === "decision")
+    .map((e) => ({
+      after: e.after,
+      source: e.source,
+      replies: (e.replies ?? []).map((reply) => reply.persona),
+    }));
+  const expected = [
+    { after: viewerLine?.seq, source: "mention", replies: [SECOND.id] },
+    { after: secondLine?.seq, source: "model", replies: [PERSONA] },
+    { after: hopLine?.seq, source: "model", replies: [] },
+  ];
+  const asks = decisions.slice(decided);
+  const questioned = (index: number) =>
+    Object.keys(asks[index]?.questions ?? {})
+      .sort()
+      .join(" ");
+  const theirs = chats.find((c) => heard(c, GROUP_MESSAGE) && !heard(c, SECOND_REPLY));
+  const hers = chats.find((c) => heard(c, SECOND_REPLY));
+  const stops = (request: ChatRequest | undefined) =>
+    Array.isArray(request?.stop) ? (request.stop as unknown[]).map(String) : [];
+  const heldBack =
+    stops(theirs).includes(`\n${first.name}：`) && stops(hers).includes(`\n${second.name}：`);
+  const introduced =
+    systemOf(theirs).includes(`这是群聊，群里还有：${first.name}；`) &&
+    systemOf(hers).includes(`这是群聊，群里还有：${second.name}；`);
+  checks.add(
+    "group mention",
+    offered &&
+      typed === GROUP_MESSAGE &&
+      noted &&
+      answered &&
+      followed &&
+      secondLine?.speaker?.id === SECOND.id &&
+      hopLine?.speaker?.id === PERSONA &&
+      JSON.stringify(picks) === JSON.stringify(expected) &&
+      asks.length === 3 &&
+      questioned(1) === `addressed_${PERSONA} interested_${PERSONA} invites_reply voice_moment` &&
+      heldBack &&
+      introduced,
+    `@ ${offered ? "offered" : "didn't offer"} ${second.name}, the box read ${quote(typed)} ` +
+      `${noted ? "and named" : "without naming"} whom it mentions; the page ` +
+      `${answered ? "shows" : "lacks"} her answer and ${followed ? "shows" : "lacks"} ` +
+      `${short(first)}'s a hop later; decisions ${JSON.stringify(picks)}; the fake server took ` +
+      `${asks.length} Decisions request(s), the second asking ${questioned(1) || "nothing"}; ` +
+      `their minds ${heldBack ? "got" : "lacked"} each other's stop sequences and ` +
+      `${introduced ? "were" : "weren't"} told who else is here`,
+  );
+
+  const names = [short(first), short(second)];
+  const shown = await Promise.all(
+    [SECOND_REPLY, HOP_REPLY].map((text) => speakerShown(log, text, names)),
+  );
+  await page.reload();
+  const reloaded = await shows(log.getByText(HOP_REPLY), 15_000);
+  const after = await Promise.all(
+    [SECOND_REPLY, HOP_REPLY].map((text) => speakerShown(log, text, names)),
+  );
+  const expectedNames = [short(second), short(first)];
+  checks.add(
+    "group names",
+    JSON.stringify(shown) === JSON.stringify(expectedNames) &&
+      reloaded &&
+      JSON.stringify(after) === JSON.stringify(expectedNames),
+    `her answer shows under ${String(shown[0])} and the hop's under ${String(shown[1])}; ` +
+      `after a reload, ${reloaded ? `${String(after[0])} and ${String(after[1])}` : "neither shows"}`,
+  );
+}
+
+/**
+ * Installed in the page before its own scripts: each media element that starts playing or plays
+ * to its end, as `playing <src>` or `ended <src>`.
+ */
+function observeMedia(): void {
+  const seen: string[] = [];
+  (window as unknown as { smokeMedia: string[] }).smokeMedia = seen;
+  for (const type of ["playing", "ended"]) {
+    // Media events don't bubble, so they are caught on the way down.
+    document.addEventListener(
+      type,
+      (event) => {
+        if (event.target instanceof HTMLMediaElement) {
+          seen.push(`${type} ${event.target.currentSrc}`);
+        }
+      },
+      true,
+    );
+  }
+}
+
+async function mediaEvents(page: Page): Promise<readonly string[]> {
+  return page.evaluate(() => (window as unknown as { smokeMedia?: string[] }).smokeMedia ?? []);
+}
+
+/** The NDJSON lines of a stream's whole text. */
+function ndjson(text: string): readonly Record<string, unknown>[] {
+  return text
+    .split("\n")
+    .filter((line) => line.trim() !== "")
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+}
+
+/**
+ * Voice messages, with her voice and hearing on an OpenAI account at the fake server: one held on
+ * the microphone, heard and answered in text; then the chat set to Voice in its settings, and her
+ * voice reply, which plays, its file served in ranges.
+ */
+async function voiceChatWalk(walk: Walk): Promise<void> {
+  const { page, checks, origin } = walk;
+  const { chats, decisions, speech, heard: uploads } = walk.embeddings.seen;
+  const speaker = await fakeAccount(walk, "openai", SPEECH_ACCOUNT_NAME);
+  await configure(walk, PERSONA, { "voice.provider": speaker, "hearing.provider": speaker });
+  const listed = (await (await walk.api("GET", "/api/local/personas")).json()) as PersonasResponse;
+  const persona = listed.personas.find((entry) => entry.id === PERSONA);
+  if (persona === undefined) throw new Error(`GET personas has no ${PERSONA}`);
+  const short = persona.shortName.trim() || persona.name;
+
+  await page.goto(`${origin}/chats`);
+  await page
+    .getByRole("button", { name: t("en", "New Chat"), exact: true })
+    .first()
+    .click();
+  await page.getByRole("menuitemcheckbox").filter({ hasText: persona.name }).click();
+  const minded = chats.length;
+  await page.getByRole("menuitem", { name: t("en", "Start Chat"), exact: true }).click();
+  await page.waitForURL(/\/chats\/[0-9a-f-]{36}$/);
+  const id = new URL(page.url()).pathname.split("/").at(-1) as string;
+  const log = page.getByRole("log", { name: t("en", "Conversation"), exact: true });
+  if (!(await shows(log.getByText(GREETING, { exact: true }), 30_000))) {
+    const logged = (await chatLog(walk, id)).map((e) => e.type).join(", ") || "nothing";
+    throw new Error(
+      `her greeting never showed: the log holds ${logged}, after ${chats.length - minded} mind ` +
+        `request(s); the page shows ${quote(await visibleText(log), 40)}`,
+    );
+  }
+
+  const opened = (await (await walk.api("GET", `/api/local/chats/${id}`)).json()) as ChatContents;
+  const mic = page.getByRole("button", { name: t("en", "Record Voice Message"), exact: true });
+  await mic.waitFor();
+  const usable = (await mic.getAttribute("aria-disabled")) === null;
+  const box = await mic.boundingBox();
+  if (box === null) throw new Error("the microphone button has no box");
+  const posted = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === `/api/local/chats/${id}/voice`,
+  );
+  const decided = decisions.length;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  const holding = await shows(
+    page.getByText(t("en", "Let go to send, or slide off the button to cancel."), { exact: true }),
+    10_000,
+  );
+  await Bun.sleep(HOLD_MIC_MS);
+  await page.mouse.up();
+  const upload = await posted;
+  const sentMs = Number(new URL(upload.url()).searchParams.get("durationMs"));
+  const sentType = (await upload.request().headerValue("content-type")) ?? "";
+  await log
+    .getByRole("button", { name: t("en", "Show Transcript"), exact: true })
+    .first()
+    .click();
+  const transcribed = await shows(log.getByText(VOICE_TRANSCRIPT, { exact: true }), 15_000);
+  const answered = await shows(log.getByText(HEARD_REPLY, { exact: true }), 30_000);
+  const stored = await poll(
+    () => chatLog(walk, id),
+    (events) => said(events, "persona", HEARD_REPLY),
+    10_000,
+  );
+  const line = stored.find((e) => e.type === "message" && e.speaker?.kind === "user");
+  const clip = line?.attachments?.[0];
+  const decision = stored.find((e) => e.type === "decision" && e.after === line?.seq);
+  const textReply = stored.find((e) => e.type === "message" && e.text === HEARD_REPLY);
+  const weighed = decisions.slice(decided);
+  const latest = weighed[0]?.state?.latest;
+  const hearing = uploads.at(-1);
+  checks.add(
+    "voice message",
+    opened.hearingRefusal === null &&
+      usable &&
+      holding &&
+      upload.status() === 200 &&
+      sentType.startsWith("audio/webm") &&
+      sentMs >= HOLD_MIC_MS &&
+      hearing?.model === "gpt-4o-transcribe" &&
+      hearing.language === "zh" &&
+      hearing.name === "voice.webm" &&
+      hearing.bytes > 0 &&
+      line?.modality === "voice" &&
+      line.text === VOICE_TRANSCRIPT &&
+      clip?.kind === "audio" &&
+      clip.mime === "audio/webm" &&
+      clip.durationMs === sentMs &&
+      transcribed &&
+      answered &&
+      textReply?.modality === undefined &&
+      decision?.source === "single" &&
+      weighed.length === 1 &&
+      Object.keys(weighed[0]?.questions ?? {}).join(" ") === "voice_moment" &&
+      latest?.modality === "voice" &&
+      latest.text === VOICE_TRANSCRIPT,
+    `the microphone ${usable ? "was offered" : "was disabled"} (hearingRefusal ` +
+      `${JSON.stringify(opened.hearingRefusal)}); held, it ${holding ? "showed" : "never showed"} ` +
+      `the let-go hint; POST voice ${upload.status()} with ${sentType || "no type"}, ` +
+      `${sentMs} ms; the fake server heard ${hearing ? `${hearing.bytes} bytes as ${hearing.name} with ${hearing.model} in ${hearing.language}` : "nothing"}; ` +
+      `the log stores a ${String(line?.modality)} message of ${quote(line?.text ?? "")} with ` +
+      `${clip ? `${clip.mime}, ${String(clip.durationMs)} ms` : "no audio"}; the page ` +
+      `${transcribed ? "shows" : "lacks"} its transcript and ${answered ? "shows" : "lacks"} her ` +
+      `text answer after a ${decision?.source ?? "missing"} decision that weighed ` +
+      `${weighed.map((d) => Object.keys(d.questions ?? {}).join(" ")).join(", ") || "nothing"} ` +
+      `on a ${String(latest?.modality)} line`,
+  );
+
+  await page
+    .getByRole("button", { name: t("en", "Chat Options"), exact: true })
+    .last()
+    .click();
+  await page.getByRole("menuitem", { name: t("en", "Chat Settings"), exact: true }).click();
+  const sheet = page.getByRole("dialog");
+  const voiceMode = sheet.getByRole("radio", {
+    name: t("en", "Voice", {}, "reply mode"),
+    exact: true,
+  });
+  const patched = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      response.url() === `${origin}/api/local/chats/${id}`,
+  );
+  await voiceMode.click();
+  const patchStatus = (await patched).status();
+  const chosen = await poll(
+    () => voiceMode.getAttribute("aria-checked"),
+    (checked) => checked === "true",
+    5_000,
+  );
+  await page.keyboard.press("Escape");
+  await sheet.waitFor({ state: "hidden" });
+
+  const fetched: Promise<string>[] = [];
+  page.on("response", (response) => {
+    if (!new URL(response.url()).pathname.endsWith(".mp3")) return;
+    fetched.push(
+      (async () => {
+        const range = (await response.request().headerValue("range")) ?? "no range";
+        const ranges = (await response.headerValue("accept-ranges")) ?? "none";
+        return `${range} ${response.status()} accept-ranges ${ranges}`;
+      })(),
+    );
+  });
+  const textBox = page.getByRole("textbox", {
+    name: t("en", "Message {name}", { name: short }),
+    exact: true,
+  });
+  const sent = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url() === `${origin}/api/local/chats/${id}/messages`,
+  );
+  const [spoke, weighedBefore] = [speech.length, decisions.length];
+  await textBox.fill(VOICE_ASK);
+  await textBox.press("Enter");
+  const streamed = ndjson(await (await sent).text());
+  const states = streamed
+    .filter((l) => l.type === "tool" && l.name === "voice")
+    .map((l) => String(l.state));
+  const herAudio = log.locator('audio[src$=".mp3"]');
+  await herAudio.waitFor({ state: "attached", timeout: 30_000 });
+  const src = new URL((await herAudio.getAttribute("src")) as string, origin).href;
+  const autoPlayed =
+    (await waitFor(async () => (await mediaEvents(page)).includes(`playing ${src}`), 5_000)) !==
+    null;
+  if (!autoPlayed) {
+    await herAudio
+      .locator("xpath=..")
+      .getByRole("button", { name: t("en", "Play Voice Message"), exact: true })
+      .click();
+  }
+  const ended =
+    (await waitFor(async () => (await mediaEvents(page)).includes(`ended ${src}`), 15_000)) !==
+    null;
+  const played = (await mediaEvents(page)).includes(`playing ${src}`);
+  await herAudio
+    .locator("xpath=../..")
+    .getByRole("button", { name: t("en", "Show Transcript"), exact: true })
+    .click();
+  const chip = await shows(log.getByRole("img", { name: "sighing", exact: true }), 5_000);
+  const raw = RAW_MARKUP.exec(await visibleText(log))?.[0] ?? null;
+  const after = await poll(
+    () => chatLog(walk, id),
+    (events) => said(events, "persona", VOICE_REPLY),
+    10_000,
+  );
+  const setting = after.find((e) => e.type === "settings" && e.replyMode === "voice");
+  const reply = after.find((e) => e.type === "message" && e.text === VOICE_REPLY);
+  const audio = reply?.attachments?.[0];
+  const failure = after.find((e) => e.type === "turn-failed");
+  const asked = speech.slice(spoke);
+  checks.add(
+    "voice reply",
+    patchStatus === 200 &&
+      chosen === "true" &&
+      setting !== undefined &&
+      decisions.length === weighedBefore &&
+      JSON.stringify(states) === JSON.stringify(["running", "done"]) &&
+      asked.length === 1 &&
+      asked[0]?.model === "gpt-4o-mini-tts" &&
+      asked[0].voice === "marin" &&
+      asked[0].response_format === "mp3" &&
+      asked[0].input === VOICE_SPOKEN &&
+      reply?.modality === "voice" &&
+      audio?.kind === "audio" &&
+      audio.mime === "audio/mpeg" &&
+      Math.abs((audio.durationMs ?? 0) - SPEECH_SECONDS * 1000) < 100 &&
+      failure === undefined &&
+      chip &&
+      raw === null,
+    `PATCH ${patchStatus} ${chosen === "true" ? "chose" : "didn't choose"} Voice and the log ` +
+      `${setting ? "stores" : "lacks"} it; her reply asked the director ` +
+      `${decisions.length - weighedBefore} time(s), streamed the voice tool ` +
+      `${states.join(" → ") || "never"}, and asked the fake voice ${asked.length} time(s), for ` +
+      `${quote(String(asked[0]?.input ?? ""))} in ${String(asked[0]?.voice)} with ` +
+      `${String(asked[0]?.model)}; the log stores a ${String(reply?.modality)} message with ` +
+      `${audio ? `${audio.mime}, ${String(audio.durationMs)} ms` : "no audio"}` +
+      `${failure ? ` and a ${String(failure.code)} turn-failed` : ""}; its transcript's cue ` +
+      (raw !== null ? `shows as written: ${raw}` : chip ? "shows as a chip" : "is missing"),
+  );
+
+  const file = `/api/local/chats/${id}/files/${audio?.name ?? "missing.mp3"}`;
+  const whole = await walk.api("GET", file);
+  const part = await walk.api("GET", file, undefined, { range: "bytes=0-99" });
+  const player = await Promise.all(fetched);
+  const ranged = player.some((entry) => /^bytes=\S+ 206 accept-ranges bytes$/.test(entry));
+  await page.reload();
+  const bubbles = await poll(
+    () => log.getByRole("button", { name: t("en", "Play Voice Message"), exact: true }).count(),
+    (count) => count === 2,
+    15_000,
+  );
+  checks.add(
+    "voice playback",
+    played &&
+      ended &&
+      ranged &&
+      whole.status === 200 &&
+      whole.headers.get("content-type") === "audio/mpeg" &&
+      whole.headers.get("accept-ranges") === "bytes" &&
+      part.status === 206 &&
+      (part.headers.get("content-range") ?? "").startsWith("bytes 0-99/") &&
+      bubbles === 2,
+    `her voice message ${played ? (autoPlayed ? "played on its own" : "played on Play") : "never played"} ` +
+      `and ${ended ? "played to its end" : "never ended"}; the player fetched ` +
+      `${player.join(", ") || "nothing"}; GET ${whole.status} ` +
+      `${whole.headers.get("content-type")} accept-ranges ${whole.headers.get("accept-ranges")}, ` +
+      `a range ${part.status} ${part.headers.get("content-range")}; after a reload, ${bubbles} ` +
+      `voice bubbles`,
+  );
+
+  const usage = (await (await walk.api("GET", "/api/local/usage")).json()) as UsageSummary;
+  const used = (role: string) =>
+    usage.rows.find((row) => row.role === role && row.provider === "openai");
+  const [voiced, heardRow] = [used("voice"), used("hearing")];
+  checks.add(
+    "voice usage",
+    voiced?.characters === [...VOICE_SPOKEN].length &&
+      heardRow !== undefined &&
+      heardRow.records === 1 &&
+      Math.abs(heardRow.audioSeconds - sentMs / 1000) < 0.01,
+    `the ledger has her voice speaking ${String(voiced?.characters ?? "no")} characters and her ` +
+      `hearing ${String(heardRow?.records ?? "no")} clip(s) of ` +
+      `${String(heardRow?.audioSeconds ?? 0)} s`,
+  );
+}
+
+/**
+ * A call inside a chat, every role at the fake server: her hearing a realtime transcription session
+ * that hears nothing, her mind, and her voice as PCM. The call opens on the chat's history, so her
+ * greeting answers the line typed before it; her line lands in the chat while the composer waits,
+ * and Hang Up stores the call's end.
+ */
+async function chatCallWalk(walk: Walk): Promise<void> {
+  const { page, checks, origin } = walk;
+  const { chats, speech, listening } = walk.embeddings.seen;
+  // She would hear the voice walk's tone; nobody speaks on this call.
+  writeFileSync(walk.mic, silentWav(2));
+  const listed = (await (await walk.api("GET", "/api/local/personas")).json()) as PersonasResponse;
+  const persona = listed.personas.find((entry) => entry.id === PERSONA);
+  if (persona === undefined) throw new Error(`GET personas has no ${PERSONA}`);
+  const short = persona.shortName.trim() || persona.name;
+
+  await page.goto(`${origin}/chats`);
+  await page
+    .getByRole("button", { name: t("en", "New Chat"), exact: true })
+    .first()
+    .click();
+  await page.getByRole("menuitemcheckbox").filter({ hasText: persona.name }).click();
+  await page.getByRole("menuitem", { name: t("en", "Start Chat"), exact: true }).click();
+  await page.waitForURL(/\/chats\/[0-9a-f-]{36}$/);
+  const id = new URL(page.url()).pathname.split("/").at(-1) as string;
+  const log = page.getByRole("log", { name: t("en", "Conversation"), exact: true });
+  if (!(await shows(log.getByText(GREETING, { exact: true }), 30_000))) {
+    throw new Error("her greeting never showed");
+  }
+  const textBox = page.getByRole("textbox", {
+    name: t("en", "Message {name}", { name: short }),
+    exact: true,
+  });
+  await textBox.fill(CALL_TOLD);
+  await textBox.press("Enter");
+  const told = await poll(
+    () => chatLog(walk, id),
+    (events) => said(events, "persona", CALL_TOLD_REPLY),
+    30_000,
+  );
+  if (!said(told, "persona", CALL_TOLD_REPLY)) {
+    throw new Error("her answer to the line typed before the call was never stored");
+  }
+  // Open before the call, so only a refused send tells it of the call.
+  const tab = await walk.context.newPage();
+  await tab.goto(`${origin}/chats/${id}`);
+  const tabLog = tab.getByRole("log", { name: t("en", "Conversation"), exact: true });
+  const tabBox = tab.getByRole("textbox", {
+    name: t("en", "Message {name}", { name: short }),
+    exact: true,
+  });
+  if (!((await shows(tabBox, 15_000)) && (await tabBox.isEnabled()))) {
+    throw new Error("the second tab's composer never showed");
+  }
+
+  const [minded, spoke, listened] = [chats.length, speech.length, listening.length];
+  const logged = walk.serverLog().length;
+  const offered = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" && new URL(response.url()).pathname === "/api/offer",
+  );
+  await page.getByRole("button", { name: t("en", "Call"), exact: true }).click();
+  const offer = await offered;
+  const offerBody = offer.request().postDataJSON() as {
+    readonly requestData?: unknown;
+    readonly request_data?: unknown;
+  };
+  const offerData = (offerBody.requestData ?? offerBody.request_data) as
+    | { readonly chatId?: unknown; readonly persona?: unknown }
+    | undefined;
+  const dock = page.getByRole("region", {
+    name: t("en", "Call with {name}", { name: short }),
+    exact: true,
+  });
+  const docked = await shows(dock, 10_000);
+  const greeted = await shows(log.getByText(CALL_GREETING, { exact: true }), 60_000);
+  const waiting = page.getByRole("textbox", { name: t("en", "In a call"), exact: true });
+  const composerWaits = (await shows(waiting, 5_000)) && (await waiting.isDisabled());
+  const started = await shows(
+    log.getByText(t("en", "Call with {name}", { name: short }), { exact: true }),
+    5_000,
+  );
+  const marked = (await log.getByText(t("en", "(on the call)")).count()) === 1;
+  const during = (await (await walk.api("GET", `/api/local/chats/${id}`)).json()) as ChatContents;
+  const refused = await walk.api(
+    "POST",
+    `/api/local/chats/${id}/messages`,
+    JSON.stringify({ text: "在吗" }),
+  );
+  const refusal = ((await refused.json()) as { error?: { code?: string } }).error?.code;
+  const stored = await poll(
+    () => chatLog(walk, id),
+    (events) => events.some((e) => e.modality === "call"),
+    10_000,
+  );
+  const opened = stored.find((e) => e.type === "call-started");
+  const line = stored.find((e) => e.modality === "call");
+  const request = chats
+    .slice(minded)
+    .find((r) => heard(r, CALL_TOLD) && r.messages?.at(-1)?.content !== CALL_TOLD);
+  const history = (request?.messages ?? []).map((m) => `${String(m.role)}:${String(m.content)}`);
+  const at = (entry: string) => history.indexOf(entry);
+  const carried =
+    at(`assistant:${GREETING}`) >= 0 &&
+    at(`assistant:${GREETING}`) < at(`user:${CALL_TOLD}`) &&
+    at(`user:${CALL_TOLD}`) < at(`assistant:${CALL_TOLD_REPLY}`) &&
+    history.slice(at(`assistant:${CALL_TOLD_REPLY}`) + 1).some((m) => m.startsWith("user:"));
+  const voiced = speech.slice(spoke).filter((s) => s.response_format === "pcm");
+  const ear = listening.slice(listened);
+  checks.add(
+    "chat call",
+    offer.status() === 200 &&
+      offerData?.chatId === id &&
+      offerData.persona === PERSONA &&
+      docked &&
+      greeted &&
+      composerWaits &&
+      started &&
+      marked &&
+      during.call?.persona === PERSONA &&
+      opened?.persona === PERSONA &&
+      during.call.id === opened.call &&
+      refused.status === 409 &&
+      refusal === "chat-in-call" &&
+      line?.type === "message" &&
+      line.speaker?.kind === "persona" &&
+      line.speaker.id === PERSONA &&
+      line.text === CALL_GREETING &&
+      line.interrupted === undefined &&
+      carried &&
+      voiced.some((s) => String(s.input).trim() === CALL_GREETING) &&
+      ear.length === 1 &&
+      (ear[0]?.appended ?? 0) > 0,
+    `POST /api/offer ${offer.status()} for chat ${offerData?.chatId === id ? "this one" : String(offerData?.chatId)} ` +
+      `and ${String(offerData?.persona)}; the dock ${docked ? "showed" : "never showed"}, her ` +
+      `greeting ${greeted ? "landed" : "never landed"} in the log ${marked ? "with" : "without"} ` +
+      `its call mark, under ${started ? "its" : "no"} separator, while the composer ` +
+      `${composerWaits ? "waited" : "didn't wait"}; GET chats/:id said ` +
+      `${JSON.stringify(during.call)}; a send answered ${refused.status} ${String(refusal)}; ` +
+      `the log stores ${opened ? `call-started for ${String(opened.persona)}` : "no call-started"} ` +
+      `and ${line ? `a ${line.speaker?.kind} call line ${quote(line.text ?? "")}` : "no call line"}; ` +
+      `her call's first mind request ${request ? (carried ? "carried the chat's lines in order" : `held ${history.join(" | ")}`) : "was never made"}; ` +
+      `her voice spoke ${voiced.map((s) => quote(String(s.input))).join(", ") || "nothing"} as PCM; ` +
+      `her hearing opened ${ear.length} session(s), streamed ${ear[0]?.appended ?? 0} chunks`,
+  );
+
+  await tabBox.fill("在吗");
+  await tabBox.press("Enter");
+  const tabWaiting = tab.getByRole("textbox", { name: t("en", "In a call"), exact: true });
+  const tabLearned = (await shows(tabWaiting, 10_000)) && (await tabWaiting.isDisabled());
+
+  await dock.getByRole("button", { name: t("en", "Hang Up"), exact: true }).click();
+  const undocked = await dock
+    .waitFor({ state: "hidden", timeout: 10_000 })
+    .then(() => true)
+    .catch(() => false);
+  const after = await poll(
+    () => chatLog(walk, id),
+    (events) => events.some((e) => e.type === "call-ended"),
+    20_000,
+  );
+  const end = after.find((e) => e.type === "call-ended");
+  const back = (await shows(textBox, 10_000)) && (await textBox.isEnabled());
+  const closed = await shows(log.getByText(t("en", "Call ended"), { exact: true }), 10_000);
+  const lasted = new RegExp(
+    `^${escapeRegExp(t("en", "Call with {name} · {duration}", { name: short, duration: "\0" })).replace("\0", "\\d+:\\d{2}")}$`,
+  );
+  const timed = await shows(log.getByText(lasted), 10_000);
+  const tabBack = (await shows(tabBox, 10_000)) && (await tabBox.isEnabled());
+  const tabClosed = await shows(tabLog.getByText(t("en", "Call ended"), { exact: true }), 5_000);
+  await tab.close();
+  checks.add(
+    "chat call tab",
+    tabLearned && tabBack && tabClosed,
+    `a second tab open before the call ${tabLearned ? "learned of it" : "never learned of it"} ` +
+      `from a refused send; after the hang-up, without a reload, its composer ` +
+      `${tabBack ? "came back" : "stayed disabled"}, under ${tabClosed ? "a" : "no"} Call ended line`,
+  );
+  const sent = await walk.api(
+    "POST",
+    `/api/local/chats/${id}/messages`,
+    JSON.stringify({ text: CHAT_MESSAGE }),
+  );
+  const errors = walk
+    .serverLog()
+    .slice(logged)
+    .split("\n")
+    .filter((entry) => /\| (ERROR|CRITICAL) +\|/.test(entry));
+  await page.reload();
+  const kept =
+    (await shows(log.getByText(CALL_GREETING, { exact: true }), 15_000)) &&
+    (await shows(log.getByText(t("en", "Call ended"), { exact: true }), 5_000)) &&
+    (await shows(log.getByText(lasted), 5_000));
+  checks.add(
+    "chat call end",
+    undocked &&
+      end?.call === opened?.call &&
+      end?.reason === "hangup" &&
+      after.at(-1)?.type === "call-ended" &&
+      back &&
+      closed &&
+      timed &&
+      sent.status === 200 &&
+      errors.length === 0 &&
+      kept,
+    `Hang Up ${undocked ? "closed" : "left"} the dock; the log ` +
+      `${end ? `ends the call: ${String(end.reason)}` : "never stored its end"}; the composer ` +
+      `${back ? "came back" : "stayed disabled"}, under ${closed ? "a" : "no"} Call ended line and ` +
+      `${timed ? "the call's length" : "no length"}; a send afterwards answered ${sent.status}; ` +
+      `the server logged ${errors.length === 0 ? "no errors" : errors.slice(0, 2).join(" ")} during ` +
+      `the call; after a reload the call ${kept ? "stays in the log" : "is gone from the log"}`,
+  );
+}
+
 /** Settles the bodies read so far; null for one the browser couldn't give. */
 async function settled(bodies: readonly Promise<string | null>[]): Promise<(string | null)[]> {
   const all = Promise.all(bodies);
@@ -964,10 +2217,19 @@ async function smoke(options: Options): Promise<Checks> {
     if (server === null) return checks;
     const { link, origin, secret, stdout, stderr } = server;
     const bodies: Promise<string | null>[] = [];
-    const api = async (method: string, path: string, body?: string): Promise<Response> => {
+    const api = async (
+      method: string,
+      path: string,
+      body?: string,
+      headers: Readonly<Record<string, string>> = {},
+    ): Promise<Response> => {
       const response = await fetch(`${origin}${path}`, {
         method,
-        headers: { authorization: `Bearer ${secret}`, "content-type": "application/json" },
+        headers: {
+          authorization: `Bearer ${secret}`,
+          "content-type": "application/json",
+          ...headers,
+        },
         body,
       });
       const text = await response.text();
@@ -975,15 +2237,23 @@ async function smoke(options: Options): Promise<Checks> {
       return new Response(text, { status: response.status, headers: response.headers });
     };
 
+    const mic = join(run.temp, "voice.wav");
+    writeFileSync(mic, toneWav(2));
     let browser: Browser;
     try {
-      browser = await chromium.launch({ ...chrome(), headless: !options.headful });
+      browser = await chromium.launch({
+        ...chrome(),
+        headless: !options.headful,
+        args: fakeMicArgs(mic),
+      });
     } catch (error) {
       checks.add("browser", false, error instanceof Error ? error.message.split("\n")[0] : "");
       return checks;
     }
     run.browser = browser;
     const context = await browser.newContext({ locale: "en-US" });
+    await context.grantPermissions(["microphone"], { origin });
+    await context.addInitScript(observeMedia);
     const problems: string[] = [];
     await reportCsp(context, problems);
     const page = await context.newPage();
@@ -1005,6 +2275,8 @@ async function smoke(options: Options): Promise<Checks> {
       home,
       keys,
       embeddings,
+      mic,
+      serverLog: () => `${stdout.text}\n${stderr.text}`,
       api,
     };
 
@@ -1018,6 +2290,13 @@ async function smoke(options: Options): Promise<Checks> {
       if (embedder && (await checks.step("ingest-facts", () => indexFacts(walk)))) {
         await checks.step("jobs page", () => jobsPage(walk));
       }
+      if (embedder) {
+        await checks.step("chat", () => chatWalk(walk));
+        await checks.step("group chat", () => groupChatWalk(walk));
+        if (await checks.step("voice chat", () => voiceChatWalk(walk))) {
+          await checks.step("chat call", () => chatCallWalk(walk));
+        }
+      }
     }
     checks.add(
       "page health",
@@ -1025,9 +2304,15 @@ async function smoke(options: Options): Promise<Checks> {
       problems.length === 0 ? "no page errors or CSP violations" : problems.slice(0, 3).join("; "),
     );
 
+    if (!checks.pass) {
+      for (const line of serverTrouble(server)) checks.notes.push(`server   ${line}`);
+    }
     const texts = await settled(bodies);
     const code = await run.stop();
     checks.add("shutdown", code === 0, `the server exited ${String(code)}`);
+    if (code !== 0) {
+      for (const line of server.stderr.tail(8).split("\n")) checks.notes.push(`exit     ${line}`);
+    }
     const scanned = [...texts, stdout.text, stderr.text].filter((text) => text !== null);
     const echoed = Object.entries(keys)
       .filter(([, value]) => scanned.some((text) => text.includes(value)))
@@ -1046,9 +2331,30 @@ async function smoke(options: Options): Promise<Checks> {
   return checks;
 }
 
+/** Chrome's flags for a fake microphone that plays `wav` and asks no permission. */
+function fakeMicArgs(wav: string): string[] {
+  return [
+    "--use-fake-ui-for-media-stream",
+    "--use-fake-device-for-media-stream",
+    `--use-file-for-fake-audio-capture=${wav}`,
+  ];
+}
+
 /** A silent 16-bit mono WAV: without a capture file, Chrome's fake microphone beeps. */
 function silentWav(seconds: number, rate = 48_000): Uint8Array {
-  const bytes = seconds * rate * 2;
+  return wav(new Int16Array(seconds * rate), rate);
+}
+
+/** A quiet 440 Hz tone as a 16-bit mono WAV: the voice message the walk records. */
+function toneWav(seconds: number, rate = 48_000): Uint8Array {
+  const samples = Int16Array.from({ length: seconds * rate }, (_, i) =>
+    Math.round(Math.sin((2 * Math.PI * 440 * i) / rate) * 4096),
+  );
+  return wav(samples, rate);
+}
+
+function wav(samples: Int16Array, rate: number): Uint8Array {
+  const bytes = samples.length * 2;
   const view = new DataView(new ArrayBuffer(44 + bytes));
   const ascii = (at: number, text: string) => {
     for (const [i, char] of [...text].entries()) view.setUint8(at + i, char.charCodeAt(0));
@@ -1065,6 +2371,7 @@ function silentWav(seconds: number, rate = 48_000): Uint8Array {
   view.setUint16(34, 16, true);
   ascii(36, "data");
   view.setUint32(40, bytes, true);
+  for (const [i, sample] of samples.entries()) view.setInt16(44 + i * 2, sample, true);
   return new Uint8Array(view.buffer);
 }
 
@@ -1712,15 +3019,7 @@ async function callSmoke(options: Options): Promise<Checks> {
     writeFileSync(mic, silentWav(1));
     let browser: Browser;
     try {
-      browser = await chromium.launch({
-        ...chrome(),
-        headless: false,
-        args: [
-          "--use-fake-ui-for-media-stream",
-          "--use-fake-device-for-media-stream",
-          `--use-file-for-fake-audio-capture=${mic}`,
-        ],
-      });
+      browser = await chromium.launch({ ...chrome(), headless: false, args: fakeMicArgs(mic) });
     } catch (error) {
       checks.add("browser", false, error instanceof Error ? error.message.split("\n")[0] : "");
       return checks;

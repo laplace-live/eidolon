@@ -222,6 +222,14 @@ export class OpenAIChatClient {
 
 const FALLBACK_BETA = "server-side-fallback-2026-07-01";
 
+/** Models whose refusals Anthropic retries on another model when a request asks for fallbacks. */
+export const ANTHROPIC_FALLBACK_MODELS: ReadonlySet<string> = new Set([
+  "claude-opus-5-5",
+  "claude-sonnet-5-5",
+  "claude-fable-5-1",
+  "claude-opus-5",
+]);
+
 /** `messages.create` and `beta.messages.create` for Anthropic's Messages API. */
 export class AnthropicClient {
   readonly messages: { create(body: Body, options?: RequestOptions): Promise<unknown> };

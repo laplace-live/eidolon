@@ -6,6 +6,7 @@ import { SharedEngine } from "./engine.ts";
 import { openMemoryProvider } from "./provider.ts";
 import type { MemoryAdmin, MemoryProvider } from "./types.ts";
 
+export { MEM0_LABEL, MEM0_STORE_KEY } from "./provider.ts";
 export type {
   AdminOutcome,
   MemoryAdmin,

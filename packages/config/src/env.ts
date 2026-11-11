@@ -2,13 +2,13 @@
 // Every reader here treats empty as unset.
 import { logger } from "./logger.ts";
 import { pyParseFloat, pyParseInt, pyRepr } from "./py.ts";
+import { type FileLayer, personaScopes } from "./scope.ts";
 
 // What settings.yaml, persona.yaml and credentials.json set, keyed by the variable each setting
 // maps to. A non-empty environment variable wins over the files, so a deployment's env stays
 // authoritative, except for a variable the persona's own file decides: there the environment is
 // ignored, and with no value in her file the variable is unset.
-let fileLayer: ReadonlyMap<string, string> = new Map();
-let owned: ReadonlySet<string> = new Set();
+let installed: FileLayer = { values: new Map(), owned: new Set() };
 
 /**
  * Replaces the values the settings files supply, and the variables the persona's file decides;
@@ -18,12 +18,20 @@ export function setFileLayer(
   values: ReadonlyMap<string, string>,
   ownedNames: ReadonlySet<string>,
 ): void {
-  fileLayer = values;
-  owned = ownedNames;
+  installed = { values, owned: ownedNames };
 }
 
-function fromEnvironment(name: string): string | undefined {
-  return owned.has(name) ? undefined : process.env[name];
+function currentLayer(): FileLayer {
+  return personaScopes.getStore() ?? installed;
+}
+
+function fromEnvironment(layer: FileLayer, name: string): string | undefined {
+  return layer.owned.has(name) ? undefined : process.env[name];
+}
+
+function rawIn(layer: FileLayer, name: string): string | undefined {
+  const raw = fromEnvironment(layer, name);
+  return raw ? raw : (layer.values.get(name) ?? raw);
 }
 
 /**
@@ -31,13 +39,12 @@ function fromEnvironment(name: string): string | undefined {
  * variables where blank means something.
  */
 export function envRaw(name: string): string | undefined {
-  const raw = fromEnvironment(name);
-  return raw ? raw : (fileLayer.get(name) ?? raw);
+  return rawIn(currentLayer(), name);
 }
 
 /** A non-empty environment variable that wins over the files: never one the persona's decides. */
 export function envOverride(name: string): string | undefined {
-  const raw = fromEnvironment(name);
+  const raw = fromEnvironment(currentLayer(), name);
   return raw ? raw : undefined;
 }
 
@@ -55,12 +62,13 @@ export function envOptional(name: string): string | undefined {
 
 /** Every variable that has a value, environment order first, then names only the files set. */
 export function envEntries(): [string, string][] {
+  const layer = currentLayer();
   const entries: [string, string][] = [];
   for (const [key, value] of Object.entries(process.env)) {
-    const resolved = envRaw(key);
+    const resolved = rawIn(layer, key);
     if (value !== undefined && resolved !== undefined) entries.push([key, resolved]);
   }
-  for (const [key, value] of fileLayer) {
+  for (const [key, value] of layer.values) {
     if (!(key in process.env)) entries.push([key, value]);
   }
   return entries;

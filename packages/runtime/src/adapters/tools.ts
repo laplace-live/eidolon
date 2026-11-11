@@ -1,3 +1,4 @@
+import { errorText, logger } from "@eidolon/config";
 import type { ConversationContext, LlmTool, ToolEffects } from "@eidolon/core";
 import { currentSignal } from "@pipedog/asyncio";
 import { FunctionSchema } from "@pipedog/core/adapters/schemas/function_schema";
@@ -18,16 +19,25 @@ function voiceDelta(tts: FrameProcessor, voice: string): TTSSettings {
   return new (own ?? TTSSettings)({ voice });
 }
 
+/** A server message a tool sends the client, handed to the session's caller too. */
+export type ServerMessageHook = (data: Readonly<Record<string, unknown>>) => void;
+
 /** The session's LLM tools, advertised in the order they were registered. */
 export class SessionTools {
   readonly #llm: LLMService<any>;
   readonly #tts: FrameProcessor | null;
+  readonly #onServerMessage: ServerMessageHook | undefined;
   readonly #schemas: FunctionSchema[] = [];
 
   /** `tts` is null under a realtime model, which no tool can switch the voice of. */
-  constructor(llm: LLMService<any>, tts: FrameProcessor | null) {
+  constructor(
+    llm: LLMService<any>,
+    tts: FrameProcessor | null,
+    onServerMessage?: ServerMessageHook,
+  ) {
     this.#llm = llm;
     this.#tts = tts;
+    this.#onServerMessage = onServerMessage;
   }
 
   get size(): number {
@@ -91,7 +101,19 @@ export class SessionTools {
           new TTSUpdateSettingsFrame({ delta: voiceDelta(tts, voice), service: tts }),
         );
       },
-      sendServerMessage: (data) => params.llm.pushFrame(new RTVIServerMessageFrame({ data })),
+      sendServerMessage: async (data) => {
+        await params.llm.pushFrame(new RTVIServerMessageFrame({ data }));
+        this.#report(data);
+      },
     };
+  }
+
+  #report(data: Readonly<Record<string, unknown>>): void {
+    try {
+      this.#onServerMessage?.(data);
+    } catch (e) {
+      // Thrown into the tool, it would fail a selfie that was already rendered and sent.
+      logger.error(`Could not report a server message: ${errorText(e)}`, e);
+    }
   }
 }

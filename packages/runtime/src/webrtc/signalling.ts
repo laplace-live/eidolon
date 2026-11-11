@@ -9,6 +9,7 @@ import {
   SmallWebRTCPatchRequest,
   SmallWebRTCRequest,
 } from "@pipedog/transport-smallwebrtc/request_handler";
+import type { AnyCallBinding } from "../native/binding.ts";
 import { type CandidateRules, connectionPlan, EidolonRequestHandler } from "./handler.ts";
 
 /** An HTTP answer for apps/bot to serialize as JSON (it adds CORS). */
@@ -18,8 +19,11 @@ export interface SignallingResult {
 }
 
 export interface SignallingServer {
-  /** POST /api/offer after the guard admitted it. New connections start a session in the background. */
-  offer(admission: AllowedOffer): Promise<SignallingResult>;
+  /**
+   * POST /api/offer after the guard admitted it. New connections start a session in the background,
+   * bound to `binding` when there is one.
+   */
+  offer(admission: AllowedOffer, binding?: AnyCallBinding): Promise<SignallingResult>;
   /**
    * PATCH /api/offer: trickled ICE candidates, the only way the browser's candidates arrive (the
    * client offers before gathering). `bodyText` is `await request.text()`; runtime parses it and
@@ -36,7 +40,11 @@ export interface SignallingServer {
 
 export interface SignallingDeps {
   /** Runs one session to its end. Must never reject. */
-  startSession(connection: SmallWebRTCConnection, admission: AllowedOffer): Promise<void>;
+  startSession(
+    connection: SmallWebRTCConnection,
+    admission: AllowedOffer,
+    binding?: AnyCallBinding,
+  ): Promise<void>;
   /** The codec every connection's encoders wrap; pipedog's process default otherwise. */
   opusCodec?: OpusCodec;
   candidates?: CandidateRules;
@@ -61,15 +69,22 @@ export function createSignallingServerWith(
   const handler = new EidolonRequestHandler(deps.candidates);
   const sessions = new Set<Task<unknown>>();
 
-  const startSession = (connection: SmallWebRTCConnection, admission: AllowedOffer): void => {
+  const startSession = (
+    connection: SmallWebRTCConnection,
+    admission: AllowedOffer,
+    binding: AnyCallBinding | undefined,
+  ): void => {
     // The answer goes out only after this returns, so the session runs on its own.
-    const task = createTask(() => deps.startSession(connection, admission), "eidolon-session");
+    const task = createTask(
+      () => deps.startSession(connection, admission, binding),
+      "eidolon-session",
+    );
     sessions.add(task);
     task.addDoneCallback(() => sessions.delete(task));
   };
 
   return {
-    async offer(admission) {
+    async offer(admission, binding) {
       const body = admission.body;
       if (body === null) return invalidRequest(`${new Error("expected a JSON object")}`);
       if (typeof body.sdp !== "string" || typeof body.type !== "string") {
@@ -85,7 +100,7 @@ export function createSignallingServerWith(
               admission.opusBitrateBps,
               deps.opusCodec ?? getOpusCodec(),
             ),
-          (connection) => startSession(connection, admission),
+          (connection) => startSession(connection, admission, binding),
         );
         return { status: 200, body: answer };
       } catch (e) {

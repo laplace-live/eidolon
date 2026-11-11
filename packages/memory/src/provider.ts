@@ -32,6 +32,16 @@ const MEMORY_PREFIX = "Based on previous conversations, I recall: \n\n";
 const MEMORY_ROLE = "developer";
 const MEMORY_POSITION = 1;
 
+/**
+ * The metadata key under which a turn hands over the messages to store in place of its context's.
+ * A group chat's context holds other personas' lines as user messages, and storing those would turn
+ * what they said into memories about the viewer.
+ */
+export const MEM0_STORE_KEY = "mem0_messages";
+
+/** pipedog's name for the Mem0 service, which labels her Mem0 among a turn's providers. */
+export const MEM0_LABEL = "LaplaceMem0MemoryService";
+
 /** The last user message with string content; LLM-specific messages are not plain objects. */
 function latestUserText(messages: readonly unknown[]): string | null {
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -61,9 +71,10 @@ export class Mem0MemoryProvider implements MemoryProvider {
     const messages = context.getMessages();
     const latest = latestUserText(messages);
     if (!latest) return;
-    const toStore = messages.filter(
-      (m) => isPlainObject(m) && (m.role === "user" || m.role === "assistant"),
-    );
+    const listed = turn.metadata[MEM0_STORE_KEY];
+    const toStore = Array.isArray(listed)
+      ? [...listed]
+      : messages.filter((m) => isPlainObject(m) && (m.role === "user" || m.role === "assistant"));
     await this.#enhance(turn, latest);
     turn.spawn("mem0_store", () => this.#store(toStore));
   }

@@ -47,6 +47,7 @@ export function AppShell() {
   // The studio opens on the active persona; it stays lit on any persona's.
   const tabs: readonly Tab[] = [
     { to: "/", label: t`Home`, end: true },
+    { to: "/chats", label: t`Chats` },
     { to: "/call", label: t`Call` },
     ...(status
       ? [{ to: studioPath(status.persona.id), label: t`Studio`, section: "/personas/" }]

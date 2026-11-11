@@ -1,75 +1,58 @@
 // Which settings and keys the running server reads once, so that a change needs POST restart. Some
-// are read at boot; others the first time memory or retrieval runs, which then keeps them:
-// SharedEngine holds the first Mem0 engine it opens, and retrieval its first embedding client and
-// reranker. Every other value applies from the next call once the settings are installed again.
+// are read at boot; others the first time retrieval embeds, whose client keeps the account it was
+// built with. Every other value applies from the next call once the settings are installed again:
+// the Mem0 engine and the reranker are cached by the values they were built from.
 import {
   activePersona,
   CREDENTIALS,
   envOptional,
   installSettings,
-  pyStrip,
   resetSettings,
   SETTINGS,
 } from "@eidolon/config";
-import { type Category, hasKey, PROVIDERS, type RoleId, trySelect } from "@eidolon/providers";
+import { hasKey, PROVIDERS, providersFor, type RoleId, trySelect } from "@eidolon/providers";
 import type { LocalApp } from "./router.ts";
 
 /** What keeps a value it read once. */
-export type BootReader = "server" | "mcp" | "memory" | "retrieval";
+export type BootReader = "server" | "mcp" | "retrieval";
 
-const READERS: readonly BootReader[] = ["server", "mcp", "memory", "retrieval"];
+const READERS: readonly BootReader[] = ["server", "mcp", "retrieval"];
 
 /** Names a settings file or credentials.json may change while the server runs. */
 const FILED = new Set([...SETTINGS.map((setting) => setting.env), ...CREDENTIALS]);
 
-/**
- * The keys and API bases of every provider that offers one of `categories`, where a file may set
- * them; the environment's alone can't change before a restart.
- */
-function providerVariables(categories: readonly Category[]): string[] {
-  return PROVIDERS.filter((p) => categories.some((category) => p.offers[category] !== undefined))
-    .flatMap((p) => [p.credential, p.baseUrlEnv])
-    .filter((name): name is string => name !== null && FILED.has(name));
-}
+/** The providers retrieval's embedding client may be built with. */
+const EMBEDDING_PROVIDERS = providersFor("embedding");
 
 /**
- * Mem0's extraction may run on any chat provider and its embeddings on any embedding provider;
- * retrieval embeds and reranks. Each keeps the key and base of whichever it was built with.
+ * The key and API base of each, where a file may set them; the environment's alone can't change
+ * before a restart. The client keeps whichever it was built with.
  */
-const PROVIDER_READERS: Readonly<Record<string, readonly BootReader[]>> = (() => {
-  const readers: Record<string, BootReader[]> = {};
-  const keep = (names: readonly string[], reader: BootReader) => {
-    for (const name of names) {
-      const entry = readers[name] ?? [];
-      if (!entry.includes(reader)) entry.push(reader);
-      readers[name] = entry;
-    }
-  };
-  keep(providerVariables(["llm", "embedding"]), "memory");
-  keep(providerVariables(["embedding", "rerank"]), "retrieval");
-  return readers;
-})();
+const PROVIDER_READERS: Readonly<Record<string, readonly BootReader[]>> = Object.fromEntries(
+  EMBEDDING_PROVIDERS.flatMap((p) => [p.credential, p.baseUrlEnv])
+    .filter((name): name is string => name !== null && FILED.has(name))
+    .map((name) => [name, ["retrieval"] as const]),
+);
 
-/**
- * The accounts a reader keeps, beside their variables: an account credentials.json holds changes
- * no variable. Each is read as what a client is built with: the account, its API base and key.
- */
-const ACCOUNT_READERS: Readonly<Record<string, readonly BootReader[]>> = {
-  "@memory": ["memory"],
-  "@embeddings": ["memory", "retrieval"],
-  "@rerank": ["retrieval"],
-};
+/** Every other provider's key: nothing keeps it past a change. */
+const LIVE_PROVIDER_KEYS: readonly string[] = PROVIDERS.filter(
+  (p) => !EMBEDDING_PROVIDERS.includes(p),
+)
+  .map((p) => p.credential)
+  .filter((name): name is string => name !== null);
 
 /** Every variable a reader keeps, with the readers that keep it. */
 export const BOOT_READ: Readonly<Record<string, readonly BootReader[]>> = {
   ...PROVIDER_READERS,
-  ...ACCOUNT_READERS,
   // The usage ledger opens at boot.
   EIDOLON_USAGE_DB: ["server"],
-  // At boot: CORS, the anonymous offer quota, ICE and the Opus presets.
+  // At boot: CORS, the anonymous offer quota, ICE and the Opus presets; the chat quotas on the
+  // first chat turn.
   PIPECAT_ALLOWED_ORIGINS: ["server"],
   EIDOLON_ANON_RATE_LIMIT_PER_HOUR: ["server"],
   EIDOLON_ANON_RATE_LIMIT_WINDOW_SEC: ["server"],
+  EIDOLON_CHAT_ANON_QUOTA: ["server"],
+  EIDOLON_CHAT_USER_QUOTA: ["server"],
   CLOUDFLARE_TURN_KEY_ID: ["server"],
   CLOUDFLARE_TURN_TTL_SEC: ["server"],
   CLOUDFLARE_TURN_KEY_API_TOKEN: ["server"],
@@ -94,30 +77,14 @@ export const BOOT_READ: Readonly<Record<string, readonly BootReader[]>> = {
   EIDOLON_MCP_ALLOWED_HOSTS: ["mcp"],
   EIDOLON_VALIDATE_TTL_SEC: ["mcp"],
   CF_WAF_BYPASS_TOKEN: ["mcp"],
-  // The Mem0 engine's whole configuration (packages/memory buildMemoryConfig).
-  MEM0_QDRANT_HOST: ["memory"],
-  MEM0_QDRANT_PORT: ["memory"],
-  MEM0_QDRANT_COLLECTION: ["memory"],
-  MEM0_HISTORY_DB_PATH: ["memory"],
-  MEM0_LLM_PROVIDER: ["memory"],
-  MEM0_LLM_MODEL: ["memory"],
-  // Memory extraction follows the persona's chat model unless it names its own.
-  LLM_PROVIDER: ["memory"],
-  LLM_MODEL: ["memory"],
-  EMBED_PROVIDER: ["memory", "retrieval"],
-  // Retrieval reads the model per query; only the Mem0 engine keeps it.
-  EMBED_MODEL: ["memory"],
-  EMBED_DIM: ["memory"],
-  EMBED_BASE_URL: ["memory", "retrieval"],
-  EMBED_API_KEY: ["memory", "retrieval"],
-  // Retrieval's embedding client and reranker.
+  // Retrieval's embedding client, which takes the model and dimension per query. It keeps its
+  // account too, read as its id, API base and key: one in credentials.json changes no variable.
+  "@embeddings": ["retrieval"],
+  EMBED_PROVIDER: ["retrieval"],
+  EMBED_BASE_URL: ["retrieval"],
+  EMBED_API_KEY: ["retrieval"],
   OPENROUTER_APP_NAME: ["retrieval"],
   OPENROUTER_APP_URL: ["retrieval"],
-  RERANK_ENABLED: ["retrieval"],
-  RERANK_PROVIDER: ["retrieval"],
-  RERANK_MODEL: ["retrieval"],
-  RERANK_BASE_URL: ["retrieval"],
-  RERANK_API_KEY: ["retrieval"],
 };
 
 /** Every other setting and key: read per call, per request or by the offline tools. */
@@ -125,6 +92,7 @@ export const LIVE_READ: readonly string[] = [
   "EIDOLON_LOCAL_VIEWER_NAME",
   "WORKERS_BASE_URL",
   "EIDOLON_REAL_IP_HEADER",
+  "EIDOLON_CHAT_PERSONAS",
   "REFINE_BASE_URL",
   "YT_DLP_PATH",
   "YT_DLP_COOKIES_FROM_BROWSER",
@@ -140,10 +108,25 @@ export const LIVE_READ: readonly string[] = [
   "REALTIME_PROVIDER",
   "REALTIME_MODEL",
   "REALTIME_VOICE",
+  "LLM_PROVIDER",
+  "LLM_MODEL",
+  "MEM0_QDRANT_HOST",
+  "MEM0_QDRANT_PORT",
+  "MEM0_QDRANT_COLLECTION",
+  "MEM0_HISTORY_DB_PATH",
+  "MEM0_LLM_PROVIDER",
+  "MEM0_LLM_MODEL",
   "MEM0_SEARCH_LIMIT",
   "MEM0_SEARCH_THRESHOLD",
   "MEM0_AGENT_ID",
   "MEM0_RUN_ID",
+  "EMBED_MODEL",
+  "EMBED_DIM",
+  "RERANK_ENABLED",
+  "RERANK_PROVIDER",
+  "RERANK_MODEL",
+  "RERANK_BASE_URL",
+  "RERANK_API_KEY",
   "RETRIEVAL_GATE_ENABLED",
   "RETRIEVAL_GATE_PROVIDER",
   "RETRIEVAL_GATE_MODEL",
@@ -163,25 +146,19 @@ export const LIVE_READ: readonly string[] = [
   "SELFIE_TTL_SECONDS",
   "SELFIE_TIMEOUT_SECONDS",
   "SELFIE_REFERENCE_IMAGES",
-  "SONIOX_API_KEY",
-  "FISH_API_KEY",
+  "CHAT_INTERESTS",
+  "CHAT_TALKATIVENESS",
+  "CHAT_REPLY_MODE",
   "REFINE_API_KEY",
-  // Voice providers: a call reads them as it starts.
-  "ELEVENLABS_API_KEY",
-  "DEEPGRAM_API_KEY",
-  "CARTESIA_API_KEY",
-  "MINIMAX_API_KEY",
+  ...LIVE_PROVIDER_KEYS,
 ];
 
 type Read = (name: string) => string | undefined;
 
-/** Any key retrieval's embedding client or reranker may be built with. */
+/** Any key retrieval's embedding client may be built with. */
 const RETRIEVAL_KEYS: readonly string[] = [
   "EMBED_API_KEY",
-  "RERANK_API_KEY",
-  ...PROVIDERS.filter((p) => p.offers.embedding !== undefined || p.offers.rerank !== undefined)
-    .map((p) => p.credential)
-    .filter((name): name is string => name !== null),
+  ...EMBEDDING_PROVIDERS.map((p) => p.credential).filter((name): name is string => name !== null),
 ];
 
 /** `@<role>`: the account a role's client is built with, while it has a key. */
@@ -199,15 +176,13 @@ function effective(name: string): string | undefined {
 }
 
 /**
- * When a reader may first keep what it reads. Memory needs a Qdrant host (isMemoryConfigured) and
- * retrieval a key, so the wizard can save both before the first call without asking for a restart.
+ * When a reader may first keep what it reads. Retrieval needs a key, so the wizard can save one
+ * before the first call without asking for a restart.
  */
 const ARMED: Readonly<Record<BootReader, (read: Read) => boolean>> = {
   server: () => true,
   mcp: () => true,
-  memory: (read) => pyStrip(read("MEM0_QDRANT_HOST") ?? "") !== "",
-  retrieval: (read) =>
-    RETRIEVAL_KEYS.some((name) => !!read(name)) || !!read("@embeddings") || !!read("@rerank"),
+  retrieval: (read) => RETRIEVAL_KEYS.some((name) => !!read(name)) || !!read("@embeddings"),
 };
 
 export interface RestartChanges {

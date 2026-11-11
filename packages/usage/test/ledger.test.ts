@@ -1,9 +1,9 @@
 import "../../config/test/isolated-guard.ts";
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, statSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { dataHome } from "@eidolon/config";
+import { dataHome, resetSettings, withPersona } from "@eidolon/config";
 import { reportUsage, withUsageScope } from "@eidolon/providers";
 import { installUsageLedger, ledgerPath, UsageLedger, uninstallUsageLedger } from "../src/index.ts";
 
@@ -12,6 +12,7 @@ afterEach(() => {
   uninstallUsageLedger();
   for (const name of touched) delete process.env[name];
   touched.length = 0;
+  resetSettings();
   rmSync(dataHome(), { recursive: true, force: true });
 });
 
@@ -127,6 +128,40 @@ describe("installUsageLedger", () => {
     const [row] = ledger?.summarize().rows ?? [];
     expect(row).toMatchObject({ persona: "milky-green", provider: "anthropic", costUsd: 2 });
     expect(statSync(join(dataHome(), "usage.db")).isFile()).toBe(true);
+  });
+
+  test("records a report under withPersona's persona, two scopes interleaved", async () => {
+    for (const id of ["alice", "bob"]) {
+      const folder = join(dataHome(), "personas", id);
+      mkdirSync(folder, { recursive: true });
+      writeFileSync(join(folder, "persona.yaml"), `identity:\n  name: ${id}\n`);
+    }
+    const ledger = installUsageLedger();
+    const report = (model: string): void =>
+      reportUsage({ role: "mind", provider: "openrouter", model, units: {}, costUsd: 0 });
+    const aliceTurn = Promise.withResolvers<void>();
+    const bobTurn = Promise.withResolvers<void>();
+    await Promise.all([
+      withPersona("alice", async () => {
+        await aliceTurn.promise;
+        report("alice-turn");
+        bobTurn.resolve();
+      }),
+      withPersona("bob", async () => {
+        report("bob-first");
+        aliceTurn.resolve();
+        await bobTurn.promise;
+        report("bob-second");
+      }),
+    ]);
+    report("outside");
+    expect(withPersona("bob", installUsageLedger)).toBe(ledger);
+    expect(ledger?.summarize().rows.map((row) => [row.persona, row.model])).toEqual([
+      ["alice", "alice-turn"],
+      ["bob", "bob-first"],
+      ["bob", "bob-second"],
+      ["milky-green", "outside"],
+    ]);
   });
 
   test("a path that can't be opened leaves recording off, and reports cost nothing", () => {

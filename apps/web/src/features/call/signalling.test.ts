@@ -15,6 +15,18 @@ test("the offer goes with the session's proof, which the server needs beside the
   expect(request.requestData).toEqual({ audioQuality: "medium" });
 });
 
+test("a call inside a chat names the chat and whom it calls there", () => {
+  keepProof("proof-for-a-chat-call");
+  const request = offerRequest({ chatId: "0199-chat", persona: "mio" });
+  expect(request.endpoint).toBe("/api/offer");
+  expect(request.headers?.get(PROOF_HEADER)).toBe("proof-for-a-chat-call");
+  expect(request.requestData).toEqual({
+    audioQuality: "medium",
+    chatId: "0199-chat",
+    persona: "mio",
+  });
+});
+
 test("the ICE servers are asked for with the proof too, and an empty list is an answer", async () => {
   keepProof("proof-for-ice");
   const fetch = spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ iceServers: [] }));

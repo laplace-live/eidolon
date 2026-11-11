@@ -1,0 +1,36 @@
+import type { ParticipantId } from "@eidolon/chat";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback } from "react";
+import { personasQuery } from "@/components/settings-form/queries";
+import type { PersonaSummary } from "@/lib/api";
+import { listOf } from "@/lib/labels";
+
+export type ChatPersona = Pick<PersonaSummary, "id" | "name" | "shortName" | "avatar">;
+
+/** Looks a chat's persona up; one deleted since keeps her id, and a monogram of it. */
+export function usePersonaOf(): (id: ParticipantId) => ChatPersona {
+  const { data } = useQuery(personasQuery);
+  return useCallback(
+    (id) =>
+      data?.personas.find((persona) => persona.id === id) ?? {
+        id,
+        name: id,
+        shortName: "",
+        avatar: false,
+      },
+    [data],
+  );
+}
+
+/** What a line, or an @-mention, names her by: her short name, else her name. */
+export function shortNameOf(persona: Pick<ChatPersona, "name" | "shortName">): string {
+  return persona.shortName.trim() || persona.name;
+}
+
+/** Who a chat is with, for one without a title: her name, or a group's short names. */
+export function chatWith(personas: readonly ChatPersona[]): string {
+  const [only] = personas;
+  return personas.length === 1 && only !== undefined
+    ? only.name
+    : listOf(personas.map(shortNameOf));
+}

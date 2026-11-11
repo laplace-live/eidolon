@@ -25,7 +25,7 @@ export interface HybridSearchOptions {
   /** Rows returned, capped at `candidates`. */
   finalK?: number | null;
   rerank?: boolean;
-  /** Overrides makeReranker(), so a benchmark can compare models without the process cache. */
+  /** Overrides makeReranker(), so a benchmark can compare models. */
   reranker?: Reranker | null;
   ftsField?: string;
   signal?: AbortSignal;
