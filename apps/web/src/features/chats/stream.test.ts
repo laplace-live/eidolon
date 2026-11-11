@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatEvent, ChatHeader, ChatStreamLine } from "@eidolon/chat";
+import type { ChatContents } from "@/lib/chats";
+import { chatItems } from "./items";
 import {
   callOn,
   IDLE,
@@ -7,6 +9,7 @@ import {
   type LiveAction,
   type LiveState,
   latePoll,
+  liveRows,
   mayRunOn,
   mergeEvents,
   reaches,
@@ -325,6 +328,125 @@ describe("a voice message", () => {
       { type: "send-failed", key: 2, error: { code: "missing-key", message: "mind" } },
     ]);
     expect(typed.error).toEqual({ code: "missing-key", message: "mind" });
+  });
+});
+
+describe("a line sent while a reply runs", () => {
+  /** The page as useChat composes it, and what its log shows, top to bottom. */
+  function page() {
+    const sends = new Sends();
+    let log: ChatContents = {
+      header: HEADER,
+      events: [],
+      lateTools: [],
+      hearingRefusal: null,
+      groupCall: false,
+      call: null,
+    };
+    let live = IDLE;
+    const dispatch = (action: LiveAction) => {
+      live = reduceLive(live, action);
+    };
+    return {
+      /** Sends `text`, and gives its stream: the lines it carries, as they arrive, and its end. */
+      send(text: string) {
+        const key = sends.issue();
+        dispatch({ type: "sending", key, after: log.events.at(-1)?.seq ?? 0, text });
+        const opened = sends.mark(key);
+        dispatch({ type: "follow" });
+        return {
+          arrive(...lines: ChatStreamLine[]) {
+            for (const line of lines) {
+              sends.accept(key);
+              if (line.type === "events") log = mergeEvents(log, line.events).log;
+              if (!reaches(line, sends.superseded(opened))) continue;
+              dispatch(line.type === "events" ? { ...line, key } : line);
+            }
+          },
+          close() {
+            dispatch({ type: "unfollow" });
+            dispatch({ type: "settled", key, turn: null });
+          },
+        };
+      },
+      screen: (): string[] => [
+        ...chatItems(log.events).map((item) =>
+          item.kind === "user" || item.kind === "persona"
+            ? `${item.kind === "user" ? "you" : item.persona}: ${item.text}`
+            : item.kind,
+        ),
+        ...liveRows(live, false).map((row) =>
+          row.kind === "streamed"
+            ? `writing: ${row.text}`
+            : row.kind === "tool"
+              ? `tool: ${row.tool}`
+              : row.kind === "pending"
+                ? `sending: ${row.line.text}`
+                : row.kind,
+        ),
+      ],
+    };
+  }
+
+  test("waits below the words she finishes, and is stored after her message", () => {
+    const chat = page();
+    const first = chat.send("在吗");
+    first.arrive(
+      { type: "events", events: [userLine(1, "在吗"), decision(2, 1)] },
+      { type: "started", turn: "t1", persona: "mio" },
+      { type: "delta", turn: "t1", text: "在的，" },
+    );
+    const second = chat.send("在干嘛");
+    // The server stores the second line only once she has finished: until then her stream, not
+    // yet superseded, carries her words on.
+    first.arrive({ type: "delta", turn: "t1", text: "刚下播" });
+    expect(chat.screen()).toEqual(["you: 在吗", "writing: 在的，刚下播", "sending: 在干嘛"]);
+    first.arrive({ type: "tool", turn: "t1", name: "voice", state: "running" });
+    expect(chat.screen()).toEqual([
+      "you: 在吗",
+      "writing: 在的，刚下播",
+      "tool: voice",
+      "sending: 在干嘛",
+    ]);
+    first.arrive(
+      { type: "events", events: [herLine(3, "在的，刚下播")] },
+      { type: "ended", turn: "t1" },
+    );
+    first.close();
+    expect(chat.screen()).toEqual([
+      "you: 在吗",
+      "mio: 在的，刚下播",
+      "sending: 在干嘛",
+      "thinking",
+    ]);
+    second.arrive({ type: "events", events: [userLine(4, "在干嘛")] });
+    expect(chat.screen()).toEqual(["you: 在吗", "mio: 在的，刚下播", "you: 在干嘛", "thinking"]);
+    second.arrive(
+      { type: "events", events: [decision(5, 4)] },
+      { type: "started", turn: "t2", persona: "mio" },
+      { type: "delta", turn: "t2", text: "吃饭" },
+    );
+    expect(chat.screen()).toEqual([
+      "you: 在吗",
+      "mio: 在的，刚下播",
+      "you: 在干嘛",
+      "writing: 吃饭",
+    ]);
+  });
+
+  test("waits above her thinking dots when she hadn't started writing, and she stores nothing", () => {
+    const chat = page();
+    const first = chat.send("在吗");
+    first.arrive(
+      { type: "events", events: [userLine(1, "在吗"), decision(2, 1)] },
+      { type: "started", turn: "t1", persona: "mio" },
+    );
+    const second = chat.send("在干嘛");
+    expect(chat.screen()).toEqual(["you: 在吗", "sending: 在干嘛", "thinking"]);
+    first.arrive({ type: "ended", turn: "t1" });
+    first.close();
+    second.arrive({ type: "events", events: [userLine(3, "在干嘛")] });
+    expect(chat.screen()).toEqual(["you: 在吗", "you: 在干嘛", "thinking"]);
   });
 });
 

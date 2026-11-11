@@ -1,5 +1,5 @@
 // runChat over fake minds and a fake director: who answers in which order, the decisions it gives
-// to store, the chain and its limit, and interruption.
+// to store, the chain and its limit, interruption, and the lines a stopped answer still owed.
 import "../../config/test/isolated-guard.ts";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -16,7 +16,7 @@ import {
 import { activePersona, consoleSink, dataHome, logger, resetSettings } from "@eidolon/config";
 import { Director, type DirectorDecision, type DirectorInput } from "@eidolon/context";
 import { type UsageRecord, usageRecord } from "@eidolon/providers";
-import { type ChatDeps, type ChatOutput, runChat } from "../src/chat.ts";
+import { type ChatDeps, type ChatOutput, type OwedLine, runChat } from "../src/chat.ts";
 import type { MindChunk, MindRequest, PersonaParts, SpeechDeps } from "../src/types.ts";
 
 const PERSONAS: Record<string, string> = {
@@ -85,6 +85,17 @@ function minds(replies: Record<string, Reply> = {}) {
     },
   });
   return { createMind, requests };
+}
+
+/** Says `text`, then waits for the interruption. */
+function untilAborted(text: string): Reply {
+  return async function* (request) {
+    yield { type: "text", text };
+    if (!request.signal.aborted) {
+      await new Promise((resolve) => request.signal.addEventListener("abort", resolve));
+    }
+    request.signal.throwIfAborted();
+  };
 }
 
 type Decide = (input: DirectorInput, signal?: AbortSignal) => Promise<DirectorDecision>;
@@ -171,6 +182,8 @@ const messages = (events: readonly ChatEvent[]) =>
   );
 const decisions = (events: readonly ChatEvent[]) =>
   events.filter((event) => event.type === "decision");
+
+const text = (persona: string) => ({ persona, mode: "text" as const });
 
 function request(chat: ReturnType<typeof chatOf>, signal = new AbortController().signal) {
   const last = chat.events.at(-1) as ChatEvent;
@@ -317,15 +330,7 @@ describe("runChat", () => {
 
   test("an interruption stores what was said and drops the turns and hops to come", async () => {
     const controller = new AbortController();
-    const { createMind, requests } = minds({
-      bea: async function* (request) {
-        yield { type: "text", text: "我想想" };
-        if (!request.signal.aborted) {
-          await new Promise((resolve) => request.signal.addEventListener("abort", resolve));
-        }
-        request.signal.throwIfAborted();
-      },
-    });
+    const { createMind, requests } = minds({ bea: untilAborted("我想想") });
     const director = scripted(["bea", "ken"], ["ann"]);
     const chat = chatOf(header("ann", "bea", "ken"), user("你们呢"));
     await chat.drive(
@@ -383,5 +388,232 @@ describe("runChat", () => {
       { replies: [{ persona: "bea", mode: "text" }], source: "fallback" },
       { replies: [], source: "fallback" },
     ]);
+  });
+});
+
+describe("runChat with owed lines", () => {
+  const owing = (
+    chat: ReturnType<typeof chatOf>,
+    owed: readonly OwedLine[],
+    signal?: AbortSignal,
+  ) => ({ ...request(chat, signal), owed });
+
+  test("owed replies run first, oldest line first, and a decided line isn't decided again", async () => {
+    const { createMind } = minds();
+    const director = scripted(["ann"], []);
+    const chat = chatOf(header("ann", "bea", "ken"), user("Ken在吗"), user("小露呢"), user("安安"));
+    await chat.drive(
+      runChat(
+        owing(chat, [
+          { line: 1, replies: [text("ken")] },
+          { line: 2, replies: [text("bea")] },
+        ]),
+        deps(createMind, director.decide),
+      ),
+    );
+    expect(messages(chat.events)).toEqual([
+      "viewer: Ken在吗",
+      "viewer: 小露呢",
+      "viewer: 安安",
+      "ken: Ken说1",
+      "bea: 露比说1",
+      "ann: 安妮说1",
+    ]);
+    expect(decisions(chat.events).map(({ after }) => after)).toEqual([3, 7]);
+    expect(director.inputs.map(({ hop, lines }) => ({ hop, latest: lines.at(-1)?.text }))).toEqual([
+      { hop: 0, latest: "安安" },
+      { hop: 1, latest: "安妮说1" },
+    ]);
+  });
+
+  test("a persona owed and chosen again answers once, at her first place and in its mode", async () => {
+    const { createMind, requests } = minds();
+    const director = scripted(["ken", "bea"], []);
+    const chat = chatOf(header("ann", "bea", "ken"), user("小露唱首歌"), user("Ken也来"));
+    await chat.drive(
+      runChat(
+        owing(chat, [{ line: 1, replies: [{ persona: "bea", mode: "voice" }] }]),
+        deps(createMind, director.decide),
+      ),
+    );
+    expect(requests.map(({ persona }) => persona)).toEqual(["bea", "ken"]);
+    // Only a voice reply tries SILENT's voice, which fails it to text.
+    expect(
+      chat.events.flatMap((event) =>
+        event.type === "turn-failed" ? [{ persona: event.persona, code: event.code }] : [],
+      ),
+    ).toEqual([{ persona: "bea", code: "voice-failed" }]);
+  });
+
+  test("an owed line no decision covered is decided again, as the latest line, before any reply", async () => {
+    const { createMind } = minds();
+    const inputs: DirectorInput[] = [];
+    const decide: Decide = async (input) => {
+      inputs.push(input);
+      const chosen =
+        input.hop > 0 ? [] : input.lines.at(-1)?.text === "@安妮 早" ? ["ann"] : ["bea"];
+      return { replies: chosen.map(text), source: "model", scores: {} };
+    };
+    const chat = chatOf(header("ann", "bea", "ken"), user("@安妮 早"), user("小露呢"));
+    const outputs = await chat.drive(runChat(owing(chat, [{ line: 1 }]), deps(createMind, decide)));
+    expect(
+      outputs
+        .slice(0, 3)
+        .map((output) =>
+          output.type === "decision"
+            ? { after: output.after, replies: output.replies }
+            : output.type,
+        ),
+    ).toEqual([
+      { after: 1, replies: [text("ann")] },
+      { after: 2, replies: [text("bea")] },
+      "started",
+    ]);
+    expect(messages(chat.events)).toEqual([
+      "viewer: @安妮 早",
+      "viewer: 小露呢",
+      "ann: 安妮说1",
+      "bea: 露比说1",
+    ]);
+    expect(
+      inputs.slice(0, 2).map(({ hop, lines, mentions }) => ({
+        hop,
+        lines: lines.map((line) => line.text),
+        mentions,
+      })),
+    ).toEqual([
+      { hop: 0, lines: ["@安妮 早"], mentions: ["ann"] },
+      { hop: 0, lines: ["@安妮 早", "小露呢"], mentions: [] },
+    ]);
+  });
+
+  test("an owed persona no longer in the chat is dropped", async () => {
+    const { createMind, requests } = minds();
+    const director = scripted(["bea"], []);
+    const chat = chatOf(
+      header("ann", "bea", "ken"),
+      user("Ken你好"),
+      { type: "participants", removed: ["ken"] },
+      user("小露呢"),
+    );
+    await chat.drive(
+      runChat(
+        owing(chat, [{ line: 1, replies: [text("ken"), text("ann")] }]),
+        deps(createMind, director.decide),
+      ),
+    );
+    expect(requests.map(({ persona }) => persona)).toEqual(["ann", "bea"]);
+  });
+
+  test("a chat of one ignores what's owed, in auto and in text: her one turn answers every line", async () => {
+    const run = async (speech: SpeechDeps) => {
+      const { createMind } = minds();
+      const director = scripted(["ann"]);
+      const chat = chatOf(header("ann"), user("在吗"), user("人呢"));
+      await chat.drive(
+        runChat(owing(chat, [{ line: 1 }]), { ...deps(createMind, director.decide), speech }),
+      );
+      return {
+        asked: director.inputs.map(({ lines }) => lines.at(-1)?.text),
+        decided: decisions(chat.events).map(({ after }) => after),
+        lines: messages(chat.events),
+      };
+    };
+    const answered = {
+      asked: ["人呢"],
+      decided: [2],
+      lines: ["viewer: 在吗", "viewer: 人呢", "ann: 安妮说1"],
+    };
+    expect(await run({ ...SILENT, canSpeak: () => true })).toEqual(answered);
+    expect(await run(SILENT)).toEqual(answered);
+  });
+
+  test("hops follow the last persona line after the new line, within the chain limit", async () => {
+    const { createMind } = minds();
+    const director = scripted(["bea"], ["ann"], ["bea"]);
+    const chat = chatOf(
+      header("ann", "bea"),
+      { type: "settings", chainLimit: 1 },
+      user("安安呢"),
+      user("小露呢"),
+    );
+    await chat.drive(
+      runChat(
+        owing(chat, [{ line: 2, replies: [text("ann")] }]),
+        deps(createMind, director.decide),
+      ),
+    );
+    expect(messages(chat.events)).toEqual([
+      "viewer: 安安呢",
+      "viewer: 小露呢",
+      "ann: 安妮说1",
+      "bea: 露比说1",
+      "ann: 安妮说2",
+    ]);
+    expect(director.inputs.map(({ hop, lines }) => ({ hop, latest: lines.at(-1)?.text }))).toEqual([
+      { hop: 0, latest: "小露呢" },
+      { hop: 1, latest: "露比说1" },
+    ]);
+    expect(decisions(chat.events).map(({ after }) => after)).toEqual([3, 6]);
+
+    const quiet = minds({
+      bea: async function* () {
+        yield DONE;
+      },
+    });
+    const later = scripted([], ["ann"]);
+    const spoke = chatOf(
+      header("ann", "bea"),
+      user("你们俩呢"),
+      { type: "message", id: "p-ann", speaker: { kind: "persona", id: "ann" }, text: "我先说" },
+      user("小露？"),
+    );
+    await spoke.drive(
+      runChat(
+        owing(spoke, [{ line: 1, replies: [text("bea")] }]),
+        deps(quiet.createMind, later.decide),
+      ),
+    );
+    expect(later.inputs).toHaveLength(1);
+  });
+
+  test("an interruption in the first round stores what was said and drops the rest", async () => {
+    const controller = new AbortController();
+    const { createMind, requests } = minds({ bea: untilAborted("我想想") });
+    const director = scripted(["ken"], ["ann"]);
+    const chat = chatOf(header("ann", "bea", "ken"), user("小露你说"), user("Ken呢"));
+    await chat.drive(
+      runChat(
+        owing(chat, [{ line: 1, replies: [text("bea")] }], controller.signal),
+        deps(createMind, director.decide),
+      ),
+      (output) => {
+        if (output.type === "delta") controller.abort();
+      },
+    );
+    expect(requests.map(({ persona }) => persona)).toEqual(["bea"]);
+    expect(director.inputs).toHaveLength(1);
+    expect(chat.events.at(-1)).toMatchObject({
+      type: "message",
+      speaker: { kind: "persona", id: "bea" },
+      text: "我想想",
+      interrupted: true,
+    });
+  });
+
+  test("an interruption while an owed line is decided stores nothing, not even the new line's decision", async () => {
+    const controller = new AbortController();
+    const chat = chatOf(header("ann", "bea"), user("嗨"), user("在吗"));
+    const decide: Decide = (input, signal) =>
+      input.lines.length > 1
+        ? Promise.resolve({ replies: [text("bea")], source: "model", scores: {} })
+        : new Promise((_resolve, reject) => {
+            signal?.addEventListener("abort", () => reject(signal.reason));
+            queueMicrotask(() => controller.abort());
+          });
+    const outputs = await chat.drive(
+      runChat(owing(chat, [{ line: 1 }], controller.signal), deps(minds().createMind, decide)),
+    );
+    expect(outputs).toEqual([]);
   });
 });

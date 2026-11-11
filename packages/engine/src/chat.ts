@@ -17,6 +17,7 @@ import {
   type DirectorDecision,
   type DirectorLine,
   type DirectorParticipant,
+  type DirectorReply,
   directorFromEnv,
   directorParticipant,
 } from "@eidolon/context";
@@ -34,6 +35,13 @@ import { replyModeFor, withUnheard } from "./voice.ts";
 
 type ChatLog = TurnRequest["chat"];
 
+export interface OwedLine {
+  /** The seq of a viewer line an answer stopped by a newer line left unanswered. */
+  readonly line: number;
+  /** Who its decision chose and hasn't answered yet; absent when the director hadn't decided. */
+  readonly replies?: readonly DirectorReply[];
+}
+
 export interface ChatRequest {
   /** The chat as stored, through the viewer's line. */
   readonly chat: ChatLog;
@@ -46,6 +54,12 @@ export interface ChatRequest {
   readonly viewer: UserContext;
   /** The seq of the viewer's line to answer. */
   readonly after: number;
+  /**
+   * Earlier viewer lines, oldest first, that the answer this line stopped left unanswered: their
+   * replies open the first round, ahead of this line's. A chat of one ignores them, since her one
+   * turn answers every line.
+   */
+  readonly owed?: readonly OwedLine[];
   /** Interrupts the running turn and drops every turn and hop still to come. */
   readonly signal: AbortSignal;
   /** Without it, an interruption cancels every tool, `cancelOnInterruption` or not. */
@@ -116,6 +130,18 @@ function decisionOutput(after: number, decision: DirectorDecision): DecisionDraf
   };
 }
 
+/** Who answers, of those still `present`: each persona once, at her first place, in its mode. */
+function round(
+  replies: readonly (readonly DirectorReply[])[],
+  present: ReadonlySet<ParticipantId>,
+): DirectorReply[] {
+  const once = new Map<ParticipantId, DirectorReply>();
+  for (const reply of replies.flat()) {
+    if (present.has(reply.persona) && !once.has(reply.persona)) once.set(reply.persona, reply);
+  }
+  return [...once.values()];
+}
+
 /** Her reply, or its failure, or the turn's end: what her decision must be stored before. */
 function closes(output: TurnOutput): boolean {
   return (
@@ -174,7 +200,8 @@ async function* answerWhileDeciding(
  * taking the next. A chat of one persona never chains, and asks the director only whether to
  * answer in voice, when her reply mode is auto, while she writes. An abort ends it quietly, once
  * the running turn has given what it said. In a call, every reply is spoken, so the director never
- * weighs a voice message, and each decision records its replies as text.
+ * weighs a voice message, and each decision records its replies as text. An owed line no decision
+ * covered is decided again, alongside this one, its decision yielded first.
  */
 export function runChat(request: CallChatRequest, deps: ChatDeps): AsyncGenerator<CallChatOutput>;
 export function runChat(request: ChatRequest, deps: ChatDeps): AsyncGenerator<ChatOutput>;
@@ -219,18 +246,26 @@ export async function* runChat(
     return;
   }
   const limit = participants.length > 1 ? chainLimitOf(request.chat.events) : 0;
+  const owed = participants.length > 1 ? (request.owed ?? []) : [];
+  const present = new Set(participants.map(({ id }) => id));
   let log = request.chat;
   let line = request.after;
   for (let hop = 0; ; hop++) {
-    let decision: DirectorDecision;
+    const answering: readonly OwedLine[] = [...(hop === 0 ? owed : []), { line }];
+    const asked = answering.flatMap((owe) => (owe.replies === undefined ? [owe.line] : []));
+    let decided: (readonly [number, DirectorDecision])[];
     try {
-      decision = await decide(linesThrough(log.events, line), hop);
+      decided = await Promise.all(
+        asked.map(async (seq) => [seq, await decide(linesThrough(log.events, seq), hop)] as const),
+      );
     } catch (error) {
       if (signal.aborted) return;
       throw error;
     }
-    yield decisionOutput(line, decision);
-    for (const { persona, mode } of decision.replies) {
+    for (const [seq, decision] of decided) yield decisionOutput(seq, decision);
+    const chosen = new Map(decided.map(([seq, { replies }]) => [seq, replies]));
+    const replies = answering.map((owe) => owe.replies ?? chosen.get(owe.line) ?? []);
+    for (const { persona, mode } of round(replies, present)) {
       if (signal.aborted) return;
       log = await request.read();
       yield* turn(log, persona, mode);

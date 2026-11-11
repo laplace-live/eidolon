@@ -11,7 +11,7 @@ import {
   SearchIcon,
   WrenchIcon,
 } from "lucide-react";
-import { memo, type ReactNode, useEffect, useMemo } from "react";
+import { Fragment, memo, type ReactNode, useEffect, useMemo } from "react";
 import { PersonaAvatar } from "@/components/avatar";
 import { Photo, Thinking, useStickToBottom } from "@/components/conversation";
 import { QuietBadge } from "@/components/quiet-badge";
@@ -34,7 +34,7 @@ import {
 } from "./items";
 import { toolState } from "./labels";
 import { type ChatPersona, shortNameOf } from "./persona";
-import type { LiveState, PendingLine, VoiceClip } from "./stream";
+import { type LiveRow, type LiveState, liveRows, type PendingLine, type VoiceClip } from "./stream";
 import { type AutoPlayEnd, useObjectUrl, VoiceBubble } from "./voice-bubble";
 import { WhyAnswered } from "./why-answered";
 
@@ -510,10 +510,6 @@ export function ChatLog({
 
   // Stable, so the memoized last item doesn't re-render with every streamed delta.
   const retryLast = useMemo(() => (retry === null ? null : () => onSend(retry)), [retry, onSend]);
-  const streamed = turn === null ? "" : withoutPartialMarkup(turn.text);
-  // A group's reply goes on between turns, while the director decides who answers next.
-  const waiting = pending.some((line) => !line.failed) || live.following > 0;
-  const thinking = !inCall && (turn === null ? waiting : streamed === "" && turn.tool === null);
   const empty = items.length === 0 && turn === null && pending.length === 0;
   const speaker = turn?.persona ?? next ?? (group ? null : (personas[0]?.id ?? null));
   const thinker = speaker === null ? null : personaOf(speaker);
@@ -531,6 +527,37 @@ export function ChatLog({
         {children}
       </Said>
     );
+  const liveRow = (row: LiveRow): ReactNode => {
+    if (row.kind === "streamed") {
+      return (
+        thinker !== null &&
+        said(<HerBubble chatId={chatId} name={shortNameOf(thinker)} text={row.text} />)
+      );
+    }
+    if (row.kind === "tool") return <ToolLine tool={row.tool} />;
+    if (row.kind === "thinking") {
+      return said(
+        <Thinking
+          label={
+            thinker === null
+              ? t`Waiting for a reply…`
+              : t`${ph({ name: shortNameOf(thinker) })} is thinking…`
+          }
+        />,
+      );
+    }
+    const { line } = row;
+    const { voice } = line;
+    return voice === undefined ? (
+      <UserBubble
+        text={line.text}
+        failed={line.failed}
+        onRetry={line.failed ? () => onSend(line.text) : undefined}
+      />
+    ) : (
+      <PendingVoice line={line} voice={voice} onRetry={() => onSendVoice(voice)} />
+    );
+  };
 
   return (
     <div
@@ -558,38 +585,9 @@ export function ChatLog({
         {[...new Set(lateTools)].map((tool) => (
           <ToolLine key={tool} tool={tool} />
         ))}
-        {streamed !== "" &&
-          thinker !== null &&
-          said(<HerBubble chatId={chatId} name={shortNameOf(thinker)} text={streamed} />)}
-        {turn !== null && turn.tool !== null && <ToolLine tool={turn.tool} />}
-        {pending.map((line) => {
-          const { voice } = line;
-          return voice === undefined ? (
-            <UserBubble
-              key={line.key}
-              text={line.text}
-              failed={line.failed}
-              onRetry={line.failed ? () => onSend(line.text) : undefined}
-            />
-          ) : (
-            <PendingVoice
-              key={line.key}
-              line={line}
-              voice={voice}
-              onRetry={() => onSendVoice(voice)}
-            />
-          );
-        })}
-        {thinking &&
-          said(
-            <Thinking
-              label={
-                thinker === null
-                  ? t`Waiting for a reply…`
-                  : t`${ph({ name: shortNameOf(thinker) })} is thinking…`
-              }
-            />,
-          )}
+        {liveRows(live, inCall).map((row) => (
+          <Fragment key={row.kind === "pending" ? row.line.key : row.kind}>{liveRow(row)}</Fragment>
+        ))}
       </div>
     </div>
   );

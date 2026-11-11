@@ -1,7 +1,8 @@
 // The local app's chats: one JSONL store in the data home, and per chat one reply at a time: a
 // greeting, or the answer to a viewer's line, typed or spoken, which may chain persona to persona.
-// A reply runs to its end whether or not anyone still reads it; only stop, delete or shutdown abort
-// one. A call takes the chat over while it is on: it opens on her view, and stores its lines.
+// A reply runs to its end whether or not anyone still reads it; only stop, delete, a call, shutdown
+// and a newer viewer line stop one. A call takes the chat over while it is on: it opens on her view,
+// and stores its lines.
 import { join } from "node:path";
 import {
   CHAT_FORMAT,
@@ -14,10 +15,12 @@ import {
   type ParticipantId,
   type ReplyMode,
   stampEvents,
+  summarize,
   type ViewMessage,
 } from "@eidolon/chat";
 import { JsonlChatStore } from "@eidolon/chat/jsonl";
 import { dataHome, errorText, logger } from "@eidolon/config";
+import type { DirectorReply } from "@eidolon/context";
 import {
   type ChatOutput,
   type ChatRequest,
@@ -28,6 +31,7 @@ import {
   type EngineDeps,
   hearVoiceMessage,
   type LateTools,
+  type OwedLine,
   replyModeFor,
   runChat,
   runTurn,
@@ -143,7 +147,9 @@ interface Chat {
   appends: Promise<unknown>;
   /** null until read, and after a failed append. */
   lastSeq: number | null;
-  live: LiveTurn | null;
+  reply: Reply | null;
+  /** What a reply stopped by a newer line left unanswered, until the next stored line's answer. */
+  owed: readonly OwedLine[];
   /** Tools interrupted turns left running, by name, until what they bring is stored. */
   readonly late: string[];
   /** Cancels those tools: the chat is deleted, or the server stops. */
@@ -170,6 +176,50 @@ interface ActiveCall {
 interface Running {
   readonly turn: string;
   readonly persona: ParticipantId;
+}
+
+/** A running reply, and what it has done of the viewer lines it answers. */
+class Reply {
+  readonly live = new LiveTurn();
+  /** Oldest first: the lines it was given as owed, then its own; none for a greeting. */
+  readonly lines: readonly OwedLine[];
+  /** Who each decision chose, by the line it was about. */
+  readonly decided = new Map<number, readonly DirectorReply[]>();
+  /** Each persona who completed a turn: it reached its end with the reply not aborted. */
+  readonly done = new Set<ParticipantId>();
+  /** The chat had one persona as it began, so her turn answers every line. */
+  single = false;
+  /** The running turn has written. */
+  writing = false;
+  /**
+   * "yield": a newer line waits for the running turn to end, and stops the reply there. "abort": a
+   * stop, a delete, a call or shutdown aborted it, so it owes nothing.
+   */
+  stopping: "yield" | "abort" | null = null;
+
+  constructor(lines: readonly OwedLine[]) {
+    this.lines = lines;
+  }
+
+  /** Aborts it at once, owing nothing. */
+  abort(): void {
+    this.stopping = "abort";
+    this.live.controller.abort();
+  }
+
+  /**
+   * The lines it leaves unanswered, oldest first: each no decision was made for, and each whose
+   * chosen personas didn't all complete a turn, with those who didn't.
+   */
+  owed(): OwedLine[] {
+    if (this.single && this.done.size > 0) return [];
+    return this.lines.flatMap(({ line, replies }) => {
+      const chosen = replies ?? this.decided.get(line);
+      if (chosen === undefined) return [{ line }];
+      const left = chosen.filter(({ persona }) => !this.done.has(persona));
+      return left.length > 0 ? [{ line, replies: left }] : [];
+    });
+  }
 }
 
 export class ChatRunner {
@@ -235,10 +285,10 @@ export class ChatRunner {
     chat.lastSeq = 0;
     const [persona] = participants;
     if (participants.length === 1 && persona !== undefined) {
-      const live = new LiveTurn();
-      chat.live = live;
-      const { signal } = live.controller;
-      void this.#run(header.id, chat, live, persona, async (late, save) => {
+      const reply = new Reply([]);
+      chat.reply = reply;
+      const { signal } = reply.live.controller;
+      void this.#run(header.id, chat, reply, persona, async (late, save) => {
         const log = await this.store.read(header.id);
         const viewer = localViewer();
         // With no line to weigh, an auto greeting is text.
@@ -289,15 +339,15 @@ export class ChatRunner {
   }
 
   /**
-   * Stops the running reply, which stores what it said as interrupted and drops the hops queued
-   * after it, then stores `text` as the viewer's and starts the answer: the director's decisions
-   * and the turns they choose. It streams from the viewer's message on.
+   * Stops the running reply, letting a persona who has written finish her turn, then stores `text`
+   * as the viewer's and starts the answer, the replies the stopped reply still owed first: the
+   * director's decisions and the turns they choose. It streams from the viewer's message on.
    */
   send(id: string, text: string): Promise<LiveTurn> {
     const chat = this.#chat(id);
     return this.#serial(chat, async () => {
       if (chat.call !== null) throw new ChatInCall();
-      await this.#interrupt(chat);
+      await this.#yield(chat);
       return this.#answerLine(id, chat, {
         type: "message",
         id: Bun.randomUUIDv7(),
@@ -310,14 +360,15 @@ export class ChatRunner {
   /**
    * As `send`, for a voice message: once the running reply has stopped, `clip` is heard through the
    * hearing role of the chat's first persona, then stored with its transcript, which may be empty.
-   * One that can't be heard rejects with HearingFailed, and nothing of it is stored.
+   * One that can't be heard rejects with HearingFailed, and nothing of it is stored; the next line
+   * takes up what the stopped reply owed.
    */
   sendVoice(id: string, clip: AudioClip): Promise<LiveTurn> {
     const chat = this.#chat(id);
     return this.#serial(chat, async () => {
       // Before the hearing, which bills.
       if (chat.call !== null) throw new ChatInCall();
-      await this.#interrupt(chat);
+      await this.#yield(chat);
       const request = { chat: await this.store.read(id), clip, signal: chat.cancel.signal };
       const message = await this.#hear(request, this.#saver(id)).catch((error: unknown) => {
         throw error instanceof ChatStoreError ? error : new HearingFailed(error);
@@ -329,7 +380,7 @@ export class ChatRunner {
   /** The running reply of chat `id`, else its call's events, or null while it is idle. */
   live(id: string): LiveTurn | null {
     const chat = this.#chats.get(id);
-    return chat?.live ?? chat?.call?.live ?? null;
+    return chat?.reply?.live ?? chat?.call?.live ?? null;
   }
 
   /** The call on in chat `id`, or null. */
@@ -384,16 +435,23 @@ export class ChatRunner {
    * Stops the running reply, stores call-started, and binds the call with `bind`, adding what
    * every call's binding has; a call it can't bind ends at once, as an error.
    */
-  #openCall<T>(
+  async #openCall<T>(
     id: string,
     persona: ParticipantId,
     group: boolean,
     bind: (chat: Chat, call: ActiveCall) => Promise<T>,
   ): Promise<T & Pick<ChatCall, "id" | "onServerMessage" | "connected" | "onEnded">> {
     const chat = this.#chat(id);
-    return this.#serial(chat, async () => {
+    const refuse = async () => {
       if (chat.call !== null) throw new ChatInCall();
       if (!(await this.participants(id)).includes(persona)) throw new NotInChat();
+    };
+    // Before the queue too, where a send may be waiting for her to finish writing: a call it
+    // doesn't refuse stops her at once, as stop does.
+    await refuse();
+    chat.reply?.abort();
+    return this.#serial(chat, async () => {
+      await refuse();
       await this.#interrupt(chat);
       // After the awaits: a delete that came during them has aborted the chat's tools and hearing,
       // and removes the chat next.
@@ -436,9 +494,11 @@ export class ChatRunner {
     });
   }
 
-  /** Aborts chat `id`'s running reply, resolving once what it said is stored. */
+  /** Aborts chat `id`'s running reply, owing nothing, resolving once what it said is stored. */
   async stop(id: string): Promise<void> {
     const chat = this.#chats.get(id);
+    // Before the queue, where a send may be waiting for her to finish writing.
+    chat?.reply?.abort();
     // Queued behind a send still storing the viewer's line, so the reply it starts is the one stopped.
     const stopped = chat !== undefined && (await this.#serial(chat, () => this.#interrupt(chat)));
     // Only to answer 404 for a chat that isn't there.
@@ -467,7 +527,7 @@ export class ChatRunner {
     if (chat.call !== null) return Promise.reject(new ChatInCall());
     // Before the queue, which a voice message being heard holds until its time limit; the reply
     // first, as shutdown does, so the tools it leaves running are cancelled as late ones.
-    chat.live?.controller.abort();
+    chat.reply?.abort();
     chat.cancel.abort();
     return this.#serial(chat, async () => {
       await this.#interrupt(chat);
@@ -486,8 +546,8 @@ export class ChatRunner {
    * call-ended.
    */
   async shutdown(): Promise<void> {
-    const running = [...this.#chats.values()].flatMap((chat) => (chat.live ? [chat.live] : []));
-    for (const live of running) live.controller.abort();
+    const running = [...this.#chats.values()].flatMap((chat) => (chat.reply ? [chat.reply] : []));
+    for (const reply of running) reply.abort();
     for (const chat of this.#chats.values()) chat.cancel.abort();
     // The peers disconnect only after the stop hooks, too late for a call's own end to be stored.
     for (const [id, chat] of this.#chats) {
@@ -497,13 +557,13 @@ export class ChatRunner {
     if (running.length === 0 && endings.length === 0) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
     await Promise.race([
-      Promise.all([...running.map((live) => live.ended), ...endings]),
+      Promise.all([...running.map((reply) => reply.live.ended), ...endings]),
       new Promise<void>((resolve) => {
         timer = setTimeout(resolve, STOP_WAIT_MS);
       }),
     ]);
     clearTimeout(timer);
-    for (const live of running) live.end();
+    for (const reply of running) reply.live.end();
   }
 
   #chat(id: string): Chat {
@@ -513,7 +573,8 @@ export class ChatRunner {
         queue: Promise.resolve(),
         appends: Promise.resolve(),
         lastSeq: null,
-        live: null,
+        reply: null,
+        owed: [],
         late: [],
         cancel: new AbortController(),
         call: null,
@@ -672,22 +733,28 @@ export class ChatRunner {
   }
 
   /**
-   * Stores the viewer's `message` and starts the answer to it: the director's decisions and the
-   * turns they choose. Its stream starts with the message.
+   * Stores the viewer's `message` and starts the answer to it and to the lines the chat owes: the
+   * director's decisions and the turns they choose. Its stream starts with the message.
    */
   async #answerLine(id: string, chat: Chat, message: MessageDraft): Promise<LiveTurn> {
     const stored = await this.#append(id, chat, [message]);
     const after = (stored[0] as ChatEvent).seq;
-    const live = new LiveTurn();
-    chat.live = live;
+    const owed = chat.owed;
+    chat.owed = [];
+    const reply = new Reply([...owed, { line: after }]);
+    chat.reply = reply;
+    const { live } = reply;
     live.push({ type: "events", events: stored });
     const { signal } = live.controller;
-    void this.#run(id, chat, live, null, async (late, save) => {
+    void this.#run(id, chat, reply, null, async (late, save) => {
+      const log = await this.store.read(id);
+      reply.single = summarize(log.header, log.events).participants.length === 1;
       const request: ChatRequest = {
-        chat: await this.store.read(id),
+        chat: log,
         read: () => this.store.read(id),
         viewer: localViewer(),
         after,
+        ...(owed.length > 0 ? { owed } : {}),
         signal,
         late,
       };
@@ -696,13 +763,27 @@ export class ChatRunner {
     return live;
   }
 
-  /** Resolves false when no turn was running. */
+  /** Aborts the running reply and drops what the chat owed. Resolves false when none was running. */
   async #interrupt(chat: Chat): Promise<boolean> {
-    const live = chat.live;
-    if (live === null) return false;
-    live.controller.abort();
-    await live.ended;
+    chat.owed = [];
+    const reply = chat.reply;
+    if (reply === null) return false;
+    reply.abort();
+    await reply.live.ended;
     return true;
+  }
+
+  /**
+   * Stops the running reply for a newer viewer line: once its running turn ends if she has written,
+   * else at once. Resolves once what it said is stored, the chat owing what it left unanswered.
+   */
+  async #yield(chat: Chat): Promise<void> {
+    const reply = chat.reply;
+    if (reply === null) return;
+    reply.stopping ??= "yield";
+    if (!reply.writing) reply.live.controller.abort();
+    await reply.live.ended;
+    if (reply.stopping === "yield") chat.owed = reply.owed();
   }
 
   /**
@@ -713,14 +794,23 @@ export class ChatRunner {
   async #run(
     id: string,
     chat: Chat,
-    live: LiveTurn,
+    reply: Reply,
     greeter: ParticipantId | null,
     start: (
       late: LateTools,
       save: EngineDeps["saveAttachment"],
     ) => Promise<AsyncIterable<ChatOutput>>,
   ): Promise<void> {
+    const { live } = reply;
+    const { signal } = live.controller;
     let running: Running | null = null;
+    const ended = ({ persona }: Running) => {
+      running = null;
+      reply.writing = false;
+      if (!signal.aborted) reply.done.add(persona);
+      // A newer line let her finish: the reply goes no further.
+      if (reply.stopping === "yield") live.controller.abort();
+    };
     try {
       const outputs = await start(
         { signal: chat.cancel.signal, add: (name, events) => this.#late(id, chat, name, events) },
@@ -730,18 +820,23 @@ export class ChatRunner {
         if (output.type === "events" || output.type === "decision") {
           const drafts = output.type === "events" ? output.events : [output];
           live.push({ type: "events", events: await this.#append(id, chat, drafts) });
+          if (output.type === "decision") reply.decided.set(output.after, output.replies);
           continue;
         }
         if (output.type === "started") running = { turn: output.turn, persona: output.persona };
+        if (output.type === "delta" && output.text !== "") reply.writing = true;
         live.push(output);
-        if (output.type === "ended") running = null;
+        if (output.type === "ended" && running !== null) ended(running);
       }
     } catch (error) {
       const persona = running?.persona ?? greeter;
       await this.#failed(id, chat, live, persona, running?.turn ?? null, error);
     } finally {
-      if (running !== null) live.push({ type: "ended", turn: running.turn });
-      if (chat.live === live) chat.live = null;
+      if (running !== null) {
+        live.push({ type: "ended", turn: running.turn });
+        ended(running);
+      }
+      if (chat.reply === reply) chat.reply = null;
       live.end();
     }
   }

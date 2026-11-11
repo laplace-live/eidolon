@@ -2,11 +2,13 @@
 // viewer's line until it is stored, and whether a reply is still under way between its turns. The
 // log itself lives in the query cache, which `mergeEvents` extends as `events` lines arrive.
 //
-// A send interrupts the reply running, and that reply's last lines come on its own stream, which
-// can arrive after the new reply started. Message events carry no turn, so a stored line is matched
-// to what waits for it by seq: whatever answers a turn or a send is stored after it began.
+// A send stops the reply running, once a persona already writing has finished her message, and that
+// reply's last lines come on its own stream, which can arrive after the new reply started. Message
+// events carry no turn, so a stored line is matched to what waits for it by seq: whatever answers a
+// turn or a send is stored after it began.
 import type { ChatEvent, ChatStreamLine, ParticipantId } from "@eidolon/chat";
 import type { ChatContents } from "@/lib/chats";
+import { withoutPartialMarkup } from "./items";
 
 export interface LiveTurn {
   readonly id: string;
@@ -189,6 +191,32 @@ export function reduceLive(state: LiveState, action: LiveAction): LiveState {
   }
 }
 
+export type LiveRow =
+  | { readonly kind: "streamed"; readonly text: string }
+  | { readonly kind: "tool"; readonly tool: string }
+  | { readonly kind: "pending"; readonly line: PendingLine }
+  | { readonly kind: "thinking" };
+
+/**
+ * What the log shows below its stored lines, top to bottom. A line sent while she writes waits
+ * below her words: the server stores it after the message she is finishing. `inCall`: a call's
+ * lines arrive as they are said, with no reply to wait for.
+ */
+export function liveRows(live: LiveState, inCall: boolean): LiveRow[] {
+  const { turn, pending } = live;
+  const rows: LiveRow[] = [];
+  const streamed = turn === null ? "" : withoutPartialMarkup(turn.text);
+  if (streamed !== "") rows.push({ kind: "streamed", text: streamed });
+  if (turn !== null && turn.tool !== null) rows.push({ kind: "tool", tool: turn.tool });
+  for (const line of pending) rows.push({ kind: "pending", line });
+  // A group's reply goes on between turns, while the director decides who answers next.
+  const waiting = pending.some((line) => !line.failed) || live.following > 0;
+  if (!inCall && (turn === null ? waiting : streamed === "" && turn.tool === null)) {
+    rows.push({ kind: "thinking" });
+  }
+  return rows;
+}
+
 /** How often a chat is read again while a tool her interrupted turn left running is out. */
 export const LATE_POLL_MS = 2000;
 
@@ -236,8 +264,9 @@ function extended(log: ChatContents, added: readonly ChatEvent[]): ChatContents 
 }
 
 /**
- * Which streams a send supersedes. A send counts once the server accepts it, at its stream's first
- * line: one refused before it starts (a 400, say) never ran, so the reply on screen carries on.
+ * Which streams a send supersedes. A send counts from its stream's first line, its stored line:
+ * until then the reply on screen carries on, a persona the server lets finish included, and a send
+ * refused before it starts (a 400, say) never counts.
  */
 export class Sends {
   #issued = 0;
@@ -284,7 +313,7 @@ export function mayRunOn({ turn, ended, broke, received }: StreamEnd): boolean {
 /**
  * Whether a stream's line reaches the reducer. A send supersedes every stream open before it, and
  * its own carries her reply from its start: a superseded one only stores what it brings, whether
- * it replays that same reply or still carries the one the send interrupted.
+ * it replays that same reply or still carries the one the send stopped.
  */
 export function reaches(line: ChatStreamLine, superseded: boolean): boolean {
   return !superseded || (line.type !== "started" && line.type !== "delta" && line.type !== "tool");
