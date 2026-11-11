@@ -435,16 +435,23 @@ export class ChatRunner {
    * Stops the running reply, stores call-started, and binds the call with `bind`, adding what
    * every call's binding has; a call it can't bind ends at once, as an error.
    */
-  #openCall<T>(
+  async #openCall<T>(
     id: string,
     persona: ParticipantId,
     group: boolean,
     bind: (chat: Chat, call: ActiveCall) => Promise<T>,
   ): Promise<T & Pick<ChatCall, "id" | "onServerMessage" | "connected" | "onEnded">> {
     const chat = this.#chat(id);
-    return this.#serial(chat, async () => {
+    const refuse = async () => {
       if (chat.call !== null) throw new ChatInCall();
       if (!(await this.participants(id)).includes(persona)) throw new NotInChat();
+    };
+    // Before the queue too, where a send may be waiting for her to finish writing: a call it
+    // doesn't refuse stops her at once, as stop does.
+    await refuse();
+    chat.reply?.abort();
+    return this.#serial(chat, async () => {
+      await refuse();
       await this.#interrupt(chat);
       // After the awaits: a delete that came during them has aborted the chat's tools and hearing,
       // and removes the chat next.

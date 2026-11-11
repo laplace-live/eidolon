@@ -567,7 +567,8 @@ that chat; without a `chatId`, it is the standalone call, unbound.
    invalid-persona-id`, `404 unknown-persona`) who is in it (`400 bad-request`), and no call on in
    it already (`409 chat-in-call`).
 2. **The runner** (`chats/runner.ts`, through `chats/calls.ts`):
-   1. stops a running reply, which stores what she said as interrupted;
+   1. stops a running reply at once, as a stop does, even while a send waits for her to finish
+      writing; it stores what she said as interrupted;
    2. stores `call-started { call, persona }`;
    3. seeds the call with her `viewOf` of the chat, the window her next text turn would read, a
       viewer's voice message heard as nothing reading `（听不清）`, less her tool calls and their

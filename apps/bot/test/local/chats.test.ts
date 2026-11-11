@@ -46,6 +46,7 @@ import {
   ChatRunner,
   type ChatRunnerOptions,
   type ChatTurn,
+  NotInChat,
 } from "../../src/local/chats/runner.ts";
 import { identityHandlers } from "../../src/local/identity.ts";
 import { ndjsonResponse } from "../../src/local/responses.ts";
@@ -1772,6 +1773,51 @@ describe("a line sent while they answer", () => {
         ["我先说", true],
         ["等等", undefined],
       ]);
+    });
+  });
+
+  test("a call while a send waits for her interrupts her at once, owes nothing, and stops the answer the send starts", async () => {
+    await ownRunner(async (runner) => {
+      const id = await runner.create([PERSONA, "beta"]);
+      plans.set("聊聊天", [{ replies: [PERSONA, "beta"], source: "model" }]);
+      // She never finishes on her own.
+      scripts.set(`${PERSONA} 聊聊天`, reply("我先说两句", { untilAborted: true }));
+      await linesOf(await runner.send(id, "聊聊天")).until((line) => line.type === "delta");
+      const sent = runner.send(id, "等等");
+      // The send is waiting for her.
+      await Bun.sleep(0);
+      const dialled = runner.startCall(id, PERSONA);
+      expect(await settles(dialled, 1000)).toBe(true);
+      await (await sent).ended;
+      expect(answers[1]?.owed).toBeUndefined();
+      expect(answers[1]?.signal.aborted).toBe(true);
+      const { events } = await runner.read(id);
+      expect(messages(events).map((m) => [m.text, m.interrupted])).toEqual([
+        ["聊聊天", undefined],
+        ["我先说", true],
+        ["等等", undefined],
+      ]);
+      expect(events.at(-1)).toMatchObject({ type: "call-started", persona: PERSONA });
+      await (await dialled).onEnded("hangup");
+    });
+  });
+
+  test("a call refused while a send waits for her leaves her writing", async () => {
+    await ownRunner(async (runner) => {
+      const id = await runner.create([PERSONA, "beta"]);
+      plans.set("聊聊天", [{ replies: [PERSONA, "beta"], source: "model" }]);
+      const hold = deferred();
+      scripts.set(`${PERSONA} 聊聊天`, reply("我先说两句", { hold: hold.promise }));
+      await linesOf(await runner.send(id, "聊聊天")).until((line) => line.type === "delta");
+      const sent = runner.send(id, "等等");
+      await Bun.sleep(0);
+      expect(await runner.startCall(id, "gamma").catch((error: unknown) => error)).toBeInstanceOf(
+        NotInChat,
+      );
+      expect(requests[0]?.signal.aborted).toBe(false);
+      hold.resolve();
+      await (await sent).ended;
+      expect(answers[1]?.owed).toEqual([{ line: 1, replies: [{ persona: "beta", mode: "text" }] }]);
     });
   });
 
