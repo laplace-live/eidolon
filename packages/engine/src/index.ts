@@ -9,6 +9,7 @@ export {
   type ChatDeps,
   type ChatOutput,
   type ChatRequest,
+  type OwedLine,
   runChat,
 } from "./chat.ts";
 export { defaultEngineDeps } from "./deps.ts";

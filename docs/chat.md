@@ -308,8 +308,31 @@ the gate's plumbing: the active persona's `gate` role and its key, `decisionsUrl
 4. If a persona spoke and the chain limit isn't reached, it asks about the last persona line, one
    hop further, and so on until no one is chosen.
 
-**Interrupting aborts the whole chain.** The running turn stores what she said as interrupted, and
-every turn and hop still to come is dropped. An abort while the director decides stores nothing.
+**Stopping aborts the whole chain at once.** The running turn stores what she said as interrupted,
+and every turn and hop still to come is dropped. An abort while the director decides stores
+nothing. Stop, `DELETE`, a call starting and shutdown do this, and leave nothing owed.
+
+**A newer viewer line never cuts off a persona who has started writing.** In the local app:
+- **She has written:** her turn finishes, the voice of a voice reply included, and the chain stops
+  before its next turn or hop.
+- **She hasn't, or no turn is running** (the director deciding, recall, thinking, tools, or between
+  turns): the chain is aborted at once, and a turn with no words stores nothing.
+
+**The lines a stopped chain owes** go to the newer line's answer, as `ChatRequest.owed`, oldest
+first:
+- **What is owed:** each viewer line the chain was answering, its own or one it was owed, whose
+  decision was never made, or whose decision chose someone who didn't complete a turn. A turn is
+  complete when it ends without the chain being aborted during it; a cut-off or a `turn-failed`
+  counts. Whoever completed any turn in the chain is owed nothing by it. Hops are never owed.
+- **The first round** runs each owed line's remaining replies, then the newer line's. A persona
+  answers once, at her first place, in that place's mode. Hops then follow the last persona line
+  after the newer line, under the same chain limit.
+- **A line never decided** is asked about again, alongside the newer line, as the latest line with
+  the log through it. Its decision is yielded first, `after` that line, before any reply.
+- **A persona no longer in the chat** is dropped from what is owed.
+- **A chat of one** ignores owed lines: her one turn answers every line.
+
+Production's endpoint and calls pass no owed lines.
 
 ### What each persona sees
 
@@ -613,21 +636,24 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
   stores a `title`, so the name the page gives a chat follows who is in it: her name, or the
   group's short names.
 - **New message:**
-  1. It stops a running reply, and waits until what it said is stored as interrupted. The hops
-     still to come are dropped.
-  2. It stores the viewer's line.
-  3. It starts the answer, `runChat`: each decision and each turn is stored, then streamed.
+  1. It stops a running reply as [The chain](#the-chain) says, waits until what it said is
+     stored, and keeps the lines it owes. Meanwhile the reply's own stream carries her words.
+  2. It stores the viewer's line, after her message when she finished one.
+  3. It starts the answer, `runChat`, with the owed lines: each decision and each turn is stored,
+     then streamed.
 
   The answer streams from the viewer's line on, so the viewer can step into a chain at any time.
-- **New voice message:** as a new message, except that after the stop it hears the clip
-  (`hearVoiceMessage`), and only then stores it with its transcript. One that can't be heard
-  stores nothing.
+- **New voice message:** as a new message, except that once the reply has stopped it hears the
+  clip (`hearVoiceMessage`), and only then stores it with its transcript. One that can't be heard
+  stores nothing, and leaves the owed lines to the next line.
+- **The owed lines** live in the runner's memory, per chat; a restart forgets them.
 - **A dropped connection** never stops a reply. It finishes and is stored, and `GET live` replays
-  it. Only stop, a new message, `DELETE` and the server's shutdown abort one. Shutdown waits up to
-  2 s for what was said to be stored.
-- **A stop** waits its turn in the queue, so one that arrives while a send is still storing the
-  viewer's line, or hearing the viewer's clip, stops the reply that send starts. Hearing's time
-  limit ([The clients](#the-clients)) bounds that wait.
+  it. Only stop, a new message, a call, `DELETE` and the server's shutdown stop one
+  ([The chain](#the-chain)). Shutdown waits up to 2 s for what was said to be stored.
+- **A stop** aborts the reply at once and drops the owed lines, even while a send waits for her to
+  finish writing. It waits its turn in the queue, so one that arrives while a send is waiting for
+  her, storing the viewer's line or hearing the viewer's clip, also stops the reply that send
+  starts. Hearing's time limit ([The clients](#the-clients)) bounds that wait.
 - **A selfie still rendering when its turn was interrupted** is the runner's until it ends, as
   `late` (step 8 above):
   - **Storing:** what it brings is numbered on from the log like any append. It always lands

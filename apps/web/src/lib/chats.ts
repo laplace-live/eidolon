@@ -28,7 +28,7 @@ export function readChat(id: string, signal?: AbortSignal): Promise<ChatContents
 }
 
 /**
- * Sends the viewer's line, interrupting any reply still running, and yields the new reply's lines.
+ * Sends the viewer's line, stopping any reply still running, and yields the new reply's lines.
  * Aborting `signal` only stops the reading: the reply runs on, and GET live replays it.
  */
 export async function* sendMessage(

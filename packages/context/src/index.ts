@@ -20,6 +20,7 @@ export {
   type DirectorInput,
   type DirectorLine,
   type DirectorParticipant,
+  type DirectorReply,
   directorFromEnv,
   directorParticipant,
   directorQuestions,
