@@ -150,6 +150,8 @@ interface Chat {
   reply: Reply | null;
   /** What a reply stopped by a newer line left unanswered, until the next stored line's answer. */
   owed: readonly OwedLine[];
+  /** Participant changes queued or running: until they are stored, who is in the chat is open. */
+  changing: number;
   /** Tools interrupted turns left running, by name, until what they bring is stored. */
   readonly late: string[];
   /** Cancels those tools: the chat is deleted, or the server stops. */
@@ -315,6 +317,7 @@ export class ChatRunner {
     remove: readonly ParticipantId[],
   ): Promise<boolean> {
     const chat = this.#chat(id);
+    chat.changing += 1;
     return this.#serial(chat, async () => {
       const now = await this.participants(id);
       const kept = now.filter((p) => !remove.includes(p));
@@ -335,6 +338,8 @@ export class ChatRunner {
         },
       ]);
       return true;
+    }).finally(() => {
+      chat.changing -= 1;
     });
   }
 
@@ -447,9 +452,12 @@ export class ChatRunner {
       if (!(await this.participants(id)).includes(persona)) throw new NotInChat();
     };
     // Before the queue too, where a send may be waiting for her to finish writing: a call it
-    // doesn't refuse stops her at once, as stop does.
-    await refuse();
-    chat.reply?.abort();
+    // doesn't refuse stops her at once, as stop does. A participant change in the queue settles
+    // who is in the chat only when it runs, so behind one the call waits its turn for both.
+    if (chat.changing === 0) {
+      await refuse();
+      if (chat.changing === 0) chat.reply?.abort();
+    }
     return this.#serial(chat, async () => {
       await refuse();
       await this.#interrupt(chat);
@@ -575,6 +583,7 @@ export class ChatRunner {
         lastSeq: null,
         reply: null,
         owed: [],
+        changing: 0,
         late: [],
         cancel: new AbortController(),
         call: null,

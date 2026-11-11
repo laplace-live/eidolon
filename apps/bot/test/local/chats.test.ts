@@ -1821,6 +1821,36 @@ describe("a line sent while they answer", () => {
     });
   });
 
+  test("a call behind a queued removal of her, while a send waits for her, leaves her writing", async () => {
+    await ownRunner(async (runner) => {
+      const id = await runner.create([PERSONA, "beta"]);
+      plans.set("聊聊天", [{ replies: [PERSONA, "beta"], source: "model" }]);
+      const hold = deferred();
+      scripts.set(`${PERSONA} 聊聊天`, reply("我先说两句", { hold: hold.promise }));
+      await linesOf(await runner.send(id, "聊聊天")).until((line) => line.type === "delta");
+      const sent = runner.send(id, "等等");
+      await Bun.sleep(0);
+      const removed = runner.changeParticipants(id, [], [PERSONA]);
+      const dialled = runner.startCall(id, PERSONA).catch((error: unknown) => error);
+      await Bun.sleep(20);
+      expect(requests[0]?.signal.aborted).toBe(false);
+      hold.resolve();
+      await (await sent).ended;
+      expect(await removed).toBe(true);
+      expect(await dialled).toBeInstanceOf(NotInChat);
+      const { events } = await runner.read(id);
+      expect(
+        messages(events)
+          .slice(0, 3)
+          .map((m) => [m.text, m.interrupted]),
+      ).toEqual([
+        ["聊聊天", undefined],
+        ["我先说两句", undefined],
+        ["等等", undefined],
+      ]);
+    });
+  });
+
   test("a call or a delete owes nothing", async () => {
     const id = await group("beta");
     plans.set("聊聊天", [{ replies: [PERSONA, "beta"], source: "model" }]);
