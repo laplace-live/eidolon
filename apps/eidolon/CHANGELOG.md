@@ -1,5 +1,24 @@
 # @laplace.live/eidolon
 
+## 0.7.0
+
+### Minor Changes
+
+- 9f0e5cc: Call a persona from inside a chat, with the conversation carried over
+- a994c23: A chat endpoint for the web client, off until a secret is set
+- 5d16254: Group chats where personas answer you and each other
+- 039a620: A new voice engine for calls: replies end on time and keep only what you heard
+- 039a620: Call everyone in a group chat at once
+- 8db1350: Voice messages in chats: she can answer with her voice, and you can talk back
+- 3d04686: Chat with a persona in text, and keep many chats
+
+### Patch Changes
+
+- dbb00af: Saving memory or reranker settings in the local app no longer needs a restart
+- 2ee1cb4: Messages sent mid-reply no longer cut off whoever is typing or go unanswered
+- 67b2c0e: Turn off onnxruntime's telemetry to Microsoft, which could crash Eidolon on exit
+- 816901c: Remove the old voice engine
+
 ## 0.6.0
 
 ### Minor Changes
