@@ -4,7 +4,7 @@ Chats with the personas, in text and in voice messages: in the local web app, wh
 chat in the data home, and in production, where each viewer's browser keeps it
 ([Production](#production-the-browser-keeps-the-chat)). A chat is an append-only log of events
 with one to six personas in it. Each persona's reply is a turn of the turn engine, which talks to
-her mind without pipedog. In a group chat, the director decides who answers each line, and the
+her mind. In a group chat, the director decides who answers each line, and the
 personas may answer each other ([Group chats](#group-chats)). Either side may send a recorded clip
 instead of a line ([Voice messages](#voice-messages)), and the viewer may call one of the personas,
 on a call that opens on the chat and is stored in it ([Calls](#calls)).
@@ -80,7 +80,7 @@ call would hold for her, without the system message:
   for a run of them in a row.
 - **Her tool calls** become an `assistant` message with `tool_calls`, each followed by its `tool`
   result. A call with no result reads `CANCELLED`, and an empty result reads `COMPLETED`, as
-  pipedog writes them.
+  pipedog wrote them.
 - **Her `context` blocks** are spliced in at their `position` in seq order, so they accumulate as a
   call's do. A `context-removed` takes the named blocks out again.
 - **Her `kickoff`** is a `user` message.
@@ -150,7 +150,7 @@ aborts the turn. The engine never rejects for the turn's own failures.
 1. **It runs as her:** inside `withPersona(persona)` and `withUsageScope({ source: "chat",
    session: <chat id> })`. Jobs a provider spawns, such as Mem0's store, outlive the turn and keep
    both scopes.
-2. **Her parts** are what a call's session builds:
+2. **Her parts** are the ones a call builds:
    - **What they are:** Mem0 (for a logged-in viewer, which the local viewer is), the stream
      archive, persona facts, the retrieval gate, `take_selfie` and `recall_streams`.
    - **The voice variant:** a voice reply (`PartsOptions.voice`) also gets her voice-style tool,
@@ -401,8 +401,9 @@ in `text`. Every persona's view reads the transcript, so voice and text mix free
 ### The clients
 
 `@eidolon/providers/speech-batch` makes or hears a whole message in one request, over `fetch`, and
-reports what it used with `reportUsage`. It is not the call's speech, which streams through
-pipedog; [providers.md](providers.md#voice-messages-batch-speech) has each provider's request.
+reports what it used with `reportUsage`. It is not a call's speech, which streams
+(`@eidolon/providers/speech-stream`); [providers.md](providers.md#voice-messages-batch-speech)
+has each provider's request.
 
 - **`synthesize(selection, text, { voice? })`,** on her voice role: MP3, with its length from the
   provider or measured from the frames. Her text goes through `stripMarkup` for the model, as a
@@ -494,9 +495,9 @@ as `（听不清）`, and the page says no words could be heard in it.
 ## Calls
 
 A call is a mode of a chat. The viewer calls one of its personas from the chat page, the call
-opens on the chat's history, and each line said on it is stored in the chat as a message. It still
-runs on pipedog's pipeline (`packages/runtime`), and costs what a call from `/call` costs. `/call`
-stays the standalone call to the active persona, with no chat.
+opens on the chat's history, and each line said on it is stored in the chat as a message. It runs
+on the voice engine ([voice-engine.md](voice-engine.md)), and costs what a call from `/call`
+costs. `/call` stays the standalone call to the active persona, with no chat.
 
 ### The binding
 
@@ -509,7 +510,7 @@ interface CallBinding {
   seedMessages: readonly unknown[]; // OpenAI-shaped, before the greeting
   onTranscript(
     line: { role: "user" | "assistant"; text: string; interrupted: boolean },
-    client?: CallClient, // the call's browser; the session always passes it
+    client?: CallClient, // the call's browser; the call always passes it
   ): void;
   // A tool's, as take_selfie's, with the same browser
   onServerMessage?(data: Readonly<Record<string, unknown>>, client?: CallClient): void;
@@ -517,46 +518,41 @@ interface CallBinding {
 }
 
 interface CallClient {
-  // An RTVI `server-message` to the call's browser, through the session's RTVI processor; nothing
-  // once the browser has hung up
+  // An RTVI `server-message` to the call's browser; nothing once the browser has hung up or the
+  // call has ended
   sendServerMessage(data: Readonly<Record<string, unknown>>): Promise<void>;
 }
 ```
 
-- **She runs as herself.** `runSessionSafely` builds and runs the whole session inside
-  `withPersona(persona)`, so her hearing, mind, voice, tools, index and memory are hers while
-  another persona is active.
-  - **What keeps the scope:** every task the session starts, as pipedog starts them: each
-    processor's queue, function calls, Mem0's stores, event handlers, observers, the usage ledger,
-    and the RTVI task that greets.
+- **She runs as herself.** `runNativeSafely` (`packages/runtime/src/native/engine.ts`) runs the
+  whole call inside `withPersona(persona)`, so her hearing, mind, voice, tools, index and memory
+  are hers while another persona is active.
+  - **What keeps the scope:** the call's mailbox and every task it starts: her turns, her speech,
+    her tools, Mem0's stores and the usage ledger's reports
+    ([voice-engine.md](voice-engine.md#the-loop)).
   - **What runs outside it, and reads no settings:** werift's connection events and data channel
-    only queue frames or log, `track-status` stops video, and `closeWhenDtlsCloses` logs and
-    disconnects.
+    only post to the mailbox or log, and `closeWhenDtlsCloses` logs and disconnects.
   - **What isn't hers:** the ICE plan and `PATCH /api/offer`, which read install-wide settings.
-- **The seed** goes into the `LLMContext` before the greeting's kickoff. The kickoff is unchanged:
-  she greets as she would on any call, with the chat behind her.
-- **The lines** come from pipedog's aggregators:
-  - the viewer's spoken lines from `on_user_turn_message_added`, one per message written to the
-    context, which realtime models emit too;
-  - her lines from `on_assistant_turn_stopped`, which holds only the text her voice played. A reply
-    cut off by the viewer or by a hang-up is its spoken part, with `interrupted`, the same text
-    the context keeps;
-  - lines typed into the call (RTVI `send-text`), which no turn carries, from an observer added
-    only with a binding.
-
-  An empty line isn't reported, and neither is the greeting's kickoff or the empty-turn recovery
-  prompt, which pipedog writes to the context itself. An `onTranscript` or `onEnded` that throws
-  is logged, and the call goes on.
-- **Her photos:** each server message a tool sends the client, `take_selfie`'s `{ type: "selfie",
-  urls }`, reaches `onServerMessage` once it is sent, in order with the lines and with the same
-  `CallClient`. One that throws is
-  logged, and the tool still returns its result. A hang-up while a line is still held reports its
-  spoken part, `interrupted`, before `onEnded`.
-- **The end:** `onEnded("hangup")` once the session ran until either side hung up, `"error"` once
-  it failed and its peer was closed.
-- **Mem0 stores only what is said on the call.** With a seed, the Mem0 processor hands Mem0 its
-  context less the seed, through `MEM0_STORE_KEY`, as a group's turns do: the chat's lines were
+- **The seed opens the call's log** (`src/native/binding.ts`): the viewer's lines and hers as
+  messages, a system or developer message as her context block where it stands. Her view is the
+  seed, then the call, in the text chat's 60-line window. The kickoff is unchanged: she greets as
+  she would on any call, with the chat behind her.
+- **The lines:** each message the call's log stores, the viewer's spoken or typed line or hers,
+  reaches `onTranscript` as the log takes it. Hers is what was heard, with `interrupted` when the
+  viewer or a hang-up cut her off; a hang-up mid-reply reports that part before `onEnded`. An
+  empty line isn't reported, and neither is the seed, the greeting's kickoff or the empty-turn
+  recovery prompt. An `onTranscript` or `onEnded` that throws is logged, and the call goes on.
+- **Her photos:** each server message the call sends its browser, `take_selfie`'s `{ type:
+  "selfie", urls }`, reaches `onServerMessage` once it is sent, in order with the lines and with the
+  same `CallClient`. One that throws is logged, and the tool still returns its result.
+- **The end:** `onEnded("error")` once when the call couldn't start or ended on a fatal error, and
+  its peer was closed; else `onEnded("hangup")`.
+- **Mem0 stores only what is said on the call.** Her Mem0 provider gets her view of the call's own
+  events as the turn began, through `MEM0_STORE_KEY`, as a group's turns do: the chat's lines were
   stored by its own turns already. Its search and the greeting's memories are unchanged.
+
+A group call takes a `GroupCallBinding` instead, with the chat as stored in place of a seed
+([voice-engine.md](voice-engine.md#group-calls)).
 
 ### A call in the local app
 
@@ -598,12 +594,12 @@ that chat; without a `chatId`, it is the standalone call, unbound.
 **In a group,** the viewer picks whom to call. Her call lines land in the chat as her messages, so
 the other personas read them in their views later.
 
-**Everyone at once,** on the native voice engine: `requestData: { chatId, persona, group: true }`
+**Everyone at once:** `requestData: { chatId, persona, group: true }`
 puts every persona in the chat on the call, `persona` hosting: her hearing role hears the viewer,
 and the director chooses who answers each line, as in the chat, each persona speaking in her own
 voice once the one before her has played out ([voice-engine.md](voice-engine.md#group-calls)).
-- **The checks,** besides the ones above: `400 bad-request` in a chat of one or while
-  `EIDOLON_VOICE_ENGINE` isn't `native`, and `409 realtime-in-group` while a persona in the chat
+- **The checks,** besides the ones above: `400 bad-request` in a chat of one, and
+  `409 realtime-in-group` while a persona in the chat
   talks through a realtime model. `GET chats/:id`'s `groupCall` says whether a group call would be
   taken now, and the page offers **Everyone** in its Call menu only then, the chat's first persona
   hosting.
@@ -695,8 +691,8 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
 
 **Checks:**
 - `bun test --no-env-file packages/chat packages/engine packages/context packages/runtime apps/bot/test/local`.
-  `packages/runtime/test/binding.test.ts` runs a bound call on scripted hearing, mind and voice,
-  and once over a real werift peer.
+  `packages/runtime/test/native/binding.test.ts` runs a bound call on scripted hearing, mind and
+  voice, and once over a real werift peer.
 - `bun apps/bot/scripts/local-smoke.ts --headful`. It walks four chats against its fake
   OpenAI-compatible server, which also answers the director's Decisions route, OpenAI's speech and
   transcriptions, and a call's realtime transcription session. It bills nothing.
@@ -949,11 +945,11 @@ inside that chat (`bindChatCall`, `call.ts`):
 - **The seed** is her view of the window, as her next text turn would read it, less tool calls and
   their results; a viewer's clip heard as nothing reads `（听不清）`.
 - **Each line,** the viewer's and hers, goes to the browser as an RTVI server message `{ type:
-  "chat-line", event }`, through the `CallClient` the session hands `onTranscript`: a `message`
+  "chat-line", event }`, through the `CallClient` the call hands `onTranscript`: a `message`
   with `modality: "call"`, numbered on from the window, signed unless it is the viewer's. A line
   said after the browser hung up never arrives.
 - **Her photos,** each selfie she sends, go the same way, in their place among the lines, through
-  the `CallClient` the session hands `onServerMessage`: her signed `call` message with `text: ""`
+  the `CallClient` the call hands `onServerMessage`: her signed `call` message with `text: ""`
   and the images as attachments. Their files are copied from the selfie store into
   `/api/chat/files`, in memory as a turn's are, for the browser to fetch; nothing is written to
   disk. A photo whose selfie is gone is logged and skipped. The `selfie` server message itself

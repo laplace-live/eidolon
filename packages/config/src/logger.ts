@@ -1,6 +1,3 @@
-// Same levels, record shape and line format as pipedog's logger, so runtime can route pipedog's
-// records through these sinks and lines from both interleave cleanly.
-
 export const LOG_LEVELS = {
   TRACE: 5,
   DEBUG: 10,

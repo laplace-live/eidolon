@@ -1,5 +1,5 @@
-// Per-viewer long-term memory: mem0's OSS engine over Qdrant, the context provider the pipeline
-// runs, and the admin operations behind /api/memories.
+// Per-viewer long-term memory: mem0's OSS engine over Qdrant, the context provider each turn runs,
+// and the admin operations behind /api/memories.
 import { createMemoryAdmin } from "./admin.ts";
 import { qdrantHost } from "./config.ts";
 import { SharedEngine } from "./engine.ts";

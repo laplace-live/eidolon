@@ -1,18 +1,24 @@
-// Which voice engine answers a call: pipedog's pipeline, or the native loop in @eidolon/voice over
-// @eidolon/webrtc. EIDOLON_VOICE_ENGINE picks one at boot, for every call. docs/voice-engine.md.
+// A call on eidolon's voice engine: @eidolon/voice's loop, bound to a chat when the offer names one.
+// docs/voice-engine.md.
 import type { AllowedOffer } from "@eidolon/access";
 import { CHAT_FORMAT, type ChatHeader, summarize } from "@eidolon/chat";
-import { activePersona, envStr, errorText, logger, pyRepr, withPersona } from "@eidolon/config";
+import {
+  activePersona,
+  cpLen,
+  errorText,
+  isJsonObject,
+  logger,
+  pyRepr,
+  withPersona,
+} from "@eidolon/config";
 import { realtimeIn, select } from "@eidolon/providers";
 import {
   type CallDeps,
-  type CallLog,
   type CallTransport,
   type CloseReason,
   memoryCallLog,
   runVoiceCall,
 } from "@eidolon/voice";
-import { logSessionStart } from "../session/start.ts";
 import {
   type AnyCallBinding,
   type BoundCall,
@@ -22,25 +28,8 @@ import {
   reportEnd,
 } from "./binding.ts";
 
-export type VoiceEngine = "pipedog" | "native";
-
-let warnedAbout: string | null = null;
-
-/** EIDOLON_VOICE_ENGINE: pipedog unless it says native. Any other value warns once. */
-export function voiceEngineFromEnv(): VoiceEngine {
-  const value = envStr("EIDOLON_VOICE_ENGINE", "pipedog");
-  if (value === "pipedog" || value === "native") return value;
-  if (warnedAbout !== value) {
-    warnedAbout = value;
-    logger.warning(
-      `EIDOLON_VOICE_ENGINE=${pyRepr(value)} is neither pipedog nor native; calls run on pipedog`,
-    );
-  }
-  return "pipedog";
-}
-
 /**
- * Why `host` can't hold a group call of `personas`, which only the native engine runs; or null.
+ * Why `host` can't hold a group call of `personas`; or null.
  * Throws when settings can't be read.
  */
 export function groupReason(host: string, personas: readonly string[]): string | null {
@@ -51,31 +40,47 @@ export function groupReason(host: string, personas: readonly string[]): string |
   return personas.includes(host) ? null : `${host} isn't in the call`;
 }
 
+/** `requestData` as the log may carry it: a chat window, the viewer's conversation, by size alone. */
+function loggedRequestData(requestData: AllowedOffer["requestData"]): unknown {
+  if (requestData === null || !("chat" in requestData)) return requestData;
+  const events = isJsonObject(requestData.chat) ? requestData.chat.events : undefined;
+  const chat = Array.isArray(events) ? `<chat: ${events.length} events>` : "<chat: not a window>";
+  return { ...requestData, chat };
+}
+
+/** `[bot] Session start …` and `Starting bot`, which the local app's status and the e2e notes read. */
+function logSessionStart(admission: Pick<AllowedOffer, "token" | "requestData">): void {
+  // Logged either way: the "anonymous everywhere" failure mode is
+  // otherwise silent, and this makes it one grep.
+  if (admission.token) {
+    logger.info(`[bot] Session start with loginSyncToken (len=${cpLen(admission.token)})`);
+  } else {
+    const body = pyRepr(loggedRequestData(admission.requestData));
+    logger.info(`[bot] Session start without loginSyncToken; runner_args.body=${body}`);
+  }
+  logger.info("Starting bot");
+}
+
 /** Never aborts: the signalling server's close disconnects every peer, which ends their calls. */
 const NO_SHUTDOWN = new AbortController().signal;
 
 /**
- * A call on the native engine, logged as pipedog's sessions start; bound to `binding`, it runs as
- * her and reports to its hooks as pipedog's sessions do. Never rejects: a call that can't start
- * logs `Bot session failed: …`, which the local app's status reads, and disconnects. `newLog`
- * makes an unbound or single-persona call's log; the twin harness passes its own to read it at the
- * end.
+ * A call, logged as it starts; bound to `binding`, it runs as her and reports to its hooks. Never
+ * rejects: a call that can't start logs `Bot session failed: …`, which the local app's status
+ * reads, and disconnects.
  */
 export async function runNativeSafely(
   transport: CallTransport,
   admission: Pick<AllowedOffer, "user" | "token" | "requestData">,
   deps: CallDeps,
   binding?: AnyCallBinding,
-  newLog: (header: ChatHeader) => CallLog = memoryCallLog,
 ): Promise<void> {
   let reason: CloseReason = "error";
   try {
     reason =
       binding === undefined
-        ? await runNative(transport, admission, deps, newLog)
-        : await withPersona(binding.persona, () =>
-            runNative(transport, admission, deps, newLog, binding),
-          );
+        ? await runNative(transport, admission, deps)
+        : await withPersona(binding.persona, () => runNative(transport, admission, deps, binding));
   } catch (error) {
     logger.error(`Bot session failed: ${errorText(error)}`, error);
     await transport.disconnect().catch((e: unknown) => {
@@ -90,7 +95,6 @@ async function runNative(
   transport: CallTransport,
   admission: Pick<AllowedOffer, "user" | "token" | "requestData">,
   deps: CallDeps,
-  newLog: (header: ChatHeader) => CallLog,
   binding?: AnyCallBinding,
 ): Promise<CloseReason> {
   logSessionStart(admission);
@@ -113,7 +117,7 @@ async function runNative(
       createdAt: Date.now(),
       participants: [host],
     };
-    const log = newLog(header);
+    const log = memoryCallLog(header);
     call =
       binding === undefined
         ? { log, transport, deps, close: () => {} }

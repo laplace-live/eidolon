@@ -5,7 +5,7 @@
 // Ported from pipedog packages/core/src/processors/aggregators/async_tool_messages.ts@ce8f8bc and packages/core/src/services/llm_service.ts@ce8f8bc
 //
 // The standing guidance a call's system instruction carries while one of her tools runs on after
-// her reply (take_selfie), as pipedog composes it into every call's prompt today.
+// her reply (take_selfie), as pipedog composed it into every call's prompt.
 import type { LlmTool } from "@eidolon/core";
 
 /**

@@ -4,10 +4,10 @@ A voice bot for a streamer roleplay persona, with optional RAG over
 hand-compiled persona facts and refined past-stream transcripts, and optional
 per-viewer long-term memory via Mem0.
 
-The bot is TypeScript on [Bun](https://bun.sh), built on
-[pipedog](https://github.com/polvallverdu/pipedog), a TypeScript port of
-[Pipecat](https://docs.pipecat.ai/); it lives in `apps/` and `packages/`, and
-has run production since 2026-11-04. The offline chain that builds its indexes
+The bot is TypeScript on [Bun](https://bun.sh), on its own voice engine, parts of
+it ported from [pipedog](https://github.com/polvallverdu/pipedog), a TypeScript
+port of [Pipecat](https://docs.pipecat.ai/); it lives in `apps/` and `packages/`,
+and has run production since 2026-11-04. The offline chain that builds its indexes
 is TypeScript too (`packages/ingest`).
 
 The original Python implementation, a Pipecat bot and its offline tools, stays
@@ -17,11 +17,12 @@ it, and how it differs, is in
 [`laplace_eidolon/README.md`](laplace_eidolon/README.md).
 
 ```
-transport.input → STT → user_aggregator → RetrievalGate
-    → Mem0 (per-viewer memory, optional)
-    → StreamArchive (RAG over past streams, optional)
-    → PersonaFacts (RAG over hand-compiled streamer facts, optional)
-    → LLM → TTS → transport.output → assistant_aggregator
+webrtc in → STT ∥ VAD → Smart Turn → the turn engine:
+    RetrievalGate
+    ∥ Mem0 (per-viewer memory, optional)
+    ∥ StreamArchive (RAG over past streams, optional)
+    ∥ PersonaFacts (RAG over hand-compiled streamer facts, optional)
+    → LLM → segmenter → TTS → Speaker → webrtc out
 ```
 
 ## Quick start
@@ -334,11 +335,13 @@ files in `~/.laplace/eidolon/sources/<id>/facts/` and re-run
 
 Eidolon is licensed under version 3 of the GNU Affero General Public License
 ([`LICENSE`](LICENSE)). The third-party code and data it includes, the code ported from pipedog,
-jieba's dictionary and the Geist font, keep their own licenses, in [`NOTICE`](NOTICE).
+jieba's dictionary, the Silero VAD and Smart Turn models and the Geist font, keep their own
+licenses, in [`NOTICE`](NOTICE).
 
 ## References
 
-- [pipedog](https://github.com/polvallverdu/pipedog) — the TypeScript Pipecat port the bot runs on
+- [pipedog](https://github.com/polvallverdu/pipedog) — the TypeScript Pipecat port the voice
+  engine is ported from
 - [Pipecat docs](https://docs.pipecat.ai/)
 - [Pipecat client SDK (JS)](https://docs.pipecat.ai/client/js/introduction)
 - [Cloudflare Realtime TURN](https://developers.cloudflare.com/realtime/turn/)

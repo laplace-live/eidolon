@@ -93,9 +93,13 @@ export class FakeUtterance implements Utterance {
 }
 
 export class FakeSpeech implements SpeechStream {
-  readonly sampleRate = 24_000;
+  readonly sampleRate: number;
   readonly utterances: FakeUtterance[] = [];
   closed = false;
+
+  constructor(sampleRate = 24_000) {
+    this.sampleRate = sampleRate;
+  }
 
   utterance(voice: string | null): FakeUtterance {
     const utterance = new FakeUtterance(voice);
@@ -222,6 +226,8 @@ export interface CallOptions {
   readonly stubborn?: boolean;
   /** Runs her turns instead of scripting them. */
   readonly turn?: FloorOptions["turn"];
+  /** Her voice's sample rate: 24 kHz unless set. */
+  readonly speechRate?: number;
 }
 
 /** One message as a short line: its type, and what tells it apart from its kind. */
@@ -260,7 +266,7 @@ export function startCall(options: CallOptions = {}) {
   const sent: RtviMessage[] = [];
   const emitter = new RtviEmitter((message) => sent.push(message), ABOUT);
   const speaker = createSpeaker((event) => kit.post({ source: "speaker", event }));
-  const speech = new FakeSpeech();
+  const speech = new FakeSpeech(options.speechRate);
   const mouth = new Mouth({
     persona: HOST,
     speech,

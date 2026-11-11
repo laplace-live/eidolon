@@ -1,4 +1,4 @@
-// pipedog's @pipedog/resampler-wasm at ce8f8bc, vendored: rubato's windowed-sinc resampler compiled
+// pipedog's resampler-wasm package at ce8f8bc, vendored: rubato's windowed-sinc resampler compiled
 // to WebAssembly (rust/), byte for byte the build pipedog's transports run.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

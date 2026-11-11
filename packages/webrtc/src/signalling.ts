@@ -4,9 +4,8 @@
 //
 // Ported from pipedog packages/transport-smallwebrtc/src/request_handler.ts@ce8f8bc and packages/transport-smallwebrtc/src/http.ts@ce8f8bc
 //
-// POST and PATCH /api/offer, answered as runtime's pipedog signalling answers them (its handler.ts
-// and signalling.ts, merged here): per-offer ICE servers and Opus bitrate, and the relay-only
-// candidate rules for offers and PATCHes alike.
+// POST and PATCH /api/offer: per-offer ICE servers and Opus bitrate, and the relay-only candidate
+// rules for offers and PATCHes alike.
 import type { AllowedOffer } from "@eidolon/access";
 import { logger } from "@eidolon/config";
 import type { IceService } from "@eidolon/turn";

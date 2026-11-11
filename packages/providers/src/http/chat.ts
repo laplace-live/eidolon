@@ -1,7 +1,6 @@
-// The clients pipedog's chat services call, over fetch: OpenAI-compatible chat completions and
-// Anthropic's Messages API. pipedog's services take a client object and call one method on it,
-// the shape of the vendor SDKs' (`chat.completions.create`, `beta.messages.create`), so these
-// stand in for the SDKs with nothing of theirs in the request path.
+// The clients a mind calls, over fetch: OpenAI-compatible chat completions and Anthropic's Messages
+// API, each one method in the vendor SDK's shape (`chat.completions.create`,
+// `beta.messages.create`), with nothing of the SDKs in the request path.
 import {
   abortableSleep,
   extractCostUsd,
@@ -79,9 +78,6 @@ async function send(
   }
 }
 
-/** A stream pipedog can stop: it calls the iterator's `return` and the controller's `abort`. */
-export type AbortableStream<T> = AsyncGenerator<T> & { readonly controller: AbortController };
-
 const count = (value: unknown): number =>
   typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0;
 
@@ -106,13 +102,6 @@ export function anthropicUnits(usage: Readonly<Record<string, unknown>>): Units 
     cacheWriteTokens: count(usage.cache_creation_input_tokens),
     outputTokens: count(usage.output_tokens),
   };
-}
-
-function abortable<T>(
-  run: (controller: AbortController) => AsyncGenerator<T>,
-  controller: AbortController,
-): AbortableStream<T> {
-  return Object.assign(run(controller), { controller });
 }
 
 function linked(signal: AbortSignal | null | undefined): AbortController {
@@ -176,7 +165,7 @@ export class OpenAIChatClient {
     }
     if (response.body === null) throw new ProviderHttpError(options.provider, 200, "no body");
     const stream = response.body;
-    return abortable((c) => this.#chunks(stream, model, c), controller);
+    return this.#chunks(stream, model, controller);
   }
 
   #usage(
@@ -230,9 +219,8 @@ export const ANTHROPIC_FALLBACK_MODELS: ReadonlySet<string> = new Set([
   "claude-opus-5",
 ]);
 
-/** `messages.create` and `beta.messages.create` for Anthropic's Messages API. */
+/** `beta.messages.create` for Anthropic's Messages API. */
 export class AnthropicClient {
-  readonly messages: { create(body: Body, options?: RequestOptions): Promise<unknown> };
   readonly beta: {
     readonly messages: { create(body: Body, options?: RequestOptions): Promise<unknown> };
   };
@@ -240,9 +228,7 @@ export class AnthropicClient {
 
   constructor(options: ChatClientOptions) {
     this.#options = options;
-    const create = (body: Body, request?: RequestOptions) => this.#create(body, request);
-    this.messages = { create };
-    this.beta = { messages: { create } };
+    this.beta = { messages: { create: (body, request) => this.#create(body, request) } };
   }
 
   async #create(body: Body, request: RequestOptions = {}): Promise<unknown> {
@@ -278,7 +264,7 @@ export class AnthropicClient {
     }
     if (response.body === null) throw new ProviderHttpError(options.provider, 200, "no body");
     const stream = response.body;
-    return abortable((c) => this.#events(stream, model, c), controller);
+    return this.#events(stream, model, controller);
   }
 
   async *#events(

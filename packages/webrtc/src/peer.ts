@@ -5,7 +5,7 @@
 // Ported from pipedog packages/transport-smallwebrtc/src/connection.ts@ce8f8bc, packages/transport-smallwebrtc/src/rtc.ts@ce8f8bc and packages/transport-smallwebrtc/src/transport.ts@ce8f8bc
 //
 // One caller's werift peer connection, as pipedog's SmallWebRTCConnection ran one (the answer,
-// trickled candidates, restart_pc, the states a call sees), and a native call's transport over it.
+// trickled candidates, restart_pc, the states a call sees), and a call's transport over it.
 import { AsyncQueue, errorText, logger } from "@eidolon/config";
 import type { ServerIceServer } from "@eidolon/turn";
 import { RTCPeerConnection, RTCRtpCodecParameters, UdpTransport, useH264, useVP8 } from "werift";
@@ -18,16 +18,16 @@ import { icePolicy } from "./patches.ts";
 // werift's ICE sockets have no "error" listener. A UDP socket reports ICMP errors from earlier
 // sends (`recvmsg ECONNREFUSED` on Linux under Bun, for a STUN check to a candidate nobody listens
 // on) as an "error" event, which without a listener is an uncaught exception that kills the
-// process. pipedog's rtc.ts adds the same listener under the same flag, so whichever loads first
-// patches, once.
+// process. The symbol keeps a second evaluation of this module from patching again.
+const UDP_PATCHED = Symbol.for("eidolon.werift.udp-patched");
 const udp = UdpTransport.prototype as unknown as { init: (this: UdpTransport) => Promise<void> };
-const udpInit = udp.init as typeof udp.init & { pipedogPatched?: boolean };
-if (udpInit.pipedogPatched !== true) {
+const udpInit = udp.init as typeof udp.init & { [UDP_PATCHED]?: boolean };
+if (udpInit[UDP_PATCHED] !== true) {
   const init = async function (this: UdpTransport): Promise<void> {
     this.socket.on("error", (e: Error) => logger.debug(`ICE UDP socket error: ${e.message}`));
     return udpInit.call(this);
   };
-  (init as { pipedogPatched?: boolean }).pipedogPatched = true;
+  (init as { [UDP_PATCHED]?: boolean })[UDP_PATCHED] = true;
   udp.init = init;
 }
 
@@ -403,7 +403,7 @@ export class Peer {
 }
 
 /**
- * A native call's transport: `@eidolon/voice`'s CallTransport, matched by shape, since only
+ * A call's transport: `@eidolon/voice`'s CallTransport, matched by shape, since only
  * packages/runtime may import the voice engine. Built before `connect()`.
  */
 export interface PeerCall {
@@ -419,7 +419,7 @@ export interface PeerCall {
   disconnect(): Promise<void>;
 }
 
-/** `peer` as a native call's transport. */
+/** `peer` as a call's transport. */
 export function peerCallTransport(peer: Peer): PeerCall {
   return new PeerCallTransport(peer);
 }

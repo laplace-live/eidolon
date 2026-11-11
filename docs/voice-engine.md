@@ -1,77 +1,64 @@
-# The native voice engine
+# The voice engine
 
-Calls run on pipedog's frame pipeline today. The native engine is eidolon's own loop around
-`@eidolon/engine`, so a call's turns run through the same engine, log format and `viewOf` as a text
-chat. It is experimental and off by default: `EIDOLON_VOICE_ENGINE=native` turns it on
-([The switch](#the-switch)). Clients need no change on either engine.
+A call runs on eidolon's own loop around `@eidolon/engine`, so its turns run through the same
+engine, log format and `viewOf` as a text chat. It replaced pipedog's frame pipeline as every
+call's engine with #39, and pipedog left the repository 14 days later with #40; clients needed
+no change ([Differences from pipedog](#differences-from-pipedog)). [RTVI](#rtvi) lists what they
+saw change, and [frontend-loading-state.md](frontend-loading-state.md) tells them.
 
 ```text
-@eidolon/voice                  the loop: no pipedog, and only packages/runtime imports it
+@eidolon/voice                  the loop; only packages/runtime imports it
   src/input/                    the Ear: Silero VAD, Smart Turn, the TurnDetector (ported from pipedog)
   src/output/                   the segmenter, the Mouth, the Speaker, what was heard
-  src/rtvi/                     the RTVI messages pipedog's observer sends
+  src/rtvi/                     the RTVI messages, as pipedog's observer sent them
   src/call/                     the mailbox and the loop every call runs (kit.ts), the Floor, the
                                 call log, runCascadeCall, runRealtimeCall (realtime.ts), a group
                                 call's policy (group.ts)
   src/dsp/resampler/            pipedog's rubato resampler, vendored with its wasm
+  models/                       Silero VAD's and Smart Turn v3.2's ONNX models, with their licenses
 @eidolon/providers/stt          live speech recognition, one stream per call
 @eidolon/providers/speech-stream   streaming speech, one stream per persona per call
 @eidolon/providers/realtime   a realtime model's session, OpenAI's dialect or xAI's
 @eidolon/webrtc                 a call's WebRTC on werift: signalling, the peer, its data channel and
-                                audio, the werift patches; no pipedog, and only packages/runtime imports it
+                                audio, the werift patches; only packages/runtime imports it
 @eidolon/engine                 runTurn in call mode (CallHooks)
-packages/runtime/src/native/    the bridge: the switch, deps, a call inside a chat (binding.ts); no
-                                pipedog
+packages/runtime/src/native/    the bridge: production's deps, a call's start, a call inside a chat
+                                (binding.ts)
 ```
 
 Code ported from pipedog keeps pipedog's BSD-2 header, then `Ported from pipedog <path>@ce8f8bc`.
 pipedog is never followed past that commit.
 
-## The switch
+## Starting a call
 
-**`EIDOLON_VOICE_ENGINE`** is `pipedog`, the default, or `native` (`.env.example`).
-- `createSignallingServer` reads it once, when the server is made, through `envStr`, so blank is
-  unset. Any other value logs one warning and runs pipedog.
-- It has no settings row: only the environment sets it.
-- **It picks the signalling server.** Under `pipedog`, every offer is a pipedog session on
-  pipedog's SmallWebRTC transport, as before the switch existed. Under `native`, every offer is a
-  native call on `@eidolon/webrtc`'s peers ([The transport](#the-transport)): the HTTP answers, SDP,
-  ICE, data channel and `restart_pc` are the same on both.
-- **No native call goes to pipedog.** Every provider the catalog offers for hearing, voice and
-  realtime has a native client. A provider added without one fails its calls as they start,
-  `Bot session failed: <provider> has no … in Eidolon yet`, and so do settings that can't be read.
+`createSignallingServer` (`packages/runtime`) answers every offer with a call on
+`@eidolon/webrtc`'s peers ([The transport](#the-transport)). There is no switch: the
+`EIDOLON_VOICE_ENGINE` the flip used is gone, and a value left in an env file is ignored. Rolling
+back to pipedog means deploying an image built before it was deleted.
 
-A group call ([Group calls](#group-calls)) runs only on `native`. As it starts,
-`groupReason(host, personas)` checks that none of them talks through a realtime model
-(`realtimeIn`, which the local app's check shares) and that the host is one of them; a call that
-fails the check fails as `Bot session failed: <why>`. Under
-`pipedog`, nothing offers one: the local app refuses it first, and the server fails one it gets.
+Every provider the catalog offers for hearing, voice and realtime has a client. A provider added
+without one fails its calls as they start,
+`Bot session failed: <provider> has no … in Eidolon yet`, and so do settings that can't be read.
 
-**Warm-up:** `warmAudioModels()` loads the running engine's models: pipedog's, or under `native`
-the native Ear's. pipedog's ONNX backend loads first on both, since it turns ORT's telemetry off
-before ORT first loads. Both engines load the same two `.onnx` files, from pipedog's packages
-(`voiceModels()`), on the same pinned onnxruntime-node.
+A group call ([Group calls](#group-calls)) checks, as it starts, with `groupReason(host, personas)`,
+that none of them talks through a realtime model (`realtimeIn`, which the local app's check shares)
+and that the host is one of them; a call that fails the check fails as `Bot session failed: <why>`.
 
-**Logs:** a native call logs what the local app and the e2e notes read from pipedog's:
-- the `[bot] Session start …` line and `Starting bot`, through the `logSessionStart` pipedog's
-  sessions call too, so a chat window in the request data is logged by its size alone;
+**Warm-up:** `warmAudioModels()` loads both models and the resampler before the server listens:
+`models/silero_vad.onnx` and `models/smart-turn-v3.2-cpu.onnx` (`voiceModels()`, through
+`@eidolon/config`'s `voiceModelsDir()`; the npm package ships them in `data/models/`), on the
+pinned onnxruntime-node 1.30.0. `src/input/onnx.ts` turns ORT's telemetry off before ORT first
+loads (`ORT_DISABLE_TELEMETRY`, set with libc's `setenv`, since ORT's `getenv` never sees Bun's
+`process.env`): an upload in flight at exit crashed Bun (exit 134).
+
+**Logs:** a call logs what the local app and the e2e notes read:
+- the `[bot] Session start …` line and `Starting bot` (`logSessionStart`), a chat window in the
+  request data logged by its size alone;
 - `Client connected`, then `Client disconnected` or `Call ended: <reason>`;
 - `Bot session failed: <why>` when it can't start, which `apps/bot/src/local/status.ts` parses;
 - one `[voice] ttfb <stage> <ms>` line per stage per reply: `llm`, `text`, `speaking`.
 
-### Rolling it out
-
-1. **Local:** `EIDOLON_VOICE_ENGINE=native bun run local`, or `bun run dev`.
-2. **Canary:** set it in the server's `eidolon.env` and restart. Run the production e2e and
-   compare it with the last recorded run on pipedog. Rsync an index once and check that a recall
-   question still works, since the engine keeps a call's LanceDB handles after it ends (D16).
-   **Rollback:** unset it and restart; no image rollback.
-3. **The flip:** after 7 days of canary with no regression, the default becomes `native`, and
-   `pipedog` stays the rollback.
-4. **Deleting pipedog:** after another 14 days.
-
 Every change under `packages/` rebuilds `:edge` and restarts production, so merge in a quiet hour.
-The native code stays dormant there until the variable is set.
 
 ## The loop
 
@@ -175,10 +162,10 @@ transcript, and her audio playing. `apps/web/src/features/call/phase.ts` counts 
    old `bot-stopped-speaking`, as [frontend-loading-state.md](frontend-loading-state.md) documents;
 5. her turn stores her message, `interrupted`, with the heard text, then ends.
 
-**Starting a call:** her mind is made before anything connects, as pipedog's session makes its
-LLM, so a mind role with no key fails the call with `Bot session failed: …` on both engines. A turn
-that fails later before its mind request (her key removed mid-call, her parts failing to build)
-reports its failure as `error` (row 18), and the call goes on, as it does after any pipedog error.
+**Her mind** is made before anything connects, as pipedog's session made its LLM, so a mind role
+with no key fails the call with `Bot session failed: …`. A turn that fails later before its mind
+request (her key removed mid-call, her parts failing to build) reports its failure as `error`
+(row 18), and the call goes on, as it did after any pipedog error.
 
 **Ending a call** (`end(reason)`): cut the open reply silently, abort her async tools, close the
 recognizer and her speech (their meters flush), wait at most 2 s for the cut reply to store what
@@ -207,7 +194,7 @@ The constants are pipedog's at ce8f8bc:
 Each turn's end costs about 88 ms of main-thread work on an M4 Max, 52 ms of it Smart Turn's naive
 DFT, as in pipedog.
 
-**The acknowledgement** (U20) is native's own; pipedog has no such rule. Soniox and Deepgram answer
+**The acknowledgement** (U20) is eidolon's own; pipedog had no such rule. Soniox and Deepgram answer
 every `finalize()`, words or none: Soniox with its `<fin>`, Deepgram with a `from_finalize` result.
 A `<fin>` with no final words before it, or an empty `from_finalize` answering a finalize the
 client sent (it counts them, so two stops before either answer get an answer each), is the bare
@@ -271,7 +258,7 @@ the words played, and `drained`. Clearing it takes effect at once.
 - `complete` only when the reply drained without a barge-in.
 
 With `audio_response: false`, a reply speaks nothing and keeps all of its text. Each of its
-segments still goes out, as pipedog's do: its `bot-transcription`, and one `bot-output` "new" with
+segments still goes out, as pipedog's did: its `bot-transcription`, and one `bot-output` "new" with
 `will_be_spoken: false`, which nothing completes.
 
 **A voice switch** (`change_voice_style`) flushes the segmenter, ends the utterance so its audio
@@ -287,7 +274,7 @@ In a call, the engine runs her turn in call mode (`CallHooks`, [chat.md](chat.md
   selfie renders in the background. When it settles, its `final` or `cancelled` result is stored
   and starts a follow-up reply once the floor is free (rows 22–23). The call's end cancels it;
 - `ASYNC_TOOL_INSTRUCTIONS` joins her system instruction while an async tool is registered, as
-  pipedog's call prompt has it.
+  pipedog's call prompt had it.
 
 Her tools act on the call through effects: a voice switch reaches her speech, and a selfie's
 `server-message` goes to the client.
@@ -332,7 +319,7 @@ sends its conversation as the session opens.
 - **E4's hold:** after the caller stops, her `bot-output` and stored lines wait for the caller's
   final transcript, a second at most, so the caller's line comes first.
 - **The caller's `user-llm-text`** goes out once the reply to that turn has played or been cut,
-  where pipedog's realtime handoff flush writes the line to her context.
+  where pipedog's realtime handoff flush wrote the line to her context.
 - **Typed text** (`send-text`) cuts her off, the response included, goes in as the caller's item and
   asks for a response (E2), then runs `prepareTurn` as a final transcript does, unless it is blank;
   without `run_immediately`, it goes in for her next response, and runs nothing.
@@ -342,15 +329,14 @@ sends its conversation as the session opens.
   ended: its call is answered `CANCELLED`, and no response is asked for it. An async tool's call is
   answered with its placeholder (the started envelope), and its result goes in later as a system
   item carrying the final or cancelled envelope, with a follow-up response once the floor is free.
-- **Her voice can't switch:** `switchVoice` throws, as it does on pipedog.
+- **Her voice can't switch:** `switchVoice` throws, as it did on pipedog.
 - **Metering** is the session's (`@eidolon/providers/realtime`): audio hours for a model priced by
   the hour, else each response's tokens.
 
 ## A call inside a chat
 
-A call bound to a chat (`CallBinding`, [chat.md](chat.md#the-binding)) runs on the native engine
-through the same binding pipedog's session takes, so the local app's runner and production's
-`bindChatCall` work unchanged on either engine (`src/native/binding.ts`).
+A call bound to a chat runs through a `CallBinding` ([chat.md](chat.md#the-binding),
+`src/native/binding.ts`), which the local app's runner and production's `bindChatCall` make.
 - **She runs as herself:** the whole call runs inside `withPersona(binding.persona)`, so her
   roles, not the active persona's, make the call, and settings of hers that can't be read fail it.
 - **The seed opens the call's log:** the viewer's lines and hers as messages, a system or developer
@@ -369,14 +355,14 @@ through the same binding pipedog's session takes, so the local app's runner and 
   a fatal error, else `hangup`.
 - **Mem0 stores only what is said on the call:** her Mem0 provider gets her view of the call's own
   events as the turn began (`MEM0_STORE_KEY`), since the chat's turns stored the seed already. So
-  the greeting's turn stores nothing, where pipedog's stores the kickoff.
+  the greeting's turn stores nothing, where pipedog's stored the kickoff.
 
 ## Group calls
 
 A group call has every persona in a chat on it at once, and answers each of the caller's lines as
 the group chat does: the director chooses who answers, and the personas may answer each other
-([chat.md](chat.md#group-chats)). Only the native engine runs one, and only the local app offers
-one ([chat.md](chat.md#a-call-in-the-local-app)).
+([chat.md](chat.md#group-chats)). Only the local app offers one
+([chat.md](chat.md#a-call-in-the-local-app)).
 
 - **Who hears and who speaks:** the host, the persona whose Call started it, hears the caller
   through her hearing role, the call's one Ear. Every persona has her own Mouth, opened in her
@@ -415,14 +401,14 @@ The server stays at protocol 2.2.0; client-js 1.16.0 speaks 2.3.0 and accepts an
 same major. Every message is `{label: "rtvi-ai", type, id?, data?}` with snake_case keys and nulls
 left out; `id` appears only on `bot-ready` and `error-response`.
 
-| Message | Native, against pipedog's |
+| Message | Against pipedog's, before the flip |
 | --- | --- |
 | `bot-ready` | byte-identical, `capabilities.metrics: true` included, and always before her greeting |
 | `user-started-speaking`, `user-stopped-speaking`, `bot-interrupted` | the same, in the same order |
 | `user-input`, then `user-transcription` | the same; joined CJK-aware (D6); OpenAI's interims are cumulative (D8) |
 | `user-llm-text` | the caller's lines and typed text only, no longer the greeting's prompt (D2) |
 | `bot-llm-started` / `-stopped`, `bot-llm-text` | the same: one pair per mind round, stopped even on an error |
-| `bot-transcription` | per segment of the native segmenter (D7) |
+| `bot-transcription` | per segment of eidolon's segmenter (D7) |
 | `bot-tts-started` / `-stopped` | stopped now always comes, per reply and on a barge-in (D4) |
 | `bot-started-speaking` / `-stopped-speaking` | stopped comes at the audio's end, not seconds late (D5) |
 | `bot-output`, `bot-tts-text` | the same shape; `segment_id` counts from 1 in each call |
@@ -432,14 +418,14 @@ left out; `id` appears only on `bot-ready` and `error-response`.
 | `metrics` | never sent (D3) |
 | `error-response` | also for inbound types pipedog accepted and ignored (D9) |
 
-What a client must be able to count on, on both engines:
+What a client can count on:
 - **I1:** `bot-ready` comes before any other `bot-*`, `user-*` or `llm-*` message.
 - **I2:** a turn's final `user-input` and `user-transcription` come before its
   `user-stopped-speaking`.
 - **I3:** `user-input` comes before `user-transcription` for the same text.
 - **I4:** every `user-started-speaking` is followed at once by `bot-interrupted`.
 - **I5:** every `bot-llm-started` has a later `bot-llm-stopped`, with no start between.
-- **I6 (native):** every `bot-tts-started` has a later `bot-tts-stopped`.
+- **I6:** every `bot-tts-started` has a later `bot-tts-stopped`.
 - **I7:** each `segment_id` is "new" before "in-progress" or "completed", and "completed" once
   unless interrupted or never to be spoken (`will_be_spoken: false`).
 - **I8:** every `error` is `fatal: false`.
@@ -452,10 +438,9 @@ and I9 doesn't apply.
 
 ## The transport
 
-A native call runs on `@eidolon/webrtc`: werift and libopus-wasm, with pipedog's SmallWebRTC
-transport ported in, less its aiortc emulation, its aiortc-derived code and its video.
-`createSignallingServer` serves it under `native`; pipedog's own transport serves `pipedog` until
-G8. What a client sees is the same on both:
+A call runs on `@eidolon/webrtc`: werift and libopus-wasm, with pipedog's SmallWebRTC transport
+ported in, less its aiortc emulation, its aiortc-derived code and its video. What a client sees is
+what pipedog's transport showed it:
 - **HTTP** (`signalling.ts`): `POST` and `PATCH /api/offer` answer with the same JSON, status codes
   and error bodies, the guard first, and a pc_id of the same form. Each offer's peer is built from
   its own plan: its ICE servers, the relay-only rules for the offer and its PATCHes, and the Opus
@@ -490,31 +475,33 @@ G8. What a client sees is the same on both:
 - **`closed`** resolves when the peer closes, the server's shutdown included, but not after the
   call's own `disconnect()`, which sends `peerLeft` and closes the peer.
 
-Messages go out as `JSON.stringify` writes them, where pipedog's transport writes Python's
+Messages go out as `JSON.stringify` writes them, where pipedog's transport wrote Python's
 `json.dumps` form; clients parse both alike.
 
-## Allowed differences
+## Differences from pipedog
 
-Every difference between the engines must be one of these, each with what triggers it:
+eidolon's engine replaced pipedog's pipeline with #39, after the user signed off each
+difference below, and what [frontend-loading-state.md](frontend-loading-state.md) tells clients of
+them. Each fixed a defect with the trigger it names; code and docs cite them by id.
 
 | Id | Difference | Trigger |
 | --- | --- | --- |
 | D1 | a call's view is the last 60 messages | a call longer than 60 lines, or a call inside a chat whose window and lines pass 60 together |
-| D2 | no `user-llm-text` for the greeting or follow-ups | every call: today the kickoff prompt reaches the client |
+| D2 | no `user-llm-text` for the greeting or follow-ups | every call: pipedog sent the client the kickoff prompt |
 | D3 | no `metrics` | no client reads them |
-| D4 | `bot-tts-stopped` per reply and on a barge-in | Fish never sends it today: it waits for the 15 s context timeout |
-| D5 | `bot-stopped-speaking` at the audio's end | Fish today: 2.75–3.9 s late in 16 of 16 measured replies |
-| D6 | CJK-aware joins of the caller's and her segments | a pause Smart Turn judges incomplete gets `我想问 你…` today |
+| D4 | `bot-tts-stopped` per reply and on a barge-in | pipedog's Fish never sent it: it waited for the 15 s context timeout |
+| D5 | `bot-stopped-speaking` at the audio's end | pipedog's Fish: 2.75–3.9 s late in 16 of 16 measured replies |
+| D6 | CJK-aware joins of the caller's and her segments | a pause Smart Turn judges incomplete got `我想问 你…` on pipedog |
 | D7 | the segmenter keeps closers, merges cue-only segments, never splits inside `[` | `他说：“我不去。\|”然后…`; a lone `</whisper>` gets no audio from Fish |
-| D8 | OpenAI's STT interims are cumulative | today the call page shows only the latest delta |
+| D8 | OpenAI's STT interims are cumulative | on pipedog the call page showed only the latest delta |
 | D9 | unsupported inbound types get `error-response` | no client sends them |
 | D10 | her audio pauses during `restart_pc` or a lost ping instead of being dropped | a reconnect mid-sentence |
 | D11 | an interrupted message keeps the sentences heard whole, Fish's too; pipedog's Fish kept every sentence said once her audio had started | a barge-in before her last sentence has played |
-| D12 | Fish's "completed" spread across the audio: each sentence new as its audio starts, completed as it ends, where pipedog reported all at her first audio. Required from G5 | every Fish reply: anything said meanwhile lands among her reports, which keep their order, and a reply cut off reports fewer sentences, so the later ones' segment ordinals run behind |
+| D12 | Fish's "completed" spread across the audio: each sentence new as its audio starts, completed as it ends, where pipedog reported all at her first audio | every Fish reply: anything said meanwhile lands among her reports, which keep their order, and a reply cut off reports fewer sentences, so the later ones' segment ordinals run behind |
 | D13 | `interruptedBot` is exact | an empty turn within 3 s after Fish's audio ends |
 | D14 | no 15 s hold on a second reply in one turn | a follow-up after a tool call |
-| D15 | voices other than Fish keep her cues in the stored text | matches text chats; today the filtered text is stored |
-| D16 | her parts (her LanceDB tables, the selfie tool) outlive the call, in the engine's cache of its last 32 chats | every native call |
+| D15 | voices other than Fish keep her cues in the stored text | matches text chats; pipedog stored the filtered text |
+| D16 | her parts (her LanceDB tables, the selfie tool) outlive the call, in the engine's cache of its last 32 chats | every call |
 
 A realtime call's differences, each a fix of pipedog's realtime path:
 
@@ -527,87 +514,28 @@ A realtime call's differences, each a fix of pipedog's realtime path:
 | E5 | one `bot-llm-started` and one `bot-llm-stopped` per response | every realtime response: pipedog started one as it asked and again per item announced, and stopped a cut one twice |
 | E8 | a fatal error, or the socket closing, ends the call | a server's fatal error; pipedog's call went on without its model |
 
-## Parity tests
+## Tests
 
 | Where | What |
 | --- | --- |
-| `packages/runtime/test/parity/` | the ported leaves against the installed pipedog: VAD and Smart Turn probabilities, loudness, the segmenter on every reply production recorded, RTVI messages against pipedog's observer, the async envelopes. The only tests that import both engines |
-| `packages/runtime/test/parity/twin.ts` | the twin harness: one scripted call on each engine ([below](#the-twin-harness)) |
-| `packages/voice/test/` | each leaf on its own; the Floor row by row on a fake engine and clock; the real `runTurn` with a scripted mind; whole calls on a fake transport with the real hearing models; a realtime call on a scripted session, with the real `prepareTurn` and `runTool`; a group call's floor on the real `runChat` with a scripted director (`group.test.ts`) |
-| `packages/runtime/test/native/` | the switch and the server each engine gets, a native call's start, a call inside a chat reporting what pipedog's binding tests expect (once over `@eidolon/webrtc`), and a group call's binding (`group.test.ts`) |
-| `packages/webrtc/test/` | pipedog's transport tests, ported (`rtc_media`, `test_smallwebrtc_request_handler`); the caller's audio and hers against libopus; a call's transport on a fake peer, and against a real werift client: both ways, liveness, a hang-up from either side, `restart_pc` |
-| `packages/runtime/test/{signalling,loopback,werift,opus}.test.ts` | each on both transports (`transports.ts`) until G8; `werift.test.ts` also holds that both resolve one werift and patch it once |
-| `apps/bot/test/{chat,local}/native_call.test.ts` | production's `bindChatCall` and the local runner's binding, unchanged, on a native call |
-| `apps/bot/test/local/group_call.test.ts` | the local offer route's group checks, and the runner storing a native group call's lines and decisions |
-| `packages/runtime/test/native_boundaries.test.ts` | nothing under `src/native/` imports pipedog |
+| `packages/voice/test/` | each leaf on its own, with the upstream tests ported with it; the Floor row by row on a fake engine and clock; the real `runTurn` with a scripted mind; whole calls on a fake transport with the real hearing models; a realtime call on a scripted session, with the real `prepareTurn` and `runTool`; a group call's floor on the real `runChat` with a scripted director (`group.test.ts`); the ORT pin and its telemetry off (`input/onnx.test.ts`) |
+| `packages/runtime/test/native/` | the server's peers, a call's start, a call inside a chat reporting its lines, photos and end (once over `@eidolon/webrtc`), and a group call's binding (`group.test.ts`) |
+| `packages/webrtc/test/` | pipedog's transport tests, ported (`rtc_media`, `test_smallwebrtc_request_handler`); the caller's audio and hers against libopus; a call's transport on a fake peer, and against a real werift client: both ways, liveness, a hang-up from either side, `restart_pc`; the signalling server with its peers' negotiation stood in for (`signalling`) and with a real werift client over this machine's interfaces (`loopback`), the werift patches loading once (`werift`), and the Opus bitrate (`opus`) |
+| `apps/bot/test/{chat,local}/native_call.test.ts` | production's `bindChatCall` and the local runner's binding on a call |
+| `apps/bot/test/local/group_call.test.ts` | the local offer route's group checks, and the runner storing a group call's lines and decisions |
+| `apps/bot/test/e2e-invariants.test.ts` | I1–I10 (`apps/bot/scripts/e2e/invariants.ts`) on made-up sequences |
 
-`bun test --no-env-file packages/runtime/test/parity` runs the first; with `EIDOLON_TWIN=1` it runs
-the twin harness's scenarios too, about ten minutes of real-time calls. A change to the loop or its
-transport also needs real calls on each engine ([Real calls](#real-calls)); they are billed.
-
-### The twin harness
-
-Each scenario (`scenarios/*.test.ts`) runs once on pipedog and once on the native engine, each
-against fresh fakes that speak the providers' wire protocols (`fakes/`):
-- **the mind:** a chat completions API over server-sent events, scripted reply by reply, text or
-  tool calls, with OpenRouter's usage;
-- **her voice:** Fish's live socket: a tone as long as each flushed text, `finish` after `stop`;
-- **her hearing:** Soniox's socket, each `finalize` answered by the next scripted line;
-- **the caller:** a real werift peer offering to the signalling server as a browser does, pinging,
-  and saying synthetic speech through its mic as Opus.
-
-The persona's roles are accounts at the fakes, in the test data home's `credentials.json`. The
-native engine reaches them through those accounts; pipedog's Soniox and Fish services get the
-fakes' URLs set on production's instances. Each engine runs on the transport production gives it:
-pipedog's sessions on pipedog's, native calls on `@eidolon/webrtc`'s.
-
-**What is compared**, after normalizing (no ids, timestamps or metric values; segment ids as
-ordinals; a mind round's `bot-llm-text` as one message; mind requests as JSON with sorted keys, the
-prompt's clock line masked):
-- the RTVI messages the caller received;
-- every mind request body, the Fish handshakes and `start` messages and the text flushed, the
-  Soniox handshake and config;
-- the usage ledger's records (role, provider, model, units; a recognizer's audio seconds only as
-  more than none, since they follow the call's length);
-- what she would see next: pipedog's final context against `viewOf` the native call's log.
-
-**Every difference must match a rule in `allowed.ts`** (the table [above](#allowed-differences)),
-each with its id, what it allows, its trigger and a predicate that matches nothing else, and both
-runs must keep I1–I10 (`invariants.ts`). A rule may excuse an invariant pipedog breaks where its
-fix is that rule's: E5 excuses pipedog's second `bot-llm-started` on a realtime call.
-
-On a realtime call the harness also compares what the realtime server got, its audio aside: the
-session as its `session.update`s leave it (pipedog sends a second one once its context arrives),
-then every other client event, with the item ids the client made up as ordinals and no truncation
-position. Rules are added only with a trigger, never to quiet a
-scenario: a difference no rule explains is a native bug to fix, or a skipped scenario with its
-reason, for the user to decide.
-
-**The scenarios:** the greeting; typed text while she is idle and while she speaks; a line typed
-without `run_immediately`, left for the next turn, and one typed during her last reply; a reply
-with `audio_response: false`; a spoken question and a two-sentence reply; a barge-in mid-sentence
-and before her first audio; an empty turn while idle, after cutting her off, and just after her
-audio ended (D13); `change_voice_style`; a mind account with no key; a mind request that fails;
-calls naming tools she doesn't have; the recognizer's socket dropping and reconnecting; a call
-longer than the 60-line window (D1); and a realtime call in each dialect
-(`scenarios/realtime.test.ts`, against `fakes/realtime.ts`): the greeting, a spoken question, a
-barge-in, a line typed while she is idle and while she speaks, and a fatal error. One is skipped,
-its difference noted where it is written: a line typed without `run_immediately` within 15 s of
-her Fish reply, which pipedog stores before that reply, since it stores her reply only when Fish's
-audio context times out. One holds parity but for its noted difference: those tools' results, a
-bare string from pipedog and `{"error": …}` from native. And one isn't written: a barge-in before a
-realtime response's transcript has all arrived, where pipedog's observer joins the cut sentence to
-the next reply's in one `bot-transcription`, a defect no rule names. `scenarios/checks.test.ts`
-tests the harness itself on made-up sequences, and runs without the variable.
+A change to the loop or its transport also needs real calls ([below](#real-calls)); they are
+billed.
 
 ### Real calls
 
 `apps/bot/scripts/e2e-call.ts` scores one real call through Chrome and client-js: `--text`,
 `--audio`, or `--barge-in`, which types the question and talks over her reply. It records the
-bot's RTVI messages off the data channel as sent, and checks I1–I10 on them (`--engine native`
-adds I6). `apps/bot/scripts/e2e-compare.ts` compares runs of two engines, a baseline's against a
-candidate's, mode by mode: their checks, event sequences, `stagesMs`, `latencyMs` and audible
-spans, then the pass bar:
+bot's RTVI messages off the data channel as sent, and checks I1–I10 on them (`--engine` labels the
+run; `--engine pipedog`, for a bot from before the flip, leaves I6 out).
+`apps/bot/scripts/e2e-compare.ts` compares runs, a baseline's against a candidate's, mode by mode:
+their checks, event sequences, `stagesMs`, `latencyMs` and audible spans, then the pass bar:
 - every check passes and I1–I10 hold;
 - question end → first reply audio, TTS start → `bot-started-speaking`, and the gap between
   sentences (0 when her audio has none), each no worse than the baseline's median + 100 ms;
@@ -616,10 +544,7 @@ spans, then the pass bar:
   once the server hears the caller, so its stops count until the caller's turn ends.
 
 ```bash
-bun run dev                                            # pipedog, on :7860
-EIDOLON_VOICE_ENGINE=native bun run dev --port 7861    # native
-bun apps/bot/scripts/e2e-call.ts --barge-in --headful --engine pipedog --out a1.json
-bun apps/bot/scripts/e2e-call.ts --barge-in --headful --engine native \
-  --base-url http://localhost:7861 --out b1.json
-bun apps/bot/scripts/e2e-compare.ts a1.json a2.json … --vs b1.json b2.json …
+bun run dev                                            # the change, on :7860
+bun apps/bot/scripts/e2e-call.ts --barge-in --headful --out b1.json
+bun apps/bot/scripts/e2e-compare.ts a1.json a2.json … --vs b1.json b2.json …   # a*: a baseline
 ```

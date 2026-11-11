@@ -6,12 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `laplace-eidolon` is a voice bot for a streamer RP persona, self-hosted over
 SmallWebRTC — no Daily, no telephony, no Pipecat Cloud. Two halves share one
-LanceDB instance: a runtime pipeline that answers viewers over WebRTC, and an
+LanceDB instance: a voice loop that answers viewers over WebRTC, and an
 offline batch chain that builds the indexes it reads.
 
 ```text
-transport.input → STT → user_aggregator → RetrievalGate
-    → Mem0 → StreamArchive → PersonaFacts → LLM → TTS → transport.output
+webrtc in → STT ∥ VAD → Smart Turn → runTurn: RetrievalGate ∥ Mem0, StreamArchive,
+    PersonaFacts → LLM → segmenter → TTS → Speaker → webrtc out
 ```
 
 By default Soniox hears (STT), OpenRouter thinks (LLM) and Fish Audio speaks
@@ -21,7 +21,7 @@ Everything else — Mem0, the reranker, the retrieval gate, both RAG indexes —
 degrades quietly when its key, table, or vector store is missing, so a fresh
 checkout runs.
 
-The bot is TypeScript on Bun, built on pipedog (a TypeScript port of Pipecat),
+The bot is TypeScript on Bun, on eidolon's own voice engine (`packages/voice`),
 in `apps/` and `packages/`; production has run it (`ghcr.io/laplace-live/eidolon`)
 since 2026-11-04. The offline chain is TypeScript too: `packages/ingest`, run
 through the `laplace-*` commands in `apps/cli`. The local web app and the
@@ -72,7 +72,7 @@ a row here and writing the prose there — not a new section in this file.**
 | the local web app (`apps/web`, `apps/bot/src/local`): local mode, its API, jobs or security | [web-app.md](docs/web-app.md) |
 | chats, the chat log format, the turn engine, group chats' director, or voice messages (`packages/chat`, `packages/engine`, `packages/context/src/director.ts`, `packages/providers/src/speech/batch`) | [chat.md](docs/chat.md) |
 | the production chat endpoint (`apps/bot/src/chat`, `/api/chat/*`, a call inside a chat), its signing, quotas or `EIDOLON_CHAT_SECRET` | [chat.md](docs/chat.md#production-the-browser-keeps-the-chat) |
-| the native voice engine (`packages/voice`, `packages/webrtc`, `packages/runtime/src/native`), `EIDOLON_VOICE_ENGINE`, or call-mode turns | [voice-engine.md](docs/voice-engine.md) |
+| the voice engine (`packages/voice`, `packages/webrtc`, `packages/runtime`), its models, or call-mode turns | [voice-engine.md](docs/voice-engine.md) |
 | a string the web app shows, its languages, or its `.po` catalogs | [web-app.md](docs/web-app.md#strings-and-languages) |
 | changesets, the version PR, tags, or publishing the npm package (`apps/eidolon`) | [releasing.md](docs/releasing.md) |
 | any env var — all 50-odd are documented there | `.env.example` |
@@ -138,8 +138,7 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | retrieval, tokenization, chunking, `top_k`, or `candidates` | `bun run laplace-eval-retrieval --compare ~/.laplace/eidolon/sources/<id>/eval/baseline.json`. A quality claim without a number is not a claim |
 | an ingest, `EMBED_MODEL`, or `EMBED_DIM` | re-run **both** ingests (`bun run laplace-ingest-streams`, `laplace-ingest-facts`) into the persona's `index/`, then copy it to each server's mounted data home with the rsync in [personas.md](docs/personas.md#deploying-a-persona) |
 | anything under `packages/ingest`, an offline command in `apps/cli`, or the write side of `packages/retrieval` | the gates below, then the stage's real-data test with `EIDOLON_REQUIRE_PARITY=1 bun test --no-env-file <file>`: `packages/ingest/test/*_real.test.ts` (streams, download, transcribe, refine, ingest_streams, pipeline), `apps/cli/test/ingest_facts_real.test.ts`, `packages/retrieval/test/write_real.test.ts`. They are free and only read `~/.laplace/eidolon` (`EIDOLON_REAL_HOME`). Without the variable a missing corpus skips silently |
-| the bot's pipeline, the transport, or the werift patches | boot the bot and hold a real call (`bun apps/bot/scripts/e2e-call.ts --text`, or `--audio`) — none of this is unit-testable |
-| `packages/voice`, `packages/webrtc` or `packages/runtime/src/native` | the parity tests with the twin harness, `EIDOLON_TWIN=1 bun test --no-env-file packages/runtime/test/parity` (about seven minutes, free): every difference between the engines must match a rule in `allowed.ts`, never a new rule added to pass. Then real calls on each engine with `e2e-call.ts` (`--text`, `--audio`, `--barge-in`) against a server started with and without `EIDOLON_VOICE_ENGINE=native`, compared by `e2e-compare.ts` ([voice-engine.md](docs/voice-engine.md#real-calls)). Billed |
+| the voice loop (`packages/voice`), the transport (`packages/webrtc`), `packages/runtime`, or the werift patches | `bun test --no-env-file packages/voice packages/webrtc packages/runtime`, then boot the bot and hold real calls with `e2e-call.ts` (`--text`, `--audio`, `--barge-in`), compared with a baseline's by `e2e-compare.ts` ([voice-engine.md](docs/voice-engine.md#real-calls)) — a call's timing isn't unit-testable. Billed |
 | `packages/imagegen` or the `take_selfie` tool | `bun run laplace-generate-image` against a real reference — it shares `generate()` with the bot, so a successful render is the check. Billed per image |
 | the gate's recall questions, state, or threshold (`packages/context/src/gate.ts`), or `RETRIEVAL_GATE_MODEL` | `bun run gate-decisions` — re-scores the labeled turns of `docs/benchmarks/2026-09-19-retrieval-gate/` into its `decisions.json`, and exits non-zero if any turn that needs recall would be skipped. About $0.002 of gate calls |
 | the director's questions, state, or thresholds (`packages/context/src/director.ts`) | `bun run director-decisions` — asks Jev about the labelled group-chat lines of `docs/benchmarks/2026-11-10-director/` into its `decisions.json`, and exits non-zero if any is decided wrong. About $0.003 of gate calls; after a threshold or label change alone, `bun docs/benchmarks/2026-11-10-director/score.ts --cached --check` replays the stored scores for free |
@@ -147,7 +146,7 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | `prompt.md`'s 表演提示 markup, or `FISH_MODEL` | no scripted check exists ([the 2026-10-17 benchmark](docs/benchmarks/2026-10-17-drama-3-markup/README.md) records what drama-3 does with each kind). Hold a real call, `bun apps/bot/scripts/e2e-call.ts --text "<a question her reply would mark up>" --headful`, and listen: a direction or a tag spoken aloud is a leak. Billed per character |
 | `packages/memory`, or `/api/memories` (`apps/bot/src/memory-admin.ts`) | `docker compose up qdrant`, then round-trip a real `add` → `search` → `deleteAll` through `openMemoryEngine(buildMemoryConfig())`. The tests fake Qdrant and both model calls, so only a live run proves the wire format; it needs an embedding key and an LLM key |
 | an env var | document it in `.env.example` in the same commit |
-| anything under `apps/` or `packages/` | `bun run typecheck`, `bun run lint`, `bun run test`; for retrieval, the gate or the bot's pipeline, also the row above that names it |
+| anything under `apps/` or `packages/` | `bun run typecheck`, `bun run lint`, `bun run test`; for retrieval, the gate or the voice loop, also the row above that names it |
 | anything under `apps/web` | the row above, whose typecheck also runs both `apps/web` tsconfigs, then `bun run build:web`; after changing a string, `bun run i18n` and its `msgstr` in `zh-Hans.po` |
 | local mode (`apps/bot/src/local`), or chats (`packages/chat`, `packages/engine`) | `bun test --no-env-file apps/bot/test/local` from the repository root, then `bun apps/bot/scripts/local-smoke.ts --headful`: a browser walk on a temporary data home that bills nothing, a chat, a group chat and voice messages with a fake mind, director, voice and hearing included |
 | `apps/eidolon`, or a file the package bundles or copies | the gates above, then `bun run pack:npm` and `bun apps/eidolon/scripts/ci-install-check.ts apps/eidolon/<tarball>`, which CI runs on Linux x64: it installs the tarball with npm, boots it on a temporary home, signs in, and stops it |
@@ -179,7 +178,7 @@ the layout's one line.
 
 - **Optional dependencies fail open, never loud.** Mem0, both RAG providers, the
   reranker, the retrieval gate, and the LanceDB tables each log their failure
-  and carry on without it: `packages/runtime/src/session/session.ts` opens the
+  and carry on without it: `packages/engine/src/parts.ts` opens the
   optional tiers that way, the gate's failure retrieves anyway, and a failed
   rerank falls back to RRF. A new optional tier follows that shape or it breaks
   fresh checkouts.
@@ -192,12 +191,11 @@ the layout's one line.
   `Number(process.env.X ?? "60")` reads a plain `.env.example` copy's blank `X`
   as 0. Read env through `envInt`, `envFloat`, `envStr` or `envOptional`
   (`packages/config/src/env.ts`), which treat blank as unset.
-- **No image service goes in the pipeline.** pipedog's `ImageGenService`
-  generates an image from every `TextFrame` it sees, and this pipeline streams
-  one per sentence into TTS — in the pipeline it would bill an image per
-  sentence spoken. The `take_selfie` tool (`packages/tools/src/selfie.ts`) calls
-  `renderSelfie`, and through it `generate()` from `@eidolon/imagegen`, directly
-  instead. See [selfies.md](docs/selfies.md).
+- **A selfie is a tool call, never part of the speech path.** Her reply streams
+  to her voice one sentence at a time, so anything that renders from what she
+  says would bill an image per sentence spoken. The `take_selfie` tool
+  (`packages/tools/src/selfie.ts`) calls `renderSelfie`, and through it
+  `generate()` from `@eidolon/imagegen`, directly. See [selfies.md](docs/selfies.md).
 - **The persona's reference images are mutually exclusive outfits — exactly
   one reaches a render.** Hand the model two and it draws two of her: a group
   selfie with one friend came back with three people in frame. `selectOutfit`
@@ -207,8 +205,10 @@ the layout's one line.
 
 ### The TypeScript bot
 
-- **Only `packages/runtime` imports `@pipedog/*`.** Biome enforces it; every
-  other package must stay usable without a pipeline.
+- **pipedog-derived code carries its BSD-2 header.** A file ported from pipedog keeps
+  pipedog's copyright lines and `SPDX-License-Identifier: BSD-2-Clause`, then
+  `Ported from pipedog <path>@ce8f8bc`; its package keeps `LICENSE-pipedog` and
+  `THIRD_PARTY.md`, and `NOTICE` names every holder (`build.test.ts` checks it).
 - **`load-env.ts` is the only `.env` reader.** `bunfig.toml` sets `env = false`
   and tests pass `--no-env-file`; no module reads env at import. It walks up to
   the first `.env`, and a git worktree without one, wherever it lives, reads
@@ -217,19 +217,17 @@ the layout's one line.
   import `apps/bot/src/local/` (Biome and `boundaries.test.ts` hold it), and
   nothing but that separate entry turns it on: no flag, setting or env var,
   which a server's mounted `settings.yaml` could flip.
-- **Only `@eidolon/engine` talks to a mind outside the voice pipeline**, and a chat's log
-  stores what was said and recalled, never stream deltas. Its `createMind` sends what a call's
-  `createLlm` does, and each persona's view is rebuilt from the log, so what isn't stored she
-  never saw. The local app, production's chat endpoint and `packages/runtime`'s native calls all
-  run it; see [chat.md](docs/chat.md).
+- **Only `@eidolon/engine` talks to a mind, and only `@eidolon/providers/realtime` to a
+  realtime model**, and a chat's log stores what was said and recalled, never stream deltas.
+  Each persona's view is rebuilt from the log, so what isn't stored she never saw. The local app,
+  production's chat endpoint and every call run it; see [chat.md](docs/chat.md).
 - **Production keeps no transcripts; it signs what it produces.** Its chat endpoint
   (`apps/bot/src/chat`) exists only while `EIDOLON_CHAT_SECRET` is set; unset, every `/api/chat/*`
   path answers as an unknown path and no offer is bound. It answers from the window the browser
   sends and writes nothing to the data home. Every event it adds but the viewer's own carries an
   HMAC `sig`, one that fails is dropped from her view, and context blocks never leave the server.
   Only `apps/bot/src/local` imports `@eidolon/chat/jsonl` (Biome and `boundaries.test.ts` hold it).
-- **Only `packages/runtime` imports `@eidolon/voice` and `@eidolon/webrtc`.** Biome enforces it;
-  nothing under `packages/runtime/src/native` imports `@pipedog/*` (`native_boundaries.test.ts`).
+- **Only `packages/runtime` imports `@eidolon/voice` and `@eidolon/webrtc`.** Biome enforces it.
   See [voice-engine.md](docs/voice-engine.md).
 - **In the voice loop, transport, provider and timer callbacks only post to the call's
   mailbox;** only the Floor changes call state, and it never awaits. A billable request started
@@ -252,8 +250,7 @@ the layout's one line.
   free text. The exception is a closed offer (`openModels: false`, Fish's): it
   has no listing and runs an id it doesn't know as another model, so it is a
   choice among the catalog's.
-- **The werift patches in `packages/webrtc/src/patches.ts` are load-bearing** (and,
-  until pipedog goes, their twin in `packages/runtime/src/webrtc/handler.ts`) — no
+- **The werift patches in `packages/webrtc/src/patches.ts` are load-bearing** — no
   default STUN server, disconnect on DTLS close, relay-only, the `raddr` scrub. Each
   one's failure mode is in [typescript.md](docs/typescript.md).
 - **Run `bun test` from the repository root only.** Elsewhere `bunfig.toml`'s preload is
@@ -312,8 +309,8 @@ the layout's one line.
   bucket, where their memories would cross-pollute every other conversation.
 - **Mem0 is self-hosted and runs embedded, not as a service.** `packages/memory`
   is its own engine over Qdrant, writing mem0's payloads and `history.db`; no
-  mem0 platform client can reach it. Every caller — the pipeline's
-  `openMemoryProvider` and `/api/memories`' `createMemoryAdmin` alike — builds
+  mem0 platform client can reach it. Every caller — the turn engine's
+  `createMemoryProvider` and `/api/memories`' `createMemoryAdmin` alike — builds
   its engine from `buildMemoryConfig()`, so a new one does too.
 - **Behind a proxy, set `EIDOLON_REAL_IP_HEADER`** or every caller rate-limits
   as the proxy's single IP.

@@ -95,11 +95,18 @@ function harness(o: { readonly markup?: Markup; readonly sampleRate?: number } =
   const cursor: CursorEvent[] = [];
   const real = createSpeaker((event) => cursor.push(event));
   const enqueued: Int16Array[] = [];
+  /** What reached the Speaker's queue, in order: each stretch of audio, and each segment's end. */
+  const queued: string[] = [];
   const speaker: Speaker = {
     ...real,
     enqueue(tag, pcm) {
       enqueued.push(pcm);
+      if (pcm.length > 0) queued.push(`audio ${tag.seg}`);
       real.enqueue(tag, pcm);
+    },
+    markSegEnd(tag) {
+      queued.push(`end ${tag.seg}`);
+      real.markSegEnd(tag);
     },
   };
   const speech = new FakeSpeech(o.sampleRate ?? 24_000);
@@ -149,6 +156,7 @@ function harness(o: { readonly markup?: Markup; readonly sampleRate?: number } =
     posted,
     notes,
     enqueued,
+    queued,
     begin(id = "r1", audio = true): SpokenReply {
       const reply = mouth.begin(id, { audio });
       replies.set(id, reply);
@@ -350,7 +358,7 @@ describe("a voice that marks where each segment ends", () => {
 });
 
 describe("a voice at another rate (Fish)", () => {
-  test("its audio reaches the Speaker at 24 kHz, each segment's under its tag, the resampler's tail at its end", async () => {
+  test("its audio reaches the Speaker at 24 kHz, each segment's under its tag and all of it before its end", async () => {
     const h = harness({ sampleRate: 44_100 });
     const reply = h.begin();
     reply.push("你好。今天天气不错。");
@@ -366,15 +374,27 @@ describe("a voice at another rate (Fish)", () => {
     await settle();
     const reference = resampler().createStream(44_100, 24_000);
     const expected = concat([
-      ...chunks.map((chunk) => reference.processSamples(chunk)),
+      reference.processSamples(chunks[0] as Int16Array),
+      reference.flushSamples(),
+      reference.processSamples(chunks[1] as Int16Array),
+      reference.processSamples(chunks[2] as Int16Array),
       reference.flushSamples(),
     ]);
     reference.destroy();
     expect(expected).toHaveLength(2400);
     expect(concat(h.enqueued)).toEqual(expected);
+    expect(h.queued).toEqual([
+      "audio 1",
+      "audio 1",
+      "end 1",
+      "audio 2",
+      "audio 2",
+      "audio 2",
+      "end 2",
+    ]);
     h.take();
     const said = h.notes.length;
-    h.play(20);
+    h.play(30);
     expect(h.notes.slice(said)).toEqual(["new 1", "done 1", "new 2"]);
     h.play(100);
     expect(h.notes.slice(said + 3)).toEqual(["done 2"]);

@@ -28,8 +28,8 @@ it buries the handful of comments that genuinely matter.
 
 The dividing line: **a comment about something outside this repo can be a
 paragraph. A comment about this repo's own structure gets one sentence, or
-nothing.** Every keeper below cites LanceDB, an upstream SDK, mem0, pipedog,
-or a benchmark. Every deleted essay explained our own module boundaries to
+nothing.** Every keeper below cites LanceDB, an upstream SDK, mem0, or a
+benchmark. Every deleted essay explained our own module boundaries to
 ourselves.
 
 Assume the reader knows TypeScript and can read the code beneath the comment.
@@ -72,7 +72,7 @@ and the check below catches it if one does.
   territory.
 - **Commented-out code.** Delete it.
 - **Upstream line numbers, versions, and endpoint paths** —
-  `@pipedog/core/dist/services/llm_service.js:125`, `mem0ai 1.0.11`,
+  `werift/lib/ice/src/ice.js:125`, `mem0ai 1.0.11`,
   `POST /v2/memories/`. These rot on the next bump, and a stale one is worse
   than nothing: the mem0 comments here once pinned both a version and a path,
   and by the time anyone looked, the SDK was on 2.0.12 POSTing to `/v3/`.

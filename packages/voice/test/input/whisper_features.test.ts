@@ -6,7 +6,6 @@
 //
 // Upstream compares against transformers' WhisperFeatureExtractor, which has no JS counterpart, so
 // those comparisons stay skipped as they are upstream; the shape checks they made run here.
-// packages/runtime/test/parity/audio.test.ts compares the extractor with pipedog's, bit for bit.
 import { describe, expect, test } from "bun:test";
 import {
   computeWhisperLogMelFeatures,

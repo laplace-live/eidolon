@@ -29,15 +29,13 @@ store; the tool itself is `packages/tools/src/selfie.ts`.
 `laplace-generate-image` calls the same `generate()`, so what you probe from
 the CLI is what a viewer gets.
 
-## Why no image service is in the pipeline
+## Why the selfie is a tool, not part of her speech
 
-pipedog's `ImageGenService` is the framework's base class for image
-generation: a subclass implements `runImageGen(prompt)`. But its inherited
-`processFrame` generates an image from **every `TextFrame` it sees**, which is
-the right trigger for a prompt→image bot and exactly wrong here: this pipeline
-streams one `TextFrame` per sentence on the way to TTS. An image service in
-the pipeline would bill an image per sentence spoken. So none is placed there;
-the tool calls `renderSelfie` directly. Keep it that way.
+Her reply streams to her voice a sentence at a time, so anything that renders
+from what she says would bill an image per sentence spoken: pipedog's
+`ImageGenService`, which generates an image from **every `TextFrame` it sees**,
+would have done exactly that in a call. So the tool calls `renderSelfie`
+directly. Keep it that way.
 
 ## Why the image travels as a URL
 
@@ -62,9 +60,11 @@ worker's ids.
 
 ## Why the call is asynchronous
 
-The tool's `cancelOnInterruption: false` makes pipedog run the call
-asynchronously: the LLM continues the conversation immediately rather than
-holding the turn, and the result is injected later as a developer message. A
+The tool's `cancelOnInterruption: false` makes a call run it asynchronously
+(`isAsyncTool`, `packages/engine/src/async_tool.ts`): she continues the
+conversation immediately rather than holding the turn, and the result goes in
+later, starting a follow-up reply once the floor is free
+([voice-engine.md](voice-engine.md#tools-and-async-results)). A
 render takes ten-odd seconds, and a voice bot that goes silent that long sounds
 broken. The persona prompt tells it to say something like 等我一下 on the way
 out, and the schema description tells it not to read the URL aloud.

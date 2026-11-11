@@ -48,6 +48,29 @@ export async function until(check: () => boolean, timeoutMs = 2000): Promise<voi
   }
 }
 
+export interface Deferred<T> {
+  readonly promise: Promise<T>;
+  resolve(value: T): void;
+  reject(error: unknown): void;
+}
+
+export function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+/** Candidate rules that keep every candidate, for a peer on this machine. */
+export const PASS_THROUGH_RULES = {
+  dropUnreachableCandidates: (sdp: string) => ({ sdp, dropped: [] }),
+  candidateReachable: () => true,
+  scrubRelayRelatedAddresses: (sdp: string) => sdp,
+};
+
 /** A 440 Hz tone at `rate`, counting what each pull asked for. */
 export class ToneSource implements PcmSource {
   readonly rate: number;

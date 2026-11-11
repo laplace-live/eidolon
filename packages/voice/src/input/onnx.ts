@@ -5,6 +5,7 @@
 //
 // One onnxruntime-node session per model file, shared by every call: Silero passes its recurrent
 // state in and out, and Smart Turn keeps none.
+import { dlopen, FFIType } from "bun:ffi";
 import type { InferenceSession, Tensor } from "onnxruntime-node";
 
 type Ort = typeof import("onnxruntime-node");
@@ -32,9 +33,34 @@ const SESSION_OPTIONS: InferenceSession.SessionOptions = {
 let ort: Promise<Ort> | null = null;
 const sessions = new Map<string, Promise<OnnxSession>>();
 
-// Imported on first use, so loading the package never loads the native addon.
+/**
+ * Sets ORT_DISABLE_TELEMETRY=1 in the C environment, unless it is set there already. ORT's Linux and
+ * macOS builds upload telemetry to Microsoft by default, and on macOS the uploader aborts the process
+ * as it exits (134, "A C++ exception occurred" under Bun) when a response lands during its teardown:
+ * https://github.com/microsoft/onnxruntime/blob/main/docs/Privacy.md#disabling-telemetry,
+ * https://github.com/dfrostar/neuralmind/issues/547. ORT reads the variable with getenv, which Bun's
+ * process.env never reaches; Windows builds don't read it.
+ */
+function disableOrtTelemetry(): void {
+  if (process.platform === "win32") return;
+  const libc = dlopen(process.platform === "darwin" ? "libc.dylib" : "libc.so.6", {
+    setenv: { args: [FFIType.cstring, FFIType.cstring, FFIType.i32], returns: FFIType.i32 },
+  });
+  try {
+    libc.symbols.setenv(Buffer.from("ORT_DISABLE_TELEMETRY\0"), Buffer.from("1\0"), 0);
+  } finally {
+    libc.close();
+  }
+}
+
+// Imported on first use, so loading the package never loads the native addon; its telemetry is off
+// before it loads.
 function loadOrt(): Promise<Ort> {
-  ort ??= import("onnxruntime-node").then((mod: any) => (mod.InferenceSession ? mod : mod.default));
+  ort ??= (async () => {
+    disableOrtTelemetry();
+    const mod: any = await import("onnxruntime-node");
+    return mod.InferenceSession ? mod : mod.default;
+  })();
   return ort;
 }
 

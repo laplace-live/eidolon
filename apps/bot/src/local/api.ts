@@ -967,7 +967,7 @@ export interface ChatContents {
   readonly call: ChatCallInfo | null;
   /**
    * Whether the viewer can call every persona in the chat at once (`group` in the offer): a chat of
-   * two or more, on the native voice engine, none of them on a realtime model.
+   * two or more, none of them on a realtime model.
    */
   readonly groupCall: boolean;
 }
@@ -991,8 +991,8 @@ export interface ChatCallInfo {
  *
  * With `group`, every persona in the chat is on the call, `persona` hosting: her hearing role hears
  * the viewer, the director chooses who answers each line, and each decision is stored too. Refused
- * with 400 bad-request in a chat of one or off the native voice engine, and 409 realtime-in-group
- * when a persona in the chat talks through a realtime model.
+ * with 400 bad-request in a chat of one, and 409 realtime-in-group when a persona in the chat
+ * talks through a realtime model.
  */
 export interface ChatCallRequestData {
   readonly chatId: string;

@@ -1,5 +1,5 @@
 // A local group call: the offer route's checks, the runner's GroupChatCall storing what a group call
-// reports against the chat's own seqs, and a whole native group call run through that binding over a
+// reports against the chat's own seqs, and a whole group call run through that binding over a
 // fake transport, recognizer and voices, the real engine on scripted minds and a scripted director.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -47,7 +47,6 @@ beforeEach(() => {
 });
 afterEach(() => {
   logs.restore();
-  delete process.env.EIDOLON_VOICE_ENGINE;
   rmSync(ROOT(), { recursive: true, force: true });
   for (const id of Object.keys(PERSONAS)) {
     rmSync(join(dataHome(), "personas", id), { recursive: true, force: true });
@@ -123,18 +122,13 @@ describe("the offer route", () => {
     expect(chatCallTarget({ chatId, persona: ANN, group: "yes" })).toBeInstanceOf(Response);
   });
 
-  test("calls the whole group only on the native engine, in a group, with no realtime persona", async () => {
+  test("calls the whole group only in a group, with no realtime persona", async () => {
     signalling.offers = [];
     const runner = new ChatRunner({ root: ROOT(), answer: silent });
     const id = await groupChat(runner);
     const one = await runner.create([ANN]);
     const target = { chatId: id, persona: ANN, group: true };
 
-    expect((await runner.read(id)).groupCall).toBe(false);
-    const off = await offerChatCall(runner, signalling, admission, target);
-    expect(await refusal(off)).toEqual([400, "bad-request"]);
-
-    process.env.EIDOLON_VOICE_ENGINE = "native";
     expect((await runner.read(id)).groupCall).toBe(true);
     expect((await runner.read(one)).groupCall).toBe(false);
     const alone = await offerChatCall(runner, signalling, admission, { ...target, chatId: one });
@@ -157,7 +151,6 @@ describe("the offer route", () => {
 
   test("a group offer binds the session to the whole chat, its call-started marked group", async () => {
     signalling.offers = [];
-    process.env.EIDOLON_VOICE_ENGINE = "native";
     const runner = new ChatRunner({ root: ROOT(), answer: silent });
     const id = await groupChat(runner);
     const answered = await offerChatCall(runner, signalling, admission, {
@@ -229,7 +222,7 @@ describe("a group call's binding", () => {
     expect(cut).toMatchObject({ interrupted: true, cutOff: "length" });
   });
 
-  test("a whole native group call: the director picks who answers, and the chat stores it all", async () => {
+  test("a whole group call: the director picks who answers, and the chat stores it all", async () => {
     const runner = new ChatRunner({ root: ROOT(), answer: silent });
     const id = await groupChat(runner);
     const call = await runner.startGroupCall(id, ANN);

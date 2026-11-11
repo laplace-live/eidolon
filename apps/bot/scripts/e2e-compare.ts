@@ -1,7 +1,7 @@
-// Compares e2e-call.ts reports of two engines, or two deployments: a baseline's runs against a
-// candidate's, mode by mode and turn by turn. It diffs their checks, their RTVI event sequences,
-// stagesMs, latencyMs and audible spans, then holds the candidate to the native engine's pass bar
-// (docs/voice-engine.md, "Parity tests"). Reads reports only, so it scores recorded ones too.
+// Compares e2e-call.ts reports of two deployments: a baseline's runs against a candidate's, mode
+// by mode and turn by turn. It diffs their checks, their RTVI event sequences, stagesMs, latencyMs
+// and audible spans, then holds the candidate to the pass bar (docs/voice-engine.md, "Real
+// calls"). Reads reports only, so it scores recorded ones too.
 import { resolve } from "node:path";
 import { LEVEL_INTERVAL_MS } from "./e2e/protocol.ts";
 import { pacingByTurn, type TimelineEntry, type Turn } from "./e2e/turns.ts";
@@ -235,7 +235,7 @@ function spanRows(base: Report[], cand: Report[]): Row[] {
   return rows;
 }
 
-/** The native engine's pass bar, for the candidate's runs of one mode. */
+/** The pass bar, for the candidate's runs of one mode. */
 function passBar(base: Report[], cand: Report[]): Check[] {
   const bar: Check[] = [];
   const failing = cand.flatMap((r, i) =>

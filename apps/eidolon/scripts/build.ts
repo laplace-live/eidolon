@@ -17,6 +17,7 @@ import {
   resamplerDir,
   serverEntry,
   templatesDir,
+  voiceModelsDir,
   webDist,
 } from "@eidolon/config";
 import { ENTRIES, PLATFORMS } from "../src/launcher.ts";
@@ -29,15 +30,13 @@ const SPDX_DIR = join(HERE, "spdx");
 
 /**
  * What the bundles leave in node_modules, each a dependency of the package: files read beside the
- * code (@pipedog's models, onnxruntime-node's binaries, LanceDB's per-platform binary, which its
- * inlined loader requires by name), and packages whose prototypes or classes an external one
- * shares: the runtime and @eidolon/webrtc patch werift's prototype for @pipedog's copy and their
- * own, and LanceDB checks apache-arrow's tables, which must be one copy for both. libopus-wasm
- * stays a package, as @pipedog's transport has it: inlined, the notices would carry its MIT license
- * but not libopus's, which its THIRD_PARTY_NOTICES.md holds.
+ * code (onnxruntime-node's binaries, LanceDB's per-platform binary, which its inlined loader
+ * requires by name), and packages whose prototypes or classes are shared: @eidolon/webrtc patches
+ * werift's, and LanceDB checks apache-arrow's tables, which must be one copy for both.
+ * libopus-wasm stays a package: inlined, the notices would carry its MIT license but not
+ * libopus's, which its THIRD_PARTY_NOTICES.md holds.
  */
 const EXTERNAL = [
-  "@pipedog/*",
   "onnxruntime-node",
   "werift",
   "libopus-wasm",
@@ -333,7 +332,7 @@ export function notices(dist: readonly Bundled[], web: readonly Bundled[]): stri
 }
 
 /** Copies the repository's files under `from`, so an untracked index or picture never ships. */
-function copyTracked(from: string, to: string): void {
+export function copyTracked(from: string, to: string): void {
   const dir = relative(ROOT, from);
   const listed = Bun.spawnSync(["git", "ls-files", "-z", "--", dir], { cwd: ROOT });
   if (listed.exitCode !== 0) throw new Error(`git ls-files ${dir} failed`);
@@ -366,6 +365,7 @@ async function stage(): Promise<Manifest> {
   copyTracked(templatesDir(), inPackage(PACK_DIR, templatesDir));
   copyTracked(jiebaDir(), inPackage(PACK_DIR, jiebaDir));
   copyTracked(resamplerDir(), inPackage(PACK_DIR, resamplerDir));
+  copyTracked(voiceModelsDir(), inPackage(PACK_DIR, voiceModelsDir));
   writeFileSync(join(PACK_DIR, "bunfig.toml"), BUNFIG);
   writeFileSync(join(PACK_DIR, "THIRD_PARTY_NOTICES.md"), notices(inlinedPackages(inlined), web));
   cpSync(join(HERE, "README.md"), join(PACK_DIR, "README.md"));

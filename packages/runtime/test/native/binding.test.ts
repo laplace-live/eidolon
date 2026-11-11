@@ -1,8 +1,6 @@
-// A call bound to a chat on the native engine: the binding pipedog's sessions take
-// (../binding.test.ts), run on the native loop over a fake transport (and once a real peer over
-// @eidolon/webrtc), a fake recognizer and voice, the real hearing models and the real engine on a
-// scripted mind. It opens on the chat and reports the same lines, photos and end, in the same
-// order, as her.
+// A call bound to a chat, run over a fake transport (and once a real peer over @eidolon/webrtc), a
+// fake recognizer and voice, the real hearing models and the real engine on a scripted mind. It
+// opens on the chat and reports her lines, photos and end, in order.
 import "../../../config/test/isolated-guard.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -14,17 +12,20 @@ import type { ContextProvider, LlmTool } from "@eidolon/core";
 import { type EngineDeps, type MindChunk, type MindRequest, runTurn } from "@eidolon/engine";
 import { MEM0_STORE_KEY } from "@eidolon/memory";
 import type { RealtimeEvent, RealtimeSession } from "@eidolon/providers/realtime";
-import type { CallDeps } from "@eidolon/voice";
+import { type CallDeps, voiceModels } from "@eidolon/voice";
 import { createSignallingServerWith, peerCallTransport } from "@eidolon/webrtc";
-import { RTCPeerConnection } from "@pipedog/transport-smallwebrtc/rtc";
+import { RTCPeerConnection } from "werift";
 import { packHistory } from "../../../voice/src/call/realtime.ts";
 import { FakeSpeech, FakeStt, FakeTransport, settle } from "../../../voice/test/call/harness.ts";
 import { FakeClock } from "../../../voice/test/input/clock.ts";
-import { voiceModels } from "../../src/audio.ts";
-import type { AnyCallBinding } from "../../src/native/binding.ts";
+import type {
+  AnyCallBinding,
+  CallBinding,
+  CallClient,
+  TranscriptLine,
+} from "../../src/native/binding.ts";
 import { runNativeSafely } from "../../src/native/engine.ts";
 import { BOT_ABOUT } from "../../src/rtvi.ts";
-import type { CallBinding, CallClient, TranscriptLine } from "../../src/session/session.ts";
 import {
   admission,
   CAN_DIAL,
@@ -53,7 +54,7 @@ let logs: LogCapture;
 let restoreEnv: () => void;
 beforeEach(() => {
   logs = captureLogs();
-  // A voice that marks where each segment's audio ends, as the pipedog tests' scripted one does.
+  // A voice that marks where each segment's audio ends.
   restoreEnv = setEnv({ TTS_PROVIDER: "minimax", REALTIME_PROVIDER: undefined });
 });
 afterEach(() => {
@@ -120,7 +121,7 @@ function engine(
   };
 }
 
-/** A native call bound to a chat, its client ready. */
+/** A call bound to a chat, its client ready. */
 async function call(
   options: { readonly seedMessages?: readonly unknown[]; readonly failing?: string } = {},
   script: { readonly replies?: Reply[]; readonly tools?: readonly LlmTool[] } = {},
@@ -231,7 +232,7 @@ async function call(
   };
 }
 
-describe("a call bound to a chat on the native engine", () => {
+describe("a call bound to a chat", () => {
   test("runs as her, opens on the chat, and reports each finished line, a cut-off one as heard", async () => {
     expect(activePersona().id).toBe("milky-green");
     const c = await call({ seedMessages: SEED });
@@ -571,6 +572,7 @@ describe.skipIf(!CAN_DIAL)("over a real peer", () => {
       peer.addTransceiver("audio", { direction: "sendrecv" });
       const channel = peer.createDataChannel("chat");
       await peer.setLocalDescription(await peer.createOffer());
+      await until(() => peer.iceGatheringState === "complete", 5000);
       const result = await server.offer(
         admission({ sdp: peer.localDescription?.sdp, type: "offer" }),
         {

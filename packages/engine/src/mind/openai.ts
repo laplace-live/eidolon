@@ -1,5 +1,5 @@
-// A mind on an OpenAI-compatible chat completions API, sending what a call's pipedog service for
-// the same provider sends and streaming back her text and whole tool calls.
+// A mind on an OpenAI-compatible chat completions API, sending what pipedog's service for the same
+// provider sent, and streaming back her text and whole tool calls.
 // Ports parts of pipedog's OpenAI, OpenRouter and DeepSeek LLM services and OpenAI adapter
 // (BSD-2-Clause; Copyright (c) 2024–2026 Daily, Copyright (c) 2026 pipedog contributors).
 import { isPlainObject } from "@eidolon/config";

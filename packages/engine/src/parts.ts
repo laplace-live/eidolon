@@ -1,9 +1,9 @@
-// What a persona brings to a chat turn, built as a call builds it (runtime's session.ts): Mem0, the
-// stream archive, persona facts, the retrieval gate, take_selfie and recall_streams, and for a
-// voice message her voice-style tool. These are kept per chat and persona until the settings
-// change, because the providers remember the conversation they serve (the turn they last searched,
-// the archive's recall scope), and what failed to open is tried again later. The system
-// instruction is rebuilt every turn, because it carries the clock.
+// What a persona brings to a turn, in a chat or a call: Mem0, the stream archive, persona facts,
+// the retrieval gate, take_selfie and recall_streams, and for a voice message her voice-style tool.
+// These are kept per chat and persona until the settings change, because the providers remember
+// the conversation they serve (the turn they last searched, the archive's recall scope), and what
+// failed to open is tried again later. The system instruction is rebuilt every turn, because it
+// carries the clock.
 import { stat } from "node:fs/promises";
 import type { UserContext } from "@eidolon/access";
 import type { ChatEvent, ParticipantId } from "@eidolon/chat";
@@ -249,7 +249,7 @@ class Pieces {
     }
   }
 
-  /** runtime's optionalProvider, logging the same lines. */
+  /** An optional tier: null, logged once, when its index is missing or won't open. */
   async #optional<T>(
     label: string,
     ingestCommand: string,
@@ -277,7 +277,7 @@ class Pieces {
     logger.log(level, message);
   }
 
-  /** runtime's sessionMemory: an anonymous viewer or an unset vector store skips Mem0. */
+  /** Her Mem0 for `viewer`: an anonymous viewer or an unset vector store skips it. */
   async #memory(viewer: UserContext): Promise<MemoryProvider | null> {
     if (!viewer.isLoggedIn) {
       this.#once("anonymous", "Mem0 skipped: anonymous viewer");

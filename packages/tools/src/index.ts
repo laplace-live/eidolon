@@ -1,5 +1,5 @@
-// The LLM tools outside retrieval, as framework-free LlmTools that runtime registers in the order
-// voice → selfie → recall.
+// The LLM tools outside retrieval, as LlmTools the engine registers in the order voice → selfie →
+// recall.
 export {
   createSelfieTool,
   SELFIE_TOOL_NAME,

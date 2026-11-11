@@ -1,12 +1,72 @@
 import { describe, expect, test } from "bun:test";
+import { join } from "node:path";
+import { PROJECT_ROOT } from "@eidolon/config";
 import { sharedSession } from "../../src/input/onnx.ts";
+import { voiceModels } from "../../src/models.ts";
 import { SILERO_MODEL, SMART_TURN_MODEL } from "./speech.ts";
 
 describe("onnx sessions", () => {
   test("the ORT build is the pinned 1.30.0: another shifts Smart Turn's probabilities", async () => {
+    // Through sharedSession first, so ORT loads as the bot loads it: after its telemetry is off.
+    await sharedSession(SILERO_MODEL);
     const mod: any = await import("onnxruntime-node");
     const ort = mod.InferenceSession ? mod : mod.default;
     expect(ort.env.versions).toEqual({ common: "1.30.0", node: "1.30.0" });
+  });
+
+  test("ORT's telemetry is off by the time it loads, where its getenv reads it", async () => {
+    const onnx = join(import.meta.dir, "../../src/input/onnx.ts");
+    const getenv = join(import.meta.dir, "getenv.ts");
+    const env: Record<string, string | undefined> = { ...process.env };
+    delete env.ORT_DISABLE_TELEMETRY;
+    // A stand-in ORT records what its getenv would read as it loads.
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "--no-env-file",
+        "-e",
+        `const { cEnv } = await import(${JSON.stringify(getenv)});
+let seen = "never loaded";
+Bun.plugin({
+  setup(build) {
+    build.module("onnxruntime-node", () => {
+      seen = String(cEnv("ORT_DISABLE_TELEMETRY"));
+      return { exports: { InferenceSession: { create: async () => ({ outputNames: [] }) } }, loader: "object" };
+    });
+  },
+});
+const { sharedSession } = await import(${JSON.stringify(onnx)});
+await sharedSession("model.onnx");
+process.stdout.write(seen);`,
+      ],
+      { env, stdout: "pipe", stderr: "inherit" },
+    );
+    expect([await child.exited, await new Response(child.stdout).text()]).toEqual([0, "1"]);
+  });
+
+  test("an ORT_DISABLE_TELEMETRY the environment sets is kept", async () => {
+    const onnx = join(import.meta.dir, "../../src/input/onnx.ts");
+    const getenv = join(import.meta.dir, "getenv.ts");
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "--no-env-file",
+        "-e",
+        `const { cEnv } = await import(${JSON.stringify(getenv)});
+const { sharedSession } = await import(${JSON.stringify(onnx)});
+await sharedSession(${JSON.stringify(SILERO_MODEL)});
+process.stdout.write(String(cEnv("ORT_DISABLE_TELEMETRY")));`,
+      ],
+      { env: { ...process.env, ORT_DISABLE_TELEMETRY: "0" }, stdout: "pipe", stderr: "inherit" },
+    );
+    expect([await child.exited, await new Response(child.stdout).text()]).toEqual([0, "0"]);
+  });
+
+  test("the models are the committed ones in packages/voice/models", () => {
+    expect(voiceModels()).toEqual({
+      silero: join(PROJECT_ROOT, "packages/voice/models/silero_vad.onnx"),
+      smartTurn: join(PROJECT_ROOT, "packages/voice/models/smart-turn-v3.2-cpu.onnx"),
+    });
   });
 
   test("every caller of a model file shares its one session", async () => {

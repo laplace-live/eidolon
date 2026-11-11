@@ -44,6 +44,11 @@ export function resamplerDir(): string {
   return shippedPath("data/resampler", "packages/voice/src/dsp/resampler/wasm");
 }
 
+/** @eidolon/voice's ONNX models, Silero VAD's and Smart Turn's, with their licenses. */
+export function voiceModelsDir(): string {
+  return shippedPath("data/models", "packages/voice/models");
+}
+
 /** `os.path.expanduser` for the current user's `~`. */
 export function expandUser(path: string): string {
   if (path === "~") return homedir();

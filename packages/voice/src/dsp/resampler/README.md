@@ -1,6 +1,6 @@
 # The resampler
 
-pipedog's `@pipedog/resampler-wasm` at `ce8f8bc` (v0.10.0), vendored: rubato 5.0.1's windowed-sinc
+pipedog's `resampler-wasm` package at `ce8f8bc` (v0.10.0), vendored: rubato 5.0.1's windowed-sinc
 resampler compiled to WebAssembly, the engine pipedog's transports and services resample with.
 
 - `wasm/resampler.wasm` is pipedog's committed build, byte for byte (38,893 bytes, sha256

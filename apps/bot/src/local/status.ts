@@ -100,7 +100,7 @@ export function recordVoice(app: LocalApp, id: string, key: string, ok: boolean 
   if (isFishKey(key)) stateOf(app).voices.set(voiceKey(id, key), { ok, at: Date.now() });
 }
 
-// packages/runtime's runSessionSafely logs a session that failed after its offer was answered.
+// packages/runtime's runNativeSafely logs a call that failed after its offer was answered.
 const SESSION_FAILED = "Bot session failed: ";
 const SESSION_ERROR_MAX_CHARS = 500;
 

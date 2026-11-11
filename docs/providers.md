@@ -10,10 +10,9 @@ chain, the MCP server and the local web app all resolve roles the same way, thro
 `packages/providers/src/resolve.ts`.
 
 Nothing calls a vendor SDK. `packages/providers/src/http/` holds fetch clients for the two wire
-formats there are (OpenAI-compatible chat and Anthropic's Messages API), and `packages/runtime`
-hands them to pipedog's services in place of the SDK clients those would build. pipedog's
-`@pipedog/openai` and `@pipedog/anthropic` still install the `openai` and `@anthropic-ai/sdk`
-packages, for their types; no request goes through them.
+formats there are (OpenAI-compatible chat and Anthropic's Messages API), which the turn engine's
+minds call, and a call's recognizers, voices and realtime sessions are fetch and WebSocket clients
+of their own (`stt/`, `speech/stream/`, `realtime/`).
 
 ## Roles
 
@@ -136,7 +135,7 @@ the response carries what the request cost; on a maker's API the catalog's price
   and the server-side fallback beta with `fallbacks: "default"` on the models that offer one. It
   sends no `temperature`, `top_p` or `top_k`, which the current models refuse.
 - **Every OpenAI-compatible chat API** goes through `OpenAIChatClient`, a fetch-based stand-in
-  for the slice of the OpenAI SDK pipedog calls. A model's `live` fields in the catalog
+  for the slice of the OpenAI SDK a mind needs. A model's `live` fields in the catalog
   (`reasoning_effort`, `enable_thinking`) keep thinking low in a call, where the first word's
   latency is what the viewer hears. Gemini's API takes one system message, so later ones are sent
   as user messages, and recalled memories go as a `developer` message only to OpenAI's own API,
@@ -153,7 +152,7 @@ the response carries what the request cost; on a maker's API the catalog's price
 
 Fish Audio, ElevenLabs, Cartesia and Soniox stream speech over a WebSocket that stays open for the
 call; MiniMax and OpenAI answer one HTTP request per sentence (`transport` in the catalog). Both
-kinds are supported, and both are interruptible: when the viewer talks over her, the pipeline
+kinds are supported, and both are interruptible: when the viewer talks over her, the call
 cancels the reply, which aborts a request in flight and drops the audio queued behind it, whatever
 the transport. What an HTTP voice costs instead:
 
@@ -173,9 +172,9 @@ voice model.
 ## Voice messages: batch speech
 
 A chat's voice messages ([chat.md](chat.md#voice-messages)) are made and heard whole, one request
-each, by `@eidolon/providers/speech-batch` (`packages/providers/src/speech/batch/`), without
-pipedog. A role's account, model and voice are the ones a call uses, and `speechSupport` says
-whether its provider offers each. Every voice provider in the catalog synthesizes and every
+each, by `@eidolon/providers/speech-batch` (`packages/providers/src/speech/batch/`). A role's
+account, model and voice are the ones a call uses, and `speechSupport` says whether its provider
+offers each. Every voice provider in the catalog synthesizes and every
 hearing provider transcribes; a provider added later without a client falls back to text, and to
 `409 missing-key` for the viewer's voice messages.
 
@@ -188,7 +187,7 @@ switched it for that reply.
 | Fish Audio | `POST {base}/v1/tts`, the model in the `model` header | `reference_id` | 128 kbps, `latency: "normal"` and no `normalize`, as a call asks; `drama-3` gets her cues as written |
 | OpenAI | `POST {base}/audio/speech` | `voice`, else `marin` | `response_format: "mp3"` |
 | ElevenLabs | `POST {base}/v1/text-to-speech/{voice}?output_format=mp3_44100_128` | in the path | `model_id` |
-| Cartesia | `POST {base}/tts/bytes` | `{ mode: "id", id }` | `Cartesia-Version: 2026-03-01`, as pipedog's service speaks; the spoken language |
+| Cartesia | `POST {base}/tts/bytes` | `{ mode: "id", id }` | `Cartesia-Version: 2026-03-01`, as pipedog's service spoke; the spoken language |
 | MiniMax | `POST {base}/t2a_v2?GroupId=…` with `stream: false` | `voice_setting.voice_id`, else `Calm_Woman` | The account needs a group id. The audio comes back as hex, its length in `extra_info`; a `200` whose `base_resp.status_code` isn't 0 is a refusal |
 | Soniox | `POST https://tts-rt.soniox.com/tts`, its own host | `voice`, else `Bryce` | The spoken language |
 
@@ -224,8 +223,9 @@ voice reply goes as text after either.
 A realtime model hears, thinks and speaks in one session: OpenAI's `gpt-realtime` models and
 xAI's Grok voice agent. `realtime.provider` turns one on for a persona, in place of the hearing,
 mind and voice roles, which stop applying until it is turned off. It is experimental: the session
-code is in `createRealtime` (`packages/runtime/src/session/services.ts`), but no call has been
-made through it with a live key.
+is `@eidolon/providers/realtime`, a call on it `runRealtimeCall`
+([voice-engine.md](voice-engine.md#realtime)), but no call has been made through it with a live
+key.
 
 In the local app, the studio's Mind section opens with **How she talks**, a choice between three
 models and a realtime provider. Choosing one swaps the three-model card for the realtime model and

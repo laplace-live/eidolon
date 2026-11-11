@@ -1,6 +1,5 @@
-// What every client may count on in a call's RTVI messages, on either engine: I1–I10 of
-// docs/voice-engine.md, "RTVI". The twin harness checks them on every run, and
-// apps/bot/scripts/e2e-call.ts on every real call's timeline, so this file imports nothing.
+// What every client may count on in a call's RTVI messages: I1–I10 of docs/voice-engine.md,
+// "RTVI". e2e-call.ts checks them on every real call's timeline.
 
 /** One RTVI message as it crossed the wire: its type and data. */
 export interface WireMessage {
@@ -16,8 +15,8 @@ export interface Violation {
 }
 
 export interface InvariantOptions {
-  /** I6 holds on the native engine only: pipedog's Fish service never stops its audio context. */
-  readonly native: boolean;
+  /** Skip I6: pipedog, which ran calls before eidolon's own engine, never stopped Fish's audio. */
+  readonly pipedog?: boolean;
   /**
    * A realtime model's call: its server ends the caller's turn on its own VAD and answers it
    * before transcribing it, so a turn's final transcript comes after its user-stopped-speaking
@@ -26,7 +25,7 @@ export interface InvariantOptions {
   readonly realtime?: boolean;
 }
 
-function field(data: unknown, key: string): unknown {
+export function field(data: unknown, key: string): unknown {
   return typeof data === "object" && data !== null
     ? (data as Record<string, unknown>)[key]
     : undefined;
@@ -42,9 +41,9 @@ const isFinalTranscription = (m: WireMessage) =>
 /** Every violation of I1–I10 in `messages`, the call's RTVI messages from the bot in order. */
 export function checkInvariants(
   messages: readonly WireMessage[],
-  options: InvariantOptions,
+  options: InvariantOptions = {},
 ): Violation[] {
-  // pipedog's metrics interleave with everything, and no client reads them (D3).
+  // The pipedog engine's metrics interleave with everything, and no client reads them (D3).
   const seq = messages
     .map((message, index) => ({ message, index }))
     .filter(({ message }) => message.type !== "metrics");
@@ -93,7 +92,7 @@ export function checkInvariants(
       llm = index;
     } else if (message.type === "bot-llm-stopped") llm = null;
     else if (message.type === "bot-tts-started") {
-      if (options.native && tts !== null) {
+      if (!options.pipedog && tts !== null) {
         violate("I6", index, "a second bot-tts-started before bot-tts-stopped");
       }
       tts = index;
@@ -103,7 +102,7 @@ export function checkInvariants(
     }
   }
   if (llm !== null) violate("I5", llm, "bot-llm-started never stopped");
-  if (options.native && tts !== null) violate("I6", tts, "bot-tts-started never stopped");
+  if (!options.pipedog && tts !== null) violate("I6", tts, "bot-tts-started never stopped");
 
   // I7: each segment's "new" comes before its "in-progress" or "completed", and it completes once
   // unless a barge-in cut it or it won't be spoken (`will_be_spoken: false`, its "new" alone).

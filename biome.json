@@ -32,10 +32,6 @@
           "options": {
             "patterns": [
               {
-                "group": ["@pipedog/*", "@pipedog/**"],
-                "message": "Only packages/runtime may import pipedog; expose what you need through @eidolon/runtime."
-              },
-              {
                 "group": [
                   "@eidolon/voice",
                   "@eidolon/voice/**",
@@ -86,10 +82,6 @@
                     "message": "The bot image skips builds for apps/cli changes (docker.yml); only apps/bot/src/local, which the image leaves out, may import it."
                   },
                   {
-                    "group": ["@pipedog/*", "@pipedog/**"],
-                    "message": "Only packages/runtime may import pipedog; expose what you need through @eidolon/runtime."
-                  },
-                  {
                     "group": [
                       "@eidolon/voice",
                       "@eidolon/voice/**",
@@ -121,10 +113,6 @@
                   {
                     "group": ["@eidolon/cli", "@eidolon/cli/**"],
                     "message": "The bot image skips builds for apps/cli changes (docker.yml); only apps/bot/src/local, which the image leaves out, may import it."
-                  },
-                  {
-                    "group": ["@pipedog/*", "@pipedog/**"],
-                    "message": "Only packages/runtime may import pipedog; expose what you need through @eidolon/runtime."
                   },
                   {
                     "group": [
@@ -194,7 +182,7 @@
                     "message": "Browsers import @eidolon/chat: only src/jsonl.ts, its own subpath export, may use Bun or Node."
                   },
                   {
-                    "group": ["@eidolon/*", "@eidolon/**", "@pipedog/*", "@pipedog/**"],
+                    "group": ["@eidolon/*", "@eidolon/**"],
                     "message": "Browsers import @eidolon/chat, so it imports no other package."
                   }
                 ]
@@ -237,10 +225,6 @@
                   {
                     "group": ["**/src/**", "!**/bot/src/local/api.ts"],
                     "message": "The web app reaches server code only through the wire types in apps/bot/src/local/api.ts, with `import type`."
-                  },
-                  {
-                    "group": ["@pipedog/*", "@pipedog/**"],
-                    "message": "Only packages/runtime may import pipedog; expose what you need through @eidolon/runtime."
                   }
                 ]
               }

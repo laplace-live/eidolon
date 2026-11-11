@@ -6,7 +6,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { type Browser, chromium, type Page } from "playwright-core";
-import { checkInvariants } from "../../../packages/runtime/test/parity/invariants.ts";
+import { checkInvariants, field } from "./e2e/invariants.ts";
 import {
   type ConnectResult,
   type EntrySource,
@@ -42,7 +42,7 @@ const USAGE = `usage: bun apps/bot/scripts/e2e-call.ts [--text "<question>" | --
   --barge-in [<wav>] type the default question, then talk over her reply with <wav>; without <wav>,
                      synthesize "${BARGE_IN}"
   --engine <name>    pipedog or native: the engine the bot runs, for the report and e2e-compare;
-                     native is also held to I6 (every bot-tts-started is stopped)
+                     every bot but pipedog's is held to I6 (every bot-tts-started is stopped)
   --base-url <url>   bot origin (default http://localhost:7860)
   --out <file>       full JSON timeline (default: a new file in the OS temp dir)
   --timeout-ms <n>   budget for the whole run (default 90000)
@@ -263,12 +263,6 @@ const BOT_ACTIVITY = new Set([
   "llmFunctionCallInProgress",
   "llmFunctionCallStopped",
 ]);
-
-function field(data: unknown, key: string): unknown {
-  return typeof data === "object" && data !== null
-    ? (data as Record<string, unknown>)[key]
-    : undefined;
-}
 
 /** Collects the timeline and follows the bot's turn state from the RTVI events in it. */
 class Recorder {
@@ -808,7 +802,7 @@ function analyze(
   const wire = recorder.timeline
     .filter((e) => e.source === "wire")
     .map((e) => ({ type: e.event, data: e.data }));
-  const invariants = checkInvariants(wire, { native: options.engine === "native" });
+  const invariants = checkInvariants(wire, { pipedog: options.engine === "pipedog" });
   checks.push({
     name: "rtvi invariants",
     pass: wire.length > 0 && invariants.length === 0,
@@ -816,7 +810,7 @@ function analyze(
       wire.length === 0
         ? "no RTVI message captured off the data channel"
         : invariants.length === 0
-          ? `I1-I10 hold over ${wire.length} messages${options.engine === "native" ? "" : " (I6 for --engine native only)"}`
+          ? `I1-I10 hold over ${wire.length} messages${options.engine === "pipedog" ? " (I6 aside, for pipedog)" : ""}`
           : invariants
               .slice(0, 3)
               .map((v) => `${v.id} at ${v.index}: ${v.detail}`)

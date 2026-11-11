@@ -32,6 +32,7 @@ import {
   sourceFolder,
   sourcesDir,
   templatesDir,
+  voiceModelsDir,
   webDist,
   zonedClock,
 } from "../src/index.ts";
@@ -258,6 +259,7 @@ describe("flags, raw values and paths", () => {
       cli: cliEntry(),
       jieba: jiebaDir(),
       resampler: resamplerDir(),
+      models: voiceModelsDir(),
     });
     expect(shipped()).toEqual({
       templates: join(PROJECT_ROOT, "personas"),
@@ -266,6 +268,7 @@ describe("flags, raw values and paths", () => {
       cli: join(PROJECT_ROOT, "apps/cli/src/main.ts"),
       jieba: join(PROJECT_ROOT, "packages/retrieval/data/jieba"),
       resampler: join(PROJECT_ROOT, "packages/voice/src/dsp/resampler/wasm"),
+      models: join(PROJECT_ROOT, "packages/voice/models"),
     });
     for (const file of [
       join(templatesDir(), "milky-green", "prompt.md"),
@@ -273,6 +276,8 @@ describe("flags, raw values and paths", () => {
       cliEntry(),
       join(jiebaDir(), "dict.txt"),
       join(resamplerDir(), "resampler.wasm"),
+      join(voiceModelsDir(), "silero_vad.onnx"),
+      join(voiceModelsDir(), "smart-turn-v3.2-cpu.onnx"),
     ]) {
       expect([file, existsSync(file)]).toEqual([file, true]);
     }
@@ -287,6 +292,7 @@ describe("flags, raw values and paths", () => {
       cli: "/opt/eidolon/dist/cli.js",
       jieba: "/opt/eidolon/data/jieba",
       resampler: "/opt/eidolon/data/resampler",
+      models: "/opt/eidolon/data/models",
     });
     expect(personaTemplateDir("milky-green")).toBe("/opt/eidolon/personas/milky-green");
     // What a user configures never resolves into the package, which an update replaces.

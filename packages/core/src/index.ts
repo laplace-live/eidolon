@@ -1,13 +1,13 @@
-// The extension contracts. Context providers and LLM tools implement these; runtime adapts them
-// to the voice pipeline, so no implementation sees the pipeline framework.
+// The extension contracts. Context providers and LLM tools implement these; @eidolon/engine's turn
+// runs them, in a chat and in a call alike.
 
-/** The session's LLM conversation, adapted by runtime from the pipeline's context. */
+/** A turn's LLM conversation, as the engine keeps it. */
 export interface ConversationContext {
   /** The live message list. Messages are OpenAI-shaped objects, but check before trusting it. */
   getMessages(): unknown[];
   setMessages(messages: unknown[]): void;
   /**
-   * Advertise every registered tool except `names`. `[]` restores the full set. Runtime owns
+   * Advertise every registered tool except `names`. `[]` restores the full set. The engine owns
    * the full list, so callers never need to snapshot it.
    */
   setHiddenTools(names: readonly string[]): void;
@@ -18,7 +18,7 @@ export interface ConversationContext {
   readonly turn?: string;
 }
 
-/** Per-frame metadata shared down the pipeline, e.g. the retrieval gate's decision. */
+/** A turn's metadata, shared by its providers, e.g. the retrieval gate's decision. */
 export type FrameMetadata = Record<string, unknown>;
 
 export interface ContextTurn {
@@ -33,8 +33,9 @@ export interface ContextTurn {
 /** Enriches the LLM context before each inference: RAG blocks, recalled memories. */
 export interface ContextProvider {
   /**
-   * Rejecting reports a non-fatal error (runtime pushes `errorMessage(e)` upstream) and the
-   * turn continues without this provider. An aborted turn rejects with `signal.reason`.
+   * Rejecting reports a non-fatal error (the turn logs `errorMessage(e)`, and a call shows it as a
+   * notice) and the turn continues without this provider. An aborted turn rejects with
+   * `signal.reason`.
    */
   onContext(turn: ContextTurn): Promise<void>;
   /** The error text for a rejection. */
@@ -64,7 +65,7 @@ export interface ToolCall {
   readonly signal: AbortSignal;
 }
 
-/** Side effects a tool may cause. Each resolves once its frame is queued in the pipeline. */
+/** Side effects a tool may cause. */
 export interface ToolEffects {
   /** Switch the TTS voice (the TTS provider's voice id) for the rest of the session. */
   switchVoice(referenceId: string): Promise<void>;
@@ -75,7 +76,7 @@ export interface ToolEffects {
 export interface LlmTool {
   readonly schema: ToolSchema;
   readonly cancelOnInterruption: boolean;
-  /** `null` uses the LLM service's default function-call timeout. */
+  /** `null` runs the tool with no timeout. */
   readonly timeoutSecs: number | null;
   /**
    * Resolves with the result the LLM sees. Awaited directly inside the function-call task, so

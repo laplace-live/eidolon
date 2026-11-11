@@ -1,13 +1,11 @@
-// The switch between the engines: how EIDOLON_VOICE_ENGINE reads, which transport answers each
-// engine's offers, and a native call's start, on a fake transport with fake providers and the real
-// hearing models.
+// The signalling server's peers, and a call's start, on a fake transport with fake providers and the
+// real hearing models.
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import type { AllowedOffer } from "@eidolon/access";
 import { activePersona, pyRepr } from "@eidolon/config";
 import type { CallTurnRequest, EngineDeps, Mind } from "@eidolon/engine";
-import type { CallDeps } from "@eidolon/voice";
+import { type CallDeps, voiceModels } from "@eidolon/voice";
 import { Peer } from "@eidolon/webrtc";
-import { SmallWebRTCConnection } from "@pipedog/transport-smallwebrtc/connection";
 import {
   FakeSpeech,
   FakeStt,
@@ -16,9 +14,8 @@ import {
   settle,
 } from "../../../voice/test/call/harness.ts";
 import { FakeClock } from "../../../voice/test/input/clock.ts";
-import { voiceModels } from "../../src/audio.ts";
 import { createSignallingServer } from "../../src/index.ts";
-import { runNativeSafely, voiceEngineFromEnv } from "../../src/native/engine.ts";
+import { runNativeSafely } from "../../src/native/engine.ts";
 import { BOT_ABOUT } from "../../src/rtvi.ts";
 import { captureLogs, type LogCapture, admission as offered, setEnv, until } from "../support.ts";
 
@@ -27,7 +24,6 @@ let restoreEnv: () => void;
 beforeEach(() => {
   logs = captureLogs();
   restoreEnv = setEnv({
-    EIDOLON_VOICE_ENGINE: undefined,
     REALTIME_PROVIDER: undefined,
     STT_PROVIDER: undefined,
     TTS_PROVIDER: undefined,
@@ -38,91 +34,31 @@ afterEach(() => {
   logs.restore();
 });
 
-describe("voiceEngineFromEnv", () => {
-  test("unset and blank are pipedog, without a word", () => {
-    expect(voiceEngineFromEnv()).toBe("pipedog");
-    setEnv({ EIDOLON_VOICE_ENGINE: "" });
-    expect(voiceEngineFromEnv()).toBe("pipedog");
-    expect(logs.messages("WARNING")).toEqual([]);
-  });
-
-  test("pipedog and native name themselves", () => {
-    setEnv({ EIDOLON_VOICE_ENGINE: "pipedog" });
-    expect(voiceEngineFromEnv()).toBe("pipedog");
-    setEnv({ EIDOLON_VOICE_ENGINE: "native" });
-    expect(voiceEngineFromEnv()).toBe("native");
-    expect(logs.messages("WARNING")).toEqual([]);
-  });
-
-  test("any other value runs pipedog, and says so once", () => {
-    setEnv({ EIDOLON_VOICE_ENGINE: "Native" });
-    expect(voiceEngineFromEnv()).toBe("pipedog");
-    expect(voiceEngineFromEnv()).toBe("pipedog");
-    expect(logs.messages("WARNING")).toEqual([
-      "EIDOLON_VOICE_ENGINE='Native' is neither pipedog nor native; calls run on pipedog",
-    ]);
-  });
-
-  test("createSignallingServer reads it once, as it is made", async () => {
-    setEnv({ EIDOLON_VOICE_ENGINE: "nativ" });
-    const signalling = createSignallingServer({
-      ice: { serverPlan: async () => ({ iceServers: [], relayOnly: false, turnUrl: null }) },
-    });
-    setEnv({ EIDOLON_VOICE_ENGINE: "pipdog" });
-    expect((await signalling.patch("not json")).status).toBe(400);
-    expect(await signalling.offer({ allowed: true, body: null } as AllowedOffer)).toMatchObject({
-      status: 400,
-    });
-    await signalling.close();
-    expect(logs.messages("WARNING")).toEqual([
-      "EIDOLON_VOICE_ENGINE='nativ' is neither pipedog nor native; calls run on pipedog",
-    ]);
-  });
-});
-
 describe("createSignallingServer", () => {
-  /** Which transport's peer answered an offer to a server made under `engine`. */
-  async function answeredBy(engine: string | undefined): Promise<string[]> {
-    const built: string[] = [];
+  test("every offer is a call on @eidolon/webrtc's peers", async () => {
     const answer = { sdp: "v=0\r\n", type: "answer" };
+    const initialize = spyOn(Peer.prototype, "initialize").mockImplementation(async () => {});
     const spies = [
-      spyOn(SmallWebRTCConnection.prototype, "initialize").mockImplementation(async function (
-        this: SmallWebRTCConnection,
-      ) {
-        built.push("pipedog");
-        (this as unknown as { _answer: unknown })._answer = answer;
-      }),
-      spyOn(Peer.prototype, "initialize").mockImplementation(async () => {
-        built.push("webrtc");
-      }),
+      initialize,
       spyOn(Peer.prototype, "getAnswer").mockImplementation(function (this: Peer) {
         return { ...answer, pc_id: this.pcId };
       }),
     ];
-    setEnv({ EIDOLON_VOICE_ENGINE: engine });
     const signalling = createSignallingServer({
       ice: { serverPlan: async () => ({ iceServers: [], relayOnly: false, turnUrl: null }) },
     });
     try {
-      const offer = offered({ sdp: "v=0", type: "offer" });
-      const result = await signalling.offer(offer);
+      const result = await signalling.offer(offered({ sdp: "v=0", type: "offer" }));
       expect(result.status).toBe(200);
-      // Both answer in the same shape.
       expect(Object.keys(result.body as object)).toEqual(["sdp", "type", "pc_id"]);
+      expect(initialize).toHaveBeenCalledTimes(1);
+      expect(await signalling.offer({ allowed: true, body: null } as AllowedOffer)).toMatchObject({
+        status: 400,
+      });
     } finally {
       for (const spy of spies) spy.mockRestore();
       await signalling.close();
     }
-    return built;
-  }
-
-  test("under native, every offer is a native call on @eidolon/webrtc's peers", async () => {
-    expect(await answeredBy("native")).toEqual(["webrtc"]);
-  });
-
-  test("under pipedog, unset or not, every offer is a pipedog session on pipedog's", async () => {
-    expect(await answeredBy("pipedog")).toEqual(["pipedog"]);
-    expect(await answeredBy(undefined)).toEqual(["pipedog"]);
   });
 });
 
@@ -158,7 +94,7 @@ describe("runNativeSafely", () => {
     requestData: { audioQuality: "medium" },
   });
 
-  test("logs a session's start as pipedog does, and greets the viewer as the active persona", async () => {
+  test("logs a session's start, and greets the viewer as the active persona", async () => {
     const s = setup();
     const running = runNativeSafely(s.transport, admission(null), s.deps);
     await until(() => s.transport.connected, 10_000);

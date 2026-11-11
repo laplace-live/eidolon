@@ -1,6 +1,6 @@
-// A local call inside a chat on the native voice engine: the runner's ChatCall, unchanged, run on
-// the native loop over a fake transport, recognizer and voice, with her turns scripted. She opens
-// on her view of the chat, and the runner stores each line and photo between the call's ends.
+// A local call inside a chat: the runner's ChatCall run on the voice loop over a fake transport,
+// recognizer and voice, with her turns scripted. She opens on her view of the chat, and the runner
+// stores each line and photo between the call's ends.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";

@@ -56,7 +56,9 @@ export interface PersonaFactsOptions {
 
 /** The persona-facts RAG provider. */
 export class PersonaFacts implements ContextProvider {
-  /** Rejects when the facts index can't be opened; runtime logs `Persona facts disabled: ${e}`. */
+  /**
+   * Rejects when the facts index can't be opened; the engine logs `Persona facts disabled: ${e}`.
+   */
   static async open(options: { dbPath: string }): Promise<PersonaFacts> {
     const retriever = await openPersonaFactsRetriever(options.dbPath);
     const facts = new PersonaFacts({ retriever });
