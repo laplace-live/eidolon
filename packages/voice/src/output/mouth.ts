@@ -290,6 +290,9 @@ class Reply implements SpokenReply {
           break;
         }
         case "seg-end":
+          // The resampler holds the segment's last samples: queued after its end, they would
+          // outlast her turn, which ends there.
+          speaker.enqueue(this.#tag(item.seg), voiced.flush());
           speaker.markSegEnd(this.#tag(item.seg));
           break;
         case "end":
@@ -305,9 +308,11 @@ class Reply implements SpokenReply {
   /** All of the first utterance's audio is queued, or its voice failed with `error`. */
   #finish(voiced: Voiced, error: string | null): void {
     this.#voices.shift();
-    const tail = voiced.close(error !== null);
+    if (error === null && voiced.last !== null) {
+      this.#o.speaker.enqueue(this.#tag(voiced.last), voiced.flush());
+    }
+    voiced.close();
     if (error !== null) this.#note({ type: "tts-error", message: error });
-    else if (voiced.last !== null) this.#o.speaker.enqueue(this.#tag(voiced.last), tail);
     this.#settle();
   }
 
@@ -395,18 +400,19 @@ class Voiced {
     return this.#resampler === null ? pcm : this.#resampler.processSamples(pcm);
   }
 
-  /** Stops its stall timer and frees its resampler: the audio the resampler held, unless `drop`. */
-  close(drop: boolean): Int16Array {
+  flush(): Int16Array {
+    return this.#resampler === null ? new Int16Array(0) : this.#resampler.flushSamples();
+  }
+
+  /** Stops its stall timer and frees its resampler. */
+  close(): void {
     this.#stopStall();
-    const tail =
-      this.#resampler === null || drop ? new Int16Array(0) : this.#resampler.flushSamples();
     this.#resampler?.destroy();
-    return tail;
   }
 
   cancel(): void {
     this.utterance.cancel();
-    this.close(true);
+    this.close();
   }
 
   /** The rule the speech clients share: owed audio that doesn't come for this long has stalled. */

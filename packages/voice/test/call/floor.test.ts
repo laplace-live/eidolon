@@ -337,6 +337,39 @@ describe("her reply (rows 9-15, 18-22)", () => {
     expect(call.events().at(-1)).toMatchObject({ text: "第一句。第二句。" });
   });
 
+  test("row 20: a voice at 44.1 kHz stops speaking when her last sentence has played", async () => {
+    const call = startCall({ speechRate: 44_100 });
+    await call.ready();
+    await call.says("你好");
+    call.turn.round("第一句。第二句。");
+    await settle();
+    const ending = call.turn.end();
+    await settle();
+    // Fish's sequence, sized to end her last sentence late in a 10 ms frame: the 138 samples the
+    // resampler holds can't follow it in that frame.
+    call.utterance().pcm(1, 4410);
+    call.utterance().segEnd(1);
+    call.utterance().pcm(2, 4000);
+    call.utterance().segEnd(2);
+    call.utterance().finish();
+    await settle();
+    call.news();
+    // A frame per play, as the transport pulls: within one play, her turn can't end between the
+    // last segment's end and `drained`.
+    for (let frame = 0; frame < 20; frame++) await call.play(240);
+    await ending;
+    expect(call.news()).toEqual([
+      "bot-started-speaking",
+      "bot-output new 第一句。",
+      "bot-output completed 第一句。",
+      "bot-tts-text 第一句。",
+      "bot-output new 第二句。",
+      "bot-output completed 第二句。",
+      "bot-tts-text 第二句。",
+      "bot-stopped-speaking",
+    ]);
+  });
+
   test("row 21: drained mid-reply, she stops speaking after 3 s, and starts again", async () => {
     const call = startCall();
     await call.ready();
