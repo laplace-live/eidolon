@@ -8,30 +8,34 @@ const lively: VoiceStyle = { name: "lively", voiceId: "l", hint: "" };
 const own = [gentle, naiHei];
 
 describe("nameProblem", () => {
-  test("a lowercase letter, then letters, digits or _, and never her own voice's", () => {
-    expect(nameProblem("lively", own, null)).toBeNull();
-    expect(nameProblem("calm_2", own, null)).toBeNull();
-    expect(nameProblem("", own, null)).toBe("empty");
-    expect(nameProblem("default", own, null)).toBe("default");
+  test("a new name: a lowercase letter, then letters, digits or _, and never her own voice's", () => {
+    expect(nameProblem("lively", own, "")).toBeNull();
+    expect(nameProblem("calm_2", own, "")).toBeNull();
+    expect(nameProblem("", own, "")).toBe("empty");
+    expect(nameProblem("default", own, "")).toBe("default");
     for (const name of ["Gentle", "2calm", "_x", "nai-hei", "温柔", "a".repeat(33)]) {
-      expect(nameProblem(name, own, null), name).toBe("pattern");
+      expect(nameProblem(name, own, ""), name).toBe("pattern");
     }
   });
 
   test("another style's name is taken; the one being edited keeps its own", () => {
-    expect(nameProblem("gentle", own, null)).toBe("taken");
+    expect(nameProblem("gentle", own, "")).toBe("taken");
     expect(nameProblem("gentle", own, "nai_hei")).toBe("taken");
     expect(nameProblem("gentle", own, "gentle")).toBeNull();
+    expect(nameProblem("", own, "gentle")).toBe("empty");
   });
 
-  test("a name a hand-written file gave a style stays hers while she keeps it", () => {
+  test("a name a hand-written file or a variable gave a style stays while it is kept", () => {
     const written = [
       { name: "nai-hei", voiceId: "n", hint: "" },
       { ...gentle, name: "default" },
     ];
     expect(nameProblem("nai-hei", written, "nai-hei")).toBeNull();
     expect(nameProblem("default", written, "default")).toBeNull();
-    expect(nameProblem("nai-hei", written, null)).toBe("pattern");
+    expect(nameProblem("nai-hei", written, "")).toBe("pattern");
+    // The environment's TTS_VOICE_ID_2D, customized: not hers yet, and named as it was.
+    expect(nameProblem("2d", own, "2d")).toBeNull();
+    expect(nameProblem("2e", own, "2d")).toBe("pattern");
   });
 });
 

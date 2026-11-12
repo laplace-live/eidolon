@@ -45,6 +45,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { Textarea } from "@/components/ui/textarea";
 import { VoicePicker } from "@/components/voice-picker";
 import {
   call,
@@ -261,7 +262,7 @@ function StyleForm({
   const [voiceId, setVoiceId] = useState(draft.style.voiceId);
   const [showErrors, setShowErrors] = useState(false);
   const typed = name.trim();
-  const problem = nameProblem(typed, styles.own, draft.editing);
+  const problem = nameProblem(typed, styles.own, draft.style.name);
   // An empty name waits for Save; anything else wrong with it shows as it is typed.
   const shownProblem = problem === "empty" && !showErrors ? null : problem;
   const noVoice = voiceId.trim() === "";
@@ -319,8 +320,10 @@ function StyleForm({
           </Field>
           <Field>
             <FieldLabel htmlFor={ids.hint}>{t`Trigger Words`}</FieldLabel>
-            <Input
+            {/* Not an Input: a hint from a hand-written file may hold line breaks, which one drops. */}
+            <Textarea
               id={ids.hint}
+              rows={2}
               value={hint}
               maxLength={200}
               placeholder={builtIn ?? t`Such as 温柔/轻柔/柔一点`}

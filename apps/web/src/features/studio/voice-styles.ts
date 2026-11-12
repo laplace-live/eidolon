@@ -10,16 +10,17 @@ const DEFAULT_STYLE = "default";
 export type NameProblem = "empty" | "default" | "pattern" | "taken";
 
 /**
- * What keeps `name` from naming a style of hers, `editing` being the one it renames; null if
- * none. A style keeps whatever name it has, which a hand-written persona.yaml may have given it.
+ * What keeps `name` from naming a style of hers; null if nothing. `kept` is the name the style
+ * opened with, hers or the environment's, which it keeps whatever it is: a hand-written
+ * persona.yaml or a variable such as TTS_VOICE_ID_2D may have given it.
  */
 export function nameProblem(
   name: string,
   own: readonly VoiceStyle[],
-  editing: string | null,
+  kept: string,
 ): NameProblem | null {
-  if (name === editing) return null;
   if (name === "") return "empty";
+  if (name === kept) return null;
   if (name === DEFAULT_STYLE) return "default";
   if (!STYLE_NAME.test(name)) return "pattern";
   return own.some((style) => style.name === name) ? "taken" : null;

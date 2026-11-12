@@ -241,8 +241,12 @@ const VOICE_REPLY = "[sighing] 好吧好吧，就说一句哦。";
 const VOICE_SPOKEN = "好吧好吧，就说一句哦。";
 /** How long the fake voice speaks. */
 const SPEECH_SECONDS = 1;
-/** The voice style the studio walk adds and removes. */
-const STYLE = { name: "nai_hei", hint: "奶黑/黑化", voiceId: "0123456789abcdef0123456789abcdef" };
+/** The voice style the studio walk adds and removes; its hint keeps its line break. */
+const STYLE = {
+  name: "nai_hei",
+  hint: "奶黑/黑化\n腹黑一点",
+  voiceId: "0123456789abcdef0123456789abcdef",
+};
 /** What the viewer types before calling her, and her text answer. */
 const CALL_TOLD = "我家的猫叫团子。";
 const CALL_TOLD_REPLY = "团子这名字好可爱！";
