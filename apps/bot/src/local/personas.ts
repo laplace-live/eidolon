@@ -47,6 +47,7 @@ import type {
   PersonaIdentityFields,
   ReferenceImage,
   ReferenceKind,
+  VoiceStyle,
 } from "./api.ts";
 import { localError } from "./responses.ts";
 import {
@@ -218,6 +219,17 @@ export function writeIdentityFields(id: string, fields: IdentityUpdate): void {
       const value = fields[key];
       if (value !== undefined) setDotted(tree, `identity.${key}`, value === "" ? null : value);
     }
+  });
+}
+
+/** Replaces her voice.styles, in order: a style without a hint as its bare voice id. */
+export function writeVoiceStyles(id: string, styles: readonly VoiceStyle[]): void {
+  const entries = styles.map(({ name, voiceId, hint }) => [
+    name,
+    hint === "" ? voiceId : { voiceId, hint },
+  ]);
+  editPersonaYaml(id, (tree) => {
+    setDotted(tree, "voice.styles", entries.length > 0 ? Object.fromEntries(entries) : null);
   });
 }
 

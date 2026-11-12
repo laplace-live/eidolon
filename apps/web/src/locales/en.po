@@ -14,6 +14,10 @@ msgctxt "list separator"
 msgid ", "
 msgstr ", "
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "“default” is her own voice: pick another name."
+msgstr "“default” is her own voice: pick another name."
+
 #: src/features/chats/chat-log.tsx
 msgid "(on the call)"
 msgstr "(on the call)"
@@ -401,7 +405,7 @@ msgstr "2024-05-01 她说……"
 msgid "30 Days"
 msgstr "30 Days"
 
-#: src/features/studio/voice-section.tsx
+#: src/features/studio/voice-by-id.tsx
 msgid "32-character voice ID"
 msgstr "32-character voice ID"
 
@@ -449,7 +453,7 @@ msgstr "A Chinese VTuber who runs a little flower shop with her cat. She comes w
 msgid "A cookies.txt for yt-dlp, which writes the merged cookies back into it."
 msgstr "A cookies.txt for yt-dlp, which writes the merged cookies back into it."
 
-#: src/features/studio/voice-section.tsx
+#: src/features/studio/voice-by-id.tsx
 msgid "A Fish voice ID is 32 characters of 0–9 and a–f."
 msgstr "A Fish voice ID is 32 characters of 0–9 and a–f."
 
@@ -511,6 +515,10 @@ msgstr "A service Eidolon relies on failed. Try again later."
 msgid "A table built with another embedding model or size than the settings now name can't be searched. Run its job again."
 msgstr "A table built with another embedding model or size than the settings now name can't be searched. Run its job again."
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "A voice she switches to when you ask for it. Name it, say how you'd ask, and pick its voice."
+msgstr "A voice she switches to when you ask for it. Name it, say how you'd ask, and pick its voice."
+
 #: src/features/studio/add-videos.tsx
 msgid "About {duration} in all."
 msgstr "About {duration} in all."
@@ -547,6 +555,10 @@ msgstr "Add a picture of someone she can take a selfie with, or drop one here."
 msgid "Add a Provider"
 msgstr "Add a Provider"
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "Add a Voice Style"
+msgstr "Add a Voice Style"
+
 #: src/features/settings/account-dialog.tsx
 msgid "Add Account"
 msgstr "Add Account"
@@ -573,6 +585,10 @@ msgstr "Add Keys"
 msgid "Add links above, and each video is listed here with where it stands."
 msgstr "Add links above, and each video is listed here with where it stands."
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "Add one, then ask her for it in a call."
+msgstr "Add one, then ask her for it in a call."
+
 #: src/features/home/readiness-labels.ts
 msgid "Add Outfits"
 msgstr "Add Outfits"
@@ -588,6 +604,10 @@ msgstr "Add Pictures"
 #: src/features/settings/accounts-card.tsx
 msgid "Add Provider"
 msgstr "Add Provider"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "Add Style"
+msgstr "Add Style"
 
 #: src/features/settings/accounts-card.tsx
 msgid "Add the providers you have keys for, then pick them in a persona's studio."
@@ -807,6 +827,10 @@ msgstr "Built in"
 msgid "Built with other embedding settings: build it again."
 msgstr "Built with other embedding settings: build it again."
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "Built-in trigger words: {words}"
+msgstr "Built-in trigger words: {words}"
+
 #: src/features/home/readiness-labels.ts
 msgid "Built, but the broadcast overview isn't."
 msgstr "Built, but the broadcast overview isn't."
@@ -914,6 +938,7 @@ msgstr "Can't reach Eidolon. Check that it's still running in the terminal."
 #: src/features/setup/new-persona.tsx
 #: src/features/studio/references-section.tsx
 #: src/features/studio/video-table.tsx
+#: src/features/studio/voice-styles-card.tsx
 msgid "Cancel"
 msgstr "Cancel"
 
@@ -1188,6 +1213,10 @@ msgstr "Credit left: {amount}"
 msgid "Current voice:"
 msgstr "Current voice:"
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "Customize"
+msgstr "Customize"
+
 #: src/features/chats/chat-log.tsx
 msgid "Cut off"
 msgstr "Cut off"
@@ -1343,8 +1372,13 @@ msgstr "Edit"
 #: src/features/settings/account-dialog.tsx
 #: src/features/settings/accounts-card.tsx
 #: src/features/studio/knowledge-section.tsx
+#: src/features/studio/voice-styles-card.tsx
 msgid "Edit {name}"
 msgstr "Edit {name}"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "Edit the {name} Style"
+msgstr "Edit the {name} Style"
 
 #: src/features/home/route.tsx
 msgid "Eidolon {version}"
@@ -1618,7 +1652,7 @@ msgstr "Fish has this voice"
 msgid "Fix the highlighted values first."
 msgstr "Fix the highlighted values first."
 
-#: src/features/studio/voice-section.tsx
+#: src/features/studio/voice-by-id.tsx
 msgid "For a voice the search can't find, such as a private one of your Fish account: copy its ID from its page on fish.audio."
 msgstr "For a voice the search can't find, such as a private one of your Fish account: copy its ID from its page on fish.audio."
 
@@ -1658,6 +1692,10 @@ msgstr "Free: only yt-dlp runs."
 msgid "Friends"
 msgstr "Friends"
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "From <0>{variable}</0> in the environment."
+msgstr "From <0>{variable}</0> in the environment."
+
 #: src/components/settings-form/account-key-field.tsx
 #: src/features/settings/accounts-card.tsx
 msgid "From the environment"
@@ -1678,6 +1716,10 @@ msgstr "Getting your microphone ready…"
 #: src/features/setup/done-step.tsx
 msgid "Give her facts, videos and outfits in the studio, so she knows who she is."
 msgstr "Give her facts, videos and outfits in the studio, so she knows who she is."
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "Give the style a name."
+msgstr "Give the style a name."
 
 #: src/features/studio/glossary-section.tsx
 #: src/features/studio/route.tsx
@@ -1993,6 +2035,10 @@ msgstr "It keeps running when you close this page."
 msgid "It may have been deleted. Pick another, or start a new one."
 msgstr "It may have been deleted. Pick another, or start a new one."
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "It replaces the environment's style by this name, which <0>{replacing}</0> sets."
+msgstr "It replaces the environment's style by this name, which <0>{replacing}</0> sets."
+
 #: src/features/jobs/parts.tsx
 msgid "It still hasn't stopped since you cancelled it. Force Stop ends it at once, without letting it finish what it is writing: an index it was building can be left half built, so run that job again afterwards."
 msgstr "It still hasn't stopped since you cancelled it. Force Stop ends it at once, without letting it finish what it is writing: an index it was building can be left half built, so run that job again afterwards."
@@ -2020,6 +2066,10 @@ msgstr "Its length is unknown until it downloads."
 #: src/features/chats/chat-menu.tsx
 msgid "Its messages and photos are deleted from this computer. What she remembers about you stays."
 msgstr "Its messages and photos are deleted from this computer. What she remembers about you stays."
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "Its Voice"
+msgstr "Its Voice"
 
 #: src/components/voice-picker/index.tsx
 msgid "Japanese"
@@ -2326,6 +2376,7 @@ msgid "Mute your mic"
 msgstr "Mute your mic"
 
 #: src/features/settings/account-dialog.tsx
+#: src/features/studio/voice-styles-card.tsx
 msgid "Name"
 msgstr "Name"
 
@@ -2482,6 +2533,10 @@ msgstr "No spending was recorded {during}. Calls, video jobs and MCP searches re
 msgid "No stream catalog yet."
 msgstr "No stream catalog yet."
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "No trigger words: the model goes by the name."
+msgstr "No trigger words: the model goes by the name."
+
 #: src/features/studio/video-table.tsx
 msgid "No upload date"
 msgstr "No upload date"
@@ -2489,6 +2544,10 @@ msgstr "No upload date"
 #: src/features/studio/video-table.tsx
 msgid "No videos yet"
 msgstr "No videos yet"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "No voice styles yet"
+msgstr "No voice styles yet"
 
 #: src/features/studio/voice-section.tsx
 msgid "No voice yet"
@@ -2618,6 +2677,10 @@ msgstr "One link per line."
 msgid "One model hears, thinks and speaks, in place of the three. Experimental."
 msgstr "One model hears, thinks and speaks, in place of the three. Experimental."
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "One of {name}'s voices, by its ID. Find one in its <0>voice library</0>."
+msgstr "One of {name}'s voices, by its ID. Find one in its <0>voice library</0>."
+
 #: src/features/studio/voice-section.tsx
 msgid "One of {provider}'s voices."
 msgstr "One of {provider}'s voices."
@@ -2710,7 +2773,7 @@ msgstr "Opus Bitrate: Lowest"
 msgid "Opus Bitrate: Medium"
 msgstr "Opus Bitrate: Medium"
 
-#: src/features/studio/voice-section.tsx
+#: src/features/studio/voice-by-id.tsx
 msgid "Or Use a Voice by Its ID"
 msgstr "Or Use a Voice by Its ID"
 
@@ -2797,6 +2860,10 @@ msgstr "Pick a chat, or start a new one"
 msgid "Pick a PNG, JPEG or WebP image."
 msgstr "Pick a PNG, JPEG or WebP image."
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "Pick a voice"
+msgstr "Pick a voice"
+
 #: src/features/call/call-notices.tsx
 #: src/features/call/call-page.tsx
 #: src/features/home/readiness-labels.ts
@@ -2812,6 +2879,10 @@ msgstr "Pick a voice for {name}"
 #: src/features/setup/new-persona.tsx
 msgid "Pick a voice for her."
 msgstr "Pick a voice for her."
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "Pick a voice for this style."
+msgstr "Pick a voice for this style."
 
 #: src/features/call/call-notices.tsx
 msgid "Pick her own voice: it overrides the environment's for her alone."
@@ -3044,6 +3115,7 @@ msgstr "Relative to her folder. Default prompt.md."
 
 #: src/features/setup/avatar-picker.tsx
 #: src/features/studio/identity-section.tsx
+#: src/features/studio/voice-styles-card.tsx
 msgid "Remove"
 msgstr "Remove"
 
@@ -3053,6 +3125,7 @@ msgid "Remove"
 msgstr "Remove"
 
 #: src/features/settings/accounts-card.tsx
+#: src/features/studio/voice-styles-card.tsx
 msgid "Remove {name}"
 msgstr "Remove {name}"
 
@@ -3077,6 +3150,10 @@ msgstr "Remove Key"
 msgid "Remove Persona"
 msgstr "Remove Persona"
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "Remove the {name} style?"
+msgstr "Remove the {name} style?"
+
 #: src/features/chats/chat-menu.tsx
 msgid "Rename"
 msgstr "Rename"
@@ -3092,6 +3169,10 @@ msgstr "Replace"
 #: src/features/studio/identity-section.tsx
 msgid "Replace Her Avatar"
 msgstr "Replace Her Avatar"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "Replaces <0>{variable}</0> in the environment."
+msgstr "Replaces <0>{variable}</0> in the environment."
 
 #: src/features/chats/labels.ts
 msgid "Replies always come as text."
@@ -3260,6 +3341,10 @@ msgstr "Save and Continue"
 #: src/components/settings-form/reindex-dialog.tsx
 msgid "Save Anyway"
 msgstr "Save Anyway"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "Save Style"
+msgstr "Save Style"
 
 #: src/components/settings-form/account-key-field.tsx
 #: src/features/settings/accounts-card.tsx
@@ -3464,6 +3549,10 @@ msgstr "She answered {name}'s line."
 msgid "She answered your line."
 msgstr "She answered your line."
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "She can't switch to it anymore, and its voice is removed from her settings."
+msgstr "She can't switch to it anymore, and its voice is removed from her settings."
+
 #: src/features/studio/models-section.tsx
 msgid "She can't switch voice styles during a call."
 msgstr "She can't switch voice styles during a call."
@@ -3471,6 +3560,10 @@ msgstr "She can't switch voice styles during a call."
 #: src/features/studio/references-section.tsx
 msgid "She can't take selfies without one. Add a picture of her, or drop one here."
 msgstr "She can't take selfies without one. Add a picture of her, or drop one here."
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "She has a style by that name already."
+msgstr "She has a style by that name already."
 
 #: src/features/home/readiness-labels.ts
 msgid "She has no voice yet, so calls can't start."
@@ -3691,6 +3784,10 @@ msgstr "Start one with any persona, or with several at once. Each chat keeps its
 msgid "Start the billed run?"
 msgstr "Start the billed run?"
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "Start with a lowercase letter, then use lowercase letters, digits or _."
+msgstr "Start with a lowercase letter, then use lowercase letters, digits or _."
+
 #: src/features/setup/persona-step.tsx
 msgid "Start with the demo persona, or create your own and build her up later in the studio."
 msgstr "Start with the demo persona, or create your own and build her up later in the studio."
@@ -3774,6 +3871,10 @@ msgstr "Studio"
 #: src/components/settings-form/labels.ts
 msgid "STUN URL"
 msgstr "STUN URL"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "Such as 温柔/轻柔/柔一点"
+msgstr "Such as 温柔/轻柔/柔一点"
 
 #: src/features/setup/persona-fields.tsx
 #: src/features/studio/identity-section.tsx
@@ -3902,6 +4003,14 @@ msgstr "That setting doesn't exist."
 msgid "That value isn't valid for this setting."
 msgstr "That value isn't valid for this setting."
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "The {name} style is removed."
+msgstr "The {name} style is removed."
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "The {name} style is saved."
+msgstr "The {name} style is saved."
+
 #: src/features/studio/voice-section.tsx
 msgid "The {provider} voice she speaks with, by its id. Find one in {provider}'s <0>voice library</0>."
 msgstr "The {provider} voice she speaks with, by its id. Find one in {provider}'s <0>voice library</0>."
@@ -3962,9 +4071,17 @@ msgstr "The disk is full."
 msgid "The environment's key wins over one saved here."
 msgstr "The environment's key wins over one saved here."
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "The environment's style by this name, which {env} sets, takes its place again."
+msgstr "The environment's style by this name, which {env} sets, takes its place again."
+
 #: src/features/studio/voice-section.tsx
 msgid "The environment's voice"
 msgstr "The environment's voice"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "The environment's voice styles go with its voice, which she doesn't use, so these don't apply to her: {names}."
+msgstr "The environment's voice styles go with its voice, which she doesn't use, so these don't apply to her: {names}."
 
 #: src/features/studio/facts-editor.tsx
 msgid "The file is removed from your data home. Facts already indexed stay until you index again."
@@ -4405,6 +4522,14 @@ msgstr "Transcription Provider"
 msgid "Transcriptions at Once"
 msgstr "Transcriptions at Once"
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "Trigger Words"
+msgstr "Trigger Words"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "Trigger words: {words}"
+msgstr "Trigger words: {words}"
+
 #: src/components/route-error.tsx
 #: src/features/home/memory-panel.tsx
 msgid "Try Again"
@@ -4523,7 +4648,7 @@ msgstr "Use the Environment's Voice"
 msgid "Use the environment's voice for {name}?"
 msgstr "Use the environment's voice for {name}?"
 
-#: src/features/studio/voice-section.tsx
+#: src/features/studio/voice-by-id.tsx
 msgid "Use This Voice"
 msgstr "Use This Voice"
 
@@ -4577,6 +4702,7 @@ msgstr "View"
 #: src/features/setup/stepper.tsx
 #: src/features/studio/route.tsx
 #: src/features/studio/voice-section.tsx
+#: src/features/studio/voice-styles-card.tsx
 #: src/lib/labels.ts
 msgid "Voice"
 msgstr "Voice"
@@ -4585,6 +4711,10 @@ msgstr "Voice"
 msgctxt "reply mode"
 msgid "Voice"
 msgstr "Voice"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "Voice ID"
+msgstr "Voice ID"
 
 #: src/components/voice-picker/index.tsx
 msgid "Voice Language"
@@ -4619,6 +4749,14 @@ msgstr "Voice set to {title}."
 #: src/features/home/voice-dialog.tsx
 msgid "Voice set to {voice}."
 msgstr "Voice set to {voice}."
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "Voice Styles"
+msgstr "Voice Styles"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "Voices she switches to when you ask for one, as in “声音温柔一点” or “换回原来的”. Her voice above stays her default."
+msgstr "Voices she switches to when you ask for one, as in “声音温柔一点” or “换回原来的”. Her voice above stays her default."
 
 #: src/features/call/call-state.tsx
 msgid "Waiting for {name} to answer…"
@@ -4703,6 +4841,18 @@ msgstr "What the index jobs read: which of her fact files, the pattern that name
 #: src/features/jobs/detail.tsx
 msgid "What the job reported, newest at the bottom."
 msgstr "What the job reported, newest at the bottom."
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "What the model calls it, such as gentle or nai_hei."
+msgstr "What the model calls it, such as gentle or nai_hei."
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "What you'd say to ask for it. Left empty, the model goes by the built-in words: {words}."
+msgstr "What you'd say to ask for it. Left empty, the model goes by the built-in words: {words}."
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "What you'd say to ask for it. Left empty, the model goes by the name alone."
+msgstr "What you'd say to ask for it. Left empty, the model goes by the name alone."
 
 #: src/features/studio/video-table.tsx
 msgid "When was it streamed?"

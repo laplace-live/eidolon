@@ -21,6 +21,7 @@ import {
   personaFolders,
   personaIds,
   personaPath,
+  readSettingsLayers,
   resetSettings,
   SETTINGS,
   withPersona,
@@ -200,6 +201,34 @@ describe("layers", () => {
     expect(entries.get("TTS_VOICE_ID")).toBe("base");
     expect(entries.get("TTS_VOICE_ID_GENTLE")).toBe("soft-id");
   });
+
+  test("a style is a voice id, or a voiceId with the hint that asks for it", () => {
+    write(
+      "personas/milky-green/persona.yaml",
+      [
+        "voice:",
+        "  styles:",
+        "    gentle: soft-id",
+        "    nai_hei:",
+        "      voiceId: dark-id",
+        "      hint: ' 奶黑/黑化 '",
+        "    Calm:",
+        "      voiceId: calm-id",
+      ].join("\n"),
+    );
+    const { persona } = installSettings();
+    const entries = new Map(envEntries());
+    expect(entries.get("TTS_VOICE_ID_GENTLE")).toBe("soft-id");
+    expect(entries.get("TTS_VOICE_ID_NAI_HEI")).toBe("dark-id");
+    expect(entries.get("TTS_VOICE_ID_CALM")).toBe("calm-id");
+    expect(persona.voiceStyleHints).toEqual({ nai_hei: "奶黑/黑化" });
+    expect(readSettingsLayers("milky-green").voiceStyles).toEqual([
+      { name: "gentle", voiceId: "soft-id", hint: "" },
+      { name: "nai_hei", voiceId: "dark-id", hint: "奶黑/黑化" },
+      { name: "calm", voiceId: "calm-id", hint: "" },
+    ]);
+    expect(warnings).toEqual([]);
+  });
 });
 
 describe("paths", () => {
@@ -302,6 +331,31 @@ describe("mistakes", () => {
       `Unknown setting identity.nmae in ${path}`,
       `Unknown setting knowledge.gate.questions.about_he in ${path}`,
       `Ignoring ${path} knowledge.gate.questions.her_past: expected string`,
+    ]);
+  });
+
+  test("a voice style without a voice id, with a typo or with a hint that isn't text warns", () => {
+    const path = write(
+      "personas/milky-green/persona.yaml",
+      [
+        "voice:",
+        "  styles:",
+        "    gentle:",
+        "      voiceID: g",
+        "    calm:",
+        "      voiceId: c",
+        "      hint: [x]",
+        "    lively: 3",
+      ].join("\n"),
+    );
+    const { persona, values } = loadSettings();
+    expect([...values]).toEqual([["TTS_VOICE_ID_CALM", "c"]]);
+    expect(persona.voiceStyleHints).toEqual({});
+    expect(warnings).toEqual([
+      `Unknown setting voice.styles.gentle.voiceID in ${path}`,
+      `Ignoring ${path} voice.styles.gentle: expected a voice id, or voiceId and hint`,
+      `Ignoring ${path} voice.styles.calm.hint: expected string`,
+      `Ignoring ${path} voice.styles.lively: expected a voice id, or voiceId and hint`,
     ]);
   });
 

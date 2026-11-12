@@ -124,6 +124,7 @@ export const RESERVED_IDS: ReadonlySet<string> = new Set([
   "stop",
   "usage",
   "voice",
+  "voice-styles",
   "voices",
 ]);
 

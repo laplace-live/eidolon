@@ -7,6 +7,7 @@ import {
   activePersona,
   envOverride,
   envVariable,
+  envVariablesStartingWith,
   isPlainObject,
   isValidTimeZone,
   layeredValue,
@@ -14,9 +15,18 @@ import {
   readSettingsLayers,
   SETTINGS,
   type SettingField,
+  type SettingsLayers,
 } from "@eidolon/config";
-import { accountOf, ROLES, roleById } from "@eidolon/providers";
-import type { SettingRow, SettingsResponse } from "../api.ts";
+import {
+  accountOf,
+  LEGACY_VOICE_STYLE_PREFIX,
+  ROLES,
+  roleById,
+  VOICE_ENV,
+  VOICE_STYLE_PREFIX,
+} from "@eidolon/providers";
+import { DEFAULT_STYLE, STYLE_HINTS } from "@eidolon/tools";
+import type { EnvironmentVoiceStyle, SettingRow, SettingsResponse, VoiceStyles } from "../api.ts";
 import {
   editPersonaYaml,
   editSettingsYaml,
@@ -43,7 +53,7 @@ const CONTROL = /\p{Cc}/u;
  */
 function environmentValue(
   field: SettingField,
-  layers: ReturnType<typeof readSettingsLayers>,
+  layers: SettingsLayers,
 ): { value: string; name: string } | null {
   const own = envVariable(field.env);
   if (own !== undefined) return { value: own, name: field.env };
@@ -68,14 +78,17 @@ const PROVIDER_DEFAULTS = new Map(
 const VOICE_PROVIDER = roleById("voice").providerEnv;
 
 /** The provider her voice would use were her file's voice.provider `own`. */
-function voiceProvider(
-  own: string | null,
-  layers: ReturnType<typeof readSettingsLayers>,
-): string | undefined {
+function voiceProvider(own: string | null, layers: SettingsLayers): string | undefined {
   const id = (own ?? envVariable(VOICE_PROVIDER) ?? PROVIDER_DEFAULTS.get(VOICE_PROVIDER))
     ?.trim()
     .toLowerCase();
   return id ? accountProvider(id, layers.accounts) : undefined;
+}
+
+/** The provider her voice uses, with her file's voice.provider as it is. */
+function herVoiceProvider(layers: SettingsLayers): string | undefined {
+  const saved = layers.values.get(VOICE_PROVIDER);
+  return voiceProvider(saved?.source === "persona" ? (saved.value ?? null) : null, layers);
 }
 
 /** Whether `changes` move her voice to another provider, whose voice ids her styles aren't. */
@@ -83,9 +96,34 @@ function dropsVoiceStyles(changes: readonly [SettingField, unknown][], persona: 
   const change = changes.find(([field]) => field.env === VOICE_PROVIDER);
   if (change === undefined) return false;
   const layers = readSettingsLayers(persona);
-  const saved = layers.values.get(VOICE_PROVIDER);
-  const own = saved?.source === "persona" ? (saved.value ?? null) : null;
-  return voiceProvider(own, layers) !== voiceProvider(change[1] as string | null, layers);
+  return herVoiceProvider(layers) !== voiceProvider(change[1] as string | null, layers);
+}
+
+/** Her styles, and each one the environment sets for her voice's provider. */
+function voiceStylesOf(layers: SettingsLayers): VoiceStyles {
+  const hers = new Set(layers.voiceStyles.map((style) => style.name));
+  // Owned when she has her own voice, or a provider other than the environment's.
+  const ownVoice = layers.owned.has(VOICE_ENV);
+  // Fish's names first, so the neutral name wins where both set a style.
+  const prefixes =
+    herVoiceProvider(layers) === "fish"
+      ? [LEGACY_VOICE_STYLE_PREFIX, VOICE_STYLE_PREFIX]
+      : [VOICE_STYLE_PREFIX];
+  const environment = new Map<string, EnvironmentVoiceStyle>();
+  for (const prefix of prefixes) {
+    for (const [env, value] of envVariablesStartingWith(prefix)) {
+      const voiceId = pyStrip(value);
+      const name = env.slice(prefix.length).toLowerCase();
+      if (!voiceId || !name || name === DEFAULT_STYLE) continue;
+      const state = ownVoice ? "ignored" : hers.has(name) ? "replaced" : "inherited";
+      environment.set(name, { name, voiceId, env, state });
+    }
+  }
+  return {
+    own: layers.voiceStyles,
+    environment: [...environment.values()].sort((a, b) => a.name.localeCompare(b.name)),
+    builtInHints: STYLE_HINTS,
+  };
 }
 
 export function settingsOf(app: LocalApp, persona: string): SettingsResponse {
@@ -116,6 +154,7 @@ export function settingsOf(app: LocalApp, persona: string): SettingsResponse {
   return {
     persona: layers.persona,
     settings,
+    voiceStyles: voiceStylesOf(layers),
     // A credentials.json that fails to parse has its parser's message, which can quote a key.
     warnings: layers.warnings.filter((warning) => !warning.includes(layers.files.credentials)),
     restartRequired: restartTracker(app).changes().calls.length > 0,

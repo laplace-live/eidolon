@@ -472,3 +472,131 @@ describe("PUT settings", () => {
     expect(atBoot.body.restartRequired).toBe(true);
   });
 });
+
+describe("voice styles", () => {
+  const yaml = () => join(personaHomeDir("milky-green"), "persona.yaml");
+  const ownFile = () => Bun.YAML.parse(readFileSync(yaml(), "utf8")) as Record<string, any>;
+  const setEnv = (name: string, value: string) => {
+    process.env[name] = value;
+    touched.push(name);
+  };
+  async function putStyles(persona: string, body: unknown): Promise<{ status: number; body: any }> {
+    const response = await api("PUT", `/personas/${persona}/voice-styles`, body);
+    return { status: response.status, body: await response.json() };
+  }
+
+  beforeEach(() => {
+    for (const name of Object.keys(process.env)) {
+      if (/^(FISH|TTS)_VOICE_ID/.test(name)) delete process.env[name];
+    }
+  });
+
+  test("GET settings: hers, and the environment's she inherits, replaces or skips", async () => {
+    setEnv("FISH_VOICE_ID", "env-voice");
+    setEnv("FISH_VOICE_ID_GENTLE", "env-gentle");
+    setEnv("FISH_VOICE_ID_CALM", "env-calm");
+    setEnv("TTS_VOICE_ID_CALM", "env-calm-neutral");
+    mkdirSync(join(yaml(), ".."), { recursive: true });
+    writeFileSync(
+      yaml(),
+      "voice:\n  styles:\n    calm:\n      voiceId: her-calm\n      hint: 冷静\n    nai_hei: her-dark\n",
+    );
+    const styles = (await settings("milky-green")).voiceStyles;
+    expect(styles.own).toEqual([
+      { name: "calm", voiceId: "her-calm", hint: "冷静" },
+      { name: "nai_hei", voiceId: "her-dark", hint: "" },
+    ]);
+    expect(styles.environment).toEqual([
+      { name: "calm", voiceId: "env-calm-neutral", env: "TTS_VOICE_ID_CALM", state: "replaced" },
+      { name: "gentle", voiceId: "env-gentle", env: "FISH_VOICE_ID_GENTLE", state: "inherited" },
+    ]);
+    expect(styles.builtInHints.gentle).toBe("温柔/温和/轻柔/温暖/柔一点");
+
+    // With her own voice, the environment's styles are another voice's.
+    const voice = await put({
+      scope: "persona",
+      persona: "milky-green",
+      values: { "voice.voiceId": "her-voice" },
+    });
+    expect(voice.status).toBe(200);
+    expect(voice.body.voiceStyles).toMatchObject({
+      own: [{ name: "calm" }, { name: "nai_hei" }],
+      environment: [
+        { name: "calm", state: "ignored" },
+        { name: "gentle", state: "ignored" },
+      ],
+    });
+  });
+
+  test("PUT writes them into her copy in order, a hint beside its voice; none removes them", async () => {
+    const saved = await putStyles("milky-green", {
+      styles: [
+        { name: "nai_hei", voiceId: " n ", hint: " 奶黑/黑化 " },
+        { name: "gentle", voiceId: "g", hint: "" },
+      ],
+    });
+    expect(saved.status).toBe(200);
+    expect(saved.body.voiceStyles.own).toEqual([
+      { name: "nai_hei", voiceId: "n", hint: "奶黑/黑化" },
+      { name: "gentle", voiceId: "g", hint: "" },
+    ]);
+    const own = ownFile();
+    expect(own.identity.name).toBe("明前奶绿");
+    expect(own.voice).toEqual({
+      styles: { nai_hei: { voiceId: "n", hint: "奶黑/黑化" }, gentle: "g" },
+    });
+    expect(Object.keys(own.voice.styles)).toEqual(["nai_hei", "gentle"]);
+    expect(envOptional("TTS_VOICE_ID_NAI_HEI")).toBe("n");
+    expect(activePersona().voiceStyleHints).toEqual({ nai_hei: "奶黑/黑化" });
+
+    expect((await putStyles("milky-green", { styles: [] })).status).toBe(200);
+    expect(ownFile().voice).toBeUndefined();
+    expect(envOptional("TTS_VOICE_ID_NAI_HEI")).toBeUndefined();
+  });
+
+  test("PUT refuses a style without a name of its own or a voice", async () => {
+    const refused = async (body: unknown, code: string) => {
+      const answer = await putStyles("milky-green", body);
+      expect([answer.status, answer.body.error.code]).toEqual([400, code]);
+    };
+    const style = (patch: Record<string, unknown>) => ({
+      name: "gentle",
+      voiceId: "g",
+      hint: "",
+      ...patch,
+    });
+    await refused({}, "bad-request");
+    await refused({ styles: ["gentle"] }, "bad-request");
+    await refused({ styles: [style({ name: 3 })] }, "bad-request");
+    await refused({ styles: [style({ hint: 3 })] }, "bad-request");
+    await refused({ styles: [style({ name: "" })] }, "invalid-setting");
+    await refused({ styles: [style({}), style({ voiceId: "h" })] }, "invalid-setting");
+    for (const voiceId of ["", "  ", undefined, "a\nb"]) {
+      await refused({ styles: [style({ voiceId })] }, "invalid-setting");
+    }
+    expect(existsSync(yaml())).toBe(false);
+    const unknown = await putStyles("nobody", { styles: [] });
+    expect([unknown.status, unknown.body.error.code]).toEqual([404, "unknown-persona"]);
+  });
+
+  test("a save keeps the styles a hand-written persona.yaml gave her, whatever their names", async () => {
+    mkdirSync(join(yaml(), ".."), { recursive: true });
+    const long = "长".repeat(300);
+    writeFileSync(
+      yaml(),
+      `voice:\n  styles:\n    nai-hei: n\n    default: d\n    calm:\n      voiceId: c\n      hint: |\n        冷静\n        ${long}\n`,
+    );
+    const { own } = (await settings("milky-green")).voiceStyles;
+    expect(own.map((style) => style.name)).toEqual(["nai-hei", "default", "calm"]);
+    const saved = await putStyles("milky-green", {
+      styles: [...own, { name: "lively", voiceId: "l", hint: "" }],
+    });
+    expect(saved.status).toBe(200);
+    expect(ownFile().voice.styles).toEqual({
+      "nai-hei": "n",
+      default: "d",
+      calm: { voiceId: "c", hint: `冷静\n${long}` },
+      lively: "l",
+    });
+  });
+});
