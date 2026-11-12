@@ -1,5 +1,16 @@
 # @laplace.live/eidolon
 
+## 0.8.0
+
+### Minor Changes
+
+- afca3c8: Set up a persona's voice styles in the studio, each with its trigger words
+
+### Patch Changes
+
+- 07258aa: A group call no longer sits waiting for a greeting no one gives
+- 07258aa: A call inside a chat shows what is said as it is said, not once she has finished
+
 ## 0.7.0
 
 ### Minor Changes
