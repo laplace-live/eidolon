@@ -355,13 +355,20 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
   - **The dock** above the composer shows her avatar, ringed while she speaks, the call's state
     line, the call's notices, the mic's mute toggle and **Hang Up**. Hanging up closes it. A call
     that ends any other way stays docked with why, **Call Again** and **Close**.
+  - **A group call** is answered as it connects, since no one greets on one: its state line never
+    waits for an answer, and until the viewer speaks the log says everyone can hear them.
   - **The composer** waits, disabled and reading **In a call**, keeping any draft; Stop and the
     microphone are hidden, and a recording under way is thrown away. It takes the focus back when
     the call ends.
-  - **What is said** arrives through `GET chats/:id/live` as call lines: messages with a small
-    phone mark, her cut-off ones marked **Interrupted**, with no Why She Answered, and her selfies
-    as photos. The call's start and end are quiet centred lines, "Call with 奶绿 · 3:12" and "Call
-    ended".
+  - **What is said** shows as it is said, on the page that placed the call: below the call's start,
+    the call's own transcript (`call-live.ts`) stands in for its stored lines, the viewer's words
+    as they are heard and hers sentence by sentence as she says them, the rest dimmed until she
+    has, with the thinking dots and the stuck notice of `/call`. The chat stores a line only once
+    it is finished, her reply once all of it has played.
+  - **What is stored** arrives through `GET chats/:id/live` as call lines, and takes the
+    transcript's place once the call's end is stored after them: messages with a small phone mark,
+    her cut-off ones marked **Interrupted**, with no Why She Answered, and her selfies as photos.
+    The call's start and end are quiet centred lines, "Call with 奶绿 · 3:12" and "Call ended".
   - **Voice messages** stay quiet, since the microphone would hear them: a call starting pauses the
     one playing and drops those waiting to play on their own, and none plays on its own until the
     call ends. Play still plays one.

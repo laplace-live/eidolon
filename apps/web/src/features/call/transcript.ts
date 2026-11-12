@@ -49,6 +49,8 @@ export interface SelfieEntry {
   readonly id: number;
   /** Same-origin `/api/selfie/` paths. */
   readonly paths: readonly string[];
+  /** Whose photo it is on a group call; null on a call with her alone. */
+  readonly persona: string | null;
 }
 
 export type Entry = UserEntry | BotEntry | SelfieEntry;
@@ -86,7 +88,7 @@ export type TranscriptEvent =
   | { readonly type: "bot-output"; readonly data: BotOutputData }
   /** The bot was cut off: what it says next is a new reply. */
   | { readonly type: "interrupted" }
-  | { readonly type: "selfie"; readonly paths: readonly string[] }
+  | { readonly type: "selfie"; readonly paths: readonly string[]; readonly persona?: string | null }
   /** A group call's persona starts speaking: her replies are entries of her own. */
   | { readonly type: "speaker"; readonly speaker: Speaker }
   | { readonly type: "reset" };
@@ -241,7 +243,12 @@ export function reduceTranscript(state: Transcript, event: TranscriptEvent): Tra
       return state.openBot === null ? state : { ...state, openBot: null };
     case "selfie": {
       if (event.paths.length === 0) return state;
-      const entry: SelfieEntry = { kind: "selfie", id: state.nextId, paths: event.paths };
+      const entry: SelfieEntry = {
+        kind: "selfie",
+        id: state.nextId,
+        paths: event.paths,
+        persona: event.persona ?? null,
+      };
       return append({ ...state, openBot: null }, entry);
     }
     case "speaker": {

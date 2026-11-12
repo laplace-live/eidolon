@@ -4,6 +4,7 @@ import { useLingui } from "@lingui/react/macro";
 import {
   CameraIcon,
   CircleAlertIcon,
+  HourglassIcon,
   MicIcon,
   PhoneIcon,
   PhoneOffIcon,
@@ -18,12 +19,13 @@ import { QuietBadge } from "@/components/quiet-badge";
 import { AvatarGroup } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { BotText } from "@/features/call/bot-text";
-import type { BotRun } from "@/features/call/transcript";
+import { type BotRun, botRuns, userText } from "@/features/call/transcript";
 import { chatFilePath } from "@/lib/chats";
 import { listOf } from "@/lib/labels";
 import { parseMarkup } from "@/lib/markup";
 import { cn } from "@/lib/utils";
 import { callLine } from "./call-line";
+import { type CallRow, callRows, type LiveCall, standsIn } from "./call-live";
 import {
   type AudioAttachment,
   type CallItem,
@@ -57,11 +59,14 @@ function CallMark() {
 
 function UserBubble({
   text,
+  hearing = "",
   call = false,
   failed = false,
   onRetry,
 }: {
   readonly text: string;
+  /** On a call this page holds, the words still being heard, with their leading space. */
+  readonly hearing?: string;
   /** Said on a call. */
   readonly call?: boolean;
   readonly failed?: boolean;
@@ -79,6 +84,7 @@ function UserBubble({
         <span className="sr-only">{t({ message: `You`, context: "chat speaker" })}: </span>
         {call && <CallMark />}
         {text}
+        {hearing && <span className="italic opacity-70">{hearing}</span>}
       </div>
       {failed && (
         <span className="flex items-center gap-2 text-destructive text-xs">
@@ -164,6 +170,43 @@ function PendingVoice({
   );
 }
 
+function HerWords({
+  name,
+  runs,
+  call = false,
+  aside,
+}: {
+  readonly name: string;
+  readonly runs: readonly BotRun[];
+  /** Said on a call. */
+  readonly call?: boolean;
+  readonly aside?: ReactNode;
+}) {
+  return (
+    <div className="flex max-w-[80%] items-end gap-0.5">
+      <div className="min-w-0 whitespace-pre-line break-words rounded-2xl rounded-bl-md bg-muted px-3.5 py-2 text-sm">
+        <span className="sr-only">{name}: </span>
+        {call && <CallMark />}
+        <BotText runs={runs} />
+      </div>
+      {aside}
+    </div>
+  );
+}
+
+function HerPhotos({ name, srcs }: { readonly name: string; readonly srcs: readonly string[] }) {
+  const { t } = useLingui();
+  const alt = t`A photo from ${name}`;
+  const failed = t`This photo couldn't be loaded`;
+  return (
+    <div className="flex flex-wrap gap-2">
+      {srcs.map((src) => (
+        <Photo key={src} src={src} alt={alt} failed={failed} />
+      ))}
+    </div>
+  );
+}
+
 function HerBubble({
   chatId,
   name,
@@ -204,8 +247,6 @@ function HerBubble({
     () => parseMarkup(shown).map((token) => ({ ...token, pending: false })),
     [shown],
   );
-  const alt = t`A photo from ${name}`;
-  const failed = t`This photo couldn't be loaded`;
   const asideBelow = shown === "" || voice !== null;
   return (
     <div className="flex flex-col items-start gap-1.5">
@@ -223,26 +264,10 @@ function HerBubble({
         </div>
       )}
       {voice === null && shown !== "" && (
-        <div className="flex max-w-[80%] items-end gap-0.5">
-          <div className="min-w-0 whitespace-pre-line break-words rounded-2xl rounded-bl-md bg-muted px-3.5 py-2 text-sm">
-            <span className="sr-only">{name}: </span>
-            {call && <CallMark />}
-            <BotText runs={runs} />
-          </div>
-          {aside}
-        </div>
+        <HerWords name={name} runs={runs} call={call} aside={aside} />
       )}
       {images.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {images.map((image) => (
-            <Photo
-              key={image.name}
-              src={chatFilePath(chatId, image.name)}
-              alt={alt}
-              failed={failed}
-            />
-          ))}
-        </div>
+        <HerPhotos name={name} srcs={images.map((image) => chatFilePath(chatId, image.name))} />
       )}
       {(interrupted || cutOff || sentAsText || (asideBelow && aside)) && (
         <div className="flex items-center gap-1">
@@ -265,16 +290,22 @@ function HerBubble({
   );
 }
 
-/** A group's line from her: her avatar and short name at the start of a run of hers. */
+/** Her line; in a group, under her avatar and short name at the start of a run of hers. */
 function Said({
   persona,
+  group,
   first,
   children,
 }: {
-  readonly persona: ChatPersona;
+  /** Null while no one is chosen to answer. */
+  readonly persona: ChatPersona | null;
+  readonly group: boolean;
   readonly first: boolean;
   readonly children: ReactNode;
 }) {
+  if (!group) return children;
+  // In line with the group's lines, past where their avatars go.
+  if (persona === null) return <div className="pl-10">{children}</div>;
   return (
     <div className="flex items-start gap-2">
       <div className="w-8 shrink-0">{first && <PersonaAvatar persona={persona} size="sm" />}</div>
@@ -288,6 +319,29 @@ function Said({
         {children}
       </div>
     </div>
+  );
+}
+
+function ThinkingLine({
+  persona,
+  group,
+  first,
+}: {
+  readonly persona: ChatPersona | null;
+  readonly group: boolean;
+  readonly first: boolean;
+}) {
+  const { t } = useLingui();
+  return (
+    <Said persona={persona} group={group} first={first}>
+      <Thinking
+        label={
+          persona === null
+            ? t`Waiting for a reply…`
+            : t`${ph({ name: shortNameOf(persona) })} is thinking…`
+        }
+      />
+    </Said>
   );
 }
 
@@ -403,12 +457,10 @@ const Item = memo(function Item({
         }
       />
     );
-  return group ? (
-    <Said persona={persona} first={first}>
+  return (
+    <Said persona={persona} group={group} first={first}>
       {said}
     </Said>
-  ) : (
-    said
   );
 });
 
@@ -457,6 +509,89 @@ function ToolLine({ tool }: { readonly tool: string }) {
   );
 }
 
+/** A row of the call this page holds, memoized: only the one being said changes. */
+const LiveCallRow = memo(function LiveCallRow(
+  props: CallRow & {
+    readonly personaOf: (id: ParticipantId) => ChatPersona;
+    readonly group: boolean;
+  },
+) {
+  if (props.kind === "viewer") {
+    const { said, hearing } = userText(props.entry);
+    return <UserBubble text={said} hearing={hearing} call />;
+  }
+  const { entry } = props;
+  const persona = props.personaOf(props.persona);
+  const name = shortNameOf(persona);
+  const runs = entry.kind === "bot" ? botRuns(entry) : [];
+  return (
+    <Said persona={persona} group={props.group} first={props.first}>
+      {runs.length > 0 && <HerWords name={name} runs={runs} call />}
+      {entry.kind === "selfie" && <HerPhotos name={name} srcs={entry.paths} />}
+    </Said>
+  );
+});
+
+/**
+ * The call this page holds as it is said, below its start, as the call page shows it: the viewer's
+ * words as they are heard, hers as she says them, the rest dimmed until she has, her photos, and
+ * the wait for her answer.
+ */
+function LiveCallRows({
+  call,
+  before,
+  next,
+  personas,
+  personaOf,
+  group,
+}: {
+  readonly call: LiveCall;
+  /** The line above its first row. */
+  readonly before: ChatItem | undefined;
+  /** Who a decision chose to answer next. */
+  readonly next: ParticipantId | null;
+  readonly personas: readonly ChatPersona[];
+  readonly personaOf: (id: ParticipantId) => ChatPersona;
+  readonly group: boolean;
+}) {
+  const { t } = useLingui();
+  const rows = callRows(call.transcript, call.persona, before);
+  const last = rows.at(-1);
+  const thinker = next ?? (call.group ? null : call.persona);
+  const everyone = call.group
+    ? listOf(personas.map(shortNameOf))
+    : shortNameOf(personaOf(call.persona));
+  return (
+    <>
+      {rows.map((row) => (
+        // Spread, so memo compares the entries the reducer keeps, not the rows callRows makes anew.
+        <LiveCallRow key={row.entry.id} {...row} personaOf={personaOf} group={group} />
+      ))}
+      {call.group && call.live && rows.length === 0 && (
+        <p className="text-balance text-center text-muted-foreground text-xs">
+          {t`Everyone can hear you. Say something to start.`}
+        </p>
+      )}
+      {call.wait.thinking && !call.wait.stuck && (
+        <ThinkingLine
+          persona={thinker === null ? null : personaOf(thinker)}
+          group={group}
+          first={last === undefined || last.kind === "viewer" || last.persona !== thinker}
+        />
+      )}
+      {call.wait.stuck && (
+        <p
+          role="status"
+          className="flex items-center justify-center gap-1.5 text-center text-muted-foreground text-xs"
+        >
+          <HourglassIcon className="size-3.5 shrink-0" />
+          {t`Still waiting for ${ph({ name: everyone })}. If nothing comes, say it again.`}
+        </p>
+      )}
+    </>
+  );
+}
+
 /**
  * A chat's lines, then the reply streaming in, kept scrolled to the newest unless the viewer
  * scrolls back. It fills a positioned box.
@@ -473,6 +608,7 @@ export function ChatLog({
   autoPlay,
   onAutoPlayEnd,
   inCall,
+  call,
   onSend,
   onSendVoice,
 }: {
@@ -482,6 +618,8 @@ export function ChatLog({
   readonly personaOf: (id: ParticipantId) => ChatPersona;
   readonly items: readonly ChatItem[];
   readonly live: LiveState;
+  /** The call this page holds, until the chat has stored all of it: shown as it is said. */
+  readonly call: LiveCall | null;
   /** Who a decision chose to answer next, before her turn starts. */
   readonly next: ParticipantId | null;
   /** Tools her interrupted turns left running: what they bring lands later. */
@@ -501,6 +639,11 @@ export function ChatLog({
   const group = useMemo(() => personas.length > 1 || manyVoices(items), [personas, items]);
   const { scrollRef, contentRef, pinnedRef, onScroll } = useStickToBottom();
   const { turn, pending } = live;
+  const from = call?.from ?? null;
+  const shown = useMemo(
+    () => (from === null ? items : items.filter((item) => !standsIn(item, from))),
+    [items, from],
+  );
 
   // The viewer's own line brings the view back down.
   const sentKey = pending.at(-1)?.key;
@@ -513,38 +656,22 @@ export function ChatLog({
   const empty = items.length === 0 && turn === null && pending.length === 0;
   const speaker = turn?.persona ?? next ?? (group ? null : (personas[0]?.id ?? null));
   const thinker = speaker === null ? null : personaOf(speaker);
-  const last = items.at(-1);
+  const last = shown.at(-1);
   // The streaming reply, or the thinking dots, continue her run when she spoke last.
   const continues = last !== undefined && last.kind !== "user" && last.persona === speaker;
-  const said = (children: ReactNode) =>
-    !group ? (
-      children
-    ) : thinker === null ? (
-      // In line with the group's lines, past where their avatars go.
-      <div className="pl-10">{children}</div>
-    ) : (
-      <Said persona={thinker} first={!continues}>
-        {children}
-      </Said>
-    );
   const liveRow = (row: LiveRow): ReactNode => {
     if (row.kind === "streamed") {
       return (
-        thinker !== null &&
-        said(<HerBubble chatId={chatId} name={shortNameOf(thinker)} text={row.text} />)
+        thinker !== null && (
+          <Said persona={thinker} group={group} first={!continues}>
+            <HerBubble chatId={chatId} name={shortNameOf(thinker)} text={row.text} />
+          </Said>
+        )
       );
     }
     if (row.kind === "tool") return <ToolLine tool={row.tool} />;
     if (row.kind === "thinking") {
-      return said(
-        <Thinking
-          label={
-            thinker === null
-              ? t`Waiting for a reply…`
-              : t`${ph({ name: shortNameOf(thinker) })} is thinking…`
-          }
-        />,
-      );
+      return <ThinkingLine persona={thinker} group={group} first={!continues} />;
     }
     const { line } = row;
     const { voice } = line;
@@ -569,19 +696,29 @@ export function ChatLog({
     >
       <div ref={contentRef} className="flex min-h-full flex-col justify-end gap-3">
         {empty && <Intro personas={personas} />}
-        {items.map((item, index) => (
+        {shown.map((item, index) => (
           <Item
             key={item.seq}
             item={item}
             chatId={chatId}
             personaOf={personaOf}
             group={group}
-            first={startsRun(items, index)}
-            onRetry={index === items.length - 1 ? retryLast : null}
+            first={startsRun(shown, index)}
+            onRetry={index === shown.length - 1 ? retryLast : null}
             autoPlay={item.seq === autoPlay}
             onAutoPlayEnd={onAutoPlayEnd}
           />
         ))}
+        {call !== null && (
+          <LiveCallRows
+            call={call}
+            before={last}
+            next={next}
+            personas={personas}
+            personaOf={personaOf}
+            group={group}
+          />
+        )}
         {[...new Set(lateTools)].map((tool) => (
           <ToolLine key={tool} tool={tool} />
         ))}

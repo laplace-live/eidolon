@@ -1509,6 +1509,10 @@ msgstr "所有视频都已下载。"
 msgid "Everyone"
 msgstr "所有人"
 
+#: src/features/chats/chat-log.tsx
+msgid "Everyone can hear you. Say something to start."
+msgstr "大家都在听，说点什么开始吧。"
+
 #: src/features/settings/route.tsx
 msgid "Everything the other sections don't show. Most installs never change these."
 msgstr "其他分区没有列出的设置。大多数情况下无需修改。"
@@ -3713,6 +3717,7 @@ msgid "State"
 msgstr "状态"
 
 #: src/features/call/transcript-view.tsx
+#: src/features/chats/chat-log.tsx
 msgid "Still waiting for {name}. If nothing comes, say it again."
 msgstr "还在等{name}回应。如果一直没有回应，请再说一遍。"
 

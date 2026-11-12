@@ -248,6 +248,17 @@ describe("selfies and resets", () => {
     expect(reduceTranscript(shot, { type: "selfie", paths: [] })).toBe(shot);
   });
 
+  test("a group call's selfie keeps whose it is", () => {
+    const shots = run(
+      { type: "selfie", paths: ["/api/selfie/a.png"], persona: "mint" },
+      { type: "selfie", paths: ["/api/selfie/b.png"] },
+    );
+    expect(shots.entries.map((entry) => entry.kind === "selfie" && entry.persona)).toEqual([
+      "mint",
+      null,
+    ]);
+  });
+
   test("ids stay unique and reset empties the transcript", () => {
     const busy = run(said("a"), announce(1, "b"), { type: "selfie", paths: ["/api/selfie/x"] });
     expect(busy.entries.map((entry) => entry.id)).toEqual([1, 2, 3]);

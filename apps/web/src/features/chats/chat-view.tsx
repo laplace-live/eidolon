@@ -17,6 +17,7 @@ import { listOf } from "@/lib/labels";
 import { statusQuery } from "@/lib/query";
 import { useLang } from "@/locales/i18n";
 import { CallButton, CallDock } from "./call-dock";
+import { cameUp, type LiveCall, ongoingCall } from "./call-live";
 import { ChatLog } from "./chat-log";
 import { ChatMenu } from "./chat-menu";
 import { ChatSettingsSheet } from "./chat-settings";
@@ -139,6 +140,8 @@ export function ChatView({
   const [callee, setCallee] = useState<{
     readonly persona: ParticipantId;
     readonly group: boolean;
+    /** The log's last seq as this page placed the call, which its start is stored after. */
+    readonly placedAfter: number;
   } | null>(null);
   const { phase } = call;
   const calling = phase.name !== "idle" && phase.name !== "ended";
@@ -163,6 +166,11 @@ export function ChatView({
     [summary, personaOf],
   );
   const next = useMemo(() => nextUp(events ?? []), [events]);
+  // This page's call shows as it is said, until the chat has stored its end after its last line.
+  const callFrom = useMemo(
+    () => (callee === null ? null : ongoingCall(events ?? [], callee.placedAfter)),
+    [events, callee],
+  );
   const chainLimit = useMemo(() => chainLimitOf(events ?? []), [events]);
   const replyMode = useMemo(() => replyModeOf(events ?? []), [events]);
 
@@ -205,9 +213,20 @@ export function ChatView({
     phase.name !== "idle" &&
     !(phase.name === "ended" && phase.end.kind === "hung-up");
   const startCall = (persona: ParticipantId, group: boolean) => {
-    setCallee({ persona, group });
+    setCallee({ persona, group, placedAfter: events?.at(-1)?.seq ?? 0 });
     call.start({ chatId: id, persona, ...(group ? { group } : {}) });
   };
+  const liveCall: LiveCall | null =
+    callFrom === null || callee === null || !cameUp(phase)
+      ? null
+      : {
+          from: callFrom,
+          transcript: call.transcript,
+          wait: call.wait,
+          persona: callee.persona,
+          group: callee.group,
+          live: phase.name === "live",
+        };
 
   return (
     <>
@@ -246,6 +265,7 @@ export function ChatView({
           autoPlay={turns.autoPlay}
           onAutoPlayEnd={turns.autoPlayEnded}
           inCall={inCall}
+          call={liveCall}
           onSend={turns.send}
           onSendVoice={turns.sendVoice}
         />

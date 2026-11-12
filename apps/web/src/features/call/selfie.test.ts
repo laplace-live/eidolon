@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { selfiePaths } from "./selfie";
+import { selfiePaths, selfiePersona } from "./selfie";
 
 const ID = "Qm9vdHN0cmFwLWlkLTE2Yg";
 
@@ -36,4 +36,13 @@ test("other server messages carry no selfies", () => {
   expect(selfiePaths({ type: "selfie" })).toEqual([]);
   expect(selfiePaths(null)).toEqual([]);
   expect(selfiePaths("selfie")).toEqual([]);
+});
+
+test("a group call's selfie names whose photo it is", () => {
+  const urls = [`/api/selfie/${ID}.png`];
+  expect(selfiePersona({ type: "selfie", urls, persona: "mint" })).toBe("mint");
+  expect(selfiePersona({ type: "selfie", urls })).toBeNull();
+  expect(selfiePersona({ type: "selfie", urls, persona: "" })).toBeNull();
+  expect(selfiePersona({ type: "selfie", urls, persona: 7 })).toBeNull();
+  expect(selfiePersona(null)).toBeNull();
 });

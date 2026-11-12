@@ -467,7 +467,10 @@ pcClient.on(RTVIEvent.ServerMessage, (data) => {
   another persona to answer the one before. A `speaker` naming someone else starts a new reply.
   The call page labels its transcript this way: `speakerOf` and the `speaker` event in
   `apps/web/src/features/call/transcript.ts`.
-- **A group call doesn't greet,** and a call to one persona never sends `speaker`.
+- **A group call doesn't greet:** nothing comes until the user speaks, so don't show it waiting
+  for an answer. The local web app counts it answered at `bot-ready` and asks the user to speak
+  first.
+- **A call to one persona never sends `speaker`.**
 
 ---
 
