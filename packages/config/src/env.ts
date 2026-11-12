@@ -54,6 +54,13 @@ export function envVariable(name: string): string | undefined {
   return raw ? raw : undefined;
 }
 
+/** The environment's own non-empty variables whose names start with `prefix`, in its order. */
+export function envVariablesStartingWith(prefix: string): [string, string][] {
+  return Object.entries(process.env).filter(
+    (entry): entry is [string, string] => entry[0].startsWith(prefix) && Boolean(entry[1]),
+  );
+}
+
 /** The value, or `undefined` when the variable is unset or empty. */
 export function envOptional(name: string): string | undefined {
   const raw = envRaw(name);

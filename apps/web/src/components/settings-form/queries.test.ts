@@ -8,6 +8,7 @@ import { refreshSettings, settingsQuery } from "./queries";
 const rows = (persona: string): SettingsResponse => ({
   persona,
   settings: [],
+  voiceStyles: { own: [], environment: [], builtInHints: {} },
   warnings: [],
   restartRequired: false,
 });

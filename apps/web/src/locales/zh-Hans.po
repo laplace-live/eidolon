@@ -14,6 +14,10 @@ msgctxt "list separator"
 msgid ", "
 msgstr "、"
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "“default” is her own voice: pick another name."
+msgstr "“default” 是她自己的声音，请换个名字。"
+
 #: src/features/chats/chat-log.tsx
 msgid "(on the call)"
 msgstr "（通话中）"
@@ -401,7 +405,7 @@ msgstr "2024-05-01 她说……"
 msgid "30 Days"
 msgstr "30 天"
 
-#: src/features/studio/voice-section.tsx
+#: src/features/studio/voice-by-id.tsx
 msgid "32-character voice ID"
 msgstr "32 位声音 ID"
 
@@ -449,7 +453,7 @@ msgstr "一位和猫咪一起经营小花店的中文虚拟主播。自带提示
 msgid "A cookies.txt for yt-dlp, which writes the merged cookies back into it."
 msgstr "供 yt-dlp 使用的 cookies.txt，yt-dlp 会把合并后的 Cookie 写回这个文件。"
 
-#: src/features/studio/voice-section.tsx
+#: src/features/studio/voice-by-id.tsx
 msgid "A Fish voice ID is 32 characters of 0–9 and a–f."
 msgstr "Fish 的声音 ID 由 32 个 0–9 和 a–f 的字符组成。"
 
@@ -511,6 +515,10 @@ msgstr "Eidolon 依赖的服务出错了，请稍后再试。"
 msgid "A table built with another embedding model or size than the settings now name can't be searched. Run its job again."
 msgstr "用与当前设置不同的嵌入模型或维度建立的表无法检索。请重新运行对应的任务。"
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "A voice she switches to when you ask for it. Name it, say how you'd ask, and pick its voice."
+msgstr "你要求时她会切换到的声音。给它起个名字，写下你会怎么要求，再选好它的声音。"
+
 #: src/features/studio/add-videos.tsx
 msgid "About {duration} in all."
 msgstr "总时长约 {duration}。"
@@ -547,6 +555,10 @@ msgstr "添加一张可以和她一起自拍的人的图片，或者拖到这里
 msgid "Add a Provider"
 msgstr "添加服务商"
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "Add a Voice Style"
+msgstr "添加声线风格"
+
 #: src/features/settings/account-dialog.tsx
 msgid "Add Account"
 msgstr "添加账号"
@@ -573,6 +585,10 @@ msgstr "添加密钥"
 msgid "Add links above, and each video is listed here with where it stands."
 msgstr "在上面添加链接，每个视频都会列在这里，并显示它的进度。"
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "Add one, then ask her for it in a call."
+msgstr "添加一个，然后在通话中让她切换。"
+
 #: src/features/home/readiness-labels.ts
 msgid "Add Outfits"
 msgstr "添加服装"
@@ -588,6 +604,10 @@ msgstr "添加图片"
 #: src/features/settings/accounts-card.tsx
 msgid "Add Provider"
 msgstr "添加服务商"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "Add Style"
+msgstr "添加风格"
 
 #: src/features/settings/accounts-card.tsx
 msgid "Add the providers you have keys for, then pick them in a persona's studio."
@@ -807,6 +827,10 @@ msgstr "内置"
 msgid "Built with other embedding settings: build it again."
 msgstr "是用其他嵌入设置构建的，需要重新构建。"
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "Built-in trigger words: {words}"
+msgstr "内置触发词：{words}"
+
 #: src/features/home/readiness-labels.ts
 msgid "Built, but the broadcast overview isn't."
 msgstr "已构建，但直播概览还没有生成。"
@@ -914,6 +938,7 @@ msgstr "无法连接 Eidolon，请确认它仍在终端中运行。"
 #: src/features/setup/new-persona.tsx
 #: src/features/studio/references-section.tsx
 #: src/features/studio/video-table.tsx
+#: src/features/studio/voice-styles-card.tsx
 msgid "Cancel"
 msgstr "取消"
 
@@ -1188,6 +1213,10 @@ msgstr "剩余余额：{amount}"
 msgid "Current voice:"
 msgstr "当前声音："
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "Customize"
+msgstr "自定义"
+
 #: src/features/chats/chat-log.tsx
 msgid "Cut off"
 msgstr "未说完"
@@ -1343,8 +1372,13 @@ msgstr "编辑"
 #: src/features/settings/account-dialog.tsx
 #: src/features/settings/accounts-card.tsx
 #: src/features/studio/knowledge-section.tsx
+#: src/features/studio/voice-styles-card.tsx
 msgid "Edit {name}"
 msgstr "编辑 {name}"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "Edit the {name} Style"
+msgstr "编辑风格 {name}"
 
 #: src/features/home/route.tsx
 msgid "Eidolon {version}"
@@ -1618,7 +1652,7 @@ msgstr "Fish 上有这个声音"
 msgid "Fix the highlighted values first."
 msgstr "请先修正标出的值。"
 
-#: src/features/studio/voice-section.tsx
+#: src/features/studio/voice-by-id.tsx
 msgid "For a voice the search can't find, such as a private one of your Fish account: copy its ID from its page on fish.audio."
 msgstr "用于搜索不到的声音，比如你 Fish 账号里的私有声音：在 fish.audio 上该声音的页面复制它的 ID。"
 
@@ -1658,6 +1692,10 @@ msgstr "免费：只运行 yt-dlp。"
 msgid "Friends"
 msgstr "朋友"
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "From <0>{variable}</0> in the environment."
+msgstr "来自环境变量 <0>{variable}</0>。"
+
 #: src/components/settings-form/account-key-field.tsx
 #: src/features/settings/accounts-card.tsx
 msgid "From the environment"
@@ -1678,6 +1716,10 @@ msgstr "正在准备麦克风…"
 #: src/features/setup/done-step.tsx
 msgid "Give her facts, videos and outfits in the studio, so she knows who she is."
 msgstr "在工作室里为她添加资料、视频和服装，让她知道自己是谁。"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "Give the style a name."
+msgstr "给这个风格起个名字。"
 
 #: src/features/studio/glossary-section.tsx
 #: src/features/studio/route.tsx
@@ -1993,6 +2035,10 @@ msgstr "关闭这个页面，任务也会继续运行。"
 msgid "It may have been deleted. Pick another, or start a new one."
 msgstr "它可能已被删除。请选择其他聊天，或开始新的聊天。"
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "It replaces the environment's style by this name, which <0>{replacing}</0> sets."
+msgstr "它会替换环境变量 <0>{replacing}</0> 设置的同名风格。"
+
 #: src/features/jobs/parts.tsx
 msgid "It still hasn't stopped since you cancelled it. Force Stop ends it at once, without letting it finish what it is writing: an index it was building can be left half built, so run that job again afterwards."
 msgstr "取消之后它仍然没有停下。强制停止会立刻结束它，不等它写完手头的内容：正在构建的索引可能只完成一半，之后请重新运行那个任务。"
@@ -2020,6 +2066,10 @@ msgstr "下载之前不知道它的时长。"
 #: src/features/chats/chat-menu.tsx
 msgid "Its messages and photos are deleted from this computer. What she remembers about you stays."
 msgstr "这个聊天的消息和照片会从这台电脑上删除。她对你的记忆会保留。"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "Its Voice"
+msgstr "它的声音"
 
 #: src/components/voice-picker/index.tsx
 msgid "Japanese"
@@ -2326,6 +2376,7 @@ msgid "Mute your mic"
 msgstr "关闭麦克风"
 
 #: src/features/settings/account-dialog.tsx
+#: src/features/studio/voice-styles-card.tsx
 msgid "Name"
 msgstr "名称"
 
@@ -2482,6 +2533,10 @@ msgstr "{during}没有花费记录。通话、视频任务和 MCP 检索运行�
 msgid "No stream catalog yet."
 msgstr "还没有直播目录。"
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "No trigger words: the model goes by the name."
+msgstr "没有触发词：模型只看名称。"
+
 #: src/features/studio/video-table.tsx
 msgid "No upload date"
 msgstr "没有上传日期"
@@ -2489,6 +2544,10 @@ msgstr "没有上传日期"
 #: src/features/studio/video-table.tsx
 msgid "No videos yet"
 msgstr "还没有视频"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "No voice styles yet"
+msgstr "还没有声线风格"
 
 #: src/features/studio/voice-section.tsx
 msgid "No voice yet"
@@ -2618,6 +2677,10 @@ msgstr "每行一个链接。"
 msgid "One model hears, thinks and speaks, in place of the three. Experimental."
 msgstr "用一个同时负责听、思考和说话的模型代替三个模型。实验性功能。"
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "One of {name}'s voices, by its ID. Find one in its <0>voice library</0>."
+msgstr "{name} 的一个声音，按 ID 填写。可以在它的<0>声音库</0>里找。"
+
 #: src/features/studio/voice-section.tsx
 msgid "One of {provider}'s voices."
 msgstr "{provider} 提供的声音之一。"
@@ -2710,7 +2773,7 @@ msgstr "Opus 码率：最低"
 msgid "Opus Bitrate: Medium"
 msgstr "Opus 码率：中等"
 
-#: src/features/studio/voice-section.tsx
+#: src/features/studio/voice-by-id.tsx
 msgid "Or Use a Voice by Its ID"
 msgstr "或按 ID 使用声音"
 
@@ -2797,6 +2860,10 @@ msgstr "选择一个聊天，或开始新的聊天"
 msgid "Pick a PNG, JPEG or WebP image."
 msgstr "请选择 PNG、JPEG 或 WebP 图片。"
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "Pick a voice"
+msgstr "选一个声音"
+
 #: src/features/call/call-notices.tsx
 #: src/features/call/call-page.tsx
 #: src/features/home/readiness-labels.ts
@@ -2812,6 +2879,10 @@ msgstr "为{name}选择声音"
 #: src/features/setup/new-persona.tsx
 msgid "Pick a voice for her."
 msgstr "请为她选择一个声音。"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "Pick a voice for this style."
+msgstr "请为这个风格选一个声音。"
 
 #: src/features/call/call-notices.tsx
 msgid "Pick her own voice: it overrides the environment's for her alone."
@@ -3044,6 +3115,7 @@ msgstr "相对于她的文件夹。默认 prompt.md。"
 
 #: src/features/setup/avatar-picker.tsx
 #: src/features/studio/identity-section.tsx
+#: src/features/studio/voice-styles-card.tsx
 msgid "Remove"
 msgstr "移除"
 
@@ -3053,6 +3125,7 @@ msgid "Remove"
 msgstr "删除"
 
 #: src/features/settings/accounts-card.tsx
+#: src/features/studio/voice-styles-card.tsx
 msgid "Remove {name}"
 msgstr "删除{name}"
 
@@ -3077,6 +3150,10 @@ msgstr "删除密钥"
 msgid "Remove Persona"
 msgstr "移除人设"
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "Remove the {name} style?"
+msgstr "移除风格 {name}？"
+
 #: src/features/chats/chat-menu.tsx
 msgid "Rename"
 msgstr "重命名"
@@ -3092,6 +3169,10 @@ msgstr "更换"
 #: src/features/studio/identity-section.tsx
 msgid "Replace Her Avatar"
 msgstr "更换她的头像"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "Replaces <0>{variable}</0> in the environment."
+msgstr "替换环境变量 <0>{variable}</0>。"
 
 #: src/features/chats/labels.ts
 msgid "Replies always come as text."
@@ -3260,6 +3341,10 @@ msgstr "保存并继续"
 #: src/components/settings-form/reindex-dialog.tsx
 msgid "Save Anyway"
 msgstr "仍然保存"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "Save Style"
+msgstr "保存风格"
 
 #: src/components/settings-form/account-key-field.tsx
 #: src/features/settings/accounts-card.tsx
@@ -3464,6 +3549,10 @@ msgstr "她回应的是{name}的话。"
 msgid "She answered your line."
 msgstr "她回应的是你的话。"
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "She can't switch to it anymore, and its voice is removed from her settings."
+msgstr "她将不能再切换到这个风格，它的声音也会从她的设置中移除。"
+
 #: src/features/studio/models-section.tsx
 msgid "She can't switch voice styles during a call."
 msgstr "通话中无法切换声音风格。"
@@ -3471,6 +3560,10 @@ msgstr "通话中无法切换声音风格。"
 #: src/features/studio/references-section.tsx
 msgid "She can't take selfies without one. Add a picture of her, or drop one here."
 msgstr "没有服装，她就不能自拍。添加一张她的图片，或者拖到这里。"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "She has a style by that name already."
+msgstr "她已经有同名的风格了。"
 
 #: src/features/home/readiness-labels.ts
 msgid "She has no voice yet, so calls can't start."
@@ -3691,6 +3784,10 @@ msgstr "和任意人设开始聊天，也可以同时拉上几位。每个聊天
 msgid "Start the billed run?"
 msgstr "开始收费的运行？"
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "Start with a lowercase letter, then use lowercase letters, digits or _."
+msgstr "以小写字母开头，之后只用小写字母、数字或 _。"
+
 #: src/features/setup/persona-step.tsx
 msgid "Start with the demo persona, or create your own and build her up later in the studio."
 msgstr "可以先用演示人设，也可以创建自己的人设，之后在工作室里慢慢完善。"
@@ -3774,6 +3871,10 @@ msgstr "工作室"
 #: src/components/settings-form/labels.ts
 msgid "STUN URL"
 msgstr "STUN 地址"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "Such as 温柔/轻柔/柔一点"
+msgstr "比如 温柔/轻柔/柔一点"
 
 #: src/features/setup/persona-fields.tsx
 #: src/features/studio/identity-section.tsx
@@ -3902,6 +4003,14 @@ msgstr "没有这项设置。"
 msgid "That value isn't valid for this setting."
 msgstr "这项设置的值无效。"
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "The {name} style is removed."
+msgstr "已移除风格 {name}。"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "The {name} style is saved."
+msgstr "已保存风格 {name}。"
+
 #: src/features/studio/voice-section.tsx
 msgid "The {provider} voice she speaks with, by its id. Find one in {provider}'s <0>voice library</0>."
 msgstr "她说话所用的 {provider} 声音 ID。可以在 {provider} 的<0>声音库</0>中查找。"
@@ -3962,9 +4071,17 @@ msgstr "磁盘空间已满。"
 msgid "The environment's key wins over one saved here."
 msgstr "环境变量中的密钥优先于这里保存的密钥。"
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "The environment's style by this name, which {env} sets, takes its place again."
+msgstr "环境变量 {env} 设置的同名风格会重新生效。"
+
 #: src/features/studio/voice-section.tsx
 msgid "The environment's voice"
 msgstr "环境变量里的声音"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "The environment's voice styles go with its voice, which she doesn't use, so these don't apply to her: {names}."
+msgstr "环境变量里的声线风格跟随环境变量的声音，而她不用那个声音，所以这些对她不生效：{names}。"
 
 #: src/features/studio/facts-editor.tsx
 msgid "The file is removed from your data home. Facts already indexed stay until you index again."
@@ -4405,6 +4522,14 @@ msgstr "转写服务商"
 msgid "Transcriptions at Once"
 msgstr "同时转写数"
 
+#: src/features/studio/voice-styles-card.tsx
+msgid "Trigger Words"
+msgstr "触发词"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "Trigger words: {words}"
+msgstr "触发词：{words}"
+
 #: src/components/route-error.tsx
 #: src/features/home/memory-panel.tsx
 msgid "Try Again"
@@ -4523,7 +4648,7 @@ msgstr "改用环境变量里的声音"
 msgid "Use the environment's voice for {name}?"
 msgstr "让{name}改用环境变量里的声音？"
 
-#: src/features/studio/voice-section.tsx
+#: src/features/studio/voice-by-id.tsx
 msgid "Use This Voice"
 msgstr "使用这个声音"
 
@@ -4577,6 +4702,7 @@ msgstr "视图"
 #: src/features/setup/stepper.tsx
 #: src/features/studio/route.tsx
 #: src/features/studio/voice-section.tsx
+#: src/features/studio/voice-styles-card.tsx
 #: src/lib/labels.ts
 msgid "Voice"
 msgstr "声音"
@@ -4585,6 +4711,10 @@ msgstr "声音"
 msgctxt "reply mode"
 msgid "Voice"
 msgstr "语音"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "Voice ID"
+msgstr "声音 ID"
 
 #: src/components/voice-picker/index.tsx
 msgid "Voice Language"
@@ -4619,6 +4749,14 @@ msgstr "声音已设为{title}。"
 #: src/features/home/voice-dialog.tsx
 msgid "Voice set to {voice}."
 msgstr "声音已设为{voice}。"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "Voice Styles"
+msgstr "声线风格"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "Voices she switches to when you ask for one, as in “声音温柔一点” or “换回原来的”. Her voice above stays her default."
+msgstr "你要求时她会切换到的声音，比如“声音温柔一点”或“换回原来的”。上面的声音仍是她的默认声音。"
 
 #: src/features/call/call-state.tsx
 msgid "Waiting for {name} to answer…"
@@ -4703,6 +4841,18 @@ msgstr "索引任务读取的内容：她的哪些资料文件、资料里指代
 #: src/features/jobs/detail.tsx
 msgid "What the job reported, newest at the bottom."
 msgstr "任务报告的内容，最新的在最下面。"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "What the model calls it, such as gentle or nai_hei."
+msgstr "模型对它的称呼，比如 gentle 或 nai_hei。"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "What you'd say to ask for it. Left empty, the model goes by the built-in words: {words}."
+msgstr "你要求切换时会说的话。留空时，模型按内置触发词判断：{words}。"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "What you'd say to ask for it. Left empty, the model goes by the name alone."
+msgstr "你要求切换时会说的话。留空时，模型只按名称判断。"
 
 #: src/features/studio/video-table.tsx
 msgid "When was it streamed?"

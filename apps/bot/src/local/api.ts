@@ -29,6 +29,7 @@ export const LOCAL_ROUTES = [
   "PUT /api/local/personas/:id/glossary",
   "GET /api/local/personas/:id/identity",
   "PUT /api/local/personas/:id/identity",
+  "PUT /api/local/personas/:id/voice-styles",
   "GET /api/local/personas/:id/references",
   "GET /api/local/personas/:id/references/:kind/:name",
   "POST /api/local/personas/:id/references/:kind/:name",
@@ -393,13 +394,52 @@ export interface SettingRow {
   readonly readOnly: boolean;
 }
 
+/** A voice of hers that change_voice_style switches to when a viewer asks for it. */
+export interface VoiceStyle {
+  /** As change_voice_style passes it. */
+  readonly name: string;
+  /** One of her voice provider's voices. */
+  readonly voiceId: string;
+  /** What a viewer says to ask for it; "" leaves that to the built-in words, else the name. */
+  readonly hint: string;
+}
+
+/** A voice style the environment sets. */
+export interface EnvironmentVoiceStyle {
+  readonly name: string;
+  readonly voiceId: string;
+  /** The variable that sets it. */
+  readonly env: string;
+  /**
+   * `inherited`: she has it too. `replaced`: a style of hers takes its name. `ignored`: it goes
+   * with the environment's voice, which she doesn't use.
+   */
+  readonly state: "inherited" | "replaced" | "ignored";
+}
+
+export interface VoiceStyles {
+  /** Her persona.yaml's, in its order. */
+  readonly own: readonly VoiceStyle[];
+  /** By name. */
+  readonly environment: readonly EnvironmentVoiceStyle[];
+  /** The words the model knows a style by when it has no hint of its own, by name. */
+  readonly builtInHints: Readonly<Record<string, string>>;
+}
+
 export interface SettingsResponse {
   readonly persona: string;
   readonly settings: readonly SettingRow[];
+  /** `persona`'s. */
+  readonly voiceStyles: VoiceStyles;
   /** What the files hold that the bot ignores, in English. */
   readonly warnings: readonly string[];
   /** As in GET status: a saved value waits for POST restart. */
   readonly restartRequired: boolean;
+}
+
+/** PUT personas/:id/voice-styles: all her styles, in order, replacing her persona.yaml's. */
+export interface VoiceStylesUpdate {
+  readonly styles: readonly VoiceStyle[];
 }
 
 /** PUT settings: dotted paths → new values in one scope's file; null removes a key. */
@@ -891,6 +931,7 @@ export interface LocalApi {
   "PUT /api/local/personas/:id/glossary": Endpoint<TextUpdate, GlossaryResponse>;
   "GET /api/local/personas/:id/identity": Endpoint<undefined, PersonaIdentityFields>;
   "PUT /api/local/personas/:id/identity": Endpoint<IdentityUpdate, PersonaIdentityFields>;
+  "PUT /api/local/personas/:id/voice-styles": Endpoint<VoiceStylesUpdate, SettingsResponse>;
   "GET /api/local/personas/:id/references": Endpoint<undefined, ReferencesResponse>;
   "GET /api/local/personas/:id/references/:kind/:name": Endpoint<undefined, Raw<"image">>;
   "POST /api/local/personas/:id/references/:kind/:name": Endpoint<Raw<"image">, ReferenceImage>;

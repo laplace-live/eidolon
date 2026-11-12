@@ -152,6 +152,9 @@ voice:
   voiceId: <Fish Audio model id>
   styles:
     gentle: <Fish Audio model id>
+    nai_hei:
+      voiceId: <Fish Audio model id>
+      hint: 奶黑/黑化/腹黑一点
 ```
 
 `identity` is written in the persona's language and lands in prompts verbatim:
@@ -167,9 +170,11 @@ voice:
 
 `knowledge.gate.questions.<key>` replaces a retrieval-gate question's text (`about_her`, `her_past`,
 `named_thing`); 奶绿's pack tunes `about_her` for her shop. `voice.styles.<name>` adds a voice
-style, as `TTS_VOICE_ID_<NAME>` would; the local app drops them when it saves her voice on another
-provider, whose voice ids they aren't. Paths resolve in the persona's folder, the user's copy
-first.
+style that `change_voice_style` switches her to when a viewer asks, as `TTS_VOICE_ID_<NAME>` would.
+It is a voice id, or a `voiceId` and a `hint`: the words that ask for it, which replace the built-in
+ones (`gentle`, `lively`, `calm`, `sweet` and `playful` have them; any other style goes by its name
+alone). The studio's Voice tab edits them, and drops them when it saves her voice on another
+provider, whose voice ids they aren't. Paths resolve in the persona's folder, the user's copy first.
 
 Each role's `provider` picks one from [the catalog](providers.md#roles) and its `model` is that
 provider's id for it, the provider's default when unset; `realtime.provider` is off until set.

@@ -132,6 +132,33 @@ describe("voiceToolSchema", () => {
     expect(wire(voiceToolSchema(styles))).toBe(VOICE_SCHEMA_WIRE);
   });
 
+  test("her voice.styles hint replaces the built-in words, or names a style that has none", () => {
+    const yaml = join(dataHome(), "personas", "milky-green", "persona.yaml");
+    mkdirSync(join(yaml, ".."), { recursive: true });
+    writeFileSync(
+      yaml,
+      "voice:\n  styles:\n    gentle:\n      voiceId: g\n      hint: 轻声细语\n" +
+        "    nai_hei:\n      voiceId: n\n      hint: 奶黑/黑化\n",
+    );
+    installSettings();
+    try {
+      const styles = new Map([
+        ["default", "a"],
+        ["gentle", "g"],
+        ["lively", "l"],
+        ["nai_hei", "n"],
+      ]);
+      const [tool] = JSON.parse(wire(voiceToolSchema(styles)));
+      expect(tool.function.parameters.properties.style.description).toBe(
+        "声线名称。`default` (默认/原来的/正常的声音); `gentle` (轻声细语); " +
+          "`lively` (活泼/精神/有活力/欢快/明亮/营业声线); `nai_hei` (奶黑/黑化)。",
+      );
+    } finally {
+      rmSync(yaml, { force: true });
+      resetSettings();
+    }
+  });
+
   test("a style without a hint shows its own name; the enum sorts by code point", () => {
     const styles = new Map([
       ["calm", "a"],

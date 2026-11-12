@@ -27,6 +27,7 @@ export {
   envRaw,
   envStr,
   envVariable,
+  envVariablesStartingWith,
 } from "./env.ts";
 export {
   DEFAULT_PERSONA,
@@ -154,6 +155,7 @@ export {
   type SettingsLayers,
   setSettingDefaults,
   settingsGeneration,
+  type VoiceStyleSetting,
   withPersona,
 } from "./settings.ts";
 export { type Clock, pyIsoformatUtc, utcDateParts, utcIsoDate, wallClockMicros } from "./utc.ts";

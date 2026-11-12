@@ -24,7 +24,8 @@ export const VOICE_TOOL_NAME = "change_voice_style";
 /** The persona's own voice's style; the LLM passes it to switch back. */
 export const DEFAULT_STYLE = "default";
 
-// A style with no entry here still works; the LLM infers from the bare name.
+// A persona's voice.styles hint replaces a style's entry here. A style with neither still works;
+// the LLM infers from the bare name.
 export const STYLE_HINTS: Readonly<Record<string, string>> = {
   default: "默认/原来的/正常的声音",
   gentle: "温柔/温和/轻柔/温暖/柔一点",
@@ -82,13 +83,15 @@ export function alternativeStyleNames(styles: VoiceStyles): string[] {
 /** The enum covers exactly the configured styles, so the model can't ask for one that isn't wired. */
 export function voiceToolSchema(styles: VoiceStyles): ToolSchema {
   const styleNames = sortedPy(styles.keys());
+  const persona = activePersona();
+  const styleHints = { ...STYLE_HINTS, ...persona.voiceStyleHints };
   // Own keys only: a style named `constructor` must not pick up Object.prototype's.
   const hints = styleNames.map(
-    (style) => `\`${style}\` (${Object.hasOwn(STYLE_HINTS, style) ? STYLE_HINTS[style] : style})`,
+    (style) => `\`${style}\` (${Object.hasOwn(styleHints, style) ? styleHints[style] : style})`,
   );
   return {
     name: VOICE_TOOL_NAME,
-    description: description(activePersona().identity.fans),
+    description: description(persona.identity.fans),
     properties: {
       style: { type: "string", description: `声线名称。${hints.join("; ")}。`, enum: styleNames },
     },

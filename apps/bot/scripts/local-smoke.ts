@@ -1,11 +1,11 @@
 // A browser walk through the local web app on a throwaway data home: sign-in, the wizard's keys step
 // in English and 简体中文, saved keys, an embeddings account added and picked in Settings, a saved
-// prompt, a facts index built through the studio, a text chat from greeting to delete, a group chat
-// with a second persona, voice messages both ways, and a call inside a chat. The keys are fake, so
-// the providers refuse them for free, and the embeddings, the chats' replies, the director's
-// decisions, the voice messages' speech and the call's hearing, mind and voice come from a fake
-// server, so nothing is billed. --call instead places a real call from the call page with the
-// .env's keys, which bills them.
+// prompt, a voice style added and removed, a facts index built through the studio, a text chat
+// from greeting to delete, a group chat with a second persona, voice messages both ways, and a call
+// inside a chat. The keys are fake, so the providers refuse them for free, and the embeddings, the
+// chats' replies, the director's decisions, the voice messages' speech and the call's hearing, mind
+// and voice come from a fake server, so nothing is billed. --call instead places a real call from
+// the call page with the .env's keys, which bills them.
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import {
   existsSync,
@@ -241,6 +241,8 @@ const VOICE_REPLY = "[sighing] 好吧好吧，就说一句哦。";
 const VOICE_SPOKEN = "好吧好吧，就说一句哦。";
 /** How long the fake voice speaks. */
 const SPEECH_SECONDS = 1;
+/** The voice style the studio walk adds and removes. */
+const STYLE = { name: "nai_hei", hint: "奶黑/黑化", voiceId: "0123456789abcdef0123456789abcdef" };
 /** What the viewer types before calling her, and her text answer. */
 const CALL_TOLD = "我家的猫叫团子。";
 const CALL_TOLD_REPLY = "团子这名字好可爱！";
@@ -1121,6 +1123,82 @@ async function savePrompt(walk: Walk, templates: string): Promise<void> {
     `PUT ${status}; ${landed ? "in" : "missing from"} <home>/personas/${PERSONA}/prompt.md; ` +
       `personas/ ${untouched ? "unchanged" : "CHANGED"}`,
   );
+}
+
+/**
+ * A voice style added in the studio, by a typed-in voice id and the words that ask for it, saved
+ * into her persona.yaml and listed, then removed. The voice search answers empty, so the walk
+ * never reaches Fish.
+ */
+async function voiceStyles(walk: Walk, templates: string): Promise<void> {
+  const { page } = walk;
+  const search = (url: URL) => url.pathname === "/api/local/voices/search";
+  await page.route(search, (route) =>
+    route.fulfill({ json: { total: 0, totalIsExact: true, hasMore: false, items: [] } }),
+  );
+  try {
+    await page.goto(`${walk.origin}/personas/${PERSONA}/voice`);
+    const card = page.getByRole("region", { name: t("en", "Voice Styles"), exact: true });
+    await card.getByRole("button", { name: t("en", "Add Style"), exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: t("en", "Add a Voice Style"), exact: true });
+    const name = dialog.getByLabel(t("en", "Name"), { exact: true });
+    await name.fill("default");
+    const refused = await shows(
+      dialog.getByText(t("en", "“default” is her own voice: pick another name."), { exact: true }),
+    );
+    await name.fill(STYLE.name);
+    await dialog.getByLabel(t("en", "Trigger Words"), { exact: true }).fill(STYLE.hint);
+    await dialog
+      .getByLabel(t("en", "Or Use a Voice by Its ID"), { exact: true })
+      .fill(STYLE.voiceId);
+    await dialog.getByRole("button", { name: t("en", "Use This Voice"), exact: true }).click();
+    const url = `${walk.origin}/api/local/personas/${PERSONA}/voice-styles`;
+    const saved = page.waitForResponse(isPut(url));
+    await dialog.getByRole("button", { name: t("en", "Save Style"), exact: true }).click();
+    const status = (await saved).status();
+    const listed = await shows(
+      card.getByText(t("en", "Trigger words: {words}", { words: STYLE.hint }), { exact: true }),
+    );
+    const yaml = join(walk.home, "personas", PERSONA, "persona.yaml");
+    const styles = () =>
+      existsSync(yaml)
+        ? (Bun.YAML.parse(readFileSync(yaml, "utf8")) as { voice?: { styles?: unknown } }).voice
+            ?.styles
+        : undefined;
+    const landed =
+      JSON.stringify(styles()) ===
+      JSON.stringify({ [STYLE.name]: { voiceId: STYLE.voiceId, hint: STYLE.hint } });
+
+    await card
+      .getByRole("button", { name: t("en", "Remove {name}", { name: STYLE.name }), exact: true })
+      .click();
+    const removed = page.waitForResponse(isPut(url));
+    await page
+      .getByRole("alertdialog")
+      .getByRole("button", { name: t("en", "Remove"), exact: true })
+      .click();
+    const removedStatus = (await removed).status();
+    const emptied = await shows(card.getByText(t("en", "No voice styles yet"), { exact: true }));
+    const gone = styles() === undefined;
+    const untouched = treeHash(join(ROOT, "personas")) === templates;
+    walk.checks.add(
+      "voice styles",
+      refused &&
+        status === 200 &&
+        landed &&
+        listed &&
+        removedStatus === 200 &&
+        gone &&
+        emptied &&
+        untouched,
+      `"default" ${refused ? "refused" : "NOT refused"}; PUT ${status}, ` +
+        `${landed ? "in" : "missing from"} <home>/personas/${PERSONA}/persona.yaml, ` +
+        `${listed ? "listed" : "NOT listed"}; removed: PUT ${removedStatus}, ` +
+        `${gone && emptied ? "gone" : "STILL THERE"}; personas/ ${untouched ? "unchanged" : "CHANGED"}`,
+    );
+  } finally {
+    await page.unroute(search);
+  }
 }
 
 async function indexFacts(walk: Walk): Promise<void> {
@@ -2287,6 +2365,7 @@ async function smoke(options: Options): Promise<Checks> {
       const embedder = await checks.step("embeddings account", () => embeddingsAccount(walk));
       await checks.step("credentials.json", () => credentialsAtRest(walk));
       await checks.step("prompt", () => savePrompt(walk, templates));
+      await checks.step("voice styles", () => voiceStyles(walk, templates));
       if (embedder && (await checks.step("ingest-facts", () => indexFacts(walk)))) {
         await checks.step("jobs page", () => jobsPage(walk));
       }

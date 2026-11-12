@@ -336,11 +336,21 @@ export const SETTINGS: readonly SettingField[] = [
   field("persona", "chat.replyMode", "CHAT_REPLY_MODE", "string", "Chat reply mode"),
 ];
 
-/** `voice.styles.<name>` sets `TTS_VOICE_ID_<NAME>`. */
+/** `voice.styles.<name>`, a voice id or `{voiceId, hint}`, sets `TTS_VOICE_ID_<NAME>`. */
 const VOICE_STYLES_PATH = "voice.styles";
 const VOICE_STYLE_PREFIX = "TTS_VOICE_ID_";
+const VOICE_STYLE_KEYS = new Set(["voiceId", "hint"]);
 /** The environment's style variables: these, and Fish's names for them. */
 const ENV_STYLE_PREFIXES = [VOICE_STYLE_PREFIX, "FISH_VOICE_ID_"];
+
+/** One of her persona.yaml's voice styles. */
+export interface VoiceStyleSetting {
+  /** As change_voice_style names it: her key as its variable spells it, lowercased. */
+  readonly name: string;
+  readonly voiceId: string;
+  /** What a viewer says to ask for it; "" leaves that to the built-in words, else the name. */
+  readonly hint: string;
+}
 
 /** The keys credentials.json may hold: the variables that carry secrets. */
 export const CREDENTIALS: readonly string[] = [
@@ -389,6 +399,8 @@ export interface PersonaSettings {
   readonly identity: PersonaIdentity;
   /** Retrieval-gate question texts that replace the built-in ones, by question key. */
   readonly gateQuestions: Readonly<Record<string, string>>;
+  /** Her voice styles' own hints, by style name. */
+  readonly voiceStyleHints: Readonly<Record<string, string>>;
 }
 
 const IDENTITY_KEYS = [
@@ -574,6 +586,36 @@ function readGateQuestions(persona: Tree, label: string): Record<string, string>
   return questions;
 }
 
+/** Her voice.styles by the variable each sets; one the file gets wrong is left out with a warning. */
+function readVoiceStyles(persona: Tree, label: string, warn: Warn): Map<string, VoiceStyleSetting> {
+  const styles = new Map<string, VoiceStyleSetting>();
+  const raw = lookup(persona, VOICE_STYLES_PATH);
+  if (raw === undefined || raw === null) return styles;
+  if (!isPlainObject(raw)) {
+    warn(`Ignoring ${label} ${VOICE_STYLES_PATH}: expected a mapping`);
+    return styles;
+  }
+  for (const [key, value] of Object.entries(raw)) {
+    const path = `${VOICE_STYLES_PATH}.${key}`;
+    const entry = isPlainObject(value) ? value : { voiceId: value };
+    for (const field of Object.keys(entry)) {
+      if (!VOICE_STYLE_KEYS.has(field)) warn(`Unknown setting ${path}.${field} in ${label}`);
+    }
+    const { voiceId, hint } = entry;
+    if (typeof voiceId !== "string" || voiceId === "") {
+      warn(`Ignoring ${label} ${path}: expected a voice id, or voiceId and hint`);
+      continue;
+    }
+    if (hint !== undefined && hint !== null && typeof hint !== "string") {
+      warn(`Ignoring ${label} ${path}.hint: expected string`);
+    }
+    const env = `${VOICE_STYLE_PREFIX}${key.toUpperCase()}`;
+    const name = env.slice(VOICE_STYLE_PREFIX.length).toLowerCase();
+    styles.set(env, { name, voiceId, hint: typeof hint === "string" ? hint.trim() : "" });
+  }
+  return styles;
+}
+
 function warnIfShared(path: string, warn: Warn): void {
   try {
     if (statSync(path).mode & 0o077) {
@@ -617,6 +659,8 @@ export interface SettingsLayers {
    * own voice every voice style in the environment.
    */
   readonly owned: ReadonlySet<string>;
+  /** Her persona.yaml's voice styles, in its order. */
+  readonly voiceStyles: readonly VoiceStyleSetting[];
   /** credentials.json's provider accounts, by id. */
   readonly accounts: ReadonlyMap<string, AccountEntry>;
   /** What loadSettings would log about these files, in its order. */
@@ -633,6 +677,7 @@ interface ReadLayers {
   readonly owned: ReadonlySet<string>;
   /** Why her persona.yaml decides each owned variable, as the log says it. */
   readonly why: ReadonlyMap<string, string>;
+  readonly voiceStyles: readonly VoiceStyleSetting[];
   readonly files: SettingsFiles;
 }
 
@@ -697,20 +742,10 @@ function readLayers(chosen: string | null, warn: Warn): ReadLayers {
     values.set(setting.env, { source: setting.scope, value, raw });
     if (setting.scope === "persona" && value) owned.add(setting.env);
   }
-  const styles = lookup(persona, VOICE_STYLES_PATH);
-  if (styles !== undefined && styles !== null && !isPlainObject(styles)) {
-    warn(`Ignoring ${personaPath} ${VOICE_STYLES_PATH}: expected a mapping`);
-  }
-  if (isPlainObject(styles)) {
-    for (const [name, voiceId] of Object.entries(styles)) {
-      if (typeof voiceId === "string" && voiceId) {
-        const env = `${VOICE_STYLE_PREFIX}${name.toUpperCase()}`;
-        values.set(env, { source: "persona", value: voiceId, raw: voiceId });
-        owned.add(env);
-      } else {
-        warn(`Ignoring ${personaPath} ${VOICE_STYLES_PATH}.${name}: expected string`);
-      }
-    }
+  const styles = readVoiceStyles(persona, personaPath, warn);
+  for (const [env, { voiceId }] of styles) {
+    values.set(env, { source: "persona", value: voiceId, raw: voiceId });
+    owned.add(env);
   }
   const why = new Map<string, string>();
   for (const name of owned) why.set(name, `sets ${BY_ENV.get(name)?.path ?? VOICE_STYLES_PATH}`);
@@ -770,6 +805,7 @@ function readLayers(chosen: string | null, warn: Warn): ReadLayers {
     accounts,
     owned,
     why,
+    voiceStyles: [...styles.values()],
     files: { home, settings: settingsPath, credentials: credentialsPath, persona: personaPath },
   };
 }
@@ -787,6 +823,7 @@ export function readSettingsLayers(personaId: string): SettingsLayers {
     values: read.values,
     accounts: read.accounts,
     owned: read.owned,
+    voiceStyles: read.voiceStyles,
     warnings,
   };
 }
@@ -826,6 +863,9 @@ export function loadSettings(personaId?: string): LoadedSettings {
       id: read.id,
       identity: readIdentity(read.persona, read.id, read.files.persona),
       gateQuestions: readGateQuestions(read.persona, read.files.persona),
+      voiceStyleHints: Object.fromEntries(
+        read.voiceStyles.filter((style) => style.hint !== "").map((s) => [s.name, s.hint]),
+      ),
     },
     values,
     accounts: read.accounts,

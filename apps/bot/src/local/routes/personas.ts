@@ -27,6 +27,7 @@ import {
   type PersonasResponse,
   REFERENCE_KINDS,
   type ReferenceKind,
+  type VoiceStyle,
 } from "../api.ts";
 import {
   AVATAR_STEM,
@@ -48,6 +49,7 @@ import {
   writeFailure,
   writeIdentityFields,
   writeNewPersona,
+  writeVoiceStyles,
 } from "../personas.ts";
 import { imageResponse, localError, localJson, NO_STORE, readJson } from "../responses.ts";
 import { reinstallSettings } from "../restart.ts";
@@ -63,7 +65,7 @@ import {
   WriteRefused,
   writeDataFile,
 } from "../write.ts";
-import { switchRefusal } from "./settings.ts";
+import { settingsOf, switchRefusal } from "./settings.ts";
 import { VOICE_ID } from "./voices.ts";
 
 /** Upload cap, counted while the body streams. */
@@ -152,6 +154,30 @@ function identityFrom(
     return localError(400, "bad-request", "The time zone is not an IANA zone name");
   }
   return fields as unknown as PersonaIdentityFields | IdentityUpdate;
+}
+
+/**
+ * The voice styles a body sends, checked: each a name of its own and a voice. Any name or hint
+ * her persona.yaml can hold passes, since a save sends back those a hand-written file gave her.
+ */
+function voiceStylesFrom(body: unknown): VoiceStyle[] | Response {
+  if (!isPlainObject(body) || !Array.isArray(body.styles)) {
+    return localError(400, "bad-request", "Send {styles}");
+  }
+  const styles: VoiceStyle[] = [];
+  for (const style of body.styles as unknown[]) {
+    const { name, voiceId, hint = "" } = isPlainObject(style) ? style : {};
+    if (typeof name !== "string" || typeof hint !== "string") {
+      return localError(400, "bad-request", "A style is {name, voiceId, hint}");
+    }
+    if (name === "" || styles.some((other) => other.name === name)) {
+      return localError(400, "invalid-setting", "Each style has a name of its own");
+    }
+    const voice = line(voiceId, 200);
+    if (!voice) return localError(400, "invalid-setting", "A style's voice is one line of text");
+    styles.push({ name, voiceId: voice, hint: hint.trim() });
+  }
+  return styles;
 }
 
 function summaryOf(id: string): PersonaSummary {
@@ -415,6 +441,22 @@ export function personasRoutes(app: LocalApp): LocalRouteSpec[] {
         }
         if (id === activePersona().id) reinstallSettings(app);
         return localJson(200, readIdentityFields(id));
+      }),
+    },
+    {
+      route: "PUT /api/local/personas/:id/voice-styles",
+      handler: forPersona(async (request, id) => {
+        const body = await readJson(request);
+        if (!body.ok) return body.response;
+        const styles = voiceStylesFrom(body.value);
+        if (styles instanceof Response) return styles;
+        try {
+          writeVoiceStyles(id, styles);
+        } catch (error) {
+          return writeFailure(error);
+        }
+        reinstallSettings(app);
+        return localJson(200, settingsOf(app, id));
       }),
     },
 
