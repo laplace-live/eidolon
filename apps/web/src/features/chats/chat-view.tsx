@@ -17,7 +17,7 @@ import { listOf } from "@/lib/labels";
 import { statusQuery } from "@/lib/query";
 import { useLang } from "@/locales/i18n";
 import { CallButton, CallDock } from "./call-dock";
-import { cameUp, type LiveCall, ongoingCall } from "./call-live";
+import { type LiveCall, ongoingCall } from "./call-live";
 import { ChatLog } from "./chat-log";
 import { ChatMenu } from "./chat-menu";
 import { ChatSettingsSheet } from "./chat-settings";
@@ -140,6 +140,8 @@ export function ChatView({
   const [callee, setCallee] = useState<{
     readonly persona: ParticipantId;
     readonly group: boolean;
+    /** The server's id for it, once it is up. */
+    readonly call?: string;
   } | null>(null);
   const { phase } = call;
   const calling = phase.name !== "idle" && phase.name !== "ended";
@@ -166,12 +168,26 @@ export function ChatView({
   const next = useMemo(() => nextUp(events ?? []), [events]);
   // This page's call shows as it is said, until the log has all of it.
   const callFrom = useMemo(
-    () =>
-      phase.name === "idle" || !cameUp(phase) ? null : ongoingCall(events ?? [], phase.startedAt),
-    [events, phase],
+    () => (callee?.call === undefined ? null : ongoingCall(events ?? [], callee.call)),
+    [events, callee],
   );
   const chainLimit = useMemo(() => chainLimitOf(events ?? []), [events]);
   const replyMode = useMemo(() => replyModeOf(events ?? []), [events]);
+
+  // While this page's call is up, the chat holds no other: the call the server then says it holds
+  // is this page's. Neither the offer's answer nor the page's clock names it.
+  const up = phase.name === "live";
+  const refetchChat = chat.refetch;
+  useEffect(() => {
+    if (up) void refetchChat();
+  }, [up, refetchChat]);
+  const held = serverCall?.id;
+  useEffect(() => {
+    if (!up || held === undefined) return;
+    setCallee((placed) =>
+      placed === null || placed.call !== undefined ? placed : { ...placed, call: held },
+    );
+  }, [up, held]);
 
   // Status then says whether the bot recorded a failure.
   const ended = phase.name === "ended";

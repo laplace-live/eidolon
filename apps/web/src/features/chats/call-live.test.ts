@@ -6,7 +6,7 @@ import {
   type Transcript,
   type TranscriptEvent,
 } from "@/features/call/transcript";
-import { callRows, cameUp, ongoingCall, standsIn } from "./call-live";
+import { callRows, ongoingCall, standsIn } from "./call-live";
 import { type ChatItem, chatItems } from "./items";
 
 const said = (text: string, final = true): TranscriptEvent => ({
@@ -60,27 +60,21 @@ const BEFORE: ChatEvent[] = [
 ];
 
 describe("ongoingCall", () => {
-  test("is the call this page placed, from its start until its end is stored", () => {
-    const started: ChatEvent = {
-      type: "call-started",
-      seq: 3,
-      at: 3000,
-      call: "c1",
-      persona: "mio",
-    };
-    expect(ongoingCall(BEFORE, 2500)).toBeNull();
-    expect(ongoingCall([...BEFORE, started], 2500)).toBe(3);
-    expect(ongoingCall([...BEFORE, started, line(4, "user", "你好")], 2500)).toBe(3);
+  test("is the page's call, from its start until its end is stored", () => {
+    const begun: ChatEvent = { type: "call-started", seq: 3, at: 3000, call: "c1", persona: "mio" };
+    expect(ongoingCall(BEFORE, "c1")).toBeNull();
+    expect(ongoingCall([...BEFORE, begun], "c1")).toBe(3);
+    expect(ongoingCall([...BEFORE, begun, line(4, "user", "你好")], "c1")).toBe(3);
     const ended: ChatEvent = { type: "call-ended", seq: 5, at: 5000, call: "c1", reason: "hangup" };
-    expect(ongoingCall([...BEFORE, started, line(4, "user", "你好"), ended], 2500)).toBeNull();
+    expect(ongoingCall([...BEFORE, begun, line(4, "user", "你好"), ended], "c1")).toBeNull();
   });
 
-  test("never a call started before this page placed its own, though its log never held it", () => {
+  test("never a call before it, though the page placed its own before its log held that one", () => {
     const earlier: ChatEvent[] = [
       { type: "call-started", seq: 3, at: 3000, call: "old", persona: "mio" },
       { type: "call-ended", seq: 4, at: 4000, call: "old", reason: "hangup" },
     ];
-    expect(ongoingCall([...BEFORE, ...earlier], 4500)).toBeNull();
+    expect(ongoingCall([...BEFORE, ...earlier], "c1")).toBeNull();
     expect(
       ongoingCall(
         [
@@ -88,16 +82,9 @@ describe("ongoingCall", () => {
           ...earlier,
           { type: "call-started", seq: 5, at: 5000, call: "c1", persona: "mio" },
         ],
-        4500,
+        "c1",
       ),
     ).toBe(5);
-    // Another tab's call, on as this page placed its own, which the chat refused.
-    expect(
-      ongoingCall(
-        [...BEFORE, { type: "call-started", seq: 3, at: 3000, call: "c2", persona: "mio" }],
-        3500,
-      ),
-    ).toBeNull();
   });
 
   test("a reply the call stopped, stored before its start, is no start", () => {
@@ -106,58 +93,22 @@ describe("ongoingCall", () => {
       { ...line(3, "mio", "我正说着"), interrupted: true } as ChatEvent,
       { type: "call-started", seq: 4, at: 4000, call: "c1", persona: "mio" },
     ];
-    expect(ongoingCall(events, 2500)).toBe(4);
+    expect(ongoingCall(events, "c1")).toBe(4);
   });
 
   test("a call the server lost is over once another call or the viewer's own line is stored", () => {
-    const started: ChatEvent = {
-      type: "call-started",
-      seq: 3,
-      at: 3000,
-      call: "c1",
-      persona: "mio",
-    };
+    const begun: ChatEvent = { type: "call-started", seq: 3, at: 3000, call: "c1", persona: "mio" };
     const text: ChatEvent = { ...line(5, "user", "还在吗"), modality: "text" } as ChatEvent;
-    expect(ongoingCall([...BEFORE, started, line(4, "user", "你好"), text], 2500)).toBeNull();
+    expect(ongoingCall([...BEFORE, begun, line(4, "user", "你好"), text], "c1")).toBeNull();
     expect(
       ongoingCall(
-        [
-          ...BEFORE,
-          started,
-          { type: "call-started", seq: 4, at: 4000, call: "c2", persona: "mio" },
-        ],
-        2500,
+        [...BEFORE, begun, { type: "call-started", seq: 4, at: 4000, call: "c2", persona: "mio" }],
+        "c1",
       ),
     ).toBeNull();
     // Her photo from a reply the call stopped lands after its start, and the call goes on.
     const photo: ChatEvent = { ...line(4, "mio", ""), modality: "text" } as ChatEvent;
-    expect(ongoingCall([...BEFORE, started, photo], 2500)).toBe(3);
-  });
-});
-
-describe("cameUp", () => {
-  test("a call live, or answered before it ended, stored the start after it was placed", () => {
-    expect(cameUp({ name: "live", startedAt: 1, answeredAt: null })).toBe(true);
-    expect(
-      cameUp({ name: "ended", startedAt: 1, answeredAt: 4, endedAt: 9, end: { kind: "hung-up" } }),
-    ).toBe(true);
-  });
-
-  test("a call refused, or given up before it came up, may have stored none", () => {
-    expect(cameUp({ name: "connecting", startedAt: 1 })).toBe(false);
-    const refused = { kind: "connect", status: 409, detail: "HTTP 409" } as const;
-    expect(
-      cameUp({ name: "ended", startedAt: 1, answeredAt: null, endedAt: 2, end: refused }),
-    ).toBe(false);
-    expect(
-      cameUp({
-        name: "ended",
-        startedAt: 1,
-        answeredAt: null,
-        endedAt: 2,
-        end: { kind: "hung-up" },
-      }),
-    ).toBe(false);
+    expect(ongoingCall([...BEFORE, begun, photo], "c1")).toBe(3);
   });
 });
 
