@@ -2,5 +2,5 @@
 // Written by apps/bot/scripts/sync-version.ts on each release.
 export const BOT_ABOUT = Object.freeze({
   library: "laplace-eidolon",
-  library_version: "0.7.0",
+  library_version: "0.8.0",
 } as const);
