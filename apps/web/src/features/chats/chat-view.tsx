@@ -174,20 +174,25 @@ export function ChatView({
   const chainLimit = useMemo(() => chainLimitOf(events ?? []), [events]);
   const replyMode = useMemo(() => replyModeOf(events ?? []), [events]);
 
-  // While this page's call is up, the chat holds no other: the call the server then says it holds
-  // is this page's. Neither the offer's answer nor the page's clock names it.
+  // While this page's call is up, the chat holds no other: the call a read made then says it holds
+  // is this page's. Neither the offer's answer nor the page's clock names it, and the cached log may
+  // still name a call a killed server never ended.
   const up = phase.name === "live";
   const refetchChat = chat.refetch;
   useEffect(() => {
-    if (up) void refetchChat();
+    if (!up) return;
+    let current = true;
+    void refetchChat().then((read) => {
+      const held = read.status === "success" ? callOn(read.data) : null;
+      if (!current || held === null) return;
+      setCallee((placed) =>
+        placed === null || placed.call !== undefined ? placed : { ...placed, call: held.id },
+      );
+    });
+    return () => {
+      current = false;
+    };
   }, [up, refetchChat]);
-  const held = serverCall?.id;
-  useEffect(() => {
-    if (!up || held === undefined) return;
-    setCallee((placed) =>
-      placed === null || placed.call !== undefined ? placed : { ...placed, call: held },
-    );
-  }, [up, held]);
 
   // Status then says whether the bot recorded a failure.
   const ended = phase.name === "ended";
