@@ -1,7 +1,7 @@
 // The call this page holds, shown as it is said. The chat stores each of its lines only once it is
 // finished, her reply once all of it has played, so while the call is on, its own transcript (what
 // the call page shows) stands in for its stored lines, until the call's end is stored after them.
-import type { ChatEvent, ChatEventOf, ParticipantId } from "@eidolon/chat";
+import type { ChatEvent, ParticipantId } from "@eidolon/chat";
 import type { CallPhase } from "@/features/call/phase";
 import type { BotEntry, SelfieEntry, Transcript, UserEntry } from "@/features/call/transcript";
 import type { WaitState } from "@/features/call/watchdog";
@@ -20,22 +20,29 @@ export interface LiveCall {
 }
 
 /**
- * The seq of the call-started this page's call stored, the first after `placedAfter`, the log's
- * last seq as the page placed it; null until it is stored, and once its call-ended is.
+ * The seq of the call-started this page's call stored, the first stamped since `placedAt`, when the
+ * page placed it: the page's log may not hold every call before it, and the page shares the local
+ * server's clock. Null until it is stored, and once the call is over: a server killed mid-call
+ * stores no call-ended, so a call started after it, or a line the viewer sent outside one, ends it.
  */
-export function ongoingCall(events: readonly ChatEvent[], placedAfter: number): number | null {
-  const started = events.find(
-    (event): event is ChatEventOf<"call-started"> =>
-      event.type === "call-started" && event.seq > placedAfter,
-  );
-  if (started === undefined) return null;
-  const ended = events.some((event) => event.type === "call-ended" && event.call === started.call);
-  return ended ? null : started.seq;
+export function ongoingCall(events: readonly ChatEvent[], placedAt: number): number | null {
+  const index = events.findIndex((event) => event.type === "call-started" && event.at >= placedAt);
+  const started = events[index];
+  if (started?.type !== "call-started") return null;
+  const over = events
+    .slice(index + 1)
+    .some(
+      (event) =>
+        (event.type === "call-ended" && event.call === started.call) ||
+        event.type === "call-started" ||
+        (event.type === "message" && event.speaker.kind === "user" && event.modality !== "call"),
+    );
+  return over ? null : started.seq;
 }
 
 /**
- * Whether the page's call stored the start found after `placedAfter`. A call refused, or given up
- * before its offer, stored none, and the next start may be another tab's call; one live or
+ * Whether the page's call stored the first start stamped since it was placed. A call refused, or
+ * given up before its offer, stored none, and the next start may be another tab's call; one live or
  * answered stored its own.
  */
 export function cameUp(phase: CallPhase): boolean {

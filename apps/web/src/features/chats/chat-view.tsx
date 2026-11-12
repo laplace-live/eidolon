@@ -140,8 +140,6 @@ export function ChatView({
   const [callee, setCallee] = useState<{
     readonly persona: ParticipantId;
     readonly group: boolean;
-    /** The log's last seq as this page placed the call, which its start is stored after. */
-    readonly placedAfter: number;
   } | null>(null);
   const { phase } = call;
   const calling = phase.name !== "idle" && phase.name !== "ended";
@@ -166,10 +164,11 @@ export function ChatView({
     [summary, personaOf],
   );
   const next = useMemo(() => nextUp(events ?? []), [events]);
-  // This page's call shows as it is said, until the chat has stored its end after its last line.
+  // This page's call shows as it is said, until the log has all of it.
   const callFrom = useMemo(
-    () => (callee === null ? null : ongoingCall(events ?? [], callee.placedAfter)),
-    [events, callee],
+    () =>
+      phase.name === "idle" || !cameUp(phase) ? null : ongoingCall(events ?? [], phase.startedAt),
+    [events, phase],
   );
   const chainLimit = useMemo(() => chainLimitOf(events ?? []), [events]);
   const replyMode = useMemo(() => replyModeOf(events ?? []), [events]);
@@ -213,11 +212,11 @@ export function ChatView({
     phase.name !== "idle" &&
     !(phase.name === "ended" && phase.end.kind === "hung-up");
   const startCall = (persona: ParticipantId, group: boolean) => {
-    setCallee({ persona, group, placedAfter: events?.at(-1)?.seq ?? 0 });
+    setCallee({ persona, group });
     call.start({ chatId: id, persona, ...(group ? { group } : {}) });
   };
   const liveCall: LiveCall | null =
-    callFrom === null || callee === null || !cameUp(phase)
+    callFrom === null || callee === null
       ? null
       : {
           from: callFrom,
