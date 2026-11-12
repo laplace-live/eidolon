@@ -17,6 +17,7 @@ import { listOf } from "@/lib/labels";
 import { statusQuery } from "@/lib/query";
 import { useLang } from "@/locales/i18n";
 import { CallButton, CallDock } from "./call-dock";
+import { type LiveCall, ongoingCall } from "./call-live";
 import { ChatLog } from "./chat-log";
 import { ChatMenu } from "./chat-menu";
 import { ChatSettingsSheet } from "./chat-settings";
@@ -139,6 +140,8 @@ export function ChatView({
   const [callee, setCallee] = useState<{
     readonly persona: ParticipantId;
     readonly group: boolean;
+    /** The server's id for it, once it is up. */
+    readonly call?: string;
   } | null>(null);
   const { phase } = call;
   const calling = phase.name !== "idle" && phase.name !== "ended";
@@ -163,8 +166,33 @@ export function ChatView({
     [summary, personaOf],
   );
   const next = useMemo(() => nextUp(events ?? []), [events]);
+  // This page's call shows as it is said, until the log has all of it.
+  const callFrom = useMemo(
+    () => (callee?.call === undefined ? null : ongoingCall(events ?? [], callee.call)),
+    [events, callee],
+  );
   const chainLimit = useMemo(() => chainLimitOf(events ?? []), [events]);
   const replyMode = useMemo(() => replyModeOf(events ?? []), [events]);
+
+  // While this page's call is up, the chat holds no other: the call a read made then says it holds
+  // is this page's. Neither the offer's answer nor the page's clock names it, and the cached log may
+  // still name a call a killed server never ended.
+  const up = phase.name === "live";
+  const refetchChat = chat.refetch;
+  useEffect(() => {
+    if (!up) return;
+    let current = true;
+    void refetchChat().then((read) => {
+      const held = read.status === "success" ? callOn(read.data) : null;
+      if (!current || held === null) return;
+      setCallee((placed) =>
+        placed === null || placed.call !== undefined ? placed : { ...placed, call: held.id },
+      );
+    });
+    return () => {
+      current = false;
+    };
+  }, [up, refetchChat]);
 
   // Status then says whether the bot recorded a failure.
   const ended = phase.name === "ended";
@@ -208,6 +236,17 @@ export function ChatView({
     setCallee({ persona, group });
     call.start({ chatId: id, persona, ...(group ? { group } : {}) });
   };
+  const liveCall: LiveCall | null =
+    callFrom === null || callee === null
+      ? null
+      : {
+          from: callFrom,
+          transcript: call.transcript,
+          wait: call.wait,
+          persona: callee.persona,
+          group: callee.group,
+          live: phase.name === "live",
+        };
 
   return (
     <>
@@ -246,6 +285,7 @@ export function ChatView({
           autoPlay={turns.autoPlay}
           onAutoPlayEnd={turns.autoPlayEnded}
           inCall={inCall}
+          call={liveCall}
           onSend={turns.send}
           onSendVoice={turns.sendVoice}
         />

@@ -180,18 +180,17 @@ export function chatItems(events: readonly ChatEvent[]): ChatItem[] {
 }
 
 /**
- * Whoever said the item at `index`: null for the viewer, else her id, for her lines and failures.
- * A call's edge has no speaker, so whoever speaks after it starts a run.
+ * Whoever said `item`: null for the viewer, else her id, for her lines and failures. A call's edge
+ * has no speaker, so whoever speaks after it starts a run.
  */
-function speakerAt(items: readonly ChatItem[], index: number): ParticipantId | null | undefined {
-  const item = items[index];
+export function saidBy(item: ChatItem | undefined): ParticipantId | null | undefined {
   if (item === undefined || item.kind === "call") return undefined;
   return item.kind === "user" ? null : item.persona;
 }
 
 /** The item at `index` begins a run of one speaker's items, where a group chat names her. */
 export function startsRun(items: readonly ChatItem[], index: number): boolean {
-  return index === 0 || speakerAt(items, index - 1) !== speakerAt(items, index);
+  return index === 0 || saidBy(items[index - 1]) !== saidBy(items[index]);
 }
 
 /** More than one persona has a line here, as in a group, or one that was a group. */

@@ -586,7 +586,9 @@ that chat; without a `chatId`, it is the standalone call, unbound.
   answer `409 chat-in-call`. The chat takes them again as soon as the call's end is asked for, and
   stores them after its `call-ended`.
 - `GET live` streams each event the chat stores, from `call-started` on, and ends after
-  `call-ended`, so the page follows a reply and a call through one subscription.
+  `call-ended`, so the page follows a reply and a call through one subscription. A line is stored
+  only once it is finished, hers once all of it has played, so the page that placed the call shows
+  the call's own transcript in their place until `call-ended` ([web-app.md](web-app.md#chats)).
 - `GET chats/:id`'s `call` is `{ id, persona }`, with `group: true` on a group call, and null once
   the call's end is asked for. A server killed mid-call leaves a `call-started` with no
   `call-ended`, and `call` is null after the restart, so the page goes by `call`, not by the events.
@@ -609,6 +611,8 @@ voice once the one before her has played out ([voice-engine.md](voice-engine.md#
   persona's view of it is her group view, and it doesn't greet.
 - **The page** names a group call's separator **Group call**, and a line said on it shows the
   decision that chose her; her follow-up after a selfie, which no decision chose, shows none.
+  Since no one greets, it counts the call answered as it connects, and asks the viewer to speak
+  first ([web-app.md](web-app.md#chats)).
 
 **Production binds a call only through its chat endpoint**
 ([A call inside a chat](#a-call-inside-a-chat)), whose window comes signed from the browser. With

@@ -26,7 +26,10 @@ export type CallPhase =
   | { readonly name: "starting"; readonly startedAt: number }
   /** The offer is out; waiting for bot-ready. */
   | { readonly name: "connecting"; readonly startedAt: number }
-  /** `answeredAt` is null until the bot first speaks. */
+  /**
+   * `answeredAt` is null until the bot first speaks; a group call, which no one greets, is answered
+   * as it comes up.
+   */
   | { readonly name: "live"; readonly startedAt: number; readonly answeredAt: number | null }
   | { readonly name: "ending"; readonly startedAt: number; readonly answeredAt: number | null }
   | {

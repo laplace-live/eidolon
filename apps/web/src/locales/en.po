@@ -1509,6 +1509,10 @@ msgstr "Every video is downloaded."
 msgid "Everyone"
 msgstr "Everyone"
 
+#: src/features/chats/chat-log.tsx
+msgid "Everyone can hear you. Say something to start."
+msgstr "Everyone can hear you. Say something to start."
+
 #: src/features/settings/route.tsx
 msgid "Everything the other sections don't show. Most installs never change these."
 msgstr "Everything the other sections don't show. Most installs never change these."
@@ -3713,6 +3717,7 @@ msgid "State"
 msgstr "State"
 
 #: src/features/call/transcript-view.tsx
+#: src/features/chats/chat-log.tsx
 msgid "Still waiting for {name}. If nothing comes, say it again."
 msgstr "Still waiting for {name}. If nothing comes, say it again."
 

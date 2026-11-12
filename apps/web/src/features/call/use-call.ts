@@ -6,7 +6,7 @@ import { type RefObject, useCallback, useEffect, useReducer, useRef, useState } 
 import type { ChatCallRequestData } from "@/lib/api";
 import { deviceProblemOf, type MicProblem, probeMic } from "./media";
 import { type CallPhase, connectEnd, endOf, IDLE, reducePhase } from "./phase";
-import { selfiePaths } from "./selfie";
+import { selfiePaths, selfiePersona } from "./selfie";
 import { fetchIceServers, offerRequest } from "./signalling";
 import { EMPTY_TRANSCRIPT, reduceTranscript, speakerOf, type Transcript } from "./transcript";
 import { type WaitState, Watchdog } from "./watchdog";
@@ -172,7 +172,9 @@ export function useCall(): Call {
             return;
           }
           const paths = selfiePaths(data);
-          if (paths.length > 0) dispatchTranscript({ type: "selfie", paths });
+          if (paths.length > 0) {
+            dispatchTranscript({ type: "selfie", paths, persona: selfiePersona(data) });
+          }
         },
         [RTVIEvent.Error]: (message) => {
           watchdog.clear();
@@ -259,6 +261,8 @@ export function useCall(): Call {
       if (stale()) return;
       call.heardAt = Date.now();
       dispatchPhase({ type: "ready" });
+      // No one greets on a group call: it waits for the viewer, so it is answered as it comes up.
+      if (target?.group) dispatchPhase({ type: "answered", at: Date.now() });
     },
     [listenersFor, release, watchdog],
   );

@@ -9,3 +9,10 @@ export function selfiePaths(data: unknown): string[] {
   if (type !== "selfie" || !Array.isArray(urls)) return [];
   return urls.filter((url): url is string => typeof url === "string" && SELFIE_PATH.test(url));
 }
+
+/** Whose photo a server message says it is, as a group call's selfie does; null for no one. */
+export function selfiePersona(data: unknown): string | null {
+  if (typeof data !== "object" || data === null) return null;
+  const { persona } = data as { readonly persona?: unknown };
+  return typeof persona === "string" && persona !== "" ? persona : null;
+}
