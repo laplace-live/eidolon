@@ -2681,12 +2681,15 @@ describe("stepConversation pure transcript reducer", () => {
     client.on("deviceError", (err) => deviceErrors.push(err));
     let busyMics = new Set<string>(["usb-busy"]);
     let currentOpenedId = "";
+    let workletGate: Promise<void> | null = null;
+    let markWorkletPending: (() => void) | null = null;
     let deviceChangeListener = null as ((devices: MediaDeviceInfo[]) => void) | null;
     let deviceErrorListener = null as
       | ((err: { devices: Array<"cam" | "mic">; type: string; error?: Error }) => void)
       | null;
     const recorderStub: {
       deviceSelection: { deviceId: string; kind: string; label: string } | null;
+      recording: boolean;
       processor: { context: { state: string; close: () => Promise<void> } } | null;
       stream: {
         getTracks: () => MediaStreamTrack[];
@@ -2704,6 +2707,7 @@ describe("stepConversation pure transcript reducer", () => {
       ) => void;
     } = {
       deviceSelection: null,
+      recording: false,
       processor: null,
       stream: null,
       listDevices: async () =>
@@ -2730,7 +2734,8 @@ describe("stepConversation pure transcript reducer", () => {
             toJSON: () => ({}),
           },
         ] as MediaDeviceInfo[],
-      getStatus: () => (recorderStub.processor === null ? "ended" : "paused"),
+      getStatus: () =>
+        recorderStub.processor === null ? "ended" : recorderStub.recording ? "recording" : "paused",
       begin: async (deviceId?: string) => {
         if (recorderStub.processor) {
           throw new Error("Already connected: please call .end() to start a new session");
@@ -2790,17 +2795,37 @@ describe("stepConversation pure transcript reducer", () => {
           },
         };
         createdContexts.push(ctx);
+        recorderStub.stream = { getTracks: () => [track], getAudioTracks: () => [track] };
+        if (workletGate) {
+          markWorkletPending?.();
+          await workletGate;
+        }
         recorderStub.processor = {
           context: ctx,
         };
-        recorderStub.stream = { getTracks: () => [track], getAudioTracks: () => [track] };
         return true;
       },
       record: async () => {
+        if (!recorderStub.processor) {
+          throw new Error("Session ended: please call .begin() first");
+        }
+        if (recorderStub.recording) {
+          throw new Error("Already recording: please call .pause() first");
+        }
+        recorderStub.recording = true;
         recordedDevices.push(currentOpenedId);
         return true;
       },
-      pause: async () => true,
+      pause: async () => {
+        if (!recorderStub.processor) {
+          throw new Error("Session ended: please call .begin() first");
+        }
+        if (!recorderStub.recording) {
+          throw new Error("Already paused: please call .record() first");
+        }
+        recorderStub.recording = false;
+        return true;
+      },
       end: async () => {
         if (!recorderStub.processor) {
           throw new Error("Session ended: please call .begin() first");
@@ -2809,6 +2834,7 @@ describe("stepConversation pure transcript reducer", () => {
         for (const t of recorderStub.stream?.getTracks() ?? []) t.stop();
         recorderStub.stream = null;
         recorderStub.processor = null;
+        recorderStub.recording = false;
       },
       listenForDeviceChange: (cb) => {
         deviceChangeListener = cb;
@@ -3288,6 +3314,53 @@ describe("stepConversation pure transcript reducer", () => {
       expect(Reflect.get(manager, "_initialized")).toBe(false);
       expect(deviceChangeListener).toBeNull();
       expect(deviceErrorListener).toBeNull();
+      expect(createdContexts.every((c) => c.state === "closed")).toBe(true);
+
+      // 11. Unmuting while a muted live swap is awaiting audioWorklet.addModule() (stream assigned,
+      // processor still null) does not poison acquireError or fail selectLiveMic, and starts recording
+      // cleanly once begin() finishes.
+      client.enableMic(false);
+      await act(async () => {
+        await client.connect({ endpoint: "https://bot.example/api/offer" });
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      let releaseWorkletGate!: () => void;
+      workletGate = new Promise<void>((resolve) => {
+        releaseWorkletGate = resolve;
+      });
+      const workletPending = new Promise<void>((resolve) => {
+        markWorkletPending = resolve;
+      });
+      const recordedBeforeUnmuteRace = recordedDevices.length;
+      try {
+        const swapDuringUnmute = client.selectLiveMic("usb-2");
+        await workletPending;
+        expect(recorderStub.stream).not.toBeNull();
+        expect(recorderStub.processor).toBeNull();
+        // Direct premature record() while processor is null also must not poison swap acquireError.
+        await expect(recorderStub.record()).rejects.toThrow(
+          "Session ended: please call .begin() first",
+        );
+        client.enableMic(true);
+        workletGate = null;
+        markWorkletPending = null;
+        releaseWorkletGate();
+        await act(async () => {
+          await swapDuringUnmute;
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        });
+        expect(client.appliedMicId).toBe("usb-2");
+        expect(recorderStub.getStatus()).toBe("recording");
+        expect(recordedDevices.slice(recordedBeforeUnmuteRace)).toEqual(["usb-2"]);
+        expect(client.tracks().local.audio?.id).toBe("track-usb-2");
+        expect(client.tracks().local.audio?.enabled).toBe(true);
+      } finally {
+        workletGate = null;
+        markWorkletPending = null;
+      }
+      await act(async () => {
+        await client.disconnect();
+      });
       expect(createdContexts.every((c) => c.state === "closed")).toBe(true);
     } finally {
       await act(async () => {

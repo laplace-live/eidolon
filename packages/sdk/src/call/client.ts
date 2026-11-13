@@ -248,6 +248,7 @@ interface BridgedMediaManager {
   clearDeviceSelection(): void;
   runPreConnectMic<T>(fn: () => Promise<T>): Promise<T>;
   tracks(): Tracks;
+  enableMic(enable: boolean): Promise<void>;
   initialize(): Promise<void>;
   connect(): Promise<void>;
   updateMic(micId: string): Promise<void>;
@@ -468,6 +469,7 @@ function createBridgedMediaManager(
         recorder.deviceSelection = null;
       }
       let acquireError: unknown;
+      let swapStartActive = false;
       const origBegin = recorder?.begin;
       const hadOwnBegin = recorder ? Object.hasOwn(recorder, "begin") : false;
       const origRecord = recorder?.record;
@@ -475,7 +477,9 @@ function createBridgedMediaManager(
       if (recorder && typeof origBegin === "function") {
         recorder.begin = async function (this: unknown, ...args: [string?]) {
           try {
-            return await origBegin.apply(this, args);
+            const result = await origBegin.apply(this, args);
+            swapStartActive = Boolean(Reflect.get(target, "_micEnabled"));
+            return result;
           } catch (error) {
             acquireError ??= error;
             throw error;
@@ -484,10 +488,12 @@ function createBridgedMediaManager(
       }
       if (recorder && typeof origRecord === "function") {
         recorder.record = async function (this: unknown, ...args: unknown[]) {
+          const isSwapRecord = swapStartActive;
+          if (isSwapRecord) swapStartActive = false;
           try {
             return await origRecord.apply(this, args);
           } catch (error) {
-            acquireError ??= error;
+            if (isSwapRecord) acquireError ??= error;
             throw error;
           }
         };
@@ -620,6 +626,59 @@ function createBridgedMediaManager(
     },
     tracks() {
       return proto.tracks.call(activeInner);
+    },
+    enableMic(enable: boolean) {
+      const epoch = disconnectEpoch;
+      Reflect.set(activeInner, "_micEnabled", enable);
+      syncMicTrack();
+      if (isCanceled(epoch)) return Promise.resolve();
+      const idleRecorder = readRecorderOf(activeInner);
+      if (
+        !idleRecorder?.stream &&
+        inFlightInners.get(activeInner) === undefined &&
+        !hasEpochMicWork(epoch)
+      ) {
+        return Promise.resolve();
+      }
+      // WavMediaManager.enableMic calls _startRecording()/pause() whenever stream is non-null, even
+      // while WavRecorder.begin() is still awaiting audioWorklet.addModule() (processor === null):
+      // https://github.com/pipecat-ai/pipecat-client-web-transports/blob/main/lib/src/media-mgmt/mediaManager.ts
+      const run = async () => {
+        if (isCanceled(epoch)) return;
+        isolateSuspendedInner();
+        let existing = inFlightInners.get(activeInner);
+        while (!isCanceled(epoch) && existing !== undefined && existing.epoch === epoch) {
+          await waitUnlessCanceled(existing.settled, epoch);
+          isolateSuspendedInner();
+          existing = inFlightInners.get(activeInner);
+        }
+        if (isCanceled(epoch)) return;
+        const target = activeInner;
+        const desired = Boolean(Reflect.get(target, "_micEnabled"));
+        if (desired !== enable) return;
+        const recorder = readRecorderOf(target);
+        if (!recorder?.stream) return;
+        const status = recorder.getStatus?.();
+        if (status === "ended") return;
+        if (desired) {
+          if (status === "recording") {
+            syncMicTrack();
+            return;
+          }
+          await proto.enableMic.call(target, true);
+          syncMicTrack();
+          return;
+        }
+        if (status === "paused") {
+          syncMicTrack();
+          return;
+        }
+        await proto.enableMic.call(target, false);
+        syncMicTrack();
+      };
+      const next = trackMicWork(epoch, () => pendingMicOp.then(run, run)).catch(() => {});
+      pendingMicOp = next;
+      return next;
     },
     async initialize() {
       const epoch = disconnectEpoch;
