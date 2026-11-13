@@ -86,7 +86,7 @@ export interface LocalChatOfferRequestData {
   readonly audioQuality?: AudioQuality;
   readonly chatId: string;
   /** Required by local `/api/offer`, including when `group: true` (where it names the opening speaker). */
-  readonly persona?: ParticipantId;
+  readonly persona: ParticipantId;
   readonly group?: boolean;
 }
 

@@ -112,12 +112,14 @@ export type ConversationAction =
       readonly type: "user-chat-echo";
       readonly text: string;
       readonly msgId?: string;
+      readonly runImmediately?: boolean;
       readonly now: string;
     }
   | {
       readonly type: "send-text-resolved";
       readonly text: string;
       readonly msgId: string;
+      readonly runImmediately?: boolean;
       readonly now: string;
     }
   | {
@@ -273,6 +275,36 @@ function insertBeforeOpenAssistant(
   if (openAssistantIdx !== -1) next.splice(openAssistantIdx, 0, created);
   else next.push(created);
   return next;
+}
+
+function placeTypedUserTurn(
+  state: ConversationState,
+  created: ConversationMessage,
+  now: string,
+  runImmediately: boolean,
+): {
+  messages: readonly ConversationMessage[];
+  segments: ReadonlyMap<string, SegmentMeta>;
+  effects: ConversationEffect[];
+} {
+  if (runImmediately) {
+    const closed = closeOpenTurns(state, now);
+    closed.effects.push({ kind: "created", message: created });
+    return {
+      messages: [...closed.messages, created],
+      segments: closed.segments,
+      effects: closed.effects,
+    };
+  }
+  const effects: ConversationEffect[] = [];
+  const userClosed = finalizeRole(state.messages, "user", now, false);
+  if (userClosed.updated) effects.push({ kind: "updated", message: userClosed.updated });
+  effects.push({ kind: "created", message: created });
+  return {
+    messages: insertBeforeOpenAssistant(userClosed.messages, created),
+    segments: state.segments,
+    effects,
+  };
 }
 
 // RTVI's llm-function-call-started omits tool_call_id; pair anonymous starts FIFO with in-progress.
@@ -475,7 +507,6 @@ export function stepConversation(
           receivedChatIds.add(action.msgId);
           return { state: { ...state, receivedChatIds }, effects: [] };
         }
-        const closed = closeOpenTurns(state, action.now);
         const created: ConversationMessage = {
           role: "user",
           final: true,
@@ -485,14 +516,18 @@ export function stepConversation(
           createdAt: action.now,
           updatedAt: action.now,
         };
-        closed.effects.push({ kind: "created", message: created });
+        const placed = placeTypedUserTurn(
+          state,
+          created,
+          action.now,
+          action.runImmediately !== false,
+        );
         return {
-          state: { ...state, messages: [...closed.messages, created], segments: closed.segments },
-          effects: closed.effects,
+          state: { ...state, messages: placed.messages, segments: placed.segments },
+          effects: placed.effects,
         };
       }
       if (action.text.trim() === "") return { state, effects: [] };
-      const closed = closeOpenTurns(state, action.now);
       const created: ConversationMessage = {
         role: "user",
         final: true,
@@ -500,10 +535,15 @@ export function stepConversation(
         createdAt: action.now,
         updatedAt: action.now,
       };
-      closed.effects.push({ kind: "created", message: created });
+      const placed = placeTypedUserTurn(
+        state,
+        created,
+        action.now,
+        action.runImmediately !== false,
+      );
       return {
-        state: { ...state, messages: [...closed.messages, created], segments: closed.segments },
-        effects: closed.effects,
+        state: { ...state, messages: placed.messages, segments: placed.segments },
+        effects: placed.effects,
       };
     }
 
@@ -520,7 +560,6 @@ export function stepConversation(
       const alreadyAcked = state.receivedChatIds.has(action.msgId);
       const receivedChatIds = new Set(state.receivedChatIds);
       receivedChatIds.delete(action.msgId);
-      const closed = closeOpenTurns(state, action.now);
       const created: ConversationMessage = {
         role: "user",
         final: true,
@@ -530,20 +569,24 @@ export function stepConversation(
         createdAt: action.now,
         updatedAt: action.now,
       };
-      closed.effects.push({ kind: "created", message: created });
+      const placed = placeTypedUserTurn(
+        state,
+        created,
+        action.now,
+        action.runImmediately !== false,
+      );
       return {
         state: {
           ...state,
-          messages: [...closed.messages, created],
-          segments: closed.segments,
+          messages: placed.messages,
+          segments: placed.segments,
           receivedChatIds,
         },
-        effects: closed.effects,
+        effects: placed.effects,
       };
     }
 
     case "send-text-rejected": {
-      const closed = closeOpenTurns(state, action.now);
       const created: ConversationMessage = {
         role: "user",
         final: true,
@@ -552,10 +595,9 @@ export function stepConversation(
         createdAt: action.now,
         updatedAt: action.now,
       };
-      closed.effects.push({ kind: "created", message: created });
       return {
-        state: { ...state, messages: [...closed.messages, created], segments: closed.segments },
-        effects: closed.effects,
+        state: { ...state, messages: [...state.messages, created] },
+        effects: [{ kind: "created", message: created }],
       };
     }
 
@@ -893,6 +935,7 @@ export function useEidolonConversation(
             type: "user-chat-echo",
             text: data.text,
             ...(data.msg_id === undefined ? {} : { msgId: data.msg_id }),
+            runImmediately: client.wasTextSentImmediately(data.msg_id),
             now,
           });
           return;
@@ -949,6 +992,7 @@ export function useEidolonConversation(
           type: "send-text-resolved",
           text: content,
           msgId,
+          runImmediately: sendOptions?.run_immediately !== false,
           now: new Date().toISOString(),
         });
         return msgId;

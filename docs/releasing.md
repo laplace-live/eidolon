@@ -94,16 +94,21 @@ Once, after the repository is public. npm refuses provenance from a private repo
 `--provenance` fails the publish there.
 
 1. **Publish the current version by hand.** npm can only trust a publisher for a package that
-   exists. Check out the latest `laplace-eidolon@X.Y.Z` tag, then, with the Bun the image runs
-   (the build refuses another) and logged in to an npm account with 2FA that can publish to the
-   `@laplace.live` scope:
+   exists. Check out each package's latest release tag (`laplace-eidolon@X.Y.Z` for the bot and
+   `@laplace.live/eidolon-sdk@A.B.C` for the SDK, which versions independently), then, with the Bun
+   the image runs (the build refuses another) and logged in to an npm account with 2FA that can
+   publish to the `@laplace.live` scope:
 
    ```bash
+   git checkout laplace-eidolon@X.Y.Z
    bun install --frozen-lockfile
    bun run pack:npm
    npm publish ./apps/eidolon/laplace.live-eidolon-X.Y.Z.tgz --access public
+
+   git checkout @laplace.live/eidolon-sdk@A.B.C
+   bun install --frozen-lockfile
    bun run pack:sdk
-   npm publish ./packages/sdk/laplace.live-eidolon-sdk-X.Y.Z.tgz --access public
+   npm publish ./packages/sdk/laplace.live-eidolon-sdk-A.B.C.tgz --access public
    ```
 
    Or stage it with npm 12, whose `npm stage publish` can create the package, and approve it with

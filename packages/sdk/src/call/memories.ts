@@ -118,6 +118,8 @@ export async function forgetMemories(
 ): Promise<ForgetMemoriesResponse> {
   const res = await memoryRequest("POST", "/api/memories/forget", options);
   const body: unknown = await res.json().catch(() => null);
-  const userId = isJsonObject(body) && typeof body.user_id === "string" ? body.user_id : "";
-  return { ok: true, user_id: userId };
+  if (!isJsonObject(body) || body.ok !== true || typeof body.user_id !== "string") {
+    throw new EidolonApiError(res.status, "Malformed memories response");
+  }
+  return { ok: true, user_id: body.user_id };
 }

@@ -17,6 +17,8 @@ export interface LiveTurn {
   readonly tools: readonly { readonly name: string; readonly state: ToolState }[];
   /** Her message or failure is stored, and shows in its place. */
   readonly settled: boolean;
+  /** Highest stored `seq` before this turn started; older persona messages cannot settle it. */
+  readonly afterSeq?: number;
 }
 
 export interface ChatViewState {
@@ -58,10 +60,12 @@ function mergeEvents(
 }
 
 function settles(live: LiveTurn, events: readonly WireEvent[]): boolean {
+  const afterSeq = live.afterSeq ?? 0;
   return events.some(
     (event) =>
       isChatEvent(event) &&
       ((event.type === "message" &&
+        event.seq > afterSeq &&
         event.speaker.kind === "persona" &&
         event.speaker.id === live.persona) ||
         (event.type === "turn-failed" && event.turn === live.turn)),
@@ -102,7 +106,14 @@ function applyLine(state: ChatViewState, line: ChatStreamLine): ChatViewState {
         error: null,
         live: [
           ...state.live,
-          { turn: line.turn, persona: line.persona, text: "", tools: [], settled: false },
+          {
+            turn: line.turn,
+            persona: line.persona,
+            text: "",
+            tools: [],
+            settled: false,
+            afterSeq: state.events.at(-1)?.seq ?? 0,
+          },
         ],
       };
     case "delta":

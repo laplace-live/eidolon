@@ -11,6 +11,7 @@ import {
   gatherNetworkInfo,
   isAudioQuality,
   isRateLimitCallError,
+  type LocalChatOfferRequestData,
   listMemories,
   newChatHeader,
   normalizeDeviceErrorReason,
@@ -28,6 +29,7 @@ import {
   uuidv7,
 } from "../src/index.ts";
 import { EMPTY_CONVERSATION_STATE, isBotOutputText, stepConversation } from "../src/react/index.ts";
+import { runLiveMicSwap } from "../src/react/mic-devices.ts";
 
 beforeAll(() => {
   // @pipecat-ai/client-js reads `window?.navigator?.userAgent` with an unguarded `window` identifier.
@@ -255,6 +257,35 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
         fetch: async () => new Response("Unauthorized", { status: 401 }),
       }),
     ).rejects.toBeInstanceOf(EidolonApiError);
+
+    // 2xx responses without `{ ok: true, user_id: string }` (such as an HTML proxy fallback) throw EidolonApiError.
+    await expect(
+      forgetMemories({
+        baseUrl: "https://bot.example",
+        fetch: async () => new Response("<!doctype html>", { status: 200 }),
+      }),
+    ).rejects.toBeInstanceOf(EidolonApiError);
+    await expect(
+      forgetMemories({
+        baseUrl: "https://bot.example",
+        fetch: async () => Response.json({ ok: false, user_id: "u_42" }),
+      }),
+    ).rejects.toBeInstanceOf(EidolonApiError);
+    await expect(
+      forgetMemories({
+        baseUrl: "https://bot.example",
+        fetch: async () => Response.json({ ok: true }),
+      }),
+    ).rejects.toBeInstanceOf(EidolonApiError);
+
+    const validLocalOffer: LocalChatOfferRequestData = {
+      chatId: "chat-1",
+      persona: "milky-green",
+    };
+    expect(validLocalOffer.persona).toBe("milky-green");
+    // @ts-expect-error local /api/offer requires persona even for group calls
+    const _missingPersona: LocalChatOfferRequestData = { chatId: "chat-1" };
+    void _missingPersona;
   });
 
   test("device selection helpers and gatherNetworkInfo", async () => {
@@ -451,6 +482,10 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
     };
     Reflect.set(mediaManager, "_wavRecorder", fakeRecorder);
     class FakePeerConnection {
+      close() {}
+      getSenders() {
+        return [];
+      }
       getTransceivers() {
         return [
           {
@@ -490,6 +525,93 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
     await mediaManager.connect();
     expect(activeTrack.enabled).toBe(false);
     await client.disconnect();
+
+    // An in-flight selectLiveMic() awaiting getUserMedia when disconnect() runs settles before
+    // disconnect() resolves and stops the newly opened capture instead of leaving the mic live.
+    Reflect.set(client.rawTransport, "_state", "connected");
+    let markBeginStarted!: () => void;
+    const beginStarted = new Promise<void>((resolve) => {
+      markBeginStarted = resolve;
+    });
+    let beginCalls = 0;
+    let finishBegin!: () => void;
+    const origBegin = fakeRecorder.begin;
+    fakeRecorder.begin = () => {
+      beginCalls += 1;
+      markBeginStarted();
+      return new Promise<boolean>((resolve) => {
+        finishBegin = () => {
+          void origBegin().then(resolve);
+        };
+      });
+    };
+    let leakedTrackStarted = false;
+    const offLeak = client.on("trackStarted", (_track, participant) => {
+      if (participant?.local === true) leakedTrackStarted = true;
+    });
+    replacedTrack = null;
+    Object.assign(globalThis, { RTCPeerConnection: FakePeerConnection });
+    const origClientDisconnect = client.rawClient.disconnect.bind(client.rawClient);
+    Reflect.set(client.rawClient, "disconnect", async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    });
+    try {
+      Reflect.set(client.rawTransport, "pc", new FakePeerConnection());
+      const pendingSwap = client.selectLiveMic("usb-1");
+      const queuedSwap = client.selectLiveMic("usb-2");
+      await beginStarted;
+      let beginSettled = false;
+      setTimeout(() => {
+        beginSettled = true;
+        finishBegin();
+      }, 10);
+      await client.disconnect();
+      // disconnect() must wait for the in-flight swap, skip queued swaps, never replace RTP sender tracks, and stop capture.
+      expect(beginSettled).toBe(true);
+      expect(beginCalls).toBe(1);
+      expect(replacedTrack).toBeNull();
+      expect(activeTrack.readyState).toBe("ended");
+      expect(fakeRecorder.stream).toBeNull();
+      await Promise.all([pendingSwap, queuedSwap]);
+    } finally {
+      Reflect.set(client.rawClient, "disconnect", origClientDisconnect);
+      Object.assign(globalThis, { RTCPeerConnection: prevRTC });
+      Reflect.set(client.rawTransport, "pc", null);
+    }
+    offLeak();
+    fakeRecorder.begin = origBegin;
+    expect(activeTrack.readyState).toBe("ended");
+    expect(fakeRecorder.stream).toBeNull();
+    expect(leakedTrackStarted).toBe(false);
+
+    // runLiveMicSwap catches selectLiveMic rejections and normalizes errors without unhandled rejections.
+    const swapErrors: string[] = [];
+    let settledCount = 0;
+    runLiveMicSwap(
+      {
+        selectLiveMic: async () => {
+          throw "mic busy";
+        },
+      },
+      "usb-2",
+      {
+        onError: (err) => swapErrors.push(err.message),
+        onSettled: () => {
+          settledCount++;
+        },
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(swapErrors).toEqual(["mic busy"]);
+    expect(settledCount).toBe(1);
+
+    // EidolonClient.sendText records run_immediately so queued sends do not interrupt active speech.
+    Reflect.set(client.rawClient, "sendText", async (_content: string) => "msg_q1");
+    const queuedId = await client.sendText("queued note", { run_immediately: false });
+    expect(client.wasTextSentImmediately(queuedId)).toBe(false);
+    Reflect.set(client.rawClient, "sendText", async (_content: string) => "msg_i1");
+    const immediateId = await client.sendText("interrupt now");
+    expect(client.wasTextSentImmediately(immediateId)).toBe(true);
 
     raw.emit(RTVIEvent.Disconnected);
     expect(client.tracks().bot).toBeUndefined();
@@ -697,5 +819,68 @@ describe("stepConversation pure transcript reducer", () => {
       ]);
       expect(unspokenParsed.tokens).toEqual([{ kind: "text", start: 0, text: "你好", tags: [] }]);
     }
+  });
+
+  test("preserves open assistant reply across failed sends and run_immediately: false sends", () => {
+    let { state } = stepConversation(EMPTY_CONVERSATION_STATE, {
+      type: "bot-output",
+      now: "2026-11-12T00:00:01.000Z",
+      data: {
+        text: "你好世界",
+        spoken_status: "new",
+        segment_id: 1,
+        will_be_spoken: true,
+      },
+    });
+
+    // A rejected send adds a failed user message without closing the active assistant turn or clearing segments.
+    state = stepConversation(state, {
+      type: "send-text-rejected",
+      text: "没发出去",
+      now: "2026-11-12T00:00:01.200Z",
+    }).state;
+    expect(state.messages.map((m) => [m.role, m.final, m.status])).toEqual([
+      ["assistant", false, undefined],
+      ["user", true, "failed"],
+    ]);
+
+    // A non-interrupting send (`run_immediately: false`) inserts before the open assistant turn and keeps it open.
+    state = stepConversation(state, {
+      type: "send-text-resolved",
+      text: "顺便问一下",
+      msgId: "queued_1",
+      runImmediately: false,
+      now: "2026-11-12T00:00:01.400Z",
+    }).state;
+    state = stepConversation(state, {
+      type: "user-chat-echo",
+      text: "第二句顺便",
+      msgId: "queued_2",
+      runImmediately: false,
+      now: "2026-11-12T00:00:01.500Z",
+    }).state;
+
+    // Subsequent speech progress continues updating the still-open assistant reply.
+    state = stepConversation(state, {
+      type: "bot-output",
+      now: "2026-11-12T00:00:02.000Z",
+      data: {
+        text: "你好世界",
+        spoken_status: "in-progress",
+        segment_id: 1,
+        will_be_spoken: true,
+        spoken_progress: { accumulated_text: "你好", remaining_text: "世界" },
+      },
+    }).state;
+
+    const openAssistant = state.messages.find((m) => m.role === "assistant");
+    expect(openAssistant?.final).toBe(false);
+    expect(openAssistant?.parts[0]?.text).toEqual({ spoken: "你好", unspoken: "世界" });
+    expect(state.messages.map((m) => [m.role, m.msgId, m.status])).toEqual([
+      ["user", "queued_1", "sent"],
+      ["user", "queued_2", "received"],
+      ["assistant", undefined, undefined],
+      ["user", undefined, "failed"],
+    ]);
   });
 });

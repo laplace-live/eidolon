@@ -2,4 +2,4 @@
 "@laplace.live/eidolon-sdk": patch
 ---
 
-fix: Track remote bot audio, mute mic RTP tracks, and keep open turns and cut-off replies intact
+fix: Track remote bot audio, serialize mic swaps with hangup, preserve open turns on queued or failed sends, and ignore historical messages when settling live chat turns

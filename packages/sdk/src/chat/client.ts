@@ -31,7 +31,10 @@ export function isAbortError(error: unknown): boolean {
 
 /** `baseUrl` without trailing slashes or surrounding space. */
 export function normalizeBaseUrl(baseUrl: string): string {
-  return baseUrl.trim().replace(/\/+$/, "");
+  const trimmed = baseUrl.trim();
+  let end = trimmed.length;
+  while (end > 0 && trimmed.charCodeAt(end - 1) === 47) end--;
+  return end === trimmed.length ? trimmed : trimmed.slice(0, end);
 }
 
 async function request(fetcher: FetchLike, url: string, init: RequestInit): Promise<Response> {

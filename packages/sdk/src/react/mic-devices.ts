@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { enumerateAudioInputs, LIVE_SWAP_STATES, resolveSelectedMicId } from "../call/devices.ts";
 import { useEidolonTransportState } from "./hooks.ts";
 import { useOptionalEidolonClient } from "./provider.tsx";
@@ -14,6 +14,26 @@ export interface EidolonMicDevices {
   readonly selectMic: (deviceId: string) => void;
   readonly canLiveSwap: boolean;
   readonly hasMicChoice: boolean;
+  readonly swapError: Error | null;
+}
+
+export function runLiveMicSwap(
+  client: { selectLiveMic(deviceId: string): Promise<void> } | null,
+  deviceId: string,
+  callbacks: {
+    readonly onError: (error: Error) => void;
+    readonly onSettled?: () => void;
+  },
+): void {
+  if (client === null) return;
+  client
+    .selectLiveMic(deviceId)
+    .catch((error: unknown) => {
+      callbacks.onError(error instanceof Error ? error : new Error(String(error)));
+    })
+    .finally(() => {
+      callbacks.onSettled?.();
+    });
 }
 
 /** Enumerates microphones without triggering a permission prompt and swaps live only mid-call. */
@@ -25,9 +45,32 @@ export function useEidolonMicDevices({
   const transportState = useEidolonTransportState();
   const canLiveSwap = client !== null && LIVE_SWAP_STATES.has(transportState);
   const [mics, setMics] = useState<readonly MediaDeviceInfo[]>([]);
+  const [swapError, setSwapError] = useState<Error | null>(null);
+  const mountedRef = useRef(true);
+  const swappingRef = useRef(0);
 
   useEffect(() => {
-    if (typeof navigator === "undefined" || !navigator.mediaDevices?.enumerateDevices) return;
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    setSwapError(null);
+    const offResetConnected = client?.on("connected", () => setSwapError(null));
+    const offResetDisconnected = client?.on("disconnected", () => setSwapError(null));
+    const offDeviceError = client?.on("deviceError", (error) => {
+      if (swappingRef.current > 0) setSwapError(error);
+    });
+
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.enumerateDevices) {
+      return () => {
+        offResetConnected?.();
+        offResetDisconnected?.();
+        offDeviceError?.();
+      };
+    }
     let cancelled = false;
 
     const refresh = async () => {
@@ -53,6 +96,9 @@ export function useEidolonMicDevices({
     return () => {
       cancelled = true;
       navigator.mediaDevices.removeEventListener("devicechange", onDeviceChange);
+      offResetConnected?.();
+      offResetDisconnected?.();
+      offDeviceError?.();
       offConnected?.();
       offAvailable?.();
       offTrack?.();
@@ -67,9 +113,17 @@ export function useEidolonMicDevices({
   const selectMic = useCallback(
     (deviceId: string) => {
       onPersistMicId?.(deviceId);
-      if (client !== null) {
-        void client.selectLiveMic(deviceId);
-      }
+      setSwapError(null);
+      if (client === null) return;
+      swappingRef.current += 1;
+      runLiveMicSwap(client, deviceId, {
+        onError: (error) => {
+          if (mountedRef.current) setSwapError(error);
+        },
+        onSettled: () => {
+          swappingRef.current = Math.max(0, swappingRef.current - 1);
+        },
+      });
     },
     [client, onPersistMicId],
   );
@@ -81,7 +135,8 @@ export function useEidolonMicDevices({
       selectMic,
       canLiveSwap,
       hasMicChoice: mics.length > 1,
+      swapError,
     }),
-    [canLiveSwap, mics, selectMic, selectedMicId],
+    [canLiveSwap, mics, selectMic, selectedMicId, swapError],
   );
 }

@@ -34,6 +34,7 @@ import {
   liveItems,
   NEVER_SENT,
   newChatHeader,
+  normalizeBaseUrl,
   type OwnEventDraft,
   parseStreamLine,
   probeChatEndpoint,
@@ -313,6 +314,10 @@ describe("window builder, locks, availability, and session lifecycle", () => {
   });
 
   test("probeChatEndpoint and createChatAvailability classify HTTP 405/404/500 statuses", async () => {
+    const repeatedSlashes = `  https://bot.example/${"/".repeat(50_000)}path///  `;
+    expect(normalizeBaseUrl(repeatedSlashes)).toBe(`https://bot.example/${"/".repeat(50_000)}path`);
+    expect(normalizeBaseUrl("   ///   ")).toBe("");
+
     expect(
       await probeChatEndpoint("https://bot.example/", {
         fetch: async () => new Response("", { status: 405 }),
@@ -521,5 +526,29 @@ describe("window builder, locks, availability, and session lifecycle", () => {
     const beforeReload = liveView.events[0];
     liveView = chatViewReducer(liveView, { type: "loaded", events: [{ ...refusalEvent }] });
     expect(liveView.events[0]).toBe(beforeReload);
+
+    // Replaying historical persona messages via "loaded" does not settle an active newer turn.
+    liveView = chatViewReducer(liveView, {
+      type: "line",
+      line: { type: "started", turn: "t10", persona: "milky-green" },
+    });
+    liveView = chatViewReducer(liveView, {
+      type: "line",
+      line: { type: "delta", turn: "t10", text: "还在说" },
+    });
+    liveView = chatViewReducer(liveView, { type: "loaded", events: [refusalEvent] });
+    expect(liveView.live.find((l) => l.turn === "t10")?.settled).toBe(false);
+    liveView = chatViewReducer(liveView, {
+      type: "line",
+      line: { type: "delta", turn: "t10", text: "呢" },
+    });
+    expect(liveItems(liveView.live)).toMatchObject([
+      { kind: "live", turn: "t10", text: "还在说呢" },
+    ]);
+    liveView = chatViewReducer(liveView, {
+      type: "loaded",
+      events: [{ ...refusalEvent, seq: 11, id: "r2", text: "说完啦" }],
+    });
+    expect(liveItems(liveView.live)).toEqual([]);
   });
 });

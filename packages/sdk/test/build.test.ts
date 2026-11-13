@@ -44,9 +44,14 @@ describe("@laplace.live/eidolon-sdk package build", () => {
       expect([rel, existsSync(join(stagedDir, rel))]).toEqual([rel, true]);
     }
 
+    const workspacePkg = JSON.parse(
+      readFileSync(resolve(import.meta.dir, "../package.json"), "utf8"),
+    ) as { version: string };
+    expect(workspacePkg.version).toMatch(/^\d+\.\d+\.\d+/);
+
     expect(manifest).toMatchObject({
       name: "@laplace.live/eidolon-sdk",
-      version: "0.1.0",
+      version: workspacePkg.version,
       license: "AGPL-3.0-only",
       type: "module",
       sideEffects: false,

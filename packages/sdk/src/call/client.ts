@@ -110,8 +110,17 @@ function effectiveMediaState(
   return raw;
 }
 
+interface InternalWavRecorder {
+  getStatus?: () => string;
+  end?: () => Promise<unknown>;
+  processor?: { context?: { state?: string; close?: () => Promise<void> } } | null;
+  stream?: MediaStream | null;
+}
+
 interface BridgedMediaManager {
   readonly isMicEnabled: boolean;
+  readonly isDisconnecting: boolean;
+  markDisconnecting(): void;
   tracks(): Tracks;
   initialize(): Promise<void>;
   connect(): Promise<void>;
@@ -128,47 +137,21 @@ function createBridgedMediaManager(
   const baseConnect = manager.connect.bind(manager);
   const baseUpdateMic = manager.updateMic.bind(manager);
   const baseDisconnect = manager.disconnect.bind(manager);
+  let disconnectEpoch = 0;
+  let activeDisconnects = 0;
+  let markedEpoch: number | null = null;
+  let pendingMicOp: Promise<void> = Promise.resolve();
 
-  const syncMicTrack = () => {
-    const track = manager.tracks().local.audio;
-    if (track) track.enabled = manager.isMicEnabled;
-  };
+  const readRecorder = () =>
+    Reflect.get(manager, "_wavRecorder") as InternalWavRecorder | undefined;
 
-  manager.initialize = async () => {
-    await baseInitialize();
-    // WavMediaManager leaves getUserMedia's track enabled when _micEnabled is false, which sends
-    // live audio over RTCRtpSender because Eidolon's server ignores signalling trackStatus frames.
-    syncMicTrack();
-  };
-
-  manager.connect = async () => {
-    await baseConnect();
-    syncMicTrack();
-  };
-
-  manager.updateMic = async (micId: string) => {
-    await baseUpdateMic(micId);
-    syncMicTrack();
-    // While muted, WavMediaManager.updateMic skips _startRecording (and with it onTrackStarted),
-    // leaving the previous stopped track on RTCRtpSender.
-    const track = manager.tracks().local.audio;
-    if (!manager.isMicEnabled && track) onLocalAudioTrack(track);
-  };
-
-  manager.disconnect = async () => {
-    const recorder = Reflect.get(manager, "_wavRecorder") as
-      | {
-          getStatus?: () => string;
-          end?: () => Promise<unknown>;
-          processor?: { context?: { state?: string; close?: () => Promise<void> } } | null;
-          stream?: MediaStream | null;
-        }
-      | undefined;
-    const context = recorder?.processor?.context;
-    const stream = recorder?.stream;
-    await baseDisconnect();
-    // applyMicPreference opens _wavRecorder via updateMic before initialize() flips _initialized,
-    // so baseDisconnect() returns early; WavRecorder.end() also clears this.stream without stopping tracks.
+  const stopRecorder = async (
+    priorStream?: MediaStream | null,
+    priorContext?: { state?: string; close?: () => Promise<void> },
+  ) => {
+    const recorder = readRecorder();
+    const stream = recorder?.stream ?? priorStream ?? null;
+    const context = recorder?.processor?.context ?? priorContext;
     if (recorder?.getStatus?.() !== "ended") {
       await recorder?.end?.().catch(() => {});
     }
@@ -181,6 +164,81 @@ function createBridgedMediaManager(
     }
   };
 
+  const syncMicTrack = () => {
+    const track = manager.tracks().local.audio;
+    if (track) track.enabled = manager.isMicEnabled;
+  };
+
+  Object.defineProperty(manager, "isDisconnecting", {
+    get: () => activeDisconnects > 0 || markedEpoch !== null,
+    configurable: true,
+  });
+  manager.markDisconnecting = () => {
+    if (markedEpoch === null) {
+      disconnectEpoch += 1;
+      markedEpoch = disconnectEpoch;
+    }
+  };
+
+  manager.initialize = async () => {
+    markedEpoch = null;
+    await baseInitialize();
+    // WavMediaManager leaves getUserMedia's track enabled when _micEnabled is false, which sends
+    // live audio over RTCRtpSender because Eidolon's server ignores signalling trackStatus frames.
+    syncMicTrack();
+  };
+
+  manager.connect = async () => {
+    markedEpoch = null;
+    await baseConnect();
+    syncMicTrack();
+  };
+
+  manager.updateMic = (micId: string) => {
+    // WavMediaManager.updateMic has no queue or teardown guard: if disconnect() runs while
+    // getUserMedia is awaiting, begin() finishes later and leaves capture live after hangup.
+    const epoch = disconnectEpoch;
+    const canceled = () =>
+      epoch !== disconnectEpoch || activeDisconnects > 0 || markedEpoch !== null;
+    const run = async () => {
+      if (canceled()) return;
+      await baseUpdateMic(micId);
+      if (canceled()) {
+        await stopRecorder();
+        return;
+      }
+      syncMicTrack();
+      // While muted, WavMediaManager.updateMic skips _startRecording (and with it onTrackStarted),
+      // leaving the previous stopped track on RTCRtpSender.
+      const track = manager.tracks().local.audio;
+      if (!manager.isMicEnabled && track) onLocalAudioTrack(track);
+    };
+    const next = pendingMicOp.then(run, run);
+    pendingMicOp = next.then(
+      () => {},
+      () => {},
+    );
+    return next;
+  };
+
+  manager.disconnect = async () => {
+    if (markedEpoch === null) disconnectEpoch += 1;
+    markedEpoch = null;
+    activeDisconnects += 1;
+    try {
+      await pendingMicOp;
+      const recorder = readRecorder();
+      const priorStream = recorder?.stream;
+      const priorContext = recorder?.processor?.context;
+      await baseDisconnect();
+      // applyMicPreference opens _wavRecorder via updateMic before initialize() flips _initialized,
+      // so baseDisconnect() returns early; WavRecorder.end() also clears this.stream without stopping tracks.
+      await stopRecorder(priorStream, priorContext);
+    } finally {
+      activeDisconnects -= 1;
+    }
+  };
+
   return manager;
 }
 
@@ -190,6 +248,8 @@ export class EidolonClient {
   readonly #client: PipecatClient;
   readonly #fetch: FetchLike | undefined;
   readonly #listeners = new Map<EidolonEventName, Set<(...args: any[]) => void>>();
+  readonly #sentRunImmediately = new Map<string, boolean>();
+  #pendingQueuedSends = 0;
   #botAudioTrack: MediaStreamTrack | undefined;
   #botVideoTrack: MediaStreamTrack | undefined;
   #lastEmittedMediaState: MediaState | undefined;
@@ -324,7 +384,7 @@ export class EidolonClient {
 
   /** Swaps the live microphone mid-call; a no-op outside `connected` / `ready` so settings never open the mic. */
   async selectLiveMic(deviceId: string): Promise<void> {
-    if (!LIVE_SWAP_STATES.has(this.#client.state)) return;
+    if (!LIVE_SWAP_STATES.has(this.#client.state) || this.#mediaManager.isDisconnecting) return;
     await this.#transport.updateMic(toLiveMicId(deviceId));
   }
 
@@ -340,13 +400,38 @@ export class EidolonClient {
   }
 
   async disconnect(): Promise<void> {
-    await this.#client.disconnect();
-    // SmallWebRTCTransport.stop() returns early when pc is null, skipping mediaManager.disconnect().
-    await this.#mediaManager.disconnect();
+    this.#mediaManager.markDisconnecting();
+    try {
+      await this.#client.disconnect();
+    } finally {
+      // SmallWebRTCTransport.stop() returns early when pc is null, skipping mediaManager.disconnect().
+      await this.#mediaManager.disconnect();
+    }
   }
 
-  sendText(content: string, options?: SendTextOptions): Promise<string> {
-    return this.#client.sendText(content, options);
+  async sendText(content: string, options?: SendTextOptions): Promise<string> {
+    const runImmediately = options?.run_immediately !== false;
+    if (!runImmediately) this.#pendingQueuedSends++;
+    try {
+      const msgId = await this.#client.sendText(content, options);
+      if (this.#sentRunImmediately.size >= 128) {
+        const oldest = this.#sentRunImmediately.keys().next().value;
+        if (oldest !== undefined) this.#sentRunImmediately.delete(oldest);
+      }
+      this.#sentRunImmediately.set(msgId, runImmediately);
+      return msgId;
+    } finally {
+      if (!runImmediately) this.#pendingQueuedSends--;
+    }
+  }
+
+  /** Whether a sent text turn requested immediate interruption (`run_immediately !== false`). */
+  wasTextSentImmediately(msgId?: string): boolean {
+    if (msgId !== undefined) {
+      const recorded = this.#sentRunImmediately.get(msgId);
+      if (recorded !== undefined) return recorded;
+    }
+    return this.#pendingQueuedSends === 0;
   }
 
   sendClientMessage(msgType: string, data?: unknown): void {
@@ -403,6 +488,10 @@ export class EidolonClient {
     this.#client.on(
       RTVIEvent.TrackStarted,
       (track: MediaStreamTrack, participant?: Participant) => {
+        if (participant?.local === true && this.#mediaManager.isDisconnecting) {
+          track.stop();
+          return;
+        }
         if (participant?.local === true) {
           if (track.kind === "audio") {
             track.enabled = this.#client.isMicEnabled;
@@ -444,6 +533,7 @@ export class EidolonClient {
       this.#botAudioTrack = undefined;
       this.#botVideoTrack = undefined;
       this.#lastEmittedMediaState = undefined;
+      this.#sentRunImmediately.clear();
       this.#emit("disconnected");
     });
 
