@@ -13,7 +13,8 @@ const CORE_NODE_EXTERNAL = ["@pipecat-ai/client-js", "node:module"] as const;
 const REACT_EXTERNAL = ["react", "react/*"] as const;
 
 // @pipecat-ai/small-webrtc-transport's ESM build imports "lodash/cloneDeep" without an extension,
-// which fails Node's native ESM resolver; its CJS build resolves cleanly through createRequire.
+// which fails Node's native ESM resolver; its CJS build resolves cleanly through createRequire:
+// https://github.com/pipecat-ai/pipecat-client-web-transports/blob/main/transports/small-webrtc-transport/src/smallWebRTCTransport.ts
 const nodeTransportCjsPlugin: BunPlugin = {
   name: "transport-cjs",
   setup(build) {

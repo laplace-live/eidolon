@@ -1826,9 +1826,24 @@ describe("stepConversation pure transcript reducer", () => {
       callOrder.push("initDevices");
       Reflect.set(client.rawTransport, "state", "initialized");
     });
+    const mockRecorder = Reflect.get(
+      Reflect.get(client.rawTransport, "mediaManager") as object,
+      "_wavRecorder",
+    ) as { stream: unknown; deviceSelection: unknown };
     Reflect.set(client.rawTransport, "updateMic", async (id: string) => {
       callOrder.push(`updateMic:${id}`);
       updateMicCalls.push(id);
+      const track = {
+        id: `track-${id || "default"}`,
+        kind: "audio",
+        enabled: client.isMicEnabled,
+        readyState: "live",
+        stop() {
+          (this as { readyState: string }).readyState = "ended";
+        },
+      } as unknown as MediaStreamTrack;
+      mockRecorder.stream = { getTracks: () => [track], getAudioTracks: () => [track] };
+      mockRecorder.deviceSelection = id ? { deviceId: id, kind: "audioinput", label: id } : null;
     });
     Reflect.set(client.rawTransport, "_connect", async () => {
       Reflect.set(client.rawTransport, "dc", {
@@ -2009,6 +2024,322 @@ describe("stepConversation pure transcript reducer", () => {
       });
       globals.IS_REACT_ACT_ENVIRONMENT = prevAct;
       globals.MediaStream = prevMediaStream;
+      Object.defineProperty(globalThis, "navigator", {
+        value: prevNavigator,
+        configurable: true,
+      });
+      win.HTMLIFrameElement = prevIframe;
+    }
+  });
+
+  test("muted calls apply saved mics, reused clients reset to default, and busy mic failures never record appliedMicId", async () => {
+    const globals = globalThis as Record<string, unknown>;
+    const prevAct = globals.IS_REACT_ACT_ENVIRONMENT;
+    const prevNavigator = globals.navigator;
+    const win = globalThis.window as unknown as Record<string, unknown>;
+    const prevIframe = win.HTMLIFrameElement;
+    globals.IS_REACT_ACT_ENVIRONMENT = true;
+    win.HTMLIFrameElement = class {};
+    Object.defineProperty(globalThis, "navigator", {
+      value: {
+        mediaDevices: Object.assign(new EventTarget(), {
+          // Safari/Firefox-style enumeration without a synthetic "default" hardware item.
+          enumerateDevices: async () => [
+            { deviceId: "built-in", kind: "audioinput", label: "Built-in Mic", groupId: "g1" },
+            { deviceId: "usb-2", kind: "audioinput", label: "USB Mic", groupId: "g2" },
+            { deviceId: "usb-busy", kind: "audioinput", label: "Busy Mic", groupId: "g3" },
+          ],
+        }),
+      },
+      configurable: true,
+    });
+    const doc = Object.assign(new EventTarget(), {
+      activeElement: null,
+      defaultView: win,
+      createElement(tag: string) {
+        return Object.assign(new EventTarget(), {
+          nodeType: 1,
+          nodeName: tag.toUpperCase(),
+          tagName: tag.toUpperCase(),
+          namespaceURI: "http://www.w3.org/1999/xhtml",
+          childNodes: [],
+          firstChild: null,
+          ownerDocument: doc,
+          style: {},
+          setAttribute() {},
+          removeAttribute() {},
+          removeChild() {},
+          appendChild() {},
+          insertBefore() {},
+        });
+      },
+    });
+    const container = doc.createElement("div");
+
+    const client = new EidolonClient({ enableMic: false });
+    const manager = Reflect.get(client.rawTransport, "mediaManager") as object;
+    const raw = client.rawClient as unknown as {
+      emit: (event: string, ...args: unknown[]) => void;
+    };
+    const openedDevices: string[] = [];
+    const recordedDevices: string[] = [];
+    let busyMics = new Set<string>(["usb-busy"]);
+    let currentOpenedId = "";
+    const recorderStub: {
+      deviceSelection: { deviceId: string; kind: string; label: string } | null;
+      processor: { context: { state: string; close: () => Promise<void> } } | null;
+      stream: {
+        getTracks: () => MediaStreamTrack[];
+        getAudioTracks: () => MediaStreamTrack[];
+      } | null;
+      listDevices: () => Promise<MediaDeviceInfo[]>;
+      getStatus: () => string;
+      begin: (deviceId?: string) => Promise<boolean>;
+      record: () => Promise<boolean>;
+      pause: () => Promise<boolean>;
+      end: () => Promise<void>;
+      listenForDeviceChange: () => void;
+      listenForDeviceErrors: () => void;
+    } = {
+      deviceSelection: null,
+      processor: null,
+      stream: null,
+      listDevices: async () =>
+        [
+          {
+            deviceId: "built-in",
+            kind: "audioinput",
+            label: "Built-in Mic",
+            groupId: "g1",
+            toJSON: () => ({}),
+          },
+          {
+            deviceId: "usb-2",
+            kind: "audioinput",
+            label: "USB Mic",
+            groupId: "g2",
+            toJSON: () => ({}),
+          },
+          {
+            deviceId: "usb-busy",
+            kind: "audioinput",
+            label: "Busy Mic",
+            groupId: "g3",
+            toJSON: () => ({}),
+          },
+        ] as MediaDeviceInfo[],
+      getStatus: () => (recorderStub.processor === null ? "ended" : "paused"),
+      begin: async (deviceId?: string) => {
+        if (recorderStub.processor) {
+          throw new Error("Already connected: please call .end() to start a new session");
+        }
+        const effective = deviceId ?? recorderStub.deviceSelection?.deviceId ?? "";
+        if (busyMics.has(effective)) {
+          throw new Error("Could not start media stream");
+        }
+        if (effective === "usb-worklet-fail") {
+          const leakedTrack = {
+            id: "track-worklet-fail",
+            kind: "audio",
+            enabled: true,
+            readyState: "live",
+            stop() {
+              (this as { readyState: string }).readyState = "ended";
+            },
+          } as unknown as MediaStreamTrack;
+          recorderStub.stream = {
+            getTracks: () => [leakedTrack],
+            getAudioTracks: () => [leakedTrack],
+          };
+          throw new Error("Could not add audioWorklet module");
+        }
+        const resolved = effective || "built-in";
+        currentOpenedId = resolved;
+        openedDevices.push(resolved);
+        // Matches WavRecorder.begin(): listDevices() resolves asynchronously after begin() returns.
+        setTimeout(() => {
+          if (recorderStub.stream) {
+            recorderStub.deviceSelection = {
+              deviceId: resolved,
+              kind: "audioinput",
+              label: resolved,
+            };
+          }
+        }, 5);
+        const track = {
+          id: `track-${resolved}`,
+          kind: "audio",
+          enabled: true,
+          readyState: "live",
+          stop() {
+            (this as { readyState: string }).readyState = "ended";
+          },
+        } as unknown as MediaStreamTrack;
+        recorderStub.processor = {
+          context: {
+            state: "running",
+            close: async () => {
+              if (recorderStub.processor) recorderStub.processor.context.state = "closed";
+            },
+          },
+        };
+        recorderStub.stream = { getTracks: () => [track], getAudioTracks: () => [track] };
+        return true;
+      },
+      record: async () => {
+        recordedDevices.push(currentOpenedId);
+        return true;
+      },
+      pause: async () => true,
+      end: async () => {
+        // Matches WavRecorder.end(): stops stream + clears processor without resetting deviceSelection.
+        for (const t of recorderStub.stream?.getTracks() ?? []) t.stop();
+        recorderStub.stream = null;
+        recorderStub.processor = null;
+      },
+      listenForDeviceChange: () => {},
+      listenForDeviceErrors: () => {},
+    };
+    Reflect.set(manager, "_wavRecorder", recorderStub);
+    Reflect.set(manager, "_wavStreamPlayer", {
+      context: null,
+      connect: async () => true,
+      interrupt: async () => {},
+    });
+    let selectedAtTransportConnect: string | undefined;
+    Reflect.set(client.rawTransport, "_connect", async () => {
+      selectedAtTransportConnect = client.selectedMic.deviceId;
+      await (manager as { connect: () => Promise<void> }).connect();
+      Reflect.set(client.rawTransport, "dc", {
+        readyState: "open",
+        send: () => {
+          const onMessage = Reflect.get(client.rawTransport, "_onMessage") as (
+            msg: unknown,
+          ) => void;
+          Reflect.set(client.rawTransport, "state", "ready");
+          onMessage({ label: "rtvi-ai", id: "1", type: "bot-ready", data: { version: "1.0.0" } });
+        },
+        close: () => {},
+      });
+      Reflect.set(client.rawTransport, "state", "connected");
+      raw.emit(RTVIEvent.Connected);
+    });
+    Reflect.set(client.rawTransport, "_disconnect", async () => {
+      Reflect.set(client.rawTransport, "dc", null);
+      Reflect.set(client.rawTransport, "state", "disconnected");
+    });
+
+    let setPersistedMic!: (id: string | null) => void;
+    let micHook!: EidolonMicDevices;
+    function App() {
+      const [persisted, _setPersisted] = useState<string | null>("usb-2");
+      setPersistedMic = _setPersisted;
+      micHook = useEidolonMicDevices({
+        persistedMicId: persisted,
+        onPersistMicId: _setPersisted,
+      });
+      return null;
+    }
+
+    const root = createRoot(container as unknown as Element);
+    try {
+      await act(async () => {
+        root.render(
+          React.createElement(EidolonClientProvider, { client }, React.createElement(App)),
+        );
+      });
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(micHook.selectedMicId).toBe("usb-2");
+      expect(openedDevices).toEqual([]);
+
+      // 1. Muted call still applies saved "usb-2" while keeping its track disabled until enableMic(true).
+      await act(async () => {
+        await client.connect({ endpoint: "https://bot.example/api/offer" });
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      expect(openedDevices).toEqual(["usb-2"]);
+      expect(recordedDevices).toEqual([]);
+      expect(client.appliedMicId).toBe("usb-2");
+      expect(client.tracks().local.audio?.id).toBe("track-usb-2");
+      expect(client.tracks().local.audio?.enabled).toBe(false);
+
+      await act(async () => {
+        client.enableMic(true);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(client.tracks().local.audio?.id).toBe("track-usb-2");
+      expect(client.tracks().local.audio?.enabled).toBe(true);
+      expect(recordedDevices).toEqual(["usb-2"]);
+
+      // 2. Mid-call swap to a busy or worklet-failing mic rejects through WavMediaManager.updateMic,
+      // stops any stream opened before addModule failed, and never records the failed device as applied.
+      await expect(client.selectLiveMic("usb-busy")).rejects.toThrow(
+        "Could not start media stream",
+      );
+      expect(client.appliedMicId).toBeNull();
+      await expect(client.selectLiveMic("usb-worklet-fail")).rejects.toThrow(
+        "Could not add audioWorklet module",
+      );
+      expect(client.appliedMicId).toBeNull();
+      expect(recorderStub.stream).toBeNull();
+
+      await act(async () => {
+        await client.disconnect();
+      });
+      // WavRecorder.end() preserved deviceSelection from "usb-2" before the failed swap.
+      expect(recorderStub.deviceSelection?.deviceId).toBe("usb-2");
+
+      // 3. Reusing the same client after switching preference back to "default" clears sticky deviceSelection.
+      await act(async () => {
+        setPersistedMic(SYSTEM_DEFAULT_MIC_ID);
+      });
+      await act(async () => {
+        await client.connect({ endpoint: "https://bot.example/api/offer" });
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      expect(selectedAtTransportConnect).toBeUndefined();
+      expect(openedDevices).toEqual(["usb-2", "built-in"]);
+      expect(client.appliedMicId).toBe(SYSTEM_DEFAULT_MIC_ID);
+
+      await act(async () => {
+        await client.disconnect();
+      });
+
+      // 4. Pre-connect busy mic leaves appliedMicId null, falls back to default, and does not block onConnected retry.
+      await act(async () => {
+        setPersistedMic("usb-busy");
+      });
+      await act(async () => {
+        await client.applyMicPreference("usb-busy");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(client.appliedMicId).toBeNull();
+      expect(openedDevices).toEqual(["usb-2", "built-in", "built-in"]);
+
+      // Once "usb-busy" becomes free while "connecting", onConnected applies it because appliedMicId was not poisoned.
+      await act(async () => {
+        await client.disconnect();
+      });
+      await act(async () => {
+        Reflect.set(client.rawTransport, "state", "connecting");
+        micHook.selectMic("usb-busy");
+      });
+      busyMics = new Set();
+      await act(async () => {
+        Reflect.set(client.rawTransport, "state", "connected");
+        raw.emit(RTVIEvent.Connected);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(client.appliedMicId).toBe("usb-busy");
+      expect(openedDevices).toEqual(["usb-2", "built-in", "built-in", "usb-busy"]);
+    } finally {
+      await act(async () => {
+        await client.disconnect();
+        root.unmount();
+      });
+      globals.IS_REACT_ACT_ENVIRONMENT = prevAct;
       Object.defineProperty(globalThis, "navigator", {
         value: prevNavigator,
         configurable: true,
