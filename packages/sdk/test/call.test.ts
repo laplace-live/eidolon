@@ -2122,10 +2122,10 @@ describe("stepConversation pure transcript reducer", () => {
     client.on("deviceError", (err) => deviceErrors.push(err));
     let busyMics = new Set<string>(["usb-busy"]);
     let currentOpenedId = "";
-    let deviceChangeListener: ((devices: MediaDeviceInfo[]) => void) | null = null;
-    let deviceErrorListener:
+    let deviceChangeListener = null as ((devices: MediaDeviceInfo[]) => void) | null;
+    let deviceErrorListener = null as
       | ((err: { devices: Array<"cam" | "mic">; type: string; error?: Error }) => void)
-      | null = null;
+      | null;
     const recorderStub: {
       deviceSelection: { deviceId: string; kind: string; label: string } | null;
       processor: { context: { state: string; close: () => Promise<void> } } | null;
@@ -2348,9 +2348,11 @@ describe("stepConversation pure transcript reducer", () => {
       expect(deviceChangeListener).not.toBeNull();
       expect(deviceErrorListener).not.toBeNull();
 
-      // Recovery swap to "usb-2" followed by hot-unplug still triggers WavMediaManager's automatic fallback.
+      // Recovery swap to "usb-2" followed by hot-unplug while muted still triggers automatic fallback
+      // through the bridge (updating appliedMicId and keeping the fallback track disabled).
       await act(async () => {
         await client.selectLiveMic("usb-2");
+        client.enableMic(false);
         await new Promise((resolve) => setTimeout(resolve, 10));
       });
       expect(client.appliedMicId).toBe("usb-2");
@@ -2369,6 +2371,9 @@ describe("stepConversation pure transcript reducer", () => {
       });
       expect(openedDevices).toEqual(["usb-2", "usb-2", "built-in"]);
       expect(recorderStub.deviceSelection?.deviceId).toBe("built-in");
+      expect(client.appliedMicId).toBe(SYSTEM_DEFAULT_MIC_ID);
+      expect(client.tracks().local.audio?.id).toBe("track-built-in");
+      expect(client.tracks().local.audio?.enabled).toBe(false);
 
       // Re-select "usb-2" before hangup so disconnect() verifies sticky deviceSelection AND listener teardown.
       await act(async () => {
@@ -2441,6 +2446,82 @@ describe("stepConversation pure transcript reducer", () => {
         "built-in",
         "usb-busy",
       ]);
+
+      // 5. Unplug fallback routes through the bridge's serialized, epoch-checked updateMic path so a
+      // delayed fallback getUserMedia never leaves capture active after disconnect(), and a stale
+      // devicechange callback resolving after disconnect() completes never opens capture.
+      await act(async () => {
+        await client.disconnect();
+      });
+      await act(async () => {
+        setPersistedMic("usb-2");
+      });
+      await act(async () => {
+        await client.connect({ endpoint: "https://bot.example/api/offer" });
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      expect(client.appliedMicId).toBe("usb-2");
+      expect(recorderStub.deviceSelection?.deviceId).toBe("usb-2");
+      const staleDeviceChange = deviceChangeListener;
+      expect(staleDeviceChange).not.toBeNull();
+
+      let markFallbackStarted!: () => void;
+      const fallbackStarted = new Promise<void>((resolve) => {
+        markFallbackStarted = resolve;
+      });
+      let fallbackFinished = false;
+      const origRecorderBegin = recorderStub.begin;
+      recorderStub.begin = async (deviceId?: string) => {
+        markFallbackStarted();
+        await new Promise((resolve) => setTimeout(resolve, 15));
+        const ok = await origRecorderBegin(deviceId);
+        fallbackFinished = true;
+        return ok;
+      };
+      try {
+        await act(async () => {
+          deviceChangeListener?.([
+            {
+              deviceId: "built-in",
+              kind: "audioinput",
+              label: "Built-in Mic",
+              groupId: "g1",
+              toJSON: () => ({}),
+            } as MediaDeviceInfo,
+          ]);
+          await fallbackStarted;
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+        await act(async () => {
+          await client.disconnect();
+        });
+        expect(fallbackFinished).toBe(true);
+        expect(recorderStub.stream).toBeNull();
+        expect(recorderStub.processor).toBeNull();
+        expect(client.tracks().local.audio).toBeUndefined();
+      } finally {
+        recorderStub.begin = origRecorderBegin;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      expect(recorderStub.stream).toBeNull();
+
+      recorderStub.deviceSelection = { deviceId: "usb-2", kind: "audioinput", label: "usb-2" };
+      const opensBeforeStaleCallback = openedDevices.length;
+      await act(async () => {
+        staleDeviceChange?.([
+          {
+            deviceId: "built-in",
+            kind: "audioinput",
+            label: "Built-in Mic",
+            groupId: "g1",
+            toJSON: () => ({}),
+          } as MediaDeviceInfo,
+        ]);
+        await new Promise((resolve) => setTimeout(resolve, 15));
+      });
+      expect(openedDevices).toHaveLength(opensBeforeStaleCallback);
+      expect(recorderStub.stream).toBeNull();
+      expect(client.appliedMicId).toBeNull();
     } finally {
       await act(async () => {
         await client.disconnect();

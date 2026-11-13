@@ -147,6 +147,7 @@ interface BridgedMediaManager {
 // https://github.com/pipecat-ai/pipecat-client-web-transports/blob/main/lib/src/wavtools/lib/wav_recorder.js
 function createBridgedMediaManager(
   onLocalAudioTrack: (track: MediaStreamTrack) => void,
+  onAutoMicFallback?: (appliedMicId: string | null) => void,
 ): WavMediaManager & BridgedMediaManager {
   const raw = new WavMediaManager();
   const proto = WavMediaManager.prototype;
@@ -158,6 +159,7 @@ function createBridgedMediaManager(
   let preConnectMicDepth = 0;
   let pendingMicOp: Promise<void> = Promise.resolve();
   const inFlightInners = new Set<WavMediaManager>();
+  const sessionEpochs = new WeakMap<WavMediaManager, number>();
   const RecorderCtor = (Reflect.get(raw, "_wavRecorder") as object | undefined)?.constructor;
   const PlayerCtor = (Reflect.get(raw, "_wavStreamPlayer") as object | undefined)?.constructor;
 
@@ -236,6 +238,7 @@ function createBridgedMediaManager(
       }
       Reflect.set(activeInner, "_callbacks", {});
       Reflect.set(activeInner, "_userAudioCallback", undefined);
+      bindInner(nextInner);
       activeInner = nextInner;
     }
   };
@@ -261,6 +264,7 @@ function createBridgedMediaManager(
     const ownsActive = attempt.inner === activeInner && attempt.token === lifecycleToken;
     const isolatedFromActive = attempt.inner !== activeInner;
     if (ownsActive || isolatedFromActive) {
+      sessionEpochs.delete(attempt.inner);
       Reflect.set(attempt.inner, "_initialized", false);
       await stopRecorderInstance(attempt.recorder ?? readRecorderOf(attempt.inner));
       await closePlayerInstance(attempt.player ?? readPlayerOf(attempt.inner));
@@ -313,9 +317,13 @@ function createBridgedMediaManager(
       const attempt = claimLifecycle();
       try {
         if (Reflect.get(attempt.inner, "_initialized") === true) {
-          if (attempt.inner === activeInner) syncMicTrack();
+          if (attempt.inner === activeInner) {
+            sessionEpochs.set(attempt.inner, epoch);
+            syncMicTrack();
+          }
           return;
         }
+        sessionEpochs.set(attempt.inner, epoch);
         try {
           await proto.initialize.call(attempt.inner);
         } catch (error) {
@@ -342,6 +350,7 @@ function createBridgedMediaManager(
       }
       const attempt = claimLifecycle();
       try {
+        sessionEpochs.set(attempt.inner, epoch);
         try {
           await proto.connect.call(attempt.inner);
         } catch (error) {
@@ -458,6 +467,7 @@ function createBridgedMediaManager(
       try {
         await pendingMicOp;
         const target = activeInner;
+        sessionEpochs.delete(target);
         const recorder = readRecorderOf(target);
         const player = readPlayerOf(target);
         const priorStream = recorder?.stream;
@@ -472,6 +482,43 @@ function createBridgedMediaManager(
       }
     },
   };
+
+  function bindInner(inner: WavMediaManager): void {
+    // WavMediaManager.initialize() binds _handleAvailableDevicesUpdated to the inner instance,
+    // whose unplug fallback invokes `this.updateMic("")` fire-and-forget without awaiting:
+    // https://github.com/pipecat-ai/pipecat-client-web-transports/blob/main/lib/src/media-mgmt/mediaManager.ts
+    Reflect.set(inner, "updateMic", (micId: string) => {
+      if (
+        inner !== activeInner ||
+        overrides.isDisconnecting ||
+        sessionEpochs.get(inner) !== disconnectEpoch
+      ) {
+        return Promise.resolve();
+      }
+      const fallbackEpoch = disconnectEpoch;
+      return overrides.updateMic(micId).then(
+        () => {
+          if (
+            inner === activeInner &&
+            !overrides.isDisconnecting &&
+            disconnectEpoch === fallbackEpoch
+          ) {
+            onAutoMicFallback?.(micId || SYSTEM_DEFAULT_MIC_ID);
+          }
+        },
+        () => {
+          if (
+            inner === activeInner &&
+            !overrides.isDisconnecting &&
+            disconnectEpoch === fallbackEpoch
+          ) {
+            onAutoMicFallback?.(null);
+          }
+        },
+      );
+    });
+  }
+  bindInner(raw);
 
   return new Proxy(raw as WavMediaManager & BridgedMediaManager, {
     get(_target, prop) {
@@ -508,7 +555,14 @@ export class EidolonClient {
 
   constructor(options: EidolonClientOptions = {}) {
     this.#fetch = options.fetch;
-    const mediaManager = createBridgedMediaManager((track) => this.#replaceSenderTrack(track));
+    const mediaManager = createBridgedMediaManager(
+      (track) => this.#replaceSenderTrack(track),
+      (appliedMicId) => {
+        if (!mediaManager.isDisconnecting) {
+          this.#appliedMicId = appliedMicId !== null && this.#hasLiveMic() ? appliedMicId : null;
+        }
+      },
+    );
     this.#mediaManager = mediaManager;
     this.#transport = new SmallWebRTCTransport({
       iceServers: [...(options.iceServers ?? DEFAULT_ICE_SERVERS)],
