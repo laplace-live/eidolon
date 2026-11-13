@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { enumerateAudioInputs, LIVE_SWAP_STATES, resolveSelectedMicId } from "../call/devices.ts";
+import {
+  enumerateAudioInputs,
+  LIVE_SWAP_STATES,
+  resolveSelectedMicId,
+  SYSTEM_DEFAULT_MIC_ID,
+} from "../call/devices.ts";
 import { useEidolonTransportState } from "./hooks.ts";
 import { useOptionalEidolonClient } from "./provider.tsx";
 
@@ -52,6 +57,8 @@ export function useEidolonMicDevices({
   const [swapError, setSwapError] = useState<Error | null>(null);
   const mountedRef = useRef(true);
   const activeClientRef = useRef(client);
+  const micsRef = useRef(mics);
+  const pendingPreConnectMicRef = useRef<string | null>(null);
   const swapGenerationRef = useRef(0);
   const inFlightSwapsRef = useRef(new Set<symbol>());
 
@@ -63,15 +70,60 @@ export function useEidolonMicDevices({
   }, []);
 
   useEffect(() => {
+    micsRef.current = mics;
+  }, [mics]);
+
+  const effectiveMicId = persistedMicId !== undefined ? persistedMicId : localMicId;
+
+  useEffect(() => {
+    client?.setPreferredMic(effectiveMicId);
+  }, [client, effectiveMicId]);
+
+  useEffect(() => {
     activeClientRef.current = client;
+    pendingPreConnectMicRef.current = null;
     const resetSwapState = () => {
       swapGenerationRef.current += 1;
       inFlightSwapsRef.current.clear();
       setSwapError(null);
     };
     resetSwapState();
-    const offResetConnected = client?.on("connected", resetSwapState);
-    const offResetDisconnected = client?.on("disconnected", resetSwapState);
+    const onConnected = () => {
+      resetSwapState();
+      if (client === null) return;
+      const pending = pendingPreConnectMicRef.current;
+      pendingPreConnectMicRef.current = null;
+      if (pending === null) return;
+      if (
+        pending !== SYSTEM_DEFAULT_MIC_ID &&
+        micsRef.current.length > 0 &&
+        !micsRef.current.some((mic) => mic.deviceId === pending)
+      ) {
+        return;
+      }
+      const currentApplied =
+        client.appliedMicId ?? (client.selectedMic.deviceId || SYSTEM_DEFAULT_MIC_ID);
+      if (currentApplied === pending) return;
+      const generation = ++swapGenerationRef.current;
+      const token = Symbol();
+      inFlightSwapsRef.current.add(token);
+      runLiveMicSwap(client, pending, {
+        isCurrent: () =>
+          mountedRef.current &&
+          activeClientRef.current === client &&
+          swapGenerationRef.current === generation,
+        onError: setSwapError,
+        onSettled: () => {
+          inFlightSwapsRef.current.delete(token);
+        },
+      });
+    };
+    const onDisconnected = () => {
+      pendingPreConnectMicRef.current = null;
+      resetSwapState();
+    };
+    const offResetConnected = client?.on("connected", onConnected);
+    const offResetDisconnected = client?.on("disconnected", onDisconnected);
     const offDeviceError = client?.on("deviceError", (error) => {
       if (inFlightSwapsRef.current.size > 0) setSwapError(error);
     });
@@ -79,6 +131,7 @@ export function useEidolonMicDevices({
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.enumerateDevices) {
       return () => {
         activeClientRef.current = null;
+        pendingPreConnectMicRef.current = null;
         swapGenerationRef.current += 1;
         inFlightSwapsRef.current.clear();
         offResetConnected?.();
@@ -111,6 +164,7 @@ export function useEidolonMicDevices({
     return () => {
       cancelled = true;
       activeClientRef.current = null;
+      pendingPreConnectMicRef.current = null;
       swapGenerationRef.current += 1;
       inFlightSwapsRef.current.clear();
       navigator.mediaDevices.removeEventListener("devicechange", onDeviceChange);
@@ -123,7 +177,6 @@ export function useEidolonMicDevices({
     };
   }, [client]);
 
-  const effectiveMicId = persistedMicId !== undefined ? persistedMicId : localMicId;
   const selectedMicId = useMemo(
     () => resolveSelectedMicId(mics, effectiveMicId),
     [mics, effectiveMicId],
@@ -136,6 +189,8 @@ export function useEidolonMicDevices({
       const generation = ++swapGenerationRef.current;
       setSwapError(null);
       if (client === null) return;
+      client.setPreferredMic(deviceId);
+      pendingPreConnectMicRef.current = LIVE_SWAP_STATES.has(client.state) ? null : deviceId;
       const token = Symbol();
       inFlightSwapsRef.current.add(token);
       runLiveMicSwap(client, deviceId, {

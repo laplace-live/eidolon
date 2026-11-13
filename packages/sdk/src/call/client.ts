@@ -103,8 +103,9 @@ function effectiveMediaState(
       return { ...raw, mic: { ...raw.mic, reason } };
     }
   }
-  // WavMediaManager never fires onMicUpdated on initial acquisition, leaving PipecatClient's mic
-  // state stuck at "uninitialized" throughout a live call once capture succeeds.
+  // WavMediaManager.initialize never fires onMicUpdated on initial acquisition, leaving PipecatClient's
+  // mic state stuck at "uninitialized" throughout a live call once capture succeeds:
+  // https://github.com/pipecat-ai/pipecat-client-web-transports/blob/main/lib/src/media-mgmt/mediaManager.ts
   if (raw.mic.state === "uninitialized" && LIVE_SWAP_STATES.has(transportState) && hasLiveMic) {
     return { ...raw, mic: { state: "granted" } };
   }
@@ -137,6 +138,9 @@ interface BridgedMediaManager {
   disconnect(): Promise<void>;
 }
 
+// Wraps WavMediaManager / WavRecorder with hangup/redial isolation and muted-track sync:
+// https://github.com/pipecat-ai/pipecat-client-web-transports/blob/main/lib/src/media-mgmt/mediaManager.ts
+// https://github.com/pipecat-ai/pipecat-client-web-transports/blob/main/lib/src/wavtools/lib/wav_recorder.js
 function createBridgedMediaManager(
   onLocalAudioTrack: (track: MediaStreamTrack) => void,
 ): WavMediaManager & BridgedMediaManager {
@@ -404,6 +408,8 @@ export class EidolonClient {
   #lastDisconnectEpoch = 0;
   #activeConnectAttempt: number | null = null;
   #cancelTransportConnect: (() => void) | null = null;
+  #preferredMicId: string | null = null;
+  #appliedMicId: string | null = null;
   #botAudioTrack: MediaStreamTrack | undefined;
   #botVideoTrack: MediaStreamTrack | undefined;
   #lastEmittedMediaState: MediaState | undefined;
@@ -419,7 +425,9 @@ export class EidolonClient {
       mediaManager,
     });
     // SmallWebRTCTransport._connect returns early without throwing when aborted, after which
-    // PipecatClient.connect still calls sendReadyMessage() and flips state back to "ready".
+    // PipecatClient.connect still calls sendReadyMessage() and flips state back to "ready":
+    // https://github.com/pipecat-ai/pipecat-client-web-transports/blob/main/transports/small-webrtc-transport/src/smallWebRTCTransport.ts
+    // https://github.com/pipecat-ai/pipecat-client-web/blob/main/client-js/client/client.ts
     const baseSendReady = this.#transport.sendReadyMessage.bind(this.#transport);
     this.#transport.sendReadyMessage = () => {
       if (this.#transport.state !== "connected" || this.#mediaManager.isDisconnecting) return;
@@ -484,6 +492,10 @@ export class EidolonClient {
     return this.#client.isMicEnabled;
   }
 
+  get selectedMic(): PipecatClient["selectedMic"] {
+    return this.#client.selectedMic;
+  }
+
   enableMic(enable: boolean): void {
     this.#client.enableMic(enable);
     const track = this.#client.tracks().local.audio;
@@ -527,11 +539,22 @@ export class EidolonClient {
     return servers;
   }
 
+  /** Microphone `deviceId` most recently applied to the active call session, or `null` when none was applied. */
+  get appliedMicId(): string | null {
+    return this.#appliedMicId;
+  }
+
+  /** Records a preferred microphone `deviceId` for the next `connect()` without opening capture while idle. */
+  setPreferredMic(deviceId: string | null | undefined): void {
+    this.#preferredMicId = deviceId ?? null;
+  }
+
   /**
    * Applies a persisted mic `deviceId` before `connect()`, awaiting `SmallWebRTCTransport.updateMic`
    * directly (which `PipecatClient.updateMic` drops) and skipping `"default"` or unplugged ids.
    */
   async applyMicPreference(persistedMicId: string | null | undefined): Promise<void> {
+    this.#preferredMicId = persistedMicId ?? null;
     if (
       !persistedMicId ||
       persistedMicId === SYSTEM_DEFAULT_MIC_ID ||
@@ -546,6 +569,9 @@ export class EidolonClient {
       const mics = await this.#client.getAllMics();
       if (isStale() || !mics.some((mic) => mic.deviceId === persistedMicId)) return;
       await this.#transport.updateMic(persistedMicId);
+      if (!isStale()) {
+        this.#appliedMicId = persistedMicId;
+      }
     } catch {
       if (isStale()) return;
       // Surfaced through connect() when fatal.
@@ -559,8 +585,13 @@ export class EidolonClient {
 
   /** Swaps the live microphone mid-call; a no-op outside `connected` / `ready` so settings never open the mic. */
   async selectLiveMic(deviceId: string): Promise<void> {
+    this.#preferredMicId = deviceId;
     if (!LIVE_SWAP_STATES.has(this.#client.state) || this.#mediaManager.isDisconnecting) return;
+    const disconnectSnapshot = this.#lastDisconnectEpoch;
     await this.#transport.updateMic(toLiveMicId(deviceId));
+    if (this.#lastDisconnectEpoch === disconnectSnapshot && !this.#mediaManager.isDisconnecting) {
+      this.#appliedMicId = deviceId;
+    }
   }
 
   initDevices(): Promise<void> {
@@ -585,9 +616,25 @@ export class EidolonClient {
     const attempt = ++this.#connectEpoch;
     this.#activeConnectAttempt = attempt;
     try {
+      if (
+        this.isMicEnabled &&
+        this.#preferredMicId &&
+        this.#preferredMicId !== SYSTEM_DEFAULT_MIC_ID &&
+        this.#appliedMicId !== this.#preferredMicId &&
+        this.selectedMic.deviceId !== this.#preferredMicId
+      ) {
+        await this.applyMicPreference(this.#preferredMicId);
+        if (this.#connectEpoch !== attempt) {
+          if (this.#connectEpoch === this.#lastDisconnectEpoch) {
+            await this.#teardownStaleInit();
+          }
+          throw new DOMException("Connection cancelled", "AbortError");
+        }
+      }
       // PipecatClient.connect() awaits initDevices() outside its inner try/catch, leaving the
       // outer promise pending forever if AudioWorklet setup rejects; it also lacks a post-init
-      // cancellation check if disconnect() ran while the permission prompt was open.
+      // cancellation check if disconnect() ran while the permission prompt was open:
+      // https://github.com/pipecat-ai/pipecat-client-web/blob/main/client-js/client/client.ts
       if (this.#client.needsInit()) {
         try {
           await this.initDevices();
@@ -661,6 +708,7 @@ export class EidolonClient {
     this.#connectEpoch += 1;
     this.#lastDisconnectEpoch = this.#connectEpoch;
     this.#activeConnectAttempt = null;
+    this.#appliedMicId = null;
     const cancelTransport = this.#cancelTransportConnect;
     this.#cancelTransportConnect = null;
     (
@@ -672,7 +720,8 @@ export class EidolonClient {
     try {
       await this.#client.disconnect();
     } finally {
-      // SmallWebRTCTransport.stop() returns early when pc is null, skipping mediaManager.disconnect().
+      // SmallWebRTCTransport.stop() returns early when pc is null, skipping mediaManager.disconnect():
+      // https://github.com/pipecat-ai/pipecat-client-web-transports/blob/main/transports/small-webrtc-transport/src/smallWebRTCTransport.ts
       await this.#mediaManager.disconnect();
       cancelTransport?.();
     }
@@ -764,7 +813,8 @@ export class EidolonClient {
 
     // Overriding SmallWebRTCTransport's default DailyMediaManager with WavMediaManager drops its
     // internal replaceTrack callback, so live mic swaps must forward new local audio tracks onto
-    // the audio transceiver's RTCRtpSender here.
+    // the audio transceiver's RTCRtpSender here:
+    // https://github.com/pipecat-ai/pipecat-client-web-transports/blob/main/transports/small-webrtc-transport/src/smallWebRTCTransport.ts
     this.#client.on(
       RTVIEvent.TrackStarted,
       (track: MediaStreamTrack, participant?: Participant) => {
@@ -810,6 +860,7 @@ export class EidolonClient {
     );
 
     this.#client.on(RTVIEvent.Disconnected, () => {
+      this.#appliedMicId = null;
       this.#botAudioTrack = undefined;
       this.#botVideoTrack = undefined;
       this.#lastEmittedMediaState = undefined;

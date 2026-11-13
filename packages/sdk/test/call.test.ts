@@ -1753,6 +1753,7 @@ describe("stepConversation pure transcript reducer", () => {
           enumerateDevices: async () => [
             { deviceId: "default", kind: "audioinput", label: "Default", groupId: "g1" },
             { deviceId: "usb-2", kind: "audioinput", label: "USB Mic", groupId: "g2" },
+            { deviceId: "usb-3", kind: "audioinput", label: "Headset Mic", groupId: "g3" },
           ],
         }),
       },
@@ -1795,7 +1796,59 @@ describe("stepConversation pure transcript reducer", () => {
     });
     const container = doc.createElement("div");
 
-    const client = new EidolonClient({ enableMic: false });
+    const client = new EidolonClient({ enableMic: true });
+    const updateMicCalls: string[] = [];
+    const callOrder: string[] = [];
+    Reflect.set(client.rawClient, "getAllMics", async () => [
+      {
+        deviceId: "default",
+        kind: "audioinput",
+        label: "Default",
+        groupId: "g1",
+        toJSON: () => ({}),
+      },
+      {
+        deviceId: "usb-2",
+        kind: "audioinput",
+        label: "USB Mic",
+        groupId: "g2",
+        toJSON: () => ({}),
+      },
+      {
+        deviceId: "usb-3",
+        kind: "audioinput",
+        label: "Headset Mic",
+        groupId: "g3",
+        toJSON: () => ({}),
+      },
+    ]);
+    Reflect.set(client.rawClient, "initDevices", async () => {
+      callOrder.push("initDevices");
+      Reflect.set(client.rawTransport, "state", "initialized");
+    });
+    Reflect.set(client.rawTransport, "updateMic", async (id: string) => {
+      callOrder.push(`updateMic:${id}`);
+      updateMicCalls.push(id);
+    });
+    Reflect.set(client.rawTransport, "_connect", async () => {
+      Reflect.set(client.rawTransport, "dc", {
+        readyState: "open",
+        send: () => {
+          const onMessage = Reflect.get(client.rawTransport, "_onMessage") as (
+            msg: unknown,
+          ) => void;
+          Reflect.set(client.rawTransport, "state", "ready");
+          onMessage({ label: "rtvi-ai", id: "1", type: "bot-ready", data: { version: "1.0.0" } });
+        },
+        close: () => {},
+      });
+      Reflect.set(client.rawTransport, "state", "connected");
+      raw.emit(RTVIEvent.Connected);
+    });
+    Reflect.set(client.rawTransport, "_disconnect", async () => {
+      Reflect.set(client.rawTransport, "dc", null);
+      Reflect.set(client.rawTransport, "state", "disconnected");
+    });
     const raw = client.rawClient as unknown as {
       emit: (event: string, ...args: unknown[]) => void;
     };
@@ -1834,12 +1887,42 @@ describe("stepConversation pure transcript reducer", () => {
         await new Promise((resolve) => origSetTimeout(resolve, 0));
       });
 
-      // 1. Uncontrolled useEidolonMicDevices updates selectedMicId when selectMic() is called.
+      // 1. Uncontrolled useEidolonMicDevices updates selectedMicId without opening capture while idle,
+      // applies pre-connect choices in connect(), and applies mid-connect choices on "connected".
       expect(mic.selectedMicId).toBe("default");
       await act(async () => {
         mic.selectMic("usb-2");
       });
       expect(mic.selectedMicId).toBe("usb-2");
+      expect(updateMicCalls).toEqual([]);
+
+      await act(async () => {
+        await client.connect({ endpoint: "https://bot.example/api/offer" });
+        await new Promise((resolve) => origSetTimeout(resolve, 0));
+      });
+      expect(callOrder).toEqual(["updateMic:usb-2", "initDevices"]);
+      expect(updateMicCalls).toEqual(["usb-2"]);
+      expect(client.appliedMicId).toBe("usb-2");
+
+      await act(async () => {
+        await client.disconnect();
+      });
+
+      // Choice made while "connecting" (after connect() began) applies as soon as "connected" fires.
+      await act(async () => {
+        Reflect.set(client.rawTransport, "state", "connecting");
+        mic.selectMic("usb-3");
+      });
+      expect(mic.selectedMicId).toBe("usb-3");
+      expect(updateMicCalls).toEqual(["usb-2"]);
+
+      await act(async () => {
+        Reflect.set(client.rawTransport, "state", "connected");
+        raw.emit(RTVIEvent.Connected);
+        await new Promise((resolve) => origSetTimeout(resolve, 0));
+      });
+      expect(updateMicCalls).toEqual(["usb-2", "usb-3"]);
+      expect(client.appliedMicId).toBe("usb-3");
 
       // 2. EidolonClientAudio surfaces blocked playback and clears it when retried via ref.current.play().
       const botTrack = { id: "bot-track-1", kind: "audio", readyState: "live" } as MediaStreamTrack;
