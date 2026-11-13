@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
+  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -9,7 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { checkDistImports, type SdkManifest, stage } from "../scripts/build.ts";
 
 const ROOT = resolve(import.meta.dir, "../../..");
@@ -163,4 +164,43 @@ describe("@laplace.live/eidolon-sdk package build", () => {
       rmSync(consumer, { recursive: true, force: true });
     }
   }, 20_000);
+
+  test("Biome enforces SDK and server import boundaries in both directions", async () => {
+    const cases: readonly (readonly [string, string, boolean])[] = [
+      ["apps/bot/src/x.ts", 'import "@laplace.live/eidolon-sdk";\n', true],
+      ["apps/bot/src/local/x.ts", 'import "@laplace.live/eidolon-sdk";\n', true],
+      ["apps/cli/src/x.ts", 'import "@laplace.live/eidolon-sdk";\n', true],
+      ["packages/runtime/src/x.ts", 'import "@laplace.live/eidolon-sdk";\n', true],
+      ["packages/ingest/src/x.ts", 'import "@laplace.live/eidolon-sdk";\n', true],
+      ["packages/chat/src/x.ts", 'import "../../sdk/src/index.ts";\n', true],
+      ["packages/sdk/src/x.ts", 'import "@eidolon/chat";\n', true],
+      ["packages/sdk/src/x.ts", 'import "node:fs";\n', true],
+      ["packages/sdk/src/x.ts", 'import "react";\n', true],
+      ["packages/sdk/src/react/x.ts", 'import "react";\n', false],
+    ];
+    const dir = mkdtempSync(join(tmpdir(), "eidolon-sdk-boundary-"));
+    try {
+      copyFileSync(join(ROOT, "biome.json"), join(dir, "biome.json"));
+      const biome = join(ROOT, "node_modules/.bin/biome");
+      const results = await Promise.all(
+        cases.map(async ([rel, code, shouldFail], index) => {
+          const sandbox = join(dir, `case-${index}`);
+          mkdirSync(dirname(join(sandbox, rel)), { recursive: true });
+          copyFileSync(join(ROOT, "biome.json"), join(sandbox, "biome.json"));
+          writeFileSync(join(sandbox, rel), code);
+          const proc = Bun.spawn([biome, "lint", rel], {
+            cwd: sandbox,
+            stdout: "ignore",
+            stderr: "ignore",
+          });
+          return [`${rel} (${code.trim()})`, (await proc.exited) !== 0, shouldFail] as const;
+        }),
+      );
+      for (const [label, failed, expected] of results) {
+        expect([label, failed]).toEqual([label, expected]);
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
 });

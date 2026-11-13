@@ -16,10 +16,13 @@ import {
   normalizeDeviceErrorReason,
   parseBotReadyData,
   parseErrorMessage,
+  parseMarkupWithState,
   parseServerMessage,
+  RTVIEvent,
   resolveSelectedMicId,
   StartBotError,
   SYSTEM_DEFAULT_MIC_ID,
+  speakerOf,
   toApiRequest,
   toLiveMicId,
   uuidv7,
@@ -56,12 +59,20 @@ describe("RTVI message parsers and call error classifiers", () => {
       persona: null,
     });
 
-    expect(
-      parseServerMessage({ type: "speaker", persona: "milky-green", name: "明前奶绿" }),
-    ).toEqual({
+    const parsedSpeaker = parseServerMessage({
+      type: "speaker",
+      persona: "milky-green",
+      name: "明前奶绿",
+    });
+    expect(parsedSpeaker).toEqual({
       type: "speaker",
       speaker: { persona: "milky-green", name: "明前奶绿" },
     });
+    expect(speakerOf({ type: "speaker", persona: "milky-green", name: "明前奶绿" })).toEqual({
+      persona: "milky-green",
+      name: "明前奶绿",
+    });
+    expect(speakerOf(parsedSpeaker)).toEqual({ persona: "milky-green", name: "明前奶绿" });
 
     expect(
       parseServerMessage({
@@ -119,6 +130,26 @@ describe("RTVI message parsers and call error classifiers", () => {
     expect(normalizeDeviceErrorReason(new DeviceError(["mic"], "not-found").type)).toBe(
       "not-found",
     );
+    expect(
+      normalizeDeviceErrorReason("unknown", {
+        sourceError: Object.assign(new Error("Denied"), { name: "NotAllowedError" }),
+      }),
+    ).toBe("blocked");
+    expect(
+      normalizeDeviceErrorReason("unknown", {
+        sourceError: Object.assign(new Error("Busy"), { name: "NotReadableError" }),
+      }),
+    ).toBe("already-in-use");
+    expect(
+      normalizeDeviceErrorReason("unknown", {
+        sourceError: Object.assign(new Error("Missing"), { name: "NotFoundError" }),
+      }),
+    ).toBe("not-found");
+    expect(
+      normalizeDeviceErrorReason("unknown", {
+        sourceError: Object.assign(new Error("Constraint"), { name: "OverconstrainedError" }),
+      }),
+    ).toBe("invalid-constraints");
 
     const quotaErr = new StartBotError("Too many requests", 429);
     expect(callErrorStatus(quotaErr)).toBe(429);
@@ -191,19 +222,24 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
       token: "sync_tok",
       userId: "u_42",
       fetch: async (url, init) => {
-        expect(url).toBe("https://bot.example/api/memories?user_id=u_42");
+        expect(url).toBe("https://bot.example/api/memories");
         expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer sync_tok");
         return Response.json({
           user_id: "u_42",
-          count: 1,
-          memories: [{ id: "mem_1", memory: "Likes matcha" }],
+          uname: "奶绿粉丝",
+          count: 99,
+          memories: [
+            { id: "mem_1", memory: "Likes matcha", categories: ["food"] },
+            { malformed: true },
+          ],
         });
       },
     });
     expect(listed).toEqual({
       user_id: "u_42",
+      uname: "奶绿粉丝",
       count: 1,
-      memories: [{ id: "mem_1", memory: "Likes matcha" }],
+      memories: [{ id: "mem_1", memory: "Likes matcha", categories: ["food"] }],
     });
 
     const wiped = await forgetMemories({
@@ -305,6 +341,158 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
       bytesSent: 1024,
       bytesReceived: 4096,
     });
+  });
+
+  test("EidolonClient bridges remote bot tracks, muted mic tracks, mediaState, and pre-PC disconnect", async () => {
+    const client = new EidolonClient({ enableMic: false });
+    const raw = client.rawClient as unknown as {
+      emit: (event: string, ...args: unknown[]) => void;
+    };
+
+    const botTrack = { id: "bot-audio-1", kind: "audio", readyState: "live" } as MediaStreamTrack;
+    const localTrack = {
+      id: "local-audio-1",
+      kind: "audio",
+      enabled: true,
+      readyState: "live",
+      stop() {
+        (this as { readyState: string }).readyState = "ended";
+      },
+    } as unknown as MediaStreamTrack;
+
+    // Remote trackStarted populates client.tracks().bot.audio; local trackStopped does not wipe it.
+    raw.emit(RTVIEvent.TrackStarted, botTrack, { id: "bot", name: "bot", local: false });
+    expect(client.tracks().bot?.audio).toBe(botTrack);
+    raw.emit(RTVIEvent.TrackStopped, localTrack, { id: "local", name: "", local: true });
+    expect(client.tracks().bot?.audio).toBe(botTrack);
+
+    // Local trackStarted while enableMic: false immediately forces track.enabled = false.
+    raw.emit(RTVIEvent.TrackStarted, localTrack, { id: "local", name: "", local: true });
+    expect(localTrack.enabled).toBe(false);
+
+    // Without a live local mic track, connected state does NOT falsely promote "uninitialized" to "granted".
+    Reflect.set(client.rawTransport, "_state", "connected");
+    expect(client.mediaState.mic.state).toBe("uninitialized");
+
+    // DeviceError with type "unknown" normalizes details.sourceError on mediaState.
+    Reflect.set(client.rawClient, "_mediaState", {
+      mic: {
+        state: "error",
+        reason: "unknown",
+        details: { sourceError: Object.assign(new Error("Denied"), { name: "NotAllowedError" }) },
+      },
+      cam: { state: "uninitialized" },
+    });
+    expect(client.mediaState.mic).toMatchObject({ state: "error", reason: "blocked" });
+
+    // Once a live mic stream exists on _wavRecorder, connected state promotes "uninitialized" to "granted",
+    // muted selectLiveMic()/connect() still disable track.enabled + replace sender track when WavMediaManager
+    // skips _startRecording(), and disconnect() with _initialized === false closes both stream and AudioContext.
+    let endedCalls = 0;
+    let closedContext = false;
+    let replacedTrack: MediaStreamTrack | null = null;
+    const makeFreshTrack = () =>
+      ({
+        id: "local-audio-1",
+        kind: "audio",
+        enabled: true,
+        readyState: "live",
+        stop() {
+          (this as { readyState: string }).readyState = "ended";
+        },
+      }) as unknown as MediaStreamTrack;
+    let activeTrack = makeFreshTrack();
+    const mediaManager = Reflect.get(client.rawTransport, "mediaManager") as {
+      connect: () => Promise<void>;
+    };
+    Reflect.set(mediaManager, "_wavStreamPlayer", {
+      connect: async () => true,
+      interrupt: async () => {},
+    });
+    const fakeRecorder: {
+      getStatus: () => string;
+      begin: () => Promise<boolean>;
+      listenForDeviceChange: () => void;
+      listenForDeviceErrors: () => void;
+      end: () => Promise<void>;
+      processor: { context: { state: string; close: () => Promise<void> } } | null;
+      stream: {
+        getTracks: () => MediaStreamTrack[];
+        getAudioTracks: () => MediaStreamTrack[];
+      } | null;
+    } = {
+      getStatus: () => (fakeRecorder.stream === null ? "ended" : "paused"),
+      begin: async () => {
+        activeTrack = makeFreshTrack();
+        fakeRecorder.stream = {
+          getTracks: () => [activeTrack],
+          getAudioTracks: () => [activeTrack],
+        };
+        return true;
+      },
+      listenForDeviceChange: () => {},
+      listenForDeviceErrors: () => {},
+      end: async () => {
+        endedCalls++;
+        fakeRecorder.stream = null;
+      },
+      processor: {
+        context: {
+          state: "running",
+          close: async () => {
+            closedContext = true;
+          },
+        },
+      },
+      stream: {
+        getTracks: () => [activeTrack],
+        getAudioTracks: () => [activeTrack],
+      },
+    };
+    Reflect.set(mediaManager, "_wavRecorder", fakeRecorder);
+    class FakePeerConnection {
+      getTransceivers() {
+        return [
+          {
+            sender: {
+              replaceTrack: async (t: MediaStreamTrack) => {
+                replacedTrack = t;
+              },
+            },
+          },
+        ];
+      }
+    }
+    const prevRTC = globalThis.RTCPeerConnection;
+    Object.assign(globalThis, { RTCPeerConnection: FakePeerConnection });
+    try {
+      Reflect.set(client.rawTransport, "pc", new FakePeerConnection());
+      await client.selectLiveMic("usb-1");
+      expect(activeTrack.enabled).toBe(false);
+      expect<MediaStreamTrack | null>(replacedTrack).toBe(activeTrack);
+    } finally {
+      Object.assign(globalThis, { RTCPeerConnection: prevRTC });
+      Reflect.set(client.rawTransport, "pc", null);
+    }
+    Reflect.set(client.rawClient, "_mediaState", {
+      mic: { state: "uninitialized" },
+      cam: { state: "uninitialized" },
+    });
+    expect(client.mediaState.mic.state).toBe("granted");
+
+    // _initialized is still false here; disconnect() must still release _wavRecorder and AudioContext.
+    await client.disconnect();
+    expect(endedCalls).toBe(2);
+    expect(closedContext).toBe(true);
+    expect(activeTrack.readyState).toBe("ended");
+
+    // Muted connect() also disables the newly acquired getUserMedia track.
+    await mediaManager.connect();
+    expect(activeTrack.enabled).toBe(false);
+    await client.disconnect();
+
+    raw.emit(RTVIEvent.Disconnected);
+    expect(client.tracks().bot).toBeUndefined();
   });
 });
 
@@ -427,5 +615,87 @@ describe("stepConversation pure transcript reducer", () => {
       status: "completed",
     });
     expect(toolCalls[1]?.functionCall?.status).toBe("started");
+    // Typed user line finalized the open assistant bubble, so tool calls land after the user line.
+    expect(state.messages.map((msg) => msg.role)).toEqual([
+      "assistant",
+      "user",
+      "function_call",
+      "function_call",
+    ]);
+    expect(state.segments.size).toBe(0);
+  });
+
+  test("handles direct user-chat-echo, legacy transcript dedup, turn markers, and mid-cue splits", () => {
+    // Direct client.sendText() echoes user-chat-echo with an unseen msgId and renders immediately.
+    let { state } = stepConversation(EMPTY_CONVERSATION_STATE, {
+      type: "user-chat-echo",
+      text: "Direct line",
+      msgId: "msg_direct",
+      now: "2026-11-12T00:00:01.000Z",
+    });
+    expect(state.messages).toHaveLength(1);
+    expect(state.messages[0]).toMatchObject({
+      role: "user",
+      msgId: "msg_direct",
+      status: "received",
+    });
+
+    // Once user-input speech is seen, legacy user-transcription copies are ignored.
+    state = stepConversation(state, {
+      type: "user-transcription",
+      text: "你好",
+      final: true,
+      fromUserInput: true,
+      now: "2026-11-12T00:00:02.000Z",
+    }).state;
+    const afterLegacy = stepConversation(state, {
+      type: "user-transcription",
+      text: "你好",
+      final: true,
+      fromUserInput: false,
+      now: "2026-11-12T00:00:02.100Z",
+    });
+    expect(afterLegacy.state).toBe(state);
+
+    // Turn markers in accumulated_text do not shift spokenLength, and mid-cue splits snap past tags.
+    state = stepConversation(state, {
+      type: "bot-output",
+      now: "2026-11-12T00:00:03.000Z",
+      data: {
+        text: "✓ <whisper>秘密</whisper>你好",
+        spoken_status: "new",
+        segment_id: 10,
+        will_be_spoken: true,
+      },
+    }).state;
+    state = stepConversation(state, {
+      type: "bot-output",
+      now: "2026-11-12T00:00:03.500Z",
+      data: {
+        text: "✓ <whisper>秘密</whisper>你好",
+        spoken_status: "in-progress",
+        segment_id: 10,
+        will_be_spoken: true,
+        // Slices partway into `</whisper>` without snapping if raw length were used blindly.
+        spoken_progress: { accumulated_text: "✓ <whisper>秘密</whi", remaining_text: "sper>你好" },
+      },
+    }).state;
+
+    const partText = state.messages.at(-1)?.parts[0]?.text;
+    expect(partText).toEqual({
+      spoken: "<whisper>秘密</whisper>",
+      unspoken: "你好",
+    });
+    expect(state.messages.at(-1)?.parts[0]?.final).toBe(false);
+    if (isBotOutputText(partText)) {
+      const spokenParsed = parseMarkupWithState(partText.spoken);
+      const unspokenParsed = parseMarkupWithState(partText.unspoken, {
+        initialTags: spokenParsed.openTags,
+      });
+      expect(spokenParsed.tokens).toEqual([
+        { kind: "text", start: 9, text: "秘密", tags: ["whisper"] },
+      ]);
+      expect(unspokenParsed.tokens).toEqual([{ kind: "text", start: 0, text: "你好", tags: [] }]);
+    }
   });
 });

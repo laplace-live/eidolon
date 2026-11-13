@@ -46,12 +46,15 @@ function mergeEvents(
   }
   const bySeq = new Map<number, WireEvent>();
   for (const event of current) bySeq.set(event.seq, event);
-  for (const event of incoming) bySeq.set(event.seq, event);
-  const merged = [...bySeq.values()].sort((a, b) => a.seq - b.seq);
-  if (merged.length === current.length && merged.every((event, i) => event === current[i])) {
-    return current;
+  let added = false;
+  for (const event of incoming) {
+    if (!bySeq.has(event.seq)) {
+      bySeq.set(event.seq, event);
+      added = true;
+    }
   }
-  return merged;
+  if (!added) return current;
+  return [...bySeq.values()].sort((a, b) => a.seq - b.seq);
 }
 
 function settles(live: LiveTurn, events: readonly WireEvent[]): boolean {
@@ -62,6 +65,16 @@ function settles(live: LiveTurn, events: readonly WireEvent[]): boolean {
         event.speaker.kind === "persona" &&
         event.speaker.id === live.persona) ||
         (event.type === "turn-failed" && event.turn === live.turn)),
+  );
+}
+
+function settleLiveTurns(
+  live: readonly LiveTurn[],
+  incoming: readonly WireEvent[],
+): readonly LiveTurn[] {
+  if (!live.some((turn) => !turn.settled && settles(turn, incoming))) return live;
+  return live.map((turn) =>
+    turn.settled || !settles(turn, incoming) ? turn : { ...turn, settled: true },
   );
 }
 
@@ -107,12 +120,7 @@ function applyLine(state: ChatViewState, line: ChatStreamLine): ChatViewState {
       }));
     case "events": {
       const events = mergeEvents(state.events, line.events);
-      const anySettled = state.live.some((live) => !live.settled && settles(live, line.events));
-      const live = anySettled
-        ? state.live.map((turn) =>
-            turn.settled || !settles(turn, line.events) ? turn : { ...turn, settled: true },
-          )
-        : state.live;
+      const live = settleLiveTurns(state.live, line.events);
       return events === state.events && live === state.live ? state : { ...state, events, live };
     }
     case "ended":
@@ -129,7 +137,8 @@ export function chatViewReducer(state: ChatViewState, action: ChatViewAction): C
   switch (action.type) {
     case "loaded": {
       const events = mergeEvents(state.events, action.events);
-      return events === state.events ? state : { ...state, events };
+      const live = settleLiveTurns(state.live, action.events);
+      return events === state.events && live === state.live ? state : { ...state, events, live };
     }
     case "line":
       return applyLine(state, action.line);
@@ -207,9 +216,22 @@ export function eventItems(events: readonly WireEvent[]): ChatItem[] {
     switch (event.type) {
       case "message": {
         const attachments = event.attachments ?? [];
-        if (event.text === "" && attachments.length === 0) break;
         const modality = event.modality ?? "text";
-        const [first] = attachments;
+        const audio =
+          modality === "voice"
+            ? (attachments.find((a): a is AudioAttachment => a.kind === "audio") ?? null)
+            : null;
+        const images = attachments.filter(
+          (attachment): attachment is ImageAttachment => attachment.kind === "image",
+        );
+        if (
+          event.text === "" &&
+          audio === null &&
+          images.length === 0 &&
+          (event.speaker.kind === "user" || event.cutOff === undefined)
+        ) {
+          break;
+        }
         const item: MessageItem = {
           kind: "message",
           key,
@@ -218,8 +240,8 @@ export function eventItems(events: readonly WireEvent[]): ChatItem[] {
           speaker: event.speaker,
           text: event.text,
           modality,
-          audio: modality === "voice" && first?.kind === "audio" ? first : null,
-          images: attachments.filter((attachment) => attachment.kind === "image"),
+          audio,
+          images,
           interrupted: event.interrupted ?? false,
           cutOff: event.cutOff ?? null,
           sentAsText: false,

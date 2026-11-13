@@ -38,7 +38,7 @@ async function request(fetcher: FetchLike, url: string, init: RequestInit): Prom
   try {
     return await fetcher(url, init);
   } catch (error) {
-    if (isAbortError(error)) throw error;
+    if (init.signal?.aborted || isAbortError(error)) throw error;
     throw new ChatRequestError(
       0,
       "network",
@@ -49,9 +49,10 @@ async function request(fetcher: FetchLike, url: string, init: RequestInit): Prom
 
 function retryAfterOf(body: unknown, header: string | null): number | null {
   const fromBody = isJsonObject(body) ? body.retry_after : undefined;
-  if (typeof fromBody === "number" && Number.isFinite(fromBody)) return fromBody;
-  const fromHeader = header === null ? Number.NaN : Number(header);
-  return Number.isFinite(fromHeader) ? fromHeader : null;
+  if (typeof fromBody === "number" && Number.isFinite(fromBody) && fromBody >= 0) return fromBody;
+  const trimmed = header?.trim() ?? "";
+  const fromHeader = trimmed === "" ? Number.NaN : Number(trimmed);
+  return Number.isFinite(fromHeader) && fromHeader >= 0 ? fromHeader : null;
 }
 
 /** The error a refused answer carries: `{ error: { code, message } }`, or a 429's `{ error, retry_after }`. */

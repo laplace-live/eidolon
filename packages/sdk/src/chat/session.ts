@@ -29,6 +29,8 @@ export interface ChatSessionOptions<TRecord extends BrowserChatRecord = BrowserC
   /** The Login Sync token a call sends; absent or blank is anonymous. */
   readonly loginSyncToken?: string | null;
   readonly fetch?: FetchLike;
+  /** Her files that couldn't be fetched once a turn or call line's downloads settle. */
+  readonly onMissingFiles?: (names: string[]) => void;
 }
 
 /** Creates a new chat with `participants`, bound to the Eidolon server at `baseUrl`. */
@@ -86,6 +88,19 @@ export function writeOwnEvents<TRecord extends BrowserChatRecord>(
 
 function herFileNames(events: readonly WireEvent[]): string[] {
   return herAttachments(events).map((attachment) => attachment.name);
+}
+
+function reportMissing(
+  downloads: readonly Promise<string[]>[],
+  callback: ((names: string[]) => void) | undefined,
+): void {
+  if (downloads.length === 0) return;
+  void Promise.all(downloads)
+    .then((lists) => {
+      const missing = lists.flat();
+      if (missing.length > 0) callback?.(missing);
+    })
+    .catch(() => {});
 }
 
 const inFlight = new WeakMap<object, Map<string, Promise<boolean>>>();
@@ -201,7 +216,7 @@ export async function sendChatTurn<TRecord extends BrowserChatRecord>(
       }
     });
   } finally {
-    void Promise.all(downloads).then((names) => input.onMissingFiles?.(names.flat()));
+    reportMissing(downloads, input.onMissingFiles ?? options.onMissingFiles);
   }
   return { events: stored };
 }
@@ -263,7 +278,10 @@ export async function startChatCall<TRecord extends BrowserChatRecord>(
       const stored = lines.then(() => store.append(chatId, [event], { allowGap: true }));
       lines = stored.then(
         () => {
-          void downloadFiles(options, chat, herFileNames([event]));
+          const names = herFileNames([event]);
+          if (names.length > 0) {
+            reportMissing([downloadFiles(options, chat, names)], options.onMissingFiles);
+          }
         },
         () => {},
       );

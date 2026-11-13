@@ -28,9 +28,10 @@ zero `@pipecat-ai/*` packages directly.
 - **`packages/sdk/src/` imports no `@eidolon/*`, `node:*`, or `bun:*` modules.** Biome enforces
   this, and `packages/sdk/scripts/build.ts` verifies that `dist/` inlines zero `node_modules`
   packages and imports only declared `dependencies` and `peerDependencies`.
-- **The server never imports `@laplace.live/eidolon-sdk`.** Biome forbids it in `apps/bot` and the
-  server `packages/*`, and `apps/bot/Dockerfile` prunes `@pipecat-ai+*` before copying `node_modules`
-  into the runtime image. `docker.yml` ignores `packages/sdk/**`.
+- **The server never imports `@laplace.live/eidolon-sdk`.** Biome forbids it across `apps/bot`,
+  `apps/cli`, `apps/eidolon`, and the server `packages/*`, and `apps/bot/Dockerfile` removes
+  `node_modules/.bun/@pipecat-ai+*` after `bun install --production`. `docker.yml` ignores
+  `packages/sdk/**`.
 - **Protocol parity is tested, not imported.** `packages/sdk/test/parity.test.ts` checks the SDK's
   constants (`CHAT_FORMAT`, window budgets, chain limits, voice limits, `AUDIO_QUALITIES`) against
   `@eidolon/chat`, `@eidolon/access`, `@eidolon/runtime`, and `apps/bot/src/chat`.
@@ -39,7 +40,7 @@ zero `@pipecat-ai/*` packages directly.
 
 ## WebRTC calls (`EidolonClient`)
 
-`EidolonClient` wraps `PipecatClient` + `SmallWebRTCTransport` (`audioCodec: "default"`, camera
+`EidolonClient` wraps `PipecatClient` + `SmallWebRTCTransport` with `WavMediaManager` (camera
 disabled, mic enabled by default):
 
 ```ts

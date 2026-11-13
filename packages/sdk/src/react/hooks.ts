@@ -152,16 +152,22 @@ export function useEidolonMediaTrack(
   useEffect(() => {
     setTrack(readTrack());
     if (client === null) return;
-    const sync = () => setTrack(readTrack());
+    const matchesParticipant = (participant?: { readonly local?: boolean }) =>
+      (participant?.local === true) === (participantType === "local");
     const offStarted = client.on("trackStarted", (next, participant) => {
-      const isLocal = participant?.local === true;
-      if (next.kind === trackType && isLocal === (participantType === "local")) {
+      if (next.kind === trackType && matchesParticipant(participant)) {
         setTrack(next);
-      } else {
-        sync();
       }
     });
-    const offStopped = client.on("trackStopped", sync);
+    const offStopped = client.on("trackStopped", (stopped, participant) => {
+      if (stopped.kind === trackType && matchesParticipant(participant)) {
+        setTrack((prev) => {
+          const fallback = readTrack();
+          if (fallback && fallback.id !== stopped.id) return fallback;
+          return prev && prev.id !== stopped.id ? prev : null;
+        });
+      }
+    });
     const offDisconnected = client.on("disconnected", () => setTrack(null));
     return () => {
       offStarted();

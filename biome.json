@@ -84,7 +84,11 @@
                     "message": "The bot image skips builds for apps/cli changes (docker.yml); only apps/bot/src/local, which the image leaves out, may import it."
                   },
                   {
-                    "group": ["@laplace.live/eidolon-sdk", "@laplace.live/eidolon-sdk/**"],
+                    "group": [
+                      "@laplace.live/eidolon-sdk",
+                      "@laplace.live/eidolon-sdk/**",
+                      "**/sdk/src/**"
+                    ],
                     "message": "The bot image skips builds for packages/sdk changes (docker.yml); server code never imports the browser SDK."
                   },
                   {
@@ -121,7 +125,11 @@
                     "message": "The bot image skips builds for apps/cli changes (docker.yml); only apps/bot/src/local, which the image leaves out, may import it."
                   },
                   {
-                    "group": ["@laplace.live/eidolon-sdk", "@laplace.live/eidolon-sdk/**"],
+                    "group": [
+                      "@laplace.live/eidolon-sdk",
+                      "@laplace.live/eidolon-sdk/**",
+                      "**/sdk/src/**"
+                    ],
                     "message": "The bot image skips builds for packages/sdk changes (docker.yml); server code never imports the browser SDK."
                   },
                   {
@@ -166,8 +174,51 @@
                     "message": "The bot image skips builds for apps/cli changes (docker.yml); only apps/bot/src/local, which the image leaves out, may import it."
                   },
                   {
-                    "group": ["@laplace.live/eidolon-sdk", "@laplace.live/eidolon-sdk/**"],
+                    "group": [
+                      "@laplace.live/eidolon-sdk",
+                      "@laplace.live/eidolon-sdk/**",
+                      "**/sdk/src/**"
+                    ],
                     "message": "The bot image skips builds for packages/sdk changes (docker.yml); server code never imports the browser SDK."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/bot/src/local/**",
+        "apps/bot/test/local/**",
+        "apps/cli/**",
+        "apps/eidolon/**",
+        "packages/ingest/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "@laplace.live/eidolon-sdk",
+                      "@laplace.live/eidolon-sdk/**",
+                      "**/sdk/src/**"
+                    ],
+                    "message": "Server, CLI, and offline packages never import the browser SDK."
+                  },
+                  {
+                    "group": [
+                      "@eidolon/voice",
+                      "@eidolon/voice/**",
+                      "@eidolon/webrtc",
+                      "@eidolon/webrtc/**"
+                    ],
+                    "message": "Only packages/runtime may import the voice engine and its transport; reach calls through @eidolon/runtime."
                   }
                 ]
               }
@@ -265,7 +316,8 @@
                       "@eidolon/*",
                       "@eidolon/**",
                       "@laplace.live/eidolon-sdk",
-                      "@laplace.live/eidolon-sdk/**"
+                      "@laplace.live/eidolon-sdk/**",
+                      "**/sdk/src/**"
                     ],
                     "message": "Browsers import @eidolon/chat, so it imports no other package."
                   }

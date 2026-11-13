@@ -3,6 +3,7 @@
 
 import {
   type BotCapabilities,
+  type DeviceStatus,
   type MediaState,
   type MediaSupport,
   type Participant,
@@ -15,7 +16,12 @@ import {
 import { SmallWebRTCTransport, WavMediaManager } from "@pipecat-ai/small-webrtc-transport";
 import type { FetchLike } from "../chat/client.ts";
 import { LIVE_SWAP_STATES, SYSTEM_DEFAULT_MIC_ID, toLiveMicId } from "./devices.ts";
-import { parseBotReadyData, parseErrorMessage, parseServerMessage } from "./rtvi.ts";
+import {
+  normalizeDeviceErrorReason,
+  parseBotReadyData,
+  parseErrorMessage,
+  parseServerMessage,
+} from "./rtvi.ts";
 import { type FetchIceServersOptions, fetchIceServers, toApiRequest } from "./signalling.ts";
 import { gatherNetworkInfo, type NetworkInfo, readPeerConnection } from "./stats.ts";
 import type {
@@ -38,7 +44,6 @@ export interface EidolonClientOptions {
 
 const PASS_THROUGH_EVENTS: readonly EidolonEventName[] = [
   "connected",
-  "disconnected",
   "botStarted",
   "botConnected",
   "botDisconnected",
@@ -63,7 +68,6 @@ const PASS_THROUGH_EVENTS: readonly EidolonEventName[] = [
   "llmFunctionCallStopped",
   "participantConnected",
   "participantLeft",
-  "trackStopped",
   "localAudioLevel",
   "remoteAudioLevel",
   "availableMicsUpdated",
@@ -75,28 +79,130 @@ const PASS_THROUGH_EVENTS: readonly EidolonEventName[] = [
   "unsupportedFeature",
 ];
 
-function effectiveMediaState(raw: MediaState, transportState: TransportState): MediaState {
+function sameDeviceStatus(a: DeviceStatus, b: DeviceStatus): boolean {
+  if (a.state !== b.state) return false;
+  if (a.state === "error" && b.state === "error") {
+    return a.reason === b.reason && Object.is(a.details, b.details);
+  }
+  return true;
+}
+
+function sameMediaState(a: MediaState, b: MediaState): boolean {
+  return sameDeviceStatus(a.mic, b.mic) && sameDeviceStatus(a.cam, b.cam);
+}
+
+function effectiveMediaState(
+  raw: MediaState,
+  transportState: TransportState,
+  hasLiveMic: boolean,
+): MediaState {
+  if (raw.mic.state === "error" && raw.mic.reason === "unknown") {
+    const reason = normalizeDeviceErrorReason("unknown", raw.mic.details);
+    if (reason !== "unknown") {
+      return { ...raw, mic: { ...raw.mic, reason } };
+    }
+  }
   // WavMediaManager never fires onMicUpdated on initial acquisition, leaving PipecatClient's mic
-  // state stuck at "uninitialized" throughout a live call.
-  if (raw.mic.state === "uninitialized" && LIVE_SWAP_STATES.has(transportState)) {
+  // state stuck at "uninitialized" throughout a live call once capture succeeds.
+  if (raw.mic.state === "uninitialized" && LIVE_SWAP_STATES.has(transportState) && hasLiveMic) {
     return { ...raw, mic: { state: "granted" } };
   }
   return raw;
 }
 
+interface BridgedMediaManager {
+  readonly isMicEnabled: boolean;
+  tracks(): Tracks;
+  initialize(): Promise<void>;
+  connect(): Promise<void>;
+  updateMic(micId: string): Promise<void>;
+  disconnect(): Promise<void>;
+}
+
+function createBridgedMediaManager(
+  onLocalAudioTrack: (track: MediaStreamTrack) => void,
+): WavMediaManager & BridgedMediaManager {
+  const raw = new WavMediaManager();
+  const manager = raw as WavMediaManager & BridgedMediaManager;
+  const baseInitialize = manager.initialize.bind(manager);
+  const baseConnect = manager.connect.bind(manager);
+  const baseUpdateMic = manager.updateMic.bind(manager);
+  const baseDisconnect = manager.disconnect.bind(manager);
+
+  const syncMicTrack = () => {
+    const track = manager.tracks().local.audio;
+    if (track) track.enabled = manager.isMicEnabled;
+  };
+
+  manager.initialize = async () => {
+    await baseInitialize();
+    // WavMediaManager leaves getUserMedia's track enabled when _micEnabled is false, which sends
+    // live audio over RTCRtpSender because Eidolon's server ignores signalling trackStatus frames.
+    syncMicTrack();
+  };
+
+  manager.connect = async () => {
+    await baseConnect();
+    syncMicTrack();
+  };
+
+  manager.updateMic = async (micId: string) => {
+    await baseUpdateMic(micId);
+    syncMicTrack();
+    // While muted, WavMediaManager.updateMic skips _startRecording (and with it onTrackStarted),
+    // leaving the previous stopped track on RTCRtpSender.
+    const track = manager.tracks().local.audio;
+    if (!manager.isMicEnabled && track) onLocalAudioTrack(track);
+  };
+
+  manager.disconnect = async () => {
+    const recorder = Reflect.get(manager, "_wavRecorder") as
+      | {
+          getStatus?: () => string;
+          end?: () => Promise<unknown>;
+          processor?: { context?: { state?: string; close?: () => Promise<void> } } | null;
+          stream?: MediaStream | null;
+        }
+      | undefined;
+    const context = recorder?.processor?.context;
+    const stream = recorder?.stream;
+    await baseDisconnect();
+    // applyMicPreference opens _wavRecorder via updateMic before initialize() flips _initialized,
+    // so baseDisconnect() returns early; WavRecorder.end() also clears this.stream without stopping tracks.
+    if (recorder?.getStatus?.() !== "ended") {
+      await recorder?.end?.().catch(() => {});
+    }
+    if (stream) {
+      for (const track of stream.getTracks()) track.stop();
+    }
+    if (recorder?.stream) recorder.stream = null;
+    if (context && context.state !== "closed") {
+      await context.close?.().catch(() => {});
+    }
+  };
+
+  return manager;
+}
+
 export class EidolonClient {
+  readonly #mediaManager: BridgedMediaManager;
   readonly #transport: SmallWebRTCTransport;
   readonly #client: PipecatClient;
   readonly #fetch: FetchLike | undefined;
   readonly #listeners = new Map<EidolonEventName, Set<(...args: any[]) => void>>();
+  #botAudioTrack: MediaStreamTrack | undefined;
+  #botVideoTrack: MediaStreamTrack | undefined;
+  #lastEmittedMediaState: MediaState | undefined;
 
   constructor(options: EidolonClientOptions = {}) {
     this.#fetch = options.fetch;
+    const mediaManager = createBridgedMediaManager((track) => this.#replaceSenderTrack(track));
+    this.#mediaManager = mediaManager;
     this.#transport = new SmallWebRTCTransport({
       iceServers: [...(options.iceServers ?? DEFAULT_ICE_SERVERS)],
       // Raw 24 kHz PCM capture avoids Chromium's WebRTC APM eating quiet syllables.
       // https://github.com/pipecat-ai/pipecat/issues/4065
-      mediaManager: new WavMediaManager(),
+      mediaManager,
     });
     this.#client = new PipecatClient({
       transport: this.#transport,
@@ -142,7 +248,7 @@ export class EidolonClient {
   }
 
   get mediaState(): MediaState {
-    return effectiveMediaState(this.#client.mediaState, this.#client.state);
+    return effectiveMediaState(this.#client.mediaState, this.#client.state, this.#hasLiveMic());
   }
 
   get mediaSupport(): MediaSupport {
@@ -159,10 +265,23 @@ export class EidolonClient {
 
   enableMic(enable: boolean): void {
     this.#client.enableMic(enable);
+    const track = this.#client.tracks().local.audio;
+    if (track) track.enabled = this.#client.isMicEnabled;
   }
 
   tracks(): Tracks {
-    return this.#client.tracks();
+    // SmallWebRTCTransport.tracks() delegates to WavMediaManager.tracks(), which returns only
+    // local tracks and leaves remote bot tracks in _incomingTracks.
+    const base = this.#client.tracks();
+    if (this.#botAudioTrack === undefined && this.#botVideoTrack === undefined) return base;
+    return {
+      ...base,
+      bot: {
+        ...base.bot,
+        ...(this.#botAudioTrack === undefined ? {} : { audio: this.#botAudioTrack }),
+        ...(this.#botVideoTrack === undefined ? {} : { video: this.#botVideoTrack }),
+      },
+    };
   }
 
   getPeerConnection(): RTCPeerConnection | null {
@@ -220,8 +339,10 @@ export class EidolonClient {
     return parseBotReadyData(data);
   }
 
-  disconnect(): Promise<void> {
-    return this.#client.disconnect();
+  async disconnect(): Promise<void> {
+    await this.#client.disconnect();
+    // SmallWebRTCTransport.stop() returns early when pc is null, skipping mediaManager.disconnect().
+    await this.#mediaManager.disconnect();
   }
 
   sendText(content: string, options?: SendTextOptions): Promise<string> {
@@ -252,6 +373,23 @@ export class EidolonClient {
     for (const listener of [...set]) listener(...args);
   }
 
+  #hasLiveMic(): boolean {
+    const audio = this.#client.tracks().local.audio;
+    return audio !== undefined && audio.readyState !== "ended";
+  }
+
+  #replaceSenderTrack(track: MediaStreamTrack): void {
+    const pc = this.getPeerConnection();
+    const sender = pc?.getTransceivers()[0]?.sender;
+    sender?.replaceTrack(track).catch(() => {});
+  }
+
+  #emitMediaStateIfChanged(next: MediaState): void {
+    if (this.#lastEmittedMediaState && sameMediaState(this.#lastEmittedMediaState, next)) return;
+    this.#lastEmittedMediaState = next;
+    this.#emit("mediaStateUpdated", next);
+  }
+
   #wireEvents(): void {
     for (const event of PASS_THROUGH_EVENTS) {
       this.#client.on(event as RTVIEvent, (...args: unknown[]) => {
@@ -265,22 +403,59 @@ export class EidolonClient {
     this.#client.on(
       RTVIEvent.TrackStarted,
       (track: MediaStreamTrack, participant?: Participant) => {
-        if (participant?.local === true && track.kind === "audio") {
-          const pc = this.getPeerConnection();
-          const sender = pc?.getTransceivers()[0]?.sender;
-          sender?.replaceTrack(track).catch(() => {});
+        if (participant?.local === true) {
+          if (track.kind === "audio") {
+            track.enabled = this.#client.isMicEnabled;
+            this.#replaceSenderTrack(track);
+          }
+        } else if (track.kind === "audio") {
+          this.#botAudioTrack = track;
+        } else if (track.kind === "video") {
+          this.#botVideoTrack = track;
         }
         this.#emit("trackStarted", track, participant);
+        if (participant?.local === true && track.kind === "audio") {
+          this.#emitMediaStateIfChanged(this.mediaState);
+        }
       },
     );
 
+    this.#client.on(
+      RTVIEvent.TrackStopped,
+      (track: MediaStreamTrack, participant?: Participant) => {
+        if (participant?.local !== true) {
+          if (
+            track.kind === "audio" &&
+            (!this.#botAudioTrack || this.#botAudioTrack.id === track.id)
+          ) {
+            this.#botAudioTrack = undefined;
+          } else if (
+            track.kind === "video" &&
+            (!this.#botVideoTrack || this.#botVideoTrack.id === track.id)
+          ) {
+            this.#botVideoTrack = undefined;
+          }
+        }
+        this.#emit("trackStopped", track, participant);
+      },
+    );
+
+    this.#client.on(RTVIEvent.Disconnected, () => {
+      this.#botAudioTrack = undefined;
+      this.#botVideoTrack = undefined;
+      this.#lastEmittedMediaState = undefined;
+      this.#emit("disconnected");
+    });
+
     this.#client.on(RTVIEvent.TransportStateChanged, (state: TransportState) => {
       this.#emit("transportStateChanged", state);
-      this.#emit("mediaStateUpdated", this.mediaState);
+      this.#emitMediaStateIfChanged(this.mediaState);
     });
 
     this.#client.on(RTVIEvent.MediaStateUpdated, (raw: MediaState) => {
-      this.#emit("mediaStateUpdated", effectiveMediaState(raw, this.#client.state));
+      const next = effectiveMediaState(raw, this.#client.state, this.#hasLiveMic());
+      this.#lastEmittedMediaState = next;
+      this.#emit("mediaStateUpdated", next);
     });
 
     this.#client.on(RTVIEvent.BotReady, (data) => {

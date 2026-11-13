@@ -30,9 +30,11 @@ export function selfiePersona(data: unknown): string | null {
 /** Who a group call's `{ type: "speaker" }` server message names; null for any other message. */
 export function speakerOf(data: unknown): CallSpeaker | null {
   if (!isJsonObject(data) || data.type !== "speaker") return null;
-  if (typeof data.persona !== "string" || data.persona === "") return null;
-  const name = typeof data.name === "string" && data.name.trim() !== "" ? data.name : data.persona;
-  return { persona: data.persona, name };
+  const source = isJsonObject(data.speaker) ? data.speaker : data;
+  if (typeof source.persona !== "string" || source.persona === "") return null;
+  const name =
+    typeof source.name === "string" && source.name.trim() !== "" ? source.name : source.persona;
+  return { persona: source.persona, name };
 }
 
 export function parseServerMessage(raw: unknown): EidolonServerMessage {
@@ -80,7 +82,18 @@ export function parseErrorMessage(message: RTVIMessage): EidolonErrorMessage {
   };
 }
 
-export function normalizeDeviceErrorReason(type: DeviceErrorType): DeviceErrorReason {
+const SOURCE_ERROR_REASONS: Readonly<Record<string, DeviceErrorReason>> = {
+  NotAllowedError: "blocked",
+  SecurityError: "blocked",
+  NotReadableError: "already-in-use",
+  NotFoundError: "not-found",
+  OverconstrainedError: "invalid-constraints",
+};
+
+export function normalizeDeviceErrorReason(
+  type: DeviceErrorType,
+  details?: unknown,
+): DeviceErrorReason {
   switch (type) {
     case "permissions":
       return "blocked";
@@ -92,8 +105,13 @@ export function normalizeDeviceErrorReason(type: DeviceErrorType): DeviceErrorRe
       return "invalid-constraints";
     case "undefined-mediadevices":
       return "not-supported";
-    default:
-      return "unknown";
+    default: {
+      // WavRecorder reports every getUserMedia failure as "unknown" and stashes the DOMException in details.sourceError.
+      const cause = isJsonObject(details) ? details.sourceError : undefined;
+      const name =
+        typeof cause === "object" && cause !== null && "name" in cause ? String(cause.name) : "";
+      return SOURCE_ERROR_REASONS[name] ?? "unknown";
+    }
   }
 }
 

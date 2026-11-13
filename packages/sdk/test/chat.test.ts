@@ -212,11 +212,37 @@ describe("uuidv7 and chat parsing", () => {
 
     expect(separator("Hello.", "World")).toBe(" ");
     expect(separator("你好。", "世界")).toBe("");
+    // Supplementary-plane CJK (U+20BB7) must not receive an ASCII space on either boundary.
+    expect(separator("𠮷", "abc")).toBe("");
+    expect(separator("abc", "𠮷")).toBe("");
     expect(joinSegments(["Hello.", "World"])).toBe("Hello. World");
     expect(joinSegments(["你好。", "世界！"])).toBe("你好。世界！");
     expect(recorderMimeType((type) => type.startsWith("audio/mp4"))).toBe(
       "audio/mp4;codecs=mp4a.40.2",
     );
+
+    expect(
+      isChatEvent({
+        seq: 1,
+        at: 1,
+        type: "context",
+        persona: "milky-green",
+        turn: "t1",
+        position: 0,
+        role: "invalid-role",
+        content: "x",
+      }),
+    ).toBe(false);
+    expect(
+      isChatEvent({
+        seq: 1,
+        at: 1,
+        type: "call-started",
+        call: "c1",
+        persona: "milky-green",
+        group: false,
+      }),
+    ).toBe(false);
   });
 
   test("parseStreamLine and chatLineEventOf validate server payloads", () => {
@@ -329,6 +355,40 @@ describe("window builder, locks, availability, and session lifecycle", () => {
         }
       })(),
     ).rejects.toMatchObject({ status: 429, code: "rate-limited", retryAfter: 30 });
+
+    // Blank Retry-After header yields null rather than 0; custom abort reasons rethrow unwrapped.
+    await expect(
+      (async () => {
+        for await (const _ of streamTurn({
+          baseUrl: "https://bot.example",
+          chat: { header: newChatHeader(["milky-green"], 1), events: [] },
+          text: "hi",
+          fetch: async () =>
+            new Response("rate limited", { status: 429, headers: { "retry-after": "   " } }),
+        })) {
+          // unreachable
+        }
+      })(),
+    ).rejects.toMatchObject({ status: 429, code: "rate-limited", retryAfter: null });
+
+    const controller = new AbortController();
+    const customReason = new Error("caller-cancelled");
+    controller.abort(customReason);
+    await expect(
+      (async () => {
+        for await (const _ of streamTurn({
+          baseUrl: "https://bot.example",
+          chat: { header: newChatHeader(["milky-green"], 1), events: [] },
+          text: "hi",
+          signal: controller.signal,
+          fetch: async (_url, init) => {
+            throw init?.signal?.reason;
+          },
+        })) {
+          // unreachable
+        }
+      })(),
+    ).rejects.toBe(customReason);
   });
 
   test("sendChatTurn, downloadMissingFiles, startChatCall, closeDanglingCall, and chatViewReducer", async () => {
@@ -376,17 +436,21 @@ describe("window builder, locks, availability, and session lifecycle", () => {
       return new Response("missing", { status: 404 });
     };
 
+    const missingCallbacks: string[][] = [];
     const result = await sendChatTurn(
       { store, fetch: fakeFetch },
       {
         chatId: chat.id,
         text: "嗨",
+        onMissingFiles: (names) => missingCallbacks.push(names),
         onLine: (line) => {
           seenLines.push(line.type);
           view = chatViewReducer(view, { type: "line", line });
         },
       },
     );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(missingCallbacks).toEqual([]);
     expect(result.events).toHaveLength(2);
     expect(seenLines).toEqual(["started", "delta", "tool", "events", "ended"]);
     expect(liveItems(view.live)).toEqual([]);
@@ -433,5 +497,29 @@ describe("window builder, locks, availability, and session lifecycle", () => {
     expect(rows.map((row) => row.kind)).toEqual(["message", "message", "message", "call"]);
     const endedRow = rows.at(-1);
     expect(endedRow?.kind === "call" ? endedRow.edge : null).toBe("ended");
+
+    // Empty-text persona message with cutOff renders as a cut-off item; reactive "loaded" settles live turns.
+    const refusalEvent: WireEvent = {
+      seq: 10,
+      at: 300,
+      type: "message",
+      id: "r1",
+      speaker: { kind: "persona", id: "milky-green" },
+      text: "",
+      cutOff: "refusal",
+    };
+    const cutOffRows = eventItems([refusalEvent]);
+    expect(cutOffRows).toHaveLength(1);
+    expect(cutOffRows[0]).toMatchObject({ kind: "message", text: "", cutOff: "refusal" });
+
+    let liveView = chatViewReducer(EMPTY_CHAT_VIEW, {
+      type: "line",
+      line: { type: "started", turn: "t9", persona: "milky-green" },
+    });
+    liveView = chatViewReducer(liveView, { type: "loaded", events: [refusalEvent] });
+    expect(liveItems(liveView.live)).toEqual([]);
+    const beforeReload = liveView.events[0];
+    liveView = chatViewReducer(liveView, { type: "loaded", events: [{ ...refusalEvent }] });
+    expect(liveView.events[0]).toBe(beforeReload);
   });
 });

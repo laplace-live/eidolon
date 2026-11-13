@@ -26,6 +26,9 @@ export function useEidolonAudioLevel({
     if (!enabled || !track || typeof window === "undefined") return;
 
     const audioContext = new AudioContext();
+    if (audioContext.state === "suspended") {
+      void audioContext.resume().catch(() => {});
+    }
     const source = audioContext.createMediaStreamSource(new MediaStream([track]));
     const analyser = audioContext.createAnalyser();
     analyser.fftSize = 512;
@@ -52,6 +55,7 @@ export function useEidolonAudioLevel({
 
     return () => {
       cancelAnimationFrame(frame);
+      onLevelRef.current(0);
       void audioContext.close();
     };
   }, [enabled, track]);

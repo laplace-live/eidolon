@@ -220,9 +220,10 @@ function moduleSpecifiers(file: string): Set<string> {
     for (const { path } of new Bun.Transpiler({ loader: "js" }).scanImports(source)) {
       found.add(path);
     }
-  }
-  for (const [, spec] of source.matchAll(/\b(?:from|import)\s*\(?\s*["']([^"']+)["']\s*\)?/g)) {
-    if (spec !== undefined) found.add(spec);
+  } else {
+    for (const [, spec] of source.matchAll(/\b(?:from|import)\s*\(?\s*["']([^"']+)["']\s*\)?/g)) {
+      if (spec !== undefined) found.add(spec);
+    }
   }
   return found;
 }

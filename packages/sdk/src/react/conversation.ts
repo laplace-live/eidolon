@@ -1,6 +1,7 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   BotOutputData,
+  EidolonServerMessage,
   LLMFunctionCallInProgressData,
   LLMFunctionCallStartedData,
   LLMFunctionCallStoppedData,
@@ -159,7 +160,10 @@ const IGNORED_BOT_OUTPUT_TYPES: ReadonlySet<string> = new Set([
   "expression_pause",
 ]);
 
+// Pipecat's turn-completion processors prefix bot-output text with ✓ / ○ / ◐ markers.
 const TURN_MARKERS: ReadonlySet<string> = new Set(["\u2713", "\u25CB", "\u25D0"]);
+
+const INLINE_MARKUP_SPAN = /\[[^[\]\n]+\]|<\/?[A-Za-z]+>/g;
 
 function stripTurnMarker(text: string): string {
   const first = text[0];
@@ -226,10 +230,36 @@ function finalizeStep(
 ): ConversationStep {
   const closed = finalizeRole(state.messages, role, now, snapSpoken);
   if (closed.messages === state.messages) return { state, effects: [] };
+  const segments =
+    role === "assistant" && state.segments.size > 0
+      ? EMPTY_CONVERSATION_STATE.segments
+      : state.segments;
   return {
-    state: { ...state, messages: closed.messages },
+    state: { ...state, messages: closed.messages, segments },
     effects: closed.updated ? [{ kind: "updated", message: closed.updated }] : [],
   };
+}
+
+function closeOpenTurns(
+  state: ConversationState,
+  now: string,
+): {
+  messages: readonly ConversationMessage[];
+  segments: ReadonlyMap<string, SegmentMeta>;
+  effects: ConversationEffect[];
+} {
+  const effects: ConversationEffect[] = [];
+  const userClosed = finalizeRole(state.messages, "user", now, false);
+  if (userClosed.updated) effects.push({ kind: "updated", message: userClosed.updated });
+  const assistantClosed = finalizeRole(userClosed.messages, "assistant", now, false);
+  if (assistantClosed.updated) {
+    effects.push({ kind: "updated", message: assistantClosed.updated });
+  }
+  const segments =
+    assistantClosed.messages !== userClosed.messages && state.segments.size > 0
+      ? EMPTY_CONVERSATION_STATE.segments
+      : state.segments;
+  return { messages: assistantClosed.messages, segments, effects };
 }
 
 function insertBeforeOpenAssistant(
@@ -245,6 +275,7 @@ function insertBeforeOpenAssistant(
   return next;
 }
 
+// RTVI's llm-function-call-started omits tool_call_id; pair anonymous starts FIFO with in-progress.
 function findStartedFunctionCallIndex(messages: readonly ConversationMessage[]): number {
   return messages.findIndex(
     (msg) =>
@@ -267,8 +298,34 @@ function segmentKey(messageCreatedAt: string, partIndex: number): string {
   return `${messageCreatedAt}#${partIndex}`;
 }
 
+function spokenLengthOf(rawText: string, accumulated: string): number {
+  const stripped = stripTurnMarker(accumulated);
+  if (rawText.startsWith(stripped)) return stripped.length;
+  const said = stripped.trim();
+  const at = said === "" ? -1 : rawText.indexOf(said);
+  return at === -1 ? 0 : at + said.length;
+}
+
+function safeSplitIndex(text: string, index: number): number {
+  let clamped = Math.max(0, Math.min(index, text.length));
+  if (clamped === 0 || clamped === text.length) return clamped;
+  const prev = text.charCodeAt(clamped - 1);
+  const next = text.charCodeAt(clamped);
+  if (prev >= 0xd800 && prev <= 0xdbff && next >= 0xdc00 && next <= 0xdfff) {
+    clamped++;
+  }
+  if (clamped >= text.length) return text.length;
+  for (const match of text.matchAll(INLINE_MARKUP_SPAN)) {
+    const start = match.index ?? 0;
+    const end = start + match[0].length;
+    if (start < clamped && clamped < end) return end;
+    if (start >= clamped) break;
+  }
+  return clamped;
+}
+
 function splitSpokenText(meta: SegmentMeta, spokenLength: number): BotOutputText {
-  const clamped = Math.max(0, Math.min(spokenLength, meta.rawText.length));
+  const clamped = safeSplitIndex(meta.rawText, spokenLength);
   if (clamped === 0) {
     return { spoken: "", unspoken: meta.prefix + meta.rawText };
   }
@@ -293,6 +350,10 @@ export function stepConversation(
       if (assistantClosed.updated) {
         effects.push({ kind: "updated", message: assistantClosed.updated });
       }
+      const segments =
+        assistantClosed.messages !== state.messages && state.segments.size > 0
+          ? EMPTY_CONVERSATION_STATE.segments
+          : state.segments;
       let messages = assistantClosed.messages;
       const lastUserIdx = messages.findLastIndex(
         (msg) => msg.role === "user" && msg.status === undefined,
@@ -309,13 +370,15 @@ export function stepConversation(
         }
       }
       if (messages === state.messages && effects.length === 0) return { state, effects: [] };
-      return { state: { ...state, messages }, effects };
+      return { state: { ...state, messages, segments }, effects };
     }
 
     case "user-stopped-timeout":
       return finalizeStep(state, "user", action.now, false);
 
     case "user-transcription": {
+      // RTVI 1.2+ emits both user-input and legacy user-transcription for speech; drop legacy copies once user-input arrives.
+      if (!action.fromUserInput && state.userInputSeen) return { state, effects: [] };
       const userInputSeen = state.userInputSeen || action.fromUserInput;
       if (action.text === "" && !action.final) {
         return {
@@ -328,6 +391,10 @@ export function stepConversation(
       if (assistantClosed.updated) {
         effects.push({ kind: "updated", message: assistantClosed.updated });
       }
+      const segments =
+        assistantClosed.messages !== state.messages && state.segments.size > 0
+          ? EMPTY_CONVERSATION_STATE.segments
+          : state.segments;
       const lastUserIdx = assistantClosed.messages.findLastIndex(
         (msg) => msg.role === "user" && msg.status === undefined,
       );
@@ -348,7 +415,7 @@ export function stepConversation(
         const messages = [...assistantClosed.messages];
         messages[lastUserIdx] = updated;
         effects.push({ kind: "updated", message: updated });
-        return { state: { ...state, messages, userInputSeen }, effects };
+        return { state: { ...state, messages, segments, userInputSeen }, effects };
       }
 
       if (action.text.trim() === "") {
@@ -359,7 +426,10 @@ export function stepConversation(
         ) {
           return { state, effects: [] };
         }
-        return { state: { ...state, messages: assistantClosed.messages, userInputSeen }, effects };
+        return {
+          state: { ...state, messages: assistantClosed.messages, segments, userInputSeen },
+          effects,
+        };
       }
       const created: ConversationMessage = {
         role: "user",
@@ -370,7 +440,12 @@ export function stepConversation(
       };
       effects.push({ kind: "created", message: created });
       return {
-        state: { ...state, messages: [...assistantClosed.messages, created], userInputSeen },
+        state: {
+          ...state,
+          messages: [...assistantClosed.messages, created],
+          segments,
+          userInputSeen,
+        },
         effects,
       };
     }
@@ -395,11 +470,29 @@ export function stepConversation(
             effects: [{ kind: "updated", message: updated }],
           };
         }
-        const receivedChatIds = new Set(state.receivedChatIds);
-        receivedChatIds.add(action.msgId);
-        return { state: { ...state, receivedChatIds }, effects: [] };
+        if (action.text.trim() === "") {
+          const receivedChatIds = new Set(state.receivedChatIds);
+          receivedChatIds.add(action.msgId);
+          return { state: { ...state, receivedChatIds }, effects: [] };
+        }
+        const closed = closeOpenTurns(state, action.now);
+        const created: ConversationMessage = {
+          role: "user",
+          final: true,
+          msgId: action.msgId,
+          status: "received",
+          parts: [{ text: action.text, final: true, createdAt: action.now }],
+          createdAt: action.now,
+          updatedAt: action.now,
+        };
+        closed.effects.push({ kind: "created", message: created });
+        return {
+          state: { ...state, messages: [...closed.messages, created], segments: closed.segments },
+          effects: closed.effects,
+        };
       }
       if (action.text.trim() === "") return { state, effects: [] };
+      const closed = closeOpenTurns(state, action.now);
       const created: ConversationMessage = {
         role: "user",
         final: true,
@@ -407,16 +500,27 @@ export function stepConversation(
         createdAt: action.now,
         updatedAt: action.now,
       };
+      closed.effects.push({ kind: "created", message: created });
       return {
-        state: { ...state, messages: [...state.messages, created] },
-        effects: [{ kind: "created", message: created }],
+        state: { ...state, messages: [...closed.messages, created], segments: closed.segments },
+        effects: closed.effects,
       };
     }
 
     case "send-text-resolved": {
+      const existingIdx = state.messages.findLastIndex(
+        (msg) => msg.role === "user" && msg.msgId === action.msgId,
+      );
+      if (existingIdx !== -1) {
+        if (!state.receivedChatIds.has(action.msgId)) return { state, effects: [] };
+        const receivedChatIds = new Set(state.receivedChatIds);
+        receivedChatIds.delete(action.msgId);
+        return { state: { ...state, receivedChatIds }, effects: [] };
+      }
       const alreadyAcked = state.receivedChatIds.has(action.msgId);
       const receivedChatIds = new Set(state.receivedChatIds);
       receivedChatIds.delete(action.msgId);
+      const closed = closeOpenTurns(state, action.now);
       const created: ConversationMessage = {
         role: "user",
         final: true,
@@ -426,13 +530,20 @@ export function stepConversation(
         createdAt: action.now,
         updatedAt: action.now,
       };
+      closed.effects.push({ kind: "created", message: created });
       return {
-        state: { ...state, messages: [...state.messages, created], receivedChatIds },
-        effects: [{ kind: "created", message: created }],
+        state: {
+          ...state,
+          messages: [...closed.messages, created],
+          segments: closed.segments,
+          receivedChatIds,
+        },
+        effects: closed.effects,
       };
     }
 
     case "send-text-rejected": {
+      const closed = closeOpenTurns(state, action.now);
       const created: ConversationMessage = {
         role: "user",
         final: true,
@@ -441,9 +552,10 @@ export function stepConversation(
         createdAt: action.now,
         updatedAt: action.now,
       };
+      closed.effects.push({ kind: "created", message: created });
       return {
-        state: { ...state, messages: [...state.messages, created] },
-        effects: [{ kind: "created", message: created }],
+        state: { ...state, messages: [...closed.messages, created], segments: closed.segments },
+        effects: closed.effects,
       };
     }
 
@@ -461,16 +573,15 @@ export function stepConversation(
       const effects: ConversationEffect[] = [];
       const userClosed = finalizeRole(state.messages, "user", action.now, false);
       if (userClosed.updated) effects.push({ kind: "updated", message: userClosed.updated });
+      const unchangedOrUserClosed = (): ConversationStep =>
+        userClosed.messages === state.messages && effects.length === 0
+          ? { state, effects: [] }
+          : { state: { ...state, messages: userClosed.messages }, effects };
 
       let assistantIdx = userClosed.messages.findLastIndex(
         (msg) => msg.role === "assistant" && msg.final !== true,
       );
-      if (isProgress && assistantIdx === -1) {
-        if (userClosed.messages === state.messages && effects.length === 0) {
-          return { state, effects: [] };
-        }
-        return { state: { ...state, messages: userClosed.messages }, effects };
-      }
+      if (isProgress && assistantIdx === -1) return unchangedOrUserClosed();
 
       const messages = [...userClosed.messages];
       let isNewMessage = false;
@@ -490,13 +601,13 @@ export function stepConversation(
       const current = messages[assistantIdx];
       if (!current) return { state: { ...state, messages }, effects };
       const parts = [...current.parts];
-      let segments = state.segments;
+      let segments = isNewMessage && state.segments.size > 0 ? new Map() : state.segments;
 
       if (!isProgress) {
         const prevPartIndex = parts.length - 1;
         const prevMeta =
           prevPartIndex >= 0
-            ? state.segments.get(segmentKey(current.createdAt, prevPartIndex))
+            ? segments.get(segmentKey(current.createdAt, prevPartIndex))
             : undefined;
         const prevRaw = prevMeta?.rawText ?? plainTextOfPart(parts[prevPartIndex]);
         const prefix = separator(prevRaw, rawText);
@@ -512,7 +623,7 @@ export function stepConversation(
           createdAt: action.now,
           ...(action.data.segment_id === undefined ? {} : { segmentId: action.data.segment_id }),
         });
-        const nextSegments = new Map(state.segments);
+        const nextSegments = new Map(segments);
         nextSegments.set(segmentKey(current.createdAt, partIndex), meta);
         segments = nextSegments;
       } else {
@@ -521,29 +632,33 @@ export function stepConversation(
           segmentId !== undefined
             ? parts.findIndex((part) => part.segmentId === segmentId)
             : parts.findIndex((part) => !part.final && isBotOutputText(part.text));
-        if (targetIndex === -1) {
-          if (userClosed.messages === state.messages && effects.length === 0) {
-            return { state, effects: [] };
-          }
-          return { state: { ...state, messages: userClosed.messages }, effects };
-        }
+        if (targetIndex === -1) return unchangedOrUserClosed();
         const targetPart = parts[targetIndex];
-        if (!targetPart) {
-          if (userClosed.messages === state.messages && effects.length === 0) {
-            return { state, effects: [] };
-          }
-          return { state: { ...state, messages: userClosed.messages }, effects };
-        }
-        const meta = state.segments.get(segmentKey(current.createdAt, targetIndex)) ?? {
+        if (!targetPart) return unchangedOrUserClosed();
+        const meta = segments.get(segmentKey(current.createdAt, targetIndex)) ?? {
           prefix: "",
           rawText: plainTextOfPart(targetPart),
         };
-        const accumulated = action.data.spoken_progress?.accumulated_text;
-        const spokenLen = status === "completed" ? meta.rawText.length : (accumulated?.length ?? 0);
-        const completed = status === "completed" || spokenLen >= meta.rawText.length;
+        const prevSpoken = isBotOutputText(targetPart.text)
+          ? Math.max(0, targetPart.text.spoken.length - meta.prefix.length)
+          : 0;
+        const accumulated = action.data.spoken_progress?.accumulated_text ?? "";
+        const rawSpoken =
+          status === "completed" ? meta.rawText.length : spokenLengthOf(meta.rawText, accumulated);
+        const spokenLen = Math.max(prevSpoken, rawSpoken);
+        const nextText = splitSpokenText(meta, spokenLen);
+        const completed = status === "completed" || nextText.unspoken.length === 0;
+        if (
+          targetPart.final === completed &&
+          isBotOutputText(targetPart.text) &&
+          targetPart.text.spoken === nextText.spoken &&
+          targetPart.text.unspoken === nextText.unspoken
+        ) {
+          return unchangedOrUserClosed();
+        }
         parts[targetIndex] = {
           ...targetPart,
-          text: splitSpokenText(meta, spokenLen),
+          text: nextText,
           final: completed,
         };
       }
@@ -666,11 +781,12 @@ export function stepConversation(
           effects: [{ kind: "created", message: created }],
         };
       }
-      const effects: ConversationEffect[] = [];
-      const closed = finalizeRole(state.messages, action.message.role, action.now, false);
-      if (closed.updated) effects.push({ kind: "updated", message: closed.updated });
-      effects.push({ kind: "created", message: created });
-      return { state: { ...state, messages: [...closed.messages, created] }, effects };
+      const closed = closeOpenTurns(state, action.now);
+      closed.effects.push({ kind: "created", message: created });
+      return {
+        state: { ...state, messages: [...closed.messages, created], segments: closed.segments },
+        effects: closed.effects,
+      };
     }
   }
 }
@@ -682,6 +798,8 @@ export function useEidolonConversation(
   const client = useEidolonClient();
   const [messages, setMessages] = useState<readonly ConversationMessage[]>([]);
   const stateRef = useRef<ConversationState>(EMPTY_CONVERSATION_STATE);
+  const prevClientRef = useRef(client);
+  const lastSpeakerRef = useRef<string | null>(null);
   const callbacksRef = useRef(options);
   useEffect(() => {
     callbacksRef.current = options;
@@ -699,6 +817,12 @@ export function useEidolonConversation(
   }, []);
 
   useEffect(() => {
+    if (prevClientRef.current !== client) {
+      prevClientRef.current = client;
+      lastSpeakerRef.current = null;
+      dispatch({ type: "reset" });
+    }
+
     let botStoppedTimer: ReturnType<typeof setTimeout> | undefined;
     let userStoppedTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -726,7 +850,17 @@ export function useEidolonConversation(
       client.on("connected", () => {
         cancelBotTimer();
         cancelUserTimer();
+        lastSpeakerRef.current = null;
         dispatch({ type: "reset" });
+      }),
+      client.on("serverMessage", (msg: EidolonServerMessage) => {
+        if (msg.type !== "speaker") return;
+        const prev = lastSpeakerRef.current;
+        lastSpeakerRef.current = msg.speaker.persona;
+        if (prev !== null && prev !== msg.speaker.persona) {
+          cancelBotTimer();
+          dispatch({ type: "bot-stopped-timeout", now: new Date().toISOString() });
+        }
       }),
       client.on("botOutput", (data: BotOutputData) => {
         dispatch({ type: "bot-output", data, now: new Date().toISOString() });
@@ -830,7 +964,10 @@ export function useEidolonConversation(
     [client, dispatch],
   );
 
-  const clearMessages = useCallback(() => dispatch({ type: "reset" }), [dispatch]);
+  const clearMessages = useCallback(() => {
+    lastSpeakerRef.current = null;
+    dispatch({ type: "reset" });
+  }, [dispatch]);
 
   return useMemo(
     () => ({ messages, injectMessage, sendText, clearMessages }),

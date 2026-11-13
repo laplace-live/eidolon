@@ -44,11 +44,20 @@ export function useEidolonMicDevices({
       void refresh();
     };
     navigator.mediaDevices.addEventListener("devicechange", onDeviceChange);
+    // Granting getUserMedia permission reveals deviceIds without firing a DOM devicechange event.
+    const offConnected = client?.on("connected", onDeviceChange);
+    const offAvailable = client?.on("availableMicsUpdated", onDeviceChange);
+    const offTrack = client?.on("trackStarted", (track, participant) => {
+      if (participant?.local === true && track.kind === "audio") void refresh();
+    });
     return () => {
       cancelled = true;
       navigator.mediaDevices.removeEventListener("devicechange", onDeviceChange);
+      offConnected?.();
+      offAvailable?.();
+      offTrack?.();
     };
-  }, []);
+  }, [client]);
 
   const selectedMicId = useMemo(
     () => resolveSelectedMicId(mics, persistedMicId),

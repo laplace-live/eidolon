@@ -4,12 +4,14 @@ import { isJsonObject } from "../chat/parse.ts";
 export interface MemorySummary {
   readonly id: string;
   readonly memory: string;
+  readonly categories?: readonly string[] | null;
   readonly created_at?: string;
   readonly updated_at?: string;
 }
 
 export interface ListMemoriesResponse {
   readonly user_id: string;
+  readonly uname?: string | null;
   readonly count: number;
   readonly memories: readonly MemorySummary[];
 }
@@ -33,7 +35,7 @@ export class EidolonApiError extends Error {
 
 export interface MemoryRequestOptions {
   readonly baseUrl: string;
-  /** Bearer token (Login Sync token on public deployments, or admin secret). */
+  /** Login Sync Bearer token; `/api/memories` identifies the viewer solely from this token. */
   readonly token?: string;
   readonly headers?: HeadersInit;
   readonly credentials?: RequestCredentials;
@@ -69,32 +71,43 @@ async function memoryRequest(
   return res;
 }
 
-/** Lists the memories stored for `userId` (or for the Bearer token's viewer when omitted). */
+/** Lists the Mem0 memories stored for the signed-in viewer (`GET /api/memories`). */
 export async function listMemories(
-  options: MemoryRequestOptions & { readonly userId?: string },
+  options: MemoryRequestOptions & {
+    /** @deprecated Ignored by `/api/memories`, which scopes exclusively to the Bearer token's viewer. */
+    readonly userId?: string;
+  },
 ): Promise<ListMemoriesResponse> {
-  const query =
-    options.userId === undefined ? "" : `?user_id=${encodeURIComponent(options.userId)}`;
-  const res = await memoryRequest("GET", `/api/memories${query}`, options);
+  const res = await memoryRequest("GET", "/api/memories", options);
   const body: unknown = await res.json();
   if (!isJsonObject(body) || typeof body.user_id !== "string" || !Array.isArray(body.memories)) {
     throw new EidolonApiError(res.status, "Malformed memories response");
   }
-  const memories: MemorySummary[] = body.memories.flatMap((item) =>
-    isJsonObject(item) && typeof item.id === "string" && typeof item.memory === "string"
-      ? [
-          {
-            id: item.id,
-            memory: item.memory,
-            ...(typeof item.created_at === "string" ? { created_at: item.created_at } : {}),
-            ...(typeof item.updated_at === "string" ? { updated_at: item.updated_at } : {}),
-          },
-        ]
-      : [],
-  );
+  const memories: MemorySummary[] = body.memories.flatMap((item) => {
+    if (!isJsonObject(item) || typeof item.id !== "string" || typeof item.memory !== "string") {
+      return [];
+    }
+    const categories =
+      item.categories === null
+        ? null
+        : Array.isArray(item.categories) && item.categories.every((c) => typeof c === "string")
+          ? (item.categories as string[])
+          : undefined;
+    return [
+      {
+        id: item.id,
+        memory: item.memory,
+        ...(categories === undefined ? {} : { categories }),
+        ...(typeof item.created_at === "string" ? { created_at: item.created_at } : {}),
+        ...(typeof item.updated_at === "string" ? { updated_at: item.updated_at } : {}),
+      },
+    ];
+  });
+  const uname = typeof body.uname === "string" || body.uname === null ? body.uname : undefined;
   return {
     user_id: body.user_id,
-    count: typeof body.count === "number" ? body.count : memories.length,
+    ...(uname === undefined ? {} : { uname }),
+    count: memories.length,
     memories,
   };
 }

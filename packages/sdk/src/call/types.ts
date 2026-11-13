@@ -65,6 +65,7 @@ export function isAudioQuality(value: unknown): value is AudioQuality {
 export interface StandaloneOfferRequestData {
   readonly audioQuality?: AudioQuality;
   readonly loginSyncToken?: string;
+  /** @deprecated Ignored by standalone `/api/offer`, which always uses the server's active persona. */
   readonly persona?: ParticipantId;
   readonly chat?: undefined;
   readonly chatId?: undefined;
@@ -76,6 +77,7 @@ export interface ChatOfferRequestData {
   readonly loginSyncToken?: string;
   readonly chat: ChatWindow;
   readonly persona: ParticipantId;
+  /** @deprecated Ignored by stateless `/api/offer`, which serves 1:1 in-chat calls only. */
   readonly group?: boolean;
 }
 
@@ -83,6 +85,7 @@ export interface ChatOfferRequestData {
 export interface LocalChatOfferRequestData {
   readonly audioQuality?: AudioQuality;
   readonly chatId: string;
+  /** Required by local `/api/offer`, including when `group: true` (where it names the opening speaker). */
   readonly persona?: ParticipantId;
   readonly group?: boolean;
 }

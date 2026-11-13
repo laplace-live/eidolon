@@ -139,7 +139,12 @@ export function isChatEvent(value: unknown): value is ChatEvent {
         (value.cutOff === undefined || isOneOf(value.cutOff, ["length", "refusal"]))
       );
     case "context":
-      return isOwnedByPersona(value) && isFiniteNumber(value.position) && isString(value.content);
+      return (
+        isOwnedByPersona(value) &&
+        isFiniteNumber(value.position) &&
+        isOneOf(value.role, ["system", "user", "developer"]) &&
+        isString(value.content)
+      );
     case "context-removed":
       return (
         isOwnedByPersona(value) && Array.isArray(value.seqs) && value.seqs.every(isFiniteNumber)
@@ -152,7 +157,12 @@ export function isChatEvent(value: unknown): value is ChatEvent {
         isJsonObject(value.arguments)
       );
     case "tool-result":
-      return isOwnedByPersona(value) && isString(value.callId) && isJsonObject(value.result);
+      return (
+        isOwnedByPersona(value) &&
+        isString(value.callId) &&
+        isJsonObject(value.result) &&
+        (value.stage === undefined || isOneOf(value.stage, ["started", "final", "cancelled"]))
+      );
     case "kickoff":
       return isOwnedByPersona(value) && isString(value.content);
     case "participants":
@@ -178,7 +188,9 @@ export function isChatEvent(value: unknown): value is ChatEvent {
             isJsonObject(reply) &&
             isString(reply.persona) &&
             isOneOf(reply.mode, ["text", "voice"]),
-        )
+        ) &&
+        (value.scores === undefined ||
+          (isJsonObject(value.scores) && Object.values(value.scores).every(isFiniteNumber)))
       );
     case "settings":
       return (
@@ -186,7 +198,11 @@ export function isChatEvent(value: unknown): value is ChatEvent {
         (value.chainLimit === undefined || isFiniteNumber(value.chainLimit))
       );
     case "call-started":
-      return isString(value.call) && isString(value.persona);
+      return (
+        isString(value.call) &&
+        isString(value.persona) &&
+        (value.group === undefined || value.group === true)
+      );
     case "call-ended":
       return isString(value.call) && isString(value.reason);
   }
@@ -269,10 +285,26 @@ export function chatTextOf(text: string): string | null {
 const CJK =
   /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3000-\u303f\uff00-\uffef]/u;
 
+function lastCodePoint(text: string): string | undefined {
+  if (text === "") return undefined;
+  const last = text.charCodeAt(text.length - 1);
+  if (last >= 0xdc00 && last <= 0xdfff && text.length >= 2) {
+    const prev = text.charCodeAt(text.length - 2);
+    if (prev >= 0xd800 && prev <= 0xdbff) return text.slice(-2);
+  }
+  return text.slice(-1);
+}
+
+function firstCodePoint(text: string): string | undefined {
+  if (text === "") return undefined;
+  const code = text.codePointAt(0);
+  return code === undefined ? undefined : String.fromCodePoint(code);
+}
+
 /** The space two pieces of text need between them: none beside whitespace or CJK. */
 export function separator(left: string, right: string): "" | " " {
-  const before = left.at(-1);
-  const after = right[0];
+  const before = lastCodePoint(left);
+  const after = firstCodePoint(right);
   if (before === undefined || after === undefined) return "";
   if (/\s/.test(before) || /\s/.test(after) || CJK.test(before) || CJK.test(after)) return "";
   return " ";
