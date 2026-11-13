@@ -40,7 +40,7 @@ jobs:
         with:
           node-version: 24
 
-      - run: bun install --frozen-lockfile
+      - run: bun install --frozen-lockfile --ignore-scripts
 
       # Requires the laplace-release-bot GitHub App installed on this repo with
       # Contents and Pull requests read & write, its Client ID and private key

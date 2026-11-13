@@ -1596,6 +1596,53 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
     expect(initClient.tracks().local.audio?.id).toBe("init-track-usb-3");
 
     await initClient.disconnect();
+
+    // 7. Pending rawTransport.updateMic in the same epoch serializes ahead of initDevices()
+    // so initialize() never acquires WavRecorder concurrently with updateMic.
+    playerPending = new Promise<void>((resolve) => {
+      markPlayerPending = resolve;
+    });
+    let releaseUpdateBegin!: () => void;
+    beginGate = new Promise<void>((resolve) => {
+      releaseUpdateBegin = resolve;
+    });
+    const updateBeginPending = new Promise<void>((resolve) => {
+      markBeginPending = resolve;
+    });
+    let concurrentBeginCount = 0;
+    let maxConcurrentBegin = 0;
+    const baseBegin = origRec.begin as (deviceId?: string) => Promise<boolean>;
+    origRec.begin = async (deviceId?: string) => {
+      concurrentBeginCount += 1;
+      maxConcurrentBegin = Math.max(maxConcurrentBegin, concurrentBeginCount);
+      try {
+        return await baseBegin(deviceId);
+      } finally {
+        concurrentBeginCount -= 1;
+      }
+    };
+    try {
+      const pendingRawUpdate = Promise.resolve(initClient.rawTransport.updateMic("usb-4"));
+      await updateBeginPending;
+      const pendingInitBehindUpdate = initClient.initDevices();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(maxConcurrentBegin).toBe(1);
+
+      beginGate = null;
+      markBeginPending = null;
+      releaseUpdateBegin();
+      await playerPending;
+      finishPlayer();
+      await Promise.all([pendingRawUpdate, pendingInitBehindUpdate]);
+      expect(maxConcurrentBegin).toBe(1);
+      expect((origRec.deviceSelection as { deviceId?: string } | null)?.deviceId).toBe("usb-4");
+      expect(initClient.tracks().local.audio?.id).toBe("init-track-usb-4");
+    } finally {
+      origRec.begin = baseBegin;
+      beginGate = null;
+      markBeginPending = null;
+    }
+    await initClient.disconnect();
   });
 });
 

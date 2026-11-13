@@ -368,6 +368,22 @@ function createBridgedMediaManager(
     };
   };
 
+  const claimWhenEpochIdle = async (epoch: number) => {
+    while (!isCanceled(epoch)) {
+      if (hasEpochMicWork(epoch)) {
+        await waitForEpochMicWork(epoch);
+        continue;
+      }
+      isolateSuspendedInner();
+      const existing = inFlightInners.get(activeInner);
+      if (existing === undefined || existing.epoch !== epoch) {
+        return claimLifecycle(epoch);
+      }
+      await waitUnlessCanceled(existing.settled, epoch);
+    }
+    throw connectionCancelledError();
+  };
+
   const releaseLifecycle = (entry: InFlightLifecycle) => {
     if (inFlightInners.get(entry.inner) === entry) {
       inFlightInners.delete(entry.inner);
@@ -554,20 +570,7 @@ function createBridgedMediaManager(
     },
     async initialize() {
       const epoch = disconnectEpoch;
-      if (isCanceled(epoch)) {
-        throw connectionCancelledError();
-      }
-      isolateSuspendedInner();
-      let existing = inFlightInners.get(activeInner);
-      while (!isCanceled(epoch) && existing !== undefined && existing.epoch === epoch) {
-        await waitUnlessCanceled(existing.settled, epoch);
-        isolateSuspendedInner();
-        existing = inFlightInners.get(activeInner);
-      }
-      if (isCanceled(epoch)) {
-        throw connectionCancelledError();
-      }
-      const attempt = claimLifecycle(epoch);
+      const attempt = await claimWhenEpochIdle(epoch);
       try {
         if (Reflect.get(attempt.inner, "_initialized") === true) {
           if (attempt.inner === activeInner) {
@@ -596,29 +599,7 @@ function createBridgedMediaManager(
     },
     async connect() {
       const epoch = disconnectEpoch;
-      if (isCanceled(epoch)) {
-        throw connectionCancelledError();
-      }
-      if (hasEpochMicWork(epoch)) {
-        await waitForEpochMicWork(epoch);
-        if (isCanceled(epoch)) {
-          throw connectionCancelledError();
-        }
-      }
-      isolateSuspendedInner();
-      let existing = inFlightInners.get(activeInner);
-      while (!isCanceled(epoch) && existing !== undefined && existing.epoch === epoch) {
-        await waitUnlessCanceled(existing.settled, epoch);
-        if (hasEpochMicWork(epoch)) {
-          await waitForEpochMicWork(epoch);
-        }
-        isolateSuspendedInner();
-        existing = inFlightInners.get(activeInner);
-      }
-      if (isCanceled(epoch)) {
-        throw connectionCancelledError();
-      }
-      const attempt = claimLifecycle(epoch);
+      const attempt = await claimWhenEpochIdle(epoch);
       try {
         sessionEpochs.set(attempt.inner, epoch);
         try {
