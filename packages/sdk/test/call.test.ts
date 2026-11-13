@@ -1305,6 +1305,158 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
     expect(prepUpdateCalls).toBe(0);
     expect(prepInitCalls).toBe(0);
   });
+
+  test("device unplug during pending player initialization defers fallback without replacing active manager", async () => {
+    const initClient = new EidolonClient({ enableMic: false });
+    const initManager = Reflect.get(initClient.rawTransport, "mediaManager") as object;
+    const origRec = Reflect.get(initManager, "_wavRecorder") as Record<string, unknown>;
+    const origPlay = Reflect.get(initManager, "_wavStreamPlayer") as Record<string, unknown>;
+    const builtInDevice = {
+      deviceId: "built-in",
+      kind: "audioinput",
+      label: "Built-in Mic",
+      groupId: "g1",
+      toJSON: () => ({}),
+    } as MediaDeviceInfo;
+
+    const openedDuringInit: string[] = [];
+    let onDeviceChangeCb = null as ((devices: MediaDeviceInfo[]) => void) | null;
+    let markPlayerPending!: () => void;
+    let playerPending = new Promise<void>((resolve) => {
+      markPlayerPending = resolve;
+    });
+    let finishPlayer!: () => void;
+    let rejectPlayer!: (error: Error) => void;
+
+    origRec.processor = null;
+    origRec.stream = null;
+    origRec.deviceSelection = null;
+    origRec.getStatus = () => (origRec.processor === null ? "ended" : "paused");
+    origRec.begin = async (deviceId?: string) => {
+      if (origRec.processor) {
+        throw new Error("Already connected: please call .end() to start a new session");
+      }
+      const resolved =
+        deviceId === undefined
+          ? ((origRec.deviceSelection as { deviceId?: string } | null)?.deviceId ?? "usb-2")
+          : deviceId || "built-in";
+      openedDuringInit.push(resolved);
+      origRec.deviceSelection = {
+        deviceId: resolved,
+        kind: "audioinput",
+        label: resolved,
+      };
+      const track = {
+        id: `init-track-${resolved}`,
+        kind: "audio",
+        enabled: true,
+        readyState: "live",
+        stop() {
+          (this as { readyState: string }).readyState = "ended";
+        },
+      } as unknown as MediaStreamTrack;
+      origRec.processor = {
+        context: {
+          state: "running",
+          close: async () => {
+            const proc = origRec.processor as { context: { state: string } } | null;
+            if (proc) proc.context.state = "closed";
+          },
+        },
+      };
+      origRec.stream = { getTracks: () => [track], getAudioTracks: () => [track] };
+      return true;
+    };
+    origRec.end = async () => {
+      const stream = origRec.stream as { getTracks: () => MediaStreamTrack[] } | null;
+      for (const t of stream?.getTracks() ?? []) t.stop();
+      origRec.stream = null;
+      origRec.processor = null;
+    };
+    origRec.record = async () => true;
+    origRec.pause = async () => true;
+    origRec.listenForDeviceChange = (cb: ((devices: MediaDeviceInfo[]) => void) | null) => {
+      onDeviceChangeCb = cb;
+    };
+    origRec.listenForDeviceErrors = () => {};
+
+    origPlay.context = null;
+    origPlay.connect = () => {
+      markPlayerPending();
+      return new Promise<boolean>((resolve, reject) => {
+        finishPlayer = () => {
+          origPlay.context = {
+            state: "running",
+            close: async () => {
+              const ctx = origPlay.context as { state: string } | null;
+              if (ctx) ctx.state = "closed";
+            },
+          };
+          resolve(true);
+        };
+        rejectPlayer = reject;
+      });
+    };
+    origPlay.interrupt = async () => {};
+
+    // 1. Unplug while _wavStreamPlayer.connect() is pending defers fallback until initialize() settles,
+    // preserving origRec/origPlay on the active WavMediaManager without aborting initDevices().
+    const pendingInit = initClient.initDevices();
+    await playerPending;
+    expect(openedDuringInit).toEqual(["usb-2"]);
+    expect(onDeviceChangeCb).not.toBeNull();
+
+    onDeviceChangeCb?.([builtInDevice]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(openedDuringInit).toEqual(["usb-2"]);
+    expect(Reflect.get(initManager, "_wavRecorder")).toBe(origRec);
+    expect(Reflect.get(initManager, "_wavStreamPlayer")).toBe(origPlay);
+
+    finishPlayer();
+    await pendingInit;
+    expect(Reflect.get(initManager, "_wavRecorder")).toBe(origRec);
+    expect(Reflect.get(initManager, "_wavStreamPlayer")).toBe(origPlay);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(openedDuringInit).toEqual(["usb-2", "built-in"]);
+    expect(initClient.appliedMicId).toBe(SYSTEM_DEFAULT_MIC_ID);
+    expect(initClient.tracks().local.audio?.id).toBe("init-track-built-in");
+    expect(initClient.tracks().local.audio?.enabled).toBe(false);
+
+    await initClient.disconnect();
+
+    // 2. Same-epoch direct updateMic while initialize() is pending also keeps activeInner intact.
+    playerPending = new Promise<void>((resolve) => {
+      markPlayerPending = resolve;
+    });
+    origRec.deviceSelection = { deviceId: "usb-2", kind: "audioinput", label: "usb-2" };
+    const pendingInit2 = initClient.initDevices();
+    await playerPending;
+    const directSwap = initClient.rawTransport.updateMic("usb-3");
+    finishPlayer();
+    await Promise.all([pendingInit2, directSwap]);
+    expect(Reflect.get(initManager, "_wavRecorder")).toBe(origRec);
+    expect(openedDuringInit).toEqual(["usb-2", "built-in", "usb-2", "usb-3"]);
+
+    await initClient.disconnect();
+
+    // 3. If _wavStreamPlayer.connect() rejects after unplug during initDevices(), deferred fallback does not reopen capture.
+    playerPending = new Promise<void>((resolve) => {
+      markPlayerPending = resolve;
+    });
+    origRec.deviceSelection = { deviceId: "usb-2", kind: "audioinput", label: "usb-2" };
+    const failingInit = initClient.initDevices();
+    await playerPending;
+    onDeviceChangeCb?.([builtInDevice]);
+    const countBeforeReject = openedDuringInit.length;
+    rejectPlayer(new Error("Player AudioWorklet failed"));
+    await expect(failingInit).rejects.toThrow("Player AudioWorklet failed");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(openedDuringInit).toHaveLength(countBeforeReject);
+    expect(origRec.stream).toBeNull();
+
+    await initClient.disconnect();
+  });
 });
 
 describe("stepConversation pure transcript reducer", () => {

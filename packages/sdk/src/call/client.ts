@@ -158,7 +158,13 @@ function createBridgedMediaManager(
   let lifecycleToken = 0;
   let preConnectMicDepth = 0;
   let pendingMicOp: Promise<void> = Promise.resolve();
-  const inFlightInners = new Set<WavMediaManager>();
+  interface InFlightLifecycle {
+    epoch: number;
+    count: number;
+    readonly settled: Promise<void>;
+    readonly resolve: () => void;
+  }
+  const inFlightInners = new Map<WavMediaManager, InFlightLifecycle>();
   const sessionEpochs = new WeakMap<WavMediaManager, number>();
   const RecorderCtor = (Reflect.get(raw, "_wavRecorder") as object | undefined)?.constructor;
   const PlayerCtor = (Reflect.get(raw, "_wavStreamPlayer") as object | undefined)?.constructor;
@@ -208,10 +214,12 @@ function createBridgedMediaManager(
   };
 
   const isolateSuspendedInner = () => {
+    const inFlight = inFlightInners.get(activeInner);
     const currentRecorder = readRecorderOf(activeInner);
     const currentPlayer = readPlayerOf(activeInner);
     if (
-      inFlightInners.has(activeInner) &&
+      inFlight !== undefined &&
+      inFlight.epoch !== disconnectEpoch &&
       RecorderCtor !== undefined &&
       PlayerCtor !== undefined &&
       currentRecorder?.constructor === RecorderCtor &&
@@ -243,16 +251,36 @@ function createBridgedMediaManager(
     }
   };
 
-  const claimLifecycle = () => {
+  const claimLifecycle = (epoch: number) => {
     isolateSuspendedInner();
     const inner = activeInner;
-    inFlightInners.add(inner);
+    const existing = inFlightInners.get(inner);
+    if (existing) {
+      existing.epoch = epoch;
+      existing.count += 1;
+    } else {
+      let resolve!: () => void;
+      const settled = new Promise<void>((r) => {
+        resolve = r;
+      });
+      inFlightInners.set(inner, { epoch, count: 1, settled, resolve });
+    }
     return {
       token: ++lifecycleToken,
       inner,
       recorder: readRecorderOf(inner),
       player: readPlayerOf(inner),
     };
+  };
+
+  const releaseLifecycle = (inner: WavMediaManager) => {
+    const existing = inFlightInners.get(inner);
+    if (!existing) return;
+    existing.count -= 1;
+    if (existing.count <= 0) {
+      inFlightInners.delete(inner);
+      existing.resolve();
+    }
   };
 
   const cleanupAttempt = async (attempt: {
@@ -314,7 +342,7 @@ function createBridgedMediaManager(
       if (canceled()) {
         throw new DOMException("Connection cancelled", "AbortError");
       }
-      const attempt = claimLifecycle();
+      const attempt = claimLifecycle(epoch);
       try {
         if (Reflect.get(attempt.inner, "_initialized") === true) {
           if (attempt.inner === activeInner) {
@@ -338,7 +366,7 @@ function createBridgedMediaManager(
         // live audio over RTCRtpSender because Eidolon's server ignores signalling trackStatus frames.
         syncMicTrack();
       } finally {
-        inFlightInners.delete(attempt.inner);
+        releaseLifecycle(attempt.inner);
       }
     },
     async connect() {
@@ -348,7 +376,7 @@ function createBridgedMediaManager(
       if (canceled()) {
         throw new DOMException("Connection cancelled", "AbortError");
       }
-      const attempt = claimLifecycle();
+      const attempt = claimLifecycle(epoch);
       try {
         sessionEpochs.set(attempt.inner, epoch);
         try {
@@ -363,7 +391,7 @@ function createBridgedMediaManager(
         }
         syncMicTrack();
       } finally {
-        inFlightInners.delete(attempt.inner);
+        releaseLifecycle(attempt.inner);
       }
     },
     updateMic(micId: string) {
@@ -429,11 +457,11 @@ function createBridgedMediaManager(
         // blocks disconnect() or an awaited redial; claimLifecycle() isolates and cleans it up.
         return (async () => {
           if (canceled()) return;
-          const attempt = claimLifecycle();
+          const attempt = claimLifecycle(epoch);
           try {
             await runUpdateOn(attempt.inner, attempt.recorder, () => cleanupAttempt(attempt));
           } finally {
-            inFlightInners.delete(attempt.inner);
+            releaseLifecycle(attempt.inner);
           }
         })();
       }
@@ -484,38 +512,50 @@ function createBridgedMediaManager(
   };
 
   function bindInner(inner: WavMediaManager): void {
-    // WavMediaManager.initialize() binds _handleAvailableDevicesUpdated to the inner instance,
-    // whose unplug fallback invokes `this.updateMic("")` fire-and-forget without awaiting:
+    // WavMediaManager.initialize() binds _handleAvailableDevicesUpdated to the inner instance
+    // before _wavStreamPlayer.connect() settles, and its unplug fallback invokes `this.updateMic("")`
+    // fire-and-forget without awaiting:
     // https://github.com/pipecat-ai/pipecat-client-web-transports/blob/main/lib/src/media-mgmt/mediaManager.ts
-    Reflect.set(inner, "updateMic", (micId: string) => {
+    Reflect.set(inner, "updateMic", async (micId: string) => {
       if (
         inner !== activeInner ||
         overrides.isDisconnecting ||
         sessionEpochs.get(inner) !== disconnectEpoch
       ) {
-        return Promise.resolve();
+        return;
       }
       const fallbackEpoch = disconnectEpoch;
-      return overrides.updateMic(micId).then(
-        () => {
-          if (
-            inner === activeInner &&
-            !overrides.isDisconnecting &&
-            disconnectEpoch === fallbackEpoch
-          ) {
-            onAutoMicFallback?.(micId || SYSTEM_DEFAULT_MIC_ID);
-          }
-        },
-        () => {
-          if (
-            inner === activeInner &&
-            !overrides.isDisconnecting &&
-            disconnectEpoch === fallbackEpoch
-          ) {
-            onAutoMicFallback?.(null);
-          }
-        },
-      );
+      let inflight = inFlightInners.get(inner);
+      while (inflight && inflight.epoch === fallbackEpoch) {
+        await inflight.settled;
+        inflight = inFlightInners.get(inner);
+      }
+      if (
+        inner !== activeInner ||
+        overrides.isDisconnecting ||
+        disconnectEpoch !== fallbackEpoch ||
+        sessionEpochs.get(inner) !== fallbackEpoch
+      ) {
+        return;
+      }
+      try {
+        await overrides.updateMic(micId);
+        if (
+          inner === activeInner &&
+          !overrides.isDisconnecting &&
+          disconnectEpoch === fallbackEpoch
+        ) {
+          onAutoMicFallback?.(micId || SYSTEM_DEFAULT_MIC_ID);
+        }
+      } catch {
+        if (
+          inner === activeInner &&
+          !overrides.isDisconnecting &&
+          disconnectEpoch === fallbackEpoch
+        ) {
+          onAutoMicFallback?.(null);
+        }
+      }
     });
   }
   bindInner(raw);
