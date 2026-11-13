@@ -37,14 +37,19 @@ export const EidolonClientAudio = forwardRef<EidolonClientAudioHandle, EidolonCl
         },
         async play() {
           const el = audioRef.current;
-          if (!el) return;
+          const source = el?.srcObject;
+          if (!el || !(source instanceof MediaStream)) return;
           try {
             await el.play();
-            reportBlocked(false);
+            if (audioRef.current === el && el.srcObject === source) {
+              reportBlocked(false);
+            }
           } catch (error) {
             const normalized = error instanceof Error ? error : new Error(String(error));
-            reportBlocked(true, normalized);
-            throw normalized;
+            if (audioRef.current === el && el.srcObject === source) {
+              reportBlocked(true, normalized);
+              throw normalized;
+            }
           }
         },
       }),

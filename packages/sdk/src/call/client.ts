@@ -182,6 +182,16 @@ async function stopRecorderInstance(
   }
 }
 
+function closeReplacedContext(
+  priorContext: { state?: string; close?: () => Promise<void> } | undefined,
+  currentContext: { state?: string; close?: () => Promise<void> } | undefined,
+): Promise<void> | undefined {
+  if (!priorContext || priorContext === currentContext || priorContext.state === "closed") {
+    return undefined;
+  }
+  return priorContext.close?.().catch(() => {});
+}
+
 async function closePlayerInstance(player: InternalWavStreamPlayer | undefined): Promise<void> {
   const context = player?.context;
   if (player?.stream) {
@@ -399,6 +409,7 @@ function createBridgedMediaManager(
       recorder: InternalWavRecorder | undefined,
       cleanupOnAbort: (reason: "canceled" | "failed") => Promise<void>,
     ) => {
+      const priorContext = recorder?.processor?.context;
       if (micId === "" && recorder && "deviceSelection" in recorder) {
         // WavRecorder.end() preserves deviceSelection across calls so begin("") leaves selectedMic
         // pointing at a prior call's hardware device until listDevices() settles:
@@ -418,16 +429,25 @@ function createBridgedMediaManager(
           }
         };
       }
-      // WavMediaManager.updateMic catches and discards WavRecorder.begin() rejections:
+      // WavMediaManager.updateMic catches and discards WavRecorder.begin() rejections, and
+      // WavRecorder.end() clears processor without closing the outgoing AudioContext:
       // https://github.com/pipecat-ai/pipecat-client-web-transports/blob/main/lib/src/media-mgmt/mediaManager.ts
+      // https://github.com/pipecat-ai/pipecat-client-web-transports/blob/main/lib/src/wavtools/lib/wav_recorder.js
       try {
         await proto.updateMic.call(target, micId);
+      } catch (error) {
+        const closing = closeReplacedContext(priorContext, recorder?.processor?.context);
+        if (closing) await closing;
+        await cleanupOnAbort("failed");
+        throw error;
       } finally {
         if (recorder && origBegin !== undefined) {
           if (hadOwnBegin) recorder.begin = origBegin;
           else Reflect.deleteProperty(recorder, "begin");
         }
       }
+      const closing = closeReplacedContext(priorContext, recorder?.processor?.context);
+      if (closing) await closing;
       if (isCanceled(epoch) || target !== activeInner) {
         await cleanupOnAbort("canceled");
         return;
@@ -730,6 +750,7 @@ export class EidolonClient {
   #preferredMicId: string | null = null;
   #appliedMicId: string | null = null;
   #attemptedPreConnectMicId: string | null = null;
+  #pendingDefaultMicReset = false;
   #botAudioTrack: MediaStreamTrack | undefined;
   #botVideoTrack: MediaStreamTrack | undefined;
   #lastEmittedMediaState: MediaState | undefined;
@@ -873,8 +894,19 @@ export class EidolonClient {
 
   /** Records a preferred microphone `deviceId` for the next `connect()` without opening capture while idle. */
   setPreferredMic(deviceId: string | null | undefined): void {
-    this.#preferredMicId = deviceId ?? null;
+    const normalized = deviceId || null;
+    this.#preferredMicId = normalized;
     this.#attemptedPreConnectMicId = null;
+    if (normalized !== null) {
+      this.#pendingDefaultMicReset = false;
+      return;
+    }
+    if (!LIVE_SWAP_STATES.has(this.#client.state) && !this.#hasLiveMic()) {
+      this.#mediaManager.clearDeviceSelection();
+      this.#pendingDefaultMicReset = false;
+    } else {
+      this.#pendingDefaultMicReset = true;
+    }
   }
 
   /**
@@ -883,28 +915,47 @@ export class EidolonClient {
    * unplugged hardware ids.
    */
   async applyMicPreference(persistedMicId: string | null | undefined): Promise<void> {
-    this.#preferredMicId = persistedMicId ?? null;
-    if (!persistedMicId || this.#mediaManager.isDisconnecting) {
+    const normalized = persistedMicId || null;
+    this.#preferredMicId = normalized;
+    if (this.#mediaManager.isDisconnecting) {
       return;
     }
+    if (normalized === null) {
+      this.#attemptedPreConnectMicId = null;
+      if (LIVE_SWAP_STATES.has(this.#client.state)) {
+        this.#pendingDefaultMicReset = true;
+      } else if (this.#hasLiveMic()) {
+        this.#pendingDefaultMicReset = false;
+        await this.#applyPreConnectMic(SYSTEM_DEFAULT_MIC_ID);
+      } else {
+        this.#mediaManager.clearDeviceSelection();
+        this.#pendingDefaultMicReset = false;
+      }
+      return;
+    }
+    this.#pendingDefaultMicReset = false;
+    await this.#applyPreConnectMic(normalized);
+  }
+
+  async #applyPreConnectMic(targetMicId: string): Promise<void> {
     const disconnectSnapshot = this.#lastDisconnectEpoch;
     const isStale = () =>
       this.#lastDisconnectEpoch !== disconnectSnapshot || this.#mediaManager.isDisconnecting;
     try {
-      this.#attemptedPreConnectMicId = persistedMicId;
-      if (persistedMicId !== SYSTEM_DEFAULT_MIC_ID) {
+      this.#attemptedPreConnectMicId = targetMicId;
+      if (targetMicId !== SYSTEM_DEFAULT_MIC_ID) {
         const mics = await this.#client.getAllMics();
         if (isStale()) return;
-        if (!mics.some((mic) => mic.deviceId === persistedMicId)) {
+        if (!mics.some((mic) => mic.deviceId === targetMicId)) {
           this.#mediaManager.clearDeviceSelection();
           return;
         }
       }
       await this.#mediaManager.runPreConnectMic(() =>
-        this.#transport.updateMic(toLiveMicId(persistedMicId)),
+        this.#transport.updateMic(toLiveMicId(targetMicId)),
       );
       if (!isStale()) {
-        this.#appliedMicId = this.#hasLiveMic() ? persistedMicId : null;
+        this.#appliedMicId = this.#hasLiveMic() ? targetMicId : null;
       }
     } catch {
       if (isStale()) return;
@@ -923,6 +974,7 @@ export class EidolonClient {
   /** Swaps the live microphone mid-call; a no-op outside `connected` / `ready` so settings never open the mic. */
   async selectLiveMic(deviceId: string): Promise<void> {
     this.#preferredMicId = deviceId;
+    this.#pendingDefaultMicReset = false;
     if (!LIVE_SWAP_STATES.has(this.#client.state) || this.#mediaManager.isDisconnecting) return;
     const disconnectSnapshot = this.#lastDisconnectEpoch;
     try {
@@ -960,12 +1012,27 @@ export class EidolonClient {
     const attempt = ++this.#connectEpoch;
     this.#activeConnectAttempt = attempt;
     try {
+      let targetMicId = this.#preferredMicId;
+      if (targetMicId === null) {
+        if (!this.#hasLiveMic()) {
+          this.#mediaManager.clearDeviceSelection();
+          this.#pendingDefaultMicReset = false;
+        } else if (
+          this.#pendingDefaultMicReset ||
+          (this.#appliedMicId !== null && this.#appliedMicId !== SYSTEM_DEFAULT_MIC_ID)
+        ) {
+          this.#pendingDefaultMicReset = false;
+          targetMicId = SYSTEM_DEFAULT_MIC_ID;
+        }
+      } else {
+        this.#pendingDefaultMicReset = false;
+      }
       if (
-        this.#preferredMicId &&
-        this.#appliedMicId !== this.#preferredMicId &&
-        this.#attemptedPreConnectMicId !== this.#preferredMicId
+        targetMicId &&
+        this.#appliedMicId !== targetMicId &&
+        this.#attemptedPreConnectMicId !== targetMicId
       ) {
-        await this.applyMicPreference(this.#preferredMicId);
+        await this.#applyPreConnectMic(targetMicId);
         if (this.#connectEpoch !== attempt) {
           if (this.#connectEpoch === this.#lastDisconnectEpoch) {
             await this.#teardownStaleInit();

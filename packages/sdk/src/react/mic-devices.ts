@@ -82,6 +82,15 @@ export function useEidolonMicDevices({
 
   useEffect(() => {
     client?.setPreferredMic(effectiveMicId);
+    if (client === null || LIVE_SWAP_STATES.has(client.state)) {
+      pendingPreConnectMicRef.current = null;
+    } else if (client.state === "disconnected" || client.state === "initialized") {
+      if (pendingPreConnectMicRef.current !== null) {
+        pendingPreConnectMicRef.current = effectiveMicId;
+      }
+    } else {
+      pendingPreConnectMicRef.current = effectiveMicId ?? SYSTEM_DEFAULT_MIC_ID;
+    }
   }, [client, effectiveMicId]);
 
   const startTrackedSwap = useCallback(

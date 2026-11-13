@@ -2112,6 +2112,7 @@ describe("stepConversation pure transcript reducer", () => {
     });
 
     let blockNextPlay = true;
+    let pendingPlayGate: Promise<void> | null = null;
     let playAttempts = 0;
     const createdAudioElements: unknown[] = [];
     const doc = Object.assign(new EventTarget(), {
@@ -2136,6 +2137,9 @@ describe("stepConversation pure transcript reducer", () => {
           insertBefore() {},
           play: async () => {
             playAttempts += 1;
+            if (pendingPlayGate) {
+              await pendingPlayGate;
+            }
             if (blockNextPlay) {
               throw new DOMException("Autoplay blocked", "NotAllowedError");
             }
@@ -2312,6 +2316,51 @@ describe("stepConversation pure transcript reducer", () => {
         [false, undefined],
       ]);
 
+      // A pending play() retry aborted by hangup / track teardown does not re-report blocked=true.
+      const botTrack2 = {
+        id: "bot-track-2",
+        kind: "audio",
+        readyState: "live",
+      } as MediaStreamTrack;
+      blockNextPlay = true;
+      await act(async () => {
+        raw.emit(RTVIEvent.TrackStarted, botTrack2, { id: "bot", name: "bot", local: false });
+        await new Promise((resolve) => origSetTimeout(resolve, 0));
+      });
+      expect(blockedEvents).toEqual([
+        [true, "NotAllowedError"],
+        [false, undefined],
+        [true, "NotAllowedError"],
+      ]);
+      let rejectRetryGate!: (err: Error) => void;
+      pendingPlayGate = new Promise<void>((_, reject) => {
+        rejectRetryGate = reject;
+      });
+      let retryPromise!: Promise<void> | undefined;
+      await act(async () => {
+        retryPromise = audioRef.current?.play();
+      });
+      await act(async () => {
+        raw.emit(RTVIEvent.TrackStopped, botTrack2, { id: "bot", name: "bot", local: false });
+      });
+      expect(blockedEvents).toEqual([
+        [true, "NotAllowedError"],
+        [false, undefined],
+        [true, "NotAllowedError"],
+        [false, undefined],
+      ]);
+      pendingPlayGate = null;
+      await act(async () => {
+        rejectRetryGate(new DOMException("The play() request was interrupted", "AbortError"));
+        await retryPromise;
+      });
+      expect(blockedEvents).toEqual([
+        [true, "NotAllowedError"],
+        [false, undefined],
+        [true, "NotAllowedError"],
+        [false, undefined],
+      ]);
+
       // 3. Text-only replies (will_be_spoken: false, no botStoppedSpeaking) arm the finalize timer and close cleanly.
       await act(async () => {
         raw.emit(RTVIEvent.BotOutput, {
@@ -2434,6 +2483,7 @@ describe("stepConversation pure transcript reducer", () => {
     };
     const openedDevices: string[] = [];
     const recordedDevices: string[] = [];
+    const createdContexts: Array<{ deviceId: string; state: string }> = [];
     const deviceErrors: unknown[] = [];
     client.on("deviceError", (err) => deviceErrors.push(err));
     let busyMics = new Set<string>(["usb-busy"]);
@@ -2539,13 +2589,16 @@ describe("stepConversation pure transcript reducer", () => {
             (this as { readyState: string }).readyState = "ended";
           },
         } as unknown as MediaStreamTrack;
-        recorderStub.processor = {
-          context: {
-            state: "running",
-            close: async () => {
-              if (recorderStub.processor) recorderStub.processor.context.state = "closed";
-            },
+        const ctx = {
+          deviceId: resolved,
+          state: "running",
+          close: async () => {
+            ctx.state = "closed";
           },
+        };
+        createdContexts.push(ctx);
+        recorderStub.processor = {
+          context: ctx,
         };
         recorderStub.stream = { getTracks: () => [track], getAudioTracks: () => [track] };
         return true;
@@ -2696,9 +2749,14 @@ describe("stepConversation pure transcript reducer", () => {
         await client.selectLiveMic("usb-2");
         await new Promise((resolve) => setTimeout(resolve, 10));
       });
+      // Every outgoing AudioContext from prior swaps and unplug fallbacks was closed; only the current one runs.
+      expect(createdContexts.length).toBeGreaterThanOrEqual(4);
+      expect(createdContexts.slice(0, -1).every((c) => c.state === "closed")).toBe(true);
+      expect(createdContexts.at(-1)?.state).toBe("running");
       await act(async () => {
         await client.disconnect();
       });
+      expect(createdContexts.every((c) => c.state === "closed")).toBe(true);
       expect(deviceChangeListener).toBeNull();
       expect(deviceErrorListener).toBeNull();
       // WavRecorder.end() preserved deviceSelection from "usb-2" across hangup.
@@ -2838,6 +2896,38 @@ describe("stepConversation pure transcript reducer", () => {
       expect(openedDevices).toHaveLength(opensBeforeStaleCallback);
       expect(recorderStub.stream).toBeNull();
       expect(client.appliedMicId).toBeNull();
+
+      // 6. Clearing preference via setPersistedMic(null) / setPreferredMic(null) clears sticky
+      // WavRecorder.deviceSelection and resets pre-connect hardware capture back to system default.
+      expect(recorderStub.deviceSelection?.deviceId).toBe("usb-2");
+      await act(async () => {
+        setPersistedMic(null);
+      });
+      expect(micHook.selectedMicId).toBe("built-in");
+      expect(recorderStub.deviceSelection).toBeNull();
+      await act(async () => {
+        await client.connect({ endpoint: "https://bot.example/api/offer" });
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      expect(openedDevices.at(-1)).toBe("built-in");
+      await act(async () => {
+        await client.disconnect();
+      });
+
+      await act(async () => {
+        await client.applyMicPreference("usb-2");
+      });
+      expect(openedDevices.at(-1)).toBe("usb-2");
+      client.setPreferredMic(null);
+      await act(async () => {
+        await client.connect({ endpoint: "https://bot.example/api/offer" });
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      expect(openedDevices.at(-1)).toBe("built-in");
+      await act(async () => {
+        await client.disconnect();
+      });
+      expect(createdContexts.every((c) => c.state === "closed")).toBe(true);
     } finally {
       await act(async () => {
         await client.disconnect();
