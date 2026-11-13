@@ -170,11 +170,14 @@ function createBridgedMediaManager(
     recorder: InternalWavRecorder | undefined,
     priorStream?: MediaStream | null,
     priorContext?: { state?: string; close?: () => Promise<void> },
+    options?: { readonly keepDeviceListeners?: boolean },
   ) => {
     const stream = recorder?.stream ?? priorStream ?? null;
     const context = recorder?.processor?.context ?? priorContext;
-    recorder?.listenForDeviceChange?.(null);
-    recorder?.listenForDeviceErrors?.(null);
+    if (!options?.keepDeviceListeners) {
+      recorder?.listenForDeviceChange?.(null);
+      recorder?.listenForDeviceErrors?.(null);
+    }
     if (recorder?.getStatus?.() !== "ended") {
       await recorder?.end?.().catch(() => {});
     }
@@ -363,7 +366,7 @@ function createBridgedMediaManager(
       const runUpdateOn = async (
         target: WavMediaManager,
         recorder: InternalWavRecorder | undefined,
-        cleanupFailedOrCanceled: () => Promise<void>,
+        cleanupOnAbort: (reason: "canceled" | "failed") => Promise<void>,
       ) => {
         if (micId === "" && recorder && "deviceSelection" in recorder) {
           // WavRecorder.end() preserves deviceSelection across calls so begin("") leaves selectedMic
@@ -395,15 +398,16 @@ function createBridgedMediaManager(
           }
         }
         if (canceled() || target !== activeInner) {
-          await cleanupFailedOrCanceled();
+          await cleanupOnAbort("canceled");
           return;
         }
         if (beginError !== undefined) {
-          await cleanupFailedOrCanceled();
+          await cleanupOnAbort("failed");
           throw beginError;
         }
         const track = proto.tracks.call(target).local.audio;
         if (!track || track.readyState === "ended") {
+          await cleanupOnAbort("failed");
           throw new Error("Could not start media stream");
         }
         syncMicTrack();
@@ -429,9 +433,14 @@ function createBridgedMediaManager(
         isolateSuspendedInner();
         const target = activeInner;
         const recorder = readRecorderOf(target);
-        await runUpdateOn(target, recorder, async () => {
+        await runUpdateOn(target, recorder, async (reason) => {
           if (target !== activeInner || readRecorderOf(target) === recorder) {
-            await stopRecorderInstance(readRecorderOf(target) ?? recorder);
+            // WavMediaManager.initialize() registers device-change and device-error listeners once
+            // per call; keep them attached when a live swap fails so retries and unplug fallback still fire:
+            // https://github.com/pipecat-ai/pipecat-client-web-transports/blob/main/lib/src/media-mgmt/mediaManager.ts
+            await stopRecorderInstance(readRecorderOf(target) ?? recorder, undefined, undefined, {
+              keepDeviceListeners: reason === "failed" && target === activeInner && !canceled(),
+            });
           }
         });
       };

@@ -2118,8 +2118,14 @@ describe("stepConversation pure transcript reducer", () => {
     };
     const openedDevices: string[] = [];
     const recordedDevices: string[] = [];
+    const deviceErrors: unknown[] = [];
+    client.on("deviceError", (err) => deviceErrors.push(err));
     let busyMics = new Set<string>(["usb-busy"]);
     let currentOpenedId = "";
+    let deviceChangeListener: ((devices: MediaDeviceInfo[]) => void) | null = null;
+    let deviceErrorListener:
+      | ((err: { devices: Array<"cam" | "mic">; type: string; error?: Error }) => void)
+      | null = null;
     const recorderStub: {
       deviceSelection: { deviceId: string; kind: string; label: string } | null;
       processor: { context: { state: string; close: () => Promise<void> } } | null;
@@ -2133,8 +2139,10 @@ describe("stepConversation pure transcript reducer", () => {
       record: () => Promise<boolean>;
       pause: () => Promise<boolean>;
       end: () => Promise<void>;
-      listenForDeviceChange: () => void;
-      listenForDeviceErrors: () => void;
+      listenForDeviceChange: (cb: ((devices: MediaDeviceInfo[]) => void) | null) => void;
+      listenForDeviceErrors: (
+        cb: ((err: { devices: Array<"cam" | "mic">; type: string; error?: Error }) => void) | null,
+      ) => void;
     } = {
       deviceSelection: null,
       processor: null,
@@ -2170,6 +2178,11 @@ describe("stepConversation pure transcript reducer", () => {
         }
         const effective = deviceId ?? recorderStub.deviceSelection?.deviceId ?? "";
         if (busyMics.has(effective)) {
+          deviceErrorListener?.({
+            devices: ["mic"],
+            type: "unknown",
+            error: new Error("Busy device"),
+          });
           throw new Error("Could not start media stream");
         }
         if (effective === "usb-worklet-fail") {
@@ -2232,8 +2245,12 @@ describe("stepConversation pure transcript reducer", () => {
         recorderStub.stream = null;
         recorderStub.processor = null;
       },
-      listenForDeviceChange: () => {},
-      listenForDeviceErrors: () => {},
+      listenForDeviceChange: (cb) => {
+        deviceChangeListener = cb;
+      },
+      listenForDeviceErrors: (cb) => {
+        deviceErrorListener = cb;
+      },
     };
     Reflect.set(manager, "_wavRecorder", recorderStub);
     Reflect.set(manager, "_wavStreamPlayer", {
@@ -2309,21 +2326,61 @@ describe("stepConversation pure transcript reducer", () => {
       expect(recordedDevices).toEqual(["usb-2"]);
 
       // 2. Mid-call swap to a busy or worklet-failing mic rejects through WavMediaManager.updateMic,
-      // stops any stream opened before addModule failed, and never records the failed device as applied.
+      // stops any stream opened before addModule failed, never records the failed device as applied,
+      // and keeps WavRecorder's device-change / device-error listeners attached for retries and unplug fallback.
+      expect(deviceChangeListener).not.toBeNull();
+      expect(deviceErrorListener).not.toBeNull();
       await expect(client.selectLiveMic("usb-busy")).rejects.toThrow(
         "Could not start media stream",
       );
       expect(client.appliedMicId).toBeNull();
+      expect(deviceErrors).toHaveLength(1);
       await expect(client.selectLiveMic("usb-worklet-fail")).rejects.toThrow(
         "Could not add audioWorklet module",
       );
       expect(client.appliedMicId).toBeNull();
       expect(recorderStub.stream).toBeNull();
+      // Subsequent device errors still surface because failure cleanup kept _deviceErrorCallback attached.
+      await expect(client.selectLiveMic("usb-busy")).rejects.toThrow(
+        "Could not start media stream",
+      );
+      expect(deviceErrors).toHaveLength(2);
+      expect(deviceChangeListener).not.toBeNull();
+      expect(deviceErrorListener).not.toBeNull();
 
+      // Recovery swap to "usb-2" followed by hot-unplug still triggers WavMediaManager's automatic fallback.
+      await act(async () => {
+        await client.selectLiveMic("usb-2");
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      expect(client.appliedMicId).toBe("usb-2");
+      expect(recorderStub.deviceSelection?.deviceId).toBe("usb-2");
+      await act(async () => {
+        deviceChangeListener?.([
+          {
+            deviceId: "built-in",
+            kind: "audioinput",
+            label: "Built-in Mic",
+            groupId: "g1",
+            toJSON: () => ({}),
+          } as MediaDeviceInfo,
+        ]);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      expect(openedDevices).toEqual(["usb-2", "usb-2", "built-in"]);
+      expect(recorderStub.deviceSelection?.deviceId).toBe("built-in");
+
+      // Re-select "usb-2" before hangup so disconnect() verifies sticky deviceSelection AND listener teardown.
+      await act(async () => {
+        await client.selectLiveMic("usb-2");
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
       await act(async () => {
         await client.disconnect();
       });
-      // WavRecorder.end() preserved deviceSelection from "usb-2" before the failed swap.
+      expect(deviceChangeListener).toBeNull();
+      expect(deviceErrorListener).toBeNull();
+      // WavRecorder.end() preserved deviceSelection from "usb-2" across hangup.
       expect(recorderStub.deviceSelection?.deviceId).toBe("usb-2");
 
       // 3. Reusing the same client after switching preference back to "default" clears sticky deviceSelection.
@@ -2335,7 +2392,7 @@ describe("stepConversation pure transcript reducer", () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
       });
       expect(selectedAtTransportConnect).toBeUndefined();
-      expect(openedDevices).toEqual(["usb-2", "built-in"]);
+      expect(openedDevices).toEqual(["usb-2", "usb-2", "built-in", "usb-2", "built-in"]);
       expect(client.appliedMicId).toBe(SYSTEM_DEFAULT_MIC_ID);
 
       await act(async () => {
@@ -2351,7 +2408,14 @@ describe("stepConversation pure transcript reducer", () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
       expect(client.appliedMicId).toBeNull();
-      expect(openedDevices).toEqual(["usb-2", "built-in", "built-in"]);
+      expect(openedDevices).toEqual([
+        "usb-2",
+        "usb-2",
+        "built-in",
+        "usb-2",
+        "built-in",
+        "built-in",
+      ]);
 
       // Once "usb-busy" becomes free while "connecting", onConnected applies it because appliedMicId was not poisoned.
       await act(async () => {
@@ -2368,7 +2432,15 @@ describe("stepConversation pure transcript reducer", () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
       expect(client.appliedMicId).toBe("usb-busy");
-      expect(openedDevices).toEqual(["usb-2", "built-in", "built-in", "usb-busy"]);
+      expect(openedDevices).toEqual([
+        "usb-2",
+        "usb-2",
+        "built-in",
+        "usb-2",
+        "built-in",
+        "built-in",
+        "usb-busy",
+      ]);
     } finally {
       await act(async () => {
         await client.disconnect();
