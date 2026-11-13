@@ -1,0 +1,74 @@
+import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import {
+  CHAT_FORMAT as SERVER_CHAT_FORMAT,
+  CHAT_WINDOW_MESSAGES as SERVER_CHAT_WINDOW_MESSAGES,
+  DEFAULT_CHAIN_LIMIT as SERVER_DEFAULT_CHAIN_LIMIT,
+  MAX_CHAIN_LIMIT as SERVER_MAX_CHAIN_LIMIT,
+  MAX_PARTICIPANTS as SERVER_MAX_PARTICIPANTS,
+  MAX_VOICE_MS as SERVER_MAX_VOICE_MS,
+  REPLY_MODES as SERVER_REPLY_MODES,
+} from "@eidolon/chat";
+import {
+  CHAT_WINDOW_BYTES as SERVER_CHAT_WINDOW_BYTES,
+  CHAT_WINDOW_EVENTS as SERVER_CHAT_WINDOW_EVENTS,
+  PUBLIC_CHAIN_LIMIT as SERVER_PUBLIC_CHAIN_LIMIT,
+} from "../../../apps/bot/src/chat/window.ts";
+import { PAIRED_TAGS as WEB_PAIRED_TAGS } from "../../../apps/web/src/lib/markup.ts";
+import { AUDIO_QUALITIES as SERVER_AUDIO_QUALITIES } from "../../access/src/audio-quality.ts";
+import { BOT_ABOUT } from "../../runtime/src/rtvi.ts";
+import {
+  AUDIO_QUALITIES,
+  CHAT_FORMAT,
+  CHAT_WINDOW_BYTES,
+  CHAT_WINDOW_EVENTS,
+  CHAT_WINDOW_MESSAGES,
+  DEFAULT_CHAIN_LIMIT,
+  MAX_CHAIN_LIMIT,
+  MAX_PARTICIPANTS,
+  MAX_TEXT_LENGTH,
+  MAX_VOICE_BYTES,
+  MAX_VOICE_MS,
+  PAIRED_TAGS,
+  PUBLIC_CHAIN_LIMIT,
+  parseBotReadyData,
+  REPLY_MODES,
+  VOICE_RECORDER_MIME_TYPES,
+} from "../src/index.ts";
+
+const ROOT = resolve(import.meta.dir, "../../..");
+
+describe("server and client SDK protocol parity", () => {
+  test("chat log format and window budgets match server constants", () => {
+    expect(CHAT_FORMAT).toBe(SERVER_CHAT_FORMAT);
+    expect(MAX_PARTICIPANTS).toBe(SERVER_MAX_PARTICIPANTS);
+    expect(DEFAULT_CHAIN_LIMIT).toBe(SERVER_DEFAULT_CHAIN_LIMIT);
+    expect(MAX_CHAIN_LIMIT).toBe(SERVER_MAX_CHAIN_LIMIT);
+    expect(PUBLIC_CHAIN_LIMIT).toBe(SERVER_PUBLIC_CHAIN_LIMIT);
+    expect(CHAT_WINDOW_EVENTS).toBe(SERVER_CHAT_WINDOW_EVENTS);
+    expect(CHAT_WINDOW_BYTES).toBe(SERVER_CHAT_WINDOW_BYTES);
+    expect(CHAT_WINDOW_MESSAGES).toBe(SERVER_CHAT_WINDOW_MESSAGES);
+    expect(MAX_VOICE_MS).toBe(SERVER_MAX_VOICE_MS);
+    expect(REPLY_MODES).toEqual(SERVER_REPLY_MODES);
+  });
+
+  test("route text and voice byte limits match apps/bot/src/chat/routes.ts", () => {
+    const routesSource = readFileSync(join(ROOT, "apps/bot/src/chat/routes.ts"), "utf8");
+    expect(routesSource).toContain(`const MAX_TEXT = ${MAX_TEXT_LENGTH};`);
+    expect(routesSource).toContain("const MAX_VOICE_BYTES = 10 * 1024 * 1024;");
+    expect(MAX_VOICE_BYTES).toBe(10 * 1024 * 1024);
+  });
+
+  test("audio qualities, paired markup tags, and bot-ready library match server and web", () => {
+    expect(AUDIO_QUALITIES).toEqual(SERVER_AUDIO_QUALITIES);
+    expect(PAIRED_TAGS).toEqual(WEB_PAIRED_TAGS);
+    expect(VOICE_RECORDER_MIME_TYPES.length).toBeGreaterThan(0);
+
+    const parsed = parseBotReadyData({
+      version: "2.2.0",
+      about: BOT_ABOUT,
+    });
+    expect(parsed.about).toEqual(BOT_ABOUT);
+  });
+});

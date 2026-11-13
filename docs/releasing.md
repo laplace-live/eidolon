@@ -4,22 +4,26 @@ Every release is cut by the Release workflow (`.github/workflows/release.yml`) w
 [Changesets](https://github.com/changesets/changesets). Nobody bumps a version, pushes a tag or
 edits a `CHANGELOG.md` by hand.
 
-Two packages are released, always at the same version: `.changeset/config.json` puts them in one
-`fixed` group.
+Three packages are released. `.changeset/config.json` puts the bot and `@laplace.live/eidolon` in
+one `fixed` group so they always share a version, while `@laplace.live/eidolon-sdk` versions
+independently.
 
 | Package | Folder | A release makes |
 | --- | --- | --- |
 | `laplace-eidolon` | `apps/bot` | the tag `laplace-eidolon@X.Y.Z`, its GitHub Release, and the images |
 | `@laplace.live/eidolon` | `apps/eidolon` | the tag `@laplace.live/eidolon@X.Y.Z`, its GitHub Release, and the npm package once publishing is on |
+| `@laplace.live/eidolon-sdk` | `packages/sdk` | the tag `@laplace.live/eidolon-sdk@X.Y.Z`, its GitHub Release, and the npm package once publishing is on |
 
 The `@eidolon/*` workspace packages are never released; Changesets ignores them.
 
 ## Changesets
 
-A user-facing change ships with a changeset in the same commit, naming both packages:
+A user-facing bot change ships with a changeset in the same commit, naming both fixed-group
+packages; a client SDK change names `@laplace.live/eidolon-sdk` (too, or alone):
 
 ```bash
 bunx changeset add --minor laplace-eidolon,@laplace.live/eidolon -m "feat: Remember a viewer's nickname"
+bunx changeset add --minor @laplace.live/eidolon-sdk -m "feat: Add useEidolonWatchdog hook"
 ```
 
 The fixed group bumps both packages whichever one a changeset names, but each `CHANGELOG.md`
@@ -33,8 +37,9 @@ only one. `--minor`, `--patch` and the summary's form are in
 On every push to `master` while changesets are pending, the workflow keeps a `chore: version
 packages` PR open. Its commit is `bun run version`:
 
-1. `changeset version` bumps `apps/bot/package.json` and `apps/eidolon/package.json`, adds each
-   package's entry to its `CHANGELOG.md`, and deletes the changesets.
+1. `changeset version` bumps `apps/bot/package.json`, `apps/eidolon/package.json` and/or
+   `packages/sdk/package.json`, adds each package's entry to its `CHANGELOG.md`, and deletes the
+   changesets.
 2. `apps/bot/scripts/sync-version.ts` copies the version into `packages/runtime/src/rtvi.ts`,
    and into the Python reference implementation's `pyproject.toml`, `uv.lock` and bot entry
    point (AGENTS.md, "The Python").
@@ -46,28 +51,31 @@ rewrites them, which `--frozen-lockfile` tolerates.
 
 When the version PR merges, no changeset is pending, so the workflow runs `bun run release`
 (`changeset git-tag`), which tags every package whose current version has no tag yet:
-`laplace-eidolon@X.Y.Z` and `@laplace.live/eidolon@X.Y.Z`. The action pushes both and creates a
-GitHub Release for each from its `CHANGELOG.md` entry.
+`laplace-eidolon@X.Y.Z`, `@laplace.live/eidolon@X.Y.Z` and/or `@laplace.live/eidolon-sdk@X.Y.Z`.
+The action pushes the new tags and creates a GitHub Release for each from its `CHANGELOG.md` entry.
 
 - **A GitHub App pushes the tags.** Events caused by the workflow's own `GITHUB_TOKEN` start no
   other workflow, so the laplace-release-bot App's token (the `RELEASE_APP_CLIENT_ID` and
   `RELEASE_APP_PRIVATE_KEY` org secrets) does it.
 - **`laplace-eidolon@X.Y.Z` builds the images.** It fires `docker.yml`, which pushes
   `ghcr.io/laplace-live/eidolon` and `ghcr.io/laplace-live/eidolon-python` tagged `X.Y.Z`, `X.Y`
-  and `X`. `@laplace.live/eidolon@X.Y.Z` matches no workflow's trigger and builds nothing.
+  and `X`. `@laplace.live/eidolon@X.Y.Z` and `@laplace.live/eidolon-sdk@X.Y.Z` match no workflow's
+  trigger and build no image.
 - **Production follows `:edge`, not the tags.** Every push to `master` that `docker.yml` doesn't
   ignore rebuilds `:edge`, and Watchtower restarts the production bot from it
   ([AGENTS.md](../AGENTS.md#shipping-a-change)).
 
 ## Publishing to npm
 
-The run that tags a new version publishes `@laplace.live/eidolon` too, while the repository
-variable `NPM_PUBLISH` is `true`. Unset, or anything else, and nothing is built or published.
+The run that tags a new version publishes whichever of `@laplace.live/eidolon` and
+`@laplace.live/eidolon-sdk` was tagged at `HEAD`, while the repository variable `NPM_PUBLISH` is
+`true`. Unset, or anything else, and nothing is built or published.
 
-- **`pack`** checks out the tagged commit, installs, runs `bun run pack:npm`, which builds the
-  package in `apps/eidolon/pack/` and packs it, and uploads the tarball. It holds no token: the
-  build runs every dev dependency's code, and any step in a job with `id-token: write` could mint
-  the credential npm publishes with.
+- **`pack`** checks out the tagged commit, inspects `git tag --points-at HEAD`, runs
+  `bun run pack:npm` (when `@laplace.live/eidolon@*` is tagged) and/or `bun run pack:sdk` (when
+  `@laplace.live/eidolon-sdk@*` is tagged), and uploads the resulting tarball(s). It holds no
+  token: the build runs every dev dependency's code, and any step in a job with `id-token: write`
+  could mint the credential npm publishes with.
 - **`publish`** holds only `id-token: write`. It downloads the tarball and runs
   `npm publish <tarball> --access public --provenance` with Node 24's npm. A tarball publishes
   without running its lifecycle scripts. npm trades the job's OIDC token for a short-lived publish
@@ -94,6 +102,8 @@ Once, after the repository is public. npm refuses provenance from a private repo
    bun install --frozen-lockfile
    bun run pack:npm
    npm publish ./apps/eidolon/laplace.live-eidolon-X.Y.Z.tgz --access public
+   bun run pack:sdk
+   npm publish ./packages/sdk/laplace.live-eidolon-sdk-X.Y.Z.tgz --access public
    ```
 
    Or stage it with npm 12, whose `npm stage publish` can create the package, and approve it with
@@ -111,6 +121,7 @@ Once, after the repository is public. npm refuses provenance from a private repo
 
    ```bash
    npm trust github @laplace.live/eidolon --file release.yml --repo laplace-live/eidolon --allow-publish
+   npm trust github @laplace.live/eidolon-sdk --file release.yml --repo laplace-live/eidolon --allow-publish
    ```
 
 3. **Set the variable:** the repository's Settings → Secrets and variables → Actions → Variables,

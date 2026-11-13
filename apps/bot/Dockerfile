@@ -29,6 +29,7 @@ COPY packages/memory/package.json packages/memory/
 COPY packages/providers/package.json packages/providers/
 COPY packages/retrieval/package.json packages/retrieval/
 COPY packages/runtime/package.json packages/runtime/
+COPY packages/sdk/package.json packages/sdk/
 COPY packages/tools/package.json packages/tools/
 COPY packages/turn/package.json packages/turn/
 COPY packages/usage/package.json packages/usage/
@@ -53,6 +54,7 @@ RUN bun install --frozen-lockfile --production \
            node_modules/.bun/onnxruntime-web@* \
            node_modules/.bun/sharp@* \
            node_modules/.bun/@img+* \
+           node_modules/.bun/@pipecat-ai+* \
            node_modules/.bun/typescript@* \
            node_modules/.bun/@typescript+typescript-* \
            "$ORT/darwin" "$ORT/win32" \

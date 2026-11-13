@@ -19,5 +19,5 @@
     "useDefineForClassFields": true
   },
   "include": ["apps/*/src", "apps/*/test", "apps/*/scripts", "packages/*/src", "packages/*/test"],
-  "exclude": ["apps/web"]
+  "exclude": ["apps/web", "packages/sdk"]
 }

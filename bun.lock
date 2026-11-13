@@ -13,7 +13,7 @@
     },
     "apps/bot": {
       "name": "laplace-eidolon",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "dependencies": {
         "@eidolon/access": "workspace:*",
         "@eidolon/chat": "workspace:*",
@@ -53,7 +53,7 @@
     },
     "apps/eidolon": {
       "name": "@laplace.live/eidolon",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "devDependencies": {
         "@eidolon/cli": "workspace:*",
         "@eidolon/config": "workspace:*",
@@ -193,6 +193,29 @@
         "@eidolon/webrtc": "workspace:*",
         "werift": "0.25.0",
       },
+    },
+    "packages/sdk": {
+      "name": "@laplace.live/eidolon-sdk",
+      "version": "0.1.0",
+      "dependencies": {
+        "@pipecat-ai/client-js": "1.16.0",
+        "@pipecat-ai/small-webrtc-transport": "1.11.2",
+      },
+      "devDependencies": {
+        "@eidolon/access": "workspace:*",
+        "@eidolon/chat": "workspace:*",
+        "@eidolon/runtime": "workspace:*",
+        "@types/react": "19.3.0",
+        "@types/react-dom": "19.3.0",
+        "react": "19.3.1",
+        "react-dom": "19.3.1",
+      },
+      "peerDependencies": {
+        "react": ">=18",
+      },
+      "optionalPeers": [
+        "react",
+      ],
     },
     "packages/tools": {
       "name": "@eidolon/tools",
@@ -492,6 +515,8 @@
     "@lancedb/lancedb-win32-x64-msvc": ["@lancedb/lancedb-win32-x64-msvc@0.41.0", "", { "os": "win32", "cpu": "x64" }, "sha512-tLKdFMcWR9ayVPcZdIpPsPr3M35JsB42i/FIkRPdI9vMtqiIbd4Fm1DraeSsdeStmN6NUabNVvLUsqg4CSrbzQ=="],
 
     "@laplace.live/eidolon": ["@laplace.live/eidolon@workspace:apps/eidolon"],
+
+    "@laplace.live/eidolon-sdk": ["@laplace.live/eidolon-sdk@workspace:packages/sdk"],
 
     "@leichtgewicht/ip-codec": ["@leichtgewicht/ip-codec@2.0.5", "", {}, "sha512-Vo+PSpZG2/fmgmiNzYK9qWRh8h/CHrwD0mo1h1DzL4yzHNSfWYujGTYsWGreD000gcgmZ7K4Ys6Tx9TxtsKdDw=="],
 

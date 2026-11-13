@@ -1,0 +1,3 @@
+# What scripts/build.ts stages and packs.
+/pack/
+/*.tgz
