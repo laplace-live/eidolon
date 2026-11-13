@@ -403,12 +403,15 @@ the layout's one line.
   anything else, `personas/` included, ships.
 - **Never bump a version, push a release tag, hand-edit `CHANGELOG.md`, or
   publish to npm.** Merging the Release workflow's version PR bumps
-  `apps/bot/package.json` and `apps/eidolon/package.json`, copies the version
-  into `packages/runtime/src/rtvi.ts`, and into the Python's files as "The
-  Python" allows (`apps/bot/scripts/sync-version.ts`), and tags `laplace-eidolon@<version>`,
-  which builds the image tagged `<version>`, `<major>.<minor>` and `<major>`,
-  and `@laplace.live/eidolon@<version>`. That run publishes the npm package while
-  the `NPM_PUBLISH` variable is `true`; only its one-time setup is done by hand
+  `apps/bot/package.json`, `apps/eidolon/package.json`, and/or
+  `packages/sdk/package.json`, copies the bot's version into
+  `packages/runtime/src/rtvi.ts` and into the Python's files as "The Python"
+  allows (`apps/bot/scripts/sync-version.ts`), publishes unpublished npm
+  packages (`@laplace.live/eidolon`, `@laplace.live/eidolon-sdk`) via OIDC
+  trusted publishing, and tags `laplace-eidolon@<version>` (which builds the
+  image tagged `<version>`, `<major>.<minor>` and `<major>`),
+  `@laplace.live/eidolon@<version>`, and/or `@laplace.live/eidolon-sdk@<version>`;
+  only one-time trusted-publisher setup is done by hand
   ([releasing.md](docs/releasing.md)).
 - **Fix defects you can trigger; don't harden against ones you can't.** Before
   adding a guard — including for a review finding — name the input or sequence

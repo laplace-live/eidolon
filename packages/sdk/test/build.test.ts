@@ -46,8 +46,14 @@ describe("@laplace.live/eidolon-sdk package build", () => {
 
     const workspacePkg = JSON.parse(
       readFileSync(resolve(import.meta.dir, "../package.json"), "utf8"),
-    ) as { version: string };
+    ) as { version: string; private?: boolean; publishConfig?: Record<string, unknown> };
     expect(workspacePkg.version).toMatch(/^\d+\.\d+\.\d+/);
+    expect(workspacePkg.private).toBeUndefined();
+    expect(workspacePkg.publishConfig).toEqual({
+      access: "public",
+      provenance: true,
+      directory: "pack",
+    });
 
     expect(manifest).toMatchObject({
       name: "@laplace.live/eidolon-sdk",
@@ -55,6 +61,7 @@ describe("@laplace.live/eidolon-sdk package build", () => {
       license: "AGPL-3.0-only",
       type: "module",
       sideEffects: false,
+      publishConfig: { access: "public", provenance: true },
       exports: {
         ".": {
           types: "./dist/index.d.ts",

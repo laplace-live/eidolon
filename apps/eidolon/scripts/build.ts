@@ -161,7 +161,7 @@ export function packageManifest(bunVersion: string): Manifest {
     engines: { node: ">=20" },
     dependencies,
     optionalDependencies,
-    publishConfig: { access: "public" },
+    publishConfig: { access: "public", provenance: true },
   };
 }
 

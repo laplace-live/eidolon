@@ -11,8 +11,8 @@ independently.
 | Package | Folder | A release makes |
 | --- | --- | --- |
 | `laplace-eidolon` | `apps/bot` | the tag `laplace-eidolon@X.Y.Z`, its GitHub Release, and the images |
-| `@laplace.live/eidolon` | `apps/eidolon` | the tag `@laplace.live/eidolon@X.Y.Z`, its GitHub Release, and the npm package once publishing is on |
-| `@laplace.live/eidolon-sdk` | `packages/sdk` | the tag `@laplace.live/eidolon-sdk@X.Y.Z`, its GitHub Release, and the npm package once publishing is on |
+| `@laplace.live/eidolon` | `apps/eidolon` | the tag `@laplace.live/eidolon@X.Y.Z`, its GitHub Release, and the npm package |
+| `@laplace.live/eidolon-sdk` | `packages/sdk` | the tag `@laplace.live/eidolon-sdk@X.Y.Z`, its GitHub Release, and the npm package |
 
 The `@eidolon/*` workspace packages are never released; Changesets ignores them.
 
@@ -50,9 +50,11 @@ rewrites them, which `--frozen-lockfile` tolerates.
 ## Tags, GitHub Releases and images
 
 When the version PR merges, no changeset is pending, so the workflow runs `bun run release`
-(`changeset git-tag`), which tags every package whose current version has no tag yet:
-`laplace-eidolon@X.Y.Z`, `@laplace.live/eidolon@X.Y.Z` and/or `@laplace.live/eidolon-sdk@X.Y.Z`.
-The action pushes the new tags and creates a GitHub Release for each from its `CHANGELOG.md` entry.
+(`bun run build:npm && bun run build:sdk && changeset publish`). `changeset publish` publishes each
+unpublished non-private package to npm and tags every released package whose current version has no
+tag yet (`laplace-eidolon@X.Y.Z` via `privatePackages.tag`, `@laplace.live/eidolon@X.Y.Z` and/or
+`@laplace.live/eidolon-sdk@X.Y.Z`). The action pushes the new tags and creates a GitHub Release for
+each from its `CHANGELOG.md` entry.
 
 - **A GitHub App pushes the tags.** Events caused by the workflow's own `GITHUB_TOKEN` start no
   other workflow, so the laplace-release-bot App's token (the `RELEASE_APP_CLIENT_ID` and
@@ -67,73 +69,56 @@ The action pushes the new tags and creates a GitHub Release for each from its `C
 
 ## Publishing to npm
 
-The run that tags a new version publishes whichever of `@laplace.live/eidolon` and
-`@laplace.live/eidolon-sdk` was tagged at `HEAD`, while the repository variable `NPM_PUBLISH` is
-`true`. Unset, or anything else, and nothing is built or published.
+`apps/eidolon/package.json` and `packages/sdk/package.json` are non-private workspace packages with
+`"publishConfig": { "access": "public", "provenance": true, "directory": "pack" }` (and a `prepack`
+guard that rejects accidental `npm publish` of the unbuilt workspace folder).
 
-- **`pack`** checks out the tagged commit, inspects `git tag --points-at HEAD`, runs
-  `bun run pack:npm` (when `@laplace.live/eidolon@*` is tagged) and/or `bun run pack:sdk` (when
-  `@laplace.live/eidolon-sdk@*` is tagged), and uploads the resulting tarball(s). It holds no
-  token: the build runs every dev dependency's code, and any step in a job with `id-token: write`
-  could mint the credential npm publishes with.
-- **`publish`** holds only `id-token: write`. It downloads the tarball and runs
-  `npm publish <tarball> --access public --provenance` with Node 24's npm. A tarball publishes
-  without running its lifecycle scripts. npm trades the job's OIDC token for a short-lived publish
-  token through the package's trusted publisher, so no npm token is stored anywhere. A version
-  already on npm is skipped.
+In the single `release` job (`id-token: write`, Node 24's npm):
 
-When `publish` fails, fix the cause and re-run the run's failed jobs; the tarball stays with the
-run. An `ENEEDAUTH` error means npm found no trusted publisher matching the job: check the
-workflow file name in the package's settings on npmjs.com. A run that pushed its tags but failed
-before `pack` started can't be re-run into a publish, since its tags exist by then: publish that
-version by hand, as in the first step below.
+1. `bun run build:npm` and `bun run build:sdk` stage publishable directories into `apps/eidolon/pack`
+   and `packages/sdk/pack` (bundled code and web assets, normalized ESM/declaration exports,
+   stripped `workspace:*` `devDependencies`, and `publishConfig: { access: "public", provenance: true }`).
+2. `changeset publish` queries the npm registry, skips versions already published, and runs
+   `npm publish <pack-dir> --access public --tag latest` directly against each unpublished package's
+   `pack/` folder — no intermediate `.tgz` tarballs, cross-job artifacts, or toggle variables.
+3. npm exchanges the job's GitHub OIDC token for a short-lived publish token through the package's
+   trusted publisher and records build provenance, so no `NPM_TOKEN` secret is stored anywhere.
+
+`bun run pack:npm` and `bun run pack:sdk` remain available locally and in CI (`ci-install-check.ts`)
+to inspect or smoke-test packed tarballs offline.
+
+When `release` fails before finishing a publish, fix the cause and re-run the failed job:
+`changeset publish` re-checks the registry and publishes and tags whatever is still missing. An
+`ENEEDAUTH` error means npm found no trusted publisher matching the job: check the workflow file
+name (`release.yml`) in the package's settings on npmjs.com.
 
 ## Setting up npm publishing
 
-Once, after the repository is public. npm refuses provenance from a private repository, so
-`--provenance` fails the publish there.
+`@laplace.live/eidolon` and `@laplace.live/eidolon-sdk` are already configured with GitHub Actions
+Trusted Publishing (`laplace-live/eidolon`, workflow `release.yml`). To bootstrap any new public
+package in a public repository (npm refuses `--provenance` from private repositories):
 
-1. **Publish the current version by hand.** npm can only trust a publisher for a package that
-   exists. Check out each package's latest release tag (`laplace-eidolon@X.Y.Z` for the bot and
-   `@laplace.live/eidolon-sdk@A.B.C` for the SDK, which versions independently), then, with the Bun
-   the image runs (the build refuses another) and logged in to an npm account with 2FA that can
-   publish to the `@laplace.live` scope:
+1. **Create the initial version on npm.** npm can only attach a trusted publisher to an existing
+   package. Stage its `pack/` directory with the image's Bun version and publish once from an npm
+   account with 2FA that can publish to `@laplace.live` (temporarily omitting `provenance: true`
+   for a local publish, or using `npm stage publish` + `npm stage approve` on npm 12):
 
    ```bash
-   git checkout laplace-eidolon@X.Y.Z
    bun install --frozen-lockfile
-   bun run pack:npm
-   npm publish ./apps/eidolon/laplace.live-eidolon-X.Y.Z.tgz --access public
-
-   git checkout @laplace.live/eidolon-sdk@A.B.C
-   bun install --frozen-lockfile
-   bun run pack:sdk
-   npm publish ./packages/sdk/laplace.live-eidolon-sdk-A.B.C.tgz --access public
+   bun run build:sdk
+   npm publish ./packages/sdk/pack --access public --no-provenance
    ```
 
-   Or stage it with npm 12, whose `npm stage publish` can create the package, and approve it with
-   `npm stage approve <id>` or on npmjs.com.
-2. **Configure the trusted publisher when a version PR is ready to merge.** A new configuration
-   expires unless it publishes within 2 days. On npmjs.com, the package's Settings → Trusted
-   publishing → GitHub Actions:
-   - organization `laplace-live`, repository `eidolon`;
-   - workflow `release.yml`, the file name only and case-sensitive;
-   - no environment;
-   - tick **npm publish**: a configuration made since 2026-09-03 allows only `npm stage publish`
-     until it is ticked.
-
-   Or, with npm 11.15 or later:
+2. **Configure the trusted publisher** (expires in 2 days until its first workflow publish):
 
    ```bash
    npm trust github @laplace.live/eidolon --file release.yml --repo laplace-live/eidolon --allow-publish
    npm trust github @laplace.live/eidolon-sdk --file release.yml --repo laplace-live/eidolon --allow-publish
    ```
 
-3. **Set the variable:** the repository's Settings → Secrets and variables → Actions → Variables,
-   `NPM_PUBLISH` = `true`.
-4. **Merge the version PR.** Its run publishes through the trusted publisher, with provenance.
-5. **Close the token path:** the package's Settings → Publishing access → "Require two-factor
-   authentication and disallow tokens". Trusted publishing keeps working.
+3. **Merge the version PR** so `release.yml` publishes through the trusted publisher with provenance,
+   then set the package's Publishing access on npmjs.com to "Require two-factor authentication and
+   disallow tokens".
 
-To stop publishing, delete `NPM_PUBLISH`. To move the publish to another workflow file, the
-trusted publisher must name it: delete the configuration and create one for the new file.
+To move publishing to another workflow file, update the package's trusted publisher on npmjs.com to
+name the new workflow file.

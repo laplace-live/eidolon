@@ -185,12 +185,18 @@ describe("the third-party notices", () => {
 describe("the published manifest", () => {
   test("is @laplace.live/eidolon at the bot's version, AGPL-3.0-only, with nothing to run at install", () => {
     const bot = manifestOf<{ version: string }>("apps/bot");
-    const own = manifestOf<{ version: string; name: string; private: boolean }>("apps/eidolon");
+    const own = manifestOf<{
+      version: string;
+      name: string;
+      private?: boolean;
+      publishConfig?: Record<string, unknown>;
+    }>("apps/eidolon");
     expect(own).toMatchObject({
       name: "@laplace.live/eidolon",
       version: bot.version,
-      private: true,
+      publishConfig: { access: "public", provenance: true, directory: "pack" },
     });
+    expect(own.private).toBeUndefined();
     expect(manifest).toMatchObject({
       name: "@laplace.live/eidolon",
       version: bot.version,
@@ -198,6 +204,7 @@ describe("the published manifest", () => {
       bin: { eidolon: "bin/eidolon.mjs" },
       os: ["darwin", "linux"],
       cpu: ["arm64", "x64"],
+      publishConfig: { access: "public", provenance: true },
     });
     for (const field of ["private", "scripts", "devDependencies", "workspaces"]) {
       expect([field, field in manifest]).toEqual([field, false]);

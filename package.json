@@ -38,7 +38,7 @@
     "format": "biome format --write .",
     "test": "bun test --no-env-file",
     "version": "changeset version && bun apps/bot/scripts/sync-version.ts",
-    "release": "changeset git-tag"
+    "release": "bun run build:npm && bun run build:sdk && changeset publish"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

@@ -1,15 +1,19 @@
 {
   "name": "@laplace.live/eidolon-sdk",
   "version": "0.1.0",
-  "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
     "./react": "./src/react/index.ts"
   },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "directory": "pack"
+  },
   "scripts": {
-    "prepack": "echo 'This folder is the workspace, not the package: run bun run pack:sdk' >&2 && exit 1"
+    "prepack": "echo 'This folder is the workspace, not the package: stage pack/ with bun run build:sdk' >&2 && exit 1"
   },
   "dependencies": {
     "@pipecat-ai/client-js": "1.16.0",

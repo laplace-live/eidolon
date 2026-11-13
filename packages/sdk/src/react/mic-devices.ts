@@ -111,7 +111,6 @@ export function useEidolonMicDevices({
 
   useEffect(() => {
     activeClientRef.current = client;
-    pendingPreConnectMicRef.current = null;
     const resetSwapState = () => {
       swapGenerationRef.current += 1;
       inFlightSwapsRef.current.clear();

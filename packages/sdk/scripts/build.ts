@@ -59,7 +59,7 @@ export interface SdkManifest {
   readonly dependencies: Readonly<Record<string, string>>;
   readonly peerDependencies: Readonly<Record<string, string>>;
   readonly peerDependenciesMeta: Readonly<Record<string, { readonly optional: boolean }>>;
-  readonly publishConfig: { readonly access: "public" };
+  readonly publishConfig: { readonly access: "public"; readonly provenance: true };
 }
 
 interface RawManifest {
@@ -130,7 +130,7 @@ export function packageManifest(): SdkManifest {
     ),
     peerDependencies: own.peerDependencies,
     peerDependenciesMeta: own.peerDependenciesMeta,
-    publishConfig: { access: "public" },
+    publishConfig: { access: "public", provenance: true },
   };
 }
 

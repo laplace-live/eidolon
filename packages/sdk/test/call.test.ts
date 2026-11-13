@@ -2928,6 +2928,51 @@ describe("stepConversation pure transcript reducer", () => {
         await client.disconnect();
       });
       expect(createdContexts.every((c) => c.state === "closed")).toBe(true);
+
+      // 7. Mounting useEidolonMicDevices while connect() is already in flight ("connecting")
+      // preserves pendingPreConnectMicRef across effects and swaps to persistedMicId on connected.
+      await act(async () => {
+        root.render(React.createElement(EidolonClientProvider, { client }, null));
+      });
+      let finishMidConnect!: () => void;
+      const midConnectGate = new Promise<void>((resolve) => {
+        finishMidConnect = resolve;
+      });
+      const origConnectImpl = Reflect.get(client.rawTransport, "_connect") as (
+        ...args: unknown[]
+      ) => Promise<void>;
+      Reflect.set(client.rawTransport, "_connect", async (...args: unknown[]) => {
+        Reflect.set(client.rawTransport, "state", "connecting");
+        await midConnectGate;
+        await origConnectImpl(...args);
+      });
+      try {
+        const midConnectPromise = client.connect({ endpoint: "https://bot.example/api/offer" });
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        });
+        expect(client.state).toBe("connecting");
+        expect(openedDevices.at(-1)).toBe("built-in");
+
+        await act(async () => {
+          root.render(
+            React.createElement(EidolonClientProvider, { client }, React.createElement(App)),
+          );
+        });
+        await act(async () => {
+          finishMidConnect();
+          await midConnectPromise;
+          await new Promise((resolve) => setTimeout(resolve, 15));
+        });
+        expect(openedDevices.at(-1)).toBe("usb-2");
+        expect(client.appliedMicId).toBe("usb-2");
+      } finally {
+        Reflect.set(client.rawTransport, "_connect", origConnectImpl);
+      }
+      await act(async () => {
+        await client.disconnect();
+      });
+      expect(createdContexts.every((c) => c.state === "closed")).toBe(true);
     } finally {
       await act(async () => {
         await client.disconnect();
