@@ -8,6 +8,7 @@ import {
   type MediaSupport,
   type Participant,
   PipecatClient,
+  RTVIError,
   RTVIEvent,
   type SendTextOptions,
   type Tracks,
@@ -147,6 +148,7 @@ function createBridgedMediaManager(
   let disconnectEpoch = 0;
   let activeDisconnects = 0;
   let markedEpoch: number | null = null;
+  let pendingInitOp: Promise<void> = Promise.resolve();
   let pendingMicOp: Promise<void> = Promise.resolve();
 
   const readRecorder = () =>
@@ -204,27 +206,63 @@ function createBridgedMediaManager(
     }
   };
 
-  manager.initialize = async () => {
-    markedEpoch = null;
-    if (Reflect.get(manager, "_initialized") === true) {
+  manager.initialize = () => {
+    const epoch = disconnectEpoch;
+    const canceled = () =>
+      epoch !== disconnectEpoch || activeDisconnects > 0 || markedEpoch !== null;
+    const run = async () => {
+      if (canceled()) {
+        throw new DOMException("Connection cancelled", "AbortError");
+      }
+      if (Reflect.get(manager, "_initialized") === true) {
+        syncMicTrack();
+        return;
+      }
+      try {
+        await baseInitialize();
+      } catch (error) {
+        await stopRecorder();
+        await closePlayer();
+        throw error;
+      }
+      if (canceled()) {
+        Reflect.set(manager, "_initialized", false);
+        await stopRecorder();
+        await closePlayer();
+        throw new DOMException("Connection cancelled", "AbortError");
+      }
+      // WavMediaManager leaves getUserMedia's track enabled when _micEnabled is false, which sends
+      // live audio over RTCRtpSender because Eidolon's server ignores signalling trackStatus frames.
       syncMicTrack();
-      return;
+    };
+    const next = pendingInitOp.then(run, run);
+    pendingInitOp = next.then(
+      () => {},
+      () => {},
+    );
+    return next;
+  };
+
+  manager.connect = async () => {
+    const epoch = disconnectEpoch;
+    const canceled = () =>
+      epoch !== disconnectEpoch || activeDisconnects > 0 || markedEpoch !== null;
+    if (canceled()) {
+      throw new DOMException("Connection cancelled", "AbortError");
     }
     try {
-      await baseInitialize();
+      await baseConnect();
     } catch (error) {
       await stopRecorder();
       await closePlayer();
       throw error;
     }
-    // WavMediaManager leaves getUserMedia's track enabled when _micEnabled is false, which sends
-    // live audio over RTCRtpSender because Eidolon's server ignores signalling trackStatus frames.
-    syncMicTrack();
-  };
-
-  manager.connect = async () => {
-    markedEpoch = null;
-    await baseConnect();
+    if (canceled()) {
+      Reflect.set(manager, "_initialized", false);
+      await stopRecorder();
+      await closePlayer();
+      throw new DOMException("Connection cancelled", "AbortError");
+    }
     syncMicTrack();
   };
 
@@ -285,6 +323,10 @@ export class EidolonClient {
   readonly #listeners = new Map<EidolonEventName, Set<(...args: any[]) => void>>();
   readonly #sentRunImmediately = new Map<string, boolean>();
   #pendingQueuedSends = 0;
+  #connectEpoch = 0;
+  #activeConnectAttempt: number | null = null;
+  #pendingInit: Promise<void> = Promise.resolve();
+  #cancelTransportConnect: (() => void) | null = null;
   #botAudioTrack: MediaStreamTrack | undefined;
   #botVideoTrack: MediaStreamTrack | undefined;
   #lastEmittedMediaState: MediaState | undefined;
@@ -299,6 +341,13 @@ export class EidolonClient {
       // https://github.com/pipecat-ai/pipecat/issues/4065
       mediaManager,
     });
+    // SmallWebRTCTransport._connect returns early without throwing when aborted, after which
+    // PipecatClient.connect still calls sendReadyMessage() and flips state back to "ready".
+    const baseSendReady = this.#transport.sendReadyMessage.bind(this.#transport);
+    this.#transport.sendReadyMessage = () => {
+      if (this.#transport.state !== "connected" || this.#mediaManager.isDisconnecting) return;
+      baseSendReady();
+    };
     this.#client = new PipecatClient({
       transport: this.#transport,
       enableMic: options.enableMic ?? true,
@@ -424,7 +473,12 @@ export class EidolonClient {
   }
 
   initDevices(): Promise<void> {
-    return this.#client.initDevices();
+    const initTask = this.#pendingInit.then(() => this.#client.initDevices());
+    this.#pendingInit = initTask.then(
+      () => {},
+      () => {},
+    );
+    return initTask;
   }
 
   async connect(options: EidolonConnectOptions): Promise<EidolonBotReadyData> {
@@ -437,38 +491,105 @@ export class EidolonClient {
     ) {
       return parseBotReadyData(await this.#client.connect(requestParams));
     }
-    // PipecatClient.connect() awaits initDevices() outside its inner try/catch, leaving the
-    // outer promise pending forever if AudioWorklet setup rejects.
-    if (this.#client.needsInit()) {
-      try {
-        await this.#client.initDevices();
-      } catch (error) {
-        await this.disconnect();
-        throw error;
+    if (this.#activeConnectAttempt !== null) {
+      throw new RTVIError(
+        "Attempt to call connect when client already started. Please call disconnect() before starting again.",
+      );
+    }
+    const attempt = ++this.#connectEpoch;
+    this.#activeConnectAttempt = attempt;
+    try {
+      await this.#pendingInit;
+      if (this.#connectEpoch !== attempt) {
+        throw new DOMException("Connection cancelled", "AbortError");
       }
-    }
-    const origNeedsInit = this.#client.needsInit;
-    Reflect.set(this.#client, "needsInit", () => false);
-    let pending: ReturnType<PipecatClient["connect"]>;
-    try {
-      pending = this.#client.connect(requestParams);
+      // PipecatClient.connect() awaits initDevices() outside its inner try/catch, leaving the
+      // outer promise pending forever if AudioWorklet setup rejects; it also lacks a post-init
+      // cancellation check if disconnect() ran while the permission prompt was open.
+      if (this.#client.needsInit()) {
+        try {
+          await this.initDevices();
+        } catch (error) {
+          if (this.#connectEpoch !== attempt) {
+            if (this.#activeConnectAttempt === null) {
+              await this.#teardownStaleInit();
+            }
+            throw new DOMException("Connection cancelled", "AbortError");
+          }
+          this.#activeConnectAttempt = null;
+          await this.disconnect();
+          throw error;
+        }
+        if (this.#connectEpoch !== attempt) {
+          if (this.#activeConnectAttempt === null) {
+            await this.#teardownStaleInit();
+          }
+          throw new DOMException("Connection cancelled", "AbortError");
+        }
+      }
+      const origNeedsInit = this.#client.needsInit;
+      Reflect.set(this.#client, "needsInit", () => false);
+      let pending: ReturnType<PipecatClient["connect"]>;
+      try {
+        pending = this.#client.connect(requestParams);
+      } finally {
+        Reflect.set(this.#client, "needsInit", origNeedsInit);
+      }
+      let rejectCancel!: (reason: unknown) => void;
+      const cancelled = new Promise<never>((_, reject) => {
+        rejectCancel = reject;
+      });
+      const cancel = () => {
+        rejectCancel(new DOMException("Connection cancelled", "AbortError"));
+      };
+      this.#cancelTransportConnect = cancel;
+      void pending.catch(() => {});
+      try {
+        return parseBotReadyData(await Promise.race([pending, cancelled]));
+      } catch (error) {
+        if (this.#connectEpoch === attempt) {
+          await this.#mediaManager.disconnect();
+        }
+        throw error;
+      } finally {
+        if (this.#cancelTransportConnect === cancel) {
+          this.#cancelTransportConnect = null;
+        }
+      }
     } finally {
-      Reflect.set(this.#client, "needsInit", origNeedsInit);
-    }
-    try {
-      return parseBotReadyData(await pending);
-    } catch (error) {
-      await this.#mediaManager.disconnect();
-      throw error;
+      if (this.#activeConnectAttempt === attempt) {
+        this.#activeConnectAttempt = null;
+      }
     }
   }
 
   async disconnect(): Promise<void> {
+    this.#connectEpoch += 1;
+    this.#activeConnectAttempt = null;
+    const cancelTransport = this.#cancelTransportConnect;
+    this.#cancelTransportConnect = null;
+    (
+      this.#client as unknown as {
+        _resolveLingeringInitializing?: (fallback: DeviceStatus) => void;
+      }
+    )._resolveLingeringInitializing?.({ state: "uninitialized" });
     this.#mediaManager.markDisconnecting();
     try {
       await this.#client.disconnect();
     } finally {
       // SmallWebRTCTransport.stop() returns early when pc is null, skipping mediaManager.disconnect().
+      await this.#mediaManager.disconnect();
+      cancelTransport?.();
+    }
+  }
+
+  async #teardownStaleInit(): Promise<void> {
+    this.#mediaManager.markDisconnecting();
+    try {
+      if (this.#client.state !== "disconnected") {
+        await this.#client.disconnect();
+      }
+    } finally {
       await this.#mediaManager.disconnect();
     }
   }

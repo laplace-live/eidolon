@@ -1,4 +1,6 @@
 import { beforeAll, describe, expect, test } from "bun:test";
+import React, { act, Suspense, startTransition, useState } from "react";
+import { createRoot } from "react-dom/client";
 import {
   callErrorStatus,
   DEFAULT_ICE_SERVERS,
@@ -29,7 +31,16 @@ import {
   uuidv7,
 } from "../src/index.ts";
 import { type ConversationAction, dispatchSentText } from "../src/react/conversation.ts";
-import { EMPTY_CONVERSATION_STATE, isBotOutputText, stepConversation } from "../src/react/index.ts";
+import {
+  EidolonClientProvider,
+  type EidolonConversationControls,
+  type EidolonMicDevices,
+  EMPTY_CONVERSATION_STATE,
+  isBotOutputText,
+  stepConversation,
+  useEidolonConversation,
+  useEidolonMicDevices,
+} from "../src/react/index.ts";
 import { runLiveMicSwap } from "../src/react/mic-devices.ts";
 
 beforeAll(() => {
@@ -755,6 +766,237 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
     expect(initStates).toEqual(["initializing"]);
     expect(playerConnectCalls).toBe(1);
   });
+
+  test("EidolonClient.disconnect cancels pending initDevices and transport connect without starting a call", async () => {
+    const client = new EidolonClient({ enableMic: true });
+    const manager = Reflect.get(client.rawTransport, "mediaManager") as object;
+    const states: string[] = [];
+    client.on("transportStateChanged", (state) => {
+      states.push(state);
+    });
+
+    let markBeginStarted!: () => void;
+    const beginStarted = new Promise<void>((resolve) => {
+      markBeginStarted = resolve;
+    });
+    let finishBegin!: () => void;
+    let micTrackEnded = false;
+    let recorderContextClosed = false;
+    let playerContextClosed = false;
+    let offerConnectCalls = 0;
+
+    const recorderStub: {
+      getStatus: () => string;
+      begin: () => Promise<boolean>;
+      listenForDeviceChange: () => void;
+      listenForDeviceErrors: () => void;
+      end: () => Promise<void>;
+      record: () => Promise<boolean>;
+      processor: { context: { state: string; close: () => Promise<void> } } | null;
+      stream: {
+        getTracks: () => MediaStreamTrack[];
+        getAudioTracks: () => MediaStreamTrack[];
+      } | null;
+    } = {
+      getStatus: () => (recorderStub.stream === null ? "ended" : "paused"),
+      begin: () => {
+        markBeginStarted();
+        return new Promise<boolean>((resolve) => {
+          finishBegin = () => {
+            micTrackEnded = false;
+            recorderContextClosed = false;
+            const track = {
+              id: "late-init-mic",
+              kind: "audio",
+              enabled: true,
+              readyState: "live",
+              stop() {
+                micTrackEnded = true;
+                (this as { readyState: string }).readyState = "ended";
+              },
+            } as unknown as MediaStreamTrack;
+            recorderStub.processor = {
+              context: {
+                state: "running",
+                close: async () => {
+                  recorderContextClosed = true;
+                  if (recorderStub.processor) recorderStub.processor.context.state = "closed";
+                },
+              },
+            };
+            recorderStub.stream = { getTracks: () => [track], getAudioTracks: () => [track] };
+            resolve(true);
+          };
+        });
+      },
+      listenForDeviceChange: () => {},
+      listenForDeviceErrors: () => {},
+      end: async () => {
+        recorderStub.stream = null;
+      },
+      record: async () => true,
+      processor: null,
+      stream: null,
+    };
+
+    const playerStub: {
+      context: { state: string; close: () => Promise<void> } | null;
+      connect: () => Promise<boolean>;
+      interrupt: () => Promise<void>;
+    } = {
+      context: null,
+      connect: async () => {
+        playerContextClosed = false;
+        playerStub.context = {
+          state: "running",
+          close: async () => {
+            playerContextClosed = true;
+            if (playerStub.context) playerStub.context.state = "closed";
+          },
+        };
+        return true;
+      },
+      interrupt: async () => {},
+    };
+
+    Reflect.set(manager, "_wavRecorder", recorderStub);
+    Reflect.set(manager, "_wavStreamPlayer", playerStub);
+    Reflect.set(client.rawTransport, "_connect", async () => {
+      offerConnectCalls += 1;
+    });
+
+    const pendingConnect = client.connect({ endpoint: "https://bot.example/api/offer" });
+    await beginStarted;
+
+    // Hang up while the microphone permission prompt is still open.
+    await client.disconnect();
+    expect(client.state).toBe("disconnected");
+
+    // Permission prompt resolves after hangup: capture and AudioContexts close immediately, and no offer goes out.
+    finishBegin();
+    await expect(pendingConnect).rejects.toThrow("Connection cancelled");
+    expect(offerConnectCalls).toBe(0);
+    expect(client.state).toBe("disconnected");
+    expect(client.mediaState.mic.state).toBe("uninitialized");
+    expect(states).not.toContain("initialized");
+    expect(micTrackEnded).toBe(true);
+    expect(recorderContextClosed).toBe(true);
+    expect(playerContextClosed).toBe(true);
+
+    // Even if a custom initDevices implementation resolves normally after disconnect(), connect() still aborts.
+    const customInitClient = new EidolonClient({ enableMic: true });
+    let resolveCustomInit!: () => void;
+    let customConnectCalls = 0;
+    Reflect.set(
+      customInitClient.rawClient,
+      "initDevices",
+      () =>
+        new Promise<void>((resolve) => {
+          resolveCustomInit = () => {
+            Reflect.set(customInitClient.rawTransport, "_state", "initialized");
+            resolve();
+          };
+        }),
+    );
+    Reflect.set(customInitClient.rawClient, "connect", async () => {
+      customConnectCalls += 1;
+      return { version: "1.0.0" };
+    });
+    const pendingCustom = customInitClient.connect({ endpoint: "https://bot.example/api/offer" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await customInitClient.disconnect();
+    resolveCustomInit();
+    await expect(pendingCustom).rejects.toThrow("Connection cancelled");
+    expect(customConnectCalls).toBe(0);
+    expect(customInitClient.state).toBe("disconnected");
+
+    // When devices were pre-initialized (_initialized === true) and connect() blocks inside
+    // mediaManager.connect() (_wavRecorder.record()), hanging up closes capture and skips peer setup.
+    const mutedInitClient = new EidolonClient({ enableMic: true });
+    const mutedManager = Reflect.get(mutedInitClient.rawTransport, "mediaManager") as object;
+    Reflect.set(mutedManager, "_initialized", true);
+    Reflect.set(mutedInitClient.rawTransport, "_state", "initialized");
+    let markRecordStarted!: () => void;
+    const recordStarted = new Promise<void>((resolve) => {
+      markRecordStarted = resolve;
+    });
+    let finishRecord!: () => void;
+    let mutedPlayerClosed = false;
+    let peerConnStarts = 0;
+    Reflect.set(mutedManager, "_wavRecorder", {
+      getStatus: () => "paused",
+      begin: async () => true,
+      listenForDeviceChange: () => {},
+      listenForDeviceErrors: () => {},
+      end: async () => {},
+      record: () => {
+        markRecordStarted();
+        return new Promise<boolean>((resolve) => {
+          finishRecord = () => resolve(true);
+        });
+      },
+      processor: null,
+      stream: null,
+    });
+    const mutedPlayerStub: {
+      context: { state: string; close: () => Promise<void> } | null;
+      connect: () => Promise<boolean>;
+      interrupt: () => Promise<void>;
+    } = {
+      context: {
+        state: "running",
+        close: async () => {
+          mutedPlayerClosed = true;
+          if (mutedPlayerStub.context) mutedPlayerStub.context.state = "closed";
+        },
+      },
+      connect: async () => true,
+      interrupt: async () => {},
+    };
+    Reflect.set(mutedManager, "_wavStreamPlayer", mutedPlayerStub);
+    Reflect.set(mutedInitClient.rawTransport, "startNewPeerConnection", async () => {
+      peerConnStarts += 1;
+    });
+    const pendingMuted = mutedInitClient.connect({ endpoint: "https://bot.example/api/offer" });
+    await recordStarted;
+    await mutedInitClient.disconnect();
+    finishRecord();
+    await expect(pendingMuted).rejects.toThrow("Connection cancelled");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(peerConnStarts).toBe(0);
+    expect(mutedPlayerClosed).toBe(true);
+    expect(mutedInitClient.state).toBe("disconnected");
+
+    // Hang up after initDevices() while transport connect / bot-ready is pending also rejects connect() promptly.
+    const midOfferClient = new EidolonClient({ enableMic: false });
+    const midManager = Reflect.get(midOfferClient.rawTransport, "mediaManager") as object;
+    Reflect.set(midManager, "_wavStreamPlayer", {
+      context: null,
+      connect: async () => true,
+      interrupt: async () => {},
+    });
+    let markOfferEntered!: () => void;
+    const offerEntered = new Promise<void>((resolve) => {
+      markOfferEntered = resolve;
+    });
+    Reflect.set(midOfferClient.rawTransport, "_connect", async () => {
+      markOfferEntered();
+      // Mirrors SmallWebRTCTransport._connect returning early without rejecting when aborted.
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    });
+    const pendingMidOffer = midOfferClient.connect({ endpoint: "https://bot.example/api/offer" });
+    await offerEntered;
+    await midOfferClient.disconnect();
+    const midOfferOutcome = await Promise.race([
+      pendingMidOffer
+        .then(() => "resolved" as const)
+        .catch((err: unknown) => (err instanceof Error ? err.message : String(err))),
+      new Promise<"hung">((resolve) => setTimeout(() => resolve("hung"), 50)),
+    ]);
+    expect(midOfferOutcome).toBe("Connection cancelled");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(midOfferClient.state).toBe("disconnected");
+  });
 });
 
 describe("stepConversation pure transcript reducer", () => {
@@ -1081,5 +1323,131 @@ describe("stepConversation pure transcript reducer", () => {
       ),
     ).rejects.toThrow("transport closed");
     expect(postResetActions).toEqual([]);
+  });
+
+  test("suspended React transition to client B does not drop committed client A sends or mic swap errors", async () => {
+    const globals = globalThis as Record<string, unknown>;
+    const prevAct = globals.IS_REACT_ACT_ENVIRONMENT;
+    const win = globalThis.window as unknown as Record<string, unknown>;
+    const prevIframe = win.HTMLIFrameElement;
+    globals.IS_REACT_ACT_ENVIRONMENT = true;
+    win.HTMLIFrameElement = class {};
+
+    const doc = Object.assign(new EventTarget(), { activeElement: null, defaultView: win });
+    const container = Object.assign(new EventTarget(), {
+      nodeType: 1,
+      nodeName: "DIV",
+      tagName: "DIV",
+      namespaceURI: "http://www.w3.org/1999/xhtml",
+      childNodes: [],
+      firstChild: null,
+      ownerDocument: doc,
+      removeChild() {},
+      appendChild() {},
+      insertBefore() {},
+    });
+
+    const clientA = new EidolonClient({ enableMic: false });
+    const clientB = new EidolonClient({ enableMic: false });
+
+    let resolveSendA!: (msgId: string) => void;
+    Reflect.set(
+      clientA,
+      "sendText",
+      () =>
+        new Promise<string>((resolve) => {
+          resolveSendA = resolve;
+        }),
+    );
+    let rejectSwapA!: (err: Error) => void;
+    Reflect.set(
+      clientA,
+      "selectLiveMic",
+      () =>
+        new Promise<void>((_, reject) => {
+          rejectSwapA = reject;
+        }),
+    );
+
+    let finishSuspense!: () => void;
+    const suspenseGate = new Promise<void>((resolve) => {
+      finishSuspense = resolve;
+    });
+    let setTarget!: (next: { client: EidolonClient; suspend: boolean }) => void;
+    let committedConv!: EidolonConversationControls;
+    let committedMic!: EidolonMicDevices;
+    let renderedClients: EidolonClient[] = [];
+
+    function Child({ suspend, current }: { suspend: boolean; current: EidolonClient }) {
+      renderedClients.push(current);
+      const conv = useEidolonConversation();
+      const mic = useEidolonMicDevices();
+      if (suspend) throw suspenseGate;
+      committedConv = conv;
+      committedMic = mic;
+      return null;
+    }
+
+    function App() {
+      const [target, _setTarget] = useState({ client: clientA, suspend: false });
+      setTarget = _setTarget;
+      return React.createElement(
+        Suspense,
+        { fallback: null },
+        React.createElement(
+          EidolonClientProvider,
+          { client: target.client },
+          React.createElement(Child, { suspend: target.suspend, current: target.client }),
+        ),
+      );
+    }
+
+    const root = createRoot(container as unknown as Element);
+    try {
+      await act(async () => {
+        root.render(React.createElement(App));
+      });
+
+      // Start an in-flight text send and mic swap on committed client A.
+      let pendingSend!: Promise<string>;
+      await act(async () => {
+        pendingSend = committedConv.sendText("来自A的消息");
+        committedMic.selectMic("usb-a");
+      });
+
+      // Start a transition to client B that renders hooks with client B and then suspends without committing.
+      renderedClients = [];
+      await act(async () => {
+        startTransition(() => {
+          setTarget({ client: clientB, suspend: true });
+        });
+      });
+      expect(renderedClients).toContain(clientB);
+
+      // Client A remains committed: its settling send and mic error must be preserved, not dropped.
+      await act(async () => {
+        resolveSendA("msg_from_a");
+        rejectSwapA(new Error("mic A unplugged"));
+        await pendingSend;
+      });
+      expect(committedConv.messages.map((m) => [m.msgId, m.status])).toEqual([
+        ["msg_from_a", "sent"],
+      ]);
+      expect(committedMic.swapError?.message).toBe("mic A unplugged");
+
+      // Once the transition unsuspends and commits client B, conversation and mic error reset cleanly.
+      await act(async () => {
+        setTarget({ client: clientB, suspend: false });
+        finishSuspense();
+      });
+      expect(committedConv.messages).toEqual([]);
+      expect(committedMic.swapError).toBeNull();
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      globals.IS_REACT_ACT_ENVIRONMENT = prevAct;
+      win.HTMLIFrameElement = prevIframe;
+    }
   });
 });

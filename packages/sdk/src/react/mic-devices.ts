@@ -51,7 +51,6 @@ export function useEidolonMicDevices({
   const [swapError, setSwapError] = useState<Error | null>(null);
   const mountedRef = useRef(true);
   const activeClientRef = useRef(client);
-  activeClientRef.current = client;
   const swapGenerationRef = useRef(0);
   const inFlightSwapsRef = useRef(new Set<symbol>());
 
@@ -63,6 +62,7 @@ export function useEidolonMicDevices({
   }, []);
 
   useEffect(() => {
+    activeClientRef.current = client;
     const resetSwapState = () => {
       swapGenerationRef.current += 1;
       inFlightSwapsRef.current.clear();
@@ -77,6 +77,7 @@ export function useEidolonMicDevices({
 
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.enumerateDevices) {
       return () => {
+        activeClientRef.current = null;
         swapGenerationRef.current += 1;
         inFlightSwapsRef.current.clear();
         offResetConnected?.();
@@ -108,6 +109,7 @@ export function useEidolonMicDevices({
     });
     return () => {
       cancelled = true;
+      activeClientRef.current = null;
       swapGenerationRef.current += 1;
       inFlightSwapsRef.current.clear();
       navigator.mediaDevices.removeEventListener("devicechange", onDeviceChange);

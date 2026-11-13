@@ -874,8 +874,7 @@ export function useEidolonConversation(
   const [messages, setMessages] = useState<readonly ConversationMessage[]>([]);
   const stateRef = useRef<ConversationState>(EMPTY_CONVERSATION_STATE);
   const prevClientRef = useRef(client);
-  const activeClientRef = useRef(client);
-  activeClientRef.current = client;
+  const activeClientRef = useRef<typeof client | null>(client);
   const generationRef = useRef(0);
   const lastSpeakerRef = useRef<string | null>(null);
   const callbacksRef = useRef(options);
@@ -902,6 +901,7 @@ export function useEidolonConversation(
   }, []);
 
   useEffect(() => {
+    activeClientRef.current = client;
     if (prevClientRef.current !== client) {
       prevClientRef.current = client;
       lastSpeakerRef.current = null;
@@ -1014,6 +1014,7 @@ export function useEidolonConversation(
     ];
 
     return () => {
+      activeClientRef.current = null;
       cancelBotTimer();
       cancelUserTimer();
       for (const unsub of unsubs) unsub();

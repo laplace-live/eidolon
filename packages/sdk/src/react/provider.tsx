@@ -5,7 +5,7 @@ const EidolonClientContext = createContext<EidolonClient | null>(null);
 
 export interface EidolonClientProviderProps {
   readonly client: EidolonClient;
-  readonly children: ReactNode;
+  readonly children?: ReactNode;
 }
 
 export function EidolonClientProvider({ client, children }: EidolonClientProviderProps) {
