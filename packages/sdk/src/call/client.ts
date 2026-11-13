@@ -134,6 +134,7 @@ interface BridgedMediaManager {
   readonly isDisconnecting: boolean;
   markDisconnecting(): void;
   clearDeviceSelection(): void;
+  runPreConnectMic<T>(fn: () => Promise<T>): Promise<T>;
   tracks(): Tracks;
   initialize(): Promise<void>;
   connect(): Promise<void>;
@@ -154,6 +155,7 @@ function createBridgedMediaManager(
   let activeDisconnects = 0;
   let markedEpoch: number | null = null;
   let lifecycleToken = 0;
+  let preConnectMicDepth = 0;
   let pendingMicOp: Promise<void> = Promise.resolve();
   const inFlightInners = new Set<WavMediaManager>();
   const RecorderCtor = (Reflect.get(raw, "_wavRecorder") as object | undefined)?.constructor;
@@ -287,6 +289,14 @@ function createBridgedMediaManager(
         recorder.deviceSelection = null;
       }
     },
+    runPreConnectMic<T>(fn: () => Promise<T>): Promise<T> {
+      preConnectMicDepth += 1;
+      try {
+        return fn();
+      } finally {
+        preConnectMicDepth -= 1;
+      }
+    },
     tracks() {
       return proto.tracks.call(activeInner);
     },
@@ -350,11 +360,11 @@ function createBridgedMediaManager(
       const epoch = disconnectEpoch;
       const canceled = () =>
         epoch !== disconnectEpoch || activeDisconnects > 0 || markedEpoch !== null;
-      const run = async () => {
-        if (canceled()) return;
-        isolateSuspendedInner();
-        const target = activeInner;
-        const recorder = readRecorderOf(target);
+      const runUpdateOn = async (
+        target: WavMediaManager,
+        recorder: InternalWavRecorder | undefined,
+        cleanupFailedOrCanceled: () => Promise<void>,
+      ) => {
         if (micId === "" && recorder && "deviceSelection" in recorder) {
           // WavRecorder.end() preserves deviceSelection across calls so begin("") leaves selectedMic
           // pointing at a prior call's hardware device until listDevices() settles:
@@ -385,16 +395,14 @@ function createBridgedMediaManager(
           }
         }
         if (canceled() || target !== activeInner) {
-          if (target !== activeInner || readRecorderOf(target) === recorder) {
-            await stopRecorderInstance(readRecorderOf(target) ?? recorder);
-          }
+          await cleanupFailedOrCanceled();
           return;
         }
         if (beginError !== undefined) {
-          await stopRecorderInstance(readRecorderOf(target) ?? recorder);
+          await cleanupFailedOrCanceled();
           throw beginError;
         }
-        const track = overrides.tracks().local.audio;
+        const track = proto.tracks.call(target).local.audio;
         if (!track || track.readyState === "ended") {
           throw new Error("Could not start media stream");
         }
@@ -402,6 +410,30 @@ function createBridgedMediaManager(
         // While muted, WavMediaManager.updateMic skips _startRecording (and with it onTrackStarted),
         // leaving the previous stopped track on RTCRtpSender.
         if (!overrides.isMicEnabled) onLocalAudioTrack(track);
+      };
+      if (preConnectMicDepth > 0) {
+        // Keep pre-connect capture off pendingMicOp so an unanswered permission prompt never
+        // blocks disconnect() or an awaited redial; claimLifecycle() isolates and cleans it up.
+        return (async () => {
+          if (canceled()) return;
+          const attempt = claimLifecycle();
+          try {
+            await runUpdateOn(attempt.inner, attempt.recorder, () => cleanupAttempt(attempt));
+          } finally {
+            inFlightInners.delete(attempt.inner);
+          }
+        })();
+      }
+      const run = async () => {
+        if (canceled()) return;
+        isolateSuspendedInner();
+        const target = activeInner;
+        const recorder = readRecorderOf(target);
+        await runUpdateOn(target, recorder, async () => {
+          if (target !== activeInner || readRecorderOf(target) === recorder) {
+            await stopRecorderInstance(readRecorderOf(target) ?? recorder);
+          }
+        });
       };
       const next = pendingMicOp.then(run, run);
       pendingMicOp = next.then(
@@ -624,7 +656,9 @@ export class EidolonClient {
           return;
         }
       }
-      await this.#transport.updateMic(toLiveMicId(persistedMicId));
+      await this.#mediaManager.runPreConnectMic(() =>
+        this.#transport.updateMic(toLiveMicId(persistedMicId)),
+      );
       if (!isStale()) {
         this.#appliedMicId = this.#hasLiveMic() ? persistedMicId : null;
       }

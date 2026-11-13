@@ -999,168 +999,203 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(midOfferClient.state).toBe("disconnected");
 
-    // Stale suspended connect/init attempts never tear down a replacement redial's active resources,
-    // and redial proceeds immediately without waiting on an open permission prompt.
-    const redialClient = new EidolonClient({ enableMic: true });
-    const redialManager = Reflect.get(redialClient.rawTransport, "mediaManager") as {
-      initialize: () => Promise<void>;
-      connect: () => Promise<void>;
-      disconnect: () => Promise<void>;
-      tracks: () => { local: { audio?: MediaStreamTrack } };
-    };
-    const origRecorder = Reflect.get(redialManager, "_wavRecorder") as object;
-    const origPlayer = Reflect.get(redialManager, "_wavStreamPlayer") as object;
-    const RecProto = Object.getPrototypeOf(origRecorder);
-    const PlayProto = Object.getPrototypeOf(origPlayer);
-    const origRecBegin = RecProto.begin;
-    const origRecEnd = RecProto.end;
-    const origRecRecord = RecProto.record;
-    const origRecStatus = RecProto.getStatus;
-    const origRecDeviceChange = RecProto.listenForDeviceChange;
-    const origRecDeviceErrors = RecProto.listenForDeviceErrors;
-    const origPlayConnect = PlayProto.connect;
-    const origPlayInterrupt = PlayProto.interrupt;
-
-    let beginInvocation = 0;
-    let markAttemptABegin!: () => void;
-    const attemptABegin = new Promise<void>((resolve) => {
-      markAttemptABegin = resolve;
-    });
-    let finishAttemptABegin!: () => void;
-    let attemptATrackEnded = false;
-    let attemptAContextClosed = false;
-    let attemptBTrackEnded = false;
-    let attemptBContextClosed = false;
-    let attemptBPlayerClosed = false;
-
-    RecProto.begin = function (this: Record<string, unknown>) {
-      const idx = ++beginInvocation;
-      if (idx === 1) {
-        markAttemptABegin();
-        return new Promise<boolean>((resolve) => {
-          finishAttemptABegin = () => {
-            const trackA = {
-              id: "mic-attempt-a",
-              kind: "audio",
-              enabled: true,
-              readyState: "live",
-              stop() {
-                attemptATrackEnded = true;
-                (this as { readyState: string }).readyState = "ended";
-              },
-            } as unknown as MediaStreamTrack;
-            this.stream = { getTracks: () => [trackA], getAudioTracks: () => [trackA] };
-            this.processor = {
-              context: {
-                state: "running",
-                close: async () => {
-                  attemptAContextClosed = true;
-                },
-              },
-            };
-            resolve(true);
-          };
-        });
+    // Stale suspended connect/init/applyMicPreference attempts never block disconnect() or tear down a
+    // replacement redial's active resources while a browser permission prompt stays open.
+    for (const preferredMic of [null, SYSTEM_DEFAULT_MIC_ID, "usb-2"] as const) {
+      const redialClient = new EidolonClient({ enableMic: true });
+      if (preferredMic !== null) {
+        redialClient.setPreferredMic(preferredMic);
+        Reflect.set(redialClient.rawClient, "getAllMics", async () => [
+          {
+            deviceId: "usb-2",
+            kind: "audioinput",
+            label: "USB Mic",
+            groupId: "g2",
+            toJSON: () => ({}),
+          },
+        ]);
       }
-      const trackB = {
-        id: "mic-attempt-b",
-        kind: "audio",
-        enabled: true,
-        readyState: "live",
-        stop() {
-          attemptBTrackEnded = true;
-          (this as { readyState: string }).readyState = "ended";
-        },
-      } as unknown as MediaStreamTrack;
-      this.stream = { getTracks: () => [trackB], getAudioTracks: () => [trackB] };
-      this.processor = {
-        context: {
+      const redialManager = Reflect.get(redialClient.rawTransport, "mediaManager") as {
+        initialize: () => Promise<void>;
+        connect: () => Promise<void>;
+        disconnect: () => Promise<void>;
+        tracks: () => { local: { audio?: MediaStreamTrack } };
+      };
+      const origRecorder = Reflect.get(redialManager, "_wavRecorder") as object;
+      const origPlayer = Reflect.get(redialManager, "_wavStreamPlayer") as object;
+      const RecProto = Object.getPrototypeOf(origRecorder);
+      const PlayProto = Object.getPrototypeOf(origPlayer);
+      const origRecBegin = RecProto.begin;
+      const origRecEnd = RecProto.end;
+      const origRecRecord = RecProto.record;
+      const origRecStatus = RecProto.getStatus;
+      const origRecDeviceChange = RecProto.listenForDeviceChange;
+      const origRecDeviceErrors = RecProto.listenForDeviceErrors;
+      const origPlayConnect = PlayProto.connect;
+      const origPlayInterrupt = PlayProto.interrupt;
+
+      let beginInvocation = 0;
+      let markAttemptABegin!: () => void;
+      const attemptABegin = new Promise<void>((resolve) => {
+        markAttemptABegin = resolve;
+      });
+      let finishAttemptABegin!: () => void;
+      let attemptATrackEnded = false;
+      let attemptAContextClosed = false;
+      let attemptBTrackEnded = false;
+      let attemptBContextClosed = false;
+      let attemptBPlayerClosed = false;
+
+      RecProto.begin = function (this: Record<string, unknown>) {
+        if (this.processor) {
+          return Promise.reject(
+            new Error("Already connected: please call .end() to start a new session"),
+          );
+        }
+        const idx = ++beginInvocation;
+        if (idx === 1) {
+          markAttemptABegin();
+          return new Promise<boolean>((resolve) => {
+            finishAttemptABegin = () => {
+              const trackA = {
+                id: "mic-attempt-a",
+                kind: "audio",
+                enabled: true,
+                readyState: "live",
+                stop() {
+                  attemptATrackEnded = true;
+                  (this as { readyState: string }).readyState = "ended";
+                },
+              } as unknown as MediaStreamTrack;
+              this.stream = { getTracks: () => [trackA], getAudioTracks: () => [trackA] };
+              this.processor = {
+                context: {
+                  state: "running",
+                  close: async () => {
+                    attemptAContextClosed = true;
+                  },
+                },
+              };
+              resolve(true);
+            };
+          });
+        }
+        const trackB = {
+          id: "mic-attempt-b",
+          kind: "audio",
+          enabled: true,
+          readyState: "live",
+          stop() {
+            attemptBTrackEnded = true;
+            (this as { readyState: string }).readyState = "ended";
+          },
+        } as unknown as MediaStreamTrack;
+        this.stream = { getTracks: () => [trackB], getAudioTracks: () => [trackB] };
+        this.processor = {
+          context: {
+            state: "running",
+            close: async () => {
+              attemptBContextClosed = true;
+            },
+          },
+        };
+        return Promise.resolve(true);
+      };
+      RecProto.end = async function (this: Record<string, unknown>) {
+        this.stream = null;
+        this.processor = null;
+      };
+      RecProto.record = async () => true;
+      RecProto.getStatus = function (this: Record<string, unknown>) {
+        return this.stream ? "recording" : "ended";
+      };
+      RecProto.listenForDeviceChange = () => {};
+      RecProto.listenForDeviceErrors = () => {};
+      let playConnectCount = 0;
+      PlayProto.connect = async function (this: Record<string, unknown>) {
+        const n = ++playConnectCount;
+        this.context = {
           state: "running",
           close: async () => {
-            attemptBContextClosed = true;
+            if (n === 1) attemptBPlayerClosed = true;
           },
-        },
+        };
+        return true;
       };
-      return Promise.resolve(true);
-    };
-    RecProto.end = async function (this: Record<string, unknown>) {
-      this.stream = null;
-    };
-    RecProto.record = async () => true;
-    RecProto.getStatus = function (this: Record<string, unknown>) {
-      return this.stream ? "recording" : "ended";
-    };
-    RecProto.listenForDeviceChange = () => {};
-    RecProto.listenForDeviceErrors = () => {};
-    let playConnectCount = 0;
-    PlayProto.connect = async function (this: Record<string, unknown>) {
-      const n = ++playConnectCount;
-      this.context = {
-        state: "running",
-        close: async () => {
-          if (n === 1) attemptBPlayerClosed = true;
-        },
-      };
-      return true;
-    };
-    PlayProto.interrupt = async () => {};
+      PlayProto.interrupt = async () => {};
 
-    Reflect.set(redialClient.rawTransport, "_connect", async () => {
-      await redialManager.connect();
-      Reflect.set(redialClient.rawTransport, "dc", {
-        readyState: "open",
-        send: () => {
-          const onMessage = Reflect.get(redialClient.rawTransport, "_onMessage") as (
-            msg: unknown,
-          ) => void;
-          Reflect.set(redialClient.rawTransport, "state", "ready");
-          onMessage({ label: "rtvi-ai", id: "1", type: "bot-ready", data: { version: "1.0.0" } });
-        },
-        close: () => {},
+      Reflect.set(redialClient.rawTransport, "_connect", async () => {
+        await redialManager.connect();
+        Reflect.set(redialClient.rawTransport, "dc", {
+          readyState: "open",
+          send: () => {
+            const onMessage = Reflect.get(redialClient.rawTransport, "_onMessage") as (
+              msg: unknown,
+            ) => void;
+            Reflect.set(redialClient.rawTransport, "state", "ready");
+            onMessage({
+              label: "rtvi-ai",
+              id: "1",
+              type: "bot-ready",
+              data: { version: "1.0.0" },
+            });
+          },
+          close: () => {},
+        });
+        Reflect.set(redialClient.rawTransport, "state", "connected");
       });
-      Reflect.set(redialClient.rawTransport, "state", "connected");
-    });
-    Reflect.set(redialClient.rawTransport, "_disconnect", async () => {
-      Reflect.set(redialClient.rawTransport, "dc", null);
-      Reflect.set(redialClient.rawTransport, "state", "disconnected");
-      await redialManager.disconnect();
-    });
+      Reflect.set(redialClient.rawTransport, "_disconnect", async () => {
+        Reflect.set(redialClient.rawTransport, "dc", null);
+        Reflect.set(redialClient.rawTransport, "state", "disconnected");
+        await redialManager.disconnect();
+      });
 
-    try {
-      const attemptAConnect = redialClient.connect({ endpoint: "https://bot.example/api/offer" });
-      await attemptABegin;
-      await redialClient.disconnect();
-
-      // Redial starts and reaches "ready" BEFORE Attempt A's stale permission prompt resolves.
-      const ready = await redialClient.connect({ endpoint: "https://bot.example/api/offer" });
-      expect(ready.version).toBe("1.0.0");
-      expect(redialClient.state).toBe("ready");
-      expect(Reflect.get(redialManager, "_initialized")).toBe(true);
-      expect(redialManager.tracks().local.audio?.id).toBe("mic-attempt-b");
-
-      // Attempt A finally resolves: its detached mic/AudioContext close while Attempt B stays live in "ready".
-      finishAttemptABegin();
-      await expect(attemptAConnect).rejects.toThrow("Connection cancelled");
-      expect(redialClient.state).toBe("ready");
-      expect(Reflect.get(redialManager, "_initialized")).toBe(true);
-      expect(attemptATrackEnded).toBe(true);
-      expect(attemptAContextClosed).toBe(true);
-      expect(attemptBTrackEnded).toBe(false);
-      expect(attemptBContextClosed).toBe(false);
-      expect(attemptBPlayerClosed).toBe(false);
-      expect(redialManager.tracks().local.audio?.id).toBe("mic-attempt-b");
-    } finally {
       try {
-        await redialClient.disconnect();
+        const attemptAConnect = redialClient.connect({
+          endpoint: "https://bot.example/api/offer",
+        });
+        await attemptABegin;
+
+        // Hangup and awaited redial must complete without waiting on Attempt A's open permission prompt.
+        const redialOutcome = await Promise.race([
+          (async () => {
+            await redialClient.disconnect();
+            return redialClient.connect({ endpoint: "https://bot.example/api/offer" });
+          })(),
+          new Promise<"hung">((resolve) => setTimeout(() => resolve("hung"), 100)),
+        ]);
+        expect(redialOutcome).not.toBe("hung");
+        if (redialOutcome === "hung")
+          throw new Error("disconnect/redial hung on permission prompt");
+        expect(redialOutcome.version).toBe("1.0.0");
+        expect(redialClient.state).toBe("ready");
+        expect(Reflect.get(redialManager, "_initialized")).toBe(true);
+        expect(redialManager.tracks().local.audio?.id).toBe("mic-attempt-b");
+
+        // Attempt A finally resolves: its detached mic/AudioContext close while Attempt B stays live in "ready".
+        finishAttemptABegin();
+        await expect(attemptAConnect).rejects.toThrow("Connection cancelled");
+        expect(redialClient.state).toBe("ready");
+        expect(Reflect.get(redialManager, "_initialized")).toBe(true);
+        expect(attemptATrackEnded).toBe(true);
+        expect(attemptAContextClosed).toBe(true);
+        expect(attemptBTrackEnded).toBe(false);
+        expect(attemptBContextClosed).toBe(false);
+        expect(attemptBPlayerClosed).toBe(false);
+        expect(redialManager.tracks().local.audio?.id).toBe("mic-attempt-b");
       } finally {
-        RecProto.begin = origRecBegin;
-        RecProto.end = origRecEnd;
-        RecProto.record = origRecRecord;
-        RecProto.getStatus = origRecStatus;
-        RecProto.listenForDeviceChange = origRecDeviceChange;
-        RecProto.listenForDeviceErrors = origRecDeviceErrors;
-        PlayProto.connect = origPlayConnect;
-        PlayProto.interrupt = origPlayInterrupt;
+        try {
+          await redialClient.disconnect();
+        } finally {
+          RecProto.begin = origRecBegin;
+          RecProto.end = origRecEnd;
+          RecProto.record = origRecRecord;
+          RecProto.getStatus = origRecStatus;
+          RecProto.listenForDeviceChange = origRecDeviceChange;
+          RecProto.listenForDeviceErrors = origRecDeviceErrors;
+          PlayProto.connect = origPlayConnect;
+          PlayProto.interrupt = origPlayInterrupt;
+        }
       }
     }
 
