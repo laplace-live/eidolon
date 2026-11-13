@@ -111,7 +111,14 @@ interface InternalWavRecorder {
   listenForDeviceChange?: (callback: null) => unknown;
   listenForDeviceErrors?: (callback: null) => unknown;
   deviceSelection?: { deviceId?: string } | null;
-  processor?: { context?: { state?: string; close?: () => Promise<void> } } | null;
+  recording?: boolean;
+  processor?: {
+    context?: { state?: string; close?: () => Promise<void> };
+    disconnect?: () => void;
+  } | null;
+  source?: { disconnect?: () => void } | null;
+  node?: { disconnect?: () => void } | null;
+  analyser?: { disconnect?: () => void } | null;
   stream?: MediaStream | null;
 }
 
@@ -123,7 +130,17 @@ interface InternalWavStreamPlayer {
 
 interface InternalPipecatClient {
   _setMediaState?: (patch: Partial<MediaState>) => void;
+  _markDeviceGranted?: (kind: "mic" | "cam") => void;
   _resolveLingeringInitializing?: (fallback: DeviceStatus) => void;
+}
+
+function markMicGranted(client: PipecatClient): void {
+  const internal = client as unknown as InternalPipecatClient;
+  if (internal._markDeviceGranted) {
+    internal._markDeviceGranted("mic");
+  } else {
+    internal._setMediaState?.({ mic: { state: "granted" } });
+  }
 }
 
 function resetInitializingMediaState(client: PipecatClient): void {
@@ -176,7 +193,22 @@ async function stopRecorderInstance(
   if (stream) {
     for (const track of stream.getTracks()) track.stop();
   }
-  if (recorder?.stream) recorder.stream = null;
+  if (recorder) {
+    // If WavRecorder.end() timed out or rejected before clearing session fields, leave getStatus()
+    // at "ended" so a subsequent updateMic() calls begin() instead of re-entering end() on a closed graph:
+    // https://github.com/pipecat-ai/pipecat-client-web-transports/blob/main/lib/src/wavtools/lib/wav_recorder.js
+    recorder.recording = false;
+    try {
+      recorder.processor?.disconnect?.();
+      recorder.source?.disconnect?.();
+      recorder.node?.disconnect?.();
+      recorder.analyser?.disconnect?.();
+    } catch {
+      // AudioNode.disconnect() may throw when partially initialized.
+    }
+    if (recorder.stream) recorder.stream = null;
+    if (recorder.processor) recorder.processor = null;
+  }
   if (context && context.state !== "closed") {
     await context.close?.().catch(() => {});
   }
@@ -233,6 +265,7 @@ interface InFlightLifecycle {
 function createBridgedMediaManager(
   onLocalAudioTrack: (track: MediaStreamTrack) => void,
   onAutoMicFallback?: (appliedMicId: string | null) => void,
+  onMicAcquired?: () => void,
 ): WavMediaManager & BridgedMediaManager {
   const raw = new WavMediaManager();
   const proto = WavMediaManager.prototype;
@@ -481,6 +514,11 @@ function createBridgedMediaManager(
       // While muted, WavMediaManager.updateMic skips _startRecording (and with it onTrackStarted),
       // leaving the previous stopped track on RTCRtpSender.
       if (!overrides.isMicEnabled) onLocalAudioTrack(track);
+      // WavMediaManager.updateMic skips onMicUpdated when deviceSelection was cleared for default-device
+      // recovery or when WavRecorder.begin()'s unawaited listDevices() has not populated deviceSelection yet,
+      // leaving PipecatClient's mic state stuck at "error" after a failed swap recovers:
+      // https://github.com/pipecat-ai/pipecat-client-web-transports/blob/main/lib/src/media-mgmt/mediaManager.ts
+      onMicAcquired?.();
     };
     if (preConnectMicDepth > 0) {
       // Keep pre-connect capture off pendingMicOp so an unanswered permission prompt never
@@ -743,6 +781,11 @@ export class EidolonClient {
       (appliedMicId) => {
         if (!mediaManager.isDisconnecting) {
           this.#appliedMicId = appliedMicId !== null && this.#hasLiveMic() ? appliedMicId : null;
+        }
+      },
+      () => {
+        if (!mediaManager.isDisconnecting && this.#hasLiveMic()) {
+          markMicGranted(this.#client);
         }
       },
     );

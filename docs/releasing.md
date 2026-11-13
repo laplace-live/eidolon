@@ -87,10 +87,15 @@ In the single `release` job (`id-token: write`, Node 24's npm):
 `bun run pack:npm` and `bun run pack:sdk` remain available locally and in CI (`ci-install-check.ts`)
 to inspect or smoke-test packed tarballs offline.
 
-When `release` fails before finishing a publish, fix the cause and re-run the failed job:
-`changeset publish` re-checks the registry and publishes and tags whatever is still missing. An
-`ENEEDAUTH` error means npm found no trusted publisher matching the job: check the workflow file
-name (`release.yml`) in the package's settings on npmjs.com.
+When `release` fails before `npm publish` finishes, fix the cause and re-run the failed job:
+`changeset publish` re-checks the registry and publishes and tags whatever is still missing on npm.
+If `npm publish` succeeded for a public package (`@laplace.live/eidolon` or
+`@laplace.live/eidolon-sdk`) before a later step failed, a fresh run sees that version on npm and
+skips its tag and GitHub Release (`privatePackages.tag` re-checks missing tags only for private
+`laplace-eidolon`): push the missing `<pkg>@<version>` tag on the release commit and create its
+GitHub Release with `gh release create` from `CHANGELOG.md`. An `ENEEDAUTH` error means npm found
+no trusted publisher matching the job: check the workflow file name (`release.yml`) in the
+package's settings on npmjs.com.
 
 ## Setting up npm publishing
 

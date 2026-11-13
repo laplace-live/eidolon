@@ -42,6 +42,7 @@ import {
   isBotOutputText,
   stepConversation,
   useEidolonConversation,
+  useEidolonMediaState,
   useEidolonMicDevices,
   useEidolonNetworkInfo,
 } from "../src/react/index.ts";
@@ -3015,6 +3016,71 @@ describe("stepConversation pure transcript reducer", () => {
         expect(client.appliedMicId).toBe("usb-2");
       } finally {
         Reflect.set(client.rawTransport, "_connect", origConnectImpl);
+      }
+      await act(async () => {
+        await client.disconnect();
+      });
+      expect(createdContexts.every((c) => c.state === "closed")).toBe(true);
+
+      // 8. Default-device recovery after a busy-device error restores mediaState.mic and
+      // useEidolonMediaState() to "granted", and an end() timeout resets terminal recorder fields
+      // so a subsequent live mic swap retry succeeds.
+      busyMics = new Set(["usb-busy"]);
+      let mediaStateHook!: ReturnType<typeof useEidolonMediaState>;
+      function MediaProbe() {
+        mediaStateHook = useEidolonMediaState();
+        return null;
+      }
+      await act(async () => {
+        root.render(
+          React.createElement(EidolonClientProvider, { client }, React.createElement(MediaProbe)),
+        );
+        await client.connect({ endpoint: "https://bot.example/api/offer" });
+        await new Promise((resolve) => setTimeout(resolve, 15));
+      });
+      await act(async () => {
+        await expect(client.selectLiveMic("usb-busy")).rejects.toThrow(
+          "Could not start media stream",
+        );
+      });
+      expect(client.mediaState.mic.state).toBe("error");
+      expect(mediaStateHook.mic.state).toBe("error");
+
+      await act(async () => {
+        await client.selectLiveMic(SYSTEM_DEFAULT_MIC_ID);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      expect(client.appliedMicId).toBe(SYSTEM_DEFAULT_MIC_ID);
+      expect(client.mediaState.mic).toEqual({ state: "granted" });
+      expect(mediaStateHook.mic).toEqual({ state: "granted" });
+
+      const origRecorderEnd = recorderStub.end;
+      let rejectNextEnd = true;
+      recorderStub.end = async () => {
+        if (rejectNextEnd) {
+          throw new Error("Timed out waiting for export event");
+        }
+        await origRecorderEnd();
+      };
+      try {
+        await act(async () => {
+          await expect(client.selectLiveMic("usb-2")).rejects.toThrow(
+            "Timed out waiting for export event",
+          );
+        });
+        expect(recorderStub.getStatus()).toBe("ended");
+        expect(recorderStub.processor).toBeNull();
+        expect(recorderStub.stream).toBeNull();
+
+        rejectNextEnd = false;
+        await act(async () => {
+          await client.selectLiveMic("usb-2");
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        });
+        expect(client.appliedMicId).toBe("usb-2");
+        expect(client.tracks().local.audio?.id).toBe("track-usb-2");
+      } finally {
+        recorderStub.end = origRecorderEnd;
       }
       await act(async () => {
         await client.disconnect();
