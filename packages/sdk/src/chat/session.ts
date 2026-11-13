@@ -216,7 +216,10 @@ export async function sendChatTurn<TRecord extends BrowserChatRecord>(
             }
           }
           stored.push(...line.events);
-          downloads.push(downloadFiles(options, chat, herFileNames(line.events)));
+          const names = herFileNames(line.events);
+          if (names.length > 0) {
+            downloads.push(downloadFiles(options, chat, names));
+          }
         }
         input.onLine?.(line);
       }

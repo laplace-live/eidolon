@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LIVE_SWAP_STATES } from "../call/devices.ts";
+import { LIVE_SWAP_STATES, sameMediaState } from "../call/devices.ts";
 import type { NetworkInfo } from "../call/stats.ts";
 import type {
-  DeviceStatus,
   EidolonEventHandler,
   EidolonEventName,
   MediaState,
@@ -15,18 +14,6 @@ const FALLBACK_MEDIA_STATE: MediaState = {
   mic: { state: "uninitialized" },
   cam: { state: "uninitialized" },
 };
-
-function sameDeviceStatus(a: DeviceStatus, b: DeviceStatus): boolean {
-  if (a.state !== b.state) return false;
-  if (a.state === "error" && b.state === "error") {
-    return a.reason === b.reason && Object.is(a.details, b.details);
-  }
-  return true;
-}
-
-function sameMediaState(a: MediaState, b: MediaState): boolean {
-  return sameDeviceStatus(a.mic, b.mic) && sameDeviceStatus(a.cam, b.cam);
-}
 
 /** Subscribes `handler` to a typed `EidolonClient` event without re-subscribing on inline closures. */
 export function useEidolonEvent<E extends EidolonEventName>(
@@ -193,8 +180,14 @@ export function useEidolonNetworkInfo({
   const transportState = useEidolonTransportState();
   const isLive = LIVE_SWAP_STATES.has(transportState);
   const [info, setInfo] = useState<NetworkInfo | null>(null);
+  const prevClientRef = useRef(client);
 
   useEffect(() => {
+    const clientChanged = prevClientRef.current !== client;
+    prevClientRef.current = client;
+    if (!enabled || !isLive || client === null || clientChanged) {
+      setInfo((prev) => (prev === null ? prev : null));
+    }
     if (!enabled || !isLive || client === null) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;

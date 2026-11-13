@@ -16,7 +16,7 @@ import {
 } from "@pipecat-ai/client-js";
 import { SmallWebRTCTransport, WavMediaManager } from "@pipecat-ai/small-webrtc-transport";
 import type { FetchLike } from "../chat/client.ts";
-import { LIVE_SWAP_STATES, SYSTEM_DEFAULT_MIC_ID, toLiveMicId } from "./devices.ts";
+import { LIVE_SWAP_STATES, SYSTEM_DEFAULT_MIC_ID, sameMediaState, toLiveMicId } from "./devices.ts";
 import {
   normalizeDeviceErrorReason,
   parseBotReadyData,
@@ -80,16 +80,8 @@ const PASS_THROUGH_EVENTS: readonly EidolonEventName[] = [
   "unsupportedFeature",
 ];
 
-function sameDeviceStatus(a: DeviceStatus, b: DeviceStatus): boolean {
-  if (a.state !== b.state) return false;
-  if (a.state === "error" && b.state === "error") {
-    return a.reason === b.reason && Object.is(a.details, b.details);
-  }
-  return true;
-}
-
-function sameMediaState(a: MediaState, b: MediaState): boolean {
-  return sameDeviceStatus(a.mic, b.mic) && sameDeviceStatus(a.cam, b.cam);
+function connectionCancelledError(): DOMException {
+  return new DOMException("Connection cancelled", "AbortError");
 }
 
 function effectiveMediaState(
@@ -129,6 +121,82 @@ interface InternalWavStreamPlayer {
   stream?: { disconnect?: () => void } | null;
 }
 
+interface InternalPipecatClient {
+  _setMediaState?: (patch: Partial<MediaState>) => void;
+  _resolveLingeringInitializing?: (fallback: DeviceStatus) => void;
+}
+
+function resetInitializingMediaState(client: PipecatClient): void {
+  (client as unknown as InternalPipecatClient)._setMediaState?.({
+    mic: { state: "initializing" },
+    cam: { state: "initializing" },
+  });
+}
+
+function resolveLingeringInitializing(client: PipecatClient, fallback: DeviceStatus): void {
+  (client as unknown as InternalPipecatClient)._resolveLingeringInitializing?.(fallback);
+}
+
+function connectWithoutAutoInit(
+  client: PipecatClient,
+  params: Parameters<PipecatClient["connect"]>[0],
+): ReturnType<PipecatClient["connect"]> {
+  const origNeedsInit = client.needsInit;
+  Reflect.set(client, "needsInit", () => false);
+  try {
+    return client.connect(params);
+  } finally {
+    Reflect.set(client, "needsInit", origNeedsInit);
+  }
+}
+
+function readRecorderOf(target: WavMediaManager): InternalWavRecorder | undefined {
+  return Reflect.get(target, "_wavRecorder") as InternalWavRecorder | undefined;
+}
+
+function readPlayerOf(target: WavMediaManager): InternalWavStreamPlayer | undefined {
+  return Reflect.get(target, "_wavStreamPlayer") as InternalWavStreamPlayer | undefined;
+}
+
+async function stopRecorderInstance(
+  recorder: InternalWavRecorder | undefined,
+  priorStream?: MediaStream | null,
+  priorContext?: { state?: string; close?: () => Promise<void> },
+  options?: { readonly keepDeviceListeners?: boolean },
+): Promise<void> {
+  const stream = recorder?.stream ?? priorStream ?? null;
+  const context = recorder?.processor?.context ?? priorContext;
+  if (!options?.keepDeviceListeners) {
+    recorder?.listenForDeviceChange?.(null);
+    recorder?.listenForDeviceErrors?.(null);
+  }
+  if (recorder?.getStatus?.() !== "ended") {
+    await recorder?.end?.().catch(() => {});
+  }
+  if (stream) {
+    for (const track of stream.getTracks()) track.stop();
+  }
+  if (recorder?.stream) recorder.stream = null;
+  if (context && context.state !== "closed") {
+    await context.close?.().catch(() => {});
+  }
+}
+
+async function closePlayerInstance(player: InternalWavStreamPlayer | undefined): Promise<void> {
+  const context = player?.context;
+  if (player?.stream) {
+    player.stream.disconnect?.();
+    player.stream = null;
+  }
+  if (player) {
+    player.analyser = null;
+    player.context = null;
+  }
+  if (context && context.state !== "closed") {
+    await context.close?.().catch(() => {});
+  }
+}
+
 interface BridgedMediaManager {
   readonly isMicEnabled: boolean;
   readonly isDisconnecting: boolean;
@@ -140,6 +208,13 @@ interface BridgedMediaManager {
   connect(): Promise<void>;
   updateMic(micId: string): Promise<void>;
   disconnect(): Promise<void>;
+}
+
+interface InFlightLifecycle {
+  readonly epoch: number;
+  readonly inner: WavMediaManager;
+  readonly settled: Promise<void>;
+  readonly resolve: () => void;
 }
 
 // Wraps WavMediaManager / WavRecorder with hangup/redial isolation and muted-track sync:
@@ -157,59 +232,73 @@ function createBridgedMediaManager(
   let markedEpoch: number | null = null;
   let lifecycleToken = 0;
   let preConnectMicDepth = 0;
+  let explicitMicSelectionGen = 0;
   let pendingMicOp: Promise<void> = Promise.resolve();
-  interface InFlightLifecycle {
-    epoch: number;
-    count: number;
-    readonly settled: Promise<void>;
-    readonly resolve: () => void;
-  }
+  const cancelWaiters = new Set<() => void>();
   const inFlightInners = new Map<WavMediaManager, InFlightLifecycle>();
+  const activeMicWork = new Map<
+    symbol,
+    { readonly epoch: number; readonly settled: Promise<void> }
+  >();
   const sessionEpochs = new WeakMap<WavMediaManager, number>();
   const RecorderCtor = (Reflect.get(raw, "_wavRecorder") as object | undefined)?.constructor;
   const PlayerCtor = (Reflect.get(raw, "_wavStreamPlayer") as object | undefined)?.constructor;
 
-  const readRecorderOf = (target: WavMediaManager) =>
-    Reflect.get(target, "_wavRecorder") as InternalWavRecorder | undefined;
-  const readPlayerOf = (target: WavMediaManager) =>
-    Reflect.get(target, "_wavStreamPlayer") as InternalWavStreamPlayer | undefined;
+  const isCanceled = (epoch: number) =>
+    epoch !== disconnectEpoch || activeDisconnects > 0 || markedEpoch !== null;
 
-  const stopRecorderInstance = async (
-    recorder: InternalWavRecorder | undefined,
-    priorStream?: MediaStream | null,
-    priorContext?: { state?: string; close?: () => Promise<void> },
-    options?: { readonly keepDeviceListeners?: boolean },
-  ) => {
-    const stream = recorder?.stream ?? priorStream ?? null;
-    const context = recorder?.processor?.context ?? priorContext;
-    if (!options?.keepDeviceListeners) {
-      recorder?.listenForDeviceChange?.(null);
-      recorder?.listenForDeviceErrors?.(null);
-    }
-    if (recorder?.getStatus?.() !== "ended") {
-      await recorder?.end?.().catch(() => {});
-    }
-    if (stream) {
-      for (const track of stream.getTracks()) track.stop();
-    }
-    if (recorder?.stream) recorder.stream = null;
-    if (context && context.state !== "closed") {
-      await context.close?.().catch(() => {});
-    }
+  const bumpDisconnectEpoch = () => {
+    disconnectEpoch += 1;
+    for (const wake of [...cancelWaiters]) wake();
+    cancelWaiters.clear();
   };
 
-  const closePlayerInstance = async (player: InternalWavStreamPlayer | undefined) => {
-    const context = player?.context;
-    if (player?.stream) {
-      player.stream.disconnect?.();
-      player.stream = null;
+  const waitUnlessCanceled = (promise: Promise<void>, epoch: number): Promise<void> => {
+    if (isCanceled(epoch)) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      const done = () => {
+        cancelWaiters.delete(done);
+        resolve();
+      };
+      cancelWaiters.add(done);
+      promise.then(done, done);
+    });
+  };
+
+  const trackMicWork = <T>(epoch: number, fn: () => Promise<T>): Promise<T> => {
+    const id = Symbol();
+    let resolveSettled!: () => void;
+    const settled = new Promise<void>((r) => {
+      resolveSettled = r;
+    });
+    activeMicWork.set(id, { epoch, settled });
+    const cleanup = () => {
+      activeMicWork.delete(id);
+      resolveSettled();
+    };
+    const result = fn();
+    result.then(cleanup, cleanup);
+    return result;
+  };
+
+  const hasEpochMicWork = (epoch: number) => {
+    for (const op of activeMicWork.values()) {
+      if (op.epoch === epoch) return true;
     }
-    if (player) {
-      player.analyser = null;
-      player.context = null;
-    }
-    if (context && context.state !== "closed") {
-      await context.close?.().catch(() => {});
+    return false;
+  };
+
+  const waitForEpochMicWork = async (epoch: number): Promise<void> => {
+    while (!isCanceled(epoch)) {
+      const sameEpoch: Promise<void>[] = [];
+      for (const op of activeMicWork.values()) {
+        if (op.epoch === epoch) sameEpoch.push(op.settled);
+      }
+      if (sameEpoch.length === 0) return;
+      await waitUnlessCanceled(
+        Promise.all(sameEpoch).then(() => {}),
+        epoch,
+      );
     }
   };
 
@@ -254,33 +343,26 @@ function createBridgedMediaManager(
   const claimLifecycle = (epoch: number) => {
     isolateSuspendedInner();
     const inner = activeInner;
-    const existing = inFlightInners.get(inner);
-    if (existing) {
-      existing.epoch = epoch;
-      existing.count += 1;
-    } else {
-      let resolve!: () => void;
-      const settled = new Promise<void>((r) => {
-        resolve = r;
-      });
-      inFlightInners.set(inner, { epoch, count: 1, settled, resolve });
-    }
+    let resolve!: () => void;
+    const settled = new Promise<void>((r) => {
+      resolve = r;
+    });
+    const entry: InFlightLifecycle = { epoch, inner, settled, resolve };
+    inFlightInners.set(inner, entry);
     return {
       token: ++lifecycleToken,
       inner,
+      entry,
       recorder: readRecorderOf(inner),
       player: readPlayerOf(inner),
     };
   };
 
-  const releaseLifecycle = (inner: WavMediaManager) => {
-    const existing = inFlightInners.get(inner);
-    if (!existing) return;
-    existing.count -= 1;
-    if (existing.count <= 0) {
-      inFlightInners.delete(inner);
-      existing.resolve();
+  const releaseLifecycle = (entry: InFlightLifecycle) => {
+    if (inFlightInners.get(entry.inner) === entry) {
+      inFlightInners.delete(entry.inner);
     }
+    entry.resolve();
   };
 
   const cleanupAttempt = async (attempt: {
@@ -304,6 +386,121 @@ function createBridgedMediaManager(
     if (track) track.enabled = Boolean(Reflect.get(activeInner, "_micEnabled"));
   };
 
+  const updateMicInternal = (
+    micId: string,
+    isAutoFallback: boolean,
+    expectedSelectionGen: number,
+  ): Promise<void> => {
+    // WavMediaManager.updateMic has no queue or teardown guard: if disconnect() runs while
+    // getUserMedia is awaiting, begin() finishes later and leaves capture live after hangup.
+    const epoch = disconnectEpoch;
+    const runUpdateOn = async (
+      target: WavMediaManager,
+      recorder: InternalWavRecorder | undefined,
+      cleanupOnAbort: (reason: "canceled" | "failed") => Promise<void>,
+    ) => {
+      if (micId === "" && recorder && "deviceSelection" in recorder) {
+        // WavRecorder.end() preserves deviceSelection across calls so begin("") leaves selectedMic
+        // pointing at a prior call's hardware device until listDevices() settles:
+        // https://github.com/pipecat-ai/pipecat-client-web-transports/blob/main/lib/src/wavtools/lib/wav_recorder.js
+        recorder.deviceSelection = null;
+      }
+      let beginError: unknown;
+      const origBegin = recorder?.begin;
+      const hadOwnBegin = recorder ? Object.hasOwn(recorder, "begin") : false;
+      if (recorder && typeof origBegin === "function") {
+        recorder.begin = async function (this: unknown, ...args: [string?]) {
+          try {
+            return await origBegin.apply(this, args);
+          } catch (error) {
+            beginError = error;
+            throw error;
+          }
+        };
+      }
+      // WavMediaManager.updateMic catches and discards WavRecorder.begin() rejections:
+      // https://github.com/pipecat-ai/pipecat-client-web-transports/blob/main/lib/src/media-mgmt/mediaManager.ts
+      try {
+        await proto.updateMic.call(target, micId);
+      } finally {
+        if (recorder && origBegin !== undefined) {
+          if (hadOwnBegin) recorder.begin = origBegin;
+          else Reflect.deleteProperty(recorder, "begin");
+        }
+      }
+      if (isCanceled(epoch) || target !== activeInner) {
+        await cleanupOnAbort("canceled");
+        return;
+      }
+      if (beginError !== undefined) {
+        await cleanupOnAbort("failed");
+        throw beginError;
+      }
+      const track = proto.tracks.call(target).local.audio;
+      if (!track || track.readyState === "ended") {
+        await cleanupOnAbort("failed");
+        throw new Error("Could not start media stream");
+      }
+      syncMicTrack();
+      // While muted, WavMediaManager.updateMic skips _startRecording (and with it onTrackStarted),
+      // leaving the previous stopped track on RTCRtpSender.
+      if (!overrides.isMicEnabled) onLocalAudioTrack(track);
+    };
+    if (preConnectMicDepth > 0) {
+      // Keep pre-connect capture off pendingMicOp so an unanswered permission prompt never
+      // blocks disconnect() or an awaited redial; claimLifecycle() isolates and cleans it up.
+      return (async () => {
+        if (isCanceled(epoch)) return;
+        isolateSuspendedInner();
+        let existing = inFlightInners.get(activeInner);
+        while (!isCanceled(epoch) && existing !== undefined && existing.epoch === epoch) {
+          await waitUnlessCanceled(existing.settled, epoch);
+          isolateSuspendedInner();
+          existing = inFlightInners.get(activeInner);
+        }
+        if (isCanceled(epoch)) return;
+        const attempt = claimLifecycle(epoch);
+        try {
+          await runUpdateOn(attempt.inner, attempt.recorder, () => cleanupAttempt(attempt));
+        } finally {
+          releaseLifecycle(attempt.entry);
+        }
+      })();
+    }
+    const run = async () => {
+      if (isCanceled(epoch)) return;
+      if (isAutoFallback && explicitMicSelectionGen !== expectedSelectionGen) return;
+      isolateSuspendedInner();
+      let existing = inFlightInners.get(activeInner);
+      while (!isCanceled(epoch) && existing !== undefined && existing.epoch === epoch) {
+        await waitUnlessCanceled(existing.settled, epoch);
+        isolateSuspendedInner();
+        existing = inFlightInners.get(activeInner);
+      }
+      if (isCanceled(epoch)) return;
+      if (isAutoFallback && explicitMicSelectionGen !== expectedSelectionGen) return;
+      const target = activeInner;
+      const recorder = readRecorderOf(target);
+      await runUpdateOn(target, recorder, async (reason) => {
+        if (target !== activeInner || readRecorderOf(target) === recorder) {
+          // WavMediaManager.initialize() registers device-change and device-error listeners once
+          // per call; keep them attached when a live swap fails so retries and unplug fallback still fire:
+          // https://github.com/pipecat-ai/pipecat-client-web-transports/blob/main/lib/src/media-mgmt/mediaManager.ts
+          await stopRecorderInstance(readRecorderOf(target) ?? recorder, undefined, undefined, {
+            keepDeviceListeners:
+              reason === "failed" && target === activeInner && !isCanceled(epoch),
+          });
+        }
+      });
+    };
+    const next = trackMicWork(epoch, () => pendingMicOp.then(run, run));
+    pendingMicOp = next.then(
+      () => {},
+      () => {},
+    );
+    return next;
+  };
+
   const overrides: BridgedMediaManager = {
     get isDisconnecting() {
       return activeDisconnects > 0 || markedEpoch !== null;
@@ -313,7 +510,7 @@ function createBridgedMediaManager(
     },
     markDisconnecting() {
       if (markedEpoch === null) {
-        disconnectEpoch += 1;
+        bumpDisconnectEpoch();
         markedEpoch = disconnectEpoch;
       }
     },
@@ -337,10 +534,18 @@ function createBridgedMediaManager(
     },
     async initialize() {
       const epoch = disconnectEpoch;
-      const canceled = () =>
-        epoch !== disconnectEpoch || activeDisconnects > 0 || markedEpoch !== null;
-      if (canceled()) {
-        throw new DOMException("Connection cancelled", "AbortError");
+      if (isCanceled(epoch)) {
+        throw connectionCancelledError();
+      }
+      isolateSuspendedInner();
+      let existing = inFlightInners.get(activeInner);
+      while (!isCanceled(epoch) && existing !== undefined && existing.epoch === epoch) {
+        await waitUnlessCanceled(existing.settled, epoch);
+        isolateSuspendedInner();
+        existing = inFlightInners.get(activeInner);
+      }
+      if (isCanceled(epoch)) {
+        throw connectionCancelledError();
       }
       const attempt = claimLifecycle(epoch);
       try {
@@ -358,23 +563,40 @@ function createBridgedMediaManager(
           await cleanupAttempt(attempt);
           throw error;
         }
-        if (canceled() || attempt.inner !== activeInner) {
+        if (isCanceled(epoch) || attempt.inner !== activeInner) {
           await cleanupAttempt(attempt);
-          throw new DOMException("Connection cancelled", "AbortError");
+          throw connectionCancelledError();
         }
         // WavMediaManager leaves getUserMedia's track enabled when _micEnabled is false, which sends
         // live audio over RTCRtpSender because Eidolon's server ignores signalling trackStatus frames.
         syncMicTrack();
       } finally {
-        releaseLifecycle(attempt.inner);
+        releaseLifecycle(attempt.entry);
       }
     },
     async connect() {
       const epoch = disconnectEpoch;
-      const canceled = () =>
-        epoch !== disconnectEpoch || activeDisconnects > 0 || markedEpoch !== null;
-      if (canceled()) {
-        throw new DOMException("Connection cancelled", "AbortError");
+      if (isCanceled(epoch)) {
+        throw connectionCancelledError();
+      }
+      if (hasEpochMicWork(epoch)) {
+        await waitForEpochMicWork(epoch);
+        if (isCanceled(epoch)) {
+          throw connectionCancelledError();
+        }
+      }
+      isolateSuspendedInner();
+      let existing = inFlightInners.get(activeInner);
+      while (!isCanceled(epoch) && existing !== undefined && existing.epoch === epoch) {
+        await waitUnlessCanceled(existing.settled, epoch);
+        if (hasEpochMicWork(epoch)) {
+          await waitForEpochMicWork(epoch);
+        }
+        isolateSuspendedInner();
+        existing = inFlightInners.get(activeInner);
+      }
+      if (isCanceled(epoch)) {
+        throw connectionCancelledError();
       }
       const attempt = claimLifecycle(epoch);
       try {
@@ -385,111 +607,21 @@ function createBridgedMediaManager(
           await cleanupAttempt(attempt);
           throw error;
         }
-        if (canceled() || attempt.inner !== activeInner) {
+        if (isCanceled(epoch) || attempt.inner !== activeInner) {
           await cleanupAttempt(attempt);
-          throw new DOMException("Connection cancelled", "AbortError");
+          throw connectionCancelledError();
         }
         syncMicTrack();
       } finally {
-        releaseLifecycle(attempt.inner);
+        releaseLifecycle(attempt.entry);
       }
     },
     updateMic(micId: string) {
-      // WavMediaManager.updateMic has no queue or teardown guard: if disconnect() runs while
-      // getUserMedia is awaiting, begin() finishes later and leaves capture live after hangup.
-      const epoch = disconnectEpoch;
-      const canceled = () =>
-        epoch !== disconnectEpoch || activeDisconnects > 0 || markedEpoch !== null;
-      const runUpdateOn = async (
-        target: WavMediaManager,
-        recorder: InternalWavRecorder | undefined,
-        cleanupOnAbort: (reason: "canceled" | "failed") => Promise<void>,
-      ) => {
-        if (micId === "" && recorder && "deviceSelection" in recorder) {
-          // WavRecorder.end() preserves deviceSelection across calls so begin("") leaves selectedMic
-          // pointing at a prior call's hardware device until listDevices() settles:
-          // https://github.com/pipecat-ai/pipecat-client-web-transports/blob/main/lib/src/wavtools/lib/wav_recorder.js
-          recorder.deviceSelection = null;
-        }
-        let beginError: unknown;
-        const origBegin = recorder?.begin;
-        const hadOwnBegin = recorder ? Object.hasOwn(recorder, "begin") : false;
-        if (recorder && typeof origBegin === "function") {
-          recorder.begin = async function (this: unknown, ...args: [string?]) {
-            try {
-              return await origBegin.apply(this, args);
-            } catch (error) {
-              beginError = error;
-              throw error;
-            }
-          };
-        }
-        // WavMediaManager.updateMic catches and discards WavRecorder.begin() rejections:
-        // https://github.com/pipecat-ai/pipecat-client-web-transports/blob/main/lib/src/media-mgmt/mediaManager.ts
-        try {
-          await proto.updateMic.call(target, micId);
-        } finally {
-          if (recorder && origBegin !== undefined) {
-            if (hadOwnBegin) recorder.begin = origBegin;
-            else Reflect.deleteProperty(recorder, "begin");
-          }
-        }
-        if (canceled() || target !== activeInner) {
-          await cleanupOnAbort("canceled");
-          return;
-        }
-        if (beginError !== undefined) {
-          await cleanupOnAbort("failed");
-          throw beginError;
-        }
-        const track = proto.tracks.call(target).local.audio;
-        if (!track || track.readyState === "ended") {
-          await cleanupOnAbort("failed");
-          throw new Error("Could not start media stream");
-        }
-        syncMicTrack();
-        // While muted, WavMediaManager.updateMic skips _startRecording (and with it onTrackStarted),
-        // leaving the previous stopped track on RTCRtpSender.
-        if (!overrides.isMicEnabled) onLocalAudioTrack(track);
-      };
-      if (preConnectMicDepth > 0) {
-        // Keep pre-connect capture off pendingMicOp so an unanswered permission prompt never
-        // blocks disconnect() or an awaited redial; claimLifecycle() isolates and cleans it up.
-        return (async () => {
-          if (canceled()) return;
-          const attempt = claimLifecycle(epoch);
-          try {
-            await runUpdateOn(attempt.inner, attempt.recorder, () => cleanupAttempt(attempt));
-          } finally {
-            releaseLifecycle(attempt.inner);
-          }
-        })();
-      }
-      const run = async () => {
-        if (canceled()) return;
-        isolateSuspendedInner();
-        const target = activeInner;
-        const recorder = readRecorderOf(target);
-        await runUpdateOn(target, recorder, async (reason) => {
-          if (target !== activeInner || readRecorderOf(target) === recorder) {
-            // WavMediaManager.initialize() registers device-change and device-error listeners once
-            // per call; keep them attached when a live swap fails so retries and unplug fallback still fire:
-            // https://github.com/pipecat-ai/pipecat-client-web-transports/blob/main/lib/src/media-mgmt/mediaManager.ts
-            await stopRecorderInstance(readRecorderOf(target) ?? recorder, undefined, undefined, {
-              keepDeviceListeners: reason === "failed" && target === activeInner && !canceled(),
-            });
-          }
-        });
-      };
-      const next = pendingMicOp.then(run, run);
-      pendingMicOp = next.then(
-        () => {},
-        () => {},
-      );
-      return next;
+      explicitMicSelectionGen += 1;
+      return updateMicInternal(micId, false, explicitMicSelectionGen);
     },
     async disconnect() {
-      if (markedEpoch === null) disconnectEpoch += 1;
+      if (markedEpoch === null) bumpDisconnectEpoch();
       markedEpoch = null;
       activeDisconnects += 1;
       try {
@@ -516,46 +648,55 @@ function createBridgedMediaManager(
     // before _wavStreamPlayer.connect() settles, and its unplug fallback invokes `this.updateMic("")`
     // fire-and-forget without awaiting:
     // https://github.com/pipecat-ai/pipecat-client-web-transports/blob/main/lib/src/media-mgmt/mediaManager.ts
-    Reflect.set(inner, "updateMic", async (micId: string) => {
-      if (
-        inner !== activeInner ||
-        overrides.isDisconnecting ||
-        sessionEpochs.get(inner) !== disconnectEpoch
-      ) {
-        return;
-      }
+    Reflect.set(inner, "updateMic", (micId: string) => {
       const fallbackEpoch = disconnectEpoch;
-      let inflight = inFlightInners.get(inner);
-      while (inflight && inflight.epoch === fallbackEpoch) {
-        await inflight.settled;
-        inflight = inFlightInners.get(inner);
-      }
       if (
         inner !== activeInner ||
-        overrides.isDisconnecting ||
-        disconnectEpoch !== fallbackEpoch ||
+        isCanceled(fallbackEpoch) ||
         sessionEpochs.get(inner) !== fallbackEpoch
       ) {
-        return;
+        return Promise.resolve();
       }
-      try {
-        await overrides.updateMic(micId);
-        if (
-          inner === activeInner &&
-          !overrides.isDisconnecting &&
-          disconnectEpoch === fallbackEpoch
+      const selectionGen = explicitMicSelectionGen;
+      return trackMicWork(fallbackEpoch, async () => {
+        let inflight = inFlightInners.get(inner);
+        while (
+          !isCanceled(fallbackEpoch) &&
+          inflight !== undefined &&
+          inflight.epoch === fallbackEpoch
         ) {
-          onAutoMicFallback?.(micId || SYSTEM_DEFAULT_MIC_ID);
+          await waitUnlessCanceled(inflight.settled, fallbackEpoch);
+          inflight = inFlightInners.get(inner);
         }
-      } catch {
         if (
-          inner === activeInner &&
-          !overrides.isDisconnecting &&
-          disconnectEpoch === fallbackEpoch
+          inner !== activeInner ||
+          isCanceled(fallbackEpoch) ||
+          sessionEpochs.get(inner) !== fallbackEpoch ||
+          explicitMicSelectionGen !== selectionGen
         ) {
-          onAutoMicFallback?.(null);
+          return;
         }
-      }
+        try {
+          await updateMicInternal(micId, true, selectionGen);
+          if (
+            inner === activeInner &&
+            !isCanceled(fallbackEpoch) &&
+            sessionEpochs.get(inner) === fallbackEpoch &&
+            explicitMicSelectionGen === selectionGen
+          ) {
+            onAutoMicFallback?.(micId || SYSTEM_DEFAULT_MIC_ID);
+          }
+        } catch {
+          if (
+            inner === activeInner &&
+            !isCanceled(fallbackEpoch) &&
+            sessionEpochs.get(inner) === fallbackEpoch &&
+            explicitMicSelectionGen === selectionGen
+          ) {
+            onAutoMicFallback?.(null);
+          }
+        }
+      });
     });
   }
   bindInner(raw);
@@ -829,7 +970,7 @@ export class EidolonClient {
           if (this.#connectEpoch === this.#lastDisconnectEpoch) {
             await this.#teardownStaleInit();
           }
-          throw new DOMException("Connection cancelled", "AbortError");
+          throw connectionCancelledError();
         }
       }
       // PipecatClient.connect() awaits initDevices() outside its inner try/catch, leaving the
@@ -847,16 +988,9 @@ export class EidolonClient {
               this.#activeConnectAttempt !== null &&
               this.#client.state === "initializing"
             ) {
-              (
-                this.#client as unknown as {
-                  _setMediaState?: (patch: Partial<MediaState>) => void;
-                }
-              )._setMediaState?.({
-                mic: { state: "initializing" },
-                cam: { state: "initializing" },
-              });
+              resetInitializingMediaState(this.#client);
             }
-            throw new DOMException("Connection cancelled", "AbortError");
+            throw connectionCancelledError();
           }
           this.#activeConnectAttempt = null;
           await this.disconnect();
@@ -866,23 +1000,16 @@ export class EidolonClient {
           if (this.#connectEpoch === this.#lastDisconnectEpoch) {
             await this.#teardownStaleInit();
           }
-          throw new DOMException("Connection cancelled", "AbortError");
+          throw connectionCancelledError();
         }
       }
-      const origNeedsInit = this.#client.needsInit;
-      Reflect.set(this.#client, "needsInit", () => false);
-      let pending: ReturnType<PipecatClient["connect"]>;
-      try {
-        pending = this.#client.connect(requestParams);
-      } finally {
-        Reflect.set(this.#client, "needsInit", origNeedsInit);
-      }
+      const pending = connectWithoutAutoInit(this.#client, requestParams);
       let rejectCancel!: (reason: unknown) => void;
       const cancelled = new Promise<never>((_, reject) => {
         rejectCancel = reject;
       });
       const cancel = () => {
-        rejectCancel(new DOMException("Connection cancelled", "AbortError"));
+        rejectCancel(connectionCancelledError());
       };
       this.#cancelTransportConnect = cancel;
       void pending.catch(() => {});
@@ -913,11 +1040,7 @@ export class EidolonClient {
     this.#attemptedPreConnectMicId = null;
     const cancelTransport = this.#cancelTransportConnect;
     this.#cancelTransportConnect = null;
-    (
-      this.#client as unknown as {
-        _resolveLingeringInitializing?: (fallback: DeviceStatus) => void;
-      }
-    )._resolveLingeringInitializing?.({ state: "uninitialized" });
+    resolveLingeringInitializing(this.#client, { state: "uninitialized" });
     this.#mediaManager.markDisconnecting();
     try {
       await this.#client.disconnect();

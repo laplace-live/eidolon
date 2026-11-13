@@ -39,22 +39,25 @@ export function readPeerConnection(transport: SmallWebRTCTransport): RTCPeerConn
 export async function gatherNetworkInfo(pc: RTCPeerConnection): Promise<NetworkInfo | null> {
   const stats = await pc.getStats();
 
-  let selectedPairId: string | undefined;
+  let transportChecked = false;
   let pair: ExtendedCandidatePairStats | undefined;
   for (const stat of stats.values()) {
-    if (!selectedPairId && stat.type === "transport") {
+    if (!transportChecked && stat.type === "transport") {
       const transportStat: RTCTransportStats = stat;
       if (typeof transportStat.selectedCandidatePairId === "string") {
-        selectedPairId = transportStat.selectedCandidatePairId;
+        transportChecked = true;
+        const fromTransport: ExtendedCandidatePairStats | undefined = stats.get(
+          transportStat.selectedCandidatePairId,
+        );
+        if (fromTransport !== undefined) {
+          pair = fromTransport;
+          break;
+        }
       }
     } else if (!pair && stat.type === "candidate-pair" && stat.state === "succeeded") {
       const candidatePair: ExtendedCandidatePairStats = stat;
       if (candidatePair.nominated || candidatePair.selected) pair = candidatePair;
     }
-  }
-  if (selectedPairId !== undefined) {
-    const fromTransport: ExtendedCandidatePairStats | undefined = stats.get(selectedPairId);
-    if (fromTransport !== undefined) pair = fromTransport;
   }
   if (!pair) return null;
 

@@ -82,8 +82,9 @@ export function attachmentExtension(mime: string): string | null {
 
 /** Whether an attachment of type `mime` is an image or audio; null for a type not taken. */
 export function attachmentKind(mime: string): Attachment["kind"] | null {
-  if (attachmentExtension(mime) === null) return null;
-  return essence(mime).startsWith("audio/") ? "audio" : "image";
+  const type = essence(mime);
+  if (!Object.hasOwn(ATTACHMENT_MIME_TO_EXT, type)) return null;
+  return type.startsWith("audio/") ? "audio" : "image";
 }
 
 /** Whether `name` is shaped as an attachment's, so it is safe in a URL path. */
@@ -123,6 +124,13 @@ function isOwnedByPersona(event: JsonObject): boolean {
   return isString(event.persona) && isString(event.turn);
 }
 
+const MODALITIES = ["text", "voice", "call"] as const;
+const CUT_OFFS = ["length", "refusal"] as const;
+const CONTEXT_ROLES = ["system", "user", "developer"] as const;
+const TOOL_STAGES = ["started", "final", "cancelled"] as const;
+const DECISION_SOURCES = ["single", "mention", "model", "fallback"] as const;
+const DECISION_MODES = ["text", "voice"] as const;
+
 /** Whether `value` is an event of a type this client knows, with the fields it reads well formed. */
 export function isChatEvent(value: unknown): value is ChatEvent {
   if (!isWireEvent(value)) return false;
@@ -132,17 +140,17 @@ export function isChatEvent(value: unknown): value is ChatEvent {
         isString(value.id) &&
         isSpeaker(value.speaker) &&
         isString(value.text) &&
-        (value.modality === undefined || isOneOf(value.modality, ["text", "voice", "call"])) &&
+        (value.modality === undefined || isOneOf(value.modality, MODALITIES)) &&
         (value.attachments === undefined ||
           (Array.isArray(value.attachments) && value.attachments.every(isAttachment))) &&
         (value.interrupted === undefined || typeof value.interrupted === "boolean") &&
-        (value.cutOff === undefined || isOneOf(value.cutOff, ["length", "refusal"]))
+        (value.cutOff === undefined || isOneOf(value.cutOff, CUT_OFFS))
       );
     case "context":
       return (
         isOwnedByPersona(value) &&
         isFiniteNumber(value.position) &&
-        isOneOf(value.role, ["system", "user", "developer"]) &&
+        isOneOf(value.role, CONTEXT_ROLES) &&
         isString(value.content)
       );
     case "context-removed":
@@ -161,7 +169,7 @@ export function isChatEvent(value: unknown): value is ChatEvent {
         isOwnedByPersona(value) &&
         isString(value.callId) &&
         isJsonObject(value.result) &&
-        (value.stage === undefined || isOneOf(value.stage, ["started", "final", "cancelled"]))
+        (value.stage === undefined || isOneOf(value.stage, TOOL_STAGES))
       );
     case "kickoff":
       return isOwnedByPersona(value) && isString(value.content);
@@ -181,13 +189,11 @@ export function isChatEvent(value: unknown): value is ChatEvent {
     case "decision":
       return (
         isFiniteNumber(value.after) &&
-        isOneOf(value.source, ["single", "mention", "model", "fallback"]) &&
+        isOneOf(value.source, DECISION_SOURCES) &&
         Array.isArray(value.replies) &&
         value.replies.every(
           (reply) =>
-            isJsonObject(reply) &&
-            isString(reply.persona) &&
-            isOneOf(reply.mode, ["text", "voice"]),
+            isJsonObject(reply) && isString(reply.persona) && isOneOf(reply.mode, DECISION_MODES),
         ) &&
         (value.scores === undefined ||
           (isJsonObject(value.scores) && Object.values(value.scores).every(isFiniteNumber)))
@@ -303,6 +309,7 @@ function firstCodePoint(text: string): string | undefined {
 
 /** The space two pieces of text need between them: none beside whitespace or CJK. */
 export function separator(left: string, right: string): "" | " " {
+  if (left === "" || right === "") return "";
   const before = lastCodePoint(left);
   const after = firstCodePoint(right);
   if (before === undefined || after === undefined) return "";

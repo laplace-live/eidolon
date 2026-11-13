@@ -70,7 +70,7 @@ export function summarize(header: ChatHeader, events: readonly WireEvent[]): Cha
 }
 
 function isSettingsEvent(event: WireEvent): event is ChatEventOf<"settings"> {
-  return isChatEvent(event) && event.type === "settings";
+  return event.type === "settings" && isChatEvent(event);
 }
 
 /** The chat's chain limit: the last `settings` event's, else `DEFAULT_CHAIN_LIMIT`. */
@@ -93,12 +93,14 @@ export function replyModeOf(events: readonly WireEvent[]): ReplyMode | null {
   );
 }
 
+function isMessageEvent(event: WireEvent): event is ChatEventOf<"message"> {
+  return event.type === "message" && isChatEvent(event);
+}
+
 /** Her messages' attachments in `events`, which the browser fetches before they expire. */
 export function herAttachments(events: readonly WireEvent[]): Attachment[] {
   return events.flatMap((event) =>
-    isChatEvent(event) && event.type === "message" && event.speaker.kind === "persona"
-      ? (event.attachments ?? [])
-      : [],
+    isMessageEvent(event) && event.speaker.kind === "persona" ? (event.attachments ?? []) : [],
   );
 }
 

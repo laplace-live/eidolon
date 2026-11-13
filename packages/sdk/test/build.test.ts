@@ -185,7 +185,6 @@ describe("@laplace.live/eidolon-sdk package build", () => {
     ];
     const dir = mkdtempSync(join(tmpdir(), "eidolon-sdk-boundary-"));
     try {
-      copyFileSync(join(ROOT, "biome.json"), join(dir, "biome.json"));
       const biome = join(ROOT, "node_modules/.bin/biome");
       const results = await Promise.all(
         cases.map(async ([rel, code, shouldFail], index) => {

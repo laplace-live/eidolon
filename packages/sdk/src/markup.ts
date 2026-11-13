@@ -192,3 +192,14 @@ export function stripCues(text: string): string {
 export function trimTrailingPartialCue(text: string): string {
   return text.replace(TRAILING_PARTIAL_CUE, "");
 }
+
+/** Advances `index` to the end of any `[cue]` or `<tag>` span it lands strictly inside. */
+export function snapPastMarkupSpan(text: string, index: number): number {
+  for (const match of text.matchAll(CUE)) {
+    const start = match.index ?? 0;
+    const end = start + match[0].length;
+    if (start < index && index < end) return end;
+    if (start >= index) break;
+  }
+  return index;
+}

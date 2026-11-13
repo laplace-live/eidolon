@@ -44,6 +44,19 @@ export function runLiveMicSwap(
     });
 }
 
+function sameMics(a: readonly MediaDeviceInfo[], b: readonly MediaDeviceInfo[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every(
+      (mic, i) =>
+        mic.deviceId === b[i]?.deviceId &&
+        mic.label === b[i]?.label &&
+        mic.groupId === b[i]?.groupId &&
+        mic.kind === b[i]?.kind,
+    )
+  );
+}
+
 /** Enumerates microphones without triggering a permission prompt and swaps live only mid-call. */
 export function useEidolonMicDevices({
   persistedMicId,
@@ -55,19 +68,11 @@ export function useEidolonMicDevices({
   const [mics, setMics] = useState<readonly MediaDeviceInfo[]>([]);
   const [localMicId, setLocalMicId] = useState<string | null>(null);
   const [swapError, setSwapError] = useState<Error | null>(null);
-  const mountedRef = useRef(true);
   const activeClientRef = useRef(client);
   const micsRef = useRef(mics);
   const pendingPreConnectMicRef = useRef<string | null>(null);
   const swapGenerationRef = useRef(0);
   const inFlightSwapsRef = useRef(new Set<symbol>());
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
 
   useEffect(() => {
     micsRef.current = mics;
@@ -78,6 +83,22 @@ export function useEidolonMicDevices({
   useEffect(() => {
     client?.setPreferredMic(effectiveMicId);
   }, [client, effectiveMicId]);
+
+  const startTrackedSwap = useCallback(
+    (targetClient: NonNullable<typeof client>, deviceId: string, generation: number) => {
+      const token = Symbol();
+      inFlightSwapsRef.current.add(token);
+      runLiveMicSwap(targetClient, deviceId, {
+        isCurrent: () =>
+          activeClientRef.current === targetClient && swapGenerationRef.current === generation,
+        onError: setSwapError,
+        onSettled: () => {
+          inFlightSwapsRef.current.delete(token);
+        },
+      });
+    },
+    [],
+  );
 
   useEffect(() => {
     activeClientRef.current = client;
@@ -104,19 +125,7 @@ export function useEidolonMicDevices({
       const currentApplied =
         client.appliedMicId ?? (client.selectedMic.deviceId || SYSTEM_DEFAULT_MIC_ID);
       if (currentApplied === pending) return;
-      const generation = ++swapGenerationRef.current;
-      const token = Symbol();
-      inFlightSwapsRef.current.add(token);
-      runLiveMicSwap(client, pending, {
-        isCurrent: () =>
-          mountedRef.current &&
-          activeClientRef.current === client &&
-          swapGenerationRef.current === generation,
-        onError: setSwapError,
-        onSettled: () => {
-          inFlightSwapsRef.current.delete(token);
-        },
-      });
+      startTrackedSwap(client, pending, ++swapGenerationRef.current);
     };
     const onDisconnected = () => {
       pendingPreConnectMicRef.current = null;
@@ -127,24 +136,25 @@ export function useEidolonMicDevices({
     const offDeviceError = client?.on("deviceError", (error) => {
       if (inFlightSwapsRef.current.size > 0) setSwapError(error);
     });
+    const teardownSwapListeners = () => {
+      activeClientRef.current = null;
+      pendingPreConnectMicRef.current = null;
+      swapGenerationRef.current += 1;
+      inFlightSwapsRef.current.clear();
+      offResetConnected?.();
+      offResetDisconnected?.();
+      offDeviceError?.();
+    };
 
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.enumerateDevices) {
-      return () => {
-        activeClientRef.current = null;
-        pendingPreConnectMicRef.current = null;
-        swapGenerationRef.current += 1;
-        inFlightSwapsRef.current.clear();
-        offResetConnected?.();
-        offResetDisconnected?.();
-        offDeviceError?.();
-      };
+      return teardownSwapListeners;
     }
     let cancelled = false;
 
     const refresh = async () => {
       try {
         const next = await enumerateAudioInputs(navigator.mediaDevices);
-        if (!cancelled) setMics(next);
+        if (!cancelled) setMics((prev) => (sameMics(prev, next) ? prev : next));
       } catch {
         // Non-HTTPS or blocked mediaDevices leaves `mics` empty.
       }
@@ -163,19 +173,13 @@ export function useEidolonMicDevices({
     });
     return () => {
       cancelled = true;
-      activeClientRef.current = null;
-      pendingPreConnectMicRef.current = null;
-      swapGenerationRef.current += 1;
-      inFlightSwapsRef.current.clear();
+      teardownSwapListeners();
       navigator.mediaDevices.removeEventListener("devicechange", onDeviceChange);
-      offResetConnected?.();
-      offResetDisconnected?.();
-      offDeviceError?.();
       offConnected?.();
       offAvailable?.();
       offTrack?.();
     };
-  }, [client]);
+  }, [client, startTrackedSwap]);
 
   const selectedMicId = useMemo(
     () => resolveSelectedMicId(mics, effectiveMicId),
@@ -191,20 +195,9 @@ export function useEidolonMicDevices({
       if (client === null) return;
       client.setPreferredMic(deviceId);
       pendingPreConnectMicRef.current = LIVE_SWAP_STATES.has(client.state) ? null : deviceId;
-      const token = Symbol();
-      inFlightSwapsRef.current.add(token);
-      runLiveMicSwap(client, deviceId, {
-        isCurrent: () =>
-          mountedRef.current &&
-          activeClientRef.current === client &&
-          swapGenerationRef.current === generation,
-        onError: setSwapError,
-        onSettled: () => {
-          inFlightSwapsRef.current.delete(token);
-        },
-      });
+      startTrackedSwap(client, deviceId, generation);
     },
-    [client, onPersistMicId],
+    [client, onPersistMicId, startTrackedSwap],
   );
 
   return useMemo(

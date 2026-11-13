@@ -63,9 +63,9 @@ function settles(live: LiveTurn, events: readonly WireEvent[]): boolean {
   const afterSeq = live.afterSeq ?? 0;
   return events.some(
     (event) =>
+      ((event.type === "message" && event.seq > afterSeq) || event.type === "turn-failed") &&
       isChatEvent(event) &&
       ((event.type === "message" &&
-        event.seq > afterSeq &&
         event.speaker.kind === "persona" &&
         event.speaker.id === live.persona) ||
         (event.type === "turn-failed" && event.turn === live.turn)),
@@ -76,10 +76,19 @@ function settleLiveTurns(
   live: readonly LiveTurn[],
   incoming: readonly WireEvent[],
 ): readonly LiveTurn[] {
-  if (!live.some((turn) => !turn.settled && settles(turn, incoming))) return live;
-  return live.map((turn) =>
-    turn.settled || !settles(turn, incoming) ? turn : { ...turn, settled: true },
-  );
+  let changed = false;
+  const next = live.map((turn) => {
+    if (turn.settled || !settles(turn, incoming)) return turn;
+    changed = true;
+    return { ...turn, settled: true };
+  });
+  return changed ? next : live;
+}
+
+function receiveEvents(state: ChatViewState, incoming: readonly WireEvent[]): ChatViewState {
+  const events = mergeEvents(state.events, incoming);
+  const live = settleLiveTurns(state.live, incoming);
+  return events === state.events && live === state.live ? state : { ...state, events, live };
 }
 
 function updateLive(
@@ -121,19 +130,18 @@ function applyLine(state: ChatViewState, line: ChatStreamLine): ChatViewState {
         live.settled || line.text === "" ? live : { ...live, text: live.text + line.text },
       );
     case "tool":
-      return updateLive(state, line.turn, (live) => ({
-        ...live,
-        tools: live.tools.some((tool) => tool.name === line.name)
-          ? live.tools.map((tool) =>
-              tool.name === line.name ? { name: line.name, state: line.state } : tool,
-            )
-          : [...live.tools, { name: line.name, state: line.state }],
-      }));
-    case "events": {
-      const events = mergeEvents(state.events, line.events);
-      const live = settleLiveTurns(state.live, line.events);
-      return events === state.events && live === state.live ? state : { ...state, events, live };
-    }
+      return updateLive(state, line.turn, (live) => {
+        const idx = live.tools.findIndex((tool) => tool.name === line.name);
+        if (idx === -1) {
+          return { ...live, tools: [...live.tools, { name: line.name, state: line.state }] };
+        }
+        if (live.tools[idx]?.state === line.state) return live;
+        const tools = [...live.tools];
+        tools[idx] = { name: line.name, state: line.state };
+        return { ...live, tools };
+      });
+    case "events":
+      return receiveEvents(state, line.events);
     case "ended":
       return state.live.some((live) => live.turn === line.turn)
         ? { ...state, live: state.live.filter((live) => live.turn !== line.turn) }
@@ -146,11 +154,8 @@ function applyLine(state: ChatViewState, line: ChatStreamLine): ChatViewState {
 /** Reducer for one chat's stored events and its still-streaming turns. */
 export function chatViewReducer(state: ChatViewState, action: ChatViewAction): ChatViewState {
   switch (action.type) {
-    case "loaded": {
-      const events = mergeEvents(state.events, action.events);
-      const live = settleLiveTurns(state.live, action.events);
-      return events === state.events && live === state.live ? state : { ...state, events, live };
-    }
+    case "loaded":
+      return receiveEvents(state, action.events);
     case "line":
       return applyLine(state, action.line);
     case "closed":
@@ -212,6 +217,13 @@ export type ChatItem =
 
 type MessageItem = Extract<ChatItem, { readonly kind: "message" }>;
 
+const RENDERED_EVENT_TYPES: ReadonlySet<string> = new Set([
+  "message",
+  "turn-failed",
+  "call-started",
+  "call-ended",
+]);
+
 /**
  * The rows a chat's stored events show, in log order: messages, failures and call marks, a call's
  * start only until it ends. Hidden events and empty messages are omitted.
@@ -221,7 +233,7 @@ export function eventItems(events: readonly WireEvent[]): ChatItem[] {
   const calls = new Map<string, { readonly persona: ParticipantId; readonly at: number }>();
   const ended = new Set<string>();
   for (const event of events) {
-    if (!isChatEvent(event)) continue;
+    if (!RENDERED_EVENT_TYPES.has(event.type) || !isChatEvent(event)) continue;
     const key = `seq-${event.seq}`;
     const { seq, at } = event;
     switch (event.type) {

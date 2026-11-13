@@ -15,6 +15,7 @@ import {
   isRateLimitCallError,
   type LocalChatOfferRequestData,
   listMemories,
+  type NetworkInfo,
   newChatHeader,
   normalizeDeviceErrorReason,
   parseBotReadyData,
@@ -42,6 +43,7 @@ import {
   stepConversation,
   useEidolonConversation,
   useEidolonMicDevices,
+  useEidolonNetworkInfo,
 } from "../src/react/index.ts";
 import { runLiveMicSwap } from "../src/react/mic-devices.ts";
 
@@ -1320,6 +1322,13 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
     } as MediaDeviceInfo;
 
     const openedDuringInit: string[] = [];
+    const recordedDuringInit: string[] = [];
+    let currentInitDevice = "";
+    let beginGate: Promise<void> | null = null;
+    let markBeginPending: (() => void) | null = null;
+    let fallbackBeginGate: Promise<void> | null = null;
+    let markFallbackBeginPending: (() => void) | null = null;
+    let playerConnectCalls = 0;
     let onDeviceChangeCb = null as ((devices: MediaDeviceInfo[]) => void) | null;
     let markPlayerPending!: () => void;
     let playerPending = new Promise<void>((resolve) => {
@@ -1328,18 +1337,29 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
     let finishPlayer!: () => void;
     let rejectPlayer!: (error: Error) => void;
 
+    let isRecording = false;
     origRec.processor = null;
     origRec.stream = null;
     origRec.deviceSelection = null;
-    origRec.getStatus = () => (origRec.processor === null ? "ended" : "paused");
+    origRec.getStatus = () =>
+      origRec.processor === null ? "ended" : isRecording ? "recording" : "paused";
     origRec.begin = async (deviceId?: string) => {
       if (origRec.processor) {
         throw new Error("Already connected: please call .end() to start a new session");
+      }
+      if (beginGate) {
+        markBeginPending?.();
+        await beginGate;
+      }
+      if (deviceId === "" && fallbackBeginGate) {
+        markFallbackBeginPending?.();
+        await fallbackBeginGate;
       }
       const resolved =
         deviceId === undefined
           ? ((origRec.deviceSelection as { deviceId?: string } | null)?.deviceId ?? "usb-2")
           : deviceId || "built-in";
+      currentInitDevice = resolved;
       openedDuringInit.push(resolved);
       origRec.deviceSelection = {
         deviceId: resolved,
@@ -1372,9 +1392,23 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
       for (const t of stream?.getTracks() ?? []) t.stop();
       origRec.stream = null;
       origRec.processor = null;
+      isRecording = false;
     };
-    origRec.record = async () => true;
-    origRec.pause = async () => true;
+    origRec.record = async () => {
+      if (origRec.processor === null) {
+        throw new Error("Session ended: please call .begin() first");
+      }
+      if (isRecording) {
+        throw new Error("Already recording: please call .pause() first");
+      }
+      isRecording = true;
+      recordedDuringInit.push(currentInitDevice);
+      return true;
+    };
+    origRec.pause = async () => {
+      isRecording = false;
+      return true;
+    };
     origRec.listenForDeviceChange = (cb: ((devices: MediaDeviceInfo[]) => void) | null) => {
       onDeviceChangeCb = cb;
     };
@@ -1382,6 +1416,7 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
 
     origPlay.context = null;
     origPlay.connect = () => {
+      playerConnectCalls += 1;
       markPlayerPending();
       return new Promise<boolean>((resolve, reject) => {
         finishPlayer = () => {
@@ -1454,6 +1489,111 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(openedDuringInit).toHaveLength(countBeforeReject);
     expect(origRec.stream).toBeNull();
+
+    await initClient.disconnect();
+
+    // 4. Concurrent same-epoch initDevices() calls coalesce onto a single begin() / player.connect(),
+    // and initDevices() awaits an in-flight pre-connect mic acquisition rather than double-opening begin().
+    playerPending = new Promise<void>((resolve) => {
+      markPlayerPending = resolve;
+    });
+    let releaseBeginGate!: () => void;
+    beginGate = new Promise<void>((resolve) => {
+      releaseBeginGate = resolve;
+    });
+    origRec.deviceSelection = { deviceId: "usb-2", kind: "audioinput", label: "usb-2" };
+    const opensBeforeCoalesce = openedDuringInit.length;
+    const playersBeforeCoalesce = playerConnectCalls;
+    const concurrentA = initClient.initDevices();
+    const concurrentB = initClient.initDevices();
+    releaseBeginGate();
+    beginGate = null;
+    await playerPending;
+    finishPlayer();
+    await Promise.all([concurrentA, concurrentB]);
+    expect(openedDuringInit.slice(opensBeforeCoalesce)).toEqual(["usb-2"]);
+    expect(playerConnectCalls - playersBeforeCoalesce).toBe(1);
+    await initClient.disconnect();
+    expect(origRec.stream).toBeNull();
+
+    playerPending = new Promise<void>((resolve) => {
+      markPlayerPending = resolve;
+    });
+    beginGate = new Promise<void>((resolve) => {
+      releaseBeginGate = resolve;
+    });
+    const beginPending = new Promise<void>((resolve) => {
+      markBeginPending = resolve;
+    });
+    const opensBeforePreConnectInit = openedDuringInit.length;
+    const pendingPref = initClient.applyMicPreference(SYSTEM_DEFAULT_MIC_ID);
+    await beginPending;
+    markBeginPending = null;
+    const initDuringPref = initClient.initDevices();
+    releaseBeginGate();
+    beginGate = null;
+    await playerPending;
+    finishPlayer();
+    await Promise.all([pendingPref, initDuringPref]);
+    expect(openedDuringInit.slice(opensBeforePreConnectInit)).toEqual(["built-in"]);
+    await initClient.disconnect();
+
+    // 5. connect() waits for a deferred unplug fallback's replacement begin("") before starting recording.
+    playerPending = new Promise<void>((resolve) => {
+      markPlayerPending = resolve;
+    });
+    let releaseFallbackBegin!: () => void;
+    fallbackBeginGate = new Promise<void>((resolve) => {
+      releaseFallbackBegin = resolve;
+    });
+    const fallbackBeginPending = new Promise<void>((resolve) => {
+      markFallbackBeginPending = resolve;
+    });
+    initClient.enableMic(true);
+    origRec.deviceSelection = { deviceId: "usb-2", kind: "audioinput", label: "usb-2" };
+    const opensBeforeConnectRace = openedDuringInit.length;
+    const pendingInitForConnect = initClient.initDevices();
+    await playerPending;
+    onDeviceChangeCb?.([builtInDevice]);
+    finishPlayer();
+    await pendingInitForConnect;
+
+    let connectSettled = false;
+    const pendingManagerConnect = (initManager as { connect: () => Promise<void> })
+      .connect()
+      .then(() => {
+        connectSettled = true;
+      });
+    await fallbackBeginPending;
+    expect(connectSettled).toBe(false);
+    expect(recordedDuringInit).toEqual([]);
+
+    releaseFallbackBegin();
+    fallbackBeginGate = null;
+    markFallbackBeginPending = null;
+    await pendingManagerConnect;
+    expect(connectSettled).toBe(true);
+    expect(openedDuringInit.slice(opensBeforeConnectRace)).toEqual(["usb-2", "built-in"]);
+    expect(recordedDuringInit).toEqual(["built-in"]);
+    initClient.enableMic(false);
+    await initClient.disconnect();
+
+    // 6. Explicit updateMic during a pending initDevices() supersedes a deferred unplug fallback to default.
+    playerPending = new Promise<void>((resolve) => {
+      markPlayerPending = resolve;
+    });
+    origRec.deviceSelection = { deviceId: "usb-2", kind: "audioinput", label: "usb-2" };
+    const opensBeforeSupersede = openedDuringInit.length;
+    const pendingInitSupersede = initClient.initDevices();
+    await playerPending;
+    onDeviceChangeCb?.([builtInDevice]);
+    const explicitChoice = initClient.rawTransport.updateMic("usb-3");
+    finishPlayer();
+    await Promise.all([pendingInitSupersede, explicitChoice]);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(openedDuringInit.slice(opensBeforeSupersede)).toEqual(["usb-2", "usb-3"]);
+    expect((origRec.deviceSelection as { deviceId?: string } | null)?.deviceId).toBe("usb-3");
+    expect(initClient.tracks().local.audio?.id).toBe("init-track-usb-3");
 
     await initClient.disconnect();
   });
@@ -1836,15 +1976,33 @@ describe("stepConversation pure transcript reducer", () => {
     let setTarget!: (next: { client: EidolonClient; suspend: boolean }) => void;
     let committedConv!: EidolonConversationControls;
     let committedMic!: EidolonMicDevices;
+    let committedNet = null as NetworkInfo | null;
     let renderedClients: EidolonClient[] = [];
+    let gatherCallsB = 0;
+    Reflect.set(clientA, "gatherNetworkInfo", async () => ({
+      localCandidateType: "relay",
+      currentRoundTripTime: 0.042,
+    }));
+    Reflect.set(
+      clientB,
+      "gatherNetworkInfo",
+      () =>
+        new Promise<NetworkInfo | null>(() => {
+          gatherCallsB += 1;
+        }),
+    );
+    Reflect.set(clientA.rawTransport, "state", "ready");
+    Reflect.set(clientB.rawTransport, "state", "ready");
 
     function Child({ suspend, current }: { suspend: boolean; current: EidolonClient }) {
       renderedClients.push(current);
       const conv = useEidolonConversation();
       const mic = useEidolonMicDevices();
+      const net = useEidolonNetworkInfo({ enabled: true, intervalMs: 60_000 });
       if (suspend) throw suspenseGate;
       committedConv = conv;
       committedMic = mic;
+      committedNet = net;
       return null;
     }
 
@@ -1866,6 +2024,10 @@ describe("stepConversation pure transcript reducer", () => {
     try {
       await act(async () => {
         root.render(React.createElement(App));
+      });
+      expect(committedNet).toEqual({
+        localCandidateType: "relay",
+        currentRoundTripTime: 0.042,
       });
 
       // Start an in-flight text send and mic swap on committed client A.
@@ -1902,6 +2064,8 @@ describe("stepConversation pure transcript reducer", () => {
       });
       expect(committedConv.messages).toEqual([]);
       expect(committedMic.swapError).toBeNull();
+      expect(gatherCallsB).toBe(1);
+      expect(committedNet).toBeNull();
     } finally {
       await act(async () => {
         root.unmount();

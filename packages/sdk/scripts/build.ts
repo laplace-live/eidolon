@@ -196,33 +196,39 @@ async function bundle(root: string): Promise<void> {
 }
 
 const RELATIVE_TS_SPECIFIER = /((\bfrom\s+|\bimport\s*\(\s*)["']\.\.?\/[^"']+)\.tsx?(["'])/g;
+const DTS_SPECIFIER = /\b(?:from|import)\s*\(?\s*["']([^"']+)["']\s*\)?/g;
+const JS_TRANSPILER = new Bun.Transpiler({ loader: "js" });
 
 /** Emits `.d.ts` declarations into `${root}/dist` and normalizes relative specifiers to `.js`. */
-function emitTypes(root: string): void {
+async function emitTypes(root: string): Promise<ReadonlyMap<string, string>> {
   const tsc = join(ROOT, "node_modules", ".bin", "tsc");
   const outDir = join(root, "dist");
-  const res = Bun.spawnSync([tsc, "-p", join(HERE, "tsconfig.build.json"), "--outDir", outDir], {
+  const proc = Bun.spawn([tsc, "-p", join(HERE, "tsconfig.build.json"), "--outDir", outDir], {
     cwd: ROOT,
     stderr: "inherit",
     stdout: "inherit",
   });
-  if (res.exitCode !== 0) throw new Error(`tsc exited ${res.exitCode}`);
+  const exitCode = await proc.exited;
+  if (exitCode !== 0) throw new Error(`tsc exited ${exitCode}`);
+  const dtsContents = new Map<string, string>();
   for (const file of walkFiles(outDir, ".d.ts")) {
     const text = readFileSync(file, "utf8");
     const rewritten = text.replace(RELATIVE_TS_SPECIFIER, "$1.js$3");
     if (rewritten !== text) writeFileSync(file, rewritten);
+    dtsContents.set(file, rewritten);
   }
+  return dtsContents;
 }
 
-function moduleSpecifiers(file: string): Set<string> {
-  const source = readFileSync(file, "utf8");
+function moduleSpecifiers(file: string, cachedSource?: string): Set<string> {
+  const source = cachedSource ?? readFileSync(file, "utf8");
   const found = new Set<string>();
   if (file.endsWith(".js")) {
-    for (const { path } of new Bun.Transpiler({ loader: "js" }).scanImports(source)) {
+    for (const { path } of JS_TRANSPILER.scanImports(source)) {
       found.add(path);
     }
   } else {
-    for (const [, spec] of source.matchAll(/\b(?:from|import)\s*\(?\s*["']([^"']+)["']\s*\)?/g)) {
+    for (const [, spec] of source.matchAll(DTS_SPECIFIER)) {
       if (spec !== undefined) found.add(spec);
     }
   }
@@ -230,11 +236,16 @@ function moduleSpecifiers(file: string): Set<string> {
 }
 
 /** Verifies every emitted `.js` and `.d.ts` imports only rewritten relative `.js` paths or declared externals. */
-export function checkDistImports(root: string, manifest: SdkManifest): void {
+export function checkDistImports(
+  root: string,
+  manifest: SdkManifest,
+  dtsContents?: ReadonlyMap<string, string>,
+): void {
   const corePackages = new Set(Object.keys(manifest.dependencies));
   const peerPackages = new Set(Object.keys(manifest.peerDependencies));
   const dist = join(root, "dist");
-  const files = [...walkFiles(dist, ".js"), ...walkFiles(dist, ".d.ts")];
+  const dtsFiles = dtsContents ? [...dtsContents.keys()] : walkFiles(dist, ".d.ts");
+  const files = [...walkFiles(dist, ".js"), ...dtsFiles];
   if (files.length === 0) throw new Error("dist/ contains no emitted files");
 
   const violations: string[] = [];
@@ -242,7 +253,7 @@ export function checkDistImports(root: string, manifest: SdkManifest): void {
     const rel = relative(dist, file).replaceAll("\\", "/");
     const isNodeBundle = rel.endsWith(".node.js");
     const isReactEntry = rel.startsWith("react/");
-    for (const spec of moduleSpecifiers(file)) {
+    for (const spec of moduleSpecifiers(file, dtsContents?.get(file))) {
       if (spec.startsWith("./") || spec.startsWith("../")) {
         if (/\.(ts|tsx)$/.test(spec)) {
           violations.push(`${rel}: unrewritten TypeScript extension ${spec}`);
@@ -265,9 +276,8 @@ export async function stage(outDir: string = PACK_DIR): Promise<SdkManifest> {
   const manifest = packageManifest();
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(outDir, { recursive: true });
-  await bundle(outDir);
-  emitTypes(outDir);
-  checkDistImports(outDir, manifest);
+  const [, dtsContents] = await Promise.all([bundle(outDir), emitTypes(outDir)]);
+  checkDistImports(outDir, manifest, dtsContents);
   cpSync(join(HERE, "README.md"), join(outDir, "README.md"));
   cpSync(join(ROOT, "LICENSE"), join(outDir, "LICENSE"));
   if (existsSync(join(HERE, "CHANGELOG.md"))) {

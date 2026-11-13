@@ -10,6 +10,7 @@ import type {
   UserInputData,
 } from "../call/types.ts";
 import { isJsonObject, separator } from "../chat/parse.ts";
+import { snapPastMarkupSpan } from "../markup.ts";
 import { useEidolonClient } from "./provider.tsx";
 
 export interface BotOutputText {
@@ -166,7 +167,10 @@ const IGNORED_BOT_OUTPUT_TYPES: ReadonlySet<string> = new Set([
 // Pipecat's turn-completion processors prefix bot-output text with ✓ / ○ / ◐ markers.
 const TURN_MARKERS: ReadonlySet<string> = new Set(["\u2713", "\u25CB", "\u25D0"]);
 
-const INLINE_MARKUP_SPAN = /\[[^[\]\n]+\]|<\/?[A-Za-z]+>/g;
+function isIgnoredBotOutput(data: BotOutputData): boolean {
+  const outputType = data.output_type ?? data.text_type ?? data.aggregated_by;
+  return outputType !== undefined && IGNORED_BOT_OUTPUT_TYPES.has(outputType);
+}
 
 function stripTurnMarker(text: string): string {
   const first = text[0];
@@ -348,13 +352,7 @@ function safeSplitIndex(text: string, index: number): number {
     clamped++;
   }
   if (clamped >= text.length) return text.length;
-  for (const match of text.matchAll(INLINE_MARKUP_SPAN)) {
-    const start = match.index ?? 0;
-    const end = start + match[0].length;
-    if (start < clamped && clamped < end) return end;
-    if (start >= clamped) break;
-  }
-  return clamped;
+  return snapPastMarkupSpan(text, clamped);
 }
 
 function splitSpokenText(meta: SegmentMeta, spokenLength: number): BotOutputText {
@@ -530,35 +528,17 @@ export function stepConversation(
             effects: [{ kind: "updated", message: updated }],
           };
         }
-        if (action.text.trim() === "") {
-          const receivedChatIds = new Set(state.receivedChatIds);
-          receivedChatIds.add(action.msgId);
-          return { state: { ...state, receivedChatIds }, effects: [] };
-        }
-        const created: ConversationMessage = {
-          role: "user",
-          final: true,
-          msgId: action.msgId,
-          status: "received",
-          parts: [{ text: action.text, final: true, createdAt: action.now }],
-          createdAt: action.now,
-          updatedAt: action.now,
-        };
-        const placed = placeTypedUserTurn(
-          state,
-          created,
-          action.now,
-          action.runImmediately !== false,
-        );
-        return {
-          state: { ...state, messages: placed.messages, segments: placed.segments },
-          effects: placed.effects,
-        };
       }
-      if (action.text.trim() === "") return { state, effects: [] };
+      if (action.text.trim() === "") {
+        if (action.msgId === undefined) return { state, effects: [] };
+        const receivedChatIds = new Set(state.receivedChatIds);
+        receivedChatIds.add(action.msgId);
+        return { state: { ...state, receivedChatIds }, effects: [] };
+      }
       const created: ConversationMessage = {
         role: "user",
         final: true,
+        ...(action.msgId === undefined ? {} : { msgId: action.msgId, status: "received" }),
         parts: [{ text: action.text, final: true, createdAt: action.now }],
         createdAt: action.now,
         updatedAt: action.now,
@@ -630,9 +610,7 @@ export function stepConversation(
     }
 
     case "bot-output": {
-      const outputType =
-        action.data.output_type ?? action.data.text_type ?? action.data.aggregated_by;
-      if (outputType !== undefined && IGNORED_BOT_OUTPUT_TYPES.has(outputType)) {
+      if (isIgnoredBotOutput(action.data)) {
         return { state, effects: [] };
       }
       const rawText = stripTurnMarker(action.data.text);
@@ -648,51 +626,69 @@ export function stepConversation(
           ? { state, effects: [] }
           : { state: { ...state, messages: userClosed.messages }, effects };
 
-      let assistantIdx = userClosed.messages.findLastIndex(
+      const assistantIdx = userClosed.messages.findLastIndex(
         (msg) => msg.role === "assistant" && msg.final !== true,
       );
       if (isProgress && assistantIdx === -1) return unchangedOrUserClosed();
 
-      const messages = [...userClosed.messages];
-      let isNewMessage = false;
       if (assistantIdx === -1) {
-        isNewMessage = true;
+        const meta: SegmentMeta = { prefix: "", rawText };
+        const willBeSpoken = action.data.will_be_spoken !== false;
+        const textValue = willBeSpoken
+          ? splitSpokenText(meta, 0)
+          : { spoken: rawText, unspoken: "" };
         const created: ConversationMessage = {
           role: "assistant",
           final: false,
-          parts: [],
+          parts: [
+            {
+              text: textValue,
+              final: !willBeSpoken,
+              createdAt: action.now,
+              ...(action.data.segment_id === undefined
+                ? {}
+                : { segmentId: action.data.segment_id }),
+            },
+          ],
           createdAt: action.now,
           updatedAt: action.now,
         };
-        messages.push(created);
-        assistantIdx = messages.length - 1;
+        const segments = new Map<string, SegmentMeta>([[segmentKey(action.now, 0), meta]]);
+        effects.push({ kind: "created", message: created });
+        return {
+          state: { ...state, messages: [...userClosed.messages, created], segments },
+          effects,
+        };
       }
 
-      const current = messages[assistantIdx];
-      if (!current) return { state: { ...state, messages }, effects };
-      const parts = [...current.parts];
-      let segments = isNewMessage && state.segments.size > 0 ? new Map() : state.segments;
+      const current = userClosed.messages[assistantIdx];
+      if (!current) return unchangedOrUserClosed();
+      let segments = state.segments;
+      let parts: ConversationMessagePart[];
 
       if (!isProgress) {
-        const prevPartIndex = parts.length - 1;
+        const prevPartIndex = current.parts.length - 1;
         const prevMeta =
           prevPartIndex >= 0
             ? segments.get(segmentKey(current.createdAt, prevPartIndex))
             : undefined;
-        const prevRaw = prevMeta?.rawText ?? plainTextOfPart(parts[prevPartIndex]);
+        const prevRaw = prevMeta?.rawText ?? plainTextOfPart(current.parts[prevPartIndex]);
         const prefix = separator(prevRaw, rawText);
         const meta: SegmentMeta = { prefix, rawText };
         const willBeSpoken = action.data.will_be_spoken !== false;
         const textValue = willBeSpoken
           ? splitSpokenText(meta, 0)
           : { spoken: prefix + rawText, unspoken: "" };
-        const partIndex = parts.length;
-        parts.push({
-          text: textValue,
-          final: !willBeSpoken,
-          createdAt: action.now,
-          ...(action.data.segment_id === undefined ? {} : { segmentId: action.data.segment_id }),
-        });
+        const partIndex = current.parts.length;
+        parts = [
+          ...current.parts,
+          {
+            text: textValue,
+            final: !willBeSpoken,
+            createdAt: action.now,
+            ...(action.data.segment_id === undefined ? {} : { segmentId: action.data.segment_id }),
+          },
+        ];
         const nextSegments = new Map(segments);
         nextSegments.set(segmentKey(current.createdAt, partIndex), meta);
         segments = nextSegments;
@@ -700,10 +696,10 @@ export function stepConversation(
         const segmentId = action.data.segment_id;
         const targetIndex =
           segmentId !== undefined
-            ? parts.findIndex((part) => part.segmentId === segmentId)
-            : parts.findIndex((part) => !part.final && isBotOutputText(part.text));
+            ? current.parts.findIndex((part) => part.segmentId === segmentId)
+            : current.parts.findIndex((part) => !part.final && isBotOutputText(part.text));
         if (targetIndex === -1) return unchangedOrUserClosed();
-        const targetPart = parts[targetIndex];
+        const targetPart = current.parts[targetIndex];
         if (!targetPart) return unchangedOrUserClosed();
         const meta = segments.get(segmentKey(current.createdAt, targetIndex)) ?? {
           prefix: "",
@@ -726,6 +722,7 @@ export function stepConversation(
         ) {
           return unchangedOrUserClosed();
         }
+        parts = [...current.parts];
         parts[targetIndex] = {
           ...targetPart,
           text: nextText,
@@ -734,8 +731,9 @@ export function stepConversation(
       }
 
       const updated: ConversationMessage = { ...current, parts, updatedAt: action.now };
+      const messages = [...userClosed.messages];
       messages[assistantIdx] = updated;
-      effects.push({ kind: isNewMessage ? "created" : "updated", message: updated });
+      effects.push({ kind: "updated", message: updated });
       return { state: { ...state, messages, segments }, effects };
     }
 
@@ -982,10 +980,9 @@ export function useEidolonConversation(
         }
       }),
       client.on("botOutput", (data: BotOutputData) => {
+        if (isIgnoredBotOutput(data)) return;
         dispatch({ type: "bot-output", data, now: new Date().toISOString() });
-        const outputType = data.output_type ?? data.text_type ?? data.aggregated_by;
-        const ignored = outputType !== undefined && IGNORED_BOT_OUTPUT_TYPES.has(outputType);
-        if (!ignored && (botStoppedTimer !== undefined || data.will_be_spoken === false)) {
+        if (botStoppedTimer !== undefined || data.will_be_spoken === false) {
           armBotTimer();
         }
       }),
