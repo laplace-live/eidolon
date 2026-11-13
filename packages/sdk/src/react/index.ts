@@ -1,4 +1,8 @@
-export { EidolonClientAudio } from "./audio.tsx";
+export {
+  EidolonClientAudio,
+  type EidolonClientAudioHandle,
+  type EidolonClientAudioProps,
+} from "./audio.tsx";
 export {
   type EidolonAudioLevelOptions,
   useEidolonAudioLevel,

@@ -99,6 +99,7 @@ export interface ConversationStep {
 
 export type ConversationAction =
   | { readonly type: "reset" }
+  | { readonly type: "disconnected"; readonly now: string }
   | { readonly type: "user-started-speaking"; readonly now: string }
   | { readonly type: "user-stopped-timeout"; readonly now: string }
   | {
@@ -209,7 +210,7 @@ function finalizeRole(
     next.splice(idx, 1);
     return { messages: next };
   }
-  const parts = target.parts.map((part, i) => {
+  const parts = target.parts.map((part) => {
     if (snapSpoken && isBotOutputText(part.text)) {
       return {
         ...part,
@@ -217,7 +218,7 @@ function finalizeRole(
         final: true,
       };
     }
-    return i === target.parts.length - 1 ? { ...part, final: true } : part;
+    return part.final ? part : { ...part, final: true };
   });
   const updated: ConversationMessage = { ...target, parts, final: true, updatedAt: now };
   next[idx] = updated;
@@ -375,6 +376,33 @@ export function stepConversation(
   switch (action.type) {
     case "reset":
       return { state: EMPTY_CONVERSATION_STATE, effects: [] };
+
+    case "disconnected": {
+      const closed = closeOpenTurns(state, action.now);
+      let messages = closed.messages;
+      for (let i = 0; i < messages.length; i++) {
+        const msg = messages[i];
+        if (msg?.role === "function_call" && msg.final !== true && msg.functionCall) {
+          const updated: ConversationMessage = {
+            ...msg,
+            final: true,
+            updatedAt: action.now,
+            functionCall: {
+              ...msg.functionCall,
+              cancelled: msg.functionCall.cancelled ?? true,
+              status: "completed",
+            },
+          };
+          if (messages === closed.messages) messages = [...closed.messages];
+          (messages as ConversationMessage[])[i] = updated;
+          closed.effects.push({ kind: "updated", message: updated });
+        }
+      }
+      if (messages === state.messages && closed.effects.length === 0) {
+        return { state, effects: [] };
+      }
+      return { state: { ...state, messages, segments: closed.segments }, effects: closed.effects };
+    }
 
     case "user-started-speaking": {
       const effects: ConversationEffect[] = [];
@@ -938,6 +966,12 @@ export function useEidolonConversation(
         lastSpeakerRef.current = null;
         dispatch({ type: "reset" });
       }),
+      client.on("disconnected", () => {
+        cancelBotTimer();
+        cancelUserTimer();
+        lastSpeakerRef.current = null;
+        dispatch({ type: "disconnected", now: new Date().toISOString() });
+      }),
       client.on("serverMessage", (msg: EidolonServerMessage) => {
         if (msg.type !== "speaker") return;
         const prev = lastSpeakerRef.current;
@@ -949,8 +983,13 @@ export function useEidolonConversation(
       }),
       client.on("botOutput", (data: BotOutputData) => {
         dispatch({ type: "bot-output", data, now: new Date().toISOString() });
-        if (botStoppedTimer !== undefined) armBotTimer();
+        const outputType = data.output_type ?? data.text_type ?? data.aggregated_by;
+        const ignored = outputType !== undefined && IGNORED_BOT_OUTPUT_TYPES.has(outputType);
+        if (!ignored && (botStoppedTimer !== undefined || data.will_be_spoken === false)) {
+          armBotTimer();
+        }
       }),
+      client.on("botLlmStarted", cancelBotTimer),
       client.on("botStartedSpeaking", cancelBotTimer),
       client.on("botStoppedSpeaking", armBotTimer),
       client.on("botInterrupted", () => {

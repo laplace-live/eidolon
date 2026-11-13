@@ -32,6 +32,8 @@ import {
 } from "../src/index.ts";
 import { type ConversationAction, dispatchSentText } from "../src/react/conversation.ts";
 import {
+  EidolonClientAudio,
+  type EidolonClientAudioHandle,
   EidolonClientProvider,
   type EidolonConversationControls,
   type EidolonMicDevices,
@@ -996,6 +998,277 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
     expect(midOfferOutcome).toBe("Connection cancelled");
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(midOfferClient.state).toBe("disconnected");
+
+    // Stale suspended connect/init attempts never tear down a replacement redial's active resources,
+    // and redial proceeds immediately without waiting on an open permission prompt.
+    const redialClient = new EidolonClient({ enableMic: true });
+    const redialManager = Reflect.get(redialClient.rawTransport, "mediaManager") as {
+      initialize: () => Promise<void>;
+      connect: () => Promise<void>;
+      disconnect: () => Promise<void>;
+      tracks: () => { local: { audio?: MediaStreamTrack } };
+    };
+    const origRecorder = Reflect.get(redialManager, "_wavRecorder") as object;
+    const origPlayer = Reflect.get(redialManager, "_wavStreamPlayer") as object;
+    const RecProto = Object.getPrototypeOf(origRecorder);
+    const PlayProto = Object.getPrototypeOf(origPlayer);
+    const origRecBegin = RecProto.begin;
+    const origRecEnd = RecProto.end;
+    const origRecRecord = RecProto.record;
+    const origRecStatus = RecProto.getStatus;
+    const origRecDeviceChange = RecProto.listenForDeviceChange;
+    const origRecDeviceErrors = RecProto.listenForDeviceErrors;
+    const origPlayConnect = PlayProto.connect;
+    const origPlayInterrupt = PlayProto.interrupt;
+
+    let beginInvocation = 0;
+    let markAttemptABegin!: () => void;
+    const attemptABegin = new Promise<void>((resolve) => {
+      markAttemptABegin = resolve;
+    });
+    let finishAttemptABegin!: () => void;
+    let attemptATrackEnded = false;
+    let attemptAContextClosed = false;
+    let attemptBTrackEnded = false;
+    let attemptBContextClosed = false;
+    let attemptBPlayerClosed = false;
+
+    RecProto.begin = function (this: Record<string, unknown>) {
+      const idx = ++beginInvocation;
+      if (idx === 1) {
+        markAttemptABegin();
+        return new Promise<boolean>((resolve) => {
+          finishAttemptABegin = () => {
+            const trackA = {
+              id: "mic-attempt-a",
+              kind: "audio",
+              enabled: true,
+              readyState: "live",
+              stop() {
+                attemptATrackEnded = true;
+                (this as { readyState: string }).readyState = "ended";
+              },
+            } as unknown as MediaStreamTrack;
+            this.stream = { getTracks: () => [trackA], getAudioTracks: () => [trackA] };
+            this.processor = {
+              context: {
+                state: "running",
+                close: async () => {
+                  attemptAContextClosed = true;
+                },
+              },
+            };
+            resolve(true);
+          };
+        });
+      }
+      const trackB = {
+        id: "mic-attempt-b",
+        kind: "audio",
+        enabled: true,
+        readyState: "live",
+        stop() {
+          attemptBTrackEnded = true;
+          (this as { readyState: string }).readyState = "ended";
+        },
+      } as unknown as MediaStreamTrack;
+      this.stream = { getTracks: () => [trackB], getAudioTracks: () => [trackB] };
+      this.processor = {
+        context: {
+          state: "running",
+          close: async () => {
+            attemptBContextClosed = true;
+          },
+        },
+      };
+      return Promise.resolve(true);
+    };
+    RecProto.end = async function (this: Record<string, unknown>) {
+      this.stream = null;
+    };
+    RecProto.record = async () => true;
+    RecProto.getStatus = function (this: Record<string, unknown>) {
+      return this.stream ? "recording" : "ended";
+    };
+    RecProto.listenForDeviceChange = () => {};
+    RecProto.listenForDeviceErrors = () => {};
+    let playConnectCount = 0;
+    PlayProto.connect = async function (this: Record<string, unknown>) {
+      const n = ++playConnectCount;
+      this.context = {
+        state: "running",
+        close: async () => {
+          if (n === 1) attemptBPlayerClosed = true;
+        },
+      };
+      return true;
+    };
+    PlayProto.interrupt = async () => {};
+
+    Reflect.set(redialClient.rawTransport, "_connect", async () => {
+      await redialManager.connect();
+      Reflect.set(redialClient.rawTransport, "dc", {
+        readyState: "open",
+        send: () => {
+          const onMessage = Reflect.get(redialClient.rawTransport, "_onMessage") as (
+            msg: unknown,
+          ) => void;
+          Reflect.set(redialClient.rawTransport, "state", "ready");
+          onMessage({ label: "rtvi-ai", id: "1", type: "bot-ready", data: { version: "1.0.0" } });
+        },
+        close: () => {},
+      });
+      Reflect.set(redialClient.rawTransport, "state", "connected");
+    });
+    Reflect.set(redialClient.rawTransport, "_disconnect", async () => {
+      Reflect.set(redialClient.rawTransport, "dc", null);
+      Reflect.set(redialClient.rawTransport, "state", "disconnected");
+      await redialManager.disconnect();
+    });
+
+    try {
+      const attemptAConnect = redialClient.connect({ endpoint: "https://bot.example/api/offer" });
+      await attemptABegin;
+      await redialClient.disconnect();
+
+      // Redial starts and reaches "ready" BEFORE Attempt A's stale permission prompt resolves.
+      const ready = await redialClient.connect({ endpoint: "https://bot.example/api/offer" });
+      expect(ready.version).toBe("1.0.0");
+      expect(redialClient.state).toBe("ready");
+      expect(Reflect.get(redialManager, "_initialized")).toBe(true);
+      expect(redialManager.tracks().local.audio?.id).toBe("mic-attempt-b");
+
+      // Attempt A finally resolves: its detached mic/AudioContext close while Attempt B stays live in "ready".
+      finishAttemptABegin();
+      await expect(attemptAConnect).rejects.toThrow("Connection cancelled");
+      expect(redialClient.state).toBe("ready");
+      expect(Reflect.get(redialManager, "_initialized")).toBe(true);
+      expect(attemptATrackEnded).toBe(true);
+      expect(attemptAContextClosed).toBe(true);
+      expect(attemptBTrackEnded).toBe(false);
+      expect(attemptBContextClosed).toBe(false);
+      expect(attemptBPlayerClosed).toBe(false);
+      expect(redialManager.tracks().local.audio?.id).toBe("mic-attempt-b");
+    } finally {
+      try {
+        await redialClient.disconnect();
+      } finally {
+        RecProto.begin = origRecBegin;
+        RecProto.end = origRecEnd;
+        RecProto.record = origRecRecord;
+        RecProto.getStatus = origRecStatus;
+        RecProto.listenForDeviceChange = origRecDeviceChange;
+        RecProto.listenForDeviceErrors = origRecDeviceErrors;
+        PlayProto.connect = origPlayConnect;
+        PlayProto.interrupt = origPlayInterrupt;
+      }
+    }
+
+    // Shared custom recorder/player in connect(): stale Attempt A resuming after Attempt B starts
+    // skips cleanup of resources now owned by Attempt B.
+    const sharedClient = new EidolonClient({ enableMic: true });
+    const sharedMgr = Reflect.get(sharedClient.rawTransport, "mediaManager") as {
+      connect: () => Promise<void>;
+    };
+    Reflect.set(sharedMgr, "_initialized", true);
+    let recordCall = 0;
+    let markRecA!: () => void;
+    const recAStarted = new Promise<void>((resolve) => {
+      markRecA = resolve;
+    });
+    let finishRecA!: () => void;
+    let sharedTrackStopped = false;
+    let sharedPlayerClosed = false;
+    const sharedTrack = {
+      id: "shared-b",
+      kind: "audio",
+      enabled: true,
+      readyState: "live",
+      stop() {
+        sharedTrackStopped = true;
+        (this as { readyState: string }).readyState = "ended";
+      },
+    } as unknown as MediaStreamTrack;
+    const sharedRecorder = {
+      getStatus: () => "paused",
+      begin: async () => true,
+      listenForDeviceChange: () => {},
+      listenForDeviceErrors: () => {},
+      end: async () => {},
+      record: () => {
+        if (++recordCall === 1) {
+          markRecA();
+          return new Promise<boolean>((resolve) => {
+            finishRecA = () => resolve(true);
+          });
+        }
+        return Promise.resolve(true);
+      },
+      processor: null,
+      stream: { getTracks: () => [sharedTrack], getAudioTracks: () => [sharedTrack] },
+    };
+    Reflect.set(sharedMgr, "_wavRecorder", sharedRecorder);
+    Reflect.set(sharedMgr, "_wavStreamPlayer", {
+      context: {
+        state: "running",
+        close: async () => {
+          sharedPlayerClosed = true;
+        },
+      },
+      connect: async () => true,
+      interrupt: async () => {},
+    });
+    const staleConnectA = sharedMgr.connect();
+    await recAStarted;
+    await sharedClient.disconnect();
+    // Restore Attempt B's live stream/context on the shared mock and run Attempt B's connect().
+    sharedTrackStopped = false;
+    sharedPlayerClosed = false;
+    (sharedTrack as { readyState: string }).readyState = "live";
+    sharedRecorder.stream = { getTracks: () => [sharedTrack], getAudioTracks: () => [sharedTrack] };
+    Reflect.set(sharedMgr, "_initialized", true);
+    await sharedMgr.connect();
+
+    // Resuming stale Attempt A must NOT clear _initialized or close Attempt B's active track/player.
+    finishRecA();
+    await expect(staleConnectA).rejects.toThrow("Connection cancelled");
+    expect(Reflect.get(sharedMgr, "_initialized")).toBe(true);
+    expect(sharedTrackStopped).toBe(false);
+    expect(sharedPlayerClosed).toBe(false);
+
+    // Pre-connect applyMicPreference cancelled during getAllMics() never calls updateMic or initDevices after hangup.
+    const prepClient = new EidolonClient({ enableMic: true });
+    let resolvePrepMics!: (mics: MediaDeviceInfo[]) => void;
+    let prepUpdateCalls = 0;
+    let prepInitCalls = 0;
+    Reflect.set(
+      prepClient.rawClient,
+      "getAllMics",
+      () =>
+        new Promise<MediaDeviceInfo[]>((resolve) => {
+          resolvePrepMics = resolve;
+        }),
+    );
+    Reflect.set(prepClient.rawTransport, "updateMic", async () => {
+      prepUpdateCalls += 1;
+    });
+    Reflect.set(prepClient.rawClient, "initDevices", async () => {
+      prepInitCalls += 1;
+    });
+    const pendingPrep = prepClient.applyMicPreference("usb-mic-9");
+    await prepClient.disconnect();
+    resolvePrepMics([
+      {
+        deviceId: "usb-mic-9",
+        kind: "audioinput",
+        label: "USB Mic 9",
+        groupId: "g9",
+        toJSON: () => ({}),
+      },
+    ]);
+    await pendingPrep;
+    expect(prepUpdateCalls).toBe(0);
+    expect(prepInitCalls).toBe(0);
   });
 });
 
@@ -1447,6 +1720,216 @@ describe("stepConversation pure transcript reducer", () => {
         root.unmount();
       });
       globals.IS_REACT_ACT_ENVIRONMENT = prevAct;
+      win.HTMLIFrameElement = prevIframe;
+    }
+  });
+
+  test("React bindings finalize text-only replies, close open messages on disconnect, update uncontrolled mic choice, and expose blocked audio retry", async () => {
+    const globals = globalThis as Record<string, unknown>;
+    const prevAct = globals.IS_REACT_ACT_ENVIRONMENT;
+    const prevMediaStream = globals.MediaStream;
+    const prevNavigator = globals.navigator;
+    const win = globalThis.window as unknown as Record<string, unknown>;
+    const prevIframe = win.HTMLIFrameElement;
+    globals.IS_REACT_ACT_ENVIRONMENT = true;
+    win.HTMLIFrameElement = class {};
+
+    class FakeMediaStream {
+      readonly #tracks: MediaStreamTrack[];
+      constructor(tracks: MediaStreamTrack[] = []) {
+        this.#tracks = [...tracks];
+      }
+      getAudioTracks() {
+        return this.#tracks.filter((t) => t.kind === "audio");
+      }
+      getTracks() {
+        return [...this.#tracks];
+      }
+    }
+    globals.MediaStream = FakeMediaStream;
+    Object.defineProperty(globalThis, "navigator", {
+      value: {
+        mediaDevices: Object.assign(new EventTarget(), {
+          enumerateDevices: async () => [
+            { deviceId: "default", kind: "audioinput", label: "Default", groupId: "g1" },
+            { deviceId: "usb-2", kind: "audioinput", label: "USB Mic", groupId: "g2" },
+          ],
+        }),
+      },
+      configurable: true,
+    });
+
+    let blockNextPlay = true;
+    let playAttempts = 0;
+    const createdAudioElements: unknown[] = [];
+    const doc = Object.assign(new EventTarget(), {
+      activeElement: null,
+      defaultView: win,
+      createElement(tag: string) {
+        const el = Object.assign(new EventTarget(), {
+          nodeType: 1,
+          nodeName: tag.toUpperCase(),
+          tagName: tag.toUpperCase(),
+          namespaceURI: "http://www.w3.org/1999/xhtml",
+          childNodes: [],
+          firstChild: null,
+          ownerDocument: doc,
+          style: {},
+          autoplay: false,
+          srcObject: null as unknown,
+          setAttribute() {},
+          removeAttribute() {},
+          removeChild() {},
+          appendChild() {},
+          insertBefore() {},
+          play: async () => {
+            playAttempts += 1;
+            if (blockNextPlay) {
+              throw new DOMException("Autoplay blocked", "NotAllowedError");
+            }
+          },
+        });
+        if (tag.toLowerCase() === "audio") createdAudioElements.push(el);
+        return el;
+      },
+    });
+    const container = doc.createElement("div");
+
+    const client = new EidolonClient({ enableMic: false });
+    const raw = client.rawClient as unknown as {
+      emit: (event: string, ...args: unknown[]) => void;
+    };
+    const audioRef = React.createRef<EidolonClientAudioHandle>();
+    const blockedEvents: [boolean, string | undefined][] = [];
+    let conv!: EidolonConversationControls;
+    let mic!: EidolonMicDevices;
+
+    function Probe() {
+      conv = useEidolonConversation();
+      mic = useEidolonMicDevices();
+      return React.createElement(EidolonClientAudio, {
+        ref: audioRef,
+        onBlockedChange: (blocked, err) => blockedEvents.push([blocked, err?.name]),
+      });
+    }
+
+    const origSetTimeout = globalThis.setTimeout;
+    const scheduledFinalize: (() => void)[] = [];
+    globals.setTimeout = ((cb: (...args: unknown[]) => void, ms?: number, ...args: unknown[]) => {
+      if (ms === 2500) {
+        scheduledFinalize.push(() => cb(...args));
+        return origSetTimeout(() => {}, 0);
+      }
+      return origSetTimeout(cb, ms, ...args);
+    }) as typeof setTimeout;
+
+    const root = createRoot(container as unknown as Element);
+    try {
+      await act(async () => {
+        root.render(
+          React.createElement(EidolonClientProvider, { client }, React.createElement(Probe)),
+        );
+      });
+      await act(async () => {
+        await new Promise((resolve) => origSetTimeout(resolve, 0));
+      });
+
+      // 1. Uncontrolled useEidolonMicDevices updates selectedMicId when selectMic() is called.
+      expect(mic.selectedMicId).toBe("default");
+      await act(async () => {
+        mic.selectMic("usb-2");
+      });
+      expect(mic.selectedMicId).toBe("usb-2");
+
+      // 2. EidolonClientAudio surfaces blocked playback and clears it when retried via ref.current.play().
+      const botTrack = { id: "bot-track-1", kind: "audio", readyState: "live" } as MediaStreamTrack;
+      await act(async () => {
+        raw.emit(RTVIEvent.TrackStarted, botTrack, { id: "bot", name: "bot", local: false });
+        await new Promise((resolve) => origSetTimeout(resolve, 0));
+      });
+      expect(playAttempts).toBe(1);
+      expect(blockedEvents).toEqual([[true, "NotAllowedError"]]);
+      expect(audioRef.current?.element).toBe(
+        createdAudioElements[0] as unknown as HTMLAudioElement,
+      );
+
+      blockNextPlay = false;
+      await act(async () => {
+        await audioRef.current?.play();
+      });
+      expect(playAttempts).toBe(2);
+      expect(blockedEvents).toEqual([
+        [true, "NotAllowedError"],
+        [false, undefined],
+      ]);
+
+      // 3. Text-only replies (will_be_spoken: false, no botStoppedSpeaking) arm the finalize timer and close cleanly.
+      await act(async () => {
+        raw.emit(RTVIEvent.BotOutput, {
+          text: "纯文字回复。",
+          spoken_status: "new",
+          segment_id: 1,
+          will_be_spoken: false,
+        });
+      });
+      expect(conv.messages).toHaveLength(1);
+      expect(conv.messages[0]?.final).toBe(false);
+      expect(scheduledFinalize).toHaveLength(1);
+      await act(async () => {
+        scheduledFinalize.pop()?.();
+      });
+      expect(conv.messages[0]?.final).toBe(true);
+
+      // 4. Hanging up mid-reply closes open user, assistant, and function_call entries without marking unheard words spoken.
+      await act(async () => {
+        raw.emit(RTVIEvent.UserInput, {
+          text: "喂",
+          final: false,
+          input_type: "transcription",
+        });
+        raw.emit(RTVIEvent.LLMFunctionCallStarted, { function_name: "take_selfie" });
+        raw.emit(RTVIEvent.BotOutput, {
+          text: "前半句后半句",
+          spoken_status: "new",
+          segment_id: 2,
+          will_be_spoken: true,
+        });
+        raw.emit(RTVIEvent.BotOutput, {
+          text: "前半句后半句",
+          spoken_status: "in-progress",
+          segment_id: 2,
+          will_be_spoken: true,
+          spoken_progress: { accumulated_text: "前半句", remaining_text: "后半句" },
+        });
+      });
+      expect(conv.messages.some((m) => m.final !== true)).toBe(true);
+
+      await act(async () => {
+        raw.emit(RTVIEvent.Disconnected);
+      });
+      expect(conv.messages.every((m) => m.final === true)).toBe(true);
+      const hungUpAssistant = conv.messages.at(-1);
+      expect(hungUpAssistant?.parts[0]?.text).toEqual({
+        spoken: "前半句",
+        unspoken: "后半句",
+      });
+      const hungUpTool = conv.messages.find((m) => m.role === "function_call");
+      expect(hungUpTool?.functionCall).toMatchObject({
+        function_name: "take_selfie",
+        cancelled: true,
+        status: "completed",
+      });
+    } finally {
+      globals.setTimeout = origSetTimeout;
+      await act(async () => {
+        root.unmount();
+      });
+      globals.IS_REACT_ACT_ENVIRONMENT = prevAct;
+      globals.MediaStream = prevMediaStream;
+      Object.defineProperty(globalThis, "navigator", {
+        value: prevNavigator,
+        configurable: true,
+      });
       win.HTMLIFrameElement = prevIframe;
     }
   });

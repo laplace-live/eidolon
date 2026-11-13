@@ -48,6 +48,7 @@ export function useEidolonMicDevices({
   const transportState = useEidolonTransportState();
   const canLiveSwap = client !== null && LIVE_SWAP_STATES.has(transportState);
   const [mics, setMics] = useState<readonly MediaDeviceInfo[]>([]);
+  const [localMicId, setLocalMicId] = useState<string | null>(null);
   const [swapError, setSwapError] = useState<Error | null>(null);
   const mountedRef = useRef(true);
   const activeClientRef = useRef(client);
@@ -122,13 +123,15 @@ export function useEidolonMicDevices({
     };
   }, [client]);
 
+  const effectiveMicId = persistedMicId !== undefined ? persistedMicId : localMicId;
   const selectedMicId = useMemo(
-    () => resolveSelectedMicId(mics, persistedMicId),
-    [mics, persistedMicId],
+    () => resolveSelectedMicId(mics, effectiveMicId),
+    [mics, effectiveMicId],
   );
 
   const selectMic = useCallback(
     (deviceId: string) => {
+      setLocalMicId(deviceId);
       onPersistMicId?.(deviceId);
       const generation = ++swapGenerationRef.current;
       setSwapError(null);
