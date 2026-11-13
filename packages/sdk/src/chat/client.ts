@@ -132,9 +132,25 @@ async function* streamLines(res: Response): AsyncGenerator<ChatStreamLine, void,
   if (res.body === null) {
     throw new ChatRequestError(res.status, "bad-stream", "The answer has no body");
   }
+  const openTurns = new Set<string>();
+  let sawTerminalError = false;
   for await (const value of ndjsonValues(res.body)) {
     const line = parseStreamLine(value);
-    if (line !== null) yield line;
+    if (line === null) continue;
+    if (line.type === "started") openTurns.add(line.turn);
+    else if (line.type === "ended") openTurns.delete(line.turn);
+    else if (line.type === "error") {
+      sawTerminalError = true;
+      openTurns.clear();
+    }
+    yield line;
+  }
+  if (!sawTerminalError && openTurns.size > 0) {
+    throw new ChatRequestError(
+      res.status,
+      "bad-stream",
+      "The answer ended before her turn finished",
+    );
   }
 }
 

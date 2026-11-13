@@ -113,8 +113,15 @@ function effectiveMediaState(
 interface InternalWavRecorder {
   getStatus?: () => string;
   end?: () => Promise<unknown>;
+  listenForDeviceChange?: (callback: null) => unknown;
   processor?: { context?: { state?: string; close?: () => Promise<void> } } | null;
   stream?: MediaStream | null;
+}
+
+interface InternalWavStreamPlayer {
+  context?: { state?: string; close?: () => Promise<void> } | null;
+  analyser?: unknown;
+  stream?: { disconnect?: () => void } | null;
 }
 
 interface BridgedMediaManager {
@@ -152,6 +159,7 @@ function createBridgedMediaManager(
     const recorder = readRecorder();
     const stream = recorder?.stream ?? priorStream ?? null;
     const context = recorder?.processor?.context ?? priorContext;
+    recorder?.listenForDeviceChange?.(null);
     if (recorder?.getStatus?.() !== "ended") {
       await recorder?.end?.().catch(() => {});
     }
@@ -159,6 +167,22 @@ function createBridgedMediaManager(
       for (const track of stream.getTracks()) track.stop();
     }
     if (recorder?.stream) recorder.stream = null;
+    if (context && context.state !== "closed") {
+      await context.close?.().catch(() => {});
+    }
+  };
+
+  const closePlayer = async () => {
+    const player = Reflect.get(manager, "_wavStreamPlayer") as InternalWavStreamPlayer | undefined;
+    const context = player?.context;
+    if (player?.stream) {
+      player.stream.disconnect?.();
+      player.stream = null;
+    }
+    if (player) {
+      player.analyser = null;
+      player.context = null;
+    }
     if (context && context.state !== "closed") {
       await context.close?.().catch(() => {});
     }
@@ -182,7 +206,17 @@ function createBridgedMediaManager(
 
   manager.initialize = async () => {
     markedEpoch = null;
-    await baseInitialize();
+    if (Reflect.get(manager, "_initialized") === true) {
+      syncMicTrack();
+      return;
+    }
+    try {
+      await baseInitialize();
+    } catch (error) {
+      await stopRecorder();
+      await closePlayer();
+      throw error;
+    }
     // WavMediaManager leaves getUserMedia's track enabled when _micEnabled is false, which sends
     // live audio over RTCRtpSender because Eidolon's server ignores signalling trackStatus frames.
     syncMicTrack();
@@ -234,6 +268,7 @@ function createBridgedMediaManager(
       // applyMicPreference opens _wavRecorder via updateMic before initialize() flips _initialized,
       // so baseDisconnect() returns early; WavRecorder.end() also clears this.stream without stopping tracks.
       await stopRecorder(priorStream, priorContext);
+      await closePlayer();
     } finally {
       activeDisconnects -= 1;
     }
@@ -393,10 +428,39 @@ export class EidolonClient {
   }
 
   async connect(options: EidolonConnectOptions): Promise<EidolonBotReadyData> {
-    const data = await this.#client.connect({
-      webrtcRequestParams: toApiRequest(options),
-    });
-    return parseBotReadyData(data);
+    const requestParams = { webrtcRequestParams: toApiRequest(options) };
+    if (
+      this.#client.state === "authenticating" ||
+      this.#client.state === "connecting" ||
+      this.#client.state === "connected" ||
+      this.#client.state === "ready"
+    ) {
+      return parseBotReadyData(await this.#client.connect(requestParams));
+    }
+    // PipecatClient.connect() awaits initDevices() outside its inner try/catch, leaving the
+    // outer promise pending forever if AudioWorklet setup rejects.
+    if (this.#client.needsInit()) {
+      try {
+        await this.#client.initDevices();
+      } catch (error) {
+        await this.disconnect();
+        throw error;
+      }
+    }
+    const origNeedsInit = this.#client.needsInit;
+    Reflect.set(this.#client, "needsInit", () => false);
+    let pending: ReturnType<PipecatClient["connect"]>;
+    try {
+      pending = this.#client.connect(requestParams);
+    } finally {
+      Reflect.set(this.#client, "needsInit", origNeedsInit);
+    }
+    try {
+      return parseBotReadyData(await pending);
+    } catch (error) {
+      await this.#mediaManager.disconnect();
+      throw error;
+    }
   }
 
   async disconnect(): Promise<void> {

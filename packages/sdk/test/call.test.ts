@@ -28,6 +28,7 @@ import {
   toLiveMicId,
   uuidv7,
 } from "../src/index.ts";
+import { type ConversationAction, dispatchSentText } from "../src/react/conversation.ts";
 import { EMPTY_CONVERSATION_STATE, isBotOutputText, stepConversation } from "../src/react/index.ts";
 import { runLiveMicSwap } from "../src/react/mic-devices.ts";
 
@@ -584,7 +585,7 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
     expect(fakeRecorder.stream).toBeNull();
     expect(leakedTrackStarted).toBe(false);
 
-    // runLiveMicSwap catches selectLiveMic rejections and normalizes errors without unhandled rejections.
+    // runLiveMicSwap catches selectLiveMic rejections and ignores stale swaps from an older client/generation.
     const swapErrors: string[] = [];
     let settledCount = 0;
     runLiveMicSwap(
@@ -601,9 +602,24 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
         },
       },
     );
+    runLiveMicSwap(
+      {
+        selectLiveMic: async () => {
+          throw new Error("stale client error");
+        },
+      },
+      "usb-stale",
+      {
+        isCurrent: () => false,
+        onError: (err) => swapErrors.push(err.message),
+        onSettled: () => {
+          settledCount++;
+        },
+      },
+    );
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(swapErrors).toEqual(["mic busy"]);
-    expect(settledCount).toBe(1);
+    expect(settledCount).toBe(2);
 
     // EidolonClient.sendText records run_immediately so queued sends do not interrupt active speech.
     Reflect.set(client.rawClient, "sendText", async (_content: string) => "msg_q1");
@@ -615,6 +631,129 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
 
     raw.emit(RTVIEvent.Disconnected);
     expect(client.tracks().bot).toBeUndefined();
+  });
+
+  test("EidolonClient.connect rejects promptly and releases audio contexts when AudioWorklet init fails", async () => {
+    for (const enableMic of [true, false]) {
+      const client = new EidolonClient({ enableMic });
+      const manager = Reflect.get(client.rawTransport, "mediaManager") as object;
+      let micTrackEnded = false;
+      let recorderContextClosed = false;
+      let playerContextClosed = false;
+
+      const recorderStub: {
+        getStatus: () => string;
+        begin: () => Promise<boolean>;
+        listenForDeviceChange: () => void;
+        listenForDeviceErrors: () => void;
+        end: () => Promise<void>;
+        processor: { context: { state: string; close: () => Promise<void> } };
+        stream: {
+          getTracks: () => MediaStreamTrack[];
+          getAudioTracks: () => MediaStreamTrack[];
+        } | null;
+      } = {
+        getStatus: () => (recorderStub.stream === null ? "ended" : "paused"),
+        begin: async () => {
+          const track = {
+            id: "init-mic",
+            kind: "audio",
+            enabled: true,
+            readyState: "live",
+            stop() {
+              micTrackEnded = true;
+              (this as { readyState: string }).readyState = "ended";
+            },
+          } as unknown as MediaStreamTrack;
+          recorderStub.stream = { getTracks: () => [track], getAudioTracks: () => [track] };
+          return true;
+        },
+        listenForDeviceChange: () => {},
+        listenForDeviceErrors: () => {},
+        end: async () => {
+          recorderStub.stream = null;
+        },
+        processor: {
+          context: {
+            state: "running",
+            close: async () => {
+              recorderContextClosed = true;
+            },
+          },
+        },
+        stream: null,
+      };
+      const playerStub: {
+        context: { state: string; close: () => Promise<void> } | null;
+        connect: () => Promise<boolean>;
+        interrupt: () => Promise<void>;
+      } = {
+        context: null,
+        connect: async () => {
+          playerStub.context = {
+            state: "running",
+            close: async () => {
+              playerContextClosed = true;
+            },
+          };
+          throw new Error("Could not add audioWorklet module");
+        },
+        interrupt: async () => {},
+      };
+
+      Reflect.set(manager, "_wavRecorder", recorderStub);
+      Reflect.set(manager, "_wavStreamPlayer", playerStub);
+
+      const outcome = await Promise.race([
+        client
+          .connect({ endpoint: "https://bot.example/api/offer" })
+          .then(() => "resolved" as const)
+          .catch((err: unknown) => (err instanceof Error ? err.message : String(err))),
+        new Promise<"hung">((resolve) => setTimeout(() => resolve("hung"), 50)),
+      ]);
+
+      expect(outcome).toBe("Could not add audioWorklet module");
+      expect(client.state).toBe("disconnected");
+      expect(micTrackEnded).toBe(true);
+      expect(recorderContextClosed).toBe(true);
+      expect(playerContextClosed).toBe(true);
+    }
+
+    // When initDevices succeeds, connect() initializes devices once rather than re-entering
+    // PipecatClient.connect()'s unguarded initDevices() branch.
+    const okClient = new EidolonClient({ enableMic: true });
+    const initStates: string[] = [];
+    okClient.on("transportStateChanged", (state) => {
+      if (state === "initializing") initStates.push(state);
+    });
+    const okManager = Reflect.get(okClient.rawTransport, "mediaManager") as object;
+    let playerConnectCalls = 0;
+    Reflect.set(okManager, "_wavRecorder", {
+      getStatus: () => "ended",
+      begin: async () => true,
+      listenForDeviceChange: () => {},
+      listenForDeviceErrors: () => {},
+      end: async () => {},
+      record: async () => true,
+      processor: null,
+      stream: null,
+    });
+    Reflect.set(okManager, "_wavStreamPlayer", {
+      context: null,
+      connect: async () => {
+        playerConnectCalls += 1;
+        return true;
+      },
+      interrupt: async () => {},
+    });
+    Reflect.set(okClient.rawTransport, "_connect", async () => {
+      throw new Error("offer refused");
+    });
+    await expect(okClient.connect({ endpoint: "https://bot.example/api/offer" })).rejects.toThrow(
+      "offer refused",
+    );
+    expect(initStates).toEqual(["initializing"]);
+    expect(playerConnectCalls).toBe(1);
   });
 });
 
@@ -882,5 +1021,65 @@ describe("stepConversation pure transcript reducer", () => {
       ["assistant", undefined, undefined],
       ["user", undefined, "failed"],
     ]);
+  });
+
+  test("dispatchSentText isolates observer errors from transport failures and drops sends across resets", async () => {
+    const actions: ConversationAction["type"][] = [];
+    let state = EMPTY_CONVERSATION_STATE;
+    await expect(
+      dispatchSentText(
+        { sendText: async () => "msg_obs" },
+        "你好",
+        undefined,
+        (action) => {
+          actions.push(action.type);
+          const next = stepConversation(state, action);
+          state = next.state;
+          for (const eff of next.effects) {
+            if (eff.kind === "created") throw new Error("observer boom");
+          }
+        },
+        () => true,
+        () => "2026-11-12T00:00:01.000Z",
+      ),
+    ).rejects.toThrow("observer boom");
+    // Observer failure must not trigger send-text-rejected or append a duplicate failed message.
+    expect(actions).toEqual(["send-text-resolved"]);
+    expect(state.messages).toHaveLength(1);
+    expect(state.messages[0]?.status).toBe("sent");
+
+    // Conversation reset while sendText is pending suppresses both resolved and rejected dispatches
+    // while preserving the returned message id or thrown transport error.
+    const postResetActions: ConversationAction["type"][] = [];
+    let current = true;
+    const staleResolved = await dispatchSentText(
+      {
+        sendText: async () => {
+          current = false;
+          return "msg_stale";
+        },
+      },
+      "旧会话消息",
+      { run_immediately: false },
+      (action) => postResetActions.push(action.type),
+      () => current,
+    );
+    expect(staleResolved).toBe("msg_stale");
+    expect(postResetActions).toEqual([]);
+
+    await expect(
+      dispatchSentText(
+        {
+          sendText: async () => {
+            throw new Error("transport closed");
+          },
+        },
+        "旧会话失败消息",
+        undefined,
+        (action) => postResetActions.push(action.type),
+        () => false,
+      ),
+    ).rejects.toThrow("transport closed");
+    expect(postResetActions).toEqual([]);
   });
 });

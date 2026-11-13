@@ -551,4 +551,120 @@ describe("window builder, locks, availability, and session lifecycle", () => {
     });
     expect(liveItems(liveView.live)).toEqual([]);
   });
+
+  test("rejects truncated turns at EOF while preserving explicit stream errors, early breaks, and voice retention reports", async () => {
+    const store = new InMemoryBrowserChatStore();
+    const chat = await createChat(store, ["milky-green"], "https://bot.example/", 100);
+
+    // Clean EOF after `started` + `delta` without `ended` rejects with ChatRequestError(bad-stream).
+    await expect(
+      sendChatTurn(
+        {
+          store,
+          fetch: async () =>
+            ndjsonResponse([
+              { type: "started", turn: "t_open", persona: "milky-green" },
+              { type: "delta", turn: "t_open", text: "断掉的回复" },
+            ]),
+        },
+        { chatId: chat.id, text: "在吗" },
+      ),
+    ).rejects.toMatchObject({
+      name: "ChatRequestError",
+      status: 200,
+      code: "bad-stream",
+    });
+
+    // An explicit terminal `error` line yields that line instead of throwing `bad-stream`.
+    const explicitErrorLines: ChatStreamLine[] = [];
+    for await (const line of streamTurn({
+      baseUrl: "https://bot.example",
+      chat: { header: chat.header, events: [] },
+      text: "在吗",
+      fetch: async () =>
+        ndjsonResponse([
+          { type: "started", turn: "t_err", persona: "milky-green" },
+          { type: "error", code: "internal", message: "Her reply failed" },
+        ]),
+    })) {
+      explicitErrorLines.push(line);
+    }
+    expect(explicitErrorLines.map((l) => l.type)).toEqual(["started", "error"]);
+
+    // Early consumer `break` exits cleanly without throwing `bad-stream`.
+    const earlyLines: ChatStreamLine[] = [];
+    for await (const line of streamTurn({
+      baseUrl: "https://bot.example",
+      chat: { header: chat.header, events: [] },
+      text: "在吗",
+      fetch: async () =>
+        ndjsonResponse([
+          { type: "started", turn: "t_break", persona: "milky-green" },
+          { type: "delta", turn: "t_break", text: "第一句" },
+        ]),
+    })) {
+      earlyLines.push(line);
+      break;
+    }
+    expect(earlyLines).toHaveLength(1);
+
+    // If `store.putFile` resolves to `false` when retaining a user voice recording, `sendChatTurn`
+    // still resolves the completed turn and reports the missing clip through `onMissingFiles`.
+    const clipName = `${"d".repeat(64)}.webm`;
+    const originalPutFile = store.putFile.bind(store);
+    store.putFile = async (id, name, blob) => {
+      if (name === clipName) return false;
+      return originalPutFile(id, name, blob);
+    };
+    const reportedMissing: string[][] = [];
+    const voiceResult = await sendChatTurn(
+      {
+        store,
+        fetch: async () =>
+          ndjsonResponse([
+            {
+              type: "events",
+              events: [
+                {
+                  seq: 1,
+                  at: 110,
+                  type: "message",
+                  id: "v1",
+                  speaker: { kind: "user" },
+                  text: "语音消息",
+                  modality: "voice",
+                  attachments: [
+                    { kind: "audio", name: clipName, mime: "audio/webm", durationMs: 900 },
+                  ],
+                },
+              ],
+            },
+            { type: "started", turn: "t_voice", persona: "milky-green" },
+            {
+              type: "events",
+              events: [
+                {
+                  seq: 2,
+                  at: 111,
+                  type: "message",
+                  id: "v2",
+                  speaker: { kind: "persona", id: "milky-green" },
+                  text: "听到啦",
+                  sig: "sig-v2",
+                },
+              ],
+            },
+            { type: "ended", turn: "t_voice" },
+          ]),
+      },
+      {
+        chatId: chat.id,
+        voice: { audio: new Blob(["opus-bytes"], { type: "audio/webm" }), durationMs: 900 },
+        onMissingFiles: (names) => reportedMissing.push(names),
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(voiceResult.events).toHaveLength(2);
+    expect(reportedMissing).toEqual([[clipName]]);
+  });
 });

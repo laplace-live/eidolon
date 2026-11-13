@@ -833,6 +833,39 @@ export function stepConversation(
   }
 }
 
+export async function dispatchSentText(
+  client: { sendText(content: string, options?: SendTextOptions): Promise<string> },
+  content: string,
+  sendOptions: SendTextOptions | undefined,
+  dispatch: (action: ConversationAction) => void,
+  isCurrent: () => boolean = () => true,
+  now: () => string = () => new Date().toISOString(),
+): Promise<string> {
+  let msgId: string;
+  try {
+    msgId = await client.sendText(content, sendOptions);
+  } catch (error) {
+    if (isCurrent()) {
+      dispatch({
+        type: "send-text-rejected",
+        text: content,
+        now: now(),
+      });
+    }
+    throw error;
+  }
+  if (isCurrent()) {
+    dispatch({
+      type: "send-text-resolved",
+      text: content,
+      msgId,
+      runImmediately: sendOptions?.run_immediately !== false,
+      now: now(),
+    });
+  }
+  return msgId;
+}
+
 /** Tracks live RTVI call transcripts, spoken/unspoken word progress, typed lines, and tool calls. */
 export function useEidolonConversation(
   options: UseEidolonConversationOptions = {},
@@ -841,13 +874,23 @@ export function useEidolonConversation(
   const [messages, setMessages] = useState<readonly ConversationMessage[]>([]);
   const stateRef = useRef<ConversationState>(EMPTY_CONVERSATION_STATE);
   const prevClientRef = useRef(client);
+  const activeClientRef = useRef(client);
+  activeClientRef.current = client;
+  const generationRef = useRef(0);
   const lastSpeakerRef = useRef<string | null>(null);
   const callbacksRef = useRef(options);
   useEffect(() => {
     callbacksRef.current = options;
   }, [options]);
+  useEffect(
+    () => () => {
+      generationRef.current += 1;
+    },
+    [],
+  );
 
   const dispatch = useCallback((action: ConversationAction) => {
+    if (action.type === "reset") generationRef.current += 1;
     const { state, effects } = stepConversation(stateRef.current, action);
     if (state === stateRef.current && effects.length === 0) return;
     stateRef.current = state;
@@ -985,25 +1028,15 @@ export function useEidolonConversation(
   );
 
   const sendText = useCallback(
-    async (content: string, sendOptions?: SendTextOptions): Promise<string> => {
-      try {
-        const msgId = await client.sendText(content, sendOptions);
-        dispatch({
-          type: "send-text-resolved",
-          text: content,
-          msgId,
-          runImmediately: sendOptions?.run_immediately !== false,
-          now: new Date().toISOString(),
-        });
-        return msgId;
-      } catch (error) {
-        dispatch({
-          type: "send-text-rejected",
-          text: content,
-          now: new Date().toISOString(),
-        });
-        throw error;
-      }
+    (content: string, sendOptions?: SendTextOptions): Promise<string> => {
+      const generation = generationRef.current;
+      return dispatchSentText(
+        client,
+        content,
+        sendOptions,
+        dispatch,
+        () => generationRef.current === generation && activeClientRef.current === client,
+      );
     },
     [client, dispatch],
   );

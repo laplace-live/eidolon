@@ -29,7 +29,7 @@ export interface ChatSessionOptions<TRecord extends BrowserChatRecord = BrowserC
   /** The Login Sync token a call sends; absent or blank is anonymous. */
   readonly loginSyncToken?: string | null;
   readonly fetch?: FetchLike;
-  /** Her files that couldn't be fetched once a turn or call line's downloads settle. */
+  /** Attachment files that couldn't be stored or fetched once a turn or call line settles. */
   readonly onMissingFiles?: (names: string[]) => void;
 }
 
@@ -147,14 +147,17 @@ async function keepRecording<TRecord extends BrowserChatRecord>(
   chatId: string,
   events: readonly WireEvent[],
   audio: Blob,
-): Promise<void> {
+): Promise<string[]> {
+  const missing: string[] = [];
   for (const event of events) {
     if (!isChatEvent(event) || event.type !== "message" || event.speaker.kind !== "user") continue;
     const [clip] = event.attachments ?? [];
     if (event.modality === "voice" && clip?.kind === "audio") {
-      await store.putFile(chatId, clip.name, audio);
+      const kept = await store.putFile(chatId, clip.name, audio).catch(() => false);
+      if (!kept) missing.push(clip.name);
     }
   }
+  return missing;
 }
 
 export interface SendTurnInput {
@@ -166,7 +169,7 @@ export interface SendTurnInput {
   readonly signal?: AbortSignal;
   /** Each line as it arrives; an `events` line once its events are stored. */
   readonly onLine?: (line: ChatStreamLine) => void;
-  /** Her files that couldn't be fetched, once every download the answer started settles. */
+  /** Attachment files that couldn't be stored or fetched once the answer settles. */
   readonly onMissingFiles?: (names: string[]) => void;
 }
 
@@ -207,7 +210,10 @@ export async function sendChatTurn<TRecord extends BrowserChatRecord>(
         if (line.type === "events") {
           await store.append(chatId, line.events);
           if (voice !== undefined && stored.length === 0) {
-            await keepRecording(store, chatId, line.events, voice.audio);
+            const missingRecording = await keepRecording(store, chatId, line.events, voice.audio);
+            if (missingRecording.length > 0) {
+              downloads.push(Promise.resolve(missingRecording));
+            }
           }
           stored.push(...line.events);
           downloads.push(downloadFiles(options, chat, herFileNames(line.events)));

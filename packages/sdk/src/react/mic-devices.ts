@@ -21,14 +21,17 @@ export function runLiveMicSwap(
   client: { selectLiveMic(deviceId: string): Promise<void> } | null,
   deviceId: string,
   callbacks: {
+    readonly isCurrent?: () => boolean;
     readonly onError: (error: Error) => void;
     readonly onSettled?: () => void;
   },
 ): void {
   if (client === null) return;
+  const isCurrent = callbacks.isCurrent ?? (() => true);
   client
     .selectLiveMic(deviceId)
     .catch((error: unknown) => {
+      if (!isCurrent()) return;
       callbacks.onError(error instanceof Error ? error : new Error(String(error)));
     })
     .finally(() => {
@@ -47,7 +50,10 @@ export function useEidolonMicDevices({
   const [mics, setMics] = useState<readonly MediaDeviceInfo[]>([]);
   const [swapError, setSwapError] = useState<Error | null>(null);
   const mountedRef = useRef(true);
-  const swappingRef = useRef(0);
+  const activeClientRef = useRef(client);
+  activeClientRef.current = client;
+  const swapGenerationRef = useRef(0);
+  const inFlightSwapsRef = useRef(new Set<symbol>());
 
   useEffect(() => {
     mountedRef.current = true;
@@ -57,15 +63,22 @@ export function useEidolonMicDevices({
   }, []);
 
   useEffect(() => {
-    setSwapError(null);
-    const offResetConnected = client?.on("connected", () => setSwapError(null));
-    const offResetDisconnected = client?.on("disconnected", () => setSwapError(null));
+    const resetSwapState = () => {
+      swapGenerationRef.current += 1;
+      inFlightSwapsRef.current.clear();
+      setSwapError(null);
+    };
+    resetSwapState();
+    const offResetConnected = client?.on("connected", resetSwapState);
+    const offResetDisconnected = client?.on("disconnected", resetSwapState);
     const offDeviceError = client?.on("deviceError", (error) => {
-      if (swappingRef.current > 0) setSwapError(error);
+      if (inFlightSwapsRef.current.size > 0) setSwapError(error);
     });
 
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.enumerateDevices) {
       return () => {
+        swapGenerationRef.current += 1;
+        inFlightSwapsRef.current.clear();
         offResetConnected?.();
         offResetDisconnected?.();
         offDeviceError?.();
@@ -95,6 +108,8 @@ export function useEidolonMicDevices({
     });
     return () => {
       cancelled = true;
+      swapGenerationRef.current += 1;
+      inFlightSwapsRef.current.clear();
       navigator.mediaDevices.removeEventListener("devicechange", onDeviceChange);
       offResetConnected?.();
       offResetDisconnected?.();
@@ -113,15 +128,19 @@ export function useEidolonMicDevices({
   const selectMic = useCallback(
     (deviceId: string) => {
       onPersistMicId?.(deviceId);
+      const generation = ++swapGenerationRef.current;
       setSwapError(null);
       if (client === null) return;
-      swappingRef.current += 1;
+      const token = Symbol();
+      inFlightSwapsRef.current.add(token);
       runLiveMicSwap(client, deviceId, {
-        onError: (error) => {
-          if (mountedRef.current) setSwapError(error);
-        },
+        isCurrent: () =>
+          mountedRef.current &&
+          activeClientRef.current === client &&
+          swapGenerationRef.current === generation,
+        onError: setSwapError,
         onSettled: () => {
-          swappingRef.current = Math.max(0, swappingRef.current - 1);
+          inFlightSwapsRef.current.delete(token);
         },
       });
     },
