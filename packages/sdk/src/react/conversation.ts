@@ -892,6 +892,10 @@ export async function dispatchSentText(
   return msgId;
 }
 
+function openAssistantMessage(state: ConversationState): ConversationMessage | undefined {
+  return state.messages.findLast((msg) => msg.role === "assistant" && msg.final !== true);
+}
+
 /** Tracks live RTVI call transcripts, spoken/unspoken word progress, typed lines, and tool calls. */
 export function useEidolonConversation(
   options: UseEidolonConversationOptions = {},
@@ -935,6 +939,7 @@ export function useEidolonConversation(
     }
 
     let botStoppedTimer: ReturnType<typeof setTimeout> | undefined;
+    let botTimerSource: "speech-stopped" | "text-only" | undefined;
     let userStoppedTimer: ReturnType<typeof setTimeout> | undefined;
 
     const cancelBotTimer = () => {
@@ -942,11 +947,14 @@ export function useEidolonConversation(
         clearTimeout(botStoppedTimer);
         botStoppedTimer = undefined;
       }
+      botTimerSource = undefined;
     };
-    const armBotTimer = () => {
+    const armBotTimer = (source: "speech-stopped" | "text-only") => {
       cancelBotTimer();
+      botTimerSource = source;
       botStoppedTimer = setTimeout(() => {
         botStoppedTimer = undefined;
+        botTimerSource = undefined;
         dispatch({ type: "bot-stopped-timeout", now: new Date().toISOString() });
       }, BOT_STOPPED_FINALIZE_DELAY_MS);
     };
@@ -982,13 +990,33 @@ export function useEidolonConversation(
       client.on("botOutput", (data: BotOutputData) => {
         if (isIgnoredBotOutput(data)) return;
         dispatch({ type: "bot-output", data, now: new Date().toISOString() });
-        if (botStoppedTimer !== undefined || data.will_be_spoken === false) {
-          armBotTimer();
+        const openAssistant = openAssistantMessage(stateRef.current);
+        if (!openAssistant) {
+          cancelBotTimer();
+          return;
+        }
+        const pendingVoiced = openAssistant.parts.some(
+          (part) => !part.final && isBotOutputText(part.text),
+        );
+        const isNewVoicedSegment =
+          data.will_be_spoken !== false &&
+          data.spoken_status !== "in-progress" &&
+          data.spoken_status !== "completed";
+        if (botTimerSource === "speech-stopped") {
+          if (pendingVoiced && isNewVoicedSegment) {
+            cancelBotTimer();
+          } else {
+            armBotTimer("speech-stopped");
+          }
+        } else if (pendingVoiced) {
+          cancelBotTimer();
+        } else if (botTimerSource === "text-only" || data.will_be_spoken === false) {
+          armBotTimer("text-only");
         }
       }),
       client.on("botLlmStarted", cancelBotTimer),
       client.on("botStartedSpeaking", cancelBotTimer),
-      client.on("botStoppedSpeaking", armBotTimer),
+      client.on("botStoppedSpeaking", () => armBotTimer("speech-stopped")),
       client.on("botInterrupted", () => {
         cancelBotTimer();
         dispatch({ type: "bot-interrupted", now: new Date().toISOString() });

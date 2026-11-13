@@ -107,6 +107,7 @@ function effectiveMediaState(
 interface InternalWavRecorder {
   getStatus?: () => string;
   begin?: (deviceId?: string) => Promise<unknown>;
+  record?: (...args: unknown[]) => Promise<unknown>;
   end?: () => Promise<unknown>;
   listenForDeviceChange?: (callback: null) => unknown;
   listenForDeviceErrors?: (callback: null) => unknown;
@@ -126,6 +127,7 @@ interface InternalWavStreamPlayer {
   context?: { state?: string; close?: () => Promise<void> } | null;
   analyser?: unknown;
   stream?: { disconnect?: () => void } | null;
+  interrupt?: () => Promise<unknown>;
 }
 
 interface InternalPipecatClient {
@@ -465,21 +467,33 @@ function createBridgedMediaManager(
         // https://github.com/pipecat-ai/pipecat-client-web-transports/blob/main/lib/src/wavtools/lib/wav_recorder.js
         recorder.deviceSelection = null;
       }
-      let beginError: unknown;
+      let acquireError: unknown;
       const origBegin = recorder?.begin;
       const hadOwnBegin = recorder ? Object.hasOwn(recorder, "begin") : false;
+      const origRecord = recorder?.record;
+      const hadOwnRecord = recorder ? Object.hasOwn(recorder, "record") : false;
       if (recorder && typeof origBegin === "function") {
         recorder.begin = async function (this: unknown, ...args: [string?]) {
           try {
             return await origBegin.apply(this, args);
           } catch (error) {
-            beginError = error;
+            acquireError ??= error;
             throw error;
           }
         };
       }
-      // WavMediaManager.updateMic catches and discards WavRecorder.begin() rejections, and
-      // WavRecorder.end() clears processor without closing the outgoing AudioContext:
+      if (recorder && typeof origRecord === "function") {
+        recorder.record = async function (this: unknown, ...args: unknown[]) {
+          try {
+            return await origRecord.apply(this, args);
+          } catch (error) {
+            acquireError ??= error;
+            throw error;
+          }
+        };
+      }
+      // WavMediaManager.updateMic catches and discards WavRecorder.begin() and _startRecording()
+      // rejections, and WavRecorder.end() clears processor without closing the outgoing AudioContext:
       // https://github.com/pipecat-ai/pipecat-client-web-transports/blob/main/lib/src/media-mgmt/mediaManager.ts
       // https://github.com/pipecat-ai/pipecat-client-web-transports/blob/main/lib/src/wavtools/lib/wav_recorder.js
       try {
@@ -494,6 +508,10 @@ function createBridgedMediaManager(
           if (hadOwnBegin) recorder.begin = origBegin;
           else Reflect.deleteProperty(recorder, "begin");
         }
+        if (recorder && origRecord !== undefined) {
+          if (hadOwnRecord) recorder.record = origRecord;
+          else Reflect.deleteProperty(recorder, "record");
+        }
       }
       const closing = closeReplacedContext(priorContext, recorder?.processor?.context);
       if (closing) await closing;
@@ -501,9 +519,9 @@ function createBridgedMediaManager(
         await cleanupOnAbort("canceled");
         return;
       }
-      if (beginError !== undefined) {
+      if (acquireError !== undefined) {
         await cleanupOnAbort("failed");
-        throw beginError;
+        throw acquireError;
       }
       const track = proto.tracks.call(target).local.audio;
       if (!track || track.readyState === "ended") {
@@ -522,18 +540,15 @@ function createBridgedMediaManager(
     };
     if (preConnectMicDepth > 0) {
       // Keep pre-connect capture off pendingMicOp so an unanswered permission prompt never
-      // blocks disconnect() or an awaited redial; claimLifecycle() isolates and cleans it up.
+      // blocks disconnect() or an awaited redial; claimWhenEpochIdle() serializes behind same-epoch
+      // mic work and claimLifecycle() isolates and cleans it up.
       return (async () => {
-        if (isCanceled(epoch)) return;
-        isolateSuspendedInner();
-        let existing = inFlightInners.get(activeInner);
-        while (!isCanceled(epoch) && existing !== undefined && existing.epoch === epoch) {
-          await waitUnlessCanceled(existing.settled, epoch);
-          isolateSuspendedInner();
-          existing = inFlightInners.get(activeInner);
+        let attempt: ReturnType<typeof claimLifecycle>;
+        try {
+          attempt = await claimWhenEpochIdle(epoch);
+        } catch {
+          return;
         }
-        if (isCanceled(epoch)) return;
-        const attempt = claimLifecycle(epoch);
         try {
           await runUpdateOn(attempt.inner, attempt.recorder, () => cleanupAttempt(attempt));
         } finally {
@@ -671,11 +686,23 @@ function createBridgedMediaManager(
         const player = readPlayerOf(target);
         const priorStream = recorder?.stream;
         const priorContext = recorder?.processor?.context;
-        await proto.disconnect.call(target);
-        // applyMicPreference opens _wavRecorder via updateMic before initialize() flips _initialized,
-        // so baseDisconnect() returns early; WavRecorder.end() also clears this.stream without stopping tracks.
-        await stopRecorderInstance(recorder, priorStream, priorContext);
-        await closePlayerInstance(player);
+        try {
+          if (recorder?.getStatus?.() !== "ended") {
+            await proto.disconnect.call(target);
+          } else if (Reflect.get(target, "_initialized") === true) {
+            await player?.interrupt?.();
+          }
+        } catch {
+          if (Reflect.get(target, "_initialized") === true) {
+            await player?.interrupt?.().catch(() => {});
+          }
+        } finally {
+          Reflect.set(target, "_initialized", false);
+          // applyMicPreference opens _wavRecorder via updateMic before initialize() flips _initialized,
+          // so baseDisconnect() returns early; WavRecorder.end() also clears this.stream without stopping tracks.
+          await stopRecorderInstance(recorder, priorStream, priorContext);
+          await closePlayerInstance(player);
+        }
       } finally {
         activeDisconnects -= 1;
       }

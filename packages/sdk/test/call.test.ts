@@ -1644,6 +1644,74 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
       markBeginPending = null;
     }
     await initClient.disconnect();
+
+    // 8. Pre-connect applyMicPreference (runPreConnectMic) waits behind an in-flight same-epoch
+    // unplug fallback in activeMicWork so WavRecorder.begin is never entered concurrently.
+    playerPending = new Promise<void>((resolve) => {
+      markPlayerPending = resolve;
+    });
+    origRec.deviceSelection = { deviceId: "usb-2", kind: "audioinput", label: "usb-2" };
+    const pendingInitBeforePref = initClient.initDevices();
+    await playerPending;
+    finishPlayer();
+    await pendingInitBeforePref;
+
+    fallbackBeginGate = new Promise<void>((resolve) => {
+      releaseFallbackBegin = resolve;
+    });
+    const fallbackStartedForPref = new Promise<void>((resolve) => {
+      markFallbackBeginPending = resolve;
+    });
+    concurrentBeginCount = 0;
+    maxConcurrentBegin = 0;
+    const baseListDevices = origRec.listDevices;
+    origRec.listDevices = async () => [
+      builtInDevice,
+      {
+        deviceId: "usb-3",
+        kind: "audioinput",
+        label: "USB 3",
+        groupId: "g3",
+        toJSON: () => ({}),
+      } as MediaDeviceInfo,
+    ];
+    origRec.begin = async (deviceId?: string) => {
+      concurrentBeginCount += 1;
+      maxConcurrentBegin = Math.max(maxConcurrentBegin, concurrentBeginCount);
+      try {
+        return await baseBegin(deviceId);
+      } finally {
+        concurrentBeginCount -= 1;
+      }
+    };
+    try {
+      const opensBeforePrefRace = openedDuringInit.length;
+      onDeviceChangeCb?.([builtInDevice]);
+      await fallbackStartedForPref;
+      let prefSettled = false;
+      const pendingPrefBehindFallback = initClient.applyMicPreference("usb-3").then(() => {
+        prefSettled = true;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(prefSettled).toBe(false);
+      expect(maxConcurrentBegin).toBe(1);
+
+      fallbackBeginGate = null;
+      markFallbackBeginPending = null;
+      releaseFallbackBegin();
+      await pendingPrefBehindFallback;
+      expect(prefSettled).toBe(true);
+      expect(maxConcurrentBegin).toBe(1);
+      expect(openedDuringInit.slice(opensBeforePrefRace)).toEqual(["built-in", "usb-3"]);
+      expect((origRec.deviceSelection as { deviceId?: string } | null)?.deviceId).toBe("usb-3");
+      expect(initClient.appliedMicId).toBe("usb-3");
+    } finally {
+      origRec.listDevices = baseListDevices;
+      origRec.begin = baseBegin;
+      fallbackBeginGate = null;
+      markFallbackBeginPending = null;
+    }
+    await initClient.disconnect();
   });
 });
 
@@ -2285,14 +2353,23 @@ describe("stepConversation pure transcript reducer", () => {
     }
 
     const origSetTimeout = globalThis.setTimeout;
-    const scheduledFinalize: (() => void)[] = [];
+    const origClearTimeout = globalThis.clearTimeout;
+    const activeFinalizeTimers = new Map<ReturnType<typeof setTimeout>, () => void>();
     globals.setTimeout = ((cb: (...args: unknown[]) => void, ms?: number, ...args: unknown[]) => {
       if (ms === 2500) {
-        scheduledFinalize.push(() => cb(...args));
-        return origSetTimeout(() => {}, 0);
+        const handle = origSetTimeout(() => {}, 0);
+        activeFinalizeTimers.set(handle, () => {
+          activeFinalizeTimers.delete(handle);
+          cb(...args);
+        });
+        return handle;
       }
       return origSetTimeout(cb, ms, ...args);
     }) as typeof setTimeout;
+    globals.clearTimeout = ((id?: ReturnType<typeof setTimeout>) => {
+      if (id !== undefined) activeFinalizeTimers.delete(id);
+      origClearTimeout(id);
+    }) as typeof clearTimeout;
 
     const root = createRoot(container as unknown as Element);
     try {
@@ -2409,7 +2486,8 @@ describe("stepConversation pure transcript reducer", () => {
         [false, undefined],
       ]);
 
-      // 3. Text-only replies (will_be_spoken: false, no botStoppedSpeaking) arm the finalize timer and close cleanly.
+      // 3. Text-only replies (will_be_spoken: false, no botStoppedSpeaking) arm the finalize timer and close cleanly,
+      // while mixed replies with pending voiced speech cancel/skip text-only timers until speech actually stops.
       await act(async () => {
         raw.emit(RTVIEvent.BotOutput, {
           text: "纯文字回复。",
@@ -2420,11 +2498,77 @@ describe("stepConversation pure transcript reducer", () => {
       });
       expect(conv.messages).toHaveLength(1);
       expect(conv.messages[0]?.final).toBe(false);
-      expect(scheduledFinalize).toHaveLength(1);
+      expect(activeFinalizeTimers.size).toBe(1);
       await act(async () => {
-        scheduledFinalize.pop()?.();
+        [...activeFinalizeTimers.values()][0]?.();
       });
       expect(conv.messages[0]?.final).toBe(true);
+
+      await act(async () => {
+        raw.emit(RTVIEvent.BotOutput, {
+          text: "（轻笑）",
+          spoken_status: "new",
+          segment_id: 10,
+          will_be_spoken: false,
+        });
+      });
+      expect(activeFinalizeTimers.size).toBe(1);
+      await act(async () => {
+        raw.emit(RTVIEvent.BotOutput, {
+          text: "慢慢说给你听。",
+          spoken_status: "new",
+          segment_id: 11,
+          will_be_spoken: true,
+        });
+      });
+      expect(activeFinalizeTimers.size).toBe(0);
+      await act(async () => {
+        raw.emit(RTVIEvent.BotOutput, {
+          text: "（眨眼）",
+          spoken_status: "new",
+          segment_id: 12,
+          will_be_spoken: false,
+        });
+      });
+      expect(activeFinalizeTimers.size).toBe(0);
+      expect(conv.messages[1]?.final).toBe(false);
+      expect(conv.messages[1]?.parts[1]?.text).toEqual({
+        spoken: "",
+        unspoken: "慢慢说给你听。",
+      });
+
+      await act(async () => {
+        raw.emit(RTVIEvent.BotStartedSpeaking);
+        raw.emit(RTVIEvent.BotOutput, {
+          text: "慢慢说给你听。",
+          spoken_status: "in-progress",
+          segment_id: 11,
+          will_be_spoken: true,
+          spoken_progress: { accumulated_text: "慢慢说", remaining_text: "给你听。" },
+        });
+      });
+      expect(conv.messages[1]?.parts[1]?.text).toEqual({
+        spoken: "慢慢说",
+        unspoken: "给你听。",
+      });
+      await act(async () => {
+        raw.emit(RTVIEvent.BotOutput, {
+          text: "慢慢说给你听。",
+          spoken_status: "completed",
+          segment_id: 11,
+          will_be_spoken: true,
+        });
+        raw.emit(RTVIEvent.BotStoppedSpeaking);
+      });
+      expect(activeFinalizeTimers.size).toBe(1);
+      await act(async () => {
+        [...activeFinalizeTimers.values()][0]?.();
+      });
+      expect(conv.messages[1]?.final).toBe(true);
+      expect(conv.messages[1]?.parts[1]?.text).toEqual({
+        spoken: "慢慢说给你听。",
+        unspoken: "",
+      });
 
       // 4. Hanging up mid-reply closes open user, assistant, and function_call entries without marking unheard words spoken.
       await act(async () => {
@@ -2467,6 +2611,7 @@ describe("stepConversation pure transcript reducer", () => {
       });
     } finally {
       globals.setTimeout = origSetTimeout;
+      globals.clearTimeout = origClearTimeout;
       await act(async () => {
         root.unmount();
       });
@@ -2657,6 +2802,9 @@ describe("stepConversation pure transcript reducer", () => {
       },
       pause: async () => true,
       end: async () => {
+        if (!recorderStub.processor) {
+          throw new Error("Session ended: please call .begin() first");
+        }
         // Matches WavRecorder.end(): stops stream + clears processor without resetting deviceSelection.
         for (const t of recorderStub.stream?.getTracks() ?? []) t.stop();
         recorderStub.stream = null;
@@ -2669,12 +2817,29 @@ describe("stepConversation pure transcript reducer", () => {
         deviceErrorListener = cb;
       },
     };
-    Reflect.set(manager, "_wavRecorder", recorderStub);
-    Reflect.set(manager, "_wavStreamPlayer", {
+    let playerInterruptCalls = 0;
+    const playerStub: {
+      context: { state: string; close: () => Promise<void> } | null;
+      connect: () => Promise<boolean>;
+      interrupt: () => Promise<void>;
+    } = {
       context: null,
-      connect: async () => true,
-      interrupt: async () => {},
-    });
+      connect: async () => {
+        const ctx = {
+          state: "running",
+          close: async () => {
+            ctx.state = "closed";
+          },
+        };
+        playerStub.context = ctx;
+        return true;
+      },
+      interrupt: async () => {
+        playerInterruptCalls += 1;
+      },
+    };
+    Reflect.set(manager, "_wavRecorder", recorderStub);
+    Reflect.set(manager, "_wavStreamPlayer", playerStub);
     let selectedAtTransportConnect: string | undefined;
     Reflect.set(client.rawTransport, "_connect", async () => {
       selectedAtTransportConnect = client.selectedMic.deviceId;
@@ -3082,9 +3247,47 @@ describe("stepConversation pure transcript reducer", () => {
       } finally {
         recorderStub.end = origRecorderEnd;
       }
+
+      // 9. An unmuted live swap whose _startRecording() / recorder.record() rejects cleans up the
+      // newly acquired stream and AudioContext, leaves appliedMicId null, and rejects selectLiveMic.
+      await act(async () => {
+        client.enableMic(true);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      const origRecorderRecord = recorderStub.record;
+      recorderStub.record = async () => {
+        throw new Error("Timed out waiting for start event");
+      };
+      try {
+        await act(async () => {
+          await expect(client.selectLiveMic("usb-2")).rejects.toThrow(
+            "Timed out waiting for start event",
+          );
+        });
+        expect(client.appliedMicId).toBeNull();
+        expect(recorderStub.getStatus()).toBe("ended");
+        expect(recorderStub.processor).toBeNull();
+        expect(recorderStub.stream).toBeNull();
+        expect(createdContexts.every((c) => c.state === "closed")).toBe(true);
+      } finally {
+        recorderStub.record = origRecorderRecord;
+      }
+
+      // 10. Hanging up right after a failed live swap (while _initialized is true and recorder.processor
+      // is already null) interrupts and closes the player, clears _initialized, detaches listeners, and resolves.
+      const playerInterruptsBefore = playerInterruptCalls;
+      const activePlayerContext = playerStub.context;
+      expect(activePlayerContext?.state).toBe("running");
+      expect(Reflect.get(manager, "_initialized")).toBe(true);
       await act(async () => {
         await client.disconnect();
       });
+      expect(playerInterruptCalls).toBe(playerInterruptsBefore + 1);
+      expect(activePlayerContext?.state).toBe("closed");
+      expect(playerStub.context).toBeNull();
+      expect(Reflect.get(manager, "_initialized")).toBe(false);
+      expect(deviceChangeListener).toBeNull();
+      expect(deviceErrorListener).toBeNull();
       expect(createdContexts.every((c) => c.state === "closed")).toBe(true);
     } finally {
       await act(async () => {
