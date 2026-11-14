@@ -6,6 +6,7 @@ function wait() {
   const turn = new TurnWait({
     arm: () => calls.push("arm"),
     clear: () => calls.push("clear"),
+    llmStarted: () => calls.push("llm"),
   });
   return { turn, calls };
 }
@@ -56,4 +57,23 @@ test("a transcript after she started answering starts no wait", () => {
   turn.settled();
   turn.heard({ text: "你好", final: true });
   expect(calls).toEqual(["clear", "clear"]);
+});
+
+test("a late wait keeps an LLM start that came before the transcript, so it never reads stuck", () => {
+  const { turn, calls } = wait();
+  turn.started();
+  turn.stopped();
+  turn.llmStarted();
+  turn.heard({ text: "你好", final: true });
+  expect(calls).toEqual(["clear", "llm", "arm", "llm"]);
+});
+
+test("a new turn forgets the last one's LLM start", () => {
+  const { turn, calls } = wait();
+  turn.started();
+  turn.llmStarted();
+  turn.started();
+  turn.stopped();
+  turn.heard({ text: "你好", final: true });
+  expect(calls).toEqual(["clear", "llm", "clear", "arm"]);
 });

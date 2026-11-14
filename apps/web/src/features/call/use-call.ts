@@ -125,7 +125,7 @@ export function useCall(): Call {
           setUserSpeaking(false);
           turn.stopped();
         }),
-        client.on("botLlmStarted", () => watchdog.llmStarted()),
+        client.on("botLlmStarted", () => turn.llmStarted()),
         client.on("userInput", (data) => {
           heard();
           turn.heard(data);
