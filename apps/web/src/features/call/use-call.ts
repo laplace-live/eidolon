@@ -107,7 +107,7 @@ export function useCall(): Call {
         }),
         client.on("botStartedSpeaking", () => {
           heard();
-          watchdog.clear();
+          turn.settled();
           setBotSpeaking(true);
           dispatchPhase({ type: "answered", at: Date.now() });
         }),
@@ -146,7 +146,7 @@ export function useCall(): Call {
           }
         }),
         client.on("error", (message) => {
-          watchdog.clear();
+          turn.settled();
           const text = message.data.error;
           setBotError((last) => ({ message: text, count: (last?.count ?? 0) + 1 }));
         }),

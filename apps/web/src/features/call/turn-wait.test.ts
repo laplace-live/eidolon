@@ -39,3 +39,21 @@ test("a new turn forgets the last one's words", () => {
   turn.stopped();
   expect(calls).toEqual(["clear", "arm", "clear"]);
 });
+
+test("on a realtime call the transcript after the turn's end starts the wait, once", () => {
+  const { turn, calls } = wait();
+  turn.started();
+  turn.stopped();
+  turn.heard({ text: "你好", final: true });
+  turn.heard({ text: "你好", final: true });
+  expect(calls).toEqual(["clear", "arm"]);
+});
+
+test("a transcript after she started answering starts no wait", () => {
+  const { turn, calls } = wait();
+  turn.started();
+  turn.stopped();
+  turn.settled();
+  turn.heard({ text: "你好", final: true });
+  expect(calls).toEqual(["clear", "clear"]);
+});

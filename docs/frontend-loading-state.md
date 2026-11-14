@@ -322,7 +322,8 @@ so steps 5–13 happen once before the user has said anything. A group call does
 On a call to a persona who talks through a realtime model, the model's own VAD starts and ends
 the user's turn, not Silero and Smart Turn, and it answers before it has transcribed the turn:
 `UserStoppedSpeaking` comes as it hears the user stop, and the final transcript after it. The
-TL;DR's indicator, which waits for that transcript, doesn't start on such a call.
+TL;DR's indicator, which waits for that transcript, doesn't start on such a call; the local app's
+`TurnWait` starts it on that late transcript instead, unless she has started answering.
 
 ---
 
