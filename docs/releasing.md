@@ -80,7 +80,7 @@ In the single `release` job (`id-token: write`, Node 24's npm):
    stripped `workspace:*` `devDependencies`, and `publishConfig: { access: "public", provenance: true }`).
 2. `changeset publish` queries the npm registry, skips versions already published, and runs
    `npm publish <pack-dir> --access public --tag latest` directly against each unpublished package's
-   `pack/` folder — no intermediate `.tgz` tarballs, cross-job artifacts, or toggle variables.
+   `pack/` folder.
 3. npm exchanges the job's GitHub OIDC token for a short-lived publish token through the package's
    trusted publisher and records build provenance, so no `NPM_TOKEN` secret is stored anywhere.
 

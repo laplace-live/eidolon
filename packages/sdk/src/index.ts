@@ -44,6 +44,7 @@ export {
 export {
   AUDIO_QUALITIES,
   type AudioQuality,
+  BotAlreadyStartedError,
   type BotCapabilities,
   BotNotReadyError,
   type BotOutputData,

@@ -1,5 +1,5 @@
 import { isAttachmentName, isJsonObject, parseStreamLine } from "./parse.ts";
-import type { ChatStreamLine, ChatWindow } from "./types.ts";
+import { type ChatStreamLine, type ChatWindow, MAX_VOICE_MS } from "./types.ts";
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -127,23 +127,35 @@ async function* ndjsonValues(
 }
 
 /** A turn's stream lines; lines of a type this client doesn't know are skipped. */
-async function* streamLines(res: Response): AsyncGenerator<ChatStreamLine, void, undefined> {
+async function* streamLines(
+  res: Response,
+  signal: AbortSignal | null | undefined,
+): AsyncGenerator<ChatStreamLine, void, undefined> {
   if (!res.ok) throw await refusalOf(res);
   if (res.body === null) {
     throw new ChatRequestError(res.status, "bad-stream", "The answer has no body");
   }
   const openTurns = new Set<string>();
   let sawTerminalError = false;
-  for await (const value of ndjsonValues(res.body)) {
-    const line = parseStreamLine(value);
-    if (line === null) continue;
-    if (line.type === "started") openTurns.add(line.turn);
-    else if (line.type === "ended") openTurns.delete(line.turn);
-    else if (line.type === "error") {
-      sawTerminalError = true;
-      openTurns.clear();
+  try {
+    for await (const value of ndjsonValues(res.body)) {
+      const line = parseStreamLine(value);
+      if (line === null) continue;
+      if (line.type === "started") openTurns.add(line.turn);
+      else if (line.type === "ended") openTurns.delete(line.turn);
+      else if (line.type === "error") {
+        sawTerminalError = true;
+        openTurns.clear();
+      }
+      yield line;
     }
-    yield line;
+  } catch (error) {
+    if (error instanceof ChatRequestError || signal?.aborted || isAbortError(error)) throw error;
+    throw new ChatRequestError(
+      res.status,
+      "network",
+      error instanceof Error ? error.message : String(error),
+    );
   }
   if (!sawTerminalError && openTurns.size > 0) {
     throw new ChatRequestError(
@@ -245,7 +257,7 @@ export async function* streamTurn(
       signal: turn.signal,
     },
   );
-  yield* streamLines(res);
+  yield* streamLines(res, turn.signal);
 }
 
 export type VoiceRequest = Omit<TurnRequest, "text"> & {
@@ -265,7 +277,12 @@ export async function* streamVoice(
   const form = new FormData();
   form.append("chat", JSON.stringify(voice.chat));
   form.append("audio", voice.audio);
-  form.append("durationMs", String(Math.max(1, Math.round(voice.durationMs))));
+  // The server refuses a claimed length past MAX_VOICE_MS, while a recorder stopped by a timer at
+  // the limit overshoots it by a few milliseconds.
+  form.append(
+    "durationMs",
+    String(Math.min(MAX_VOICE_MS, Math.max(1, Math.round(voice.durationMs)))),
+  );
   const token = tokenOf(voice.loginSyncToken);
   if (token !== null) form.append("loginSyncToken", token);
   const res = await request(
@@ -277,7 +294,7 @@ export async function* streamVoice(
       signal: voice.signal,
     },
   );
-  yield* streamLines(res);
+  yield* streamLines(res, voice.signal);
 }
 
 /** How long one of her files may take, body included, before a turn goes on without it. */
@@ -296,20 +313,17 @@ export async function fetchChatFile(file: {
   if (!isAttachmentName(file.name)) {
     throw new ChatRequestError(0, "bad-request", `${file.name} isn't a file's name`);
   }
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FILE_TIMEOUT_MS);
+  const signal = AbortSignal.timeout(FILE_TIMEOUT_MS);
   try {
     const url = `${normalizeBaseUrl(file.baseUrl)}/api/chat/files/${file.name}`;
-    const res = await request(file.fetch ?? fetch, url, { signal: controller.signal });
+    const res = await request(file.fetch ?? fetch, url, { signal });
     if (res.status === 404) return null;
     if (!res.ok) throw await refusalOf(res);
     return await res.blob();
   } catch (error) {
-    if (controller.signal.aborted) {
+    if (signal.aborted) {
       throw new ChatRequestError(0, "timeout", `${file.name} didn't arrive in time`);
     }
     throw error;
-  } finally {
-    clearTimeout(timer);
   }
 }

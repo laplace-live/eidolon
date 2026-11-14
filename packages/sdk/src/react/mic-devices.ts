@@ -28,6 +28,7 @@ export function runLiveMicSwap(
   callbacks: {
     readonly isCurrent?: () => boolean;
     readonly onError: (error: Error) => void;
+    readonly onSuccess?: () => void;
     readonly onSettled?: () => void;
   },
 ): void {
@@ -35,10 +36,15 @@ export function runLiveMicSwap(
   const isCurrent = callbacks.isCurrent ?? (() => true);
   client
     .selectLiveMic(deviceId)
-    .catch((error: unknown) => {
-      if (!isCurrent()) return;
-      callbacks.onError(error instanceof Error ? error : new Error(String(error)));
-    })
+    .then(
+      () => {
+        if (isCurrent()) callbacks.onSuccess?.();
+      },
+      (error: unknown) => {
+        if (!isCurrent()) return;
+        callbacks.onError(error instanceof Error ? error : new Error(String(error)));
+      },
+    )
     .finally(() => {
       callbacks.onSettled?.();
     });
@@ -66,13 +72,16 @@ export function useEidolonMicDevices({
   const transportState = useEidolonTransportState();
   const canLiveSwap = client !== null && LIVE_SWAP_STATES.has(transportState);
   const [mics, setMics] = useState<readonly MediaDeviceInfo[]>([]);
-  const [localMicId, setLocalMicId] = useState<string | null>(null);
+  // A remounted uncontrolled picker starts from the client's choice, not from null, which it would
+  // otherwise push back to the client as "system default".
+  const [localMicId, setLocalMicId] = useState<string | null>(() => client?.preferredMicId ?? null);
   const [swapError, setSwapError] = useState<Error | null>(null);
   const activeClientRef = useRef(client);
   const micsRef = useRef(mics);
   const pendingPreConnectMicRef = useRef<string | null>(null);
   const swapGenerationRef = useRef(0);
-  const inFlightSwapsRef = useRef(new Set<symbol>());
+  /** Each swap still in flight, oldest first, with the generation that started it. */
+  const inFlightSwapsRef = useRef(new Map<symbol, number>());
 
   useEffect(() => {
     micsRef.current = mics;
@@ -96,11 +105,12 @@ export function useEidolonMicDevices({
   const startTrackedSwap = useCallback(
     (targetClient: NonNullable<typeof client>, deviceId: string, generation: number) => {
       const token = Symbol();
-      inFlightSwapsRef.current.add(token);
+      inFlightSwapsRef.current.set(token, generation);
       runLiveMicSwap(targetClient, deviceId, {
         isCurrent: () =>
           activeClientRef.current === targetClient && swapGenerationRef.current === generation,
         onError: setSwapError,
+        onSuccess: () => setSwapError(null),
         onSettled: () => {
           inFlightSwapsRef.current.delete(token);
         },
@@ -142,7 +152,10 @@ export function useEidolonMicDevices({
     const offResetConnected = client?.on("connected", onConnected);
     const offResetDisconnected = client?.on("disconnected", onDisconnected);
     const offDeviceError = client?.on("deviceError", (error) => {
-      if (inFlightSwapsRef.current.size > 0) setSwapError(error);
+      // Live swaps run one at a time, so the error is the oldest in-flight swap's: stale unless
+      // the viewer hasn't picked another mic since.
+      const [running] = inFlightSwapsRef.current.values();
+      if (running === swapGenerationRef.current) setSwapError(error);
     });
     const teardownSwapListeners = () => {
       activeClientRef.current = null;

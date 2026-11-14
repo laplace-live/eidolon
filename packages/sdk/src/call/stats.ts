@@ -39,26 +39,17 @@ export function readPeerConnection(transport: SmallWebRTCTransport): RTCPeerConn
 export async function gatherNetworkInfo(pc: RTCPeerConnection): Promise<NetworkInfo | null> {
   const stats = await pc.getStats();
 
-  let transportChecked = false;
-  let pair: ExtendedCandidatePairStats | undefined;
-  for (const stat of stats.values()) {
-    if (!transportChecked && stat.type === "transport") {
-      const transportStat: RTCTransportStats = stat;
-      if (typeof transportStat.selectedCandidatePairId === "string") {
-        transportChecked = true;
-        const fromTransport: ExtendedCandidatePairStats | undefined = stats.get(
-          transportStat.selectedCandidatePairId,
-        );
-        if (fromTransport !== undefined) {
-          pair = fromTransport;
-          break;
-        }
-      }
-    } else if (!pair && stat.type === "candidate-pair" && stat.state === "succeeded") {
-      const candidatePair: ExtendedCandidatePairStats = stat;
-      if (candidatePair.nominated || candidatePair.selected) pair = candidatePair;
-    }
-  }
+  const all = [...stats.values()];
+  const selectedId = all.find(
+    (s): s is RTCTransportStats =>
+      s.type === "transport" && typeof s.selectedCandidatePairId === "string",
+  )?.selectedCandidatePairId;
+  const pair: ExtendedCandidatePairStats | undefined =
+    (selectedId === undefined ? undefined : stats.get(selectedId)) ??
+    all.find(
+      (s): s is ExtendedCandidatePairStats =>
+        s.type === "candidate-pair" && s.state === "succeeded" && (s.nominated || s.selected),
+    );
   if (!pair) return null;
 
   const localCand: CandidateStat | undefined = stats.get(pair.localCandidateId);

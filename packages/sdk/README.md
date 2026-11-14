@@ -24,7 +24,7 @@ import {
   useEidolonConversation,
   useEidolonTransportState,
 } from "@laplace.live/eidolon-sdk/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 function CallControls({ baseUrl }: { baseUrl: string }) {
   const client = useEidolonClient();
@@ -53,7 +53,10 @@ function CallControls({ baseUrl }: { baseUrl: string }) {
 }
 
 export function App() {
-  const [client] = useState(() => new EidolonClient());
+  // EidolonClient reads `window` when constructed: create it in the browser, never while server rendering.
+  const [client, setClient] = useState<EidolonClient | null>(null);
+  useEffect(() => setClient(new EidolonClient()), []);
+  if (client === null) return null;
   return (
     <EidolonClientProvider client={client}>
       <CallControls baseUrl="http://127.0.0.1:7860" />

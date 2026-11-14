@@ -45,15 +45,7 @@ export function useEidolonTransportState(): TransportState {
       return;
     }
     setState(client.state);
-    const sync = () => setState(client.state);
-    const offChanged = client.on("transportStateChanged", setState);
-    const offConnected = client.on("connected", sync);
-    const offDisconnected = client.on("disconnected", sync);
-    return () => {
-      offChanged();
-      offConnected();
-      offDisconnected();
-    };
+    return client.on("transportStateChanged", setState);
   }, [client]);
 
   return state;
@@ -71,11 +63,13 @@ export function useEidolonMicControl(): EidolonMicControl {
   useEffect(() => {
     setIsMicEnabled(client.isMicEnabled);
     const sync = () => setIsMicEnabled(client.isMicEnabled);
+    const offEnabled = client.on("micEnabledUpdated", setIsMicEnabled);
     const offMuteStarted = client.on("userMuteStarted", sync);
     const offMuteStopped = client.on("userMuteStopped", sync);
     const offState = client.on("transportStateChanged", sync);
     const offMic = client.on("micUpdated", sync);
     return () => {
+      offEnabled();
       offMuteStarted();
       offMuteStopped();
       offState();
@@ -83,13 +77,7 @@ export function useEidolonMicControl(): EidolonMicControl {
     };
   }, [client]);
 
-  const enableMic = useCallback(
-    (enabled: boolean) => {
-      client.enableMic(enabled);
-      setIsMicEnabled(client.isMicEnabled);
-    },
-    [client],
-  );
+  const enableMic = useCallback((enabled: boolean) => client.enableMic(enabled), [client]);
 
   return useMemo(() => ({ enableMic, isMicEnabled }), [enableMic, isMicEnabled]);
 }
@@ -186,7 +174,7 @@ export function useEidolonNetworkInfo({
     const clientChanged = prevClientRef.current !== client;
     prevClientRef.current = client;
     if (!enabled || !isLive || client === null || clientChanged) {
-      setInfo((prev) => (prev === null ? prev : null));
+      setInfo(null);
     }
     if (!enabled || !isLive || client === null) return;
     let cancelled = false;

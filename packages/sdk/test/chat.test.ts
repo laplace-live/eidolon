@@ -32,6 +32,7 @@ import {
   isChatId,
   joinSegments,
   liveItems,
+  MAX_VOICE_MS,
   NEVER_SENT,
   newChatHeader,
   normalizeBaseUrl,
@@ -44,6 +45,7 @@ import {
   stampEvents,
   startChatCall,
   streamTurn,
+  streamVoice,
   summarize,
   uuidv7,
   type WireEvent,
@@ -666,5 +668,70 @@ describe("window builder, locks, availability, and session lifecycle", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(voiceResult.events).toHaveLength(2);
     expect(reportedMissing).toEqual([[clipName]]);
+  });
+
+  test("maps a connection dropped mid-reply to ChatRequestError(network), keeps aborts unwrapped, and caps the voice clock", async () => {
+    const store = new InMemoryBrowserChatStore();
+    const chat = await createChat(store, ["milky-green"], "https://bot.example/", 100);
+    const encoder = new TextEncoder();
+    const droppingResponse = (fail: () => unknown) =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(
+              encoder.encode(
+                `${JSON.stringify({ type: "started", turn: "t_drop", persona: "milky-green" })}\n`,
+              ),
+            );
+          },
+          pull(controller) {
+            controller.error(fail());
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/x-ndjson" } },
+      );
+
+    await expect(
+      sendChatTurn(
+        { store, fetch: async () => droppingResponse(() => new TypeError("network error")) },
+        { chatId: chat.id, text: "在吗" },
+      ),
+    ).rejects.toMatchObject({ name: "ChatRequestError", status: 200, code: "network" });
+
+    const controller = new AbortController();
+    const customReason = new Error("caller-cancelled");
+    await expect(
+      (async () => {
+        for await (const _ of streamTurn({
+          baseUrl: "https://bot.example",
+          chat: { header: chat.header, events: [] },
+          text: "在吗",
+          signal: controller.signal,
+          fetch: async () =>
+            droppingResponse(() => {
+              controller.abort(customReason);
+              return customReason;
+            }),
+        })) {
+          // The first line arrives before the abort.
+        }
+      })(),
+    ).rejects.toBe(customReason);
+
+    const sentDurations: (string | null)[] = [];
+    for await (const _ of streamVoice({
+      baseUrl: "https://bot.example",
+      chat: { header: chat.header, events: [] },
+      audio: new Blob(["opus-bytes"], { type: "audio/webm" }),
+      durationMs: MAX_VOICE_MS + 17,
+      fetch: async (_url, init) => {
+        const form = init?.body;
+        sentDurations.push(form instanceof FormData ? (form.get("durationMs") as string) : null);
+        return ndjsonResponse([]);
+      },
+    })) {
+      // no lines
+    }
+    expect(sentDurations).toEqual([String(MAX_VOICE_MS)]);
   });
 });

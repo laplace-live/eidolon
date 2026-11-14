@@ -197,11 +197,18 @@ function plainTextOfPart(part: ConversationMessagePart | undefined): string {
   return "";
 }
 
+/**
+ * How a closed turn's parts end: all final, her unspoken words snapped to spoken, or as they are.
+ * A caller's turn closed while its transcript is still interim keeps that part interim, so the
+ * final transcript that comes after her reply starts can still replace it.
+ */
+type PartsOnClose = "final" | "snap" | "keep";
+
 function finalizeRole(
   messages: readonly ConversationMessage[],
   role: "user" | "assistant",
   now: string,
-  snapSpoken: boolean,
+  partsOnClose: PartsOnClose,
 ): { messages: readonly ConversationMessage[]; updated?: ConversationMessage } {
   const idx = messages.findLastIndex(
     (msg) => msg.role === role && msg.status === undefined && msg.final !== true,
@@ -214,59 +221,116 @@ function finalizeRole(
     next.splice(idx, 1);
     return { messages: next };
   }
-  const parts = target.parts.map((part) => {
-    if (snapSpoken && isBotOutputText(part.text)) {
-      return {
-        ...part,
-        text: { spoken: part.text.spoken + part.text.unspoken, unspoken: "" },
-        final: true,
-      };
-    }
-    return part.final ? part : { ...part, final: true };
-  });
+  const parts =
+    partsOnClose === "keep"
+      ? target.parts
+      : target.parts.map((part) => {
+          if (partsOnClose === "snap" && isBotOutputText(part.text)) {
+            return {
+              ...part,
+              text: { spoken: part.text.spoken + part.text.unspoken, unspoken: "" },
+              final: true,
+            };
+          }
+          return part.final ? part : { ...part, final: true };
+        });
   const updated: ConversationMessage = { ...target, parts, final: true, updatedAt: now };
   next[idx] = updated;
   return { messages: next, updated };
+}
+
+interface Turns {
+  readonly messages: readonly ConversationMessage[];
+  readonly segments: ReadonlyMap<string, SegmentMeta>;
+}
+
+function closeTurn(
+  turns: Turns,
+  role: "user" | "assistant",
+  now: string,
+  effects: ConversationEffect[],
+  partsOnClose: PartsOnClose = "final",
+): Turns {
+  const closed = finalizeRole(turns.messages, role, now, partsOnClose);
+  if (closed.messages === turns.messages) return turns;
+  if (closed.updated) effects.push({ kind: "updated", message: closed.updated });
+  return {
+    messages: closed.messages,
+    segments: role === "assistant" ? EMPTY_CONVERSATION_STATE.segments : turns.segments,
+  };
 }
 
 function finalizeStep(
   state: ConversationState,
   role: "user" | "assistant",
   now: string,
-  snapSpoken: boolean,
+  partsOnClose: PartsOnClose,
 ): ConversationStep {
-  const closed = finalizeRole(state.messages, role, now, snapSpoken);
-  if (closed.messages === state.messages) return { state, effects: [] };
-  const segments =
-    role === "assistant" && state.segments.size > 0
-      ? EMPTY_CONVERSATION_STATE.segments
-      : state.segments;
-  return {
-    state: { ...state, messages: closed.messages, segments },
-    effects: closed.updated ? [{ kind: "updated", message: closed.updated }] : [],
-  };
+  const effects: ConversationEffect[] = [];
+  const closed = closeTurn(state, role, now, effects, partsOnClose);
+  return closed === state ? { state, effects } : { state: { ...state, ...closed }, effects };
 }
 
 function closeOpenTurns(
   state: ConversationState,
   now: string,
-): {
-  messages: readonly ConversationMessage[];
-  segments: ReadonlyMap<string, SegmentMeta>;
-  effects: ConversationEffect[];
-} {
+  userParts: PartsOnClose,
+): Turns & { effects: ConversationEffect[] } {
   const effects: ConversationEffect[] = [];
-  const userClosed = finalizeRole(state.messages, "user", now, false);
-  if (userClosed.updated) effects.push({ kind: "updated", message: userClosed.updated });
-  const assistantClosed = finalizeRole(userClosed.messages, "assistant", now, false);
-  if (assistantClosed.updated) {
-    effects.push({ kind: "updated", message: assistantClosed.updated });
+  const userClosed = closeTurn(state, "user", now, effects, userParts);
+  const closed = closeTurn(userClosed, "assistant", now, effects);
+  return { messages: closed.messages, segments: closed.segments, effects };
+}
+
+/** Finalizes the interim parts closed caller turns still hold, once no late transcript can land. */
+function settleInterims(
+  messages: readonly ConversationMessage[],
+  now: string,
+  effects: ConversationEffect[],
+): readonly ConversationMessage[] {
+  let next = messages;
+  messages.forEach((msg, i) => {
+    if (msg.role !== "user" || msg.final !== true || msg.parts.every((part) => part.final)) return;
+    const parts = msg.parts.map((part) => (part.final ? part : { ...part, final: true }));
+    const updated: ConversationMessage = { ...msg, parts, updatedAt: now };
+    if (next === messages) next = [...messages];
+    (next as ConversationMessage[])[i] = updated;
+    effects.push({ kind: "updated", message: updated });
+  });
+  return next;
+}
+
+/** Adds a transcript to a caller's message: an interim or final replaces its trailing interim. */
+function withTranscript(
+  message: ConversationMessage,
+  text: string,
+  final: boolean,
+  now: string,
+): ConversationMessage {
+  const parts = [...message.parts];
+  const lastPart = parts[parts.length - 1];
+  const appending = !lastPart || lastPart.final;
+  const prevText = plainTextOfPart(appending ? lastPart : parts[parts.length - 2]);
+  const joined = separator(prevText, text) + text;
+  if (appending) parts.push({ text: joined, final, createdAt: now });
+  else parts[parts.length - 1] = { ...lastPart, text: joined, final };
+  return { ...message, parts, updatedAt: now };
+}
+
+/**
+ * Where a transcript that lands while her reply is open goes: the caller's message of the turn
+ * she's answering, or `-1` with the index a new one is inserted at, the start of that turn.
+ */
+function lateTranscriptTarget(
+  messages: readonly ConversationMessage[],
+  openAssistantIdx: number,
+): { readonly index: number; readonly insertAt: number } {
+  for (let i = openAssistantIdx - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg?.role === "assistant") return { index: -1, insertAt: i + 1 };
+    if (msg?.role === "user" && msg.status === undefined) return { index: i, insertAt: i };
   }
-  const segments =
-    assistantClosed.messages !== userClosed.messages && state.segments.size > 0
-      ? EMPTY_CONVERSATION_STATE.segments
-      : state.segments;
-  return { messages: assistantClosed.messages, segments, effects };
+  return { index: -1, insertAt: 0 };
 }
 
 function insertBeforeOpenAssistant(
@@ -282,31 +346,24 @@ function insertBeforeOpenAssistant(
   return next;
 }
 
+/**
+ * A typed line that interrupts her goes last, but her reply stays open: what the server sent
+ * before it read the line is still arriving, and its bot-interrupted, always ahead of the echo,
+ * closes her reply.
+ */
 function placeTypedUserTurn(
   state: ConversationState,
   created: ConversationMessage,
   now: string,
   runImmediately: boolean,
-): {
-  messages: readonly ConversationMessage[];
-  segments: ReadonlyMap<string, SegmentMeta>;
-  effects: ConversationEffect[];
-} {
-  if (runImmediately) {
-    const closed = closeOpenTurns(state, now);
-    closed.effects.push({ kind: "created", message: created });
-    return {
-      messages: [...closed.messages, created],
-      segments: closed.segments,
-      effects: closed.effects,
-    };
-  }
+): Turns & { effects: ConversationEffect[] } {
   const effects: ConversationEffect[] = [];
-  const userClosed = finalizeRole(state.messages, "user", now, false);
-  if (userClosed.updated) effects.push({ kind: "updated", message: userClosed.updated });
+  const userClosed = closeTurn(state, "user", now, effects, "keep");
   effects.push({ kind: "created", message: created });
   return {
-    messages: insertBeforeOpenAssistant(userClosed.messages, created),
+    messages: runImmediately
+      ? [...userClosed.messages, created]
+      : insertBeforeOpenAssistant(userClosed.messages, created),
     segments: state.segments,
     effects,
   };
@@ -376,8 +433,9 @@ export function stepConversation(
       return { state: EMPTY_CONVERSATION_STATE, effects: [] };
 
     case "disconnected": {
-      const closed = closeOpenTurns(state, action.now);
-      let messages = closed.messages;
+      const closed = closeOpenTurns(state, action.now, "final");
+      const settled = settleInterims(closed.messages, action.now, closed.effects);
+      let messages = settled;
       for (let i = 0; i < messages.length; i++) {
         const msg = messages[i];
         if (msg?.role === "function_call" && msg.final !== true && msg.functionCall) {
@@ -391,7 +449,7 @@ export function stepConversation(
               status: "completed",
             },
           };
-          if (messages === closed.messages) messages = [...closed.messages];
+          if (messages === settled) messages = [...settled];
           (messages as ConversationMessage[])[i] = updated;
           closed.effects.push({ kind: "updated", message: updated });
         }
@@ -403,36 +461,27 @@ export function stepConversation(
     }
 
     case "user-started-speaking": {
+      // New speech: a closed turn's late transcript can no longer be told apart from this one's.
       const effects: ConversationEffect[] = [];
-      const assistantClosed = finalizeRole(state.messages, "assistant", action.now, false);
-      if (assistantClosed.updated) {
-        effects.push({ kind: "updated", message: assistantClosed.updated });
-      }
-      const segments =
-        assistantClosed.messages !== state.messages && state.segments.size > 0
-          ? EMPTY_CONVERSATION_STATE.segments
-          : state.segments;
-      let messages = assistantClosed.messages;
-      const lastUserIdx = messages.findLastIndex(
+      let turns = closeTurn(state, "assistant", action.now, effects);
+      const lastUserIdx = turns.messages.findLastIndex(
         (msg) => msg.role === "user" && msg.status === undefined,
       );
-      const lastUser = lastUserIdx === -1 ? undefined : messages[lastUserIdx];
-      if (lastUser && lastUser.final !== true) {
-        const botSpokeSince = messages
-          .slice(lastUserIdx + 1)
-          .some((msg) => msg.role === "assistant");
-        if (botSpokeSince) {
-          const userClosed = finalizeRole(messages, "user", action.now, false);
-          messages = userClosed.messages;
-          if (userClosed.updated) effects.push({ kind: "updated", message: userClosed.updated });
-        }
+      const lastUser = lastUserIdx === -1 ? undefined : turns.messages[lastUserIdx];
+      if (
+        lastUser &&
+        lastUser.final !== true &&
+        turns.messages.slice(lastUserIdx + 1).some((msg) => msg.role === "assistant")
+      ) {
+        turns = closeTurn(turns, "user", action.now, effects);
       }
-      if (messages === state.messages && effects.length === 0) return { state, effects: [] };
-      return { state: { ...state, messages, segments }, effects };
+      const settled = settleInterims(turns.messages, action.now, effects);
+      if (settled !== turns.messages) turns = { messages: settled, segments: turns.segments };
+      return turns === state ? { state, effects } : { state: { ...state, ...turns }, effects };
     }
 
     case "user-stopped-timeout":
-      return finalizeStep(state, "user", action.now, false);
+      return finalizeStep(state, "user", action.now, "keep");
 
     case "user-transcription": {
       // RTVI 1.2+ emits both user-input and legacy user-transcription for speech; drop legacy copies once user-input arrives.
@@ -444,67 +493,54 @@ export function stepConversation(
           effects: [],
         };
       }
-      const effects: ConversationEffect[] = [];
-      const assistantClosed = finalizeRole(state.messages, "assistant", action.now, false);
-      if (assistantClosed.updated) {
-        effects.push({ kind: "updated", message: assistantClosed.updated });
-      }
-      const segments =
-        assistantClosed.messages !== state.messages && state.segments.size > 0
-          ? EMPTY_CONVERSATION_STATE.segments
-          : state.segments;
-      const lastUserIdx = assistantClosed.messages.findLastIndex(
-        (msg) => msg.role === "user" && msg.status === undefined,
+      const { messages } = state;
+      // While her reply is open the transcript is a late one for the turn she's answering:
+      // user-started-speaking closes her reply before any new speech.
+      const openIdx = messages.findLastIndex(
+        (msg) => msg.role === "assistant" && msg.final !== true,
       );
-      const lastUser = lastUserIdx === -1 ? undefined : assistantClosed.messages[lastUserIdx];
-
-      if (lastUser && lastUser.final !== true) {
-        const parts = [...lastUser.parts];
-        const lastPart = parts[parts.length - 1];
-        const appending = !lastPart || lastPart.final;
-        const prevText = plainTextOfPart(appending ? lastPart : parts[parts.length - 2]);
-        const text = separator(prevText, action.text) + action.text;
-        if (appending) {
-          parts.push({ text, final: action.final, createdAt: action.now });
-        } else {
-          parts[parts.length - 1] = { ...lastPart, text, final: action.final };
-        }
-        const updated: ConversationMessage = { ...lastUser, parts, updatedAt: action.now };
-        const messages = [...assistantClosed.messages];
-        messages[lastUserIdx] = updated;
-        effects.push({ kind: "updated", message: updated });
-        return { state: { ...state, messages, segments, userInputSeen }, effects };
+      let target: { readonly index: number; readonly insertAt: number };
+      if (openIdx !== -1) {
+        target = lateTranscriptTarget(messages, openIdx);
+      } else {
+        const lastUserIdx = messages.findLastIndex(
+          (msg) => msg.role === "user" && msg.status === undefined,
+        );
+        const lastUser = messages[lastUserIdx];
+        const takesIt =
+          lastUser !== undefined &&
+          (lastUser.final !== true || lastUser.parts.at(-1)?.final === false);
+        target = { index: takesIt ? lastUserIdx : -1, insertAt: messages.length };
       }
 
-      if (action.text.trim() === "") {
-        if (
-          assistantClosed.messages === state.messages &&
-          userInputSeen === state.userInputSeen &&
-          effects.length === 0
-        ) {
-          return { state, effects: [] };
-        }
+      const existing = messages[target.index];
+      if (existing) {
+        const updated = withTranscript(existing, action.text, action.final, action.now);
+        const next = [...messages];
+        next[target.index] = updated;
         return {
-          state: { ...state, messages: assistantClosed.messages, segments, userInputSeen },
-          effects,
+          state: { ...state, messages: next, userInputSeen },
+          effects: [{ kind: "updated", message: updated }],
+        };
+      }
+      if (action.text.trim() === "") {
+        return {
+          state: userInputSeen === state.userInputSeen ? state : { ...state, userInputSeen },
+          effects: [],
         };
       }
       const created: ConversationMessage = {
         role: "user",
-        final: false,
+        final: openIdx !== -1,
         parts: [{ text: action.text, final: action.final, createdAt: action.now }],
         createdAt: action.now,
         updatedAt: action.now,
       };
-      effects.push({ kind: "created", message: created });
+      const next = [...messages];
+      next.splice(target.insertAt, 0, created);
       return {
-        state: {
-          ...state,
-          messages: [...assistantClosed.messages, created],
-          segments,
-          userInputSeen,
-        },
-        effects,
+        state: { ...state, messages: next, userInputSeen },
+        effects: [{ kind: "created", message: created }],
       };
     }
 
@@ -619,12 +655,9 @@ export function stepConversation(
       if (!isProgress && rawText.length === 0) return { state, effects: [] };
 
       const effects: ConversationEffect[] = [];
-      const userClosed = finalizeRole(state.messages, "user", action.now, false);
-      if (userClosed.updated) effects.push({ kind: "updated", message: userClosed.updated });
+      const userClosed = closeTurn(state, "user", action.now, effects, "keep");
       const unchangedOrUserClosed = (): ConversationStep =>
-        userClosed.messages === state.messages && effects.length === 0
-          ? { state, effects: [] }
-          : { state: { ...state, messages: userClosed.messages }, effects };
+        userClosed === state ? { state, effects } : { state: { ...state, ...userClosed }, effects };
 
       const assistantIdx = userClosed.messages.findLastIndex(
         (msg) => msg.role === "assistant" && msg.final !== true,
@@ -738,10 +771,10 @@ export function stepConversation(
     }
 
     case "bot-interrupted":
-      return finalizeStep(state, "assistant", action.now, false);
+      return finalizeStep(state, "assistant", action.now, "final");
 
     case "bot-stopped-timeout":
-      return finalizeStep(state, "assistant", action.now, true);
+      return finalizeStep(state, "assistant", action.now, "snap");
 
     case "function-call-started": {
       const created: ConversationMessage = {
@@ -849,7 +882,7 @@ export function stepConversation(
           effects: [{ kind: "created", message: created }],
         };
       }
-      const closed = closeOpenTurns(state, action.now);
+      const closed = closeOpenTurns(state, action.now, "keep");
       closed.effects.push({ kind: "created", message: created });
       return {
         state: { ...state, messages: [...closed.messages, created], segments: closed.segments },
@@ -911,12 +944,6 @@ export function useEidolonConversation(
   useEffect(() => {
     callbacksRef.current = options;
   }, [options]);
-  useEffect(
-    () => () => {
-      generationRef.current += 1;
-    },
-    [],
-  );
 
   const dispatch = useCallback((action: ConversationAction) => {
     if (action.type === "reset") generationRef.current += 1;
@@ -940,6 +967,7 @@ export function useEidolonConversation(
 
     let botStoppedTimer: ReturnType<typeof setTimeout> | undefined;
     let botTimerSource: "speech-stopped" | "text-only" | undefined;
+    let botSpeaking = false;
     let userStoppedTimer: ReturnType<typeof setTimeout> | undefined;
 
     const cancelBotTimer = () => {
@@ -1010,13 +1038,22 @@ export function useEidolonConversation(
           }
         } else if (pendingVoiced) {
           cancelBotTimer();
+        } else if (!botSpeaking && data.will_be_spoken !== false) {
+          // A realtime call releases her held bot-output after bot-stopped-speaking.
+          armBotTimer("speech-stopped");
         } else if (botTimerSource === "text-only" || data.will_be_spoken === false) {
           armBotTimer("text-only");
         }
       }),
       client.on("botLlmStarted", cancelBotTimer),
-      client.on("botStartedSpeaking", cancelBotTimer),
-      client.on("botStoppedSpeaking", () => armBotTimer("speech-stopped")),
+      client.on("botStartedSpeaking", () => {
+        botSpeaking = true;
+        cancelBotTimer();
+      }),
+      client.on("botStoppedSpeaking", () => {
+        botSpeaking = false;
+        armBotTimer("speech-stopped");
+      }),
       client.on("botInterrupted", () => {
         cancelBotTimer();
         dispatch({ type: "bot-interrupted", now: new Date().toISOString() });
@@ -1079,6 +1116,7 @@ export function useEidolonConversation(
 
     return () => {
       activeClientRef.current = null;
+      generationRef.current += 1;
       cancelBotTimer();
       cancelUserTimer();
       for (const unsub of unsubs) unsub();

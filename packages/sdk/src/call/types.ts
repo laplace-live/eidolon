@@ -17,6 +17,7 @@ import type {
 import type { ChatWindow, ParticipantId, WireEvent } from "../chat/types.ts";
 
 export {
+  BotAlreadyStartedError,
   type BotCapabilities,
   BotNotReadyError,
   type BotOutputData,
@@ -136,7 +137,10 @@ export interface CallSpeaker {
 
 export interface SelfieServerMessage {
   readonly type: "selfie";
-  /** Same-origin `/api/selfie/<id>` paths verified by `selfiePaths`. */
+  /**
+   * Root-relative `/api/selfie/<id>` paths verified by `selfiePaths`. On a page served from another
+   * origin, resolve them against the bot's base URL (e.g. `new URL(path, offerEndpoint)`).
+   */
   readonly urls: readonly string[];
   readonly persona: ParticipantId | null;
 }
@@ -202,6 +206,8 @@ export interface EidolonEvents {
   readonly availableMicsUpdated: (mics: MediaDeviceInfo[]) => void;
   readonly availableSpeakersUpdated: (speakers: MediaDeviceInfo[]) => void;
   readonly micUpdated: (mic: MediaDeviceInfo) => void;
+  /** `enableMic` turned the mic on or off; pipecat itself has no such event. */
+  readonly micEnabledUpdated: (enabled: boolean) => void;
   readonly speakerUpdated: (speaker: MediaDeviceInfo) => void;
   readonly deviceError: (error: DeviceError) => void;
   readonly mediaStateUpdated: (mediaState: MediaState) => void;
@@ -253,6 +259,7 @@ export const EidolonEvent = {
   AvailableMicsUpdated: "availableMicsUpdated",
   AvailableSpeakersUpdated: "availableSpeakersUpdated",
   MicUpdated: "micUpdated",
+  MicEnabledUpdated: "micEnabledUpdated",
   SpeakerUpdated: "speakerUpdated",
   DeviceError: "deviceError",
   MediaStateUpdated: "mediaStateUpdated",

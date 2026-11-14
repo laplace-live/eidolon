@@ -65,10 +65,20 @@ async function memoryRequest(
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   });
   if (!res.ok) {
-    const text = (await res.text().catch(() => "")).slice(0, 200);
-    throw new EidolonApiError(res.status, text);
+    throw new EidolonApiError(res.status, errorDetailOf(await res.text().catch(() => "")));
   }
   return res;
+}
+
+/** The `{ error }` message `/api/memories` refuses with, else the start of whatever body came. */
+function errorDetailOf(body: string): string {
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (isJsonObject(parsed) && typeof parsed.error === "string") return parsed.error;
+  } catch {
+    // A proxy's page, or no body at all.
+  }
+  return body.slice(0, 200);
 }
 
 /** Lists the Mem0 memories stored for the signed-in viewer (`GET /api/memories`). */
@@ -79,7 +89,7 @@ export async function listMemories(
   },
 ): Promise<ListMemoriesResponse> {
   const res = await memoryRequest("GET", "/api/memories", options);
-  const body: unknown = await res.json();
+  const body: unknown = await res.json().catch(() => null);
   if (!isJsonObject(body) || typeof body.user_id !== "string" || !Array.isArray(body.memories)) {
     throw new EidolonApiError(res.status, "Malformed memories response");
   }

@@ -29,9 +29,9 @@ zero `@pipecat-ai/*` packages directly.
   this, and `packages/sdk/scripts/build.ts` verifies that `dist/` inlines zero `node_modules`
   packages and imports only declared `dependencies` and `peerDependencies`.
 - **The server never imports `@laplace.live/eidolon-sdk`.** Biome forbids it across `apps/bot`,
-  `apps/cli`, `apps/eidolon`, and the server `packages/*`, and `apps/bot/Dockerfile` removes
-  `node_modules/.bun/@pipecat-ai+*` after `bun install --production`. `docker.yml` ignores
-  `packages/sdk/**`.
+  `apps/cli`, `apps/eidolon`, and the server `packages/*`, and `apps/bot/Dockerfile` installs with
+  `--filter '!@laplace.live/eidolon-sdk'`, so none of the SDK's dependencies reach the image.
+  `docker.yml` ignores `packages/sdk/**`.
 - **Protocol parity is tested, not imported.** `packages/sdk/test/parity.test.ts` checks the SDK's
   constants (`CHAT_FORMAT`, window budgets, chain limits, voice limits, `AUDIO_QUALITIES`) against
   `@eidolon/chat`, `@eidolon/access`, `@eidolon/runtime`, and `apps/bot/src/chat`.
@@ -61,8 +61,7 @@ await client.connect({
 ### Upstream `WavMediaManager` bridges inside `EidolonClient`
 
 `EidolonClient` configures `SmallWebRTCTransport` with `WavMediaManager` (raw 24 kHz PCM capture so
-Chromium's WebRTC APM does not clip quiet syllables) and closes three upstream gaps that downstream
-clients previously patched by hand:
+Chromium's WebRTC APM does not clip quiet syllables) and closes three upstream gaps:
 
 1. **Missing `replaceTrack` on live mic swap.** Passing a custom `mediaManager` skips
    `SmallWebRTCTransport`'s default `DailyMediaManager` callback that swaps the outbound RTP track.
@@ -83,10 +82,13 @@ clients previously patched by hand:
 `client.on(event, handler)` and `useEidolonEvent(event, handler)` narrow payloads automatically:
 
 - `"serverMessage"` delivers a discriminated `EidolonServerMessage` (`"selfie"` with validated
-  `/api/selfie/...` URLs, `"chat-line"` with a validated `WireEvent`, `"speaker"` on local
-  group calls, or `"unknown"`).
+  root-relative `/api/selfie/...` paths, which a page on another origin resolves against the bot's
+  base URL, `"chat-line"` with a validated `WireEvent`, `"speaker"` on local group calls, or
+  `"unknown"`).
 - `"botReady"` delivers `EidolonBotReadyData` (`about.library === "laplace-eidolon"`, parsed
   `capabilities`).
+- `"micEnabledUpdated"` fires whenever `enableMic` turns the mic on or off (pipecat has no such
+  event), so every `useEidolonMicControl` stays in step.
 - `"error"` delivers `EidolonErrorMessage` (`data.error`, `data.fatal`).
 
 ---

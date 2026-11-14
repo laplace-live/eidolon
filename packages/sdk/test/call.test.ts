@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import React, { act, Suspense, startTransition, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
+  BotAlreadyStartedError,
   callErrorStatus,
   DEFAULT_ICE_SERVERS,
   DeviceError,
@@ -27,22 +28,26 @@ import {
   StartBotError,
   SYSTEM_DEFAULT_MIC_ID,
   speakerOf,
+  TransportStartError,
   toApiRequest,
   toLiveMicId,
   uuidv7,
 } from "../src/index.ts";
 import { type ConversationAction, dispatchSentText } from "../src/react/conversation.ts";
 import {
+  type ConversationMessage,
   EidolonClientAudio,
   type EidolonClientAudioHandle,
   EidolonClientProvider,
   type EidolonConversationControls,
+  type EidolonMicControl,
   type EidolonMicDevices,
   EMPTY_CONVERSATION_STATE,
   isBotOutputText,
   stepConversation,
   useEidolonConversation,
   useEidolonMediaState,
+  useEidolonMicControl,
   useEidolonMicDevices,
   useEidolonNetworkInfo,
 } from "../src/react/index.ts";
@@ -57,6 +62,19 @@ beforeAll(() => {
     });
   }
 });
+
+function fakeMicTrack(id: string, onStop?: () => void): MediaStreamTrack {
+  return {
+    id,
+    kind: "audio",
+    enabled: true,
+    readyState: "live",
+    stop() {
+      onStop?.();
+      (this as { readyState: string }).readyState = "ended";
+    },
+  } as unknown as MediaStreamTrack;
+}
 
 describe("RTVI message parsers and call error classifiers", () => {
   test("parseServerMessage discriminates selfie, chat-line, speaker, and unknown payloads", () => {
@@ -274,10 +292,23 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
         fetch: async () => new Response("Unauthorized", { status: 401 }),
       }),
     ).rejects.toBeInstanceOf(EidolonApiError);
+    // The server's `{ error }` envelope becomes the detail, shown as-is.
+    await expect(
+      listMemories({
+        baseUrl: "https://bot.example",
+        fetch: async () => Response.json({ error: "需要登录后才能查看记忆" }, { status: 401 }),
+      }),
+    ).rejects.toMatchObject({ status: 401, detail: "需要登录后才能查看记忆" });
 
     // 2xx responses without `{ ok: true, user_id: string }` (such as an HTML proxy fallback) throw EidolonApiError.
     await expect(
       forgetMemories({
+        baseUrl: "https://bot.example",
+        fetch: async () => new Response("<!doctype html>", { status: 200 }),
+      }),
+    ).rejects.toBeInstanceOf(EidolonApiError);
+    await expect(
+      listMemories({
         baseUrl: "https://bot.example",
         fetch: async () => new Response("<!doctype html>", { status: 200 }),
       }),
@@ -398,15 +429,7 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
     };
 
     const botTrack = { id: "bot-audio-1", kind: "audio", readyState: "live" } as MediaStreamTrack;
-    const localTrack = {
-      id: "local-audio-1",
-      kind: "audio",
-      enabled: true,
-      readyState: "live",
-      stop() {
-        (this as { readyState: string }).readyState = "ended";
-      },
-    } as unknown as MediaStreamTrack;
+    const localTrack = fakeMicTrack("local-audio-1");
 
     // Remote trackStarted populates client.tracks().bot.audio; local trackStopped does not wipe it.
     raw.emit(RTVIEvent.TrackStarted, botTrack, { id: "bot", name: "bot", local: false });
@@ -439,16 +462,7 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
     let endedCalls = 0;
     let closedContext = false;
     let replacedTrack: MediaStreamTrack | null = null;
-    const makeFreshTrack = () =>
-      ({
-        id: "local-audio-1",
-        kind: "audio",
-        enabled: true,
-        readyState: "live",
-        stop() {
-          (this as { readyState: string }).readyState = "ended";
-        },
-      }) as unknown as MediaStreamTrack;
+    const makeFreshTrack = () => fakeMicTrack("local-audio-1");
     let activeTrack = makeFreshTrack();
     const mediaManager = Reflect.get(client.rawTransport, "mediaManager") as {
       connect: () => Promise<void>;
@@ -671,16 +685,9 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
       } = {
         getStatus: () => (recorderStub.stream === null ? "ended" : "paused"),
         begin: async () => {
-          const track = {
-            id: "init-mic",
-            kind: "audio",
-            enabled: true,
-            readyState: "live",
-            stop() {
-              micTrackEnded = true;
-              (this as { readyState: string }).readyState = "ended";
-            },
-          } as unknown as MediaStreamTrack;
+          const track = fakeMicTrack("init-mic", () => {
+            micTrackEnded = true;
+          });
           recorderStub.stream = { getTracks: () => [track], getAudioTracks: () => [track] };
           return true;
         },
@@ -772,6 +779,136 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
     expect(playerConnectCalls).toBe(1);
   });
 
+  test("EidolonClient.connect rejects when the call drops before bot-ready, keeping a refused offer's status", async () => {
+    const stubbedClient = () => {
+      const client = new EidolonClient({ enableMic: false });
+      const manager = Reflect.get(client.rawTransport, "mediaManager") as object;
+      Reflect.set(manager, "_wavStreamPlayer", {
+        context: null,
+        connect: async () => true,
+        interrupt: async () => {},
+      });
+      Reflect.set(manager, "_wavRecorder", {
+        stream: null,
+        processor: null,
+        getStatus: () => "ended",
+        begin: async () => true,
+        end: async () => {},
+        record: async () => true,
+        listenForDeviceChange: () => {},
+        listenForDeviceErrors: () => {},
+      });
+      return client;
+    };
+
+    // The server's call setup fails after the data channel opened: the bot leaves before bot-ready.
+    const dropped = stubbedClient();
+    let botLeaves!: () => void;
+    Reflect.set(
+      dropped.rawTransport,
+      "startNewPeerConnection",
+      async function (this: Record<string, unknown>) {
+        this.pc = { getTransceivers: () => [], getSenders: () => [], close() {} };
+        this.dc = { readyState: "open", close() {}, send() {} };
+        (this._connectResolved as (() => void) | null)?.();
+        this._connectResolved = null;
+        this._connectFailed = null;
+        botLeaves = () => {
+          const callbacks = this._callbacks as { onBotDisconnected?: (p: unknown) => void };
+          callbacks.onBotDisconnected?.({ id: "bot", local: false, name: "bot" });
+        };
+      },
+    );
+    const first = dropped.connect({ endpoint: "https://bot.example/api/offer" });
+    const firstOutcome = first.then(
+      () => null,
+      (error: unknown) => error,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    botLeaves();
+    const firstError = await firstOutcome;
+    expect(firstError).toBeInstanceOf(TransportStartError);
+    expect((firstError as Error).message).toBe("The call ended before the bot was ready");
+    expect(dropped.state).toBe("disconnected");
+    const redial = dropped.connect({ endpoint: "https://bot.example/api/offer" }).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await dropped.disconnect();
+    const redialError = await redial;
+    expect(redialError).not.toBeInstanceOf(BotAlreadyStartedError);
+    expect((redialError as Error).name).toBe("AbortError");
+
+    // A refused offer still rejects with its own status rather than the cut-off error.
+    const refused = stubbedClient();
+    Reflect.set(
+      refused.rawTransport,
+      "startNewPeerConnection",
+      async function (this: Record<string, unknown>) {
+        this.pc = { getTransceivers: () => [], getSenders: () => [], close() {} };
+        this._lastNegotiationError = new Response(null, { status: 429 });
+        await (this.stop as (error: unknown) => Promise<void>)(
+          (this.buildTransportStartError as () => unknown)(),
+        );
+      },
+    );
+    const refusal = await refused.connect({ endpoint: "https://bot.example/api/offer" }).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    expect(isRateLimitCallError(refusal)).toBe(true);
+    expect(callErrorStatus(refusal)).toBe(429);
+  });
+
+  test("applyMicPreference during a live call swaps in place and never re-initializes devices", async () => {
+    const client = new EidolonClient();
+    const manager = Reflect.get(client.rawTransport, "mediaManager") as object;
+    Reflect.set(manager, "_wavStreamPlayer", {
+      context: null,
+      connect: async () => true,
+      interrupt: async () => {},
+    });
+    let track = fakeMicTrack("usb-1-track");
+    const opened: string[] = [];
+    const recorder: Record<string, unknown> = {
+      stream: { getTracks: () => [track], getAudioTracks: () => [track] },
+      processor: { context: { state: "running", close: async () => {} } },
+      deviceSelection: { deviceId: "usb-1", label: "USB 1" },
+      getStatus: () => (recorder.stream ? "recording" : "ended"),
+      end: async () => {
+        recorder.stream = null;
+        recorder.processor = null;
+      },
+      begin: async (id?: string) => {
+        opened.push(id ?? "");
+        if (id === "usb-busy") throw new Error("Could not start media stream");
+        track = fakeMicTrack(`${id}-track`);
+        recorder.stream = { getTracks: () => [track], getAudioTracks: () => [track] };
+        return true;
+      },
+      record: async () => true,
+      pause: async () => true,
+      listenForDeviceChange: () => {},
+      listenForDeviceErrors: () => {},
+    };
+    Reflect.set(manager, "_wavRecorder", recorder);
+    Reflect.set(manager, "_initialized", true);
+    Reflect.set(client.rawTransport, "_state", "ready");
+    const transitions: string[] = [];
+    client.on("transportStateChanged", (state) => transitions.push(state));
+
+    await client.applyMicPreference("usb-busy");
+    expect(opened).toEqual(["usb-busy"]);
+    expect(transitions).toEqual([]);
+    expect(client.state).toBe("ready");
+
+    await client.applyMicPreference("usb-2");
+    expect(opened).toEqual(["usb-busy", "usb-2"]);
+    expect(client.appliedMicId).toBe("usb-2");
+    expect(transitions).toEqual([]);
+  });
+
   test("EidolonClient.disconnect cancels pending initDevices and transport connect without starting a call", async () => {
     const client = new EidolonClient({ enableMic: true });
     const manager = Reflect.get(client.rawTransport, "mediaManager") as object;
@@ -810,16 +947,9 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
           finishBegin = () => {
             micTrackEnded = false;
             recorderContextClosed = false;
-            const track = {
-              id: "late-init-mic",
-              kind: "audio",
-              enabled: true,
-              readyState: "live",
-              stop() {
-                micTrackEnded = true;
-                (this as { readyState: string }).readyState = "ended";
-              },
-            } as unknown as MediaStreamTrack;
+            const track = fakeMicTrack("late-init-mic", () => {
+              micTrackEnded = true;
+            });
             recorderStub.processor = {
               context: {
                 state: "running",
@@ -1060,16 +1190,9 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
           markAttemptABegin();
           return new Promise<boolean>((resolve) => {
             finishAttemptABegin = () => {
-              const trackA = {
-                id: "mic-attempt-a",
-                kind: "audio",
-                enabled: true,
-                readyState: "live",
-                stop() {
-                  attemptATrackEnded = true;
-                  (this as { readyState: string }).readyState = "ended";
-                },
-              } as unknown as MediaStreamTrack;
+              const trackA = fakeMicTrack("mic-attempt-a", () => {
+                attemptATrackEnded = true;
+              });
               this.stream = { getTracks: () => [trackA], getAudioTracks: () => [trackA] };
               this.processor = {
                 context: {
@@ -1083,16 +1206,9 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
             };
           });
         }
-        const trackB = {
-          id: "mic-attempt-b",
-          kind: "audio",
-          enabled: true,
-          readyState: "live",
-          stop() {
-            attemptBTrackEnded = true;
-            (this as { readyState: string }).readyState = "ended";
-          },
-        } as unknown as MediaStreamTrack;
+        const trackB = fakeMicTrack("mic-attempt-b", () => {
+          attemptBTrackEnded = true;
+        });
         this.stream = { getTracks: () => [trackB], getAudioTracks: () => [trackB] };
         this.processor = {
           context: {
@@ -1217,16 +1333,9 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
     let finishRecA!: () => void;
     let sharedTrackStopped = false;
     let sharedPlayerClosed = false;
-    const sharedTrack = {
-      id: "shared-b",
-      kind: "audio",
-      enabled: true,
-      readyState: "live",
-      stop() {
-        sharedTrackStopped = true;
-        (this as { readyState: string }).readyState = "ended";
-      },
-    } as unknown as MediaStreamTrack;
+    const sharedTrack = fakeMicTrack("shared-b", () => {
+      sharedTrackStopped = true;
+    });
     const sharedRecorder = {
       getStatus: () => "paused",
       begin: async () => true,
@@ -1367,15 +1476,7 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
         kind: "audioinput",
         label: resolved,
       };
-      const track = {
-        id: `init-track-${resolved}`,
-        kind: "audio",
-        enabled: true,
-        readyState: "live",
-        stop() {
-          (this as { readyState: string }).readyState = "ended";
-        },
-      } as unknown as MediaStreamTrack;
+      const track = fakeMicTrack(`init-track-${resolved}`);
       origRec.processor = {
         context: {
           state: "running",
@@ -1716,6 +1817,130 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
 });
 
 describe("stepConversation pure transcript reducer", () => {
+  const at = (second: number) => `2026-11-13T00:00:${String(second).padStart(2, "0")}.000Z`;
+  const heard = (text: string, final: boolean, second: number): ConversationAction => ({
+    type: "user-transcription",
+    text,
+    final,
+    fromUserInput: true,
+    now: at(second),
+  });
+  const said = (
+    text: string,
+    segment: number,
+    status: "new" | "in-progress" | "completed",
+    second: number,
+    accumulated?: string,
+  ): ConversationAction => ({
+    type: "bot-output",
+    now: at(second),
+    data: {
+      text,
+      spoken_status: status,
+      segment_id: segment,
+      will_be_spoken: true,
+      ...(accumulated === undefined
+        ? {}
+        : {
+            spoken_progress: {
+              accumulated_text: accumulated,
+              remaining_text: text.slice(accumulated.length),
+            },
+          }),
+    },
+  });
+  const transcript = (messages: readonly ConversationMessage[]) =>
+    messages.map((msg) => [
+      msg.role,
+      msg.parts.map((part) => (isBotOutputText(part.text) ? part.text.spoken : part.text)),
+    ]);
+
+  test("a realtime transcript landing after her reply started joins the turn she answers", () => {
+    let state = EMPTY_CONVERSATION_STATE;
+    const step = (action: ConversationAction) => {
+      state = stepConversation(state, action).state;
+    };
+    // Her reply's hold ran out before the caller's final transcript: the interim stays interim.
+    step({ type: "user-started-speaking", now: at(0) });
+    step(heard("今天", false, 1));
+    step(said("好的，", 1, "new", 2));
+    step(said("好的，", 1, "completed", 3, "好的，"));
+    expect(state.messages[0]).toMatchObject({ role: "user", final: true });
+    expect(state.messages[0]?.parts[0]?.final).toBe(false);
+    step(heard("今天天气怎么样", true, 4));
+    step(said("今天是晴天。", 2, "new", 5));
+    expect(transcript(state.messages)).toEqual([
+      ["user", ["今天天气怎么样"]],
+      ["assistant", ["好的，", ""]],
+    ]);
+    expect(state.messages[0]?.parts[0]?.final).toBe(true);
+    expect(state.messages[1]?.final).toBe(false);
+
+    // A final-only transcriber: the caller's line goes at the start of the turn she answers.
+    step({ type: "user-started-speaking", now: at(6) });
+    step({ type: "function-call-started", data: { function_name: "take_selfie" }, now: at(7) });
+    step(said("拍好啦。", 3, "new", 8));
+    step(heard("拍张照片", true, 9));
+    expect(transcript(state.messages).map(([role]) => role)).toEqual([
+      "user",
+      "assistant",
+      "user",
+      "function_call",
+      "assistant",
+    ]);
+    expect(state.messages[2]?.parts[0]?.text).toBe("拍张照片");
+
+    // New speech settles a closed turn's interim; a hang-up settles whatever is left.
+    step(heard("还有", false, 10));
+    expect(state.messages[2]?.parts.at(-1)).toMatchObject({ text: "还有", final: false });
+    step({ type: "user-started-speaking", now: at(11) });
+    expect(state.messages[2]?.parts.at(-1)?.final).toBe(true);
+    step(heard("再见", false, 12));
+    step(said("拜拜。", 4, "new", 13));
+    expect(state.messages.at(-2)?.parts[0]).toMatchObject({ text: "再见", final: false });
+    step({ type: "disconnected", now: at(14) });
+    expect(state.messages.every((msg) => msg.parts.every((part) => part.final))).toBe(true);
+  });
+
+  test("a run_immediately line leaves her reply open until bot-interrupted", () => {
+    let state = EMPTY_CONVERSATION_STATE;
+    const step = (action: ConversationAction) => {
+      state = stepConversation(state, action).state;
+    };
+    step(said("第一句话。", 1, "new", 0));
+    step(said("第一句话。", 1, "in-progress", 1, "第一句"));
+    step({
+      type: "send-text-resolved",
+      text: "等一下",
+      msgId: "msg_1",
+      runImmediately: true,
+      now: at(2),
+    });
+    // Sent before the server read the line, delivered after the send resolved.
+    step(said("第一句话。", 1, "completed", 3, "第一句话。"));
+    step(said("第二句话。", 2, "new", 4));
+    step(said("第二句话。", 2, "in-progress", 5, "第二"));
+    expect(transcript(state.messages)).toEqual([
+      ["assistant", ["第一句话。", "第二"]],
+      ["user", ["等一下"]],
+    ]);
+    step({ type: "bot-interrupted", now: at(6) });
+    step({
+      type: "user-chat-echo",
+      text: "等一下",
+      msgId: "msg_1",
+      runImmediately: true,
+      now: at(7),
+    });
+    step(said("好的。", 3, "new", 8));
+    expect(state.messages.map((msg) => [msg.role, msg.final, msg.status])).toEqual([
+      ["assistant", true, undefined],
+      ["user", true, "received"],
+      ["assistant", false, undefined],
+    ]);
+    expect(state.messages[0]?.parts[1]?.text).toEqual({ spoken: "第二", unspoken: "句话。" });
+  });
+
   test("tracks CJK and English bot-output progress without stray CJK spaces", () => {
     let { state } = stepConversation(EMPTY_CONVERSATION_STATE, {
       type: "bot-output",
@@ -1788,7 +2013,12 @@ describe("stepConversation pure transcript reducer", () => {
     }).state;
     expect(state.messages[0]?.parts[1]?.text).toEqual({ spoken: " World!", unspoken: "" });
 
-    // Out-of-order user-chat-echo arriving before send-text-resolved marks the sent line received.
+    // The server sends bot-interrupted ahead of a run_immediately line's echo, closing her reply;
+    // an out-of-order user-chat-echo arriving before send-text-resolved marks the sent line received.
+    state = stepConversation(state, {
+      type: "bot-interrupted",
+      now: "2026-11-12T00:00:02.500Z",
+    }).state;
     const msgId = uuidv7();
     state = stepConversation(state, {
       type: "user-chat-echo",
@@ -1834,7 +2064,7 @@ describe("stepConversation pure transcript reducer", () => {
       status: "completed",
     });
     expect(toolCalls[1]?.functionCall?.status).toBe("started");
-    // Typed user line finalized the open assistant bubble, so tool calls land after the user line.
+    // Her reply closed at bot-interrupted, so tool calls land after the typed line.
     expect(state.messages.map((msg) => msg.role)).toEqual([
       "assistant",
       "user",
@@ -2304,15 +2534,8 @@ describe("stepConversation pure transcript reducer", () => {
     Reflect.set(client.rawTransport, "updateMic", async (id: string) => {
       callOrder.push(`updateMic:${id}`);
       updateMicCalls.push(id);
-      const track = {
-        id: `track-${id || "default"}`,
-        kind: "audio",
-        enabled: client.isMicEnabled,
-        readyState: "live",
-        stop() {
-          (this as { readyState: string }).readyState = "ended";
-        },
-      } as unknown as MediaStreamTrack;
+      const track = fakeMicTrack(`track-${id || "default"}`);
+      track.enabled = client.isMicEnabled;
       mockRecorder.stream = { getTracks: () => [track], getAudioTracks: () => [track] };
       mockRecorder.deviceSelection = id ? { deviceId: id, kind: "audioinput", label: id } : null;
     });
@@ -2570,6 +2793,31 @@ describe("stepConversation pure transcript reducer", () => {
         unspoken: "",
       });
 
+      // A realtime call holds her bot-output for the caller's transcript, so a short reply can arrive
+      // after bot-stopped-speaking; its completion still arms the finalize timer.
+      await act(async () => {
+        raw.emit(RTVIEvent.BotStartedSpeaking);
+        raw.emit(RTVIEvent.BotStoppedSpeaking);
+        raw.emit(RTVIEvent.BotOutput, {
+          text: "好呀。",
+          spoken_status: "new",
+          segment_id: 20,
+          will_be_spoken: true,
+        });
+        raw.emit(RTVIEvent.BotOutput, {
+          text: "好呀。",
+          spoken_status: "completed",
+          segment_id: 20,
+          will_be_spoken: true,
+          spoken_progress: { accumulated_text: "好呀。", remaining_text: "" },
+        });
+      });
+      expect(activeFinalizeTimers.size).toBe(1);
+      await act(async () => {
+        [...activeFinalizeTimers.values()][0]?.();
+      });
+      expect(conv.messages.at(-1)).toMatchObject({ role: "assistant", final: true });
+
       // 4. Hanging up mid-reply closes open user, assistant, and function_call entries without marking unheard words spoken.
       await act(async () => {
         raw.emit(RTVIEvent.UserInput, {
@@ -2609,6 +2857,20 @@ describe("stepConversation pure transcript reducer", () => {
         cancelled: true,
         status: "completed",
       });
+
+      // 5. Closing and reopening a settings dialog remounts the uncontrolled picker; it keeps the choice.
+      expect(mic.selectedMicId).toBe("usb-3");
+      await act(async () => {
+        root.render(React.createElement(EidolonClientProvider, { client }, null));
+      });
+      await act(async () => {
+        root.render(
+          React.createElement(EidolonClientProvider, { client }, React.createElement(Probe)),
+        );
+        await new Promise((resolve) => origSetTimeout(resolve, 0));
+      });
+      expect(mic.selectedMicId).toBe("usb-3");
+      expect(client.preferredMicId).toBe("usb-3");
     } finally {
       globals.setTimeout = origSetTimeout;
       globals.clearTimeout = origClearTimeout;
@@ -2750,15 +3012,7 @@ describe("stepConversation pure transcript reducer", () => {
           throw new Error("Could not start media stream");
         }
         if (effective === "usb-worklet-fail") {
-          const leakedTrack = {
-            id: "track-worklet-fail",
-            kind: "audio",
-            enabled: true,
-            readyState: "live",
-            stop() {
-              (this as { readyState: string }).readyState = "ended";
-            },
-          } as unknown as MediaStreamTrack;
+          const leakedTrack = fakeMicTrack("track-worklet-fail");
           recorderStub.stream = {
             getTracks: () => [leakedTrack],
             getAudioTracks: () => [leakedTrack],
@@ -2778,15 +3032,7 @@ describe("stepConversation pure transcript reducer", () => {
             };
           }
         }, 5);
-        const track = {
-          id: `track-${resolved}`,
-          kind: "audio",
-          enabled: true,
-          readyState: "live",
-          stop() {
-            (this as { readyState: string }).readyState = "ended";
-          },
-        } as unknown as MediaStreamTrack;
+        const track = fakeMicTrack(`track-${resolved}`);
         const ctx = {
           deviceId: resolved,
           state: "running",
@@ -3374,5 +3620,157 @@ describe("stepConversation pure transcript reducer", () => {
       });
       win.HTMLIFrameElement = prevIframe;
     }
+  });
+});
+
+/** Renders `element` inside an `EidolonClientProvider` on a minimal fake DOM, then unmounts it. */
+async function withMountedHooks(
+  client: unknown,
+  element: React.ReactElement,
+  run: () => Promise<void>,
+): Promise<void> {
+  const globals = globalThis as Record<string, unknown>;
+  const win = globalThis.window as unknown as Record<string, unknown>;
+  const prevAct = globals.IS_REACT_ACT_ENVIRONMENT;
+  const prevIframe = win.HTMLIFrameElement;
+  globals.IS_REACT_ACT_ENVIRONMENT = true;
+  win.HTMLIFrameElement = class {};
+  const doc = Object.assign(new EventTarget(), { activeElement: null, defaultView: win });
+  const container = Object.assign(new EventTarget(), {
+    nodeType: 1,
+    nodeName: "DIV",
+    tagName: "DIV",
+    namespaceURI: "http://www.w3.org/1999/xhtml",
+    childNodes: [],
+    firstChild: null,
+    ownerDocument: doc,
+    removeChild() {},
+    appendChild() {},
+    insertBefore() {},
+  });
+  const root = createRoot(container as unknown as Element);
+  try {
+    await act(async () => {
+      root.render(
+        React.createElement(EidolonClientProvider, { client: client as EidolonClient }, element),
+      );
+    });
+    await run();
+  } finally {
+    await act(async () => {
+      root.unmount();
+    });
+    globals.IS_REACT_ACT_ENVIRONMENT = prevAct;
+    win.HTMLIFrameElement = prevIframe;
+  }
+}
+
+describe("React mic hooks", () => {
+  test("every useEidolonMicControl follows enableMic, including direct client calls", async () => {
+    const client = new EidolonClient({ enableMic: true });
+    const enabledEvents: boolean[] = [];
+    client.on("micEnabledUpdated", (enabled) => enabledEvents.push(enabled));
+    let button!: EidolonMicControl;
+    let badge!: EidolonMicControl;
+    function Button() {
+      button = useEidolonMicControl();
+      return null;
+    }
+    function Badge() {
+      badge = useEidolonMicControl();
+      return null;
+    }
+    const both = React.createElement(
+      React.Fragment,
+      null,
+      React.createElement(Button),
+      React.createElement(Badge),
+    );
+    await withMountedHooks(client, both, async () => {
+      expect([button.isMicEnabled, badge.isMicEnabled]).toEqual([true, true]);
+      await act(async () => {
+        button.enableMic(false);
+      });
+      expect([client.isMicEnabled, button.isMicEnabled, badge.isMicEnabled]).toEqual([
+        false,
+        false,
+        false,
+      ]);
+      await act(async () => {
+        client.enableMic(true);
+        client.enableMic(true);
+      });
+      expect([button.isMicEnabled, badge.isMicEnabled]).toEqual([true, true]);
+      expect(enabledEvents).toEqual([false, true]);
+    });
+  });
+
+  test("useEidolonMicDevices shows only the swap the viewer is waiting on", async () => {
+    const listeners = new Map<string, Set<(...args: unknown[]) => void>>();
+    const swaps: { resolve: () => void; reject: (error: Error) => void }[] = [];
+    const client = {
+      state: "ready",
+      appliedMicId: "default",
+      selectedMic: { deviceId: "default" },
+      on(event: string, handler: (...args: unknown[]) => void) {
+        const set = listeners.get(event) ?? new Set();
+        set.add(handler);
+        listeners.set(event, set);
+        return () => set.delete(handler);
+      },
+      setPreferredMic() {},
+      selectLiveMic: () =>
+        new Promise<void>((resolve, reject) => {
+          swaps.push({ resolve, reject });
+        }),
+    };
+    const deviceError = () => {
+      const error = Object.assign(new Error("Busy device"), { name: "DeviceError" });
+      for (const handler of [...(listeners.get("deviceError") ?? [])]) handler(error);
+    };
+    let mic!: EidolonMicDevices;
+    function Picker() {
+      mic = useEidolonMicDevices();
+      return null;
+    }
+    await withMountedHooks(client, React.createElement(Picker), async () => {
+      // Arrowing past a busy mic: its error lands after the viewer already picked the next one.
+      await act(async () => {
+        mic.selectMic("usb-busy");
+        mic.selectMic("built-in");
+      });
+      await act(async () => {
+        deviceError();
+        swaps[0]?.reject(new Error("Could not start media stream"));
+      });
+      expect(mic.swapError).toBeNull();
+      await act(async () => {
+        swaps[1]?.resolve();
+      });
+      expect(mic.swapError).toBeNull();
+
+      // A device error during the current swap clears once that swap goes through.
+      await act(async () => {
+        mic.selectMic("usb-flaky");
+      });
+      await act(async () => {
+        deviceError();
+      });
+      expect(mic.swapError?.message).toBe("Busy device");
+      await act(async () => {
+        swaps[2]?.resolve();
+      });
+      expect(mic.swapError).toBeNull();
+
+      // The current swap's own failure still shows.
+      await act(async () => {
+        mic.selectMic("usb-busy");
+      });
+      await act(async () => {
+        deviceError();
+        swaps[3]?.reject(new Error("Could not start media stream"));
+      });
+      expect(mic.swapError?.message).toBe("Could not start media stream");
+    });
   });
 });

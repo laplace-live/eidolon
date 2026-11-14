@@ -52,6 +52,8 @@ export interface SdkManifest {
   };
   readonly type: "module";
   readonly sideEffects: false;
+  readonly types: string;
+  readonly typesVersions: { readonly "*": { readonly react: readonly string[] } };
   readonly exports: {
     readonly ".": SdkExportEntry;
     readonly "./react": SdkExportEntry;
@@ -111,6 +113,9 @@ export function packageManifest(): SdkManifest {
     },
     type: "module",
     sideEffects: false,
+    // TypeScript's `moduleResolution: "node"` (the default under `module: "commonjs"`) ignores exports.
+    types: "./dist/index.d.ts",
+    typesVersions: { "*": { react: ["./dist/react/index.d.ts"] } },
     exports: {
       ".": {
         types: "./dist/index.d.ts",
@@ -180,6 +185,11 @@ async function bundle(root: string): Promise<void> {
         naming: basename(output),
         external: react ? [...baseExternal, ...REACT_EXTERNAL] : [...baseExternal],
         plugins: node ? [nodeTransportCjsPlugin] : [],
+        // Bun emits jsxDEV from react/jsx-dev-runtime unless told otherwise, and React's production
+        // build of that module exports jsxDEV as undefined, so consumers' production renders throw.
+        jsx: { runtime: "automatic", development: false },
+        // The React entry calls createContext at import, which React Server Components lack.
+        ...(react ? { banner: '"use client";' } : {}),
         metafile: true,
       });
       if (!result.success) throw new AggregateError(result.logs, `bun build ${entry} failed`);
@@ -200,7 +210,7 @@ const DTS_SPECIFIER = /\b(?:from|import)\s*\(?\s*["']([^"']+)["']\s*\)?/g;
 const JS_TRANSPILER = new Bun.Transpiler({ loader: "js" });
 
 /** Emits `.d.ts` declarations into `${root}/dist` and normalizes relative specifiers to `.js`. */
-async function emitTypes(root: string): Promise<ReadonlyMap<string, string>> {
+async function emitTypes(root: string): Promise<void> {
   const tsc = join(ROOT, "node_modules", ".bin", "tsc");
   const outDir = join(root, "dist");
   const proc = Bun.spawn([tsc, "-p", join(HERE, "tsconfig.build.json"), "--outDir", outDir], {
@@ -210,18 +220,15 @@ async function emitTypes(root: string): Promise<ReadonlyMap<string, string>> {
   });
   const exitCode = await proc.exited;
   if (exitCode !== 0) throw new Error(`tsc exited ${exitCode}`);
-  const dtsContents = new Map<string, string>();
   for (const file of walkFiles(outDir, ".d.ts")) {
     const text = readFileSync(file, "utf8");
     const rewritten = text.replace(RELATIVE_TS_SPECIFIER, "$1.js$3");
     if (rewritten !== text) writeFileSync(file, rewritten);
-    dtsContents.set(file, rewritten);
   }
-  return dtsContents;
 }
 
-function moduleSpecifiers(file: string, cachedSource?: string): Set<string> {
-  const source = cachedSource ?? readFileSync(file, "utf8");
+function moduleSpecifiers(file: string): Set<string> {
+  const source = readFileSync(file, "utf8");
   const found = new Set<string>();
   if (file.endsWith(".js")) {
     for (const { path } of JS_TRANSPILER.scanImports(source)) {
@@ -236,16 +243,11 @@ function moduleSpecifiers(file: string, cachedSource?: string): Set<string> {
 }
 
 /** Verifies every emitted `.js` and `.d.ts` imports only rewritten relative `.js` paths or declared externals. */
-export function checkDistImports(
-  root: string,
-  manifest: SdkManifest,
-  dtsContents?: ReadonlyMap<string, string>,
-): void {
+export function checkDistImports(root: string, manifest: SdkManifest): void {
   const corePackages = new Set(Object.keys(manifest.dependencies));
   const peerPackages = new Set(Object.keys(manifest.peerDependencies));
   const dist = join(root, "dist");
-  const dtsFiles = dtsContents ? [...dtsContents.keys()] : walkFiles(dist, ".d.ts");
-  const files = [...walkFiles(dist, ".js"), ...dtsFiles];
+  const files = [...walkFiles(dist, ".js"), ...walkFiles(dist, ".d.ts")];
   if (files.length === 0) throw new Error("dist/ contains no emitted files");
 
   const violations: string[] = [];
@@ -253,7 +255,7 @@ export function checkDistImports(
     const rel = relative(dist, file).replaceAll("\\", "/");
     const isNodeBundle = rel.endsWith(".node.js");
     const isReactEntry = rel.startsWith("react/");
-    for (const spec of moduleSpecifiers(file, dtsContents?.get(file))) {
+    for (const spec of moduleSpecifiers(file)) {
       if (spec.startsWith("./") || spec.startsWith("../")) {
         if (/\.(ts|tsx)$/.test(spec)) {
           violations.push(`${rel}: unrewritten TypeScript extension ${spec}`);
@@ -261,6 +263,10 @@ export function checkDistImports(
         continue;
       }
       if (isNodeBundle && spec === "node:module") continue;
+      if (spec === "react/jsx-dev-runtime") {
+        violations.push(`${rel}: development JSX runtime ${spec}`);
+        continue;
+      }
       const pkg = packageName(spec);
       if (!corePackages.has(pkg) && !(isReactEntry && peerPackages.has(pkg))) {
         violations.push(`${rel}: undeclared import ${spec}`);
@@ -276,8 +282,8 @@ export async function stage(outDir: string = PACK_DIR): Promise<SdkManifest> {
   const manifest = packageManifest();
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(outDir, { recursive: true });
-  const [, dtsContents] = await Promise.all([bundle(outDir), emitTypes(outDir)]);
-  checkDistImports(outDir, manifest, dtsContents);
+  await Promise.all([bundle(outDir), emitTypes(outDir)]);
+  checkDistImports(outDir, manifest);
   cpSync(join(HERE, "README.md"), join(outDir, "README.md"));
   cpSync(join(ROOT, "LICENSE"), join(outDir, "LICENSE"));
   if (existsSync(join(HERE, "CHANGELOG.md"))) {

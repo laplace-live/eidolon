@@ -40,13 +40,14 @@ COPY packages/webrtc/package.json packages/webrtc/
 # scripts): on linux/x64 it downloads the CUDA execution provider, and the CPU
 # binaries already ship in the tarball. Never add it to trustedDependencies.
 #
-# The prune removes what the bot never loads. LanceDB's optional
+# --filter skips the browser SDK's dependencies (its manifest is still checked
+# against bun.lock). The prune removes what the bot never loads. LanceDB's optional
 # @huggingface/transformers (with a second onnxruntime-node, onnxruntime-web and
 # sharp) is imported only by LanceDB's own embedding functions; typescript is a
 # types-only peer of @qdrant/js-client-rest; onnxruntime-node bundles every
 # platform's binaries.
 ARG TARGETARCH
-RUN bun install --frozen-lockfile --production \
+RUN bun install --frozen-lockfile --production --filter '!@laplace.live/eidolon-sdk' \
  && bun pm cache rm \
  && ORT="$(echo node_modules/.bun/onnxruntime-node@1.30.*/node_modules/onnxruntime-node/bin/napi-v6)" \
  && rm -rf node_modules/.bun/@huggingface+transformers@* \
@@ -54,7 +55,6 @@ RUN bun install --frozen-lockfile --production \
            node_modules/.bun/onnxruntime-web@* \
            node_modules/.bun/sharp@* \
            node_modules/.bun/@img+* \
-           node_modules/.bun/@pipecat-ai+* \
            node_modules/.bun/typescript@* \
            node_modules/.bun/@typescript+typescript-* \
            "$ORT/darwin" "$ORT/win32" \

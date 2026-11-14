@@ -62,6 +62,8 @@ describe("@laplace.live/eidolon-sdk package build", () => {
       type: "module",
       sideEffects: false,
       publishConfig: { access: "public", provenance: true },
+      types: "./dist/index.d.ts",
+      typesVersions: { "*": { react: ["./dist/react/index.d.ts"] } },
       exports: {
         ".": {
           types: "./dist/index.d.ts",
@@ -85,16 +87,28 @@ describe("@laplace.live/eidolon-sdk package build", () => {
     expect(readFileSync(join(stagedDir, "LICENSE"), "utf8")).toContain("AFFERO GENERAL PUBLIC");
   });
 
-  test("checkDistImports rejects unrewritten .ts extensions and undeclared packages", () => {
+  test("checkDistImports rejects unrewritten .ts extensions, undeclared packages, and jsxDEV", () => {
+    for (const rel of ["dist/react/index.js", "dist/react/index.node.js"]) {
+      const bundle = readFileSync(join(stagedDir, rel), "utf8");
+      expect([rel, bundle.startsWith('"use client";\n')]).toEqual([rel, true]);
+      expect([rel, bundle.includes('from "react/jsx-runtime"')]).toEqual([rel, true]);
+    }
     const broken = mkdtempSync(join(tmpdir(), "eidolon-sdk-broken-"));
     try {
-      mkdirSync(join(broken, "dist"), { recursive: true });
+      mkdirSync(join(broken, "dist", "react"), { recursive: true });
       writeFileSync(
         join(broken, "dist", "bad.d.ts"),
         'export { x } from "./other.ts";\nimport "left-pad";\n',
       );
+      writeFileSync(
+        join(broken, "dist", "react", "index.js"),
+        'import { jsxDEV } from "react/jsx-dev-runtime";\nexport const el = jsxDEV("div", {});\n',
+      );
       expect(() => checkDistImports(broken, manifest)).toThrow(
         /unrewritten TypeScript[\s\S]*undeclared import left-pad/,
+      );
+      expect(() => checkDistImports(broken, manifest)).toThrow(
+        /development JSX runtime react\/jsx-dev-runtime/,
       );
     } finally {
       rmSync(broken, { recursive: true, force: true });
