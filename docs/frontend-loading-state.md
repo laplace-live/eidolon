@@ -256,10 +256,10 @@ pcClient.on(RTVIEvent.Disconnected, () => {
 This is the pattern we recommend: it catches every source of slowness after the turn ends
 (retrieval, slow LLM TTFB, or slow TTS) in one indicator rather than coupling the UI to a specific
 stage that may not be the actual bottleneck. The local web app's call page runs it: the SDK's
-`Watchdog` (`packages/sdk/src/watchdog.ts`), which `use-call.ts` arms on `UserStoppedSpeaking` and
-on typed text, shows its thinking dots after `THINKING_DELAY_MS`, and clears on
-`BotStartedSpeaking`, `UserStartedSpeaking`, `Error` and disconnect; `BotLlmStarted` cancels its
-"stuck" warning.
+`Watchdog` (`packages/sdk/src/watchdog.ts`), which `use-call.ts` arms on typed text and on
+`UserStoppedSpeaking` after a final transcript with words (`turn-wait.ts`), shows its thinking
+dots after `THINKING_DELAY_MS`, and clears on `BotStartedSpeaking`, `UserStartedSpeaking`, `Error`
+and disconnect; `BotLlmStarted` cancels its "stuck" warning.
 
 ### 4. Streaming partial text (optional)
 

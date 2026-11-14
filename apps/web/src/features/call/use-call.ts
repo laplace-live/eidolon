@@ -7,6 +7,7 @@ import { deviceProblemOf, type MicProblem, probeMic } from "./media";
 import { type CallPhase, connectEnd, endOf, IDLE, reducePhase } from "./phase";
 import { fetchIceServers, offerOptions } from "./signalling";
 import { EMPTY_TRANSCRIPT, reduceTranscript, type Transcript } from "./transcript";
+import { TurnWait } from "./turn-wait";
 
 export interface BotError {
   /** The latest error the bot reported, as it worded it. */
@@ -95,6 +96,7 @@ export function useCall(): Call {
   const subscribe = useCallback(
     (call: ActiveCall): (() => void) => {
       const { client } = call;
+      const turn = new TurnWait(watchdog);
       const heard = () => {
         call.heardAt = Date.now();
       };
@@ -115,21 +117,23 @@ export function useCall(): Call {
         }),
         client.on("userStartedSpeaking", () => {
           heard();
-          watchdog.clear();
+          turn.started();
           setUserSpeaking(true);
         }),
         client.on("userStoppedSpeaking", () => {
           heard();
           setUserSpeaking(false);
-          watchdog.arm();
+          turn.stopped();
         }),
         client.on("botLlmStarted", () => watchdog.llmStarted()),
         client.on("userInput", (data) => {
           heard();
+          turn.heard(data);
           dispatchTranscript({ type: "user-input", data });
         }),
         client.on("userTranscript", (data) => {
           heard();
+          turn.heard(data);
           dispatchTranscript({ type: "user-transcript", data });
         }),
         client.on("botOutput", (data) => dispatchTranscript({ type: "bot-output", data })),
