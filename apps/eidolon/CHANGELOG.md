@@ -1,5 +1,11 @@
 # @laplace.live/eidolon
 
+## 0.9.0
+
+### Minor Changes
+
+- 9310a28: Let sites listed in EIDOLON_LOCAL_ALLOWED_ORIGINS call the local app's bot API
+
 ## 0.8.0
 
 ### Minor Changes
