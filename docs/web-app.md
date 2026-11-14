@@ -73,7 +73,8 @@ finishing an index. A tool that stops the app should send SIGTERM.
   `apps/bot/test/local/`, `apps/bot/scripts/local-smoke.ts` and `apps/web/` except its
   `package.json`, which the frozen install needs. `docker.yml` skips the image build for changes
   under `apps/web/**` and `apps/bot/src/local/**`.
-- `local.viewerName` (`EIDOLON_LOCAL_VIEWER_NAME`) is read in local mode only.
+- `local.viewerName` (`EIDOLON_LOCAL_VIEWER_NAME`) and `EIDOLON_LOCAL_ALLOWED_ORIGINS` are read in
+  local mode only.
 - **The app's chats stay out too.** Only `apps/bot/src/local` imports the JSONL chat store
   (`@eidolon/chat/jsonl`); the same Biome rule and `boundaries.test.ts` hold it. Production runs
   the turn engine only for its own chat endpoint, which keeps no transcripts and is off until
@@ -102,12 +103,24 @@ the secret behind them, are the only boundary, so treat the link, the cookie, th
   - the socket's peer must be loopback; forwarded-for headers never count;
   - `Host` must be `localhost`, `127.0.0.1` or `[::1]` (or the bound IP literal) with the bound
     port, else 421 `misdirected`, which stops DNS rebinding;
-  - every `OPTIONS` gets 405, and no answer carries a CORS header;
+  - every `OPTIONS` gets 405, and no answer carries a CORS header, except a listed origin's
+    (below);
   - under `/api` and `/mcp`, an `Origin` other than `http://<Host>` gets 403, and so does a
     `Sec-Fetch-Site` other than `same-origin` or `none`, since every localhost port is the same
     site to a browser;
   - a change (any method but GET and HEAD) made with the cookie must carry `Origin`;
   - HEAD on a GET API route gets 405, and `/api/local` answers are `Cache-Control: no-store`.
+- **Listed origins.** `EIDOLON_LOCAL_ALLOWED_ORIGINS`, comma-separated and read at boot, lets
+  another site's pages, such as one built on `@laplace.live/eidolon-sdk` at
+  `http://localhost:3000`, call the bot's API: `/api/ice-servers`, `/api/offer`,
+  `/api/memories`, `/api/chat/*`, `/api/selfie` and `/mcp`, with their preflights answered and CORS
+  headers on every answer. It gets them as a deployment serves them: an offer is a stranger's,
+  within the anonymous quota, or a LAPLACE login's, and memories take a LAPLACE token, so the
+  cookie that rides along never makes it the local viewer. `/api/local` stays the app's own, and
+  the app's own origin stays the local viewer's even when listed. An entry with no http(s)
+  origin, `null` included, is ignored with a warning. While any origin is listed, a selfie also
+  loads as an `<img>`, which sends no `Origin`, from any page: its unguessable id is the key, as
+  on a deployment. Blank, the default, lists none.
 - **The secret** is `<data home>/local-token`, made at the first start, mode 0600 from creation.
   The server refuses to start (exit 1) when it isn't a regular file, another user owns it, its
   mode lets other users in, or it holds no valid token. It never reaches a browser.
@@ -587,8 +600,10 @@ else.
   works too.
 - **421**: the app was opened through a name other than `localhost`, `127.0.0.1` or `[::1]`, or
   another port. From another computer, use `ssh -L`.
-- **403 "Only Eidolon's own pages may call its API"**: the request came from another page, such
+- **403 "Only Eidolon's own pages … may call its API"**: the request came from another page, such
   as a browser extension, another app on localhost, or `dev:web` talking to a server not on 7860.
+  A site built on `@laplace.live/eidolon-sdk` needs its origin in `EIDOLON_LOCAL_ALLOWED_ORIGINS`,
+  then a restart ([listed origins](#security)).
 - **"local-token is readable by other users"** (exit 1): `chmod 600` it, or delete it to sign
   everything out and make a new one.
 - **"port 7860 is taken by another program"** (exit 1): pass `--port`.

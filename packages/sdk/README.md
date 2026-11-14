@@ -13,6 +13,15 @@ bun add @laplace.live/eidolon-sdk
 
 React bindings require `react >= 18` when importing `@laplace.live/eidolon-sdk/react`.
 
+## Which bot to point it at
+
+A bot in production mode (`bun run dev` or `bun run start` in an Eidolon checkout, or its Docker
+image) answers every origin unless `PIPECAT_ALLOWED_ORIGINS` narrows it. Eidolon's local app
+(`bun run app`, `bun run local`, or the `eidolon` command) refuses other sites' API calls with a
+403 until `EIDOLON_LOCAL_ALLOWED_ORIGINS` lists your site's origin, such as
+`http://localhost:3000`; restart it after setting that. Text chats also need `EIDOLON_CHAT_SECRET`
+set on the bot; without it the chat probe reports `"off"`.
+
 ## Voice call quick start
 
 ```tsx

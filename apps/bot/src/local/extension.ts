@@ -1,14 +1,14 @@
 // The local web app's hold on the bot server: the guard in front of every route and the fallback,
 // the local viewer on the offer and memory routes, the /api/local router, and the built app for
-// every other GET.
-import { OFFER_PATH, PREFLIGHT_PATH } from "@eidolon/access";
+// every other GET. A listed origin gets the bot's own routes, as a deployment serves them.
+import { OFFER_PATH, PREFLIGHT_PATH, withCors } from "@eidolon/access";
 import { logger } from "@eidolon/config";
 import type { MemoryAdmin } from "@eidolon/memory";
 import { logAccess, type MethodRoutes, type RouteHandler, type RouteMethod } from "../app.ts";
 import { FORGET_MEMORIES_PATH, LIST_MEMORIES_PATH } from "../memory-admin.ts";
 import type { LocalContext, LocalExtension } from "../server.ts";
 import type { ChatRunner } from "./chats/runner.ts";
-import { allowedHosts, guardRequest, isApiPath, logRefused } from "./guard.ts";
+import { allowedHosts, guardRequest, isApiPath, listedOrigin, logRefused } from "./guard.ts";
 import { identityHandlers } from "./identity.ts";
 import {
   createLocalRouter,
@@ -56,23 +56,31 @@ export interface LocalExtensionOptions {
   readonly restart: () => void;
   /** The clock link codes are checked against. */
   readonly nowSeconds: () => number;
+  /** EIDOLON_LOCAL_ALLOWED_ORIGINS: other sites whose pages may call the bot's API. */
+  readonly origins?: ReadonlySet<string>;
 }
 
 export function createLocalExtension(options: LocalExtensionOptions): LocalExtension {
   const stopHooks: (() => Promise<void>)[] = [];
+  const origins = options.origins ?? new Set<string>();
   let hosts: ReadonlySet<string> | null = null;
   const hostsOf = (context: LocalContext): ReadonlySet<string> => {
     hosts ??= allowedHosts(context.port(), options.boundLiterals);
     return hosts;
   };
 
+  /** `crossOrigin` answers a listed origin, with its CORS headers; `handler` everyone else. */
   const guarded =
-    (handler: RouteHandler, context: LocalContext): RouteHandler =>
+    (handler: RouteHandler, context: LocalContext, crossOrigin = handler): RouteHandler =>
     async (request, server) => {
-      const refused = guardRequest(request, server, hostsOf(context));
-      if (refused === null) return handler(request, server);
-      logRefused(request, server, refused);
-      return refused;
+      const refused = guardRequest(request, server, hostsOf(context), origins);
+      if (refused !== null) {
+        logRefused(request, server, refused);
+        return refused;
+      }
+      const origin = listedOrigin(request, origins);
+      if (origin === null) return handler(request, server);
+      return withCors(request, await crossOrigin(request, server), { allowOrigins: [origin] });
     };
 
   return {
@@ -108,16 +116,30 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalExten
       }
 
       const authenticate = authenticator(options.token, context.port);
-      const local = (method: "GET" | "POST", handler: Parameters<typeof localRoute>[1]) =>
-        guarded(localRoute(method, handler, authenticate), context);
+      // A listed origin gets the bot's own handler: a stranger or a LAPLACE login, never the
+      // local viewer.
+      const local = (
+        path: string,
+        method: "GET" | "POST",
+        handler: Parameters<typeof localRoute>[1],
+      ) =>
+        guarded(
+          localRoute(method, handler, authenticate),
+          context,
+          (botRoutes[path] as MethodRoutes)[method],
+        );
       // POST stays first: the bot's 405 for this path takes Allow from the first method.
       routes[OFFER_PATH] = {
-        POST: local("POST", identity.offer),
+        POST: local(OFFER_PATH, "POST", identity.offer),
         PATCH: (routes[OFFER_PATH] as MethodRoutes).PATCH,
       };
-      routes[PREFLIGHT_PATH] = { POST: local("POST", identity.preflight) };
-      routes[LIST_MEMORIES_PATH] = { GET: local("GET", identity.listMemories) };
-      routes[FORGET_MEMORIES_PATH] = { POST: local("POST", identity.forgetMemories) };
+      routes[PREFLIGHT_PATH] = { POST: local(PREFLIGHT_PATH, "POST", identity.preflight) };
+      routes[LIST_MEMORIES_PATH] = {
+        GET: local(LIST_MEMORIES_PATH, "GET", identity.listMemories),
+      };
+      routes[FORGET_MEMORIES_PATH] = {
+        POST: local(FORGET_MEMORIES_PATH, "POST", identity.forgetMemories),
+      };
 
       const specs = [
         ...sessionRoutes(app, options.token, options.nowSeconds),
@@ -129,7 +151,7 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalExten
 
     fallback(botFallback, context) {
       return (request, server) => {
-        const refused = guardRequest(request, server, hostsOf(context));
+        const refused = guardRequest(request, server, hostsOf(context), origins);
         if (refused !== null) {
           logRefused(request, server, refused);
           return refused;
@@ -141,7 +163,9 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalExten
           return response;
         }
         // Unknown /api and /mcp paths keep the bot's own 404 and 405 bytes.
-        return botFallback(request, server);
+        const response = botFallback(request, server);
+        const origin = listedOrigin(request, origins);
+        return origin === null ? response : withCors(request, response, { allowOrigins: [origin] });
       };
     },
 
