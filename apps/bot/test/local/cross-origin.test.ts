@@ -6,8 +6,15 @@ import { LOCAL_VIEWER_MID } from "@eidolon/context";
 import type { MemoryAdmin } from "@eidolon/memory";
 import { PROOF_HEADER as PROOF } from "../../src/local/api.ts";
 import { listedOrigin, parseListedOrigins } from "../../src/local/guard.ts";
-import { type CapturedLogs, captureLogs } from "../fakes.ts";
-import { type Booted, bootFixture, cleanUpBoot, type RawResponse, raw } from "./harness.ts";
+import { type CapturedLogs, captureLogs, deferred } from "../fakes.ts";
+import {
+  type Booted,
+  bootFixture,
+  cleanUpBoot,
+  fakeModules,
+  type RawResponse,
+  raw,
+} from "./harness.ts";
 
 const SITE = "http://localhost:3000";
 const OFFER = '{"sdp":"v=0","type":"offer","requestData":{"audioQuality":"low"}}';
@@ -15,12 +22,34 @@ const OFFER = '{"sdp":"v=0","type":"offer","requestData":{"audioQuality":"low"}}
 let booted: Booted;
 let logs: CapturedLogs;
 let memoryCalls = 0;
+/** While set, the signalling server's offer reports in and waits for it. */
+let offerGate: { reached(): void; open: Promise<void> } | null = null;
 
 beforeAll(async () => {
   logs = captureLogs();
+  const fakes = fakeModules();
+  const runtime = fakes.modules.runtime;
+  const modules = {
+    ...fakes.modules,
+    runtime: {
+      ...runtime,
+      createSignallingServer: (options: Parameters<typeof runtime.createSignallingServer>[0]) => {
+        const signalling = runtime.createSignallingServer(options);
+        return {
+          ...signalling,
+          offer: async (...args: Parameters<typeof signalling.offer>) => {
+            const gate = offerGate;
+            gate?.reached();
+            await gate?.open;
+            return signalling.offer(...args);
+          },
+        };
+      },
+    },
+  };
   process.env.EIDOLON_LOCAL_ALLOWED_ORIGINS = `${SITE}, https://laplace.live/, null, localhost:5173`;
   try {
-    booted = await bootFixture();
+    booted = await bootFixture({ fakes: { ...fakes, modules } });
   } finally {
     delete process.env.EIDOLON_LOCAL_ALLOWED_ORIGINS;
   }
@@ -162,6 +191,34 @@ describe("a listed origin", () => {
     expect([admission?.user.isLoggedIn, admission?.quota === null]).toEqual([false, false]);
     const patch = await send("PATCH", "/api/offer", from(SITE), "{}");
     expect([patch.status, ...cors(patch)]).toEqual([200, SITE, "true"]);
+  });
+
+  test("holds off a restart while its offer connects, as the app's own offers do", async () => {
+    const reached = deferred();
+    const open = deferred();
+    offerGate = { reached: reached.resolve, open: open.promise };
+    const bearer = { Authorization: `Bearer ${booted.token.secret}` };
+    const activeCalls = async () => {
+      const status = await fetch(`${booted.base}/api/local/status`, { headers: bearer });
+      return ((await status.json()) as { activeCalls: number }).activeCalls;
+    };
+    try {
+      const offer = send("POST", "/api/offer", from(SITE), OFFER);
+      await reached.promise;
+      expect(await activeCalls()).toBe(1);
+      const restart = await fetch(`${booted.base}/api/local/restart`, {
+        method: "POST",
+        headers: bearer,
+      });
+      const refused = (await restart.json()) as { error: { code: string } };
+      expect([restart.status, refused.error.code]).toEqual([409, "call-active"]);
+      open.resolve();
+      expect((await offer).status).toBe(200);
+      expect(await activeCalls()).toBe(0);
+    } finally {
+      offerGate = null;
+      open.resolve();
+    }
   });
 
   test("never reaches the local viewer's memories, even carrying the session", async () => {

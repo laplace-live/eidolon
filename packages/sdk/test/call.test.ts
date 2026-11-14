@@ -299,6 +299,17 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
         fetch: async () => Response.json({ error: "需要登录后才能查看记忆" }, { status: 401 }),
       }),
     ).rejects.toMatchObject({ status: 401, detail: "需要登录后才能查看记忆" });
+    // So does the local app's `{ error: { code, message } }`, as its Bearer secret gets it.
+    await expect(
+      listMemories({
+        baseUrl: "http://localhost:7860",
+        fetch: async () =>
+          Response.json(
+            { error: { code: "unavailable", message: "Memory is off" } },
+            { status: 503 },
+          ),
+      }),
+    ).rejects.toMatchObject({ status: 503, detail: "Memory is off" });
 
     // 2xx responses without `{ ok: true, user_id: string }` (such as an HTML proxy fallback) throw EidolonApiError.
     await expect(
@@ -861,6 +872,67 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
     expect(callErrorStatus(refusal)).toBe(429);
   });
 
+  test("connect() opens a mic picked while it was opening the previous pick", async () => {
+    const client = new EidolonClient();
+    const mics = ["usb-1", "usb-2"].map((deviceId) => ({
+      deviceId,
+      kind: "audioinput" as const,
+      label: deviceId,
+      groupId: deviceId,
+      toJSON: () => ({}),
+    }));
+    let listings = 0;
+    let releaseMics!: () => void;
+    Reflect.set(client.rawClient, "getAllMics", () =>
+      ++listings === 1
+        ? new Promise((resolve) => {
+            releaseMics = () => resolve(mics);
+          })
+        : Promise.resolve(mics),
+    );
+    Reflect.set(client.rawClient, "initDevices", async () => {
+      Reflect.set(client.rawTransport, "state", "initialized");
+    });
+    const recorder = Reflect.get(
+      Reflect.get(client.rawTransport, "mediaManager") as object,
+      "_wavRecorder",
+    ) as { stream: unknown; deviceSelection: unknown };
+    const opened: string[] = [];
+    Reflect.set(client.rawTransport, "updateMic", async (id: string) => {
+      opened.push(id);
+      const track = fakeMicTrack(`track-${id}`);
+      recorder.stream = { getTracks: () => [track], getAudioTracks: () => [track] };
+      recorder.deviceSelection = { deviceId: id, kind: "audioinput", label: id };
+    });
+    Reflect.set(client.rawTransport, "_connect", async () => {
+      Reflect.set(client.rawTransport, "dc", {
+        readyState: "open",
+        send: () => {
+          Reflect.set(client.rawTransport, "state", "ready");
+          const onMessage = Reflect.get(client.rawTransport, "_onMessage") as (m: unknown) => void;
+          onMessage({ label: "rtvi-ai", id: "1", type: "bot-ready", data: { version: "1.0.0" } });
+        },
+        close: () => {},
+      });
+      Reflect.set(client.rawTransport, "state", "connected");
+    });
+    Reflect.set(client.rawTransport, "_disconnect", async () => {
+      Reflect.set(client.rawTransport, "dc", null);
+      Reflect.set(client.rawTransport, "state", "disconnected");
+    });
+
+    client.setPreferredMic("usb-1");
+    const connecting = client.connect({ endpoint: "https://bot.example/api/offer" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // The client still reads "initialized" while it checks usb-1 is plugged in.
+    client.setPreferredMic("usb-2");
+    releaseMics();
+    await connecting;
+    expect(opened).toEqual(["usb-1", "usb-2"]);
+    expect(client.appliedMicId).toBe("usb-2");
+    await client.disconnect();
+  });
+
   test("applyMicPreference during a live call swaps in place and never re-initializes devices", async () => {
     const client = new EidolonClient();
     const manager = Reflect.get(client.rawTransport, "mediaManager") as object;
@@ -1376,9 +1448,17 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
     Reflect.set(sharedMgr, "_initialized", true);
     await sharedMgr.connect();
 
-    // Resuming stale Attempt A must NOT clear _initialized or close Attempt B's active track/player.
+    // Resuming stale Attempt A must NOT clear _initialized or close Attempt B's active track/player,
+    // and never settles, so PipecatClient.connect() can't disconnect Attempt B either.
     finishRecA();
-    await expect(staleConnectA).rejects.toThrow("Connection cancelled");
+    const staleOutcome = await Promise.race([
+      staleConnectA.then(
+        () => "resolved",
+        () => "rejected",
+      ),
+      new Promise<"pending">((resolve) => setTimeout(() => resolve("pending"), 10)),
+    ]);
+    expect(staleOutcome).toBe("pending");
     expect(Reflect.get(sharedMgr, "_initialized")).toBe(true);
     expect(sharedTrackStopped).toBe(false);
     expect(sharedPlayerClosed).toBe(false);
@@ -1416,6 +1496,116 @@ describe("signalling, memories, devices, stats, and EidolonClient", () => {
     await pendingPrep;
     expect(prepUpdateCalls).toBe(0);
     expect(prepInitCalls).toBe(0);
+  });
+
+  test("a cancelled attempt that resumes inside PipecatClient.connect leaves the redialed call up", async () => {
+    const client = new EidolonClient({ enableMic: true });
+    const manager = Reflect.get(client.rawTransport, "mediaManager") as {
+      connect: () => Promise<void>;
+      disconnect: () => Promise<void>;
+      tracks: () => { local: { audio?: MediaStreamTrack } };
+    };
+    const RecProto = Object.getPrototypeOf(Reflect.get(manager, "_wavRecorder") as object);
+    const PlayProto = Object.getPrototypeOf(Reflect.get(manager, "_wavStreamPlayer") as object);
+    const saved = {
+      begin: RecProto.begin,
+      end: RecProto.end,
+      record: RecProto.record,
+      getStatus: RecProto.getStatus,
+      listenForDeviceChange: RecProto.listenForDeviceChange,
+      listenForDeviceErrors: RecProto.listenForDeviceErrors,
+      connect: PlayProto.connect,
+      interrupt: PlayProto.interrupt,
+    };
+    let begins = 0;
+    let markABegin!: () => void;
+    const aBegan = new Promise<void>((resolve) => {
+      markABegin = resolve;
+    });
+    let finishABegin!: () => void;
+    RecProto.begin = function (this: Record<string, unknown>) {
+      const track = fakeMicTrack(++begins === 1 ? "mic-a" : "mic-b");
+      const open = () => {
+        this.stream = { getTracks: () => [track], getAudioTracks: () => [track] };
+        this.processor = { context: { state: "running", close: async () => {} } };
+        return true;
+      };
+      if (begins > 1) return Promise.resolve(open());
+      markABegin();
+      return new Promise<boolean>((resolve) => {
+        finishABegin = () => resolve(open());
+      });
+    };
+    RecProto.end = async function (this: Record<string, unknown>) {
+      this.stream = null;
+      this.processor = null;
+    };
+    RecProto.record = async () => true;
+    RecProto.getStatus = function (this: Record<string, unknown>) {
+      return this.stream ? "recording" : "ended";
+    };
+    RecProto.listenForDeviceChange = () => {};
+    RecProto.listenForDeviceErrors = () => {};
+    PlayProto.connect = async function (this: Record<string, unknown>) {
+      this.context = { state: "running", close: async () => {} };
+      return true;
+    };
+    PlayProto.interrupt = async () => {};
+    // Devices already initialized, so the mic opens inside the transport's own connect().
+    Reflect.set(client.rawClient, "needsInit", () => false);
+    Reflect.set(client.rawTransport, "_connect", async () => {
+      await manager.connect();
+      Reflect.set(client.rawTransport, "dc", {
+        readyState: "open",
+        send: () => {
+          Reflect.set(client.rawTransport, "state", "ready");
+          const onMessage = Reflect.get(client.rawTransport, "_onMessage") as (m: unknown) => void;
+          onMessage({ label: "rtvi-ai", id: "1", type: "bot-ready", data: { version: "1.0.0" } });
+        },
+        close: () => {},
+      });
+      Reflect.set(client.rawTransport, "state", "connected");
+    });
+    Reflect.set(client.rawTransport, "_disconnect", async () => {
+      Reflect.set(client.rawTransport, "dc", null);
+      Reflect.set(client.rawTransport, "state", "disconnected");
+      await manager.disconnect();
+    });
+    let disconnects = 0;
+    client.on("disconnected", () => {
+      disconnects += 1;
+    });
+    try {
+      const attemptA = client.connect({ endpoint: "https://bot.example/api/offer" });
+      const settledA = attemptA.then(
+        () => "connected",
+        (error: Error) => error.message,
+      );
+      await aBegan;
+      await client.disconnect();
+      expect(await settledA).toBe("Connection cancelled");
+      const ready = await client.connect({ endpoint: "https://bot.example/api/offer" });
+      expect(ready.version).toBe("1.0.0");
+      const before = disconnects;
+
+      // PipecatClient.connect() answers a rejected transport connect with disconnect() on the
+      // shared client, which would end the redialed call.
+      finishABegin();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect([client.state, disconnects - before]).toEqual(["ready", 0]);
+      expect(manager.tracks().local.audio?.id).toBe("mic-b");
+    } finally {
+      await client.disconnect().catch(() => {});
+      Object.assign(RecProto, {
+        begin: saved.begin,
+        end: saved.end,
+        record: saved.record,
+        getStatus: saved.getStatus,
+        listenForDeviceChange: saved.listenForDeviceChange,
+        listenForDeviceErrors: saved.listenForDeviceErrors,
+      });
+      Object.assign(PlayProto, { connect: saved.connect, interrupt: saved.interrupt });
+    }
   });
 
   test("device unplug during pending player initialization defers fallback without replacing active manager", async () => {

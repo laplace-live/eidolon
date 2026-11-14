@@ -94,10 +94,12 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalExten
         memoryAdmin: options.memoryAdmin,
         chats,
       });
+      let listedOffers = 0;
       const app: LocalApp = {
         port: context.port,
         // A connecting offer is a call already: a switch or restart now would cut it off.
-        activeCalls: () => context.signalling.activeSessions + identity.pendingOffers(),
+        activeCalls: () =>
+          context.signalling.activeSessions + identity.pendingOffers() + listedOffers,
         restart: options.restart,
         onStop,
         memoryAdmin: options.memoryAdmin,
@@ -119,26 +121,37 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalExten
       // A listed origin gets the bot's own handler: a stranger or a LAPLACE login, never the
       // local viewer.
       const local = (
-        path: string,
         method: "GET" | "POST",
         handler: Parameters<typeof localRoute>[1],
-      ) =>
-        guarded(
-          localRoute(method, handler, authenticate),
-          context,
-          (botRoutes[path] as MethodRoutes)[method],
-        );
+        crossOrigin: RouteHandler | undefined,
+      ) => guarded(localRoute(method, handler, authenticate), context, crossOrigin);
+      const bot = (path: string, method: RouteMethod) => (botRoutes[path] as MethodRoutes)[method];
+      const botOffer = bot(OFFER_PATH, "POST");
       // POST stays first: the bot's 405 for this path takes Allow from the first method.
       routes[OFFER_PATH] = {
-        POST: local(OFFER_PATH, "POST", identity.offer),
+        POST: local(
+          "POST",
+          identity.offer,
+          botOffer &&
+            (async (request, server) => {
+              listedOffers++;
+              try {
+                return await botOffer(request, server);
+              } finally {
+                listedOffers--;
+              }
+            }),
+        ),
         PATCH: (routes[OFFER_PATH] as MethodRoutes).PATCH,
       };
-      routes[PREFLIGHT_PATH] = { POST: local(PREFLIGHT_PATH, "POST", identity.preflight) };
+      routes[PREFLIGHT_PATH] = {
+        POST: local("POST", identity.preflight, bot(PREFLIGHT_PATH, "POST")),
+      };
       routes[LIST_MEMORIES_PATH] = {
-        GET: local(LIST_MEMORIES_PATH, "GET", identity.listMemories),
+        GET: local("GET", identity.listMemories, bot(LIST_MEMORIES_PATH, "GET")),
       };
       routes[FORGET_MEMORIES_PATH] = {
-        POST: local(FORGET_MEMORIES_PATH, "POST", identity.forgetMemories),
+        POST: local("POST", identity.forgetMemories, bot(FORGET_MEMORIES_PATH, "POST")),
       };
 
       const specs = [

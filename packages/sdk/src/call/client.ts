@@ -678,25 +678,35 @@ function createBridgedMediaManager(
         releaseLifecycle(attempt.entry);
       }
     },
-    async connect() {
+    connect() {
       const epoch = disconnectEpoch;
-      const attempt = await claimWhenEpochIdle(epoch);
-      try {
-        sessionEpochs.set(attempt.inner, epoch);
+      const run = async () => {
+        const attempt = await claimWhenEpochIdle(epoch);
         try {
-          await proto.connect.call(attempt.inner);
-        } catch (error) {
-          await cleanupAttempt(attempt);
-          throw error;
+          sessionEpochs.set(attempt.inner, epoch);
+          try {
+            await proto.connect.call(attempt.inner);
+          } catch (error) {
+            await cleanupAttempt(attempt);
+            throw error;
+          }
+          if (isCanceled(epoch) || attempt.inner !== activeInner) {
+            await cleanupAttempt(attempt);
+            throw connectionCancelledError();
+          }
+          syncMicTrack();
+        } finally {
+          releaseLifecycle(attempt.entry);
         }
-        if (isCanceled(epoch) || attempt.inner !== activeInner) {
-          await cleanupAttempt(attempt);
-          throw connectionCancelledError();
-        }
-        syncMicTrack();
-      } finally {
-        releaseLifecycle(attempt.entry);
-      }
+      };
+      // PipecatClient.connect() answers a rejected transport connect with disconnect() on the
+      // shared client, which would end a call redialed since; EidolonClient has already rejected
+      // the cancelled attempt, so it never settles here:
+      // https://github.com/pipecat-ai/pipecat-client-web/blob/main/client-js/client/client.ts
+      return run().catch((error: unknown) => {
+        if (isCanceled(epoch)) return new Promise<void>(() => {});
+        throw error;
+      });
     },
     updateMic(micId: string) {
       explicitMicSelectionGen += 1;
@@ -1075,28 +1085,34 @@ export class EidolonClient {
     const attempt = ++this.#connectEpoch;
     this.#activeConnectAttempt = attempt;
     try {
-      let targetMicId = this.#preferredMicId;
-      if (targetMicId === null) {
-        if (!this.#hasLiveMic()) {
-          this.#mediaManager.clearDeviceSelection();
+      // Until the vendor connect starts, the state still reads idle, so a pick made while one
+      // opens reaches only #preferredMicId: open it before going on.
+      for (let preferred = this.#preferredMicId; ; preferred = this.#preferredMicId) {
+        let targetMicId = preferred;
+        if (targetMicId === null) {
+          if (!this.#hasLiveMic()) {
+            this.#mediaManager.clearDeviceSelection();
+            this.#pendingDefaultMicReset = false;
+          } else if (
+            this.#pendingDefaultMicReset ||
+            (this.#appliedMicId !== null && this.#appliedMicId !== SYSTEM_DEFAULT_MIC_ID)
+          ) {
+            this.#pendingDefaultMicReset = false;
+            targetMicId = SYSTEM_DEFAULT_MIC_ID;
+          }
+        } else {
           this.#pendingDefaultMicReset = false;
-        } else if (
-          this.#pendingDefaultMicReset ||
-          (this.#appliedMicId !== null && this.#appliedMicId !== SYSTEM_DEFAULT_MIC_ID)
-        ) {
-          this.#pendingDefaultMicReset = false;
-          targetMicId = SYSTEM_DEFAULT_MIC_ID;
         }
-      } else {
-        this.#pendingDefaultMicReset = false;
-      }
-      if (
-        targetMicId &&
-        this.#appliedMicId !== targetMicId &&
-        this.#attemptedPreConnectMicId !== targetMicId
-      ) {
+        if (
+          !targetMicId ||
+          this.#appliedMicId === targetMicId ||
+          this.#attemptedPreConnectMicId === targetMicId
+        ) {
+          break;
+        }
         await this.#applyPreConnectMic(targetMicId);
         if (this.#connectEpoch !== attempt) await this.#abandonSuperseded();
+        if (this.#preferredMicId === preferred) break;
       }
       // PipecatClient.connect() awaits initDevices() outside its inner try/catch, leaving the
       // outer promise pending forever if AudioWorklet setup rejects; it also lacks a post-init

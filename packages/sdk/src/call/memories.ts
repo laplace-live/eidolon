@@ -70,11 +70,16 @@ async function memoryRequest(
   return res;
 }
 
-/** The `{ error }` message `/api/memories` refuses with, else the start of whatever body came. */
+/**
+ * The message `/api/memories` refuses with, as `{ error }` or the local app's
+ * `{ error: { message } }`, else the start of whatever body came.
+ */
 function errorDetailOf(body: string): string {
   try {
     const parsed: unknown = JSON.parse(body);
-    if (isJsonObject(parsed) && typeof parsed.error === "string") return parsed.error;
+    const error = isJsonObject(parsed) ? parsed.error : undefined;
+    if (typeof error === "string") return error;
+    if (isJsonObject(error) && typeof error.message === "string") return error.message;
   } catch {
     // A proxy's page, or no body at all.
   }
