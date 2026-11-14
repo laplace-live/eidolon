@@ -2,8 +2,8 @@
 // finished, her reply once all of it has played, so while the call is on, its own transcript (what
 // the call page shows) stands in for its stored lines, until the call's end is stored after them.
 import type { ChatEvent, ParticipantId } from "@eidolon/chat";
+import type { WaitState } from "@laplace.live/eidolon-sdk";
 import type { BotEntry, SelfieEntry, Transcript, UserEntry } from "@/features/call/transcript";
-import type { WaitState } from "@/features/call/watchdog";
 import { type ChatItem, saidBy } from "./items";
 
 export interface LiveCall {

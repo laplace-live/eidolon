@@ -1,11 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { BotOutputData } from "@pipecat-ai/client-js";
+import type { BotOutputData } from "@laplace.live/eidolon-sdk";
 import {
   type BotEntry,
   botRuns,
   EMPTY_TRANSCRIPT,
   reduceTranscript,
-  speakerOf,
   type Transcript,
   type TranscriptEvent,
   userText,
@@ -307,26 +306,6 @@ describe("group calls", () => {
     expect(run(announce(1, "你好。")).entries[0]).toMatchObject({ speaker: null });
     const labeled = run(speaking("mint", "薄荷"), announce(1, "你好。"));
     expect(reduceTranscript(labeled, { type: "reset" })).toBe(EMPTY_TRANSCRIPT);
-  });
-
-  test("speakerOf reads the group call's label and nothing else", () => {
-    expect(speakerOf({ type: "speaker", persona: "mint", name: "薄荷" })).toEqual({
-      persona: "mint",
-      name: "薄荷",
-    });
-    expect(speakerOf({ type: "speaker", persona: "mint", name: " " })).toEqual({
-      persona: "mint",
-      name: "mint",
-    });
-    expect(speakerOf({ type: "speaker", persona: "mint" })).toEqual({
-      persona: "mint",
-      name: "mint",
-    });
-    expect(speakerOf({ type: "speaker", persona: "", name: "薄荷" })).toBeNull();
-    expect(speakerOf({ type: "speaker", persona: 7, name: "薄荷" })).toBeNull();
-    expect(speakerOf({ type: "selfie", urls: ["/api/selfie/a.png"], persona: "mint" })).toBeNull();
-    expect(speakerOf(null)).toBeNull();
-    expect(speakerOf("speaker")).toBeNull();
   });
 });
 

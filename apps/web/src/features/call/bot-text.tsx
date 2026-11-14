@@ -1,4 +1,4 @@
-import type { PairedTag } from "@/lib/markup";
+import type { PairedTag } from "@laplace.live/eidolon-sdk";
 import { cn } from "@/lib/utils";
 import type { BotRun } from "./transcript";
 

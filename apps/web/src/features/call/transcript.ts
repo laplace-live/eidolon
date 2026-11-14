@@ -2,8 +2,14 @@
 // messages, the bot's replies sentence by sentence as the TTS says them, and the selfies it sends.
 // On a group call, each reply names the persona who said it.
 import { separator } from "@eidolon/chat";
-import type { BotOutputData, TranscriptData, UserInputData } from "@pipecat-ai/client-js";
-import { type MarkupToken, parseMarkup } from "../../lib/markup";
+import {
+  type BotOutputData,
+  type CallSpeaker,
+  type MarkupToken,
+  parseMarkup,
+  type TranscriptData,
+  type UserInputData,
+} from "@laplace.live/eidolon-sdk";
 
 export interface UserPart {
   readonly text: string;
@@ -30,17 +36,11 @@ export interface BotSegment {
   readonly voiced: boolean;
 }
 
-/** Who a group call's server says is speaking, as her audio starts. */
-export interface Speaker {
-  readonly persona: string;
-  readonly name: string;
-}
-
 export interface BotEntry {
   readonly kind: "bot";
   readonly id: number;
   /** Who said it on a group call; null on a call with her alone. */
-  readonly speaker: Speaker | null;
+  readonly speaker: CallSpeaker | null;
   readonly segments: readonly BotSegment[];
 }
 
@@ -65,7 +65,7 @@ export interface Transcript {
   /** Transcriptions arrive as user-input, so their user-transcription copies are skipped. */
   readonly userInput: boolean;
   /** On a group call, the persona the caller hears now, or heard last. */
-  readonly speaker: Speaker | null;
+  readonly speaker: CallSpeaker | null;
 }
 
 export const EMPTY_TRANSCRIPT: Transcript = {
@@ -90,7 +90,7 @@ export type TranscriptEvent =
   | { readonly type: "interrupted" }
   | { readonly type: "selfie"; readonly paths: readonly string[]; readonly persona?: string | null }
   /** A group call's persona starts speaking: her replies are entries of her own. */
-  | { readonly type: "speaker"; readonly speaker: Speaker }
+  | { readonly type: "speaker"; readonly speaker: CallSpeaker }
   | { readonly type: "reset" };
 
 // Word and token output repeats the sentences, and backchannels and expressions sit outside a reply.
@@ -260,18 +260,6 @@ export function reduceTranscript(state: Transcript, event: TranscriptEvent): Tra
     case "reset":
       return EMPTY_TRANSCRIPT;
   }
-}
-
-/** Who a server message says is speaking now; null for any message but a group call's label. */
-export function speakerOf(data: unknown): Speaker | null {
-  if (typeof data !== "object" || data === null) return null;
-  const { type, persona, name } = data as {
-    readonly type?: unknown;
-    readonly persona?: unknown;
-    readonly name?: unknown;
-  };
-  if (type !== "speaker" || typeof persona !== "string" || persona === "") return null;
-  return { persona, name: typeof name === "string" && name.trim() !== "" ? name : persona };
 }
 
 /** A user entry's words: what was said, and the part still being heard with its leading space. */

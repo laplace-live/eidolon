@@ -1,13 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatEvent, ChatEventOf, Speaker } from "@eidolon/chat";
-import {
-  chatItems,
-  manyVoices,
-  previewText,
-  retryText,
-  startsRun,
-  withoutPartialMarkup,
-} from "./items";
+import { chatItems, manyVoices, previewText, retryText, startsRun } from "./items";
 
 const IMAGE = { kind: "image", name: `${"a".repeat(64)}.png`, mime: "image/png" } as const;
 
@@ -561,22 +554,11 @@ describe("calls", () => {
   });
 });
 
-describe("withoutPartialMarkup", () => {
-  test("drops a cue or tag cut off at the end, and nothing else", () => {
-    expect(withoutPartialMarkup("真的</emp")).toBe("真的");
-    expect(withoutPartialMarkup("<emphasis>真")).toBe("<emphasis>真");
-    expect(withoutPartialMarkup("你好[温柔")).toBe("你好");
-    expect(withoutPartialMarkup("你好[温柔地]")).toBe("你好[温柔地]");
-    expect(withoutPartialMarkup("a <")).toBe("a ");
-    expect(withoutPartialMarkup("3 < 5")).toBe("3 < 5");
-  });
-
-  test("leaves a preview without the fragment", () => {
+describe("previewText", () => {
+  test("leaves a preview without a fragment cut off at the end", () => {
     expect(previewText("嗯嗯。<emph")).toBe("嗯嗯。");
   });
-});
 
-describe("previewText", () => {
   test("keeps the words and cue emoji, and drops directions and tags", () => {
     expect(previewText("[温柔地]<whisper>晚安</whisper> [sighing]\n明天见")).toBe(
       "晚安 😮‍💨 明天见",

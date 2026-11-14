@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type MarkupToken, parseMarkup } from "./markup";
+import { type MarkupToken, parseMarkup, trimTrailingPartialCue } from "../src/index.ts";
 
 /** The tokens without offsets, which only the spoken split reads. */
 function shapes(source: string) {
@@ -105,5 +105,16 @@ describe("parseMarkup", () => {
         expect(source.slice(token.start, token.start + token.text.length)).toBe(token.text);
       }
     }
+  });
+});
+
+describe("trimTrailingPartialCue", () => {
+  test("drops a cue or tag cut off at the end, and nothing else", () => {
+    expect(trimTrailingPartialCue("真的</emp")).toBe("真的");
+    expect(trimTrailingPartialCue("<emphasis>真")).toBe("<emphasis>真");
+    expect(trimTrailingPartialCue("你好[温柔")).toBe("你好");
+    expect(trimTrailingPartialCue("你好[温柔地]")).toBe("你好[温柔地]");
+    expect(trimTrailingPartialCue("a <")).toBe("a ");
+    expect(trimTrailingPartialCue("3 < 5")).toBe("3 < 5");
   });
 });

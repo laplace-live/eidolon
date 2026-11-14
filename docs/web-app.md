@@ -334,7 +334,7 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
 - **The studio's Chats section** edits a persona's `chat.replyMode`, `chat.interests` and
   `chat.talkativeness` ([personas.md](personas.md#personayaml)), showing where each value
   comes from.
-- **Her lines** render through `lib/markup.ts` like a call's transcript: cues as chips and
+- **Her lines** render through the SDK's `parseMarkup` like a call's transcript: cues as chips and
   directions as small labels, never as HTML. A selfie shows as a photo, served from the chat's
   `files/`.
 - **While she replies:**

@@ -1,8 +1,9 @@
 // The studio's checks on files before they reach the server, which checks them again: names,
 // image types and sizes, and what a prompt asks of the voice model.
+
+import { parseMarkup } from "@laplace.live/eidolon-sdk";
 import { type AccountList, effectiveProviderType } from "@/components/settings-form/controls";
 import type { SettingRow } from "@/lib/api";
-import { parseMarkup } from "@/lib/markup";
 import { defaultModel, modelInfo, providerName, roleById } from "@/lib/providers";
 
 /** The server refuses larger uploads. */

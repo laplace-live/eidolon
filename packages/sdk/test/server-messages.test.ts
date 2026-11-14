@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { selfiePaths, selfiePersona } from "./selfie";
+import { selfiePaths, selfiePersona, speakerOf } from "../src/index.ts";
 
 const ID = "Qm9vdHN0cmFwLWlkLTE2Yg";
 
@@ -45,4 +45,24 @@ test("a group call's selfie names whose photo it is", () => {
   expect(selfiePersona({ type: "selfie", urls, persona: "" })).toBeNull();
   expect(selfiePersona({ type: "selfie", urls, persona: 7 })).toBeNull();
   expect(selfiePersona(null)).toBeNull();
+});
+
+test("speakerOf reads the group call's label and nothing else", () => {
+  expect(speakerOf({ type: "speaker", persona: "mint", name: "薄荷" })).toEqual({
+    persona: "mint",
+    name: "薄荷",
+  });
+  expect(speakerOf({ type: "speaker", persona: "mint", name: " " })).toEqual({
+    persona: "mint",
+    name: "mint",
+  });
+  expect(speakerOf({ type: "speaker", persona: "mint" })).toEqual({
+    persona: "mint",
+    name: "mint",
+  });
+  expect(speakerOf({ type: "speaker", persona: "", name: "薄荷" })).toBeNull();
+  expect(speakerOf({ type: "speaker", persona: 7, name: "薄荷" })).toBeNull();
+  expect(speakerOf({ type: "selfie", urls: ["/api/selfie/a.png"], persona: "mint" })).toBeNull();
+  expect(speakerOf(null)).toBeNull();
+  expect(speakerOf("speaker")).toBeNull();
 });

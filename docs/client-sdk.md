@@ -35,6 +35,11 @@ zero `@pipecat-ai/*` packages directly.
 - **Protocol parity is tested, not imported.** `packages/sdk/test/parity.test.ts` checks the SDK's
   constants (`CHAT_FORMAT`, window budgets, chain limits, voice limits, `AUDIO_QUALITIES`) against
   `@eidolon/chat`, `@eidolon/access`, `@eidolon/runtime`, and `apps/bot/src/chat`.
+- **The local web app is a consumer.** `apps/web` calls through `EidolonClient` and takes the cue
+  markup, the turn `Watchdog` and server-message parsing from the SDK, with no `@pipecat-ai/*`
+  package of its own. Its call transcript, call phases and chat items stay in `apps/web`: they
+  carry group calls' speakers, selfies by persona and the director's reasons, which
+  `useEidolonConversation` and `eventItems` don't model.
 - **A host app on another origin needs a bot that answers it.** A production-mode bot (`bun run
   dev`, `bun run start` or the image) allows every origin unless `PIPECAT_ALLOWED_ORIGINS` narrows
   it. The local app (`bun run app`, `bun run local`, `eidolon`) answers only its own pages until

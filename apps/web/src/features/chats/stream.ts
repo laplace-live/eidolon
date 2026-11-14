@@ -7,8 +7,8 @@
 // events carry no turn, so a stored line is matched to what waits for it by seq: whatever answers a
 // turn or a send is stored after it began.
 import type { ChatEvent, ChatStreamLine, ParticipantId } from "@eidolon/chat";
+import { trimTrailingPartialCue } from "@laplace.live/eidolon-sdk";
 import type { ChatContents } from "@/lib/chats";
-import { withoutPartialMarkup } from "./items";
 
 export interface LiveTurn {
   readonly id: string;
@@ -205,7 +205,7 @@ export type LiveRow =
 export function liveRows(live: LiveState, inCall: boolean): LiveRow[] {
   const { turn, pending } = live;
   const rows: LiveRow[] = [];
-  const streamed = turn === null ? "" : withoutPartialMarkup(turn.text);
+  const streamed = turn === null ? "" : trimTrailingPartialCue(turn.text);
   if (streamed !== "") rows.push({ kind: "streamed", text: streamed });
   if (turn !== null && turn.tool !== null) rows.push({ kind: "tool", tool: turn.tool });
   for (const line of pending) rows.push({ kind: "pending", line });

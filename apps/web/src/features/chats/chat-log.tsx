@@ -1,4 +1,5 @@
 import type { Attachment, ParticipantId } from "@eidolon/chat";
+import { parseMarkup, trimTrailingPartialCue } from "@laplace.live/eidolon-sdk";
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import {
@@ -22,18 +23,10 @@ import { BotText } from "@/features/call/bot-text";
 import { type BotRun, botRuns, userText } from "@/features/call/transcript";
 import { chatFilePath } from "@/lib/chats";
 import { listOf } from "@/lib/labels";
-import { parseMarkup } from "@/lib/markup";
 import { cn } from "@/lib/utils";
 import { callLine } from "./call-line";
 import { type CallRow, callRows, type LiveCall, standsIn } from "./call-live";
-import {
-  type AudioAttachment,
-  type CallItem,
-  type ChatItem,
-  manyVoices,
-  startsRun,
-  withoutPartialMarkup,
-} from "./items";
+import { type AudioAttachment, type CallItem, type ChatItem, manyVoices, startsRun } from "./items";
 import { toolState } from "./labels";
 import { type ChatPersona, shortNameOf } from "./persona";
 import { type LiveRow, type LiveState, liveRows, type PendingLine, type VoiceClip } from "./stream";
@@ -242,7 +235,7 @@ function HerBubble({
   readonly onAutoPlayEnd?: AutoPlayEnd;
 }) {
   const { t } = useLingui();
-  const shown = withoutPartialMarkup(text);
+  const shown = trimTrailingPartialCue(text);
   const runs = useMemo<BotRun[]>(
     () => parseMarkup(shown).map((token) => ({ ...token, pending: false })),
     [shown],

@@ -1,15 +1,12 @@
-// One call at a time, over SmallWebRTC to this server's /api/offer. Each call gets a fresh client
-// and transport, so nothing a finished or cancelled call leaves running can reach the next one.
-import { PipecatClient, RTVIEvent, type RTVIEvents, type RTVIMessage } from "@pipecat-ai/client-js";
-import { SmallWebRTCTransport, WavMediaManager } from "@pipecat-ai/small-webrtc-transport";
+// One call at a time, over SmallWebRTC to this server's /api/offer. Each call gets a fresh client,
+// so nothing a finished or cancelled call leaves running can reach the next one.
+import { EidolonClient, type WaitState, Watchdog } from "@laplace.live/eidolon-sdk";
 import { type RefObject, useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { ChatCallRequestData } from "@/lib/api";
 import { deviceProblemOf, type MicProblem, probeMic } from "./media";
 import { type CallPhase, connectEnd, endOf, IDLE, reducePhase } from "./phase";
-import { selfiePaths, selfiePersona } from "./selfie";
-import { fetchIceServers, offerRequest } from "./signalling";
-import { EMPTY_TRANSCRIPT, reduceTranscript, speakerOf, type Transcript } from "./transcript";
-import { type WaitState, Watchdog } from "./watchdog";
+import { fetchIceServers, offerOptions } from "./signalling";
+import { EMPTY_TRANSCRIPT, reduceTranscript, type Transcript } from "./transcript";
 
 export interface BotError {
   /** The latest error the bot reported, as it worded it. */
@@ -42,40 +39,12 @@ export interface Call {
 }
 
 interface ActiveCall {
-  readonly client: PipecatClient;
-  readonly transport: SmallWebRTCTransport;
+  readonly client: EidolonClient;
   /** The bot said it was leaving before the transport went. */
   botLeft: boolean;
   /** When the call last heard speech, to tell the bot's idle timeout from other endings. */
   heardAt: number;
   detach(): void;
-}
-
-/**
- * WavMediaManager drops the replaceTrack wiring the transport's default media manager has, so a
- * mic it restarts (after a device change, say) would send silence. `pc` is private; the audio
- * transceiver is the first one the transport adds.
- */
-function bridgeMic(transport: SmallWebRTCTransport, track: MediaStreamTrack): void {
-  const pc: unknown = Reflect.get(transport, "pc");
-  if (!(pc instanceof RTCPeerConnection)) return;
-  pc.getTransceivers()[0]
-    ?.sender.replaceTrack(track)
-    .catch(() => undefined);
-}
-
-function errorText(message: RTVIMessage): string {
-  const data = message.data as { error?: unknown; message?: unknown } | undefined;
-  const text = data?.error ?? data?.message;
-  return typeof text === "string" ? text : "";
-}
-
-function attach(client: PipecatClient, listeners: RTVIEvents): () => void {
-  const pairs = Object.entries(listeners) as [keyof RTVIEvents, RTVIEvents[keyof RTVIEvents]][];
-  for (const [event, listener] of pairs) client.on(event, listener);
-  return () => {
-    for (const [event, listener] of pairs) client.off(event, listener);
-  };
 }
 
 export function useCall(): Call {
@@ -123,73 +92,69 @@ export function useCall(): Call {
       });
   }, []);
 
-  const listenersFor = useCallback(
-    (call: ActiveCall): RTVIEvents => {
+  const subscribe = useCallback(
+    (call: ActiveCall): (() => void) => {
+      const { client } = call;
       const heard = () => {
         call.heardAt = Date.now();
       };
-      return {
-        [RTVIEvent.TrackStarted]: (track, participant) => {
-          if (track.kind !== "audio") return;
-          if (participant?.local) bridgeMic(call.transport, track);
-          else playBot(track);
-        },
-        [RTVIEvent.BotStartedSpeaking]: () => {
+      const offs = [
+        // The client hands its own mic to the peer connection; only the bot's audio is the page's.
+        client.on("trackStarted", (track, participant) => {
+          if (track.kind === "audio" && !participant?.local) playBot(track);
+        }),
+        client.on("botStartedSpeaking", () => {
           heard();
           watchdog.clear();
           setBotSpeaking(true);
           dispatchPhase({ type: "answered", at: Date.now() });
-        },
-        [RTVIEvent.BotStoppedSpeaking]: () => {
+        }),
+        client.on("botStoppedSpeaking", () => {
           heard();
           setBotSpeaking(false);
-        },
-        [RTVIEvent.UserStartedSpeaking]: () => {
+        }),
+        client.on("userStartedSpeaking", () => {
           heard();
           watchdog.clear();
           setUserSpeaking(true);
-        },
-        [RTVIEvent.UserStoppedSpeaking]: () => {
+        }),
+        client.on("userStoppedSpeaking", () => {
           heard();
           setUserSpeaking(false);
           watchdog.arm();
-        },
-        [RTVIEvent.BotLlmStarted]: () => watchdog.llmStarted(),
-        [RTVIEvent.UserInput]: (data) => {
+        }),
+        client.on("botLlmStarted", () => watchdog.llmStarted()),
+        client.on("userInput", (data) => {
           heard();
           dispatchTranscript({ type: "user-input", data });
-        },
-        [RTVIEvent.UserTranscript]: (data) => {
+        }),
+        client.on("userTranscript", (data) => {
           heard();
           dispatchTranscript({ type: "user-transcript", data });
-        },
-        [RTVIEvent.BotOutput]: (data) => dispatchTranscript({ type: "bot-output", data }),
-        [RTVIEvent.BotInterrupted]: () => dispatchTranscript({ type: "interrupted" }),
-        [RTVIEvent.ServerMessage]: (data: unknown) => {
-          const speaker = speakerOf(data);
-          if (speaker !== null) {
-            dispatchTranscript({ type: "speaker", speaker });
-            return;
+        }),
+        client.on("botOutput", (data) => dispatchTranscript({ type: "bot-output", data })),
+        client.on("botInterrupted", () => dispatchTranscript({ type: "interrupted" })),
+        client.on("serverMessage", (message) => {
+          if (message.type === "speaker") {
+            dispatchTranscript({ type: "speaker", speaker: message.speaker });
+          } else if (message.type === "selfie" && message.urls.length > 0) {
+            dispatchTranscript({ type: "selfie", paths: message.urls, persona: message.persona });
           }
-          const paths = selfiePaths(data);
-          if (paths.length > 0) {
-            dispatchTranscript({ type: "selfie", paths, persona: selfiePersona(data) });
-          }
-        },
-        [RTVIEvent.Error]: (message) => {
+        }),
+        client.on("error", (message) => {
           watchdog.clear();
-          const text = errorText(message);
+          const text = message.data.error;
           setBotError((last) => ({ message: text, count: (last?.count ?? 0) + 1 }));
-        },
-        [RTVIEvent.DeviceError]: (error) => {
+        }),
+        client.on("deviceError", (error) => {
           if (error.devices.includes("mic")) setMicProblem(deviceProblemOf(error));
-        },
-        [RTVIEvent.BotDisconnected]: () => {
+        }),
+        client.on("botDisconnected", () => {
           call.botLeft = true;
-        },
-        [RTVIEvent.Disconnected]: () => {
+        }),
+        client.on("disconnected", () => {
           // A failed connect rejects within this task, with the offer's status, and start()
-          // reports that. A connect cut off after the data channel opened never settles.
+          // reports that; so does one cut off before the bot was ready, on the next timer.
           setTimeout(() => {
             if (activeRef.current !== call) return;
             release(call);
@@ -200,7 +165,10 @@ export function useCall(): Call {
               end: endOf(call.botLeft, at - call.heardAt),
             });
           });
-        },
+        }),
+      ];
+      return () => {
+        for (const off of offs) off();
       };
     },
     [playBot, release, watchdog],
@@ -235,23 +203,18 @@ export function useCall(): Call {
       }
       if (stale()) return;
 
-      const transport = new SmallWebRTCTransport({
-        iceServers,
-        mediaManager: new WavMediaManager(),
-      });
-      const client = new PipecatClient({ transport, enableMic: true, enableCam: false });
+      const client = new EidolonClient({ iceServers, enableMic: true });
       const call: ActiveCall = {
         client,
-        transport,
         botLeft: false,
         heardAt: Date.now(),
         detach() {},
       };
-      call.detach = attach(client, listenersFor(call));
+      call.detach = subscribe(call);
       activeRef.current = call;
       dispatchPhase({ type: "dial" });
       try {
-        await client.connect({ webrtcRequestParams: offerRequest(target) });
+        await client.connect(offerOptions(target));
       } catch (error) {
         if (stale()) return;
         release(call);
@@ -264,7 +227,7 @@ export function useCall(): Call {
       // No one greets on a group call: it waits for the viewer, so it is answered as it comes up.
       if (target?.group) dispatchPhase({ type: "answered", at: Date.now() });
     },
-    [listenersFor, release, watchdog],
+    [subscribe, release, watchdog],
   );
 
   const hangUp = useCallback(async () => {
