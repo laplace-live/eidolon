@@ -1,12 +1,11 @@
 name: Release
 
-# Changesets flow (laplace-jupiter / laplace-comet pattern; docs/releasing.md):
-# while changesets exist on master, keep a "chore: version packages" PR open.
-# Once it merges, `bun run release` tags laplace-eidolon@<version> and
-# @laplace.live/eidolon@<version>, the action pushes the tags and publishes their
-# GitHub Releases, laplace-eidolon's tag fires docker.yml's versioned images, and
-# while the NPM_PUBLISH variable is true, the jobs after `release` publish the
-# npm package.
+# Changesets flow (docs/releasing.md): while changesets exist on master, keep a
+# "chore: version packages" PR open. Once it merges, `bun run release` stages
+# @laplace.live/eidolon and @laplace.live/eidolon-sdk into their pack/ folders
+# and runs `changeset publish`, which publishes unpublished packages to npm via
+# OIDC trusted publishing (publishConfig.directory) and tags every release
+# including private laplace-eidolon@<version> (firing docker.yml's images).
 #
 # A GitHub App token (not the default GITHUB_TOKEN) authenticates the action:
 # events caused by GITHUB_TOKEN don't start other workflows, so the tag would
@@ -21,25 +20,25 @@ concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   release:
     runs-on: ubuntu-latest
-
-    outputs:
-      # "true" only on the run whose `changeset git-tag` created a tag.
-      published: ${{ steps.changesets.outputs.published }}
-
     steps:
       - uses: actions/checkout@v7
         with:
-          # Full history so each CHANGELOG line can link the commit that added its changeset
           fetch-depth: 0
           persist-credentials: false
 
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.4
+
+      # Trusted publishing needs npm 11.5.1 or later, which Node 24 ships.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
 
       - run: bun install --frozen-lockfile --ignore-scripts
 
@@ -56,82 +55,15 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
 
-      - name: Create version PR or tag the release
-        id: changesets
-        uses: changesets/action@v2
+      - uses: changesets/action@v2
         with:
           version-script: bun run version
-          # `changeset git-tag` tags the new version locally, and the action
-          # pushes the tags and creates their GitHub Releases through the API.
-          # npm is left to the jobs below.
           publish-script: bun run release
           # No [skip ci]: the version PR runs the full CI, so a bump that breaks a
           # test is caught before it merges.
           commit-message: "chore: version packages"
           pr-title: "chore: version packages"
+          create-github-releases: true
           # v2 reads the token only from this input, not from the
           # `GITHUB_TOKEN` env var.
           github-token: ${{ steps.app-token.outputs.token }}
-          create-github-releases: true
-
-  # Any step of a job with `id-token: write` can mint the OIDC token npm accepts
-  # in place of a publish token, so the build, which runs every dev dependency's
-  # code, gets a job without it.
-  pack:
-    needs: release
-    if: needs.release.outputs.published == 'true' && vars.NPM_PUBLISH == 'true'
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.4.4
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-
-      - run: bun install --frozen-lockfile
-
-      - run: bun run pack:npm
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: npm-package
-          path: apps/eidolon/*.tgz
-          if-no-files-found: error
-
-  publish:
-    needs: pack
-    runs-on: ubuntu-latest
-
-    permissions:
-      id-token: write
-
-    steps:
-      - uses: actions/download-artifact@v8
-        with:
-          name: npm-package
-
-      # Trusted publishing needs npm 11.5.1 or later, which Node 24 ships.
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-
-      # Publishing a tarball runs none of its lifecycle scripts. npm can't attest
-      # a build from a private repository, so --provenance fails the publish
-      # there. A version a maintainer already published by hand
-      # (docs/releasing.md) is skipped.
-      - name: Publish to npm
-        run: |
-          tarball="$(ls ./*.tgz)"
-          spec="$(tar -xzOf "$tarball" package/package.json | jq -r '.name + "@" + .version')"
-          if npm view "$spec" version > /dev/null 2>&1; then
-            echo "$spec is on npm already"
-          else
-            npm publish "$tarball" --access public --provenance
-          fi

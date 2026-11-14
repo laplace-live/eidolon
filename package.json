@@ -17,6 +17,8 @@
     "i18n": "bun run --cwd apps/web i18n",
     "build:npm": "bun apps/eidolon/scripts/build.ts",
     "pack:npm": "bun apps/eidolon/scripts/build.ts --pack",
+    "build:sdk": "bun packages/sdk/scripts/build.ts",
+    "pack:sdk": "bun packages/sdk/scripts/build.ts --pack",
     "laplace-search": "bun apps/cli/src/main.ts search",
     "laplace-eval-retrieval": "bun apps/cli/src/main.ts eval-retrieval",
     "laplace-generate-image": "bun apps/cli/src/main.ts generate-image",
@@ -31,12 +33,12 @@
     "laplace-pipeline": "bun apps/cli/src/main.ts pipeline",
     "laplace-extract-users": "bun apps/cli/src/main.ts extract-users",
     "laplace-prepare-batch": "bun apps/cli/src/main.ts prepare-batch",
-    "typecheck": "tsc -p tsconfig.json && tsc -p apps/web/tsconfig.json && tsc -p apps/web/tsconfig.node.json",
+    "typecheck": "tsc -p tsconfig.json && tsc -p packages/sdk/tsconfig.json && tsc -p packages/sdk/tsconfig.test.json && tsc -p apps/web/tsconfig.json && tsc -p apps/web/tsconfig.node.json",
     "lint": "biome check .",
     "format": "biome format --write .",
     "test": "bun test --no-env-file",
     "version": "changeset version && bun apps/bot/scripts/sync-version.ts",
-    "release": "changeset git-tag"
+    "release": "bun run build:npm && bun run build:sdk && changeset publish"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

@@ -205,8 +205,9 @@ cython_debug/
 # Ruff stuff:
 .ruff_cache/
 
-# PyPI configuration file
+# PyPI / npm configuration files
 .pypirc
+.npmrc
 
 # Marimo
 marimo/_static/

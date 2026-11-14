@@ -87,3 +87,5 @@ jobs:
       - run: bun run pack:npm
 
       - run: bun apps/eidolon/scripts/ci-install-check.ts apps/eidolon/*.tgz
+
+      - run: bun run pack:sdk

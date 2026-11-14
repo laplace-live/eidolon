@@ -1,11 +1,15 @@
 {
   "name": "@laplace.live/eidolon",
   "version": "0.8.0",
-  "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "directory": "pack"
+  },
   "scripts": {
-    "prepack": "echo 'This folder is the workspace, not the package: run bun run pack:npm' >&2 && exit 1"
+    "prepack": "echo 'This folder is the workspace, not the package: stage pack/ with bun run build:npm' >&2 && exit 1"
   },
   "devDependencies": {
     "@eidolon/cli": "workspace:*",

@@ -8,7 +8,8 @@
       "!**/node_modules",
       "!packages/retrieval/data",
       "!apps/web/dist",
-      "!apps/eidolon/pack"
+      "!apps/eidolon/pack",
+      "!packages/sdk/pack"
     ]
   },
   "formatter": {
@@ -64,7 +65,8 @@
         "!apps/bot/src/local/**",
         "!apps/bot/test/local/**",
         "packages/**",
-        "!packages/ingest/**"
+        "!packages/ingest/**",
+        "!packages/sdk/**"
       ],
       "linter": {
         "rules": {
@@ -80,6 +82,14 @@
                   {
                     "group": ["@eidolon/cli", "@eidolon/cli/**"],
                     "message": "The bot image skips builds for apps/cli changes (docker.yml); only apps/bot/src/local, which the image leaves out, may import it."
+                  },
+                  {
+                    "group": [
+                      "@laplace.live/eidolon-sdk",
+                      "@laplace.live/eidolon-sdk/**",
+                      "**/sdk/src/**"
+                    ],
+                    "message": "The bot image skips builds for packages/sdk changes (docker.yml); server code never imports the browser SDK."
                   },
                   {
                     "group": [
@@ -113,6 +123,14 @@
                   {
                     "group": ["@eidolon/cli", "@eidolon/cli/**"],
                     "message": "The bot image skips builds for apps/cli changes (docker.yml); only apps/bot/src/local, which the image leaves out, may import it."
+                  },
+                  {
+                    "group": [
+                      "@laplace.live/eidolon-sdk",
+                      "@laplace.live/eidolon-sdk/**",
+                      "**/sdk/src/**"
+                    ],
+                    "message": "The bot image skips builds for packages/sdk changes (docker.yml); server code never imports the browser SDK."
                   },
                   {
                     "group": [
@@ -154,6 +172,118 @@
                   {
                     "group": ["@eidolon/cli", "@eidolon/cli/**"],
                     "message": "The bot image skips builds for apps/cli changes (docker.yml); only apps/bot/src/local, which the image leaves out, may import it."
+                  },
+                  {
+                    "group": [
+                      "@laplace.live/eidolon-sdk",
+                      "@laplace.live/eidolon-sdk/**",
+                      "**/sdk/src/**"
+                    ],
+                    "message": "The bot image skips builds for packages/sdk changes (docker.yml); server code never imports the browser SDK."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/bot/src/local/**",
+        "apps/bot/test/local/**",
+        "apps/cli/**",
+        "apps/eidolon/**",
+        "packages/ingest/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "@laplace.live/eidolon-sdk",
+                      "@laplace.live/eidolon-sdk/**",
+                      "**/sdk/src/**"
+                    ],
+                    "message": "Server, CLI, and offline packages never import the browser SDK."
+                  },
+                  {
+                    "group": [
+                      "@eidolon/voice",
+                      "@eidolon/voice/**",
+                      "@eidolon/webrtc",
+                      "@eidolon/webrtc/**"
+                    ],
+                    "message": "Only packages/runtime may import the voice engine and its transport; reach calls through @eidolon/runtime."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/sdk/src/**", "!packages/sdk/src/react/**"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noNodejsModules": "error"
+          },
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "bun": "Browsers import @laplace.live/eidolon-sdk: no Bun or Node modules.",
+                  "react": "Keep the root @laplace.live/eidolon-sdk entry framework-agnostic; React bindings belong in src/react/."
+                },
+                "patterns": [
+                  {
+                    "group": ["bun:*", "node:*"],
+                    "message": "Browsers import @laplace.live/eidolon-sdk: no Bun or Node modules."
+                  },
+                  {
+                    "group": ["@eidolon/*", "@eidolon/**", "**/src/**", "**/apps/**"],
+                    "message": "@laplace.live/eidolon-sdk publishes standalone to npm and never imports private @eidolon/* workspaces from src/."
+                  },
+                  {
+                    "group": ["react/*", "react-dom", "react-dom/*", "**/react", "**/react/**"],
+                    "message": "Keep the root @laplace.live/eidolon-sdk entry framework-agnostic; React bindings belong in src/react/."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/sdk/src/react/**"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noNodejsModules": "error"
+          },
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "bun": "Browsers import @laplace.live/eidolon-sdk: no Bun or Node modules."
+                },
+                "patterns": [
+                  {
+                    "group": ["bun:*", "node:*"],
+                    "message": "Browsers import @laplace.live/eidolon-sdk: no Bun or Node modules."
+                  },
+                  {
+                    "group": ["@eidolon/*", "@eidolon/**", "**/src/**", "**/apps/**"],
+                    "message": "@laplace.live/eidolon-sdk publishes standalone to npm and never imports private @eidolon/* workspaces from src/."
                   }
                 ]
               }
@@ -182,7 +312,13 @@
                     "message": "Browsers import @eidolon/chat: only src/jsonl.ts, its own subpath export, may use Bun or Node."
                   },
                   {
-                    "group": ["@eidolon/*", "@eidolon/**"],
+                    "group": [
+                      "@eidolon/*",
+                      "@eidolon/**",
+                      "@laplace.live/eidolon-sdk",
+                      "@laplace.live/eidolon-sdk/**",
+                      "**/sdk/src/**"
+                    ],
                     "message": "Browsers import @eidolon/chat, so it imports no other package."
                   }
                 ]

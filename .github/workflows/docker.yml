@@ -25,13 +25,14 @@ on:
       - ".github/workflows/release.yml"
       # The bot never runs these. The image copies nothing from apps/cli, apps/web or apps/eidolon
       # but their manifests, whose dependency changes also reach bun.lock, and leaves
-      # apps/bot/src/local out. packages/ingest holds only while nothing the bot image loads imports
-      # @eidolon/ingest, which a Biome rule enforces.
+      # apps/bot/src/local out. packages/ingest and packages/sdk hold only while nothing the bot
+      # image loads imports @eidolon/ingest or @laplace.live/eidolon-sdk, which Biome rules enforce.
       - "apps/cli/**"
       - "apps/web/**"
       - "apps/eidolon/**"
       - "apps/bot/src/local/**"
       - "packages/ingest/**"
+      - "packages/sdk/**"
       - ".agents/**"
   pull_request:
     branches:
@@ -52,6 +53,7 @@ on:
       - "apps/eidolon/**"
       - "apps/bot/src/local/**"
       - "packages/ingest/**"
+      - "packages/sdk/**"
       - ".agents/**"
   repository_dispatch:
     types:

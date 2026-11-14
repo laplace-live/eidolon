@@ -1,9 +1,10 @@
 // Starts the local web app's server, the bot plus the app, on loopback only, and prints the link
 // that signs a browser in. server.ts runs it as the supervisor's child.
-import { envOptional, errorText, type LogLevel, logger } from "@eidolon/config";
+import { envOptional, errorText, type LogLevel, logger, pyRepr } from "@eidolon/config";
 import { type BotDeps, type BotServer, startBotServer } from "../server.ts";
 import { type LocalHost, parseLocalArgs, resolveLocalHost } from "./args.ts";
 import { createLocalExtension } from "./extension.ts";
+import { parseListedOrigins } from "./guard.ts";
 import { usePersonaMemoryScope } from "./identity.ts";
 import { recordServerPort, type ServerHolder, takeServerLock } from "./server-lock.ts";
 import { loadStaticSite, MissingDist } from "./static.ts";
@@ -210,6 +211,16 @@ export async function bootLocal(
   }
   if (token === null) return null;
   usePersonaMemoryScope();
+  const listed = parseListedOrigins(envOptional("EIDOLON_LOCAL_ALLOWED_ORIGINS"));
+  for (const entry of listed.rejected) {
+    logger.warning(
+      `EIDOLON_LOCAL_ALLOWED_ORIGINS: ${pyRepr(entry)} is not an origin such as ` +
+        "http://localhost:3000; ignoring it",
+    );
+  }
+  if (listed.origins.size > 0) {
+    logger.info(`[local] The bot's API also answers ${[...listed.origins].join(", ")}`);
+  }
 
   let shutdown: ((code: number) => void) | null = null;
   const restart = (): void => {
@@ -217,7 +228,7 @@ export async function bootLocal(
   };
   const deps: BotDeps = {
     ...modules,
-    // The local app answers only its own pages, so the bot's CORS has nothing to add.
+    // The bot's CORS allows every origin; the extension adds headers for a listed one only.
     access: {
       ...modules.access,
       corsPreflightResponse: () => null,
@@ -234,6 +245,7 @@ export async function bootLocal(
       memoryAdmin: () => modules.memory.memoryAdmin(),
       restart,
       nowSeconds: () => io.nowSeconds(),
+      origins: listed.origins,
     }),
   };
 

@@ -74,7 +74,8 @@ a row here and writing the prose there — not a new section in this file.**
 | the production chat endpoint (`apps/bot/src/chat`, `/api/chat/*`, a call inside a chat), its signing, quotas or `EIDOLON_CHAT_SECRET` | [chat.md](docs/chat.md#production-the-browser-keeps-the-chat) |
 | the voice engine (`packages/voice`, `packages/webrtc`, `packages/runtime`), its models, or call-mode turns | [voice-engine.md](docs/voice-engine.md) |
 | a string the web app shows, its languages, or its `.po` catalogs | [web-app.md](docs/web-app.md#strings-and-languages) |
-| changesets, the version PR, tags, or publishing the npm package (`apps/eidolon`) | [releasing.md](docs/releasing.md) |
+| changesets, the version PR, tags, or publishing the npm packages (`apps/eidolon`, `packages/sdk`) | [releasing.md](docs/releasing.md) |
+| the browser client SDK (`@laplace.live/eidolon-sdk`, `packages/sdk`) | [client-sdk.md](docs/client-sdk.md) |
 | any env var — all 50-odd are documented there | `.env.example` |
 | Soniox's per-project vocabulary glossary | `personas/milky-green/glossary.toml` |
 | broadcast overviews, date-scoped recall, the archive lookup tool, or when she last did something | [stream-recall.md](docs/stream-recall.md) |
@@ -122,11 +123,13 @@ bun run laplace-prepare-batch          # a series capture's new videos → lists
 bun run laplace-extract-users          # mine danmaku JSON for glossary.toml terms
 ```
 
-The npm package, `@laplace.live/eidolon` ([releasing.md](docs/releasing.md)):
+The npm packages, `@laplace.live/eidolon` and `@laplace.live/eidolon-sdk` ([releasing.md](docs/releasing.md)):
 
 ```bash
 bun run build:npm                      # stages it in apps/eidolon/pack/: bundles, web app, templates
 bun run pack:npm                       # stages it, then packs apps/eidolon/laplace.live-eidolon-<version>.tgz
+bun run build:sdk                      # stages @laplace.live/eidolon-sdk in packages/sdk/pack/
+bun run pack:sdk                       # stages it, then packs packages/sdk/laplace.live-eidolon-sdk-<version>.tgz
 ```
 
 ### Which checks to run
@@ -150,6 +153,7 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | anything under `apps/web` | the row above, whose typecheck also runs both `apps/web` tsconfigs, then `bun run build:web`; after changing a string, `bun run i18n` and its `msgstr` in `zh-Hans.po` |
 | local mode (`apps/bot/src/local`), or chats (`packages/chat`, `packages/engine`) | `bun test --no-env-file apps/bot/test/local` from the repository root, then `bun apps/bot/scripts/local-smoke.ts --headful`: a browser walk on a temporary data home that bills nothing, a chat, a group chat and voice messages with a fake mind, director, voice and hearing included |
 | `apps/eidolon`, or a file the package bundles or copies | the gates above, then `bun run pack:npm` and `bun apps/eidolon/scripts/ci-install-check.ts apps/eidolon/<tarball>`, which CI runs on Linux x64: it installs the tarball with npm, boots it on a temporary home, signs in, and stops it |
+| `packages/sdk` (`@laplace.live/eidolon-sdk`) | `bun run typecheck`, `bun run lint`, `bun run test`, and `bun run pack:sdk` |
 
 ## Rules
 
@@ -387,22 +391,27 @@ the layout's one line.
   docs, tests, dev-only tooling, or refactors nobody notices. `laplace-eidolon`
   (`apps/bot`) and the npm package `@laplace.live/eidolon` (`apps/eidolon`) are
   released together at one version, so name both: each changelog lists only the
-  changesets naming it. `@eidolon/*` are ignored.
+  changesets naming it. `@laplace.live/eidolon-sdk` (`packages/sdk`) is versioned
+  independently — name it on changesets that change the client SDK. `@eidolon/*`
+  are ignored.
 - **A push to `master` is a production deploy.** CI rebuilds `:edge`, and
   Watchtower on the production host restarts the bot from it, dropping live
   calls. Pushes that only touch docs, tests, changesets, `AGENTS.md`, `.agents/`,
   the offline chain (`apps/cli`, `packages/ingest`), the local web app
-  (`apps/web`, `apps/bot/src/local`) or the npm package (`apps/eidolon`) skip the
-  image build (`paths-ignore` in `docker.yml`); anything else, `personas/`
-  included, ships.
+  (`apps/web`, `apps/bot/src/local`), or the npm packages (`apps/eidolon`,
+  `packages/sdk`) skip the image build (`paths-ignore` in `docker.yml`);
+  anything else, `personas/` included, ships.
 - **Never bump a version, push a release tag, hand-edit `CHANGELOG.md`, or
   publish to npm.** Merging the Release workflow's version PR bumps
-  `apps/bot/package.json` and `apps/eidolon/package.json`, copies the version
-  into `packages/runtime/src/rtvi.ts`, and into the Python's files as "The
-  Python" allows (`apps/bot/scripts/sync-version.ts`), and tags `laplace-eidolon@<version>`,
-  which builds the image tagged `<version>`, `<major>.<minor>` and `<major>`,
-  and `@laplace.live/eidolon@<version>`. That run publishes the npm package while
-  the `NPM_PUBLISH` variable is `true`; only its one-time setup is done by hand
+  `apps/bot/package.json`, `apps/eidolon/package.json`, and/or
+  `packages/sdk/package.json`, copies the bot's version into
+  `packages/runtime/src/rtvi.ts` and into the Python's files as "The Python"
+  allows (`apps/bot/scripts/sync-version.ts`), publishes unpublished npm
+  packages (`@laplace.live/eidolon`, `@laplace.live/eidolon-sdk`) via OIDC
+  trusted publishing, and tags `laplace-eidolon@<version>` (which builds the
+  image tagged `<version>`, `<major>.<minor>` and `<major>`),
+  `@laplace.live/eidolon@<version>`, and/or `@laplace.live/eidolon-sdk@<version>`;
+  only one-time trusted-publisher setup is done by hand
   ([releasing.md](docs/releasing.md)).
 - **Fix defects you can trigger; don't harden against ones you can't.** Before
   adding a guard — including for a review finding — name the input or sequence
