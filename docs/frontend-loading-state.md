@@ -255,11 +255,11 @@ pcClient.on(RTVIEvent.Disconnected, () => {
 
 This is the pattern we recommend: it catches every source of slowness after the turn ends
 (retrieval, slow LLM TTFB, or slow TTS) in one indicator rather than coupling the UI to a specific
-stage that may not be the actual bottleneck. The local web app's call page runs it: `Watchdog`
-(`apps/web/src/features/call/watchdog.ts`), which `use-call.ts` arms on `UserStoppedSpeaking` and
-on typed text, shows its thinking dots after `THINKING_DELAY_MS`, and clears on
-`BotStartedSpeaking`, `UserStartedSpeaking`, `Error` and disconnect; `BotLlmStarted` cancels its
-"stuck" warning.
+stage that may not be the actual bottleneck. The local web app's call page runs it: the SDK's
+`Watchdog` (`packages/sdk/src/watchdog.ts`), which `use-call.ts` arms on typed text and on
+`UserStoppedSpeaking` after a final transcript with words (`turn-wait.ts`), shows its thinking
+dots after `THINKING_DELAY_MS`, and clears on `BotStartedSpeaking`, `UserStartedSpeaking`, `Error`
+and disconnect; `BotLlmStarted` cancels its "stuck" warning.
 
 ### 4. Streaming partial text (optional)
 
@@ -286,7 +286,7 @@ writes them) and `onBotTranscript` still fire, if you want the text ahead of the
 Note that the bot speaks Chinese, and its delivery cues for the TTS appear inline in the text
 stream: bracketed directions and sounds like `[懒洋洋的，带点笑意]` and `[chuckling]`, and the tag
 pairs `<emphasis>…</emphasis>` and `<whisper>…</whisper>`. Strip both kinds before rendering;
-`apps/web/src/lib/markup.ts` parses the full set.
+the SDK's `parseMarkup` (`packages/sdk/src/markup.ts`) parses the full set.
 
 ---
 
@@ -322,7 +322,8 @@ so steps 5–13 happen once before the user has said anything. A group call does
 On a call to a persona who talks through a realtime model, the model's own VAD starts and ends
 the user's turn, not Silero and Smart Turn, and it answers before it has transcribed the turn:
 `UserStoppedSpeaking` comes as it hears the user stop, and the final transcript after it. The
-TL;DR's indicator, which waits for that transcript, doesn't start on such a call.
+TL;DR's indicator, which waits for that transcript, doesn't start on such a call; the local app's
+`TurnWait` starts it on that late transcript instead, unless she has started answering.
 
 ---
 

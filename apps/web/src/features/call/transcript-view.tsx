@@ -1,3 +1,4 @@
+import type { WaitState } from "@laplace.live/eidolon-sdk";
 import { useLingui } from "@lingui/react/macro";
 import { HourglassIcon } from "lucide-react";
 import { memo, type ReactNode, useMemo } from "react";
@@ -12,7 +13,6 @@ import {
   type UserEntry,
   userText,
 } from "./transcript";
-import type { WaitState } from "./watchdog";
 
 function UserBubble({ entry }: { readonly entry: UserEntry }) {
   const { t } = useLingui();

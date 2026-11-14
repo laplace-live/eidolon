@@ -15,15 +15,6 @@ import {
   CHAT_WINDOW_EVENTS as SERVER_CHAT_WINDOW_EVENTS,
   PUBLIC_CHAIN_LIMIT as SERVER_PUBLIC_CHAIN_LIMIT,
 } from "../../../apps/bot/src/chat/window.ts";
-import { selfiePaths as webSelfiePaths } from "../../../apps/web/src/features/call/selfie.ts";
-import {
-  STUCK_DELAY_MS as WEB_STUCK_DELAY_MS,
-  THINKING_DELAY_MS as WEB_THINKING_DELAY_MS,
-} from "../../../apps/web/src/features/call/watchdog.ts";
-import {
-  PAIRED_TAGS as WEB_PAIRED_TAGS,
-  parseMarkup as webParseMarkup,
-} from "../../../apps/web/src/lib/markup.ts";
 import { AUDIO_QUALITIES as SERVER_AUDIO_QUALITIES } from "../../access/src/audio-quality.ts";
 import { BOT_ABOUT } from "../../runtime/src/rtvi.ts";
 import {
@@ -32,22 +23,15 @@ import {
   CHAT_WINDOW_BYTES,
   CHAT_WINDOW_EVENTS,
   CHAT_WINDOW_MESSAGES,
-  CUE_EMOJI,
   DEFAULT_CHAIN_LIMIT,
-  isPauseCue,
   MAX_CHAIN_LIMIT,
   MAX_PARTICIPANTS,
   MAX_TEXT_LENGTH,
   MAX_VOICE_BYTES,
   MAX_VOICE_MS,
-  PAIRED_TAGS,
   PUBLIC_CHAIN_LIMIT,
   parseBotReadyData,
-  parseMarkup,
   REPLY_MODES,
-  STUCK_DELAY_MS,
-  selfiePaths,
-  THINKING_DELAY_MS,
   VOICE_RECORDER_MIME_TYPES,
 } from "../src/index.ts";
 
@@ -74,26 +58,9 @@ describe("server and client SDK protocol parity", () => {
     expect(MAX_VOICE_BYTES).toBe(10 * 1024 * 1024);
   });
 
-  test("audio qualities, markup cues, watchdog delays, selfie validation, and bot-ready match server and web", () => {
+  test("audio qualities and bot-ready match the server", () => {
     expect(AUDIO_QUALITIES).toEqual(SERVER_AUDIO_QUALITIES);
-    expect(PAIRED_TAGS).toEqual(WEB_PAIRED_TAGS);
-    expect(THINKING_DELAY_MS).toBe(WEB_THINKING_DELAY_MS);
-    expect(STUCK_DELAY_MS).toBe(WEB_STUCK_DELAY_MS);
     expect(VOICE_RECORDER_MIME_TYPES.length).toBeGreaterThan(0);
-
-    for (const [cue, emoji] of CUE_EMOJI) {
-      expect(webParseMarkup(`[${cue}]`)).toEqual([{ kind: "cue", start: 0, name: cue, emoji }]);
-    }
-    for (const pause of ["break", "long-break"]) {
-      expect(isPauseCue(pause)).toBe(true);
-      expect(parseMarkup(`[${pause}] hi`)).toEqual(webParseMarkup(`[${pause}] hi`));
-    }
-
-    const selfiePayload = {
-      type: "selfie",
-      urls: ["/api/selfie/ok_1.png", "https://evil.example/x.png", "/api/selfie/../bad.png"],
-    };
-    expect(selfiePaths(selfiePayload)).toEqual(webSelfiePaths(selfiePayload));
 
     const parsed = parseBotReadyData({
       version: "2.2.0",

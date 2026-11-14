@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { STUCK_DELAY_MS, THINKING_DELAY_MS, type WaitState, Watchdog } from "./watchdog";
+import { STUCK_DELAY_MS, THINKING_DELAY_MS, type WaitState, Watchdog } from "../src/index.ts";
 
 /** A clock the test moves by hand. */
 class FakeScheduler {

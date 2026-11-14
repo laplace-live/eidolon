@@ -8,7 +8,7 @@ import type {
   ParticipantId,
   Speaker,
 } from "@eidolon/chat";
-import { parseMarkup } from "@/lib/markup";
+import { parseMarkup, trimTrailingPartialCue } from "@laplace.live/eidolon-sdk";
 import { type ReplyReason, reasonOf } from "./group";
 
 export type AudioAttachment = Extract<Attachment, { readonly kind: "audio" }>;
@@ -223,19 +223,9 @@ export function retryText(items: readonly ChatItem[]): string | null {
   return null;
 }
 
-const PARTIAL_MARKUP = /(?:\[[^[\]\n]*|<\/?[A-Za-z]*)$/;
-
-/**
- * `text` without a cue or tag cut off at its end, as a reply still streaming, or one interrupted,
- * ends: `…真的</emp` shows as `…真的`.
- */
-export function withoutPartialMarkup(text: string): string {
-  return text.replace(PARTIAL_MARKUP, "");
-}
-
 /** A line as one row of plain text: her cues as their emoji, directions and tags dropped. */
 export function previewText(text: string): string {
-  return parseMarkup(withoutPartialMarkup(text))
+  return parseMarkup(trimTrailingPartialCue(text))
     .map((token) => (token.kind === "text" ? token.text : token.kind === "cue" ? token.emoji : " "))
     .join("")
     .replace(/\s+/g, " ")
