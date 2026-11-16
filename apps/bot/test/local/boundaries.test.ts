@@ -1,6 +1,6 @@
 // What keeps the local app out of production: main.ts reaches none of it, nor the store it keeps
-// chats in, nothing outside apps/bot/src/local names it, apps/bot gains no dependency, and the
-// SPA's leaves import nothing but @eidolon/chat's types.
+// chats in, nor the assistant, nothing outside apps/bot/src/local names it, apps/bot gains no
+// dependency, and the SPA's leaves import nothing but @eidolon/chat's types.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -87,7 +87,7 @@ function sources(dir: string): string[] {
 }
 
 describe("production never loads the local app", () => {
-  test("main.ts reaches the engine and the chat format, but none of local/, ingest, cli, apps/web or the chat store", () => {
+  test("main.ts reaches the engine and the chat format, but none of local/, ingest, the assistant, cli, apps/web or the chat store", () => {
     const { files, specifiers } = importGraph(join(BOT_SRC, "main.ts"));
     const reached = [...files].map((file) => relative(ROOT, file));
     expect(reached).toContain("apps/bot/src/server.ts");
@@ -103,6 +103,7 @@ describe("production never loads the local app", () => {
         file.startsWith("apps/web/") ||
         file.startsWith("apps/cli/") ||
         file.startsWith("packages/ingest/") ||
+        file.startsWith("packages/assistant/") ||
         file.startsWith("packages/sdk/") ||
         file === "packages/chat/src/jsonl.ts" ||
         file === "packages/chat/src/contract.ts",
@@ -111,7 +112,7 @@ describe("production never loads the local app", () => {
     expect(
       [...specifiers].filter(
         (s) =>
-          /^@eidolon\/(ingest|cli)(\/|$)/.test(s) ||
+          /^@eidolon\/(ingest|assistant|cli)(\/|$)/.test(s) ||
           /^@laplace\.live\/eidolon-sdk(\/|$)/.test(s) ||
           /^@eidolon\/chat\/(jsonl|contract)$/.test(s) ||
           s.includes("/local"),

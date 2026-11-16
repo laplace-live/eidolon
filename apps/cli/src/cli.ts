@@ -14,6 +14,7 @@ import { pipelineMain } from "./pipeline.ts";
 import { prepareBatchMain } from "./prepare_batch.ts";
 import { refineMain } from "./refine.ts";
 import { searchMain } from "./search.ts";
+import { taskMain } from "./task.ts";
 import { transcribeMain } from "./transcribe.ts";
 
 type Command = (argv: readonly string[], deps: CommandDeps) => Promise<number>;
@@ -32,6 +33,7 @@ export const COMMANDS: Readonly<Record<string, Command>> = {
   pipeline: pipelineMain,
   "extract-users": extractUsersMain,
   "prepare-batch": prepareBatchMain,
+  task: taskMain,
 };
 
 // These never read deps.signal, so the first Ctrl-C quits them at once instead of leaving them
@@ -52,7 +54,8 @@ export function cleanupLimitMs(argv: readonly string[]): number {
 const NAMES = Object.keys(COMMANDS);
 export const CLI_USAGE = `usage: main.ts [-h]\n               {${NAMES.join(",")}} ...\n`;
 const CLI_HELP = `${CLI_USAGE}
-The TypeScript ports of the Python CLIs. Each takes its Python flags.
+The TypeScript ports of the Python CLIs, each taking its Python flags, and
+laplace-task.
 
 positional arguments:
   {${NAMES.join(",")}}
@@ -70,6 +73,7 @@ positional arguments:
     pipeline            laplace-pipeline
     extract-users       laplace-extract-users
     prepare-batch       laplace-prepare-batch
+    task                laplace-task
 
 options:
   -h, --help            show this help message and exit

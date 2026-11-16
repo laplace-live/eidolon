@@ -10,7 +10,7 @@ npx @laplace.live/eidolon
 
 The terminal prints the link that signs your browser in, and opens it. `npx @laplace.live/eidolon
 --help` lists the offline commands, which build a persona's knowledge from her facts and videos;
-the web app runs them too.
+the web app runs them too. `task` runs an assistant task in a folder, on a model you choose.
 
 It needs Node.js 20 or later, and brings its own Bun. Everything it keeps, settings and keys
 included, is in `~/.laplace/eidolon` (or the folder `EIDOLON_HOME` names); it reads no `.env`.

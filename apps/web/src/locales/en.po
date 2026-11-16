@@ -515,6 +515,10 @@ msgstr "A service Eidolon relies on failed. Try again later."
 msgid "A table built with another embedding model or size than the settings now name can't be searched. Run its job again."
 msgstr "A table built with another embedding model or size than the settings now name can't be searched. Run its job again."
 
+#: src/components/settings-form/labels.ts
+msgid "A task asks before going on each time its spend crosses another multiple of this, in US dollars. 0 never asks. Default 1."
+msgstr "A task asks before going on each time its spend crosses another multiple of this, in US dollars. 0 never asks. Default 1."
+
 #: src/features/studio/voice-styles-card.tsx
 msgid "A voice she switches to when you ask for it. Name it, say how you'd ask, and pick its voice."
 msgstr "A voice she switches to when you ask for it. Name it, say how you'd ask, and pick its voice."
@@ -749,6 +753,34 @@ msgstr "As each provider reported it."
 #: src/components/settings-form/model-picker.tsx
 msgid "Asking the provider for its models…"
 msgstr "Asking the provider for its models…"
+
+#: src/components/settings-form/labels.ts
+msgid "Assistant Context"
+msgstr "Assistant Context"
+
+#: src/components/settings-form/labels.ts
+msgid "Assistant Folders"
+msgstr "Assistant Folders"
+
+#: src/components/settings-form/labels.ts
+msgid "Assistant Mode"
+msgstr "Assistant Mode"
+
+#: src/components/settings-form/labels.ts
+msgid "Assistant Model"
+msgstr "Assistant Model"
+
+#: src/components/settings-form/labels.ts
+msgid "Assistant Provider"
+msgstr "Assistant Provider"
+
+#: src/components/settings-form/labels.ts
+msgid "Assistant Spend Pause"
+msgstr "Assistant Spend Pause"
+
+#: src/lib/labels.ts
+msgid "Assistant Tasks"
+msgstr "Assistant Tasks"
 
 #: src/features/jobs/labels.ts
 msgid "Audio over 5 hours needs ffmpeg to split it. Install ffmpeg and try again."
@@ -1651,6 +1683,10 @@ msgstr "Fish has this voice"
 #: src/features/studio/identity-section.tsx
 msgid "Fix the highlighted values first."
 msgstr "Fix the highlighted values first."
+
+#: src/components/settings-form/labels.ts
+msgid "Folders every task may read and write besides its own, one per line."
+msgstr "Folders every task may read and write besides its own, one per line."
 
 #: src/features/studio/voice-by-id.tsx
 msgid "For a voice the search can't find, such as a private one of your Fish account: copy its ID from its page on fish.audio."
@@ -2643,6 +2679,10 @@ msgstr "Nothing was spent in this range."
 #: src/components/settings-form/labels.ts
 msgid "Off"
 msgstr "Off"
+
+#: src/components/settings-form/labels.ts
+msgid "Off: No Tasks"
+msgstr "Off: No Tasks"
 
 #: src/features/home/readiness-labels.ts
 msgid "Off: she won't remember you between calls."
@@ -4175,6 +4215,10 @@ msgstr "The microphone isn't available here"
 #: src/features/studio/models-section.tsx
 msgid "The model and voice {name} talks with. Her speech recognition, chat and voice settings don't apply while it's on."
 msgstr "The model and voice {name} talks with. Her speech recognition, chat and voice settings don't apply while it's on."
+
+#: src/components/settings-form/labels.ts
+msgid "The most context a task's requests carry, in tokens. Default 128000."
+msgstr "The most context a task's requests carry, in tokens. Default 128000."
 
 #: src/features/jobs/list.tsx
 msgid "The offline work that builds each persona's knowledge. A job keeps running when you close this page."

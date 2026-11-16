@@ -24,7 +24,8 @@ nothing.
 | `packages/context` | the retrieval gate, both RAG providers, the recall tool, the system instruction, the greeting, and group chats' director ([chat.md](chat.md#the-director)) |
 | `packages/tools`, `packages/imagegen` | `change_voice_style`, `take_selfie`, the selfie store |
 | `packages/chat` | the chat log's format, browser-safe: its events, `viewOf`, `parseMentions`, the `ChatStore` interface and its contract suite; `@eidolon/chat/jsonl` is the local store ([chat.md](chat.md)) |
-| `packages/engine` | the turn engine: one persona's turn, her mind per provider, the tool loop and her context providers ([chat.md](chat.md#a-turn-runturn)); `runChat`, a chat's turns in the order the director chooses ([chat.md](chat.md#the-chain)) |
+| `packages/engine` | the turn engine: one persona's turn, her mind per provider, the tool loop and her context providers ([chat.md](chat.md#a-turn-runturn)); `runChat`, a chat's turns in the order the director chooses ([chat.md](chat.md#the-chain)); `runTask`, an assistant task's loop ([assistant.md](assistant.md#the-loop)) |
+| `packages/assistant` | an assistant task's tools, `FolderPolicy`, the worker's prompt and the task's files, ported in part from pi-mono ([assistant.md](assistant.md)); only `apps/bot/src/local` and `apps/cli` import it (Biome) |
 | `packages/ingest` | the offline chain: download, transcribe, refine, both ingests, the stream catalog and the pipeline ([below](#the-offline-chain)) |
 | `packages/voice` | the voice engine: a call's loop around the turn engine, the Ear (Silero VAD, Smart Turn, the turn detector), the sentence segmenter, the Mouth and the Speaker, the vendored resampler, the RTVI codec and emitter, and the two ONNX models (`models/`) ([voice-engine.md](voice-engine.md)). Its live recognizers and speech clients are `@eidolon/providers/stt` and `/speech-stream`; only `packages/runtime` imports it (Biome) |
 | `packages/webrtc` | a call's WebRTC on werift and libopus-wasm: the signalling server, the peer, the data channel, the caller's audio in and hers out, and the werift patches ([voice-engine.md](voice-engine.md#the-transport)); only `packages/runtime` imports it (Biome) |
@@ -193,12 +194,14 @@ original) or one code path against another (the pipeline's dry run against the p
 
 - **pipedog-derived code carries its BSD-2 header**, then `Ported from pipedog <path>@ce8f8bc`.
   pipedog is never followed past that commit; `NOTICE` names every copyright holder a ported
-  file's header does, and `apps/eidolon/test/build.test.ts` holds it to that.
+  file's header does, and `apps/eidolon/test/build.test.ts` holds it to that. Code ported from
+  pi-mono carries its MIT header the same way, at `ac78a60` ([assistant.md](assistant.md)).
 - **Only `packages/runtime` imports `@eidolon/voice` and `@eidolon/webrtc`.** Biome's
   `noRestrictedImports` enforces it, so every other package is testable without a call.
 - **`@eidolon/ingest` stays out of the bot image.** Biome forbids importing it under `apps/bot/**`
   and the other packages, because `docker.yml` skips the image build for changes to `apps/cli/**`
   and `packages/ingest/**`. Lift both together, or the image ships without a change it runs.
+  `@eidolon/assistant` is fenced the same way, and production never has the assistant at all.
 - **No vendor SDK sends a request.** `packages/providers` has fetch clients for OpenAI-compatible
   chat and Anthropic's Messages API, which the engine's minds call, and every provider a call
   hears or speaks through. A new provider gets one too, or bills behind the usage ledger's back.

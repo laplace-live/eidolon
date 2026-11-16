@@ -190,6 +190,20 @@ export const SETTINGS: readonly SettingField[] = [
   ),
   field("app", "sources.cookiesFile", "YT_DLP_COOKIES", "path", "Cookies file"),
   field("app", "usage.db", "EIDOLON_USAGE_DB", "path", "Usage ledger"),
+  field("app", "assistant.enabled", "ASSISTANT_ENABLED", "flag", "Assistant Mode"),
+  field("app", "assistant.provider", "ASSISTANT_PROVIDER", "string", "Assistant provider"),
+  field("app", "assistant.model", "ASSISTANT_MODEL", "string", "Assistant model", {
+    provider: "ASSISTANT_PROVIDER",
+  }),
+  field("app", "assistant.folders", "ASSISTANT_FOLDERS", "paths", "Assistant folders"),
+  field(
+    "app",
+    "assistant.spendPauseUsd",
+    "ASSISTANT_SPEND_PAUSE_USD",
+    "float",
+    "Assistant spend pause",
+  ),
+  field("app", "assistant.contextTokens", "ASSISTANT_CONTEXT_TOKENS", "int", "Assistant context"),
 
   field("persona", "prompt", "PERSONA_FILE", "path", "System prompt file"),
   field("persona", "identity.timezone", "PERSONA_TIMEZONE", "string", "Time zone"),

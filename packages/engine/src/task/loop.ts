@@ -1,0 +1,760 @@
+// Copyright (c) 2025 Mario Zechner
+// SPDX-License-Identifier: MIT
+//
+// Ported from pi-mono packages/agent/src/agent-loop.ts@ac78a60 and packages/agent/src/agent.ts@ac78a60
+//
+// A task's run: pi-agent-core's turns on a Mind, with every step stored before it is shown, so a run
+// stopped anywhere resumes from its transcript.
+import { abortableSleep, errorText, raceAbort } from "@eidolon/config";
+import { withUsageScope } from "@eidolon/providers";
+import type {
+  TaskEntry,
+  TaskEntryDraft,
+  TaskEvent,
+  TaskOutcome,
+  TaskRequest,
+  TaskTool,
+  TaskToolContext,
+  TaskToolResult,
+} from "../task.ts";
+import type { MindRequest, MindToolCall } from "../types.ts";
+import {
+  type ContextMessage,
+  contextMessages,
+  estimateTokens,
+  filesBefore,
+  firstKept,
+  messageTokens,
+  summaryPrompt,
+  taskContext,
+} from "./context.ts";
+import { isContextOverflow, isTransient } from "./errors.ts";
+import { validateToolArguments } from "./validate.ts";
+
+/** The waits before each retry of a request that failed for a transient reason. */
+const RETRY_DELAYS_MS: readonly number[] = [1_000, 4_000, 15_000];
+
+/** pi's reserveTokens: room left in the context for the reply. */
+const RESERVE_TOKENS = 16_384;
+/** pi's keepRecentTokens. */
+const KEEP_TOKENS = 20_000;
+const MASK_AFTER_TOKENS = 40_000;
+/** Turns making the same calls before the task pauses as stalled. */
+const STALL_TURNS = 3;
+
+const INTERRUPTED =
+  "Interrupted by a restart before its result was recorded; check the files before trying again.";
+/** OpenClaw's result for a sequential call steering skipped. */
+const SKIPPED = "Skipped to process an incoming message.";
+
+/** OpenAI's and Anthropic's finish reasons for a reply the output limit cut off. */
+const CUT_OFF: ReadonlySet<string | null> = new Set(["length", "max_tokens"]);
+
+/** Why a reply with no tool calls can't be the task's report. */
+function unfinished(finishReason: string | null): string | null {
+  if (CUT_OFF.has(finishReason)) return "The model's reply was cut off at its output limit";
+  if (finishReason === "content_filter" || finishReason === "refusal") {
+    return "The model's provider stopped its reply";
+  }
+  if (finishReason === "tool_calls" || finishReason === "tool_use") {
+    return "The model's tool calls couldn't be read";
+  }
+  return null;
+}
+
+type EntryOf<T extends TaskEntry["type"]> = Extract<TaskEntry, { readonly type: T }>;
+
+interface Reply {
+  readonly text: string;
+  readonly calls: readonly MindToolCall[];
+  readonly finishReason: string | null;
+}
+
+/** A call a batch answers: on resume, one a restart caught running reruns or is reported. */
+interface Pending {
+  readonly call: MindToolCall;
+  readonly as: "new" | "rerun" | "interrupted";
+}
+
+interface Settled {
+  readonly call: MindToolCall;
+  readonly result: TaskToolResult;
+}
+
+interface Batch {
+  /** In call order. */
+  readonly settled: readonly Settled[];
+  /** The gate's reason, when it paused the batch; its call and the ones after it didn't run. */
+  readonly paused?: string;
+}
+
+interface Turn {
+  readonly assistant: EntryOf<"assistant">;
+  readonly batch: Batch | null;
+  readonly finishReason: string | null;
+}
+
+type Prepared =
+  | {
+      readonly kind: "run";
+      readonly call: MindToolCall;
+      readonly tool: TaskTool;
+      readonly args: Record<string, unknown>;
+    }
+  | { readonly kind: "result"; readonly result: TaskToolResult }
+  | { readonly kind: "pause"; readonly detail: string };
+
+const paused = (reason: "spend" | "stall" | "approval", detail: string): TaskOutcome => ({
+  status: "paused",
+  reason,
+  detail,
+});
+
+/** pi's terminate: a batch whose every result asks for it ends the run as a reply with no calls. */
+const terminates = (batch: Batch): boolean =>
+  batch.paused === undefined &&
+  batch.settled.length > 0 &&
+  batch.settled.every(({ result }) => result.terminate === true);
+
+/** Keys sorted all the way down, so equal arguments compare equal. */
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (typeof value !== "object" || value === null) return JSON.stringify(value) ?? "null";
+  const fields = Object.entries(value)
+    .filter(([, field]) => field !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([key, field]) => `${JSON.stringify(key)}:${canonical(field)}`);
+  return `{${fields.join(",")}}`;
+}
+
+/** A turn's calls, in a form two turns making the same calls share. */
+function signatureOf(calls: readonly MindToolCall[]): string {
+  return calls
+    .map((call) => `${call.name} ${canonical(call.arguments)}`)
+    .sort()
+    .join("\n");
+}
+
+/** The compaction's kept part shrinks with a small context, or it would compact on every turn. */
+function keepTokens(contextTokens: number): number {
+  return Math.min(KEEP_TOKENS, Math.max(0, Math.floor((contextTokens - RESERVE_TOKENS) / 2)));
+}
+
+/** The events a running task has produced and its reader hasn't taken yet. */
+class Events implements AsyncIterable<TaskEvent> {
+  readonly #queue: TaskEvent[] = [];
+  #closed = false;
+  #wake: (() => void) | null = null;
+
+  readonly push = (event: TaskEvent): void => {
+    if (this.#closed) return;
+    this.#queue.push(event);
+    this.#wake?.();
+  };
+
+  close(): void {
+    this.#closed = true;
+    this.#wake?.();
+  }
+
+  async *[Symbol.asyncIterator](): AsyncGenerator<TaskEvent> {
+    for (;;) {
+      const next = this.#queue.shift();
+      if (next !== undefined) {
+        yield next;
+        continue;
+      }
+      if (this.#closed) return;
+      await new Promise<void>((resolve) => {
+        this.#wake = resolve;
+      });
+      this.#wake = null;
+    }
+  }
+}
+
+class TaskRun {
+  readonly #request: TaskRequest;
+  readonly #emit: (event: TaskEvent) => void;
+  /** The reader stopped reading: the run stops, storing nothing more, for a later run to resume. */
+  readonly #left: AbortSignal;
+  readonly #signal: AbortSignal;
+  readonly #entries: TaskEntry[] = [];
+  readonly #schemaTokens: number;
+  #writes: Promise<unknown> = Promise.resolve();
+  /** The run has stored its last entry, or its reader left. */
+  #closed = false;
+  /** Assistant entries so far: the number of the turn that made the latest. */
+  #turns = 0;
+  /** Each turn's calls this run, for stalls. */
+  readonly #signatures: string[] = [];
+  #spendLimit = Number.POSITIVE_INFINITY;
+  /** The last request's input as its provider counted it, and as estimated. */
+  #counted: { readonly reported: number; readonly estimated: number } | null = null;
+
+  constructor(request: TaskRequest, emit: (event: TaskEvent) => void, left: AbortSignal) {
+    this.#request = request;
+    this.#emit = emit;
+    this.#left = left;
+    this.#signal = AbortSignal.any([request.signal, left]);
+    this.#schemaTokens = estimateTokens(JSON.stringify(request.tools.map((tool) => tool.schema)));
+    left.addEventListener(
+      "abort",
+      () => {
+        this.#closed = true;
+      },
+      { once: true },
+    );
+  }
+
+  async run(): Promise<TaskOutcome> {
+    this.#emit({ type: "run", state: "start" });
+    let outcome: TaskOutcome;
+    try {
+      outcome = await this.#run();
+    } catch (error) {
+      if (!this.#signal.aborted) throw error;
+      if (this.#left.aborted) return { status: "cancelled" };
+      outcome = { status: "cancelled" };
+    }
+    await this.#append(
+      outcome.status === "paused"
+        ? { type: "pause", reason: outcome.reason, detail: outcome.detail }
+        : { type: "end", outcome },
+      true,
+    );
+    this.#emit({ type: "run", state: "end" });
+    return outcome;
+  }
+
+  async #run(): Promise<TaskOutcome> {
+    const stored = await this.#request.store.entries();
+    if (stored.length === 0) throw new Error(`Task ${this.#request.id} has no brief`);
+    this.#entries.push(...stored);
+    this.#turns = stored.filter((entry) => entry.type === "assistant").length;
+    const step = this.#request.limits.spendPauseUsd;
+    if (step > 0) {
+      this.#spendLimit = (Math.floor(this.#request.meter.spentUsd() / step) + 1) * step;
+    }
+    if (stored.length === 1) return await this.#loop(null);
+    await this.#append({ type: "resume" });
+    const last = this.#entries.findLast(
+      (entry): entry is EntryOf<"assistant"> => entry.type === "assistant",
+    );
+    const pending = last === undefined ? [] : this.#pending(last);
+    if (last !== undefined && pending.length > 0) {
+      return await this.#loop({ assistant: last, pending });
+    }
+    // pi's continue() from an assistant tail: a request now would answer her own reply, so only
+    // queued lines carry the run on.
+    const tail = taskContext(this.#entries).blocks.at(-1);
+    if (
+      tail?.kind === "assistant" &&
+      tail.entry.calls.length === 0 &&
+      !this.#request.inbox.hasSteering() &&
+      (await this.#takeFollowUps()) === 0
+    ) {
+      return { status: "succeeded", report: tail.entry.text };
+    }
+    return await this.#loop(null);
+  }
+
+  /** `assistant`'s calls with no result yet, and how each is answered. */
+  #pending(assistant: EntryOf<"assistant">): Pending[] {
+    const after = this.#entries.filter((entry) => entry.seq > assistant.seq);
+    const answered = new Set(after.flatMap((e) => (e.type === "tool-result" ? [e.callId] : [])));
+    const started = new Set(after.flatMap((e) => (e.type === "tool-start" ? [e.callId] : [])));
+    return assistant.calls
+      .filter((call) => !answered.has(call.id))
+      .map((call): Pending => {
+        if (!started.has(call.id)) return { call, as: "new" };
+        return { call, as: this.#tool(call.name)?.replay === "safe" ? "rerun" : "interrupted" };
+      });
+  }
+
+  async #loop(
+    resumed: {
+      readonly assistant: EntryOf<"assistant">;
+      readonly pending: readonly Pending[];
+    } | null,
+  ): Promise<TaskOutcome> {
+    for (let first = true; ; first = false) {
+      const turn = first && resumed !== null ? await this.#rerun(resumed) : await this.#turn();
+      if ("status" in turn) return turn;
+      const stop = this.#guard(turn);
+      if (stop !== null) return stop;
+      if (turn.batch !== null && !terminates(turn.batch)) continue;
+      if (this.#request.inbox.hasSteering()) continue;
+      if ((await this.#takeFollowUps()) > 0) continue;
+      const why = turn.batch === null ? unfinished(turn.finishReason) : null;
+      if (why !== null) return { status: "failed", error: why };
+      return { status: "succeeded", report: turn.assistant.text };
+    }
+  }
+
+  async #turn(): Promise<Turn | TaskOutcome> {
+    this.#signal.throwIfAborted();
+    const spent = this.#request.meter.spentUsd();
+    if (spent >= this.#spendLimit) {
+      const step = this.#request.limits.spendPauseUsd;
+      return paused("spend", `Spent $${spent.toFixed(2)}; it pauses at every $${step.toFixed(2)}.`);
+    }
+    const all = this.#request.steeringMode !== "one-at-a-time";
+    for (const text of this.#request.inbox.takeSteering(all)) {
+      await this.#append({ type: "steer", text });
+    }
+    const turn = ++this.#turns;
+    this.#emit({ type: "turn", state: "start", turn });
+    try {
+      let reply: Reply;
+      try {
+        reply = await this.#ask();
+      } catch (error) {
+        if (this.#signal.aborted) throw error;
+        return { status: "failed", error: errorText(error) };
+      }
+      const assistant = await this.#append({
+        type: "assistant",
+        text: reply.text,
+        calls: reply.calls,
+      });
+      const { calls, finishReason } = reply;
+      if (calls.length === 0) return { assistant, batch: null, finishReason };
+      const batch = CUT_OFF.has(finishReason)
+        ? await this.#failTruncated(calls)
+        : await this.#runBatch(
+            assistant,
+            calls.map((call): Pending => ({ call, as: "new" })),
+          );
+      return { assistant, batch, finishReason };
+    } finally {
+      this.#emit({ type: "turn", state: "end", turn });
+    }
+  }
+
+  /** The turn a restart cut short: its calls with no result, and no request. */
+  async #rerun({
+    assistant,
+    pending,
+  }: {
+    readonly assistant: EntryOf<"assistant">;
+    readonly pending: readonly Pending[];
+  }): Promise<Turn> {
+    const turn = this.#turns;
+    this.#emit({ type: "turn", state: "start", turn });
+    try {
+      return { assistant, batch: await this.#runBatch(assistant, pending), finishReason: null };
+    } finally {
+      this.#emit({ type: "turn", state: "end", turn });
+    }
+  }
+
+  /** The pause a finished batch calls for: the gate's, a refused path's, or a stall's. */
+  #guard({ assistant, batch }: Turn): TaskOutcome | null {
+    if (batch === null) {
+      this.#signatures.push("");
+      return null;
+    }
+    if (batch.paused !== undefined) return paused("approval", batch.paused);
+    if (this.#request.pauseOnRefused) {
+      const refused = batch.settled.flatMap(({ result }) =>
+        result.refused ? [result.refused] : [],
+      );
+      if (refused.length > 0) {
+        const asked = refused.map(({ path, access }) => `${access} access to ${path}`);
+        return paused("approval", asked.join("\n"));
+      }
+    }
+    if (terminates(batch)) return null;
+    const signature = signatureOf(assistant.calls);
+    this.#signatures.push(signature);
+    const recent = this.#signatures.slice(-STALL_TURNS);
+    if (recent.length === STALL_TURNS && recent.every((each) => each === signature)) {
+      return paused("stall", `The same calls ${STALL_TURNS} turns running:\n${signature}`);
+    }
+    return null;
+  }
+
+  async #takeFollowUps(): Promise<number> {
+    this.#signal.throwIfAborted();
+    const all = this.#request.followUpMode !== "one-at-a-time";
+    const lines = this.#request.inbox.takeFollowUps(all);
+    for (const text of lines) await this.#append({ type: "follow-up", text });
+    return lines.length;
+  }
+
+  /** The context's size: the provider's count for the last request, and an estimate since. */
+  #view(): {
+    readonly messages: ContextMessage[];
+    readonly tokens: number;
+    readonly sized: number;
+  } {
+    const maskAfter = this.#request.limits.maskAfterTokens ?? MASK_AFTER_TOKENS;
+    const messages = contextMessages(taskContext(this.#entries), maskAfter);
+    const tokens =
+      estimateTokens(this.#request.system) +
+      this.#schemaTokens +
+      messages.reduce((sum, message) => sum + messageTokens(message), 0);
+    const counted = this.#counted;
+    const sized = counted === null ? tokens : counted.reported + tokens - counted.estimated;
+    return { messages, tokens, sized };
+  }
+
+  async #ask(): Promise<Reply> {
+    if (this.#view().sized > this.#request.limits.contextTokens - RESERVE_TOKENS) {
+      await this.#compact();
+    }
+    let compacted = false;
+    for (;;) {
+      const view = this.#view();
+      try {
+        const reply = await this.#send(
+          this.#request.system,
+          view.messages,
+          this.#request.tools.map((tool) => tool.schema),
+          true,
+        );
+        const reported = this.#request.meter.lastInputTokens();
+        this.#counted = reported === null ? null : { reported, estimated: view.tokens };
+        return reply;
+      } catch (error) {
+        if (this.#signal.aborted || compacted || !isContextOverflow(error)) throw error;
+        compacted = true;
+        if (!(await this.#compact())) throw error;
+      }
+    }
+  }
+
+  /** One request, sent again after each transient failure. `live`: the task's own, with events. */
+  async #send(
+    system: string,
+    messages: readonly ContextMessage[],
+    tools: MindRequest["tools"],
+    live: boolean,
+  ): Promise<Reply> {
+    const report = (event: TaskEvent): void => {
+      if (live) this.#emit(event);
+    };
+    for (let retries = 0; ; retries++) {
+      report({ type: "request", state: "start" });
+      try {
+        const reply = await this.#stream({ system, messages, tools, signal: this.#signal }, live);
+        report({ type: "request", state: "end" });
+        return reply;
+      } catch (error) {
+        if (this.#signal.aborted) {
+          report({ type: "request", state: "end" });
+          throw this.#signal.reason;
+        }
+        const retryInMs =
+          isContextOverflow(error) || !isTransient(error) ? undefined : RETRY_DELAYS_MS[retries];
+        const text = errorText(error);
+        report(
+          retryInMs === undefined
+            ? { type: "request", state: "end", error: text }
+            : { type: "request", state: "end", error: text, retryInMs },
+        );
+        if (retryInMs === undefined) throw error;
+        await (this.#request.sleep ?? abortableSleep)(retryInMs, this.#signal);
+        this.#signal.throwIfAborted();
+      }
+    }
+  }
+
+  async #stream(request: MindRequest, live: boolean): Promise<Reply> {
+    let text = "";
+    const calls: MindToolCall[] = [];
+    let finishReason: string | null = null;
+    for await (const chunk of this.#request.mind.stream(request)) {
+      this.#signal.throwIfAborted();
+      if (chunk.type === "text") {
+        text += chunk.text;
+        if (live && chunk.text !== "") this.#emit({ type: "delta", text: chunk.text });
+      } else if (chunk.type === "tool-calls") {
+        calls.push(...chunk.calls);
+      } else {
+        finishReason = chunk.finishReason;
+      }
+    }
+    this.#signal.throwIfAborted();
+    return { text, calls, finishReason };
+  }
+
+  /**
+   * Summarizes what came before the newest blocks, through the task's mind with no tools, and
+   * stores it. False when the newest blocks are all there is.
+   */
+  async #compact(): Promise<boolean> {
+    const tokensBefore = this.#view().sized;
+    const context = taskContext(this.#entries);
+    const first = firstKept(context.blocks, keepTokens(this.#request.limits.contextTokens));
+    const kept = context.blocks[first];
+    if (first === 0 || kept === undefined) return false;
+    const files = filesBefore(this.#entries, kept.seq);
+    const { system, instructions } = this.#request.compaction;
+    const older = context.blocks.slice(0, first);
+    const prompt = summaryPrompt(older, context.compaction?.summary ?? null, files, instructions);
+    const reply = await this.#send(system, [{ role: "user", content: prompt }], [], false);
+    const summary = reply.text.trim();
+    if (summary === "") throw new Error("Compaction returned no summary");
+    await this.#append({
+      type: "compaction",
+      summary,
+      firstKeptSeq: kept.seq,
+      files,
+      tokensBefore,
+    });
+    this.#counted = null;
+    return true;
+  }
+
+  #tool(name: string): TaskTool | undefined {
+    return this.#request.tools.find((tool) => tool.schema.name === name);
+  }
+
+  /** pi: the calls of a reply the output limit cut off may hold cut arguments, so none runs. */
+  async #failTruncated(calls: readonly MindToolCall[]): Promise<Batch> {
+    const settled: Settled[] = [];
+    for (const call of calls) {
+      this.#toolStart(call);
+      const content =
+        `Tool call "${call.name}" was not executed: the response hit the output token limit, ` +
+        "so its arguments may be truncated. Re-issue the tool call with complete arguments.";
+      settled.push(await this.#settle(call, { content, isError: true }));
+    }
+    return { settled };
+  }
+
+  /** In parallel, unless a call's tool runs alone (pi's executionMode). */
+  #runBatch(assistant: EntryOf<"assistant">, pending: readonly Pending[]): Promise<Batch> {
+    const sequential = pending.some(
+      ({ call }) => this.#tool(call.name)?.executionMode === "sequential",
+    );
+    return sequential ? this.#runSequential(assistant, pending) : this.#runParallel(pending);
+  }
+
+  /**
+   * One call at a time. Once one of the reply's calls has started, a waiting steering line skips
+   * the rest (OpenClaw's queue steering).
+   */
+  async #runSequential(
+    assistant: EntryOf<"assistant">,
+    pending: readonly Pending[],
+  ): Promise<Batch> {
+    const settled: Settled[] = [];
+    let started = this.#entries.some(
+      (entry) => entry.type === "tool-start" && entry.seq > assistant.seq,
+    );
+    const steered = (): boolean => started && this.#request.inbox.hasSteering();
+    for (const [at, item] of pending.entries()) {
+      if (steered()) {
+        settled.push(...(await this.#skip(pending.slice(at), false)));
+        break;
+      }
+      const prepared = await this.#prepare(item);
+      if (prepared.kind === "pause") return { settled, paused: prepared.detail };
+      if (prepared.kind === "result") {
+        settled.push(await this.#settle(item.call, prepared.result));
+        continue;
+      }
+      if (steered()) {
+        settled.push(...(await this.#skip(pending.slice(at), true)));
+        break;
+      }
+      started = true;
+      settled.push(await this.#execute(prepared));
+    }
+    return { settled };
+  }
+
+  /** pi's parallel batch: each call through the gate in order, then the allowed ones together. */
+  async #runParallel(pending: readonly Pending[]): Promise<Batch> {
+    const settled = new Map<string, Settled>();
+    const runs: Extract<Prepared, { kind: "run" }>[] = [];
+    let pausedBy: string | undefined;
+    for (const item of pending) {
+      const prepared = await this.#prepare(item);
+      if (prepared.kind === "pause") {
+        pausedBy = prepared.detail;
+        break;
+      }
+      if (prepared.kind === "result") {
+        settled.set(item.call.id, await this.#settle(item.call, prepared.result));
+      } else {
+        runs.push(prepared);
+      }
+    }
+    if (pausedBy === undefined) {
+      const outcomes = await Promise.allSettled(runs.map((run) => this.#execute(run)));
+      for (const outcome of outcomes) {
+        if (outcome.status === "rejected") throw outcome.reason;
+        settled.set(outcome.value.call.id, outcome.value);
+      }
+    }
+    const ordered = pending.flatMap(({ call }) => {
+      const each = settled.get(call.id);
+      return each === undefined ? [] : [each];
+    });
+    return pausedBy === undefined ? { settled: ordered } : { settled: ordered, paused: pausedBy };
+  }
+
+  /** Answers each of `items` without running it; `announced`: the first's start is shown. */
+  async #skip(items: readonly Pending[], announced: boolean): Promise<Settled[]> {
+    const settled: Settled[] = [];
+    for (const [at, { call, as }] of items.entries()) {
+      if (at > 0 || !announced) this.#toolStart(call);
+      const result: TaskToolResult =
+        as === "new"
+          ? {
+              content: SKIPPED,
+              isError: true,
+              details: { status: "skipped", deniedReason: "steering" },
+            }
+          : { content: INTERRUPTED, isError: true };
+      settled.push(await this.#settle(call, result));
+    }
+    return settled;
+  }
+
+  /** pi's prepareToolCall: the call's tool, its arguments validated, and the gate's word on it. */
+  async #prepare({ call, as }: Pending): Promise<Prepared> {
+    this.#signal.throwIfAborted();
+    this.#toolStart(call);
+    if (as === "interrupted")
+      return { kind: "result", result: { content: INTERRUPTED, isError: true } };
+    const tool = this.#tool(call.name);
+    if (tool === undefined) {
+      return { kind: "result", result: { content: `Tool ${call.name} not found`, isError: true } };
+    }
+    try {
+      const args = validateToolArguments(
+        tool.schema,
+        tool.prepareArguments?.(call.arguments) ?? call.arguments,
+      );
+      // A rerun was let through before the restart.
+      const gate = as === "new" ? this.#request.gate : undefined;
+      const decision =
+        gate === undefined
+          ? null
+          : await raceAbort(gate({ ...call, arguments: args }), this.#signal);
+      if (decision !== null && "pause" in decision)
+        return { kind: "pause", detail: decision.pause };
+      if (decision !== null) {
+        const content = decision.block || "Tool execution was blocked";
+        const result: TaskToolResult = decision.terminate
+          ? { content, isError: true, terminate: true }
+          : { content, isError: true };
+        return { kind: "result", result };
+      }
+      return { kind: "run", call, tool, args };
+    } catch (error) {
+      if (this.#signal.aborted) throw this.#signal.reason;
+      return { kind: "result", result: { content: errorText(error), isError: true } };
+    }
+  }
+
+  /** Stores the intent to run `call`, runs it, and stores its result. */
+  async #execute({ call, tool, args }: Extract<Prepared, { kind: "run" }>): Promise<Settled> {
+    await this.#append({ type: "tool-start", callId: call.id, name: call.name });
+    this.#signal.throwIfAborted();
+    let open = true;
+    const context: TaskToolContext = {
+      signal: this.#signal,
+      onUpdate: (text) => {
+        if (open)
+          this.#emit({ type: "tool", state: "update", callId: call.id, name: call.name, text });
+      },
+    };
+    let result: TaskToolResult;
+    try {
+      result = await raceAbort(tool.execute(args, context), this.#signal);
+    } catch (error) {
+      if (this.#signal.aborted) throw this.#signal.reason;
+      result = { content: errorText(error), isError: true };
+    } finally {
+      open = false;
+    }
+    return await this.#settle(call, await this.#after({ ...call, arguments: args }, result));
+  }
+
+  /** pi's afterToolCall: it may replace the content, details or isError, or set terminate. */
+  async #after(call: MindToolCall, result: TaskToolResult): Promise<TaskToolResult> {
+    const hook = this.#request.afterToolCall;
+    if (hook === undefined) return result;
+    try {
+      const override = await raceAbort(hook(call, result), this.#signal);
+      if (override === undefined) return result;
+      return {
+        ...result,
+        content: override.content ?? result.content,
+        details: override.details ?? result.details,
+        isError: override.isError ?? result.isError,
+        terminate: override.terminate ?? result.terminate,
+      };
+    } catch (error) {
+      if (this.#signal.aborted) throw this.#signal.reason;
+      return { content: errorText(error), isError: true };
+    }
+  }
+
+  async #settle(call: MindToolCall, result: TaskToolResult): Promise<Settled> {
+    const isError = result.isError === true;
+    await this.#append({
+      type: "tool-result",
+      callId: call.id,
+      name: call.name,
+      content: result.content,
+      isError,
+      ...(result.details === undefined ? {} : { details: result.details }),
+      ...(result.files === undefined ? {} : { files: result.files }),
+      ...(result.refused === undefined ? {} : { refused: result.refused }),
+    });
+    this.#emit({ type: "tool", state: "end", callId: call.id, name: call.name, isError });
+    return { call, result };
+  }
+
+  #toolStart(call: MindToolCall): void {
+    this.#emit({ type: "tool", state: "start", callId: call.id, name: call.name });
+  }
+
+  /**
+   * Stores `draft`, one write at a time in call order, then shows it. `last`: nothing is stored
+   * after it, so a tool still running when the run ends never adds its result.
+   */
+  async #append<D extends TaskEntryDraft>(draft: D, last = false): Promise<D & TaskEntry> {
+    if (this.#closed) throw this.#signal.reason ?? new Error("The task's run has ended");
+    if (last) this.#closed = true;
+    const write = this.#writes.then(() => this.#request.store.append(draft));
+    this.#writes = write.catch(() => {});
+    const entry = (await write) as D & TaskEntry;
+    this.#entries.push(entry);
+    this.#emit({ type: "entry", entry });
+    return entry;
+  }
+}
+
+/**
+ * Runs task `request.id` from its store: a store holding only its brief starts, any other resumes.
+ * It starts on the first read and ends with the outcome, stored first; a cancel through
+ * `request.signal` stores `cancelled`, and a reader that stops reading stops it storing nothing,
+ * for a later run to resume. Its requests are billed as source "task", session `request.id`.
+ */
+export async function* runTask(request: TaskRequest): AsyncGenerator<TaskEvent, TaskOutcome> {
+  const events = new Events();
+  const left = new AbortController();
+  const run = new TaskRun(request, events.push, left.signal);
+  // A promise rather than this generator's body, which runs in whatever context reads it next.
+  const outcome = withUsageScope({ source: "task", session: request.id }, () => run.run());
+  void outcome.then(
+    () => events.close(),
+    () => events.close(),
+  );
+  let drained = false;
+  try {
+    yield* events;
+    drained = true;
+  } finally {
+    if (!drained) left.abort();
+  }
+  return await outcome;
+}

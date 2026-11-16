@@ -16,6 +16,7 @@ export const ROLE_LABELS: Readonly<Record<RoleId, MessageDescriptor>> = {
   transcription: msg`Transcription`,
   refine: msg`Transcript Refinement`,
   embeddings: msg`Embeddings`,
+  assistant: msg`Assistant Tasks`,
 };
 
 /** The kinds of model a provider offers. */

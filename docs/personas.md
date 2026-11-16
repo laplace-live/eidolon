@@ -309,6 +309,12 @@ The install's settings, for every persona. Paths resolve in the data home.
 | `sources.cookiesFromBrowser` | `YT_DLP_COOKIES_FROM_BROWSER` | string | Browser to read cookies from |
 | `sources.cookiesFile` | `YT_DLP_COOKIES` | path | Cookies file |
 | `usage.db` | `EIDOLON_USAGE_DB` | path | Usage ledger |
+| `assistant.enabled` | `ASSISTANT_ENABLED` | flag | Assistant Mode |
+| `assistant.provider` | `ASSISTANT_PROVIDER` | string | Assistant provider |
+| `assistant.model` | `ASSISTANT_MODEL` | string | Assistant model |
+| `assistant.folders` | `ASSISTANT_FOLDERS` | paths | Assistant folders |
+| `assistant.spendPauseUsd` | `ASSISTANT_SPEND_PAUSE_USD` | float | Assistant spend pause |
+| `assistant.contextTokens` | `ASSISTANT_CONTEXT_TOKENS` | int | Assistant context |
 
 `local.viewerName` is what the persona calls you in the local web app's calls; the bot that
 `bun run start` and the Docker image run never reads it.
@@ -324,6 +330,15 @@ The `access.chat*` rows apply only once `EIDOLON_CHAT_SECRET` turns the producti
 installed persona alone. Each viewer line costs one turn of a quota counted over the last hour:
 `access.chatAnonQuota` (default 20) per client IP for anonymous viewers, and `access.chatUserQuota`
 (default 200) per mid for logged-in ones. Both quotas are read once, on the first chat turn.
+
+`assistant.*` is Assistant Mode: tasks a persona runs on this computer, from the local app or
+`laplace-task`; production never has them. `assistant.enabled` (default on) turns them off in the
+local app; `laplace-task`, a command run on purpose, ignores it. Tasks also stay off until
+`assistant.provider` and `assistant.model` name an account and a model: the role has no default
+for either, and her chat model is never the fallback. `assistant.folders` lists folders every
+task may read and write besides its own. A task pauses to ask before going on each time its
+spend crosses a multiple of `assistant.spendPauseUsd` (default 1, in US dollars; 0 never
+pauses), and keeps its requests within `assistant.contextTokens` tokens (default 128000).
 
 ## Deploying a persona
 

@@ -1,9 +1,11 @@
 import "./isolated-guard.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import {
   activePersona,
+  assistantSettings,
   CREDENTIALS,
   chatInterests,
   chatReplyMode,
@@ -472,6 +474,67 @@ describe("chat settings", () => {
     setEnv("CHAT_REPLY_MODE", "audio");
     expect(chatReplyMode()).toBe("auto");
     expect(warnings).toEqual(["CHAT_REPLY_MODE='audio' is not auto, text or voice; using auto"]);
+  });
+});
+
+describe("assistant settings", () => {
+  test("unset: on, no folders of its own, a $1 spend pause and a 128,000-token context", () => {
+    expect(assistantSettings()).toEqual({
+      enabled: true,
+      folders: [],
+      spendPauseUsd: 1,
+      contextTokens: 128_000,
+    });
+  });
+
+  test("settings.yaml's, its folders in the data home or under ~; the environment's win", () => {
+    write(
+      "settings.yaml",
+      [
+        "assistant:",
+        "  enabled: false",
+        "  folders: [~/Projects, notes]",
+        "  spendPauseUsd: 2.5",
+        "  contextTokens: 64000",
+        "",
+      ].join("\n"),
+    );
+    installSettings();
+    expect(assistantSettings()).toEqual({
+      enabled: false,
+      folders: [join(homedir(), "Projects"), join(dataHome(), "notes")],
+      spendPauseUsd: 2.5,
+      contextTokens: 64_000,
+    });
+    setEnv("ASSISTANT_ENABLED", "on");
+    setEnv("ASSISTANT_FOLDERS", " ~/a, /b ,,");
+    expect(assistantSettings()).toMatchObject({
+      enabled: true,
+      folders: [join(homedir(), "a"), "/b"],
+    });
+    expect(warnings).toEqual([]);
+  });
+
+  test("only 0 turns the spend pauses off; a pause or context that is no amount is the default", () => {
+    for (const [value, read] of [
+      ["0", 0],
+      ["0.25", 0.25],
+      ["-1", 1],
+      ["inf", 1],
+      ["nan", 1],
+    ] as const) {
+      setEnv("ASSISTANT_SPEND_PAUSE_USD", value);
+      expect([value, assistantSettings().spendPauseUsd]).toEqual([value, read]);
+    }
+    for (const [value, read] of [
+      ["200000", 200_000],
+      ["0", 128_000],
+      ["-5", 128_000],
+    ] as const) {
+      setEnv("ASSISTANT_CONTEXT_TOKENS", value);
+      expect([value, assistantSettings().contextTokens]).toEqual([value, read]);
+    }
+    expect(warnings).toEqual([]);
   });
 });
 

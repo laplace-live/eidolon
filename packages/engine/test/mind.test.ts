@@ -61,6 +61,8 @@ const ENV = [
   "OPENAI_BASE_URL",
   "OPENAI_COMPATIBLE_API_KEY",
   "OPENAI_COMPATIBLE_BASE_URL",
+  "ASSISTANT_PROVIDER",
+  "ASSISTANT_MODEL",
 ];
 
 let saved: (readonly [string, string | undefined])[] = [];
@@ -800,5 +802,113 @@ describe("aborting", () => {
       reason,
     );
     expect(seen).toEqual([]);
+  });
+});
+
+describe("a task's mind", () => {
+  const done = (usage: Record<string, unknown>) => () =>
+    completions([
+      { choices: [{ delta: { content: "好" }, finish_reason: "stop" }] },
+      { choices: [], usage },
+    ]);
+
+  test("fills the assistant role, which nothing fills by default: no provider, then no model", () => {
+    setEnv({ LLM_MODEL: "a/b", OPENROUTER_MODEL: "c/d" });
+    expect(() => createMind("assistant")).toThrow("No provider fills ASSISTANT_PROVIDER");
+    setEnv({ ASSISTANT_PROVIDER: "openrouter" });
+    expect(() => createMind("assistant")).toThrow("OpenRouter needs a model: set ASSISTANT_MODEL");
+    expect(seen).toEqual([]);
+  });
+
+  test("bills as the assistant in its task's scope, and its tap hears each record the ledger does", async () => {
+    setEnv({ ASSISTANT_PROVIDER: "openrouter", ASSISTANT_MODEL: "x/task-model" });
+    reply = done({ prompt_tokens: 12, completion_tokens: 2, cost: 0.0003 });
+    const tapped: UsageRecord[] = [];
+    const mind = createMind("assistant", { tap: (record) => tapped.push(record) });
+    await withUsageScope({ source: "task", session: "task-1" }, () => drain(mind, ask()));
+    expect(seen[0]?.body.model).toBe("x/task-model");
+    expect(records).toEqual([
+      expect.objectContaining({
+        role: "assistant",
+        category: "llm",
+        provider: "openrouter",
+        model: "x/task-model",
+        costUsd: 0.0003,
+        costSource: "reported",
+        source: "task",
+        session: "task-1",
+      }),
+    ]);
+    expect(tapped).toEqual(records);
+  });
+
+  test("an estimated cost reaches the tap as the ledger records it", async () => {
+    setEnv({
+      ASSISTANT_PROVIDER: "deepseek",
+      ASSISTANT_MODEL: "deepseek-v4-pro",
+      DEEPSEEK_API_KEY: "dk",
+      DEEPSEEK_BASE_URL: base(),
+    });
+    reply = done({ prompt_tokens: 1_000_000, completion_tokens: 1_000_000 });
+    const tapped: UsageRecord[] = [];
+    await drain(createMind("assistant", { tap: (record) => tapped.push(record) }), ask());
+    expect(records).toEqual([
+      expect.objectContaining({ role: "assistant", costSource: "estimated" }),
+    ]);
+    expect(records[0]?.costUsd).toBeCloseTo(1.32 + 3.96, 10);
+    expect(tapped).toEqual(records);
+  });
+
+  test("an account and a model for this mind alone take the role's place", async () => {
+    setEnv({
+      ASSISTANT_PROVIDER: "openrouter",
+      ASSISTANT_MODEL: "x/task-model",
+      DEEPSEEK_API_KEY: "dk",
+      DEEPSEEK_BASE_URL: base(),
+    });
+    reply = done({ prompt_tokens: 1, completion_tokens: 1 });
+    await drain(createMind("assistant", { model: "x/other" }), ask());
+    await drain(createMind("assistant", { account: "DeepSeek", model: "deepseek-flash" }), ask());
+    expect(
+      seen.map((request) => [request.body.model, request.headers.get("authorization")]),
+    ).toEqual([
+      ["x/other", "Bearer or-key"],
+      ["deepseek-flash", "Bearer dk"],
+    ]);
+    expect(records.map((record) => [record.role, record.provider])).toEqual([
+      ["assistant", "openrouter"],
+      ["assistant", "deepseek"],
+    ]);
+    // The role's model belongs to its own provider, so another account brings none.
+    expect(() => createMind("assistant", { account: "deepseek" })).toThrow(
+      "DeepSeek needs a model: set ASSISTANT_MODEL",
+    );
+    expect(createMind("assistant", { account: "openrouter" })).toBeDefined();
+  });
+
+  test("a task can pick its account and model while the settings name none", async () => {
+    reply = done({ prompt_tokens: 1, completion_tokens: 1 });
+    await drain(createMind("assistant", { account: "openrouter", model: "x/picked" }), ask());
+    expect(seen[0]?.body.model).toBe("x/picked");
+    expect(records.map((record) => record.role)).toEqual(["assistant"]);
+  });
+
+  test("an override fails as the settings would: an unknown account, a missing key", () => {
+    setEnv({ ASSISTANT_PROVIDER: "openrouter", ASSISTANT_MODEL: "x/task-model" });
+    expect(() => createMind("assistant", { account: "nope" })).toThrow(
+      "ASSISTANT_PROVIDER=nope is no provider or account Eidolon knows",
+    );
+    expect(() =>
+      createMind("assistant", { account: "anthropic", model: "claude-sonnet-5-5" }),
+    ).toThrow("Anthropic needs an API key: set ANTHROPIC_API_KEY");
+    expect(seen).toEqual([]);
+  });
+
+  test("her mind takes the same overrides, and still bills as her mind", async () => {
+    reply = done({ prompt_tokens: 1, completion_tokens: 1, cost: 0 });
+    const tapped: UsageRecord[] = [];
+    await drain(createMind("mind", { model: "x/hers", tap: (r) => tapped.push(r) }), ask());
+    expect(seen[0]?.body.model).toBe("x/hers");
+    expect(tapped.map((record) => [record.role, record.model])).toEqual([["mind", "x/hers"]]);
   });
 });

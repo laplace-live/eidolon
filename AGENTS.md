@@ -41,7 +41,8 @@ apps/cli/             every laplace-* command, the offline chain's included
 apps/eidolon/         the npm package @laplace.live/eidolon: a Node launcher, and a build that
                       bundles the local app and the CLI with the web app, templates and jieba
 packages/             subsystems, one Bun workspace package each (docs/typescript.md);
-                      packages/ingest is the offline chain
+                      packages/ingest is the offline chain, packages/assistant the tools,
+                      folder policy and files of the assistant's tasks
 laplace_eidolon/      the Python, with tests/: for human readers only ("The Python" under Rules)
 personas/<id>/        a persona's template: persona.yaml, prompt.md (the system
                       prompt), glossary.toml, references/outfits/ (what take_selfie
@@ -84,6 +85,7 @@ a row here and writing the prose there — not a new section in this file.**
 | the retrieval gate, or why a turn skipped LanceDB | [retrieval-gate.md](docs/retrieval-gate.md) |
 | anything under `apps/` or `packages/` | [typescript.md](docs/typescript.md) |
 | a provider, an account, a role's provider or model, model lists, prices, realtime models, the usage ledger or the Usage page | [providers.md](docs/providers.md) |
+| the assistant: Assistant Mode, a task's tools, `FolderPolicy` or files (`packages/assistant`), the task loop (`packages/engine/src/task.ts`), or `laplace-task` | [assistant.md](docs/assistant.md) |
 
 ## Commands
 
@@ -94,6 +96,7 @@ bun install
 bun run dev                            # watch mode on :7860 (--port to move it); `start` without watch
 bun run typecheck && bun run lint && bun run test
 bun run laplace-search / laplace-eval-retrieval / laplace-generate-image / gate-decisions / director-decisions
+bun run laplace-task --folder <path> "<goal>"   # one assistant task in the foreground; billed (docs/assistant.md)
 ```
 
 The local web app, on loopback only ([web-app.md](docs/web-app.md)):
@@ -148,6 +151,7 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | the gate's timeline questions or `TIMELINE_THRESHOLD` (`packages/context/src/gate.ts`) | `bun docs/benchmarks/2026-11-07-timeline-question/score.ts` — exits non-zero if any labeled turn lands on the wrong side of the threshold |
 | `prompt.md`'s 表演提示 markup, or `FISH_MODEL` | no scripted check exists ([the 2026-10-17 benchmark](docs/benchmarks/2026-10-17-drama-3-markup/README.md) records what drama-3 does with each kind). Hold a real call, `bun apps/bot/scripts/e2e-call.ts --text "<a question her reply would mark up>" --headful`, and listen: a direction or a tag spoken aloud is a leak. Billed per character |
 | `packages/memory`, or `/api/memories` (`apps/bot/src/memory-admin.ts`) | `docker compose up qdrant`, then round-trip a real `add` → `search` → `deleteAll` through `openMemoryEngine(buildMemoryConfig())`. The tests fake Qdrant and both model calls, so only a live run proves the wire format; it needs an embedding key and an LLM key |
+| `packages/assistant`, the task loop (`packages/engine/src/task*`), or `laplace-task` | `bun test --no-env-file packages/assistant packages/engine apps/cli/test/task.test.ts`, which script every mind; a change to how a task behaves also needs one billed task on a model you pick: `bun run laplace-task --folder <tmp>/mg-react-todomvc "写一个 React TodoMVC，单文件 index.html"`, then try the page ([assistant.md](docs/assistant.md#laplace-task)) |
 | an env var | document it in `.env.example` in the same commit |
 | anything under `apps/` or `packages/` | `bun run typecheck`, `bun run lint`, `bun run test`; for retrieval, the gate or the voice loop, also the row above that names it |
 | anything under `apps/web` | the row above, whose typecheck also runs both `apps/web` tsconfigs, then `bun run build:web`; after changing a string, `bun run i18n` and its `msgstr` in `zh-Hans.po` |
@@ -299,6 +303,17 @@ the layout's one line.
   `EIDOLON_REAL_HOME` (`~/.laplace/eidolon`), write to temporary folders, clone
   the embedding cache, and fake every paid request. `EIDOLON_REQUIRE_PARITY=1`
   turns their skips into failures.
+
+### The assistant
+
+- **`@eidolon/assistant` never reaches production.** Only `apps/bot/src/local` and `apps/cli`
+  import it (Biome and `boundaries.test.ts` hold it), and `docker.yml` skips the image build for
+  `packages/assistant`; lift the fence and the paths-ignore together.
+- **The task loop, `runTask`, lives in `@eidolon/engine`, which imports nothing from
+  `@eidolon/assistant`:** the tools, store, inbox and meter come injected.
+- **pi-mono-derived code carries its MIT header,** then `Ported from pi-mono <path>@ac78a60`;
+  `packages/assistant` keeps `LICENSE-pi` and `THIRD_PARTY.md`, and `NOTICE` names the holder
+  (`build.test.ts` checks it).
 
 ### Identity and quotas
 

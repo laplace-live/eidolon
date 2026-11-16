@@ -893,6 +893,7 @@ export const ROLE_IDS = [
   "transcription",
   "refine",
   "embeddings",
+  "assistant",
 ] as const;
 export type RoleId = (typeof ROLE_IDS)[number];
 
@@ -908,8 +909,11 @@ export interface Role {
   readonly modelEnv: string;
   /** null: the role is off unless a provider is named, as realtime is. */
   readonly defaultProvider: ProviderId | null;
-  /** Where a role wants another model than its provider's default, by provider. */
-  readonly defaultModels?: Readonly<Partial<Record<ProviderId, string>>>;
+  /**
+   * Where a role wants another model than its provider's default, by provider. null: no default
+   * fills it, so the model must be named, as the assistant's is.
+   */
+  readonly defaultModels?: Readonly<Partial<Record<ProviderId, string>>> | null;
   /** Unset, the provider and model follow this role's. */
   readonly follows?: RoleId;
   /** A provider-named variable that also sets the model, read only while that provider fills it. */
@@ -1056,6 +1060,19 @@ export const ROLES: readonly Role[] = [
     baseUrlEnv: "EMBED_BASE_URL",
     phase: "index",
   },
+  {
+    id: "assistant",
+    label: "the assistant's tasks",
+    category: "llm",
+    scope: "app",
+    path: "assistant",
+    providerEnv: "ASSISTANT_PROVIDER",
+    modelEnv: "ASSISTANT_MODEL",
+    defaultProvider: null,
+    // Tasks run tools unattended, so they never fall back to a model nobody picked for them.
+    defaultModels: null,
+    phase: "call",
+  },
 ];
 
 const ROLE_BY_ID: ReadonlyMap<string, Role> = new Map(ROLES.map((role) => [role.id, role]));
@@ -1067,7 +1084,7 @@ export function roleById(id: RoleId): Role {
 /** The model `role` gets from a provider while none is named; null when it needs one named. */
 export function defaultModel(role: Role, providerId: string): string | null {
   const offer = BY_ID.get(providerId)?.offers[role.category];
-  if (offer === undefined) return null;
+  if (offer === undefined || role.defaultModels === null) return null;
   return role.defaultModels?.[providerId as ProviderId] ?? offer.defaultModel;
 }
 

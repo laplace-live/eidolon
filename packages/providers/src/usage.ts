@@ -1,17 +1,17 @@
 // Every request that spends money reports what it used here; an app that keeps a ledger installs
-// the sink, and without one a report costs nothing. A call, a chat turn, a job or an MCP request
-// runs inside a scope that says which, so the code that spends needn't know who asked.
+// the sink, and without one a report costs nothing. A call, a chat turn, a job, a task or an MCP
+// request runs inside a scope that says which, so the code that spends needn't know who asked.
 import { AsyncLocalStorage } from "node:async_hooks";
 import { errorText, logger } from "@eidolon/config";
 import { type Category, PROVIDERS, providerById, type RoleId, roleById } from "./catalog.ts";
 import type { UsageHook } from "./http/chat.ts";
 import { costOf, priceOf, type Units } from "./pricing.ts";
 
-export type UsageSource = "call" | "chat" | "mcp" | "job";
+export type UsageSource = "call" | "chat" | "mcp" | "job" | "task";
 
 export interface UsageScope {
   readonly source: UsageSource;
-  /** The call's, chat's or job's id. */
+  /** The call's, chat's, job's or task's id. */
   readonly session?: string;
 }
 
@@ -117,18 +117,33 @@ export function billingProvider(provider: string, baseUrl: string | undefined): 
   return own?.id ?? provider;
 }
 
-/** The hook a client reports each response through, as `role`'s use of `provider`. */
-export function usageHook(role: RoleId, provider: string): UsageHook {
+/**
+ * The hook a client reports each response through, as `role`'s use of `provider`; `tap` hears
+ * each record as the ledger gets it.
+ */
+export function usageHook(role: RoleId, provider: string, tap?: UsageSink): UsageHook {
   return (units, model, costUsd, requested) =>
-    reportUsage({ role, provider, model, requested, units, costUsd });
+    reportUsage({ role, provider, model, requested, units, costUsd }, tap);
 }
 
-/** Records what a request used. Never throws: a ledger that fails must not fail the request. */
-export function reportUsage(report: UsageReport): void {
-  if (sink === null) return;
+/**
+ * Records what a request used, and hands `tap` the record as the ledger gets it, cost included.
+ * Never throws: a ledger that fails must not fail the request, nor keep the record from `tap`.
+ */
+export function reportUsage(report: UsageReport, tap?: UsageSink): void {
+  if (sink === null && tap === undefined) return;
+  let record: UsageRecord;
   try {
-    sink(usageRecord(report));
+    record = usageRecord(report);
   } catch (error) {
     logger.warning(`Usage not recorded: ${errorText(error)}`);
+    return;
+  }
+  for (const each of [sink, tap]) {
+    try {
+      each?.(record);
+    } catch (error) {
+      logger.warning(`Usage not recorded: ${errorText(error)}`);
+    }
   }
 }

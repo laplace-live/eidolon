@@ -50,6 +50,12 @@ export const SETTING_TITLES: Readonly<Record<string, MessageDescriptor>> = {
   "sources.cookiesFromBrowser": msg`Browser to Read Cookies From`,
   "sources.cookiesFile": msg`Cookies File`,
   "usage.db": msg`Usage Ledger`,
+  "assistant.enabled": msg`Assistant Mode`,
+  "assistant.provider": msg`Assistant Provider`,
+  "assistant.model": msg`Assistant Model`,
+  "assistant.folders": msg`Assistant Folders`,
+  "assistant.spendPauseUsd": msg`Assistant Spend Pause`,
+  "assistant.contextTokens": msg`Assistant Context`,
   prompt: msg`System Prompt File`,
   "identity.timezone": msg`Time Zone`,
   "voice.provider": msg`Voice Provider`,
@@ -115,6 +121,9 @@ export const SETTING_HELP: Readonly<Record<string, MessageDescriptor>> = {
   "sources.cookiesFromBrowser": msg`The browser whose cookies yt-dlp uses for videos behind a login. Reading them may ask for your Keychain password.`,
   "sources.cookiesFile": msg`A cookies.txt for yt-dlp, which writes the merged cookies back into it.`,
   "usage.db": msg`Where calls and jobs record what they spend. Default usage.db in the data home.`,
+  "assistant.folders": msg`Folders every task may read and write besides its own, one per line.`,
+  "assistant.spendPauseUsd": msg`A task asks before going on each time its spend crosses another multiple of this, in US dollars. 0 never asks. Default 1.`,
+  "assistant.contextTokens": msg`The most context a task's requests carry, in tokens. Default 128000.`,
   prompt: msg`Relative to her folder. Default prompt.md.`,
   "voice.model": msg`Fish Audio's drama-3 performs every delivery cue in her prompt. With other models, Eidolon takes out the cues they can't read before they're spoken.`,
   "hearing.language": msg`The language you speak in calls, as a two-letter code. Default zh.`,
@@ -156,6 +165,7 @@ export const GROUP_LABELS: Readonly<Record<string, MessageDescriptor>> = {
   knowledge: msg`Knowledge`,
   videos: msg`Videos and Transcripts`,
   selfie: msg`Selfies`,
+  assistant: msg`Assistant Mode`,
   providers: msg`Providers`,
   sources: msg`Downloads`,
   usage: msg`Usage`,
@@ -173,6 +183,7 @@ export const FLAG_LABELS = {
 /** An optional role's default, where it has none: what being off means. */
 export const PROVIDER_OFF_LABELS: Readonly<Partial<Record<RoleId, MessageDescriptor>>> = {
   realtime: msg`Off: Three Models`,
+  assistant: msg`Off: No Tasks`,
 };
 
 /** Why controls.ts refused a value, by the code it gives; `{min}` and `{max}` are the row's limits. */

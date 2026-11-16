@@ -515,6 +515,10 @@ msgstr "Eidolon 依赖的服务出错了，请稍后再试。"
 msgid "A table built with another embedding model or size than the settings now name can't be searched. Run its job again."
 msgstr "用与当前设置不同的嵌入模型或维度建立的表无法检索。请重新运行对应的任务。"
 
+#: src/components/settings-form/labels.ts
+msgid "A task asks before going on each time its spend crosses another multiple of this, in US dollars. 0 never asks. Default 1."
+msgstr "任务的花费每越过这个金额的一个整数倍，都会先问过你再继续。单位为美元，0 表示从不询问。默认 1。"
+
 #: src/features/studio/voice-styles-card.tsx
 msgid "A voice she switches to when you ask for it. Name it, say how you'd ask, and pick its voice."
 msgstr "你要求时她会切换到的声音。给它起个名字，写下你会怎么要求，再选好它的声音。"
@@ -749,6 +753,34 @@ msgstr "均为服务商报告的金额。"
 #: src/components/settings-form/model-picker.tsx
 msgid "Asking the provider for its models…"
 msgstr "正在向服务商获取模型列表…"
+
+#: src/components/settings-form/labels.ts
+msgid "Assistant Context"
+msgstr "助手上下文"
+
+#: src/components/settings-form/labels.ts
+msgid "Assistant Folders"
+msgstr "助手文件夹"
+
+#: src/components/settings-form/labels.ts
+msgid "Assistant Mode"
+msgstr "助手模式"
+
+#: src/components/settings-form/labels.ts
+msgid "Assistant Model"
+msgstr "助手模型"
+
+#: src/components/settings-form/labels.ts
+msgid "Assistant Provider"
+msgstr "助手服务商"
+
+#: src/components/settings-form/labels.ts
+msgid "Assistant Spend Pause"
+msgstr "助手花费暂停"
+
+#: src/lib/labels.ts
+msgid "Assistant Tasks"
+msgstr "助手任务"
 
 #: src/features/jobs/labels.ts
 msgid "Audio over 5 hours needs ffmpeg to split it. Install ffmpeg and try again."
@@ -1651,6 +1683,10 @@ msgstr "Fish 上有这个声音"
 #: src/features/studio/identity-section.tsx
 msgid "Fix the highlighted values first."
 msgstr "请先修正标出的值。"
+
+#: src/components/settings-form/labels.ts
+msgid "Folders every task may read and write besides its own, one per line."
+msgstr "除了任务自己的文件夹，每个任务都能读写的文件夹，每行一个。"
 
 #: src/features/studio/voice-by-id.tsx
 msgid "For a voice the search can't find, such as a private one of your Fish account: copy its ID from its page on fish.audio."
@@ -2643,6 +2679,10 @@ msgstr "这段时间没有花费。"
 #: src/components/settings-form/labels.ts
 msgid "Off"
 msgstr "关"
+
+#: src/components/settings-form/labels.ts
+msgid "Off: No Tasks"
+msgstr "关闭：不运行任务"
 
 #: src/features/home/readiness-labels.ts
 msgid "Off: she won't remember you between calls."
@@ -4175,6 +4215,10 @@ msgstr "此处无法使用麦克风"
 #: src/features/studio/models-section.tsx
 msgid "The model and voice {name} talks with. Her speech recognition, chat and voice settings don't apply while it's on."
 msgstr "{name}通话所用的模型和声音。开启后，她的语音识别、对话和声音设置都不再生效。"
+
+#: src/components/settings-form/labels.ts
+msgid "The most context a task's requests carry, in tokens. Default 128000."
+msgstr "任务每次请求最多携带的上下文，以 token 计。默认 128000。"
 
 #: src/features/jobs/list.tsx
 msgid "The offline work that builds each persona's knowledge. A job keeps running when you close this page."

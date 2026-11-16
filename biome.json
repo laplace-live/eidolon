@@ -66,6 +66,7 @@
         "!apps/bot/test/local/**",
         "packages/**",
         "!packages/ingest/**",
+        "!packages/assistant/**",
         "!packages/sdk/**"
       ],
       "linter": {
@@ -78,6 +79,10 @@
                   {
                     "group": ["@eidolon/ingest", "@eidolon/ingest/**"],
                     "message": "The bot image skips builds for packages/ingest changes (docker.yml); only apps/bot/src/local, which the image leaves out, may import it."
+                  },
+                  {
+                    "group": ["@eidolon/assistant", "@eidolon/assistant/**"],
+                    "message": "Production never has the assistant, and the bot image skips builds for packages/assistant changes (docker.yml): only apps/bot/src/local and apps/cli, which the image leaves out, may import it."
                   },
                   {
                     "group": ["@eidolon/cli", "@eidolon/cli/**"],
@@ -119,6 +124,10 @@
                   {
                     "group": ["@eidolon/ingest", "@eidolon/ingest/**"],
                     "message": "The bot image skips builds for packages/ingest changes (docker.yml); only apps/bot/src/local, which the image leaves out, may import it."
+                  },
+                  {
+                    "group": ["@eidolon/assistant", "@eidolon/assistant/**"],
+                    "message": "Production never has the assistant, and the bot image skips builds for packages/assistant changes (docker.yml): only apps/bot/src/local and apps/cli, which the image leaves out, may import it."
                   },
                   {
                     "group": ["@eidolon/cli", "@eidolon/cli/**"],
@@ -170,6 +179,10 @@
                     "message": "The bot image skips builds for packages/ingest changes (docker.yml); only apps/bot/src/local, which the image leaves out, may import it."
                   },
                   {
+                    "group": ["@eidolon/assistant", "@eidolon/assistant/**"],
+                    "message": "Production never has the assistant, and the bot image skips builds for packages/assistant changes (docker.yml): only apps/bot/src/local and apps/cli, which the image leaves out, may import it."
+                  },
+                  {
                     "group": ["@eidolon/cli", "@eidolon/cli/**"],
                     "message": "The bot image skips builds for apps/cli changes (docker.yml); only apps/bot/src/local, which the image leaves out, may import it."
                   },
@@ -194,7 +207,8 @@
         "apps/bot/test/local/**",
         "apps/cli/**",
         "apps/eidolon/**",
-        "packages/ingest/**"
+        "packages/ingest/**",
+        "packages/assistant/**"
       ],
       "linter": {
         "rules": {

@@ -29,6 +29,7 @@ of their own (`stt/`, `speech/stream/`, `realtime/`).
 | transcription | `transcription.provider`, `.model` | `TRANSCRIBE_PROVIDER`, `TRANSCRIBE_MODEL` | Soniox `stt-async-v5` | jobs |
 | refine | `refine.provider`, `.model` | `REFINE_PROVIDER`, `REFINE_MODEL` | OpenRouter `~google/gemini-pro-latest` | jobs |
 | embeddings | `embeddings.provider`, `.model` (app-wide) | `EMBED_PROVIDER`, `EMBED_MODEL` | OpenRouter `google/gemini-embedding-2-preview` | jobs, calls, MCP |
+| assistant | `assistant.provider`, `.model` (app-wide) | `ASSISTANT_PROVIDER`, `ASSISTANT_MODEL` | off | tasks |
 
 The decision models the retrieval gate asks are a category of their own, `decision`: OpenRouter
 lists them under `output_modalities=decisions` (Jev, Reflex, d1 and others), and the catalog
@@ -38,6 +39,10 @@ another one.
 Memory follows the mind: unset, it uses her chat account, and her chat model while the two
 accounts' providers match, as `modelFor` resolves it. Embeddings are app-wide, because every
 persona's index and the memory collection share one vector space.
+
+The assistant runs the tasks of Assistant Mode, app-wide. It has no default provider and no
+default model, whatever the provider: its tasks stay off until both are named, and her chat
+model is never the fallback.
 
 ## Accounts
 
@@ -245,14 +250,16 @@ keys in Settings and the wizard, and home's readiness drops the voice item.
 ## Usage and cost
 
 Every request that spends money reports what it used (tokens in, cached and out, characters,
-bytes, seconds of audio, images, searches) through `reportUsage`. A call, a chat turn, a job and
-an MCP request each run inside `withUsageScope`, so the code that spends needn't know who asked.
+bytes, seconds of audio, images, searches) through `reportUsage`. A call, a chat turn, a job, a
+task and an MCP request each run inside `withUsageScope`, so the code that spends needn't know
+who asked.
 A record's cost is, in order: what the provider's response says it billed (OpenRouter's
 `usage.cost`, the decisions API's), else the catalog's list price for that model on that day,
 promotions included, else the caller's own estimate, else none, and it is kept as `unpriced` with
 its usage. A record names the provider whose API the request reached, so a role's own base at
 another provider's API (`RERANK_BASE_URL` at Cohere's) is that provider's spend, priced from its
-models.
+models. A task's mind also hands each of its records, cost and all, to the task's own meter
+(`createMind`'s `tap`), whose spend pauses read it.
 
 `@eidolon/usage` keeps the records in SQLite, at `EIDOLON_USAGE_DB` or `<data home>/usage.db`, in
 WAL mode with a busy timeout, because the bot, the local app and every job's CLI write to one file.

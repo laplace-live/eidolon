@@ -111,6 +111,29 @@ describe("select", () => {
     expect(local?.keyName).toBeNull();
     expect(local?.baseUrl).toBe("http://localhost:11434/v1");
   });
+
+  test("the assistant is off until it names a provider, and then a model: no default fills either", () => {
+    // Her chat model, either way it is set, is never the assistant's.
+    const chat = { OPENROUTER_API_KEY: "or", LLM_MODEL: "a/b", OPENROUTER_MODEL: "c/d" };
+    expect(select("assistant", reader(chat))).toBeNull();
+    expect(() => selectRequired("assistant", reader(chat))).toThrow(
+      "No provider fills ASSISTANT_PROVIDER",
+    );
+    for (const provider of ["openrouter", "anthropic", "deepseek", "openai"]) {
+      expect(() => select("assistant", reader({ ...chat, ASSISTANT_PROVIDER: provider }))).toThrow(
+        "needs a model: set ASSISTANT_MODEL",
+      );
+    }
+    const picked = select(
+      "assistant",
+      reader({ ...chat, ASSISTANT_PROVIDER: "openrouter", ASSISTANT_MODEL: "x/y" }),
+    );
+    expect([picked?.provider.id, picked?.model, picked?.apiKey]).toEqual([
+      "openrouter",
+      "x/y",
+      "or",
+    ]);
+  });
 });
 
 describe("voices", () => {

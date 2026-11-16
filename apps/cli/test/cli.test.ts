@@ -22,6 +22,7 @@ import {
   prepareBatchMain,
   refineMain,
   runCli,
+  taskMain,
   transcribeMain,
 } from "../src/index.ts";
 import { blockNetwork, captureIo, captureLogs, setEnv, spawnCli } from "./helpers.ts";
@@ -49,9 +50,10 @@ const NEW_COMMANDS = {
   pipeline: pipelineMain,
   "extract-users": extractUsersMain,
   "prepare-batch": prepareBatchMain,
+  task: taskMain,
 };
 
-test("one command per Python CLI, each run by its own module", () => {
+test("one command per Python CLI, and laplace-task, each run by its own module", () => {
   expect(Object.keys(COMMANDS)).toEqual([
     "search",
     "eval-retrieval",

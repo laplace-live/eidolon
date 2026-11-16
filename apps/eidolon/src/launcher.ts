@@ -30,6 +30,7 @@ export const CLI_COMMANDS: readonly string[] = [
   "generate-image",
   "extract-users",
   "prepare-batch",
+  "task",
 ];
 
 /** Each entry's bundle, relative to the package. */

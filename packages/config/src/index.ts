@@ -6,6 +6,12 @@ export {
   isAccountId,
   parseAccounts,
 } from "./accounts.ts";
+export {
+  type AssistantSettings,
+  assistantSettings,
+  DEFAULT_ASSISTANT_CONTEXT_TOKENS,
+  DEFAULT_ASSISTANT_SPEND_PAUSE_USD,
+} from "./assistant.ts";
 export { daysInMonth, isLeap, ordinalToYmd, ymdToOrdinal } from "./calendar.ts";
 export {
   chatInterests,

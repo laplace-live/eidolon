@@ -18,6 +18,7 @@ COPY apps/cli/package.json apps/cli/
 COPY apps/eidolon/package.json apps/eidolon/
 COPY apps/web/package.json apps/web/
 COPY packages/access/package.json packages/access/
+COPY packages/assistant/package.json packages/assistant/
 COPY packages/chat/package.json packages/chat/
 COPY packages/config/package.json packages/config/
 COPY packages/context/package.json packages/context/
