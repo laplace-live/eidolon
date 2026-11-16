@@ -1,5 +1,12 @@
 # laplace-eidolon
 
+## 0.9.1
+
+### Patch Changes
+
+- a62824d: Muting your mic on a call in the local app stops sending your voice
+- 3acd3da: A cough or noise on a call no longer leaves the thinking dots up with no reply coming
+
 ## 0.9.0
 
 ### Minor Changes
