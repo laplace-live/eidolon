@@ -331,12 +331,14 @@ installed persona alone. Each viewer line costs one turn of a quota counted over
 `access.chatAnonQuota` (default 20) per client IP for anonymous viewers, and `access.chatUserQuota`
 (default 200) per mid for logged-in ones. Both quotas are read once, on the first chat turn.
 
-`assistant.*` is Assistant Mode: tasks a persona runs on this computer, from the local app or
-`laplace-task`; production never has them. `assistant.enabled` (default on) turns them off in the
-local app; `laplace-task`, a command run on purpose, ignores it. Tasks also stay off until
+`assistant.*` is Assistant Mode: tasks a persona runs on this computer, which she starts when asked
+in one of the local app's chats, or `laplace-task` runs; production never has them.
+`assistant.enabled` (default on) turns them off in the local app, and stops the live ones;
+`laplace-task`, a command run on purpose, ignores it. Tasks also stay off until
 `assistant.provider` and `assistant.model` name an account and a model: the role has no default
 for either, and her chat model is never the fallback. `assistant.folders` lists folders every
-task may read and write besides its own. A task pauses to ask before going on each time its
+task may read and write besides its own, where a task she starts runs without asking first
+([assistant.md](assistant.md)). A task pauses to ask before going on each time its
 spend crosses a multiple of `assistant.spendPauseUsd` (default 1, in US dollars; 0 never
 pauses), or after its first request on a model with no known price, whose spend can't be
 counted, and keeps its requests within `assistant.contextTokens` tokens (default 128000).

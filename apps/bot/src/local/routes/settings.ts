@@ -2,12 +2,15 @@
 // settings.yaml or a persona's own persona.yaml. A persona path setting must stay inside her
 // folder, and sources.ytDlp is never written here: either would let a page read files or run a
 // binary.
+import { resolve } from "node:path";
 import {
   accountProvider,
   activePersona,
+  assistantSettings,
   envOverride,
   envVariable,
   envVariablesStartingWith,
+  expandUser,
   isPlainObject,
   isValidTimeZone,
   layeredValue,
@@ -39,6 +42,7 @@ import {
 import { localError, localJson, readJson } from "../responses.ts";
 import { reinstallSettings, restartTracker } from "../restart.ts";
 import type { LocalApp, LocalRouteSpec } from "../router.ts";
+import { foldersProblem } from "../status.ts";
 
 /** Rows only a public deployment reads, which the local app hides. */
 const PRODUCTION_ONLY = /^(?:access\.|mcp\.|network\.|audio\.opus|providers\.openrouter\.app)/;
@@ -257,6 +261,11 @@ export function checkValue(field: SettingField, value: unknown, persona: string)
           }
         }
       }
+      if (field.env === "ASSISTANT_FOLDERS") {
+        // Read back as assistantSettings reads them; every task is granted them all.
+        const refused = foldersProblem(list.map((path) => resolve(expandUser(path))));
+        if (refused !== null) return invalid(refused);
+      }
       return { ok: true, value: list.length > 0 ? list : null };
     }
   }
@@ -273,7 +282,14 @@ export function switchRefusal(app: LocalApp): Response | null {
   return null;
 }
 
-export function settingsRoutes(app: LocalApp): LocalRouteSpec[] {
+/**
+ * `onAssistantMode` hears each change of Assistant Mode a write makes to the settings the server
+ * runs with, before the write's answer: off stops every live task.
+ */
+export function settingsRoutes(
+  app: LocalApp,
+  onAssistantMode: (enabled: boolean) => Promise<void>,
+): LocalRouteSpec[] {
   return [
     {
       route: "GET /api/local/settings",
@@ -328,6 +344,8 @@ export function settingsRoutes(app: LocalApp): LocalRouteSpec[] {
           for (const [field, value] of changes) setDotted(tree, field.path, value);
           if (dropStyles) setDotted(tree, "voice.styles", null);
         };
+        // ASSISTANT_ENABLED in the environment outlasts the file: only what takes effect is news.
+        const wasEnabled = assistantSettings().enabled;
         try {
           if (scope === "app") editSettingsYaml(edit);
           else editPersonaYaml(persona, edit);
@@ -335,6 +353,8 @@ export function settingsRoutes(app: LocalApp): LocalRouteSpec[] {
           return writeFailure(error);
         }
         reinstallSettings(app);
+        const enabled = assistantSettings().enabled;
+        if (enabled !== wasEnabled) await onAssistantMode(enabled);
         return localJson(200, settingsOf(app, scope === "app" ? activePersona().id : persona));
       },
     },

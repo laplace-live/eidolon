@@ -26,14 +26,19 @@ export {
   type TaskInbox,
   type TaskMeter,
   type TaskOutcome,
+  type TaskPauseReason,
   type TaskRequest,
   type TaskStore,
   type TaskTool,
   type TaskToolContext,
   type TaskToolResult,
+  UsageMeter,
+  type UsageMeterOptions,
 } from "./task.ts";
 export { type PrepareRequest, prepareTurn, runTool, runTurn } from "./turn.ts";
 export type {
+  BackgroundTool,
+  BackgroundTools,
   CallHooks,
   CallTurnOutput,
   CallTurnRequest,

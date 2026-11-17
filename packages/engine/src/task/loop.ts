@@ -13,6 +13,7 @@ import type {
   TaskEntryDraft,
   TaskEvent,
   TaskOutcome,
+  TaskPauseReason,
   TaskRequest,
   TaskTool,
   TaskToolContext,
@@ -93,7 +94,7 @@ type Prepared =
   | { readonly kind: "result"; readonly result: TaskToolResult }
   | { readonly kind: "pause"; readonly detail: string };
 
-const paused = (reason: "spend" | "stall" | "approval", detail: string): TaskOutcome => ({
+const paused = (reason: TaskPauseReason, detail: string): TaskOutcome => ({
   status: "paused",
   reason,
   detail,
@@ -283,11 +284,8 @@ class TaskRun {
 
   async #turn(): Promise<Turn | TaskOutcome> {
     this.#signal.throwIfAborted();
-    const spent = this.#request.meter.spentUsd();
-    if (spent >= this.#spendLimit) {
-      const step = this.#request.limits.spendPauseUsd;
-      return paused("spend", `Spent $${spent.toFixed(2)}; it pauses at every $${step.toFixed(2)}.`);
-    }
+    const held = this.#held();
+    if (held !== null) return held;
     const all = this.#request.steeringMode !== "one-at-a-time";
     for (const text of this.#request.inbox.takeSteering(all)) {
       await this.#append({ type: "steer", text });
@@ -295,13 +293,14 @@ class TaskRun {
     const turn = ++this.#turns;
     this.#emit({ type: "turn", state: "start", turn });
     try {
-      let reply: Reply;
+      let reply: Reply | TaskOutcome;
       try {
         reply = await this.#ask();
       } catch (error) {
         if (this.#signal.aborted) throw error;
         return { status: "failed", error: errorText(error) };
       }
+      if ("status" in reply) return reply;
       const assistant = await this.#append({
         type: "assistant",
         text: reply.text,
@@ -340,6 +339,23 @@ class TaskRun {
     } finally {
       this.#emit({ type: "turn", state: "end", turn });
     }
+  }
+
+  /**
+   * The pause the meter calls for before another request, while spend pauses are on: its spend
+   * reached the next multiple of the pause, or a request it couldn't count went before.
+   */
+  #held(): TaskOutcome | null {
+    const step = this.#request.limits.spendPauseUsd;
+    if (step <= 0) return null;
+    const every = `every $${step.toFixed(2)}`;
+    const spent = this.#request.meter.spentUsd();
+    if (spent >= this.#spendLimit) {
+      return paused("spend", `Spent $${spent.toFixed(2)}; it pauses at ${every}.`);
+    }
+    const why = this.#request.meter.unpriced();
+    if (why === null) return null;
+    return paused("unpriced", `${why}, so its spend can't count toward the pause at ${every}.`);
   }
 
   /** The pause a finished batch calls for: the gate's, a refused path's, or a stall's. */
@@ -396,9 +412,13 @@ class TaskRun {
     return { messages, tokens, sized };
   }
 
-  async #ask(): Promise<Reply> {
+  /** The turn's request, compacted first when the context calls for it; a summary may pause it. */
+  async #ask(): Promise<Reply | TaskOutcome> {
     if (this.#view().sized > compactAbove(this.#request.limits.contextTokens)) {
-      await this.#compact();
+      if (await this.#compact()) {
+        const held = this.#held();
+        if (held !== null) return held;
+      }
     }
     let compacted = false;
     for (;;) {
@@ -417,6 +437,8 @@ class TaskRun {
         if (this.#signal.aborted || compacted || !isContextOverflow(error)) throw error;
         compacted = true;
         if (!(await this.#compact())) throw error;
+        const held = this.#held();
+        if (held !== null) return held;
       }
     }
   }
@@ -481,6 +503,8 @@ class TaskRun {
           : `The model's reply ended with finish reason ${JSON.stringify(finishReason)}`,
       );
     }
+    // Only a whole reply: a cut stream seldom carries its usage, and its retry may.
+    this.#request.meter.requestEnded();
     return { text, calls, finishReason };
   }
 

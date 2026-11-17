@@ -109,7 +109,10 @@ Things it relies on:
   lock on a file in `<home>/locks/`, which the OS releases when the process dies, so a crash
   leaves no stale lock. download, transcribe, refine and the pipeline hold `sources:<persona>`;
   the ingests, the catalog and the pipeline's ingest stage hold `index:<db path>`; the managed
-  yt-dlp's update holds `yt-dlp`. Dry runs take none.
+  yt-dlp's update holds `yt-dlp`. Dry runs take none. It lives in `@eidolon/config/lock`, a
+  subpath so config's index never loads `bun:sqlite`, and `@eidolon/ingest` re-exports it. An
+  assistant task holds `task:<id>` there too, while `laplace-task` or the local app's task manager
+  runs it.
 - **Cancellation.** `main.ts` runs every command through `runWithSignals`: the first SIGINT or
   SIGTERM aborts the run's signal, a second exits at once unless it comes within `REPEAT_MS`
   (500 ms), as the first delivered twice, and the exit code is 130 or 143. No new item starts,

@@ -3,7 +3,8 @@
 import "../../../../packages/config/test/isolated-guard.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 import {
   dataHome,
   installSettings,
@@ -247,6 +248,63 @@ describe("GET status", () => {
         },
       ],
     });
+  });
+
+  test("Assistant Mode is on, and ready once its account and model are set and the key is there", () => {
+    const { deps } = fakeDeps({});
+    expect(buildStatus(app, deps).assistant).toEqual({
+      enabled: true,
+      ready: false,
+      problem: "No provider fills ASSISTANT_PROVIDER",
+      running: 0,
+    });
+    write("settings.yaml", "assistant:\n  provider: openrouter\n");
+    reinstallSettings(app);
+    expect(buildStatus(app, deps).assistant).toMatchObject({
+      ready: false,
+      problem: "OpenRouter needs a model: set ASSISTANT_MODEL",
+    });
+    write("settings.yaml", "assistant:\n  provider: openrouter\n  model: z-ai/glm-5\n");
+    reinstallSettings(app);
+    expect(buildStatus(app, deps).assistant).toMatchObject({
+      ready: false,
+      problem:
+        "OpenRouter needs an API key: set OPENROUTER_API_KEY in credentials.json or the environment",
+    });
+    setEnv("OPENROUTER_API_KEY", "k");
+    expect(buildStatus(app, deps).assistant).toEqual({
+      enabled: true,
+      ready: true,
+      problem: null,
+      running: 0,
+    });
+    write("settings.yaml", "assistant:\n  enabled: false\n  provider: openrouter\n  model: m\n");
+    reinstallSettings(app);
+    expect(buildStatus(app, deps).assistant).toMatchObject({ enabled: false, ready: true });
+  });
+
+  test("an assistant folder that is or holds the home folder keeps Assistant Mode from being ready", () => {
+    const { deps } = fakeDeps({});
+    setEnv("OPENROUTER_API_KEY", "k");
+    const ready = "assistant:\n  provider: openrouter\n  model: z-ai/glm-5\n";
+    write("settings.yaml", `${ready}  folders: [/tmp, ~/.]\n`);
+    reinstallSettings(app);
+    expect(buildStatus(app, deps).assistant).toEqual({
+      enabled: true,
+      ready: false,
+      problem: `No task may be granted ${homedir()}: it is or holds the home folder`,
+      running: 0,
+    });
+    write("settings.yaml", ready);
+    setEnv("ASSISTANT_FOLDERS", dirname(homedir()));
+    reinstallSettings(app);
+    expect(buildStatus(app, deps).assistant).toMatchObject({
+      ready: false,
+      problem: `No task may be granted ${dirname(homedir())}: it is or holds the home folder`,
+    });
+    setEnv("ASSISTANT_FOLDERS", "/tmp,~/Documents");
+    reinstallSettings(app);
+    expect(buildStatus(app, deps).assistant).toMatchObject({ ready: true, problem: null });
   });
 
   test("the voice's source is the installed settings', so a poll reads no settings file", () => {

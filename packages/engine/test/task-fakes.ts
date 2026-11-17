@@ -140,6 +140,9 @@ export class MemoryInbox implements TaskInbox {
 export class FakeMeter implements TaskMeter {
   spent = 0;
   input: number | null = null;
+  uncounted: string | null = null;
+  /** The requests the loop said came back whole. */
+  ended = 0;
 
   spentUsd(): number {
     return this.spent;
@@ -147,6 +150,14 @@ export class FakeMeter implements TaskMeter {
 
   lastInputTokens(): number | null {
     return this.input;
+  }
+
+  unpriced(): string | null {
+    return this.uncounted;
+  }
+
+  requestEnded(): void {
+    this.ended++;
   }
 }
 

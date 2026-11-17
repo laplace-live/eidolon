@@ -9,6 +9,16 @@ import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
 import { ErrorAlert } from "@/components/error-alert";
 import { FieldSkeletons, SectionCard } from "@/components/section-card";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { FieldLegend, FieldSet } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
@@ -54,6 +64,18 @@ export interface SettingsCardProps {
   readonly children?: ReactNode;
   /** After a save the server accepted, with the values it saved. */
   readonly onSaved?: (values: Readonly<Record<string, unknown>>) => void;
+  /** Asked before a save of `values`: what to confirm first, or null to save at once. */
+  readonly confirm?: (values: Readonly<Record<string, unknown>>) => Promise<SaveQuestion | null>;
+}
+
+/** What a save asks before it goes ahead, in the viewer's language. */
+export interface SaveQuestion {
+  readonly title: string;
+  readonly description: string;
+  /** Keeps the value as it is. */
+  readonly cancel: string;
+  /** Saves anyway. */
+  readonly action: string;
 }
 
 export function SettingsCard({
@@ -66,6 +88,7 @@ export function SettingsCard({
   action,
   children,
   onSaved,
+  confirm,
 }: SettingsCardProps) {
   const { t } = useLingui();
   const queryClient = useQueryClient();
@@ -76,6 +99,11 @@ export function SettingsCard({
   const [drafts, setDrafts] = useState<Readonly<Record<string, string>>>({});
   const [touched, setTouched] = useState<ReadonlySet<string>>(new Set());
   const [confirming, setConfirming] = useState<Record<string, unknown> | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [asking, setAsking] = useState<{
+    readonly values: Record<string, unknown>;
+    readonly question: SaveQuestion;
+  } | null>(null);
 
   const owner = persona ?? settings.data?.persona;
   const save = useMutation({
@@ -138,12 +166,20 @@ export function SettingsCard({
   // A draft shows its error once the field was left or a save was tried, not on every keystroke.
   const shownErrors = Object.keys(errors).filter((path) => touched.has(path));
 
+  async function ask(values: Record<string, unknown>) {
+    if (confirm === undefined) return save.mutate(values);
+    setChecking(true);
+    const question = await confirm(values).finally(() => setChecking(false));
+    if (question === null) save.mutate(values);
+    else setAsking({ values, question });
+  }
+
   function submit(event: FormEvent) {
     event.preventDefault();
     setTouched(new Set(Object.keys(drafts)));
     if (invalid || !changed) return;
     if (reembeds || REINDEX_PATHS.some((path) => path in values)) setConfirming(values);
-    else save.mutate(values);
+    else void ask(values);
   }
 
   function discard() {
@@ -207,7 +243,7 @@ export function SettingsCard({
         }
         actions={
           rows.length > 0 ? (
-            <SaveActions dirty={changed} pending={save.isPending} onDiscard={discard} />
+            <SaveActions dirty={changed} pending={save.isPending || checking} onDiscard={discard} />
           ) : undefined
         }
       >
@@ -242,10 +278,27 @@ export function SettingsCard({
         open={confirming !== null}
         onCancel={() => setConfirming(null)}
         onConfirm={() => {
-          if (confirming) save.mutate(confirming);
+          if (confirming) void ask(confirming);
           setConfirming(null);
         }}
       />
+      <AlertDialog open={asking !== null} onOpenChange={(open) => !open && setAsking(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{asking?.question.title}</AlertDialogTitle>
+            <AlertDialogDescription>{asking?.question.description}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{asking?.question.cancel}</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => asking && save.mutate(asking.values)}
+            >
+              {asking?.question.action}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </form>
   );
 }

@@ -19,6 +19,7 @@ on a call that opens on the chat and is stored in it ([Calls](#calls)).
 @eidolon/providers/speech-batch   synthesize and transcribe: a whole voice message per request
 @eidolon/runtime      CallBinding: a call run as a chat's persona, opened on it, reporting its lines
 apps/bot/src/local/chats/, routes/chats.ts   the runner, a chat's calls and /api/local/chats
+apps/bot/src/local/tasks/                    start_task and the tasks she starts (assistant.md)
 apps/web/src/features/chats/                 the Chats page (web-app.md)
 apps/bot/src/chat/                           production's endpoint: /api/chat/*, signing, a call's binding
 packages/access/src/chat.ts                  production's chat quotas and served personas
@@ -52,7 +53,7 @@ isn't stored, she never saw.
 | `message` | the runner for the viewer and for a call's lines, the engine for her | `speaker`, `text`, and `attachments` (her selfies; `text` is empty on a message of photos alone); `modality: "voice"` on a voice message, whose first attachment is its audio and whose `text` is its transcript; `modality: "call"` on a line said on a call, the viewer's or hers, its transcript in `text`; `interrupted` when she was cut off, keeping what she had said; `cutOff` when her provider stopped her short: `length` at its token limit, `refusal` when it refused or filtered her |
 | `context` | the engine | A block a context provider put into her view: `role`, `content` and its `position` there; never shown |
 | `context-removed` | the engine | Her earlier `context` blocks, by seq, that a provider took back out; the stream archive replaces its blocks when they change or move |
-| `tool-call`, `tool-result` | the engine | Her call and what it returned; a call cut off has no result, and one that ran on past an interruption returns further down the log |
+| `tool-call`, `tool-result` | the engine | Her call and what it returned; a call cut off has no result, and one that ran on past an interruption returns further down the log. An async tool's results carry `stage`: `started` while it runs, then `final` or `cancelled`; `start_task`'s `final` is stored by the runner when the task ends ([The local API](#the-local-api)) |
 | `kickoff` | the engine | The greeting prompt she answered |
 | `turn-failed` | the engine, or the runner when a turn throws | The failure, through `errorText`; the chat stays usable. `code: "voice-failed"` when her reply, stored just before it, was meant as a voice message but stayed text |
 | `decision` | the engine (`runChat`) | Who answers the line at seq `after`, and how: `source: "single"` in a chat of one persona, else `mention`, `model` or `fallback`, with the director's `scores` when it asked, and each reply's `mode`, `text` or `voice`. Every reply follows one, and one may choose no one. In a chat of one in `auto`, it lands just before her reply, after her turn's other events |
@@ -81,6 +82,16 @@ call would hold for her, without the system message:
 - **Her tool calls** become an `assistant` message with `tool_calls`, each followed by its `tool`
   result. A call with no result reads `CANCELLED`, and an empty result reads `COMPLETED`, as
   pipedog wrote them.
+- **An async call** reads pipedog's placeholder while it runs. Its `final` replaces the
+  placeholder in place unless the conversation moved on, and otherwise arrives as a `developer`
+  message carrying pipedog's final envelope, which tells her to convey it. That is a call's rule
+  (her lines there are `modality: "call"`). **A text turn's async call,** one a reply of hers
+  outside a call followed, as `start_task`'s is by her line about being on it, always settles in
+  its own `tool` message, whatever came after; when the call has left the window, the result comes
+  with it as an `assistant` message with `tool_calls` and its `tool` message, at the final's place.
+  So what such a call brings back (a page a task quotes) reaches her only as a tool's output, and
+  a cancel's `final` doesn't ask her to tell the owner of a cancel the owner made. If no reply of
+  hers was stored between the call and its end, pipedog's rule applies.
 - **Her `context` blocks** are spliced in at their `position` in seq order, so they accumulate as a
   call's do. A `context-removed` takes the named blocks out again.
 - **Her `kickoff`** is a `user` message.
@@ -172,7 +183,8 @@ aborts the turn. The engine never rejects for the turn's own failures.
      `buildSystemInstruction`, with `voicePromptHint` in a voice reply alone, and in a group the
      line naming the others ([below](#what-each-persona-sees)).
 3. **Her view** is `viewOf` the log as stored. A greeting turn adds `buildGreetingKickoff` over her
-   memories of the viewer, recorded as a `kickoff`.
+   memories of the viewer, recorded as a `kickoff`. A turn's `nudge` (a task's report turn has
+   one) is a `developer` message at the view's end, recorded as her `context` block.
 4. **Recall:** the gate attaches its decision, then Mem0, the archive and the facts run in turn.
    The gate and the archive key their turn on the turn's id, since past the window a repeated line
    leaves the view's last lines as they were.
@@ -233,6 +245,18 @@ aborts the turn. The engine never rejects for the turn's own failures.
      text, and a `turn-failed` with `code: "voice-failed"` follows it.
    - **An interruption while she is spoken** stores her words as interrupted text, with no audio.
    - **A reply with no words** isn't spoken.
+10. **Background tools,** a text chat's async tools (`TurnRequest.background`,
+    `ChatRequest.background`: `{ tools, hint }`), are offered after her own tools, and `hint` joins
+    her persona prefix after the selfie hint. Assistant Mode's `start_task` is the only one
+    ([assistant.md](assistant.md#her-side-start_task)).
+    - **Running one:** its `run` also gets the mind's `callId`. A result is stored as her
+      `tool-result` with `stage: "started"`, unless it holds `error`, which is stored as it is.
+    - **Her turn then takes another round,** reading pipedog's started placeholder, so she says her
+      line even when the call came with no words.
+    - **Interrupted,** the tool runs on through `late`, and its started result is stored after the
+      interruption.
+    - **A call's turn never takes them:** `CallTurnRequest` leaves the field out, and a call's or a
+      realtime model's turn ignores it.
 
 ## Group chats
 
@@ -650,6 +674,18 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
   clip (`hearVoiceMessage`), and only then stores it with its transcript. One that can't be heard
   stores nothing, and leaves the owed lines to the next line.
 - **The owed lines** live in the runner's memory, per chat; a restart forgets them.
+- **Assistant Mode's `start_task`** and its hint go with her answers to the viewer's lines in a
+  chat of one, voice messages included, while Assistant Mode is ready (`ChatRunnerOptions.tasks`);
+  never with her greeting or her report turns, which no line of the viewer's asked for. A group
+  never gets them, and neither does a call.
+- **A task's end** reaches the chat through `report(snapshot)`, which the task manager calls
+  ([assistant.md](assistant.md#the-report)). It waits until no reply runs in the chat, then, in
+  one turn of the queue, stores her call's `final` and starts her report turn the way a greeting
+  starts: no viewer line and no kickoff, streamed by `GET live`, in text unless the chat's reply
+  mode is voice. The turn carries the nudge `taskEndedNudge(call)`, stored as her developer
+  `context` block, which says the task ended and its result is in her call's return. A cancelled
+  task gets its `final` and no turn, and so does one that ends while the chat is in a call or no
+  longer hers alone. Once shutdown begins it stores nothing.
 - **A dropped connection** never stops a reply. It finishes and is stored, and `GET live` replays
   it. Only stop, a new message, a call, `DELETE` and the server's shutdown stop one
   ([The chain](#the-chain)). Shutdown waits up to 2 s for what was said to be stored.
@@ -664,7 +700,8 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
   - **Reaching the page:** no stream carries it, since its turn's streams have closed by then and
     the page may have none open. `GET chats/:id` lists the tool in `lateTools` until what it
     brought is stored. While that list isn't empty, the page reads the chat again every 2 s and
-    shows the tool's quiet line, so the photo appears without a reload.
+    shows the tool's quiet line, so the photo appears without a reload. `start_task` may be listed
+    there too, for the moment its interrupted turn's start is still being made.
   - **What ends it:** stop and a new message leave it running. `DELETE` and shutdown cancel it.
 
 | Method and path (under `/api/local`) | Body | Answer |
@@ -678,7 +715,7 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
 | `POST chats/:id/stop` | | `204` once the stopped reply's words are stored |
 | `PATCH chats/:id` | `{ title }`, 1 to 80 characters on one line, `{ chainLimit }`, a whole number from 0 to 6, or `{ replyMode }`, `auto`, `text` or `voice`; one per request | Appends a `title`, or a `settings` that applies from the next viewer line |
 | `POST chats/:id/participants` | `{ add?: [id], remove?: [id] }`, at least one persona, none in both | `200 { ok }` and a `participants` event; `400` when it adds one already there, removes one who isn't, or leaves fewer than 1 or more than 6 |
-| `DELETE chats/:id` | | Stops any reply and cancels a voice message being heard, whose `POST voice` answers `502`, then removes `chats/<id>/` and nothing else. `409 chat-in-call` during a call, stopping and cancelling nothing; a call still opening when it comes is refused `404 unknown-chat` |
+| `DELETE chats/:id` | | Stops any reply and cancels a voice message being heard, whose `POST voice` answers `502`; stops the chat's live tasks, after any `start_task` still being answered; then removes `chats/<id>/` and nothing else, leaving the tasks' records. `409 chat-in-call` during a call, stopping and cancelling nothing; a call still opening when it comes is refused `404 unknown-chat` |
 | `GET chats/:id/files/:name` | | The attachment: its type, `nosniff`, a sandbox CSP and `Cache-Control: private, max-age=31536000, immutable`; an `<img>` or `<audio>` reads it with the cookie alone. It answers `Range` requests with a `206` (Bun.serve's own, on a file) and sends `Accept-Ranges: bytes`, since Safari plays audio only from a server that takes ranges |
 
 - **Text** is trimmed. A message may hold tabs and line breaks, but no other control character.
@@ -699,9 +736,9 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
 - `bun test --no-env-file packages/chat packages/engine packages/context packages/runtime apps/bot/test/local`.
   `packages/runtime/test/native/binding.test.ts` runs a bound call on scripted hearing, mind and
   voice, and once over a real werift peer.
-- `bun apps/bot/scripts/local-smoke.ts --headful`. It walks four chats against its fake
+- `bun apps/bot/scripts/local-smoke.ts --headful`. It walks five chats against its fake
   OpenAI-compatible server, which also answers the director's Decisions route, OpenAI's speech and
-  transcriptions, and a call's realtime transcription session. It bills nothing.
+  transcriptions, a call's realtime transcription session, and a task's worker. It bills nothing.
   - **A chat of one:** New Chat and the greeting, a reply that streams in with its cue as a chip,
     after a decision that asked `voice_moment` alone, the history after a reload, Rename and
     Delete.
@@ -718,6 +755,11 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
     call line, the composer waiting and a send refused `chat-in-call`, then Hang Up, the
     `call-ended`, the separators with the call's length, and the composer back. A second tab, open
     before the call and told of it by a refused send, gets its composer back at the hang-up too.
+  - **A task,** with the assistant role on an OpenRouter account at the fake server: her greeting
+    offered neither `start_task` nor its hint, her `start_task` call for the viewer's line and her
+    line after it, Allow Once on the card at the start and at a path outside the task's folders,
+    the task done, her `final`, and her report turn, offered no `start_task`, reading the final as
+    her call's result after the nudge ([web-app.md](web-app.md#the-browser-smoke-test)).
 - `bun run director-decisions` after changing the director's questions, state or thresholds
   ([Calibrating](#calibrating)).
 - **By hand, billed:** a chat with milky-green on OpenRouter. Ask a recall question (it must call
@@ -733,6 +775,9 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
   refer to something typed earlier, her lines and yours must land in the chat as call lines, and a
   reply you cut off must keep only what she said. Then call a persona who isn't the active one:
   her own voice must answer.
+- **By hand, billed:** with Assistant Mode on a model you pick, ask milky-green on OpenRouter for a
+  page in a new folder. She must call `start_task` with a brief the worker can follow alone, say
+  she is on it, and, once you allow the start, retell the result in her own voice.
 
 ## Production: the browser keeps the chat
 

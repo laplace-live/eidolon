@@ -64,6 +64,20 @@ function withHome(path: string, home: string): string {
   return bare === "~" || bare.startsWith("~/") ? join(home, bare.slice(1)) : path;
 }
 
+/** `path`'s realpath; a folder not made yet holds nothing, home least of all. */
+function real(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
+}
+
+/** Why `path`, an absolute folder, can't be granted: it is or holds `home` on disk. Else null. */
+export function grantRefusal(path: string, home: string): GrantRefused | null {
+  return isInside(real(resolve(home)), real(path)) ? new GrantRefused(path) : null;
+}
+
 /**
  * Where `path` leads on disk: its realpath, else its parent's plus its name, with a dangling
  * symlink followed to where a write through it would land. Throws ENOENT where the kernel would.
@@ -141,17 +155,10 @@ export class FolderPolicy implements PathGuard {
       { path: this.folder, access: "read-write" },
       ...options.grants.map((grant) => ({ path: absolute(grant.path), access: grant.access })),
     ];
-    // A folder not made yet holds nothing, home least of all.
-    const real = (path: string) => {
-      try {
-        return realpathSync(path);
-      } catch {
-        return path;
-      }
-    };
     this.#realHome = real(home);
     for (const grant of this.#grants) {
-      if (isInside(this.#realHome, real(grant.path))) throw new GrantRefused(grant.path);
+      const refused = grantRefusal(grant.path, home);
+      if (refused !== null) throw refused;
     }
     const appRoot = resolve(options.appRoot);
     const dotenv = options.dotenv ? resolve(options.dotenv) : null;
@@ -215,7 +222,14 @@ export class FolderPolicy implements PathGuard {
         (access === "read" || grant.access === "read-write") &&
         isInside(target, grant.path),
     );
-    if (!granted) throw new PathRefused(target, access, "outside");
+    if (!granted) {
+      // No grant may hold home, so there is nothing to ask the owner for.
+      throw new PathRefused(
+        target,
+        access,
+        isInside(this.#realHome, target) ? "denied" : "outside",
+      );
+    }
     return target;
   }
 }

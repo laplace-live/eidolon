@@ -65,6 +65,12 @@ export const LOCAL_ROUTES = [
   "POST /api/local/chats/:id/stop",
   "POST /api/local/chats/:id/participants",
   "GET /api/local/chats/:id/files/:name",
+  "GET /api/local/tasks",
+  "GET /api/local/tasks/:id",
+  "GET /api/local/tasks/:id/events",
+  "POST /api/local/tasks/:id/approve",
+  "POST /api/local/tasks/:id/continue",
+  "DELETE /api/local/tasks/:id",
 ] as const satisfies readonly (keyof LocalApi)[];
 
 export type LocalRoute = (typeof LOCAL_ROUTES)[number];
@@ -113,6 +119,14 @@ export const ERROR_CODES = [
   "missing-key",
   "chat-in-call",
   "realtime-in-group",
+  "assistant-off",
+  "assistant-not-ready",
+  "unknown-task",
+  "task-locked",
+  "nothing-pending",
+  "not-paused",
+  "pending",
+  "range-not-satisfiable",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -320,6 +334,18 @@ export interface MemoryStatus {
   readonly reachable: boolean | null;
 }
 
+/** Assistant Mode: tasks she runs on the owner's computer. */
+export interface AssistantStatus {
+  /** `assistant.enabled`. Off, no task starts and the Tasks page is hidden. */
+  readonly enabled: boolean;
+  /** A task can start: the assistant role's account and model are set, and its key is there. */
+  readonly ready: boolean;
+  /** Why it isn't ready, in English: no account or model chosen, or no key; null when ready. */
+  readonly problem: string | null;
+  /** Tasks whose status is `running`. */
+  readonly running: number;
+}
+
 /**
  * GET status, which the home page polls: cheap. It never waits on a remote probe; Qdrant and the
  * voice are checked in the background and reported from the last answer.
@@ -358,6 +384,7 @@ export interface Status {
   /** The last call that failed after it was answered, for the call page to explain a hang-up. */
   readonly lastSessionError: { readonly message: string; readonly at: string } | null;
   readonly activeCalls: number;
+  readonly assistant: AssistantStatus;
 }
 
 export type SettingScope = "app" | "persona";
@@ -975,6 +1002,34 @@ export interface LocalApi {
   "POST /api/local/chats/:id/participants": Endpoint<ChatParticipantsRequest, Ok>;
   /** Audio answers Range requests, so a player can seek. */
   "GET /api/local/chats/:id/files/:name": Endpoint<undefined, Raw<"image" | "audio">>;
+  /** The app's tasks, which she starts in her chats with start_task; nothing else starts one. */
+  "GET /api/local/tasks": Endpoint<undefined, TasksResponse, TasksQuery>;
+  /**
+   * 400 bad-request for a malformed id, which is never looked up. Every tasks/:id route answers 404
+   * unknown-task for a laplace-task task's id too.
+   */
+  "GET /api/local/tasks/:id": Endpoint<undefined, TaskSnapshot>;
+  /**
+   * Each line a TaskEntry, as transcript.jsonl holds it: the entries from `after`, then each one
+   * stored while the task runs, until it stops running. 416 range-not-satisfiable past the end.
+   */
+  "GET /api/local/tasks/:id/events": Endpoint<undefined, Raw<"ndjson">, TaskEventsQuery>;
+  /**
+   * 400 for a `model` createMind refuses. 409 nothing-pending, also for a `pending` the task no
+   * longer asks; task-locked while another process, such as laplace-task, runs it; assistant-off;
+   * assistant-not-ready, which Status' `assistant.problem` explains.
+   */
+  "POST /api/local/tasks/:id/approve": Endpoint<TaskApproveRequest, TaskSnapshot>;
+  /**
+   * 409 not-paused; pending, when it waits on an approval instead; task-locked; assistant-off;
+   * assistant-not-ready.
+   */
+  "POST /api/local/tasks/:id/continue": Endpoint<TaskContinueRequest, TaskSnapshot>;
+  /**
+   * The card's Stop, which works while Assistant Mode is off too: a live task comes back cancelled,
+   * an ended one as it is. No route deletes a task: its record says what was done on the computer.
+   */
+  "DELETE /api/local/tasks/:id": Endpoint<undefined, TaskSnapshot>;
 }
 
 /**
@@ -1139,3 +1194,269 @@ export interface UsageQuery {
   /** Every persona's when absent. */
   readonly persona?: string;
 }
+
+/**
+ * `interrupted`: the server stopped while it ran; it resumes at the next start while Assistant Mode
+ * is on and ready, else on Continue. A task that `succeeded`, `failed` or was `cancelled` never
+ * runs again.
+ */
+export type TaskStatus =
+  | "awaiting-approval"
+  | "running"
+  | "paused"
+  | "interrupted"
+  | "succeeded"
+  | "failed"
+  | "cancelled";
+
+export interface TaskBrief {
+  readonly goal: string;
+  readonly deliverable: string;
+  /** Absolute. */
+  readonly folder: string;
+  /** How the worker checks the deliverable before it reports. */
+  readonly check: string;
+}
+
+/** An account, and the model a task runs on there. */
+export interface TaskModel {
+  readonly account: string;
+  readonly model: string;
+}
+
+export interface TaskGrant {
+  /** Absolute, or under `~`. */
+  readonly path: string;
+  readonly access: "read" | "read-write";
+}
+
+/**
+ * `spend`: it reached the next multiple of its spend pause. `stall`: the same calls three turns
+ * running. `approval`: it waits on the owner. `unpriced`: a request's spend can't be counted.
+ */
+export type TaskPauseReason = "spend" | "stall" | "approval" | "unpriced";
+
+/** How a run ended, from the runtime, never from the worker's words. */
+export type TaskOutcome =
+  | { readonly status: "succeeded"; readonly report: string }
+  | { readonly status: "failed"; readonly error: string }
+  | { readonly status: "cancelled" }
+  | { readonly status: "paused"; readonly reason: TaskPauseReason; readonly detail: string };
+
+/** What a task waits on the owner for: to start, a path outside its grants, or a site. */
+export type TaskPending =
+  | { readonly kind: "start" }
+  | {
+      readonly kind: "path";
+      readonly path: string;
+      readonly access: "read" | "write";
+      /**
+       * What an Allow grants, with the access asked for (a write's is read-write): the path when it
+       * is a folder, else its parent. Absent when the path alone is granted, a file right in home.
+       */
+      readonly folder?: string;
+    }
+  | { readonly kind: "fetch"; readonly host: string };
+
+export interface TaskPause {
+  readonly reason: TaskPauseReason;
+  readonly detail: string;
+}
+
+export type TaskTodoStatus = "pending" | "in_progress" | "done";
+
+/** A step of the plan the worker keeps with its todo tool. */
+export interface TaskTodoItem {
+  readonly text: string;
+  readonly status: TaskTodoStatus;
+}
+
+/** Lines for the task's run, kept until the run takes them. */
+export interface TaskInboxLines {
+  readonly steer: readonly string[];
+  readonly followUp: readonly string[];
+}
+
+/** `ask`: the owner allows each site. `off`: the task gets no web_fetch. */
+export type TaskWebMode = "ask" | "any" | "off";
+
+export interface TaskWebAccess {
+  readonly mode: TaskWebMode;
+  /** Sites allowed while the mode is `ask`. */
+  readonly hosts: readonly string[];
+  /** Sites the owner refused. */
+  readonly denied: readonly string[];
+}
+
+/** Where a task started: the chat, the persona in it, and her start_task call's id. */
+export interface TaskChat {
+  readonly id: string;
+  readonly persona: ParticipantId;
+  /** The task's card sits at this call in the chat's log. */
+  readonly call: string;
+}
+
+/** A task as its task.json holds it, which the task routes answer with. */
+export interface TaskSnapshot {
+  readonly v: 1;
+  /** A UUIDv7, so ids sort by creation. */
+  readonly id: string;
+  /** ms since the epoch, as `endedAt`. */
+  readonly createdAt: number;
+  readonly status: TaskStatus;
+  /** Set on every task the routes show: laplace-task's tasks have none, and answer 404. */
+  readonly chat?: TaskChat;
+  readonly brief: TaskBrief;
+  readonly model: TaskModel;
+  /** Folders besides its own. */
+  readonly grants: readonly TaskGrant[];
+  /** It pauses each time its spend crosses a multiple of this; 0 never. */
+  readonly spendPauseUsd: number;
+  readonly spentUsd: number;
+  /** Absolute paths. */
+  readonly files: { readonly read: readonly string[]; readonly written: readonly string[] };
+  readonly endedAt?: number;
+  readonly outcome?: TaskOutcome;
+  readonly pending?: TaskPending;
+  /** The latest pause, while `paused`. */
+  readonly pause?: TaskPause;
+  /** The latest list its todo tool wrote. */
+  readonly todo?: readonly TaskTodoItem[];
+  readonly inbox?: TaskInboxLines;
+  /** `ask` with no sites when absent. */
+  readonly web?: TaskWebAccess;
+  /** Cancelled by the owner's Deny at its start. */
+  readonly denied?: true;
+  /** Its `final` is stored in its chat. */
+  readonly reported?: true;
+}
+
+/** A tool call in the worker's reply. */
+export interface TaskToolCall {
+  readonly id: string;
+  readonly name: string;
+  readonly arguments: Readonly<Record<string, unknown>>;
+  /**
+   * A call that never ran, its arguments' text as streamed: they aren't a JSON object, or the
+   * output limit cut its reply off. Its `arguments` are then `{}`.
+   */
+  readonly unparsed?: string;
+}
+
+/** Absolute paths. */
+export interface TaskFiles {
+  readonly read?: readonly string[];
+  readonly written?: readonly string[];
+}
+
+/** A line of a task's transcript.jsonl: `seq` counts from 1, `at` is ms since the epoch. */
+export type TaskEntry = { readonly seq: number; readonly at: number } & (
+  | { readonly type: "brief"; readonly brief: TaskBrief }
+  | {
+      readonly type: "assistant";
+      readonly text: string;
+      readonly calls: readonly TaskToolCall[];
+      /** As its provider put it: a reply cut off or stopped is no report. */
+      readonly finishReason?: string | null;
+    }
+  | { readonly type: "tool-start"; readonly callId: string; readonly name: string }
+  | {
+      readonly type: "tool-result";
+      readonly callId: string;
+      readonly name: string;
+      /** What the worker saw, truncated. */
+      readonly content: string;
+      readonly isError: boolean;
+      /** The tool's own, which the worker never sees, such as an edit's diff. */
+      readonly details?: unknown;
+      readonly files?: TaskFiles;
+      /** The path the call was refused, so the owner can be asked for it. */
+      readonly refused?: { readonly path: string; readonly access: "read" | "write" };
+    }
+  | { readonly type: "steer"; readonly text: string }
+  | { readonly type: "follow-up"; readonly text: string }
+  | {
+      readonly type: "compaction";
+      readonly summary: string;
+      /** The first entry the worker's context keeps after the summary. */
+      readonly firstKeptSeq: number;
+      readonly files: { readonly read: readonly string[]; readonly written: readonly string[] };
+      readonly tokensBefore: number;
+    }
+  | { readonly type: "pause"; readonly reason: TaskPauseReason; readonly detail: string }
+  | { readonly type: "resume" }
+  | { readonly type: "end"; readonly outcome: TaskOutcome }
+);
+
+export interface TasksQuery {
+  /** A chat's id: only the tasks she started in it. */
+  readonly chat?: string;
+}
+
+export interface TasksResponse {
+  /** Newest first. */
+  readonly tasks: readonly TaskSnapshot[];
+}
+
+export interface TaskEventsQuery {
+  /** A byte offset into the transcript, at the start of a line. */
+  readonly after?: number;
+}
+
+/** POST tasks/:id/approve: the owner's answer to its `pending`. */
+export interface TaskApproveRequest {
+  /**
+   * `once`: for this task alone. `always`: a start's folder, or the `folder` a write's question
+   * names, joins `assistant.folders` (on any other path question it is `once`), and a site's answer
+   * turns the task's web mode to `any`. `deny`: a start ends `cancelled` and `denied`; a path or a
+   * site is refused, and the run goes on.
+   */
+  readonly answer: "once" | "always" | "deny";
+  /**
+   * The question answered, as the snapshot's `pending` put it: one the task no longer asks is 409
+   * nothing-pending, so a page showing an older question can't answer a newer one.
+   */
+  readonly pending?: TaskPending;
+  /**
+   * A start's only: the model to run on instead. One createMind would refuse, an unknown account
+   * or one with no key, is a 400.
+   */
+  readonly model?: TaskModel;
+  /** A start's only. */
+  readonly web?: TaskWebMode;
+}
+
+/** POST tasks/:id/continue: for a task paused with no `pending`, or interrupted. */
+export interface TaskContinueRequest {
+  /** Replaces the task's own; continuing an `unpriced` pause sets it to 0. */
+  readonly spendPauseUsd?: number;
+}
+
+/** The name of her tool that starts a task, as her `tool-call` events carry it. */
+export type StartTaskToolName = "start_task";
+
+// Types, not interfaces: an interface can't be assigned to a record, which is what a tool returns
+// and a tool-result event holds.
+
+/** start_task's result as it returns, stored as her `tool-result` with `stage: "started"`. */
+export type StartTaskStarted = {
+  /** The task's id. */
+  readonly task: string;
+  readonly status: Extract<TaskStatus, "running" | "awaiting-approval">;
+};
+
+/** start_task's result once the task has ended, stored with `stage: "final"`. */
+export type StartTaskFinal = {
+  /** From the runtime, never from the worker's own words. */
+  readonly status: Extract<TaskStatus, "succeeded" | "failed" | "cancelled">;
+  /**
+   * The worker's report, or why the task failed; empty when cancelled. Cut at 4,000 characters
+   * with a note.
+   */
+  readonly report: string;
+  /** Absolute paths: what its tool log shows it wrote, the first 50. */
+  readonly files: readonly string[];
+  /** How many more it wrote, when that is more than 50; the task's snapshot lists them all. */
+  readonly moreFiles?: number;
+  readonly spentUsd: number;
+};

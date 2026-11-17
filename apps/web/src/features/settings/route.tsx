@@ -6,6 +6,7 @@ import { msg } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import {
+  BriefcaseIcon,
   DatabaseIcon,
   DownloadIcon,
   PlugIcon,
@@ -21,6 +22,7 @@ import { SettingsCard } from "@/components/settings-form/settings-card";
 import { studioPath } from "@/lib/paths";
 import { statusQuery } from "@/lib/query";
 import { AccountsCard } from "./accounts-card";
+import { AssistantCard } from "./assistant";
 import { Notices } from "./notices";
 import { CARDS, type CardId, NAMED, resolveSection, SECTIONS, type SectionId } from "./sections";
 import { YtDlpBadge, YtDlpProblem } from "./yt-dlp-state";
@@ -30,6 +32,7 @@ const ICONS: Readonly<Record<SectionId, ReactNode>> = {
   general: <SettingsIcon />,
   memory: <DatabaseIcon />,
   downloads: <DownloadIcon />,
+  assistant: <BriefcaseIcon />,
   advanced: <SlidersHorizontalIcon />,
 };
 
@@ -38,6 +41,7 @@ const SECTION_LABELS: Readonly<Record<SectionId, MessageDescriptor>> = {
   general: msg`General`,
   memory: msg`Memory`,
   downloads: msg`Downloads`,
+  assistant: msg`Assistant Mode`,
   advanced: msg`Advanced`,
 };
 
@@ -61,6 +65,10 @@ const CARD_LABELS: Readonly<
     title: msg`yt-dlp`,
     body: msg`Downloads her videos. A video behind a login needs your cookies, read from a browser or a cookies.txt.`,
   },
+  assistant: {
+    title: msg`Assistant Mode`,
+    body: msg`Ask her in a chat to do real work on this computer, such as writing and editing files or looking things up, and she starts a task for it. Tasks run on the account and model chosen here, never on her chat model, and one that needs a folder outside the folders below asks you in the chat first.`,
+  },
 };
 
 function Section({ section }: { readonly section: SectionId }) {
@@ -79,18 +87,27 @@ function Section({ section }: { readonly section: SectionId }) {
       return (
         <>
           {section === "providers" && <AccountsCard />}
-          {CARDS[section].map((card) => (
-            <SettingsCard
-              key={card.id}
-              scope="app"
-              paths={card.paths}
-              title={t(CARD_LABELS[card.id].title)}
-              description={t(CARD_LABELS[card.id].body)}
-              action={card.id === "ytDlp" ? <YtDlpBadge /> : undefined}
-            >
-              {card.id === "ytDlp" && <YtDlpProblem />}
-            </SettingsCard>
-          ))}
+          {CARDS[section].map((card) =>
+            card.id === "assistant" ? (
+              <AssistantCard
+                key={card.id}
+                paths={card.paths}
+                title={t(CARD_LABELS[card.id].title)}
+                description={t(CARD_LABELS[card.id].body)}
+              />
+            ) : (
+              <SettingsCard
+                key={card.id}
+                scope="app"
+                paths={card.paths}
+                title={t(CARD_LABELS[card.id].title)}
+                description={t(CARD_LABELS[card.id].body)}
+                action={card.id === "ytDlp" ? <YtDlpBadge /> : undefined}
+              >
+                {card.id === "ytDlp" && <YtDlpProblem />}
+              </SettingsCard>
+            ),
+          )}
         </>
       );
   }

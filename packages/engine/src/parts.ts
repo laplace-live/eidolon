@@ -52,6 +52,7 @@ export interface PartsDeps {
     viewer: UserContext;
     voiceHint: string;
     selfieHint: string;
+    assistantHint?: string;
     participants?: readonly string[];
     realtime?: boolean;
   }): Promise<string>;
@@ -180,7 +181,7 @@ class Pieces {
   async parts(
     viewer: UserContext,
     events: readonly ChatEvent[],
-    { others = [], voice: spoken = false, realtime = false }: PartsOptions,
+    { others = [], voice: spoken = false, realtime = false, assistantHint = "" }: PartsOptions,
   ): Promise<PersonaParts> {
     const deps = this.#deps;
     this.#selfie ??= (() => {
@@ -215,6 +216,7 @@ class Pieces {
         viewer,
         voiceHint: voice?.hint ?? "",
         selfieHint: this.#selfie.hint,
+        ...(assistantHint === "" ? {} : { assistantHint }),
         ...(others.length > 0 ? { participants: others } : {}),
         ...(realtime ? { realtime: true } : {}),
       }),

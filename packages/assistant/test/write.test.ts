@@ -155,11 +155,11 @@ describe("write tool in a task", () => {
     expect(result.content.length).toBeLessThan(2200);
   });
 
-  it("describes itself as pi's write does", () => {
+  it("describes itself as pi's write does, but runs its batch in order", () => {
     expect(writeTool.schema.name).toBe("write");
     expect(writeTool.schema.required).toEqual(["path", "content"]);
     expect(writeTool.replay).toBe("safe");
-    expect(writeTool.executionMode).toBeUndefined();
+    expect(writeTool.executionMode).toBe("sequential");
     expect(writeTool.snippet).toBe("Create or overwrite files");
     expect(writeTool.guidelines).toEqual(["Use write only for new files or complete rewrites."]);
   });

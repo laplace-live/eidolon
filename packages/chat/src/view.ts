@@ -115,7 +115,9 @@ export function toolCallMessages(
  * result, and each context block is spliced in at its recorded position in seq order, so blocks
  * accumulate as they do in a call, until a `context-removed` takes one out. An async call's result
  * replaces its placeholder, or comes later as a developer message once the conversation has moved
- * on, as pipedog settles it. What belongs to another persona is left out.
+ * on, as pipedog settles it; a text turn's, which a reply of hers outside a call followed, always
+ * replaces it, and comes with its call when that call left the window. What belongs to another
+ * persona is left out.
  */
 export function viewOf(
   header: ChatHeader,
@@ -143,11 +145,30 @@ export function viewWithBlocks(
     else if (event.stage === "started") results.set(event.callId, "started");
   }
   const placeholders = new Map<string, ViewToolMessage>();
+  /** Her calls by id, those before the window too. */
+  const calls = new Map<string, ChatEventOf<"tool-call">>();
+  /** Her async calls still running. */
+  const running = new Set<string>();
+  /** Her async calls a reply of hers outside a call followed: a text turn's, which ended there. */
+  const textTurns = new Set<string>();
   const view: ViewMessage[] = [];
   const blocks = new Map<ViewMessage, number>();
   const bySeq = new Map<number, ViewMessage>();
   let others: { role: "user"; content: string } | null = null;
   for (const event of events) {
+    if (event.type === "tool-call" && event.persona === id) {
+      calls.set(event.callId, event);
+    } else if (event.type === "tool-result" && event.persona === id && event.stage !== undefined) {
+      if (event.stage === "started") {
+        textTurns.delete(event.callId);
+        running.add(event.callId);
+      } else {
+        running.delete(event.callId);
+      }
+    } else if (event.type === "message" && isFrom(event, id) && event.modality !== "call") {
+      for (const callId of running) textTurns.add(callId);
+      running.clear();
+    }
     if (event.seq < start) continue;
     switch (event.type) {
       case "message": {
@@ -205,7 +226,12 @@ export function viewWithBlocks(
         } else if (event.persona === id && event.stage === "final") {
           const content = resultContent(event.result);
           const placeholder = placeholders.get(event.callId);
-          if (placeholder !== undefined && !movedOn(view, placeholder)) {
+          if (textTurns.has(event.callId)) {
+            // What a text turn's call brings, such as a page a task quotes, stays a tool's output.
+            const call = calls.get(event.callId);
+            if (placeholder !== undefined) placeholder.content = content;
+            else if (call !== undefined) view.push(...toolCallMessages(call, event.result));
+          } else if (placeholder !== undefined && !movedOn(view, placeholder)) {
             placeholder.content = content;
           } else {
             view.push({ role: "developer", content: finalEnvelope(event.callId, content) });

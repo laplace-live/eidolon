@@ -412,8 +412,8 @@ function ControlInput({
       );
     }
     case "flag": {
-      const inheritedFlag =
-        inherited === "on" || inherited === "off" ? t(FLAG_LABELS[inherited]) : "";
+      const fallback = inherited === "on" || inherited === "off" ? inherited : control.fallback;
+      const fallbackFlag = fallback === undefined ? "" : t(FLAG_LABELS[fallback]);
       return (
         <ToggleGroup
           type="single"
@@ -426,9 +426,7 @@ function ControlInput({
           aria-labelledby={`${id}-label`}
         >
           <ToggleGroupItem value={DEFAULT} className="h-9 px-3">
-            {inherited === "on" || inherited === "off"
-              ? t`Default (${ph({ value: inheritedFlag })})`
-              : t`Default`}
+            {fallback === undefined ? t`Default` : t`Default (${ph({ value: fallbackFlag })})`}
           </ToggleGroupItem>
           <ToggleGroupItem value="on" className="h-9 px-3">
             {t`On`}

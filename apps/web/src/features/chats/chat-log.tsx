@@ -21,6 +21,7 @@ import { AvatarGroup } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { BotText } from "@/features/call/bot-text";
 import { type BotRun, botRuns, userText } from "@/features/call/transcript";
+import { TaskCard } from "@/features/tasks/task-card";
 import { chatFilePath } from "@/lib/chats";
 import { listOf } from "@/lib/labels";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,9 @@ import { type ChatPersona, shortNameOf } from "./persona";
 import { type LiveRow, type LiveState, liveRows, type PendingLine, type VoiceClip } from "./stream";
 import { type AutoPlayEnd, useObjectUrl, VoiceBubble } from "./voice-bubble";
 import { WhyAnswered } from "./why-answered";
+
+/** How long a card brought into view stays ringed. */
+const FLASH_MS = 1600;
 
 const TOOL_ICONS: Readonly<Record<string, ReactNode>> = {
   take_selfie: <CameraIcon />,
@@ -413,6 +417,7 @@ const Item = memo(function Item({
   readonly onAutoPlayEnd: AutoPlayEnd;
 }) {
   if (item.kind === "call") return <CallSeparator item={item} personaOf={personaOf} />;
+  if (item.kind === "task") return <TaskCard chatId={chatId} item={item} />;
   if (item.kind === "user") {
     return item.voice === null ? (
       <UserBubble text={item.text} call={item.call} />
@@ -604,6 +609,8 @@ export function ChatLog({
   call,
   onSend,
   onSendVoice,
+  focusTask,
+  onFocused,
 }: {
   readonly chatId: string;
   /** Who is in the chat now. */
@@ -626,6 +633,9 @@ export function ChatLog({
   readonly inCall: boolean;
   readonly onSend: (text: string) => void;
   readonly onSendVoice: (clip: VoiceClip) => void;
+  /** A task whose card to bring into view, once it is in the log. */
+  readonly focusTask: string | null;
+  readonly onFocused: () => void;
 }) {
   const { t } = useLingui();
   // Each line names its persona once the chat holds more than one, now or in its lines.
@@ -643,6 +653,22 @@ export function ChatLog({
   useEffect(() => {
     if (sentKey !== undefined) pinnedRef.current = true;
   }, [sentKey, pinnedRef]);
+
+  // A card brought into view stays there: the log lets go of the bottom.
+  useEffect(() => {
+    if (focusTask === null) return;
+    if (!shown.some((item) => item.kind === "task" && item.task === focusTask)) return;
+    const card = contentRef.current?.querySelector<HTMLElement>(
+      `[data-task="${CSS.escape(focusTask)}"]`,
+    );
+    if (card === null || card === undefined) return;
+    pinnedRef.current = false;
+    card.scrollIntoView({ block: "center", behavior: "smooth" });
+    card.focus({ preventScroll: true });
+    card.dataset.flash = "";
+    setTimeout(() => card.removeAttribute("data-flash"), FLASH_MS);
+    onFocused();
+  }, [focusTask, shown, onFocused, contentRef, pinnedRef]);
 
   // Stable, so the memoized last item doesn't re-render with every streamed delta.
   const retryLast = useMemo(() => (retry === null ? null : () => onSend(retry)), [retry, onSend]);

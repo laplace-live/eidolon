@@ -37,13 +37,18 @@ function taskDir(): string {
   return join(tasksDir(), newTaskId());
 }
 
+const chat = {
+  id: "0196f3a0-7c1e-7d2a-9b4c-1f2e3d4c5b6a",
+  persona: "milky-green",
+  call: "call_start_1",
+};
+
 function snapshot(id: string): TaskSnapshot {
   return {
     v: 1,
     id,
     createdAt: 1_763_251_200_000,
     status: "running",
-    persona: "milky-green",
     brief,
     model: { account: "openrouter", model: "z-ai/glm-5" },
     grants: [{ path: "/Users/me/Git", access: "read" }],
@@ -173,6 +178,78 @@ describe("task.json", () => {
     expect(readdirSync(dir)).toEqual(["task.json"]);
   });
 
+  test("what it waits on, its pause, plan, inbox and web access read back", async () => {
+    const dir = taskDir();
+    const unpriced =
+      "No price is known for qwen3 at openai-compatible, so its spend can't count toward the pause at every $1.00.";
+    const snapshots: TaskSnapshot[] = [
+      {
+        ...snapshot("t1"),
+        status: "awaiting-approval",
+        pending: { kind: "start" },
+        web: { mode: "ask", hosts: [], denied: [] },
+      },
+      {
+        ...snapshot("t1"),
+        status: "paused",
+        pending: {
+          kind: "path",
+          path: "/Users/me/Documents/a.txt",
+          access: "read",
+          folder: "/Users/me/Documents",
+        },
+        todo: [
+          { text: "Read the notes", status: "in_progress" },
+          { text: "Write index.html", status: "pending" },
+        ],
+        inbox: { steer: ["use Vue instead"], followUp: [] },
+      },
+      {
+        ...snapshot("t1"),
+        status: "paused",
+        pending: { kind: "fetch", host: "react.dev" },
+        web: { mode: "ask", hosts: ["developer.mozilla.org"], denied: ["example.com"] },
+      },
+      {
+        ...snapshot("t1"),
+        status: "paused",
+        pause: { reason: "unpriced", detail: unpriced },
+        outcome: { status: "paused", reason: "unpriced", detail: unpriced },
+        web: { mode: "off", hosts: [], denied: [] },
+      },
+      {
+        ...snapshot("t1"),
+        status: "cancelled",
+        denied: true,
+        endedAt: 1_763_251_260_000,
+        outcome: { status: "cancelled" },
+      },
+    ];
+    for (const value of snapshots) {
+      await writeSnapshot(dir, value);
+      expect(await readSnapshot(dir)).toEqual(value);
+    }
+  });
+
+  test("the chat she started it from, and its report stored there, read back", async () => {
+    const dir = taskDir();
+    const snapshots: TaskSnapshot[] = [
+      { ...snapshot("t1"), chat },
+      {
+        ...snapshot("t1"),
+        status: "succeeded",
+        chat,
+        reported: true,
+        endedAt: 1_763_251_260_000,
+        outcome: { status: "succeeded", report: "index.html is ready" },
+      },
+    ];
+    for (const value of snapshots) {
+      await writeSnapshot(dir, value);
+      expect(await readSnapshot(dir)).toEqual(value);
+    }
+  });
+
   test("a file that isn't a version 1 snapshot is an error", async () => {
     const dir = taskDir();
     const path = join(dir, "task.json");
@@ -183,6 +260,23 @@ describe("task.json", () => {
       { ...snapshot("t1"), grants: [{ path: "/x", access: "write" }] },
       { ...snapshot("t1"), files: { read: [] } },
       { ...snapshot("t1"), brief: { goal: "x" } },
+      { ...snapshot("t1"), pending: { kind: "folder" } },
+      { ...snapshot("t1"), pending: { kind: "path", path: "/x", access: "read-write" } },
+      { ...snapshot("t1"), pending: { kind: "path", path: "/x/y", access: "read", folder: 7 } },
+      { ...snapshot("t1"), pending: { kind: "fetch" } },
+      { ...snapshot("t1"), pause: { reason: "bored", detail: "" } },
+      { ...snapshot("t1"), pause: { reason: "spend" } },
+      { ...snapshot("t1"), todo: [{ text: "x", status: "doing" }] },
+      { ...snapshot("t1"), todo: { items: [] } },
+      { ...snapshot("t1"), inbox: { steer: ["x"] } },
+      { ...snapshot("t1"), inbox: { steer: [1], followUp: [] } },
+      { ...snapshot("t1"), web: { mode: "some", hosts: [], denied: [] } },
+      { ...snapshot("t1"), web: { mode: "ask", hosts: "react.dev", denied: [] } },
+      { ...snapshot("t1"), denied: false },
+      { ...snapshot("t1"), chat: chat.id },
+      { ...snapshot("t1"), chat: { id: chat.id, persona: chat.persona } },
+      { ...snapshot("t1"), chat: { ...chat, persona: 7 } },
+      { ...snapshot("t1"), reported: false },
     ];
     for (const value of wrong) {
       await Bun.write(path, JSON.stringify(value));

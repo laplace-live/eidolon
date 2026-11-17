@@ -318,3 +318,43 @@ export function mayRunOn({ turn, ended, broke, received }: StreamEnd): boolean {
 export function reaches(line: ChatStreamLine, superseded: boolean): boolean {
   return !superseded || (line.type !== "started" && line.type !== "delta" && line.type !== "tool");
 }
+
+/**
+ * How long the page asks GET live for her report on a task it saw end, with no reply on the page:
+ * hers starts only once no reply runs in the chat.
+ */
+export const REPORT_WAIT_MS = 60_000;
+
+/** What the wait for her report reads and does. */
+export interface ReportWatch {
+  /** The page's streams open now. */
+  readonly open: () => number;
+  /** When a stream of the page's that carried a line last ended; 0 for none. */
+  readonly carried: () => number;
+  /** Asks GET live once, following what it carries to its end. */
+  readonly follow: () => Promise<void>;
+  /** Waits before asking again. */
+  readonly pause: () => Promise<unknown>;
+  readonly now: () => number;
+  /** The page still waits for it. */
+  readonly on: () => boolean;
+}
+
+/**
+ * Asks GET live for her report on a task the page saw end at `since`, until REPORT_WAIT_MS pass from
+ * then, or from the end of the last reply the page carried, with none open. A stream already open
+ * carries any reply, and a second would show its words twice.
+ */
+export async function awaitReport(watch: ReportWatch, since: number): Promise<void> {
+  let quiet = since;
+  while (watch.on()) {
+    if (watch.open() > 0) quiet = watch.now();
+    else {
+      quiet = Math.max(quiet, watch.carried());
+      if (watch.now() - quiet >= REPORT_WAIT_MS) return;
+      await watch.follow();
+      if (!watch.on()) return;
+    }
+    await watch.pause();
+  }
+}

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatEvent, ChatEventOf, Speaker } from "@eidolon/chat";
+import type { StartTaskFinal } from "@/lib/api";
 import { chatItems, manyVoices, previewText, retryText, startsRun } from "./items";
 
 const IMAGE = { kind: "image", name: `${"a".repeat(64)}.png`, mime: "image/png" } as const;
@@ -551,6 +552,90 @@ describe("calls", () => {
     });
     // Her own follow-up, which no decision chose, and not the text turn's from before the call.
     expect(items[5]).toMatchObject({ kind: "persona", persona: "mio", call: true, reason: null });
+  });
+});
+
+describe("tasks", () => {
+  const TASK = "0196a3c0-0000-7000-8000-000000000001";
+  const MIO = { kind: "persona", id: "mio" } as const;
+  const startTask = (seq: number, callId: string): ChatEvent => ({
+    type: "tool-call",
+    seq,
+    at: seq,
+    persona: "mio",
+    turn: "t1",
+    callId,
+    name: "start_task",
+    arguments: { goal: "Write a TodoMVC", folder: "/Users/me/todo" },
+  });
+  const result = (
+    seq: number,
+    callId: string,
+    value: Record<string, unknown>,
+    stage?: "started" | "final",
+  ): ChatEvent => ({
+    type: "tool-result",
+    seq,
+    at: seq,
+    persona: "mio",
+    turn: "t1",
+    callId,
+    result: value,
+    ...(stage === undefined ? {} : { stage }),
+  });
+  const final: StartTaskFinal = { status: "succeeded", report: "Done.", files: [], spentUsd: 0.1 };
+  const events: ChatEvent[] = [
+    { type: "message", seq: 1, at: 1, id: "m1", speaker: { kind: "user" }, text: "Write one" },
+    startTask(2, "c1"),
+    result(3, "c1", { task: TASK, status: "running" }, "started"),
+    { type: "message", seq: 4, at: 4, id: "m4", speaker: MIO, text: "On it!" },
+    result(5, "c1", final, "final"),
+    { type: "message", seq: 6, at: 6, id: "m6", speaker: MIO, text: "Done!" },
+  ];
+
+  test("a card sits at her start_task call, naming the task its started result gives", () => {
+    const items = chatItems(events);
+    expect(items.map((item) => [item.kind, item.seq])).toEqual([
+      ["user", 1],
+      ["task", 2],
+      ["persona", 4],
+      ["persona", 6],
+    ]);
+    expect(items[1]).toEqual({
+      kind: "task",
+      seq: 2,
+      persona: "mio",
+      task: TASK,
+      call: {
+        seq: 2,
+        callId: "c1",
+        persona: "mio",
+        goal: "Write a TodoMVC",
+        folder: "/Users/me/todo",
+        task: TASK,
+        final: { seq: 5, result: final },
+      },
+    });
+  });
+
+  test("a call that started no task has no card", () => {
+    const items = chatItems([
+      startTask(1, "c1"),
+      result(2, "c1", { error: "A task is already working in /Users/me/todo: Write one." }),
+      startTask(3, "c2"),
+    ]);
+    expect(items).toEqual([]);
+  });
+
+  test("her line after a card starts a run, and Retry never reaches back past one", () => {
+    const items = chatItems([
+      ...events.slice(0, 3),
+      { type: "turn-failed", seq: 4, at: 4, persona: "mio", turn: "t1", error: "Timed out" },
+    ]);
+    expect(retryText(items)).toBeNull();
+    const told = chatItems(events.slice(0, 4));
+    expect(startsRun(told, 2)).toBe(true);
+    expect(manyVoices(told)).toBe(false);
   });
 });
 

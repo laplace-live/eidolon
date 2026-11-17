@@ -14,6 +14,10 @@ msgctxt "list separator"
 msgid ", "
 msgstr ", "
 
+#: src/components/app-shell.tsx
+msgid ", {count} waiting for you"
+msgstr ", {count} waiting for you"
+
 #: src/features/studio/voice-styles-card.tsx
 msgid "“default” is her own voice: pick another name."
 msgstr "“default” is her own voice: pick another name."
@@ -78,6 +82,10 @@ msgstr "{count, plural, one {# new video ({known} already added)} other {# new v
 #: src/features/usage/route.tsx
 msgid "{count, plural, one {# request has no price, so it isn't counted.} other {# requests have no price, so they aren't counted.}}"
 msgstr "{count, plural, one {# request has no price, so it isn't counted.} other {# requests have no price, so they aren't counted.}}"
+
+#: src/features/settings/assistant.tsx
+msgid "{count, plural, one {# task is running or waiting for you. Turning Assistant Mode off stops it.} other {# tasks are running or waiting for you. Turning Assistant Mode off stops them.}}"
+msgstr "{count, plural, one {# task is running or waiting for you. Turning Assistant Mode off stops it.} other {# tasks are running or waiting for you. Turning Assistant Mode off stops them.}}"
 
 #: src/features/studio/videos-section.tsx
 msgid "{count, plural, one {# video can't be priced yet: its length is known only once it downloads.} other {# videos can't be priced yet: their length is known only once they download.}}"
@@ -150,6 +158,10 @@ msgstr "{count} errors this call"
 #: src/features/jobs/parts.tsx
 msgid "{count} failed"
 msgstr "{count} failed"
+
+#: src/features/tasks/waiting-bar.tsx
+msgid "{count} more waiting"
+msgstr "{count} more waiting"
 
 #: src/features/jobs/parts.tsx
 msgid "{count} skipped"
@@ -457,6 +469,10 @@ msgstr "A cookies.txt for yt-dlp, which writes the merged cookies back into it."
 msgid "A Fish voice ID is 32 characters of 0–9 and a–f."
 msgstr "A Fish voice ID is 32 characters of 0–9 and a–f."
 
+#: src/components/settings-form/labels.ts
+msgid "A folder can't be the whole disk or your home folder."
+msgstr "A folder can't be the whole disk or your home folder."
+
 #: src/lib/labels.ts
 msgid "A job option isn't valid."
 msgstr "A job option isn't valid."
@@ -526,6 +542,10 @@ msgstr "A voice she switches to when you ask for it. Name it, say how you'd ask,
 #: src/features/studio/add-videos.tsx
 msgid "About {duration} in all."
 msgstr "About {duration} in all."
+
+#: src/features/tasks/parts.tsx
+msgid "Account"
+msgstr "Account"
 
 #: src/components/persona-badges.tsx
 msgid "Active"
@@ -657,6 +677,14 @@ msgstr "All Personas"
 msgid "All Time"
 msgstr "All Time"
 
+#: src/features/tasks/cards.tsx
+msgid "Allow Any Site"
+msgstr "Allow Any Site"
+
+#: src/features/tasks/cards.tsx
+msgid "Allow Any Site lets this task fetch from any site without asking again."
+msgstr "Allow Any Site lets this task fetch from any site without asking again."
+
 #: src/features/call/call-notices.tsx
 msgid "Allow microphone access for this page in your browser's site settings, then call again."
 msgstr "Allow microphone access for this page in your browser's site settings, then call again."
@@ -665,6 +693,26 @@ msgstr "Allow microphone access for this page in your browser's site settings, t
 msgid "Allow microphone access for this page in your browser's site settings, then try again."
 msgstr "Allow microphone access for this page in your browser's site settings, then try again."
 
+#: src/features/tasks/cards.tsx
+msgid "Allow Once"
+msgstr "Allow Once"
+
+#: src/features/tasks/labels.ts
+msgid "Allow Once lets this task read {path} alone until it ends; Deny tells it it can't."
+msgstr "Allow Once lets this task read {path} alone until it ends; Deny tells it it can't."
+
+#: src/features/tasks/labels.ts
+msgid "Allow Once lets this task read and write {path} alone until it ends; Deny tells it it can't."
+msgstr "Allow Once lets this task read and write {path} alone until it ends; Deny tells it it can't."
+
+#: src/features/tasks/labels.ts
+msgid "Allow Once lets this task read and write everything in {folder} until it ends; Deny tells it it can't."
+msgstr "Allow Once lets this task read and write everything in {folder} until it ends; Deny tells it it can't."
+
+#: src/features/tasks/labels.ts
+msgid "Allow Once lets this task read everything in {folder} until it ends; Deny tells it it can't."
+msgstr "Allow Once lets this task read everything in {folder} until it ends; Deny tells it it can't."
+
 #: src/components/settings-form/labels.ts
 msgid "Allowed Browser Origins"
 msgstr "Allowed Browser Origins"
@@ -672,6 +720,18 @@ msgstr "Allowed Browser Origins"
 #: src/features/studio/add-videos.tsx
 msgid "Already added"
 msgstr "Already added"
+
+#: src/features/tasks/cards.tsx
+msgid "Always Allow This Folder"
+msgstr "Always Allow This Folder"
+
+#: src/features/tasks/labels.ts
+msgid "Always Allow This Folder adds {folder} to Assistant Mode's folders: from then on every task may read and write in it, and tasks start there without asking."
+msgstr "Always Allow This Folder adds {folder} to Assistant Mode's folders: from then on every task may read and write in it, and tasks start there without asking."
+
+#: src/features/tasks/cards.tsx
+msgid "Always Allow This Folder adds it to Assistant Mode's folders, where tasks start without asking."
+msgstr "Always Allow This Folder adds it to Assistant Mode's folders, where tasks start without asking."
 
 #: src/lib/labels.ts
 msgid "An account a persona uses can't be removed: pick another for her first."
@@ -722,6 +782,10 @@ msgstr "Another run is already working on this persona."
 msgid "Any Language"
 msgstr "Any Language"
 
+#: src/features/tasks/labels.ts
+msgid "Any Site"
+msgstr "Any Site"
+
 #: src/features/settings/account-dialog.tsx
 msgid "API Base"
 msgstr "API Base"
@@ -750,6 +814,18 @@ msgstr "API Keys"
 msgid "As each provider reported it."
 msgstr "As each provider reported it."
 
+#: src/features/tasks/labels.ts
+msgid "Ask for Each Site"
+msgstr "Ask for Each Site"
+
+#: src/features/settings/route.tsx
+msgid "Ask her in a chat to do real work on this computer, such as writing and editing files or looking things up, and she starts a task for it. Tasks run on the account and model chosen here, never on her chat model, and one that needs a folder outside the folders below asks you in the chat first."
+msgstr "Ask her in a chat to do real work on this computer, such as writing and editing files or looking things up, and she starts a task for it. Tasks run on the account and model chosen here, never on her chat model, and one that needs a folder outside the folders below asks you in the chat first."
+
+#: src/features/tasks/list.tsx
+msgid "Ask her in a chat to do something on this computer, and the task shows here while she works on it."
+msgstr "Ask her in a chat to do something on this computer, and the task shows here while she works on it."
+
 #: src/components/settings-form/model-picker.tsx
 msgid "Asking the provider for its models…"
 msgstr "Asking the provider for its models…"
@@ -763,8 +839,25 @@ msgid "Assistant Folders"
 msgstr "Assistant Folders"
 
 #: src/components/settings-form/labels.ts
+#: src/features/settings/route.tsx
 msgid "Assistant Mode"
 msgstr "Assistant Mode"
+
+#: src/features/tasks/cards.tsx
+msgid "Assistant Mode is off, so this task can't go on. You can still stop it."
+msgstr "Assistant Mode is off, so this task can't go on. You can still stop it."
+
+#: src/lib/labels.ts
+msgid "Assistant Mode is off. Turn it on in Settings."
+msgstr "Assistant Mode is off. Turn it on in Settings."
+
+#: src/features/tasks/cards.tsx
+msgid "Assistant Mode isn't ready, so this can't go on yet."
+msgstr "Assistant Mode isn't ready, so this can't go on yet."
+
+#: src/lib/labels.ts
+msgid "Assistant Mode needs a model, and a key for its account. Set them in Settings."
+msgstr "Assistant Mode needs a model, and a key for its account. Set them in Settings."
 
 #: src/components/settings-form/labels.ts
 msgid "Assistant Model"
@@ -803,6 +896,10 @@ msgstr "Avatar removed."
 #: src/features/studio/identity-section.tsx
 msgid "Avatar saved."
 msgstr "Avatar saved."
+
+#: src/features/tasks/labels.ts
+msgid "Awaiting Approval"
+msgstr "Awaiting Approval"
 
 #: src/features/setup/step-card.tsx
 msgid "Back"
@@ -1031,6 +1128,10 @@ msgstr "Chart"
 msgid "Chat"
 msgstr "Chat"
 
+#: src/features/tasks/list.tsx
+msgid "Chat deleted"
+msgstr "Chat deleted"
+
 #: src/components/settings-form/labels.ts
 #: src/features/home/readiness-labels.ts
 msgid "Chat Model"
@@ -1113,6 +1214,14 @@ msgstr "Chinese"
 msgid "Choose"
 msgstr "Choose"
 
+#: src/features/settings/assistant.tsx
+msgid "Choose the account and model tasks run on here, and add a key for that account in Providers."
+msgstr "Choose the account and model tasks run on here, and add a key for that account in Providers."
+
+#: src/features/tasks/list.tsx
+msgid "Choose the account and model tasks run on in Settings, and add a key for that account."
+msgstr "Choose the account and model tasks run on in Settings, and add a key for that account."
+
 #: src/features/studio/voice-section.tsx
 msgid "Choosing a voice saves it for {name}."
 msgstr "Choosing a voice saves it for {name}."
@@ -1155,6 +1264,7 @@ msgstr "Connect a microphone, then try again."
 #: src/features/setup/memory-step.tsx
 #: src/features/setup/persona-step.tsx
 #: src/features/setup/voice-step.tsx
+#: src/features/tasks/cards.tsx
 msgid "Continue"
 msgstr "Continue"
 
@@ -1217,6 +1327,10 @@ msgstr "Couldn't list the models ({reason}): type the model id."
 msgid "Couldn't load the jobs"
 msgstr "Couldn't load the jobs"
 
+#: src/features/tasks/list.tsx
+msgid "Couldn't load the tasks"
+msgstr "Couldn't load the tasks"
+
 #: src/features/studio/parts.tsx
 msgid "Couldn't load this"
 msgstr "Couldn't load this"
@@ -1252,6 +1366,10 @@ msgstr "Customize"
 #: src/features/chats/chat-log.tsx
 msgid "Cut off"
 msgstr "Cut off"
+
+#: src/features/tasks/transcript-view.tsx
+msgid "Cut off at the model's output limit."
+msgstr "Cut off at the model's output limit."
 
 #: src/components/preferences.tsx
 msgid "Dark"
@@ -1311,6 +1429,10 @@ msgstr "Delete {name}?"
 msgid "demo"
 msgstr "demo"
 
+#: src/features/tasks/cards.tsx
+msgid "Deny"
+msgstr "Deny"
+
 #: src/features/jobs/parts.tsx
 #: src/features/studio/add-videos.tsx
 msgid "Details"
@@ -1338,11 +1460,22 @@ msgstr "done"
 
 #: src/features/jobs/labels.ts
 #: src/features/setup/stepper.tsx
+#: src/features/tasks/labels.ts
 msgid "Done"
 msgstr "Done"
 
 #: src/features/jobs/labels.ts
 msgctxt "job status"
+msgid "Done"
+msgstr "Done"
+
+#: src/features/tasks/labels.ts
+msgctxt "task status"
+msgid "Done"
+msgstr "Done"
+
+#: src/features/tasks/labels.ts
+msgctxt "tool call"
 msgid "Done"
 msgstr "Done"
 
@@ -1397,6 +1530,10 @@ msgstr "Each model, and the task it did for her."
 msgid "Each score runs from 0 to 1. Addressed: the line was for her. Interested: it touches what she cares about."
 msgstr "Each score runs from 0 to 1. Addressed: the line was for her. Interested: it touches what she cares about."
 
+#: src/features/tasks/transcript-view.tsx
+msgid "Earlier steps summarized, from {tokens} tokens"
+msgstr "Earlier steps summarized, from {tokens} tokens"
+
 #: src/features/studio/knowledge-section.tsx
 msgid "Edit"
 msgstr "Edit"
@@ -1424,9 +1561,17 @@ msgstr "Eidolon answers only at localhost or 127.0.0.1. Open it at one of those.
 msgid "Eidolon calls paid services with your own keys: by default Soniox hears you, OpenRouter thinks and Fish Audio speaks. Each needs credit on its account."
 msgstr "Eidolon calls paid services with your own keys: by default Soniox hears you, OpenRouter thinks and Fish Audio speaks. Each needs credit on its account."
 
+#: src/features/tasks/cards.tsx
+msgid "Eidolon can't price what this task's model spends, so its spend pause can't work. Continuing turns its spend pause off."
+msgstr "Eidolon can't price what this task's model spends, so its spend pause can't work. Continuing turns its spend pause off."
+
 #: src/features/usage/route.tsx
 msgid "Eidolon can't write its usage ledger at <0>{path}</0>. Set <1>EIDOLON_USAGE_DB</1> to a file it can write, then restart."
 msgstr "Eidolon can't write its usage ledger at <0>{path}</0>. Set <1>EIDOLON_USAGE_DB</1> to a file it can write, then restart."
+
+#: src/features/settings/assistant.tsx
+msgid "Eidolon couldn't count its tasks. Turning Assistant Mode off stops any that are running or waiting for you."
+msgstr "Eidolon couldn't count its tasks. Turning Assistant Mode off stops any that are running or waiting for you."
 
 #: src/features/settings/restart-button.tsx
 msgid "Eidolon couldn't list its jobs. A restart interrupts any that still run; you can resume each from its page once Eidolon is back."
@@ -1471,6 +1616,10 @@ msgstr "Eidolon sent a reply this page couldn't read."
 #: src/features/jobs/detail.tsx
 msgid "Eidolon stopped while this job ran"
 msgstr "Eidolon stopped while this job ran"
+
+#: src/features/tasks/cards.tsx
+msgid "Eidolon stopped while this task ran. Continue picks it up where it stopped."
+msgstr "Eidolon stopped while this task ran. Continue picks it up where it stopped."
 
 #: src/features/setup/persona-fields.tsx
 msgid "Eidolon uses that word itself. Pick another id."
@@ -1530,6 +1679,10 @@ msgstr "Enter a number, such as 0.5."
 #: src/components/settings-form/labels.ts
 msgid "Enter a whole number."
 msgstr "Enter a whole number."
+
+#: src/features/tasks/cards.tsx
+msgid "Enter an amount of 0 or more."
+msgstr "Enter an amount of 0 or more."
 
 #: src/components/settings-form/field.tsx
 msgid "environment"
@@ -1624,8 +1777,13 @@ msgid "failed"
 msgstr "failed"
 
 #: src/features/jobs/labels.ts
+#: src/features/tasks/labels.ts
 msgid "Failed"
 msgstr "Failed"
+
+#: src/features/tasks/transcript-view.tsx
+msgid "Failed at {time}"
+msgstr "Failed at {time}"
 
 #: src/features/studio/identity-section.tsx
 msgid "Fans"
@@ -1646,6 +1804,14 @@ msgstr "ffmpeg isn't installed. Only videos over 5 hours need it."
 #: src/features/studio/facts-editor.tsx
 msgid "File Name"
 msgstr "File Name"
+
+#: src/features/tasks/task-card.tsx
+msgid "Files Written"
+msgstr "Files Written"
+
+#: src/features/tasks/transcript-view.tsx
+msgid "Finished at {time}"
+msgstr "Finished at {time}"
 
 #: src/features/call/call-notices.tsx
 msgid "Fish Audio can't use {name}'s voice, so calls may have no sound."
@@ -1683,6 +1849,11 @@ msgstr "Fish has this voice"
 #: src/features/studio/identity-section.tsx
 msgid "Fix the highlighted values first."
 msgstr "Fix the highlighted values first."
+
+#: src/features/tasks/list.tsx
+#: src/features/tasks/task-card.tsx
+msgid "Folder"
+msgstr "Folder"
 
 #: src/components/settings-form/labels.ts
 msgid "Folders every task may read and write besides its own, one per line."
@@ -1858,6 +2029,10 @@ msgstr "Her voice ({id}) hasn't been checked with Fish Audio yet."
 msgid "Hide"
 msgstr "Hide"
 
+#: src/features/tasks/task-card.tsx
+msgid "Hide Steps"
+msgstr "Hide Steps"
+
 #: src/features/chats/voice-bubble.tsx
 msgid "Hide Transcript"
 msgstr "Hide Transcript"
@@ -1943,6 +2118,10 @@ msgstr "In a call · {duration}"
 msgid "In her own language; prompts use it as written."
 msgstr "In her own language; prompts use it as written."
 
+#: src/features/tasks/labels.ts
+msgid "In Progress"
+msgstr "In Progress"
+
 #: src/features/home/readiness-labels.ts
 msgid "In progress: {count}."
 msgstr "In progress: {count}."
@@ -1966,6 +2145,10 @@ msgstr "in the last 90 days"
 #: src/features/chats/participants.tsx
 msgid "In This Chat"
 msgstr "In This Chat"
+
+#: src/features/tasks/cards.tsx
+msgid "In US dollars. 0 turns this task's spend pauses off."
+msgstr "In US dollars. 0 turns this task's spend pauses off."
 
 #: src/features/studio/knowledge-section.tsx
 msgid "Index"
@@ -2048,6 +2231,7 @@ msgstr "Interests"
 
 #: src/features/chats/chat-log.tsx
 #: src/features/jobs/labels.ts
+#: src/features/tasks/labels.ts
 msgid "Interrupted"
 msgstr "Interrupted"
 
@@ -2059,17 +2243,57 @@ msgstr "Invites a reply: {score}"
 msgid "It answers only on this machine, keeps its data in a Docker volume and restarts with Docker."
 msgstr "It answers only on this machine, keeps its data in a Docker volume and restarts with Docker."
 
+#: src/features/tasks/cards.tsx
+msgid "It asked for this path, which none of its folders hold."
+msgstr "It asked for this path, which none of its folders hold."
+
+#: src/features/tasks/cards.tsx
+msgid "It asks before it fetches from a site for the first time. Allow Once lets this task use this site until it ends; Deny tells it it can't."
+msgstr "It asks before it fetches from a site for the first time. Allow Once lets this task use this site until it ends; Deny tells it it can't."
+
+#: src/features/tasks/labels.ts
+msgid "It asks you before it fetches from a site for the first time."
+msgstr "It asks you before it fetches from a site for the first time."
+
+#: src/features/tasks/labels.ts
+msgid "It can't fetch anything from the web."
+msgstr "It can't fetch anything from the web."
+
 #: src/features/jobs/detail.tsx
 msgid "It ended before reporting a result. The end of its technical log usually says why."
 msgstr "It ended before reporting a result. The end of its technical log usually says why."
+
+#: src/features/tasks/cards.tsx
+msgid "It has spent {spent}, and pauses each time its spend crosses another {each}."
+msgstr "It has spent {spent}, and pauses each time its spend crosses another {each}."
 
 #: src/features/jobs/detail.tsx
 msgid "It keeps running when you close this page."
 msgstr "It keeps running when you close this page."
 
+#: src/features/tasks/labels.ts
+msgid "It may fetch from any public site without asking."
+msgstr "It may fetch from any public site without asking."
+
 #: src/features/chats/chat-view.tsx
 msgid "It may have been deleted. Pick another, or start a new one."
 msgstr "It may have been deleted. Pick another, or start a new one."
+
+#: src/features/tasks/cards.tsx
+msgid "It paused, and waits for you to let it go on."
+msgstr "It paused, and waits for you to let it go on."
+
+#: src/features/tasks/cards.tsx
+msgid "It pauses each time its spend crosses another {step}."
+msgstr "It pauses each time its spend crosses another {step}."
+
+#: src/features/tasks/labels.ts
+msgid "It reached its spend pause."
+msgstr "It reached its spend pause."
+
+#: src/features/tasks/labels.ts
+msgid "It repeated the same steps three turns running."
+msgstr "It repeated the same steps three turns running."
 
 #: src/features/studio/voice-styles-card.tsx
 msgid "It replaces the environment's style by this name, which <0>{replacing}</0> sets."
@@ -2079,13 +2303,29 @@ msgstr "It replaces the environment's style by this name, which <0>{replacing}</
 msgid "It still hasn't stopped since you cancelled it. Force Stop ends it at once, without letting it finish what it is writing: an index it was building can be left half built, so run that job again afterwards."
 msgstr "It still hasn't stopped since you cancelled it. Force Stop ends it at once, without letting it finish what it is writing: an index it was building can be left half built, so run that job again afterwards."
 
+#: src/features/tasks/task-card.tsx
+msgid "It stops at once and can't go on afterwards. The files it already wrote stay."
+msgstr "It stops at once and can't go on afterwards. The files it already wrote stay."
+
 #: src/features/jobs/detail.tsx
 msgid "It stops once it has finished what it is writing."
 msgstr "It stops once it has finished what it is writing."
 
+#: src/features/tasks/labels.ts
+msgid "It waited for your answer."
+msgstr "It waited for your answer."
+
+#: src/features/tasks/cards.tsx
+msgid "It works in this folder on its own once you allow it. Eidolon makes the folder if it doesn't exist yet."
+msgstr "It works in this folder on its own once you allow it. Eidolon makes the folder if it doesn't exist yet."
+
 #: src/features/studio/identity-section.tsx
 msgid "It's {time} for her now."
 msgstr "It's {time} for her now."
+
+#: src/features/tasks/transcript-view.tsx
+msgid "Its arguments couldn't be read, so it never ran."
+msgstr "Its arguments couldn't be read, so it never ran."
 
 #: src/features/settings/accounts-card.tsx
 msgid "Its key and settings are deleted from credentials.json. A key the environment sets stays."
@@ -2102,6 +2342,14 @@ msgstr "Its length is unknown until it downloads."
 #: src/features/chats/chat-menu.tsx
 msgid "Its messages and photos are deleted from this computer. What she remembers about you stays."
 msgstr "Its messages and photos are deleted from this computer. What she remembers about you stays."
+
+#: src/features/tasks/labels.ts
+msgid "Its spend couldn't be counted."
+msgstr "Its spend couldn't be counted."
+
+#: src/features/tasks/cards.tsx
+msgid "Its spend pauses are off."
+msgstr "Its spend pauses are off."
 
 #: src/features/studio/voice-styles-card.tsx
 msgid "Its Voice"
@@ -2126,8 +2374,13 @@ msgstr "Keep Hers"
 
 #: src/features/studio/facts-editor.tsx
 #: src/features/studio/identity-section.tsx
+#: src/features/tasks/task-card.tsx
 msgid "Keep It"
 msgstr "Keep It"
+
+#: src/features/settings/assistant.tsx
+msgid "Keep It On"
+msgstr "Keep It On"
 
 #: src/features/jobs/parts.tsx
 msgid "Keep Running"
@@ -2190,6 +2443,10 @@ msgstr "LAPLACE Workers URL"
 msgid "Last Call"
 msgstr "Last Call"
 
+#: src/features/tasks/task-card.tsx
+msgid "Latest Step"
+msgstr "Latest Step"
+
 #: src/features/settings/account-dialog.tsx
 msgid "Leave it empty for the provider's own API, or point it at a proxy or another region."
 msgstr "Leave it empty for the provider's own API, or point it at a proxy or another region."
@@ -2210,6 +2467,18 @@ msgstr "Length"
 #: src/features/chats/voice-recorder.tsx
 msgid "Let go to send, or slide off the button to cancel."
 msgstr "Let go to send, or slide off the button to cancel."
+
+#: src/features/tasks/cards.tsx
+msgid "Let it fetch from {host}?"
+msgstr "Let it fetch from {host}?"
+
+#: src/features/tasks/cards.tsx
+msgid "Let it read outside its folders?"
+msgstr "Let it read outside its folders?"
+
+#: src/features/tasks/cards.tsx
+msgid "Let it write outside its folders?"
+msgstr "Let it write outside its folders?"
 
 #: src/components/preferences.tsx
 msgid "Light"
@@ -2241,6 +2510,8 @@ msgstr "Listening…"
 #: src/features/jobs/detail.tsx
 #: src/features/jobs/list.tsx
 #: src/features/studio/route.tsx
+#: src/features/tasks/list.tsx
+#: src/features/tasks/transcript-view.tsx
 msgid "Loading…"
 msgstr "Loading…"
 
@@ -2394,6 +2665,9 @@ msgstr "Mind"
 msgid "Missing: {names}. Calls can't start without them."
 msgstr "Missing: {names}. Calls can't start without them."
 
+#: src/features/tasks/list.tsx
+#: src/features/tasks/parts.tsx
+#: src/features/tasks/task-card.tsx
 #: src/features/usage/tables.tsx
 msgid "Model"
 msgstr "Model"
@@ -2537,6 +2811,10 @@ msgstr "No outfit references, so she can't take selfies."
 msgid "No outfits yet"
 msgstr "No outfits yet"
 
+#: src/features/tasks/transcript-view.tsx
+msgid "No output."
+msgstr "No output."
+
 #: src/features/studio/references-section.tsx
 msgid "No preview: only PNG, JPEG and WebP are shown here. Selfies still use it."
 msgstr "No preview: only PNG, JPEG and WebP are shown here. Selfies still use it."
@@ -2548,6 +2826,10 @@ msgstr "No provider by that name."
 #: src/components/settings-form/check-labels.ts
 msgid "No Qdrant address is set."
 msgstr "No Qdrant address is set."
+
+#: src/features/tasks/labels.ts
+msgid "No result"
+msgstr "No result"
 
 #: src/components/voice-picker/index.tsx
 msgid "No sample"
@@ -2561,6 +2843,10 @@ msgstr "No speech"
 msgid "No speech was heard in this audio."
 msgstr "No speech was heard in this audio."
 
+#: src/features/tasks/parts.tsx
+msgid "no spend pause"
+msgstr "no spend pause"
+
 #: src/features/usage/route.tsx
 msgid "No spending was recorded {during}. Calls, video jobs and MCP searches record theirs here as they run."
 msgstr "No spending was recorded {during}. Calls, video jobs and MCP searches record theirs here as they run."
@@ -2568,6 +2854,10 @@ msgstr "No spending was recorded {during}. Calls, video jobs and MCP searches re
 #: src/features/studio/knowledge-section.tsx
 msgid "No stream catalog yet."
 msgstr "No stream catalog yet."
+
+#: src/features/tasks/list.tsx
+msgid "No tasks yet"
+msgstr "No tasks yet"
 
 #: src/features/studio/voice-styles-card.tsx
 msgid "No trigger words: the model goes by the name."
@@ -2592,6 +2882,10 @@ msgstr "No voice yet"
 #: src/components/voice-picker/index.tsx
 msgid "No voices match."
 msgstr "No voices match."
+
+#: src/features/tasks/labels.ts
+msgid "No Web"
+msgstr "No Web"
 
 #: src/features/chats/chat-log.tsx
 msgid "No words could be heard in it."
@@ -2675,10 +2969,18 @@ msgstr "Nothing to set here."
 msgid "Nothing was spent in this range."
 msgstr "Nothing was spent in this range."
 
+#: src/features/tasks/transcript-view.tsx
+msgid "Nothing yet."
+msgstr "Nothing yet."
+
 #: src/components/settings-form/field.tsx
 #: src/components/settings-form/labels.ts
 msgid "Off"
 msgstr "Off"
+
+#: src/components/settings-form/labels.ts
+msgid "Off, she can't start tasks, the running ones stop, and the Tasks list is hidden."
+msgstr "Off, she can't start tasks, the running ones stop, and the Tasks list is hidden."
 
 #: src/components/settings-form/labels.ts
 msgid "Off: No Tasks"
@@ -2753,6 +3055,15 @@ msgstr "Open Her Models"
 #: src/features/home/route.tsx
 msgid "Open one's studio to build her up, or make another the one your calls reach."
 msgstr "Open one's studio to build her up, or make another the one your calls reach."
+
+#: src/features/tasks/cards.tsx
+#: src/features/tasks/list.tsx
+msgid "Open Settings"
+msgstr "Open Settings"
+
+#: src/features/settings/assistant.tsx
+msgid "Open Tasks"
+msgstr "Open Tasks"
 
 #: src/components/persona-switcher.tsx
 #: src/features/home/hero.tsx
@@ -2870,6 +3181,18 @@ msgstr "Paste video links, or the link of a playlist, series or channel. Each li
 msgid "Pause Voice Message"
 msgstr "Pause Voice Message"
 
+#: src/features/tasks/labels.ts
+msgid "Paused"
+msgstr "Paused"
+
+#: src/features/tasks/transcript-view.tsx
+msgid "Paused at {time}: {reason}"
+msgstr "Paused at {time}: {reason}"
+
+#: src/features/tasks/parts.tsx
+msgid "pauses at {amount}"
+msgstr "pauses at {amount}"
+
 #: src/features/studio/references-section.tsx
 msgid "People she can take a selfie with: one picture each, named after them."
 msgstr "People she can take a selfie with: one picture each, named after them."
@@ -2895,6 +3218,10 @@ msgstr "Personas speak Mandarin, and the videos you build one from should be Man
 #: src/features/chats/route.tsx
 msgid "Pick a chat, or start a new one"
 msgstr "Pick a chat, or start a new one"
+
+#: src/features/tasks/parts.tsx
+msgid "Pick a model for this account."
+msgstr "Pick a model for this account."
 
 #: src/features/setup/avatar-picker.tsx
 msgid "Pick a PNG, JPEG or WebP image."
@@ -2957,6 +3284,11 @@ msgid "Pipeline"
 msgstr "Pipeline"
 
 #: src/features/jobs/labels.ts
+msgid "Plan"
+msgstr "Plan"
+
+#: src/features/tasks/task-card.tsx
+msgctxt "task plan"
 msgid "Plan"
 msgstr "Plan"
 
@@ -3305,6 +3637,10 @@ msgstr "Resume"
 msgid "Resume runs it again, and every stage skips the work it already finished."
 msgstr "Resume runs it again, and every stage skips the work it already finished."
 
+#: src/features/tasks/transcript-view.tsx
+msgid "Resumed at {time}"
+msgstr "Resumed at {time}"
+
 #: src/features/jobs/detail.tsx
 msgid "Resumed by a later job"
 msgstr "Resumed by a later job"
@@ -3347,11 +3683,17 @@ msgid "Run, about {usd}"
 msgstr "Run, about {usd}"
 
 #: src/features/jobs/labels.ts
+#: src/features/tasks/labels.ts
 msgid "Running"
 msgstr "Running"
 
 #: src/features/jobs/labels.ts
 msgctxt "job stage"
+msgid "Running"
+msgstr "Running"
+
+#: src/features/tasks/labels.ts
+msgctxt "tool call"
 msgid "Running"
 msgstr "Running"
 
@@ -3678,6 +4020,14 @@ msgstr "Show More"
 msgid "Show Plans and Link Checks ({count})"
 msgstr "Show Plans and Link Checks ({count})"
 
+#: src/features/tasks/task-card.tsx
+msgid "Show Steps"
+msgstr "Show Steps"
+
+#: src/features/tasks/waiting-bar.tsx
+msgid "Show Task"
+msgstr "Show Task"
+
 #: src/features/chats/voice-bubble.tsx
 msgid "Show Transcript"
 msgstr "Show Transcript"
@@ -3780,6 +4130,10 @@ msgstr "Spend"
 msgid "Spend and usage per provider, the costliest first."
 msgstr "Spend and usage per provider, the costliest first."
 
+#: src/features/tasks/cards.tsx
+msgid "Spend Pause"
+msgstr "Spend Pause"
+
 #: src/features/usage/route.tsx
 msgid "Spend per day"
 msgstr "Spend per day"
@@ -3787,6 +4141,11 @@ msgstr "Spend per day"
 #: src/features/usage/route.tsx
 msgid "Spend per month"
 msgstr "Spend per month"
+
+#: src/features/tasks/list.tsx
+#: src/features/tasks/task-card.tsx
+msgid "Spent"
+msgstr "Spent"
 
 #: src/features/usage/route.tsx
 msgid "Spent by {name} {during}"
@@ -3824,6 +4183,10 @@ msgstr "Start one with any persona, or with several at once. Each chat keeps its
 msgid "Start the billed run?"
 msgstr "Start the billed run?"
 
+#: src/features/tasks/cards.tsx
+msgid "Start this task?"
+msgstr "Start this task?"
+
 #: src/features/studio/voice-styles-card.tsx
 msgid "Start with a lowercase letter, then use lowercase letters, digits or _."
 msgstr "Start with a lowercase letter, then use lowercase letters, digits or _."
@@ -3838,8 +4201,13 @@ msgstr "started"
 
 #: src/features/jobs/detail.tsx
 #: src/features/jobs/list.tsx
+#: src/features/tasks/list.tsx
 msgid "Started"
 msgstr "Started"
+
+#: src/features/tasks/transcript-view.tsx
+msgid "Started at {time}"
+msgstr "Started at {time}"
 
 #: src/features/jobs/detail.tsx
 msgid "Starting…"
@@ -3853,6 +4221,10 @@ msgstr "Starts with a Chinese prompt skeleton in her name. Add facts, videos and
 msgid "State"
 msgstr "State"
 
+#: src/features/tasks/transcript-view.tsx
+msgid "Steps"
+msgstr "Steps"
+
 #: src/features/call/transcript-view.tsx
 #: src/features/chats/chat-log.tsx
 msgid "Still waiting for {name}. If nothing comes, say it again."
@@ -3860,8 +4232,30 @@ msgstr "Still waiting for {name}. If nothing comes, say it again."
 
 #: src/features/chats/composer.tsx
 #: src/features/studio/add-videos.tsx
+#: src/features/tasks/task-card.tsx
 msgid "Stop"
 msgstr "Stop"
+
+#: src/features/tasks/task-card.tsx
+msgid "Stop Task"
+msgstr "Stop Task"
+
+#: src/features/tasks/task-card.tsx
+msgid "Stop this task?"
+msgstr "Stop this task?"
+
+#: src/features/tasks/labels.ts
+msgctxt "task status"
+msgid "Stopped"
+msgstr "Stopped"
+
+#: src/features/tasks/transcript-view.tsx
+msgid "Stopped at {time}"
+msgstr "Stopped at {time}"
+
+#: src/features/tasks/transcript-view.tsx
+msgid "Stopped by the model's provider."
+msgstr "Stopped by the model's provider."
 
 #: src/features/jobs/labels.ts
 msgid "Stopped unexpectedly"
@@ -3966,6 +4360,20 @@ msgstr "Talking to"
 msgid "Task"
 msgstr "Task"
 
+#: src/features/tasks/task-card.tsx
+msgid "Task:"
+msgstr "Task:"
+
+#: src/components/app-shell.tsx
+#: src/features/tasks/list.tsx
+msgid "Tasks"
+msgstr "Tasks"
+
+#: src/features/settings/assistant.tsx
+#: src/features/tasks/list.tsx
+msgid "Tasks can't start yet"
+msgstr "Tasks can't start yet"
+
 #: src/features/jobs/detail.tsx
 msgid "Technical Log"
 msgstr "Technical Log"
@@ -4032,12 +4440,28 @@ msgid "That link has expired. Run the same command again for a fresh one."
 msgstr "That link has expired. Run the same command again for a fresh one."
 
 #: src/lib/labels.ts
+msgid "That part of the file doesn't exist."
+msgstr "That part of the file doesn't exist."
+
+#: src/lib/labels.ts
 msgid "That service isn't available right now."
 msgstr "That service isn't available right now."
 
 #: src/lib/labels.ts
 msgid "That setting doesn't exist."
 msgstr "That setting doesn't exist."
+
+#: src/lib/labels.ts
+msgid "That task is waiting for an approval. Answer it first."
+msgstr "That task is waiting for an approval. Answer it first."
+
+#: src/lib/labels.ts
+msgid "That task isn't paused."
+msgstr "That task isn't paused."
+
+#: src/lib/labels.ts
+msgid "That task isn't waiting for an answer."
+msgstr "That task isn't waiting for an answer."
 
 #: src/lib/labels.ts
 msgid "That value isn't valid for this setting."
@@ -4289,6 +4713,10 @@ msgstr "The request wasn't valid JSON."
 msgid "The request wasn't valid."
 msgstr "The request wasn't valid."
 
+#: src/features/tasks/cards.tsx
+msgid "The same steps came three turns running, so it paused. Continue lets it try again."
+msgstr "The same steps came three turns running, so it paused. Continue lets it try again."
+
 #: src/features/jobs/labels.ts
 msgid "The site refused yt-dlp, usually because it is out of date."
 msgstr "The site refused yt-dlp, usually because it is out of date."
@@ -4352,6 +4780,10 @@ msgstr "There is no such job"
 #: src/lib/labels.ts
 msgid "There is no such job."
 msgstr "There is no such job."
+
+#: src/lib/labels.ts
+msgid "There is no such task."
+msgstr "There is no such task."
 
 #: src/features/studio/add-videos.tsx
 msgid "There may not be enough free space for this audio. Free some space first, or add fewer videos."
@@ -4482,6 +4914,10 @@ msgstr "This Qdrant's version is more than one minor release away from the one E
 msgid "This setting can't be changed here."
 msgstr "This setting can't be changed here."
 
+#: src/lib/labels.ts
+msgid "This task is running elsewhere, such as in a terminal. Try again once it stops."
+msgstr "This task is running elsewhere, such as in a terminal. Try again once it stops."
+
 #: src/features/jobs/labels.ts
 msgid "This video has no upload date, so it can't be placed among the streams."
 msgstr "This video has no upload date, so it can't be placed among the streams."
@@ -4499,6 +4935,10 @@ msgstr "Time Zone"
 #: src/features/chats/chat-menu.tsx
 msgid "Title"
 msgstr "Title"
+
+#: src/features/tasks/labels.ts
+msgid "To Do"
+msgstr "To Do"
 
 #: src/features/studio/video-table.tsx
 msgid "To index"
@@ -4583,6 +5023,14 @@ msgstr "Try Again"
 msgid "TURN Credential Lifetime"
 msgstr "TURN Credential Lifetime"
 
+#: src/features/settings/assistant.tsx
+msgid "Turn Off"
+msgstr "Turn Off"
+
+#: src/features/settings/assistant.tsx
+msgid "Turn off Assistant Mode?"
+msgstr "Turn off Assistant Mode?"
+
 #: src/features/home/readiness-labels.ts
 msgid "Turn On"
 msgstr "Turn On"
@@ -4658,6 +5106,10 @@ msgstr "Use “{model}”"
 #: src/features/studio/identity-section.tsx
 msgid "Use {zone}"
 msgstr "Use {zone}"
+
+#: src/components/settings-form/labels.ts
+msgid "Use a full path, such as ~/Projects."
+msgstr "Use a full path, such as ~/Projects."
 
 #: src/components/settings-form/labels.ts
 msgid "Use a path relative to the persona's folder that stays inside it."
@@ -4802,6 +5254,10 @@ msgstr "Voice Styles"
 msgid "Voices she switches to when you ask for one, as in “声音温柔一点” or “换回原来的”. Her voice above stays her default."
 msgstr "Voices she switches to when you ask for one, as in “声音温柔一点” or “换回原来的”. Her voice above stays her default."
 
+#: src/features/tasks/labels.ts
+msgid "Waiting"
+msgstr "Waiting"
+
 #: src/features/call/call-state.tsx
 msgid "Waiting for {name} to answer…"
 msgstr "Waiting for {name} to answer…"
@@ -4809,6 +5265,58 @@ msgstr "Waiting for {name} to answer…"
 #: src/features/chats/chat-log.tsx
 msgid "Waiting for a reply…"
 msgstr "Waiting for a reply…"
+
+#: src/features/tasks/waiting-bar.tsx
+msgid "Waiting for You"
+msgstr "Waiting for You"
+
+#: src/features/tasks/cards.tsx
+msgid "Waiting for you to continue it"
+msgstr "Waiting for you to continue it"
+
+#: src/features/tasks/cards.tsx
+msgid "Waiting for your OK to fetch from {host}"
+msgstr "Waiting for your OK to fetch from {host}"
+
+#: src/features/tasks/cards.tsx
+msgid "Waiting for your OK to go on"
+msgstr "Waiting for your OK to go on"
+
+#: src/features/tasks/cards.tsx
+msgid "Waiting for your OK to go on after repeating itself"
+msgstr "Waiting for your OK to go on after repeating itself"
+
+#: src/features/tasks/cards.tsx
+msgid "Waiting for your OK to go on without spend pauses"
+msgstr "Waiting for your OK to go on without spend pauses"
+
+#: src/features/tasks/labels.ts
+msgid "Waiting for your OK to read {path}"
+msgstr "Waiting for your OK to read {path}"
+
+#: src/features/tasks/labels.ts
+msgid "Waiting for your OK to read and write {path}"
+msgstr "Waiting for your OK to read and write {path}"
+
+#: src/features/tasks/labels.ts
+msgid "Waiting for your OK to read and write everything in {folder}"
+msgstr "Waiting for your OK to read and write everything in {folder}"
+
+#: src/features/tasks/labels.ts
+msgid "Waiting for your OK to read everything in {folder}"
+msgstr "Waiting for your OK to read everything in {folder}"
+
+#: src/features/tasks/cards.tsx
+msgid "Waiting for your OK to spend more than {spent}"
+msgstr "Waiting for your OK to spend more than {spent}"
+
+#: src/features/tasks/cards.tsx
+msgid "Waiting for your OK to work in {folder}"
+msgstr "Waiting for your OK to work in {folder}"
+
+#: src/features/tasks/parts.tsx
+msgid "Web Access"
+msgstr "Web Access"
 
 #: src/features/home/memory-panel.tsx
 msgid "What {name} Remembers"
@@ -4954,6 +5462,14 @@ msgstr "Why {name} Answered"
 msgid "With memory on, she remembers you from one call to the next. It needs Qdrant, a database you run in Docker on this machine. Skip it and everything else still works."
 msgstr "With memory on, she remembers you from one call to the next. It needs Qdrant, a database you run in Docker on this machine. Skip it and everything else still works."
 
+#: src/features/tasks/list.tsx
+msgid "Work she does on this computer when you ask her in a chat, such as writing a page or sorting files. Each row opens its chat at the task, where you answer what it asks."
+msgstr "Work she does on this computer when you ask her in a chat, such as writing a page or sorting files. Each row opens its chat at the task, where you answer what it asks."
+
+#: src/features/tasks/transcript-view.tsx
+msgid "Working…"
+msgstr "Working…"
+
 #: src/features/jobs/labels.ts
 msgid "Works out what the video pipeline would do and what it would cost, without running it."
 msgstr "Works out what the video pipeline would do and what it would cost, without running it."
@@ -4972,6 +5488,10 @@ msgstr "You"
 msgctxt "chat speaker"
 msgid "You"
 msgstr "You"
+
+#: src/features/tasks/task-card.tsx
+msgid "You denied it when it asked to start."
+msgstr "You denied it when it asked to start."
 
 #: src/features/setup/done-step.tsx
 msgid "You're all set"

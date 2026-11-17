@@ -63,6 +63,8 @@ export function createEditTool(guard: PathGuard): AssistantTool {
       "Each edits[].oldText must exactly and uniquely match the original file. Keep matches short and non-overlapping; merge nearby changes without including large unchanged regions.",
     ],
     replay: "never",
+    // As write's: a read later in the reply must see the edit.
+    executionMode: "sequential",
     prepareArguments: (args) => prepareEditArguments(args) as Readonly<Record<string, unknown>>,
     async execute(args, { signal }) {
       // Again for a caller that skips prepareArguments; prepared arguments come back unchanged.

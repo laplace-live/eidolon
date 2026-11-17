@@ -87,6 +87,14 @@ const ERRORS: Readonly<Record<ErrorCode | ClientErrorCode | "unknown", MessageDe
   "missing-key": msg`Her chat model has no key yet. Add one in Settings.`,
   "chat-in-call": msg`This chat is in a call. Hang up first.`,
   "realtime-in-group": msg`Someone here talks through a realtime model, which can't join a group call.`,
+  "assistant-off": msg`Assistant Mode is off. Turn it on in Settings.`,
+  "assistant-not-ready": msg`Assistant Mode needs a model, and a key for its account. Set them in Settings.`,
+  "unknown-task": msg`There is no such task.`,
+  "task-locked": msg`This task is running elsewhere, such as in a terminal. Try again once it stops.`,
+  "nothing-pending": msg`That task isn't waiting for an answer.`,
+  "not-paused": msg`That task isn't paused.`,
+  pending: msg`That task is waiting for an approval. Answer it first.`,
+  "range-not-satisfiable": msg`That part of the file doesn't exist.`,
 };
 
 /** What an error says to the viewer: its code's sentence, else a general one. */

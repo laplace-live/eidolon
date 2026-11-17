@@ -1,23 +1,26 @@
 // A browser walk through the local web app on a throwaway data home: sign-in, the wizard's keys step
 // in English and 简体中文, saved keys, an embeddings account added and picked in Settings, a saved
 // prompt, a voice style added and removed, a facts index built through the studio, a text chat
-// from greeting to delete, a group chat with a second persona, voice messages both ways, and a call
-// inside a chat. The keys are fake, so the providers refuse them for free, and the embeddings, the
-// chats' replies, the director's decisions, the voice messages' speech and the call's hearing, mind
-// and voice come from a fake server, so nothing is billed. --call instead places a real call from
-// the call page with the .env's keys, which bills them.
+// from greeting to delete, a group chat with a second persona, voice messages both ways, a call
+// inside a chat, and a task she starts in a chat. The keys are fake, so the providers refuse them
+// for free, and the embeddings, the chats' replies, the director's decisions, the voice messages'
+// speech, the call's hearing, mind and voice and the task's worker come from a fake server, so
+// nothing is billed. --call instead places a real call from the call page with the .env's keys,
+// which bills them.
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { CREDENTIALS, dataHome, envOptional, expandUser, SETTINGS } from "@eidolon/config";
 import { PROVIDERS } from "@eidolon/providers/catalog";
 import type { Subprocess } from "bun";
@@ -35,6 +38,7 @@ import type {
   JobSnapshot,
   PersonasResponse,
   Status,
+  TaskSnapshot,
   UsageSummary,
 } from "../src/local/api.ts";
 import { Output, READY_LINE } from "./output.ts";
@@ -252,6 +256,27 @@ const CALL_TOLD = "我家的猫叫团子。";
 const CALL_TOLD_REPLY = "团子这名字好可爱！";
 /** Her greeting on the call, which the fake mind gives only when the call's history holds CALL_TOLD. */
 const CALL_GREETING = "团子今天乖不乖呀？";
+/** The assistant role's model, on the decisions account, whose usage blocks report a cost. */
+const WORKER_MODEL = "fake-worker";
+/** What each of the worker's requests reports it cost, so its spend pauses can count it. */
+const WORKER_COST_USD = 0.0012;
+/** The viewer's line that has her start a task, and the goal her start_task call gives it. */
+const TASK_LINE = "帮我在电脑上做个待办网页吧";
+const TASK_GOAL = "做一个单文件的待办网页 index.html，待办从 notes.txt 里来";
+/** Her line once she has started it, and her word on it once it is done. */
+const TASK_ACK = "好，我这就去弄～";
+const TASK_REPORT = "网页做好啦，就在那个文件夹里，打开 index.html 看看吧！";
+/** notes.txt's line, in a folder outside the task's, which the worker may read once allowed. */
+const NOTES_TEXT = "待办：买猫粮、给坚果剪指甲";
+const INDEX_HTML =
+  "<!doctype html>\n<title>待办</title>\n<ul><li>买猫粮</li><li>给坚果剪指甲</li></ul>\n";
+/** The worker's last reply, which the task reports. */
+const WORKER_REPORT = "Wrote index.html, a to-do page listing the two items in notes.txt.";
+/** How pipedog's async-tool payloads start: her call's placeholder, and a call's final result. */
+const ASYNC_RUNNING = '{"type": "async_tool", "status": "running"';
+const ASYNC_FINISHED = '{"type": "async_tool", "status": "finished"';
+/** The id the fake mind gives her start_task call, which the runner's word on its end names. */
+const START_CALL = "call_start_task";
 
 interface Check {
   readonly name: string;
@@ -318,7 +343,19 @@ interface ChatRequest {
   readonly model?: unknown;
   readonly stream?: unknown;
   readonly stop?: unknown;
-  readonly messages?: readonly { readonly role?: unknown; readonly content?: unknown }[];
+  readonly tools?: readonly { readonly function?: { readonly name?: unknown } }[];
+  readonly messages?: readonly {
+    readonly role?: unknown;
+    readonly content?: unknown;
+    readonly tool_calls?: readonly { readonly function?: { readonly name?: unknown } }[];
+    readonly tool_call_id?: unknown;
+  }[];
+}
+
+/** The task walk's folders: the task's own, and a file in one outside it. */
+interface TaskPlaces {
+  readonly site: string;
+  readonly notes: string;
 }
 
 /** One Decisions request the fake server took, as far as the walk reads it. */
@@ -412,6 +449,112 @@ function completionStream(texts: readonly string[], holdMs: number): Response {
   return new Response(body, { headers: { "content-type": "text/event-stream" } });
 }
 
+/** A one-chunk OpenAI chat completion stream: `delta`, then `finish`, then `usage`. */
+function scriptedStream(
+  model: string,
+  delta: object,
+  finish: string,
+  usage: Readonly<Record<string, number>>,
+): Response {
+  const choice = (part: object, reason: string | null) => ({
+    id: "chatcmpl-local-smoke",
+    object: "chat.completion.chunk",
+    created: 0,
+    model,
+    choices: [{ index: 0, delta: part, finish_reason: reason }],
+  });
+  const lines = [
+    choice({ role: "assistant", ...delta }, null),
+    choice({}, finish),
+    { id: "chatcmpl-local-smoke", choices: [], usage },
+  ];
+  const body = `${lines.map((line) => `data: ${JSON.stringify(line)}\n\n`).join("")}data: [DONE]\n\n`;
+  return new Response(body, { headers: { "content-type": "text/event-stream" } });
+}
+
+/** A streamed call of `name` with `args`, as `model` makes one. */
+function toolCallStream(
+  model: string,
+  id: string,
+  name: string,
+  args: object,
+  usage: Readonly<Record<string, number>>,
+): Response {
+  const call = {
+    index: 0,
+    id,
+    type: "function",
+    function: { name, arguments: JSON.stringify(args) },
+  };
+  return scriptedStream(model, { tool_calls: [call] }, "tool_calls", usage);
+}
+
+const UNPRICED_USAGE = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+/** OpenRouter's usage block, which carries what the request cost. */
+const WORKER_USAGE = {
+  prompt_tokens: 900,
+  completion_tokens: 60,
+  total_tokens: 960,
+  cost: WORKER_COST_USD,
+};
+
+/**
+ * Her mind's part in the task walk: start_task for TASK_LINE, her line once the call's placeholder
+ * is in her view, and her report once the runner's word that the task ended is. Null for any other
+ * request.
+ */
+function herTaskAnswer(body: ChatRequest, places: TaskPlaces): Response | null {
+  const last = body.messages?.at(-1);
+  const content = String(last?.content ?? "");
+  if (last?.role === "user" && content === TASK_LINE) {
+    const brief = { goal: TASK_GOAL, folder: places.site };
+    return toolCallStream(MIND_MODEL, START_CALL, "start_task", brief, UNPRICED_USAGE);
+  }
+  if (last?.role === "tool" && content.startsWith(ASYNC_RUNNING)) {
+    return completionStream([TASK_ACK], 0);
+  }
+  if (asksForReport(body)) return completionStream([TASK_REPORT], 0);
+  return null;
+}
+
+/** Her report turn's request, which ends on the runner's word that her start_task call ended. */
+function asksForReport(request: ChatRequest | undefined): boolean {
+  const last = request?.messages?.at(-1);
+  return (
+    last !== undefined && last.role !== "tool" && String(last.content ?? "").includes(START_CALL)
+  );
+}
+
+/**
+ * The task's worker, turn by turn: a write of index.html in the task's folder, a read of notes.txt
+ * outside it, the read again once the owner allowed it, then its report.
+ */
+function workerAnswer(body: ChatRequest, places: TaskPlaces): Response {
+  const messages = body.messages ?? [];
+  const results = messages.filter((m) => m.role === "tool").map((m) => String(m.content));
+  if (results.some((text) => text.includes(NOTES_TEXT))) {
+    return scriptedStream(WORKER_MODEL, { content: WORKER_REPORT }, "stop", WORKER_USAGE);
+  }
+  if (results.length === 0) {
+    const page = { path: join(places.site, "index.html"), content: INDEX_HTML };
+    return toolCallStream(WORKER_MODEL, "call_write_1", "write", page, WORKER_USAGE);
+  }
+  const reads = messages.filter((m) =>
+    (m.tool_calls ?? []).some((call) => call.function?.name === "read"),
+  ).length;
+  const allowed = messages.some((m) => String(m.content).includes("The owner allowed"));
+  if (reads === 0 || allowed) {
+    const read = { path: places.notes };
+    return toolCallStream(WORKER_MODEL, `call_read_${reads + 1}`, "read", read, WORKER_USAGE);
+  }
+  return scriptedStream(
+    WORKER_MODEL,
+    { content: "notes.txt stayed out of reach." },
+    "stop",
+    WORKER_USAGE,
+  );
+}
+
 /** `seconds` of silent MPEG-1 Layer III frames, mono, 44.1 kHz at 128 kbps: the fake voice. */
 function silentMp3(seconds: number): Uint8Array<ArrayBuffer> {
   // 144 × 128000 / 44100, unpadded; all-zero side info decodes as silence.
@@ -435,11 +578,11 @@ const ROUTES = new Set([
 /**
  * An OpenAI-compatible server that answers the fake key only: its embeddings, its model list,
  * streaming chat completions, which greet a kickoff and answer CHAT_MESSAGE, the group's lines and
- * the voice and call walks', OpenAI's speech, as MP3 or a call's PCM, its transcriptions, its
- * realtime transcription sessions, which hear nothing, and OpenRouter's Decisions route beside its
- * v1 API.
+ * the voice and call walks' and the task walk's, OpenAI's speech, as MP3 or a call's PCM, its
+ * transcriptions, its realtime transcription sessions, which hear nothing, and OpenRouter's
+ * Decisions route beside its v1 API. WORKER_MODEL's requests are the task walk's worker's.
  */
-function fakeEmbeddings(key: string) {
+function fakeEmbeddings(key: string, places: TaskPlaces) {
   const seen = {
     requests: 0,
     inputs: 0,
@@ -447,6 +590,7 @@ function fakeEmbeddings(key: string) {
     listed: 0,
     models: new Set<string>(),
     chats: [] as ChatRequest[],
+    workers: [] as ChatRequest[],
     decisions: [] as DecisionsRequest[],
     speech: [] as SpeechRequest[],
     heard: [] as HeardUpload[],
@@ -464,7 +608,13 @@ function fakeEmbeddings(key: string) {
       }
       if (route === "POST /v1/chat/completions") {
         const body = (await request.json()) as ChatRequest;
+        if (body.model === WORKER_MODEL) {
+          seen.workers.push(body);
+          return workerAnswer(body, places);
+        }
         seen.chats.push(body);
+        const tasked = herTaskAnswer(body, places);
+        if (tasked !== null) return tasked;
         const last = body.messages?.at(-1);
         const asked = last?.role === "user" ? last.content : undefined;
         if (asked === CHAT_MESSAGE) return completionStream(REPLY, REPLY_HOLD_MS);
@@ -572,7 +722,12 @@ function fakeEmbeddings(key: string) {
       },
     },
   });
-  return { url: `http://127.0.0.1:${server.port}/v1`, seen, stop: () => server.stop(true) };
+  return {
+    url: `http://127.0.0.1:${server.port}/v1`,
+    seen,
+    places,
+    stop: () => server.stop(true),
+  };
 }
 
 type FakeEmbeddings = ReturnType<typeof fakeEmbeddings>;
@@ -1317,6 +1472,10 @@ interface LoggedEvent {
   readonly persona?: string;
   readonly reason?: string;
   readonly interrupted?: boolean;
+  readonly name?: string;
+  readonly callId?: string;
+  readonly stage?: string;
+  readonly result?: Readonly<Record<string, unknown>>;
 }
 
 async function chatLog(walk: Walk, id: string): Promise<readonly LoggedEvent[]> {
@@ -2264,10 +2423,367 @@ async function chatCallWalk(walk: Walk): Promise<void> {
   );
 }
 
-/** Settles the bodies read so far; null for one the browser couldn't give. */
+/** settings.yaml's assistant.folders, as JSON to compare, or "absent". */
+function savedAssistantFolders(home: string): string {
+  const path = join(home, "settings.yaml");
+  if (!existsSync(path)) return "absent";
+  const yaml = Bun.YAML.parse(readFileSync(path, "utf8")) as {
+    assistant?: { folders?: unknown };
+  } | null;
+  const folders = yaml?.assistant?.folders;
+  return folders === undefined ? "absent" : JSON.stringify(folders);
+}
+
+async function taskOf(walk: Walk, id: string): Promise<TaskSnapshot | null> {
+  const response = await walk.api("GET", `/api/local/tasks/${id}`);
+  return response.ok ? ((await response.json()) as TaskSnapshot) : null;
+}
+
+/** The task her start_task call started, once its `started` result is in the log. */
+function startedTask(events: readonly LoggedEvent[]): string | null {
+  const started = events.find((e) => e.type === "tool-result" && e.stage === "started");
+  const task = started?.result?.task;
+  return typeof task === "string" ? task : null;
+}
+
+function lastContent(request: ChatRequest | undefined): string {
+  return String(request?.messages?.at(-1)?.content ?? "");
+}
+
+function offersStartTask(request: ChatRequest | undefined): boolean {
+  return (request?.tools ?? []).some((tool) => tool.function?.name === "start_task");
+}
+
+const ENDED_TASK = new Set(["succeeded", "failed", "cancelled"]);
+
+/**
+ * A task she starts in a chat of one: the assistant role set up in Settings on the decisions
+ * account, whose usage blocks price the worker's requests; her start_task call for the viewer's
+ * line; Allow Once on the card at the start and at a path outside the task's folders; the page the
+ * worker wrote, Show Steps and her report; then the read-only Tasks list, whose row opens the chat
+ * at the card.
+ */
+async function taskWalk(walk: Walk): Promise<void> {
+  const { page, checks, origin } = walk;
+  const { chats, workers } = walk.embeddings.seen;
+  const { site, notes } = walk.embeddings.places;
+  const account = await fakeAccount(walk, "openrouter", DECISIONS_ACCOUNT_NAME);
+
+  await page.goto(`${origin}/settings?tab=assistant`);
+  const provider = page.getByLabel(t("en", "Assistant Provider"), { exact: true });
+  await provider.click();
+  await page.getByRole("option", { name: DECISIONS_ACCOUNT_NAME, exact: true }).click();
+  // The field is plain text until the account's list arrives, and the list lacks the worker's.
+  const model = page.getByRole("combobox", { name: t("en", "Assistant Model"), exact: true });
+  if (await shows(model, 15_000)) {
+    await model.click();
+    await page.getByPlaceholder(t("en", "Search models")).fill(WORKER_MODEL);
+    await page
+      .getByRole("option", { name: t("en", "Use “{model}”", { model: WORKER_MODEL }), exact: true })
+      .click();
+  } else {
+    await page.getByLabel(t("en", "Assistant Model"), { exact: true }).fill(WORKER_MODEL);
+  }
+  const saved = page.waitForResponse(isPut(`${origin}/api/local/settings`));
+  await page
+    .locator("form", { has: provider })
+    .getByRole("button", { name: t("en", "Save"), exact: true })
+    .click();
+  const saveStatus = (await saved).status();
+  const yaml = Bun.YAML.parse(readFileSync(join(walk.home, "settings.yaml"), "utf8")) as {
+    assistant?: { provider?: unknown; model?: unknown };
+  };
+  const mode = await poll(
+    async () => ((await (await walk.api("GET", "/api/local/status")).json()) as Status).assistant,
+    (assistant) => assistant.ready,
+    10_000,
+  );
+  checks.add(
+    "assistant settings",
+    saveStatus === 200 &&
+      yaml.assistant?.provider === account &&
+      yaml.assistant.model === WORKER_MODEL &&
+      mode.enabled &&
+      mode.ready,
+    `PUT settings ${saveStatus}; settings.yaml runs tasks on ${String(yaml.assistant?.provider)} ` +
+      `with ${String(yaml.assistant?.model)}; Assistant Mode is ${mode.enabled ? "on" : "off"} ` +
+      `and ${mode.ready ? "ready" : `not ready: ${String(mode.problem)}`}`,
+  );
+
+  mkdirSync(dirname(notes), { recursive: true });
+  writeFileSync(notes, `${NOTES_TEXT}\n`);
+  const folders = savedAssistantFolders(walk.home);
+  const listed = (await (await walk.api("GET", "/api/local/personas")).json()) as PersonasResponse;
+  const persona = listed.personas.find((entry) => entry.id === PERSONA);
+  if (persona === undefined) throw new Error(`GET personas has no ${PERSONA}`);
+  const short = persona.shortName.trim() || persona.name;
+
+  await page.goto(`${origin}/chats`);
+  await page
+    .getByRole("button", { name: t("en", "New Chat"), exact: true })
+    .first()
+    .click();
+  await page.getByRole("menuitemcheckbox").filter({ hasText: persona.name }).click();
+  const greeted = chats.length;
+  await page.getByRole("menuitem", { name: t("en", "Start Chat"), exact: true }).click();
+  await page.waitForURL(/\/chats\/[0-9a-f-]{36}$/);
+  const id = new URL(page.url()).pathname.split("/").at(-1) as string;
+  const log = page.getByRole("log", { name: t("en", "Conversation"), exact: true });
+  if (!(await shows(log.getByText(GREETING, { exact: true }), 30_000))) {
+    throw new Error("her greeting never showed in the task's chat");
+  }
+  const greeting = chats[greeted];
+
+  const box = page.getByRole("textbox", {
+    name: t("en", "Message {name}", { name: short }),
+    exact: true,
+  });
+  const asked = chats.length;
+  await box.fill(TASK_LINE);
+  await box.press("Enter");
+  const started = await poll(
+    () => chatLog(walk, id),
+    (events) => startedTask(events) !== null,
+    30_000,
+  );
+  const task = startedTask(started);
+  if (task === null) {
+    const logged = started.map((e) => e.type).join(", ") || "nothing";
+    throw new Error(`no task started: the log holds ${logged}`);
+  }
+  const card = log.locator(`article[data-task="${task}"]`);
+  const startAsked = await shows(
+    card.getByText(t("en", "Start this task?"), { exact: true }),
+    20_000,
+  );
+  const bar = page.locator(`section[data-waiting="${task}"]`);
+  const waitingLine = t("en", "Waiting for your OK to work in {folder}", { folder: site });
+  const barShown = await shows(bar.getByText(waitingLine, { exact: true }), 10_000);
+  const acked = await shows(log.getByText(TASK_ACK, { exact: true }), 20_000);
+  const line = chats.slice(asked).find((request) => lastContent(request) === TASK_LINE);
+  const hinted = (request: ChatRequest | undefined) =>
+    systemOf(request).includes("调用 start_task 工具");
+  const waiting = await taskOf(walk, task);
+  checks.add(
+    "task start",
+    greeting !== undefined &&
+      !offersStartTask(greeting) &&
+      !hinted(greeting) &&
+      offersStartTask(line) &&
+      hinted(line) &&
+      waiting?.status === "awaiting-approval" &&
+      waiting.pending?.kind === "start" &&
+      waiting.chat?.id === id &&
+      waiting.chat.persona === PERSONA &&
+      waiting.model.account === account &&
+      waiting.model.model === WORKER_MODEL &&
+      startAsked &&
+      barShown &&
+      acked &&
+      workers.length === 0,
+    `her greeting ${offersStartTask(greeting) || hinted(greeting) ? "was" : "wasn't"} offered ` +
+      `start_task or its hint, and her answer ${offersStartTask(line) ? "was" : "wasn't"} offered ` +
+      `it, ${hinted(line) ? "with" : "without"} its hint; the task ` +
+      `${String(waiting?.status)} on ${String(waiting?.model.model)}, waiting for ` +
+      `${waiting?.pending?.kind ?? "nothing"}, ${waiting?.chat?.id === id ? "in this chat" : "in another chat"}; ` +
+      `the card ${startAsked ? "asks" : "doesn't ask"} to start it, the waiting bar ` +
+      `${barShown ? "asks too" : "doesn't"}, her line ${acked ? "shows" : "doesn't show"}; the ` +
+      `worker took ${workers.length} request(s) before the OK`,
+  );
+
+  const approved = () =>
+    page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        response.url() === `${origin}/api/local/tasks/${task}/approve`,
+    );
+  let answer = approved();
+  await card.locator('[data-answer="once"]').click();
+  const startStatus = (await answer).status();
+  const pathAsked = await shows(
+    card.getByText(t("en", "Let it read outside its folders?"), { exact: true }),
+    30_000,
+  );
+  const paused = await taskOf(walk, task);
+  // What Allow Once grants: notes.txt's whole folder, as it lies on disk.
+  const granted = { folder: realpathSync(dirname(notes)) };
+  const grantNamed = await shows(
+    card.getByText(
+      t(
+        "en",
+        "Allow Once lets this task read everything in {folder} until it ends; Deny tells it it can't.",
+        granted,
+      ),
+      { exact: true },
+    ),
+    10_000,
+  );
+  const barNamed = await shows(
+    bar.getByText(t("en", "Waiting for your OK to read everything in {folder}", granted), {
+      exact: true,
+    }),
+    10_000,
+  );
+  answer = approved();
+  await card.locator('[data-answer="once"]').click();
+  const pathStatus = (await answer).status();
+  const ended = await poll(
+    () => taskOf(walk, task),
+    (snapshot) => snapshot !== null && ENDED_TASK.has(snapshot.status),
+    60_000,
+  );
+  const badge = await shows(card.locator('[data-status="succeeded"]'), 15_000);
+  const written = join(site, "index.html");
+  const wrote = existsSync(written) && readFileSync(written, "utf8") === INDEX_HTML;
+  const kept = savedAssistantFolders(walk.home) === folders;
+  const spent = ended?.spentUsd ?? 0;
+  const priced = Math.abs(spent - workers.length * WORKER_COST_USD) < 1e-9;
+  checks.add(
+    "task approvals",
+    startStatus === 200 &&
+      paused?.status === "paused" &&
+      paused.pending?.kind === "path" &&
+      paused.pending.access === "read" &&
+      paused.pending.path.endsWith("notes.txt") &&
+      paused.pending.folder === granted.folder &&
+      pathAsked &&
+      grantNamed &&
+      barNamed &&
+      pathStatus === 200 &&
+      ended?.status === "succeeded" &&
+      badge &&
+      wrote &&
+      kept &&
+      workers.length === 4 &&
+      priced,
+    `Allow Once at the start answered ${startStatus}; the task then ${String(paused?.status)} ` +
+      `for ${paused?.pending?.kind === "path" ? `${paused.pending.access} of ${paused.pending.path}, granting ${String(paused.pending.folder)}` : "nothing"}` +
+      `, which the card ${pathAsked ? "asked about" : "never asked about"}, ` +
+      `${grantNamed ? "naming" : "without naming"} ${granted.folder} as what Allow Once grants, ` +
+      `as the waiting bar ${barNamed ? "did" : "didn't"}; Allow Once answered ` +
+      `${pathStatus}; the task ${String(ended?.status)}${ended?.outcome?.status === "failed" ? ` (${ended.outcome.error})` : ""}` +
+      ` after ${workers.length} worker request(s), spending $${spent} ` +
+      `${priced ? "as reported" : `where ${workers.length * WORKER_COST_USD} was reported`}; the ` +
+      `card ${badge ? "shows" : "doesn't show"} it done; index.html ${wrote ? "holds the page" : "is missing or wrong"}; ` +
+      `assistant.folders ${kept ? "unchanged" : `changed from ${folders}`}`,
+  );
+
+  await card.locator('[data-action="steps"]').click();
+  const steps = card.getByRole("log", { name: t("en", "Steps"), exact: true });
+  const reportStep = await shows(steps.getByText(WORKER_REPORT), 15_000);
+  const step = (state: string, tool: string) =>
+    steps.getByRole("button", { name: new RegExp(`^${escapeRegExp(state)}: ${tool}`) }).count();
+  const done = t("en", "Done", {}, "tool call");
+  const rows = await Promise.all([
+    step(done, "write"),
+    step(t("en", "Failed"), "read"),
+    step(done, "read"),
+  ]);
+  const told = await shows(
+    steps.getByText(/^The owner allowed read access to .*task-notes\. Try again\.$/),
+    5_000,
+  );
+  const finishedAt = t("en", "Finished at {time}", { time: "" });
+  const finished = await shows(steps.getByText(new RegExp(`^${escapeRegExp(finishedAt)}`)), 5_000);
+  checks.add(
+    "task steps",
+    JSON.stringify(rows) === "[1,1,1]" && told && finished && reportStep,
+    `Show Steps lists write done, read failed and read done ${JSON.stringify(rows)} times; the ` +
+      `owner's answer ${told ? "shows" : "doesn't show"} as a line it was told; its report ` +
+      `${reportStep ? "shows" : "doesn't show"}, ${finished ? "then" : "without"} its end`,
+  );
+
+  const stored = await poll(
+    () => chatLog(walk, id),
+    (events) => said(events, "persona", TASK_REPORT),
+    60_000,
+  );
+  const final = stored.find((e) => e.type === "tool-result" && e.stage === "final");
+  const report = stored.find((e) => e.type === "message" && e.text === TASK_REPORT);
+  const reportShown = await shows(log.getByText(TASK_REPORT, { exact: true }), 20_000);
+  const files = Array.isArray(final?.result?.files) ? final.result.files.map(String) : [];
+  const toldHer = chats.find(asksForReport);
+  const toldMessages = toldHer?.messages ?? [];
+  const callResult = toldMessages.find((m) => m.role === "tool" && m.tool_call_id === START_CALL);
+  // The worker's report reaches her only as her call's result, never in a message of a higher rank.
+  const quoting = toldMessages.flatMap((m) =>
+    String(m.content ?? "").includes(WORKER_REPORT) ? [String(m.role)] : [],
+  );
+  const enveloped = toldMessages.some((m) => String(m.content ?? "").startsWith(ASYNC_FINISHED));
+  const marked = await poll(
+    () => taskOf(walk, task),
+    (snapshot) => snapshot?.reported === true,
+    10_000,
+  );
+  checks.add(
+    "task report",
+    final?.result?.status === "succeeded" &&
+      final.result.report === WORKER_REPORT &&
+      files.some((file) => file.endsWith(`${sep}task-site${sep}index.html`)) &&
+      report !== undefined &&
+      report.seq > final.seq &&
+      toldHer !== undefined &&
+      !offersStartTask(toldHer) &&
+      String(callResult?.content ?? "").includes(WORKER_REPORT) &&
+      JSON.stringify(quoting) === '["tool"]' &&
+      !enveloped &&
+      reportShown &&
+      marked?.reported === true,
+    `the log stores the call's final ${String(final?.result?.status)} with ` +
+      `${files.length} file(s) written, then ${report ? "her report" : "no report from her"}; ` +
+      `her report turn ${toldHer ? "was asked for it" : "was never asked for it"}, ` +
+      `${offersStartTask(toldHer) ? "offered" : "not offered"} start_task, reading the report in ` +
+      `${quoting.length > 0 ? quoting.join(" and ") : "no"} message(s)` +
+      `${enveloped ? " and a final envelope" : ""}; the page ` +
+      `${reportShown ? "shows" : "doesn't show"} her report; the task is ` +
+      `${marked?.reported === true ? "marked reported" : "not marked reported"}`,
+  );
+
+  await page.locator('nav a[href="/tasks"]').first().click();
+  await page.waitForURL(`${origin}/tasks`);
+  const list = page.getByRole("list", { name: t("en", "Tasks"), exact: true });
+  const row = list.getByRole("listitem").filter({ hasText: TASK_GOAL });
+  const listedDone = await shows(row.locator('[data-status="succeeded"]'), 15_000);
+  const buttons = await list.getByRole("button").count();
+  const fields = await page.getByRole("main").getByRole("textbox").count();
+  const link = row.locator(`a[href="/chats/${id}?task=${task}"]`);
+  const linked = (await link.count()) === 1;
+  if (linked) await link.click();
+  const opened =
+    linked &&
+    (await waitFor(() => new URL(page.url()).pathname === `/chats/${id}`, 10_000)) !== null;
+  const back = page.locator(`article[data-task="${task}"]`);
+  const inView =
+    opened &&
+    (await waitFor(
+      () =>
+        back
+          .evaluate((element) => {
+            const box = element.getBoundingClientRect();
+            return box.top >= 0 && box.bottom <= window.innerHeight;
+          })
+          .catch(() => false),
+      10_000,
+    )) !== null;
+  const settled =
+    opened && (await waitFor(() => new URL(page.url()).search === "", 10_000)) !== null;
+  checks.add(
+    "task list",
+    listedDone && buttons === 0 && fields === 0 && linked && opened && inView && settled,
+    `the Tasks list ${listedDone ? "shows" : "doesn't show"} the task done, with ${buttons} ` +
+      `button(s) and ${fields} field(s); its row ${linked ? "links" : "doesn't link"} to the ` +
+      `chat at the card, which ${opened ? (inView ? "opened in view" : "opened out of view") : "never opened"}` +
+      `${settled ? "" : ", ?task= still in the address"}`,
+  );
+}
+
+/**
+ * Settles the bodies read so far, each on its own: null for one the browser couldn't give, or one
+ * still streaming after 10 s.
+ */
 async function settled(bodies: readonly Promise<string | null>[]): Promise<(string | null)[]> {
-  const all = Promise.all(bodies);
-  return (await Promise.race([all, Bun.sleep(10_000).then(() => null)])) ?? bodies.map(() => null);
+  const deadline = Bun.sleep(10_000).then(() => null);
+  return Promise.all(bodies.map((body) => Promise.race([body, deadline])));
 }
 
 async function smoke(options: Options): Promise<Checks> {
@@ -2283,7 +2799,11 @@ async function smoke(options: Options): Promise<Checks> {
     fish: `not-a-real-key-fish-${id}`,
     embed: `not-a-real-key-embed-${id}`,
   };
-  const embeddings = fakeEmbeddings(keys.embed as string);
+  // Beside the data home, which no task may touch.
+  const embeddings = fakeEmbeddings(keys.embed as string, {
+    site: join(run.temp, "task-site"),
+    notes: join(run.temp, "task-notes", "notes.txt"),
+  });
   run.defer(embeddings.stop);
   const env = childEnv(home);
   try {
@@ -2374,11 +2894,13 @@ async function smoke(options: Options): Promise<Checks> {
         await checks.step("jobs page", () => jobsPage(walk));
       }
       if (embedder) {
-        await checks.step("chat", () => chatWalk(walk));
+        const chatted = await checks.step("chat", () => chatWalk(walk));
         await checks.step("group chat", () => groupChatWalk(walk));
         if (await checks.step("voice chat", () => voiceChatWalk(walk))) {
           await checks.step("chat call", () => chatCallWalk(walk));
         }
+        // Last: once the assistant has a model, her answers in a chat of one offer her start_task.
+        if (chatted) await checks.step("task", () => taskWalk(walk));
       }
     }
     checks.add(

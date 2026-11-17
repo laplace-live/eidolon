@@ -18,11 +18,13 @@ import {
   DEFAULT_REPLY_MODE,
   DEFAULT_TALKATIVENESS,
   draftOf,
+  effectiveModel,
   effectiveProvider,
   envDraft,
   fallbackModel,
   GROUPS,
   groupOf,
+  isFullPath,
   optionsOf,
   originOf,
   orphanedByProvider,
@@ -309,6 +311,47 @@ describe("the other controls", () => {
   });
 });
 
+describe("Assistant Mode", () => {
+  test("is on while nothing sets it, as assistantSettings reads it, and its switch says so", () => {
+    expect(control("assistant.enabled")).toEqual({ type: "flag", fallback: "on" });
+  });
+
+  test("its folders are full paths, one per line", () => {
+    const folders = control("assistant.folders");
+    expect(folders).toEqual({ type: "paths", inPersona: false, folders: true });
+    expect(parseDraft("~/Projects\n\n /Users/me/work \nC:\\work", folders)).toEqual({
+      ok: true,
+      value: ["~/Projects", "/Users/me/work", "C:\\work"],
+    });
+    // The settings file resolves a relative one in the data home, where every task is refused.
+    for (const relative of ["Projects", "./work", "../x"]) {
+      expect(parseDraft(relative, folders)).toEqual({
+        ok: false,
+        error: "settings.form.invalid.fullPath",
+      });
+    }
+  });
+
+  test("its folders are never the disk or home, which FolderPolicy refuses as a grant", () => {
+    const folders = control("assistant.folders");
+    for (const whole of ["/", "~", "~/", "//", "~//"]) {
+      expect(parseDraft(`~/ok\n${whole}`, folders)).toEqual({
+        ok: false,
+        error: "settings.form.invalid.home",
+      });
+    }
+    expect(parseDraft("~/a,b", folders)).toEqual({
+      ok: false,
+      error: "settings.form.invalid.comma",
+    });
+  });
+
+  test("isFullPath", () => {
+    for (const path of ["/a", "~", "~/a", "C:\\a", "c:/a"]) expect(isFullPath(path)).toBe(true);
+    for (const path of ["a", "./a", "", "C:", "C:a"]) expect(isFullPath(path)).toBe(false);
+  });
+});
+
 describe("providers and the models they fill", () => {
   const rows = (values: Record<string, string>, env: Record<string, string> = {}) =>
     SETTINGS.map((setting) =>
@@ -351,6 +394,19 @@ describe("providers and the models they fill", () => {
     expect(
       fallbackModel(roleById("mind"), rows({ "mind.provider": "openai-compatible" }), {}, []),
     ).toBeNull();
+  });
+
+  test("a role's model: its own as the drafts stand, else its fallback; the assistant has none", () => {
+    const assistant = roleById("assistant");
+    expect(effectiveModel(assistant, rows({ "assistant.provider": "openrouter" }), {}, [])).toBe(
+      null,
+    );
+    const chosen = rows({ "assistant.provider": "openrouter", "assistant.model": "x-ai/grok-5" });
+    expect(effectiveModel(assistant, chosen, {}, [])).toBe("x-ai/grok-5");
+    expect(effectiveModel(assistant, chosen, { "assistant.model": "" }, [])).toBeNull();
+    expect(effectiveModel(roleById("mind"), rows({}), {}, [])).toBe(
+      defaultModel(roleById("mind"), "openrouter"),
+    );
   });
 });
 

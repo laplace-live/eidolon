@@ -16,6 +16,7 @@ import { localRouteModules } from "../../src/local/extension.ts";
 import type { LocalApp } from "../../src/local/router.ts";
 import { chatRunner } from "../../src/local/routes/chats.ts";
 import { sessionRoutes } from "../../src/local/session.ts";
+import { TaskManager } from "../../src/local/tasks/manager.ts";
 import { LocalToken } from "../../src/local/token.ts";
 
 const ROOT = resolve(import.meta.dir, "../../../..");
@@ -237,9 +238,17 @@ describe("the route table", () => {
       onStop: () => {},
       memoryAdmin: () => null,
     };
+    // Never booted: building the routes reads nothing of it.
+    const tasks = new TaskManager({
+      dataHome: "/nowhere",
+      settings: () => ({ enabled: false, folders: [], spendPauseUsd: 1, contextTokens: 1 }),
+      addFolder: () => {},
+      problem: () => null,
+      report: async () => {},
+    });
     const registered = [
       ...sessionRoutes(app, new LocalToken("s".repeat(43))),
-      ...localRouteModules(app, chatRunner(app)),
+      ...localRouteModules(app, chatRunner(app), tasks),
     ].map((spec) => spec.route);
     expect(registered.toSorted()).toEqual([...LOCAL_ROUTES].toSorted());
     expect(new Set(registered).size).toBe(registered.length);

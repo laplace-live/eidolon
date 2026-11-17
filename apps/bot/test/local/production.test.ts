@@ -5,7 +5,10 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ANONYMOUS } from "@eidolon/access";
-import { dataHome } from "@eidolon/config";
+import { CHAT_FORMAT } from "@eidolon/chat";
+import { activePersona, dataHome, resetSettings } from "@eidolon/config";
+import { MIN_CHAT_SECRET_LENGTH } from "../../src/chat/sig.ts";
+import { assistantPromptHint, START_TASK } from "../../src/local/tasks/tool.ts";
 import type { BotDeps, BotServer } from "../../src/server.ts";
 import { startBotServer } from "../../src/server.ts";
 import { type CapturedLogs, captureLogs } from "../fakes.ts";
@@ -127,5 +130,63 @@ describe("the production surface", () => {
   test("boots at DEBUG and logs no local line", () => {
     expect(fakes.levels).toEqual(["DEBUG"]);
     expect(logs.lines().some((line) => line.includes("local"))).toBe(false);
+  });
+
+  test("its chat endpoint never offers start_task or its hint, whatever Assistant Mode's settings say", async () => {
+    const sent: { tools?: { function: { name: string } }[]; messages: unknown[] }[] = [];
+    const provider = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(request) {
+        sent.push(await request.json());
+        const chunks = [
+          { choices: [{ delta: { role: "assistant", content: "好呀" } }] },
+          { choices: [{ delta: {}, finish_reason: "stop" }] },
+        ];
+        const body = [...chunks.map((chunk) => JSON.stringify(chunk)), "[DONE]"]
+          .map((data) => `data: ${data}\n\n`)
+          .join("");
+        return new Response(body, { headers: { "content-type": "text/event-stream" } });
+      },
+    });
+    const env: Record<string, string> = {
+      EIDOLON_CHAT_SECRET: "e".repeat(MIN_CHAT_SECRET_LENGTH),
+      OPENROUTER_API_KEY: "fake-key",
+      OPENROUTER_API_BASE: `http://127.0.0.1:${provider.port}/v1`,
+      ASSISTANT_ENABLED: "true",
+      ASSISTANT_PROVIDER: "openrouter",
+      ASSISTANT_MODEL: "test/model",
+    };
+    const saved = Object.keys(env).map((name) => [name, process.env[name]] as const);
+    Object.assign(process.env, env);
+    resetSettings();
+    try {
+      await bot?.stop();
+      bot = await startBotServer({ host: "127.0.0.1", port: 0, verbose: 0 }, fakes.modules);
+      const header = {
+        format: CHAT_FORMAT,
+        id: "0190f5c8-0000-7000-8000-0000000000ee",
+        createdAt: 1000,
+        participants: [activePersona().id],
+      };
+      const { response, body } = await call("/api/chat/turn", {
+        method: "POST",
+        headers: { "content-type": "application/json", Origin: ORIGIN },
+        body: JSON.stringify({ chat: { header, events: [] }, text: "帮我在电脑上写个网页" }),
+      });
+      expect([response.status, body.includes("好呀")]).toEqual([200, true]);
+      expect(sent.length).toBeGreaterThan(0);
+      for (const request of sent) {
+        expect((request.tools ?? []).map((tool) => tool.function.name)).not.toContain(START_TASK);
+        expect(JSON.stringify(request.messages)).not.toContain(assistantPromptHint());
+      }
+    } finally {
+      await provider.stop(true);
+      for (const [name, value] of saved) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+      resetSettings();
+    }
   });
 });

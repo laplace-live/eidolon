@@ -21,6 +21,7 @@ import {
   type TaskSnapshot,
   type TaskStatus,
   tasksDir,
+  type WebAccess,
   writeSnapshot,
 } from "@eidolon/assistant";
 import {
@@ -35,11 +36,9 @@ import {
   pyStrip,
   shippedPath,
 } from "@eidolon/config";
+import { acquireLock, LockedError } from "@eidolon/config/lock";
 import {
   createMind,
-  type Mind,
-  type MindChunk,
-  type MindRequest,
   type MindToolCall,
   runTask,
   type TaskBrief,
@@ -49,15 +48,15 @@ import {
   type TaskMeter,
   type TaskOutcome,
   type TaskRequest,
+  UsageMeter,
 } from "@eidolon/engine";
-import { acquireLock, LockedError } from "@eidolon/ingest";
-import { ProviderConfigError, roleById, type UsageRecord } from "@eidolon/providers";
+import { ProviderConfigError, roleById } from "@eidolon/providers";
 import { ArgparseExit, type ParserSpec, parseArgs, parserError } from "./argparse.ts";
 import { type CliIo, type CommandDeps, reportExit, resolveIo } from "./io.ts";
 
 const PROG = "laplace-task";
 
-const USAGE = `usage: laplace-task [-h] [--folder FOLDER] [--allow PATH]
+const USAGE = `usage: laplace-task [-h] [--folder FOLDER] [--allow PATH] [--web {any,off}]
                     [--model ACCOUNT/MODEL] [--deliverable TEXT]
                     [--check TEXT] [--resume ID] [--json]
                     [goal]
@@ -79,6 +78,8 @@ options:
                         if missing
   --allow PATH          Another folder the task may read and write; repeat
                         for more. assistant.folders are allowed too
+  --web {any,off}       Whether the task may fetch web pages, from any site
+                        (default: off; with --resume, the task's own)
   --model ACCOUNT/MODEL
                         The account and model to run on, as in
                         openrouter/anthropic/claude-sonnet-5.5 (default:
@@ -106,6 +107,7 @@ const PARSER: ParserSpec = {
     { dest: "goal", flags: [], kind: "store", nargs: "?" },
     { dest: "folder", flags: ["--folder"], kind: "store" },
     { dest: "allow", flags: ["--allow"], kind: "append" },
+    { dest: "web", flags: ["--web"], kind: "store", choices: ["any", "off"] },
     { dest: "model", flags: ["--model"], kind: "store" },
     { dest: "deliverable", flags: ["--deliverable"], kind: "store" },
     { dest: "check", flags: ["--check"], kind: "store" },
@@ -137,6 +139,9 @@ export interface ModelChoice {
   readonly model: string;
 }
 
+/** `--web`: `any` offers web_fetch for every site, `off` leaves it out. */
+export type WebChoice = "any" | "off";
+
 export type TaskArgs =
   | {
       readonly kind: "new";
@@ -148,12 +153,15 @@ export type TaskArgs =
       readonly deliverable: string;
       readonly check: string;
       readonly model: ModelChoice | null;
+      readonly web: WebChoice;
       readonly json: boolean;
     }
   | {
       readonly kind: "resume";
       readonly id: string;
       readonly model: ModelChoice | null;
+      /** Null: `any` if the task had it, else `off`. */
+      readonly web: WebChoice | null;
       readonly json: boolean;
     };
 
@@ -175,6 +183,7 @@ function modelChoice(text: string): ModelChoice {
 export function parseTaskArgs(argv: readonly string[]): TaskArgs {
   const ns = parseArgs(PARSER, argv);
   const model = ns.model === null ? null : modelChoice(ns.model as string);
+  const web = ns.web as WebChoice | null;
   const json = ns.json as boolean;
   const resume = ns.resume as string | null;
   if (resume !== null) {
@@ -193,7 +202,7 @@ export function parseTaskArgs(argv: readonly string[]): TaskArgs {
     if (!TASK_ID.test(resume)) {
       throw parserError(PARSER, `argument --resume: no task ${pyRepr(resume)}`);
     }
-    return { kind: "resume", id: resume.toLowerCase(), model, json };
+    return { kind: "resume", id: resume.toLowerCase(), model, web, json };
   }
   const goal = ns.goal as string | null;
   const folder = ns.folder as string | null;
@@ -215,6 +224,7 @@ export function parseTaskArgs(argv: readonly string[]): TaskArgs {
     deliverable: text(ns.deliverable) ?? DEFAULT_DELIVERABLE,
     check: text(ns.check) ?? DEFAULT_CHECK,
     model,
+    web: web ?? "off",
     json,
   };
 }
@@ -227,6 +237,9 @@ function settingsModel(): ModelChoice | null {
   return account === "" || model === "" ? null : { account, model };
 }
 
+/** `--web any`. web_fetch still refuses this computer and its network. */
+const ANY_SITE: WebAccess = { allows: () => true };
+
 /** The command line steers nothing: a task runs on its brief alone. */
 const NO_LINES: TaskInbox = {
   hasSteering: () => false,
@@ -234,97 +247,18 @@ const NO_LINES: TaskInbox = {
   takeFollowUps: () => [],
 };
 
-/** The task's spend and its last request's input, from each usage record its mind reports. */
-export class Spend implements TaskMeter {
-  #spent: number;
-  #input: number | null = null;
-  #records = 0;
-  /** Why the first request this meter couldn't count went uncounted. */
-  #uncountable: string | null = null;
-  #uncounted = false;
-
-  constructor(spent: number) {
-    this.#spent = spent;
-  }
-
-  readonly tap = (record: UsageRecord): void => {
-    this.#records++;
-    if (record.costUsd !== null) this.#spent += record.costUsd;
-    else this.#cannotCount(`No price is known for ${record.model} at ${record.provider}`);
-    // The context's size: what the provider read from its cache counts as much as the rest.
-    const { inputTokens, cachedTokens, cacheWriteTokens } = record.units;
-    const counted = [inputTokens, cachedTokens, cacheWriteTokens].filter((n) => n !== undefined);
-    this.#input = counted.length === 0 ? null : counted.reduce((sum, n) => sum + n, 0);
-  };
-
-  /**
-   * `mind`, on `choice`, with each of its requests that ends with no usage record counted as one
-   * this meter can't count: a server may ignore the request for it (stream_options.include_usage).
-   */
-  metered(mind: Mind, choice: ModelChoice): Mind {
-    return { stream: (request) => this.#stream(mind, choice, request) };
-  }
-
-  async *#stream(mind: Mind, choice: ModelChoice, request: MindRequest): AsyncGenerator<MindChunk> {
-    const before = this.#records;
-    yield* mind.stream(request);
-    if (this.#records === before) {
-      this.#cannotCount(`No usage was reported for ${choice.model} at ${choice.account}`);
-    }
-  }
-
-  #cannotCount(why: string): void {
-    if (this.#uncountable !== null) return;
-    this.#uncountable = why;
-    logger.warning(`${why}, so the task's spend pauses can't count it`);
-  }
-
-  spentUsd(): number {
-    return this.#spent;
-  }
-
-  lastInputTokens(): number | null {
-    return this.#input;
-  }
-
-  /** Why this meter can't count the task's spend, until the owner lets the task go on without. */
-  unpriced(): string | null {
-    return this.#uncounted ? null : this.#uncountable;
-  }
-
-  goOnUncounted(): void {
-    this.#uncounted = true;
-  }
-}
-
-/**
- * With spend pauses on, a gate that pauses before the next calls once a request came back with no
- * price or no usage, as the pause it can't count toward would have: the loop pauses on what the
- * meter adds up.
- */
-function spendGate(meter: Spend, step: number): TaskRequest["gate"] {
-  if (step <= 0) return undefined;
-  return async () => {
-    const why = meter.unpriced();
-    if (why === null) return null;
-    return {
-      pause: `${why}, so its spend can't count toward the pause at every $${step.toFixed(2)}.`,
-    };
-  };
-}
-
 const ENDED: ReadonlySet<TaskStatus> = new Set(["succeeded", "failed", "cancelled"]);
 
 /** task.json, kept current: written again whenever what it says changes. */
 class Snapshots {
   readonly #dir: string;
-  readonly #meter: Spend;
+  readonly #meter: TaskMeter;
   #snapshot: TaskSnapshot;
   #text: string;
   readonly #read: Set<string>;
   readonly #written: Set<string>;
 
-  constructor(dir: string, snapshot: TaskSnapshot, meter: Spend) {
+  constructor(dir: string, snapshot: TaskSnapshot, meter: TaskMeter) {
     this.#dir = dir;
     this.#meter = meter;
     this.#snapshot = snapshot;
@@ -366,6 +300,11 @@ class Snapshots {
   async update(): Promise<void> {
     await this.save(this.#snapshot.status, this.#snapshot.outcome);
   }
+
+  /** From the next save on, the task has no spend pauses, so a --resume asks nothing. */
+  withoutSpendPauses(): void {
+    this.#snapshot = { ...this.#snapshot, spendPauseUsd: 0 };
+  }
 }
 
 interface Prepared {
@@ -375,7 +314,6 @@ interface Prepared {
   readonly model: ModelChoice;
   readonly resumed: boolean;
   readonly request: TaskRequest;
-  readonly meter: Spend;
   readonly snapshots: Snapshots;
   readonly release: () => void;
 }
@@ -396,7 +334,8 @@ async function equip(
   brief: TaskBrief,
   grants: readonly FolderGrant[],
   choice: ModelChoice,
-  meter: Spend,
+  meter: UsageMeter,
+  web: WebChoice,
   deps: TaskDeps,
 ): Promise<Omit<TaskRequest, "store" | "limits" | "signal">> {
   const home = homedir();
@@ -421,20 +360,17 @@ async function equip(
     // A link in it that leads nowhere on disk, say.
     throw parserError(PARSER, `${brief.folder} can't be the task's folder: ${errorText(error)}`);
   }
-  const mind = meter.metered(
-    (deps.createMind ?? createMind)("assistant", {
-      tap: meter.tap,
-      account: choice.account,
-      model: choice.model,
-    }),
-    choice,
-  );
+  const mind = (deps.createMind ?? createMind)("assistant", {
+    tap: meter.tap,
+    account: choice.account,
+    model: choice.model,
+  });
   try {
     await mkdir(folder, { recursive: true });
   } catch (error) {
     throw parserError(PARSER, `${brief.folder} can't be the task's folder: ${errorText(error)}`);
   }
-  const tools = createTaskTools(policy);
+  const tools = createTaskTools(policy, web === "any" ? { web: ANY_SITE } : {});
   const system = buildTaskPrompt({
     brief,
     tools,
@@ -471,8 +407,8 @@ async function newTask(
     check: args.check,
   };
   const id = newTaskId();
-  const meter = new Spend(0);
-  const equipped = await equip(id, brief, grants, model, meter, deps);
+  const meter = new UsageMeter(model);
+  const equipped = await equip(id, brief, grants, model, meter, args.web, deps);
   const dir = join(tasksDir(), id);
   const release = acquireLock(`task:${id}`, PROG);
   try {
@@ -489,13 +425,13 @@ async function newTask(
       spendPauseUsd: settings.spendPauseUsd,
       spentUsd: 0,
       files: { read: [], written: [] },
+      web: { mode: args.web, hosts: [], denied: [] },
     };
     const snapshots = new Snapshots(dir, snapshot, meter);
     await snapshots.save("running");
     const limits = { contextTokens: settings.contextTokens, spendPauseUsd: settings.spendPauseUsd };
-    const gate = spendGate(meter, limits.spendPauseUsd);
-    const request: TaskRequest = { ...equipped, store, limits, signal, ...(gate && { gate }) };
-    return { id, dir, brief, model, resumed: false, request, meter, snapshots, release };
+    const request: TaskRequest = { ...equipped, store, limits, signal };
+    return { id, dir, brief, model, resumed: false, request, snapshots, release };
   } catch (error) {
     release();
     throw error;
@@ -511,6 +447,13 @@ async function resumedTask(
   const dir = join(tasksDir(), id);
   const found = await readSnapshot(dir);
   if (found === null) throw parserError(PARSER, `argument --resume: no task ${pyRepr(id)}`);
+  // The app's manager runs it, answers its card, and reports its end to the chat.
+  if (found.chat !== undefined) {
+    throw parserError(
+      PARSER,
+      `argument --resume: task ${id} belongs to a chat in the local app, and goes on from its card there`,
+    );
+  }
   const release = acquireLock(`task:${id}`, PROG);
   try {
     // A transcript gone or damaged since can't be resumed; its task stays as it was.
@@ -522,27 +465,18 @@ async function resumedTask(
       throw parserError(PARSER, `argument --resume: task ${id} has no brief in its transcript`);
     }
     const model = args.model ?? found.model;
-    const meter = new Spend(found.spentUsd);
-    const equipped = await equip(id, found.brief, found.grants, model, meter, deps);
-    const snapshots = new Snapshots(dir, { ...found, model }, meter);
+    const meter = new UsageMeter({ ...model, spentUsd: found.spentUsd });
+    const web = args.web ?? (found.web?.mode === "any" ? "any" : "off");
+    const equipped = await equip(id, found.brief, found.grants, model, meter, web, deps);
+    const chosen = args.web && { web: { mode: args.web, hosts: [], denied: [] } };
+    const snapshots = new Snapshots(dir, { ...found, model, ...chosen }, meter);
     await snapshots.save("running");
     const limits = {
       contextTokens: assistantSettings().contextTokens,
       spendPauseUsd: found.spendPauseUsd,
     };
-    const gate = spendGate(meter, limits.spendPauseUsd);
-    const request: TaskRequest = { ...equipped, store, limits, signal, ...(gate && { gate }) };
-    return {
-      id,
-      dir,
-      brief: found.brief,
-      model,
-      resumed: true,
-      request,
-      meter,
-      snapshots,
-      release,
-    };
+    const request: TaskRequest = { ...equipped, store, limits, signal };
+    return { id, dir, brief: found.brief, model, resumed: true, request, snapshots, release };
   } catch (error) {
     release();
     throw error;
@@ -765,7 +699,8 @@ async function runInForeground(
   json: boolean,
   confirm: Confirm | null,
 ): Promise<number> {
-  const { request, snapshots } = task;
+  const { snapshots } = task;
+  let { request } = task;
   const report: Report = json ? new JsonReport(io.stdout, task) : new HumanReport(io.stdout, task);
   const onEvent = async (event: TaskEvent): Promise<void> => {
     report.event(event);
@@ -784,13 +719,16 @@ async function runInForeground(
   report.start();
   let outcome = await follow(request, onEvent);
   while (outcome.status === "paused" && confirm !== null) {
-    // The CLI's only gate is spendGate's, so an approval it asks for is spend it can't count.
-    const uncounted = outcome.reason === "approval" && task.meter.unpriced() !== null;
+    const uncounted = outcome.reason === "unpriced";
     if (outcome.reason !== "spend" && !uncounted) break;
     await snapshots.save("paused", outcome);
     const question = `${outcome.detail} Continue${uncounted ? " without spend pauses" : ""}? [y/N] `;
     if (!(await confirm(question, request.signal))) break;
-    if (uncounted) task.meter.goOnUncounted();
+    // Spend the meter can't count can't pause the task, so it goes on without the pauses.
+    if (uncounted) {
+      request = { ...request, limits: { ...request.limits, spendPauseUsd: 0 } };
+      snapshots.withoutSpendPauses();
+    }
     await snapshots.save("running");
     outcome = await follow(request, onEvent);
   }

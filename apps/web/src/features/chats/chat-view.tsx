@@ -1,10 +1,16 @@
-import { chainLimitOf, type ParticipantId, replyModeOf, summarize } from "@eidolon/chat";
+import {
+  type ChatEvent,
+  chainLimitOf,
+  type ParticipantId,
+  replyModeOf,
+  summarize,
+} from "@eidolon/chat";
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { KeyRoundIcon, MessageSquareOffIcon, PanelLeftIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorAlert } from "@/components/error-alert";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -12,6 +18,8 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { MicPill } from "@/features/call/call-controls";
 import { useCall } from "@/features/call/use-call";
+import { useChatTasks } from "@/features/tasks/use-chat-tasks";
+import { WaitingBar } from "@/features/tasks/waiting-bar";
 import { ApiError, type ErrorCode } from "@/lib/api";
 import { listOf } from "@/lib/labels";
 import { statusQuery } from "@/lib/query";
@@ -32,6 +40,8 @@ import { callOn, type LiveError } from "./stream";
 import { useChat } from "./use-chat";
 import { canRecord } from "./use-recorder";
 import type { MicState } from "./voice-recorder";
+
+const NO_EVENTS: readonly ChatEvent[] = [];
 
 /** A reply that couldn't start: a key she needs, else the API's failure. */
 function LiveNotice({
@@ -150,11 +160,32 @@ export function ChatView({
     () => (chat.data === undefined ? null : callOn(chat.data)),
     [chat.data],
   );
+  const events = chat.data?.events;
+  const tasks = useChatTasks(id, events ?? NO_EVENTS);
   // Another tab's call is followed too, so its lines show and its end frees the composer.
-  const turns = useChat(id, calling || serverCall !== null);
+  const turns = useChat(id, calling || serverCall !== null, tasks.awaitingReport);
   const [recordable] = useState(canRecord);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const events = chat.data?.events;
+  // The task card to bring into view: the Tasks list links here with ?task=, and the waiting bar
+  // shows its own.
+  const [params, setParams] = useSearchParams();
+  const linked = params.get("task");
+  const [focus, setFocus] = useState<string | null>(linked);
+  useEffect(() => {
+    if (linked !== null) setFocus(linked);
+  }, [linked]);
+  const focused = useCallback(() => {
+    setFocus(null);
+    if (linked === null) return;
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete("task");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [linked, setParams]);
   const items = useMemo(() => chatItems(events ?? []), [events]);
   const header = chat.data?.header;
   const summary = useMemo(
@@ -288,10 +319,19 @@ export function ChatView({
           call={liveCall}
           onSend={turns.send}
           onSendVoice={turns.sendVoice}
+          focusTask={focus}
+          onFocused={focused}
         />
         <MicPill call={call} />
       </div>
       <footer className="flex shrink-0 flex-col gap-3 border-t bg-muted/50 px-4 py-3">
+        {tasks.bar !== null && (
+          <WaitingBar
+            task={tasks.bar.task}
+            others={tasks.bar.others}
+            onShow={() => setFocus(tasks.bar?.task.id ?? null)}
+          />
+        )}
         {docked && (
           <CallDock
             call={call}

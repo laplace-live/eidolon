@@ -7,7 +7,15 @@ import type {
   ChatStreamLine,
   ParticipantId,
 } from "@eidolon/chat";
-import type { ContextProvider, LlmTool, ToolEffects, ToolSchema, TurnGate } from "@eidolon/core";
+import type {
+  ContextProvider,
+  LlmTool,
+  ToolCall,
+  ToolEffects,
+  ToolResult,
+  ToolSchema,
+  TurnGate,
+} from "@eidolon/core";
 import type { UsageScope } from "@eidolon/providers";
 import type { AudioClip, Speech, Transcript } from "@eidolon/providers/speech-batch";
 
@@ -64,6 +72,23 @@ export interface TurnRequest {
   readonly usage?: UsageScope;
   /** A prompt she answers, stored as a developer `context` block at her view's end. */
   readonly nudge?: string;
+  /** Offered after her own tools, in this turn alone; a call's turn takes none. */
+  readonly background?: BackgroundTools;
+}
+
+/** A text turn's tools whose work goes on outside it, and the line her persona prefix gives them. */
+export interface BackgroundTools {
+  /**
+   * Each result is stored with stage `started`, and whoever does the work stores the call's `final`
+   * later. A result holding `error` is stored as it is: nothing went on.
+   */
+  readonly tools: readonly BackgroundTool[];
+  readonly hint: string;
+}
+
+/** A tool whose call settles outside its turn: it is told the call's id, which its `final` answers. */
+export interface BackgroundTool extends Omit<LlmTool, "run"> {
+  run(call: ToolCall & { readonly callId: string }, effects: ToolEffects): Promise<ToolResult>;
 }
 
 /** What a call gives each of her turns: her reply is spoken live, and her tools act on the call. */
@@ -93,7 +118,8 @@ export interface CallHooks {
 }
 
 /** A turn in a call, which has no `late`: an async tool runs on through `onAsyncResult`. */
-export type CallTurnRequest = Omit<TurnRequest, "mode" | "late" | "usage"> & CallHooks;
+export type CallTurnRequest = Omit<TurnRequest, "mode" | "late" | "usage" | "background"> &
+  CallHooks;
 
 /** Takes a tool that runs on (`cancelOnInterruption: false`) when its turn is interrupted. */
 export interface LateTools {
@@ -158,6 +184,8 @@ export interface PartsOptions {
   readonly voice?: boolean;
   /** A realtime model voices her: the prefix's realtime delivery line. Its voice never switches. */
   readonly realtime?: boolean;
+  /** Her background tools' line, which her persona prefix carries after the selfie's. */
+  readonly assistantHint?: string;
   /** What the chat's parts are kept under, by default its id. */
   readonly chatKey?: string;
 }

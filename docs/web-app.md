@@ -2,7 +2,8 @@
 
 Eidolon on your own computer, with a web app to set it up, build personas, and call or text them: a
 setup wizard, a persona studio (identity, prompt, voice, facts, videos, glossary, pictures), a call
-page, text chats, settings, and the offline chain's commands run as jobs. It is a second entry
+page, text chats, the tasks she runs on this computer when asked in a chat, settings, and the
+offline chain's commands run as jobs. It is a second entry
 point beside the bot, `apps/bot/src/local/`, serving the built app from `apps/web/` (Vite, React,
 shadcn, Tailwind) on loopback only. The bot that `bun run start` and the Docker image run never
 loads it.
@@ -81,6 +82,9 @@ finishing an index. A tool that stops the app should send SIGTERM.
   `EIDOLON_CHAT_SECRET` is set ([chat.md](chat.md#production-the-browser-keeps-the-chat)). Until
   then, production's offer never binds a call to a chat, whatever its request data says, which
   `production.test.ts` pins.
+- **So does the assistant.** Only `apps/bot/src/local` and `apps/cli` import `@eidolon/assistant`,
+  which Biome and `boundaries.test.ts` hold, and production's chat endpoint never offers
+  `start_task` ([assistant.md](assistant.md)).
 
 ## Security
 
@@ -116,11 +120,11 @@ the secret behind them, are the only boundary, so treat the link, the cookie, th
   `/api/memories`, `/api/chat/*`, `/api/selfie` and `/mcp`, with their preflights answered and CORS
   headers on every answer. It gets them as a deployment serves them: an offer is a stranger's,
   within the anonymous quota, or a LAPLACE login's, and memories take a LAPLACE token, so the
-  cookie that rides along never makes it the local viewer. `/api/local` stays the app's own, and
-  the app's own origin stays the local viewer's even when listed. An entry with no http(s)
-  origin, `null` included, is ignored with a warning. While any origin is listed, a selfie also
-  loads as an `<img>`, which sends no `Origin`, from any page: its unguessable id is the key, as
-  on a deployment. Blank, the default, lists none.
+  cookie that rides along never makes it the local viewer. `/api/local` stays the app's own, its
+  chats and tasks included, and the app's own origin stays the local viewer's even when listed. An
+  entry with no http(s) origin, `null` included, is ignored with a warning. While any origin is
+  listed, a selfie also loads as an `<img>`, which sends no `Origin`, from any page: its
+  unguessable id is the key, as on a deployment. Blank, the default, lists none.
 - **The secret** is `<data home>/local-token`, made at the first start, mode 0600 from creation.
   The server refuses to start (exit 1) when it isn't a regular file, another user owns it, its
   mode lets other users in, or it holds no valid token. It never reaches a browser.
@@ -182,8 +186,8 @@ terminal's log line that holds what went wrong, and the app shows it beside the 
 | Area | Routes | What |
 | --- | --- | --- |
 | Session | `POST session`, `GET session` | Trades a link code for the cookie and the proof; GET says whether the caller is signed in, or with `?probe=` proves this server holds the secret, for a second start |
-| Status | `GET status`, `POST restart` | Readiness, polled by the home page and never waiting on a remote probe: the keys her call roles need, each role's provider and model or what is wrong with them, her voice; restart is refused during a call, or while one is connecting |
-| Settings | `GET settings?persona=`, `PUT settings` | Every `SETTINGS` row: the value the files give it and which file, the environment's value and the variable it comes from, and whether that overrides the file's, as only an app row's does (a persona's own value wins, and without one she inherits the environment's, a model or voice only while the environment's provider is hers); and her voice styles, with each one the environment sets and whether she inherits it, replaces it with one of hers, or ignores it while her voice isn't the environment's; PUT `{scope, persona?, values}` is checked by kind, a provider against the catalog, the time zone as an IANA zone, and written to `settings.yaml` or her `persona.yaml` |
+| Status | `GET status`, `POST restart` | Readiness, polled by the home page and never waiting on a remote probe: the keys her call roles need, each role's provider and model or what is wrong with them, her voice, and `assistant: { enabled, ready, problem, running }`, Assistant Mode's state, why it isn't ready, and how many tasks run; restart is refused during a call, or while one is connecting |
+| Settings | `GET settings?persona=`, `PUT settings` | Every `SETTINGS` row: the value the files give it and which file, the environment's value and the variable it comes from, and whether that overrides the file's, as only an app row's does (a persona's own value wins, and without one she inherits the environment's, a model or voice only while the environment's provider is hers); and her voice styles, with each one the environment sets and whether she inherits it, replaces it with one of hers, or ignores it while her voice isn't the environment's; PUT `{scope, persona?, values}` is checked by kind, a provider against the catalog, the time zone as an IANA zone, and written to `settings.yaml` or her `persona.yaml`; one that turns Assistant Mode off, as the environment and the file decide it, answers once every live task is cancelled |
 | Accounts | `GET`, `POST accounts`, `PUT`, `DELETE accounts/:id`, `POST accounts/check`, `GET accounts/:id/models?category=` | Every provider account: `credentials.json`'s, and each provider's default that the environment configures or her calls need, with where its key comes from and never the key, its API base and settings, and which settings name it; a new one takes its provider's id while that is free, else `<provider>-2` and on; an API base is refused for a provider without a base variable; DELETE is refused while a settings file names it; the check asks the provider about a typed or the saved key, where the catalog says how: a free listing, never a model call; models lists what the provider's API offers now ([providers.md](providers.md#model-lists)) |
 | Credentials | `GET`, `PUT credentials`, `POST credentials/check` | The secrets `credentials.json` keeps under variable names, `{NAME: {set, source}}`, never a value; the check is Qdrant's for the memory step and home |
 | Personas | `GET`, `POST personas`, `PUT personas/active` | List, create (with a voice and a starter `prompt.md`), switch (refused during a call, or while one is connecting) |
@@ -197,6 +201,7 @@ terminal's log line that holds what went wrong, and the app shows it beside the 
 | Memories | `GET`, `DELETE memories?persona=` | One persona's memories of you |
 | Usage | `GET usage?from=&to=&persona=` | The usage ledger's spend summed by day, persona, provider, task and model, every persona and provider it knows, and whether it records at all ([providers.md](providers.md#usage-and-cost)) |
 | Chats | `GET`, `POST chats`, `GET`, `PATCH`, `DELETE chats/:id`, `POST chats/:id/messages`, `GET chats/:id/live`, `POST chats/:id/stop`, `POST chats/:id/participants`, `GET chats/:id/files/:name` | [Chats](#chats) |
+| Tasks | `GET tasks?chat=`, `GET tasks/:id`, `GET tasks/:id/events?after=`, `POST tasks/:id/approve`, `POST tasks/:id/continue`, `DELETE tasks/:id` | The app's tasks, which she starts in a chat with `start_task`, and the answers and Stop of each one's card; no route starts, steers or deletes a task ([assistant.md](assistant.md#the-routes)) |
 
 The bot's own routes stay, behind the guard: `POST /api/offer` and `/api/offer/preflight` take
 the session and call as [the local viewer](#the-local-viewer-and-memory), with no quota;
@@ -212,7 +217,7 @@ whether or not she is the active persona ([chat.md](chat.md#calls)).
 | Code | Status | When |
 | --- | --- | --- |
 | `bad-json` | 400 | The body isn't JSON |
-| `bad-request` | 400 | A body, query or path segment of the wrong shape |
+| `bad-request` | 400 | A body, query or path segment of the wrong shape: for a task, an id that isn't a lowercase UUID, an `after` that isn't a byte offset, a model `createMind` refuses, or an Always on a folder `assistant.folders` can't hold |
 | `unauthorized` | 401 | No session and no Bearer token, or a link code that isn't this Eidolon's |
 | `link-expired` | 401 | A link code over 10 minutes old |
 | `proof-missing` | 401 | The session cookie without its `X-Eidolon-Proof`, or with a wrong one |
@@ -220,7 +225,7 @@ whether or not she is the active persona ([chat.md](chat.md#calls)).
 | `misdirected` | 421 | A `Host` other than a loopback name with the bound port |
 | `not-found` | 404 | No such route, file or picture |
 | `method-not-allowed` | 405 | Another method, any `OPTIONS`, HEAD on a GET route; `Allow` names the right one |
-| `conflict` | 409 | A file that doesn't read as it should (`credentials.json`, a `persona.yaml`, a hand-made URL list), a persona `EIDOLON_PERSONA` pins, a job an earlier server started |
+| `conflict` | 409 | A file that doesn't read as it should (`credentials.json`, a `persona.yaml`, a hand-made URL list, a `settings.yaml` an Always answer would write), a persona `EIDOLON_PERSONA` pins, a job an earlier server started |
 | `payload-too-large` | 413 | A body or upload over its cap |
 | `unsupported-media-type` | 415 | An upload that isn't PNG, JPEG or WebP by its bytes |
 | `unavailable` | 503 | Memory is off or Qdrant doesn't answer; Fish Audio doesn't answer a voice search |
@@ -235,7 +240,7 @@ whether or not she is the active persona ([chat.md](chat.md#calls)).
 | `read-only-setting` | 400 | `sources.ytDlp` |
 | `invalid-path` | 400, 409 | A persona path that is absolute or leaves her folder; 409 when her saved `prompt` setting does |
 | `unknown-credential` | 400 | A name `credentials.json` doesn't take |
-| `unknown-account` | 404, 400 | No provider account has that id; 400 for a provider the catalog doesn't have |
+| `unknown-account` | 404, 400 | No provider account has that id; 400 for a provider the catalog doesn't have, or an account a task's approval picks that Eidolon doesn't know |
 | `account-in-use` | 409 | Removing an account a persona's or the install's settings name |
 | `invalid-file-name` | 400 | A fact or picture name that isn't one plain segment with an allowed extension |
 | `template-file` | 409 | Deleting a picture the template ships |
@@ -249,6 +254,14 @@ whether or not she is the active persona ([chat.md](chat.md#calls)).
 | `unknown-chat` | 404 | No chat has that id |
 | `missing-key` | 409 | Starting a chat, or sending in one, while her mind's provider takes a key and has none |
 | `chat-in-call` | 409 | Sending a message or a voice message, deleting the chat, or calling into it while it is in a call |
+| `assistant-off` | 409 | Answering a task's card while Assistant Mode is off; Stop and a Deny at its start still work |
+| `assistant-not-ready` | 409 | Allowing a start, answering a path or a site, or Continue while the assistant role lacks an account, a model or a key, or an assistant folder is or holds the home folder; the message is status' `assistant.problem` |
+| `unknown-task` | 404 | No app task has that id, a `laplace-task` task's included |
+| `task-locked` | 409 | Another process, such as `laplace-task`, holds the task |
+| `nothing-pending` | 409 | Approving a task that waits for no answer, runs, or asks something other than the question the answer names |
+| `not-paused` | 409 | Continuing a task that isn't paused or interrupted |
+| `pending` | 409 | Continuing a task that waits for an answer |
+| `range-not-satisfiable` | 416 | A task's events asked for from past the transcript's end |
 
 ## The local viewer and memory
 
@@ -392,6 +405,71 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
   - `/call` stays the standalone call to the active persona, with no chat.
 - **Spend:** a chat's requests are recorded in the usage ledger with `source: "chat"`.
 
+## Tasks
+
+Assistant Mode's tasks ([assistant.md](assistant.md)) start only in a chat: the owner asks her,
+and she calls `start_task`. Everything a task asks of the owner is answered in that chat.
+
+- **The task card** (`features/tasks/task-card.tsx`) sits in the chat's log at her `start_task`
+  call, found by the call's `started` result:
+  - the goal, a status badge, the folder, the model and its account, and the spend against the
+    next pause;
+  - while it waits on the owner, its question, **Start this task?**, whether it may read or write
+    outside its folders, or whether it may fetch from a site, with **Deny**, **Always Allow This
+    Folder** (**Allow Any Site** for a site) and **Allow Once**. A path's question shows the path
+    it asked for and what an Allow grants: "Allow Once lets this task read everything in
+    <folder> until it ends" ("read and write" for a write), or "<path> alone" when the question
+    names no folder. A request to read outside its folders, or to write a path granted alone,
+    offers only **Deny** and **Allow Once**: every task may read and write in a folder Always
+    Allow adds, and tasks start there without asking, which the card's write question says,
+    naming that folder. Each answer names the question it answers. At a start the account and model (the role's
+    picker, with a live listing) and the web access (**Ask for Each Site**, **Any Site**, **No
+    Web**) can be changed first;
+  - for a spend, stall or unpriced pause, or an interrupted task, **Continue**, with the spend
+    pause's amount at a spend pause;
+  - the plan, the latest step (the tool and the head of its argument) on the card of the chat's
+    newest running task, and the files it wrote;
+  - **Show Steps**, the transcript, followed live while it runs and read once otherwise: the
+    worker's words in Markdown-light, a row per tool call whose result folds out, errors marked,
+    the lines it was told, pauses, compaction as a divider, and its end. Only the newest running
+    task's card, and a card whose steps are open, follows `GET tasks/:id/events`: a follow holds
+    one of the browser's six connections to the app while its task runs;
+  - **Stop**, after a confirmation in the page, while it is live.
+  - While Assistant Mode is off or not ready, Continue and every answer but a Deny at the start are
+    disabled, as the server would refuse them, and a note says why, with a link to Settings; Stop
+    still works.
+- **The waiting bar** sits above the composer while a task of the open chat waits on the owner:
+  awaiting approval, paused or interrupted. It says what the oldest one waits for ("Waiting for
+  your OK to work in ~/Git/x"; for a path, what an Allow grants: "Waiting for your OK to read
+  everything in ~/Documents", "read and write" for a write, or the path alone) and how many more
+  wait, with the card's buttons, which share the card's model, web access and spend-pause field,
+  and **Show Task**, which scrolls to the card. The Tasks list's waiting row says the same line.
+- **Refresh:** once her log holds a `start_task` call, the chat page reads `GET tasks?chat=`, and
+  polls it while a task is live, every 2 s while one runs and 5 s while one waits. When it sees a
+  task end, it asks `GET live` every 2 s, reading the log again each time, until her report is in
+  the log, or 60 s pass with no reply on the page. Her report turn starts only once no reply runs
+  in the chat, so the page doesn't ask while it carries a reply, and the 60 s count from the end
+  of the last reply it carried. Her report turn streams in like any reply.
+- **The Tasks list** (`/tasks`) is read-only: what she is working on and has done. A **Tasks** nav
+  entry before Jobs, shown while Assistant Mode is on, counts the tasks waiting on the owner.
+  - Live tasks come first, then ended ones, each newest first. A row has the goal, the status, her
+    name and the chat's title (an untitled chat's day), the folder, the model, the spend and the
+    age, and a waiting row says what it waits for.
+  - A row opens `/chats/<id>?task=<task>`, which scrolls the card into view and rings it. A
+    deleted chat's row reads **Chat deleted** and opens nothing.
+  - There is no New Task, no button and no steps. While the mode is on but not ready, the problem
+    shows above the rows, with **Open Settings**; while it is off, `/tasks` leads home.
+  - The nav polls the list, every 2 s while a task runs, 5 s while one waits and 30 s otherwise.
+- **Settings → Assistant Mode** holds the switch, the account and model (the role's picker), the
+  folders (full paths, never `/` or `~`; PUT settings also refuses, 400 `invalid-setting` with
+  `GrantRefused`'s reason, any folder that is or holds home on disk, such as `/Users/<you>`,
+  `/Users`, `~/.` or `~/..`), the spend pause and the context, says she starts tasks when asked in
+  a chat, shows the problem while the mode isn't ready, and links to the Tasks list while it is
+  on. Saving the switch off asks first while any task hasn't ended, counted from a fresh
+  `GET tasks` ("2 tasks are running or waiting for you. Turning Assistant Mode off stops them."),
+  and asks anyway when the list can't be read.
+- **Spend:** a task's requests are recorded with `source: "task"` and the task's id.
+
 ## Jobs
 
 `POST /api/local/jobs` takes `{command, persona, options}`. Each command maps its typed options
@@ -507,6 +585,10 @@ browser's languages, else English.
 `src/locales/catalog.test.ts` checks that both catalogs hold the same messages, none obsolete, and
 that every Chinese one has the English one's placeholders and tags.
 
+In Chinese a task is 任务, a job is 作业, and Assistant Mode is 助手模式. A task's statuses come
+from `STATUS_LABELS` in `features/tasks/labels.ts`, and its plan's **Plan** carries the context
+`task plan`, apart from the jobs' Plan command.
+
 The English capitalizes as laplace-chat's does. A short label is Title Case, with articles,
 conjunctions and prepositions lowercased whatever their length and a phrasal verb's particle
 capitalized: a button, a menu item, a heading, a setting's name, a tab or column label, an
@@ -560,6 +642,20 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
   landing in the log with its phone mark under its separator, the composer waiting and a send
   refused `chat-in-call`, then **Hang Up**, the log's `call-ended` with `hangup`, the separators
   with the call's length, the composer back, and no server error during the call;
+- a task she starts in a new chat with milky-green, last, since her answers in a chat of one are
+  offered `start_task` once the assistant has a model: Settings → Assistant Mode set to the
+  OpenRouter account at that server and a model typed into its picker; her greeting offered
+  neither `start_task` nor its hint; her `start_task` call for the viewer's line, offered with her
+  hint, and her line after it; the card and the waiting bar asking
+  to start it, then **Allow Once** on the card; the worker, answered by that server turn by turn
+  with usage blocks that carry a cost, writing `index.html` in the task's temporary folder, then
+  reading `notes.txt` in a second one outside its grant, which pauses the task, the card and the
+  waiting bar naming that second folder as what Allow Once grants, until **Allow Once** on the
+  card's path question; the task done with its spend as reported, the page on disk
+  and `assistant.folders` unchanged; **Show Steps**' rows; her call's `final` in the log, then
+  her report turn, asked by the runner's nudge and offered no `start_task`, reading the worker's
+  report only in her call's `tool` message, the page showing it, and the task marked reported; and the Tasks list showing it done,
+  with no button or field, its row opening the chat with the card in view;
 
 then stops the server and deletes the home. It refuses to start when either `load-env.ts` would
 apply a `.env` or use another data home, and exits 0 when every check passes, else 1, after the
@@ -618,6 +714,10 @@ else.
   Setting the value back doesn't clear it: a call may have read the changed one.
 - **A job reads `interrupted`**: the server stopped or restarted while it ran. Resume it from its
   page.
+- **A task reads `interrupted`**: the server stopped while it ran. The next start resumes it while
+  Assistant Mode is on and ready; otherwise press **Continue** on its card in the chat.
+- **She says she can't use the computer, or never offers a task**: Assistant Mode is off or not
+  ready (Settings → Assistant Mode says why), or the chat holds more than her.
 - **A cancelled job stays `stopping`**: it is finishing an index rebuild, which can take a while
   on a large archive. Wait, or Force stop it and run that ingest again. A job an earlier start
   of Eidolon ran has no Force stop: it will finish on its own or be marked interrupted.

@@ -226,6 +226,15 @@ export async function bootLocal(
   const restart = (): void => {
     setTimeout(() => shutdown?.(RESTART_EXIT_CODE), RESTART_DELAY_MS);
   };
+  const local = createLocalExtension({
+    token,
+    site,
+    boundLiterals: host.literals,
+    memoryAdmin: () => modules.memory.memoryAdmin(),
+    restart,
+    nowSeconds: () => io.nowSeconds(),
+    origins: listed.origins,
+  });
   const deps: BotDeps = {
     ...modules,
     // The bot's CORS allows every origin; the extension adds headers for a listed one only.
@@ -238,15 +247,7 @@ export async function bootLocal(
       ...modules.runtime,
       configureLogging: () => modules.runtime.configureLogging({ level: logLevel(args.verbose) }),
     },
-    local: createLocalExtension({
-      token,
-      site,
-      boundLiterals: host.literals,
-      memoryAdmin: () => modules.memory.memoryAdmin(),
-      restart,
-      nowSeconds: () => io.nowSeconds(),
-      origins: listed.origins,
-    }),
+    local,
   };
 
   let started: BotServer;
@@ -281,6 +282,7 @@ export async function bootLocal(
   } catch (error) {
     logger.warning(`A second start won't be told this one's port: ${errorText(error)}`);
   }
+  await local.startTasks();
   io.notify({ kind: "listening", port });
   const url = linkUrl(host, port, token, io.nowSeconds());
   io.stdout(`Eidolon is ready: ${url}\n`);

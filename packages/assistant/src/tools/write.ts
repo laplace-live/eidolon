@@ -34,6 +34,9 @@ export function createWriteTool(guard: PathGuard): AssistantTool {
     snippet: "Create or overwrite files",
     guidelines: ["Use write only for new files or complete rewrites."],
     replay: "safe",
+    // A reply that writes a file and reads it back expects the read to see the write; run with the
+    // rest of its batch, the read can finish first.
+    executionMode: "sequential",
     async execute(args, { signal }) {
       const problems: string[] = [];
       const path = pathArgument(args, problems);

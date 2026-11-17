@@ -71,6 +71,7 @@ export interface PersonaPrefixInput {
   /** Pre-rendered tool hint lines; "" when the tool isn't offered. */
   readonly voiceHint?: string;
   readonly selfieHint?: string;
+  readonly assistantHint?: string;
   /** A realtime model voices her replies itself, so no cue is ever stripped before it speaks. */
   readonly realtime?: boolean;
   /** The names of a group chat's other personas; none in a chat of one and on calls. */
@@ -138,6 +139,7 @@ export function buildPersonaPrefix(input: PersonaPrefixInput): string {
 
   if (input.voiceHint) lines.push(input.voiceHint);
   if (input.selfieHint) lines.push(input.selfieHint);
+  if (input.assistantHint) lines.push(input.assistantHint);
   if (input.realtime) lines.push(REALTIME_DELIVERY_LINE);
   return `${lines.join("\n")}\n\n`;
 }
@@ -232,6 +234,7 @@ export async function buildSystemInstruction(input: {
   /** Pre-rendered tool hint lines; "" when the tool isn't offered. */
   voiceHint: string;
   selfieHint: string;
+  assistantHint?: string;
   /** The call runs on a realtime model. */
   realtime?: boolean;
   /** The names of a group chat's other personas. */
@@ -252,6 +255,7 @@ export async function buildSystemInstruction(input: {
     recentStreamDates,
     voiceHint: input.voiceHint,
     selfieHint: input.selfieHint,
+    ...(input.assistantHint ? { assistantHint: input.assistantHint } : {}),
     ...(input.realtime ? { realtime: true } : {}),
     ...(input.participants ? { participants: input.participants } : {}),
   });

@@ -851,7 +851,7 @@ describe("edit tool in a task", () => {
     expect(existsSync(join(testDir, "a.txt"))).toBe(false);
   });
 
-  it("describes itself as pi's edit does", () => {
+  it("describes itself as pi's edit does, but runs its batch in order", () => {
     const { schema } = editTool;
     expect(schema.name).toBe("edit");
     expect(schema.required).toEqual(["path", "edits"]);
@@ -864,7 +864,7 @@ describe("edit tool in a task", () => {
       },
     });
     expect(editTool.replay).toBe("never");
-    expect(editTool.executionMode).toBeUndefined();
+    expect(editTool.executionMode).toBe("sequential");
     expect(editTool.snippet).toBe(
       "Make precise file edits with exact text replacement, including multiple disjoint edits in one call",
     );

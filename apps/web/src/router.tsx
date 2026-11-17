@@ -60,6 +60,7 @@ export function createRouter({ queryClient, exchanged }: RouterDeps) {
             { path: "call", lazy: () => import("@/features/call/route") },
             { path: "personas/:id/:tab?", lazy: () => import("@/features/studio/route") },
             { path: "settings", lazy: () => import("@/features/settings/route") },
+            { path: "tasks", lazy: () => import("@/features/tasks/route") },
             { path: "jobs/:id?", lazy: () => import("@/features/jobs/route") },
             { path: "usage", lazy: () => import("@/features/usage/route") },
           ],

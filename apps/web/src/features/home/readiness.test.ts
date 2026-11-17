@@ -69,6 +69,7 @@ const healthy: Status = {
   freeBytes: 200e9,
   lastSessionError: null,
   activeCalls: 0,
+  assistant: { enabled: true, ready: true, problem: null, running: 0 },
 };
 
 function item(status: Status, id: string): Item | undefined {

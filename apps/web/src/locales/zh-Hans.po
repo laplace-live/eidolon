@@ -14,6 +14,10 @@ msgctxt "list separator"
 msgid ", "
 msgstr "、"
 
+#: src/components/app-shell.tsx
+msgid ", {count} waiting for you"
+msgstr "，{count} 个在等你"
+
 #: src/features/studio/voice-styles-card.tsx
 msgid "“default” is her own voice: pick another name."
 msgstr "“default” 是她自己的声音，请换个名字。"
@@ -78,6 +82,10 @@ msgstr "{count, plural, other {# 个新视频（{known} 个已添加过）}}"
 #: src/features/usage/route.tsx
 msgid "{count, plural, one {# request has no price, so it isn't counted.} other {# requests have no price, so they aren't counted.}}"
 msgstr "{count, plural, other {# 个请求没有价格，未计入花费。}}"
+
+#: src/features/settings/assistant.tsx
+msgid "{count, plural, one {# task is running or waiting for you. Turning Assistant Mode off stops it.} other {# tasks are running or waiting for you. Turning Assistant Mode off stops them.}}"
+msgstr "{count, plural, other {有 # 个任务正在运行或等你处理。关闭助手模式会停止它们。}}"
 
 #: src/features/studio/videos-section.tsx
 msgid "{count, plural, one {# video can't be priced yet: its length is known only once it downloads.} other {# videos can't be priced yet: their length is known only once they download.}}"
@@ -150,6 +158,10 @@ msgstr "本次通话共 {count} 个错误"
 #: src/features/jobs/parts.tsx
 msgid "{count} failed"
 msgstr "失败 {count} 项"
+
+#: src/features/tasks/waiting-bar.tsx
+msgid "{count} more waiting"
+msgstr "还有 {count} 个在等待"
 
 #: src/features/jobs/parts.tsx
 msgid "{count} skipped"
@@ -457,9 +469,13 @@ msgstr "供 yt-dlp 使用的 cookies.txt，yt-dlp 会把合并后的 Cookie 写�
 msgid "A Fish voice ID is 32 characters of 0–9 and a–f."
 msgstr "Fish 的声音 ID 由 32 个 0–9 和 a–f 的字符组成。"
 
+#: src/components/settings-form/labels.ts
+msgid "A folder can't be the whole disk or your home folder."
+msgstr "文件夹不能是整个磁盘或你的主目录。"
+
 #: src/lib/labels.ts
 msgid "A job option isn't valid."
-msgstr "任务选项无效。"
+msgstr "作业选项无效。"
 
 #: src/components/locked-screen.tsx
 msgid "A link works for 10 minutes."
@@ -513,7 +529,7 @@ msgstr "Eidolon 依赖的服务出错了，请稍后再试。"
 
 #: src/features/studio/knowledge-section.tsx
 msgid "A table built with another embedding model or size than the settings now name can't be searched. Run its job again."
-msgstr "用与当前设置不同的嵌入模型或维度建立的表无法检索。请重新运行对应的任务。"
+msgstr "用与当前设置不同的嵌入模型或维度建立的表无法检索。请重新运行对应的作业。"
 
 #: src/components/settings-form/labels.ts
 msgid "A task asks before going on each time its spend crosses another multiple of this, in US dollars. 0 never asks. Default 1."
@@ -526,6 +542,10 @@ msgstr "你要求时她会切换到的声音。给它起个名字，写下你会
 #: src/features/studio/add-videos.tsx
 msgid "About {duration} in all."
 msgstr "总时长约 {duration}。"
+
+#: src/features/tasks/parts.tsx
+msgid "Account"
+msgstr "账号"
 
 #: src/components/persona-badges.tsx
 msgid "Active"
@@ -643,7 +663,7 @@ msgstr "高级"
 
 #: src/features/jobs/detail.tsx
 msgid "All Jobs"
-msgstr "全部任务"
+msgstr "全部作业"
 
 #: src/features/studio/add-videos.tsx
 msgid "All of these videos are listed already."
@@ -657,6 +677,14 @@ msgstr "所有人设"
 msgid "All Time"
 msgstr "全部"
 
+#: src/features/tasks/cards.tsx
+msgid "Allow Any Site"
+msgstr "允许任何网站"
+
+#: src/features/tasks/cards.tsx
+msgid "Allow Any Site lets this task fetch from any site without asking again."
+msgstr "选择「允许任何网站」后，这个任务可以从任何网站获取内容，不再询问。"
+
 #: src/features/call/call-notices.tsx
 msgid "Allow microphone access for this page in your browser's site settings, then call again."
 msgstr "请在浏览器的网站设置中允许此页面使用麦克风，然后再次呼叫。"
@@ -665,6 +693,26 @@ msgstr "请在浏览器的网站设置中允许此页面使用麦克风，然后
 msgid "Allow microphone access for this page in your browser's site settings, then try again."
 msgstr "请在浏览器的网站设置中允许此页面使用麦克风，然后再试一次。"
 
+#: src/features/tasks/cards.tsx
+msgid "Allow Once"
+msgstr "允许一次"
+
+#: src/features/tasks/labels.ts
+msgid "Allow Once lets this task read {path} alone until it ends; Deny tells it it can't."
+msgstr "「允许一次」让这个任务在结束前可以读取 {path}，仅限它本身；「拒绝」会告诉它不能使用。"
+
+#: src/features/tasks/labels.ts
+msgid "Allow Once lets this task read and write {path} alone until it ends; Deny tells it it can't."
+msgstr "「允许一次」让这个任务在结束前可以读写 {path}，仅限它本身；「拒绝」会告诉它不能使用。"
+
+#: src/features/tasks/labels.ts
+msgid "Allow Once lets this task read and write everything in {folder} until it ends; Deny tells it it can't."
+msgstr "「允许一次」让这个任务在结束前可以读写 {folder} 里的所有内容；「拒绝」会告诉它不能使用。"
+
+#: src/features/tasks/labels.ts
+msgid "Allow Once lets this task read everything in {folder} until it ends; Deny tells it it can't."
+msgstr "「允许一次」让这个任务在结束前可以读取 {folder} 里的所有内容；「拒绝」会告诉它不能使用。"
+
 #: src/components/settings-form/labels.ts
 msgid "Allowed Browser Origins"
 msgstr "允许的浏览器来源"
@@ -672,6 +720,18 @@ msgstr "允许的浏览器来源"
 #: src/features/studio/add-videos.tsx
 msgid "Already added"
 msgstr "已添加"
+
+#: src/features/tasks/cards.tsx
+msgid "Always Allow This Folder"
+msgstr "始终允许这个文件夹"
+
+#: src/features/tasks/labels.ts
+msgid "Always Allow This Folder adds {folder} to Assistant Mode's folders: from then on every task may read and write in it, and tasks start there without asking."
+msgstr "选择「始终允许这个文件夹」会把 {folder} 加入助手模式的文件夹：之后每个任务都能在里面读写，在这里的任务也无需询问即可开始。"
+
+#: src/features/tasks/cards.tsx
+msgid "Always Allow This Folder adds it to Assistant Mode's folders, where tasks start without asking."
+msgstr "选择「始终允许这个文件夹」会把它加入助手模式的文件夹，以后在这里的任务无需询问即可开始。"
 
 #: src/lib/labels.ts
 msgid "An account a persona uses can't be removed: pick another for her first."
@@ -688,7 +748,7 @@ msgstr "头像不是必需的，但建议设置一个。"
 #: src/features/jobs/detail.tsx
 #: src/features/jobs/parts.tsx
 msgid "An earlier run of Eidolon started this job, so this one can't stop it. It will finish on its own, or be marked interrupted."
-msgstr "这个任务是之前运行的 Eidolon 启动的，现在的 Eidolon 无法停止它。它会自行完成，或被标记为已中断。"
+msgstr "这个作业是之前运行的 Eidolon 启动的，现在的 Eidolon 无法停止它。它会自行完成，或被标记为已中断。"
 
 #: src/features/jobs/parts.tsx
 msgid "and {count} more"
@@ -716,11 +776,15 @@ msgstr "另一个应用正在使用麦克风。关闭它后再试一次。"
 
 #: src/features/jobs/labels.ts
 msgid "Another run is already working on this persona."
-msgstr "另一个任务正在处理这个人设。"
+msgstr "另一次运行正在处理这个人设。"
 
 #: src/components/voice-picker/index.tsx
 msgid "Any Language"
 msgstr "所有语言"
+
+#: src/features/tasks/labels.ts
+msgid "Any Site"
+msgstr "任何网站"
 
 #: src/features/settings/account-dialog.tsx
 msgid "API Base"
@@ -750,6 +814,18 @@ msgstr "API 密钥"
 msgid "As each provider reported it."
 msgstr "均为服务商报告的金额。"
 
+#: src/features/tasks/labels.ts
+msgid "Ask for Each Site"
+msgstr "每个网站都询问"
+
+#: src/features/settings/route.tsx
+msgid "Ask her in a chat to do real work on this computer, such as writing and editing files or looking things up, and she starts a task for it. Tasks run on the account and model chosen here, never on her chat model, and one that needs a folder outside the folders below asks you in the chat first."
+msgstr "在聊天里请她在这台电脑上真正动手，比如写入和编辑文件、查找资料，她就会为此开始一个任务。任务使用这里选择的账号和模型，从不使用她的聊天模型；需要用到下面这些文件夹以外的文件夹时，会先在聊天里问你。"
+
+#: src/features/tasks/list.tsx
+msgid "Ask her in a chat to do something on this computer, and the task shows here while she works on it."
+msgstr "在聊天里请她在这台电脑上做点什么，她处理时任务会显示在这里。"
+
 #: src/components/settings-form/model-picker.tsx
 msgid "Asking the provider for its models…"
 msgstr "正在向服务商获取模型列表…"
@@ -763,8 +839,25 @@ msgid "Assistant Folders"
 msgstr "助手文件夹"
 
 #: src/components/settings-form/labels.ts
+#: src/features/settings/route.tsx
 msgid "Assistant Mode"
 msgstr "助手模式"
+
+#: src/features/tasks/cards.tsx
+msgid "Assistant Mode is off, so this task can't go on. You can still stop it."
+msgstr "助手模式已关闭，这个任务无法继续。你仍然可以停止它。"
+
+#: src/lib/labels.ts
+msgid "Assistant Mode is off. Turn it on in Settings."
+msgstr "助手模式已关闭，请在设置中开启。"
+
+#: src/features/tasks/cards.tsx
+msgid "Assistant Mode isn't ready, so this can't go on yet."
+msgstr "助手模式还没准备好，暂时无法继续。"
+
+#: src/lib/labels.ts
+msgid "Assistant Mode needs a model, and a key for its account. Set them in Settings."
+msgstr "助手模式需要选好模型，并为其账号添加密钥，请在设置中完成。"
 
 #: src/components/settings-form/labels.ts
 msgid "Assistant Model"
@@ -803,6 +896,10 @@ msgstr "头像已移除。"
 #: src/features/studio/identity-section.tsx
 msgid "Avatar saved."
 msgstr "头像已保存。"
+
+#: src/features/tasks/labels.ts
+msgid "Awaiting Approval"
+msgstr "等待批准"
 
 #: src/features/setup/step-card.tsx
 msgid "Back"
@@ -976,7 +1073,7 @@ msgstr "取消"
 
 #: src/features/jobs/parts.tsx
 msgid "Cancel Job"
-msgstr "取消任务"
+msgstr "取消作业"
 
 #: src/features/chats/voice-recorder.tsx
 msgid "Cancel Recording"
@@ -984,7 +1081,7 @@ msgstr "取消录音"
 
 #: src/features/jobs/parts.tsx
 msgid "Cancel this job?"
-msgstr "取消这个任务？"
+msgstr "取消这个作业？"
 
 #: src/features/jobs/labels.ts
 msgid "cancelled"
@@ -1030,6 +1127,10 @@ msgstr "图表"
 #: src/lib/labels.ts
 msgid "Chat"
 msgstr "对话"
+
+#: src/features/tasks/list.tsx
+msgid "Chat deleted"
+msgstr "聊天已删除"
 
 #: src/components/settings-form/labels.ts
 #: src/features/home/readiness-labels.ts
@@ -1113,6 +1214,14 @@ msgstr "中文"
 msgid "Choose"
 msgstr "选择"
 
+#: src/features/settings/assistant.tsx
+msgid "Choose the account and model tasks run on here, and add a key for that account in Providers."
+msgstr "请在这里选择任务使用的账号和模型，并在「服务商」中为该账号添加密钥。"
+
+#: src/features/tasks/list.tsx
+msgid "Choose the account and model tasks run on in Settings, and add a key for that account."
+msgstr "请在设置中选择任务使用的账号和模型，并为该账号添加密钥。"
+
 #: src/features/studio/voice-section.tsx
 msgid "Choosing a voice saves it for {name}."
 msgstr "选中的声音会立即保存到{name}的设置中。"
@@ -1155,6 +1264,7 @@ msgstr "请连接麦克风，然后再试一次。"
 #: src/features/setup/memory-step.tsx
 #: src/features/setup/persona-step.tsx
 #: src/features/setup/voice-step.tsx
+#: src/features/tasks/cards.tsx
 msgid "Continue"
 msgstr "继续"
 
@@ -1215,6 +1325,10 @@ msgstr "无法获取模型列表（{reason}）：请直接填写模型 ID。"
 #: src/features/jobs/detail.tsx
 #: src/features/jobs/list.tsx
 msgid "Couldn't load the jobs"
+msgstr "无法加载作业"
+
+#: src/features/tasks/list.tsx
+msgid "Couldn't load the tasks"
 msgstr "无法加载任务"
 
 #: src/features/studio/parts.tsx
@@ -1252,6 +1366,10 @@ msgstr "自定义"
 #: src/features/chats/chat-log.tsx
 msgid "Cut off"
 msgstr "未说完"
+
+#: src/features/tasks/transcript-view.tsx
+msgid "Cut off at the model's output limit."
+msgstr "在模型的输出上限处被截断。"
 
 #: src/components/preferences.tsx
 msgid "Dark"
@@ -1311,6 +1429,10 @@ msgstr "删除 {name}？"
 msgid "demo"
 msgstr "演示"
 
+#: src/features/tasks/cards.tsx
+msgid "Deny"
+msgstr "拒绝"
+
 #: src/features/jobs/parts.tsx
 #: src/features/studio/add-videos.tsx
 msgid "Details"
@@ -1338,6 +1460,7 @@ msgstr "完成"
 
 #: src/features/jobs/labels.ts
 #: src/features/setup/stepper.tsx
+#: src/features/tasks/labels.ts
 msgid "Done"
 msgstr "完成"
 
@@ -1345,6 +1468,16 @@ msgstr "完成"
 msgctxt "job status"
 msgid "Done"
 msgstr "已完成"
+
+#: src/features/tasks/labels.ts
+msgctxt "task status"
+msgid "Done"
+msgstr "已完成"
+
+#: src/features/tasks/labels.ts
+msgctxt "tool call"
+msgid "Done"
+msgstr "完成"
 
 #: src/features/jobs/labels.ts
 #: src/features/studio/videos-section.tsx
@@ -1397,6 +1530,10 @@ msgstr "每个模型，以及它为她承担的任务。"
 msgid "Each score runs from 0 to 1. Addressed: the line was for her. Interested: it touches what she cares about."
 msgstr "每项分数都在 0 到 1 之间。被点名：这句话是对她说的。感兴趣：话题是她在意的。"
 
+#: src/features/tasks/transcript-view.tsx
+msgid "Earlier steps summarized, from {tokens} tokens"
+msgstr "较早的步骤已概括（原 {tokens} token）"
+
 #: src/features/studio/knowledge-section.tsx
 msgid "Edit"
 msgstr "编辑"
@@ -1424,13 +1561,21 @@ msgstr "Eidolon 只响应 localhost 或 127.0.0.1，请通过其中之一打开�
 msgid "Eidolon calls paid services with your own keys: by default Soniox hears you, OpenRouter thinks and Fish Audio speaks. Each needs credit on its account."
 msgstr "Eidolon 用你自己的密钥调用付费服务：默认由 Soniox 负责听，OpenRouter 负责思考，Fish Audio 负责说话。每个账户都需要有余额。"
 
+#: src/features/tasks/cards.tsx
+msgid "Eidolon can't price what this task's model spends, so its spend pause can't work. Continuing turns its spend pause off."
+msgstr "Eidolon 无法计算这个任务的模型花了多少钱，所以花费暂停无法生效。继续会关闭它的花费暂停。"
+
 #: src/features/usage/route.tsx
 msgid "Eidolon can't write its usage ledger at <0>{path}</0>. Set <1>EIDOLON_USAGE_DB</1> to a file it can write, then restart."
 msgstr "Eidolon 无法写入用量记录文件 <0>{path}</0>。请把 <1>EIDOLON_USAGE_DB</1> 设为可写入的文件，然后重启。"
 
+#: src/features/settings/assistant.tsx
+msgid "Eidolon couldn't count its tasks. Turning Assistant Mode off stops any that are running or waiting for you."
+msgstr "Eidolon 没能统计它的任务。关闭助手模式会停止所有正在运行或等你处理的任务。"
+
 #: src/features/settings/restart-button.tsx
 msgid "Eidolon couldn't list its jobs. A restart interrupts any that still run; you can resume each from its page once Eidolon is back."
-msgstr "Eidolon 没能列出任务。重启会中断所有还在运行的任务，Eidolon 恢复后可以在各自的任务页面继续。"
+msgstr "Eidolon 没能列出作业。重启会中断所有还在运行的作业，Eidolon 恢复后可以在各自的作业页面继续。"
 
 #: src/features/settings/restart.ts
 msgid "Eidolon didn't come back. Start it again from the terminal."
@@ -1458,7 +1603,7 @@ msgstr "未设置时，Eidolon 会自行安装并更新 yt-dlp。"
 
 #: src/features/jobs/detail.tsx
 msgid "Eidolon keeps the last 50 jobs."
-msgstr "Eidolon 只保留最近 50 个任务。"
+msgstr "Eidolon 只保留最近 50 个作业。"
 
 #: src/features/settings/restart.ts
 msgid "Eidolon restarted."
@@ -1470,7 +1615,11 @@ msgstr "Eidolon 返回了此页面无法读取的响应。"
 
 #: src/features/jobs/detail.tsx
 msgid "Eidolon stopped while this job ran"
-msgstr "任务运行期间 Eidolon 停止了"
+msgstr "作业运行期间 Eidolon 停止了"
+
+#: src/features/tasks/cards.tsx
+msgid "Eidolon stopped while this task ran. Continue picks it up where it stopped."
+msgstr "这个任务运行期间 Eidolon 停止了。继续会从它停下的地方接着做。"
 
 #: src/features/setup/persona-fields.tsx
 msgid "Eidolon uses that word itself. Pick another id."
@@ -1530,6 +1679,10 @@ msgstr "请输入数字，例如 0.5。"
 #: src/components/settings-form/labels.ts
 msgid "Enter a whole number."
 msgstr "请输入整数。"
+
+#: src/features/tasks/cards.tsx
+msgid "Enter an amount of 0 or more."
+msgstr "请输入 0 或更大的金额。"
 
 #: src/components/settings-form/field.tsx
 msgid "environment"
@@ -1624,8 +1777,13 @@ msgid "failed"
 msgstr "失败"
 
 #: src/features/jobs/labels.ts
+#: src/features/tasks/labels.ts
 msgid "Failed"
 msgstr "失败"
+
+#: src/features/tasks/transcript-view.tsx
+msgid "Failed at {time}"
+msgstr "{time} 失败"
 
 #: src/features/studio/identity-section.tsx
 msgid "Fans"
@@ -1646,6 +1804,14 @@ msgstr "未安装 ffmpeg。只有超过 5 小时的视频才需要它。"
 #: src/features/studio/facts-editor.tsx
 msgid "File Name"
 msgstr "文件名"
+
+#: src/features/tasks/task-card.tsx
+msgid "Files Written"
+msgstr "写入的文件"
+
+#: src/features/tasks/transcript-view.tsx
+msgid "Finished at {time}"
+msgstr "{time} 完成"
 
 #: src/features/call/call-notices.tsx
 msgid "Fish Audio can't use {name}'s voice, so calls may have no sound."
@@ -1684,6 +1850,11 @@ msgstr "Fish 上有这个声音"
 msgid "Fix the highlighted values first."
 msgstr "请先修正标出的值。"
 
+#: src/features/tasks/list.tsx
+#: src/features/tasks/task-card.tsx
+msgid "Folder"
+msgstr "文件夹"
+
 #: src/components/settings-form/labels.ts
 msgid "Folders every task may read and write besides its own, one per line."
 msgstr "除了任务自己的文件夹，每个任务都能读写的文件夹，每行一个。"
@@ -1698,7 +1869,7 @@ msgstr "强制停止"
 
 #: src/features/jobs/parts.tsx
 msgid "Force this job to stop?"
-msgstr "强制停止这个任务？"
+msgstr "强制停止这个作业？"
 
 #: src/features/home/memory-panel.tsx
 msgid "Forget"
@@ -1858,6 +2029,10 @@ msgstr "她的声音（{id}）尚未经过 Fish Audio 检查。"
 msgid "Hide"
 msgstr "隐藏"
 
+#: src/features/tasks/task-card.tsx
+msgid "Hide Steps"
+msgstr "收起步骤"
+
 #: src/features/chats/voice-bubble.tsx
 msgid "Hide Transcript"
 msgstr "收起文字"
@@ -1943,6 +2118,10 @@ msgstr "通话中 · {duration}"
 msgid "In her own language; prompts use it as written."
 msgstr "用她自己的语言填写，提示词会原样使用。"
 
+#: src/features/tasks/labels.ts
+msgid "In Progress"
+msgstr "进行中"
+
 #: src/features/home/readiness-labels.ts
 msgid "In progress: {count}."
 msgstr "进行中：{count}。"
@@ -1966,6 +2145,10 @@ msgstr "近 90 天"
 #: src/features/chats/participants.tsx
 msgid "In This Chat"
 msgstr "聊天成员"
+
+#: src/features/tasks/cards.tsx
+msgid "In US dollars. 0 turns this task's spend pauses off."
+msgstr "单位为美元。0 表示关闭这个任务的花费暂停。"
 
 #: src/features/studio/knowledge-section.tsx
 msgid "Index"
@@ -2048,6 +2231,7 @@ msgstr "兴趣"
 
 #: src/features/chats/chat-log.tsx
 #: src/features/jobs/labels.ts
+#: src/features/tasks/labels.ts
 msgid "Interrupted"
 msgstr "已中断"
 
@@ -2059,17 +2243,57 @@ msgstr "期待回应：{score}"
 msgid "It answers only on this machine, keeps its data in a Docker volume and restarts with Docker."
 msgstr "它只在本机应答，数据保存在 Docker 卷中，并随 Docker 自动重启。"
 
+#: src/features/tasks/cards.tsx
+msgid "It asked for this path, which none of its folders hold."
+msgstr "它请求了这个路径，但它可用的文件夹都不包含它。"
+
+#: src/features/tasks/cards.tsx
+msgid "It asks before it fetches from a site for the first time. Allow Once lets this task use this site until it ends; Deny tells it it can't."
+msgstr "第一次从某个网站获取内容前，它会先询问。「允许一次」让这个任务在结束前都能使用这个网站；「拒绝」会告诉它不能使用。"
+
+#: src/features/tasks/labels.ts
+msgid "It asks you before it fetches from a site for the first time."
+msgstr "第一次从某个网站获取内容前，它会先问你。"
+
+#: src/features/tasks/labels.ts
+msgid "It can't fetch anything from the web."
+msgstr "它不能从网上获取任何内容。"
+
 #: src/features/jobs/detail.tsx
 msgid "It ended before reporting a result. The end of its technical log usually says why."
 msgstr "它在报告结果之前就结束了。技术日志的末尾通常会说明原因。"
 
+#: src/features/tasks/cards.tsx
+msgid "It has spent {spent}, and pauses each time its spend crosses another {each}."
+msgstr "它已花费 {spent}，花费每再增加 {each} 就会暂停一次。"
+
 #: src/features/jobs/detail.tsx
 msgid "It keeps running when you close this page."
-msgstr "关闭这个页面，任务也会继续运行。"
+msgstr "关闭这个页面，作业也会继续运行。"
+
+#: src/features/tasks/labels.ts
+msgid "It may fetch from any public site without asking."
+msgstr "它可以不经询问从任何公开网站获取内容。"
 
 #: src/features/chats/chat-view.tsx
 msgid "It may have been deleted. Pick another, or start a new one."
 msgstr "它可能已被删除。请选择其他聊天，或开始新的聊天。"
+
+#: src/features/tasks/cards.tsx
+msgid "It paused, and waits for you to let it go on."
+msgstr "它暂停了，等你让它继续。"
+
+#: src/features/tasks/cards.tsx
+msgid "It pauses each time its spend crosses another {step}."
+msgstr "花费每增加 {step}，它就会暂停一次。"
+
+#: src/features/tasks/labels.ts
+msgid "It reached its spend pause."
+msgstr "达到了花费暂停金额。"
+
+#: src/features/tasks/labels.ts
+msgid "It repeated the same steps three turns running."
+msgstr "它连续三轮重复了相同的步骤。"
 
 #: src/features/studio/voice-styles-card.tsx
 msgid "It replaces the environment's style by this name, which <0>{replacing}</0> sets."
@@ -2077,15 +2301,31 @@ msgstr "它会替换环境变量 <0>{replacing}</0> 设置的同名风格。"
 
 #: src/features/jobs/parts.tsx
 msgid "It still hasn't stopped since you cancelled it. Force Stop ends it at once, without letting it finish what it is writing: an index it was building can be left half built, so run that job again afterwards."
-msgstr "取消之后它仍然没有停下。强制停止会立刻结束它，不等它写完手头的内容：正在构建的索引可能只完成一半，之后请重新运行那个任务。"
+msgstr "取消之后它仍然没有停下。强制停止会立刻结束它，不等它写完手头的内容：正在构建的索引可能只完成一半，之后请重新运行那个作业。"
+
+#: src/features/tasks/task-card.tsx
+msgid "It stops at once and can't go on afterwards. The files it already wrote stay."
+msgstr "它会立刻停止，之后无法再继续。已经写入的文件会保留。"
 
 #: src/features/jobs/detail.tsx
 msgid "It stops once it has finished what it is writing."
 msgstr "写完手头的内容后，它就会停止。"
 
+#: src/features/tasks/labels.ts
+msgid "It waited for your answer."
+msgstr "它在等你答复。"
+
+#: src/features/tasks/cards.tsx
+msgid "It works in this folder on its own once you allow it. Eidolon makes the folder if it doesn't exist yet."
+msgstr "你允许后，它会在这个文件夹里自行工作。如果文件夹还不存在，Eidolon 会创建它。"
+
 #: src/features/studio/identity-section.tsx
 msgid "It's {time} for her now."
 msgstr "她那里现在是{time}。"
+
+#: src/features/tasks/transcript-view.tsx
+msgid "Its arguments couldn't be read, so it never ran."
+msgstr "它的参数无法读取，所以没有运行。"
 
 #: src/features/settings/accounts-card.tsx
 msgid "Its key and settings are deleted from credentials.json. A key the environment sets stays."
@@ -2103,6 +2343,14 @@ msgstr "下载之前不知道它的时长。"
 msgid "Its messages and photos are deleted from this computer. What she remembers about you stays."
 msgstr "这个聊天的消息和照片会从这台电脑上删除。她对你的记忆会保留。"
 
+#: src/features/tasks/labels.ts
+msgid "Its spend couldn't be counted."
+msgstr "它的花费无法计算。"
+
+#: src/features/tasks/cards.tsx
+msgid "Its spend pauses are off."
+msgstr "它的花费暂停已关闭。"
+
 #: src/features/studio/voice-styles-card.tsx
 msgid "Its Voice"
 msgstr "它的声音"
@@ -2114,7 +2362,7 @@ msgstr "日文"
 #: src/components/app-shell.tsx
 #: src/features/jobs/list.tsx
 msgid "Jobs"
-msgstr "任务"
+msgstr "作业"
 
 #: src/features/studio/text-editor.tsx
 msgid "Keep Editing"
@@ -2126,8 +2374,13 @@ msgstr "保留她的"
 
 #: src/features/studio/facts-editor.tsx
 #: src/features/studio/identity-section.tsx
+#: src/features/tasks/task-card.tsx
 msgid "Keep It"
 msgstr "保留"
+
+#: src/features/settings/assistant.tsx
+msgid "Keep It On"
+msgstr "保持开启"
 
 #: src/features/jobs/parts.tsx
 msgid "Keep Running"
@@ -2190,6 +2443,10 @@ msgstr "LAPLACE Workers 地址"
 msgid "Last Call"
 msgstr "上一次通话"
 
+#: src/features/tasks/task-card.tsx
+msgid "Latest Step"
+msgstr "最新步骤"
+
 #: src/features/settings/account-dialog.tsx
 msgid "Leave it empty for the provider's own API, or point it at a proxy or another region."
 msgstr "留空即使用服务商自己的 API，也可以指向代理或其他区域。"
@@ -2210,6 +2467,18 @@ msgstr "时长"
 #: src/features/chats/voice-recorder.tsx
 msgid "Let go to send, or slide off the button to cancel."
 msgstr "松开发送，滑出按钮取消。"
+
+#: src/features/tasks/cards.tsx
+msgid "Let it fetch from {host}?"
+msgstr "让它从 {host} 获取内容？"
+
+#: src/features/tasks/cards.tsx
+msgid "Let it read outside its folders?"
+msgstr "让它读取文件夹以外的内容？"
+
+#: src/features/tasks/cards.tsx
+msgid "Let it write outside its folders?"
+msgstr "让它写入文件夹以外的位置？"
 
 #: src/components/preferences.tsx
 msgid "Light"
@@ -2241,6 +2510,8 @@ msgstr "正在聆听…"
 #: src/features/jobs/detail.tsx
 #: src/features/jobs/list.tsx
 #: src/features/studio/route.tsx
+#: src/features/tasks/list.tsx
+#: src/features/tasks/transcript-view.tsx
 msgid "Loading…"
 msgstr "加载中…"
 
@@ -2394,6 +2665,9 @@ msgstr "思维"
 msgid "Missing: {names}. Calls can't start without them."
 msgstr "缺少：{names}。没有它们无法开始通话。"
 
+#: src/features/tasks/list.tsx
+#: src/features/tasks/parts.tsx
+#: src/features/tasks/task-card.tsx
 #: src/features/usage/tables.tsx
 msgid "Model"
 msgstr "模型"
@@ -2505,7 +2779,7 @@ msgstr "还没有索引：她只知道提示词里的内容。"
 
 #: src/features/jobs/list.tsx
 msgid "No jobs yet"
-msgstr "还没有任务"
+msgstr "还没有作业"
 
 #: src/components/settings-form/account-key-field.tsx
 #: src/features/settings/accounts-card.tsx
@@ -2537,6 +2811,10 @@ msgstr "没有服装参考图，她无法自拍。"
 msgid "No outfits yet"
 msgstr "还没有服装"
 
+#: src/features/tasks/transcript-view.tsx
+msgid "No output."
+msgstr "没有输出。"
+
 #: src/features/studio/references-section.tsx
 msgid "No preview: only PNG, JPEG and WebP are shown here. Selfies still use it."
 msgstr "无法预览：这里只显示 PNG、JPEG 和 WebP 图片。自拍仍会用到它。"
@@ -2548,6 +2826,10 @@ msgstr "没有这个名字的服务商。"
 #: src/components/settings-form/check-labels.ts
 msgid "No Qdrant address is set."
 msgstr "尚未设置 Qdrant 地址。"
+
+#: src/features/tasks/labels.ts
+msgid "No result"
+msgstr "没有结果"
 
 #: src/components/voice-picker/index.tsx
 msgid "No sample"
@@ -2561,13 +2843,21 @@ msgstr "没有语音"
 msgid "No speech was heard in this audio."
 msgstr "音频中没有识别到语音。"
 
+#: src/features/tasks/parts.tsx
+msgid "no spend pause"
+msgstr "不按花费暂停"
+
 #: src/features/usage/route.tsx
 msgid "No spending was recorded {during}. Calls, video jobs and MCP searches record theirs here as they run."
-msgstr "{during}没有花费记录。通话、视频任务和 MCP 检索运行时会在这里记录花费。"
+msgstr "{during}没有花费记录。通话、视频作业和 MCP 检索运行时会在这里记录花费。"
 
 #: src/features/studio/knowledge-section.tsx
 msgid "No stream catalog yet."
 msgstr "还没有直播目录。"
+
+#: src/features/tasks/list.tsx
+msgid "No tasks yet"
+msgstr "还没有任务"
 
 #: src/features/studio/voice-styles-card.tsx
 msgid "No trigger words: the model goes by the name."
@@ -2592,6 +2882,10 @@ msgstr "还没有声音"
 #: src/components/voice-picker/index.tsx
 msgid "No voices match."
 msgstr "没有匹配的声音。"
+
+#: src/features/tasks/labels.ts
+msgid "No Web"
+msgstr "不联网"
 
 #: src/features/chats/chat-log.tsx
 msgid "No words could be heard in it."
@@ -2675,10 +2969,18 @@ msgstr "这里没有可设置的项。"
 msgid "Nothing was spent in this range."
 msgstr "这段时间没有花费。"
 
+#: src/features/tasks/transcript-view.tsx
+msgid "Nothing yet."
+msgstr "暂无内容。"
+
 #: src/components/settings-form/field.tsx
 #: src/components/settings-form/labels.ts
 msgid "Off"
 msgstr "关"
+
+#: src/components/settings-form/labels.ts
+msgid "Off, she can't start tasks, the running ones stop, and the Tasks list is hidden."
+msgstr "关闭后，她不能开始任务，正在运行的任务会停止，「任务」列表也会隐藏。"
 
 #: src/components/settings-form/labels.ts
 msgid "Off: No Tasks"
@@ -2753,6 +3055,15 @@ msgstr "打开模型设置"
 #: src/features/home/route.tsx
 msgid "Open one's studio to build her up, or make another the one your calls reach."
 msgstr "打开人设的工作室来完善她，或把另一个人设设为通话对象。"
+
+#: src/features/tasks/cards.tsx
+#: src/features/tasks/list.tsx
+msgid "Open Settings"
+msgstr "打开设置"
+
+#: src/features/settings/assistant.tsx
+msgid "Open Tasks"
+msgstr "打开任务"
 
 #: src/components/persona-switcher.tsx
 #: src/features/home/hero.tsx
@@ -2870,6 +3181,18 @@ msgstr "粘贴视频链接，或者播放列表、合集、频道的链接。每
 msgid "Pause Voice Message"
 msgstr "暂停语音消息"
 
+#: src/features/tasks/labels.ts
+msgid "Paused"
+msgstr "已暂停"
+
+#: src/features/tasks/transcript-view.tsx
+msgid "Paused at {time}: {reason}"
+msgstr "{time} 暂停：{reason}"
+
+#: src/features/tasks/parts.tsx
+msgid "pauses at {amount}"
+msgstr "到 {amount} 时暂停"
+
 #: src/features/studio/references-section.tsx
 msgid "People she can take a selfie with: one picture each, named after them."
 msgstr "可以和她一起自拍的人：每人一张图片，以名字命名。"
@@ -2895,6 +3218,10 @@ msgstr "人设使用普通话交流，用来构建人设的视频也应当是普
 #: src/features/chats/route.tsx
 msgid "Pick a chat, or start a new one"
 msgstr "选择一个聊天，或开始新的聊天"
+
+#: src/features/tasks/parts.tsx
+msgid "Pick a model for this account."
+msgstr "请为这个账号选择模型。"
 
 #: src/features/setup/avatar-picker.tsx
 msgid "Pick a PNG, JPEG or WebP image."
@@ -2959,6 +3286,11 @@ msgstr "流水线"
 #: src/features/jobs/labels.ts
 msgid "Plan"
 msgstr "规划"
+
+#: src/features/tasks/task-card.tsx
+msgctxt "task plan"
+msgid "Plan"
+msgstr "计划"
 
 #: src/features/studio/videos-section.tsx
 msgid "Plan Again"
@@ -3269,7 +3601,7 @@ msgstr "每次检索重排序约花费 $0.002。"
 
 #: src/features/jobs/detail.tsx
 msgid "Reruns an earlier job"
-msgstr "重新运行了之前的任务"
+msgstr "重新运行了之前的作业"
 
 #: src/components/settings-form/field.tsx
 msgid "Reset"
@@ -3283,7 +3615,7 @@ msgstr "重启"
 
 #: src/features/settings/restart-button.tsx
 msgid "Restart and interrupt running jobs?"
-msgstr "重启并中断正在运行的任务？"
+msgstr "重启并中断正在运行的作业？"
 
 #: src/features/settings/notices.tsx
 msgid "Restart to apply saved settings"
@@ -3291,7 +3623,7 @@ msgstr "重启后已保存的设置才会生效"
 
 #: src/features/settings/restart-button.tsx
 msgid "Restarting interrupts these jobs. What they finished is kept, and you can resume each from its page once Eidolon is back."
-msgstr "重启会中断这些任务。已经完成的部分会保留，Eidolon 恢复后可以在各自的任务页面继续。"
+msgstr "重启会中断这些作业。已经完成的部分会保留，Eidolon 恢复后可以在各自的作业页面继续。"
 
 #: src/features/settings/restart-button.tsx
 msgid "Restarting…"
@@ -3305,9 +3637,13 @@ msgstr "继续"
 msgid "Resume runs it again, and every stage skips the work it already finished."
 msgstr "点“继续”会重新运行，每个阶段都会跳过已经完成的部分。"
 
+#: src/features/tasks/transcript-view.tsx
+msgid "Resumed at {time}"
+msgstr "{time} 继续"
+
 #: src/features/jobs/detail.tsx
 msgid "Resumed by a later job"
-msgstr "已由之后的任务继续"
+msgstr "已由之后的作业继续"
 
 #: src/components/settings-form/labels.ts
 #: src/lib/labels.ts
@@ -3347,6 +3683,7 @@ msgid "Run, about {usd}"
 msgstr "运行，约 {usd}"
 
 #: src/features/jobs/labels.ts
+#: src/features/tasks/labels.ts
 msgid "Running"
 msgstr "运行中"
 
@@ -3354,6 +3691,11 @@ msgstr "运行中"
 msgctxt "job stage"
 msgid "Running"
 msgstr "进行中"
+
+#: src/features/tasks/labels.ts
+msgctxt "tool call"
+msgid "Running"
+msgstr "运行中"
 
 #: src/components/settings-form/labels.ts
 msgid "s1 (Retires 2026-12-31)"
@@ -3678,6 +4020,14 @@ msgstr "显示更多"
 msgid "Show Plans and Link Checks ({count})"
 msgstr "显示规划和链接检查（{count}）"
 
+#: src/features/tasks/task-card.tsx
+msgid "Show Steps"
+msgstr "查看步骤"
+
+#: src/features/tasks/waiting-bar.tsx
+msgid "Show Task"
+msgstr "查看任务"
+
 #: src/features/chats/voice-bubble.tsx
 msgid "Show Transcript"
 msgstr "显示文字"
@@ -3716,7 +4066,7 @@ msgstr "部分工作失败了"
 
 #: src/features/settings/notices.tsx
 msgid "Some saved settings are read only when Eidolon starts or runs its first search. Restarting interrupts running jobs, and can't happen during a call."
-msgstr "有些设置只在 Eidolon 启动或第一次检索时读取。重启会中断正在运行的任务，通话进行中无法重启。"
+msgstr "有些设置只在 Eidolon 启动或第一次检索时读取。重启会中断正在运行的作业，通话进行中无法重启。"
 
 #: src/features/studio/videos-section.tsx
 msgid "Some videos need a signed-in browser's cookies. Reading a browser's cookies may ask for your password (the macOS Keychain), and yt-dlp writes the cookies it used back into a cookies file."
@@ -3780,6 +4130,10 @@ msgstr "花费"
 msgid "Spend and usage per provider, the costliest first."
 msgstr "各服务商的花费和用量，花费最多的在前。"
 
+#: src/features/tasks/cards.tsx
+msgid "Spend Pause"
+msgstr "花费暂停"
+
 #: src/features/usage/route.tsx
 msgid "Spend per day"
 msgstr "每日花费"
@@ -3787,6 +4141,11 @@ msgstr "每日花费"
 #: src/features/usage/route.tsx
 msgid "Spend per month"
 msgstr "每月花费"
+
+#: src/features/tasks/list.tsx
+#: src/features/tasks/task-card.tsx
+msgid "Spent"
+msgstr "已花费"
 
 #: src/features/usage/route.tsx
 msgid "Spent by {name} {during}"
@@ -3824,6 +4183,10 @@ msgstr "和任意人设开始聊天，也可以同时拉上几位。每个聊天
 msgid "Start the billed run?"
 msgstr "开始收费的运行？"
 
+#: src/features/tasks/cards.tsx
+msgid "Start this task?"
+msgstr "开始这个任务？"
+
 #: src/features/studio/voice-styles-card.tsx
 msgid "Start with a lowercase letter, then use lowercase letters, digits or _."
 msgstr "以小写字母开头，之后只用小写字母、数字或 _。"
@@ -3838,8 +4201,13 @@ msgstr "开始"
 
 #: src/features/jobs/detail.tsx
 #: src/features/jobs/list.tsx
+#: src/features/tasks/list.tsx
 msgid "Started"
 msgstr "开始于"
+
+#: src/features/tasks/transcript-view.tsx
+msgid "Started at {time}"
+msgstr "{time} 开始"
 
 #: src/features/jobs/detail.tsx
 msgid "Starting…"
@@ -3853,6 +4221,10 @@ msgstr "从一份写好她名字的中文提示词框架开始。资料、视频
 msgid "State"
 msgstr "状态"
 
+#: src/features/tasks/transcript-view.tsx
+msgid "Steps"
+msgstr "步骤"
+
 #: src/features/call/transcript-view.tsx
 #: src/features/chats/chat-log.tsx
 msgid "Still waiting for {name}. If nothing comes, say it again."
@@ -3860,8 +4232,30 @@ msgstr "还在等{name}回应。如果一直没有回应，请再说一遍。"
 
 #: src/features/chats/composer.tsx
 #: src/features/studio/add-videos.tsx
+#: src/features/tasks/task-card.tsx
 msgid "Stop"
 msgstr "停止"
+
+#: src/features/tasks/task-card.tsx
+msgid "Stop Task"
+msgstr "停止任务"
+
+#: src/features/tasks/task-card.tsx
+msgid "Stop this task?"
+msgstr "停止这个任务？"
+
+#: src/features/tasks/labels.ts
+msgctxt "task status"
+msgid "Stopped"
+msgstr "已停止"
+
+#: src/features/tasks/transcript-view.tsx
+msgid "Stopped at {time}"
+msgstr "{time} 停止"
+
+#: src/features/tasks/transcript-view.tsx
+msgid "Stopped by the model's provider."
+msgstr "被模型的服务商中止。"
 
 #: src/features/jobs/labels.ts
 msgid "Stopped unexpectedly"
@@ -3966,6 +4360,20 @@ msgstr "正在和她聊天"
 msgid "Task"
 msgstr "任务"
 
+#: src/features/tasks/task-card.tsx
+msgid "Task:"
+msgstr "任务："
+
+#: src/components/app-shell.tsx
+#: src/features/tasks/list.tsx
+msgid "Tasks"
+msgstr "任务"
+
+#: src/features/settings/assistant.tsx
+#: src/features/tasks/list.tsx
+msgid "Tasks can't start yet"
+msgstr "任务还不能开始"
+
 #: src/features/jobs/detail.tsx
 msgid "Technical Log"
 msgstr "技术日志"
@@ -4013,15 +4421,15 @@ msgstr "这不是 Eidolon 的链接。"
 
 #: src/lib/labels.ts
 msgid "That job can't be resumed."
-msgstr "该任务无法继续执行。"
+msgstr "该作业无法继续执行。"
 
 #: src/lib/labels.ts
 msgid "That job doesn't exist."
-msgstr "没有这种任务。"
+msgstr "没有这种作业。"
 
 #: src/lib/labels.ts
 msgid "That job isn't running."
-msgstr "该任务未在运行。"
+msgstr "该作业未在运行。"
 
 #: src/components/locked-screen.tsx
 msgid "That link has expired or isn't valid. A link works for 10 minutes: run the same command again for a fresh one."
@@ -4032,12 +4440,28 @@ msgid "That link has expired. Run the same command again for a fresh one."
 msgstr "链接已过期，再运行一次相同的命令即可获取新链接。"
 
 #: src/lib/labels.ts
+msgid "That part of the file doesn't exist."
+msgstr "文件中没有这一部分。"
+
+#: src/lib/labels.ts
 msgid "That service isn't available right now."
 msgstr "该服务暂时不可用。"
 
 #: src/lib/labels.ts
 msgid "That setting doesn't exist."
 msgstr "没有这项设置。"
+
+#: src/lib/labels.ts
+msgid "That task is waiting for an approval. Answer it first."
+msgstr "该任务正在等待批准，请先答复。"
+
+#: src/lib/labels.ts
+msgid "That task isn't paused."
+msgstr "该任务没有暂停。"
+
+#: src/lib/labels.ts
+msgid "That task isn't waiting for an answer."
+msgstr "该任务没有在等待答复。"
 
 #: src/lib/labels.ts
 msgid "That value isn't valid for this setting."
@@ -4222,7 +4646,7 @@ msgstr "任务每次请求最多携带的上下文，以 token 计。默认 1280
 
 #: src/features/jobs/list.tsx
 msgid "The offline work that builds each persona's knowledge. A job keeps running when you close this page."
-msgstr "为各个人设构建知识的离线工作。关闭这个页面，任务也会继续运行。"
+msgstr "为各个人设构建知识的离线工作。关闭这个页面，作业也会继续运行。"
 
 #: src/features/studio/identity-section.tsx
 msgid "The picture is deleted from her folder, and her initials show in its place."
@@ -4234,7 +4658,7 @@ msgstr "图片会以对方的名字保存，她就是靠这个认出是谁的。
 
 #: src/features/studio/videos-section.tsx
 msgid "The plan couldn't be made. Its job page has the details."
-msgstr "无法完成规划。详情请看它的任务页面。"
+msgstr "无法完成规划。详情请看它的作业页面。"
 
 #: src/features/jobs/labels.ts
 msgid "The provider account is out of credit."
@@ -4288,6 +4712,10 @@ msgstr "请求不是有效的 JSON。"
 #: src/lib/labels.ts
 msgid "The request wasn't valid."
 msgstr "请求无效。"
+
+#: src/features/tasks/cards.tsx
+msgid "The same steps came three turns running, so it paused. Continue lets it try again."
+msgstr "它连续三轮重复了相同的步骤，所以暂停了。继续会让它再试一次。"
 
 #: src/features/jobs/labels.ts
 msgid "The site refused yt-dlp, usually because it is out of date."
@@ -4347,10 +4775,14 @@ msgstr "没有这个聊天。"
 
 #: src/features/jobs/detail.tsx
 msgid "There is no such job"
-msgstr "没有这个任务"
+msgstr "没有这个作业"
 
 #: src/lib/labels.ts
 msgid "There is no such job."
+msgstr "没有这个作业。"
+
+#: src/lib/labels.ts
+msgid "There is no such task."
 msgstr "没有这个任务。"
 
 #: src/features/studio/add-videos.tsx
@@ -4371,7 +4803,7 @@ msgstr "这些视频来自你自己的 URL 列表，只能在终端里用 laplac
 
 #: src/features/jobs/list.tsx
 msgid "They appear here when you index facts or add videos in a persona's studio."
-msgstr "在人设工作室里索引资料或添加视频后，任务会出现在这里。"
+msgstr "在人设工作室里索引资料或添加视频后，作业会出现在这里。"
 
 #: src/features/studio/knowledge-section.tsx
 msgid "They were deleted, or no longer match the patterns. Index facts again so she forgets them:"
@@ -4419,11 +4851,11 @@ msgstr "这是她的头像，显示在通话页面和人设切换菜单里。点
 
 #: src/features/jobs/detail.tsx
 msgid "This job reported no progress."
-msgstr "这个任务没有报告进度。"
+msgstr "这个作业没有报告进度。"
 
 #: src/features/jobs/detail.tsx
 msgid "This job stopped without finishing"
-msgstr "任务没有完成就停止了"
+msgstr "作业没有完成就停止了"
 
 #: src/components/settings-form/check-labels.ts
 msgid "This OpenRouter account never bought credits, so paid models will fail."
@@ -4482,6 +4914,10 @@ msgstr "这个 Qdrant 的版本与 Eidolon 使用的版本相差超过一个次�
 msgid "This setting can't be changed here."
 msgstr "这项设置无法在此修改。"
 
+#: src/lib/labels.ts
+msgid "This task is running elsewhere, such as in a terminal. Try again once it stops."
+msgstr "这个任务正在别处运行（比如终端里），请等它停止后再试。"
+
 #: src/features/jobs/labels.ts
 msgid "This video has no upload date, so it can't be placed among the streams."
 msgstr "该视频没有上传日期，无法归入直播记录。"
@@ -4499,6 +4935,10 @@ msgstr "时区"
 #: src/features/chats/chat-menu.tsx
 msgid "Title"
 msgstr "标题"
+
+#: src/features/tasks/labels.ts
+msgid "To Do"
+msgstr "待办"
 
 #: src/features/studio/video-table.tsx
 msgid "To index"
@@ -4583,6 +5023,14 @@ msgstr "重试"
 msgid "TURN Credential Lifetime"
 msgstr "TURN 凭据有效期"
 
+#: src/features/settings/assistant.tsx
+msgid "Turn Off"
+msgstr "关闭"
+
+#: src/features/settings/assistant.tsx
+msgid "Turn off Assistant Mode?"
+msgstr "关闭助手模式？"
+
 #: src/features/home/readiness-labels.ts
 msgid "Turn On"
 msgstr "开启"
@@ -4658,6 +5106,10 @@ msgstr "使用“{model}”"
 #: src/features/studio/identity-section.tsx
 msgid "Use {zone}"
 msgstr "使用 {zone}"
+
+#: src/components/settings-form/labels.ts
+msgid "Use a full path, such as ~/Projects."
+msgstr "请使用完整路径，例如 ~/Projects。"
 
 #: src/components/settings-form/labels.ts
 msgid "Use a path relative to the persona's folder that stays inside it."
@@ -4802,6 +5254,10 @@ msgstr "声线风格"
 msgid "Voices she switches to when you ask for one, as in “声音温柔一点” or “换回原来的”. Her voice above stays her default."
 msgstr "你要求时她会切换到的声音，比如“声音温柔一点”或“换回原来的”。上面的声音仍是她的默认声音。"
 
+#: src/features/tasks/labels.ts
+msgid "Waiting"
+msgstr "等待中"
+
 #: src/features/call/call-state.tsx
 msgid "Waiting for {name} to answer…"
 msgstr "等待{name}接听…"
@@ -4809,6 +5265,58 @@ msgstr "等待{name}接听…"
 #: src/features/chats/chat-log.tsx
 msgid "Waiting for a reply…"
 msgstr "等待回复…"
+
+#: src/features/tasks/waiting-bar.tsx
+msgid "Waiting for You"
+msgstr "等你处理"
+
+#: src/features/tasks/cards.tsx
+msgid "Waiting for you to continue it"
+msgstr "等你让它继续"
+
+#: src/features/tasks/cards.tsx
+msgid "Waiting for your OK to fetch from {host}"
+msgstr "等你同意它从 {host} 获取内容"
+
+#: src/features/tasks/cards.tsx
+msgid "Waiting for your OK to go on"
+msgstr "等你同意它继续"
+
+#: src/features/tasks/cards.tsx
+msgid "Waiting for your OK to go on after repeating itself"
+msgstr "它在重复相同的步骤，等你同意它继续"
+
+#: src/features/tasks/cards.tsx
+msgid "Waiting for your OK to go on without spend pauses"
+msgstr "等你同意它在没有花费暂停的情况下继续"
+
+#: src/features/tasks/labels.ts
+msgid "Waiting for your OK to read {path}"
+msgstr "等你同意它读取 {path}"
+
+#: src/features/tasks/labels.ts
+msgid "Waiting for your OK to read and write {path}"
+msgstr "等你同意它读写 {path}"
+
+#: src/features/tasks/labels.ts
+msgid "Waiting for your OK to read and write everything in {folder}"
+msgstr "等你同意它读写 {folder} 里的所有内容"
+
+#: src/features/tasks/labels.ts
+msgid "Waiting for your OK to read everything in {folder}"
+msgstr "等你同意它读取 {folder} 里的所有内容"
+
+#: src/features/tasks/cards.tsx
+msgid "Waiting for your OK to spend more than {spent}"
+msgstr "等你同意它花费超过 {spent}"
+
+#: src/features/tasks/cards.tsx
+msgid "Waiting for your OK to work in {folder}"
+msgstr "等你同意它在 {folder} 里工作"
+
+#: src/features/tasks/parts.tsx
+msgid "Web Access"
+msgstr "联网权限"
 
 #: src/features/home/memory-panel.tsx
 msgid "What {name} Remembers"
@@ -4824,7 +5332,7 @@ msgstr "通话和构建所需的一切，以及缺少时的解决办法。"
 
 #: src/features/studio/knowledge-section.tsx
 msgid "What calls search: her facts and her stream archive. Each table is rebuilt by its own job."
-msgstr "通话时检索的内容：她的资料和直播回放。每张表由各自的任务重建。"
+msgstr "通话时检索的内容：她的资料和直播回放。每张表由各自的作业重建。"
 
 #: src/features/studio/models-section.tsx
 msgid "What changes with {provider}"
@@ -4832,7 +5340,7 @@ msgstr "换用 {provider} 后的变化"
 
 #: src/features/usage/route.tsx
 msgid "What each provider has cost, as calls, video jobs and MCP searches on this machine recorded it."
-msgstr "各服务商的花费，由这台电脑上的通话、视频任务和 MCP 检索记录。"
+msgstr "各服务商的花费，由这台电脑上的通话、视频作业和 MCP 检索记录。"
 
 #: src/features/settings/route.tsx
 msgid "What every persona knows about you."
@@ -4876,15 +5384,15 @@ msgstr "她该怎么称呼你？"
 
 #: src/features/jobs/detail.tsx
 msgid "What the command printed. Its end usually says why a job stopped."
-msgstr "命令输出的内容。末尾通常会说明任务为什么停止。"
+msgstr "命令输出的内容。末尾通常会说明作业为什么停止。"
 
 #: src/features/studio/knowledge-section.tsx
 msgid "What the index jobs read: which of her fact files, the pattern that names her in them, and the scene types left out of her stream archive. Index again after a change."
-msgstr "索引任务读取的内容：她的哪些资料文件、资料里指代她的规则，以及直播回放中不收录的场景类型。修改后请重新索引。"
+msgstr "索引作业读取的内容：她的哪些资料文件、资料里指代她的规则，以及直播回放中不收录的场景类型。修改后请重新索引。"
 
 #: src/features/jobs/detail.tsx
 msgid "What the job reported, newest at the bottom."
-msgstr "任务报告的内容，最新的在最下面。"
+msgstr "作业报告的内容，最新的在最下面。"
 
 #: src/features/studio/voice-styles-card.tsx
 msgid "What the model calls it, such as gentle or nai_hei."
@@ -4904,11 +5412,11 @@ msgstr "这场直播是哪天？"
 
 #: src/components/settings-form/labels.ts
 msgid "Where calls and jobs record what they spend. Default usage.db in the data home."
-msgstr "通话和任务记录花费的位置。默认为数据目录中的 usage.db。"
+msgstr "通话和作业记录花费的位置。默认为数据目录中的 usage.db。"
 
 #: src/features/studio/videos-section.tsx
 msgid "Where each video stands by the latest plan, and what the running job is doing."
-msgstr "按最近一次规划显示每个视频的进度，以及正在运行的任务在做什么。"
+msgstr "按最近一次规划显示每个视频的进度，以及正在运行的作业在做什么。"
 
 #: src/components/settings-form/labels.ts
 msgid "Whether she answers in text or with a voice message. Auto lets the director choose voice when a line suits it, more often after a voice message of yours. A chat's own reply mode overrides hers, and without a key for her voice she answers in text."
@@ -4954,6 +5462,14 @@ msgstr "{name}为什么回答"
 msgid "With memory on, she remembers you from one call to the next. It needs Qdrant, a database you run in Docker on this machine. Skip it and everything else still works."
 msgstr "开启记忆后，她会在多次通话之间记得你。这需要在本机用 Docker 运行 Qdrant 数据库。跳过也不影响其他功能。"
 
+#: src/features/tasks/list.tsx
+msgid "Work she does on this computer when you ask her in a chat, such as writing a page or sorting files. Each row opens its chat at the task, where you answer what it asks."
+msgstr "你在聊天里请她在这台电脑上做的工作，比如写网页或整理文件。点开一行会打开它所在的聊天并定位到这个任务，你在那里答复它的请求。"
+
+#: src/features/tasks/transcript-view.tsx
+msgid "Working…"
+msgstr "工作中…"
+
 #: src/features/jobs/labels.ts
 msgid "Works out what the video pipeline would do and what it would cost, without running it."
 msgstr "估算视频流水线会做什么、要花多少钱，但不会真正运行。"
@@ -4972,6 +5488,10 @@ msgstr "我"
 msgctxt "chat speaker"
 msgid "You"
 msgstr "我"
+
+#: src/features/tasks/task-card.tsx
+msgid "You denied it when it asked to start."
+msgstr "它请求开始时你拒绝了。"
 
 #: src/features/setup/done-step.tsx
 msgid "You're all set"

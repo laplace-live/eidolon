@@ -13,10 +13,10 @@ import {
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { readSnapshot, tasksDir } from "@eidolon/assistant";
+import { readSnapshot, type TaskSnapshot, tasksDir, writeSnapshot } from "@eidolon/assistant";
 import { dataHome } from "@eidolon/config";
+import { acquireLock, LockedError } from "@eidolon/config/lock";
 import type { createMind, MindChunk, MindRequest, MindToolCall, TaskEntry } from "@eidolon/engine";
-import { acquireLock, LockedError } from "@eidolon/ingest";
 import {
   ProviderConfigError,
   ProviderHttpError,
@@ -24,7 +24,7 @@ import {
   type UsageRecord,
 } from "@eidolon/providers";
 import { ArgparseExit } from "../src/argparse.ts";
-import { parseTaskArgs, Spend, taskMain } from "../src/task.ts";
+import { parseTaskArgs, taskMain } from "../src/task.ts";
 import { blockNetwork, captureIo, captureLogs, setEnv } from "./helpers.ts";
 
 blockNetwork();
@@ -221,6 +221,40 @@ describe("laplace-task", () => {
       "INFO",
       `Starting task ${id} in ${folder} on openrouter/test/model; its transcript is in ${dir}`,
     ]);
+  });
+
+  test("a reply that writes a file and reads it back runs its calls in order, so the read sees the write", async () => {
+    // Claude Sonnet 5.5 on OpenRouter sent exactly this, and its read raced the write to ENOENT.
+    const mind = scripted([
+      calls([
+        call("c1", "write", { path: "index.html", content: "<p>hi</p>\n" }),
+        call("c2", "read", { path: "index.html" }),
+      ]),
+      calls([
+        call("c3", "edit", { path: "index.html", edits: [{ oldText: "hi", newText: "hello" }] }),
+        call("c4", "read", { path: "index.html" }),
+      ]),
+      says("Done."),
+    ]);
+    const io = captureIo();
+    const code = await taskMain(["--folder", folder, "Write index.html and check it"], {
+      ...io.io,
+      createMind: mind.createMind,
+      confirm: null,
+    });
+
+    expect(code).toBe(0);
+    const results = transcript(onlyTask().dir).flatMap((entry) =>
+      entry.type === "tool-result" ? [entry] : [],
+    );
+    expect(results.map(({ callId, isError }) => ({ callId, isError }))).toEqual([
+      { callId: "c1", isError: false },
+      { callId: "c2", isError: false },
+      { callId: "c3", isError: false },
+      { callId: "c4", isError: false },
+    ]);
+    expect(results[1]?.content).toContain("<p>hi</p>");
+    expect(results[3]?.content).toContain("<p>hello</p>");
   });
 
   test("shows control characters from the folder or the worker as escapes, not to the terminal", async () => {
@@ -449,15 +483,21 @@ describe("laplace-task", () => {
           confirm: null,
         }),
       ).toBe(3);
+      // The reply's calls ran; the pause comes before the next request.
       expect(paused.requests).toHaveLength(1);
-      expect(existsSync(join(folder, "a.txt"))).toBe(false);
-      const { id } = onlyTask();
+      expect(readFileSync(join(folder, "a.txt"), "utf8")).toBe("a");
+      const { id, dir } = onlyTask();
       expect(io.stdout()).toEndWith(
         `\nTask ${id} paused: ${detail}\nResume it with: bun run laplace-task --resume ${id}\n`,
       );
+      expect(await readSnapshot(dir)).toMatchObject({
+        status: "paused",
+        spendPauseUsd: 0.01,
+        outcome: { status: "paused", reason: "unpriced", detail },
+      });
       rmSync(tasksDir(), { recursive: true, force: true });
 
-      // In a terminal it asks, and goes on without pauses on yes.
+      // In a terminal it asks, and goes on without pauses on yes, which task.json keeps.
       const asked: string[] = [];
       const yes = scripted(turns(), null);
       expect(
@@ -472,6 +512,12 @@ describe("laplace-task", () => {
       ).toBe(0);
       expect(asked).toEqual([`${detail} Continue without spend pauses? [y/N] `]);
       expect(yes.requests).toHaveLength(4);
+      const done = onlyTask().dir;
+      expect(transcript(done).find((entry) => entry.type === "pause")).toMatchObject({
+        reason: "unpriced",
+        detail,
+      });
+      expect(await readSnapshot(done)).toMatchObject({ status: "succeeded", spendPauseUsd: 0 });
       rmSync(tasksDir(), { recursive: true, force: true });
     } finally {
       restore();
@@ -508,7 +554,7 @@ describe("laplace-task", () => {
         }),
       ).toBe(3);
       expect(silent.requests).toHaveLength(1);
-      expect(existsSync(join(folder, "a.txt"))).toBe(false);
+      expect(readFileSync(join(folder, "a.txt"), "utf8")).toBe("a");
       const why = "No usage was reported for test/model at openrouter";
       expect(io.stdout()).toContain(
         `paused: ${why}, so its spend can't count toward the pause at every $0.01.\n`,
@@ -517,6 +563,89 @@ describe("laplace-task", () => {
         "WARNING",
         `${why}, so the task's spend pauses can't count it`,
       ]);
+    } finally {
+      restore();
+    }
+  });
+
+  test("a reply whose calls all fail before running pauses too, as --json's unpriced outcome", async () => {
+    const restore = setEnv({ ASSISTANT_SPEND_PAUSE_USD: "0.01" });
+    try {
+      // A write with no content fails validation and never runs.
+      const failing = scripted(
+        [calls([call("a", "write", { path: "a.txt" })]), says("Never asked.")],
+        null,
+      );
+      const io = captureIo();
+      expect(
+        await taskMain(["--json", "--folder", folder, "Write a.txt"], {
+          ...io.io,
+          createMind: failing.createMind,
+          confirm: async () => {
+            throw new Error("asked");
+          },
+        }),
+      ).toBe(3);
+      expect(failing.requests).toHaveLength(1);
+      expect(existsSync(join(folder, "a.txt"))).toBe(false);
+      const last = JSON.parse(io.stdout().trimEnd().split("\n").at(-1) ?? "null");
+      expect(last).toMatchObject({
+        type: "outcome",
+        outcome: {
+          status: "paused",
+          reason: "unpriced",
+          detail:
+            "No price is known for test/model at openrouter, so its spend can't count toward the pause at every $0.01.",
+        },
+      });
+    } finally {
+      restore();
+    }
+  });
+
+  test("going on without spend pauses keeps them off, so a --resume doesn't ask again", async () => {
+    const restore = setEnv({ ASSISTANT_SPEND_PAUSE_USD: "0.01" });
+    try {
+      const asked: string[] = [];
+      const first = scripted(
+        [
+          calls([call("a", "write", { path: "a.txt", content: "a" })]),
+          // biome-ignore lint/correctness/useYield: it fails before its first chunk.
+          async function* () {
+            throw new ProviderHttpError("OpenRouter", 400, "No such model");
+          },
+        ],
+        null,
+      );
+      expect(
+        await taskMain(["--folder", folder, "Write a.txt and b.txt"], {
+          ...captureIo().io,
+          createMind: first.createMind,
+          confirm: async (question) => {
+            asked.push(question);
+            return true;
+          },
+        }),
+      ).toBe(1);
+      expect(asked).toHaveLength(1);
+      const { id, dir } = onlyTask();
+      expect(await readSnapshot(dir)).toMatchObject({ status: "failed", spendPauseUsd: 0 });
+
+      const again = scripted(
+        [calls([call("b", "write", { path: "b.txt", content: "b" })]), says("Done.")],
+        null,
+      );
+      expect(
+        await taskMain(["--resume", id], {
+          ...captureIo().io,
+          createMind: again.createMind,
+          confirm: async () => {
+            throw new Error("asked");
+          },
+        }),
+      ).toBe(0);
+      expect(again.requests).toHaveLength(2);
+      expect(readFileSync(join(folder, "b.txt"), "utf8")).toBe("b");
     } finally {
       restore();
     }
@@ -574,6 +703,109 @@ describe("laplace-task", () => {
       outcome: { status: "failed", error },
     });
     expect(logs.records).toContainEqual(["WARNING", `The task's request failed: ${error}`]);
+  });
+
+  test("--web any offers web_fetch, which --resume keeps until --web off takes it away", async () => {
+    // Each run's one request fails for good, so the task can be resumed again.
+    const failing = () =>
+      scripted([
+        // biome-ignore lint/correctness/useYield: it fails before its first chunk.
+        async function* () {
+          throw new ProviderHttpError("OpenRouter", 400, "No such model");
+        },
+      ]);
+    const run = (argv: readonly string[], mind: ReturnType<typeof scripted>) =>
+      taskMain(argv, { ...captureIo().io, createMind: mind.createMind, confirm: null });
+    const offered = (mind: ReturnType<typeof scripted>) =>
+      mind.requests[0]?.tools.map((tool) => tool.name);
+
+    const first = failing();
+    expect(await run(["--web", "any", "--folder", folder, "Look it up"], first)).toBe(1);
+    expect(offered(first)).toEqual([
+      "read",
+      "write",
+      "edit",
+      "ls",
+      "find",
+      "grep",
+      "web_fetch",
+      "todo",
+    ]);
+    expect(first.requests[0]?.system).toContain("\n- web_fetch: ");
+    const { id, dir } = onlyTask();
+    expect((await readSnapshot(dir))?.web).toEqual({ mode: "any", hosts: [], denied: [] });
+
+    const again = failing();
+    expect(await run(["--resume", id], again)).toBe(1);
+    expect(offered(again)).toContain("web_fetch");
+
+    const off = scripted([says("Done.")]);
+    expect(await run(["--resume", id, "--web", "off"], off)).toBe(0);
+    expect(offered(off)).not.toContain("web_fetch");
+    expect((await readSnapshot(dir))?.web).toEqual({ mode: "off", hosts: [], denied: [] });
+  });
+
+  test("without --web there is no web_fetch, nor on resuming the task", async () => {
+    const first = scripted([
+      // biome-ignore lint/correctness/useYield: it fails before its first chunk.
+      async function* () {
+        throw new ProviderHttpError("OpenRouter", 400, "No such model");
+      },
+    ]);
+    const run = (argv: readonly string[], mind: ReturnType<typeof scripted>) =>
+      taskMain(argv, { ...captureIo().io, createMind: mind.createMind, confirm: null });
+    expect(await run(["--folder", folder, "Look it up"], first)).toBe(1);
+    expect(first.requests[0]?.tools.map((tool) => tool.name)).not.toContain("web_fetch");
+    const { id, dir } = onlyTask();
+    const off = { mode: "off", hosts: [], denied: [] } as const;
+    expect((await readSnapshot(dir))?.web).toEqual(off);
+
+    const resumed = scripted([says("Done.")]);
+    expect(await run(["--resume", id], resumed)).toBe(0);
+    expect(resumed.requests[0]?.tools.map((tool) => tool.name)).not.toContain("web_fetch");
+    expect((await readSnapshot(dir))?.web).toEqual(off);
+  });
+
+  test("a task of the local app's, one with a chat, isn't resumed: its card there goes on with it", async () => {
+    const first = scripted([
+      // biome-ignore lint/correctness/useYield: it fails before its first chunk.
+      async function* () {
+        throw new ProviderHttpError("OpenRouter", 400, "No such model");
+      },
+    ]);
+    expect(
+      await taskMain(["--folder", folder, "Look it up"], {
+        ...captureIo().io,
+        createMind: first.createMind,
+        confirm: null,
+      }),
+    ).toBe(1);
+    const { id, dir } = onlyTask();
+    // As the app's manager leaves one: paused on a site it asks the owner about.
+    const app: TaskSnapshot = {
+      ...((await readSnapshot(dir)) as TaskSnapshot),
+      status: "paused",
+      chat: { id: "chat-1", persona: "milky-green", call: "call-1" },
+      web: { mode: "ask", hosts: [], denied: [] },
+      pending: { kind: "fetch", host: "example.com" },
+    };
+    await writeSnapshot(dir, app);
+    const before = readFileSync(join(dir, "transcript.jsonl"), "utf8");
+
+    const resumed = scripted([says("Done.")]);
+    const io = captureIo();
+    expect(
+      await taskMain(["--resume", id], { ...io.io, createMind: resumed.createMind, confirm: null }),
+    ).toBe(2);
+    expect(io.stderr()).toEndWith(
+      `laplace-task: error: argument --resume: task ${id} belongs to a chat in the local app, ` +
+        "and goes on from its card there\n",
+    );
+    expect(resumed.made).toEqual([]);
+    expect(await readSnapshot(dir)).toEqual(app);
+    expect(readFileSync(join(dir, "transcript.jsonl"), "utf8")).toBe(before);
+    // Nor is its lock taken.
+    acquireLock(`task:${id}`, "probe")();
   });
 
   test("with no assistant model and no --model, it exits 2 saying how to choose one", async () => {
@@ -950,6 +1182,7 @@ describe("parseTaskArgs", () => {
       deliverable: "index.html",
       check: "The result does what the goal asks",
       model: null,
+      web: "off",
       json: true,
     });
   });
@@ -965,6 +1198,7 @@ describe("parseTaskArgs", () => {
       kind: "resume",
       id: id.toLowerCase(),
       model: { account: "openai", model: "gpt-5" },
+      web: null,
       json: false,
     });
     expect(usageError(["--resume", "../x"])).toBe("argument --resume: no task '../x'");
@@ -973,6 +1207,23 @@ describe("parseTaskArgs", () => {
     );
     expect(usageError(["--resume", id, "goal"])).toBe(
       "argument --resume: not allowed with argument goal",
+    );
+  });
+
+  test("--web is any or off: off for a new task unless given, a resumed task's own unless given", () => {
+    const id = "0199e0a4-7c5e-7000-8000-000000000000";
+    expect(parseTaskArgs(["--web", "any", "--folder", "/tmp/x", "x"])).toMatchObject({
+      kind: "new",
+      web: "any",
+    });
+    expect(parseTaskArgs(["--folder", "/tmp/x", "x"])).toMatchObject({ kind: "new", web: "off" });
+    expect(parseTaskArgs(["--resume", id, "--web", "off"])).toMatchObject({
+      kind: "resume",
+      web: "off",
+    });
+    expect(parseTaskArgs(["--resume", id])).toMatchObject({ kind: "resume", web: null });
+    expect(usageError(["--web", "ask", "--folder", "/tmp/x", "x"])).toBe(
+      "argument --web: invalid choice: 'ask' (choose from any, off)",
     );
   });
 
@@ -985,50 +1236,14 @@ describe("parseTaskArgs", () => {
       expect(error.code).toBe(0);
       help = error.stdout;
     }
-    expect(help).toStartWith("usage: laplace-task [-h]");
+    expect(help).toStartWith(
+      "usage: laplace-task [-h] [--folder FOLDER] [--allow PATH] [--web {any,off}]\n",
+    );
+    expect(help).toContain(
+      "  --web {any,off}       Whether the task may fetch web pages, from any site\n" +
+        "                        (default: off; with --resume, the task's own)\n",
+    );
     expect(help).toContain("Assistant Mode (assistant.enabled) governs the local app");
     expect(help).toContain("It exits 0 when the task succeeded, 1 when it failed, 3 when it");
-  });
-});
-
-describe("Spend", () => {
-  const record = (fields: Partial<UsageRecord>): UsageRecord => ({
-    role: "assistant",
-    provider: "openrouter",
-    model: "test/model",
-    units: {},
-    category: "llm",
-    at: 0,
-    source: "task",
-    session: "t",
-    costUsd: null,
-    costSource: "unpriced",
-    ...fields,
-  });
-
-  test("sums the records' costs from where the task stood, and warns once of one it can't price", () => {
-    const meter = new Spend(0.5);
-    meter.tap(record({ costUsd: 0.25, costSource: "reported" }));
-    meter.tap(record({}));
-    meter.tap(record({}));
-    meter.tap(record({ costUsd: 0.1, costSource: "estimated" }));
-    expect(meter.spentUsd()).toBeCloseTo(0.85, 10);
-    expect(logs.records.filter(([level]) => level === "WARNING")).toEqual([
-      [
-        "WARNING",
-        "No price is known for test/model at openrouter, so the task's spend pauses can't count it",
-      ],
-    ]);
-  });
-
-  test("counts the last request's whole input, what its provider cached included", () => {
-    const meter = new Spend(0);
-    expect(meter.lastInputTokens()).toBeNull();
-    meter.tap(record({ units: { inputTokens: 300, cachedTokens: 9000, cacheWriteTokens: 700 } }));
-    expect(meter.lastInputTokens()).toBe(10_000);
-    meter.tap(record({ units: { inputTokens: 40, outputTokens: 5 } }));
-    expect(meter.lastInputTokens()).toBe(40);
-    meter.tap(record({ units: { outputTokens: 5 } }));
-    expect(meter.lastInputTokens()).toBeNull();
   });
 });

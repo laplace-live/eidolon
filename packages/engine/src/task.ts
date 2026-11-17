@@ -50,15 +50,17 @@ export interface TaskTool {
   ): Promise<TaskToolResult>;
 }
 
+/**
+ * Why a task paused: its spend reached the next multiple of its pause, it made the same calls three
+ * turns running, it waits on an approval, or its spend can't be counted toward the pause.
+ */
+export type TaskPauseReason = "spend" | "stall" | "approval" | "unpriced";
+
 export type TaskOutcome =
   | { readonly status: "succeeded"; readonly report: string }
   | { readonly status: "failed"; readonly error: string }
   | { readonly status: "cancelled" }
-  | {
-      readonly status: "paused";
-      readonly reason: "spend" | "stall" | "approval";
-      readonly detail: string;
-    };
+  | { readonly status: "paused"; readonly reason: TaskPauseReason; readonly detail: string };
 
 /** A transcript line before the store numbers and stamps it. */
 export type TaskEntryDraft =
@@ -91,11 +93,7 @@ export type TaskEntryDraft =
       readonly files: { readonly read: readonly string[]; readonly written: readonly string[] };
       readonly tokensBefore: number;
     }
-  | {
-      readonly type: "pause";
-      readonly reason: "spend" | "stall" | "approval";
-      readonly detail: string;
-    }
+  | { readonly type: "pause"; readonly reason: TaskPauseReason; readonly detail: string }
   | { readonly type: "resume" }
   | { readonly type: "end"; readonly outcome: TaskOutcome };
 
@@ -123,6 +121,13 @@ export interface TaskMeter {
   spentUsd(): number;
   /** The last request's input tokens, when its provider reported them. */
   lastInputTokens(): number | null;
+  /**
+   * Why the first request it couldn't count went uncounted ("No price is known for <model> at
+   * <provider>", "No usage was reported for <model> at <account>"), or null.
+   */
+  unpriced(): string | null;
+  /** A request's reply came back whole, a summary's included: one that reported no usage can't count. */
+  requestEnded(): void;
 }
 
 export type TaskGateDecision =
@@ -188,3 +193,4 @@ export type TaskEvent =
     };
 
 export { runTask } from "./task/loop.ts";
+export { UsageMeter, type UsageMeterOptions } from "./task/meter.ts";

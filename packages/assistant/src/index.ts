@@ -7,6 +7,7 @@ export {
   FolderPolicy,
   type FolderPolicyOptions,
   GrantRefused,
+  grantRefusal,
 } from "./policy.ts";
 export {
   buildTaskPrompt,
@@ -14,7 +15,7 @@ export {
   loadContextFiles,
   type TaskPromptInput,
 } from "./prompt.ts";
-export { createTaskTools } from "./task-tools.ts";
+export { createTaskTools, type TaskToolsOptions } from "./task-tools.ts";
 export type { FindDetails } from "./tools/find.ts";
 export type { GrepDetails } from "./tools/grep.ts";
 export type { LsDetails } from "./tools/ls.ts";
@@ -35,12 +36,27 @@ export {
   truncateTail,
 } from "./tools/truncate.ts";
 export {
+  createWebFetchTool,
+  WEB_FETCH,
+  type WebAccess,
+  type WebFetchDetails,
+  type WebFetchOptions,
+  webFetchHost,
+} from "./tools/web-fetch.ts";
+export {
   newTaskId,
   openTaskStore,
   readSnapshot,
   TASK_STATUSES,
+  TASK_WEB_MODES,
+  type TaskChat,
+  type TaskInboxLines,
+  type TaskPause,
+  type TaskPending,
   type TaskSnapshot,
   type TaskStatus,
+  type TaskWebAccess,
+  type TaskWebMode,
   tasksDir,
   writeSnapshot,
 } from "./transcript.ts";

@@ -3,6 +3,7 @@ import type { ChatEvent, ChatHeader, ChatStreamLine } from "@eidolon/chat";
 import type { ChatContents } from "@/lib/chats";
 import { chatItems } from "./items";
 import {
+  awaitReport,
   callOn,
   IDLE,
   LATE_POLL_MS,
@@ -12,6 +13,8 @@ import {
   liveRows,
   mayRunOn,
   mergeEvents,
+  REPORT_WAIT_MS,
+  type ReportWatch,
   reaches,
   reduceLive,
   Sends,
@@ -610,5 +613,90 @@ describe("mayRunOn", () => {
     expect(mayRunOn({ ...broke, received: false })).toBe(false);
     expect(mayRunOn({ ...broke, broke: false })).toBe(false);
     expect(mayRunOn({ ...broke, turn: "t1", ended: true, broke: false })).toBe(false);
+  });
+});
+
+describe("the wait for her report", () => {
+  const TICK = 2000;
+
+  /** A page that saw a task end at 0 and asks every TICK, with a reply of its own from `from` to `to`. */
+  function page(reply: { readonly from: number; readonly to: number } | null = null) {
+    let now = 0;
+    const asked: number[] = [];
+    const watch: ReportWatch = {
+      open: () => (reply !== null && now >= reply.from && now < reply.to ? 1 : 0),
+      carried: () => (reply !== null && now >= reply.to ? reply.to : 0),
+      follow: async () => {
+        asked.push(now);
+      },
+      pause: async () => {
+        now += TICK;
+      },
+      now: () => now,
+      on: () => true,
+    };
+    return { watch, asked };
+  }
+
+  test("asks GET live at each tick while no reply runs, until REPORT_WAIT_MS after the end", async () => {
+    const { watch, asked } = page();
+    await awaitReport(watch, 0);
+    expect(asked).toHaveLength(REPORT_WAIT_MS / TICK);
+    expect([asked[0], asked.at(-1)]).toEqual([0, REPORT_WAIT_MS - TICK]);
+  });
+
+  test("a reply on the page that runs past it holds the wait, since hers starts after that one", async () => {
+    // Her selfie reply ran from before the task ended until 90 s after; a second stream would show
+    // its words twice.
+    const { watch, asked } = page({ from: 0, to: 90_000 });
+    await awaitReport(watch, 0);
+    expect([asked[0], asked.at(-1)]).toEqual([90_000, 90_000 + REPORT_WAIT_MS - TICK]);
+  });
+
+  test("so does a reply GET live carried", async () => {
+    let now = 0;
+    let carried = 0;
+    const asked: number[] = [];
+    await awaitReport(
+      {
+        open: () => 0,
+        carried: () => carried,
+        follow: async () => {
+          asked.push(now);
+          // The first answer is another tab's reply, 80 s long.
+          if (asked.length === 1) {
+            now += 80_000;
+            carried = now;
+          }
+        },
+        pause: async () => {
+          now += TICK;
+        },
+        now: () => now,
+        on: () => true,
+      },
+      0,
+    );
+    expect(asked.at(-1)).toBe(80_000 + REPORT_WAIT_MS - TICK);
+  });
+
+  test("stops once the page no longer waits for it", async () => {
+    let on = true;
+    let asked = 0;
+    await awaitReport(
+      {
+        open: () => 0,
+        carried: () => 0,
+        follow: async () => {
+          asked += 1;
+          on = false;
+        },
+        pause: async () => {},
+        now: () => 0,
+        on: () => on,
+      },
+      0,
+    );
+    expect(asked).toBe(1);
   });
 });

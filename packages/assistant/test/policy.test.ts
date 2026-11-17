@@ -426,6 +426,31 @@ describe("FolderPolicy", () => {
     expect(policy.folder).toBe(options.folder);
   });
 
+  test("home and any folder holding it are denied, never outside: no grant could open them", async () => {
+    const { base, home, options } = layout();
+    symlinkSync(home, join(base, "home-link"));
+    const policy = new FolderPolicy({
+      ...options,
+      grants: [{ path: join(home, "Git"), access: "read-write" }],
+    });
+    for (const path of [
+      "/",
+      home,
+      "~",
+      base,
+      join(home, "projects", ".."),
+      join(base, "home-link"),
+    ]) {
+      for (const access of ["read", "write"] as const) {
+        await expect(policy.resolve(path, access)).rejects.toMatchObject({ why: "denied", access });
+      }
+    }
+    // A file right in home can be granted alone, so it is only outside.
+    await expect(policy.resolve(join(home, "notes.txt"), "read")).rejects.toMatchObject({
+      why: "outside",
+    });
+  });
+
   test("a read-only grant can be read but not written", async () => {
     const { base, options } = layout();
     const shared = join(base, "shared");

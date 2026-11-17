@@ -2,7 +2,8 @@
 // gate and context providers, then the mind and its tool loop, and for a voice message her voice
 // role speaking what she wrote. It all runs as her, inside withPersona, and its events come out as
 // drafts for the caller to number and store. In a call, her reply is spoken as it streams and she
-// keeps what was heard, and an async tool's result arrives after her turn.
+// keeps what was heard, and an async tool's result arrives after her turn; in a text turn, a
+// background tool's does.
 import {
   type Attachment,
   CHAT_WINDOW_MESSAGES,
@@ -28,6 +29,8 @@ import { saveSelfies } from "./attachments.ts";
 import { TurnConversation } from "./context.ts";
 import { type Group, groupOf, SpeakerCut } from "./group.ts";
 import type {
+  BackgroundTool,
+  BackgroundTools,
   CallHooks,
   CallTurnOutput,
   CallTurnRequest,
@@ -88,6 +91,14 @@ interface ToolOutcome {
 
 /** A call's async tool, still running when its round ends. */
 const RUNS_ON: unique symbol = Symbol("runs on");
+
+/** A text turn's background tool whose work went on: its result was stored as `started`. */
+const STARTED: unique symbol = Symbol("started");
+
+/** Whether a background tool's outcome started its work, rather than refusing or failing. */
+function started(outcome: ToolOutcome): outcome is ToolOutcome & { readonly result: ToolResult } {
+  return outcome.result !== null && !outcome.failed && outcome.result.error === undefined;
+}
 
 type ToolState = "running" | "done" | "failed" | "cancelled";
 
@@ -274,7 +285,7 @@ export async function runTool(
  * under; rejects with `cancel`'s reason.
  */
 async function invoke(
-  tool: LlmTool,
+  tool: LlmTool | BackgroundTool,
   call: MindToolCall,
   context: ConversationContext,
   effects: (signal: AbortSignal) => ToolEffects,
@@ -283,7 +294,10 @@ async function invoke(
   const timeout = tool.timeoutSecs ? AbortSignal.timeout(tool.timeoutSecs * 1000) : null;
   const signal = timeout === null ? cancel : AbortSignal.any([cancel, timeout]);
   try {
-    const run = tool.run({ arguments: call.arguments, context, signal }, effects(signal));
+    const run = tool.run(
+      { arguments: call.arguments, context, signal, callId: call.id },
+      effects(signal),
+    );
     return { result: await raceAbort(run, signal), failed: false };
   } catch (error) {
     if (cancel.aborted) throw cancel.reason;
@@ -316,6 +330,8 @@ class Turn {
   /** A call's: her reply is spoken as it streams. */
   readonly #call: CallHooks | null;
   readonly #late: LateTools | undefined;
+  /** Her background tools, which only a text turn takes. */
+  readonly #background: BackgroundTools | null;
   /** A call on a realtime model, which this turn only prepares. */
   readonly #realtime: boolean;
   #text = "";
@@ -349,6 +365,7 @@ class Turn {
     this.#id = deps.newId();
     this.#call = request.mode === "call" ? inOrder(request, read, signal) : null;
     this.#late = request.mode === "call" ? undefined : request.late;
+    this.#background = request.mode === "call" || realtime ? null : (request.background ?? null);
     this.#realtime = realtime;
     this.#mayBeVoice = request.mode !== undefined && request.mode !== "text";
   }
@@ -437,13 +454,19 @@ class Turn {
   async #parts(group: Group | null): Promise<PersonaParts> {
     const { chat, viewer } = this.#request;
     const others = group?.others ?? [];
+    const background = this.#background;
     const options: PartsOptions = this.#realtime
       ? { others, realtime: true }
-      : { others, voice: this.#mayBeVoice };
+      : {
+          others,
+          voice: this.#mayBeVoice,
+          ...(background === null ? {} : { assistantHint: background.hint }),
+        };
     const parts = await raceAbort(
       this.#deps.parts(this.#persona, viewer, chat, options),
       this.#signal,
     );
+    if (background !== null) return { ...parts, tools: [...parts.tools, ...background.tools] };
     if (this.#call === null && !this.#realtime) return parts;
     return { ...parts, systemInstruction: callInstruction(parts.systemInstruction, parts.tools) };
   }
@@ -609,7 +632,7 @@ class Turn {
         ended(signal.aborted ? undefined : completionError(error));
         throw error;
       }
-      let running: Promise<ToolResult | null | typeof RUNS_ON>[];
+      let running: Promise<ToolResult | null | typeof RUNS_ON | typeof STARTED>[];
       try {
         if (cut?.cut) {
           logger.info(`[chat] ${this.#persona}'s reply was cut where she wrote as someone else`);
@@ -652,7 +675,13 @@ class Turn {
         return;
       }
       calls.forEach((call, i) => {
-        conversation.append(...toolCallMessages({ callId: call.id, ...call }, results[i] ?? null));
+        const result = results[i] ?? null;
+        conversation.append(
+          ...toolCallMessages(
+            { callId: call.id, ...call },
+            result === STARTED ? "started" : result,
+          ),
+        );
       });
       // A call's text lands after its tool messages, as pipedog's assistant aggregator orders it.
       if (text !== "") conversation.append({ role: "assistant", content: text });
@@ -672,18 +701,20 @@ class Turn {
   }
 
   /**
-   * The result the mind sees, null for a call that timed out, which a call's view cancels, or
-   * RUNS_ON for a call's async tool, whose result comes through `onAsyncResult`.
+   * The result the mind sees, null for a call that timed out, which a call's view cancels, RUNS_ON
+   * for a call's async tool, whose result comes through `onAsyncResult`, or STARTED for a
+   * background tool whose work went on.
    */
   async #runTool(
     parts: PersonaParts,
     call: MindToolCall,
     conversation: TurnConversation,
-  ): Promise<ToolResult | null | typeof RUNS_ON> {
+  ): Promise<ToolResult | null | typeof RUNS_ON | typeof STARTED> {
     const turnSignal = this.#signal;
     const hooks = this.#call;
     const tool = parts.tools.find((candidate) => candidate.schema.name === call.name);
     const runsOn = hooks !== null && tool !== undefined && isAsyncTool(tool);
+    const background = tool !== undefined && (this.#background?.tools.includes(tool) ?? false);
     const state = (s: ToolState): void => this.#toolLine(call, runsOn, s);
     const settle = (result: ToolResult, s: "done" | "failed"): ToolResult => {
       this.#record([this.#toolResult(call, result)]);
@@ -725,7 +756,7 @@ class Turn {
         logger.info(
           `[chat] ${call.name} runs on after ${this.#persona}'s turn ${this.#id} stopped`,
         );
-        late.add(call.name, this.#lateEvents(call, running, later));
+        late.add(call.name, this.#lateEvents(call, running, later, background));
       }
       if (hooks !== null) state("cancelled");
       throw turnSignal.reason;
@@ -733,6 +764,11 @@ class Turn {
     if (outcome.result === null) {
       state("cancelled");
       return null;
+    }
+    if (background && started(outcome)) {
+      this.#record([{ ...this.#toolResult(call, outcome.result), stage: "started" }]);
+      state("done");
+      return STARTED;
     }
     return settle(outcome.result, outcome.failed ? "failed" : "done");
   }
@@ -762,15 +798,23 @@ class Turn {
       });
   }
 
-  /** What a tool her interrupted turn left running adds once it ends: its result, then `photos`. */
+  /**
+   * What a tool her interrupted turn left running adds once it ends: its result, `started` for a
+   * background tool whose work went on, then `photos`.
+   */
   async #lateEvents(
     call: MindToolCall,
     running: Promise<ToolOutcome>,
     photos: readonly Attachment[],
+    background: boolean,
   ): Promise<readonly ChatEventDraft[]> {
     const outcome = await running.catch(() => null);
     const events: ChatEventDraft[] = [];
-    if (outcome?.result) events.push(this.#toolResult(call, outcome.result));
+    if (outcome !== null && background && started(outcome)) {
+      events.push({ ...this.#toolResult(call, outcome.result), stage: "started" });
+    } else if (outcome?.result) {
+      events.push(this.#toolResult(call, outcome.result));
+    }
     if (photos.length > 0) {
       events.push({
         type: "message",

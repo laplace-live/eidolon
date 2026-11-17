@@ -3,10 +3,17 @@
 import type { CardPath } from "@/components/settings-form/controls";
 import { studioPath } from "@/lib/paths";
 
-export const SECTIONS = ["providers", "general", "memory", "downloads", "advanced"] as const;
+export const SECTIONS = [
+  "providers",
+  "general",
+  "memory",
+  "downloads",
+  "assistant",
+  "advanced",
+] as const;
 export type SectionId = (typeof SECTIONS)[number];
 
-export type CardId = "you" | "storage" | "embeddings" | "ytDlp";
+export type CardId = "you" | "storage" | "embeddings" | "ytDlp" | "assistant";
 
 export interface CardSpec {
   /** Picks its title and description. */
@@ -41,6 +48,17 @@ export const CARDS: Readonly<Record<Named, readonly CardSpec[]>> = {
     {
       id: "ytDlp",
       paths: [["sources.cookiesFromBrowser", "sources.cookiesFile"], "sources.ytDlp"],
+    },
+  ],
+  assistant: [
+    {
+      id: "assistant",
+      paths: [
+        "assistant.enabled",
+        ["assistant.provider", "assistant.model"],
+        "assistant.folders",
+        ["assistant.spendPauseUsd", "assistant.contextTokens"],
+      ],
     },
   ],
 };

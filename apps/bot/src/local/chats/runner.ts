@@ -1,8 +1,8 @@
 // The local app's chats: one JSONL store in the data home, and per chat one reply at a time: a
-// greeting, or the answer to a viewer's line, typed or spoken, which may chain persona to persona.
-// A reply runs to its end whether or not anyone still reads it; only stop, delete, a call, shutdown
-// and a newer viewer line stop one. A call takes the chat over while it is on: it opens on her view,
-// and stores its lines.
+// greeting, the answer to a viewer's line, typed or spoken, which may chain persona to persona, or
+// her word on a task she started. A reply runs to its end whether or not anyone still reads it; only
+// stop, delete, a call, shutdown and a newer viewer line stop one. A call takes the chat over while
+// it is on: it opens on her view, and stores its lines.
 import { join } from "node:path";
 import {
   CHAT_FORMAT,
@@ -22,6 +22,7 @@ import { JsonlChatStore } from "@eidolon/chat/jsonl";
 import { dataHome, errorText, logger } from "@eidolon/config";
 import type { DirectorReply } from "@eidolon/context";
 import {
+  type BackgroundTools,
   type ChatOutput,
   type ChatRequest,
   callLine,
@@ -40,8 +41,16 @@ import {
 } from "@eidolon/engine";
 import type { AudioClip } from "@eidolon/providers/speech-batch";
 import type { CallBinding, CallEnd, GroupCallBinding, TranscriptLine } from "@eidolon/runtime";
-import type { ChatCallInfo, ChatContents } from "../api.ts";
+import type { ChatCallInfo, ChatContents, StartTaskFinal, TaskChat, TaskSnapshot } from "../api.ts";
 import { localViewer } from "../identity.ts";
+import type { TaskManager } from "../tasks/manager.ts";
+import {
+  assistantPromptHint,
+  type StartTask,
+  startTaskTool,
+  taskEndedNudge,
+  taskFinal,
+} from "../tasks/tool.ts";
 import { type GroupCallRefusal, groupCallRefusal } from "./group.ts";
 import { HearingFailed, hearingRefusal } from "./hearing.ts";
 import { LiveTurn } from "./live.ts";
@@ -126,6 +135,11 @@ export interface ChatRunnerOptions {
   readonly answer?: ChatAnswer;
   /** Default: the engine's. */
   readonly hear?: ChatHear;
+  /**
+   * Assistant Mode's tasks. While they are ready, her answers to the viewer's lines in a chat of one
+   * offer her start_task and its hint; a deleted chat's are stopped. Without them she has neither.
+   */
+  readonly tasks?: Pick<TaskManager, "ready" | "start" | "cancelChat">;
 }
 
 /** How long shutdown waits for aborted replies to store what they said. */
@@ -158,6 +172,8 @@ interface Chat {
   readonly cancel: AbortController;
   /** From the moment it opens, before its call-started is stored, until its end is asked for. */
   call: ActiveCall | null;
+  /** Her start_task calls the manager has yet to answer: a delete stops their tasks too. */
+  readonly starts: Set<Promise<unknown>>;
 }
 
 interface ActiveCall {
@@ -229,7 +245,10 @@ export class ChatRunner {
   readonly #turn: ChatTurn;
   readonly #answer: ChatAnswer;
   readonly #hear: ChatHear;
+  readonly #tasks: ChatRunnerOptions["tasks"];
   readonly #chats = new Map<string, Chat>();
+  /** Shutdown has begun: a task's end waits for the next start. */
+  #closed = false;
   /** Each call whose end was asked for, until its call-ended, after its last lines, is stored. */
   readonly #endings = new Set<Promise<void>>();
 
@@ -240,6 +259,7 @@ export class ChatRunner {
     this.#turn = options.turn ?? engineTurn;
     this.#answer = options.answer ?? engineAnswer;
     this.#hear = options.hear ?? engineHear;
+    this.#tasks = options.tasks;
   }
 
   list(): Promise<ChatSummary[]> {
@@ -287,18 +307,37 @@ export class ChatRunner {
     chat.lastSeq = 0;
     const [persona] = participants;
     if (participants.length === 1 && persona !== undefined) {
-      const reply = new Reply([]);
-      chat.reply = reply;
-      const { signal } = reply.live.controller;
-      void this.#run(header.id, chat, reply, persona, async (late, save) => {
-        const log = await this.store.read(header.id);
-        const viewer = localViewer();
-        // With no line to weigh, an auto greeting is text.
-        const mode = replyModeFor(log, persona) === "voice" ? "voice" : "text";
-        return this.#turn({ chat: log, persona, viewer, kickoff: true, signal, late, mode }, save);
-      });
+      this.#speak(header.id, chat, persona, { kickoff: true });
     }
     return header.id;
+  }
+
+  /**
+   * An ended task's word to the chat she started it in, once no reply runs there: her start_task
+   * call's `final`, unless the chat is gone or holds one already, then her turn telling of it, as a
+   * greeting is told, unless the owner stopped the task or a call is on. Resolves once the final is
+   * stored or found not to be; after shutdown, with nothing stored, so the next start reports it.
+   */
+  async report(snapshot: TaskSnapshot): Promise<void> {
+    const final = taskFinal(snapshot);
+    const origin = snapshot.chat;
+    if (final === null || origin === undefined) return;
+    const chat = await this.#existing(origin.id);
+    if (chat === null) return;
+    for (;;) {
+      // The reply that called start_task may not have stored her started result yet.
+      await this.#idle(chat);
+      const done = await this.#serial(chat, async () => {
+        if (this.#closed || this.#chats.get(origin.id) !== chat) return true;
+        if (chat.reply !== null) return false;
+        // Her turn starts in the same slot, so no viewer line's answer reads the final first.
+        if ((await this.#storeFinal(chat, origin, final)) && final.status !== "cancelled") {
+          await this.#tell(chat, origin);
+        }
+        return true;
+      });
+      if (done) return;
+    }
   }
 
   /** The personas in chat `id` now. */
@@ -526,8 +565,8 @@ export class ChatRunner {
   }
 
   /**
-   * Stops any reply and the voice message being heard, then removes the chat's folder; ChatInCall
-   * during a call.
+   * Stops any reply and the voice message being heard, and the chat's tasks, then removes the
+   * chat's folder; ChatInCall during a call.
    */
   remove(id: string): Promise<void> {
     const chat = this.#chat(id);
@@ -539,6 +578,11 @@ export class ChatRunner {
     chat.cancel.abort();
     return this.#serial(chat, async () => {
       await this.#interrupt(chat);
+      if (this.#tasks !== undefined) {
+        // A start the manager is still making would leave its task running for no chat.
+        await Promise.allSettled([...chat.starts]);
+        await this.#tasks.cancelChat(id);
+      }
       await chat.appends;
       try {
         await this.store.remove(id);
@@ -554,6 +598,7 @@ export class ChatRunner {
    * call-ended.
    */
   async shutdown(): Promise<void> {
+    this.#closed = true;
     const running = [...this.#chats.values()].flatMap((chat) => (chat.reply ? [chat.reply] : []));
     for (const reply of running) reply.abort();
     for (const chat of this.#chats.values()) chat.cancel.abort();
@@ -587,6 +632,7 @@ export class ChatRunner {
         late: [],
         cancel: new AbortController(),
         call: null,
+        starts: new Set(),
       };
       this.#chats.set(id, chat);
     }
@@ -757,7 +803,11 @@ export class ChatRunner {
     const { signal } = live.controller;
     void this.#run(id, chat, reply, null, async (late, save) => {
       const log = await this.store.read(id);
-      reply.single = summarize(log.header, log.events).participants.length === 1;
+      const { participants } = summarize(log.header, log.events);
+      reply.single = participants.length === 1;
+      const [only] = participants;
+      const background =
+        reply.single && only !== undefined ? this.#background(id, chat, only) : null;
       const request: ChatRequest = {
         chat: log,
         read: () => this.store.read(id),
@@ -766,10 +816,114 @@ export class ChatRunner {
         ...(owed.length > 0 ? { owed } : {}),
         signal,
         late,
+        ...(background ? { background } : {}),
       };
       return this.#answer(request, save);
     });
     return live;
+  }
+
+  /**
+   * Her turn with no viewer line, in a chat of hers alone: a greeting, or her word on a task's end,
+   * which a nudge asks for. GET live streams it.
+   */
+  #speak(
+    id: string,
+    chat: Chat,
+    persona: ParticipantId,
+    prompt: { readonly kickoff: true } | { readonly nudge: string },
+  ): void {
+    const reply = new Reply([]);
+    chat.reply = reply;
+    const { signal } = reply.live.controller;
+    void this.#run(id, chat, reply, persona, async (late, save) => {
+      const log = await this.store.read(id);
+      const viewer = localViewer();
+      // With no line to weigh, an auto reply is text.
+      const mode = replyModeFor(log, persona) === "voice" ? "voice" : "text";
+      return this.#turn({ chat: log, persona, viewer, signal, late, mode, ...prompt }, save);
+    });
+  }
+
+  /**
+   * Her start_task and its hint for her answer to a viewer's line, while Assistant Mode is ready;
+   * never for a turn of hers no line asked for.
+   */
+  #background(id: string, chat: Chat, persona: ParticipantId): BackgroundTools | null {
+    const tasks = this.#tasks;
+    if (tasks === undefined || !tasks.ready()) return null;
+    const start: StartTask = (input, call) => {
+      const starting = tasks.start(input, { id, persona, call });
+      chat.starts.add(starting);
+      const answered = () => chat.starts.delete(starting);
+      starting.then(answered, answered);
+      return starting;
+    };
+    return { tools: [startTaskTool(start)], hint: assistantPromptHint() };
+  }
+
+  /** Chat `id`'s state, or null when the store doesn't have it. */
+  async #existing(id: string): Promise<Chat | null> {
+    const known = this.#chats.get(id);
+    if (known !== undefined) return known;
+    try {
+      await this.store.summary(id);
+    } catch (error) {
+      if (error instanceof ChatStoreError && error.code === "not-found") return null;
+      throw error;
+    }
+    return this.#chat(id);
+  }
+
+  /**
+   * Resolves once no reply runs in the chat, or once shutdown has begun: it ends a reply's stream
+   * before its run may have finished, so the chat still holds the reply.
+   */
+  async #idle(chat: Chat): Promise<void> {
+    for (let reply = chat.reply; reply !== null && !this.#closed; reply = chat.reply) {
+      await reply.live.ended;
+    }
+  }
+
+  /**
+   * Stores `final` for her call `origin.call`, after the latest call of hers with that id, unless
+   * that call is settled already. Whether it was stored.
+   */
+  async #storeFinal(chat: Chat, origin: TaskChat, final: StartTaskFinal): Promise<boolean> {
+    const { id, persona, call } = origin;
+    let turn: string | null = null;
+    let settled = false;
+    for (const event of (await this.store.read(id)).events) {
+      if (event.type === "tool-call" && event.persona === persona && event.callId === call) {
+        turn = event.turn;
+        settled = false;
+      } else if (
+        event.type === "tool-result" &&
+        event.persona === persona &&
+        event.callId === call &&
+        (event.stage === "final" || event.stage === "cancelled")
+      ) {
+        settled = true;
+      }
+    }
+    if (turn === null) {
+      logger.warning(`Chat ${id} holds no start_task call ${call}; the task's end isn't stored`);
+      return false;
+    }
+    if (settled) return false;
+    await this.#append(id, chat, [
+      { type: "tool-result", persona, turn, callId: call, result: final, stage: "final" },
+    ]);
+    return true;
+  }
+
+  /** Her turn telling of a task's end: none during a call, or once the chat isn't hers alone. */
+  async #tell(chat: Chat, { id, persona, call }: TaskChat): Promise<void> {
+    if (chat.call !== null) return;
+    const participants = await this.participants(id);
+    if (participants.length === 1 && participants[0] === persona) {
+      this.#speak(id, chat, persona, { nudge: taskEndedNudge(call) });
+    }
   }
 
   /** Aborts the running reply and drops what the chat owed. Resolves false when none was running. */

@@ -24,6 +24,7 @@ import {
 import { type UsageScope, withUsageScope } from "@eidolon/providers";
 import { runTurn } from "./turn.ts";
 import type {
+  BackgroundTools,
   CallHooks,
   CallTurnOutput,
   EngineDeps,
@@ -66,10 +67,12 @@ export interface ChatRequest {
   readonly late?: LateTools;
   /** The director's and each turn's. Default: `{ source: "chat", session: <chat id> }`. */
   readonly usage?: UsageScope;
+  /** Offered in each turn after her own tools. */
+  readonly background?: BackgroundTools;
 }
 
 /** A call's answer: each persona's turn is a call's, and every reply is spoken. */
-export interface CallChatRequest extends Omit<ChatRequest, "late"> {
+export interface CallChatRequest extends Omit<ChatRequest, "late" | "background"> {
   /** Called just before each persona's turn, for that turn alone. */
   readonly hooks: (persona: ParticipantId) => CallHooks;
 }
@@ -183,6 +186,7 @@ async function* answerWhileDeciding(
       mode,
       ...(request.late ? { late: request.late } : {}),
       ...(request.usage ? { usage: request.usage } : {}),
+      ...(request.background ? { background: request.background } : {}),
     },
     deps,
   )) {
@@ -225,7 +229,11 @@ export async function* runChat(
     const base = { chat, persona, viewer: request.viewer, signal, usage };
     if (hooks !== null) return runTurn({ ...base, ...hooks(persona) }, deps);
     const late = "late" in request ? request.late : undefined;
-    return runTurn({ ...base, mode, ...(late ? { late } : {}) }, deps);
+    const background = "background" in request ? request.background : undefined;
+    return runTurn(
+      { ...base, mode, ...(late ? { late } : {}), ...(background ? { background } : {}) },
+      deps,
+    );
   };
   const decide = (lines: DirectorLine[], hop: number): Promise<DirectorDecision> =>
     withUsageScope(usage, () =>

@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { dataHome, isPlainObject } from "@eidolon/config";
 import type { TaskBrief, TaskEntry, TaskEntryDraft, TaskOutcome, TaskStore } from "@eidolon/engine";
 import type { FolderGrant } from "./policy.ts";
+import { TODO_STATUSES, type TodoItem } from "./tools/todo.ts";
 
 const TRANSCRIPT = "transcript.jsonl";
 const SNAPSHOT = "task.json";
@@ -31,13 +32,56 @@ export const TASK_STATUSES = [
 
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
+/** What a task waits on the owner for: to start, a path outside its grants, or a site. */
+export type TaskPending =
+  | { readonly kind: "start" }
+  | {
+      readonly kind: "path";
+      readonly path: string;
+      readonly access: "read" | "write";
+      /**
+       * What an Allow grants, decided at the pause: the path when it is a folder, else its parent.
+       * Absent when that can't be granted, as home can't: the path alone is then.
+       */
+      readonly folder?: string;
+    }
+  | { readonly kind: "fetch"; readonly host: string };
+
+export type TaskPause = Pick<Extract<TaskOutcome, { status: "paused" }>, "reason" | "detail">;
+
+/** Lines for the task's run, kept here until the run takes them. */
+export interface TaskInboxLines {
+  readonly steer: readonly string[];
+  readonly followUp: readonly string[];
+}
+
+export const TASK_WEB_MODES = ["ask", "any", "off"] as const;
+
+/** `ask`: the owner allows each site. `off`: the task gets no web_fetch. */
+export type TaskWebMode = (typeof TASK_WEB_MODES)[number];
+
+export interface TaskWebAccess {
+  readonly mode: TaskWebMode;
+  /** Sites allowed while the mode is `ask`. */
+  readonly hosts: readonly string[];
+  /** Sites the owner refused. */
+  readonly denied: readonly string[];
+}
+
+/** Where a task started: the chat, the persona in it, and her start_task call's id. */
+export interface TaskChat {
+  readonly id: string;
+  readonly persona: string;
+  readonly call: string;
+}
+
 export interface TaskSnapshot {
   readonly v: 1;
   readonly id: string;
   readonly createdAt: number;
   readonly status: TaskStatus;
-  readonly persona?: string;
-  readonly chat?: string;
+  /** The app's tasks have one; one without it is laplace-task's, which the app never touches. */
+  readonly chat?: TaskChat;
   readonly brief: TaskBrief;
   readonly model: { readonly account: string; readonly model: string };
   readonly grants: readonly FolderGrant[];
@@ -46,6 +90,18 @@ export interface TaskSnapshot {
   readonly files: { readonly read: readonly string[]; readonly written: readonly string[] };
   readonly endedAt?: number;
   readonly outcome?: TaskOutcome;
+  readonly pending?: TaskPending;
+  /** The latest pause, while `paused`. */
+  readonly pause?: TaskPause;
+  /** The latest list its todo tool wrote. */
+  readonly todo?: readonly TodoItem[];
+  readonly inbox?: TaskInboxLines;
+  /** `ask` with no sites when absent. */
+  readonly web?: TaskWebAccess;
+  /** Cancelled by the owner's Deny at its start. */
+  readonly denied?: true;
+  /** Its `final` is stored in its chat; until then the app's next start reports it again. */
+  readonly reported?: true;
 }
 
 function isMissing(error: unknown): boolean {
@@ -55,17 +111,67 @@ function isMissing(error: unknown): boolean {
 const isString = (value: unknown): value is string => typeof value === "string";
 const isNumber = (value: unknown): value is number => Number.isFinite(value);
 const isStrings = (value: unknown): boolean => Array.isArray(value) && value.every(isString);
+const isOneOf = (list: readonly string[], value: unknown): boolean =>
+  isString(value) && list.includes(value);
+
+// A Record, so a reason the engine adds or drops fails the typecheck here.
+const PAUSE_REASONS: Readonly<Record<TaskPause["reason"], true>> = {
+  spend: true,
+  stall: true,
+  approval: true,
+  unpriced: true,
+};
+
+function isPending(value: unknown): boolean {
+  if (!isPlainObject(value)) return false;
+  switch (value.kind) {
+    case "start":
+      return true;
+    case "path":
+      return (
+        isString(value.path) &&
+        (value.access === "read" || value.access === "write") &&
+        (value.folder === undefined || isString(value.folder))
+      );
+    case "fetch":
+      return isString(value.host);
+    default:
+      return false;
+  }
+}
+
+const isPause = (value: unknown): boolean =>
+  isPlainObject(value) &&
+  isOneOf(Object.keys(PAUSE_REASONS), value.reason) &&
+  isString(value.detail);
+
+const isTodo = (value: unknown): boolean =>
+  Array.isArray(value) &&
+  value.every(
+    (item) => isPlainObject(item) && isString(item.text) && isOneOf(TODO_STATUSES, item.status),
+  );
+
+const isInbox = (value: unknown): boolean =>
+  isPlainObject(value) && isStrings(value.steer) && isStrings(value.followUp);
+
+const isWebAccess = (value: unknown): boolean =>
+  isPlainObject(value) &&
+  isOneOf(TASK_WEB_MODES, value.mode) &&
+  isStrings(value.hosts) &&
+  isStrings(value.denied);
+
+const isChat = (value: unknown): boolean =>
+  isPlainObject(value) && [value.id, value.persona, value.call].every(isString);
 
 function isSnapshot(value: unknown): value is TaskSnapshot {
   if (!isPlainObject(value)) return false;
-  const { v, id, createdAt, status, persona, chat, brief, model, grants, files } = value;
+  const { v, id, createdAt, status, chat, brief, model, grants, files } = value;
   return (
     v === 1 &&
     isString(id) &&
     isNumber(createdAt) &&
     (TASK_STATUSES as readonly unknown[]).includes(status) &&
-    (persona === undefined || isString(persona)) &&
-    (chat === undefined || isString(chat)) &&
+    (chat === undefined || isChat(chat)) &&
     isPlainObject(brief) &&
     [brief.goal, brief.deliverable, brief.folder, brief.check].every(isString) &&
     isPlainObject(model) &&
@@ -85,7 +191,14 @@ function isSnapshot(value: unknown): value is TaskSnapshot {
     isStrings(files.written) &&
     (value.endedAt === undefined || isNumber(value.endedAt)) &&
     (value.outcome === undefined ||
-      (isPlainObject(value.outcome) && isString(value.outcome.status)))
+      (isPlainObject(value.outcome) && isString(value.outcome.status))) &&
+    (value.pending === undefined || isPending(value.pending)) &&
+    (value.pause === undefined || isPause(value.pause)) &&
+    (value.todo === undefined || isTodo(value.todo)) &&
+    (value.inbox === undefined || isInbox(value.inbox)) &&
+    (value.web === undefined || isWebAccess(value.web)) &&
+    (value.denied === undefined || value.denied === true) &&
+    (value.reported === undefined || value.reported === true)
   );
 }
 
