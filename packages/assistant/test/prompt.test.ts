@@ -9,11 +9,24 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { FolderPolicy } from "../src/policy.ts";
 import { buildTaskPrompt, loadContextFiles, type TaskPromptInput } from "../src/prompt.ts";
 import type { AssistantTool } from "../src/types.ts";
 
 const root = mkdtempSync(join(tmpdir(), "task-prompt-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
+
+/** The context files a task in `folder` gets, under the policy it would run with. */
+function contextFiles(folder: string, home: string) {
+  const policy = new FolderPolicy({
+    folder,
+    grants: [],
+    home,
+    dataHome: join(home, ".laplace", "eidolon"),
+    appRoot: join(home, "Git", "laplace-eidolon"),
+  });
+  return loadContextFiles(folder, home, policy);
+}
 
 function tool(name: string, snippet: string, guidelines: string[] = []): AssistantTool {
   return {
@@ -187,7 +200,7 @@ describe("loadContextFiles", () => {
     write(join(home, "Git", "other", "AGENTS.md"), "a sibling");
     write(join(folder, "AGENTS.md"), "web");
     write(join(folder, "src", "AGENTS.md"), "below the folder");
-    expect(await loadContextFiles(folder, home)).toEqual([
+    expect(await contextFiles(folder, home)).toEqual([
       { path: join(home, "AGENTS.md"), content: "home" },
       { path: join(home, "Git", "CLAUDE.md"), content: "Git" },
       { path: join(home, "Git", "proj", "AGENTS.md"), content: "proj" },
@@ -195,7 +208,7 @@ describe("loadContextFiles", () => {
       { path: join(folder, "AGENTS.md"), content: "web" },
     ]);
     const unmade = join(home, "Git", "proj", "new", "app");
-    expect((await loadContextFiles(unmade, home)).map((file) => file.content)).toEqual([
+    expect((await contextFiles(unmade, home)).map((file) => file.content)).toEqual([
       "home",
       "Git",
       "proj",
@@ -207,7 +220,7 @@ describe("loadContextFiles", () => {
     const base = join(root, "outside");
     write(join(base, "AGENTS.md"), "shared temp folder");
     write(join(base, "task", "AGENTS.md"), "the task's own");
-    expect(await loadContextFiles(join(base, "task"), join(base, "home"))).toEqual([
+    expect(await contextFiles(join(base, "task"), join(base, "home"))).toEqual([
       { path: join(base, "task", "AGENTS.md"), content: "the task's own" },
     ]);
   });
@@ -219,11 +232,47 @@ describe("loadContextFiles", () => {
     symlinkSync("AGENTS.md", join(proj, "CLAUDE.md"));
     mkdirSync(join(proj, "web"));
     symlinkSync(join(proj, "AGENTS.md"), join(proj, "web", "AGENTS.md"));
-    expect(await loadContextFiles(proj, home)).toEqual([
+    expect(await contextFiles(proj, home)).toEqual([
       { path: join(proj, "AGENTS.md"), content: "proj" },
     ]);
-    expect(await loadContextFiles(join(proj, "web"), home)).toEqual([
+    expect(await contextFiles(join(proj, "web"), home)).toEqual([
       { path: join(proj, "web", "AGENTS.md"), content: "proj" },
+    ]);
+  });
+
+  test("a file linked out of these folders to anything but an AGENTS.md or CLAUDE.md is left out: a key, the data home, anything else", async () => {
+    const home = join(root, "linked-out");
+    const repo = join(home, "Git", "repo");
+    write(join(home, ".ssh", "id_rsa"), "PRIVATE-KEY-SECRET");
+    write(join(home, ".laplace", "eidolon", "credentials.json"), "sk-or-CRED-SECRET");
+    write(join(home, ".npmrc"), "NPM-TOKEN-SECRET");
+    write(join(home, "Documents", "notes.md"), "NOTES-SECRET");
+    write(join(home, "Git", "AGENTS.md"), "the owner's own");
+    mkdirSync(join(repo, "sub"), { recursive: true });
+    symlinkSync("../../.ssh/id_rsa", join(repo, "AGENTS.md"));
+    symlinkSync("../../Documents/notes.md", join(repo, "CLAUDE.md"));
+    symlinkSync("../../../.npmrc", join(repo, "sub", "AGENTS.md"));
+    symlinkSync("../../../.laplace/eidolon/credentials.json", join(repo, "sub", "CLAUDE.md"));
+    for (const folder of [repo, join(repo, "sub")]) {
+      expect(await contextFiles(folder, home)).toEqual([
+        { path: join(home, "Git", "AGENTS.md"), content: "the owner's own" },
+      ]);
+    }
+  });
+
+  test("a file of these folders linked into the owner's dotfiles is read where it leads", async () => {
+    const home = join(root, "dotfiles");
+    const folder = join(home, "Git", "proj");
+    write(join(home, "dotfiles", "agents", "AGENTS.md"), "home rules");
+    write(join(home, "dotfiles", "agents", "Git", "CLAUDE.md"), "Git rules");
+    write(join(folder, "AGENTS.md"), "project rules");
+    // As GNU stow links them.
+    symlinkSync("dotfiles/agents/AGENTS.md", join(home, "AGENTS.md"));
+    symlinkSync("../dotfiles/agents/Git/CLAUDE.md", join(home, "Git", "CLAUDE.md"));
+    expect(await contextFiles(folder, home)).toEqual([
+      { path: join(home, "AGENTS.md"), content: "home rules" },
+      { path: join(home, "Git", "CLAUDE.md"), content: "Git rules" },
+      { path: join(folder, "AGENTS.md"), content: "project rules" },
     ]);
   });
 
@@ -233,7 +282,7 @@ describe("loadContextFiles", () => {
     write(join(home, "proj", "CLAUDE.md"), "Fallback instructions");
     write(join(home, "AGENTS.md"), " \n");
     write(join(home, "CLAUDE.md"), "\uFEFF# Home rules");
-    expect(await loadContextFiles(join(home, "proj"), home)).toEqual([
+    expect(await contextFiles(join(home, "proj"), home)).toEqual([
       { path: join(home, "CLAUDE.md"), content: "# Home rules" },
       { path: join(home, "proj", "CLAUDE.md"), content: "Fallback instructions" },
     ]);
@@ -247,7 +296,7 @@ describe("loadContextFiles", () => {
     write(join(home, "a", "AGENTS.md"), "b".repeat(15_000));
     write(join(home, "a", "b", "AGENTS.md"), "c".repeat(25_000));
     write(join(folder, "AGENTS.md"), "d".repeat(25_000));
-    const files = await loadContextFiles(folder, home);
+    const files = await contextFiles(folder, home);
     expect(files.map((file) => file.path)).toEqual([
       join(home, "AGENTS.md"),
       join(home, "a", "AGENTS.md"),

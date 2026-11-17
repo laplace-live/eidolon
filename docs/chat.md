@@ -187,7 +187,9 @@ aborts the turn. The engine never rejects for the turn's own failures.
      OpenAI, Gemini's single system message, and Anthropic's prompt caching, fallbacks and message
      conversion.
    - **One mind per turn,** so Anthropic's signed thinking goes back with the round after a tool
-     call.
+     call, while the system prompt, the tools and every earlier message are as they were
+     ([prefix checks](https://platform.claude.com/docs/en/build-with-claude/preserved-thinking/prefix-checks)):
+     a round that hides a spent tool (`recall_streams` after its second call) sends none.
    - **In a group,** her request carries stop sequences, and her text is cut where she writes as
      someone else ([below](#what-each-persona-sees)).
    - **Rounds:** at most 4 mind calls per turn. A round's tool calls run in parallel and are

@@ -45,10 +45,11 @@ const SPENT = /insufficient_quota|quota exceeded|out of budget|billing|usage lim
 
 /**
  * An error event in a stream that had begun answers 200, with no status of its own: Anthropic's
- * overloaded_error, a gateway's dropped upstream.
+ * overloaded_error, a gateway's dropped upstream (OpenRouter's "Provider disconnected
+ * unexpectedly").
  */
 const TRANSIENT =
-  /overloaded|server_busy|servers are currently busy|high demand|at capacity|rate.?limit|too many requests|service.?(?:is.?)?(?:temporarily.?)?unavailable|server.?error|internal.?error|provider.?returned.?(?:an.?)?error|upstream|stream was interrupted|connection.?(?:error|refused|lost|closed|reset)|other side closed|fetch failed/i;
+  /overloaded|server_busy|servers are currently busy|high demand|at capacity|rate.?limit|too many requests|service.?(?:is.?)?(?:temporarily.?)?unavailable|server.?error|internal.?error|provider.?returned.?(?:an.?)?error|upstream|stream was interrupted|connection.?(?:error|refused|lost|closed|reset)|disconnected|other side closed|fetch failed/i;
 
 /** A provider refused the request as longer than its model's context: a 413, or one of OVERFLOW. */
 export function isContextOverflow(error: unknown): boolean {

@@ -338,7 +338,8 @@ local app; `laplace-task`, a command run on purpose, ignores it. Tasks also stay
 for either, and her chat model is never the fallback. `assistant.folders` lists folders every
 task may read and write besides its own. A task pauses to ask before going on each time its
 spend crosses a multiple of `assistant.spendPauseUsd` (default 1, in US dollars; 0 never
-pauses), and keeps its requests within `assistant.contextTokens` tokens (default 128000).
+pauses), or after its first request on a model with no known price, whose spend can't be
+counted, and keeps its requests within `assistant.contextTokens` tokens (default 128000).
 
 ## Deploying a persona
 

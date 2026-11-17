@@ -25,6 +25,11 @@ export interface MindToolCall {
   readonly id: string;
   readonly name: string;
   readonly arguments: Readonly<Record<string, unknown>>;
+  /**
+   * A call that must not run, its arguments' text as streamed: they aren't a JSON object, or the
+   * output limit cut its reply off. Its `arguments` are then `{}`.
+   */
+  readonly unparsed?: string;
 }
 
 /** Text as it streams, then a round's tool calls assembled whole, then the end. */

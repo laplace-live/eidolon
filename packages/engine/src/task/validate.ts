@@ -194,9 +194,21 @@ function valid(value: unknown, schema: Schema): boolean {
   return issues.length === 0;
 }
 
+/** How much of a rejected call's arguments its error repeats, as the tools' own errors do. */
+const ECHO_CHARS = 2000;
+
+/** `text` as an error repeats it: its head, so a long `content` isn't sent back whole. */
+export function echoed(text: string): string {
+  if (text.length <= ECHO_CHARS) return text;
+  const code = text.charCodeAt(ECHO_CHARS - 1);
+  const end = code >= 0xd800 && code <= 0xdbff ? ECHO_CHARS - 1 : ECHO_CHARS;
+  return `${text.slice(0, end)}\n... [truncated]`;
+}
+
 /**
  * `args` as `schema` takes them: a coerced copy, so a tool that changes its arguments never changes
- * the call in the transcript. Throws pi's message, each issue and then the arguments received.
+ * the call in the transcript. Throws pi's message, each issue and then the arguments received,
+ * `echoed`.
  */
 export function validateToolArguments(
   schema: ToolSchema,
@@ -210,6 +222,6 @@ export function validateToolArguments(
   const listed = issues.map(({ path, message }) => `  - ${path || "root"}: ${message}`).join("\n");
   throw new Error(
     `Validation failed for tool "${schema.name}":\n${listed}\n\n` +
-      `Received arguments:\n${JSON.stringify(args, null, 2)}`,
+      `Received arguments:\n${echoed(JSON.stringify(args, null, 2))}`,
   );
 }

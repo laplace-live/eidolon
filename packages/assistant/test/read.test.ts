@@ -258,6 +258,45 @@ describe("read tool in a task", () => {
     });
   });
 
+  it("reads UTF-16 by its byte order mark, and text that isn't UTF-8 as GB18030, saying so", async () => {
+    const utf16 = Buffer.from("\u{feff}name\tscore\n小红\t200", "utf16le");
+    writeFileSync(join(testDir, "export.txt"), utf16);
+    // 你好，世界 as GBK, as a Chinese Windows saves text.
+    const gbk = Buffer.from([0xc4, 0xe3, 0xba, 0xc3, 0xa3, 0xac, 0xca, 0xc0, 0xbd, 0xe7]);
+    writeFileSync(join(testDir, "notes.txt"), gbk);
+
+    expect(await read({ path: "export.txt" })).toEqual({
+      content: "name\tscore\n小红\t200\n\n[export.txt is UTF-16LE text.]",
+      files: { read: [join(testDir, "export.txt")] },
+    });
+    expect(await read({ path: "notes.txt" })).toEqual({
+      content: "你好，世界\n\n[notes.txt isn't UTF-8: this is it read as GB18030.]",
+      files: { read: [join(testDir, "notes.txt")] },
+    });
+  });
+
+  it("reads UTF-8 with a stray byte, or Latin-1, as UTF-8 with a replacement character", async () => {
+    // A Windows-1252 apostrophe pasted into UTF-8 notes, and a Windows-1252 CSV.
+    const notes = ["# 直播笔记\n今天的歌单：晴天、稻香\nIt", "s done\n明天直播唱歌\n"];
+    writeFileSync(
+      join(testDir, "notes.md"),
+      Buffer.concat([
+        Buffer.from(notes[0] as string),
+        Buffer.from([0x92]),
+        Buffer.from(notes[1] as string),
+      ]),
+    );
+    writeFileSync(
+      join(testDir, "kunden.csv"),
+      Buffer.from("Name;Stadt\nM\xfcller;M\xfcnchen\n", "latin1"),
+    );
+
+    expect((await read({ path: "notes.md" })).content).toBe(notes.join("\ufffd"));
+    expect((await read({ path: "kunden.csv" })).content).toBe(
+      "Name;Stadt\nM\ufffdller;M\ufffdnchen\n",
+    );
+  });
+
   it("points a directory at ls", async () => {
     mkdirSync(join(testDir, "src"));
 
@@ -273,15 +312,20 @@ describe("read tool in a task", () => {
     expect((await read({ path: "empty.txt" })).content).toBe("");
   });
 
-  it("says how to read on past a first line over the byte limit", async () => {
+  it("shows the head of a first line over the byte limit, and says how to read on", async () => {
     writeFileSync(join(testDir, "wide.txt"), `${"z".repeat(60 * 1024)}\nsecond`);
+    // 中 is three bytes: the head stops at the last whole one.
+    writeFileSync(join(testDir, "export.json"), "中".repeat(20 * 1024));
 
     const result = await read({ path: "wide.txt" });
 
     expect(result.content).toBe(
-      "[Line 1 is 60.0KB, exceeds 50.0KB limit, so read can't show it. Use offset=2 to continue.]",
+      `${"z".repeat(50 * 1024)}\n\n[Showing the first 50.0KB of line 1, which is 60.0KB. Use grep to see the text around a match further along it. Use offset=2 to continue.]`,
     );
     expect(await read({ path: "wide.txt", offset: 2 })).toMatchObject({ content: "second" });
+    expect((await read({ path: "export.json" })).content).toBe(
+      `${"中".repeat(17_066)}\n\n[Showing the first 50.0KB of line 1, which is 60.0KB. Use grep to see the text around a match further along it.]`,
+    );
   });
 
   it("reads on from the offset its note gives", async () => {

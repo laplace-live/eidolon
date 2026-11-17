@@ -48,14 +48,35 @@ export function createTodoTool(): AssistantTool {
     guidelines: [
       "For work of several steps, keep a todo list with todo: write it before you start, and update it as each step finishes. The owner sees it as the task's plan.",
     ],
+    prepareArguments: prepareTodoArguments,
     async execute(args) {
       const problems: string[] = [];
-      const items = readItems(args.items, problems);
+      // Again for a caller that skips prepareArguments; prepared arguments come back unchanged.
+      const items = readItems(prepareTodoArguments(args).items, problems);
       if (problems.length > 0) return invalidArguments("todo", problems, args);
       const details: TodoDetails = { items };
       return { content: render(items), details };
     },
   };
+}
+
+/**
+ * `items` sent as a JSON string or as one item, as models send pi's edit its `edits` (edit.ts's
+ * prepareEditArguments), made a list; `args` itself when nothing changes.
+ */
+function prepareTodoArguments(
+  args: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
+  let items = args.items;
+  if (typeof items === "string") {
+    try {
+      items = JSON.parse(items);
+    } catch {
+      return args;
+    }
+  }
+  if (items !== null && typeof items === "object" && !Array.isArray(items)) items = [items];
+  return Array.isArray(items) && items !== args.items ? { ...args, items } : args;
 }
 
 /** The valid items of `value`, with what is wrong with the others added to `problems`. */

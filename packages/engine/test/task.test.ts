@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test";
 import { ProviderHttpError, type UsageRecord, usageRecord } from "@eidolon/providers";
 import { runTask, type TaskEntry, type TaskEvent } from "../src/task.ts";
 import {
+  anthropicMind,
   BRIEF,
   call,
   calls,
@@ -11,6 +12,7 @@ import {
   drain,
   FakeMeter,
   MemoryStore,
+  openaiMind,
   result,
   ScriptedMind,
   says,
@@ -24,6 +26,34 @@ import {
 const INTERRUPTED =
   "Interrupted by a restart before its result was recorded; check the files before trying again.";
 const SKIPPED = "Skipped to process an incoming message.";
+const REISSUE = (name: string) =>
+  `Tool call "${name}" was not executed: the response hit the output token limit, so its ` +
+  "arguments may be truncated. Re-issue the tool call with complete arguments.";
+
+/** A chat completion chunk carrying `delta`. */
+const chunk = (delta: Record<string, unknown>) => ({ choices: [{ index: 0, delta }] });
+const finish = (reason: string) => ({ choices: [{ index: 0, delta: {}, finish_reason: reason }] });
+const fragment = (index: number, id: string, name: string, args: string) => ({
+  index,
+  id,
+  type: "function",
+  function: { name, arguments: args },
+});
+
+/** OpenRouter's chunk for an upstream that dropped mid-reply (openrouter.ai/docs/api-reference/errors). */
+const DROPPED = {
+  id: "gen-1",
+  object: "chat.completion.chunk",
+  created: 0,
+  model: "anthropic/claude-sonnet-5.5",
+  provider: "Anthropic",
+  error: {
+    code: 502,
+    message: "Provider disconnected unexpectedly",
+    metadata: { error_type: "provider_unavailable" },
+  },
+  choices: [{ index: 0, delta: { content: "" }, finish_reason: "error" }],
+};
 
 /** A tool recording each value it runs with. */
 function recording(name: string, ran: unknown[], more: Parameters<typeof tool>[2] = {}) {
@@ -206,6 +236,93 @@ describe("runTask's outcome", () => {
     expect(outcome).toEqual({ status: "failed", error: "The model's tool calls couldn't be read" });
   });
 
+  test("a write the output limit cut off gets pi's re-issue result, and the task goes on", async () => {
+    const cut = '{"path":"index.html","content":"<!doctype html><html><body>';
+    const whole = '{"path":"index.html","content":"<!doctype html>"}';
+    const openai = openaiMind([
+      [
+        chunk({ content: "Writing index.html." }),
+        chunk({ tool_calls: [fragment(0, "call_1", "write", cut)] }),
+        finish("length"),
+      ],
+      [chunk({ tool_calls: [fragment(0, "call_2", "write", whole)] }), finish("tool_calls")],
+      [chunk({ content: "Done." }), finish("stop")],
+    ]);
+    const block = (index: number, id: string, json: string) => [
+      {
+        type: "content_block_start",
+        index,
+        content_block: { type: "tool_use", id, name: "write" },
+      },
+      {
+        type: "content_block_delta",
+        index,
+        delta: { type: "input_json_delta", partial_json: json },
+      },
+    ];
+    const stop = (reason: string) => ({ type: "message_delta", delta: { stop_reason: reason } });
+    const anthropic = anthropicMind([
+      [
+        { type: "message_start", message: { model: "claude-sonnet-4-5", usage: {} } },
+        { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+        { type: "content_block_delta", index: 0, delta: { text: "Writing index.html." } },
+        ...block(1, "call_1", cut),
+        stop("max_tokens"),
+      ],
+      [...block(0, "call_2", whole), stop("tool_use")],
+      [{ type: "content_block_delta", index: 0, delta: { text: "Done." } }, stop("end_turn")],
+    ]);
+    for (const { mind, bodies } of [openai, anthropic]) {
+      const wrote: unknown[] = [];
+      const write = tool(
+        "write",
+        async (args) => {
+          wrote.push(args.content);
+          return result(`wrote ${String(args.path)}`);
+        },
+        {
+          properties: { path: { type: "string" }, content: { type: "string" } },
+          required: ["path", "content"],
+        },
+      );
+      const request = taskRequest(mind, { tools: [write] });
+      const { outcome } = await drain(request);
+      expect(outcome).toEqual({ status: "succeeded", report: "Done." });
+      expect(bodies).toHaveLength(3);
+      expect(wrote).toEqual(["<!doctype html>"]);
+      expect(storedResults(request.store)).toEqual([
+        ["call_1", REISSUE("write")],
+        ["call_2", "wrote index.html"],
+      ]);
+      expect(request.store.of("assistant")[0]?.calls).toEqual([
+        { id: "call_1", name: "write", arguments: {}, unparsed: cut },
+      ]);
+    }
+  });
+
+  test("a call whose arguments aren't JSON gets an error, and the rest of its batch runs", async () => {
+    const ran: unknown[] = [];
+    const { mind } = openaiMind([
+      [
+        chunk({ tool_calls: [fragment(0, "call_0", "read", '{"value":"a"}')] }),
+        chunk({ tool_calls: [fragment(1, "call_1", "read", "{oops")] }),
+        finish("tool_calls"),
+      ],
+      [chunk({ content: "Done." }), finish("stop")],
+    ]);
+    const request = taskRequest(mind, { tools: [recording("read", ran)] });
+    const { outcome } = await drain(request);
+    expect(outcome).toEqual({ status: "succeeded", report: "Done." });
+    expect(ran).toEqual(["a"]);
+    expect(storedResults(request.store).sort()).toEqual([
+      ["call_0", "read ran a"],
+      [
+        "call_1",
+        "Tool call \"read\" wasn't run: its arguments aren't a JSON object.\n\nReceived arguments:\n{oops",
+      ],
+    ]);
+  });
+
   test("goes on past a cut-off reply when a line is queued", async () => {
     const mind = new ScriptedMind([
       [
@@ -358,6 +475,22 @@ describe("runTask's pauses", () => {
     expect(ran).toHaveLength(3);
   });
 
+  test("a stall's detail names each call with the head of its arguments", async () => {
+    const content = "<!doctype html>".padEnd(5_000, "x");
+    const write = (id: string) => calls([call(id, "write", { path: "index.html", content })]);
+    const mind = new ScriptedMind([write("c1"), write("c2"), write("c3")]);
+    const writer = tool("write", async () => result("wrote"), {
+      properties: { path: { type: "string" }, content: { type: "string" } },
+    });
+    const { outcome } = await drain(taskRequest(mind, { tools: [writer] }));
+    const args = JSON.stringify({ content, path: "index.html" });
+    expect(outcome).toEqual({
+      status: "paused",
+      reason: "stall",
+      detail: `The same calls 3 turns running:\nwrite ${args.slice(0, 200)}…`,
+    });
+  });
+
   test("doesn't pause for calls that differ", async () => {
     const mind = new ScriptedMind([
       calls([call("c1", "read", { value: "a" })]),
@@ -367,6 +500,78 @@ describe("runTask's pauses", () => {
     ]);
     const { outcome } = await drain(taskRequest(mind, { tools: [tool("read")] }));
     expect(outcome).toMatchObject({ status: "succeeded" });
+  });
+
+  test("doesn't pause for calls it couldn't read that said different things", async () => {
+    const cut = (path: string) => `{"path":"${path}","content":"<!doctype html><html><body>`;
+    const bad = (path: string) => `{"path":"${path}","content":"<!doctype html>",}`;
+    const paths = ["a.html", "b.html", "c.html"];
+    const openai = (args: (path: string) => string, reason: string) =>
+      openaiMind([
+        ...paths.map((path, n) => [
+          chunk({ tool_calls: [fragment(0, `call_${n}`, "write", args(path))] }),
+          finish(reason),
+        ]),
+        [chunk({ content: "Done." }), finish("stop")],
+      ]);
+    const anthropic = anthropicMind([
+      ...paths.map((path, n) => [
+        { type: "message_start", message: { model: "claude-sonnet-4-5", usage: {} } },
+        {
+          type: "content_block_start",
+          index: 0,
+          content_block: { type: "tool_use", id: `call_${n}`, name: "write" },
+        },
+        {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "input_json_delta", partial_json: cut(path) },
+        },
+        { type: "message_delta", delta: { stop_reason: "max_tokens" } },
+      ]),
+      [
+        { type: "content_block_delta", index: 0, delta: { text: "Done." } },
+        { type: "message_delta", delta: { stop_reason: "end_turn" } },
+      ],
+    ]);
+    const cases = [
+      [openai(cut, "length"), cut],
+      [anthropic, cut],
+      [openai(bad, "tool_calls"), bad],
+    ] as const;
+    for (const [{ mind }, args] of cases) {
+      const ran: unknown[] = [];
+      const writer = recording("write", ran, {
+        properties: { path: { type: "string" }, content: { type: "string" } },
+      });
+      const request = taskRequest(mind, { tools: [writer] });
+      const { outcome } = await drain(request);
+      expect(outcome).toEqual({ status: "succeeded", report: "Done." });
+      expect(ran).toEqual([]);
+      expect(request.store.of("assistant").map((entry) => entry.calls[0]?.unparsed)).toEqual([
+        ...paths.map(args),
+        undefined,
+      ]);
+    }
+  });
+
+  test("a stall of calls it couldn't read names each by the text it got", async () => {
+    const text = `{"path":"index.html","content":"<ul>${"<li>todo</li>".repeat(40)}`;
+    const { mind } = openaiMind(
+      ["call_0", "call_1", "call_2"].map((id) => [
+        chunk({ tool_calls: [fragment(0, id, "write", text)] }),
+        finish("length"),
+      ]),
+    );
+    const writer = tool("write", async () => result("wrote"), {
+      properties: { path: { type: "string" }, content: { type: "string" } },
+    });
+    const { outcome } = await drain(taskRequest(mind, { tools: [writer] }));
+    expect(outcome).toEqual({
+      status: "paused",
+      reason: "stall",
+      detail: `The same calls 3 turns running:\nwrite ${text.slice(0, 200)}…`,
+    });
   });
 
   test("the gate's pause holds its call, and the resume gates and runs it", async () => {
@@ -480,6 +685,71 @@ describe("runTask's retries", () => {
     );
     expect(waits).toEqual([1000]);
     expect(outcome).toEqual({ status: "succeeded", report: "done" });
+  });
+
+  test("retries a reply a provider's error ended mid-stream, never taking it for the report", async () => {
+    const waits: number[] = [];
+    const ran: unknown[] = [];
+    const { mind, bodies } = openaiMind([
+      [
+        chunk({ content: "I'll create index.html." }),
+        chunk({
+          tool_calls: [fragment(0, "call_1", "write", '{"path":"index.html","content":"<!doc')],
+        }),
+        DROPPED,
+      ],
+      [chunk({ content: "Done." }), finish("stop")],
+    ]);
+    const request = taskRequest(mind, {
+      tools: [recording("write", ran)],
+      sleep: async (ms) => {
+        waits.push(ms);
+      },
+    });
+    const { events, outcome } = await drain(request);
+    expect(outcome).toEqual({ status: "succeeded", report: "Done." });
+    expect(bodies).toHaveLength(2);
+    expect(ran).toEqual([]);
+    expect(waits).toEqual([1000]);
+    expect(events.filter((event) => event.type === "request" && event.error)).toEqual([
+      {
+        type: "request",
+        state: "end",
+        error: "OpenRouter answered 502: Provider disconnected unexpectedly",
+        retryInMs: 1000,
+      },
+    ]);
+  });
+
+  test("retries a reply that ended with no finish reason, or one it doesn't know", async () => {
+    const waits: number[] = [];
+    const mind = new ScriptedMind([
+      [
+        { type: "text", text: "Let me write" },
+        { type: "done", finishReason: "insufficient_system_resource" },
+      ],
+      [
+        { type: "text", text: "Writing" },
+        { type: "done", finishReason: null },
+      ],
+      says("done"),
+    ]);
+    const request = taskRequest(mind, {
+      sleep: async (ms) => {
+        waits.push(ms);
+      },
+    });
+    const { events, outcome } = await drain(request);
+    expect(outcome).toEqual({ status: "succeeded", report: "done" });
+    expect(waits).toEqual([1000, 4000]);
+    const errors = events.flatMap((event) =>
+      event.type === "request" && event.error !== undefined ? [event.error] : [],
+    );
+    expect(errors).toEqual([
+      'The model\'s reply ended with finish reason "insufficient_system_resource"',
+      "The model's reply ended with no finish reason",
+    ]);
+    expect(request.store.types()).toEqual(["brief", "assistant", "end"]);
   });
 
   test("doesn't retry a quota that ran out", async () => {
@@ -647,6 +917,65 @@ describe("runTask's resume", () => {
     expect(outcome).toEqual({ status: "succeeded", report: "done" });
     expect(toolMessages(mind.requests[0])).toEqual([["c1", "ok"]]);
     expect(store.types().slice(4)).toEqual(["resume", "assistant", "end"]);
+  });
+
+  test("a resumed reply the output limit cut off has its calls answered, never run", async () => {
+    const ran: unknown[] = [];
+    const store = new MemoryStore(
+      { type: "brief", brief: BRIEF },
+      {
+        type: "assistant",
+        text: "",
+        calls: [call("c1", "write", { value: "<!doctype" })],
+        finishReason: "length",
+      },
+    );
+    const mind = new ScriptedMind([says("done")]);
+    const { outcome } = await drain(taskRequest(mind, { store, tools: [recording("write", ran)] }));
+    expect(outcome).toEqual({ status: "succeeded", report: "done" });
+    expect(ran).toEqual([]);
+    expect(storedResults(store)).toEqual([["c1", REISSUE("write")]]);
+  });
+
+  test("a task its last reply failed asks again on resume, telling the model why", async () => {
+    const notes: Record<string, string> = {
+      max_tokens:
+        "[Your reply was cut off at the output limit. Go on from where it stopped, in smaller steps.]",
+      length:
+        "[Your reply was cut off at the output limit. Go on from where it stopped, in smaller steps.]",
+      content_filter: "[The model's provider stopped your reply before it ended.]",
+      refusal: "[The model's provider stopped your reply before it ended.]",
+    };
+    for (const [reason, note] of Object.entries(notes)) {
+      const first = taskRequest(
+        new ScriptedMind([
+          [
+            { type: "text", text: "I'll write index.html now." },
+            { type: "done", finishReason: reason },
+          ],
+        ]),
+      );
+      expect((await drain(first)).outcome).toMatchObject({ status: "failed" });
+      const mind = new ScriptedMind([says("Wrote index.html in parts.")]);
+      const { outcome } = await drain(taskRequest(mind, { store: first.store }));
+      expect([reason, outcome]).toEqual([
+        reason,
+        { status: "succeeded", report: "Wrote index.html in parts." },
+      ]);
+      expect(mind.requests).toHaveLength(1);
+      expect(mind.requests[0]?.messages.slice(-2)).toEqual([
+        { role: "assistant", content: "I'll write index.html now." },
+        { role: "user", content: note },
+      ]);
+      expect(first.store.types()).toEqual([
+        "brief",
+        "assistant",
+        "end",
+        "resume",
+        "assistant",
+        "end",
+      ]);
+    }
   });
 
   test("entries carry their store's numbering", async () => {

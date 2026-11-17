@@ -4,7 +4,8 @@
 // Ported from pi-mono packages/coding-agent/src/core/tools/edit-diff.ts@ac78a60
 //
 // The edit tool's matching and diffs: each edit is found in the file's LF view, exactly or after
-// fuzzy normalization, and spliced into the original text so untouched lines keep their bytes.
+// fuzzy normalization, and spliced into the original text over what it matched, so the text around
+// it keeps its bytes. pi rewrote each line a fuzzy match touched from its normalized form.
 import {
   type ChangeObject,
   createTwoFilesPatch,
@@ -78,17 +79,11 @@ function getLineEndingAt(content: string, offset: number): "\r\n" | "\n" | "\r" 
   return content[lineFeed - 1] === "\r" ? "\r\n" : "\n";
 }
 
-/**
- * `text` as fuzzy matching compares it: NFKC, no trailing whitespace on any line, and ASCII for
- * Unicode quotes, dashes and spaces.
- */
-function normalizeForFuzzyMatch(text: string): string {
+/** NFKC, and ASCII for Unicode quotes, dashes and spaces. */
+function normalizeChars(text: string): string {
   return (
     text
       .normalize("NFKC")
-      .split("\n")
-      .map((line) => line.trimEnd())
-      .join("\n")
       .replace(/[\u{2018}\u{2019}\u{201a}\u{201b}]/gu, "'")
       .replace(/[\u{201c}\u{201d}\u{201e}\u{201f}]/gu, '"')
       // Hyphen, non-breaking hyphen, figure dash, en and em dashes, horizontal bar and minus.
@@ -98,13 +93,170 @@ function normalizeForFuzzyMatch(text: string): string {
   );
 }
 
-function splitLinesWithEndings(content: string): string[] {
-  return content.match(/[^\n]*\n|[^\n]+/g) ?? [];
+/** A stretch of a text and what fuzzy matching sees of it. */
+interface FuzzyPiece {
+  /** Where the stretch starts in the text, and how long it is there. */
+  readonly from: number;
+  readonly length: number;
+  /** Where its normalized text starts in the normalized whole. */
+  readonly at: number;
+  readonly text: string;
+  /** Normalized one character for one, so an offset inside it maps straight back. */
+  readonly linear: boolean;
 }
 
-interface LineSpan {
-  readonly start: number;
-  readonly end: number;
+/** A text as fuzzy matching sees it, and where each of its lines starts, to map a match back. */
+interface FuzzyView {
+  readonly text: string;
+  readonly lines: readonly string[];
+  /** Where each line starts in the text it was made from. */
+  readonly from: readonly number[];
+  /** Where each line starts in `text`. */
+  readonly at: readonly number[];
+}
+
+// Runs normalizing leaves alone, ASCII and CJK ideographs, captured; else a character with the
+// marks after it, which NFKC may compose with it.
+const FUZZY_PIECE =
+  /((?:[!-~](?!\p{M}))+|(?:[\t\v\f ](?!\p{M}))+|(?:[\u{3400}-\u{4dbf}\u{4e00}-\u{9fff}](?!\p{M}))+)|[^\p{M}]\p{M}*|\p{M}+/gu;
+
+// Characters that normalize the same whatever is beside them, so a line of them normalizes whole as
+// it does piece by piece: ASCII, general punctuation, CJK punctuation without its tone marks, CJK
+// ideographs and fullwidth ASCII. Not kana, Hangul or combining marks, which compose with a neighbor.
+const CONTEXT_FREE =
+  /^[\p{ASCII}\u{2000}-\u{206f}\u{3000}-\u{3029}\u{3030}-\u{303f}\u{3400}-\u{4dbf}\u{4e00}-\u{9fff}\u{ff01}-\u{ff5e}]*$/u;
+
+/**
+ * `line` as fuzzy matching compares it, but for its trailing whitespace. A line normalizing changes
+ * is normalized piece by piece, so that a match in it maps back to the text it covers alone.
+ */
+function fuzzyLine(line: string): string {
+  const whole = normalizeChars(line);
+  if (whole === line || CONTEXT_FREE.test(line)) return whole;
+  return line.replace(
+    FUZZY_PIECE,
+    (piece, kept: string | undefined) => kept ?? normalizeChars(piece),
+  );
+}
+
+/**
+ * `text` as fuzzy matching compares it: NFKC, no trailing whitespace on any line, and ASCII for
+ * Unicode quotes, dashes and spaces. Only a match's first and last lines are cut into pieces
+ * (linePieces), so an exact edit of a large file allocates no more than its lines.
+ */
+function fuzzyView(text: string): FuzzyView {
+  const lines = text.split("\n");
+  const from: number[] = [];
+  const at: number[] = [];
+  const normalized: string[] = [];
+  let offset = 0;
+  let normalizedOffset = 0;
+  for (const line of lines) {
+    const kept = fuzzyLine(line).trimEnd();
+    from.push(offset);
+    at.push(normalizedOffset);
+    normalized.push(kept);
+    offset += line.length + 1;
+    normalizedOffset += kept.length + 1;
+  }
+  return { text: normalized.join("\n"), lines, from, at };
+}
+
+/** `text` as fuzzy matching compares it (fuzzyView's text). */
+function normalizeForFuzzyMatch(text: string): string {
+  return fuzzyView(text).text;
+}
+
+/** The pieces of `view`'s line `index`, as fuzzyLine normalizes them, and the line feed after it. */
+function linePieces(view: FuzzyView, index: number): FuzzyPiece[] {
+  const line = view.lines[index] as string;
+  const from = view.from[index] as number;
+  const lineAt = view.at[index] as number;
+  const found: FuzzyPiece[] = [];
+  if (normalizeChars(line) === line) {
+    found.push({ from, length: line.length, at: lineAt, text: line, linear: true });
+  } else {
+    let at = lineAt;
+    for (const match of line.matchAll(FUZZY_PIECE)) {
+      const original = match[0];
+      const piece = match[1] ?? normalizeChars(original);
+      const linear = piece === original || (original.length === 1 && piece.length === 1);
+      found.push({ from: from + match.index, length: original.length, at, text: piece, linear });
+      at += piece.length;
+    }
+  }
+  // Trailing whitespace is trimmed: what lies past the kept text normalizes to nothing.
+  const kept =
+    lineAt +
+    found
+      .map((piece) => piece.text)
+      .join("")
+      .trimEnd().length;
+  const pieces: FuzzyPiece[] = [];
+  for (const piece of found) {
+    const end = piece.at + piece.text.length;
+    if (end <= kept) {
+      pieces.push(piece);
+    } else if (piece.at >= kept) {
+      pieces.push({ ...piece, at: kept, text: "", linear: false });
+    } else {
+      const keep = kept - piece.at;
+      // An unchanged run splits where the whitespace starts; anything else is cut whole.
+      if (piece.linear) {
+        pieces.push({ ...piece, length: keep, text: piece.text.slice(0, keep) });
+        pieces.push({
+          from: piece.from + keep,
+          length: piece.length - keep,
+          at: kept,
+          text: "",
+          linear: false,
+        });
+      } else {
+        pieces.push({ ...piece, text: piece.text.slice(0, keep), linear: false });
+      }
+    }
+  }
+  if (index + 1 < view.lines.length) {
+    pieces.push({ from: from + line.length, length: 1, at: kept, text: "\n", linear: true });
+  }
+  return pieces;
+}
+
+/** The index of the last of `starts`, which ascend, at or before `offset`. */
+function lastAtOrBefore(starts: readonly number[], offset: number): number {
+  let low = 0;
+  let high = starts.length - 1;
+  while (low < high) {
+    const middle = (low + high + 1) >> 1;
+    if ((starts[middle] as number) <= offset) low = middle;
+    else high = middle - 1;
+  }
+  return low;
+}
+
+/** The piece of `view` that holds `offset` in its normalized text. */
+function pieceAt(view: FuzzyView, offset: number): FuzzyPiece {
+  const pieces = linePieces(view, lastAtOrBefore(view.at, offset));
+  const starts = pieces.map((piece) => piece.at);
+  return pieces[lastAtOrBefore(starts, offset)] as FuzzyPiece;
+}
+
+/**
+ * A match of `matchLength` at `matchIndex` in `view`'s text, replaced by `newText`, as a replacement
+ * of the text the view was made from. A match that starts or ends inside a piece normalizing
+ * changed takes the whole piece, its part outside the match normalized.
+ */
+function replacementOfView(view: FuzzyView, match: TextReplacement): TextReplacement {
+  const end = match.matchIndex + match.matchLength;
+  const first = pieceAt(view, match.matchIndex);
+  const last = pieceAt(view, end - 1);
+  const into = match.matchIndex - first.at;
+  const intoLast = end - last.at;
+  const start = first.linear ? first.from + into : first.from;
+  const stop = last.linear ? last.from + intoLast : last.from + last.length;
+  const prefix = first.linear ? "" : first.text.slice(0, into);
+  const suffix = last.linear ? "" : last.text.slice(intoLast);
+  return { matchIndex: start, matchLength: stop - start, newText: prefix + match.newText + suffix };
 }
 
 interface MatchedEdit {
@@ -117,103 +269,16 @@ interface MatchedEdit {
 /** Replacement of `matchLength` characters at `matchIndex` with `newText`. */
 export type TextReplacement = Pick<MatchedEdit, "matchIndex" | "matchLength" | "newText">;
 
-function getLineSpans(content: string): LineSpan[] {
-  let offset = 0;
-  return splitLinesWithEndings(content).map((line) => {
-    const span = { start: offset, end: offset + line.length };
-    offset = span.end;
-    return span;
-  });
-}
-
-function getReplacementLineRange(
-  lines: readonly LineSpan[],
-  replacement: TextReplacement,
-): { startLine: number; endLine: number } {
-  const replacementStart = replacement.matchIndex;
-  const replacementEnd = replacement.matchIndex + replacement.matchLength;
-
-  let startLine = -1;
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i] as LineSpan;
-    if (replacementStart >= line.start && replacementStart < line.end) {
-      startLine = i;
-      break;
-    }
-  }
-  if (startLine === -1) throw new Error("Replacement range is outside the base content.");
-
-  let endLine = startLine;
-  while (endLine < lines.length && (lines[endLine] as LineSpan).end < replacementEnd) endLine++;
-  if (endLine >= lines.length) throw new Error("Replacement range is outside the base content.");
-
-  return { startLine, endLine: endLine + 1 };
-}
-
-function applyReplacements(
-  content: string,
-  replacements: readonly TextReplacement[],
-  offset = 0,
-): string {
+function applyReplacements(content: string, replacements: readonly TextReplacement[]): string {
   let result = content;
   for (let i = replacements.length - 1; i >= 0; i--) {
     const replacement = replacements[i] as TextReplacement;
-    const matchIndex = replacement.matchIndex - offset;
     result =
-      result.substring(0, matchIndex) +
+      result.substring(0, replacement.matchIndex) +
       replacement.newText +
-      result.substring(matchIndex + replacement.matchLength);
+      result.substring(replacement.matchIndex + replacement.matchLength);
   }
   return result;
-}
-
-/**
- * Replacements matched against `baseContent`, a normalized view of `originalContent`, as
- * replacements of `originalContent` that keep its unchanged lines. Each one widens to the lines it
- * touches, which are rewritten from the normalized base; every other line keeps its original text.
- * The replacement ranges decide what is kept, so duplicate normalized lines can't be aligned to the
- * wrong occurrence.
- */
-function widenReplacementsToLines(
-  originalContent: string,
-  baseContent: string,
-  replacements: readonly TextReplacement[],
-): TextReplacement[] {
-  const originalLines = getLineSpans(originalContent);
-  const baseLines = getLineSpans(baseContent);
-  if (originalLines.length !== baseLines.length) {
-    throw new Error(
-      "Cannot preserve unchanged lines because the base content has a different line count.",
-    );
-  }
-
-  const groups: { startLine: number; endLine: number; replacements: TextReplacement[] }[] = [];
-  const sortedReplacements = [...replacements].sort((a, b) => a.matchIndex - b.matchIndex);
-  for (const replacement of sortedReplacements) {
-    const range = getReplacementLineRange(baseLines, replacement);
-    const current = groups[groups.length - 1];
-    if (current && range.startLine < current.endLine) {
-      current.endLine = Math.max(current.endLine, range.endLine);
-      current.replacements.push(replacement);
-      continue;
-    }
-    groups.push({ ...range, replacements: [replacement] });
-  }
-
-  return groups.map((group) => {
-    const groupStartOffset = (baseLines[group.startLine] as LineSpan).start;
-    const groupEndOffset = (baseLines[group.endLine - 1] as LineSpan).end;
-    const originalStart = (originalLines[group.startLine] as LineSpan).start;
-    return {
-      matchIndex: originalStart,
-      matchLength: (originalLines[group.endLine - 1] as LineSpan).end - originalStart,
-      newText: applyReplacements(
-        baseContent.slice(groupStartOffset, groupEndOffset),
-        group.replacements,
-        groupStartOffset,
-      ),
-    };
-  });
 }
 
 interface FuzzyMatchResult {
@@ -237,18 +302,15 @@ export interface AppliedEditsResult {
 }
 
 /**
- * `oldText` in `content`, exactly, else after fuzzy normalization; a fuzzy match's offsets are in
- * the normalized content.
+ * `oldText` in `content`, exactly, else as `fuzzyOldText`, its fuzzy normalization; a fuzzy
+ * match's offsets are in `content`, which is then the fuzzy-normalized content.
  */
-function fuzzyFindText(content: string, oldText: string): FuzzyMatchResult {
+function fuzzyFindText(content: string, oldText: string, fuzzyOldText: string): FuzzyMatchResult {
   const exactIndex = content.indexOf(oldText);
   if (exactIndex !== -1) {
     return { found: true, index: exactIndex, matchLength: oldText.length, usedFuzzyMatch: false };
   }
-
-  const fuzzyContent = normalizeForFuzzyMatch(content);
-  const fuzzyOldText = normalizeForFuzzyMatch(oldText);
-  const fuzzyIndex = fuzzyContent.indexOf(fuzzyOldText);
+  const fuzzyIndex = content.indexOf(fuzzyOldText);
   if (fuzzyIndex === -1) {
     return { found: false, index: -1, matchLength: 0, usedFuzzyMatch: false };
   }
@@ -258,12 +320,6 @@ function fuzzyFindText(content: string, oldText: string): FuzzyMatchResult {
     matchLength: fuzzyOldText.length,
     usedFuzzyMatch: true,
   };
-}
-
-function countOccurrences(content: string, oldText: string): number {
-  const fuzzyContent = normalizeForFuzzyMatch(content);
-  const fuzzyOldText = normalizeForFuzzyMatch(oldText);
-  return fuzzyContent.split(fuzzyOldText).length - 1;
 }
 
 function getNotFoundError(path: string, editIndex: number, totalEdits: number): Error {
@@ -309,8 +365,8 @@ function getNoChangeError(path: string, totalEdits: number): Error {
 
 /**
  * `edits` applied to LF-normalized content, each matched against the same original rather than
- * one after another. When any edit needs fuzzy matching, all are matched in fuzzy-normalized space,
- * and their lines are laid over the original, so unchanged lines keep their bytes. Throws, naming
+ * one after another. When any edit needs fuzzy matching, all are matched in fuzzy-normalized space
+ * and mapped back to the text they cover, so everything else keeps its bytes. Throws, naming
  * `path`, when an edit is empty, missing, not unique or overlaps another, or nothing changes.
  */
 export function applyEditsToNormalizedContent(
@@ -329,29 +385,31 @@ export function applyEditsToNormalizedContent(
     }
   }
 
-  const initialMatches = normalizedEdits.map((edit) =>
-    fuzzyFindText(normalizedContent, edit.oldText),
-  );
-  const usedFuzzyMatch = initialMatches.some((match) => match.usedFuzzyMatch);
-  const replacementBaseContent = usedFuzzyMatch
-    ? normalizeForFuzzyMatch(normalizedContent)
-    : normalizedContent;
+  // Uniqueness is judged after fuzzy normalization, so the view is needed for exact matches too.
+  const view = fuzzyView(normalizedContent);
+  const fuzzyOldTexts = normalizedEdits.map((edit) => normalizeForFuzzyMatch(edit.oldText));
+  const usedFuzzyMatch = normalizedEdits.some((edit) => !normalizedContent.includes(edit.oldText));
+  const replacementBaseContent = usedFuzzyMatch ? view.text : normalizedContent;
 
   const matchedEdits: MatchedEdit[] = [];
   for (let i = 0; i < normalizedEdits.length; i++) {
     const edit = normalizedEdits[i] as Edit;
-    const matchResult = fuzzyFindText(replacementBaseContent, edit.oldText);
+    const fuzzyOldText = fuzzyOldTexts[i] as string;
+    const matchResult = fuzzyFindText(replacementBaseContent, edit.oldText, fuzzyOldText);
     if (!matchResult.found) throw getNotFoundError(path, i, normalizedEdits.length);
 
-    const occurrences = countOccurrences(replacementBaseContent, edit.oldText);
+    const occurrences = view.text.split(fuzzyOldText).length - 1;
     if (occurrences > 1) throw getDuplicateError(path, i, normalizedEdits.length, occurrences);
 
-    matchedEdits.push({
+    const matched = {
       editIndex: i,
       matchIndex: matchResult.index,
       matchLength: matchResult.matchLength,
       newText: edit.newText,
-    });
+    };
+    matchedEdits.push(
+      usedFuzzyMatch ? { ...matched, ...replacementOfView(view, matched) } : matched,
+    );
   }
 
   matchedEdits.sort((a, b) => a.matchIndex - b.matchIndex);
@@ -366,9 +424,7 @@ export function applyEditsToNormalizedContent(
   }
 
   const baseContent = normalizedContent;
-  const replacements = usedFuzzyMatch
-    ? widenReplacementsToLines(normalizedContent, replacementBaseContent, matchedEdits)
-    : matchedEdits;
+  const replacements = matchedEdits;
   const newContent = applyReplacements(baseContent, replacements);
   if (baseContent === newContent) throw getNoChangeError(path, normalizedEdits.length);
 

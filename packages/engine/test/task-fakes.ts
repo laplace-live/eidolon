@@ -1,5 +1,8 @@
 // What runTask's tests stand in for: a mind that answers each request from a script, and an
 // in-memory store, inbox and meter.
+import { AnthropicClient, OpenAIChatClient } from "@eidolon/providers";
+import { AnthropicMind } from "../src/mind/anthropic.ts";
+import { OpenAIMind } from "../src/mind/openai.ts";
 import {
   runTask,
   type TaskBrief,
@@ -180,18 +183,18 @@ export function deferred<T = void>(): {
   return { promise, resolve, reject };
 }
 
-export interface Fakes {
-  readonly mind: ScriptedMind;
+export interface Fakes<M extends Mind = ScriptedMind> {
+  readonly mind: M;
   readonly store: MemoryStore;
   readonly inbox: MemoryInbox;
   readonly meter: FakeMeter;
 }
 
 /** A task on `mind`, with a store holding only its brief unless `overrides` brings one. */
-export function taskRequest(
-  mind: ScriptedMind,
+export function taskRequest<M extends Mind = ScriptedMind>(
+  mind: M,
   overrides: Partial<TaskRequest> = {},
-): TaskRequest & Fakes {
+): TaskRequest & Fakes<M> {
   return {
     id: "task-1",
     mind,
@@ -204,7 +207,7 @@ export function taskRequest(
     compaction: { system: SUMMARY_SYSTEM, instructions: "Summarize the task so far." },
     signal: new AbortController().signal,
     ...overrides,
-  } as TaskRequest & Fakes;
+  } as TaskRequest & Fakes<M>;
 }
 
 /** Every event the run yields, and its outcome. */
@@ -244,4 +247,60 @@ export function storedResults(store: MemoryStore): [string, string][] {
 /** A tool result. */
 export function result(content: string, more: Partial<TaskToolResult> = {}): TaskToolResult {
   return { content, ...more };
+}
+
+/**
+ * A provider that streams its nth request `replies[n]` as server-sent events, `[DONE]` after
+ * them when `done` says so, and the request bodies it was sent.
+ */
+function provider(
+  replies: readonly (readonly Readonly<Record<string, unknown>>[])[],
+  done: boolean,
+): { readonly fetch: typeof fetch; readonly bodies: Record<string, unknown>[] } {
+  const bodies: Record<string, unknown>[] = [];
+  const answer = async (_url: unknown, init: RequestInit): Promise<Response> => {
+    const events = replies[bodies.length] ?? [];
+    bodies.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+    const lines = [...events.map((event) => JSON.stringify(event)), ...(done ? ["[DONE]"] : [])];
+    const body = lines.map((line) => `data: ${line}\n\n`).join("");
+    return new Response(body, { headers: { "Content-Type": "text/event-stream" } });
+  };
+  return { fetch: answer as unknown as typeof fetch, bodies };
+}
+
+/** The OpenAI-compatible mind on a fake OpenRouter streaming `replies`' chunks. */
+export function openaiMind(replies: readonly (readonly Readonly<Record<string, unknown>>[])[]): {
+  readonly mind: OpenAIMind;
+  readonly bodies: Record<string, unknown>[];
+} {
+  const { fetch, bodies } = provider(replies, true);
+  const client = new OpenAIChatClient({
+    provider: "OpenRouter",
+    baseUrl: "http://provider.invalid/api/v1",
+    apiKey: "key",
+    fetch,
+  });
+  const mind = new OpenAIMind({
+    client,
+    model: "anthropic/claude-sonnet-5.5",
+    live: {},
+    dialect: "compatible",
+    takesStop: true,
+  });
+  return { mind, bodies };
+}
+
+/** The Anthropic mind on a fake Messages API streaming `replies`' events. */
+export function anthropicMind(replies: readonly (readonly Readonly<Record<string, unknown>>[])[]): {
+  readonly mind: AnthropicMind;
+  readonly bodies: Record<string, unknown>[];
+} {
+  const { fetch, bodies } = provider(replies, false);
+  const client = new AnthropicClient({
+    provider: "Anthropic",
+    baseUrl: "http://provider.invalid/v1",
+    apiKey: "key",
+    fetch,
+  });
+  return { mind: new AnthropicMind({ client, model: "claude-sonnet-4-5", extra: {} }), bodies };
 }

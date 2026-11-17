@@ -72,6 +72,7 @@ describe("isTransient", () => {
     '{"type":"error","error":{"type":"api_error","message":"Connection closed."}}',
     "upstream_stream_read_error: Upstream response stream was interrupted",
     "The service is temporarily unavailable. Please retry later.",
+    "Provider disconnected unexpectedly",
   ])("retries an error event mid-stream that says %s", (message) => {
     expect(isTransient(http(200, message))).toBe(true);
   });

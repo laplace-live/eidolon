@@ -40,9 +40,17 @@ export type ContextMessage =
     }
   | { readonly role: "tool"; readonly tool_call_id: string; readonly content: string };
 
-/** pi's estimate, which overestimates English and underestimates CJK. */
+/**
+ * Chinese, Japanese and Korean characters and their punctuation: up to about a token each
+ * (DeepSeek documents 0.6), where pi's estimate counts four characters a token.
+ */
+const CJK =
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3000-\u303f\uff00-\uffef]/gu;
+
+/** pi's estimate, four characters a token, but a token for each CJK character. */
 export function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
+  const cjk = text.match(CJK)?.length ?? 0;
+  return Math.ceil((text.length - cjk) / 4) + cjk;
 }
 
 export function messageTokens(message: ContextMessage): number {
@@ -51,6 +59,67 @@ export function messageTokens(message: ContextMessage): number {
     (sum, call) => sum + estimateTokens(call.function.name + call.function.arguments),
     0,
   );
+}
+
+/** Finish reasons of a reply that ended as its model meant it to (pi's mapStopReason). */
+const ENDED: ReadonlySet<string> = new Set([
+  "stop",
+  "end",
+  "end_turn",
+  "stop_sequence",
+  "tool_calls",
+  "tool_use",
+]);
+
+/** Finish reasons of a reply the output limit, or the context window, cut off. */
+const CUT_OFF: ReadonlySet<string> = new Set([
+  "length",
+  "max_tokens",
+  "model_context_window_exceeded",
+]);
+
+/** Finish reasons of a reply its provider stopped. */
+const STOPPED: ReadonlySet<string> = new Set(["content_filter", "refusal"]);
+
+/** Whether a reply ended for `finishReason`; any other, or none, means its stream broke off. */
+export function endedReply(finishReason: string | null): boolean {
+  return (
+    finishReason !== null &&
+    (ENDED.has(finishReason) || CUT_OFF.has(finishReason) || STOPPED.has(finishReason))
+  );
+}
+
+export function cutOff(finishReason: string | null | undefined): boolean {
+  return finishReason !== null && finishReason !== undefined && CUT_OFF.has(finishReason);
+}
+
+/**
+ * Why a reply that made no calls can't be the task's report, and the note the requests after it
+ * give the model; null when it can be.
+ */
+export function unfinished(
+  finishReason: string | null | undefined,
+): { readonly error: string; readonly note: string } | null {
+  if (finishReason === null || finishReason === undefined) return null;
+  if (CUT_OFF.has(finishReason)) {
+    return {
+      error: "The model's reply was cut off at its output limit",
+      note: "[Your reply was cut off at the output limit. Go on from where it stopped, in smaller steps.]",
+    };
+  }
+  if (STOPPED.has(finishReason)) {
+    return {
+      error: "The model's provider stopped its reply",
+      note: "[The model's provider stopped your reply before it ended.]",
+    };
+  }
+  if (finishReason === "tool_calls" || finishReason === "tool_use") {
+    return {
+      error: "The model's tool calls couldn't be read",
+      note: "[Your reply's tool calls couldn't be read. Make them again.]",
+    };
+  }
+  return null;
 }
 
 export function briefText(brief: TaskBrief): string {
@@ -106,10 +175,13 @@ function toolCallsMessage(calls: readonly MindToolCall[]): ContextMessage {
   };
 }
 
-/** The messages of `block`, unmasked: its text, then its calls, then their results. */
+/**
+ * The messages of `block`, unmasked: its text, then its calls, then their results; or, for a reply
+ * that made no calls and can't be a report, its text and a note saying why.
+ */
 function blockMessages(block: Block): ContextMessage[] {
   if (block.kind === "line") return [{ role: "user", content: block.text }];
-  const { text, calls } = block.entry;
+  const { text, calls, finishReason } = block.entry;
   const messages: ContextMessage[] = [];
   // Two messages, not one with both: Anthropic's adapter drops the text of a message with calls.
   if (text !== "") messages.push({ role: "assistant", content: text });
@@ -121,6 +193,8 @@ function blockMessages(block: Block): ContextMessage[] {
       content: block.results[at]?.content ?? "",
     });
   });
+  const why = calls.length === 0 ? unfinished(finishReason) : null;
+  if (why !== null) messages.push({ role: "user", content: why.note });
   return messages;
 }
 
@@ -128,12 +202,16 @@ export function blockTokens(block: Block): number {
   return blockMessages(block).reduce((sum, message) => sum + messageTokens(message), 0);
 }
 
-const MASKED_ARGUMENTS_CHARS = 200;
+const ARGUMENTS_CHARS = 200;
+
+/** A call's arguments as a stub or a pause names them: the head of their JSON. */
+export function argumentsHead(json: string): string {
+  return json.length > ARGUMENTS_CHARS ? `${json.slice(0, ARGUMENTS_CHARS)}…` : json;
+}
 
 /** A masked result: the call, so the model can run it again, and what it would get back. */
 function stub(call: MindToolCall, content: string): string {
-  let args = JSON.stringify(call.arguments);
-  if (args.length > MASKED_ARGUMENTS_CHARS) args = `${args.slice(0, MASKED_ARGUMENTS_CHARS)}…`;
+  const args = argumentsHead(JSON.stringify(call.arguments));
   return (
     `[Result elided to save context: ${call.name} ${args} returned ${content.length} ` +
     "characters. Run it again if you need them.]"
@@ -160,29 +238,32 @@ export function fileLists(files: {
 /**
  * What a request sends: the summary, then the blocks, with each tool result older than the newest
  * `maskAfterTokens` of context masked to a stub (JetBrains Research, "The Complexity Trap", 2025:
- * masking matches summarizing on long agent runs, for less).
+ * masking matches summarizing on long agent runs, for less). The boundary moves in steps of half
+ * that, so each request between two steps only adds to the one before, which keeps the provider's
+ * prompt cache. It rounds up, keeping half of `maskAfterTokens` to all of it whole and never more:
+ * rounded down, a window that fits the newest `maskAfterTokens` would compact before masking.
  */
 export function contextMessages(context: TaskContext, maskAfterTokens: number): ContextMessage[] {
-  const chunks: ContextMessage[][] = [];
-  let newer = 0;
-  for (let i = context.blocks.length - 1; i >= 0; i--) {
+  const chunks = context.blocks.map(blockMessages);
+  let total = 0;
+  for (const message of chunks.flat()) total += messageTokens(message);
+  const over = total - maskAfterTokens;
+  const step = Math.max(1, Math.floor(maskAfterTokens / 2));
+  const boundary = over > 0 ? Math.ceil(over / step) * step : 0;
+  let end = 0;
+  for (const [i, messages] of chunks.entries()) {
     const block = context.blocks[i] as Block;
-    const messages = blockMessages(block);
-    for (let m = messages.length - 1; m >= 0; m--) {
-      const message = messages[m] as ContextMessage;
-      const tokens = messageTokens(message);
-      if (message.role === "tool" && block.kind === "assistant" && newer >= maskAfterTokens) {
-        const call = block.entry.calls.find(({ id }) => id === message.tool_call_id);
-        const masked = call === undefined ? null : stub(call, message.content);
-        if (masked !== null && masked.length < message.content.length) {
-          messages[m] = { ...message, content: masked };
-        }
+    for (const [m, message] of messages.entries()) {
+      end += messageTokens(message);
+      if (message.role !== "tool" || block.kind !== "assistant" || end > boundary) continue;
+      const call = block.entry.calls.find(({ id }) => id === message.tool_call_id);
+      const masked = call === undefined ? null : stub(call, message.content);
+      if (masked !== null && masked.length < message.content.length) {
+        messages[m] = { ...message, content: masked };
       }
-      newer += tokens;
     }
-    chunks.push(messages);
   }
-  const messages = chunks.reverse().flat();
+  const messages = chunks.flat();
   const { compaction } = context;
   if (compaction === null) return messages;
   const lists = fileLists(compaction.files);

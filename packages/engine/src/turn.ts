@@ -599,7 +599,7 @@ class Turn {
             // What follows a line written as someone else is theirs too, tool calls included.
             if (cut?.cut) break;
           } else if (chunk.type === "tool-calls") {
-            calls = [...calls, ...chunk.calls];
+            calls = [...calls, ...chunk.calls.filter((call) => call.unparsed === undefined)];
           } else if (chunk.type === "done") {
             finishReason = chunk.finishReason;
           }

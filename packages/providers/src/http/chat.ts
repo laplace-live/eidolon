@@ -189,7 +189,10 @@ export class OpenAIChatClient {
       for await (const event of sseEvents(body)) {
         if (event.data === "[DONE]") return;
         const chunk = parseData(this.#options.provider, event.data);
-        if (isPlainObject(chunk) && chunk.error !== undefined && chunk.choices === undefined) {
+        // A chunk with an error ends the reply, whatever else it carries: OpenRouter's mid-stream
+        // errors come with a choice whose finish_reason is "error"
+        // (https://openrouter.ai/docs/api-reference/errors).
+        if (isPlainObject(chunk) && chunk.error) {
           const error = chunk.error;
           const message =
             isPlainObject(error) && typeof error.message === "string"

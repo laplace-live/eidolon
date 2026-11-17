@@ -5,11 +5,12 @@
 //
 // The worker's system prompt: what it is for, its tools and rules, the brief, the AGENTS.md and
 // CLAUDE.md files around its folder, the date and the folder. Nothing of the persona reaches it.
-import { readFile, realpath } from "node:fs/promises";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { open } from "node:fs/promises";
+import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { TaskBrief } from "@eidolon/engine";
+import { fold } from "./policy.ts";
 import { sliceHead } from "./tools/truncate.ts";
-import type { AssistantTool } from "./types.ts";
+import { type AssistantTool, type PathGuard, PathRefused } from "./types.ts";
 
 export interface ContextFile {
   readonly path: string;
@@ -17,6 +18,7 @@ export interface ContextFile {
 }
 
 const CONTEXT_FILE_NAMES = ["AGENTS.md", "CLAUDE.md"];
+const CONTEXT_FILE_KEYS: ReadonlySet<string> = new Set(CONTEXT_FILE_NAMES.map(fold));
 // OpenClaw's caps on a workspace's bootstrap files: each one, all of them, and the budget below
 // which another file is left out rather than cut to a stub.
 const FILE_MAX_CHARS = 20_000;
@@ -32,37 +34,91 @@ function contextDirs(folder: string, home: string): string[] {
   return dirs;
 }
 
-function cut(text: string, max: number): string {
-  if (text.length <= max) return text;
+/** `head`, the start of a text `length` characters long, cut to `max` with a marker if it is longer. */
+function cut(head: string, length: number, max: number): string {
+  if (length <= max) return head;
   const marker = (omitted: number) => `\n\n[... ${omitted} more characters truncated]`;
-  const head = sliceHead(text, max - marker(text.length).length);
-  return `${head}${marker(text.length - head.length)}`;
+  const kept = sliceHead(head, max - marker(length).length);
+  return `${kept}${marker(length - kept.length)}`;
+}
+
+/**
+ * Where the context file `path` lies on disk, if the task may have it: a place `guard` lets it
+ * read, or an AGENTS.md or CLAUDE.md it doesn't deny, as the folders above the task's hold and as
+ * an owner's dotfiles links lead to. A link to a key, or to anything else, is null.
+ */
+async function contextPlace(path: string, guard: PathGuard): Promise<string | null> {
+  try {
+    return await guard.resolve(path, "read");
+  } catch (error) {
+    if (
+      error instanceof PathRefused &&
+      error.why === "outside" &&
+      CONTEXT_FILE_KEYS.has(fold(basename(error.path)))
+    ) {
+      return error.path;
+    }
+    return null;
+  }
+}
+
+/** The regular file at `path` as text: its first `max` characters, and how many it has. */
+async function readHead(path: string, max: number): Promise<{ head: string; length: number }> {
+  const handle = await open(path, "r");
+  try {
+    if (!(await handle.stat()).isFile()) return { head: "", length: 0 };
+    // Drops a byte order mark; reads in chunks, so a huge file isn't held whole.
+    const decoder = new TextDecoder();
+    const buffer = Buffer.allocUnsafe(64 * 1024);
+    let head = "";
+    let length = 0;
+    for (;;) {
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, null);
+      const text =
+        bytesRead === 0
+          ? decoder.decode()
+          : decoder.decode(buffer.subarray(0, bytesRead), { stream: true });
+      if (head.length < max) head += text.slice(0, max - head.length);
+      length += text.length;
+      if (bytesRead === 0) return { head, length };
+    }
+  } finally {
+    await handle.close();
+  }
 }
 
 /**
  * AGENTS.md, then CLAUDE.md, in each folder from `home` down to `folder`, the nearest last (pi's
- * order), and none above home. A file linked from a nearer one is read once, at the nearer path.
- * Each is cut at 20,000 characters and all of them at 60,000, the nearest kept first.
+ * order), and none above home. A file is read where it lies on disk, and only if `guard` lets the
+ * task read it or it is an AGENTS.md or CLAUDE.md there that `guard` doesn't deny: a cloned repo's
+ * AGENTS.md linked to a key is left out. A file linked from a nearer one is read once, at the
+ * nearer path. Each is cut at 20,000 characters and all of them at 60,000, the nearest kept first.
  */
-export async function loadContextFiles(folder: string, home: string): Promise<ContextFile[]> {
+export async function loadContextFiles(
+  folder: string,
+  home: string,
+  guard: PathGuard,
+): Promise<ContextFile[]> {
+  const dirs = contextDirs(resolve(folder), resolve(home));
   const seen = new Set<string>();
   const nearestFirst: ContextFile[][] = [];
   let budget = TOTAL_MAX_CHARS;
-  for (const dir of contextDirs(resolve(folder), resolve(home)).reverse()) {
+  for (const dir of dirs.reverse()) {
     const files: ContextFile[] = [];
     for (const name of CONTEXT_FILE_NAMES) {
       if (budget < MIN_FILE_BUDGET_CHARS) break;
       const path = join(dir, name);
-      let text: string;
-      let real: string;
+      const place = await contextPlace(path, guard);
+      if (place === null || seen.has(place)) continue;
+      const max = Math.min(FILE_MAX_CHARS, budget);
+      let text: { head: string; length: number };
       try {
-        [text, real] = await Promise.all([readFile(path, "utf8"), realpath(path)]);
+        text = await readHead(place, max);
       } catch {
         continue;
       }
-      if (seen.has(real)) continue;
-      seen.add(real);
-      const content = cut(text.replace(/^\uFEFF/, ""), Math.min(FILE_MAX_CHARS, budget));
+      seen.add(place);
+      const content = cut(text.head, text.length, max);
       if (content.trim() === "") continue;
       budget -= content.length;
       files.push({ path, content });

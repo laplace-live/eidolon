@@ -7,7 +7,7 @@
 // and with whole-number limits; then the search's own: regexes and case, binary files, the ignore
 // rules, globs, refusals, aborts and arguments.
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { TaskToolResult } from "@eidolon/engine";
 import { createGrepTool, type GrepDetails } from "../src/tools/grep.ts";
@@ -103,6 +103,34 @@ describe("grep tool", () => {
     const result = await grep({ pattern: "needle", path: testFile });
 
     expect(result.content).toBe("utf16.txt:2: needle 中文");
+  });
+
+  it("reads text that isn't UTF-8 as GB18030, as read does", async () => {
+    // 你好，世界 as GBK.
+    write("notes.txt", Buffer.from([0xc4, 0xe3, 0xba, 0xc3, 0xa3, 0xac, 0xca, 0xc0, 0xbd, 0xe7]));
+
+    expect(await rows({ pattern: "你好" })).toEqual(["notes.txt:1: 你好，世界"]);
+  });
+
+  it("reads UTF-8 with a stray byte, or Latin-1, as UTF-8, as read does", async () => {
+    // A Windows-1252 apostrophe pasted into UTF-8 notes, and a Windows-1252 CSV.
+    write(
+      "notes.md",
+      Buffer.concat([
+        Buffer.from("# 直播笔记\n今天的歌单：晴天、稻香\nIt"),
+        Buffer.from([0x92]),
+        Buffer.from("s done\n明天直播唱歌\n"),
+      ]),
+    );
+    write("kunden.csv", Buffer.from("Name;Stadt\nM\xfcller;M\xfcnchen\n", "latin1"));
+
+    expect(await rows({ pattern: "直播" })).toEqual([
+      "notes.md:1: # 直播笔记",
+      "notes.md:4: 明天直播唱歌",
+    ]);
+    expect(await rows({ pattern: "nchen|ller" })).toEqual([
+      "kunden.csv:2: M\ufffdller;M\ufffdnchen",
+    ]);
   });
 
   it("should keep a lone CR inside a line and strip CRLF terminators", async () => {
@@ -241,13 +269,46 @@ describe("grep's search", () => {
     const result = await grep({ pattern: "needle" });
 
     expect(result.content.split("\n\n")[0]?.split("\n")).toEqual([
-      `long.txt:1: start ${"y".repeat(GREP_MAX_LINE_LENGTH - "start ".length)}... [truncated]`,
+      `long.txt:1: [truncated] ...${"y".repeat(GREP_MAX_LINE_LENGTH - " needle".length)} needle`,
       "long.txt:3: needle at the end",
     ]);
     expect(result.content).toContain(
-      "[Some lines truncated to 500 chars. Use read tool to see full lines]",
+      "[Some lines truncated to 500 chars. Use read tool to see full lines of up to 50.0KB; to see more of a longer one, grep a pattern further along it]",
     );
     expect(result.details).toEqual({ linesTruncated: true });
+  });
+
+  it("sends a truncated line to read only when read shows it whole", async () => {
+    write("notes.txt", `${"a".repeat(2000)} needle\n`);
+    // read shows the first 50 KB of this line, short of the match.
+    write("export.json", `${"b".repeat(70_000)} needle ${"c".repeat(1000)}\n`);
+
+    expect((await grep({ pattern: "needle", path: "notes.txt" })).content).toEndWith(
+      "\n\n[Some lines truncated to 500 chars. Use read tool to see full lines]",
+    );
+    expect((await grep({ pattern: "needle", path: "export.json" })).content).toEndWith(
+      "\n\n[Some lines truncated to 500 chars. Use read tool to see full lines of up to 50.0KB; to see more of a longer one, grep a pattern further along it]",
+    );
+  });
+
+  it("shows a long line around its match, so a one-line file can be read where it matters", async () => {
+    const viewers = Array.from(
+      { length: 3000 },
+      (_, i) => `{"uid":${10_000 + i},"name":"viewer${i}"}`,
+    );
+    write("danmaku.json", `[${viewers.join(",")}]\n`);
+    write("head.txt", `needle ${"z".repeat(1000)}\n`);
+
+    const deep = await grep({ pattern: "viewer1499\\b", path: "danmaku.json" });
+    const row = deep.content.split("\n")[0] as string;
+
+    expect(row).toStartWith("danmaku.json:1: [truncated] ...");
+    expect(row).toContain('{"uid":11499,"name":"viewer1499"}');
+    expect(row).toEndWith("... [truncated]");
+    expect(row.length).toBeLessThan(GREP_MAX_LINE_LENGTH + 60);
+    expect((await grep({ pattern: "needle", path: "head.txt" })).content).toStartWith(
+      `head.txt:1: needle ${"z".repeat(GREP_MAX_LINE_LENGTH - "needle ".length)}... [truncated]`,
+    );
   });
 
   it("follows .gitignore files, and never searches .git or node_modules", async () => {
@@ -417,6 +478,204 @@ describe("grep's search", () => {
     expect(result).toEqual({ content: "Operation aborted", isError: true });
     expect(guard.resolved).toContain(join(testDir, "a.txt"));
     expect(guard.resolved).not.toContain(join(testDir, "b.txt"));
+  });
+
+  it("reads patterns as Unicode-mode regexes, and refuses rg's own syntax rather than misread it", async () => {
+    write("notes.md", "# Plan\n今天直播唱歌\nrun the app\nhappy path\n");
+    write("dash.txt", "foo-bar: baz\n");
+
+    expect(await rows({ pattern: "\\p{Script=Han}+", path: "notes.md" })).toEqual([
+      "notes.md:2: 今天直播唱歌",
+    ]);
+    for (const pattern of ["\\p{Han}+", "[\\p{Han}]", "\\pL", "\\Arun", "\\x{4eca}"]) {
+      const result = await grep({ pattern, path: "notes.md" });
+      expect([pattern, result.isError]).toEqual([pattern, true]);
+      expect(result.content).toEndWith(
+        "grep takes JavaScript regexes in Unicode mode: write \\p{Script=Han} for \\p{Han}, \\p{L} for \\pL, \\u{...} for \\x{...}, and ^ and $ for \\A and \\z.",
+      );
+    }
+    // Punctuation rg takes escaped stands for itself, a class's \- included.
+    expect(await rows({ pattern: "foo\\-bar\\:\\ [\\w\\-]+", path: "dash.txt" })).toEqual([
+      "dash.txt:1: foo-bar: baz",
+    ]);
+  });
+
+  it("takes a ] or } that closes nothing as itself, as rg does", async () => {
+    write("main.ts", "const first = args[0];\n}\nconst o = { a: 1 };\nitems[12]\n");
+
+    const cases: [string, string[]][] = [
+      ["args\\[0]", ["main.ts:1: const first = args[0];"]],
+      ["\\d+]", ["main.ts:1: const first = args[0];", "main.ts:4: items[12]"]],
+      ["items\\[\\d{2}]", ["main.ts:4: items[12]"]],
+      ["^}", ["main.ts:2: }"]],
+      ["1 }", ["main.ts:3: const o = { a: 1 };"]],
+      ["[}\\]]$", ["main.ts:2: }", "main.ts:4: items[12]"]],
+    ];
+    for (const [pattern, matched] of cases) {
+      expect([pattern, await rows({ pattern, path: "main.ts" })]).toEqual([pattern, matched]);
+    }
+    // As rg, a { that opens no count is still an error.
+    expect((await grep({ pattern: "{ a: 1 }", path: "main.ts" })).isError).toBe(true);
+  });
+
+  it("a cancel lands while a pattern backtracks, on a long line or on line after line", async () => {
+    // \w+bar rescans the line from every start; (\w+\s?)+\( nests quantifiers.
+    write("long.txt", `${"x".repeat(64 * 1024)}\n`);
+    write("prose.md", "The quick brown fox jumps over the lazy dog and runs far away\n".repeat(20));
+    for (const [pattern, path] of [
+      ["\\w+bar", "long.txt"],
+      ["(\\w+\\s?)+\\(", "prose.md"],
+    ]) {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(), 100);
+      const started = performance.now();
+      const result = await grep({ pattern, path }, controller.signal);
+      const elapsed = performance.now() - started;
+      expect([pattern, result]).toEqual([pattern, { content: "Operation aborted", isError: true }]);
+      expect([pattern, elapsed < 1000]).toEqual([pattern, true]);
+    }
+  });
+
+  it("names a line the pattern may have given up on, and searches on past it", async () => {
+    // JavaScriptCore stops backtracking at a limit and reports no match.
+    write("log.txt", `${"a".repeat(30)}!ab\nshort ab\n`);
+
+    const result = await grep({ pattern: "(a+)+b" });
+
+    expect(result.isError).toBeUndefined();
+    expect(result.content).toStartWith(
+      "log.txt:2: short ab\n\n[Not searched, the pattern was too slow there: log.txt:1. JavaScript regexes backtrack: avoid nested quantifiers such as (a+)+, and \\w+x or .* after a common word, which rescan a long line from every start",
+    );
+    expect(result.details).toEqual({ unsearched: ["log.txt:1"] });
+  });
+
+  it("returns what it found past a long minified line the pattern is merely slow on", async () => {
+    // .* after a common word scans on to the line's end from each one: right, but slowly.
+    write("public/vendor/app.min.js", `${"return a&&b(c,d);".padEnd(100, "x=1;").repeat(2000)}\n`);
+    write(
+      "src/user.ts",
+      "export function load(id) {\n  return isLoading ? null : fetchUser(id);\n}\n",
+    );
+
+    const result = await grep({ pattern: "return.*isLoading" });
+
+    expect(result.isError).toBeUndefined();
+    expect(result.content).toStartWith("src/user.ts:2:   return isLoading ? null : fetchUser(id);");
+  });
+
+  it("leaves a line the pattern still runs on after two seconds, and searches on", async () => {
+    write("min.js", `${"x".repeat(256 * 1024)}\n`);
+    write("src/a.ts", "foobar\n");
+
+    const started = performance.now();
+    const result = await grep({ pattern: "\\w+bar" });
+
+    expect(result.content).toStartWith(
+      "src/a.ts:1: foobar\n\n[Not searched, the pattern was too slow there: min.js:1. ",
+    );
+    expect(performance.now() - started).toBeLessThan(4000);
+  }, 10_000);
+
+  it("stops once lines it can't search have taken five seconds, with what it found", async () => {
+    write("a.txt", "ab\n");
+    write("log.txt", `${"a".repeat(30)}!ab\n`.repeat(60));
+    write("z.txt", "ab\n");
+
+    const started = performance.now();
+    const result = await grep({ pattern: "(a+)+b" });
+    const elapsed = performance.now() - started;
+
+    expect(result.content).toStartWith(
+      "a.txt:1: ab\n\n[Not searched, the pattern was too slow there: log.txt:1, log.txt:2,",
+    );
+    expect(result.content).toContain(
+      ". grep stopped after 5 s on such lines, and searched nothing after them. ",
+    );
+    expect(result.content).not.toContain("z.txt");
+    expect(elapsed).toBeGreaterThan(5000);
+    expect(elapsed).toBeLessThan(8000);
+  }, 20_000);
+
+  it("ends its matcher with the process that started it, even one killed outright", async () => {
+    write("long.txt", `${"x".repeat(1024 * 1024)}\n`);
+    const module = (name: string) => JSON.stringify(join(import.meta.dir, name));
+    const task = Bun.spawn({
+      cmd: [
+        process.execPath,
+        "--no-env-file",
+        "-e",
+        `const { createGrepTool } = await import(${module("../src/tools/grep.ts")});
+         const { folderGuard, toolContext } = await import(${module("tool-folder.ts")});
+         await createGrepTool(folderGuard(${JSON.stringify(testDir)}))
+           .execute({ pattern: "\\\\w+bar" }, toolContext());`,
+      ],
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "inherit",
+    });
+    const children = () =>
+      Bun.spawnSync(["pgrep", "-P", String(task.pid)])
+        .stdout.toString()
+        .split("\n")
+        .filter(Boolean)
+        .map(Number);
+    let matcher: number | undefined;
+    for (let wait = 0; wait < 500 && matcher === undefined; wait++) {
+      await Bun.sleep(10);
+      matcher = children()[0];
+    }
+    if (matcher === undefined) throw new Error("grep started no matcher");
+    // Busy in its test of the line, so it can't hear its channel close.
+    await Bun.sleep(300);
+    task.kill("SIGKILL");
+    await task.exited;
+    const alive = (pid: number) => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    let gone = false;
+    for (let wait = 0; wait < 100 && !gone; wait++) {
+      await Bun.sleep(20);
+      gone = !alive(matcher);
+    }
+    if (!gone) process.kill(matcher, "SIGKILL");
+    expect(gone).toBe(true);
+  }, 10_000);
+
+  it("matches from a process whose working folder has been removed", async () => {
+    write("a.txt", "hello needle\n");
+    const gone = await tempFolder();
+    const before = process.cwd();
+    process.chdir(gone);
+    rmSync(gone, { recursive: true });
+    try {
+      expect(await grep({ pattern: "needle" })).toEqual({ content: "a.txt:1: hello needle" });
+    } finally {
+      process.chdir(before);
+    }
+  });
+
+  it("fails when its matcher can't start, rather than finding nothing", async () => {
+    write("a.txt", "hello needle\n");
+    const bun = process.execPath;
+    // As when the Bun running the task is reinstalled under it.
+    process.execPath = join(testDir, "bun");
+    try {
+      for (const path of [".", "a.txt"]) {
+        const result = await grep({ pattern: "needle", path });
+        expect([path, result.isError, result.content]).toEqual([
+          path,
+          true,
+          expect.stringContaining("ENOENT"),
+        ]);
+      }
+    } finally {
+      process.execPath = bun;
+    }
   });
 
   it("describes itself as pi does", () => {

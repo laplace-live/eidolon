@@ -424,6 +424,81 @@ describe("edit tool fuzzy matching", () => {
     expect(applyPatch(originalContent, diffOf(result).patch)).toBe(expectedContent);
   });
 
+  it("should keep the text around a fuzzy match as it was, on the lines it touches too", async () => {
+    const cases = [
+      // Fullwidth punctuation and a trailing space outside the match.
+      {
+        before: "周一\u{ff1a}写周报\u{ff0c}整理笔记 \n周二\u{ff1a}开会\u{ff01}\n",
+        edits: [{ oldText: "整理笔记\n周二", newText: "整理笔记\n周三" }],
+        after: "周一\u{ff1a}写周报\u{ff0c}整理笔记\n周三\u{ff1a}开会\u{ff01}\n",
+      },
+      // An exact edit batched with a fuzzy one; fullwidth digits and brackets stay.
+      {
+        before:
+          "负责人\u{ff1a}小明\u{ff08}组长\u{ff09}\u{ff0c}电话\u{ff1a}\u{ff11}\u{ff13}\u{ff18}\n他说\u{ff1a}\u{201c}明天见\u{201d}\n",
+        edits: [
+          { oldText: "小明", newText: "小红" },
+          { oldText: '"明天见"', newText: "\u{201c}后天见\u{201d}" },
+        ],
+        after:
+          "负责人\u{ff1a}小红\u{ff08}组长\u{ff09}\u{ff0c}电话\u{ff1a}\u{ff11}\u{ff13}\u{ff18}\n他说\u{ff1a}\u{201c}后天见\u{201d}\n",
+      },
+      // Curly quotes and a dash on the same line as the match.
+      {
+        before: "He said \u{201c}hi\u{201d} \u{2014} then She said \u{201c}bye\u{201d}.\n",
+        edits: [{ oldText: 'She said "bye".', newText: 'She said "see you".' }],
+        after: 'He said \u{201c}hi\u{201d} \u{2014} then She said "see you".\n',
+      },
+      // A match that starts inside a ligature takes the whole ligature, normalized.
+      {
+        before: "\u{fb01}x the \u{fb02}ow\n",
+        edits: [{ oldText: "ix the", newText: "IX THE" }],
+        after: "fIX THE \u{fb02}ow\n",
+      },
+    ];
+    for (const [index, { before, edits, after }] of cases.entries()) {
+      const testFile = join(testDir, `fuzzy-keeps-${index}.txt`);
+      writeFileSync(testFile, before);
+
+      const result = await edit({ path: testFile, edits });
+
+      expect([index, result.content]).toEqual([
+        index,
+        `Successfully replaced ${edits.length} block(s) in ${testFile}.`,
+      ]);
+      expect([index, readFileSync(testFile, "utf-8")]).toEqual([index, after]);
+      expect(applyPatch(before, diffOf(result).patch)).toBe(after);
+    }
+  });
+
+  it("matches an edit in a 10 MB Chinese file in a few times what NFKC alone takes", () => {
+    // NFKC changes every line, by its fullwidth punctuation.
+    const line =
+      "今天直播唱了三首歌，分别是《晴天》、《稻香》和《七里香》！观众说：“太好听了（真的）。”\n";
+    const body = line.repeat(Math.floor((10 * 1024 * 1024) / Buffer.byteLength(line)));
+    const quickest = (work: () => void) => {
+      let best = Number.POSITIVE_INFINITY;
+      for (let run = 0; run < 3; run++) {
+        const started = performance.now();
+        work();
+        best = Math.min(best, performance.now() - started);
+      }
+      return best;
+    };
+    const nfkc = quickest(() => body.split("\n").map((each) => each.normalize("NFKC")));
+    for (const oldText of ["最后一行：结束", "最后一行:结束"]) {
+      const elapsed = quickest(() => {
+        const { newContent } = applyEditsToNormalizedContent(
+          `${body}最后一行：结束\n`,
+          [{ oldText, newText: "最后一行：完" }],
+          "notes.md",
+        );
+        expect(newContent).toBe(`${body}最后一行：完\n`);
+      });
+      expect([oldText, elapsed < nfkc * 8]).toEqual([oldText, true]);
+    }
+  });
+
   it("should preserve untouched lines and produce an applicable patch for fuzzy multi-edits", async () => {
     const testFile = join(testDir, "fuzzy-preserve-multi.txt");
     const originalContent = [

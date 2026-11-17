@@ -54,7 +54,7 @@ describe("todo tool", () => {
   it("answers a malformed list as pi's validation does, naming each bad item", async () => {
     for (const [items, problems] of [
       [undefined, ["items: missing"]],
-      ['[{"text":"a","status":"done"}]', ["items: expected array, got string"]],
+      ["Write tests", ["items: expected array, got string"]],
       [
         ["Write tests", null],
         ["items.0: expected object, got string", "items.1: expected object, got null"],
@@ -75,6 +75,22 @@ describe("todo tool", () => {
         `Validation failed for tool "todo":\n${problems.map((problem) => `  - ${problem}`).join("\n")}\n\n`,
       );
     }
+  });
+
+  it("takes the list sent as a JSON string, or one item alone, as edit takes its edits", async () => {
+    const item = { text: "写页面", status: "in_progress" };
+    const stringified = { items: JSON.stringify([item]) };
+
+    // The task loop runs prepareArguments before it validates.
+    expect(todoTool.prepareArguments?.(stringified)).toEqual({ items: [item] });
+    expect(todoTool.prepareArguments?.({ items: item })).toEqual({ items: [item] });
+    expect(todoTool.prepareArguments?.({ items: "Write tests" })).toEqual({
+      items: "Write tests",
+    });
+    expect(await todo(stringified)).toEqual({
+      content: "Todo list (0/1 done):\n[>] 写页面",
+      details: { items: [item] },
+    });
   });
 
   it("offers the statuses it accepts, and replays safely", () => {

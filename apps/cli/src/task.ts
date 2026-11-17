@@ -29,6 +29,7 @@ import {
   envOptional,
   errorText,
   expandUser,
+  findDotenv,
   logger,
   pyRepr,
   pyStrip,
@@ -36,6 +37,9 @@ import {
 } from "@eidolon/config";
 import {
   createMind,
+  type Mind,
+  type MindChunk,
+  type MindRequest,
   type MindToolCall,
   runTask,
   type TaskBrief,
@@ -90,7 +94,8 @@ options:
 It exits 0 when the task succeeded, 1 when it failed, 3 when it paused, and
 130 when Ctrl-C cancelled it; each but the first prints the command that
 resumes it. A task pauses each time its spend crosses a multiple of
-assistant.spendPauseUsd, and in a terminal asks whether to go on.
+assistant.spendPauseUsd, or after its first request on a model with no known
+price, and in a terminal asks whether to go on.
 `;
 
 const PARSER: ParserSpec = {
@@ -233,25 +238,46 @@ const NO_LINES: TaskInbox = {
 export class Spend implements TaskMeter {
   #spent: number;
   #input: number | null = null;
-  #unpriced = false;
+  #records = 0;
+  /** Why the first request this meter couldn't count went uncounted. */
+  #uncountable: string | null = null;
+  #uncounted = false;
 
   constructor(spent: number) {
     this.#spent = spent;
   }
 
   readonly tap = (record: UsageRecord): void => {
+    this.#records++;
     if (record.costUsd !== null) this.#spent += record.costUsd;
-    else if (!this.#unpriced) {
-      this.#unpriced = true;
-      logger.warning(
-        `No price is known for ${record.model} at ${record.provider}, so the task's spend pauses can't count it`,
-      );
-    }
+    else this.#cannotCount(`No price is known for ${record.model} at ${record.provider}`);
     // The context's size: what the provider read from its cache counts as much as the rest.
     const { inputTokens, cachedTokens, cacheWriteTokens } = record.units;
     const counted = [inputTokens, cachedTokens, cacheWriteTokens].filter((n) => n !== undefined);
     this.#input = counted.length === 0 ? null : counted.reduce((sum, n) => sum + n, 0);
   };
+
+  /**
+   * `mind`, on `choice`, with each of its requests that ends with no usage record counted as one
+   * this meter can't count: a server may ignore the request for it (stream_options.include_usage).
+   */
+  metered(mind: Mind, choice: ModelChoice): Mind {
+    return { stream: (request) => this.#stream(mind, choice, request) };
+  }
+
+  async *#stream(mind: Mind, choice: ModelChoice, request: MindRequest): AsyncGenerator<MindChunk> {
+    const before = this.#records;
+    yield* mind.stream(request);
+    if (this.#records === before) {
+      this.#cannotCount(`No usage was reported for ${choice.model} at ${choice.account}`);
+    }
+  }
+
+  #cannotCount(why: string): void {
+    if (this.#uncountable !== null) return;
+    this.#uncountable = why;
+    logger.warning(`${why}, so the task's spend pauses can't count it`);
+  }
 
   spentUsd(): number {
     return this.#spent;
@@ -260,6 +286,31 @@ export class Spend implements TaskMeter {
   lastInputTokens(): number | null {
     return this.#input;
   }
+
+  /** Why this meter can't count the task's spend, until the owner lets the task go on without. */
+  unpriced(): string | null {
+    return this.#uncounted ? null : this.#uncountable;
+  }
+
+  goOnUncounted(): void {
+    this.#uncounted = true;
+  }
+}
+
+/**
+ * With spend pauses on, a gate that pauses before the next calls once a request came back with no
+ * price or no usage, as the pause it can't count toward would have: the loop pauses on what the
+ * meter adds up.
+ */
+function spendGate(meter: Spend, step: number): TaskRequest["gate"] {
+  if (step <= 0) return undefined;
+  return async () => {
+    const why = meter.unpriced();
+    if (why === null) return null;
+    return {
+      pause: `${why}, so its spend can't count toward the pause at every $${step.toFixed(2)}.`,
+    };
+  };
 }
 
 const ENDED: ReadonlySet<TaskStatus> = new Set(["succeeded", "failed", "cancelled"]);
@@ -324,6 +375,7 @@ interface Prepared {
   readonly model: ModelChoice;
   readonly resumed: boolean;
   readonly request: TaskRequest;
+  readonly meter: Spend;
   readonly snapshots: Snapshots;
   readonly release: () => void;
 }
@@ -358,19 +410,25 @@ async function equip(
       dataHome: dataHome(),
       // EIDOLON_APP_ROOT's package, or this checkout.
       appRoot: shippedPath(".", "."),
+      // The one load-env.ts reads: from a worktree, its main checkout's.
+      dotenv: findDotenv(import.meta.dir),
     });
     folder = await policy.resolve(brief.folder, "write");
   } catch (error) {
     if (error instanceof GrantRefused || error instanceof PathRefused) {
       throw parserError(PARSER, error.message);
     }
-    throw error;
+    // A link in it that leads nowhere on disk, say.
+    throw parserError(PARSER, `${brief.folder} can't be the task's folder: ${errorText(error)}`);
   }
-  const mind = (deps.createMind ?? createMind)("assistant", {
-    tap: meter.tap,
-    account: choice.account,
-    model: choice.model,
-  });
+  const mind = meter.metered(
+    (deps.createMind ?? createMind)("assistant", {
+      tap: meter.tap,
+      account: choice.account,
+      model: choice.model,
+    }),
+    choice,
+  );
   try {
     await mkdir(folder, { recursive: true });
   } catch (error) {
@@ -380,7 +438,7 @@ async function equip(
   const system = buildTaskPrompt({
     brief,
     tools,
-    contextFiles: await loadContextFiles(brief.folder, home),
+    contextFiles: await loadContextFiles(brief.folder, home, policy),
     date: today(),
     folder: brief.folder,
   });
@@ -435,8 +493,9 @@ async function newTask(
     const snapshots = new Snapshots(dir, snapshot, meter);
     await snapshots.save("running");
     const limits = { contextTokens: settings.contextTokens, spendPauseUsd: settings.spendPauseUsd };
-    const request: TaskRequest = { ...equipped, store, limits, signal };
-    return { id, dir, brief, model, resumed: false, request, snapshots, release };
+    const gate = spendGate(meter, limits.spendPauseUsd);
+    const request: TaskRequest = { ...equipped, store, limits, signal, ...(gate && { gate }) };
+    return { id, dir, brief, model, resumed: false, request, meter, snapshots, release };
   } catch (error) {
     release();
     throw error;
@@ -454,6 +513,14 @@ async function resumedTask(
   if (found === null) throw parserError(PARSER, `argument --resume: no task ${pyRepr(id)}`);
   const release = acquireLock(`task:${id}`, PROG);
   try {
+    // A transcript gone or damaged since can't be resumed; its task stays as it was.
+    const store = openTaskStore(dir);
+    const entries = await store.entries().catch((error: unknown) => {
+      throw parserError(PARSER, `argument --resume: task ${id} can't be read: ${errorText(error)}`);
+    });
+    if (entries[0]?.type !== "brief") {
+      throw parserError(PARSER, `argument --resume: task ${id} has no brief in its transcript`);
+    }
     const model = args.model ?? found.model;
     const meter = new Spend(found.spentUsd);
     const equipped = await equip(id, found.brief, found.grants, model, meter, deps);
@@ -463,8 +530,19 @@ async function resumedTask(
       contextTokens: assistantSettings().contextTokens,
       spendPauseUsd: found.spendPauseUsd,
     };
-    const request: TaskRequest = { ...equipped, store: openTaskStore(dir), limits, signal };
-    return { id, dir, brief: found.brief, model, resumed: true, request, snapshots, release };
+    const gate = spendGate(meter, limits.spendPauseUsd);
+    const request: TaskRequest = { ...equipped, store, limits, signal, ...(gate && { gate }) };
+    return {
+      id,
+      dir,
+      brief: found.brief,
+      model,
+      resumed: true,
+      request,
+      meter,
+      snapshots,
+      release,
+    };
   } catch (error) {
     release();
     throw error;
@@ -525,6 +603,17 @@ function toolLine(
   return `· ${result.name} ${target === "" ? firstLine(result.content).replace(/:$/, "") : target}`;
 }
 
+/**
+ * `text` with its control characters, but newlines and tabs, as \u escapes: a file name or the
+ * worker's words could otherwise drive the terminal, as OSC 52 writes the clipboard.
+ */
+function visible(text: string): string {
+  return text.replace(
+    /(?![\t\n])\p{Cc}/gu,
+    (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  );
+}
+
 /** For a person: the worker's words as they stream, a line per tool, then how it ended. */
 class HumanReport implements Report {
   readonly #write: (text: string) => void;
@@ -534,7 +623,7 @@ class HumanReport implements Report {
   #spoke = false;
 
   constructor(write: (text: string) => void, task: Prepared) {
-    this.#write = write;
+    this.#write = (text) => write(visible(text));
     this.#task = task;
   }
 
@@ -551,6 +640,12 @@ class HumanReport implements Report {
       this.#write(event.text);
       this.#midLine = !event.text.endsWith("\n");
       this.#spoke = true;
+      return;
+    }
+    // A failed attempt's words stay; its retry, and the warning on stderr, start a line of their own.
+    if (event.type === "request" && event.error !== undefined && this.#midLine) {
+      this.#write("\n");
+      this.#midLine = false;
       return;
     }
     if (event.type !== "entry") return;
@@ -688,9 +783,14 @@ async function runInForeground(
   };
   report.start();
   let outcome = await follow(request, onEvent);
-  while (outcome.status === "paused" && outcome.reason === "spend" && confirm !== null) {
+  while (outcome.status === "paused" && confirm !== null) {
+    // The CLI's only gate is spendGate's, so an approval it asks for is spend it can't count.
+    const uncounted = outcome.reason === "approval" && task.meter.unpriced() !== null;
+    if (outcome.reason !== "spend" && !uncounted) break;
     await snapshots.save("paused", outcome);
-    if (!(await confirm(`${outcome.detail} Continue? [y/N] `, request.signal))) break;
+    const question = `${outcome.detail} Continue${uncounted ? " without spend pauses" : ""}? [y/N] `;
+    if (!(await confirm(question, request.signal))) break;
+    if (uncounted) task.meter.goOnUncounted();
     await snapshots.save("running");
     outcome = await follow(request, onEvent);
   }

@@ -139,6 +139,28 @@ describe("validateToolArguments", () => {
     ).toThrow('  - edits.0.newText: missing\n  - mode: expected one of ["replace","append"]');
   });
 
+  test("repeats no more than 2,000 characters of the arguments it rejects", () => {
+    const write: ToolSchema = {
+      name: "write",
+      description: "Write tool",
+      properties: { path: { type: "string" }, content: { type: "string" } },
+      required: ["path", "content"],
+    };
+    const content = "<div>".padEnd(150_000, "y");
+    let message = "";
+    try {
+      validateToolArguments(write, { file_path: "index.html", content });
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toStartWith(
+      'Validation failed for tool "write":\n  - path: missing\n\nReceived arguments:\n' +
+        '{\n  "file_path": "index.html",\n  "content": "<div>yyy',
+    );
+    expect(message).toEndWith("yyy\n... [truncated]");
+    expect(message.length).toBeLessThan(2_200);
+  });
+
   test("returns a copy of the arguments, also when nothing is coerced", () => {
     const args = { value: "x" };
     const validated = validateToolArguments(echo({ type: "string" }), args);

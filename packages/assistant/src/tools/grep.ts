@@ -3,13 +3,16 @@
 //
 // Ported from pi-mono packages/coding-agent/src/core/tools/grep.ts@ac78a60
 //
-// pi runs rg; this reads the files itself, on find's walk, a line at a time as rg does. It has no
-// context lines.
+// pi runs rg; this reads the files itself, on find's walk, and matches their lines in a child Bun.
+// It has no context lines.
 import type { Stats } from "node:fs";
 import { open, stat } from "node:fs/promises";
-import { basename } from "node:path";
+import { basename, parse } from "node:path";
+import type { TaskToolResult } from "@eidolon/engine";
 import type { AssistantTool, PathGuard } from "../types.ts";
 import { globMatcher, walkFolder } from "./find.ts";
+import { resolveToCwd } from "./path.ts";
+import { textEncoding } from "./read.ts";
 import {
   ABORTED,
   errorResult,
@@ -24,6 +27,7 @@ import {
   DEFAULT_MAX_BYTES,
   formatSize,
   GREP_MAX_LINE_LENGTH,
+  sliceHead,
   type TruncationResult,
   truncateHead,
   truncateLine,
@@ -32,17 +36,142 @@ import {
 const DEFAULT_LIMIT = 100;
 const CHUNK_BYTES = 64 * 1024;
 
+// JavaScript regexes backtrack, so one test of a line can run for minutes (\w+x over a long one)
+// and hold its thread; a worker can't be stopped inside one. Lines are matched in a child Bun,
+// killed on a cancel or past the deadline. JavaScriptCore also stops backtracking at a limit and
+// answers no match, measured at about 300 ms for (a+)+b on 30 characters: a test that fails that
+// slowly may have given up, so its line counts as not searched.
+const SLOW_TEST_MS = 50;
+const MATCH_DEADLINE_MS = 2000;
+/** The time a search may spend on lines it can't search before it stops. */
+const SLOW_BUDGET_MS = 5000;
+
+// A parent killed outright takes its deadline and its kill along, and a test that runs on holds
+// the child's thread, deaf to its channel closing: a worker ends the child once the parent is gone.
+const MATCHER_SOURCE = `
+let regex;
+const parent = process.ppid;
+const watch = "setInterval(() => { if (process.ppid !== " + parent + ") process.kill(process.pid, 'SIGKILL'); }, 200);";
+new Worker(URL.createObjectURL(new Blob([watch], { type: "application/javascript" }))).unref();
+process.on("disconnect", () => process.exit(0));
+process.on("message", (data) => {
+  if (data.lines === undefined) {
+    regex = new RegExp(data.source, data.flags);
+    return;
+  }
+  const hits = [];
+  for (let i = 0; i < data.lines.length; i++) {
+    const started = performance.now();
+    const match = regex.exec(data.lines[i]);
+    if (match !== null) hits.push(i, match.index);
+    else if (performance.now() - started >= ${SLOW_TEST_MS}) {
+      process.send({ hits, slow: i });
+      return;
+    }
+  }
+  process.send({ hits, slow: -1 });
+});
+`;
+
+/** The lines of a batch that match, as [line, at] pairs, and the first it may have given up on. */
+interface Matched {
+  readonly hits: readonly number[];
+  readonly slow: number;
+}
+
+/** A pattern running over batches of lines in a process of its own. */
+class LineMatcher {
+  readonly #child: Bun.Subprocess;
+  #settle: ((outcome: Matched | Error) => void) | null = null;
+
+  constructor(regex: RegExp) {
+    this.#child = Bun.spawn({
+      cmd: [process.execPath, "--no-env-file", "-e", MATCHER_SOURCE],
+      // Bun reads bunfig.toml, preloads included, from its working directory; process.cwd() throws
+      // once the folder the process started in is removed.
+      cwd: parse(process.execPath).root,
+      env: {},
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "ignore",
+      serialization: "json",
+      ipc: (message) => this.#settle?.(message as Matched),
+      onExit: (_child, code, signal) => {
+        this.#settle?.(new Error(`grep's matcher exited (${signal ?? code})`));
+      },
+    });
+    this.#child.unref();
+    this.#child.send({ source: regex.source, flags: regex.flags });
+  }
+
+  /** What matches in `lines`; "aborted" once `signal` aborts, "late" past the deadline. */
+  match(lines: readonly string[], signal: AbortSignal): Promise<Matched | "aborted" | "late"> {
+    if (signal.aborted) return Promise.resolve("aborted");
+    return new Promise((resolve, reject) => {
+      this.#child.send({ lines });
+      const onAbort = () => finish("aborted");
+      const timer = setTimeout(() => finish("late"), MATCH_DEADLINE_MS);
+      const finish = (outcome: Matched | Error | "aborted" | "late") => {
+        clearTimeout(timer);
+        signal.removeEventListener("abort", onAbort);
+        this.#settle = null;
+        if (outcome instanceof Error) reject(outcome);
+        else resolve(outcome);
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+      this.#settle = finish;
+    });
+  }
+
+  stop(): void {
+    this.#settle = null;
+    this.#child.kill("SIGKILL");
+  }
+}
+
+/** How much of a long line before its match its row keeps. */
+const BEFORE_MATCH = 100;
+
+/**
+ * `line` cut to GREP_MAX_LINE_LENGTH characters around its match at `at`, not from its head: only
+ * grep shows any of a line past read's byte limit, so the match must be in what it shows.
+ */
+function aroundMatch(line: string, at: number): { text: string; wasTruncated: boolean } {
+  let start = Math.max(0, Math.min(at - BEFORE_MATCH, line.length - GREP_MAX_LINE_LENGTH));
+  if (start === 0) return truncateLine(line);
+  // Not from the middle of a surrogate pair.
+  const code = line.charCodeAt(start);
+  if (code >= 0xdc00 && code <= 0xdfff) start++;
+  const shown = sliceHead(line.slice(start), GREP_MAX_LINE_LENGTH);
+  const cut = start + shown.length < line.length ? "... [truncated]" : "";
+  return { text: `[truncated] ...${shown}${cut}`, wasTruncated: true };
+}
+
+/** The notice for the lines, as file:line or file:first-last, the pattern was too slow to search. */
+function notSearched(lines: readonly string[], stopped: boolean): string {
+  const more = lines.length > 10 ? ` and ${lines.length - 10} more` : "";
+  return (
+    `Not searched, the pattern was too slow there: ${lines.slice(0, 10).join(", ")}${more}. ` +
+    (stopped
+      ? `grep stopped after ${SLOW_BUDGET_MS / 1000} s on such lines, and searched nothing after them. `
+      : "") +
+    "JavaScript regexes backtrack: avoid nested quantifiers such as (a+)+, and \\w+x or .* after a common word, which rescan a long line from every start; or set literal to true, or leave such files out with a glob such as '!*.min.js'"
+  );
+}
+
 export interface GrepDetails {
   readonly truncation?: TruncationResult;
   readonly matchLimitReached?: number;
   readonly linesTruncated?: boolean;
+  /** The lines the pattern was too slow to search, as file:line or file:first-last. */
+  readonly unsearched?: readonly string[];
 }
 
 export function createGrepTool(guard: PathGuard): AssistantTool {
   return {
     schema: {
       name: "grep",
-      description: `Search file contents for a pattern. Returns matching lines with file paths and line numbers. Respects .gitignore and skips .git, node_modules and binary files. Output is truncated to ${DEFAULT_LIMIT} matches or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). Long lines are truncated to ${GREP_MAX_LINE_LENGTH} chars.`,
+      description: `Search file contents for a pattern. Returns matching lines with file paths and line numbers. Respects .gitignore and skips .git, node_modules and binary files. Output is truncated to ${DEFAULT_LIMIT} matches or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). Long lines are truncated to ${GREP_MAX_LINE_LENGTH} chars around the match.`,
       properties: {
         pattern: {
           type: "string",
@@ -110,55 +239,108 @@ export function createGrepTool(guard: PathGuard): AssistantTool {
       let outputBytes = 0;
       let matchLimitReached = false;
       let linesTruncated = false;
+      // One of them is longer than read shows.
+      let linesPastRead = false;
+      let matcher: LineMatcher | undefined;
+      // Set when the search can't go on: its matcher failed.
+      let stopped: TaskToolResult | undefined;
+      const unsearched: string[] = [];
+      let slowMs = 0;
+      let gaveUp = false;
       const search = (file: string, shown: string) =>
-        eachLine(file, buffer, signal, (text, lineNumber) => {
-          if (!regex.test(text)) return true;
-          // Only one more match proves that the limit cut results off.
-          if (matchCount === effectiveLimit) {
-            matchLimitReached = true;
-            return false;
+        eachBatch(file, buffer, signal, async (lines, firstLine) => {
+          for (let start = 0; start < lines.length; ) {
+            if (slowMs >= SLOW_BUDGET_MS) {
+              gaveUp = true;
+              return false;
+            }
+            const began = performance.now();
+            let matched: Matched | "aborted" | "late";
+            try {
+              matcher ??= new LineMatcher(regex);
+              matched = await matcher.match(start === 0 ? lines : lines.slice(start), signal);
+            } catch (error) {
+              stopped = failure(error);
+              return false;
+            }
+            if (matched === "aborted") return false;
+            if (matched === "late") {
+              // Which line it is still on is unknown, so the rest of the batch goes unsearched.
+              matcher?.stop();
+              matcher = undefined;
+              slowMs += performance.now() - began;
+              const [first, last] = [firstLine + start, firstLine + lines.length - 1];
+              unsearched.push(first === last ? `${shown}:${first}` : `${shown}:${first}-${last}`);
+              return true;
+            }
+            for (let i = 0; i < matched.hits.length; i += 2) {
+              // Only one more match proves that the limit cut results off.
+              if (matchCount === effectiveLimit) {
+                matchLimitReached = true;
+                return false;
+              }
+              matchCount++;
+              const index = start + (matched.hits[i] as number);
+              const text = lines[index] as string;
+              const line = aroundMatch(text, matched.hits[i + 1] as number);
+              if (line.wasTruncated) {
+                linesTruncated = true;
+                linesPastRead ||= Buffer.byteLength(text, "utf-8") > DEFAULT_MAX_BYTES;
+              }
+              const row = `${shown}:${firstLine + index}: ${line.text}`;
+              if (outputBytes - 1 <= DEFAULT_MAX_BYTES) kept.push(row);
+              outputBytes += Buffer.byteLength(row, "utf-8") + 1;
+            }
+            if (matched.slow === -1) return true;
+            slowMs += performance.now() - began;
+            unsearched.push(`${shown}:${firstLine + start + matched.slow}`);
+            start += matched.slow + 1;
           }
-          matchCount++;
-          const line = truncateLine(text);
-          if (line.wasTruncated) linesTruncated = true;
-          const row = `${shown}:${lineNumber}: ${line.text}`;
-          if (outputBytes - 1 <= DEFAULT_MAX_BYTES) kept.push(row);
-          outputBytes += Buffer.byteLength(row, "utf-8") + 1;
           return true;
         });
 
-      if (stats.isFile()) {
-        const name = basename(searchPath);
-        try {
-          if ((await search(searchPath, name)) === "binary") {
-            return { content: `No matches found: ${name} is a binary file` };
-          }
-        } catch (error) {
-          return failure(error);
-        }
-      } else {
-        let included = (_path: string) => true;
-        let skipDirectory: ((path: string) => boolean) | undefined;
-        if (glob !== "") {
-          const excludes = glob.startsWith("!");
-          const matches = globMatcher(excludes ? glob.slice(1) : glob, searchPath);
-          included = excludes ? (entryPath) => !matches(entryPath) : matches;
-          // As with rg, an excluded directory takes everything under it along.
-          if (excludes) skipDirectory = matches;
-        }
-        for await (const entry of walkFolder(searchPath, { guard, signal, skipDirectory })) {
-          if (entry.kind !== "file" || !included(entry.path)) continue;
+      try {
+        if (stats.isFile()) {
+          const name = basename(searchPath);
           try {
-            await guard.resolve(entry.absolute, "read");
-            await search(entry.absolute, entry.path);
-          } catch {
-            // Like rg past a file it can't read, the search goes on past one the guard refuses.
+            if ((await search(searchPath, name)) === "binary") {
+              return { content: `No matches found: ${name} is a binary file` };
+            }
+          } catch (error) {
+            return failure(error);
           }
-          if (matchLimitReached) break;
+        } else {
+          let included = (_path: string) => true;
+          let skipDirectory: ((path: string) => boolean) | undefined;
+          if (glob !== "") {
+            const excludes = glob.startsWith("!");
+            const named = resolveToCwd(path || ".", guard.folder);
+            const matches = globMatcher(excludes ? glob.slice(1) : glob, searchPath, named);
+            included = excludes ? (entryPath) => !matches(entryPath) : matches;
+            // As with rg, an excluded directory takes everything under it along.
+            if (excludes) skipDirectory = matches;
+          }
+          for await (const entry of walkFolder(searchPath, { guard, signal, skipDirectory })) {
+            if (entry.kind !== "file" || !included(entry.path)) continue;
+            try {
+              await guard.resolve(entry.absolute, "read");
+              await search(entry.absolute, entry.path);
+            } catch {
+              // Like rg past a file it can't read, the search goes on past one the guard refuses.
+            }
+            if (matchLimitReached || stopped !== undefined || gaveUp) break;
+          }
         }
+      } finally {
+        matcher?.stop();
       }
       if (signal.aborted) return errorResult(ABORTED);
-      if (matchCount === 0) return { content: "No matches found" };
+      if (stopped !== undefined) return stopped;
+      if (matchCount === 0) {
+        if (unsearched.length === 0) return { content: "No matches found" };
+        const details: GrepDetails = { unsearched };
+        return { content: `No matches found\n\n[${notSearched(unsearched, gaveUp)}]`, details };
+      }
 
       const truncation: TruncationResult = {
         ...truncateHead(kept.join("\n"), { maxLines: Number.MAX_SAFE_INTEGER }),
@@ -173,15 +355,21 @@ export function createGrepTool(guard: PathGuard): AssistantTool {
       }
       if (truncation.truncated) notices.push(`${formatSize(DEFAULT_MAX_BYTES)} limit reached`);
       if (linesTruncated) {
+        // read shows the head of a longer line, and sends the model back here for the rest.
+        const longer = linesPastRead
+          ? ` of up to ${formatSize(DEFAULT_MAX_BYTES)}; to see more of a longer one, grep a pattern further along it`
+          : "";
         notices.push(
-          `Some lines truncated to ${GREP_MAX_LINE_LENGTH} chars. Use read tool to see full lines`,
+          `Some lines truncated to ${GREP_MAX_LINE_LENGTH} chars. Use read tool to see full lines${longer}`,
         );
       }
+      if (unsearched.length > 0) notices.push(notSearched(unsearched, gaveUp));
       if (notices.length === 0) return { content: truncation.content };
       const details: GrepDetails = {
         ...(truncation.truncated ? { truncation } : {}),
         ...(matchLimitReached ? { matchLimitReached: effectiveLimit } : {}),
         ...(linesTruncated ? { linesTruncated } : {}),
+        ...(unsearched.length > 0 ? { unsearched } : {}),
       };
       return { content: `${truncation.content}\n\n[${notices.join(". ")}]`, details };
     },
@@ -201,32 +389,80 @@ function booleanArgument(
   return false;
 }
 
+const UNICODE_MODE =
+  "grep takes JavaScript regexes in Unicode mode: write \\p{Script=Han} for \\p{Han}, \\p{L} for \\pL, \\u{...} for \\x{...}, and ^ and $ for \\A and \\z.";
+
 /** `pattern` as a RegExp, or why it isn't one. */
 function compile(pattern: string, literal: boolean, ignoreCase: boolean): RegExp | string {
-  const source = literal ? pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") : pattern;
-  const flags = ignoreCase ? "i" : "";
+  const source = literal
+    ? pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    : unescapePunctuation(pattern);
   try {
-    return new RegExp(source, `u${flags}`);
-  } catch {
-    // Unicode mode refuses escapes rg takes, such as \- outside a class.
-    try {
-      return new RegExp(source, flags);
-    } catch (error) {
-      return error instanceof Error ? error.message : String(error);
-    }
+    return new RegExp(source, ignoreCase ? "ui" : "u");
+  } catch (error) {
+    // Without Unicode mode, \p{Han} would be the text p{Han} and \A the letter A.
+    return `${error instanceof Error ? error.message : String(error)}. ${UNICODE_MODE}`;
   }
 }
 
+/** Punctuation that rg takes escaped as itself, and that Unicode mode refuses escaped. */
+const PLAIN_PUNCTUATION = new Set("!\"#%&',-:;=@_`~ ");
+
+/** A count's braces, {n}, {n,} or {n,m}; any other } closes nothing. */
+const COUNT = /^\{\d+(?:,\d*)?\}/;
+
 /**
- * Hands `onLine` each line of the file, without its line ending, until it returns false. A NUL byte
- * marks binary data, as it does for rg: in the first chunk the file is skipped, in a later one the
- * search stops before it. UTF-16 is read by its byte order mark.
+ * `pattern` with those escapes dropped; a class keeps its \-, which Unicode mode takes. A ] or }
+ * that closes nothing is escaped: rg takes it as itself, and Unicode mode refuses it.
  */
-async function eachLine(
+function unescapePunctuation(pattern: string): string {
+  let source = "";
+  let inClass = false;
+  for (let i = 0; i < pattern.length; i++) {
+    const char = pattern[i] as string;
+    if (char === "\\" && i + 1 < pattern.length) {
+      const next = pattern[++i] as string;
+      // \p{…} and \u{…} keep their braces.
+      const close = /[a-z]/i.test(next) && pattern[i + 1] === "{" ? pattern.indexOf("}", i) : -1;
+      if (close !== -1) {
+        source += `\\${pattern.slice(i, close + 1)}`;
+        i = close;
+        continue;
+      }
+      source += PLAIN_PUNCTUATION.has(next) && !(inClass && next === "-") ? next : `\\${next}`;
+      continue;
+    }
+    if (inClass) {
+      if (char === "]") inClass = false;
+    } else if (char === "[") {
+      inClass = true;
+    } else if (char === "{") {
+      const count = COUNT.exec(pattern.slice(i))?.[0];
+      if (count !== undefined) {
+        source += count;
+        i += count.length - 1;
+        continue;
+      }
+    } else if (char === "]" || char === "}") {
+      source += `\\${char}`;
+      continue;
+    }
+    source += char;
+  }
+  return source;
+}
+
+/**
+ * Hands `onBatch` the file's lines, a chunk's at a time, without their line endings and with the
+ * number of the first, until it answers false. A NUL byte marks binary data, as it does for rg: in
+ * the first chunk the file is skipped, in a later one the search stops before it. The text reads as
+ * read reads it (textEncoding).
+ */
+async function eachBatch(
   path: string,
   buffer: Buffer,
   signal: AbortSignal,
-  onLine: (text: string, lineNumber: number) => boolean,
+  onBatch: (lines: readonly string[], firstLine: number) => Promise<boolean>,
 ): Promise<"text" | "binary"> {
   const handle = await open(path, "r");
   try {
@@ -240,33 +476,31 @@ async function eachLine(
       if (bytesRead === 0) break;
       const chunk = buffer.subarray(0, bytesRead);
       if (decoder === undefined) {
-        decoder = new TextDecoder(encodingOf(chunk));
-        if (decoder.encoding === "utf-8" && chunk.includes(0)) return "binary";
-      } else if (decoder.encoding === "utf-8" && chunk.includes(0)) {
+        decoder = new TextDecoder(textEncoding(chunk));
+        if (!decoder.encoding.startsWith("utf-16") && chunk.includes(0)) return "binary";
+      } else if (!decoder.encoding.startsWith("utf-16") && chunk.includes(0)) {
         return "text";
       }
       const text = decoder.decode(chunk, { stream: true });
+      const lines: string[] = [];
       let start = 0;
       for (let end = text.indexOf("\n"); end !== -1; end = text.indexOf("\n", start)) {
-        const line = carry + text.slice(start, end);
+        lines.push(withoutCr(carry + text.slice(start, end)));
         carry = "";
         start = end + 1;
-        if (!onLine(withoutCr(line), ++lineNumber)) return "text";
       }
       carry += text.slice(start);
+      if (lines.length > 0) {
+        if (!(await onBatch(lines, lineNumber + 1))) return "text";
+        lineNumber += lines.length;
+      }
     }
     const last = carry + (decoder?.decode() ?? "");
-    if (last !== "") onLine(withoutCr(last), lineNumber + 1);
+    if (last !== "") await onBatch([withoutCr(last)], lineNumber + 1);
     return "text";
   } finally {
     await handle.close();
   }
-}
-
-function encodingOf(chunk: Uint8Array): "utf-8" | "utf-16le" | "utf-16be" {
-  if (chunk[0] === 0xff && chunk[1] === 0xfe) return "utf-16le";
-  if (chunk[0] === 0xfe && chunk[1] === 0xff) return "utf-16be";
-  return "utf-8";
 }
 
 /** A lone CR inside a line is content, as the read tool shows it; only a CRLF's goes. */

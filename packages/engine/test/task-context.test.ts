@@ -89,7 +89,47 @@ describe("masking", () => {
     ]);
   });
 
+  test("moves its boundary a step at a time, so most requests only add to the one before", async () => {
+    // Each result is 2,000 tokens: the boundary steps 20,000 at a time, every ten turns.
+    const values = Array.from({ length: 60 }, (_, n) => `n${n}`);
+    const mind = new ScriptedMind(reads(values));
+    await drain(taskRequest(mind, { tools: [reader(8_000)] }));
+    const sent = mind.requests.map((request) => request.messages.map((m) => JSON.stringify(m)));
+    const edited = sent.filter((messages, at) =>
+      (sent[at - 1] ?? []).some((message, i) => messages[i] !== message),
+    );
+    expect(edited.length).toBeGreaterThan(0);
+    expect(edited.length).toBeLessThanOrEqual(5);
+    const whole = toolMessages(mind.requests.at(-1)).filter(
+      ([, content]) => content.length === 8_000,
+    );
+    expect(whole.length).toBeGreaterThanOrEqual(10);
+    expect(whole.length).toBeLessThanOrEqual(20);
+    expect(mind.summaryRequests).toHaveLength(0);
+  });
+
+  test("counts a Chinese character as a token, so masking holds the context to its budget", async () => {
+    const han = /\p{Script=Han}/gu;
+    const meter = new FakeMeter();
+    const counted: number[] = [];
+    // The provider's count: a token a Chinese character, as Claude's tokenizer comes close to.
+    const mind = new ScriptedMind(reads(Array.from({ length: 25 }, (_, n) => `n${n}`)), {
+      after: (request) => {
+        const text = request.system + JSON.stringify(request.messages);
+        const chinese = text.match(han)?.length ?? 0;
+        meter.input = chinese + Math.ceil((text.length - chinese) / 4);
+        counted.push(meter.input);
+      },
+    });
+    const notes = "我们今天把笔记整理一下这个项目的目标是让助手帮主人处理文件并且汇报结果";
+    const read = tool("read", async () => result(notes.repeat(300).slice(0, 10_000)));
+    await drain(taskRequest(mind, { tools: [read], meter }));
+    expect(mind.summaryRequests).toHaveLength(0);
+    expect(Math.max(...counted)).toBeLessThan(70_000);
+  });
+
   test("keeps a context that fits once masked from compacting", async () => {
+    // 50,000 tokens before it compacts: the six results, 10,000 each, fit only once masked.
     const mind = new ScriptedMind(reads(["a", "b", "c", "d", "e", "f"]));
     await drain(
       taskRequest(mind, {
@@ -99,13 +139,37 @@ describe("masking", () => {
     );
     expect(mind.summaryRequests).toHaveLength(0);
     const sent = toolMessages(mind.requests[6]);
-    expect(sent.slice(0, 2)).toEqual([
+    expect(sent.slice(0, 3)).toEqual([
       ["c-a", stub("a", 40_000)],
       ["c-b", stub("b", 40_000)],
+      ["c-c", stub("c", 40_000)],
     ]);
-    expect(sent.slice(2).map(([, content]) => content.length)).toEqual([
-      40_000, 40_000, 40_000, 40_000,
-    ]);
+    expect(sent.slice(3).map(([, content]) => content.length)).toEqual([40_000, 40_000, 40_000]);
+  });
+
+  test("never keeps more than the newest 40,000 tokens whole, so a smaller window masks before it compacts", async () => {
+    for (const contextTokens of [61_440, 65_536, 73_728, 77_824]) {
+      const values = Array.from({ length: 60 }, (_, n) => `n${n}`);
+      const mind = new ScriptedMind(reads(values), {
+        summaries: values.map(() => says("SUMMARY")),
+      });
+      const request = taskRequest(mind, {
+        // About the worker's prompt and tool schemas: 1,600 tokens.
+        system: "S".repeat(6_400),
+        tools: [reader(8_000)],
+        limits: { contextTokens, spendPauseUsd: 0 },
+      });
+      const { outcome } = await drain(request);
+      expect([contextTokens, outcome, mind.summaryRequests.length]).toEqual([
+        contextTokens,
+        { status: "succeeded", report: "done" },
+        0,
+      ]);
+      for (const sent of mind.requests) {
+        const whole = toolMessages(sent).filter(([, content]) => content.length === 8_000);
+        expect(whole.length).toBeLessThanOrEqual(20);
+      }
+    }
   });
 });
 
@@ -183,8 +247,30 @@ describe("compaction", () => {
     expect(events.filter((event) => event.type === "request")).toHaveLength(18);
   });
 
+  test("leaves a small window room to work: a short task in 8,192 or 16,384 tokens never compacts", async () => {
+    for (const contextTokens of [8_192, 16_384]) {
+      const mind = new ScriptedMind(reads(["a", "b", "c", "d"]), {
+        summaries: [says("SUMMARY"), says("SUMMARY"), says("SUMMARY"), says("SUMMARY")],
+      });
+      const request = taskRequest(mind, {
+        // About the worker's prompt and tool schemas: 1,600 tokens.
+        system: "S".repeat(6_400),
+        tools: [reader(400)],
+        limits: { contextTokens, spendPauseUsd: 0 },
+      });
+      const { outcome } = await drain(request);
+      expect([contextTokens, outcome, mind.summaryRequests.length]).toEqual([
+        contextTokens,
+        { status: "succeeded", report: "done" },
+        0,
+      ]);
+      expect(opening(mind.requests.at(-1))).toStartWith("Goal: Write a TodoMVC");
+    }
+  });
+
   test("goes by the provider's count of the last request, when it reports one", async () => {
-    const tight = { contextTokens: 17_384, spendPauseUsd: 0, maskAfterTokens: 1e9 };
+    // 1,001 tokens before it compacts, a quarter of the window left for the reply.
+    const tight = { contextTokens: 1_334, spendPauseUsd: 0, maskAfterTokens: 1e9 };
     const estimated = new ScriptedMind(reads(["a", "b", "c", "d"]), {
       summaries: [says("SUMMARY")],
     });
@@ -201,6 +287,23 @@ describe("compaction", () => {
       mind.requests.findIndex((request) => opening(request).startsWith(SUMMARY_OPENING));
     expect(compactedBefore(estimated)).toBe(4);
     expect(compactedBefore(reported)).toBe(2);
+  });
+
+  test("a summary the output limit cut off fails the task, never standing in for the context", async () => {
+    const mind = new ScriptedMind(reads(["a", "b", "c", "d", "e"]), {
+      summaries: [
+        [
+          { type: "text", text: "## Goal\nWrite a TodoMVC\n## Progr" },
+          { type: "done", finishReason: "length" },
+        ],
+      ],
+    });
+    const request = taskRequest(mind, { tools: [reader(40_000)], limits });
+    expect((await drain(request)).outcome).toEqual({
+      status: "failed",
+      error: "Compaction failed. The model's reply was cut off at its output limit",
+    });
+    expect(request.store.of("compaction")).toHaveLength(0);
   });
 
   test("a summary request that fails fails the task", async () => {

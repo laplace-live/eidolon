@@ -27,6 +27,13 @@ import { type OpenAIDialect, OpenAIMind } from "./openai.ts";
  */
 const REJECTS_STOP: ReadonlySet<string> = new Set(["openai", "xai"]);
 
+/**
+ * A task's reply cap on Anthropic, thinking included: the most every model Anthropic serves accepts
+ * (Haiku 4.5, Sonnet 4.5 and Opus 4.5 stop at 64K, the rest at 128K), so one long `write` fits
+ * (https://platform.claude.com/docs/en/build-with-claude/thinking#output-limits).
+ */
+const TASK_MAX_TOKENS = 64_000;
+
 function dialectOf(provider: string, model: string): OpenAIDialect {
   switch (provider) {
     case "openai":
@@ -93,6 +100,7 @@ export function createMind(
       client: new AnthropicClient({ provider: provider.name, baseUrl, apiKey, onUsage }),
       model,
       extra: { ...live, ...(ANTHROPIC_FALLBACK_MODELS.has(model) ? { fallbacks: "default" } : {}) },
+      ...(role === "assistant" ? { maxTokens: TASK_MAX_TOKENS } : {}),
     });
   }
   const openrouter = provider.id === "openrouter";

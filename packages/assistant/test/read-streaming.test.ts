@@ -3,8 +3,8 @@
 //
 // Ported from pi-mono packages/coding-agent/test/read-streaming.test.ts@ac78a60
 //
-// The reference is pi's whole-file read from before it streamed, with this tool's note for a line
-// over the byte limit. Bun takes no heap cap, so the 200 MB line is checked for its output only.
+// The reference is pi's whole-file read from before it streamed, with this tool's head and note for
+// a line over the byte limit. Bun takes no heap cap, so the 200 MB line is checked for its output only.
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { appendFileSync, writeFileSync } from "node:fs";
 import * as fsp from "node:fs/promises";
@@ -39,11 +39,14 @@ function referenceRead(
   }
   const { content, ...truncation } = truncateHead(selectedContent);
   if (truncation.firstLineExceedsLimit) {
-    const firstLineSize = formatSize(Buffer.byteLength(allLines[startLine] as string, "utf-8"));
+    const firstLine = Buffer.from(allLines[startLine] as string, "utf-8");
+    let end = DEFAULT_MAX_BYTES;
+    while (((firstLine[end] as number) & 0xc0) === 0x80) end--;
+    const head = firstLine.subarray(0, end).toString("utf-8");
     const next =
       startLineDisplay < totalFileLines ? ` Use offset=${startLineDisplay + 1} to continue.` : "";
     return {
-      text: `[Line ${startLineDisplay} is ${firstLineSize}, exceeds ${formatSize(DEFAULT_MAX_BYTES)} limit, so read can't show it.${next}]`,
+      text: `${head}\n\n[Showing the first ${formatSize(DEFAULT_MAX_BYTES)} of line ${startLineDisplay}, which is ${formatSize(firstLine.length)}. Use grep to see the text around a match further along it.${next}]`,
       truncation,
     };
   }
@@ -289,7 +292,9 @@ describe("read tool streaming", () => {
       for (let i = 0; i < 3200; i++) yield chunk;
     }
     const { text } = await readLines(createReadStream(), undefined, undefined);
-    expect(text).toBe("[Line 1 is 200.0MB, exceeds 50.0KB limit, so read can't show it.]");
+    expect(text).toBe(
+      `${"x".repeat(DEFAULT_MAX_BYTES)}\n\n[Showing the first 50.0KB of line 1, which is 200.0MB. Use grep to see the text around a match further along it.]`,
+    );
   });
 
   it("stops consuming the stream when aborted", async () => {

@@ -9,7 +9,9 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { TaskToolResult } from "@eidolon/engine";
+import { FolderPolicy } from "../src/policy.ts";
 import { createFindTool, type FindDetails } from "../src/tools/find.ts";
+import { createGrepTool } from "../src/tools/grep.ts";
 import { truncateHead } from "../src/tools/truncate.ts";
 import type { PathGuard } from "../src/types.ts";
 import { folderGuard, removeTempFolders, tempFolder, toolContext } from "./tool-folder.ts";
@@ -331,6 +333,31 @@ describe("issue #12066 find path globs do not match above the search path", () =
     symlinkSync(project, link);
 
     expect(await findIn(link, "src/**/*.ts")).toEqual(["src/a.ts"]);
+  });
+
+  it("matches an absolute pattern with the folder as the task names it, through a link", async () => {
+    const project = join(tempRoot, "src", "app");
+    createProject(project);
+    writeFileSync(join(project, "lib", "b.ts"), "TODO\n");
+    // The prompt shows the folder as named; the policy resolves where it lies, as /tmp is /private/tmp.
+    const named = join(tempRoot, "named");
+    symlinkSync(project, named);
+    const home = join(tempRoot, "home");
+    const policy = new FolderPolicy({
+      folder: named,
+      grants: [],
+      home,
+      dataHome: join(home, ".laplace", "eidolon"),
+      appRoot: join(home, "Git", "laplace-eidolon"),
+    });
+    for (const pattern of [`${named}/lib/*.ts`, `${named}/**/b.ts`, `${project}/lib/*.ts`]) {
+      expect([pattern, (await find(policy, { pattern })).content]).toEqual([pattern, "lib/b.ts"]);
+      const grep = await createGrepTool(policy).execute(
+        { pattern: "TODO", glob: pattern },
+        toolContext(),
+      );
+      expect([pattern, grep.content]).toEqual([pattern, "lib/b.ts:1: TODO"]);
+    }
   });
 });
 

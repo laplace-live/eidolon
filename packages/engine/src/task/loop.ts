@@ -7,6 +7,7 @@
 // stopped anywhere resumes from its transcript.
 import { abortableSleep, errorText, raceAbort } from "@eidolon/config";
 import { withUsageScope } from "@eidolon/providers";
+import { canonical } from "../canonical.ts";
 import type {
   TaskEntry,
   TaskEntryDraft,
@@ -19,22 +20,26 @@ import type {
 } from "../task.ts";
 import type { MindRequest, MindToolCall } from "../types.ts";
 import {
+  argumentsHead,
   type ContextMessage,
   contextMessages,
+  cutOff,
+  endedReply,
   estimateTokens,
   filesBefore,
   firstKept,
   messageTokens,
   summaryPrompt,
   taskContext,
+  unfinished,
 } from "./context.ts";
 import { isContextOverflow, isTransient } from "./errors.ts";
-import { validateToolArguments } from "./validate.ts";
+import { echoed, validateToolArguments } from "./validate.ts";
 
 /** The waits before each retry of a request that failed for a transient reason. */
 const RETRY_DELAYS_MS: readonly number[] = [1_000, 4_000, 15_000];
 
-/** pi's reserveTokens: room left in the context for the reply. */
+/** pi's reserveTokens: room left in the context for the reply, a quarter of a smaller window. */
 const RESERVE_TOKENS = 16_384;
 /** pi's keepRecentTokens. */
 const KEEP_TOKENS = 20_000;
@@ -46,21 +51,6 @@ const INTERRUPTED =
   "Interrupted by a restart before its result was recorded; check the files before trying again.";
 /** OpenClaw's result for a sequential call steering skipped. */
 const SKIPPED = "Skipped to process an incoming message.";
-
-/** OpenAI's and Anthropic's finish reasons for a reply the output limit cut off. */
-const CUT_OFF: ReadonlySet<string | null> = new Set(["length", "max_tokens"]);
-
-/** Why a reply with no tool calls can't be the task's report. */
-function unfinished(finishReason: string | null): string | null {
-  if (CUT_OFF.has(finishReason)) return "The model's reply was cut off at its output limit";
-  if (finishReason === "content_filter" || finishReason === "refusal") {
-    return "The model's provider stopped its reply";
-  }
-  if (finishReason === "tool_calls" || finishReason === "tool_use") {
-    return "The model's tool calls couldn't be read";
-  }
-  return null;
-}
 
 type EntryOf<T extends TaskEntry["type"]> = Extract<TaskEntry, { readonly type: T }>;
 
@@ -91,7 +81,6 @@ interface Batch {
 interface Turn {
   readonly assistant: EntryOf<"assistant">;
   readonly batch: Batch | null;
-  readonly finishReason: string | null;
 }
 
 type Prepared =
@@ -116,28 +105,27 @@ const terminates = (batch: Batch): boolean =>
   batch.settled.length > 0 &&
   batch.settled.every(({ result }) => result.terminate === true);
 
-/** Keys sorted all the way down, so equal arguments compare equal. */
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
-  if (typeof value !== "object" || value === null) return JSON.stringify(value) ?? "null";
-  const fields = Object.entries(value)
-    .filter(([, field]) => field !== undefined)
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([key, field]) => `${JSON.stringify(key)}:${canonical(field)}`);
-  return `{${fields.join(",")}}`;
+/** A call's arguments as a stall compares and names them; for one that couldn't be read, its text. */
+function argumentsOf(call: MindToolCall): string {
+  return call.unparsed ?? canonical(call.arguments);
 }
 
 /** A turn's calls, in a form two turns making the same calls share. */
 function signatureOf(calls: readonly MindToolCall[]): string {
   return calls
-    .map((call) => `${call.name} ${canonical(call.arguments)}`)
+    .map((call) => `${call.name} ${argumentsOf(call)}`)
     .sort()
     .join("\n");
 }
 
+/** The context's size past which it is compacted. */
+function compactAbove(contextTokens: number): number {
+  return contextTokens - Math.min(RESERVE_TOKENS, Math.floor(contextTokens / 4));
+}
+
 /** The compaction's kept part shrinks with a small context, or it would compact on every turn. */
 function keepTokens(contextTokens: number): number {
-  return Math.min(KEEP_TOKENS, Math.max(0, Math.floor((contextTokens - RESERVE_TOKENS) / 2)));
+  return Math.min(KEEP_TOKENS, Math.floor(compactAbove(contextTokens) / 2));
 }
 
 /** The events a running task has produced and its reader hasn't taken yet. */
@@ -246,11 +234,12 @@ class TaskRun {
       return await this.#loop({ assistant: last, pending });
     }
     // pi's continue() from an assistant tail: a request now would answer her own reply, so only
-    // queued lines carry the run on.
+    // queued lines carry the run on, unless that reply can't be the report.
     const tail = taskContext(this.#entries).blocks.at(-1);
     if (
       tail?.kind === "assistant" &&
       tail.entry.calls.length === 0 &&
+      unfinished(tail.entry.finishReason) === null &&
       !this.#request.inbox.hasSteering() &&
       (await this.#takeFollowUps()) === 0
     ) {
@@ -286,8 +275,8 @@ class TaskRun {
       if (turn.batch !== null && !terminates(turn.batch)) continue;
       if (this.#request.inbox.hasSteering()) continue;
       if ((await this.#takeFollowUps()) > 0) continue;
-      const why = turn.batch === null ? unfinished(turn.finishReason) : null;
-      if (why !== null) return { status: "failed", error: why };
+      const why = turn.batch === null ? unfinished(turn.assistant.finishReason) : null;
+      if (why !== null) return { status: "failed", error: why.error };
       return { status: "succeeded", report: turn.assistant.text };
     }
   }
@@ -317,19 +306,23 @@ class TaskRun {
         type: "assistant",
         text: reply.text,
         calls: reply.calls,
+        finishReason: reply.finishReason,
       });
-      const { calls, finishReason } = reply;
-      if (calls.length === 0) return { assistant, batch: null, finishReason };
-      const batch = CUT_OFF.has(finishReason)
-        ? await this.#failTruncated(calls)
-        : await this.#runBatch(
-            assistant,
-            calls.map((call): Pending => ({ call, as: "new" })),
-          );
-      return { assistant, batch, finishReason };
+      const pending = reply.calls.map((call): Pending => ({ call, as: "new" }));
+      return { assistant, batch: await this.#answer(assistant, pending) };
     } finally {
       this.#emit({ type: "turn", state: "end", turn });
     }
+  }
+
+  /** Runs `pending`, or tells the model to make them again when the output limit cut them off. */
+  async #answer(
+    assistant: EntryOf<"assistant">,
+    pending: readonly Pending[],
+  ): Promise<Batch | null> {
+    if (pending.length === 0) return null;
+    if (cutOff(assistant.finishReason)) return await this.#failTruncated(pending);
+    return await this.#runBatch(assistant, pending);
   }
 
   /** The turn a restart cut short: its calls with no result, and no request. */
@@ -343,7 +336,7 @@ class TaskRun {
     const turn = this.#turns;
     this.#emit({ type: "turn", state: "start", turn });
     try {
-      return { assistant, batch: await this.#runBatch(assistant, pending), finishReason: null };
+      return { assistant, batch: await this.#answer(assistant, pending) };
     } finally {
       this.#emit({ type: "turn", state: "end", turn });
     }
@@ -370,7 +363,10 @@ class TaskRun {
     this.#signatures.push(signature);
     const recent = this.#signatures.slice(-STALL_TURNS);
     if (recent.length === STALL_TURNS && recent.every((each) => each === signature)) {
-      return paused("stall", `The same calls ${STALL_TURNS} turns running:\n${signature}`);
+      const named = assistant.calls
+        .map((call) => `${call.name} ${argumentsHead(argumentsOf(call))}`)
+        .sort();
+      return paused("stall", `The same calls ${STALL_TURNS} turns running:\n${named.join("\n")}`);
     }
     return null;
   }
@@ -401,7 +397,7 @@ class TaskRun {
   }
 
   async #ask(): Promise<Reply> {
-    if (this.#view().sized > this.#request.limits.contextTokens - RESERVE_TOKENS) {
+    if (this.#view().sized > compactAbove(this.#request.limits.contextTokens)) {
       await this.#compact();
     }
     let compacted = false;
@@ -477,6 +473,14 @@ class TaskRun {
       }
     }
     this.#signal.throwIfAborted();
+    // pi's "Stream ended without finish_reason": a failed attempt, which a retry may get past.
+    if (!endedReply(finishReason)) {
+      throw new Error(
+        finishReason === null
+          ? "The model's reply ended with no finish reason"
+          : `The model's reply ended with finish reason ${JSON.stringify(finishReason)}`,
+      );
+    }
     return { text, calls, finishReason };
   }
 
@@ -495,6 +499,8 @@ class TaskRun {
     const older = context.blocks.slice(0, first);
     const prompt = summaryPrompt(older, context.compaction?.summary ?? null, files, instructions);
     const reply = await this.#send(system, [{ role: "user", content: prompt }], [], false);
+    const why = unfinished(reply.finishReason);
+    if (why !== null) throw new Error(`Compaction failed. ${why.error}`);
     const summary = reply.text.trim();
     if (summary === "") throw new Error("Compaction returned no summary");
     await this.#append({
@@ -513,9 +519,9 @@ class TaskRun {
   }
 
   /** pi: the calls of a reply the output limit cut off may hold cut arguments, so none runs. */
-  async #failTruncated(calls: readonly MindToolCall[]): Promise<Batch> {
+  async #failTruncated(pending: readonly Pending[]): Promise<Batch> {
     const settled: Settled[] = [];
-    for (const call of calls) {
+    for (const { call } of pending) {
       this.#toolStart(call);
       const content =
         `Tool call "${call.name}" was not executed: the response hit the output token limit, ` +
@@ -622,6 +628,12 @@ class TaskRun {
     this.#toolStart(call);
     if (as === "interrupted")
       return { kind: "result", result: { content: INTERRUPTED, isError: true } };
+    if (call.unparsed !== undefined) {
+      const content =
+        `Tool call "${call.name}" wasn't run: its arguments aren't a JSON object.\n\n` +
+        `Received arguments:\n${echoed(call.unparsed)}`;
+      return { kind: "result", result: { content, isError: true } };
+    }
     const tool = this.#tool(call.name);
     if (tool === undefined) {
       return { kind: "result", result: { content: `Tool ${call.name} not found`, isError: true } };

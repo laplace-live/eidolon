@@ -97,7 +97,8 @@ async function readPath(
       const sniffed = head.subarray(0, bytesRead);
       const files = { read: [target] };
       const mimeType = detectSupportedImageMimeType(sniffed);
-      if (mimeType !== null || sniffed.includes(0)) {
+      const encoding = textEncoding(sniffed);
+      if (mimeType !== null || (!encoding.startsWith("utf-16") && sniffed.includes(0))) {
         const kind = mimeType === null ? "a binary file" : `an image (${mimeType})`;
         return {
           content: `${path} is ${kind} of ${formatSize(stats.size)}. read shows text only, so its contents aren't shown.`,
@@ -105,14 +106,78 @@ async function readPath(
         };
       }
       const chunks = fileChunks(handle, stats.isFile() ? stats.size : 0);
-      const { text, truncation } = await readLines(chunks, offset, limit, signal);
-      return { content: text, details: truncation && { truncation }, files };
+      const { text, truncation } = await readLines(chunks, offset, limit, signal, encoding);
+      return {
+        content: text + encodingNote(path, encoding),
+        details: truncation && { truncation },
+        files,
+      };
     } finally {
       await handle.close();
     }
   } catch (error) {
     return failure(error);
   }
+}
+
+export type TextEncodingName = "utf-8" | "utf-16le" | "utf-16be" | "gb18030";
+
+/**
+ * How a file whose first bytes are `head` reads as text: by its byte order mark, else UTF-8, unless
+ * its first SNIFF_BYTES fail as UTF-8 more often than they hold and pair as GBK's do, as text a
+ * Chinese Windows saved does: then GB18030. UTF-8 with a stray byte, or Latin-1, stays UTF-8.
+ */
+export function textEncoding(head: Uint8Array): TextEncodingName {
+  if (head[0] === 0xff && head[1] === 0xfe) return "utf-16le";
+  if (head[0] === 0xfe && head[1] === 0xff) return "utf-16be";
+  const sniffed = head.subarray(0, SNIFF_BYTES);
+  // A character cut off at the end is no error while streaming.
+  try {
+    new TextDecoder("utf-8", { fatal: true }).decode(sniffed, { stream: true });
+    return "utf-8";
+  } catch {}
+  let failed = 0;
+  let held = 0;
+  for (const char of new TextDecoder().decode(sniffed, { stream: true })) {
+    if (char === "\ufffd") failed++;
+    else if (char > "\x7f") held++;
+  }
+  return failed > held && pairsAsGbk(sniffed) ? "gb18030" : "utf-8";
+}
+
+/**
+ * Whether `bytes` pair as GBK's do: each byte past ASCII leads a pair, or one of GB18030's four,
+ * and most pairs are GB2312's, both bytes from 0xA1. A Latin-1 letter is mostly followed by ASCII.
+ */
+function pairsAsGbk(bytes: Uint8Array): boolean {
+  let gb2312 = 0;
+  let other = 0;
+  for (let i = 0; i < bytes.length; i++) {
+    const lead = bytes[i] as number;
+    // 0x80 is the euro sign alone.
+    if (lead <= 0x80) continue;
+    const [trail, third, fourth] = [bytes[i + 1], bytes[i + 2], bytes[i + 3]];
+    if (trail === undefined) break;
+    if (trail >= 0x30 && trail <= 0x39) {
+      if (third === undefined || fourth === undefined) break;
+      if (third < 0x81 || third > 0xfe || fourth < 0x30 || fourth > 0x39) return false;
+      gb2312++;
+      i += 3;
+      continue;
+    }
+    if (lead === 0xff || trail < 0x40 || trail === 0x7f || trail === 0xff) return false;
+    if (lead >= 0xa1 && trail >= 0xa1) gb2312++;
+    else other++;
+    i++;
+  }
+  return gb2312 > other;
+}
+
+/** What read adds to text it didn't decode as UTF-8. */
+function encodingNote(path: string, encoding: TextEncodingName): string {
+  if (encoding === "utf-8") return "";
+  if (encoding === "gb18030") return `\n\n[${path} isn't UTF-8: this is it read as GB18030.]`;
+  return `\n\n[${path} is ${encoding.toUpperCase()} text.]`;
 }
 
 /**
@@ -142,23 +207,26 @@ export async function readLines(
   offset: number | undefined,
   limit: number | undefined,
   signal?: AbortSignal,
+  encoding: TextEncodingName = "utf-8",
 ): Promise<ReadText> {
   const startLine = offset ? Math.max(0, offset - 1) : 0;
   const first = startLine + 1;
-  const { totalFileLines, truncation, firstLineBytes } = await selectLines(
+  const { totalFileLines, truncation, firstLine, firstLineBytes } = await selectLines(
     chunks,
     startLine,
     limit,
     signal,
+    encoding,
   );
   if (startLine >= totalFileLines) {
     throw new Error(`Offset ${offset} is beyond end of file (${totalFileLines} lines total)`);
   }
   const { content, ...cut } = truncation;
   if (truncation.firstLineExceedsLimit) {
+    // No other tool reads a line, so a one-line export or a minified file gets its head.
     const next = first < totalFileLines ? ` Use offset=${first + 1} to continue.` : "";
     return {
-      text: `[Line ${first} is ${formatSize(firstLineBytes)}, exceeds ${formatSize(DEFAULT_MAX_BYTES)} limit, so read can't show it.${next}]`,
+      text: `${headBytes(firstLine, DEFAULT_MAX_BYTES)}\n\n[Showing the first ${formatSize(DEFAULT_MAX_BYTES)} of line ${first}, which is ${formatSize(firstLineBytes)}. Use grep to see the text around a match further along it.${next}]`,
       truncation: cut,
     };
   }
@@ -183,9 +251,21 @@ export async function readLines(
   return { text: content };
 }
 
+/** The start of `text` that fits in `maxBytes` of UTF-8, ending on a whole character. */
+function headBytes(text: string, maxBytes: number): string {
+  const bytes = Buffer.from(text, "utf-8");
+  if (bytes.length <= maxBytes) return text;
+  let end = maxBytes;
+  // Back over continuation bytes (10xxxxxx) to the start of a character.
+  while (end > 0 && ((bytes[end] as number) & 0xc0) === 0x80) end--;
+  return bytes.subarray(0, end).toString("utf-8");
+}
+
 interface SelectedLines {
   readonly totalFileLines: number;
   readonly truncation: TruncationResult;
+  /** The first selected line, as much of it as was stored: past the byte limit when it is longer. */
+  readonly firstLine: string;
   /** The first selected line's size, for the note when it alone is over the byte limit. */
   readonly firstLineBytes: number;
 }
@@ -199,10 +279,11 @@ async function selectLines(
   startLine: number,
   limit: number | undefined,
   signal: AbortSignal | undefined,
+  encoding: TextEncodingName,
 ): Promise<SelectedLines> {
   const endLine = limit === undefined ? Number.POSITIVE_INFINITY : startLine + limit;
-  // ignoreBOM keeps a byte order mark, as Buffer.toString("utf-8") does.
-  const decoder = new TextDecoder("utf-8", { ignoreBOM: true });
+  // ignoreBOM keeps a UTF-8 byte order mark, as Buffer.toString("utf-8") does; UTF-16's goes.
+  const decoder = new TextDecoder(encoding, { ignoreBOM: encoding === "utf-8" });
   const storedLines: string[] = [];
   let storedBytes = 0;
   let storedPastCaps = false;
@@ -281,7 +362,7 @@ async function selectLines(
     totalLines: selectedBytes === 0 ? 0 : selectedLines - (lastLineEmpty ? 1 : 0),
     totalBytes: selectedBytes,
   };
-  return { totalFileLines: line + 1, truncation, firstLineBytes };
+  return { totalFileLines: line + 1, truncation, firstLine: storedLines[0] ?? "", firstLineBytes };
 }
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];

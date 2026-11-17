@@ -1,3 +1,8 @@
+// Copyright (c) 2025 Mario Zechner
+// SPDX-License-Identifier: MIT
+//
+// Ported from pi-mono packages/ai/src/utils/validation.ts@ac78a60 and packages/schema/src/explain.ts@ac78a60
+//
 // How the file tools answer what they can't do (bad arguments, a refused path, a failure): as a
 // result with isError, which the task's loop hands the model, never as a throw.
 import type { TaskToolResult } from "@eidolon/engine";

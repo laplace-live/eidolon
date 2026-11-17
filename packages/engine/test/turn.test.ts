@@ -249,6 +249,34 @@ describe("runTurn", () => {
     }
   });
 
+  test("never runs a call its mind couldn't read, and keeps the reply as cut off", async () => {
+    let ran = 0;
+    const selfie = tool("take_selfie", async () => {
+      ran++;
+      return {};
+    });
+    const { mind, requests } = fakeMind([
+      { type: "text", text: "等我" },
+      {
+        type: "tool-calls",
+        calls: [{ id: "c1", name: "take_selfie", arguments: {}, unparsed: '{"scene":"海' }],
+      },
+      { type: "done", finishReason: "max_tokens" },
+    ]);
+    const outputs = await collect(runTurn(request(), deps(mind, parts({ tools: [selfie] }))));
+    expect(ran).toBe(0);
+    expect(requests).toHaveLength(1);
+    expect(eventsOf(outputs)).toEqual([
+      {
+        type: "message",
+        id: "id-2",
+        speaker: { kind: "persona", id: PERSONA },
+        text: "等我",
+        cutOff: "length",
+      },
+    ]);
+  });
+
   test("keeps a refusal with no words as an empty message, cut off", async () => {
     const { mind } = fakeMind([{ type: "done", finishReason: "refusal" }]);
     const outputs = await collect(runTurn(request(), deps(mind, parts())));

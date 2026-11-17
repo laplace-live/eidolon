@@ -63,7 +63,13 @@ export type TaskOutcome =
 /** A transcript line before the store numbers and stamps it. */
 export type TaskEntryDraft =
   | { readonly type: "brief"; readonly brief: TaskBrief }
-  | { readonly type: "assistant"; readonly text: string; readonly calls: readonly MindToolCall[] }
+  | {
+      readonly type: "assistant";
+      readonly text: string;
+      readonly calls: readonly MindToolCall[];
+      /** Why the reply ended, as its provider put it: one cut off or stopped is no report. */
+      readonly finishReason?: string | null;
+    }
   | { readonly type: "tool-start"; readonly callId: string; readonly name: string }
   | {
       readonly type: "tool-result";
@@ -146,8 +152,8 @@ export interface TaskRequest {
     readonly contextTokens: number;
     readonly spendPauseUsd: number;
     /**
-     * Tool results older than this many tokens of newer context become stubs in the request.
-     * Default 40,000.
+     * Tool results older than this many tokens of newer context become stubs in the request, half
+     * of it at a time. Default 40,000.
      */
     readonly maskAfterTokens?: number;
   };

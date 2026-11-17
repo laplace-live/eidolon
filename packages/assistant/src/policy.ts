@@ -1,9 +1,9 @@
 // What a task may touch: its folder and the folders granted it, and never this app, its data or the
-// owner's keys. Every decision is made on where a path lies on disk, so `..` and symlinks, dangling
-// ones included, can't lead a task outside.
+// owner's keys, nor a repository's git directory to write. Every decision is made on where a path
+// lies on disk, so `..` and symlinks, dangling ones included, can't lead a task outside.
 import { realpathSync } from "node:fs";
-import { readlink, realpath } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { lstat, readlink, realpath } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { pathExists, resolveReadPath, resolveToCwd } from "./tools/path.ts";
 import { type PathGuard, PathRefused } from "./types.ts";
 
@@ -21,6 +21,11 @@ export interface FolderPolicyOptions {
   readonly dataHome: string;
   /** EIDOLON_APP_ROOT, or the checkout. */
   readonly appRoot: string;
+  /**
+   * The .env the app reads (findDotenv's), with the owner's keys. A linked worktree's is its main
+   * checkout's, and that checkout is denied with it, unless the worktree lies inside it.
+   */
+  readonly dotenv?: string | null;
 }
 
 /** A grant of the home folder, or of a folder holding it: no task gets the whole home. */
@@ -38,7 +43,7 @@ export class GrantRefused extends Error {
 const SECRETS = [".ssh", ".gnupg", ".aws", join(".config", "gh"), ".netrc", ".git-credentials"];
 
 // APFS and NTFS match names in any case, so a denied folder not made yet has every spelling.
-const fold =
+export const fold =
   process.platform === "darwin" || process.platform === "win32"
     ? (path: string) => path.toLowerCase()
     : (path: string) => path;
@@ -61,7 +66,7 @@ function withHome(path: string, home: string): string {
 
 /**
  * Where `path` leads on disk: its realpath, else its parent's plus its name, with a dangling
- * symlink followed to where a write through it would land.
+ * symlink followed to where a write through it would land. Throws ENOENT where the kernel would.
  */
 async function onDisk(path: string): Promise<string> {
   try {
@@ -78,12 +83,51 @@ async function onDisk(path: string): Promise<string> {
   } catch {
     return here;
   }
-  return onDisk(resolve(dirname(here), target));
+  return onDisk(await linkTarget(dirname(here), target));
+}
+
+/**
+ * A link's `target`, read from `folder`, the link's own: each `..` is taken on disk, as the kernel
+ * takes it, so one after a missing folder or a file throws rather than collapsing as text would.
+ */
+async function linkTarget(folder: string, target: string): Promise<string> {
+  let at = isAbsolute(target) ? parse(target).root : folder;
+  for (const part of target.split(sep)) {
+    if (part === "" || part === ".") continue;
+    // realpath's own `..` is the kernel's, unlike path.resolve's.
+    at = part === ".." ? await realpath(`${at}${sep}..`) : join(at, part);
+  }
+  return at;
+}
+
+/**
+ * Whether `target`, once written, lies in a folder git takes for a git directory whatever its name
+ * (is_git_directory in git's setup.c): a HEAD beside objects and refs, or beside a commondir saying
+ * where they are. What the write would make there counts, so a task can't plant one.
+ */
+async function inGitDirectory(target: string): Promise<boolean> {
+  for (let folder = dirname(target); ; folder = dirname(folder)) {
+    const made = fold(relative(folder, target).split(sep)[0] as string);
+    const has = async (name: string) =>
+      made === fold(name) ||
+      (await lstat(join(folder, name)).then(
+        () => true,
+        () => false,
+      ));
+    if (
+      (await has("HEAD")) &&
+      ((await has("commondir")) || ((await has("objects")) && (await has("refs"))))
+    ) {
+      return true;
+    }
+    if (dirname(folder) === folder) return false;
+  }
 }
 
 export class FolderPolicy implements PathGuard {
   readonly folder: string;
   readonly #home: string;
+  readonly #realHome: string;
   readonly #grants: readonly FolderGrant[];
   readonly #denied: readonly string[];
 
@@ -105,12 +149,24 @@ export class FolderPolicy implements PathGuard {
         return path;
       }
     };
+    this.#realHome = real(home);
     for (const grant of this.#grants) {
-      if (isInside(real(home), real(grant.path))) throw new GrantRefused(grant.path);
+      if (isInside(this.#realHome, real(grant.path))) throw new GrantRefused(grant.path);
     }
+    const appRoot = resolve(options.appRoot);
+    const dotenv = options.dotenv ? resolve(options.dotenv) : null;
+    // The .env is denied where it leads, and its folder with it when that doesn't hold the app root,
+    // as a linked worktree's main checkout doesn't; one found above the checkout is denied alone.
+    const dotenvPlaces =
+      dotenv === null
+        ? []
+        : isInside(real(appRoot), real(dirname(dotenv)))
+          ? [dotenv]
+          : [dotenv, dirname(dotenv)];
     this.#denied = [
       resolve(options.dataHome),
-      resolve(options.appRoot),
+      appRoot,
+      ...dotenvPlaces,
       ...SECRETS.map((name) => join(home, name)),
     ];
   }
@@ -132,15 +188,32 @@ export class FolderPolicy implements PathGuard {
       onDisk(path),
       Promise.all(this.#denied.map(onDisk)),
       Promise.all(
-        this.#grants.map(async (grant) => ({ ...grant, path: await onDisk(grant.path) })),
+        // A grant that leads nowhere grants nothing, nor one leading home: a link past a missing
+        // folder can, once the task makes that folder.
+        this.#grants.map((grant) =>
+          onDisk(grant.path).then(
+            (place) => (isInside(this.#realHome, place) ? null : { ...grant, path: place }),
+            () => null,
+          ),
+        ),
       ),
     ]);
     if (denied.some((place) => isInside(fold(target), fold(place)))) {
       throw new PathRefused(target, access, "denied");
     }
+    // git runs what a repository's own config and hooks say (core.fsmonitor on `git status`), and
+    // shows no change to them.
+    if (
+      access === "write" &&
+      (target.split(sep).some((part) => fold(part) === ".git") || (await inGitDirectory(target)))
+    ) {
+      throw new PathRefused(target, access, "denied");
+    }
     const granted = grants.some(
       (grant) =>
-        (access === "read" || grant.access === "read-write") && isInside(target, grant.path),
+        grant !== null &&
+        (access === "read" || grant.access === "read-write") &&
+        isInside(target, grant.path),
     );
     if (!granted) throw new PathRefused(target, access, "outside");
     return target;

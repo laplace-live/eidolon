@@ -10,7 +10,7 @@ import { lstat, readdir, readFile, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import ignore, { type Ignore } from "ignore";
 import type { AssistantTool, PathGuard } from "../types.ts";
-import { pathExists } from "./path.ts";
+import { pathExists, resolveToCwd } from "./path.ts";
 import {
   ABORTED,
   errorResult,
@@ -108,7 +108,8 @@ export function createFindTool(guard: PathGuard): AssistantTool {
 
       const effectiveLimit = Math.max(1, limit);
       // fd's smart case: an all-lowercase pattern matches case-insensitively.
-      const matches = globMatcher(pattern, searchPath, pattern === pattern.toLowerCase());
+      const named = resolveToCwd(path || ".", guard.folder);
+      const matches = globMatcher(pattern, searchPath, named, pattern === pattern.toLowerCase());
       // Results past the byte cap are counted, each with its newline, but not kept: truncateHead
       // drops them anyway.
       const kept: string[] = [];
@@ -155,11 +156,13 @@ export function createFindTool(guard: PathGuard): AssistantTool {
 /**
  * Whether a path under the searched folder `root` matches `pattern`, as fd's and rg's globs do: a
  * pattern without "/" matches a name at any depth, and any other the path from the folder, or the
- * whole path when the pattern is absolute.
+ * whole path when the pattern is absolute. `root` is where the folder lies on disk; `named` is the
+ * folder as the task names it, which an absolute pattern may start with instead.
  */
 export function globMatcher(
   pattern: string,
   root: string,
+  named: string,
   ignoreCase = false,
 ): (path: string) => boolean {
   // fd and rg never match a leading "./" (pi #12020).
@@ -169,7 +172,9 @@ export function globMatcher(
   if (!cleaned.includes("/")) {
     return (path) => glob.match(fold(path.slice(path.lastIndexOf("/") + 1)));
   }
-  if (isAbsolute(cleaned)) return (path) => glob.match(fold(join(root, path)));
+  if (isAbsolute(cleaned)) {
+    return (path) => glob.match(fold(join(root, path))) || glob.match(fold(join(named, path)));
+  }
   return (path) => glob.match(fold(path));
 }
 
