@@ -205,6 +205,9 @@ aborts the turn. The engine never rejects for the turn's own failures.
      call-time fields, OpenRouter's usage body and headers, `developer` as `user` everywhere but
      OpenAI, Gemini's single system message, and Anthropic's prompt caching, fallbacks and message
      conversion.
+   - **A malformed empty reply is asked for again,** twice at most: Gemini sometimes ends a round
+     with no text and no call, its native finish reason `MALFORMED_RESPONSE` or
+     `MALFORMED_FUNCTION_CALL`, mostly where it meant to call a tool. Each attempt bills.
    - **One mind per turn,** so Anthropic's signed thinking goes back with the round after a tool
      call, while the system prompt, the tools and every earlier message are as they were
      ([prefix checks](https://platform.claude.com/docs/en/build-with-claude/preserved-thinking/prefix-checks)):

@@ -432,6 +432,85 @@ describe("an OpenAI-compatible mind", () => {
     expect(error).toBeInstanceOf(ProviderHttpError);
     expect((error as Error).message).toContain("no such model");
   });
+
+  test("a malformed reply with nothing in it is asked for again, twice at most", async () => {
+    const usage = { prompt_tokens: 12, completion_tokens: 64, cost: 0.004 };
+    const malformed = () =>
+      completions([
+        {
+          choices: [
+            {
+              delta: { role: "assistant", content: "" },
+              finish_reason: "stop",
+              native_finish_reason: "MALFORMED_RESPONSE",
+            },
+          ],
+        },
+        { choices: [], usage },
+      ]);
+    const answered = () =>
+      completions([
+        {
+          choices: [
+            { delta: { content: "在的" }, finish_reason: "stop", native_finish_reason: "STOP" },
+          ],
+        },
+        { choices: [], usage },
+      ]);
+    let n = 0;
+    reply = () => (++n === 1 ? malformed() : answered());
+    expect(await drain(createMind(), ask())).toEqual([
+      { type: "text", text: "在的" },
+      { type: "done", finishReason: "stop" },
+    ]);
+    expect(seen).toHaveLength(2);
+    expect(seen[1]?.body).toEqual(seen[0]?.body as Record<string, unknown>);
+    // Each attempt bills.
+    expect(records).toHaveLength(2);
+    const warnings = () =>
+      logs.filter((record) => record.level === "WARNING").map((record) => record.message);
+    expect(warnings()).toEqual([
+      "~google/gemini-flash-latest sent back a malformed reply (MALFORMED_RESPONSE); asking again",
+    ]);
+
+    seen = [];
+    logs = [];
+    reply = malformed;
+    expect(await drain(createMind(), ask())).toEqual([{ type: "done", finishReason: "stop" }]);
+    expect(seen).toHaveLength(3);
+    expect(warnings()).toHaveLength(2);
+
+    // Words or a call before a malformed end are her reply, as are no words with any other reason.
+    for (const chunks of [
+      [
+        { choices: [{ delta: { content: "好" } }] },
+        {
+          choices: [
+            { delta: {}, finish_reason: "stop", native_finish_reason: "MALFORMED_RESPONSE" },
+          ],
+        },
+      ],
+      [
+        call(0, { name: "take_selfie", arguments: '{"scene":"海边"}' }, "call_a"),
+        {
+          choices: [
+            {
+              delta: {},
+              finish_reason: "tool_calls",
+              native_finish_reason: "MALFORMED_FUNCTION_CALL",
+            },
+          ],
+        },
+      ],
+      [{ choices: [{ delta: {}, finish_reason: "stop", native_finish_reason: "STOP" }] }],
+      [{ choices: [{ delta: {}, finish_reason: "stop" }] }],
+    ]) {
+      seen = [];
+      reply = () => completions(chunks);
+      await drain(createMind(), ask());
+      expect(seen).toHaveLength(1);
+    }
+  });
 });
 
 describe("an Anthropic mind", () => {
