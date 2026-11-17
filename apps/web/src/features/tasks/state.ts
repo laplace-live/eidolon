@@ -1,7 +1,8 @@
 // What a task's state means for the pages: whether it waits on the owner and for what, what its
-// card offers, the Tasks list's order, and how often a page asks again.
+// card offers and lists, the Tasks list's order, and how often a page asks again.
 import type {
   AssistantStatus,
+  STEER_PREFIX as SteerPrefix,
   TaskApproveRequest,
   TaskPause,
   TaskPauseReason,
@@ -12,6 +13,7 @@ import type {
 
 const ENDED: ReadonlySet<TaskStatus> = new Set(["succeeded", "failed", "cancelled"]);
 const WAITING: ReadonlySet<TaskStatus> = new Set(["awaiting-approval", "paused", "interrupted"]);
+const STEER_PREFIX: typeof SteerPrefix = "The assistant updates the brief: ";
 
 /** It will never run again. */
 export function ended(status: TaskStatus): boolean {
@@ -60,6 +62,17 @@ export function modeRefuses(
 ): boolean {
   if (assistant === undefined || (assistant.enabled && assistant.ready)) return false;
   return !(pending === "start" && answer === "deny");
+}
+
+/**
+ * Her steer_task lines that a task waiting on the owner reads first when it goes on, her prefix
+ * off; a running one reads them at its next request.
+ */
+export function queuedLines(task: Pick<TaskSnapshot, "status" | "inbox">): string[] {
+  if (!waitsOnOwner(task)) return [];
+  return (task.inbox?.steer ?? [])
+    .filter((line) => line.startsWith(STEER_PREFIX))
+    .map((line) => line.slice(STEER_PREFIX.length));
 }
 
 /** The pause a snapshot holds: its own, else the paused outcome laplace-task stores. */

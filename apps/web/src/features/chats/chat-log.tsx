@@ -6,11 +6,15 @@ import {
   CameraIcon,
   CircleAlertIcon,
   HourglassIcon,
+  ListTodoIcon,
+  MessageSquareShareIcon,
   MicIcon,
   PhoneIcon,
   PhoneOffIcon,
   RotateCcwIcon,
+  ScanSearchIcon,
   SearchIcon,
+  SquareIcon,
   WrenchIcon,
 } from "lucide-react";
 import { Fragment, memo, type ReactNode, useEffect, useMemo } from "react";
@@ -41,6 +45,10 @@ const TOOL_ICONS: Readonly<Record<string, ReactNode>> = {
   take_selfie: <CameraIcon />,
   recall_streams: <SearchIcon />,
   voice: <MicIcon />,
+  start_task: <ListTodoIcon />,
+  steer_task: <MessageSquareShareIcon />,
+  stop_task: <SquareIcon />,
+  check_task: <ScanSearchIcon />,
 };
 
 /** Marks a line said on a call. */

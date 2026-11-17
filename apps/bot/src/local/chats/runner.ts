@@ -2,7 +2,8 @@
 // greeting, the answer to a viewer's line, typed or spoken, which may chain persona to persona, or
 // her word on a task she started. A reply runs to its end whether or not anyone still reads it; only
 // stop, delete, a call, shutdown and a newer viewer line stop one. A call takes the chat over while
-// it is on: it opens on her view, and stores its lines.
+// it is on: it opens on her view, and stores its lines and her task starts; her tasks' ends and
+// pauses reach her on it.
 import { join } from "node:path";
 import {
   CHAT_FORMAT,
@@ -19,10 +20,9 @@ import {
   type ViewMessage,
 } from "@eidolon/chat";
 import { JsonlChatStore } from "@eidolon/chat/jsonl";
-import { dataHome, errorText, logger } from "@eidolon/config";
+import { AsyncQueue, dataHome, errorText, logger } from "@eidolon/config";
 import type { DirectorReply } from "@eidolon/context";
 import {
-  type BackgroundTools,
   type ChatOutput,
   type ChatRequest,
   callLine,
@@ -36,20 +36,34 @@ import {
   replyModeFor,
   runChat,
   runTurn,
+  type TurnExtras,
   type TurnOutput,
   type TurnRequest,
 } from "@eidolon/engine";
+import { realtimeIn } from "@eidolon/providers";
 import type { AudioClip } from "@eidolon/providers/speech-batch";
-import type { CallBinding, CallEnd, GroupCallBinding, TranscriptLine } from "@eidolon/runtime";
+import type {
+  CallBinding,
+  CallEnd,
+  GroupCallBinding,
+  OutsideResult,
+  TranscriptLine,
+} from "@eidolon/runtime";
 import type { ChatCallInfo, ChatContents, StartTaskFinal, TaskChat, TaskSnapshot } from "../api.ts";
 import { localViewer } from "../identity.ts";
+import { herStart, staleTaskContext, untoldEnds, withoutTaskContext } from "../tasks/calls.ts";
+import { herTaskTools } from "../tasks/her-tools.ts";
 import type { TaskManager } from "../tasks/manager.ts";
+import { herTasks, isLive, tasksStatusProvider } from "../tasks/status.ts";
 import {
   assistantPromptHint,
+  START_TASK,
   type StartTask,
+  startedOf,
   startTaskTool,
   taskEndedNudge,
   taskFinal,
+  taskWaitingNudge,
 } from "../tasks/tool.ts";
 import { type GroupCallRefusal, groupCallRefusal } from "./group.ts";
 import { HearingFailed, hearingRefusal } from "./hearing.ts";
@@ -136,11 +150,18 @@ export interface ChatRunnerOptions {
   /** Default: the engine's. */
   readonly hear?: ChatHear;
   /**
-   * Assistant Mode's tasks. While they are ready, her answers to the viewer's lines in a chat of one
-   * offer her start_task and its hint; a deleted chat's are stopped. Without them she has neither.
+   * Assistant Mode's tasks. Each turn of hers in a chat gets the status block of her tasks there.
+   * While they are ready, her answers to the viewer's lines in a chat of one, typed, spoken or on
+   * a call, offer her start_task and its hint, and her task tools while a task of hers there is
+   * live; a deleted chat's are stopped. Without them she has none of it.
    */
-  readonly tasks?: Pick<TaskManager, "ready" | "start" | "cancelChat">;
+  readonly tasks?: Pick<
+    TaskManager,
+    "ready" | "start" | "cancelChat" | "list" | "steer" | "cancel" | "snapshotsOf"
+  >;
 }
+
+type Tasks = NonNullable<ChatRunnerOptions["tasks"]>;
 
 /** How long shutdown waits for aborted replies to store what they said. */
 const STOP_WAIT_MS = 2000;
@@ -153,6 +174,13 @@ const engineAnswer: ChatAnswer = (request, saveAttachment) =>
 
 const engineHear: ChatHear = (request, saveAttachment) =>
   hearVoiceMessage(request, defaultEngineDeps({ saveAttachment }));
+
+/** Keeps `promise` in `set` until it settles. */
+function track(set: Set<Promise<unknown>>, promise: Promise<unknown>): void {
+  set.add(promise);
+  const settled = () => set.delete(promise);
+  promise.then(settled, settled);
+}
 
 interface Chat {
   /** Sends, participant changes and deletes, one at a time. */
@@ -172,7 +200,10 @@ interface Chat {
   readonly cancel: AbortController;
   /** From the moment it opens, before its call-started is stored, until its end is asked for. */
   call: ActiveCall | null;
-  /** Her start_task calls the manager has yet to answer: a delete stops their tasks too. */
+  /**
+   * Her start_task calls the manager has yet to answer, and on a call to store: a delete stops
+   * their tasks too, and a task's end waits for its call.
+   */
   readonly starts: Set<Promise<unknown>>;
 }
 
@@ -184,10 +215,36 @@ interface ActiveCall {
   /** Each event the chat stores while the call is on, through its call-ended. */
   readonly live: LiveTurn;
   pcId: string | null;
-  /** Set by the first end; it resolves once call-ended is stored or has failed. */
+  /**
+   * Set by the first end; it resolves once call-ended is stored or has failed, and her starts on
+   * the call are stored.
+   */
   ending: Promise<void> | null;
   /** A group call's lines, by their seq on the call, to the seq the chat stores each at. */
   readonly seqs: Map<number, Promise<number>>;
+  /** It takes her tasks: a single call off realtime, in a chat of hers alone until one joins. */
+  tasks: boolean;
+  /** Her tasks' ends and pauses, for its Floor; read until it ends. */
+  readonly outside: AsyncQueue<OutsideResult>;
+  /** Her start_task calls whose call and started result its log holds. */
+  readonly known: Set<string>;
+  /** Her tasks' ends handed to it, or held for after it: each may be left for a turn after it. */
+  readonly ends: HandOff[];
+  /** Her starts on it that the chat has yet to store. */
+  readonly starts: Set<Promise<unknown>>;
+}
+
+/** A task's end a call was handed, or held for after it. */
+interface HandOff {
+  readonly origin: TaskChat;
+  /** A line of hers after this seq told it; null when it never reached the call. */
+  readonly after: number | null;
+}
+
+/** Her answer to the owner's line in a chat of hers alone: typed, a voice message, or on `call`. */
+interface Answering {
+  readonly persona: ParticipantId;
+  readonly call: ActiveCall | null;
 }
 
 /** The turn a reply is in, from its `started` to its `ended`. */
@@ -314,9 +371,11 @@ export class ChatRunner {
 
   /**
    * An ended task's word to the chat she started it in, once no reply runs there: her start_task
-   * call's `final`, unless the chat is gone or holds one already, then her turn telling of it, as a
-   * greeting is told, unless the owner stopped the task or a call is on. Resolves once the final is
-   * stored or found not to be; after shutdown, with nothing stored, so the next start reports it.
+   * call's `final`, unless the chat is gone or holds one already, then, unless the owner stopped the
+   * task, her turn telling of it, as a greeting is told. During a call that takes her tasks, the
+   * call is handed the end for her to tell there, a cancel to settle her call alone; another call
+   * holds it for after it ends. Resolves once the final is stored or found not to be; after
+   * shutdown, with nothing stored, so the next start reports it.
    */
   async report(snapshot: TaskSnapshot): Promise<void> {
     const final = taskFinal(snapshot);
@@ -324,20 +383,64 @@ export class ChatRunner {
     if (final === null || origin === undefined) return;
     const chat = await this.#existing(origin.id);
     if (chat === null) return;
-    for (;;) {
-      // The reply that called start_task may not have stored her started result yet.
-      await this.#idle(chat);
-      const done = await this.#serial(chat, async () => {
-        if (this.#closed || this.#chats.get(origin.id) !== chat) return true;
-        if (chat.reply !== null) return false;
-        // Her turn starts in the same slot, so no viewer line's answer reads the final first.
-        if ((await this.#storeFinal(chat, origin, final)) && final.status !== "cancelled") {
-          await this.#tell(chat, origin);
-        }
-        return true;
-      });
-      if (done) return;
-    }
+    // Her turn starts in the same slot, so no viewer line's answer reads the final first.
+    await this.#whenIdle(origin.id, chat, async () => {
+      const stored = await this.#storeFinal(chat, origin, final);
+      if (stored === null) return;
+      const told = final.status !== "cancelled";
+      const { call } = chat;
+      if (call === null) {
+        if (told) await this.#tell(chat, origin);
+      } else if (this.#takesTasks(call, origin.persona)) {
+        const drafts = call.known.has(origin.call) ? stored.drafts.slice(-1) : stored.drafts;
+        call.known.add(origin.call);
+        call.outside.push({ drafts, ...(told ? { nudge: taskEndedNudge(origin.call) } : {}) });
+        if (told) call.ends.push({ origin, after: stored.seq });
+      } else if (told) {
+        call.ends.push({ origin, after: null });
+      }
+    });
+  }
+
+  /**
+   * The manager's word that a task paused for the owner: on a call of hers in its chat that takes
+   * her tasks, her next reply without task tools points the owner to the task's card, her start
+   * first when the call's log lacks it, unless the card is answered or the task ends first. Nothing
+   * otherwise: the chat's waiting bar shows it.
+   */
+  taskWaiting(snapshot: TaskSnapshot): void {
+    const origin = snapshot.chat;
+    const chat = origin === undefined ? undefined : this.#chats.get(origin.id);
+    const call = chat?.call ?? null;
+    const tasks = this.#tasks;
+    if (origin === undefined || chat === undefined || call === null || tasks === undefined) return;
+    if (!this.#takesTasks(call, origin.persona)) return;
+    const asks = JSON.stringify([snapshot.pending, snapshot.pause]);
+    const due = () =>
+      tasks
+        .snapshotsOf(origin.id)
+        .some(
+          (now) =>
+            now.id === snapshot.id &&
+            now.status === "paused" &&
+            JSON.stringify([now.pending, now.pause]) === asks,
+        );
+    void this.#serial(chat, async () => {
+      // A start on the call may still be being stored.
+      await Promise.allSettled([...chat.starts]);
+      const { events } = await this.store.read(origin.id);
+      if (chat.call !== call || !this.#takesTasks(call, origin.persona)) return;
+      const drafts = call.known.has(origin.call)
+        ? []
+        : herStart(events, origin.persona, origin.call);
+      call.known.add(origin.call);
+      call.outside.push({ drafts, nudge: taskWaitingNudge(origin.call), due });
+    }).catch((error: unknown) => {
+      logger.exception(
+        `Chat ${origin.id}: task ${snapshot.id}'s pause didn't reach its call`,
+        error,
+      );
+    });
   }
 
   /** The personas in chat `id` now. */
@@ -376,6 +479,8 @@ export class ChatRunner {
           ...(remove.length > 0 ? { removed: remove } : {}),
         },
       ]);
+      // The chat is no longer hers alone: her call there takes no more tasks until it ends.
+      if (add.length > 0 && chat.call !== null) chat.call.tasks = false;
       return true;
     }).finally(() => {
       chat.changing -= 1;
@@ -444,35 +549,59 @@ export class ChatRunner {
    * Opens a call in chat `id` with `persona`: it stops the running reply, which stores what it said
    * as interrupted, stores call-started, and takes her view of the chat as the call's seed. Until
    * the call ends, the chat refuses sends, voice messages, deletes and other calls with ChatInCall,
-   * and GET live streams each event it stores. NotInChat when she isn't in the chat.
+   * and GET live streams each event it stores. NotInChat when she isn't in the chat. With Assistant
+   * Mode's tasks, each reply of hers on it is handed the status block, her answers to the owner her
+   * task tools as a text answer is, and a call that takes her tasks is handed the ends she never
+   * told as it starts.
    */
   startCall(id: string, persona: ParticipantId): Promise<ChatCall> {
     return this.#openCall(id, persona, false, async (chat, call) => {
-      const seedMessages: ViewMessage[] = callSeed(
-        await this.store.read(id),
-        persona,
-        localViewer().uname ?? "",
+      const log = await this.store.read(id);
+      // The status block and her task nudges the chat stored are stale on the call.
+      const seedMessages: ViewMessage[] = withoutTaskContext(
+        callSeed(log, persona, localViewer().uname ?? ""),
       );
+      if (this.#tasks === undefined) {
+        return {
+          persona,
+          seedMessages,
+          onTranscript: (line: TranscriptLine) => this.#callLine(id, chat, call, line),
+        };
+      }
+      const { participants } = summarize(log.header, log.events);
+      // A realtime session fixes its tools as it opens, and takes late results as system items.
+      call.tasks =
+        participants.length === 1 && participants[0] === persona && realtimeIn([persona]) === null;
+      this.#handUntold(id, call, log.events);
       return {
         persona,
         seedMessages,
         onTranscript: (line: TranscriptLine) => this.#callLine(id, chat, call, line),
+        extras: (answers: boolean) =>
+          this.#handed(id, chat, answers && call.tasks ? { persona, call } : null),
+        outside: call.outside,
       };
     });
   }
 
   /**
    * As `startCall`, with every persona in the chat on the call, `host` hearing the viewer: the call
-   * opens on the chat as stored, its call-started marked `group`, and each line and decision it
-   * reports is stored. The caller checks first that they can be called together.
+   * opens on the chat as stored, its call-started marked `group`, the status blocks and task nudges
+   * it holds taken out, and each line and decision it reports is stored. The caller checks first
+   * that they can be called together.
    */
   startGroupCall(id: string, host: ParticipantId): Promise<GroupChatCall> {
-    return this.#openCall(id, host, true, async (chat, call) => ({
-      group: true as const,
-      persona: host,
-      chat: await this.store.read(id),
-      onEvents: (events: readonly ChatEvent[]) => this.#groupEvents(id, chat, call, events),
-    }));
+    return this.#openCall(id, host, true, async (chat, call) => {
+      // Stale by the call, whose turns refresh no block.
+      const stored = await this.store.read(id);
+      await this.#append(id, chat, staleTaskContext(stored.events, call.id));
+      return {
+        group: true as const,
+        persona: host,
+        chat: await this.store.read(id),
+        onEvents: (events: readonly ChatEvent[]) => this.#groupEvents(id, chat, call, events),
+      };
+    });
   }
 
   /**
@@ -511,6 +640,11 @@ export class ChatRunner {
         pcId: null,
         ending: null,
         seqs: new Map(),
+        tasks: false,
+        outside: new AsyncQueue(),
+        known: new Set(),
+        ends: [],
+        starts: new Set(),
       };
       chat.call = call;
       try {
@@ -762,20 +896,32 @@ export class ChatRunner {
   }
 
   /**
-   * Stores `call`'s call-ended, after every line asked for before it, then ends its feed. The chat
-   * takes sends again at once: they are stored after it.
+   * Stores `call`'s call-ended, after every line asked for before it, then, unless the server is
+   * stopping, tells in text what it left untold of her tasks, and ends its feed once her starts on
+   * it are stored. The chat takes sends again at once: they are stored after it.
    */
   #endCall(id: string, chat: Chat, call: ActiveCall, reason: CallEndReason): Promise<void> {
     if (call.ending !== null) return call.ending;
     const stored = this.#append(id, chat, [{ type: "call-ended", call: call.id, reason }]);
     chat.call = null;
-    const ending = stored
+    call.outside.close();
+    const ending: Promise<void> = stored
       .then(
-        () => {},
+        () => {
+          if (reason === "shutdown") return;
+          this.#tellAfter(id, chat, call).catch((error: unknown) => {
+            logger.exception(`Chat ${id}: what call ${call.id} left untold wasn't told`, error);
+          });
+        },
         (error: unknown) => {
           logger.exception(`Chat ${id}: call ${call.id}'s end wasn't stored`, error);
         },
       )
+      // The page reads the chat again once the feed ends: a start the manager answers after the
+      // hang-up has its card by then. Shutdown stops waiting at its own limit.
+      .then(async () => {
+        await Promise.allSettled([...call.starts]);
+      })
       .finally(() => {
         call.live.end();
         this.#endings.delete(ending);
@@ -784,7 +930,7 @@ export class ChatRunner {
     this.#endings.add(ending);
     const who = call.group ? `everyone, ${call.persona} hosting,` : call.persona;
     logger.info(`Chat ${id}: call ${call.id} with ${who} ended (${reason})`);
-    return call.ending;
+    return ending;
   }
 
   /**
@@ -806,8 +952,7 @@ export class ChatRunner {
       const { participants } = summarize(log.header, log.events);
       reply.single = participants.length === 1;
       const [only] = participants;
-      const background =
-        reply.single && only !== undefined ? this.#background(id, chat, only) : null;
+      const answering = reply.single && only !== undefined ? { persona: only, call: null } : null;
       const request: ChatRequest = {
         chat: log,
         read: () => this.store.read(id),
@@ -816,7 +961,7 @@ export class ChatRunner {
         ...(owed.length > 0 ? { owed } : {}),
         signal,
         late,
-        ...(background ? { background } : {}),
+        ...this.#handed(id, chat, answering),
       };
       return this.#answer(request, save);
     });
@@ -841,25 +986,133 @@ export class ChatRunner {
       const viewer = localViewer();
       // With no line to weigh, an auto reply is text.
       const mode = replyModeFor(log, persona) === "voice" ? "voice" : "text";
-      return this.#turn({ chat: log, persona, viewer, signal, late, mode, ...prompt }, save);
+      const handed = this.#handed(id, chat, null);
+      return this.#turn(
+        { chat: log, persona, viewer, signal, late, mode, ...prompt, ...handed },
+        save,
+      );
     });
   }
 
   /**
-   * Her start_task and its hint for her answer to a viewer's line, while Assistant Mode is ready;
-   * never for a turn of hers no line asked for.
+   * What a turn of hers in chat `id` is handed: the status block's provider, which lists the tasks
+   * of the persona the turn runs as; and for `answering`, while Assistant Mode is ready, start_task
+   * and its hint, and her task tools while a task of hers there is live. A turn of hers no line
+   * asked for gets no tool: a report quoting a page must not act on the computer. Nothing without
+   * Assistant Mode's tasks.
    */
-  #background(id: string, chat: Chat, persona: ParticipantId): BackgroundTools | null {
+  #handed(id: string, chat: Chat, answering: Answering | null): TurnExtras {
     const tasks = this.#tasks;
-    if (tasks === undefined || !tasks.ready()) return null;
-    const start: StartTask = (input, call) => {
+    if (tasks === undefined) return {};
+    if (answering === null || !tasks.ready()) {
+      return { providers: [tasksStatusProvider(tasks, id, { tools: false })] };
+    }
+    const { persona, call } = answering;
+    const start =
+      call === null
+        ? this.#textStart(id, chat, persona, tasks)
+        : this.#callStart(id, chat, call, tasks);
+    // Read as the turn starts, whose tools stay as offered: the Floor asks without waiting.
+    const live = herTasks(tasks.snapshotsOf(id), id, persona).some(({ snapshot }) =>
+      isLive(snapshot.status),
+    );
+    return {
+      background: { tools: [startTaskTool(start)], hint: assistantPromptHint() },
+      ...(live ? { tools: herTaskTools({ chat: id, persona, tasks }) } : {}),
+      providers: [tasksStatusProvider(tasks, id, { tools: live })],
+    };
+  }
+
+  /** start_task in a text turn, which stores her call and its result itself. */
+  #textStart(id: string, chat: Chat, persona: ParticipantId, tasks: Tasks): StartTask {
+    return (input, call) => {
       const starting = tasks.start(input, { id, persona, call });
-      chat.starts.add(starting);
-      const answered = () => chat.starts.delete(starting);
-      starting.then(answered, answered);
+      track(chat.starts, starting);
       return starting;
     };
-    return { tools: [startTaskTool(start)], hint: assistantPromptHint() };
+  }
+
+  /**
+   * start_task on `call`, whose log the chat never takes: once the manager answers, her call and
+   * its started result are stored in the chat, under the call's id as the turn, even after a
+   * barge-in or the call's end. A refusal stores nothing: her line on the call tells it.
+   */
+  #callStart(id: string, chat: Chat, call: ActiveCall, tasks: Tasks): StartTask {
+    const { persona } = call;
+    return (input, callId, args) => {
+      const starting = tasks.start(input, { id, persona, call: callId });
+      const stored = starting.then(
+        async (task) => {
+          const turn = call.id;
+          try {
+            await this.#append(id, chat, [
+              { type: "tool-call", persona, turn, callId, name: START_TASK, arguments: args },
+              {
+                type: "tool-result",
+                persona,
+                turn,
+                callId,
+                result: startedOf(task),
+                stage: "started",
+              },
+            ]);
+            call.known.add(callId);
+          } catch (error) {
+            logger.exception(`Chat ${id}: her start_task call ${callId} wasn't stored`, error);
+          }
+        },
+        () => {},
+      );
+      track(chat.starts, stored);
+      track(call.starts, stored);
+      return starting;
+    };
+  }
+
+  /** Whether `call` takes what a task of `persona`'s brings. */
+  #takesTasks(call: ActiveCall, persona: ParticipantId): boolean {
+    return call.tasks && call.persona === persona;
+  }
+
+  /**
+   * Hands `call`, as it opens on `events`, each end of her tasks she never told, for her greeting
+   * there; a call that doesn't take her tasks holds them for after it.
+   */
+  #handUntold(id: string, call: ActiveCall, events: readonly ChatEvent[]): void {
+    const { persona } = call;
+    const opened = events.at(-1)?.seq ?? 0;
+    for (const { callId, drafts } of untoldEnds(events, persona)) {
+      const origin = { id, persona, call: callId };
+      if (!call.tasks) {
+        call.ends.push({ origin, after: null });
+        continue;
+      }
+      call.outside.push({ drafts, nudge: taskEndedNudge(callId) });
+      call.known.add(callId);
+      call.ends.push({ origin, after: opened });
+    }
+  }
+
+  /**
+   * Once `call` has ended, her word in text on each end it held, and on each it was handed that no
+   * line of hers after it told: one turn each, as report() tells one.
+   */
+  async #tellAfter(id: string, chat: Chat, call: ActiveCall): Promise<void> {
+    if (call.ends.length === 0) return;
+    const { events } = await this.store.read(id);
+    const told = ({ origin, after }: HandOff) =>
+      after !== null &&
+      events.some(
+        (event) =>
+          event.seq > after &&
+          event.type === "message" &&
+          event.speaker.kind === "persona" &&
+          event.speaker.id === origin.persona &&
+          event.text.trim() !== "",
+      );
+    for (const end of call.ends.filter((each) => !told(each))) {
+      await this.#whenIdle(id, chat, () => this.#tell(chat, end.origin));
+    }
   }
 
   /** Chat `id`'s state, or null when the store doesn't have it. */
@@ -886,14 +1139,41 @@ export class ChatRunner {
   }
 
   /**
-   * Stores `final` for her call `origin.call`, after the latest call of hers with that id, unless
-   * that call is settled already. Whether it was stored.
+   * Runs `work` in the chat's queue once no reply runs there; not once shutdown has begun, nor for
+   * a chat that's gone.
    */
-  async #storeFinal(chat: Chat, origin: TaskChat, final: StartTaskFinal): Promise<boolean> {
+  async #whenIdle(id: string, chat: Chat, work: () => Promise<void>): Promise<void> {
+    for (;;) {
+      // The reply that called start_task may not have stored her started result yet.
+      await this.#idle(chat);
+      const done = await this.#serial(chat, async () => {
+        if (this.#closed || this.#chats.get(id) !== chat) return true;
+        if (chat.reply !== null) return false;
+        await work();
+        return true;
+      });
+      if (done) return;
+    }
+  }
+
+  /**
+   * Stores `final` for her call `origin.call`, after the latest call of hers with that id, unless
+   * that call is settled already, once every start being answered or stored is: a start on a call
+   * reaches the chat only then. Resolves with its seq and her call as drafts, the final last; null
+   * when it wasn't stored.
+   */
+  async #storeFinal(
+    chat: Chat,
+    origin: TaskChat,
+    final: StartTaskFinal,
+  ): Promise<{ readonly seq: number; readonly drafts: readonly ChatEventDraft[] } | null> {
+    await Promise.allSettled([...chat.starts]);
+    await chat.appends;
     const { id, persona, call } = origin;
+    const { events } = await this.store.read(id);
     let turn: string | null = null;
     let settled = false;
-    for (const event of (await this.store.read(id)).events) {
+    for (const event of events) {
       if (event.type === "tool-call" && event.persona === persona && event.callId === call) {
         turn = event.turn;
         settled = false;
@@ -908,13 +1188,19 @@ export class ChatRunner {
     }
     if (turn === null) {
       logger.warning(`Chat ${id} holds no start_task call ${call}; the task's end isn't stored`);
-      return false;
+      return null;
     }
-    if (settled) return false;
-    await this.#append(id, chat, [
-      { type: "tool-result", persona, turn, callId: call, result: final, stage: "final" },
-    ]);
-    return true;
+    if (settled) return null;
+    const draft: ChatEventDraft = {
+      type: "tool-result",
+      persona,
+      turn,
+      callId: call,
+      result: final,
+      stage: "final",
+    };
+    const [stored] = await this.#append(id, chat, [draft]);
+    return { seq: (stored as ChatEvent).seq, drafts: [...herStart(events, persona, call), draft] };
   }
 
   /** Her turn telling of a task's end: none during a call, or once the chat isn't hers alone. */

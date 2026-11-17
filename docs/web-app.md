@@ -2,8 +2,8 @@
 
 Eidolon on your own computer, with a web app to set it up, build personas, and call or text them: a
 setup wizard, a persona studio (identity, prompt, voice, facts, videos, glossary, pictures), a call
-page, text chats, the tasks she runs on this computer when asked in a chat, settings, and the
-offline chain's commands run as jobs. It is a second entry
+page, text chats, the tasks she runs on this computer when asked in a chat or on a call in one,
+settings, and the offline chain's commands run as jobs. It is a second entry
 point beside the bot, `apps/bot/src/local/`, serving the built app from `apps/web/` (Vite, React,
 shadcn, Tailwind) on loopback only. The bot that `bun run start` and the Docker image run never
 loads it.
@@ -83,8 +83,8 @@ finishing an index. A tool that stops the app should send SIGTERM.
   then, production's offer never binds a call to a chat, whatever its request data says, which
   `production.test.ts` pins.
 - **So does the assistant.** Only `apps/bot/src/local` and `apps/cli` import `@eidolon/assistant`,
-  which Biome and `boundaries.test.ts` hold, and production's chat endpoint never offers
-  `start_task` ([assistant.md](assistant.md)).
+  which Biome and `boundaries.test.ts` hold, and production's chat endpoint never offers her task
+  tools or the status block of her tasks ([assistant.md](assistant.md)).
 
 ## Security
 
@@ -351,7 +351,8 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
   directions as small labels, never as HTML. A selfie shows as a photo, served from the chat's
   `files/`.
 - **While she replies:**
-  - Her words stream in, and a quiet line names the tool she is using.
+  - Her words stream in, and a quiet line names the tool she is using, her task tools' included
+    ([Tasks](#tasks)).
   - **Stop** cuts everyone off at once, even one finishing her message before a line just sent:
     what she said stays, marked **Interrupted**, and no line still waiting is answered.
   - Sending while she replies is allowed, and cuts no one off mid-sentence: a persona whose words
@@ -401,14 +402,22 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
     call ends. Play still plays one.
   - **Another tab** that learns of the call from `ChatContents.call`, as a refused send rereads it,
     follows it too, and gets its composer back when the call ends.
+  - **Her tasks on a call,** in a chat of hers alone: she starts, checks, steers and stops them by
+    voice ([assistant.md](assistant.md#calls)). The card of a task she starts on the call is stored
+    at its place in the log, which while this page holds the call is under the call's separator,
+    above its transcript, and among the call's lines once its end is stored. The waiting bar sits
+    above the dock, with the card's buttons. A group call, a realtime one and `/call` have no
+    tasks.
   - **Leaving the page,** or opening another chat, hangs up, as leaving `/call` does.
   - `/call` stays the standalone call to the active persona, with no chat.
 - **Spend:** a chat's requests are recorded in the usage ledger with `source: "chat"`.
 
 ## Tasks
 
-Assistant Mode's tasks ([assistant.md](assistant.md)) start only in a chat: the owner asks her,
-and she calls `start_task`. Everything a task asks of the owner is answered in that chat.
+Assistant Mode's tasks ([assistant.md](assistant.md)) start only in a chat, or on a call in one:
+the owner asks her, and she calls `start_task`. Everything a task asks of the owner is answered in
+that chat. She answers how it is going herself, and checks, steers and stops it with her task
+tools.
 
 - **The task card** (`features/tasks/task-card.tsx`) sits in the chat's log at her `start_task`
   call, found by the call's `started` result:
@@ -427,13 +436,21 @@ and she calls `start_task`. Everything a task asks of the owner is answered in t
     Web**) can be changed first;
   - for a spend, stall or unpriced pause, or an interrupted task, **Continue**, with the spend
     pause's amount at a spend pause;
+  - while it waits on the owner (awaiting approval, paused or interrupted), the lines she passed
+    on with `steer_task` that it hasn't read, under "She passed these on, and it reads them first
+    when it goes on:", each quoted as plain text, never Markdown or HTML, without her `The
+    assistant updates the brief: ` prefix (`QueuedLines`, `parts.tsx`, over `queuedLines`,
+    `state.ts`). They sit between the card's details and its question, so an Allow or a Continue
+    covers them, and the waiting bar lists them too. The manager's own answer lines aren't listed,
+    and a running task, which reads hers before its next request, lists none;
   - the plan, the latest step (the tool and the head of its argument) on the card of the chat's
     newest running task, and the files it wrote;
   - **Show Steps**, the transcript, followed live while it runs and read once otherwise: the
     worker's words in Markdown-light, a row per tool call whose result folds out, errors marked,
-    the lines it was told, pauses, compaction as a divider, and its end. Only the newest running
-    task's card, and a card whose steps are open, follows `GET tasks/:id/events`: a follow holds
-    one of the browser's six connections to the app while its task runs;
+    the lines it was told (hers with their prefix), pauses, compaction as a divider, and its end.
+    Only the newest running task's card, and a card whose steps are open, follows
+    `GET tasks/:id/events`: a follow holds one of the browser's six connections to the app while
+    its task runs;
   - **Stop**, after a confirmation in the page, while it is live.
   - While Assistant Mode is off or not ready, Continue and every answer but a Deny at the start are
     disabled, as the server would refuse them, and a note says why, with a link to Settings; Stop
@@ -443,13 +460,21 @@ and she calls `start_task`. Everything a task asks of the owner is answered in t
   your OK to work in ~/Git/x"; for a path, what an Allow grants: "Waiting for your OK to read
   everything in ~/Documents", "read and write" for a write, or the path alone) and how many more
   wait, with the card's buttons, which share the card's model, web access and spend-pause field,
-  and **Show Task**, which scrolls to the card. The Tasks list's waiting row says the same line.
+  and **Show Task**, which scrolls to the card. Above its buttons it lists her queued lines as the
+  card does, since its Allow or Continue lets the task read them too. During a call it sits above
+  the dock. The Tasks list's waiting row says the same line.
+- **Her task tools** show in the page's log only as `start_task`'s card. While one runs, her
+  reply's quiet line reads **Starting a task…**, **Passing it on to the task…**, **Stopping the
+  task…** or **Checking on the task…**, each with its icon (`TOOL_STATES`,
+  `features/chats/labels.ts`).
 - **Refresh:** once her log holds a `start_task` call, the chat page reads `GET tasks?chat=`, and
-  polls it while a task is live, every 2 s while one runs and 5 s while one waits. When it sees a
-  task end, it asks `GET live` every 2 s, reading the log again each time, until her report is in
-  the log, or 60 s pass with no reply on the page. Her report turn starts only once no reply runs
-  in the chat, so the page doesn't ask while it carries a reply, and the 60 s count from the end
-  of the last reply it carried. Her report turn streams in like any reply.
+  polls it while a task is live, every 2 s while one runs and 5 s while one waits, so a line she
+  passes on to a waiting task, and her stop, show at the next poll. When it sees a task end, it
+  asks `GET live` every 2 s, reading the log again each time, until her report is in the log, or
+  60 s pass with no reply on the page; a cancelled `final` counts as her report, since it gets no
+  turn. Her report turn starts only once no reply runs in the chat, so the page doesn't ask while
+  it carries a reply, and the 60 s count from the end of the last reply it carried. Her report
+  turn streams in like any reply.
 - **The Tasks list** (`/tasks`) is read-only: what she is working on and has done. A **Tasks** nav
   entry before Jobs, shown while Assistant Mode is on, counts the tasks waiting on the owner.
   - Live tasks come first, then ended ones, each newest first. A row has the goal, the status, her
@@ -587,7 +612,9 @@ that every Chinese one has the English one's placeholders and tags.
 
 In Chinese a task is 任务, a job is 作业, and Assistant Mode is 助手模式. A task's statuses come
 from `STATUS_LABELS` in `features/tasks/labels.ts`, and its plan's **Plan** carries the context
-`task plan`, apart from the jobs' Plan command.
+`task plan`, apart from the jobs' Plan command. The task card's copy of the bot's `STEER_PREFIX`
+(`features/tasks/state.ts`) is typed by the bot's constant, so changing one fails typecheck until
+the other follows.
 
 The English capitalizes as laplace-chat's does. A short label is Title Case, with articles,
 conjunctions and prepositions lowercased whatever their length and a phrasal verb's particle
@@ -642,20 +669,46 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
   landing in the log with its phone mark under its separator, the composer waiting and a send
   refused `chat-in-call`, then **Hang Up**, the log's `call-ended` with `hangup`, the separators
   with the call's length, the composer back, and no server error during the call;
-- a task she starts in a new chat with milky-green, last, since her answers in a chat of one are
-  offered `start_task` once the assistant has a model: Settings → Assistant Mode set to the
-  OpenRouter account at that server and a model typed into its picker; her greeting offered
-  neither `start_task` nor its hint; her `start_task` call for the viewer's line, offered with her
-  hint, and her line after it; the card and the waiting bar asking
-  to start it, then **Allow Once** on the card; the worker, answered by that server turn by turn
-  with usage blocks that carry a cost, writing `index.html` in the task's temporary folder, then
-  reading `notes.txt` in a second one outside its grant, which pauses the task, the card and the
-  waiting bar naming that second folder as what Allow Once grants, until **Allow Once** on the
-  card's path question; the task done with its spend as reported, the page on disk
-  and `assistant.folders` unchanged; **Show Steps**' rows; her call's `final` in the log, then
-  her report turn, asked by the runner's nudge and offered no `start_task`, reading the worker's
-  report only in her call's `tool` message, the page showing it, and the task marked reported; and the Tasks list showing it done,
-  with no button or field, its row opening the chat with the card in view;
+- tasks in a new chat with milky-green, last, since her answers in a chat of one are offered
+  `start_task` once the assistant has a model: Settings → Assistant Mode set to the OpenRouter
+  account at that server and a model typed into its picker, and her greeting offered neither
+  `start_task` nor its hint; then
+  - a task she starts for the viewer's line, offered `start_task` and her hint but none of her
+    other task tools, and her line after it, reading the started result
+    `{"task": …, "status": "awaiting-approval"}`; the card and the waiting bar asking to start it;
+    弄好了吗 before **Allow Once** on the card, offered all four of her task tools, after a status
+    block saying it hasn't started and ending on the line that names them, and again while the
+    worker's first request waits, the block saying it runs;
+  - the worker, answered by that server turn by turn with usage blocks that carry a cost, writing
+    `index.html` in the task's temporary folder, then reading `notes.txt` in a second one outside
+    its grant, which pauses the task, the card and the waiting bar naming that second folder as
+    what Allow Once grants;
+  - at that question, 具体到哪了 after a block saying it asks to read outside its folders, and
+    `check_task`'s detail: the card's question, `index.html` written, and the `read` step with the
+    path's head, the whole path reaching her mind only in `tool` messages; then a change she passes
+    on through `steer_task`, queued in the task's inbox with her prefix and listed on the card
+    (`[data-queued] blockquote`) until **Allow Once** on the path question lets the run read it,
+    ahead of the owner's answer;
+  - the task done with its spend as reported, the page on disk and `assistant.folders` unchanged;
+    **Show Steps**' rows, her line among the lines the task was told; her call's `final` in the
+    log, then her report turn, asked by the runner's nudge and offered none of her task tools,
+    reading the worker's report only in her call's `tool` message, the page showing it, and the
+    task marked reported;
+  - a second task she starts, then stops with `stop_task` before it was allowed, after a block
+    that lists it alone, waiting to start: cancelled and not denied, its `final` after her answer
+    and no turn telling of it, the waiting bar gone, and the card showing it stopped with no Stop;
+  - the Tasks list showing the first done and the second stopped, with no button or field, the
+    first's row opening the chat with the card in view;
+  - a call in that chat, whose greeting holds none of the status blocks the chat stored, and no
+    task tool; a line its fake hearing hears (`say`), and her `start_task` for it, with the hint,
+    her next round reading the started result, and her call and its result stored in the chat
+    under the call's id, between the call's lines; the card, and the waiting bar above the dock,
+    asking to start it; **Allow Once** on the bar, then her pointer to the card at the path
+    question, answering the waiting nudge with no task tool and a block ending on the line for no
+    tools; **Allow Once** again, then her word on the end on the call, answering the ended nudge
+    with the worker's report only in her call's `tool` message; and after **Hang Up**, the call's
+    lines and her call's events in order, no turn telling it again, the page on disk, and the
+    Tasks list showing it done;
 
 then stops the server and deletes the home. It refuses to start when either `load-env.ts` would
 apply a `.env` or use another data home, and exits 0 when every check passes, else 1, after the
@@ -717,7 +770,8 @@ else.
 - **A task reads `interrupted`**: the server stopped while it ran. The next start resumes it while
   Assistant Mode is on and ready; otherwise press **Continue** on its card in the chat.
 - **She says she can't use the computer, or never offers a task**: Assistant Mode is off or not
-  ready (Settings → Assistant Mode says why), or the chat holds more than her.
+  ready (Settings → Assistant Mode says why), or the chat holds more than her, or the call is a
+  realtime or group call.
 - **A cancelled job stays `stopping`**: it is finishing an index rebuild, which can take a while
   on a large archive. Wait, or Force stop it and run that ingest again. A job an earlier start
   of Eidolon ran has no Force stop: it will finish on its own or be marked interrupted.

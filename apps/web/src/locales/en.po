@@ -1206,6 +1206,10 @@ msgstr "Check your microphone, then call again."
 msgid "Check your microphone, then try again."
 msgstr "Check your microphone, then try again."
 
+#: src/features/chats/labels.ts
+msgid "Checking on the task…"
+msgstr "Checking on the task…"
+
 #: src/components/voice-picker/index.tsx
 msgid "Chinese"
 msgstr "Chinese"
@@ -3163,6 +3167,10 @@ msgstr "Part of the cost couldn't be priced."
 msgid "Participants"
 msgstr "Participants"
 
+#: src/features/chats/labels.ts
+msgid "Passing it on to the task…"
+msgstr "Passing it on to the task…"
+
 #: src/components/settings-form/account-key-field.tsx
 #: src/features/settings/account-dialog.tsx
 msgid "Paste a new key to replace it"
@@ -3959,6 +3967,10 @@ msgstr "She inherits a voice from the environment ({id}), which hasn't been chec
 msgid "She needs a name and a short name."
 msgstr "She needs a name and a short name."
 
+#: src/features/tasks/parts.tsx
+msgid "She passed these on, and it reads them first when it goes on:"
+msgstr "She passed these on, and it reads them first when it goes on:"
+
 #: src/features/home/memory-panel.tsx
 msgid "She picks these up in your calls, and only she reads them: each persona remembers on her own."
 msgstr "She picks these up in your calls, and only she reads them: each persona remembers on her own."
@@ -4209,6 +4221,10 @@ msgstr "Started"
 msgid "Started at {time}"
 msgstr "Started at {time}"
 
+#: src/features/chats/labels.ts
+msgid "Starting a task…"
+msgstr "Starting a task…"
+
 #: src/features/jobs/detail.tsx
 msgid "Starting…"
 msgstr "Starting…"
@@ -4260,6 +4276,10 @@ msgstr "Stopped by the model's provider."
 #: src/features/jobs/labels.ts
 msgid "Stopped unexpectedly"
 msgstr "Stopped unexpectedly"
+
+#: src/features/chats/labels.ts
+msgid "Stopping the task…"
+msgstr "Stopping the task…"
 
 #: src/features/jobs/parts.tsx
 msgid "Stopping…"

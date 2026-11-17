@@ -1,7 +1,7 @@
-// The local app's tasks, which she starts in a chat with start_task. Each runs in this process under
-// its lock, its task.json kept in step with the run; the owner answers its approvals from its card,
-// and its end is reported back to the chat. laplace-task's tasks have no chat and are never touched:
-// that command may be running one.
+// The local app's tasks, which she starts in a chat with start_task, and may steer or stop there.
+// Each runs in this process under its lock, its task.json kept in step with the run; the owner
+// answers its approvals from its card, and its end is reported back to the chat. laplace-task's
+// tasks have no chat and are never touched: that command may be running one.
 import { statSync } from "node:fs";
 import { mkdir, readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -59,12 +59,13 @@ import {
   UsageMeter,
 } from "@eidolon/engine";
 import { accountOf, ProviderConfigError, selectRequired } from "@eidolon/providers";
-import type {
-  ErrorCode,
-  TaskApproveRequest,
-  TaskContinueRequest,
-  TaskModel,
-  TasksQuery,
+import {
+  type ErrorCode,
+  STEER_PREFIX,
+  type TaskApproveRequest,
+  type TaskContinueRequest,
+  type TaskModel,
+  type TasksQuery,
 } from "../api.ts";
 import { readLines } from "../jobs/events.ts";
 import { SnapshotFile } from "./snapshot-file.ts";
@@ -101,6 +102,11 @@ export interface TaskManagerOptions {
    * calls it again.
    */
   readonly report: (snapshot: TaskSnapshot) => Promise<void>;
+  /**
+   * Told when a task pauses to wait for the owner, once task.json is written; never at a start, an
+   * answer or an end, nor for a pause a cancel has already asked to end. A throw is logged.
+   */
+  readonly waiting?: (snapshot: TaskSnapshot) => void;
 }
 
 type RefusalStatus = 400 | 404 | 409 | 416;
@@ -142,6 +148,10 @@ const LOCK_HOLDER = "eidolon";
 const TRANSCRIPT = "transcript.jsonl";
 const DEFAULT_CHECK = "Check the deliverable against the goal";
 const STREAM_CHUNK_BYTES = 256 * 1024;
+const STEER_MAX_CHARS = 2000;
+const STEP_HEAD_CHARS = 120;
+/** What names a call's step, in this order, before the JSON of all its arguments. */
+const STEP_KEYS = ["path", "url", "pattern", "glob", "query"] as const;
 
 const LIVE: ReadonlySet<TaskStatus> = new Set([
   "running",
@@ -182,6 +192,8 @@ interface Run extends Omit<Equipped, "mind"> {
   refused: { readonly path: string; readonly access: "read" | "write" } | null;
   /** How the run ended or paused, once its transcript says so. */
   last: TaskOutcome | null;
+  /** The calls of the latest reply: stored before the run, or made in it. */
+  calls: readonly MindToolCall[];
 }
 
 interface Task {
@@ -272,6 +284,15 @@ function steering(inbox: TaskInboxLines | undefined, line: string): TaskInboxLin
   return { steer: [...(inbox?.steer ?? []), line], followUp: inbox?.followUp ?? [] };
 }
 
+/** A call's step as the snapshot names it: its path, url, pattern, glob or query, else its JSON. */
+function stepHead(args: Readonly<Record<string, unknown>>): string {
+  const named = STEP_KEYS.map((key) => args[key]).find((value) => typeof value === "string");
+  const head = [...(typeof named === "string" ? named : JSON.stringify(args))];
+  return head.length > STEP_HEAD_CHARS
+    ? `${head.slice(0, STEP_HEAD_CHARS).join("")}…`
+    : head.join("");
+}
+
 /** What `outcome` makes of a task whose run just ended; null: the server stopped it. */
 function settledChanges(run: Run, outcome: TaskOutcome | null, endedAt: number): Changes {
   if (outcome === null) return { status: "interrupted" };
@@ -299,6 +320,19 @@ function untilLeft(store: TaskStore, left: AbortSignal): TaskStore {
     entries: () => store.entries(),
     append: (draft) =>
       left.aborted ? Promise.reject(new Error("The task was interrupted")) : store.append(draft),
+  };
+}
+
+/** `store`, keeping on `run` the calls of the last reply it holds: a resume runs them. */
+function noting(store: TaskStore, run: Run): TaskStore {
+  return {
+    entries: async () => {
+      const entries = await store.entries();
+      const last = entries.findLast((entry) => entry.type === "assistant");
+      if (last?.type === "assistant") run.calls = last.calls;
+      return entries;
+    },
+    append: (draft) => store.append(draft),
   };
 }
 
@@ -356,6 +390,7 @@ export class TaskManager {
   readonly #createMind: typeof createMind;
   readonly #now: () => number;
   readonly #report: (snapshot: TaskSnapshot) => Promise<void>;
+  readonly #waiting: ((snapshot: TaskSnapshot) => void) | undefined;
   readonly #tasks = new Map<string, Task>();
   readonly #streams = new Set<() => void>();
   #loaded: Promise<void> | null = null;
@@ -372,6 +407,7 @@ export class TaskManager {
     this.#createMind = options.createMind ?? createMind;
     this.#now = options.now ?? Date.now;
     this.#report = options.report;
+    this.#waiting = options.waiting;
   }
 
   /**
@@ -430,6 +466,16 @@ export class TaskManager {
       .map((task) => task.snapshot)
       .filter((snapshot) => query.chat === undefined || snapshot.chat?.id === query.chat)
       .sort((a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id));
+  }
+
+  /**
+   * Chat `chatId`'s tasks as they stand, oldest first, for a caller that can't wait: none before
+   * the first load.
+   */
+  snapshotsOf(chatId: string): readonly TaskSnapshot[] {
+    return this.#oldestFirst().flatMap(({ snapshot }) =>
+      snapshot.chat?.id === chatId ? [snapshot] : [],
+    );
   }
 
   async get(id: string): Promise<TaskSnapshot> {
@@ -513,6 +559,30 @@ export class TaskManager {
       const spendPauseUsd =
         pause?.reason === "unpriced" ? 0 : (step ?? task.snapshot.spendPauseUsd);
       return this.#resume(task, { spendPauseUsd });
+    });
+  }
+
+  /**
+   * Her steer_task: `text`, stripped, joins the task's inbox in task.json at once as her line, for
+   * its run to read before its next request, or as it goes on after an Allow, an answer or Continue.
+   * It answers, allows and continues nothing; a Deny at its start or a Stop drops it with the
+   * inbox.
+   */
+  async steer(id: string, text: string): Promise<TaskSnapshot> {
+    await this.#load();
+    const task = this.#find(id);
+    return this.#exclusive(task, async () => {
+      const line = pyStrip(text);
+      if (line === "") throw new TaskRefused(400, "bad-request", "There is no text to pass on.");
+      if ([...line].length > STEER_MAX_CHARS) {
+        throw new TaskRefused(400, "bad-request", "The text to pass on is over 2,000 characters.");
+      }
+      const { status, inbox } = task.snapshot;
+      if (!LIVE.has(status)) {
+        throw new TaskRefused(409, "conflict", `The task has ended (${status})`);
+      }
+      await this.#change(task, { inbox: steering(inbox, `${STEER_PREFIX}${line}`) }, true);
+      return task.snapshot;
     });
   }
 
@@ -948,6 +1018,7 @@ export class TaskManager {
       asked: null,
       refused: null,
       last: null,
+      calls: [],
     };
     task.meter = meter;
     task.run = run;
@@ -995,7 +1066,7 @@ export class TaskManager {
         folder: brief.folder,
       }),
       tools,
-      store: untilLeft(openTaskStore(task.dir), left),
+      store: untilLeft(noting(openTaskStore(task.dir), run), left),
       inbox: this.#inbox(task, run),
       meter: run.meter,
       gate: async (call) => this.#gate(task, run, call),
@@ -1075,7 +1146,14 @@ export class TaskManager {
     if (event.type !== "entry") return;
     const { entry } = event;
     const changes: Changes = { spentUsd };
-    if (entry.type === "assistant") run.refused = null;
+    if (entry.type === "assistant") {
+      run.refused = null;
+      run.calls = entry.calls;
+    }
+    if (entry.type === "tool-start") {
+      const made = run.calls.find((each) => each.id === entry.callId);
+      changes.step = { tool: entry.name, head: made === undefined ? "" : stepHead(made.arguments) };
+    }
     if (entry.type === "tool-result") {
       const { files } = task.snapshot;
       changes.files = {
@@ -1109,7 +1187,18 @@ export class TaskManager {
     const written = this.#change(task, changes, true);
     for (const wake of task.readers) wake();
     await written;
-    if (outcome !== null && outcome.status !== "paused") void this.#reportEnd(task);
+    if (outcome === null) return;
+    if (outcome.status !== "paused") void this.#reportEnd(task);
+    // A cancel that came as the run decided to pause ends the task next: nothing waits on the owner.
+    else if (!run.cancel.signal.aborted) this.#tellWaiting(task);
+  }
+
+  #tellWaiting(task: Task): void {
+    try {
+      this.#waiting?.(task.snapshot);
+    } catch (error) {
+      logger.exception(`Task ${task.snapshot.id}'s pause wasn't told to its chat`, error);
+    }
   }
 
   async #reportEnd(task: Task): Promise<void> {

@@ -9,15 +9,32 @@ import type { AllowedOffer, UserContext } from "@eidolon/access";
 import { AsyncQueue, activePersona, dataHome, resetSettings } from "@eidolon/config";
 import { buildGreetingKickoff } from "@eidolon/context";
 import type { ContextProvider, LlmTool } from "@eidolon/core";
-import { type EngineDeps, type MindChunk, type MindRequest, runTurn } from "@eidolon/engine";
+import {
+  type BackgroundTools,
+  type CallTurnRequest,
+  type EngineDeps,
+  type Mind,
+  type MindChunk,
+  type MindRequest,
+  type PersonaParts,
+  runTurn,
+  type TurnExtras,
+} from "@eidolon/engine";
 import { MEM0_STORE_KEY } from "@eidolon/memory";
 import type { RealtimeEvent, RealtimeSession } from "@eidolon/providers/realtime";
 import { type CallDeps, voiceModels } from "@eidolon/voice";
 import { createSignallingServerWith, peerCallTransport } from "@eidolon/webrtc";
 import { RTCPeerConnection } from "werift";
 import { packHistory } from "../../../voice/src/call/realtime.ts";
-import { FakeSpeech, FakeStt, FakeTransport, settle } from "../../../voice/test/call/harness.ts";
+import {
+  FakeSpeech,
+  FakeStt,
+  FakeTransport,
+  FakeTurn,
+  settle,
+} from "../../../voice/test/call/harness.ts";
 import { FakeClock } from "../../../voice/test/input/clock.ts";
+import type { OutsideResult } from "../../src/index.ts";
 import type {
   AnyCallBinding,
   CallBinding,
@@ -508,6 +525,218 @@ describe("a call bound to a chat", () => {
       "Bot session failed: MiniMax has no key: set MINIMAX_API_KEY",
     ]);
   });
+});
+
+describe("what her chat adds to a call of hers alone", () => {
+  const BACKGROUND: BackgroundTools = {
+    tools: [
+      {
+        schema: { name: "start_task", description: "", properties: {}, required: [] },
+        cancelOnInterruption: false,
+        timeoutSecs: null,
+        run: async () => ({}),
+      },
+    ],
+    hint: "（你能用电脑）",
+  };
+  const PROVIDERS: PersonaParts["providers"] = [
+    { label: "TaskStatus", provider: { onContext: async () => {}, errorMessage: () => "" } },
+  ];
+  const ADDS: TurnExtras = { background: BACKGROUND, providers: PROVIDERS };
+  const ENDED = "（任务结束了）";
+
+  /** What the call added to a reply's turn. */
+  const added = ({ background, tools, providers }: CallTurnRequest): TurnExtras => ({
+    ...(background === undefined ? {} : { background }),
+    ...(tools === undefined ? {} : { tools }),
+    ...(providers === undefined ? {} : { providers }),
+  });
+
+  /** A call bound to her chat, its turns scripted, its client ready and her greeting begun. */
+  async function scripted(adds: Pick<CallBinding, "extras" | "outside">) {
+    const transport = new FakeTransport();
+    const stt = new FakeStt();
+    const speech = new FakeSpeech();
+    const clock = new FakeClock(0);
+    const turns: FakeTurn[] = [];
+    const lines: TranscriptLine[] = [];
+    const deps: CallDeps = {
+      engine: { createMind: (): Mind => ({ async *stream() {} }) } as EngineDeps,
+      runTurn: ((request: CallTurnRequest) => {
+        const turn = new FakeTurn(request, `turn-${turns.length + 1}`);
+        turns.push(turn);
+        return turn.lines;
+      }) as unknown as CallDeps["runTurn"],
+      openStt: async () => stt,
+      openSpeech: () => speech,
+      openRealtime: () => Promise.reject(new Error("no realtime here")),
+      models: voiceModels(),
+      about: BOT_ABOUT,
+      clock,
+    };
+    const done = runNativeSafely(transport, ADMISSION, deps, {
+      persona: "bob",
+      seedMessages: SEED,
+      onTranscript: (line) => lines.push(line),
+      onEnded: () => {},
+      ...adds,
+    });
+    await until(() => transport.connected, 10_000);
+    transport.rtvi("client-ready", { version: "2.3.0" });
+    await until(() => turns.length === 1);
+    const transcribed = () => transport.types.filter((t) => t === "user-transcription").length;
+    return {
+      turns,
+      lines,
+      /** Her latest turn says `text`, played to its end. */
+      async replies(text: string): Promise<void> {
+        const turn = turns.at(-1) as FakeTurn;
+        const opened = speech.utterances.length;
+        turn.round(text);
+        await until(() => speech.utterances.length > opened);
+        const ending = turn.end();
+        await settle();
+        const utterance = speech.utterances.at(-1);
+        utterance?.pcm(1, 240);
+        utterance?.segEnd(1);
+        utterance?.finish();
+        await settle();
+        transport.source?.pull(240);
+        await ending;
+        await settle();
+      },
+      async says(text: string): Promise<void> {
+        const heard = transcribed();
+        stt.events.push({ type: "final", text, finalized: true });
+        await until(() => transcribed() > heard);
+        clock.advance(400);
+        await settle();
+      },
+      async hangUp(): Promise<void> {
+        transport.leave();
+        await done;
+      },
+    };
+  }
+
+  test("her greeting gets its providers alone, her answer to a line all it adds, and a result from outside a follow-up", async () => {
+    const asked: boolean[] = [];
+    const outside = new AsyncQueue<OutsideResult>();
+    const c = await scripted({
+      extras: (answers) => {
+        asked.push(answers);
+        return ADDS;
+      },
+      outside,
+    });
+    const greeting = (c.turns[0] as FakeTurn).request;
+    expect(greeting.kickoff).toBe(true);
+    expect(added(greeting)).toEqual({ providers: PROVIDERS });
+    await c.replies("你好呀。");
+    await c.says("帮我做个网页");
+    await until(() => c.turns.length === 2);
+    expect(added((c.turns[1] as FakeTurn).request)).toEqual(ADDS);
+
+    // Her task ends while she answers: she tells it in a reply of its own, without the task tools.
+    const final = {
+      type: "tool-result",
+      persona: "bob",
+      turn: "chat-turn",
+      callId: "call-1",
+      result: { task: "call-1", status: "succeeded" },
+      stage: "final",
+    } as const;
+    outside.push({ drafts: [final], nudge: ENDED });
+    await settle();
+    expect(c.turns).toHaveLength(2);
+    await c.replies("交给我吧。");
+    await until(() => c.turns.length === 3);
+    const followUp = (c.turns[2] as FakeTurn).request;
+    expect(followUp.nudge).toBe(ENDED);
+    expect(added(followUp)).toEqual({ providers: PROVIDERS });
+    expect(followUp.chat.events.filter((e) => e.type === "tool-result")).toMatchObject([
+      { callId: "call-1", stage: "final" },
+    ]);
+    expect(asked).toEqual([false, true, false]);
+    await c.replies("网页做好了。");
+    await c.hangUp();
+    // The result is the chat's already: only the lines said are reported.
+    expect(c.lines.map((line) => [line.role, line.text])).toEqual([
+      ["assistant", "你好呀。"],
+      ["user", "帮我做个网页"],
+      ["assistant", "交给我吧。"],
+      ["assistant", "网页做好了。"],
+    ]);
+    expect(logs.messages("ERROR")).toEqual([]);
+  }, 15_000);
+
+  test("a realtime call takes neither: nothing is asked of her extras, and nothing from outside read", async () => {
+    setEnv({ REALTIME_PROVIDER: "openai" });
+    resetSettings();
+    const asked: string[] = [];
+    const events = new AsyncQueue<RealtimeEvent>();
+    const session: RealtimeSession = {
+      inputRate: 24_000,
+      outputRate: 24_000,
+      appendAudio: () => {},
+      addItem: async (item) => {
+        asked.push(`add ${item.role}`);
+        return `item-${asked.length}`;
+      },
+      deleteItem: () => {},
+      createResponse: () => void asked.push("create"),
+      cancelResponse: () => {},
+      truncate: () => {},
+      sendToolOutput: () => {},
+      events,
+      close: async () => events.close(),
+    };
+    const extrasAsked: boolean[] = [];
+    let read = false;
+    const outside: AsyncIterable<OutsideResult> = {
+      [Symbol.asyncIterator]: () => {
+        read = true;
+        return new AsyncQueue<OutsideResult>()[Symbol.asyncIterator]();
+      },
+    };
+    const transport = new FakeTransport();
+    const done = runNativeSafely(
+      transport,
+      ADMISSION,
+      {
+        engine: engine([], { requests: [], stored: [] }, []),
+        runTurn,
+        openStt: () => Promise.reject(new Error("a realtime model hears")),
+        openSpeech: () => {
+          throw new Error("a realtime model speaks");
+        },
+        openRealtime: async () => session,
+        models: voiceModels(),
+        about: BOT_ABOUT,
+        clock: new FakeClock(0),
+      },
+      {
+        persona: "bob",
+        seedMessages: SEED,
+        onTranscript: () => {},
+        onEnded: () => {},
+        extras: (answers) => {
+          extrasAsked.push(answers);
+          return ADDS;
+        },
+        outside,
+      },
+    );
+    await until(() => transport.connected, 10_000);
+    transport.rtvi("client-ready", { version: "2.3.0" });
+    await until(() => asked.length === 2);
+    transport.leave();
+    await done;
+    expect(asked).toEqual(["add user", "create"]);
+    expect(extrasAsked).toEqual([]);
+    expect(read).toBe(false);
+    expect(logs.messages("ERROR")).toEqual([]);
+  }, 15_000);
 });
 
 describe("her own settings", () => {

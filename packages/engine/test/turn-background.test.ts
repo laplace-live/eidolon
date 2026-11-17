@@ -1,6 +1,6 @@
-// A text turn's background tools, as Assistant Mode's start_task is one: offered after hers with
-// their hint, their result stored as `started` while the work goes on outside the turn, and never
-// a call's.
+// A turn's background tools, as Assistant Mode's start_task is one: offered after hers with their
+// hint, their result stored as `started` while the work goes on outside the turn, and her next
+// round reading what they started, in a chat and in a call alike.
 import "../../config/test/isolated-guard.ts";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -13,16 +13,17 @@ import {
   type ChatEventDraft,
   type ChatHeader,
   stampEvents,
-  startedEnvelope,
   viewOf,
 } from "@eidolon/chat";
 import { dataHome, resetSettings } from "@eidolon/config";
 import type { LlmTool, ToolResult } from "@eidolon/core";
+import { ASYNC_TOOL_INSTRUCTIONS } from "../src/async_tool.ts";
 import { type ChatDeps, type ChatOutput, runChat } from "../src/chat.ts";
 import { runTurn } from "../src/turn.ts";
 import type {
   BackgroundTool,
-  CallTurnRequest,
+  CallHooks,
+  CallTurnOutput,
   EngineDeps,
   LateTools,
   Mind,
@@ -86,15 +87,18 @@ const selfie: LlmTool = {
   run: async () => ({ ok: true }),
 };
 
-/** Her parts with a selfie, and the options each turn asked them for. */
-function deps(mind: Mind): { engine: EngineDeps; asked: PartsOptions[] } {
+/** Her parts, with a selfie unless `tools` says otherwise, and the options each turn asked for. */
+function deps(
+  mind: Mind,
+  tools: readonly LlmTool[] = [selfie],
+): { engine: EngineDeps; asked: PartsOptions[] } {
   const asked: PartsOptions[] = [];
   let n = 0;
   const parts: PersonaParts = {
     systemInstruction: "SYSTEM",
     providers: [],
     gate: null,
-    tools: [selfie],
+    tools,
     memories: async () => [],
   };
   const engine: EngineDeps = {
@@ -139,12 +143,47 @@ async function collect<T>(outputs: AsyncIterable<T>): Promise<T[]> {
   return all;
 }
 
-function eventsOf(outputs: readonly (TurnOutput | ChatOutput)[]): ChatEventDraft[] {
+function eventsOf(
+  outputs: readonly (TurnOutput | ChatOutput | CallTurnOutput)[],
+): ChatEventDraft[] {
   return outputs.flatMap((output) => (output.type === "events" ? [...output.events] : []));
 }
 
 const toolNames = (request: MindRequest | undefined) =>
   (request?.tools ?? []).map((tool) => tool.name);
+
+/** A call's hooks, its async results collecting in `results`; she was heard saying `heard`. */
+function callHooks(heard = ""): { hooks: CallHooks; results: (readonly ChatEventDraft[])[] } {
+  const results: (readonly ChatEventDraft[])[] = [];
+  return {
+    results,
+    hooks: {
+      mode: "call",
+      effects: { switchVoice: async () => {}, sendServerMessage: async () => {} },
+      heard: async () => ({ text: heard, complete: true }),
+      onAsyncResult: (events) => {
+        results.push(events);
+      },
+    },
+  };
+}
+
+/** Each tool line's name, call id, kind and state, as a call's turn streams them. */
+const callToolLines = (outputs: readonly CallTurnOutput[]): string[] =>
+  outputs.flatMap((output) =>
+    output.type === "tool"
+      ? [`${output.name}:${output.callId}:${output.async ? "async" : "sync"}:${output.state}`]
+      : [],
+  );
+
+/** Resolves once `fn` holds, or rejects after a second. */
+async function until(fn: () => boolean): Promise<void> {
+  const start = Date.now();
+  while (!fn()) {
+    if (Date.now() - start > 1000) throw new Error("timed out waiting");
+    await Bun.sleep(5);
+  }
+}
 
 function viewAfter(log: readonly ChatEvent[], drafts: readonly ChatEventDraft[]) {
   const events = [...log, ...stampEvents(drafts, log.length, 2000)];
@@ -175,7 +214,7 @@ describe("a text turn's background tools", () => {
     expect(asked).toEqual([{ others: [], voice: false, assistantHint: HINT }]);
   });
 
-  test("store a result as started, and her turn goes on, reading its placeholder", async () => {
+  test("store a result as started, and her turn goes on, reading its started result", async () => {
     const { mind, requests } = fakeMind(
       [callStart, { type: "done", finishReason: "tool_calls" }],
       [{ type: "text", text: "好，我去弄啦" }, DONE],
@@ -230,12 +269,12 @@ describe("a text turn's background tools", () => {
         output.type === "tool" ? [`${output.name}:${output.state}`] : [],
       ),
     ).toEqual(["start_task:running", "start_task:done"]);
-    // Her second round reads what her next turn's view will: pipedog's placeholder.
+    // Her second round reads what her next turn's view will: what the tool started.
     expect(requests).toHaveLength(2);
     expect(requests[1]?.messages.at(-1)).toEqual({
       role: "tool",
       tool_call_id: "c1",
-      content: startedEnvelope("c1"),
+      content: '{"task": "t1", "status": "awaiting-approval"}',
     });
     expect<unknown[]>(viewAfter(log.events, events)).toEqual([
       ...(requests[1]?.messages ?? []),
@@ -324,25 +363,162 @@ describe("a text turn's background tools", () => {
       },
     ]);
   });
+});
 
-  test("are never a call's", async () => {
-    const { mind, requests } = fakeMind([{ type: "text", text: "喂" }, DONE]);
-    const { engine, asked } = deps(mind);
-    const tool = startTask(async () => ({ task: "t1", status: "running" }));
-    const call = {
-      chat: chat(user("你好")),
-      persona: PERSONA,
-      viewer: VIEWER,
-      signal: new AbortController().signal,
-      mode: "call",
-      effects: { switchVoice: async () => {}, sendServerMessage: async () => {} },
-      heard: async () => ({ text: "喂", complete: true }),
-      onAsyncResult: () => {},
-      background: { tools: [tool], hint: HINT },
-    } as CallTurnRequest;
-    await collect(runTurn(call, engine));
-    expect(toolNames(requests[0])).toEqual(["take_selfie"]);
-    expect(asked).toEqual([{ others: [], voice: true }]);
+describe("a call's background tools", () => {
+  test("come after her own tools, with their hint in her prefix and pipedog's async guidance only for hers", async () => {
+    for (const own of [[selfie], []]) {
+      const { mind, requests } = fakeMind([{ type: "text", text: "喂" }, DONE]);
+      const { engine, asked } = deps(mind, own);
+      const tool = startTask(async () => ({ task: "t1", status: "running" }));
+      await collect(
+        runTurn(
+          {
+            chat: chat(user("你好")),
+            persona: PERSONA,
+            viewer: VIEWER,
+            signal: new AbortController().signal,
+            ...callHooks("喂").hooks,
+            background: { tools: [tool], hint: HINT },
+          },
+          engine,
+        ),
+      );
+      expect([toolNames(requests[0]), requests[0]?.system]).toEqual(
+        own.length > 0
+          ? [["take_selfie", "start_task"], `SYSTEM\n\n${ASYNC_TOOL_INSTRUCTIONS}`]
+          : [["start_task"], "SYSTEM"],
+      );
+      expect(asked).toEqual([{ others: [], voice: true, assistantHint: HINT }]);
+    }
+  });
+
+  test("store a result as started with its value, her next round reading it, and stream a sync tool's lines", async () => {
+    const { mind, requests } = fakeMind(
+      [callStart, { type: "done", finishReason: "tool_calls" }],
+      [{ type: "text", text: "交给我吧" }, DONE],
+    );
+    const { engine } = deps(mind);
+    const runs: unknown[] = [];
+    const tool = startTask(async ({ arguments: args, callId }) => {
+      runs.push([callId, args]);
+      return { task: "t1", status: "awaiting-approval" };
+    });
+    const { hooks, results } = callHooks("交给我吧");
+    const log = chat(user("帮我写个网页"));
+    const outputs = await collect(
+      runTurn(
+        {
+          chat: log,
+          persona: PERSONA,
+          viewer: VIEWER,
+          signal: new AbortController().signal,
+          ...hooks,
+          background: { tools: [tool], hint: HINT },
+        },
+        engine,
+      ),
+    );
+    expect(runs).toEqual([["c1", ARGS]]);
+    const events = eventsOf(outputs);
+    expect(events).toEqual([
+      {
+        type: "tool-call",
+        persona: PERSONA,
+        turn: "id-1",
+        callId: "c1",
+        name: "start_task",
+        arguments: ARGS,
+      },
+      {
+        type: "tool-result",
+        persona: PERSONA,
+        turn: "id-1",
+        callId: "c1",
+        result: { task: "t1", status: "awaiting-approval" },
+        stage: "started",
+      },
+      {
+        type: "message",
+        id: "id-2",
+        speaker: { kind: "persona", id: PERSONA },
+        text: "交给我吧",
+        modality: "call",
+      },
+    ]);
+    expect(callToolLines(outputs)).toEqual([
+      "start_task:c1:sync:running",
+      "start_task:c1:sync:done",
+    ]);
+    expect(requests[1]?.messages.at(-1)).toEqual({
+      role: "tool",
+      tool_call_id: "c1",
+      content: '{"task": "t1", "status": "awaiting-approval"}',
+    });
+    expect<unknown[]>(viewAfter(log.events, events)).toEqual([
+      ...(requests[1]?.messages ?? []),
+      { role: "assistant", content: "交给我吧" },
+    ]);
+    // Its final comes from whoever does the work, never through the call's async results.
+    expect(results).toEqual([]);
+  });
+
+  test("run on past a barge-in, their started result reaching onAsyncResult; one the call's end cuts off brings nothing", async () => {
+    for (const ending of [false, true]) {
+      const barge = new AbortController();
+      const end = new AbortController();
+      const starting = Promise.withResolvers<ToolResult>();
+      let toolSignal: AbortSignal | undefined;
+      const tool = startTask(({ signal }) => {
+        toolSignal = signal;
+        barge.abort();
+        return starting.promise;
+      });
+      const { mind, requests } = fakeMind([callStart, DONE]);
+      const { engine } = deps(mind);
+      const { hooks, results } = callHooks();
+      const outputs = await collect(
+        runTurn(
+          {
+            chat: chat(user("帮我写个网页")),
+            persona: PERSONA,
+            viewer: VIEWER,
+            signal: barge.signal,
+            ...hooks,
+            asyncSignal: end.signal,
+            background: { tools: [tool], hint: HINT },
+          },
+          engine,
+        ),
+      );
+      expect(outputs.at(-1)).toEqual({ type: "ended", turn: "id-1" });
+      expect(eventsOf(outputs).map((event) => event.type)).toEqual(["tool-call"]);
+      expect(requests).toHaveLength(1);
+      expect(toolSignal?.aborted).toBe(false);
+      if (ending) {
+        end.abort();
+        expect(toolSignal?.aborted).toBe(true);
+      }
+      starting.resolve({ task: "t1", status: "running" });
+      if (ending) {
+        await Bun.sleep(20);
+        expect(results).toEqual([]);
+        continue;
+      }
+      await until(() => results.length > 0);
+      expect(results).toEqual([
+        [
+          {
+            type: "tool-result",
+            persona: PERSONA,
+            turn: "id-1",
+            callId: "c1",
+            result: { task: "t1", status: "running" },
+            stage: "started",
+          },
+        ],
+      ]);
+    }
   });
 });
 

@@ -1,5 +1,6 @@
-// Pieces the task card and the Tasks list share: a task's status, model, spend, plan and files, and
-// the fields a start's approval changes its model and web access with.
+// Pieces the task card, the waiting bar and the Tasks list share: a task's status, model, spend,
+// her lines it waits to read, its plan and files, and the fields a start's approval changes its
+// model and web access with.
 
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
@@ -34,7 +35,7 @@ import { cn } from "@/lib/utils";
 import { useLang } from "@/locales/i18n";
 import { type ModelChoice, WEB_MODES } from "./choice";
 import { STATUS_LABELS, TODO_STATUS_LABELS, WEB_MODE_HELP, WEB_MODE_LABELS } from "./labels";
-import { nextPauseAt, pathIn } from "./state";
+import { nextPauseAt, pathIn, queuedLines } from "./state";
 
 /** Where Settings sets Assistant Mode up. */
 export const ASSISTANT_SETTINGS = "/settings?tab=assistant";
@@ -123,14 +124,34 @@ const TODO_ICONS = {
   done: CircleCheckIcon,
 } as const satisfies Record<TaskTodoItem["status"], unknown>;
 
-/** Each step with a key of its own: its text, and how often that text came before. */
-function keyed(items: readonly TaskTodoItem[]) {
+/** Each item with a key of its own: its text, and how often that text came before. */
+export function keyed<T>(items: readonly T[], text: (item: T) => string) {
   const seen = new Map<string, number>();
   return items.map((item) => {
-    const before = seen.get(item.text) ?? 0;
-    seen.set(item.text, before + 1);
-    return { item, key: `${before}:${item.text}` };
+    const said = text(item);
+    const before = seen.get(said) ?? 0;
+    seen.set(said, before + 1);
+    return { item, key: `${before}:${said}` };
   });
+}
+
+/** Her lines it waits to read, shown wherever an answer lets it read them: text, never markup. */
+export function QueuedLines({ task }: { readonly task: TaskSnapshot }) {
+  const { t } = useLingui();
+  const lines = queuedLines(task);
+  if (lines.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-1.5" data-queued>
+      <p className="text-muted-foreground text-xs">
+        {t`She passed these on, and it reads them first when it goes on:`}
+      </p>
+      {keyed(lines, (line) => line).map(({ item, key }) => (
+        <blockquote key={key} className="whitespace-pre-wrap break-words border-l-2 pl-3">
+          {item}
+        </blockquote>
+      ))}
+    </div>
+  );
 }
 
 /** The plan the worker keeps with its todo tool. */
@@ -138,7 +159,7 @@ export function TodoList({ items }: { readonly items: readonly TaskTodoItem[] })
   const { t } = useLingui();
   return (
     <ol className="flex flex-col gap-1.5">
-      {keyed(items).map(({ item, key }) => {
+      {keyed(items, (item) => item.text).map(({ item, key }) => {
         const Icon = TODO_ICONS[item.status];
         return (
           <li key={key} className="flex gap-2 text-sm">

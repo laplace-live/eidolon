@@ -194,6 +194,13 @@ describe("bindChatCall", () => {
     ]);
   });
 
+  test("adds nothing to her replies, and nothing reaches the call from outside it", async () => {
+    const chat = { header: HEADER, events: await window() };
+    const { binding } = await bound({ chat, persona: MILKY });
+    expect(binding).not.toHaveProperty("extras");
+    expect(binding).not.toHaveProperty("outside");
+  });
+
   test("each line goes to the browser numbered on from the window, hers signed, in the order said", async () => {
     const events = await window();
     const { binding } = await bound({ chat: { header: HEADER, events }, persona: MILKY });

@@ -1,6 +1,7 @@
 // A local call inside a chat: the runner's ChatCall run on the voice loop over a fake transport,
 // recognizer and voice, with her turns scripted. She opens on her view of the chat, and the runner
-// stores each line and photo between the call's ends.
+// stores each line and photo between the call's ends; in a chat of hers alone, her start_task on
+// the call too, and a task's end reaches her there.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
@@ -21,7 +22,9 @@ import {
 } from "../../../../packages/voice/test/call/harness.ts";
 import { FakeClock } from "../../../../packages/voice/test/input/clock.ts";
 import { SILERO_MODEL, SMART_TURN_MODEL } from "../../../../packages/voice/test/input/speech.ts";
-import { ChatRunner, type ChatTurn } from "../../src/local/chats/runner.ts";
+import type { TaskChat, TaskSnapshot } from "../../src/local/api.ts";
+import { ChatRunner, type ChatRunnerOptions, type ChatTurn } from "../../src/local/chats/runner.ts";
+import { START_TASK, taskEndedNudge } from "../../src/local/tasks/tool.ts";
 import { type CapturedLogs, captureLogs } from "../fakes.ts";
 
 const PERSONA = "milky-green";
@@ -63,12 +66,21 @@ const greets: ChatTurn = (request) =>
     yield { type: "ended", turn } as const;
   })();
 
-test("the runner stores each line and photo of the call, between its ends", async () => {
-  const runner = new ChatRunner({ root: ROOT(), turn: greets });
-  const id = await runner.create([PERSONA]);
-  await runner.live(id)?.ended;
-  const call = await runner.startCall(id, PERSONA);
+/** Each event as a short line: what it is, and what tells it apart from its kind. */
+const brief = (event: ChatEvent) => {
+  if (event.type === "message") {
+    return [event.speaker.kind, event.text, event.modality ?? "text", event.attachments ?? null];
+  }
+  if (event.type === "call-started") return ["call-started", event.persona];
+  if (event.type === "call-ended") return ["call-ended", event.reason];
+  if (event.type === "tool-call") return ["tool-call", event.name];
+  if (event.type === "tool-result") return ["tool-result", event.stage ?? null];
+  return [event.type];
+};
 
+/** A call with her in chat `id` on the voice loop, answered and ready, her turns scripted. */
+async function onCall(runner: ChatRunner, id: string) {
+  const call = await runner.startCall(id, PERSONA);
   const transport = new FakeTransport();
   const speech = new FakeSpeech();
   const turns: FakeTurn[] = [];
@@ -104,7 +116,6 @@ test("the runner stores each line and photo of the call, between its ends", asyn
     for (let pulled = 0; pulled < 480; pulled += 240) transport.source?.pull(240);
     await ending;
   };
-
   const admission = {
     user: { mid: null, uname: null, face: null, isLoggedIn: false },
     token: null,
@@ -114,6 +125,14 @@ test("the runner stores each line and photo of the call, between its ends", asyn
   await until(() => transport.connected);
   transport.rtvi("client-ready", { version: "2.3.0" });
   await until(() => turns.length === 1);
+  return { call, transport, turns, speaks, done };
+}
+
+test("the runner stores each line and photo of the call, between its ends", async () => {
+  const runner = new ChatRunner({ root: ROOT(), turn: greets });
+  const id = await runner.create([PERSONA]);
+  await runner.live(id)?.ended;
+  const { call, transport, turns, speaks, done } = await onCall(runner, id);
   const [greeting] = turns as [FakeTurn];
   // She opens on her view of the chat.
   const { header, events } = greeting.request.chat;
@@ -136,14 +155,6 @@ test("the runner stores each line and photo of the call, between its ends", asyn
 
   const stored = (await runner.store.read(id)).events;
   const name = `${createHash("sha256").update(png).digest("hex")}.png`;
-  const brief = (event: ChatEvent) => {
-    if (event.type === "message") {
-      return [event.speaker.kind, event.text, event.modality ?? "text", event.attachments ?? null];
-    }
-    if (event.type === "call-started") return ["call-started", event.persona];
-    if (event.type === "call-ended") return ["call-ended", event.reason];
-    return [event.type];
-  };
   expect(stored.map(brief)).toEqual([
     ["persona", "你好", "text", null],
     ["call-started", PERSONA],
@@ -151,6 +162,121 @@ test("the runner stores each line and photo of the call, between its ends", asyn
     ["user", "拍一张看看", "call", null],
     ["persona", "", "call", [{ kind: "image", name, mime: "image/png" }]],
     ["persona", "拍好啦", "call", null],
+    ["call-ended", "hangup"],
+  ]);
+  expect(
+    logs.lines().filter((line) => line.startsWith("ERROR") || line.startsWith("WARNING")),
+  ).toEqual([]);
+}, 20_000);
+
+test("her answer on the call may start a task, which the chat stores, and she tells its end there", async () => {
+  const waiting: TaskSnapshot = {
+    v: 1,
+    id: "0190f5c8-0000-7000-8000-00000000a001",
+    createdAt: 1000,
+    status: "awaiting-approval",
+    pending: { kind: "start" },
+    brief: {
+      goal: "写一个待办网页",
+      deliverable: "写一个待办网页",
+      folder: "/site",
+      check: "Check it",
+    },
+    model: { account: "openrouter", model: "test/model" },
+    grants: [],
+    spendPauseUsd: 1,
+    spentUsd: 0,
+    files: { read: [], written: [] },
+  };
+  const origins: TaskChat[] = [];
+  const tasks: NonNullable<ChatRunnerOptions["tasks"]> = {
+    ready: () => true,
+    start: async (_input, origin) => {
+      origins.push(origin);
+      return waiting;
+    },
+    cancelChat: async () => {},
+    list: async () => [],
+    snapshotsOf: () => [],
+    steer: async () => waiting,
+    cancel: async () => waiting,
+  };
+  let told = 0;
+  const runner = new ChatRunner({
+    root: ROOT(),
+    turn: (request, save) => {
+      told++;
+      return greets(request, save);
+    },
+    tasks,
+  });
+  const id = await runner.create([PERSONA]);
+  await runner.live(id)?.ended;
+  const { transport, turns, speaks, done } = await onCall(runner, id);
+  const [greeting] = turns as [FakeTurn];
+  // Every reply gets the status block; only one that answers her caller, start_task.
+  expect(greeting.request.providers?.map((entry) => entry.label)).toEqual(["TasksStatus"]);
+  expect(greeting.request.background).toBeUndefined();
+  await speaks(greeting, "又见面了");
+  transport.rtvi("send-text", { content: "帮我写个网页", options: { run_immediately: true } });
+  await until(() => turns.length === 2);
+  const answer = turns[1] as FakeTurn;
+  const start = answer.request.background?.tools[0];
+  expect(start?.schema.name).toBe(START_TASK);
+  // Her start_task, as the engine runs it: the call's log keeps her call and what it started.
+  const args = { goal: "写一个待办网页", folder: "~/site" };
+  const call = { persona: PERSONA, turn: answer.id, callId: "call-1" };
+  answer.events({ type: "tool-call", ...call, name: START_TASK, arguments: args });
+  const context = { getMessages: () => [], setMessages: () => {}, setHiddenTools: () => {} };
+  const signal = new AbortController().signal;
+  const result = await start?.run(
+    { arguments: args, context, signal, callId: "call-1" },
+    answer.request.effects,
+  );
+  expect(result).toEqual({ task: waiting.id, status: "awaiting-approval" });
+  answer.events({ type: "tool-result", ...call, result: result ?? {}, stage: "started" });
+  await speaks(answer, "交给我吧，你点一下允许");
+  // The task ends while she is on the call: she tells it there, in a reply of its own.
+  await runner.report({
+    ...waiting,
+    status: "succeeded",
+    outcome: { status: "succeeded", report: "Done." },
+    chat: { id, persona: PERSONA, call: "call-1" },
+    endedAt: 5000,
+  });
+  await until(() => turns.length === 3);
+  const tells = turns[2] as FakeTurn;
+  expect(tells.request.nudge).toBe(taskEndedNudge("call-1"));
+  expect(tells.request.background).toBeUndefined();
+  expect(
+    tells.request.chat.events.flatMap((event) =>
+      event.type === "tool-result" ? [[event.callId, event.stage]] : [],
+    ),
+  ).toEqual([
+    ["call-1", "started"],
+    ["call-1", "final"],
+  ]);
+  await speaks(tells, "网页做好啦");
+  transport.leave();
+  await done;
+  await until(() => runner.callIn(id) === null);
+  await Bun.sleep(50);
+  await runner.shutdown();
+
+  // She told it on the call: no turn of hers after it.
+  expect(told).toBe(1);
+  expect(origins).toEqual([{ id, persona: PERSONA, call: "call-1" }]);
+  const stored = (await runner.store.read(id)).events;
+  expect(stored.map(brief)).toEqual([
+    ["persona", "你好", "text", null],
+    ["call-started", PERSONA],
+    ["persona", "又见面了", "call", null],
+    ["user", "帮我写个网页", "call", null],
+    ["tool-call", START_TASK],
+    ["tool-result", "started"],
+    ["persona", "交给我吧，你点一下允许", "call", null],
+    ["tool-result", "final"],
+    ["persona", "网页做好啦", "call", null],
     ["call-ended", "hangup"],
   ]);
   expect(

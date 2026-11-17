@@ -1,6 +1,7 @@
 // A task's card in the chat log, at her start_task call: what it works on and where, its state,
-// what it asks the owner, its plan, its latest step and the files it wrote, its steps on demand,
-// and Stop. Every button a task has is here or on the waiting bar.
+// what she passed on that it hasn't read, what it asks the owner, its plan, its latest step and the
+// files it wrote, its steps on demand, and Stop. Every button a task has is here or on the waiting
+// bar.
 
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
@@ -23,7 +24,7 @@ import type { TaskItem } from "@/features/chats/items";
 import type { TaskSnapshot, TasksResponse } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { TaskPrompt } from "./cards";
-import { FileList, ModelText, SpendText, StatusBadge, TodoList } from "./parts";
+import { FileList, ModelText, QueuedLines, SpendText, StatusBadge, TodoList } from "./parts";
 import { chatTasksQuery, useAnswering, useStopTask } from "./queries";
 import { followsSteps, offers } from "./state";
 import { latestStep, toolState } from "./transcript";
@@ -157,6 +158,7 @@ export function TaskCard({ chatId, item }: { readonly chatId: string; readonly i
         {task?.denied && (
           <p className="text-muted-foreground text-xs">{t`You denied it when it asked to start.`}</p>
         )}
+        {task !== undefined && <QueuedLines task={task} />}
       </div>
       {task !== undefined && <TaskPrompt task={task} />}
       {((task?.todo?.length ?? 0) > 0 || written.length > 0) && (

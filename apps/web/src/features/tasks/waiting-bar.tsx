@@ -1,11 +1,12 @@
-// Above the composer while a task of the open chat waits on the owner: its question and its card's
-// answers, so nobody has to scroll back to the card.
+// Above the composer while a task of the open chat waits on the owner: its question, her lines its
+// answer lets it read, and its card's answers, so nobody has to scroll back to the card.
 
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { Button } from "@/components/ui/button";
 import type { TaskSnapshot } from "@/lib/api";
 import { TaskPrompt } from "./cards";
+import { QueuedLines } from "./parts";
 
 export function WaitingBar({
   task,
@@ -32,6 +33,7 @@ export function WaitingBar({
           {t`Show Task`}
         </Button>
       </div>
+      <QueuedLines task={task} />
       <TaskPrompt task={task} compact />
     </section>
   );

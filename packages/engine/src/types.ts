@@ -72,15 +72,29 @@ export interface TurnRequest {
   readonly usage?: UsageScope;
   /** A prompt she answers, stored as a developer `context` block at her view's end. */
   readonly nudge?: string;
-  /** Offered after her own tools, in this turn alone; a call's turn takes none. */
+  /** Offered after her own tools, in this turn alone; a realtime model's turn takes none. */
   readonly background?: BackgroundTools;
+  /**
+   * Offered after her own and her background tools, in this turn alone, and settled within it as
+   * hers are, as sync tools in a call; a realtime model's turn takes none.
+   */
+  readonly tools?: readonly LlmTool[];
+  /**
+   * Run after her own, in this turn alone; the blocks they set are recorded as hers are. A realtime
+   * model's turn takes none.
+   */
+  readonly providers?: PersonaParts["providers"];
 }
 
-/** A text turn's tools whose work goes on outside it, and the line her persona prefix gives them. */
+/** What a caller adds to one turn of hers, beyond what her persona brings. */
+export type TurnExtras = Pick<TurnRequest, "background" | "tools" | "providers">;
+
+/** A turn's tools whose work goes on outside it, and the line her persona prefix gives them. */
 export interface BackgroundTools {
   /**
-   * Each result is stored with stage `started`, and whoever does the work stores the call's `final`
-   * later. A result holding `error` is stored as it is: nothing went on.
+   * Each result is stored with stage `started`, her next round reads it, and whoever does the work
+   * stores the call's `final` later. A result holding `error` is stored as it is: nothing went on.
+   * A started result is never `{}`, which her view reads as pipedog's async call.
    */
   readonly tools: readonly BackgroundTool[];
   readonly hint: string;
@@ -95,9 +109,9 @@ export interface BackgroundTool extends Omit<LlmTool, "run"> {
 export interface CallHooks {
   /**
    * Her parts' voice variant, spoken live rather than saved: tools act through `effects`,
-   * `ASYNC_TOOL_INSTRUCTIONS` joins her system instruction while an async tool is registered, and
-   * an async tool reports through `onAsyncResult`. The turn's outputs gain `mind` and `notice`
-   * lines, and its `tool` lines a `callId`.
+   * `ASYNC_TOOL_INSTRUCTIONS` joins her system instruction while one of her own tools is async, and
+   * such a tool reports through `onAsyncResult`. The turn's outputs gain `mind` and `notice` lines,
+   * and its `tool` lines a `callId`.
    */
   readonly mode: "call";
   readonly effects: ToolEffects;
@@ -109,17 +123,25 @@ export interface CallHooks {
   readonly heard: () => Promise<{ readonly text: string; readonly complete: boolean }>;
   /**
    * An async tool's settled result, during the turn or after it: one `tool-result` with stage
-   * `final` or `cancelled`. Its `running` line was the turn's; nothing else reports its end.
+   * `final` or `cancelled`. Its `running` line was the turn's; nothing else reports its end. Also,
+   * after a barge-in, the result of a tool the turn was handed that runs on past it, once that
+   * returns: stage `started` for a background tool, no stage for a request tool. Its tool line
+   * already ended `cancelled` with the turn.
    */
   readonly onAsyncResult: (events: readonly ChatEventDraft[]) => void;
-  /** Cancels the async tools her turns start, as the call ends; each also stops at its timeout. */
+  /**
+   * Cancels the async tools her turns start, and the tools that run on past a barge-in, as the
+   * call ends; each also stops at its timeout.
+   */
   readonly asyncSignal?: AbortSignal;
   readonly usage?: UsageScope;
 }
 
-/** A turn in a call, which has no `late`: an async tool runs on through `onAsyncResult`. */
-export type CallTurnRequest = Omit<TurnRequest, "mode" | "late" | "usage" | "background"> &
-  CallHooks;
+/**
+ * A turn in a call. Its `late` comes from its hooks: her async tool runs on through
+ * `onAsyncResult`, and so does a tool the turn is handed that isn't cancelled on interruption.
+ */
+export type CallTurnRequest = Omit<TurnRequest, "mode" | "late" | "usage"> & CallHooks;
 
 /** Takes a tool that runs on (`cancelOnInterruption: false`) when its turn is interrupted. */
 export interface LateTools {

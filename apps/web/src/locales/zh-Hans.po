@@ -1206,6 +1206,10 @@ msgstr "请检查麦克风，然后再次呼叫。"
 msgid "Check your microphone, then try again."
 msgstr "请检查麦克风，然后再试一次。"
 
+#: src/features/chats/labels.ts
+msgid "Checking on the task…"
+msgstr "正在查看任务…"
+
 #: src/components/voice-picker/index.tsx
 msgid "Chinese"
 msgstr "中文"
@@ -3163,6 +3167,10 @@ msgstr "部分费用无法估价。"
 msgid "Participants"
 msgstr "成员"
 
+#: src/features/chats/labels.ts
+msgid "Passing it on to the task…"
+msgstr "正在转告任务…"
+
 #: src/components/settings-form/account-key-field.tsx
 #: src/features/settings/account-dialog.tsx
 msgid "Paste a new key to replace it"
@@ -3959,6 +3967,10 @@ msgstr "她从环境变量继承了声音（{id}），还没有用 Fish Audio �
 msgid "She needs a name and a short name."
 msgstr "她需要名字和简称。"
 
+#: src/features/tasks/parts.tsx
+msgid "She passed these on, and it reads them first when it goes on:"
+msgstr "她转告的话，接着做时会先看："
+
 #: src/features/home/memory-panel.tsx
 msgid "She picks these up in your calls, and only she reads them: each persona remembers on her own."
 msgstr "这些是她在你们的通话里记下的，只有她会读到：每个人设各记各的。"
@@ -4209,6 +4221,10 @@ msgstr "开始于"
 msgid "Started at {time}"
 msgstr "{time} 开始"
 
+#: src/features/chats/labels.ts
+msgid "Starting a task…"
+msgstr "正在开始任务…"
+
 #: src/features/jobs/detail.tsx
 msgid "Starting…"
 msgstr "正在启动…"
@@ -4260,6 +4276,10 @@ msgstr "被模型的服务商中止。"
 #: src/features/jobs/labels.ts
 msgid "Stopped unexpectedly"
 msgstr "意外停止"
+
+#: src/features/chats/labels.ts
+msgid "Stopping the task…"
+msgstr "正在停止任务…"
 
 #: src/features/jobs/parts.tsx
 msgid "Stopping…"

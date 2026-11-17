@@ -19,6 +19,8 @@ import {
   type CallLog,
   type CallTransport,
   type CloseReason,
+  type OutsideResult,
+  type ReplyExtras,
   rtviMessage,
 } from "@eidolon/voice";
 
@@ -49,6 +51,14 @@ export interface CallBinding {
   readonly onServerMessage?: (data: Readonly<Record<string, unknown>>, client?: CallClient) => void;
   /** Called once, after the call's last line, however it ended. */
   readonly onEnded: (end: CallEnd) => void;
+  /**
+   * What each reply of hers adds to her turn, asked synchronously as it starts: `background` and
+   * `tools` go only to a reply to the viewer's line, `providers` to every one. A realtime call never
+   * asks.
+   */
+  readonly extras?: ReplyExtras;
+  /** What reaches the call from outside it, read until it ends; a realtime call never reads it. */
+  readonly outside?: AsyncIterable<OutsideResult>;
 }
 
 /** A call with every persona in a chat at once, the director choosing who answers each line. */

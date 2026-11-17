@@ -29,6 +29,7 @@ import type {
   CallTurnOutput,
   EngineDeps,
   LateTools,
+  TurnExtras,
   TurnOutput,
   TurnRequest,
 } from "./types.ts";
@@ -69,10 +70,14 @@ export interface ChatRequest {
   readonly usage?: UsageScope;
   /** Offered in each turn after her own tools. */
   readonly background?: BackgroundTools;
+  /** Offered in each turn after her own and her background tools, and settled within it. */
+  readonly tools?: TurnRequest["tools"];
+  /** Run in each turn after her own providers. */
+  readonly providers?: TurnRequest["providers"];
 }
 
 /** A call's answer: each persona's turn is a call's, and every reply is spoken. */
-export interface CallChatRequest extends Omit<ChatRequest, "late" | "background"> {
+export interface CallChatRequest extends Omit<ChatRequest, "late" | keyof TurnExtras> {
   /** Called just before each persona's turn, for that turn alone. */
   readonly hooks: (persona: ParticipantId) => CallHooks;
 }
@@ -145,6 +150,17 @@ function round(
   return [...once.values()];
 }
 
+/** What a chat's answer hands each of its turns beyond her parts. */
+function handed(request: ChatRequest): Pick<TurnRequest, "late" | keyof TurnExtras> {
+  const { late, background, tools, providers } = request;
+  return {
+    ...(late ? { late } : {}),
+    ...(background ? { background } : {}),
+    ...(tools ? { tools } : {}),
+    ...(providers ? { providers } : {}),
+  };
+}
+
 /** Her reply, or its failure, or the turn's end: what her decision must be stored before. */
 function closes(output: TurnOutput): boolean {
   return (
@@ -184,9 +200,8 @@ async function* answerWhileDeciding(
       viewer: request.viewer,
       signal,
       mode,
-      ...(request.late ? { late: request.late } : {}),
       ...(request.usage ? { usage: request.usage } : {}),
-      ...(request.background ? { background: request.background } : {}),
+      ...handed(request),
     },
     deps,
   )) {
@@ -227,13 +242,8 @@ export async function* runChat(
   const usage = request.usage ?? { source: "chat", session: header.id };
   const turn = (chat: ChatLog, persona: ParticipantId, mode: "text" | "voice") => {
     const base = { chat, persona, viewer: request.viewer, signal, usage };
-    if (hooks !== null) return runTurn({ ...base, ...hooks(persona) }, deps);
-    const late = "late" in request ? request.late : undefined;
-    const background = "background" in request ? request.background : undefined;
-    return runTurn(
-      { ...base, mode, ...(late ? { late } : {}), ...(background ? { background } : {}) },
-      deps,
-    );
+    if ("hooks" in request) return runTurn({ ...base, ...request.hooks(persona) }, deps);
+    return runTurn({ ...base, mode, ...handed(request) }, deps);
   };
   const decide = (lines: DirectorLine[], hop: number): Promise<DirectorDecision> =>
     withUsageScope(usage, () =>

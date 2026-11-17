@@ -80,6 +80,17 @@ function resultContent(result: Readonly<Record<string, unknown>>): string {
 }
 
 /**
+ * A `started` result as `toolCallMessages` takes it: "started", pipedog's placeholder, for its
+ * async tools' `{}`, else what a background tool started, as it is. Only a `{}` start gets
+ * pipedog's rule for the call's `final`, so a background tool's started result is never empty.
+ */
+export function startedResult(
+  result: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> | "started" {
+  return Object.keys(result).length === 0 ? "started" : result;
+}
+
+/**
  * A tool call as her view holds it: the `assistant.tool_calls` message, then its `tool` message,
  * with pipedog's content: "CANCELLED" for a call with no result, and for `started`, an async call
  * still running, the placeholder `startedEnvelope`.
@@ -113,11 +124,12 @@ export function toolCallMessages(
  * personas; a run of other personas' lines becomes one `user` message of `名字：text` lines. Her
  * kickoff is a `user` message, each tool call an `assistant.tool_calls` message followed by its
  * result, and each context block is spliced in at its recorded position in seq order, so blocks
- * accumulate as they do in a call, until a `context-removed` takes one out. An async call's result
- * replaces its placeholder, or comes later as a developer message once the conversation has moved
- * on, as pipedog settles it; a text turn's, which a reply of hers outside a call followed, always
- * replaces it, and comes with its call when that call left the window. What belongs to another
- * persona is left out.
+ * accumulate as they do in a call, until a `context-removed` takes one out. A `final` of pipedog's
+ * async calls, whose `started` result is `{}`, replaces its placeholder, or comes later as a
+ * developer message once the conversation has moved on, as pipedog settles it. Every other `final`
+ * replaces its call's result, comes with its call when that call left the window, and is left out
+ * when the log holds no call for it, so what a background tool brings back stays a tool's output.
+ * A `cancelled` always comes as a developer message. What belongs to another persona is left out.
  */
 export function viewOf(
   header: ChatHeader,
@@ -142,33 +154,18 @@ export function viewWithBlocks(
   for (const event of events) {
     if (event.type !== "tool-result" || event.persona !== id) continue;
     if (event.stage === undefined) results.set(event.callId, event.result);
-    else if (event.stage === "started") results.set(event.callId, "started");
+    else if (event.stage === "started") results.set(event.callId, startedResult(event.result));
   }
-  const placeholders = new Map<string, ViewToolMessage>();
+  /** Her calls' `tool` messages in the window, by call id. */
+  const toolMessages = new Map<string, ViewToolMessage>();
   /** Her calls by id, those before the window too. */
   const calls = new Map<string, ChatEventOf<"tool-call">>();
-  /** Her async calls still running. */
-  const running = new Set<string>();
-  /** Her async calls a reply of hers outside a call followed: a text turn's, which ended there. */
-  const textTurns = new Set<string>();
   const view: ViewMessage[] = [];
   const blocks = new Map<ViewMessage, number>();
   const bySeq = new Map<number, ViewMessage>();
   let others: { role: "user"; content: string } | null = null;
   for (const event of events) {
-    if (event.type === "tool-call" && event.persona === id) {
-      calls.set(event.callId, event);
-    } else if (event.type === "tool-result" && event.persona === id && event.stage !== undefined) {
-      if (event.stage === "started") {
-        textTurns.delete(event.callId);
-        running.add(event.callId);
-      } else {
-        running.delete(event.callId);
-      }
-    } else if (event.type === "message" && isFrom(event, id) && event.modality !== "call") {
-      for (const callId of running) textTurns.add(callId);
-      running.clear();
-    }
+    if (event.type === "tool-call" && event.persona === id) calls.set(event.callId, event);
     if (event.seq < start) continue;
     switch (event.type) {
       case "message": {
@@ -214,10 +211,9 @@ export function viewWithBlocks(
         break;
       case "tool-call":
         if (event.persona === id) {
-          const result = results.get(event.callId) ?? null;
-          const [call, tool] = toolCallMessages(event, result);
+          const [call, tool] = toolCallMessages(event, results.get(event.callId) ?? null);
           view.push(call, tool);
-          if (result === "started") placeholders.set(event.callId, tool);
+          toolMessages.set(event.callId, tool);
         }
         break;
       case "tool-result":
@@ -225,16 +221,17 @@ export function viewWithBlocks(
           view.push({ role: "developer", content: cancelledEnvelope(event.callId) });
         } else if (event.persona === id && event.stage === "final") {
           const content = resultContent(event.result);
-          const placeholder = placeholders.get(event.callId);
-          if (textTurns.has(event.callId)) {
-            // What a text turn's call brings, such as a page a task quotes, stays a tool's output.
-            const call = calls.get(event.callId);
-            if (placeholder !== undefined) placeholder.content = content;
-            else if (call !== undefined) view.push(...toolCallMessages(call, event.result));
-          } else if (placeholder !== undefined && !movedOn(view, placeholder)) {
-            placeholder.content = content;
+          const tool = toolMessages.get(event.callId);
+          // pipedog's async call: its started result was `{}`.
+          if (results.get(event.callId) === "started") {
+            if (tool !== undefined && !movedOn(view, tool)) tool.content = content;
+            else view.push({ role: "developer", content: finalEnvelope(event.callId, content) });
+          } else if (tool !== undefined) {
+            // What a background tool brings, such as a page a task quotes, stays a tool's output.
+            tool.content = content;
           } else {
-            view.push({ role: "developer", content: finalEnvelope(event.callId, content) });
+            const call = calls.get(event.callId);
+            if (call !== undefined) view.push(...toolCallMessages(call, event.result));
           }
         }
         break;

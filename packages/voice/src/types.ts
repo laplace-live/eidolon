@@ -1,6 +1,6 @@
 import type { UserContext } from "@eidolon/access";
 import type { ChatEvent, ChatEventDraft, ChatHeader, ParticipantId } from "@eidolon/chat";
-import type { ChatDeps, runChat, runTurn } from "@eidolon/engine";
+import type { ChatDeps, runChat, runTurn, TurnExtras } from "@eidolon/engine";
 import type { openRealtime } from "@eidolon/providers/realtime";
 import type { openSpeech } from "@eidolon/providers/speech-stream";
 import type { openStt } from "@eidolon/providers/stt";
@@ -127,6 +127,21 @@ export interface CallDeps {
   readonly clock: Clock;
 }
 
+/**
+ * What a reply of hers adds to her turn, asked as the reply starts: `answers` when it answers the
+ * caller's line, which alone may take its tools.
+ */
+export type ReplyExtras = (answers: boolean) => TurnExtras | null;
+
+/** What reaches a call from outside it: lines its log stores, and a prompt she answers. */
+export interface OutsideResult {
+  readonly drafts: readonly ChatEventDraft[];
+  /** Answered by her next reply that is offered no tools of `CallPlan.extras`. */
+  readonly nudge?: string;
+  /** Whether the nudge is still due, asked as a reply would take it: one that isn't is dropped. */
+  readonly due?: () => boolean;
+}
+
 export interface CallPlan {
   readonly id: string;
   /** The persona whose Call button started it; in a group call, her hearing role hears. */
@@ -141,4 +156,8 @@ export interface CallPlan {
    * chooses (`group.ts`). Never on a realtime model.
    */
   readonly group?: boolean;
+  /** What each reply of hers adds to her turn: a single cascade call's alone. */
+  readonly extras?: ReplyExtras;
+  /** Results from outside the call, read until it ends: a single cascade call's alone. */
+  readonly outside?: AsyncIterable<OutsideResult>;
 }

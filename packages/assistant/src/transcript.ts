@@ -68,6 +68,12 @@ export interface TaskWebAccess {
   readonly denied: readonly string[];
 }
 
+/** The latest tool call a task's run started: its tool, and the head of its arguments. */
+export interface TaskStep {
+  readonly tool: string;
+  readonly head: string;
+}
+
 /** Where a task started: the chat, the persona in it, and her start_task call's id. */
 export interface TaskChat {
   readonly id: string;
@@ -95,6 +101,7 @@ export interface TaskSnapshot {
   readonly pause?: TaskPause;
   /** The latest list its todo tool wrote. */
   readonly todo?: readonly TodoItem[];
+  readonly step?: TaskStep;
   readonly inbox?: TaskInboxLines;
   /** `ask` with no sites when absent. */
   readonly web?: TaskWebAccess;
@@ -151,6 +158,9 @@ const isTodo = (value: unknown): boolean =>
     (item) => isPlainObject(item) && isString(item.text) && isOneOf(TODO_STATUSES, item.status),
   );
 
+const isStep = (value: unknown): boolean =>
+  isPlainObject(value) && isString(value.tool) && isString(value.head);
+
 const isInbox = (value: unknown): boolean =>
   isPlainObject(value) && isStrings(value.steer) && isStrings(value.followUp);
 
@@ -195,6 +205,7 @@ function isSnapshot(value: unknown): value is TaskSnapshot {
     (value.pending === undefined || isPending(value.pending)) &&
     (value.pause === undefined || isPause(value.pause)) &&
     (value.todo === undefined || isTodo(value.todo)) &&
+    (value.step === undefined || isStep(value.step)) &&
     (value.inbox === undefined || isInbox(value.inbox)) &&
     (value.web === undefined || isWebAccess(value.web)) &&
     (value.denied === undefined || value.denied === true) &&

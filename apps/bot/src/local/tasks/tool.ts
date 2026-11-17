@@ -1,16 +1,31 @@
-// start_task, her one way to use the owner's computer, and the line her persona prefix gives it. It
-// hands her brief to the task manager and answers at once; the task's end reaches the chat later,
-// as her call's `final`.
+// start_task, her one way to use the owner's computer, the line her persona prefix gives it, and the
+// nudges her turns answer about a task. It hands her brief to the task manager and answers at once;
+// the task's end reaches the chat later, as her call's `final`.
 import type { BackgroundTool } from "@eidolon/engine";
-import type { StartTaskFinal, StartTaskStarted, StartTaskToolName, TaskSnapshot } from "../api.ts";
+import type {
+  CheckTaskToolName,
+  StartTaskFinal,
+  StartTaskStarted,
+  StartTaskToolName,
+  SteerTaskToolName,
+  StopTaskToolName,
+  TaskSnapshot,
+} from "../api.ts";
 import { type TaskBriefInput, TaskRefused } from "./manager.ts";
 
 export const START_TASK: StartTaskToolName = "start_task";
+export const STEER_TASK: SteerTaskToolName = "steer_task";
+export const STOP_TASK: StopTaskToolName = "stop_task";
+export const CHECK_TASK: CheckTaskToolName = "check_task";
 
-/** Starts the task her call `callId` asks for: the manager's start, with that call as its origin. */
+/**
+ * Starts the task her call `callId` asks for: the manager's start, with that call as its origin.
+ * `args` are her arguments as she gave them.
+ */
 export type StartTask = (
   input: TaskBriefInput,
   callId: string,
+  args: Readonly<Record<string, unknown>>,
 ) => Promise<Pick<TaskSnapshot, "id" | "status">>;
 
 /** How much of the worker's last text her call's `final` carries. */
@@ -19,11 +34,17 @@ const REPORT_MAX_CHARS = 4000;
 /** How many of the files it wrote her call's `final` names: it stays in each later turn's view. */
 const FILES_MAX = 50;
 
+/** How each nudge about a task starts, before her call's id: a call's seed drops them by it. */
+export const TASK_NUDGE_LEAD = `你用 ${START_TASK} 在电脑上做的事（调用 `;
+
 const START_TASK_SCHEMA: BackgroundTool["schema"] = {
   name: START_TASK,
   description:
-    "在这台电脑上动手做一件事：写代码、做网页、整理或修改文件、上网查资料。" +
-    "对方要你在电脑上做事时调用。调用后马上返回，活在后台做，做完结果会自己回来。" +
+    "在这台电脑上动手做一件事：写代码、做网页、写或修改文件、在文件夹里找东西、上网看网页查资料。" +
+    "对方要你在电脑上做这些时调用。打开文件、网页或软件给对方看，运行程序或命令，" +
+    "删除、移动或重命名文件，看图片，这些都做不到，别调用，直接跟对方说现在还做不到。" +
+    "调用后马上返回：status 是 running 就是开始做了，awaiting-approval " +
+    "是要等对方在聊天里的任务卡片上点允许才开始。活在后台做，做完结果会自己回来。" +
     "后台干活时看不到这段聊天，只看得到这几个参数，所以要把要求写完整。",
   properties: {
     goal: {
@@ -78,27 +99,34 @@ export function startTaskTool(start: StartTask): BackgroundTool {
       if (typeof brief === "string") return { error: brief };
       let task: Pick<TaskSnapshot, "id" | "status">;
       try {
-        task = await start(brief, callId);
+        task = await start(brief, callId, args);
       } catch (error) {
         if (error instanceof TaskRefused) return { error: error.message };
         throw error;
       }
-      const started: StartTaskStarted = {
-        task: task.id,
-        status: task.status === "awaiting-approval" ? "awaiting-approval" : "running",
-      };
-      return started;
+      return startedOf(task);
     },
+  };
+}
+
+/** start_task's result for the task a start made: stored as her call's `started` result. */
+export function startedOf(task: Pick<TaskSnapshot, "id" | "status">): StartTaskStarted {
+  return {
+    task: task.id,
+    status: task.status === "awaiting-approval" ? "awaiting-approval" : "running",
   };
 }
 
 /** Her persona-prefix line for start_task. */
 export function assistantPromptHint(): string {
   return (
-    "你能直接用这台电脑做事：写代码、做网页、整理文件、上网查资料，都是你自己动手。" +
+    "你能直接用这台电脑做事：写代码、做网页、写和改文件、上网查资料，都是你自己动手。" +
     `要用电脑就调用 ${START_TASK} 工具，这是你碰电脑的唯一方式，不要说自己用不了电脑。` +
-    "调用后说一句交给你了就行；聊天里的任务卡片要是在问要不要开始，得对方点了允许才会开始，" +
-    "顺口提醒对方一声。做完了结果会自己回来。"
+    "不过现在你在电脑上只会读写文件、上网看网页：打开文件、网页或软件给对方看，运行程序，" +
+    "删除或移动文件，看图片，这些还做不到，对方要的话就直说，告诉对方文件在哪，" +
+    `别为这些调用 ${START_TASK}。调用后看返回的 status：running 是已经开始了，说一句交给你了就行；` +
+    "awaiting-approval 是还没开始，得对方在聊天里的任务卡片上点了允许才开始，要跟对方说一声。" +
+    "交出去的事别再调用一次，做完了结果会自己回来。"
   );
 }
 
@@ -108,8 +136,19 @@ export function assistantPromptHint(): string {
  */
 export function taskEndedNudge(callId: string): string {
   return (
-    `你用 ${START_TASK} 在电脑上做的事（调用 ${callId}）结束了，结果在那次调用的返回里。` +
+    `${TASK_NUDGE_LEAD}${callId}）结束了，结果在那次调用的返回里。` +
     "用一两句话自然地告诉对方：做成了什么，或者卡在了哪儿；内容多就挑要紧的说，细节等对方问。"
+  );
+}
+
+/**
+ * What her reply on a call answers when task `callId` pauses for the owner: a pointer to its card,
+ * which alone takes the answer.
+ */
+export function taskWaitingNudge(callId: string): string {
+  return (
+    `${TASK_NUDGE_LEAD}${callId}）停下来了，要等对方在聊天里的任务卡片上点一下才会接着做；` +
+    "嘴上答应不算，得在卡片上点。用一句话自然地提醒对方去看看卡片。"
   );
 }
 

@@ -15,7 +15,7 @@ import { callLog, memoryCallLog } from "../../src/call/log.ts";
 import { packHistory, runRealtimeCall } from "../../src/call/realtime.ts";
 import { runVoiceCall } from "../../src/index.ts";
 import type { RtviMessage } from "../../src/rtvi/codec.ts";
-import type { CallDeps, CallPlan } from "../../src/types.ts";
+import type { CallDeps, CallPlan, OutsideResult } from "../../src/types.ts";
 import { FakeClock } from "../input/clock.ts";
 import { ABOUT, FakeTransport, HEADER, HOST, line, settle, VIEWER } from "./harness.ts";
 
@@ -184,6 +184,8 @@ interface Options {
   readonly provider?: ContextProvider;
   /** Started as production starts it, through runVoiceCall and its usage scope. */
   readonly scoped?: boolean;
+  /** Results from outside the call, which a plan may carry. */
+  readonly outside?: AsyncIterable<OutsideResult>;
 }
 
 let serial = 0;
@@ -227,6 +229,7 @@ async function startRealtime(o: Options = {}) {
     log,
     greet: o.greet ?? false,
     realtime: true,
+    ...(o.outside === undefined ? {} : { outside: o.outside }),
   };
   const shutdown = new AbortController();
   let ids = 0;
@@ -953,6 +956,33 @@ describe("runRealtimeCall", () => {
     expect(call.asks()).toEqual(["create"]);
     call.transport.leave();
     await call.running;
+  });
+
+  test("results from outside are ignored: nothing is stored or asked", async () => {
+    const outside = new AsyncQueue<OutsideResult>();
+    const call = await startRealtime({ outside });
+    await call.ready();
+    call.asks();
+    call.news();
+    outside.push({
+      drafts: [
+        {
+          type: "tool-result",
+          persona: HOST,
+          turn: "chat-turn",
+          callId: "t1",
+          result: { task: "t1", status: "succeeded" },
+          stage: "final",
+        },
+      ],
+      nudge: "（任务结束了）",
+    });
+    await settle();
+    expect(call.events()).toEqual([]);
+    expect(call.asks()).toEqual([]);
+    expect(call.news()).toEqual([]);
+    call.transport.leave();
+    expect(await call.running).toBe("client");
   });
 
   test("a fatal error is reported and ends the call (E8)", async () => {

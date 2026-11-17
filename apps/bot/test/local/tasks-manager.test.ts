@@ -41,6 +41,7 @@ import {
   reportUsage,
   type UsageRecord,
 } from "@eidolon/providers";
+import { STEER_PREFIX } from "../../src/local/api.ts";
 import {
   TaskManager,
   type TaskManagerOptions,
@@ -1492,5 +1493,362 @@ describe("reading tasks", () => {
     const past = await refused(tasks.events(id, Buffer.byteLength(text) + 1));
     expect([past.status, past.code]).toEqual([416, "range-not-satisfiable"]);
     expect((await refused(tasks.events(newTaskId(), 0))).code).toBe("unknown-task");
+  });
+});
+
+describe("what she sees of a task", () => {
+  test("snapshotsOf: a chat's tasks as they stand, oldest first, at once; none before the first load", async () => {
+    const seeded = await seed({ status: "interrupted" });
+    problem = "No key";
+    const tasks = manager();
+    expect(tasks.snapshotsOf(ORIGIN.id)).toEqual([]);
+    await tasks.boot();
+    expect(tasks.snapshotsOf(ORIGIN.id)).toEqual([await tasks.get(seeded.id)]);
+
+    problem = null;
+    clock += 1000;
+    const first = await tasks.start({ goal: "First", folder: join(work, "1") }, ORIGIN);
+    await tasks.start({ goal: "Elsewhere", folder: join(work, "2") }, ELSEWHERE);
+    clock += 1000;
+    const second = await tasks.start({ goal: "Second", folder: join(work, "3") }, ORIGIN);
+    expect(tasks.snapshotsOf(ORIGIN.id).map((each) => each.id)).toEqual([
+      seeded.id,
+      first.id,
+      second.id,
+    ]);
+    await tasks.cancel(first.id);
+    expect(tasks.snapshotsOf(ORIGIN.id)[1]?.status).toBe("cancelled");
+    expect(tasks.snapshotsOf("nope")).toEqual([]);
+  });
+
+  test("its latest step: the tool a call started, and its path, url or pattern, else its JSON", async () => {
+    settings = { ...settings, folders: [work] };
+    const first = deferred();
+    const second = deferred();
+    const items = [{ text: "x".repeat(150), status: "pending" }];
+    minds.script("Steps", [
+      calls([call("w1", "write", { path: "a.txt", content: "a" })]),
+      held(first.promise, calls([call("f1", "find", { pattern: "*.txt" })])),
+      held(second.promise, calls([call("t1", "todo", { items })])),
+      says("Done."),
+    ]);
+    const tasks = await booted();
+    const { id } = await tasks.start({ goal: "Steps", folder: join(work, "steps") }, ORIGIN);
+    expect((await tasks.get(id)).step).toBeUndefined();
+
+    await until(async () => (await tasks.get(id)).step !== undefined);
+    expect((await tasks.get(id)).step).toEqual({ tool: "write", head: "a.txt" });
+    first.resolve();
+    await until(async () => (await tasks.get(id)).step?.tool === "find");
+    expect((await tasks.get(id)).step).toEqual({ tool: "find", head: "*.txt" });
+    second.resolve();
+    const ended = await reach(tasks, id, "succeeded");
+    const json = JSON.stringify({ items });
+    expect(ended.step).toEqual({ tool: "todo", head: `${json.slice(0, 120)}…` });
+    await until(async () => (await onDisk(id))?.status === "succeeded");
+    expect((await onDisk(id))?.step).toEqual(ended.step);
+  });
+
+  test("a step a run takes up from its stored reply is named too", async () => {
+    settings = { ...settings, folders: [work] };
+    const url = "https://203.0.113.7/page";
+    minds.script("Fetch later", [
+      calls([call("f1", "web_fetch", { url, note: "the page" })]),
+      says("Fetched."),
+    ]);
+    const tasks = await booted();
+    const { id } = await tasks.start({ goal: "Fetch later", folder: join(work, "f") }, ORIGIN);
+    expect((await reach(tasks, id, "paused")).step).toBeUndefined();
+    // A new manager, as after a restart: only the transcript holds the call.
+    await tasks.stop();
+    const again = await booted();
+    await again.approve(id, { answer: "once" });
+    expect((await reach(again, id, "succeeded")).step).toEqual({ tool: "web_fetch", head: url });
+  });
+});
+
+describe("her steering", () => {
+  const line = (text: string) => `${STEER_PREFIX}${text}`;
+
+  test("queues her line on a running task, which its next request carries as a user line", async () => {
+    settings = { ...settings, folders: [work] };
+    const open = deferred();
+    minds.script("Steered", [
+      held(open.promise, calls([call("l1", "ls", { path: "." })])),
+      says("Used tabs."),
+    ]);
+    const tasks = await booted();
+    const { id } = await tasks.start({ goal: "Steered", folder: join(work, "s") }, ORIGIN);
+    await until(() => minds.for("Steered").length === 1);
+
+    const steered = await tasks.steer(id, "  Use tabs.  ");
+    expect(steered).toMatchObject({
+      status: "running",
+      inbox: { steer: [line("Use tabs.")], followUp: [] },
+    });
+    // At once, not within a second.
+    expect((await onDisk(id))?.inbox).toEqual({ steer: [line("Use tabs.")], followUp: [] });
+
+    open.resolve();
+    await reach(tasks, id, "succeeded");
+    expect(userLines(minds.for("Steered")[1]).at(-1)).toBe(line("Use tabs."));
+    expect(types(id)).toEqual([
+      "brief",
+      "assistant",
+      "tool-start",
+      "tool-result",
+      "steer",
+      "assistant",
+      "end",
+    ]);
+    await until(async () => (await onDisk(id))?.status === "succeeded");
+    expect(await onDisk(id)).not.toHaveProperty("inbox");
+  });
+
+  test("on a task waiting at its start, it comes first once Allow runs it; a Deny drops it", async () => {
+    const tasks = await booted();
+    const allowed = await tasks.start({ goal: "Allowed", folder: join(work, "a") }, ORIGIN);
+    expect((await tasks.steer(allowed.id, "Make it blue.")).status).toBe("awaiting-approval");
+    await tasks.approve(allowed.id, { answer: "once" });
+    await reach(tasks, allowed.id, "succeeded");
+    expect(types(allowed.id)).toEqual(["brief", "steer", "assistant", "end"]);
+    expect(userLines(minds.for("Allowed")[0]).at(-1)).toBe(line("Make it blue."));
+
+    const denied = await tasks.start({ goal: "Denied", folder: join(work, "d") }, ORIGIN);
+    await tasks.steer(denied.id, "Make it red.");
+    const ended = await tasks.approve(denied.id, { answer: "deny" });
+    expect(ended.status).toBe("cancelled");
+    expect(ended).not.toHaveProperty("inbox");
+    expect(types(denied.id)).toEqual(["brief", "end"]);
+  });
+
+  test("on a path question it waits through the answer, and goes ahead of the owner's", async () => {
+    settings = { ...settings, folders: [join(work, "site")] };
+    mkdirSync(join(work, "notes"));
+    writeFileSync(join(work, "notes", "notes.txt"), "milk\n");
+    const read = call("r1", "read", { path: join(work, "notes", "notes.txt") });
+    minds.script("Asks", [calls([read]), calls([{ ...read, id: "r2" }]), says("Read.")]);
+    const tasks = await booted();
+    const { id } = await tasks.start({ goal: "Asks", folder: join(work, "site") }, ORIGIN);
+    const { pending } = await reach(tasks, id, "paused");
+
+    const steered = await tasks.steer(id, "Read the other notes too.");
+    expect(steered).toMatchObject({ status: "paused", pending });
+    await tasks.approve(id, { answer: "once", pending });
+    await reach(tasks, id, "succeeded");
+    expect(userLines(minds.for("Asks")[1]).slice(-2)).toEqual([
+      line("Read the other notes too."),
+      `The owner allowed read access to ${realpathSync(join(work, "notes"))}. Try again.`,
+    ]);
+  });
+
+  test("a Deny on a path or a site question keeps it: the run reads it as it goes on", async () => {
+    settings = { ...settings, folders: [join(work, "site")] };
+    mkdirSync(join(work, "notes"));
+    const notes = join(work, "notes", "notes.txt");
+    writeFileSync(notes, "milk\n");
+    minds.script("Asks", [calls([call("r1", "read", { path: notes })]), says("Couldn't.")]);
+    minds.script("Site", [
+      calls([call("f1", "web_fetch", { url: "https://203.0.113.9/" })]),
+      says("Refused."),
+    ]);
+    const tasks = await booted();
+    const asks = await tasks.start({ goal: "Asks", folder: join(work, "site") }, ORIGIN);
+    const { pending } = await reach(tasks, asks.id, "paused");
+    await tasks.steer(asks.id, "Read the other notes too.");
+    expect(await tasks.approve(asks.id, { answer: "deny", pending })).toMatchObject({
+      status: "running",
+    });
+    await reach(tasks, asks.id, "succeeded");
+    expect(userLines(minds.for("Asks")[1]).slice(-2)).toEqual([
+      line("Read the other notes too."),
+      `The owner refused access to ${realpathSync(notes)}.`,
+    ]);
+
+    settings = { ...settings, folders: [work] };
+    const site = await tasks.start({ goal: "Site", folder: join(work, "web") }, ORIGIN);
+    const fetching = await reach(tasks, site.id, "paused");
+    expect(fetching.pending).toEqual({ kind: "fetch", host: "203.0.113.9" });
+    await tasks.steer(site.id, "Use the official docs instead.");
+    await tasks.approve(site.id, { answer: "deny", pending: fetching.pending });
+    await reach(tasks, site.id, "succeeded");
+    expect(userLines(minds.for("Site")[1]).at(-1)).toBe(line("Use the official docs instead."));
+  });
+
+  test("on a spend pause it waits for Continue", async () => {
+    settings = { ...settings, folders: [work] };
+    minds.cost = 0.6;
+    const ls = call("l1", "ls", { path: "." });
+    minds.script("Spends", [calls([ls]), calls([{ ...ls, id: "l2" }]), says("Spent.")]);
+    const tasks = await booted();
+    const { id } = await tasks.start({ goal: "Spends", folder: join(work, "spend") }, ORIGIN);
+    await reach(tasks, id, "paused");
+    expect((await tasks.steer(id, "Stop at two pages.")).status).toBe("paused");
+    await Bun.sleep(20);
+    expect(minds.for("Spends")).toHaveLength(2);
+
+    await tasks.continue(id);
+    await reach(tasks, id, "succeeded");
+    expect(userLines(minds.for("Spends")[2]).at(-1)).toBe(line("Stop at two pages."));
+  });
+
+  test("on an interrupted task it is kept in task.json through a restart", async () => {
+    const seeded = await seed({ status: "interrupted" });
+    problem = "No key";
+    const first = await booted();
+    await first.steer(seeded.id, "Use the old logo.");
+    expect((await onDisk(seeded.id))?.inbox).toEqual({
+      steer: [line("Use the old logo.")],
+      followUp: [],
+    });
+    await first.stop();
+
+    problem = null;
+    const second = await booted();
+    await reach(second, seeded.id, "succeeded");
+    expect(userLines(minds.for("Seeded")[0]).at(-1)).toBe(line("Use the old logo."));
+  });
+
+  test("an ended task is refused, and nothing changes", async () => {
+    const tasks = await booted();
+    const { id } = await tasks.start({ goal: "Gone", folder: join(work, "g") }, ORIGIN);
+    await tasks.cancel(id);
+    await until(async () => (await onDisk(id))?.reported === true);
+    const before = await onDisk(id);
+
+    const ended = await refused(tasks.steer(id, "Too late."));
+    expect([ended.status, ended.code, ended.message]).toEqual([
+      409,
+      "conflict",
+      "The task has ended (cancelled)",
+    ]);
+    expect(await onDisk(id)).toEqual(before);
+    expect(types(id)).toEqual(["brief", "end"]);
+    expect((await refused(tasks.steer(newTaskId(), "Anyone?"))).code).toBe("unknown-task");
+  });
+
+  test("the text is stripped, and none or over 2,000 characters is refused", async () => {
+    const tasks = await booted();
+    const { id } = await tasks.start({ goal: "Texts", folder: join(work, "t") }, ORIGIN);
+    const blank = await refused(tasks.steer(id, " \n "));
+    expect([blank.status, blank.code]).toEqual([400, "bad-request"]);
+    const long = await refused(tasks.steer(id, "x".repeat(2001)));
+    expect([long.status, long.code, long.message]).toEqual([
+      400,
+      "bad-request",
+      "The text to pass on is over 2,000 characters.",
+    ]);
+    expect(await tasks.get(id)).not.toHaveProperty("inbox");
+    // Characters, not UTF-16 units or bytes.
+    const wide = "字".repeat(2000);
+    expect((await tasks.steer(id, wide)).inbox?.steer).toEqual([line(wide)]);
+  });
+});
+
+describe("waiting", () => {
+  /** A manager whose waiting hook records each snapshot it is called with. */
+  async function watched(): Promise<{ tasks: TaskManager; waits: TaskSnapshot[] }> {
+    const waits: TaskSnapshot[] = [];
+    const tasks = manager({ waiting: (snapshot) => waits.push(snapshot) });
+    await tasks.boot();
+    return { tasks, waits };
+  }
+
+  test("is called once at each pause, with the paused snapshot", async () => {
+    settings = { ...settings, folders: [join(work, "in")] };
+    mkdirSync(join(work, "notes"));
+    writeFileSync(join(work, "notes", "a.txt"), "a\n");
+    const ls = call("l1", "ls", { path: "." });
+    minds.script("Path", [calls([call("r1", "read", { path: join(work, "notes", "a.txt") })])]);
+    minds.script("Site", [calls([call("f1", "web_fetch", { url: "https://203.0.113.7/" })])]);
+    minds.script("Spend", [calls([ls]), calls([{ ...ls, id: "l2" }])]);
+    minds.script("Stall", [calls([ls]), calls([ls]), calls([ls])]);
+    minds.script("Unpriced", [calls([ls])]);
+    const { tasks, waits } = await watched();
+
+    const paused: Record<string, unknown> = {};
+    for (const goal of ["Path", "Site", "Spend", "Stall", "Unpriced"]) {
+      minds.cost = goal === "Spend" ? 0.6 : goal === "Unpriced" ? null : 0;
+      const { id } = await tasks.start({ goal, folder: join(work, "in", goal) }, ORIGIN);
+      const snapshot = await reach(tasks, id, "paused");
+      await until(() => waits.length === Object.keys(paused).length + 1);
+      expect(waits.at(-1)).toEqual(snapshot);
+      paused[goal] = snapshot.pending?.kind ?? snapshot.pause?.reason;
+      await tasks.cancel(id);
+    }
+    expect(paused).toEqual({
+      Path: "path",
+      Site: "fetch",
+      Spend: "spend",
+      Stall: "stall",
+      Unpriced: "unpriced",
+    });
+    await Bun.sleep(20);
+    expect(waits).toHaveLength(5);
+  });
+
+  test("is never called at a start, an answer or an end", async () => {
+    settings = { ...settings, folders: [join(work, "in")] };
+    mkdirSync(join(work, "notes"));
+    writeFileSync(join(work, "notes", "a.txt"), "a\n");
+    const read = call("r1", "read", { path: join(work, "notes", "a.txt") });
+    minds.script("Asks once", [calls([read]), calls([{ ...read, id: "r2" }]), says("Read.")]);
+    const { tasks, waits } = await watched();
+
+    const waiting = await tasks.start({ goal: "Outside", folder: join(work, "out") }, ORIGIN);
+    expect(waiting.status).toBe("awaiting-approval");
+    await tasks.approve(waiting.id, { answer: "once" });
+    await reach(tasks, waiting.id, "succeeded");
+    expect(waits).toEqual([]);
+
+    const { id } = await tasks.start({ goal: "Asks once", folder: join(work, "in", "x") }, ORIGIN);
+    await reach(tasks, id, "paused");
+    await until(() => waits.length === 1);
+    await tasks.approve(id, { answer: "once" });
+    await reach(tasks, id, "succeeded");
+    await until(() => reports.length === 2);
+    await Bun.sleep(20);
+    expect(waits.map((each) => each.status)).toEqual(["paused"]);
+  });
+
+  test("a pause a Stop already asked to end is not one", async () => {
+    settings = { ...settings, folders: [join(work, "site")] };
+    mkdirSync(join(work, "notes"));
+    writeFileSync(join(work, "notes", "a.txt"), "a\n");
+    minds.script("Stopped", [calls([call("r1", "read", { path: join(work, "notes", "a.txt") })])]);
+    const { tasks, waits } = await watched();
+    const { id } = await tasks.start({ goal: "Stopped", folder: join(work, "site", "s") }, ORIGIN);
+    // The refused read's result is stored: the run is storing its pause now.
+    const reader = (await tasks.events(id, 0)).getReader();
+    let text = "";
+    while (!text.includes('"type":"tool-result"')) {
+      const { value, done } = await reader.read();
+      if (done) throw new Error("ended early");
+      text += new TextDecoder().decode(value);
+    }
+    await tasks.cancel(id);
+    await reader.cancel();
+    expect((await tasks.get(id)).status).toBe("cancelled");
+    expect(types(id).slice(-2)).toEqual(["pause", "end"]);
+    expect(waits).toEqual([]);
+  });
+
+  test("a throw is logged, and the pause stands", async () => {
+    settings = { ...settings, folders: [work] };
+    minds.script("Throws", [calls([call("f1", "web_fetch", { url: "https://203.0.113.7/" })])]);
+    const tasks = manager({
+      waiting: () => {
+        throw new Error("no call to tell");
+      },
+    });
+    await tasks.boot();
+    const { id } = await tasks.start({ goal: "Throws", folder: join(work, "t") }, ORIGIN);
+    expect((await reach(tasks, id, "paused")).pending).toEqual({
+      kind: "fetch",
+      host: "203.0.113.7",
+    });
+    await until(() => logs.lines().some((each) => each.startsWith("ERROR") && each.includes(id)));
+    expect((await onDisk(id))?.status).toBe("paused");
+    expect((await tasks.approve(id, { answer: "deny" })).status).toBe("running");
   });
 });

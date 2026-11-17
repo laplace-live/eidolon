@@ -2,13 +2,14 @@
 // and closes, how it ends, the logs runtime's status reads, and the call's usage scope reaching
 // what the transport's audio bills. runVoiceCall runs the real Ear on the real models.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { consoleSink, logger } from "@eidolon/config";
+import type { ChatEventDraft } from "@eidolon/chat";
+import { AsyncQueue, consoleSink, logger } from "@eidolon/config";
 import type { EngineDeps } from "@eidolon/engine";
 import { setUsageSink, type UsageRecord } from "@eidolon/providers";
 import { type Ear, runCascadeCall } from "../../src/call/cascade.ts";
 import { memoryCallLog } from "../../src/call/log.ts";
 import { runVoiceCall, warmVoiceModels } from "../../src/index.ts";
-import type { CallDeps, CallPlan, EarEvent } from "../../src/types.ts";
+import type { CallDeps, CallPlan, EarEvent, OutsideResult } from "../../src/types.ts";
 import { FakeClock } from "../input/clock.ts";
 import { SILERO_MODEL, SMART_TURN_MODEL } from "../input/speech.ts";
 import {
@@ -146,6 +147,80 @@ describe("runCascadeCall", () => {
     expect(s.transport.types).toEqual(["error"]);
     expect(s.transport.sent[0]?.data).toEqual({ error: "VAD exploded", fatal: false });
     expect(s.transport.disconnects).toBe(1);
+  });
+});
+
+describe("results from outside the call", () => {
+  const ended = (callId: string): ChatEventDraft => ({
+    type: "tool-result",
+    persona: HOST,
+    turn: "chat-turn",
+    callId,
+    result: { task: callId, status: "succeeded" },
+    stage: "final",
+  });
+
+  test("runCall hands each to the Floor in order, a nudge answered, until the stream ends", async () => {
+    const s = setup();
+    const outside = new AsyncQueue<OutsideResult>();
+    const plan: CallPlan = { ...s.plan, outside };
+    // One that comes before the call reads it waits for it.
+    outside.push({ drafts: [ended("t1")] });
+    const running = runCascadeCall(s.transport, plan, s.deps, new AbortController().signal, {
+      ear: s.ear,
+    });
+    await settle();
+    expect(plan.log.snapshot().events).toMatchObject([{ callId: "t1" }]);
+    s.transport.rtvi("client-ready", { version: "2.3.0" });
+    await settle();
+    outside.push({ drafts: [ended("t2")], nudge: "（任务结束了）" });
+    await settle();
+    expect(plan.log.snapshot().events).toMatchObject([{ callId: "t1" }, { callId: "t2" }]);
+    expect(s.turns).toHaveLength(1);
+    expect(s.turns[0]?.request.nudge).toBe("（任务结束了）");
+    // The stream ending ends nothing else.
+    outside.close();
+    await settle();
+    s.transport.leave();
+    expect(await running).toBe("client");
+  });
+
+  test("once the call has ended, what comes from outside reaches nothing", async () => {
+    const s = setup();
+    const outside = new AsyncQueue<OutsideResult>();
+    const plan: CallPlan = { ...s.plan, outside };
+    const running = runCascadeCall(s.transport, plan, s.deps, new AbortController().signal, {
+      ear: s.ear,
+    });
+    await settle();
+    s.transport.rtvi("client-ready", { version: "2.3.0" });
+    s.transport.leave();
+    expect(await running).toBe("client");
+    outside.push({ drafts: [ended("t1")], nudge: "（任务结束了）" });
+    await settle();
+    expect(plan.log.snapshot().events).toEqual([]);
+    expect(s.turns).toHaveLength(0);
+  });
+
+  test("a stream that fails is logged, and the call goes on", async () => {
+    const s = setup();
+    const outside: AsyncIterable<OutsideResult> = {
+      [Symbol.asyncIterator]: () => ({ next: () => Promise.reject(new Error("the chat is gone")) }),
+    };
+    const running = runCascadeCall(
+      s.transport,
+      { ...s.plan, outside },
+      s.deps,
+      new AbortController().signal,
+      { ear: s.ear },
+    );
+    await settle();
+    expect(logs).toContain("[voice] Results from outside the call failed: the chat is gone");
+    s.transport.rtvi("client-ready", { version: "2.3.0" });
+    await settle();
+    expect(s.transport.types).toEqual(["bot-ready"]);
+    s.transport.leave();
+    expect(await running).toBe("client");
   });
 });
 

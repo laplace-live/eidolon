@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskPending, TaskSnapshot, TaskStatus } from "@/lib/api";
+import { STEER_PREFIX } from "../../../../bot/src/local/api.ts";
 import {
   barChoice,
   ended,
@@ -12,6 +13,7 @@ import {
   offers,
   pathIn,
   pauseKind,
+  queuedLines,
   RUNNING_POLL_MS,
   tasksPoll,
   WAITING_POLL_MS,
@@ -173,6 +175,39 @@ describe("what the card offers", () => {
       pauseKind({ status: "paused", pending: path, pause: { reason: "approval", detail: "" } }),
     ).toBeNull();
     expect(pauseKind({ status: "running", pause: { reason: "spend", detail: "" } })).toBeNull();
+  });
+});
+
+describe("the lines she passed on, which the card lists", () => {
+  const inbox = {
+    steer: [
+      `${STEER_PREFIX}页面标题写成『今天的事』`,
+      // The manager's own answer lines share the inbox.
+      "The owner allowed read access to /x/notes.txt. Try again.",
+      `${STEER_PREFIX}**加粗**和 <b>标签</b>照原样`,
+      `${STEER_PREFIX}页面标题写成『今天的事』`,
+    ],
+    followUp: [],
+  };
+
+  test("while it waits on the owner: hers alone, her prefix off, as she wrote them", () => {
+    for (const status of ["awaiting-approval", "paused", "interrupted"] as const) {
+      expect(queuedLines(task("1", status, { inbox }))).toEqual([
+        "页面标题写成『今天的事』",
+        "**加粗**和 <b>标签</b>照原样",
+        "页面标题写成『今天的事』",
+      ]);
+    }
+  });
+
+  test("none while it runs or once it has ended, nor while none of hers waits", () => {
+    // A running task reads them before its next request, and an ended one dropped them.
+    for (const status of ["running", "succeeded", "failed", "cancelled"] as const) {
+      expect(queuedLines(task("1", status, { inbox }))).toEqual([]);
+    }
+    expect(queuedLines(task("1", "paused"))).toEqual([]);
+    const answered = { steer: ["The owner refused access to /x/notes.txt."], followUp: [] };
+    expect(queuedLines(task("1", "paused", { inbox: answered }))).toEqual([]);
   });
 });
 

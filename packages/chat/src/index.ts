@@ -36,6 +36,7 @@ export { canonicalForSig } from "./sig.ts";
 export { chainLimitOf, replyModeOf, summarize } from "./summary.ts";
 export {
   CHAT_WINDOW_MESSAGES,
+  startedResult,
   toolCallMessages,
   type ViewMessage,
   type ViewOptions,

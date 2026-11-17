@@ -4,14 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-`laplace-eidolon` is a voice bot for a streamer RP persona, self-hosted over
-SmallWebRTC — no Daily, no telephony, no Pipecat Cloud. Two halves share one
-LanceDB instance: a voice loop that answers viewers over WebRTC, and an
-offline batch chain that builds the indexes it reads.
+`laplace-eidolon` is a personal assistant whose personality is a streamer's
+role-play persona. She chats, and takes calls that run self-hosted over
+SmallWebRTC — no Daily, no telephony, no Pipecat Cloud. In the local app, on
+her owner's computer, she also does real work: tasks that write and edit files
+in folders the owner allows and read the web, which she starts, steers, stops
+and reports as her own, in a chat or on a call in one
+([assistant.md](docs/assistant.md)). Production is the companion alone: viewers
+chat with and call her there, and no task ever runs. Two halves share one
+LanceDB instance: the bot that answers, and an offline batch chain that builds
+the indexes it reads.
 
 ```text
 webrtc in → STT ∥ VAD → Smart Turn → runTurn: RetrievalGate ∥ Mem0, StreamArchive,
     PersonaFacts → LLM → segmenter → TTS → Speaker → webrtc out
+chat line → runChat → runTurn → her reply; start_task → TaskManager → runTask (local app only)
 ```
 
 By default Soniox hears (STT), OpenRouter thinks (LLM) and Fish Audio speaks
@@ -34,8 +41,8 @@ Python runtime is in the repo too, for human readers only; agents never touch it
 
 ```text
 apps/bot/             the bot: HTTP server, routes, MCP, entry point; src/chat/ is production's
-                      chat endpoint; src/local/ is the local web app's own entry and API, which
-                      production never loads
+                      chat endpoint; src/local/ is the local web app's own entry and API, its
+                      chats and her tasks, which production never loads
 apps/web/             the local web app's pages (Vite, React, shadcn), served by src/local/
 apps/cli/             every laplace-* command, the offline chain's included
 apps/eidolon/         the npm package @laplace.live/eidolon: a Node launcher, and a build that
@@ -85,7 +92,7 @@ a row here and writing the prose there — not a new section in this file.**
 | the retrieval gate, or why a turn skipped LanceDB | [retrieval-gate.md](docs/retrieval-gate.md) |
 | anything under `apps/` or `packages/` | [typescript.md](docs/typescript.md) |
 | a provider, an account, a role's provider or model, model lists, prices, realtime models, the usage ledger or the Usage page | [providers.md](docs/providers.md) |
-| the assistant: Assistant Mode, a task's tools, `FolderPolicy` or files (`packages/assistant`), the task loop (`packages/engine/src/task.ts`), the app's tasks, `start_task` and their routes (`apps/bot/src/local/tasks`, `routes/tasks.ts`), or `laplace-task` | [assistant.md](docs/assistant.md) |
+| the assistant: Assistant Mode, a task's tools, `FolderPolicy` or files (`packages/assistant`), the task loop (`packages/engine/src/task.ts`), the app's tasks, her task tools (`start_task`, `steer_task`, `stop_task`, `check_task`), the status block, tasks on a call and the task routes (`apps/bot/src/local/tasks`, `routes/tasks.ts`), or `laplace-task` | [assistant.md](docs/assistant.md) |
 
 ## Commands
 
@@ -155,7 +162,8 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | an env var | document it in `.env.example` in the same commit |
 | anything under `apps/` or `packages/` | `bun run typecheck`, `bun run lint`, `bun run test`; for retrieval, the gate or the voice loop, also the row above that names it |
 | anything under `apps/web` | the row above, whose typecheck also runs both `apps/web` tsconfigs, then `bun run build:web`; after changing a string, `bun run i18n` and its `msgstr` in `zh-Hans.po` |
-| local mode (`apps/bot/src/local`), or chats (`packages/chat`, `packages/engine`) | `bun test --no-env-file apps/bot/test/local` from the repository root, then `bun apps/bot/scripts/local-smoke.ts --headful`: a browser walk on a temporary data home that bills nothing, a chat, a group chat, voice messages and a task she starts in a chat with a fake mind, director, voice, hearing and worker included |
+| local mode (`apps/bot/src/local`), or chats (`packages/chat`, `packages/engine`) | `bun test --no-env-file apps/bot/test/local` from the repository root, then `bun apps/bot/scripts/local-smoke.ts --headful`: a browser walk on a temporary data home that bills nothing, a chat, a group chat, voice messages and a task she starts, steers, checks and stops in a chat, and one she starts on a call there, with a fake mind, director, voice, hearing and worker included |
+| her task tools' descriptions, her hint, the status block or her nudges (`apps/bot/src/local/tasks`) | the row above, then one billed chat on OpenRouter ([assistant.md](docs/assistant.md#checking-her-side)): a task outside `assistant.folders`, whose line must name the card's question; 弄好了吗 before and after Allow; 具体到哪了, answered through `check_task`; a change, passed on through `steer_task`; 帮我打开它, which starts no task; 算了别做了 on a second task, through `stop_task`. About $0.20, most of it the worker. A change to tasks on a call also needs a call by hand, billed on Soniox and Fish too, so it waits for the user's go-ahead |
 | `apps/eidolon`, or a file the package bundles or copies | the gates above, then `bun run pack:npm` and `bun apps/eidolon/scripts/ci-install-check.ts apps/eidolon/<tarball>`, which CI runs on Linux x64: it installs the tarball with npm, boots it on a temporary home, signs in, and stops it |
 | `packages/sdk` (`@laplace.live/eidolon-sdk`) | `bun run typecheck`, `bun run lint`, `bun run test`, and `bun run pack:sdk` |
 
@@ -308,7 +316,36 @@ the layout's one line.
 
 - **`@eidolon/assistant` never reaches production.** Only `apps/bot/src/local` and `apps/cli`
   import it (Biome and `boundaries.test.ts` hold it), and `docker.yml` skips the image build for
-  `packages/assistant`; lift the fence and the paths-ignore together.
+  `packages/assistant`; lift the fence and the paths-ignore together. Production's chat endpoint
+  offers none of her task tools (`production.test.ts`), and no flag, setting or env var turns them
+  on there.
+- **Only the owner's own lines make her start, steer or stop a task; only its card answers it.**
+  Every task route is under `/api/local`, behind the session, and a listed origin
+  (`EIDOLON_LOCAL_ALLOWED_ORIGINS`) reaches none of them, nor the chats that offer her task tools.
+  No route creates or steers a task: she does, from the owner's lines. Allow, Deny and Continue
+  come only from the task's card and the waiting bar, never from her tools or her voice.
+- **Her task tools (`start_task`, `steer_task`, `stop_task`, `check_task`) go only with her
+  answers to the owner's own lines, in a chat of hers alone,** typed, as a voice message or on a
+  single cascade call there: never with her greeting, her report turns or her follow-ups on a call,
+  nor in a group chat, a group or realtime call, or `/call`. A report can quote a page, and a turn
+  no line of the owner's asked for must not act on the computer.
+- **Nothing the worker wrote reaches her above a tool's output.** Its report, plan, steps, file
+  names and the paths or sites it asks about can quote a page it fetched, so her view holds them
+  only in a `tool` message (her `start_task` call's `final`, `check_task`'s result); the status
+  block and her nudges carry the runtime's facts and her own words alone. The one exception is an
+  Anthropic turn offered no tools at all, which sends its calls and results as user-turn notes
+  (`callsAsNotes`) with no tool to act on them. Her retellings are her own lines, which Mem0 stores
+  like any other.
+- **A task's steps never enter the chat log.** The log holds her task tools' calls and results,
+  `check_task`'s bounded summary included, and the status block; every step is in the task's
+  transcript.
+- **The outcome comes from the runtime** (`succeeded`, `failed`, `cancelled`, and the files its
+  tool log shows written), never from the worker's words.
+- **Interruptions never stop a task; only a cancel does:** the card's Stop, a Deny at its start,
+  Assistant Mode off, a deleted chat, or her `stop_task` on the owner's word.
+- **The worker has no persona:** the brief, the folder's `AGENTS.md` and `CLAUDE.md`, its tools'
+  rules, the date and the folder; no `prompt.md`, Mem0 or persona facts.
+- **Every task request is billed as source `task`, with the task's id as its session.**
 - **The task loop, `runTask`, lives in `@eidolon/engine`, which imports nothing from
   `@eidolon/assistant`:** the tools, store, inbox and meter come injected.
 - **pi-mono-derived code carries its MIT header,** then `Ported from pi-mono <path>@ac78a60`;
@@ -375,11 +412,12 @@ the layout's one line.
 
 - **Persona edits go in `prompt.md` and `persona.yaml`, not in code.** `buildPersonaPrefix`
   (`packages/context/src/persona.ts`) layers only per-session facts on top — current
-  date, viewer name, recent stream dates, the voice and selfie tools' hints.
+  date, viewer name, recent stream dates, the voice, selfie and assistant tools' hints.
 - **The Chinese prompt text is load-bearing.** The 不要主动念 lines in
   `buildPersonaPrefix` are what stop the model narrating the clock and reading
   UIDs aloud, and the wording tracks `prompt.md`'s vocabulary. Don't paraphrase
-  it in passing.
+  it in passing. So is the assistant's Chinese: her hint, her task tools'
+  descriptions, her nudges and the status block (`apps/bot/src/local/tasks`).
 - **`change_voice_style` is named once, as `VOICE_TOOL_NAME` in
   `packages/tools/src/voice.ts`.** It reaches the prompt through
   `voicePromptHint`, not through `prompt.md` — rename it in that one place.
@@ -436,8 +474,9 @@ the layout's one line.
 - **Upstream-dependency bugs get a citation comment, not a silent workaround.**
 - **Tool descriptions are live API surface.** The MCP tools' descriptions and
   schemas (`toolDefinitions()` in `apps/bot/src/mcp/tools.ts`) and each
-  `LlmTool`'s `schema` (`packages/tools`) go to a model as written: editing one
-  changes runtime behavior. See [comments.md](docs/comments.md).
+  `LlmTool`'s `schema` (`packages/tools`, and her task tools in
+  `apps/bot/src/local/tasks`) go to a model as written: editing one changes
+  runtime behavior. See [comments.md](docs/comments.md).
 
 ## Comments
 

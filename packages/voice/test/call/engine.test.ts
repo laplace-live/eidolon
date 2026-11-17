@@ -1,17 +1,20 @@
 // The Floor on the real turn engine over a scripted mind and tools: her voice switches between
 // her words where she wrote it, her speech ends only once all of them reached it, her stored line
-// is what was heard, and an async selfie's result brings the follow-up reply.
+// is what was heard, an async selfie's result brings the follow-up reply, and what reaches the call
+// from outside lands where her view keeps a call with its result, its nudge spoken.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import type { ChatEventDraft } from "@eidolon/chat";
 import { consoleSink, logger } from "@eidolon/config";
 import type { LlmTool } from "@eidolon/core";
 import {
+  type BackgroundTool,
   type EngineDeps,
   type Mind,
   type MindChunk,
   type MindRequest,
   runTurn,
 } from "@eidolon/engine";
-import { settle, startCall } from "./harness.ts";
+import { HOST, settle, startCall } from "./harness.ts";
 
 let logs: string[];
 beforeEach(() => {
@@ -273,5 +276,149 @@ describe("the Floor on the real engine", () => {
     expect(requests).toHaveLength(2);
     const stages = call.events().flatMap((e) => (e.type === "tool-result" ? [e.stage] : []));
     expect(stages).toEqual(["started", "final"]);
+  });
+});
+
+describe("results from outside on the real engine (row 31)", () => {
+  const ENDED_T1 = "你用 start_task 在电脑上做的事（调用 call_T1）结束了。";
+  const WAITING_T2 = "你用 start_task 在电脑上做的事（调用 call_T2）停下来了。";
+
+  /** Her start_task call `callId` in a text turn of the chat, with its started result. */
+  const startOf = (callId: string): ChatEventDraft[] => [
+    {
+      type: "tool-call",
+      persona: HOST,
+      turn: "text-turn",
+      callId,
+      name: "start_task",
+      arguments: { goal: "做个网页", folder: "~/site" },
+    },
+    {
+      type: "tool-result",
+      persona: HOST,
+      turn: "text-turn",
+      callId,
+      result: { task: callId, status: "running" },
+      stage: "started",
+    },
+  ];
+  const finalOf = (callId: string): ChatEventDraft => ({
+    type: "tool-result",
+    persona: HOST,
+    turn: "text-turn",
+    callId,
+    result: { status: "succeeded", report: "Done.", files: [], spentUsd: 0 },
+    stage: "final",
+  });
+
+  /** Each message of `request` as a short line: tool calls and results by their call's id. */
+  const shown = (request: MindRequest | undefined): string[] =>
+    (request?.messages ?? []).map((message) => {
+      const m = message as {
+        role: string;
+        content?: unknown;
+        tool_calls?: { id: string }[];
+        tool_call_id?: string;
+      };
+      if (m.tool_calls !== undefined) return `tool_calls ${m.tool_calls[0]?.id}`;
+      if (m.role === "tool") return `tool ${m.tool_call_id}`;
+      return `${m.role}: ${String(m.content)}`;
+    });
+
+  test("a call and its result handed while her nudged greeting prepares stay together in her view", async () => {
+    const preparing = Promise.withResolvers<void>();
+    const { mind, requests } = scriptedMind([{ type: "text", text: "你好呀。" }, DONE], [DONE]);
+    let made = 0;
+    const deps: EngineDeps = {
+      ...engine(mind, []),
+      // Her greeting's parts take a moment, as Mem0 and her index do: the pause lands meanwhile.
+      parts: async () => {
+        if (++made === 1) await preparing.promise;
+        return {
+          systemInstruction: "SYSTEM",
+          providers: [],
+          gate: null,
+          tools: [],
+          memories: async () => [],
+        };
+      },
+    };
+    const call = startCall({ greet: true, turn: (request) => runTurn(request, deps) });
+    // An end she never told, for her greeting.
+    await call.outside({ drafts: [...startOf("call_T1"), finalOf("call_T1")], nudge: ENDED_T1 });
+    await call.ready();
+    // A task she started in text pauses: the call's log lacks its start.
+    await call.outside({ drafts: startOf("call_T2"), nudge: WAITING_T2 });
+    preparing.resolve();
+    await settle();
+    const greeting = call.utterance();
+    greeting.pcm(1, 480);
+    greeting.segEnd(1);
+    greeting.finish();
+    await settle();
+    await call.play(480);
+    await settle();
+    await settle();
+    expect(requests).toHaveLength(2);
+    const followUp = shown(requests[1]);
+    const at = followUp.indexOf("tool_calls call_T2");
+    expect(at).toBeGreaterThan(-1);
+    expect(followUp[at + 1]).toBe("tool call_T2");
+    expect(followUp.at(-1)).toBe(`developer: ${WAITING_T2}`);
+  });
+
+  test("a greeting cut before it records the nudge it took leaves it for a follow-up after her answer", async () => {
+    const memories = Promise.withResolvers<readonly { memory?: unknown }[]>();
+    const { mind, requests } = scriptedMind(
+      [{ type: "text", text: "在的。" }, DONE],
+      [{ type: "text", text: "网页做好啦。" }, DONE],
+    );
+    const deps: EngineDeps = {
+      ...engine(mind, []),
+      parts: async () => ({
+        systemInstruction: "SYSTEM",
+        providers: [],
+        gate: null,
+        tools: [],
+        // Mem0's newest memories for her greeting take a moment.
+        memories: () => memories.promise,
+      }),
+    };
+    const startTask: BackgroundTool = {
+      schema: { name: "start_task", description: "", properties: {}, required: [] },
+      cancelOnInterruption: false,
+      timeoutSecs: null,
+      run: async () => ({ task: "t9", status: "running" }),
+    };
+    const asked: boolean[] = [];
+    const call = startCall({
+      greet: true,
+      turn: (request) => runTurn(request, deps),
+      // Her answer to the caller's line is offered her task tools, as a bound call's is.
+      extras: (answers) => {
+        asked.push(answers);
+        return answers ? { background: { tools: [startTask], hint: "（你能用电脑）" } } : {};
+      },
+    });
+    await call.outside({ drafts: [...startOf("call_T1"), finalOf("call_T1")], nudge: ENDED_T1 });
+    await call.ready();
+    // The caller says 喂 as the call connects, while her greeting still reads her memories.
+    await call.ear({ type: "user-started" });
+    await call.ear({ type: "final", text: "喂" }, { type: "user-stopped", text: "喂" });
+    await settle();
+    expect(asked).toEqual([false, true]);
+    expect(requests).toHaveLength(1);
+    expect(shown(requests[0]).at(-1)).toBe("user: 喂");
+    const answer = call.utterance();
+    answer.pcm(1, 480);
+    answer.segEnd(1);
+    answer.finish();
+    await settle();
+    await call.play(480);
+    await settle();
+    await settle();
+    expect(asked).toEqual([false, true, false]);
+    expect(requests).toHaveLength(2);
+    expect(shown(requests[1]).slice(-2)).toEqual(["assistant: 在的。", `developer: ${ENDED_T1}`]);
   });
 });

@@ -178,7 +178,7 @@ describe("task.json", () => {
     expect(readdirSync(dir)).toEqual(["task.json"]);
   });
 
-  test("what it waits on, its pause, plan, inbox and web access read back", async () => {
+  test("what it waits on, its pause, plan, latest step, inbox and web access read back", async () => {
     const dir = taskDir();
     const unpriced =
       "No price is known for qwen3 at openai-compatible, so its spend can't count toward the pause at every $1.00.";
@@ -202,6 +202,7 @@ describe("task.json", () => {
           { text: "Read the notes", status: "in_progress" },
           { text: "Write index.html", status: "pending" },
         ],
+        step: { tool: "read", head: "/Users/me/Documents/a.txt" },
         inbox: { steer: ["use Vue instead"], followUp: [] },
       },
       {
@@ -268,6 +269,9 @@ describe("task.json", () => {
       { ...snapshot("t1"), pause: { reason: "spend" } },
       { ...snapshot("t1"), todo: [{ text: "x", status: "doing" }] },
       { ...snapshot("t1"), todo: { items: [] } },
+      { ...snapshot("t1"), step: "write" },
+      { ...snapshot("t1"), step: { tool: "write" } },
+      { ...snapshot("t1"), step: { tool: 7, head: "index.html" } },
       { ...snapshot("t1"), inbox: { steer: ["x"] } },
       { ...snapshot("t1"), inbox: { steer: [1], followUp: [] } },
       { ...snapshot("t1"), web: { mode: "some", hosts: [], denied: [] } },

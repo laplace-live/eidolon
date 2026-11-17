@@ -8,7 +8,14 @@ import { ANONYMOUS } from "@eidolon/access";
 import { CHAT_FORMAT } from "@eidolon/chat";
 import { activePersona, dataHome, resetSettings } from "@eidolon/config";
 import { MIN_CHAT_SECRET_LENGTH } from "../../src/chat/sig.ts";
-import { assistantPromptHint, START_TASK } from "../../src/local/tasks/tool.ts";
+import { TASKS_BLOCK_NAME } from "../../src/local/tasks/status.ts";
+import {
+  assistantPromptHint,
+  CHECK_TASK,
+  START_TASK,
+  STEER_TASK,
+  STOP_TASK,
+} from "../../src/local/tasks/tool.ts";
 import type { BotDeps, BotServer } from "../../src/server.ts";
 import { startBotServer } from "../../src/server.ts";
 import { type CapturedLogs, captureLogs } from "../fakes.ts";
@@ -132,7 +139,7 @@ describe("the production surface", () => {
     expect(logs.lines().some((line) => line.includes("local"))).toBe(false);
   });
 
-  test("its chat endpoint never offers start_task or its hint, whatever Assistant Mode's settings say", async () => {
+  test("its chat endpoint never offers her task tools, their hint or the 后台的活 block, whatever Assistant Mode's settings say", async () => {
     const sent: { tools?: { function: { name: string } }[]; messages: unknown[] }[] = [];
     const provider = Bun.serve({
       hostname: "127.0.0.1",
@@ -177,8 +184,13 @@ describe("the production surface", () => {
       expect([response.status, body.includes("好呀")]).toEqual([200, true]);
       expect(sent.length).toBeGreaterThan(0);
       for (const request of sent) {
-        expect((request.tools ?? []).map((tool) => tool.function.name)).not.toContain(START_TASK);
-        expect(JSON.stringify(request.messages)).not.toContain(assistantPromptHint());
+        const offered = (request.tools ?? []).map((tool) => tool.function.name);
+        for (const name of [START_TASK, STEER_TASK, STOP_TASK, CHECK_TASK]) {
+          expect(offered).not.toContain(name);
+        }
+        const said = JSON.stringify(request.messages);
+        expect(said).not.toContain(assistantPromptHint());
+        expect(said).not.toContain(TASKS_BLOCK_NAME);
       }
     } finally {
       await provider.stop(true);

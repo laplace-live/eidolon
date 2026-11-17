@@ -1288,6 +1288,14 @@ export interface TaskWebAccess {
   readonly denied: readonly string[];
 }
 
+/** The latest tool call a task's run started. */
+export interface TaskStep {
+  /** The worker's tool, such as `write`. */
+  readonly tool: string;
+  /** Its path, url, pattern, glob or query, else its arguments' JSON: 120 characters at most. */
+  readonly head: string;
+}
+
 /** Where a task started: the chat, the persona in it, and her start_task call's id. */
 export interface TaskChat {
   readonly id: string;
@@ -1322,6 +1330,7 @@ export interface TaskSnapshot {
   readonly pause?: TaskPause;
   /** The latest list its todo tool wrote. */
   readonly todo?: readonly TaskTodoItem[];
+  readonly step?: TaskStep;
   readonly inbox?: TaskInboxLines;
   /** `ask` with no sites when absent. */
   readonly web?: TaskWebAccess;
@@ -1435,6 +1444,11 @@ export interface TaskContinueRequest {
 /** The name of her tool that starts a task, as her `tool-call` events carry it. */
 export type StartTaskToolName = "start_task";
 
+/** Her tools that pass the owner's change to a task of hers, stop one, and read one's detail. */
+export type SteerTaskToolName = "steer_task";
+export type StopTaskToolName = "stop_task";
+export type CheckTaskToolName = "check_task";
+
 // Types, not interfaces: an interface can't be assigned to a record, which is what a tool returns
 // and a tool-result event holds.
 
@@ -1460,3 +1474,6 @@ export type StartTaskFinal = {
   readonly moreFiles?: number;
   readonly spentUsd: number;
 };
+
+/** How each line she passes on with steer_task starts, in the task's inbox and its transcript. */
+export const STEER_PREFIX = "The assistant updates the brief: ";

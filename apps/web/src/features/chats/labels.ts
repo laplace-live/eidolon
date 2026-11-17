@@ -8,6 +8,10 @@ const TOOL_STATES: Readonly<Record<string, MessageDescriptor>> = {
   take_selfie: msg`Taking a selfie…`,
   recall_streams: msg`Looking through the stream archive…`,
   voice: msg`Recording a voice message…`,
+  start_task: msg`Starting a task…`,
+  steer_task: msg`Passing it on to the task…`,
+  stop_task: msg`Stopping the task…`,
+  check_task: msg`Checking on the task…`,
 };
 
 export function toolState(name: string): MessageDescriptor {

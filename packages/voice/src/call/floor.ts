@@ -5,11 +5,19 @@
 // each answer is a chain of the personas' turns, each a reply of its own (group.ts).
 import type { ChatEventDraft, ParticipantId } from "@eidolon/chat";
 import { errorText, logger } from "@eidolon/config";
-import type { CallChatOutput, CallHooks, CallTurnRequest } from "@eidolon/engine";
+import type { CallChatOutput, CallHooks, CallTurnRequest, TurnExtras } from "@eidolon/engine";
 import type { SpeechNote, SpokenReply } from "../output/mouth.ts";
 import type { RtviInbound } from "../rtvi/codec.ts";
 import type { RtviEmitter } from "../rtvi/emitter.ts";
-import type { CallPlan, CloseReason, CursorEvent, EarEvent, Heard, Speaker } from "../types.ts";
+import type {
+  CallPlan,
+  CloseReason,
+  CursorEvent,
+  EarEvent,
+  Heard,
+  OutsideResult,
+  Speaker,
+} from "../types.ts";
 import { type GroupFloor, lastViewerLine, speakerLabel } from "./group.ts";
 import {
   type CallKit,
@@ -23,6 +31,26 @@ import {
 const END_WAIT_MS = 2_000;
 /** What a turn whose speech never began heard. */
 const UNHEARD: Heard = { text: "", complete: false };
+
+type ToolResultDraft = Extract<ChatEventDraft, { readonly type: "tool-result" }>;
+
+/** The result that settles a call run on past its round: never a late `started` or plain one. */
+function settles(draft: ChatEventDraft): draft is ToolResultDraft {
+  return draft.type === "tool-result" && (draft.stage === "final" || draft.stage === "cancelled");
+}
+
+/** Whether a reply is offered tools of the plan's, which a nudge from outside never goes with. */
+function offersTools({ background, tools }: TurnExtras): boolean {
+  return (background?.tools.length ?? 0) > 0 || (tools?.length ?? 0) > 0;
+}
+
+/** Row 31's nudge, until a reply takes it. */
+interface Nudge {
+  readonly text: string;
+  readonly due?: () => boolean;
+}
+
+const isDue = (nudge: Nudge): boolean => nudge.due?.() ?? true;
 
 export interface FloorOptions {
   readonly plan: CallPlan;
@@ -54,6 +82,8 @@ interface StartOptions {
   readonly persona?: ParticipantId;
   /** A follow-up's: the personas still owed one keep their places. */
   readonly followUp?: boolean;
+  /** Rows 4 and 7: it answers the caller's line, and alone may take the plan's tools. */
+  readonly answers?: boolean;
 }
 
 /** A group call's answer: the chat's to the caller's line, or one persona's turn, under one abort. */
@@ -93,6 +123,10 @@ interface Reply {
   cut: boolean;
   /** The ttfb stages already logged. */
   readonly timed: Set<string>;
+  /** Row 31's nudges it took, until its turn records them: a cut before then puts them back. */
+  nudges: readonly Nudge[];
+  /** Its turn's nudge, which the turn records as her `context` block. */
+  nudge: string | undefined;
 }
 
 export class Floor {
@@ -118,6 +152,11 @@ export class Floor {
   #syncToolsRunning = 0;
   /** Whose async results are owed a follow-up reply once the floor is free, each once, in order. */
   readonly #followUps: ParticipantId[] = [];
+  /**
+   * Row 31's nudges, which her next reply offered none of the plan's tools takes: the host is owed
+   * a follow-up while one is due.
+   */
+  readonly #nudges: Nudge[] = [];
   /** A reply to start once the cut one has ended. */
   #startOwed: StartOptions | null = null;
   /** Lines that go after the cut reply's own message, which its end stores. */
@@ -172,6 +211,9 @@ export class Floor {
       case "async-result":
         this.#asyncResult(event.persona, event.drafts);
         return;
+      case "outside":
+        this.#outside(event.result);
+        return;
       case "timer":
         this.#timer(event);
         return;
@@ -222,12 +264,13 @@ export class Floor {
     const { emitter } = this.#o;
     const line = this.#userLine(message.content, "text");
     if (message.runImmediately) {
+      // Row 7: it cuts her off, and her reply answers it.
       emitter.botInterrupted();
       if (this.#busy()) this.#bargeIn(true);
       emitter.userTyped(message.content, message.id);
       emitter.userLlmText(message.content);
       this.#append(line);
-      this.#start({ speech: message.audioResponse });
+      this.#start({ speech: message.audioResponse, answers: true });
       return;
     }
     // Row 8: stored for her next turn, as pipedog's LLMMessagesAppendFrame with runLlm false.
@@ -288,9 +331,10 @@ export class Floor {
     if (text !== null) emitter.userLlmText(text);
     emitter.userStoppedSpeaking();
     if (text !== null) {
+      // Row 4: her reply answers the line.
       this.#append(this.#userLine(text, "call"));
       this.#recoveries = 0;
-      this.#start();
+      this.#start({ answers: true });
     } else if (user.interruptedBot && this.#recoveries < 1 && this.#syncToolsRunning === 0) {
       this.#recoveries++;
       // In a group, the persona cut off goes on; a chain cut between turns has no one to.
@@ -339,16 +383,48 @@ export class Floor {
     const reply = this.#newReply(id, persona, abort, speech);
     this.#reply = reply;
     this.#replies.set(id, reply);
+    const extras = this.#extras(id, options.answers === true);
+    // One offered the plan's tools leaves row 31's nudges for a follow-up after it.
+    reply.nudges = offersTools(extras) ? [] : this.#nudges.splice(0).filter(isDue);
+    const nudges = [
+      ...(options.nudge === undefined ? [] : [options.nudge]),
+      ...reply.nudges.map(({ text }) => text),
+    ];
+    reply.nudge = nudges.length === 0 ? undefined : nudges.join("\n\n");
     const request: CallTurnRequest = {
       chat: plan.log.snapshot(),
       persona,
       viewer: plan.viewer,
       ...(options.kickoff ? { kickoff: true } : {}),
-      ...(options.nudge === undefined ? {} : { nudge: options.nudge }),
+      ...(reply.nudge === undefined ? {} : { nudge: reply.nudge }),
+      ...extras,
       signal: abort.signal,
       ...this.#hooks(id, persona),
     };
     void this.#run(id, request);
+  }
+
+  /**
+   * What the plan adds to reply `id`, asked as it starts: its tools only when the reply answers the
+   * caller's line, its providers always. One that throws adds nothing.
+   */
+  #extras(id: string, answers: boolean): TurnExtras {
+    const ask = this.#o.plan.extras;
+    if (ask === undefined) return {};
+    let extras: TurnExtras | null;
+    try {
+      extras = ask(answers);
+    } catch (error) {
+      logger.error(`[voice] Reply ${id}'s extras failed: ${errorText(error)}`, error);
+      return {};
+    }
+    if (extras === null) return {};
+    const { background, tools, providers } = extras;
+    return {
+      ...(answers && background !== undefined ? { background } : {}),
+      ...(answers && tools !== undefined ? { tools } : {}),
+      ...(providers === undefined ? {} : { providers }),
+    };
   }
 
   #newReply(
@@ -371,6 +447,8 @@ export class Floor {
       silenced: false,
       cut: false,
       timed: new Set(),
+      nudges: [],
+      nudge: undefined,
     };
   }
 
@@ -516,6 +594,9 @@ export class Floor {
       case "events":
         // Stored before anything else is done with it.
         plan.log.append(out.events);
+        if (out.events.some((event) => event.type === "context" && event.content === reply.nudge)) {
+          reply.nudges = [];
+        }
         // Row 18: a failure no mind request reported, as her parts or her mind not being made.
         for (const event of out.events) {
           if (event.type === "turn-failed" && !reply.failed && !reply.cut) {
@@ -583,6 +664,8 @@ export class Floor {
 
   #replyEnded(reply: Reply): void {
     this.#replies.delete(reply.id);
+    // Cut before its turn recorded them: her next reply without the plan's tools takes them.
+    if (reply.cut) this.#nudges.unshift(...reply.nudges);
     if (this.#reply !== reply) return;
     this.#reply = null;
     this.#speaking = false;
@@ -620,10 +703,17 @@ export class Floor {
     else if (this.#idle()) this.#startFollowUp();
   }
 
-  /** The first persona owed a follow-up gets her turn alone. */
+  /** The first persona owed a follow-up gets her turn alone; the host, while a nudge is due. */
   #startFollowUp(): void {
-    const persona = this.#followUps.shift();
+    const persona = this.#followUps.shift() ?? (this.#nudgeDue() ? this.#o.plan.host : undefined);
     if (persona !== undefined) this.#start({ persona, followUp: true });
+  }
+
+  /** Whether one of row 31's nudges is still due; those that aren't are dropped. */
+  #nudgeDue(): boolean {
+    const due = this.#nudges.filter(isDue);
+    this.#nudges.splice(0, this.#nudges.length, ...due);
+    return due.length > 0;
   }
 
   /** Her turn is done writing: her speech ends, and `answer` gets what was heard once it played. */
@@ -645,25 +735,38 @@ export class Floor {
   }
 
   /**
-   * Row 23: stored, and answered once the floor is free, by `persona`, whose tool it was, after
-   * whoever was owed a follow-up before her; a reply started sooner sees it too.
+   * Row 23: stored; one that settles a call is answered once the floor is free, by `persona`, whose
+   * tool it was, after whoever was owed a follow-up before her; a reply started sooner sees it too.
+   * A tool her cut turn left running answers with a late `started` or plain result, owed nothing.
    */
   #asyncResult(persona: ParticipantId, drafts: readonly ChatEventDraft[]): void {
+    const settling = drafts.filter(settles);
     if (this.#call !== "ended") {
-      for (const draft of drafts) {
-        if (
-          draft.type === "tool-result" &&
-          draft.stage !== undefined &&
-          draft.stage !== "started"
-        ) {
-          this.#o.emitter.toolStopped(draft.callId, draft.stage === "cancelled");
-        }
+      for (const { callId, stage } of settling) {
+        this.#o.emitter.toolStopped(callId, stage === "cancelled");
       }
     }
     this.#append(...drafts);
-    if (this.#call === "ended" || this.#closing) return;
+    if (settling.length === 0 || this.#call === "ended" || this.#closing) return;
     if (!this.#followUps.includes(persona)) this.#followUps.push(persona);
     if (this.#idle()) this.#startFollowUp();
+  }
+
+  /**
+   * Row 31: its lines are stored at once, or once her open reply has stored its own. Its nudge
+   * waits for her next reply offered none of the plan's tools: before client-ready her greeting,
+   * else a follow-up owed, started at once if the floor is free. Nothing is stored or started once
+   * the call has ended.
+   */
+  #outside({ drafts, nudge, due }: OutsideResult): void {
+    if (this.#call === "ended") return;
+    // A block the open reply records is placed by the log it read, so lines stored before it
+    // would put the block between a call stored here and its result.
+    if (this.#busy()) this.#deferred.push(drafts);
+    else this.#append(...drafts);
+    if (nudge === undefined || this.#closing) return;
+    this.#nudges.push({ text: nudge, due });
+    if (this.#call === "live" && this.#idle()) this.#startFollowUp();
   }
 
   /** Appends lines to the log, after her cut reply's message while it has yet to store it. */

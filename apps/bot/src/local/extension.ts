@@ -114,6 +114,7 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalAppEx
         addFolder: (folder) => addAssistantFolder(app, folder),
         problem: assistantProblem,
         report: (snapshot) => chats().report(snapshot),
+        waiting: (snapshot) => chats().taskWaiting(snapshot),
       });
       manager = tasks;
       const chats = chatRunner({ onStop }, { tasks });
