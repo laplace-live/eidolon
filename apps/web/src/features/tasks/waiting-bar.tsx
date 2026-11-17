@@ -33,7 +33,9 @@ export function WaitingBar({
           {t`Show Task`}
         </Button>
       </div>
-      <QueuedLines task={task} />
+      {/* The bar sits in the chat pane's fixed footer: long lines would push its answers, the
+          call dock and the composer out of reach. */}
+      <QueuedLines task={task} className="max-h-24 overflow-y-auto" />
       <TaskPrompt task={task} compact />
     </section>
   );

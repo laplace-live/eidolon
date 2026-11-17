@@ -227,11 +227,20 @@ const callsStart = (id = "c1"): MindChunk[] => calls(START_TASK, BRIEF, id);
 /** What each of her turns asked her parts for. */
 let asked: PartsOptions[];
 
-/** The engine over `mind`, with her own parts empty, as the runner's turn and answer. */
-function engine(mind: ScriptedMind): Pick<ChatRunnerOptions, "turn" | "answer"> {
+/**
+ * The engine over `mind`, with her own parts empty, as the runner's turn and answer; her mind can't
+ * be made while `keyless` says so.
+ */
+function engine(
+  mind: ScriptedMind,
+  keyless: () => boolean = () => false,
+): Pick<ChatRunnerOptions, "turn" | "answer"> {
   let n = 0;
   const deps = (saveAttachment: EngineDeps["saveAttachment"]): EngineDeps => ({
-    createMind: () => mind,
+    createMind: () => {
+      if (keyless()) throw new Error("No key for openrouter: set OPENROUTER_API_KEY");
+      return mind;
+    },
     parts: async (_persona, _viewer, _chat, options = {}) => {
       asked.push(options);
       return {
@@ -1030,6 +1039,31 @@ describe("a task's end", () => {
     }
   });
 
+  test("told in a turn whose mind can't be made leaves its nudge before the failure, and a call is handed it", async () => {
+    let keyless = false;
+    const mind = new ScriptedMind(says("你好呀"), callsStart(), says("好，我去弄啦"));
+    serve({ ...engine(mind, () => keyless), tasks: new FakeTasks() });
+    const id = await greeted();
+    await send(id, ASK);
+    // Her mind's key is gone by the time the task ends.
+    keyless = true;
+    await runner.report(ended(id, SUCCESS));
+    await until(async () => (await events(id)).some((event) => event.type === "turn-failed"));
+    await idle(id);
+    const log = await events(id);
+    const [final] = finals(log);
+    // The page's reportStored reads them as her report turn's end: none is coming.
+    expect(log.slice(log.indexOf(final as ChatEvent) + 1)).toMatchObject([
+      { type: "context", persona: PERSONA, content: taskEndedNudge("c1") },
+      { type: "turn-failed", persona: PERSONA },
+    ]);
+    expect(mind.requests).toHaveLength(3);
+    const { call, handed } = await onCall(id);
+    await until(() => handed.length === 1);
+    expect(handed[0]?.nudge).toBe(taskEndedNudge("c1"));
+    await call.onEnded("hangup");
+  });
+
   test("of a cancel, which the owner made, isn't pressed on her at the owner's next line", async () => {
     const mind = new ScriptedMind(
       says("你好呀"),
@@ -1336,12 +1370,14 @@ describe("a call in a chat of hers alone", () => {
       "tool-result",
       "tool-result",
     ]);
-    // She speaks of it on the call: after the call, nothing more is told.
+    // Her follow-up records the nudge, then speaks of it: after the call, nothing more is told.
+    call.onContext?.(taskEndedNudge("c1"));
     call.onTranscript({ role: "assistant", text: "网页做好啦", interrupted: false });
     await call.onEnded("hangup");
     await Bun.sleep(50);
     await idle(id);
     expect(mind.requests).toHaveLength(3);
+    expect((await events(id)).at(-1)).toMatchObject({ type: "call-ended", told: ["c1"] });
   });
 
   test("hands an end of a task started on it as the final alone, once that start is stored", async () => {
@@ -1669,6 +1705,284 @@ describe("a call in a chat of hers alone", () => {
       rmSync(beta, { recursive: true, force: true });
       resetSettings();
     }
+  });
+});
+
+describe("an end she tells on a call", () => {
+  /** Her answer starting a task at each of `ids`. */
+  const callsStarts = (...ids: string[]): MindChunk[] => [
+    { type: "tool-calls", calls: ids.map((id) => ({ id, name: START_TASK, arguments: BRIEF })) },
+    { type: "done", finishReason: "tool_calls" },
+  ];
+
+  /** Writes `text`, and ends once her turn is aborted. */
+  const writesThenWaits =
+    (text: string): Round =>
+    (request) =>
+      (async function* () {
+        yield { type: "text", text };
+        await new Promise<void>((resolve) => {
+          request.signal.addEventListener("abort", () => resolve(), { once: true });
+        });
+        request.signal.throwIfAborted();
+        yield DONE;
+      })();
+
+  /** Her task of call `call` in chat `id`, ended. */
+  const endOf = (id: string, call: string, task = TASK): TaskSnapshot =>
+    snapshot({ ...SUCCESS, id: task, endedAt: 5000, chat: { id, persona: PERSONA, call } });
+  const SECOND = `${TASK.slice(0, -1)}2`;
+
+  /** The nudge closing each of `requests`, for her turns that answer one. */
+  const nudgesIn = (requests: readonly MindRequest[]) =>
+    requests.flatMap((request) => {
+      const last = request.messages.at(-1) as { role: string; content: string } | undefined;
+      return last?.role === "developer" ? [last.content] : [];
+    });
+
+  /** Runs `work` with her persona on a realtime model, whose calls take no task. */
+  async function onRealtime<T>(work: () => Promise<T>): Promise<T> {
+    const saved = process.env.REALTIME_PROVIDER;
+    process.env.REALTIME_PROVIDER = "openai";
+    resetSettings();
+    try {
+      return await work();
+    } finally {
+      if (saved === undefined) delete process.env.REALTIME_PROVIDER;
+      else process.env.REALTIME_PROVIDER = saved;
+      resetSettings();
+    }
+  }
+
+  const callEnded = async (id: string) =>
+    (await events(id)).findLast((event) => event.type === "call-ended");
+
+  test("isn't told by her answer to another line already under way: hung up before the follow-up, she tells it in text", async () => {
+    const mind = new ScriptedMind(
+      says("你好呀"),
+      callsStart(),
+      says("好，我去弄啦"),
+      says("弄好啦"),
+    );
+    const id = await startedIn(mind);
+    const { call, handed } = await onCall(id);
+    // The owner asks something else; her answer on the call, its status block recorded, is under
+    // way as the task ends.
+    call.onTranscript({ role: "user", text: "今天天气怎么样", interrupted: false });
+    call.onContext?.(`${TASKS_BLOCK_PREFIX}\n任务1……正在做`);
+    await runner.report(ended(id, SUCCESS));
+    await until(() => handed.length === 1);
+    // That answer ends, stored after the final; the Floor keeps the nudge for a follow-up after it.
+    call.onTranscript({ role: "assistant", text: "今天是晴天哦", interrupted: false });
+    // The owner hangs up before the follow-up says anything.
+    await call.onEnded("hangup");
+    await until(() => mind.requests.length === 4);
+    await idle(id);
+    expect(nudgesIn(mind.requests)).toEqual([taskEndedNudge("c1")]);
+    expect(await callEnded(id)).not.toHaveProperty("told");
+    expect(lines(await events(id)).slice(-3)).toEqual([
+      "viewer: 今天天气怎么样",
+      "her: 今天是晴天哦",
+      "her: 弄好啦",
+    ]);
+  });
+
+  test("isn't told by her answer to the line the owner said as it ended, whose blocks hold no nudge", async () => {
+    const mind = new ScriptedMind(
+      says("你好呀"),
+      callsStart(),
+      says("好，我去弄啦"),
+      says("弄好啦"),
+    );
+    const id = await startedIn(mind);
+    const { call, handed } = await onCall(id);
+    // The task ends as the owner speaks; her answer, offered her task tools, leaves the nudge for a
+    // follow-up after it, and records its own blocks.
+    await runner.report(ended(id, SUCCESS));
+    await until(() => handed.length === 1);
+    call.onTranscript({ role: "user", text: "今天天气怎么样", interrupted: false });
+    call.onContext?.(`${TASKS_BLOCK_PREFIX}\n任务1……做完了`);
+    call.onTranscript({ role: "assistant", text: "今天是晴天哦", interrupted: false });
+    await call.onEnded("hangup");
+    await until(() => mind.requests.length === 4);
+    await idle(id);
+    expect(nudgesIn(mind.requests)).toEqual([taskEndedNudge("c1")]);
+    expect(await callEnded(id)).not.toHaveProperty("told");
+  });
+
+  test("…and with the server stopping instead, the next cascade call is handed it", async () => {
+    const mind = new ScriptedMind(says("你好呀"), callsStart(), says("好，我去弄啦"));
+    const id = await startedIn(mind);
+    const first = await onCall(id);
+    first.call.onTranscript({ role: "user", text: "今天天气怎么样", interrupted: false });
+    await runner.report(ended(id, SUCCESS));
+    await until(() => first.handed.length === 1);
+    first.call.onTranscript({ role: "assistant", text: "今天是晴天哦", interrupted: false });
+    await runner.shutdown();
+    expect(mind.requests).toHaveLength(3);
+    expect(await callEnded(id)).toMatchObject({ reason: "shutdown" });
+    // The next start: the manager reports nothing, since report() marked the task reported.
+    serve({ ...engine(new ScriptedMind()), tasks: new FakeTasks() });
+    const { call, handed } = await onCall(id);
+    await until(() => handed.length === 1);
+    expect(handed).toEqual([
+      { drafts: ofCall(await events(id), "c1"), nudge: taskEndedNudge("c1") },
+    ]);
+    await call.onEnded("hangup");
+  });
+
+  test("asked by a reply cut before it spoke, isn't told by the owner's line after it", async () => {
+    const mind = new ScriptedMind(
+      says("你好呀"),
+      callsStart(),
+      says("好，我去弄啦"),
+      says("弄好啦"),
+    );
+    const id = await startedIn(mind);
+    const { call, handed } = await onCall(id);
+    await runner.report(ended(id, SUCCESS));
+    await until(() => handed.length === 1);
+    // Her follow-up records the nudge; the owner talks over it before she says anything.
+    call.onContext?.(taskEndedNudge("c1"));
+    call.onTranscript({ role: "user", text: "等一下", interrupted: false });
+    await call.onEnded("hangup");
+    await until(() => mind.requests.length === 4);
+    await idle(id);
+    expect(nudgesIn(mind.requests)).toEqual([taskEndedNudge("c1")]);
+    expect(await callEnded(id)).not.toHaveProperty("told");
+  });
+
+  test("asked by her greeting there, is named on call-ended, and told in no text turn or later call", async () => {
+    const mind = new ScriptedMind(
+      says("你好呀"),
+      callsStart(),
+      says("好，我去弄啦"),
+      // Her report turn, which the call cuts off before she says anything.
+      waitsForAbort,
+    );
+    const id = await startedIn(mind);
+    await runner.report(ended(id, SUCCESS));
+    await until(() => mind.requests.length === 4);
+    const { call, handed } = await onCall(id);
+    await until(() => handed.length === 1);
+    // Her greeting records the nudge it took, then speaks, as bindCall reports them.
+    call.onContext?.(taskEndedNudge("c1"));
+    call.onTranscript({ role: "assistant", text: "网页做好啦", interrupted: false });
+    await call.onEnded("hangup");
+    await Bun.sleep(50);
+    await idle(id);
+    expect(mind.requests).toHaveLength(4);
+    expect(await callEnded(id)).toMatchObject({ call: call.id, told: ["c1"] });
+    const next = await onCall(id);
+    await Bun.sleep(30);
+    expect(next.handed).toEqual([]);
+    await next.call.onEnded("hangup");
+  });
+
+  test("held by a realtime call the server stopped during, is handed to the next cascade call", async () => {
+    const mind = new ScriptedMind(says("你好呀"), callsStart(), says("好，我去弄啦"));
+    const id = await startedIn(mind);
+    await onRealtime(async () => {
+      const { call, handed } = await onCall(id);
+      await runner.report(ended(id, SUCCESS));
+      call.onTranscript({ role: "assistant", text: "我们聊点别的吧", interrupted: false });
+      await Bun.sleep(30);
+      expect(handed).toEqual([]);
+    });
+    // The owner quits the app with the call on: no tell after it.
+    await runner.shutdown();
+    expect(mind.requests).toHaveLength(3);
+    serve({ ...engine(new ScriptedMind()), tasks: new FakeTasks() });
+    const { call, handed } = await onCall(id);
+    await until(() => handed.length === 1);
+    expect(handed[0]?.nudge).toBe(taskEndedNudge("c1"));
+    await call.onEnded("hangup");
+  });
+
+  test("held by a realtime call, whose tell after it a new call cuts before she writes, is handed to the new call", async () => {
+    const mind = new ScriptedMind(
+      says("你好呀"),
+      callsStart(),
+      says("好，我去弄啦"),
+      waitsForAbort,
+    );
+    const id = await startedIn(mind);
+    await onRealtime(async () => {
+      const { call } = await onCall(id);
+      await runner.report(ended(id, SUCCESS));
+      call.onTranscript({ role: "assistant", text: "我们聊点别的吧", interrupted: false });
+      await call.onEnded("hangup");
+    });
+    // Her tell after the hang-up starts; the owner calls again before she writes anything.
+    await until(() => mind.requests.length === 4);
+    const { call, handed } = await onCall(id);
+    await until(() => handed.length === 1);
+    expect(handed).toEqual([
+      { drafts: ofCall(await events(id), "c1"), nudge: taskEndedNudge("c1") },
+    ]);
+    await call.onEnded("hangup");
+  });
+
+  test("two a realtime call held: a new call cutting the first's tell after part of a line is handed the second alone", async () => {
+    const mind = new ScriptedMind(
+      says("你好呀"),
+      callsStarts("c1", "c2"),
+      says("好，我去弄啦"),
+      writesThenWaits("第一个做好了，"),
+      says("第二个也好了"),
+    );
+    const id = await startedIn(mind);
+    await onRealtime(async () => {
+      const { call } = await onCall(id);
+      await runner.report(endOf(id, "c1"));
+      await runner.report(endOf(id, "c2", SECOND));
+      call.onTranscript({ role: "assistant", text: "我们聊点别的吧", interrupted: false });
+      await call.onEnded("hangup");
+    });
+    // Her tell of the first has written part of a line when the owner calls again.
+    await until(() => mind.requests.length === 4);
+    await Bun.sleep(30);
+    const { call, handed } = await onCall(id);
+    expect(lines(await events(id)).at(-1)).toBe("her: 第一个做好了，");
+    await until(() => handed.length === 1);
+    await Bun.sleep(30);
+    expect(handed).toEqual([
+      { drafts: ofCall(await events(id), "c2"), nudge: taskEndedNudge("c2") },
+    ]);
+    // Hung up before her greeting: the second is told in text after the call.
+    await call.onEnded("hangup");
+    await until(() => mind.requests.length === 5);
+    await idle(id);
+    expect(nudgesIn(mind.requests)).toEqual([taskEndedNudge("c1"), taskEndedNudge("c2")]);
+  });
+
+  test("two a realtime call held, cut before she writes: the new call is handed both, and her greeting there tells both", async () => {
+    const mind = new ScriptedMind(
+      says("你好呀"),
+      callsStarts("c1", "c2"),
+      says("好，我去弄啦"),
+      waitsForAbort,
+    );
+    const id = await startedIn(mind);
+    await onRealtime(async () => {
+      const { call } = await onCall(id);
+      await runner.report(endOf(id, "c1"));
+      await runner.report(endOf(id, "c2", SECOND));
+      call.onTranscript({ role: "assistant", text: "我们聊点别的吧", interrupted: false });
+      await call.onEnded("hangup");
+    });
+    await until(() => mind.requests.length === 4);
+    const { call, handed } = await onCall(id);
+    await until(() => handed.length === 2);
+    expect(handed.map((each) => each.nudge)).toEqual([taskEndedNudge("c1"), taskEndedNudge("c2")]);
+    // Her greeting takes both nudges, which the Floor joins with a blank line.
+    call.onContext?.(`${taskEndedNudge("c1")}\n\n${taskEndedNudge("c2")}`);
+    call.onTranscript({ role: "assistant", text: "两个都做好啦", interrupted: false });
+    await call.onEnded("hangup");
+    await Bun.sleep(50);
+    await idle(id);
+    expect(mind.requests).toHaveLength(4);
+    expect(await callEnded(id)).toMatchObject({ told: ["c1", "c2"] });
   });
 });
 

@@ -470,11 +470,12 @@ tools.
 - **Refresh:** once her log holds a `start_task` call, the chat page reads `GET tasks?chat=`, and
   polls it while a task is live, every 2 s while one runs and 5 s while one waits, so a line she
   passes on to a waiting task, and her stop, show at the next poll. When it sees a task end, it
-  asks `GET live` every 2 s, reading the log again each time, until her report is in the log, or
-  60 s pass with no reply on the page; a cancelled `final` counts as her report, since it gets no
-  turn. Her report turn starts only once no reply runs in the chat, so the page doesn't ask while
-  it carries a reply, and the 60 s count from the end of the last reply it carried. Her report
-  turn streams in like any reply.
+  asks `GET live` every 2 s, reading the log again each time, until her report is in the log
+  (`reportStored`, [assistant.md](assistant.md#calls)), or 60 s pass with no reply on the page; a
+  cancelled `final` counts as her report, since it gets no turn, and so does a call's end that
+  names it as told. Her report turn starts only once no reply runs in the chat, so the page
+  doesn't ask while it carries a reply, and the 60 s count from the end of the last reply it
+  carried. Her report turn streams in like any reply.
 - **The Tasks list** (`/tasks`) is read-only: what she is working on and has done. A **Tasks** nav
   entry before Jobs, shown while Assistant Mode is on, counts the tasks waiting on the owner.
   - Live tasks come first, then ended ones, each newest first. A row has the goal, the status, her

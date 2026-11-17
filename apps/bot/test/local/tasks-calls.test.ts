@@ -134,13 +134,73 @@ describe("untoldEnds", () => {
     expect(untoldEnds(events, HER)).toEqual([
       { callId: "c1", drafts: drafted(call, started, final) },
     ]);
-    // An owner's line after it doesn't tell it; hers does, typed, spoken or on a call.
+    // An owner's line after it doesn't tell it; hers does, typed or spoken.
     expect(untoldEnds([...events, line(null, "好了吗")], HER)).toHaveLength(1);
-    for (const modality of [undefined, "voice", "call"] as const) {
+    for (const modality of [undefined, "voice"] as const) {
       expect(untoldEnds([...events, line(HER, "做好了", modality)], HER)).toEqual([]);
     }
     // An empty line of hers, as a call's cut-off reply leaves, tells nothing.
     expect(untoldEnds([...events, line(HER, "  ")], HER)).toHaveLength(1);
+  });
+
+  test("her line on a call tells none: the call's call-ended tells those it names as told", () => {
+    seq = 0;
+    const events = [
+      callOf("c1"),
+      resultOf("c1", "started", { task: "t1", status: "running" }),
+      callOf("c2"),
+      resultOf("c2", "started", { task: "t2", status: "running" }),
+      line(HER, "交给我吧"),
+      at({ type: "call-started", call: "k1", persona: HER }),
+      resultOf("c1", "final", SUCCEEDED),
+      resultOf("c2", "final", SUCCEEDED),
+      line(HER, "我们聊点别的吧", "call"),
+    ];
+    expect(untoldEnds(events, HER).map((end) => end.callId)).toEqual(["c1", "c2"]);
+    const ended = (told?: string[]) =>
+      at({ type: "call-ended", call: "k1", reason: "hangup", ...(told ? { told } : {}) });
+    expect(untoldEnds([...events, ended()], HER).map((end) => end.callId)).toEqual(["c1", "c2"]);
+    expect(untoldEnds([...events, ended(["c2"])], HER).map((end) => end.callId)).toEqual(["c1"]);
+    expect(untoldEnds([...events, ended(["c1", "c2"])], HER)).toEqual([]);
+    // Only a call-ended after the final: one before it named an earlier end.
+    expect(untoldEnds([ended(["c1"]), ...events], HER).map((end) => end.callId)).toEqual([
+      "c1",
+      "c2",
+    ]);
+  });
+
+  test("a line answering her report turn's nudge tells that end alone; the latest nudge since her last line counts", () => {
+    seq = 0;
+    const events = [
+      callOf("c1"),
+      resultOf("c1", "started", { task: "t1", status: "running" }),
+      callOf("c2"),
+      resultOf("c2", "started", { task: "t2", status: "running" }),
+      line(HER, "交给我吧"),
+      resultOf("c1", "final", SUCCEEDED),
+      resultOf("c2", "final", SUCCEEDED),
+      block(HER, taskEndedNudge("c1")),
+      // Her report turn's providers record their blocks after her nudge.
+      block(HER, `${TASKS_BLOCK_PREFIX}\n任务1……做完了`),
+    ];
+    const ids = (log: ChatEvent[]) => untoldEnds(log, HER).map((end) => end.callId);
+    // Cut off after part of a line, or told whole, it answered c1's nudge alone.
+    expect(ids([...events, line(HER, "第一个做")])).toEqual(["c2"]);
+    const told = [...events, line(HER, "第一个做好了")];
+    expect(ids([...told, block(HER, taskEndedNudge("c2")), line(HER, "第二个也好了")])).toEqual([]);
+    // Her next line, with no nudge of hers since the last, tells every end, as any line does.
+    expect(ids([...told, line(null, "还有呢"), line(HER, "都好了")])).toEqual([]);
+    // Two nudges before her line: the latest is the one she answers.
+    expect(ids([...events, block(HER, taskEndedNudge("c2")), line(HER, "第二个好了")])).toEqual([
+      "c1",
+    ]);
+    // A nudge on an end already told is no tell's she answers, nor is another persona's.
+    expect(ids([...told, block(HER, taskEndedNudge("c1")), line(HER, "嗯")])).toEqual([]);
+    expect(
+      ids([...told.slice(0, -3), block(OTHER, taskEndedNudge("c1")), line(HER, "嗯")]),
+    ).toEqual([]);
+    // Nor does a nudge outlast a line of hers on a call.
+    expect(ids([...events, line(HER, "在呢", "call"), line(HER, "都好了")])).toEqual([]);
   });
 
   test("never a cancelled end, another persona's, or another tool's", () => {

@@ -136,12 +136,18 @@ export function keyed<T>(items: readonly T[], text: (item: T) => string) {
 }
 
 /** Her lines it waits to read, shown wherever an answer lets it read them: text, never markup. */
-export function QueuedLines({ task }: { readonly task: TaskSnapshot }) {
+export function QueuedLines({
+  task,
+  className,
+}: {
+  readonly task: TaskSnapshot;
+  readonly className?: string;
+}) {
   const { t } = useLingui();
   const lines = queuedLines(task);
   if (lines.length === 0) return null;
   return (
-    <div className="flex flex-col gap-1.5" data-queued>
+    <div className={cn("flex flex-col gap-1.5", className)} data-queued>
       <p className="text-muted-foreground text-xs">
         {t`She passed these on, and it reads them first when it goes on:`}
       </p>

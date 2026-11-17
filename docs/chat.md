@@ -52,7 +52,7 @@ isn't stored, she never saw.
 | --- | --- | --- |
 | `message` | the runner for the viewer and for a call's lines, the engine for her | `speaker`, `text`, and `attachments` (her selfies; `text` is empty on a message of photos alone); `modality: "voice"` on a voice message, whose first attachment is its audio and whose `text` is its transcript; `modality: "call"` on a line said on a call, the viewer's or hers, its transcript in `text`; `interrupted` when she was cut off, keeping what she had said; `cutOff` when her provider stopped her short: `length` at its token limit, `refusal` when it refused or filtered her |
 | `context` | the engine | A block a context provider put into her view: `role`, `content` and its `position` there; never shown. In the local app, the status block of her tasks (`后台的活：`) is one, replaced each turn ([assistant.md](assistant.md#the-status-block)) |
-| `context-removed` | the engine | Her earlier `context` blocks, by seq, that a provider took back out; the stream archive replaces its blocks when they change or move, and the status block when it changes or moves |
+| `context-removed` | the engine; the runner as a group call opens | Her earlier `context` blocks, by seq, that a provider took back out; the stream archive replaces its blocks when they change or move, and the status block when it changes or moves. In the local app, a group call's opening takes each persona's stored status blocks and task nudges out, one under the call's id per persona (`staleTaskContext`, [Calls](#calls)) |
 | `tool-call`, `tool-result` | the engine | Her call and what it returned; a call cut off has no result, and one that ran on past an interruption returns further down the log. An async tool's results carry `stage`: `started` while it runs, then `final` or `cancelled`. pipedog's async tools (`take_selfie` on a call) store `{}` as `started`; a background tool stores what it started (`start_task`'s `{ task, status }`), never `{}`. Nothing else tells the two apart: only a `{}` start's `final` follows pipedog's rule ([Her view](#her-view-viewof)), so a future async tool that stores a value would settle as a background tool's does. `start_task`'s `final` is stored by the runner when the task ends ([The local API](#the-local-api)), and so are its `tool-call` and `started` result when she started it on a call ([assistant.md](assistant.md#calls)) |
 | `kickoff` | the engine | The greeting prompt she answered |
 | `turn-failed` | the engine, or the runner when a turn throws | The failure, through `errorText`; the chat stays usable. `code: "voice-failed"` when her reply, stored just before it, was meant as a voice message but stayed text |
@@ -60,7 +60,7 @@ isn't stored, she never saw.
 | `title` | `PATCH` | The chat's title; the last one wins. Until there is one, the page names the chat by who is in it now |
 | `participants` | `POST participants` | Personas added or removed |
 | `settings` | `PATCH` | The chat's `chainLimit` or `replyMode`; the last of each wins |
-| `call-started`, `call-ended` | the runner; in production, the browser | A call in the chat ([Calls](#calls)): `call-started` names the `call`, a UUIDv7, and the `persona` called, with `group: true` when every persona in the chat was on it; `call-ended` names the same `call` and its `reason`, `hangup`, `error` or `shutdown` |
+| `call-started`, `call-ended` | the runner; in production, the browser | A call in the chat ([Calls](#calls)): `call-started` names the `call`, a UUIDv7, and the `persona` called, with `group: true` when every persona in the chat was on it; `call-ended` names the same `call` and its `reason`, `hangup`, `error` or `shutdown`, and in the local app `told`, the ids of her `start_task` calls whose ends she told on the call, when there are any ([assistant.md](assistant.md#calls)) |
 
 **`ChatSummary`** is what the chat list shows: the title, the participants, `createdAt`,
 `updatedAt`, the last message's text and the last seq. `summarize` derives it from a log, so a
@@ -190,7 +190,10 @@ aborts the turn. The engine never rejects for the turn's own failures.
 3. **Her view** is `viewOf` the log as stored. A greeting turn adds `buildGreetingKickoff` over her
    memories of the viewer, recorded as a `kickoff`. A turn's `nudge` (a task's report turn has
    one, and so may a reply on a call, [voice-engine.md](voice-engine.md#tools-and-async-results))
-   is a `developer` message at the view's end, recorded as her `context` block.
+   is a `developer` message at the view's end, recorded as her `context` block. Outside a call,
+   with no kickoff to go before it, it is recorded first, before step 2's parts and step 5's mind
+   are made, so a turn that fails or is cut there still shows what it was asked. A call's waits
+   for both: the Floor hands the nudge of a reply cut before its turn records it to her next one.
 4. **Recall:** the gate attaches its decision, then Mem0, the archive and the facts run in turn,
    then the providers the request hands the turn (step 10), such as the local app's status block.
    The gate and the archive key their turn on the turn's id, since past the window a repeated line
@@ -205,9 +208,10 @@ aborts the turn. The engine never rejects for the turn's own failures.
      call-time fields, OpenRouter's usage body and headers, `developer` as `user` everywhere but
      OpenAI, Gemini's single system message, and Anthropic's prompt caching, fallbacks and message
      conversion.
-   - **A malformed empty reply is asked for again,** twice at most: Gemini sometimes ends a round
-     with no text and no call, its native finish reason `MALFORMED_RESPONSE` or
-     `MALFORMED_FUNCTION_CALL`, mostly where it meant to call a tool. Each attempt bills.
+   - **A malformed empty reply is asked for again,** twice at most: Gemini through OpenRouter
+     sometimes ends a round with no text and no call, its `native_finish_reason`
+     `MALFORMED_RESPONSE` or `MALFORMED_FUNCTION_CALL`, mostly where it meant to call a tool. Each
+     attempt bills.
    - **One mind per turn,** so Anthropic's signed thinking goes back with the round after a tool
      call, while the system prompt, the tools and every earlier message are as they were
      ([prefix checks](https://platform.claude.com/docs/en/build-with-claude/preserved-thinking/prefix-checks)):
@@ -561,14 +565,21 @@ interface CallBinding {
     line: { role: "user" | "assistant"; text: string; interrupted: boolean },
     client?: CallClient, // the call's browser; the call always passes it
   ): void;
+  // Each context block the call's log records after the seed, in order with the lines
+  onContext?(content: string): void;
   // A tool's, as take_selfie's, with the same browser
   onServerMessage?(data: Readonly<Record<string, unknown>>, client?: CallClient): void;
   onEnded(end: "hangup" | "error"): void; // once, after the last line
   // What each reply of hers adds to her turn, asked as it starts: `answers` when it answers the
   // viewer's line
   extras?(answers: boolean): TurnExtras | null;
-  // Lines for the call's log and prompts for her, from outside the call
-  outside?: AsyncIterable<{ drafts: readonly ChatEventDraft[]; nudge?: string }>;
+  // Lines for the call's log and prompts for her, from outside the call; `due` says a nudge is
+  // still due
+  outside?: AsyncIterable<{
+    drafts: readonly ChatEventDraft[];
+    nudge?: string;
+    due?: () => boolean;
+  }>;
 }
 
 interface CallClient {
@@ -596,6 +607,12 @@ interface CallClient {
   viewer or a hang-up cut her off; a hang-up mid-reply reports that part before `onEnded`. An
   empty line isn't reported, and neither is the seed, the greeting's kickoff or the empty-turn
   recovery prompt. An `onTranscript` or `onEnded` that throws is logged, and the call goes on.
+- **Her context blocks:** each `context` event the call's log records after the seed, her recall,
+  a block `extras`' providers add, the nudge a reply answers (after an empty turn's recovery prompt,
+  in one block, when one goes first), reaches `onContext` as the log takes it, in order with the
+  lines; one that throws is logged. The local app tells from it which of her
+  tasks' ends a reply was asked to tell ([assistant.md](assistant.md#calls)). A group call reports
+  none.
 - **Her photos:** each server message the call sends its browser, `take_selfie`'s `{ type:
   "selfie", urls }`, reaches `onServerMessage` once it is sent, in order with the lines and with the
   same `CallClient`. One that throws is logged, and the tool still returns its result.
@@ -647,8 +664,9 @@ that chat; without a `chatId`, it is the standalone call, unbound.
       `start_task` of hers on the call is stored too, as her `tool-call` and its `started` result,
       once the manager answers;
    6. stores `call-ended { call, reason }` once the session ends: `hangup`, `error`, or `shutdown`
-      when the server stops mid-call. A line or photo after it is dropped. Shutdown waits up to 2 s
-      for it, after the call's last lines, a call hung up just before included.
+      when the server stops mid-call, with `told` naming the ends of her tasks she told on it. A
+      line or photo after it is dropped. Shutdown waits up to 2 s for it, after the call's last
+      lines, a call hung up just before included.
 3. **An offer the signalling server refuses** still stores both ends, the second with `error`: a
    call of no length.
 4. **A renegotiation,** an offer for the call's own `pc_id`, passes through unbound and stores
@@ -741,7 +759,7 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
   `context` block, which says the task ended and its result is in her call's return. A cancelled
   task gets its `final` and no turn, and so does one that ends once the chat is no longer hers
   alone. During a call, the call is handed the end for her to tell there, or holds it, and what
-  it leaves untold she tells in text once `call-ended` is stored
+  she didn't tell there she tells in text once `call-ended` is stored
   ([assistant.md](assistant.md#calls)). Once shutdown begins it stores nothing.
 - **A pause** of a task of hers reaches the chat through `taskWaiting(snapshot)`, the manager's
   `waiting` hook: during a call that takes her tasks, she points the owner to the card there;

@@ -791,6 +791,36 @@ describe("runTurn", () => {
     ]);
   });
 
+  test("records her nudge before her parts and mind are made: a turn that fails or is cut there still shows it", async () => {
+    const nudge = "说说那件事";
+    const recorded: ChatEventDraft = {
+      type: "context",
+      persona: PERSONA,
+      turn: "id-1",
+      position: 1,
+      role: "developer",
+      content: nudge,
+    };
+    const keyless = deps(fakeMind().mind, parts(), {
+      createMind: () => {
+        throw new Error("Set OPENROUTER_API_KEY");
+      },
+    });
+    expect(eventsOf(await collect(runTurn(request({ nudge }), keyless)))).toEqual([
+      recorded,
+      { type: "turn-failed", persona: PERSONA, turn: "id-1", error: "Set OPENROUTER_API_KEY" },
+    ]);
+    const controller = new AbortController();
+    const cut = deps(fakeMind().mind, parts(), {
+      parts: async () => {
+        controller.abort();
+        return parts();
+      },
+    });
+    const signal = controller.signal;
+    expect(eventsOf(await collect(runTurn(request({ nudge, signal }), cut)))).toEqual([recorded]);
+  });
+
   test("aborts the turn when its reader stops reading", async () => {
     const { promise: aborted, resolve } = Promise.withResolvers<void>();
     const { mind } = fakeMind(async function* (request) {

@@ -503,6 +503,22 @@ describe("a call's turn", () => {
     ).toEqual([{ role: "user", content: "你好" }, nudge]);
   });
 
+  test("a nudge waits for her parts and mind: a reply cut before then records none, for the Floor to hand on", async () => {
+    const controller = new AbortController();
+    const outputs = await collect(
+      runTurn(
+        request(hooks(), { nudge: "刚才没听清，接着说吧", signal: controller.signal }),
+        deps(fakeMind().mind, parts(), {
+          parts: async () => {
+            controller.abort();
+            return parts();
+          },
+        }),
+      ),
+    );
+    expect(eventsOf(outputs)).toEqual([]);
+  });
+
   test("runs in the call's usage scope, as her", async () => {
     const scopes: unknown[] = [];
     const { mind } = fakeMind(async function* () {

@@ -1631,6 +1631,8 @@ interface LoggedEvent {
   /** A context block's text, and the blocks a context-removed takes out, by seq. */
   readonly content?: string;
   readonly seqs?: readonly number[];
+  /** A call-ended's: her start_task calls whose ends she told on the call. */
+  readonly told?: readonly string[];
 }
 
 async function chatLog(walk: Walk, id: string): Promise<readonly LoggedEvent[]> {
@@ -3296,7 +3298,8 @@ function callShape(events: readonly LoggedEvent[]): string[] {
     if (e.type === "message") return [`${e.speaker?.kind}: ${e.text}`];
     if (e.type === "tool-call") return [`call ${e.callId}`];
     if (e.type === "tool-result") return [`${e.stage ?? "result"} ${e.callId}`];
-    return e.type === "call-ended" ? ["call-ended"] : [];
+    if (e.type !== "call-ended") return [];
+    return [e.told === undefined ? "call-ended" : `call-ended told ${e.told.join(" ")}`];
   });
 }
 
@@ -3305,7 +3308,8 @@ function callShape(events: readonly LoggedEvent[]): string[] {
  * chat stored; the fake hearing hears the viewer ask for a task, which she starts, her call and its
  * started result stored in the chat between their lines; Allow Once on the waiting bar, above the
  * dock; her pointer to the card at the task's pause and her word on its end, both on the call; Hang
- * Up, after which no text turn tells it again; and its row in the Tasks list.
+ * Up, whose call-ended names the end as told, after which no text turn tells it again; and its row
+ * in the Tasks list.
  */
 async function callTaskWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
   const { page, checks, origin } = walk;
@@ -3526,7 +3530,7 @@ async function callTaskWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
     `persona: ${CALL_WAIT_LINE}`,
     `final ${CALL_TASK_CALL}`,
     `persona: ${CALL_REPORT_LINE}`,
-    "call-ended",
+    `call-ended told ${CALL_TASK_CALL}`,
   ];
   const nudges = chats.slice(asked).flatMap((request) => {
     const nudge = nudgeOf(request);

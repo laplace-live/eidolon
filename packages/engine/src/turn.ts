@@ -462,14 +462,26 @@ class Turn {
   async prepare(): Promise<{ parts: PersonaParts; conversation: TurnConversation }> {
     const group = this.#group();
     const parts = await this.#parts(group);
-    return { parts, conversation: await this.#enriched(parts, group) };
+    const conversation = this.#view();
+    await this.#kickoff(parts, conversation);
+    this.#nudge(conversation);
+    await this.#enrich(parts, conversation, group);
+    return { parts, conversation };
   }
 
   async #respond(): Promise<void> {
     const group = this.#group();
+    const conversation = this.#view();
+    // Outside a call, with no kickoff to go first, her nudge is recorded before her parts and mind
+    // are made, so a turn that fails or is cut there still shows what it was asked. A call's waits
+    // for them: the Floor gives a nudge her cut reply never recorded to her next one.
+    const early = this.#call === null && !this.#request.kickoff;
+    if (early) this.#nudge(conversation);
     const parts = await this.#parts(group);
     const mind = this.#deps.createMind();
-    const conversation = await this.#enriched(parts, group);
+    await this.#kickoff(parts, conversation);
+    if (!early) this.#nudge(conversation);
+    await this.#enrich(parts, conversation, group);
     await this.#converse(parts, mind, conversation, group);
   }
 
@@ -502,28 +514,27 @@ class Turn {
     };
   }
 
-  async #enriched(parts: PersonaParts, group: Group | null): Promise<TurnConversation> {
-    const { chat, viewer, kickoff, nudge } = this.#request;
+  #view(): TurnConversation {
+    const { chat, viewer } = this.#request;
     const { messages, blocks } = turnView(chat, this.#persona, viewer.uname ?? "");
-    const conversation = new TurnConversation(messages, {
-      persona: this.#persona,
-      turn: this.#id,
-      blocks,
-    });
-    if (kickoff) {
-      const content = buildGreetingKickoff(await this.#greetingMemories(parts));
-      this.#record([{ type: "kickoff", persona: this.#persona, turn: this.#id, content }]);
-      conversation.append({ role: "user", content });
-    }
-    if (nudge !== undefined) {
-      conversation.setMessages([
-        ...conversation.getMessages(),
-        { role: "developer", content: nudge },
-      ]);
-      this.#record(conversation.takeRecorded());
-    }
-    await this.#enrich(parts, conversation, group);
-    return conversation;
+    return new TurnConversation(messages, { persona: this.#persona, turn: this.#id, blocks });
+  }
+
+  async #kickoff(parts: PersonaParts, conversation: TurnConversation): Promise<void> {
+    if (!this.#request.kickoff) return;
+    const content = buildGreetingKickoff(await this.#greetingMemories(parts));
+    this.#record([{ type: "kickoff", persona: this.#persona, turn: this.#id, content }]);
+    conversation.append({ role: "user", content });
+  }
+
+  #nudge(conversation: TurnConversation): void {
+    const { nudge } = this.#request;
+    if (nudge === undefined) return;
+    conversation.setMessages([
+      ...conversation.getMessages(),
+      { role: "developer", content: nudge },
+    ]);
+    this.#record(conversation.takeRecorded());
   }
 
   /**

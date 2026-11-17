@@ -77,6 +77,10 @@ function render(node: ReactNode): string {
 const QUOTED = "<blockquote";
 const ESCAPED = "页面标题写成&lt;b&gt;今天的事&lt;/b&gt;";
 
+/** The classes of the element that lists her lines in `markup`. */
+const queuedClasses = (markup: string): string[] =>
+  /<div class="([^"]*)" data-queued/.exec(markup)?.[1]?.split(" ") ?? [];
+
 test("the waiting bar lists her lines the task hasn't read above its answers, as text", () => {
   const bar = render(createElement(WaitingBar, { task: TASK, others: 0, onShow: () => {} }));
   expect(bar).toContain('data-answer="once"');
@@ -85,6 +89,10 @@ test("the waiting bar lists her lines the task hasn't read above its answers, as
   expect(bar.indexOf(ESCAPED)).toBeLessThan(bar.indexOf('data-answer="once"'));
   expect(bar).not.toContain("The owner allowed");
   expect(bar.split(QUOTED)).toHaveLength(2);
+  // Lines up to 2,000 characters each would push the composer, the dock and the answers off the
+  // chat pane: the bar's list scrolls within a bounded height.
+  expect(queuedClasses(bar)).toContain("overflow-y-auto");
+  expect(queuedClasses(bar).some((name) => name.startsWith("max-h-"))).toBe(true);
 });
 
 test("so does the task's card", () => {
@@ -111,4 +119,6 @@ test("so does the task's card", () => {
   expect(card).toContain("data-queued");
   expect(card).toContain(ESCAPED);
   expect(card.indexOf(ESCAPED)).toBeLessThan(card.indexOf('data-answer="once"'));
+  // The card sits in the scrolling log, which shows its lines whole.
+  expect(queuedClasses(card)).toEqual(["flex", "flex-col", "gap-1.5"]);
 });

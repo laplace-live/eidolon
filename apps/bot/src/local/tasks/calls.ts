@@ -3,7 +3,7 @@
 // stale by the call, and stay out of its views.
 import type { ChatEvent, ChatEventDraft, ParticipantId, ViewMessage } from "@eidolon/chat";
 import { TASKS_BLOCK_PREFIX } from "./status.ts";
-import { START_TASK, TASK_NUDGE_LEAD } from "./tool.ts";
+import { START_TASK, TASK_NUDGE_LEAD, taskEndedNudge } from "./tool.ts";
 
 /** Whether a developer block is the status block or one of her task nudges. */
 const isTaskContext = (content: string): boolean =>
@@ -79,20 +79,37 @@ export interface UntoldEnd {
 
 /**
  * The ends of persona `persona`'s tasks she hasn't told, oldest first: each final of a start_task
- * call of hers that isn't cancelled, with no line of hers that says anything after it.
+ * call of hers that isn't cancelled, until a call's call-ended names it among those she told there,
+ * or a line of hers with words comes after it, not on a call. A line that answers her report turn's
+ * nudge on one of them, the latest task nudge of hers since her last line, tells only that one: her
+ * turn records its providers' blocks after the nudge.
  */
 export function untoldEnds(events: readonly ChatEvent[], persona: ParticipantId): UntoldEnd[] {
   const starts = new Map<string, ChatEvent[]>();
   let untold: UntoldEnd[] = [];
+  let nudge: string | null = null;
   for (const event of events) {
     note(starts, event, persona);
-    if (
+    if (event.type === "call-ended") {
+      const told = event.told ?? [];
+      untold = untold.filter(({ callId }) => !told.includes(callId));
+    } else if (
+      event.type === "context" &&
+      event.persona === persona &&
+      event.content.startsWith(TASK_NUDGE_LEAD)
+    ) {
+      nudge = event.content;
+    } else if (
       event.type === "message" &&
       event.speaker.kind === "persona" &&
       event.speaker.id === persona &&
       event.text.trim() !== ""
     ) {
-      untold = [];
+      if (event.modality !== "call") {
+        const answered = untold.find(({ callId }) => taskEndedNudge(callId) === nudge);
+        untold = answered === undefined ? [] : untold.filter((end) => end !== answered);
+      }
+      nudge = null;
     } else if (
       event.type === "tool-result" &&
       event.persona === persona &&

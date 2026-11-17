@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatEvent } from "@eidolon/chat";
 import type { StartTaskFinal } from "@/lib/api";
+import { taskEndedNudge } from "../../../../bot/src/local/tasks/tool.ts";
 import { reportStored, type TaskCall, taskCalls } from "./calls";
 
 const TASK = "0196a3c0-0000-7000-8000-000000000001";
 
-function said(seq: number, who: "user" | "mio", text = "…"): ChatEvent {
+function said(seq: number, who: "user" | "mio", text = "…", modality?: "call"): ChatEvent {
   return {
     type: "message",
     seq,
@@ -13,6 +14,33 @@ function said(seq: number, who: "user" | "mio", text = "…"): ChatEvent {
     id: `m${seq}`,
     speaker: who === "user" ? { kind: "user" } : { kind: "persona", id: who },
     text,
+    ...(modality === undefined ? {} : { modality }),
+  };
+}
+
+/** Her report turn's nudge on call `callId`, as the runner stores it before her line. */
+function nudged(seq: number, callId: string, persona = "mio"): ChatEvent {
+  const content = taskEndedNudge(callId);
+  return {
+    type: "context",
+    seq,
+    at: seq,
+    persona,
+    turn: "t9",
+    position: 4,
+    role: "developer",
+    content,
+  };
+}
+
+function callEnded(seq: number, told?: string[]): ChatEvent {
+  return {
+    type: "call-ended",
+    seq,
+    at: seq,
+    call: "k1",
+    reason: "hangup",
+    ...(told === undefined ? {} : { told }),
   };
 }
 
@@ -141,28 +169,43 @@ describe("reportStored", () => {
     return entry;
   };
 
-  test("waits for the final, then for her line after it", () => {
+  test("waits for the final, then for her line after her report turn's nudge", () => {
     expect(reportStored(started, callOf(started))).toBe(false);
     const ended = [...started, result(5, "c1", final, "final")];
     expect(reportStored(ended, callOf(ended))).toBe(false);
-    const told = [...ended, said(6, "mio", "Done! Open index.html.")];
+    const asked = [...ended, nudged(6, "c1")];
+    expect(reportStored(asked, callOf(asked))).toBe(false);
+    const told = [...asked, said(7, "mio", "Done! Open index.html.")];
     expect(reportStored(told, callOf(told))).toBe(true);
   });
 
-  test("a report turn that failed counts as her answer", () => {
-    const events = [
-      ...started,
-      result(5, "c1", final, "final"),
-      {
-        type: "turn-failed",
-        seq: 6,
-        at: 6,
-        persona: "mio",
-        turn: "t9",
-        error: "Timed out",
-      } as const,
-    ];
+  test("a report turn that failed counts as her answer; her answer to the owner failing doesn't", () => {
+    const failed = (seq: number): ChatEvent => ({
+      type: "turn-failed",
+      seq,
+      at: seq,
+      persona: "mio",
+      turn: "t9",
+      error: "Timed out",
+    });
+    const events = [...started, result(5, "c1", final, "final"), nudged(6, "c1"), failed(7)];
     expect(reportStored(events, callOf(events))).toBe(true);
+    const answer = [...started, result(5, "c1", final, "final"), said(6, "user", "Hi"), failed(7)];
+    expect(reportStored(answer, callOf(answer))).toBe(false);
+    // Told one at a time after a call, the first's failed report turn leaves the second's to come.
+    const two = [
+      ...started,
+      call(5, "c2"),
+      result(6, "c2", { task: `${TASK.slice(0, -1)}2`, status: "running" }, "started"),
+      result(7, "c1", final, "final"),
+      result(8, "c2", final, "final"),
+      callEnded(9),
+      nudged(10, "c1"),
+      failed(11),
+    ];
+    const [first, second] = taskCalls(two) as [TaskCall, TaskCall];
+    expect(reportStored(two, first)).toBe(true);
+    expect(reportStored(two, second)).toBe(false);
   });
 
   test("a task the owner stopped gets its final and no turn", () => {
@@ -170,7 +213,7 @@ describe("reportStored", () => {
     expect(reportStored(events, callOf(events))).toBe(true);
   });
 
-  test("her line after one of the owner's may answer the owner instead", () => {
+  test("her line answering the owner's isn't her report, unless her report turn's nudge came first", () => {
     const events = [
       ...started,
       result(5, "c1", final, "final"),
@@ -178,5 +221,60 @@ describe("reportStored", () => {
       said(7, "mio", "Almost there."),
     ];
     expect(reportStored(events, callOf(events))).toBe(false);
+    // The owner's line cut her report turn short: nothing more is coming.
+    const cut = [...started, result(5, "c1", final, "final"), nudged(6, "c1"), ...events.slice(-2)];
+    expect(reportStored(cut, callOf(cut))).toBe(true);
+  });
+
+  test("her lines on a call don't report it; the call's end naming it as told does, else her report turn after", () => {
+    // Her answer to another line, under way as the task ended, then the hang-up.
+    const hers = [
+      ...started,
+      result(5, "c1", final, "final"),
+      said(6, "mio", "Sunny!", "call"),
+      callEnded(7),
+    ];
+    expect(reportStored(hers, callOf(hers))).toBe(false);
+    const during = [
+      ...started,
+      result(5, "c1", final, "final"),
+      said(6, "user", "What's the weather like?", "call"),
+      said(7, "mio", "Sunny!", "call"),
+    ];
+    const untold = [...during, callEnded(8)];
+    expect(reportStored(untold, callOf(untold))).toBe(false);
+    const other = [...during, callEnded(8, ["c9"])];
+    expect(reportStored(other, callOf(other))).toBe(false);
+    const toldThere = [...during, callEnded(8, ["c1"])];
+    expect(reportStored(toldThere, callOf(toldThere))).toBe(true);
+    // After a call that left it untold, the owner's line and her answer come before her report.
+    const answered = [...untold, said(9, "user", "Hi again"), said(10, "mio", "Hi!")];
+    expect(reportStored(answered, callOf(answered))).toBe(false);
+    const reported = [...answered, nudged(11, "c1"), said(12, "mio", "The page is done.")];
+    expect(reportStored(reported, callOf(reported))).toBe(true);
+    // Her report turn cut by a call before she wrote: the call is handed the end.
+    const redialed = [...untold, nudged(9, "c1"), said(10, "mio", "Hi again!", "call")];
+    expect(reportStored(redialed, callOf(redialed))).toBe(false);
+  });
+
+  test("another task's report, or another persona's nudge, doesn't end the wait", () => {
+    const events = [
+      said(1, "user", "Write me two pages"),
+      call(2, "c1"),
+      result(3, "c1", { task: TASK, status: "running" }, "started"),
+      call(4, "c2"),
+      result(5, "c2", { task: `${TASK.slice(0, -1)}2`, status: "running" }, "started"),
+      said(6, "mio", "On it!"),
+      result(7, "c1", final, "final"),
+      result(8, "c2", final, "final"),
+      nudged(9, "c1"),
+      said(10, "mio", "The first is done."),
+    ];
+    const second = taskCalls(events)[1] as TaskCall;
+    expect(reportStored(events, second)).toBe(false);
+    const elsewhere = [...events, nudged(11, "c2", "bea"), said(12, "mio", "…")];
+    expect(reportStored(elsewhere, second)).toBe(false);
+    const told = [...events, nudged(11, "c2"), said(12, "mio", "So is the second.")];
+    expect(reportStored(told, second)).toBe(true);
   });
 });

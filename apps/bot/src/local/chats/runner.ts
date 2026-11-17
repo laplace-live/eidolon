@@ -234,11 +234,13 @@ interface ActiveCall {
   readonly starts: Set<Promise<unknown>>;
 }
 
-/** A task's end a call was handed, or held for after it. */
+/**
+ * A task's end a call was handed to tell, or held for after it: `asked` once a reply of hers on the
+ * call recorded its nudge, `told` once a line of hers came after that.
+ */
 interface HandOff {
   readonly origin: TaskChat;
-  /** A line of hers after this seq told it; null when it never reached the call. */
-  readonly after: number | null;
+  state: "held" | "handed" | "asked" | "told";
 }
 
 /** Her answer to the owner's line in a chat of hers alone: typed, a voice message, or on `call`. */
@@ -395,9 +397,9 @@ export class ChatRunner {
         const drafts = call.known.has(origin.call) ? stored.drafts.slice(-1) : stored.drafts;
         call.known.add(origin.call);
         call.outside.push({ drafts, ...(told ? { nudge: taskEndedNudge(origin.call) } : {}) });
-        if (told) call.ends.push({ origin, after: stored.seq });
+        if (told) call.ends.push({ origin, state: "handed" });
       } else if (told) {
-        call.ends.push({ origin, after: null });
+        call.ends.push({ origin, state: "held" });
       }
     });
   }
@@ -577,6 +579,7 @@ export class ChatRunner {
         persona,
         seedMessages,
         onTranscript: (line: TranscriptLine) => this.#callLine(id, chat, call, line),
+        onContext: (content: string) => this.#recorded(call, content),
         extras: (answers: boolean) =>
           this.#handed(id, chat, answers && call.tasks ? { persona, call } : null),
         outside: call.outside,
@@ -822,12 +825,31 @@ export class ChatRunner {
     return false;
   }
 
-  /** Stores a finished line of `call` as a `call` message; one after its end is dropped. */
+  /**
+   * Stores a finished line of `call` as a `call` message; one after its end is dropped. A line of
+   * hers tells each end she was asked to tell there.
+   */
   #callLine(id: string, chat: Chat, call: ActiveCall, line: TranscriptLine): void {
     if (!this.#takes(id, call, `${line.role === "user" ? "the viewer's" : "her"} line`)) return;
+    if (line.role === "assistant") {
+      for (const end of call.ends) if (end.state === "asked") end.state = "told";
+    }
     void this.#append(id, chat, [callLine(line, call.persona)]).catch((error: unknown) => {
       logger.exception(`Chat ${id}: a line of call ${call.id} wasn't stored`, error);
     });
+  }
+
+  /**
+   * A reply of hers on `call` recorded the context block `content`. The nudge a reply answers is
+   * every nudge the Floor gave it, joined by a blank line.
+   */
+  #recorded(call: ActiveCall, content: string): void {
+    const nudges = content.split("\n\n");
+    for (const end of call.ends) {
+      if (end.state === "handed" && nudges.includes(taskEndedNudge(end.origin.call))) {
+        end.state = "asked";
+      }
+    }
   }
 
   /**
@@ -896,13 +918,17 @@ export class ChatRunner {
   }
 
   /**
-   * Stores `call`'s call-ended, after every line asked for before it, then, unless the server is
-   * stopping, tells in text what it left untold of her tasks, and ends its feed once her starts on
-   * it are stored. The chat takes sends again at once: they are stored after it.
+   * Stores `call`'s call-ended, naming the ends of her tasks she told on it, after every line asked
+   * for before it, then, unless the server is stopping, tells in text what it left untold, and ends
+   * its feed once her starts on it are stored. The chat takes sends again at once: they are stored
+   * after it.
    */
   #endCall(id: string, chat: Chat, call: ActiveCall, reason: CallEndReason): Promise<void> {
     if (call.ending !== null) return call.ending;
-    const stored = this.#append(id, chat, [{ type: "call-ended", call: call.id, reason }]);
+    const told = call.ends.flatMap(({ origin, state }) => (state === "told" ? [origin.call] : []));
+    const stored = this.#append(id, chat, [
+      { type: "call-ended", call: call.id, reason, ...(told.length > 0 ? { told } : {}) },
+    ]);
     chat.call = null;
     call.outside.close();
     const ending: Promise<void> = stored
@@ -1080,38 +1106,25 @@ export class ChatRunner {
    */
   #handUntold(id: string, call: ActiveCall, events: readonly ChatEvent[]): void {
     const { persona } = call;
-    const opened = events.at(-1)?.seq ?? 0;
     for (const { callId, drafts } of untoldEnds(events, persona)) {
       const origin = { id, persona, call: callId };
       if (!call.tasks) {
-        call.ends.push({ origin, after: null });
+        call.ends.push({ origin, state: "held" });
         continue;
       }
       call.outside.push({ drafts, nudge: taskEndedNudge(callId) });
       call.known.add(callId);
-      call.ends.push({ origin, after: opened });
+      call.ends.push({ origin, state: "handed" });
     }
   }
 
   /**
-   * Once `call` has ended, her word in text on each end it held, and on each it was handed that no
-   * line of hers after it told: one turn each, as report() tells one.
+   * Once `call` has ended, her word in text on each end it held, and on each it was handed that she
+   * didn't tell there: one turn each, as report() tells one.
    */
   async #tellAfter(id: string, chat: Chat, call: ActiveCall): Promise<void> {
-    if (call.ends.length === 0) return;
-    const { events } = await this.store.read(id);
-    const told = ({ origin, after }: HandOff) =>
-      after !== null &&
-      events.some(
-        (event) =>
-          event.seq > after &&
-          event.type === "message" &&
-          event.speaker.kind === "persona" &&
-          event.speaker.id === origin.persona &&
-          event.text.trim() !== "",
-      );
-    for (const end of call.ends.filter((each) => !told(each))) {
-      await this.#whenIdle(id, chat, () => this.#tell(chat, end.origin));
+    for (const { origin } of call.ends.filter((end) => end.state !== "told")) {
+      await this.#whenIdle(id, chat, () => this.#tell(chat, origin));
     }
   }
 

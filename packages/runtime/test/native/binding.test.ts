@@ -1,6 +1,6 @@
 // A call bound to a chat, run over a fake transport (and once a real peer over @eidolon/webrtc), a
 // fake recognizer and voice, the real hearing models and the real engine on a scripted mind. It
-// opens on the chat and reports her lines, photos and end, in order.
+// opens on the chat and reports her lines, context blocks, photos and end, in order.
 import "../../../config/test/isolated-guard.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -552,14 +552,21 @@ describe("what her chat adds to a call of hers alone", () => {
     ...(providers === undefined ? {} : { providers }),
   });
 
-  /** A call bound to her chat, its turns scripted, its client ready and her greeting begun. */
-  async function scripted(adds: Pick<CallBinding, "extras" | "outside">) {
+  /**
+   * A call bound to her chat, opening on `seedMessages`, its turns scripted, its client ready and
+   * her greeting begun. `reported` holds each line and context block the binding gets, in order.
+   */
+  async function scripted(
+    adds: Pick<CallBinding, "extras" | "outside">,
+    seedMessages: readonly unknown[] = SEED,
+  ) {
     const transport = new FakeTransport();
     const stt = new FakeStt();
     const speech = new FakeSpeech();
     const clock = new FakeClock(0);
     const turns: FakeTurn[] = [];
     const lines: TranscriptLine[] = [];
+    const reported: string[] = [];
     const deps: CallDeps = {
       engine: { createMind: (): Mind => ({ async *stream() {} }) } as EngineDeps,
       runTurn: ((request: CallTurnRequest) => {
@@ -576,8 +583,12 @@ describe("what her chat adds to a call of hers alone", () => {
     };
     const done = runNativeSafely(transport, ADMISSION, deps, {
       persona: "bob",
-      seedMessages: SEED,
-      onTranscript: (line) => lines.push(line),
+      seedMessages,
+      onTranscript: (line) => {
+        lines.push(line);
+        reported.push(`${line.role}: ${line.text}`);
+      },
+      onContext: (content) => reported.push(`context: ${content}`),
       onEnded: () => {},
       ...adds,
     });
@@ -588,6 +599,7 @@ describe("what her chat adds to a call of hers alone", () => {
     return {
       turns,
       lines,
+      reported,
       /** Her latest turn says `text`, played to its end. */
       async replies(text: string): Promise<void> {
         const turn = turns.at(-1) as FakeTurn;
@@ -666,6 +678,39 @@ describe("what her chat adds to a call of hers alone", () => {
       ["user", "帮我做个网页"],
       ["assistant", "交给我吧。"],
       ["assistant", "网页做好了。"],
+    ]);
+    expect(logs.messages("ERROR")).toEqual([]);
+  }, 15_000);
+
+  test("each context block her replies record reaches onContext in order with her lines, and none of the seed's", async () => {
+    const outside = new AsyncQueue<OutsideResult>();
+    const c = await scripted({ outside }, [{ role: "developer", content: "种子里的块" }, ...SEED]);
+    /** `turn` records `content` as her block, as the engine records her recall and her nudge. */
+    const records = (turn: FakeTurn, content: string) =>
+      turn.events({
+        type: "context",
+        persona: "bob",
+        turn: turn.id,
+        position: 0,
+        role: "developer",
+        content,
+      });
+    const greeting = c.turns[0] as FakeTurn;
+    records(greeting, "记住：对方养了一只猫");
+    await c.replies("你好呀。");
+    // A task's end from outside: her follow-up records its nudge, then tells it.
+    outside.push({ drafts: [], nudge: ENDED });
+    await until(() => c.turns.length === 2);
+    const followUp = c.turns[1] as FakeTurn;
+    expect(followUp.request.nudge).toBe(ENDED);
+    records(followUp, ENDED);
+    await c.replies("网页做好了。");
+    await c.hangUp();
+    expect(c.reported).toEqual([
+      "context: 记住：对方养了一只猫",
+      "assistant: 你好呀。",
+      `context: ${ENDED}`,
+      "assistant: 网页做好了。",
     ]);
     expect(logs.messages("ERROR")).toEqual([]);
   }, 15_000);

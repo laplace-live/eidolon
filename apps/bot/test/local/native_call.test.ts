@@ -1,7 +1,8 @@
 // A local call inside a chat: the runner's ChatCall run on the voice loop over a fake transport,
 // recognizer and voice, with her turns scripted. She opens on her view of the chat, and the runner
 // stores each line and photo between the call's ends; in a chat of hers alone, her start_task on
-// the call too, and a task's end reaches her there.
+// the call too, and a task's end reaches her there, told there only by a line after a reply of hers
+// recorded its nudge, else in text after the call.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
@@ -99,6 +100,10 @@ async function onCall(runner: ChatRunner, id: string) {
     about: BOT_ABOUT,
     clock: new FakeClock(0),
   } as unknown as Parameters<typeof runNativeSafely>[2];
+  /** Plays `samples` of her audio, in the transport's 10 ms frames. */
+  const pull = (samples: number) => {
+    for (let pulled = 0; pulled < samples; pulled += 240) transport.source?.pull(240);
+  };
   /** Her turn's `text`, voiced and played whole. */
   const speaks = async (turn: FakeTurn, text: string) => {
     const before = speech.utterances.length;
@@ -113,7 +118,7 @@ async function onCall(runner: ChatRunner, id: string) {
     utterance?.segEnd(1);
     utterance?.finish();
     await settle();
-    for (let pulled = 0; pulled < 480; pulled += 240) transport.source?.pull(240);
+    pull(480);
     await ending;
   };
   const admission = {
@@ -125,7 +130,15 @@ async function onCall(runner: ChatRunner, id: string) {
   await until(() => transport.connected);
   transport.rtvi("client-ready", { version: "2.3.0" });
   await until(() => turns.length === 1);
-  return { call, transport, turns, speaks, done };
+  return { call, transport, turns, speech, speaks, pull, done };
+}
+
+/** `turn` records its nudge as her context block, as the engine does before her mind runs. */
+function recordsNudge(turn: FakeTurn): void {
+  const { nudge } = turn.request;
+  if (nudge === undefined) throw new Error(`${turn.id} answers no nudge`);
+  const context = { persona: PERSONA, turn: turn.id, position: 0, role: "developer" } as const;
+  turn.events({ type: "context", ...context, content: nudge });
 }
 
 test("the runner stores each line and photo of the call, between its ends", async () => {
@@ -256,6 +269,7 @@ test("her answer on the call may start a task, which the chat stores, and she te
     ["call-1", "started"],
     ["call-1", "final"],
   ]);
+  recordsNudge(tells);
   await speaks(tells, "网页做好啦");
   transport.leave();
   await done;
@@ -263,8 +277,12 @@ test("her answer on the call may start a task, which the chat stores, and she te
   await Bun.sleep(50);
   await runner.shutdown();
 
-  // She told it on the call: no turn of hers after it.
+  // She told it on the call: no turn of hers after it, and the call's end says so.
   expect(told).toBe(1);
+  expect((await runner.store.read(id)).events.at(-1)).toMatchObject({
+    type: "call-ended",
+    told: ["call-1"],
+  });
   expect(origins).toEqual([{ id, persona: PERSONA, call: "call-1" }]);
   const stored = (await runner.store.read(id)).events;
   expect(stored.map(brief)).toEqual([
@@ -282,4 +300,144 @@ test("her answer on the call may start a task, which the chat stores, and she te
   expect(
     logs.lines().filter((line) => line.startsWith("ERROR") || line.startsWith("WARNING")),
   ).toEqual([]);
+}, 20_000);
+
+/**
+ * A chat of hers alone on a call where her answer started a task, then the owner said goodbye: her
+ * reply to that, about something else, is under way. The runner's report turns are counted by the
+ * nudge each answers.
+ */
+async function sayingGoodbye() {
+  const running: TaskSnapshot = {
+    v: 1,
+    id: "0190f5c8-0000-7000-8000-00000000a001",
+    createdAt: 1000,
+    status: "running",
+    brief: { goal: "写一个待办网页", deliverable: "写一个待办网页", folder: "/site", check: "c" },
+    model: { account: "openrouter", model: "test/model" },
+    grants: [],
+    spendPauseUsd: 1,
+    spentUsd: 0,
+    files: { read: [], written: [] },
+  };
+  const tasks: NonNullable<ChatRunnerOptions["tasks"]> = {
+    ready: () => true,
+    start: async () => running,
+    cancelChat: async () => {},
+    list: async () => [],
+    snapshotsOf: () => [],
+    steer: async () => running,
+    cancel: async () => running,
+  };
+  const told: (string | undefined)[] = [];
+  const runner = new ChatRunner({
+    root: ROOT(),
+    turn: (request, save) => {
+      told.push("nudge" in request ? request.nudge : undefined);
+      return greets(request, save);
+    },
+    tasks,
+  });
+  const id = await runner.create([PERSONA]);
+  await runner.live(id)?.ended;
+  const call = await onCall(runner, id);
+  const { transport, turns, speaks } = call;
+  await speaks(turns[0] as FakeTurn, "又见面了");
+  transport.rtvi("send-text", { content: "帮我写个网页", options: { run_immediately: true } });
+  await until(() => turns.length === 2);
+  const answer = turns[1] as FakeTurn;
+  const start = answer.request.background?.tools[0];
+  const args = { goal: "写一个待办网页", folder: "~/site" };
+  const ids = { persona: PERSONA, turn: answer.id, callId: "call-1" };
+  answer.events({ type: "tool-call", ...ids, name: START_TASK, arguments: args });
+  const context = { getMessages: () => [], setMessages: () => {}, setHiddenTools: () => {} };
+  const result = await start?.run(
+    { arguments: args, context, signal: new AbortController().signal, callId: "call-1" },
+    answer.request.effects,
+  );
+  answer.events({ type: "tool-result", ...ids, result: result ?? {}, stage: "started" });
+  await speaks(answer, "交给我吧");
+  transport.rtvi("send-text", { content: "好，那我先挂了", options: { run_immediately: true } });
+  await until(() => turns.length === 3);
+  const end: TaskSnapshot = {
+    ...running,
+    status: "succeeded",
+    outcome: { status: "succeeded", report: "Done." },
+    chat: { id, persona: PERSONA, call: "call-1" },
+    endedAt: 5000,
+  };
+  return { runner, id, told, ...call, goodbye: turns[2] as FakeTurn, end };
+}
+
+test("a reply already under way when her task ends doesn't tell it: cut by a hang-up, she tells it in text after", async () => {
+  const { runner, id, told, transport, turns, speech, pull, done, goodbye, end } =
+    await sayingGoodbye();
+  const before = speech.utterances.length;
+  goodbye.round("好呀。拜拜，路上小心。");
+  await settle();
+  await until(() => speech.utterances.length > before);
+  const utterance = speech.utterances.at(-1);
+  utterance?.pcm(1, 480);
+  utterance?.segEnd(1);
+  utterance?.pcm(2, 480);
+  await settle();
+  pull(720);
+  await settle();
+  // The task ends while she speaks: the Floor keeps its nudge for a follow-up after her goodbye.
+  await runner.report(end);
+  await settle();
+  expect(turns).toHaveLength(3);
+  // The owner hangs up mid-goodbye.
+  transport.leave();
+  await done;
+  await until(() => runner.callIn(id) === null);
+  await until(() => told.length === 2);
+  await runner.shutdown();
+  expect(told).toEqual([undefined, taskEndedNudge("call-1")]);
+  const stored = (await runner.store.read(id)).events;
+  expect(stored.slice(-4).map(brief)).toEqual([
+    ["tool-result", "final"],
+    ["persona", "好呀。", "call", null],
+    ["call-ended", "hangup"],
+    // Her report turn's line, which the fake greeting says.
+    ["persona", "你好", "text", null],
+  ]);
+  expect(stored.find((event) => event.type === "call-ended")).not.toHaveProperty("told");
+}, 20_000);
+
+test("her follow-up records the nudge, and the owner hangs up before it says anything: she tells it in text after", async () => {
+  const { runner, id, told, transport, turns, speech, pull, done, goodbye, end } =
+    await sayingGoodbye();
+  const before = speech.utterances.length;
+  goodbye.round("好呀。拜拜，路上小心。");
+  await settle();
+  await until(() => speech.utterances.length > before);
+  await runner.report(end);
+  await settle();
+  // She finishes her goodbye; the follow-up that takes the nudge starts after it.
+  const ending = goodbye.end();
+  await until(() => speech.utterances.at(-1)?.ended === true);
+  const utterance = speech.utterances.at(-1);
+  utterance?.pcm(1, 480);
+  utterance?.segEnd(1);
+  utterance?.pcm(2, 480);
+  utterance?.segEnd(2);
+  utterance?.finish();
+  await settle();
+  pull(960);
+  await ending;
+  await until(() => turns.length === 4);
+  const followUp = turns[3] as FakeTurn;
+  expect(followUp.request.nudge).toBe(taskEndedNudge("call-1"));
+  recordsNudge(followUp);
+  await settle();
+  // The owner hangs up before it says anything.
+  transport.leave();
+  await done;
+  await until(() => runner.callIn(id) === null);
+  await until(() => told.length === 2);
+  await runner.shutdown();
+  expect(told).toEqual([undefined, taskEndedNudge("call-1")]);
+  const stored = (await runner.store.read(id)).events;
+  expect(stored.find((event) => event.type === "call-ended")).not.toHaveProperty("told");
 }, 20_000);

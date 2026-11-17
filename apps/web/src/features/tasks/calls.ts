@@ -4,6 +4,8 @@ import type { ChatEvent, ParticipantId } from "@eidolon/chat";
 import type { StartTaskFinal, StartTaskToolName } from "@/lib/api";
 
 export const START_TASK: StartTaskToolName = "start_task";
+/** How her nudges about a task start, before her call's id: the bot's TASK_NUDGE_LEAD. */
+const TASK_NUDGE_LEAD = `你用 ${START_TASK} 在电脑上做的事（调用 `;
 
 export interface TaskCall {
   /** Her tool-call's seq: where the card sits. */
@@ -68,19 +70,28 @@ export function taskCalls(events: readonly ChatEvent[]): TaskCall[] {
 }
 
 /**
- * Her report on `call` is in the log: its final, then for a task that ended on its own, her line or
- * her failed turn. One of hers after a line of the owner's may answer that line instead.
+ * Her report on `call` is in the log, or none is coming: its final, then for a task that ended on
+ * its own, a call's end naming it as told there, or her report turn's nudge and after it her line,
+ * not on a call, or her failed turn. A line of hers that answers another isn't her report; one after
+ * the nudge is, even when the owner's line cut her report turn short. Her report turn records the
+ * nudge before it can fail, so a failure with none before it was another turn's.
  */
 export function reportStored(events: readonly ChatEvent[], call: TaskCall): boolean {
   const { final } = call;
   if (final === null) return false;
   if (final.result.status === "cancelled") return true;
+  const nudge = `${TASK_NUDGE_LEAD}${call.callId}）`;
+  let asked = false;
   for (const event of events) {
     if (event.seq <= final.seq) continue;
-    if (event.type === "message") {
-      if (event.speaker.kind === "user") return false;
-      if (event.speaker.id === call.persona) return true;
-    } else if (event.type === "turn-failed" && event.persona === call.persona) {
+    if (event.type === "call-ended") {
+      if (event.told?.includes(call.callId)) return true;
+    } else if (event.type === "context") {
+      if (event.persona === call.persona && event.content.startsWith(nudge)) asked = true;
+    } else if (event.type === "message") {
+      const hers = event.speaker.kind === "persona" && event.speaker.id === call.persona;
+      if (asked && hers && event.modality !== "call") return true;
+    } else if (event.type === "turn-failed" && event.persona === call.persona && asked) {
       return true;
     }
   }

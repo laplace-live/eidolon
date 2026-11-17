@@ -693,15 +693,24 @@ takes her tasks away from it until it ends.
   the call's log lacks them. It names no path or site:
   "你用 start_task 在电脑上做的事（调用 <call id>）停下来了，要等对方在聊天里的任务卡片上点一下才会
   接着做；嘴上答应不算，得在卡片上点。用一句话自然地提醒对方去看看卡片。"
-  It is due only while the task still asks what it paused on: answered on the card, or ended,
-  before a reply speaks it, it is dropped, so she never points to a question already answered.
-  With no call, nothing is said: the waiting bar shows it.
+  It is due only while the task still asks what it paused on, asked as a reply would take the
+  nudge: answered on the card, or ended, before then, it is dropped. A reply that took it while it
+  was due still speaks it, even when the owner answers the card before she does. With no call,
+  nothing is said: the waiting bar shows it.
 - **An end during the call:** `report()` stores the `final`, then hands the call the end, with her
   `tool-call` and `started` result first when the call's log lacks them, and `taskEndedNudge(call)`.
   A cancel goes with no nudge, only settling her call there, and is never held.
 - **Ends she never told:** as the call opens, it is handed each end of hers in the chat she hasn't
-  told, with its call and started result, for her greeting: a `start_task` `final` that isn't
-  cancelled, with no line of hers with words after it.
+  told, with its call and started result, for her greeting (`untoldEnds`, `calls.ts`, which reads
+  the log, so this holds across a restart). An end is a `start_task` `final` that isn't cancelled,
+  and it stays untold until either:
+  - a `call-ended` after it names her call in `told`. Her lines on a call never tell an end by
+    themselves;
+  - or a line of hers with words comes after it, typed or as a voice message. One that answers her
+    report turn's nudge on an end tells that end alone. It answers the latest task nudge of hers
+    since her previous line, not her latest block: her turn records its providers' blocks after its
+    nudge. So when a redial cuts her report on the first of two ends after part of a line, the new
+    call is handed the second.
 - **Who speaks a nudge:** her next reply offered no task tools: a follow-up, started at once when
   the floor is free, or her greeting before the call is up. A reply to the owner's line that is
   offered them leaves the nudge for a follow-up after it, so the reply asked to tell of an end, or
@@ -712,21 +721,35 @@ takes her tasks away from it until it ends.
   them.
 - **A call that doesn't take her tasks** is handed nothing: the ends that come during it are held
   for after it, and on a single call, so are those she never told as it opens.
+- **Told on the call:** an end is told there only by a line of hers, cut off or whole, after a
+  reply of hers recorded its nudge. The runner follows the call's log in its order through the
+  binding's `onContext` and `onTranscript` ([chat.md](chat.md#the-binding)); a reply that took
+  several nudges records them joined by a blank line, and each counts. `call-ended` names the ends
+  she told in `told`, left out when there are none.
 - **After the call,** once `call-ended` is stored and unless the server is stopping, the runner
   tells in text, one report turn at a time while the chat is hers alone, each end the call held,
-  and each it was handed with no line of hers with words after it. It never scans the log for
-  finals: it tells only what this call held or was handed. Any line of hers after the end counts as
-  telling it, even one cut off about something else; the card stays the record. That includes the
-  line of a reply already under way when the end reached the call, and her answer to the owner's
-  line while the nudge waited for the follow-up after it: if the owner hangs up before that
-  follow-up speaks, only the card tells the end.
-- **Unlike the web's `reportStored`,** which the page waits on after a task ends and which stops at
-  an owner's line, the runner counts her line after the end whatever came between. After a call
-  whose log runs `final`, the owner's line, her line, she tells nothing more, and the page asks
-  `GET live` for its 60 s with no report coming.
-- **A shutdown mid-call** after an end was handed skips the tell after the call, and the task is
-  `reported` by then. The next cascade call in the chat hands the end again, since its start reads
-  the chat for ends she never told; text turns alone don't.
+  and each it was handed that she didn't tell there. It never scans the log for finals: it tells
+  only what this call held or was handed. A reply already under way when the end reached the call,
+  and her answer to the owner's line while the nudge waited for the follow-up after it, recorded no
+  nudge, so their lines tell nothing: if the owner hangs up before that follow-up speaks, she tells
+  the end in text. So she does when the follow-up recorded the nudge but the hang-up came before it
+  said anything.
+- **The web's `reportStored`,** which the page waits on after a task ends, takes her report as in
+  the log once a `call-ended` names the end as told, or once her line, not on a call, or her failed
+  turn comes after her report turn's nudge on it; her answer to the owner's line counts only after
+  that nudge. A turn outside a call stores its nudge before her parts and mind are made
+  ([chat.md](chat.md#a-turn-runturn)), so a report turn that fails there, as when her mind's
+  account has lost its key, still ends the wait, and so does her answer to an owner's line that
+  cut one short. A report turn the owner stops before she writes leaves the page asking `GET live`
+  for its 60 s with nothing coming, and so does an end in a chat that is no longer hers alone.
+- **A shutdown mid-call** skips the tell after the call, and the task is `reported` by then,
+  whether the call was handed the end or held it. The next cascade call in the chat hands the end
+  again, since its start reads the chat for ends she never told and her lines on the earlier call
+  don't count; a line of hers in text first counts as telling it.
+- **A call that never stores its `call-ended`** records no tells: the server killed mid-call,
+  `dev:local`'s reload included, which doesn't wait for the stop hooks, or the append failing. The
+  ends she told on it stay untold, so the next call has her tell them again, unless a line of hers
+  in text comes first.
 
 ### The routes
 
@@ -773,7 +796,7 @@ OpenRouter key exported, so Mem0 stays out. In one chat with milky-green:
 4. She speaks the end in a sentence or two, reading no path aloud.
 5. Ask 帮我打开它: no task starts.
 6. Hang Up. The log holds her call and its started result among the call's lines, the `final`, her
-   line after it, and no report in text.
+   line after it, a `call-ended` whose `told` names her call, and no report in text.
 
 A change to the voice loop also needs its real calls
 ([voice-engine.md](voice-engine.md#real-calls)), billed the same way.

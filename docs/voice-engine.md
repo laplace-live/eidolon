@@ -402,6 +402,10 @@ A call bound to a chat runs through a `CallBinding` ([chat.md](chat.md#the-bindi
   `onTranscript` as the log takes it. Hers is what was heard, `interrupted` when the viewer or a
   hang-up cut her off. The seed, the greeting's kickoff, the empty-turn prompt and an empty line
   aren't reported. A hook that throws is logged, and the call goes on.
+- **Her context blocks:** each `context` event the call stores after the seed, her recall, a block
+  of `extras`' providers, the nudge a reply answers (in one block after the empty-turn prompt, when
+  that goes first), goes to `onContext` as the log takes it, in order with the lines; a realtime
+  call's recall included.
 - **Her photos:** each `server-message` the call sends its browser, a selfie's, reaches
   `onServerMessage` once sent, in order with the lines.
 - **The browser:** every hook gets the call's one `CallClient`, whose `sendServerMessage` reaches
@@ -578,9 +582,9 @@ A realtime call's differences, each a fix of pipedog's realtime path:
 | Where | What |
 | --- | --- |
 | `packages/voice/test/` | each leaf on its own, with the upstream tests ported with it; the Floor row by row on a fake engine and clock, row 31 and what a plan's `extras` add to each kind of reply included; the real `runTurn` with a scripted mind; whole calls on a fake transport with the real hearing models, results from outside included; a realtime call on a scripted session, with the real `prepareTurn` and `runTool`, ignoring an outside result; a group call's floor on the real `runChat` with a scripted director (`group.test.ts`); the ORT pin and its telemetry off (`input/onnx.test.ts`) |
-| `packages/runtime/test/native/` | the server's peers, a call's start, a call inside a chat reporting its lines, photos and end (once over `@eidolon/webrtc`), a bound call's `extras` and `outside` reaching its replies, a realtime or group call taking neither, and a group call's binding (`group.test.ts`) |
+| `packages/runtime/test/native/` | the server's peers, a call's start, a call inside a chat reporting its lines, photos and end (once over `@eidolon/webrtc`), a bound call's `extras` and `outside` reaching its replies and its context blocks reaching `onContext`, a realtime or group call taking neither, and a group call's binding (`group.test.ts`) |
 | `packages/webrtc/test/` | pipedog's transport tests, ported (`rtc_media`, `test_smallwebrtc_request_handler`); the caller's audio and hers against libopus; a call's transport on a fake peer, and against a real werift client: both ways, liveness, a hang-up from either side, `restart_pc`; the signalling server with its peers' negotiation stood in for (`signalling`) and with a real werift client over this machine's interfaces (`loopback`), the werift patches loading once (`werift`), and the Opus bitrate (`opus`) |
-| `apps/bot/test/{chat,local}/native_call.test.ts` | production's `bindChatCall` and the local runner's binding on a call, her tasks' starts on it included |
+| `apps/bot/test/{chat,local}/native_call.test.ts` | production's `bindChatCall` and the local runner's binding on a call, her tasks' starts on it and the ends she told there included |
 | `apps/bot/test/chat/call.test.ts` | production's binding, which hands her replies nothing and the call nothing from outside it |
 | `apps/bot/test/local/group_call.test.ts` | the local offer route's group checks, and the runner storing a group call's lines and decisions |
 | `apps/bot/test/e2e-invariants.test.ts` | I1–I10 (`apps/bot/scripts/e2e/invariants.ts`) on made-up sequences |

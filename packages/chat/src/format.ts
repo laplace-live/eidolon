@@ -156,7 +156,13 @@ export type ChatEvent =
       /** Every persona in the chat was on the call, the director choosing who answered. */
       readonly group?: true;
     })
-  | (EventBase & { readonly type: "call-ended"; readonly call: string; readonly reason: string });
+  | (EventBase & {
+      readonly type: "call-ended";
+      readonly call: string;
+      readonly reason: string;
+      /** Her start_task calls whose ends she told on it, by id; only the local app writes it. */
+      readonly told?: readonly string[];
+    });
 
 export type ChatEventOf<K extends ChatEvent["type"]> = Extract<ChatEvent, { readonly type: K }>;
 
