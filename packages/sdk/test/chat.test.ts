@@ -356,6 +356,17 @@ describe("window builder, locks, availability, and session lifecycle", () => {
     expect(sent.every((event) => log.includes(event))).toBe(true);
   });
 
+  test("buildWindow ends where the lines' share closes, full or at a line too big for it: no older tool event goes", () => {
+    const header = newChatHeader(["milky-green"], 1000);
+    const recall = [viewerLine(1, "还记得吗"), toolCall(2, "c0"), toolResult(3, "c0")];
+    const full = [...recall, ...Array.from({ length: 125 }, (_, i) => viewerLine(4 + i))];
+    expect(buildWindow(header, full).events).toEqual(
+      full.slice(-(CHAT_WINDOW_EVENTS - CHAT_WINDOW_TOOL_EVENTS)),
+    );
+    const misfit = [...recall, viewerLine(4, "长".repeat(90_000)), viewerLine(5, "讲讲")];
+    expect(buildWindow(header, misfit).events).toEqual([viewerLine(5, "讲讲")]);
+  });
+
   test("buildWindow over the newest CHAT_WINDOW_EVENTS sendable events and every older state event equals buildWindow over the whole log", () => {
     const header = newChatHeader(["milky-green"], 1000);
     const context = (seq: number): WireEvent => ({

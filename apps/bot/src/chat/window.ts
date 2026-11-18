@@ -62,16 +62,18 @@ function isStateEvent(raw: unknown): boolean {
 /**
  * The events the window keeps, unchanged and in their order. From the newest of the newest
  * CHAT_WINDOW_EVENTS that aren't context back, tool calls and results fill a share of their own and
- * every other event the rest; each share closes at its first event that doesn't fit, so a call is
- * never kept without its result. Every participants, title and settings event is kept, however
- * old. The SDK's buildWindow cuts by this rule, so what a browser on it sends is kept whole.
+ * every other event the rest. Each share closes at its first event that doesn't fit, so a call is
+ * never kept without its result, and the walk stops where the lines' share closes, full or at an
+ * event that doesn't fit: an older call of hers kept past her lines would open her view. Every
+ * participants, title and settings event is kept, however old. The SDK's buildWindow cuts by this
+ * rule, so what a browser on it sends is kept whole.
  */
 export function windowOf(events: readonly unknown[]): unknown[] {
   const lines = { events: CHAT_WINDOW_EVENTS - CHAT_WINDOW_TOOL_EVENTS, bytes: CHAT_WINDOW_BYTES };
   const tools = { events: CHAT_WINDOW_TOOL_EVENTS, bytes: CHAT_WINDOW_TOOL_BYTES };
   const kept = new Set<number>();
   let read = 0;
-  for (let i = events.length - 1; i >= 0 && read < CHAT_WINDOW_EVENTS; i--) {
+  for (let i = events.length - 1; i >= 0 && read < CHAT_WINDOW_EVENTS && lines.events > 0; i--) {
     const raw = events[i];
     if (isContextEvent(raw)) continue;
     read++;

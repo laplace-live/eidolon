@@ -742,6 +742,7 @@ describe("her words before a tool call", () => {
       cutOff: null,
       reason: null,
       call: false,
+      said: true,
     });
     // Her message keeps the decision her turn answered.
     expect(items[3]).toMatchObject({ kind: "persona", reason: { source: "model" } });
@@ -774,7 +775,28 @@ describe("her words before a tool call", () => {
     ]);
   });
 
-  test("Retry isn't offered past them, after a failure or a reply cut off", () => {
+  test("Retry after a reply cut off reaches past them, as past a call with none; never past a failure's, or a card", () => {
+    const cutOff: ChatEvent = {
+      type: "message",
+      seq: 6,
+      at: 6,
+      id: "m6",
+      speaker: MIO,
+      text: "那次",
+      cutOff: "length",
+    };
+    const cut = chatItems([
+      ...events.slice(0, 2),
+      call(3, "recall_streams", "我查一下"),
+      call(4, "recall_streams", "再查查"),
+      cutOff,
+    ]);
+    expect(cut.map((item) => item.kind)).toEqual(["user", "persona", "persona", "persona"]);
+    expect(retryText(cut)).toBe("Write one");
+    expect(retryText(chatItems([...events.slice(0, 2), call(3, "recall_streams"), cutOff]))).toBe(
+      "Write one",
+    );
+    // Her line stands between the owner's and a failure: the failure is her reply's.
     const failed = chatItems([
       ...events.slice(0, 2),
       call(3, "recall_streams", "我查一下"),
@@ -782,14 +804,14 @@ describe("her words before a tool call", () => {
     ]);
     expect(failed.map((item) => item.kind)).toEqual(["user", "persona", "failed"]);
     expect(retryText(failed)).toBeNull();
-    // A reply cut off after a round that ran her tools would run them again.
-    const cut = chatItems([
-      ...events.slice(0, 2),
-      call(3, "recall_streams", "我查一下"),
-      { type: "message", seq: 4, at: 4, id: "m4", speaker: MIO, text: "那次", cutOff: "length" },
-    ]);
-    expect(cut.map((item) => item.kind)).toEqual(["user", "persona", "persona"]);
-    expect(retryText(cut)).toBeNull();
+    // Sending the line again would start another task.
+    expect(retryText(chatItems([...events.slice(0, 4), cutOff]))).toBeNull();
+    expect(
+      retryText(chatItems([...events.slice(0, 4), call(5, "recall_streams", "我查一下"), cutOff])),
+    ).toBeNull();
+    // Another persona's words before her calls are another's turn.
+    const bea = { ...call(5, "recall_streams", "我也查查"), persona: "bea" } as ChatEvent;
+    expect(retryText(chatItems([...events.slice(0, 2), bea, cutOff]))).toBeNull();
   });
 
   test("continue her run of lines", () => {

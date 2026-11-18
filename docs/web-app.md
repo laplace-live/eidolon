@@ -385,8 +385,9 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
   - A failed reply shows its error with **Retry**, which sends the viewer's last line again.
   - A reply her provider stopped short, at its token limit or refusing, is marked **Cut off**, with
     the same **Retry**.
-  - Neither offers **Retry** once that reply showed her words before a tool call, nor once it
-    started a task: sending the line again would call the tool again.
+  - Neither offers **Retry** once that reply started a task: sending the line again would start
+    another. A failure offers it only when no line of hers stands between it and the viewer's,
+    her words before a tool call included; a reply cut off offers it past those words.
   - A mind with no key shows a notice with a link to Settings → Providers.
 - **Reopening a chat mid-reply** picks the reply up again through `GET chats/:id/live`. The reply
   keeps running when the tab closes.

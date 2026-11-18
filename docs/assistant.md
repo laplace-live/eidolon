@@ -726,7 +726,10 @@ takes her tasks away from it until it ends.
     report turn's nudge on an end tells that end alone. It answers the latest task nudge of hers
     since her previous line, not her latest block: her turn records its providers' blocks after its
     nudge. So when a redial cuts her report on the first of two ends after part of a line, the new
-    call is handed the second.
+    call is handed the second. Her words before a tool call are such a line, and her next line
+    joins them when no other line, call or nudge comes first, the two telling once: a report turn
+    cut while a tool of hers runs, after her words before it, stores no message and has told its
+    end. One with no words before the tool has told nothing.
 - **Who speaks a nudge:** her next reply offered no task tools: a follow-up, started at once when
   the floor is free, or her greeting before the call is up. A reply to the owner's line that is
   offered them leaves the nudge for a follow-up after it, so the reply asked to tell of an end, or
@@ -752,13 +755,14 @@ takes her tasks away from it until it ends.
   the end in text. So she does when the follow-up recorded the nudge but the hang-up came before it
   said anything.
 - **The web's `reportStored`,** which the page waits on after a task ends, takes her report as in
-  the log once a `call-ended` names the end as told, or once her line, not on a call, or her failed
-  turn comes after her report turn's nudge on it; her answer to the owner's line counts only after
-  that nudge. A turn outside a call stores its nudge before her parts and mind are made
-  ([chat.md](chat.md#a-turn-runturn)), so a report turn that fails there, as when her mind's
-  account has lost its key, still ends the wait, and so does her answer to an owner's line that
-  cut one short. A report turn the owner stops before she writes leaves the page asking `GET live`
-  for its 60 s with nothing coming, and so does an end in a chat that is no longer hers alone.
+  the log once a `call-ended` names the end as told, or once her line, not on a call, her words
+  before a tool call included, or her failed turn comes after her report turn's nudge on it; her
+  answer to the owner's line counts only after that nudge. A turn outside a call stores its nudge
+  before her parts and mind are made ([chat.md](chat.md#a-turn-runturn)), so a report turn that
+  fails there, as when her mind's account has lost its key, still ends the wait, and so does her
+  answer to an owner's line that cut one short. A report turn the owner stops before she writes
+  leaves the page asking `GET live` for its 60 s with nothing coming, and so does an end in a chat
+  that is no longer hers alone.
 - **A shutdown mid-call** skips the tell after the call, and the task is `reported` by then,
   whether the call was handed the end or held it. The next cascade call in the chat hands the end
   again, since its start reads the chat for ends she never told and her lines on the earlier call

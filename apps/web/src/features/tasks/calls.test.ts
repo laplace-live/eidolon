@@ -208,6 +208,29 @@ describe("reportStored", () => {
     expect(reportStored(two, second)).toBe(false);
   });
 
+  test("her words before a tool call after the nudge are her report, though no line of hers follows", () => {
+    const before = (seq: number, words: string, persona = "mio"): ChatEvent => ({
+      type: "tool-call",
+      seq,
+      at: seq,
+      persona,
+      turn: "t9",
+      callId: `s${seq}`,
+      name: "recall_streams",
+      arguments: {},
+      said: words,
+    });
+    const ended = [...started, result(5, "c1", final, "final")];
+    const asked = [...ended, nudged(6, "c1")];
+    const cut = [...asked, before(7, "Done! Let me find what you asked for.")];
+    expect(reportStored(cut, callOf(cut))).toBe(true);
+    // Not before the nudge, nor only whitespace, nor another persona's.
+    const early = [...ended, before(6, "Hmm, let me look.")];
+    expect(reportStored(early, callOf(early))).toBe(false);
+    expect(reportStored([...asked, before(7, "  ")], callOf(asked))).toBe(false);
+    expect(reportStored([...asked, before(7, "Done!", "bea")], callOf(asked))).toBe(false);
+  });
+
   test("a task the owner stopped gets its final and no turn", () => {
     const events = [...started, result(5, "c1", { ...final, status: "cancelled" }, "final")];
     expect(reportStored(events, callOf(events))).toBe(true);

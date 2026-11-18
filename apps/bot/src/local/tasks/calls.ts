@@ -81,36 +81,50 @@ export interface UntoldEnd {
 /**
  * The ends of persona `persona`'s tasks she hasn't told, oldest first: each final of a start_task
  * call of hers that isn't cancelled, until a call's call-ended names it among those she told there,
- * or a line of hers with words comes after it, not on a call. A line that answers her report turn's
- * nudge on one of them, the latest task nudge of hers since her last line, tells only that one: her
- * turn records its providers' blocks after the nudge.
+ * or a line of hers with words comes after it, not on a call. Her words before a tool call are such
+ * a line, which her next line joins when no other line, call or nudge comes first: the two tell
+ * once. A line that answers her report turn's nudge on one of them, the latest task nudge of hers
+ * since her last line, tells only that one: her turn records its providers' blocks after the nudge.
  */
 export function untoldEnds(events: readonly ChatEvent[], persona: ParticipantId): UntoldEnd[] {
   const starts = new Map<string, ChatEvent[]>();
   let untold: UntoldEnd[] = [];
   let nudge: string | null = null;
+  /** Her words before a call have told: her next line joins them, and tells nothing more. */
+  let saying = false;
+  const tell = (): void => {
+    const answered = untold.find(({ callId }) => taskEndedNudge(callId) === nudge);
+    untold = answered === undefined ? [] : untold.filter((end) => end !== answered);
+    nudge = null;
+  };
   for (const event of events) {
     note(starts, event, persona);
     if (event.type === "call-ended") {
       const told = event.told ?? [];
       untold = untold.filter(({ callId }) => !told.includes(callId));
+    } else if (event.type === "call-started") {
+      saying = false;
     } else if (
       event.type === "context" &&
       event.persona === persona &&
       event.content.startsWith(TASK_NUDGE_LEAD)
     ) {
+      saying = false;
       nudge = event.content;
-    } else if (
-      event.type === "message" &&
-      event.speaker.kind === "persona" &&
-      event.speaker.id === persona &&
-      event.text.trim() !== ""
-    ) {
-      if (event.modality !== "call") {
-        const answered = untold.find(({ callId }) => taskEndedNudge(callId) === nudge);
-        untold = answered === undefined ? [] : untold.filter((end) => end !== answered);
+    } else if (event.type === "tool-call") {
+      if (event.persona === persona && (event.said ?? "").trim() !== "") {
+        if (!saying) tell();
+        saying = true;
       }
-      nudge = null;
+    } else if (event.type === "message") {
+      const hers = event.speaker.kind === "persona" && event.speaker.id === persona;
+      if (!hers) {
+        saying = false;
+      } else if (event.text.trim() !== "") {
+        if (event.modality === "call" || saying) nudge = null;
+        else tell();
+        saying = false;
+      }
     } else if (
       event.type === "tool-result" &&
       event.persona === persona &&

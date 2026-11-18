@@ -646,11 +646,14 @@ class Turn {
     const signal = this.#signal;
     const cut = group === null ? null : new SpeakerCut(group.names);
     const rounds = chatMaxRounds();
+    // A background start in her tool rounds isn't offered again: the answer round then calls none.
+    let started = false;
     for (let round = 1; ; round++) {
       const hidden = conversation.hiddenTools;
       const visible = parts.tools.filter((tool) => !hidden.includes(tool.schema.name));
       const answering = round > rounds;
-      const background = answering ? visible.filter((tool) => this.#isBackground(tool)) : [];
+      const background =
+        answering && !started ? visible.filter((tool) => this.#isBackground(tool)) : [];
       const offered = background.length > 0 ? background : visible;
       const none = answering && (background.length === 0 || round > rounds + 1);
       let text = "";
@@ -690,6 +693,7 @@ class Turn {
       }
       let running: Promise<RoundResult | typeof RUNS_ON>[];
       let kept: MindToolCall[];
+      let words: string;
       try {
         if (cut?.cut) {
           logger.info(`[chat] ${this.#persona}'s reply was cut where she wrote as someone else`);
@@ -711,8 +715,10 @@ class Turn {
           this.#cutOff = CUT_OFF.get(finishReason);
           return;
         }
+        // Whitespace alone is no words: no line of hers to show, nor content for her to read.
+        words = text.trim() === "" ? "" : text;
         // A call's message is what was heard, which the round's words may not have reached yet.
-        const said = this.#call === null ? text : "";
+        const said = this.#call === null ? words : "";
         this.#record(
           kept.map((call, i) => ({
             type: "tool-call",
@@ -725,6 +731,11 @@ class Turn {
           })),
         );
         if (this.#call === null) this.#text = "";
+        started ||=
+          !answering &&
+          kept.some((call) =>
+            visible.some((tool) => tool.schema.name === call.name && this.#isBackground(tool)),
+          );
         // pipedog runs a round's calls in parallel too, and ends the mind's response once they
         // have started.
         running = kept.map((call) => this.#runTool(parts, call, conversation));
@@ -745,7 +756,7 @@ class Turn {
           ...toolCallMessages(
             { callId: call.id, ...call },
             results[i] ?? null,
-            i === 0 ? text : "",
+            i === 0 ? words : "",
           ),
         );
       });

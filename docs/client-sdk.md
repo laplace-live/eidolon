@@ -138,6 +138,9 @@ import {
   - tool calls and results: `CHAT_WINDOW_TOOL_EVENTS` (60) and `CHAT_WINDOW_TOOL_BYTES` (128 KB of
     JSON);
   - every other event: the other 120 and `CHAT_WINDOW_BYTES` (256 KB).
+
+  Once the second closes, full or at an event that doesn't fit, the window ends there: no older
+  tool event goes.
 - **State:** every `STATE_EVENT_TYPES` event goes too, however old.
 - **As stored:** each event goes whole, in log order, or not at all. A signed event changed in any
   way fails its signature, and the server drops it: a tool result shortened to fit would read to

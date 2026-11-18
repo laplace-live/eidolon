@@ -36,6 +36,8 @@ type PersonaItem = {
   readonly reason: ReplyReason | null;
   /** Said on a call, as its transcript. */
   readonly call: boolean;
+  /** Her words before a tool call, at the call's seq: a round of the reply her message ends. */
+  readonly said?: true;
 };
 
 /** Where a call began or ended, as a quiet line across the log. */
@@ -133,6 +135,7 @@ export function chatItems(events: readonly ChatEvent[]): ChatItem[] {
           cutOff: null,
           reason: null,
           call: false,
+          said: true,
         });
       }
       const started = tasks.get(event.seq);
@@ -264,13 +267,18 @@ export function manyVoices(items: readonly ChatItem[]): boolean {
 
 /**
  * What Retry sends again: the viewer's last line, if anything followed it only to fail, or her
- * reply to it was cut off. A voice message goes again as its transcript; one with none, not at all.
- * A task her failed turn started stops it: sending the line again would start another.
+ * reply to it was cut off, her words before its tool calls being part of that reply. A voice
+ * message goes again as its transcript; one with none, not at all. A task her turn started stops
+ * it: sending the line again would start another.
  */
 export function retryText(items: readonly ChatItem[]): string | null {
   const last = items.at(-1);
   if (last?.kind === "persona" && last.cutOff !== null) {
-    const asked = items.at(-2);
+    const before = (item: ChatItem | undefined) =>
+      item?.kind === "persona" && item.said === true && item.persona === last.persona;
+    let at = items.length - 2;
+    while (before(items[at])) at--;
+    const asked = items[at];
     return asked?.kind === "user" && asked.text !== "" ? asked.text : null;
   }
   if (last?.kind !== "failed") return null;

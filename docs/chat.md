@@ -53,7 +53,7 @@ isn't stored, she never saw.
 | `message` | the runner for the viewer and for a call's lines, the engine for her | `speaker`, `text`, and `attachments` (her selfies; `text` is empty on a message of photos alone); `modality: "voice"` on a voice message, whose first attachment is its audio and whose `text` is its transcript; `modality: "call"` on a line said on a call, the viewer's or hers, its transcript in `text`; `interrupted` when she was cut off, keeping what she had said; `cutOff` when her provider stopped her short: `length` at its token limit, `refusal` when it refused or filtered her |
 | `context` | the engine | A block a context provider put into her view: `role`, `content` and its `position` there; never shown. In the local app, the status block of her tasks (`后台的活：`) is one, replaced each turn ([assistant.md](assistant.md#the-status-block)) |
 | `context-removed` | the engine; the runner as a group call opens | Her earlier `context` blocks, by seq, that a provider took back out; the stream archive replaces its blocks when they change or move, and the status block when it changes or moves. In the local app, a group call's opening takes each persona's stored status blocks and task nudges out, one under the call's id per persona (`staleTaskContext`, [Calls](#calls)) |
-| `tool-call`, `tool-result` | the engine | Her call and what it returned; a call cut off has no result, and one that ran on past an interruption returns further down the log. In a text turn, the first call a round records carries `said`, the words she wrote before it in that round, which her `message` doesn't repeat; a call's turns never store it, and logs from before it have none. An async tool's results carry `stage`: `started` while it runs, then `final` or `cancelled`. pipedog's async tools (`take_selfie` on a call) store `{}` as `started`; a background tool stores what it started (`start_task`'s `{ task, status }`), never `{}`. Nothing else tells the two apart: only a `{}` start's `final` follows pipedog's rule ([Her view](#her-view-viewof)), so a future async tool that stores a value would settle as a background tool's does. `start_task`'s `final` is stored by the runner when the task ends ([The local API](#the-local-api)), and so are its `tool-call` and `started` result when she started it on a call ([assistant.md](assistant.md#calls)) |
+| `tool-call`, `tool-result` | the engine | Her call and what it returned; a call cut off has no result, and one that ran on past an interruption returns further down the log. In a text turn, the first call a round records carries `said`, the words she wrote before it in that round (none for whitespace alone), which her `message` doesn't repeat; a call's turns never store it, and logs from before it have none. An async tool's results carry `stage`: `started` while it runs, then `final` or `cancelled`. pipedog's async tools (`take_selfie` on a call) store `{}` as `started`; a background tool stores what it started (`start_task`'s `{ task, status }`), never `{}`. Nothing else tells the two apart: only a `{}` start's `final` follows pipedog's rule ([Her view](#her-view-viewof)), so a future async tool that stores a value would settle as a background tool's does. `start_task`'s `final` is stored by the runner when the task ends ([The local API](#the-local-api)), and so are its `tool-call` and `started` result when she started it on a call ([assistant.md](assistant.md#calls)) |
 | `kickoff` | the engine | The greeting prompt she answered |
 | `turn-failed` | the engine, or the runner when a turn throws | The failure, through `errorText`; the chat stays usable. `code: "voice-failed"` when her reply, stored just before it, was meant as a voice message but stayed text |
 | `decision` | the engine (`runChat`) | Who answers the line at seq `after`, and how: `source: "single"` in a chat of one persona, else `mention`, `model` or `fallback`, with the director's `scores` when it asked, and each reply's `mode`, `text` or `voice`. Every reply follows one, and one may choose no one. In a chat of one in `auto`, it lands just before her reply, after her turn's other events |
@@ -242,11 +242,13 @@ aborts the turn. The engine never rejects for the turn's own failures.
        round reads the results, as her next view will. So each request after a call ends on its
        results, with no filler turn on Anthropic, where `turnOf` sends the words and the call as
        one assistant turn, exactly as Claude wrote them. Mem0 in a chat of one stores her view's
-       lines, so it keeps them as a line of hers before her message.
+       lines, so it keeps them as a line of hers before her message. A round that wrote only
+       whitespace has no words: no `said`, and no `content` on its call message.
      - **The answer round:** when the last of those rounds still calls, one more follows. It
-       offers her background tools alone (`start_task`, step 10) when the turn has them, and
-       otherwise her tools with `tool_choice: "none"`, which a mind sends only beside tools. A call
-       to anything it doesn't offer is neither run nor recorded, only logged.
+       offers her background tools alone (`start_task`, step 10) when the turn has them and she
+       started none in her tool rounds, and otherwise her tools with `tool_choice: "none"`, which a
+       mind sends only beside tools, so a start isn't made twice. A call to anything it doesn't
+       offer is neither run nor recorded, only logged.
      - **After a start there,** one more round offers the same tool with `none`, and its words are
        her message, so she still says her line.
      - **The bound:** `chat.maxRounds` + 1 requests a turn, or + 2 after a start in the answer
@@ -1060,15 +1062,18 @@ temporary data home and find it unchanged.
     `CHAT_WINDOW_TOOL_BYTES`);
   - every other event to the lines' share: the other 120 events and 256 KB (`CHAT_WINDOW_BYTES`).
 
-  A share closes at its first event that doesn't fit, and the other goes on. What neither keeps is
-  dropped and counted in the log. A browser can send its whole log; the server keeps what fits.
+  A share closes once it is full or at its first event that doesn't fit. Once the tools' share
+  closes, the lines' share goes on; once the lines' share closes, the cut ends there, since an
+  older call of hers kept past her lines would open her view on that call, the lines around it
+  gone. What neither keeps is dropped and counted in the log. A browser can send its whole log;
+  the server keeps what fits.
 - **Why tool events have a share:** a `recall_streams` overview runs to 10,000 characters, about
   30 KB of JSON, so two a turn would fill a shared 256 KB in about four turns and push her older
   lines out. A chat with no tool calls keeps its newest 120 events.
 - **A call is never kept without its result,** which would read to her as a call that never
   returned: the result is newer, so the walk meets it first, and one that doesn't fit closes the
-  share before its call. A result can stay without its call when the share fills between them; her
-  view leaves such a result out.
+  share before its call. A result can stay without its call when the share fills, or the cut ends,
+  between them; her view leaves such a result out.
 - **Her words before a call ride its share.** A call's `said` is part of the signed call, so once
   the tool share leaves an older call out, the words she wrote before it leave her view with it,
   while her line after them stays.

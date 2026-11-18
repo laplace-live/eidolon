@@ -482,6 +482,38 @@ describe("her answer round", () => {
     ]);
   });
 
+  test("after a start_task in her tool rounds, the answer round doesn't offer it again: it calls none", async () => {
+    process.env.CHAT_MAX_ROUNDS = "1";
+    const { mind, requests } = fakeMind(
+      [callStart, DONE],
+      [{ type: "text", text: "点一下允许就开始" }, DONE],
+    );
+    const { engine } = deps(mind);
+    const runs: unknown[] = [];
+    const tool = startTask(async ({ callId }) => {
+      runs.push(callId);
+      return { task: "t1", status: "awaiting-approval" };
+    });
+    const outputs = await collect(
+      runTurn(
+        {
+          chat: chat(user("帮我写个网页")),
+          persona: PERSONA,
+          viewer: VIEWER,
+          signal: new AbortController().signal,
+          background: { tools: [tool], hint: HINT },
+        },
+        engine,
+      ),
+    );
+    expect(runs).toEqual(["c1"]);
+    expect(requests.map((asked) => [toolNames(asked), asked.toolChoice])).toEqual([
+      [["take_selfie", "start_task"], undefined],
+      [["take_selfie", "start_task"], "none"],
+    ]);
+    expect(eventsOf(outputs).at(-1)).toMatchObject({ type: "message", text: "点一下允许就开始" });
+  });
+
   test("with no background tools, the answer round offers hers with tool_choice none and ends the turn", async () => {
     process.env.CHAT_MAX_ROUNDS = "1";
     const { mind, requests } = fakeMind(

@@ -653,6 +653,26 @@ describe("runTurn", () => {
     expect(events.at(-1)).toMatchObject({ type: "message", text: "记得" });
   });
 
+  test("a round that writes only whitespace before its calls stores no said, and her next round reads none", async () => {
+    const recall = tool("recall_streams", async () => ({}));
+    const { mind, requests } = fakeMind(
+      [{ type: "text", text: "\n\n" }, call("c1", "recall_streams"), DONE],
+      [{ type: "text", text: "记得" }, DONE],
+    );
+    const log = chat(user("还记得吗"));
+    const outputs = await collect(
+      runTurn(request({ chat: log }), deps(mind, parts({ tools: [recall] }))),
+    );
+    const events = eventsOf(outputs);
+    expect(events[0]).not.toHaveProperty("said");
+    expect(events.at(-1)).toMatchObject({ type: "message", text: "记得" });
+    expect(requests[1]?.messages[1]).not.toHaveProperty("content");
+    expect(viewAfter(log.events, outputs)).toEqual([
+      ...((requests[1]?.messages ?? []) as never[]),
+      { role: "assistant", content: "记得" },
+    ]);
+  });
+
   test("each round's words go on its own first call, and a cut-off last round marks her message alone", async () => {
     const recall = tool("recall_streams", async () => ({}));
     const { mind, requests } = fakeMind(

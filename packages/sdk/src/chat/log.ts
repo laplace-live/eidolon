@@ -127,16 +127,17 @@ const TOOL_EVENTS: ReadonlySet<string> = new Set(["tool-call", "tool-result"]);
  * The window a turn sends, from the log oldest first, cut as the server cuts it. From the newest of
  * the log's newest `CHAT_WINDOW_EVENTS` that aren't `NEVER_SENT` back, tool calls and results fill
  * a share of their own (`CHAT_WINDOW_TOOL_EVENTS`, `CHAT_WINDOW_TOOL_BYTES`) and every other event
- * the rest (`CHAT_WINDOW_BYTES`); each share closes at its first event that doesn't fit, so a call
- * never goes without its result. Every state event goes too, however old. Events are sent as
- * stored, in log order: one changed to fit would fail its signature.
+ * the rest (`CHAT_WINDOW_BYTES`). Each share closes at its first event that doesn't fit, so a call
+ * never goes without its result, and the walk stops where the other events' share closes, full or
+ * at an event that doesn't fit, so no older tool event goes. Every state event goes too, however
+ * old. Events are sent as stored, in log order: one changed to fit would fail its signature.
  */
 export function buildWindow(header: ChatHeader, events: readonly WireEvent[]): ChatWindow {
   const lines = { events: CHAT_WINDOW_EVENTS - CHAT_WINDOW_TOOL_EVENTS, bytes: CHAT_WINDOW_BYTES };
   const tools = { events: CHAT_WINDOW_TOOL_EVENTS, bytes: CHAT_WINDOW_TOOL_BYTES };
   const kept = new Set<number>();
   let read = 0;
-  for (let i = events.length - 1; i >= 0 && read < CHAT_WINDOW_EVENTS; i--) {
+  for (let i = events.length - 1; i >= 0 && read < CHAT_WINDOW_EVENTS && lines.events > 0; i--) {
     const event = events[i];
     if (event === undefined || NEVER_SENT.has(event.type)) continue;
     read++;

@@ -20,6 +20,7 @@ import { Director } from "@eidolon/context";
 import {
   type ChatRequest,
   type EngineDeps,
+  type LlmTool,
   type MindChunk,
   type MindRequest,
   type PartsOptions,
@@ -231,12 +232,13 @@ const callsStart = (id = "c1"): MindChunk[] => calls(START_TASK, BRIEF, id);
 let asked: PartsOptions[];
 
 /**
- * The engine over `mind`, with her own parts empty, as the runner's turn and answer; her mind can't
- * be made while `keyless` says so.
+ * The engine over `mind`, with her own parts empty but for `own` tools, as the runner's turn and
+ * answer; her mind can't be made while `keyless` says so.
  */
 function engine(
   mind: ScriptedMind,
   keyless: () => boolean = () => false,
+  own: readonly LlmTool[] = [],
 ): Pick<ChatRunnerOptions, "turn" | "answer"> {
   let n = 0;
   const deps = (saveAttachment: EngineDeps["saveAttachment"]): EngineDeps => ({
@@ -250,7 +252,7 @@ function engine(
         systemInstruction: "SYSTEM",
         providers: [],
         gate: null,
-        tools: [],
+        tools: own,
         memories: async () => [],
       };
     },
@@ -1883,6 +1885,43 @@ describe("an end she tells on a call", () => {
     await Bun.sleep(30);
     expect(next.handed).toEqual([]);
     await next.call.onEnded("hangup");
+  });
+
+  test("told in text by her words before a tool of hers, which a call cut, isn't handed to that call", async () => {
+    const words = "网页做好啦！我先翻翻你上次说的那个～";
+    const entered = deferred();
+    const recall: LlmTool = {
+      schema: { name: "recall_streams", description: "recall", properties: {}, required: [] },
+      cancelOnInterruption: true,
+      timeoutSecs: null,
+      run: ({ signal }) => {
+        entered.resolve();
+        return new Promise((_, reject) => {
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        });
+      },
+    };
+    const mind = new ScriptedMind(says("你好呀"), callsStart(), says("好，我去弄啦"), [
+      { type: "text", text: words },
+      ...calls("recall_streams", {}, "s1"),
+    ]);
+    serve({ ...engine(mind, undefined, [recall]), tasks: new FakeTasks() });
+    const id = await greeted();
+    await send(id, ASK);
+    await runner.report(ended(id, SUCCESS));
+    await entered.promise;
+    // The owner calls while her report turn's tool runs: a turn cut there stores no message.
+    const { call, handed } = await onCall(id);
+    await Bun.sleep(30);
+    const log = await events(id);
+    expect(log.findLast((event) => event.type === "tool-call")).toMatchObject({ said: words });
+    expect(lines(log).at(-1)).toBe("her: 好，我去弄啦");
+    expect(call.seedMessages.at(-1)).toEqual({ role: "assistant", content: words });
+    expect(handed).toEqual([]);
+    await call.onEnded("hangup");
+    await Bun.sleep(30);
+    await idle(id);
+    expect(mind.requests).toHaveLength(4);
   });
 
   test("held by a realtime call the server stopped during, is handed to the next cascade call", async () => {

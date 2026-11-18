@@ -215,6 +215,42 @@ describe("untoldEnds", () => {
     expect(ids([...events, line(HER, "在呢", "call"), line(HER, "都好了")])).toEqual([]);
   });
 
+  test("her words before a tool call are a line of hers: one with her next line, else one alone", () => {
+    seq = 0;
+    const events = [
+      callOf("c1"),
+      resultOf("c1", "started", { task: "t1", status: "running" }),
+      callOf("c2"),
+      resultOf("c2", "started", { task: "t2", status: "running" }),
+      line(HER, "交给我吧"),
+      resultOf("c1", "final", SUCCEEDED),
+      resultOf("c2", "final", SUCCEEDED),
+      block(HER, taskEndedNudge("c1")),
+    ];
+    const saidBefore = (said: string, persona = HER) =>
+      at({ ...callOf("s1", persona, "take_selfie"), said });
+    const callStarted = () => at({ type: "call-started", call: "k1", persona: HER } as const);
+    const callEnded = () => at({ type: "call-ended", call: "k1", reason: "hangup" } as const);
+    const ids = (log: ChatEvent[]) => untoldEnds(log, HER).map((end) => end.callId);
+    // Her report turn wrote, then ran a tool of hers, and was cut there: by a call, Stop or shutdown.
+    const cut = [...events, saidBefore("第一个做好啦！我拍张照")];
+    expect(ids(cut)).toEqual(["c2"]);
+    expect(ids([...cut, callStarted()])).toEqual(["c2"]);
+    // Her next line after a nudge, the owner's line or a call is a line of its own.
+    expect(ids([...cut, block(HER, taskEndedNudge("c2")), line(HER, "第二个也好了")])).toEqual([]);
+    expect(ids([...cut, line(null, "在吗"), line(HER, "在呢")])).toEqual([]);
+    expect(ids([...cut, callStarted(), callEnded(), line(HER, "都好啦")])).toEqual([]);
+    // Her line after them in the turn is one line with them, answering c1's nudge alone.
+    const told = [...cut, line(HER, "给你看")];
+    expect(ids(told)).toEqual(["c2"]);
+    expect(ids([...told, block(HER, taskEndedNudge("c2")), callStarted()])).toEqual(["c2"]);
+    // Words before the ends tell neither; whitespace isn't words, and another persona's aren't hers.
+    const before = [...events.slice(0, 5), saidBefore("我看看"), ...events.slice(5)];
+    expect(ids([...before, callStarted()])).toEqual(["c1", "c2"]);
+    expect(ids([...events, saidBefore("  "), callStarted()])).toEqual(["c1", "c2"]);
+    expect(ids([...events, saidBefore("我也做好了", OTHER), callStarted()])).toEqual(["c1", "c2"]);
+  });
+
   test("never a cancelled end, another persona's, or another tool's", () => {
     seq = 0;
     const events = [

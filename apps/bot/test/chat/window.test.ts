@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { ANONYMOUS } from "@eidolon/access";
 import {
   CHAT_FORMAT,
+  CHAT_WINDOW_MESSAGES,
   type ChatEvent,
   type ChatEventDraft,
   type ChatEventOf,
@@ -15,6 +16,7 @@ import {
   chainLimitOf,
   replyModeOf,
   summarize,
+  viewOf,
 } from "@eidolon/chat";
 import { activePersona, dataHome, resetSettings } from "@eidolon/config";
 import {
@@ -172,14 +174,14 @@ describe("windowOf", () => {
     expect(windowOf([...batch, ...newer])).toEqual([result(3, "a"), result(4, "b"), ...newer]);
   });
 
-  test("every participants, title and settings event is kept, in log order among both shares", () => {
+  test("every participants, title and settings event is kept, in log order, past where the cut ends", () => {
     const title = { seq: 3, at: 1003, type: "title", title: "旧标题" };
     const settings = { seq: 7, at: 1007, type: "settings", replyMode: "voice" };
     const events = [
       call(1, "a"),
       result(2, "a"),
       title,
-      // Too big for the lines' share, which closes here while tool events reach further back.
+      // Too big for the lines' share, which ends the cut here: the tool events before it go too.
       user(4, "x".repeat(CHAT_WINDOW_BYTES)),
       call(5, "b"),
       result(6, "b"),
@@ -187,14 +189,45 @@ describe("windowOf", () => {
       hers(8, "八"),
     ];
     expect(windowOf(events)).toEqual([
-      call(1, "a"),
-      result(2, "a"),
       title,
       call(5, "b"),
       result(6, "b"),
       settings,
       hers(8, "八"),
     ]);
+  });
+
+  test("ends at the first line too big for the lines' share: an older recall of hers is left out, and her view opens on the viewer's line", () => {
+    // Her long replies fill the lines' 256 KB well inside the 180 events read.
+    const events = [
+      user(1, "还记得那只猫吗"),
+      call(2, "c0", "我想想。"),
+      result(3, "c0", "那次直播"),
+      hers(4, "是小花！"),
+      ...Array.from({ length: 22 }, (_, i) => [
+        user(5 + 2 * i, "讲讲"),
+        hers(6 + 2 * i, "长".repeat(4000)),
+      ]).flat(),
+    ];
+    const kept = windowOf(events) as ChatEvent[];
+    expect(kept.filter(isTool)).toEqual([]);
+    expect(kept[0]).toEqual(user(7, "讲讲"));
+    const view = viewOf(HEADER, kept, "milky-green", {
+      windowMessages: CHAT_WINDOW_MESSAGES,
+      nameOf: (id) => id,
+    });
+    expect(view[0]).toEqual({ role: "user", content: "讲讲" });
+  });
+
+  test("ends once the lines' share is full: no older call or result is kept", () => {
+    const events = [
+      user(1, "还记得吗"),
+      call(2, "c0"),
+      result(3, "c0"),
+      hers(4, "记得"),
+      ...Array.from({ length: 125 }, (_, i) => user(5 + i, "嗯")),
+    ];
+    expect(windowOf(events)).toEqual(events.slice(-LINES));
   });
 
   test("reads only the newest 180 events that aren't context, though the lines' share has room", () => {
