@@ -2,11 +2,13 @@ import { describe, expect, test } from "bun:test";
 import type { TaskEntry } from "@/lib/api";
 import {
   argumentHead,
+  callOf,
   EMPTY_TRANSCRIPT,
   latestStep,
   reduceTranscript,
   type ToolRow,
   type TranscriptRow,
+  toolLabel,
   toolState,
 } from "./transcript";
 
@@ -237,6 +239,121 @@ describe("reduceTranscript", () => {
     expect(edit?.result?.diff).toBe("-1 old\n+1 new");
     expect(read?.result?.diff).toBeNull();
     expect(read?.result?.refused).toEqual({ path: "/etc/hosts", access: "read" });
+  });
+});
+
+describe("commands, MCP tools and the runtime's notices", () => {
+  test("a notice is a line of its own, apart from what she or the owner told it", () => {
+    const view = reduceTranscript(
+      EMPTY_TRANSCRIPT,
+      entries(
+        { type: "steer", text: "The owner allowed read access to /x." },
+        {
+          type: "notice",
+          text: "[Command 3 ended with code 0 after 47 s. bash_output with id 3 shows its output.]",
+        },
+      ),
+    );
+    expect(view.rows).toEqual([
+      { kind: "steer", key: "1", at: 1000, text: "The owner allowed read access to /x." },
+      {
+        kind: "notice",
+        key: "2",
+        at: 1001,
+        text: "[Command 3 ended with code 0 after 47 s. bash_output with id 3 shows its output.]",
+      },
+    ]);
+  });
+
+  test("a bash call's row gains its command's id once its result gives one, which bash_output and bash_kill name", () => {
+    const view = reduceTranscript(
+      EMPTY_TRANSCRIPT,
+      entries(
+        {
+          type: "assistant",
+          text: "",
+          calls: [{ id: "b", name: "bash", arguments: { command: "npm run dev", wait: false } }],
+        },
+        { type: "tool-start", callId: "b", name: "bash" },
+        {
+          type: "tool-result",
+          callId: "b",
+          name: "bash",
+          content: "Command 3 is still running after 10 s, so it moved to the background.",
+          isError: false,
+          details: { id: 3, background: true },
+        },
+        {
+          type: "assistant",
+          text: "",
+          calls: [
+            { id: "o", name: "bash_output", arguments: { id: 3, offset: 10, limit: 50 } },
+            { id: "k", name: "bash_kill", arguments: { id: 3 } },
+          ],
+        },
+      ),
+    );
+    expect(tools(view.rows).map((row) => [row.label, row.head])).toEqual([
+      ["bash", "#3 · npm run dev"],
+      ["bash_output", "#3"],
+      ["bash_kill", "#3"],
+    ]);
+  });
+
+  test("an MCP tool reads as its server and tool, by its name, then by its result's own names", () => {
+    const view = reduceTranscript(
+      EMPTY_TRANSCRIPT,
+      entries(
+        {
+          type: "assistant",
+          text: "",
+          calls: [
+            { id: "m", name: "mcp__github__create_issue", arguments: { title: "Bug" } },
+            { id: "n", name: "mcp__my_fs__read_text_file", arguments: { path: "/a" } },
+          ],
+        },
+        {
+          type: "tool-result",
+          callId: "n",
+          name: "mcp__my_fs__read_text_file",
+          content: "text",
+          isError: false,
+          details: { server: "my-fs", tool: "read.text.file", isError: false },
+        },
+      ),
+    );
+    expect(tools(view.rows).map((row) => [row.name, row.label, row.head])).toEqual([
+      ["mcp__github__create_issue", "github · create_issue", "Bug"],
+      ["mcp__my_fs__read_text_file", "my-fs · read.text.file", "/a"],
+    ]);
+    // Only an MCP tool's name is read so, whatever another tool's details hold.
+    expect(toolLabel("read", { server: "x", tool: "y" })).toBe("read");
+  });
+
+  test("a skill's row names the skill, then the file of it it reads", () => {
+    const head = (args: Record<string, unknown>) =>
+      argumentHead({ id: "s", name: "skill", arguments: args });
+    expect(head({ name: "house-style" })).toBe("house-style");
+    expect(head({ name: "house-style", path: "references/forms.md" })).toBe(
+      "house-style · references/forms.md",
+    );
+  });
+
+  test("a call's arguments are kept whole, and found by its id, the latest call's when ids repeat", () => {
+    const content = "x".repeat(3000);
+    const view = reduceTranscript(
+      EMPTY_TRANSCRIPT,
+      entries(
+        { type: "assistant", text: "", calls: [{ id: "c", name: "ls", arguments: { path: "a" } }] },
+        {
+          type: "assistant",
+          text: "",
+          calls: [{ id: "c", name: "mcp__fs__write", arguments: { content, path: "~/.zshrc" } }],
+        },
+      ),
+    );
+    expect(callOf(view, "c")?.arguments).toEqual({ content, path: "~/.zshrc" });
+    expect(callOf(view, "nope")).toBeNull();
   });
 });
 

@@ -456,6 +456,30 @@ describe("check_task", () => {
       [
         {
           status: "paused",
+          pending: { kind: "command", call: "b1", command: "npm test", timeout: 120 },
+          pause: { reason: "approval", detail: "run a command" },
+        },
+        { asks: "command", command: "npm test" },
+      ],
+      [
+        {
+          status: "paused",
+          pending: {
+            kind: "mcp",
+            server: "github",
+            tool: "create_issue",
+            call: "m1",
+            key: "0123456789abcdef0123456789abcdef",
+            args: [{ name: "title", head: "Bug", chars: 3, lines: 1 }],
+            hint: "destructive",
+          },
+          pause: { reason: "approval", detail: "run create_issue on the MCP server github" },
+        },
+        { asks: "tool", server: "github", tool: "create_issue" },
+      ],
+      [
+        {
+          status: "paused",
           pause: { reason: "stall", detail: "The same calls 3 turns running:\nls ." },
         },
         { asks: "continue", reason: "stall", detail: "The same calls 3 turns running:\nls ." },
@@ -537,12 +561,35 @@ describe("check_task", () => {
     expect(short.morePlan).toBe(3);
   });
 
-  test("stays under 2,000 characters whatever the card asks: a long host, or a path of escapes", async () => {
+  test("stays under 2,000 characters whatever the card asks: a long host, command or tool, or a path of escapes", async () => {
     const host = `${"a".repeat(2990)}.com`;
     // A host the gate would pause a web_fetch on, whole.
     expect(webFetchHost({ url: `https://${host}/` })).toBe(host);
     const escaped = `/Users/me/${"\u0001".repeat(400)}`;
+    // The longest command a card asks about.
+    const command = `echo ${"好".repeat(4093)}`;
+    // A server names its tools as it likes.
+    const tool = "工".repeat(3000);
     const cases: Partial<TaskSnapshot>[] = [
+      {
+        status: "paused",
+        pending: {
+          kind: "mcp",
+          server: "s".repeat(500),
+          tool,
+          call: "m1",
+          key: "0123456789abcdef0123456789abcdef",
+          args: [],
+        },
+        pause: { reason: "approval", detail: `run ${tool} on the MCP server fake` },
+        step: { tool: "mcp__fake__x", head: "{}" },
+      },
+      {
+        status: "paused",
+        pending: { kind: "command", call: "b1", command, timeout: 120 },
+        pause: { reason: "approval", detail: "run a command" },
+        step: { tool: "bash", head: `${command.slice(0, 120)}…` },
+      },
       {
         status: "paused",
         pending: { kind: "fetch", host },
@@ -570,9 +617,21 @@ describe("check_task", () => {
     }
     fake = new FakeTasks();
     made = 0;
-    has(task(cases[0]));
+    has(task(cases[2]));
     expect(await call("check_task")).toMatchObject({
       card: { asks: "site", host: `${"a".repeat(300)}…` },
+    });
+    fake = new FakeTasks();
+    made = 0;
+    has(task(cases[1]));
+    expect(await call("check_task")).toMatchObject({
+      card: { asks: "command", command: `echo ${"好".repeat(295)}…` },
+    });
+    fake = new FakeTasks();
+    made = 0;
+    has(task(cases[0]));
+    expect(await call("check_task")).toMatchObject({
+      card: { asks: "tool", server: `${"s".repeat(300)}…`, tool: `${"工".repeat(300)}…` },
     });
   });
 });

@@ -204,6 +204,7 @@ test("her answer on the call may start a task, which the chat stores, and she te
   const origins: TaskChat[] = [];
   const tasks: NonNullable<ChatRunnerOptions["tasks"]> = {
     ready: () => true,
+    offersCommands: () => true,
     start: async (_input, origin) => {
       origins.push(origin);
       return waiting;
@@ -237,7 +238,7 @@ test("her answer on the call may start a task, which the chat stores, and she te
   const start = answer.request.background?.tools[0];
   expect(start?.schema.name).toBe(START_TASK);
   // Her start_task, as the engine runs it: the call's log keeps her call and what it started.
-  const args = { goal: "写一个待办网页", folder: "~/site" };
+  const args = { goal: "写一个待办网页", folder: "~/site", profile: "coding" };
   const call = { persona: PERSONA, turn: answer.id, callId: "call-1" };
   answer.events({ type: "tool-call", ...call, name: START_TASK, arguments: args });
   const context = { getMessages: () => [], setMessages: () => {}, setHiddenTools: () => {} };
@@ -318,6 +319,7 @@ test("in a verbose chat, a step of her task's plan done is told in a follow-up o
   let snapshots: TaskSnapshot[] = [];
   const tasks: NonNullable<ChatRunnerOptions["tasks"]> = {
     ready: () => true,
+    offersCommands: () => true,
     start: async () => running,
     cancelChat: async () => {},
     list: async () => snapshots,
@@ -343,7 +345,7 @@ test("in a verbose chat, a step of her task's plan done is told in a follow-up o
   await until(() => turns.length === 2);
   const answer = turns[1] as FakeTurn;
   const start = answer.request.background?.tools[0];
-  const args = { goal: "写一个待办网页", folder: "~/site" };
+  const args = { goal: "写一个待办网页", folder: "~/site", profile: "coding" };
   const ids = { persona: PERSONA, turn: answer.id, callId: "call-1" };
   answer.events({ type: "tool-call", ...ids, name: START_TASK, arguments: args });
   const context = { getMessages: () => [], setMessages: () => {}, setHiddenTools: () => {} };
@@ -418,6 +420,7 @@ async function sayingGoodbye() {
   };
   const tasks: NonNullable<ChatRunnerOptions["tasks"]> = {
     ready: () => true,
+    offersCommands: () => true,
     start: async () => running,
     cancelChat: async () => {},
     list: async () => [],
@@ -443,7 +446,7 @@ async function sayingGoodbye() {
   await until(() => turns.length === 2);
   const answer = turns[1] as FakeTurn;
   const start = answer.request.background?.tools[0];
-  const args = { goal: "写一个待办网页", folder: "~/site" };
+  const args = { goal: "写一个待办网页", folder: "~/site", profile: "coding" };
   const ids = { persona: PERSONA, turn: answer.id, callId: "call-1" };
   answer.events({ type: "tool-call", ...ids, name: START_TASK, arguments: args });
   const context = { getMessages: () => [], setMessages: () => {}, setHiddenTools: () => {} };

@@ -1,12 +1,12 @@
-// What a task waiting on the owner asks, with its answers: an approval to start, or for a path or a
-// site, and Continue for one paused or interrupted. Its card shows the prompt whole; the waiting bar
-// above the composer shows it in one line, sharing the card's draft.
+// What a task waiting on the owner asks, with its answers: an approval to start, for a path, a site,
+// a command or an MCP server's tool, and Continue for one paused or interrupted. Its card shows the
+// prompt whole; the waiting bar above the composer shows it in one line, sharing the card's draft.
 
-import { ph } from "@lingui/core/macro";
+import { ph, plural } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
-import { CircleAlertIcon, CirclePauseIcon } from "lucide-react";
-import { type ReactNode, useId } from "react";
+import { CircleAlertIcon, CirclePauseIcon, TriangleAlertIcon } from "lucide-react";
+import { type ReactNode, useId, useState } from "react";
 import { Link } from "react-router";
 import { parseDraft } from "@/components/settings-form/controls";
 import { Button } from "@/components/ui/button";
@@ -21,16 +21,28 @@ import type {
   TaskSnapshot,
   TaskWebMode,
 } from "@/lib/api";
-import { formatSpend } from "@/lib/format";
+import { formatClockMinute, formatSpend } from "@/lib/format";
 import { statusQuery } from "@/lib/query";
+import { useNow } from "@/lib/use-now";
 import { cn } from "@/lib/utils";
 import { useLang } from "@/locales/i18n";
 import { approveBody, chosenModel, type ModelChoice } from "./choice";
 import { useDraft } from "./draft";
-import { pathGrant } from "./labels";
-import { ASSISTANT_SETTINGS, ModelChoiceFields, WebAccessField } from "./parts";
+import { MCP_HINT_TEXT, pathGrant } from "./labels";
+import {
+  ASSISTANT_SETTINGS,
+  CommandText,
+  Escaped,
+  ModelChoiceFields,
+  WebAccessField,
+} from "./parts";
 import { useAnswering, useApproveTask, useContinueTask } from "./queries";
-import { modeRefuses, offers, pauseDetail, pauseKind, waitingFor } from "./state";
+import { alwaysSuspended, modeRefuses, offers, pauseDetail, pauseKind, waitingFor } from "./state";
+import { callOf } from "./transcript";
+import { useTaskEvents } from "./use-task-events";
+
+type McpPending = Extract<TaskPending, { readonly kind: "mcp" }>;
+type McpArgument = McpPending["args"][number];
 
 /** What a waiting task waits for, in a line: the list's rows and the waiting bar say it. */
 export function useWaitingText(): (task: TaskSnapshot) => string | null {
@@ -47,6 +59,10 @@ export function useWaitingText(): (task: TaskSnapshot) => string | null {
         return i18n._(pathGrant(waiting).line);
       case "fetch":
         return t`Waiting for your OK to fetch from ${ph({ host: waiting.host })}`;
+      case "command":
+        return t`Waiting for your OK to run a command in ${ph({ folder: waiting.folder })}`;
+      case "mcp":
+        return t`Waiting for your OK to run ${ph({ tool: waiting.tool })} on ${ph({ server: waiting.server })}`;
       case "spend":
         return t`Waiting for your OK to spend more than ${ph({ spent: formatSpend(waiting.spentUsd, lang) })}`;
       case "stall":
@@ -102,6 +118,7 @@ function Frame({
   question,
   line,
   children,
+  bar,
   note,
   actions,
 }: {
@@ -112,6 +129,8 @@ function Frame({
   /** The bar's. */
   readonly line: string;
   readonly children?: ReactNode;
+  /** The bar's, under its line: what the answers would let through, where a line can't say it. */
+  readonly bar?: ReactNode;
   readonly note?: ReactNode;
   readonly actions: ReactNode;
 }) {
@@ -123,6 +142,7 @@ function Frame({
           <span className="wrap-anywhere">{line}</span>
         </p>
         <div className="flex flex-wrap items-center justify-end gap-2">{actions}</div>
+        {bar !== undefined && <div className="min-w-0 basis-full">{bar}</div>}
         {note}
       </div>
     );
@@ -131,12 +151,116 @@ function Frame({
     <div className="flex flex-col gap-3 border-t bg-warning/5 px-4 py-3 dark:bg-warning/10">
       <p className="flex items-start gap-2 font-medium text-sm">
         <span className="mt-0.5 shrink-0 text-warning [&_svg]:size-4">{icon}</span>
-        <span className="min-w-0">{question}</span>
+        <span className="min-w-0 wrap-anywhere">{question}</span>
       </p>
       {children}
       {note}
       <div className="flex flex-wrap items-center justify-end gap-2">{actions}</div>
     </div>
+  );
+}
+
+/** When a command allowed now would be stopped, by the timeout its call asks for. */
+function StopsAt({ seconds }: { readonly seconds: number }) {
+  const { t } = useLingui();
+  const lang = useLang();
+  const now = useNow(true, 15_000);
+  const time = formatClockMinute(now + seconds * 1000, lang);
+  return <p className="text-muted-foreground text-xs">{t`Stops at ${ph({ time })}`}</p>;
+}
+
+/** An argument's size: its characters, and its lines when it has more than one. */
+function useSizeText(): (arg: McpArgument) => string {
+  const { t } = useLingui();
+  return (arg) => {
+    const characters = t`${plural(ph({ count: arg.chars }), { one: "# character", other: "# characters" })}`;
+    if (arg.lines <= 1) return characters;
+    const lines = t`${plural(ph({ count: arg.lines }), { one: "# line", other: "# lines" })}`;
+    return `${characters} · ${lines}`;
+  };
+}
+
+/** An argument's value whole: a string as it is, anything else as indented JSON. */
+function wholeText(value: unknown): string {
+  return typeof value === "string" ? value : (JSON.stringify(value, null, 2) ?? String(value));
+}
+
+/**
+ * Every argument a tool call sends, each with its size and its head, or with Show All, its whole
+ * value, read from the task's transcript: an owner approves only what was shown.
+ */
+function McpArguments({
+  task,
+  pending,
+}: {
+  readonly task: TaskSnapshot;
+  readonly pending: McpPending;
+}) {
+  const { t } = useLingui();
+  const sizeText = useSizeText();
+  const [all, setAll] = useState(false);
+  // A task waiting on its card doesn't run, so this reads its transcript once, to its end.
+  const events = useTaskEvents(task.id, false, all);
+  const whole = all ? callOf(events.view, pending.call)?.arguments : undefined;
+  if (pending.args.length === 0) {
+    return <p className="text-muted-foreground text-xs">{t`It sends no arguments.`}</p>;
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-muted-foreground text-xs">{t`It sends these:`}</p>
+        <Button
+          variant="link"
+          size="xs"
+          className="h-auto p-0"
+          aria-expanded={all}
+          data-action="arguments"
+          onClick={() => setAll(!all)}
+        >
+          {all && whole === undefined && !events.loaded && <Spinner />}
+          {all ? t`Show Less` : t`Show All`}
+        </Button>
+      </div>
+      <dl className="flex flex-col gap-2">
+        {pending.args.map((arg) => {
+          const full = whole !== undefined && Object.hasOwn(whole, arg.name);
+          const cut = !full && arg.head.length < arg.chars;
+          return (
+            <div key={arg.name} className="flex flex-col gap-1" data-argument={arg.name}>
+              <dt className="flex flex-wrap items-baseline gap-x-2 text-xs">
+                <span className="wrap-anywhere font-medium font-mono">
+                  <Escaped text={arg.name} />
+                </span>
+                <span className="text-muted-foreground">{sizeText(arg)}</span>
+              </dt>
+              <dd>
+                <CommandText
+                  command={full ? wholeText(whole[arg.name]) : `${arg.head}${cut ? "…" : ""}`}
+                  className={full ? "max-h-80" : "max-h-24"}
+                />
+              </dd>
+            </div>
+          );
+        })}
+      </dl>
+    </div>
+  );
+}
+
+/** The bar's line of a tool call's arguments: each one's name and size. */
+function McpArgumentSizes({ args }: { readonly args: readonly McpArgument[] }) {
+  const sizeText = useSizeText();
+  return (
+    <ul className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
+      {args.map((arg) => (
+        <li key={arg.name} className="min-w-0 wrap-anywhere">
+          <span className="font-mono">
+            <Escaped text={arg.name} />
+          </span>{" "}
+          <span className="text-muted-foreground">{sizeText(arg)}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -185,17 +309,21 @@ function ApprovalPrompt({
       {label}
     </Button>
   );
+  // A command or a tool call is one run; a start, a path or a site holds until the task ends.
+  const runs = pending.kind === "command" || pending.kind === "mcp";
+  const alwaysLabel = {
+    start: t`Always Allow This Folder`,
+    path: t`Always Allow This Folder`,
+    fetch: t`Allow Any Site`,
+    command: t`Always in This Folder`,
+    mcp: t`Always Allow This Tool`,
+  }[pending.kind];
   const always = pending.kind !== "path" || pathGrant(pending).always !== null;
   const actions = (
     <>
       {button("deny", t`Deny`, "outline")}
-      {always &&
-        button(
-          "always",
-          pending.kind === "fetch" ? t`Allow Any Site` : t`Always Allow This Folder`,
-          "outline",
-        )}
-      {button("once", t`Allow Once`, "default")}
+      {always && button("always", alwaysLabel, "outline")}
+      {button("once", runs ? t`Run Once` : t`Allow Once`, "default")}
     </>
   );
   const note =
@@ -224,7 +352,12 @@ function ApprovalPrompt({
             disabled={busy}
             onChange={setChoice}
           />
-          <WebAccessField value={web} disabled={busy} onChange={setWeb} />
+          <WebAccessField
+            value={web}
+            search={assistant?.search.on ?? false}
+            disabled={busy}
+            onChange={setWeb}
+          />
           <p className="text-muted-foreground text-xs">
             {task.spendPauseUsd > 0
               ? t`It pauses each time its spend crosses another ${ph({ step: formatSpend(task.spendPauseUsd, lang) })}.`
@@ -272,6 +405,64 @@ function ApprovalPrompt({
           <p className="text-muted-foreground text-xs">{t`Allow Any Site lets this task fetch from any site without asking again.`}</p>
         </Frame>
       );
+    case "command":
+      return (
+        <Frame
+          compact={compact}
+          icon={icon}
+          question={t`Let it run this command?`}
+          line={line}
+          bar={<CommandText command={pending.command} className="max-h-24" />}
+          note={note}
+          actions={actions}
+        >
+          <CommandText command={pending.command} />
+          <p className="text-muted-foreground text-xs">{t`It runs in this folder:`}</p>
+          <Asked>{task.brief.folder}</Asked>
+          <p className="flex items-start gap-2 text-xs">
+            <TriangleAlertIcon aria-hidden className="mt-0.5 size-3.5 shrink-0 text-warning" />
+            <span>{t`Commands run as you, with no sandbox: this one can read, change or delete any of your files, not only this folder's, and reach the network.`}</span>
+          </p>
+          <StopsAt seconds={pending.timeout} />
+          <p className="wrap-anywhere text-xs">{t`Run Once runs it this time only. Always in This Folder also runs exactly this command in this folder from now on without asking, whatever the folder's files then say, in later tasks too; Settings lists it, where you can remove it. Deny tells it it can't.`}</p>
+          {pending.granted && (
+            <p className="text-muted-foreground text-xs" data-granted>
+              {t`You allowed this command for good in this folder, but this task has read the web or an MCP server, so it asks again.`}
+            </p>
+          )}
+        </Frame>
+      );
+    case "mcp": {
+      const { tool, server } = pending;
+      const suspended = alwaysSuspended(task);
+      return (
+        <Frame
+          compact={compact}
+          icon={icon}
+          question={t`Let it run ${ph({ tool })} on ${ph({ server })}?`}
+          line={line}
+          bar={pending.args.length > 0 ? <McpArgumentSizes args={pending.args} /> : undefined}
+          note={note}
+          actions={actions}
+        >
+          {pending.hint !== undefined && (
+            <p className="text-xs">
+              {i18n._(MCP_HINT_TEXT[pending.hint])}{" "}
+              <span className="text-muted-foreground">{t`That's the server's own claim.`}</span>
+            </p>
+          )}
+          <McpArguments task={task} pending={pending} />
+          <p className="wrap-anywhere text-xs">{t`Each call to an MCP server waits for you, with what it sends. Run Once runs this call; Always Allow This Tool lets tasks call ${ph({ tool })} on ${ph({ server })} without asking, even when something they read asks them to, until you take it back in Settings; Deny refuses these inputs for the rest of the task.`}</p>
+          {suspended !== null && (
+            <p className="text-muted-foreground text-xs">
+              {suspended === "no-web"
+                ? t`This task has no web access, so tools you always allow ask again.`
+                : t`This task has read the web or an MCP server, so tools you always allow ask again.`}
+            </p>
+          )}
+        </Frame>
+      );
+    }
   }
 }
 

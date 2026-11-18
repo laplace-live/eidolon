@@ -71,7 +71,7 @@ const PERSONA = activePersona().id;
 const TASK = "0190f5c8-0000-7000-8000-00000000a001";
 const DONE: MindChunk = { type: "done", finishReason: "stop" };
 const ASK = "帮我写个网页";
-const BRIEF = { goal: "写一个待办网页", folder: "~/site" };
+const BRIEF = { goal: "写一个待办网页", folder: "~/site", profile: "coding" } as const;
 const HER_TOOLS = [STEER_TASK, STOP_TASK, CHECK_TASK];
 const STATUS = "TasksStatus";
 const TOOLS_TAIL =
@@ -87,6 +87,8 @@ const chatsRoot = () => join(dataHome(), "chats");
 /** The task manager as the runner sees it: what it started, steered and stopped, and when. */
 class FakeTasks {
   isReady = true;
+  /** Whether her tasks may run commands, which her texts say. */
+  commands = true;
   readonly started: { input: TaskBriefInput; origin: TaskChat }[] = [];
   readonly order: string[] = [];
   /** The manager's tasks, oldest first, as list() and snapshotsOf() read them: none until put. */
@@ -102,6 +104,10 @@ class FakeTasks {
 
   ready(): boolean {
     return this.isReady;
+  }
+
+  offersCommands(): boolean {
+    return this.commands;
   }
 
   async start(input: TaskBriefInput, origin: TaskChat): Promise<TaskSnapshot> {
@@ -440,10 +446,13 @@ const toolNames = (request: MindRequest | undefined) =>
 describe("start_task", () => {
   test("takes her brief, starts the task with her call as its origin, and answers at once", async () => {
     const asked: [TaskBriefInput, string][] = [];
-    const tool = startTaskTool(async (input, callId) => {
-      asked.push([input, callId]);
-      return { id: TASK, status: "awaiting-approval" };
-    });
+    const tool = startTaskTool(
+      async (input, callId) => {
+        asked.push([input, callId]);
+        return { id: TASK, status: "awaiting-approval" };
+      },
+      { commands: true },
+    );
     const signal = new AbortController().signal;
     const run = (args: Record<string, unknown>) =>
       tool.run({ arguments: args, context: TOOL_CONTEXT, signal, callId: "c1" }, EFFECTS);
@@ -459,18 +468,24 @@ describe("start_task", () => {
     expect([tool.cancelOnInterruption, tool.schema.name, tool.schema.required]).toEqual([
       false,
       "start_task",
-      ["goal", "folder"],
+      ["goal", "folder", "profile"],
     ]);
   });
 
   test("turns the manager's refusal into an error she can tell, and lets anything else fail", async () => {
     const busy = new TaskRefused(409, "conflict", "A task is already working in /site: 写个网页.");
-    const refusing = startTaskTool(async () => {
-      throw busy;
-    });
-    const broken = startTaskTool(async () => {
-      throw new Error("disk full");
-    });
+    const refusing = startTaskTool(
+      async () => {
+        throw busy;
+      },
+      { commands: true },
+    );
+    const broken = startTaskTool(
+      async () => {
+        throw new Error("disk full");
+      },
+      { commands: true },
+    );
     const call = {
       arguments: BRIEF,
       context: TOOL_CONTEXT,
@@ -566,8 +581,24 @@ describe("what her turns are offered", () => {
     const id = await greeted();
     await send(id, "你好");
     await (await runner.sendVoice(id, CLIP)).ended;
-    const expected = [[START_TASK], assistantPromptHint()];
+    const expected = [[START_TASK], assistantPromptHint({ commands: true })];
     expect(answers.map(offered)).toEqual([expected, expected]);
+  });
+
+  test("her texts name commands only while her tasks may run them, as each turn reads it", async () => {
+    const tasks = new FakeTasks();
+    serve({ turn: fakeTurn, answer: fakeAnswer, tasks });
+    const id = await greeted();
+    await send(id, "你好");
+    tasks.commands = false;
+    await send(id, "在吗");
+    const described = answers.map((request) => request?.background?.tools[0]?.schema.description);
+    expect(answers.map((request) => request?.background?.hint)).toEqual([
+      assistantPromptHint({ commands: true }),
+      assistantPromptHint({ commands: false }),
+    ]);
+    expect(described[0]).toContain("还能运行命令和程序");
+    expect(described[1]).not.toContain("还能运行命令和程序");
   });
 
   test("her task tools besides, while a task of hers in the chat is live, typed or spoken", async () => {
@@ -708,9 +739,31 @@ describe("a task she starts in a chat", () => {
     // Her answer had her hint for its instruction, and the tool after hers; her greeting neither.
     expect(asked.map((options) => options.assistantHint)).toEqual([
       undefined,
-      assistantPromptHint(),
+      assistantPromptHint({ commands: true }),
     ]);
     expect(mind.requests.map(toolNames)).toEqual([[], [START_TASK], [START_TASK]]);
+  });
+
+  test("her turns carry no skill, whatever the data home holds", async () => {
+    const SENTINEL = "zz-sentinel-skill";
+    const folder = join(dataHome(), "skills", SENTINEL);
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(
+      join(folder, "SKILL.md"),
+      `---\nname: ${SENTINEL}\ndescription: ${SENTINEL} for every page.\n---\n${SENTINEL}\n`,
+    );
+    try {
+      const tasks = new FakeTasks();
+      const mind = new ScriptedMind(says("你好呀"), callsStart(), says("好，等你点允许"));
+      serve({ ...engine(mind), tasks });
+      const id = await greeted();
+      await send(id, ASK);
+      expect(mind.requests).toHaveLength(3);
+      expect(JSON.stringify(mind.requests)).not.toContain(SENTINEL);
+      expect(JSON.stringify(asked)).not.toContain(SENTINEL);
+    } finally {
+      rmSync(join(dataHome(), "skills"), { recursive: true, force: true });
+    }
   });
 });
 
@@ -1240,7 +1293,7 @@ describe("a call in a chat of hers alone", () => {
     const plain = { background: null, tools: null, providers: [STATUS] };
     expect(handedOf(call.extras?.(false))).toEqual(plain);
     expect(handedOf(call.extras?.(true))).toEqual({ ...plain, background: [START_TASK] });
-    expect(call.extras?.(true)?.background?.hint).toBe(assistantPromptHint());
+    expect(call.extras?.(true)?.background?.hint).toBe(assistantPromptHint({ commands: true }));
     tasks.snapshots = [hers(id)];
     const answer = call.extras?.(true);
     expect(handedOf(answer)).toEqual({ ...plain, background: [START_TASK], tools: HER_TOOLS });

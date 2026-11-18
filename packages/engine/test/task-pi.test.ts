@@ -38,7 +38,8 @@ function label(event: TaskEvent): string {
     case "tool":
       return `tool:${event.state}:${event.callId}`;
     case "delta":
-      return "delta";
+    case "wait":
+      return event.type;
   }
 }
 

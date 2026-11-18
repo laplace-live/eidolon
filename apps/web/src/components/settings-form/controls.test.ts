@@ -385,6 +385,10 @@ describe("Assistant Mode", () => {
     for (const path of ["/a", "~", "~/a", "C:\\a", "c:/a"]) expect(isFullPath(path)).toBe(true);
     for (const path of ["a", "./a", "", "C:", "C:a"]) expect(isFullPath(path)).toBe(false);
   });
+
+  test("its commands are on while nothing sets them, as assistantSettings reads them", () => {
+    expect(control("assistant.bash")).toEqual({ type: "flag", fallback: "on" });
+  });
 });
 
 describe("providers and the models they fill", () => {
@@ -431,6 +435,37 @@ describe("providers and the models they fill", () => {
     ).toBeNull();
   });
 
+  test("a task kind's provider follows the assistant's, and its model too while the providers match", () => {
+    const coding = roleById("assistant-coding");
+    expect(control("assistant.coding.provider")).toEqual({ type: "provider", role: coding });
+    expect(control("assistant.coding.model")).toEqual({ type: "model", role: coding });
+    // Nothing set anywhere: no task runs, the kind's included.
+    expect(effectiveProvider(coding, rows({}), {})).toBeNull();
+    const assistant = rows({
+      "assistant.provider": "openrouter",
+      "assistant.model": "anthropic/claude-sonnet-5.5",
+    });
+    expect(effectiveProvider(coding, assistant, {})).toBe("openrouter");
+    expect(effectiveModel(coding, assistant, {}, [])).toBe("anthropic/claude-sonnet-5.5");
+    // A model alone runs on the assistant's account.
+    const own = { "assistant.coding.model": "openai/gpt-6" };
+    expect(effectiveModel(coding, assistant, own, [])).toBe("openai/gpt-6");
+    // On another provider's account, the assistant's model isn't one it serves: it names its own.
+    const elsewhere = { "assistant.coding.provider": "anthropic" };
+    expect(effectiveProvider(coding, assistant, elsewhere)).toBe("anthropic");
+    expect(effectiveModel(coding, assistant, elsewhere, [])).toBeNull();
+  });
+
+  test("web search is off until an account is chosen, and takes the offer's engine while none is named", () => {
+    const search = roleById("search");
+    expect(control("assistant.search.provider")).toEqual({ type: "provider", role: search });
+    expect(control("assistant.search.model")).toEqual({ type: "model", role: search });
+    expect(effectiveProvider(search, rows({ "assistant.provider": "openrouter" }), {})).toBeNull();
+    const chosen = rows({ "assistant.search.provider": "openrouter" });
+    expect(effectiveModel(search, chosen, {}, [])).toBe(defaultModel(search, "openrouter"));
+    expect(defaultModel(search, "openrouter")).toBe("exa");
+  });
+
   test("a role's model: its own as the drafts stand, else its fallback; the assistant has none", () => {
     const assistant = roleById("assistant");
     expect(effectiveModel(assistant, rows({ "assistant.provider": "openrouter" }), {}, [])).toBe(
@@ -463,6 +498,22 @@ describe("a provider's models and voices go with it", () => {
       "memory.model",
     ]);
     expect(orphanedByProvider(hers, { "mind.provider": "openrouter" }, {}, [])).toEqual([]);
+  });
+
+  test("a new assistant provider clears a kind's model while the kind follows it", () => {
+    const kinds = rows({
+      "assistant.provider": "openrouter",
+      "assistant.model": "anthropic/claude-sonnet-5.5",
+      "assistant.coding.model": "openai/gpt-6",
+      "assistant.research.provider": "openrouter",
+      "assistant.research.model": "x-ai/grok-5",
+    });
+    const drafts = { "assistant.provider": "anthropic" };
+    // research names its own account, which the change leaves where it was.
+    expect(orphanedByProvider(kinds, drafts, drafts, [])).toEqual([
+      "assistant.model",
+      "assistant.coding.model",
+    ]);
   });
 
   test("another account of the same provider keeps its models; one of another provider doesn't", () => {

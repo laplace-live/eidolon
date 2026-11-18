@@ -189,7 +189,8 @@ describe("the production surface", () => {
           expect(offered).not.toContain(name);
         }
         const said = JSON.stringify(request.messages);
-        expect(said).not.toContain(assistantPromptHint());
+        expect(said).not.toContain(assistantPromptHint({ commands: true }));
+        expect(said).not.toContain(assistantPromptHint({ commands: false }));
         expect(said).not.toContain(TASKS_BLOCK_NAME);
       }
     } finally {

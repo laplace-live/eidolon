@@ -63,6 +63,10 @@ msgstr "{count, plural, one {{amount} token} other {{amount} tokens}}"
 msgid "{count, plural, one {# batch is waiting; this downloads it.} other {# batches are waiting; this downloads the oldest first.}}"
 msgstr "{count, plural, one {# batch is waiting; this downloads it.} other {# batches are waiting; this downloads the oldest first.}}"
 
+#: src/features/tasks/cards.tsx
+msgid "{count, plural, one {# character} other {# characters}}"
+msgstr "{count, plural, one {# character} other {# characters}}"
+
 #: src/features/studio/videos-section.tsx
 msgid "{count, plural, one {# downloaded video has no upload date, so it waits until you give one in the table below.} other {# downloaded videos have no upload date, so they wait until you give one in the table below.}}"
 msgstr "{count, plural, one {# downloaded video has no upload date, so it waits until you give one in the table below.} other {# downloaded videos have no upload date, so they wait until you give one in the table below.}}"
@@ -83,13 +87,25 @@ msgstr "{count, plural, one {# file was removed since the last index.} other {# 
 msgid "{count, plural, one {# image} other {# images}}"
 msgstr "{count, plural, one {# image} other {# images}}"
 
+#: src/features/tasks/cards.tsx
+msgid "{count, plural, one {# line} other {# lines}}"
+msgstr "{count, plural, one {# line} other {# lines}}"
+
 #: src/features/studio/add-videos.tsx
 msgid "{count, plural, one {# new video ({known} already added)} other {# new videos ({known} already added)}}"
 msgstr "{count, plural, one {# new video ({known} already added)} other {# new videos ({known} already added)}}"
 
+#: src/features/tasks/task-card.tsx
+msgid "{count, plural, one {# of {server}'s tools was left out: list the ones tasks need in its tools in mcp.json.} other {# of {server}'s tools were left out: list the ones tasks need in its tools in mcp.json.}}"
+msgstr "{count, plural, one {# of {server}'s tools was left out: list the ones tasks need in its tools in mcp.json.} other {# of {server}'s tools were left out: list the ones tasks need in its tools in mcp.json.}}"
+
 #: src/features/usage/route.tsx
 msgid "{count, plural, one {# request has no price, so it isn't counted.} other {# requests have no price, so they aren't counted.}}"
 msgstr "{count, plural, one {# request has no price, so it isn't counted.} other {# requests have no price, so they aren't counted.}}"
+
+#: src/features/usage/tables.tsx
+msgid "{count, plural, one {# search} other {# searches}}"
+msgstr "{count, plural, one {# search} other {# searches}}"
 
 #: src/features/settings/assistant.tsx
 msgid "{count, plural, one {# task is running or waiting for you. Turning Assistant Mode off stops it.} other {# tasks are running or waiting for you. Turning Assistant Mode off stops them.}}"
@@ -360,6 +376,10 @@ msgstr "{rows} indexed, built {date}."
 #: src/features/home/readiness-labels.ts
 msgid "{rows} passages, built {date}."
 msgstr "{rows} passages, built {date}."
+
+#: src/features/tasks/task-card.tsx
+msgid "{server} didn't start, so this task works without it: {error}"
+msgstr "{server} didn't start, so this task works without it: {error}"
 
 #: src/features/studio/videos-section.tsx
 msgid "{size} free on the data home's disk."
@@ -725,6 +745,10 @@ msgstr "Allow Once lets this task read everything in {folder} until it ends; Den
 msgid "Allowed Browser Origins"
 msgstr "Allowed Browser Origins"
 
+#: src/features/settings/commands-card.tsx
+msgid "Allowed Commands"
+msgstr "Allowed Commands"
+
 #: src/features/studio/add-videos.tsx
 msgid "Already added"
 msgstr "Already added"
@@ -740,6 +764,18 @@ msgstr "Always Allow This Folder adds {folder} to Assistant Mode's folders: from
 #: src/features/tasks/cards.tsx
 msgid "Always Allow This Folder adds it to Assistant Mode's folders, where tasks start without asking."
 msgstr "Always Allow This Folder adds it to Assistant Mode's folders, where tasks start without asking."
+
+#: src/features/tasks/cards.tsx
+msgid "Always Allow This Tool"
+msgstr "Always Allow This Tool"
+
+#: src/features/settings/mcp-card.tsx
+msgid "Always Allowed"
+msgstr "Always Allowed"
+
+#: src/features/tasks/cards.tsx
+msgid "Always in This Folder"
+msgstr "Always in This Folder"
 
 #: src/lib/labels.ts
 msgid "An account a persona uses can't be removed: pick another for her first."
@@ -757,6 +793,10 @@ msgstr "An avatar is optional but recommended."
 #: src/features/jobs/parts.tsx
 msgid "An earlier run of Eidolon started this job, so this one can't stop it. It will finish on its own, or be marked interrupted."
 msgstr "An earlier run of Eidolon started this job, so this one can't stop it. It will finish on its own, or be marked interrupted."
+
+#: src/features/settings/mcp-card.tsx
+msgid "An MCP server is a program on this computer. Eidolon starts it with the command in mcp.json whenever a task begins, with your permissions and outside the task's folders. Each call asks you first, unless you chose Always for that tool."
+msgstr "An MCP server is a program on this computer. Eidolon starts it with the command in mcp.json whenever a task begins, with your permissions and outside the task's folders. Each call asks you first, unless you chose Always for that tool."
 
 #: src/features/jobs/parts.tsx
 msgid "and {count} more"
@@ -827,8 +867,8 @@ msgid "Ask for Each Site"
 msgstr "Ask for Each Site"
 
 #: src/features/settings/route.tsx
-msgid "Ask her in a chat to do real work on this computer, such as writing and editing files or looking things up, and she starts a task for it. Tasks run on the account and model chosen here, never on her chat model, and one that needs a folder outside the folders below asks you in the chat first."
-msgstr "Ask her in a chat to do real work on this computer, such as writing and editing files or looking things up, and she starts a task for it. Tasks run on the account and model chosen here, never on her chat model, and one that needs a folder outside the folders below asks you in the chat first."
+msgid "Ask her in a chat to do real work on this computer, such as writing and editing files or looking things up, and she starts a task for it. Tasks run on the account and model chosen here, or a kind's below, never on her chat model, and one that needs a folder outside the folders below asks you in the chat first."
+msgstr "Ask her in a chat to do real work on this computer, such as writing and editing files or looking things up, and she starts a task for it. Tasks run on the account and model chosen here, or a kind's below, never on her chat model, and one that needs a folder outside the folders below asks you in the chat first."
 
 #: src/features/tasks/list.tsx
 msgid "Ask her in a chat to do something on this computer, and the task shows here while she works on it."
@@ -837,6 +877,10 @@ msgstr "Ask her in a chat to do something on this computer, and the task shows h
 #: src/components/settings-form/model-picker.tsx
 msgid "Asking the provider for its models…"
 msgstr "Asking the provider for its models…"
+
+#: src/components/settings-form/labels.ts
+msgid "Assistant Commands"
+msgstr "Assistant Commands"
 
 #: src/components/settings-form/labels.ts
 msgid "Assistant Context"
@@ -1266,6 +1310,39 @@ msgstr "Close"
 msgid "Cloudflare TURN Key ID"
 msgstr "Cloudflare TURN Key ID"
 
+#: src/components/settings-form/labels.ts
+msgid "Code, web pages and small programs."
+msgstr "Code, web pages and small programs."
+
+#: src/features/tasks/labels.ts
+msgctxt "task kind"
+msgid "Coding"
+msgstr "Coding"
+
+#: src/components/settings-form/labels.ts
+msgid "Coding Task Model"
+msgstr "Coding Task Model"
+
+#: src/components/settings-form/labels.ts
+msgid "Coding Task Provider"
+msgstr "Coding Task Provider"
+
+#: src/lib/labels.ts
+msgid "Coding Tasks"
+msgstr "Coding Tasks"
+
+#: src/features/settings/assistant.tsx
+msgid "Coding tasks run on Assistant Mode's model for now"
+msgstr "Coding tasks run on Assistant Mode's model for now"
+
+#: src/features/settings/commands-card.tsx
+msgid "Commands a task runs without asking, each only in its folder and only exactly as written, unless the task has read the web or an MCP server. Always in This Folder on a task's card adds one."
+msgstr "Commands a task runs without asking, each only in its folder and only exactly as written, unless the task has read the web or an MCP server. Always in This Folder on a task's card adds one."
+
+#: src/features/tasks/cards.tsx
+msgid "Commands run as you, with no sandbox: this one can read, change or delete any of your files, not only this folder's, and reach the network."
+msgstr "Commands run as you, with no sandbox: this one can read, change or delete any of your files, not only this folder's, and reach the network."
+
 #: src/features/call/call-notices.tsx
 msgid "Connect a microphone, then call again."
 msgstr "Connect a microphone, then call again."
@@ -1531,6 +1608,10 @@ msgstr "e.g. A Chinese VTuber who streams on Bilibili and loves cats"
 msgid "e.g. 明前奶绿"
 msgstr "e.g. 明前奶绿"
 
+#: src/features/tasks/cards.tsx
+msgid "Each call to an MCP server waits for you, with what it sends. Run Once runs this call; Always Allow This Tool lets tasks call {tool} on {server} without asking, even when something they read asks them to, until you take it back in Settings; Deny refuses these inputs for the rest of the task."
+msgstr "Each call to an MCP server waits for you, with what it sends. Run Once runs this call; Always Allow This Tool lets tasks call {tool} on {server} without asking, even when something they read asks them to, until you take it back in Settings; Deny refuses these inputs for the rest of the task."
+
 #: src/lib/labels.ts
 msgid "Each link must be a full http or https URL."
 msgstr "Each link must be a full http or https URL."
@@ -1675,6 +1756,10 @@ msgstr "Empty keeps each persona's memories of you apart, under her own id."
 #: src/features/setup/persona-fields.tsx
 msgid "Empty uses 观众."
 msgstr "Empty uses 观众."
+
+#: src/features/settings/mcp-card.tsx
+msgid "Enabled"
+msgstr "Enabled"
 
 #: src/features/home/readiness-labels.ts
 msgid "Ended with an error ({when})."
@@ -2164,6 +2249,10 @@ msgstr "In Progress"
 msgid "In progress: {count}."
 msgstr "In progress: {count}."
 
+#: src/features/tasks/task-card.tsx
+msgid "In the Background"
+msgstr "In the Background"
+
 #: src/features/usage/route.tsx
 msgid "in the last 12 months"
 msgstr "in the last 12 months"
@@ -2294,8 +2383,12 @@ msgid "It asks you before it fetches from a site for the first time."
 msgstr "It asks you before it fetches from a site for the first time."
 
 #: src/features/tasks/labels.ts
-msgid "It can't fetch anything from the web."
-msgstr "It can't fetch anything from the web."
+msgid "It can't fetch anything from the web, and each call to an MCP server asks you first."
+msgstr "It can't fetch anything from the web, and each call to an MCP server asks you first."
+
+#: src/features/tasks/labels.ts
+msgid "It can't search or fetch from the web, and each call to an MCP server asks you first."
+msgstr "It can't search or fetch from the web, and each call to an MCP server asks you first."
 
 #: src/features/jobs/detail.tsx
 msgid "It ended before reporting a result. The end of its technical log usually says why."
@@ -2317,6 +2410,14 @@ msgstr "It may fetch from any public site without asking."
 msgid "It may have been deleted. Pick another, or start a new one."
 msgstr "It may have been deleted. Pick another, or start a new one."
 
+#: src/features/tasks/labels.ts
+msgid "It may search the web and fetch from any public site without asking."
+msgstr "It may search the web and fetch from any public site without asking."
+
+#: src/features/tasks/labels.ts
+msgid "It may search the web without asking, and asks you before it fetches from a site for the first time."
+msgstr "It may search the web without asking, and asks you before it fetches from a site for the first time."
+
 #: src/features/tasks/cards.tsx
 msgid "It paused, and waits for you to let it go on."
 msgstr "It paused, and waits for you to let it go on."
@@ -2336,6 +2437,18 @@ msgstr "It repeated the same steps three turns running."
 #: src/features/studio/voice-styles-card.tsx
 msgid "It replaces the environment's style by this name, which <0>{replacing}</0> sets."
 msgstr "It replaces the environment's style by this name, which <0>{replacing}</0> sets."
+
+#: src/features/tasks/cards.tsx
+msgid "It runs in this folder:"
+msgstr "It runs in this folder:"
+
+#: src/features/tasks/cards.tsx
+msgid "It sends no arguments."
+msgstr "It sends no arguments."
+
+#: src/features/tasks/cards.tsx
+msgid "It sends these:"
+msgstr "It sends these:"
 
 #: src/features/jobs/parts.tsx
 msgid "It still hasn't stopped since you cancelled it. Force Stop ends it at once, without letting it finish what it is writing: an index it was building can be left half built, so run that job again afterwards."
@@ -2403,6 +2516,10 @@ msgstr "Japanese"
 msgid "Jobs"
 msgstr "Jobs"
 
+#: src/components/settings-form/labels.ts
+msgid "Jobs of a few minutes, such as a list or a few edits to a file. A cheaper model suits them, though a task still uses tools, and a weaker model is easier to mislead with what it reads."
+msgstr "Jobs of a few minutes, such as a list or a few edits to a file. A cheaper model suits them, though a task still uses tools, and a weaker model is easier to mislead with what it reads."
+
 #: src/features/studio/text-editor.tsx
 msgid "Keep Editing"
 msgstr "Keep Editing"
@@ -2420,6 +2537,10 @@ msgstr "Keep It"
 #: src/features/settings/assistant.tsx
 msgid "Keep It On"
 msgstr "Keep It On"
+
+#: src/features/settings/mcp-card.tsx
+msgid "Keep keys out of mcp.json: write {reference} where one goes, and set NAME in credentials.json's mcpSecrets or in the environment."
+msgstr "Keep keys out of mcp.json: write {reference} where one goes, and set NAME in credentials.json's mcpSecrets or in the environment."
 
 #: src/features/jobs/parts.tsx
 msgid "Keep Running"
@@ -2460,6 +2581,11 @@ msgstr "Keys are saved in credentials.json, readable only by you, and never show
 #: src/features/setup/keys-step.tsx
 msgid "Keys stay on this machine, readable only by you."
 msgstr "Keys stay on this machine, readable only by you."
+
+#: src/features/tasks/list.tsx
+#: src/features/tasks/task-card.tsx
+msgid "Kind"
+msgstr "Kind"
 
 #: src/components/settings-form/labels.ts
 #: src/features/studio/route.tsx
@@ -2516,6 +2642,14 @@ msgid "Let it read outside its folders?"
 msgstr "Let it read outside its folders?"
 
 #: src/features/tasks/cards.tsx
+msgid "Let it run {tool} on {server}?"
+msgstr "Let it run {tool} on {server}?"
+
+#: src/features/tasks/cards.tsx
+msgid "Let it run this command?"
+msgstr "Let it run this command?"
+
+#: src/features/tasks/cards.tsx
 msgid "Let it write outside its folders?"
 msgstr "Let it write outside its folders?"
 
@@ -2566,6 +2700,10 @@ msgstr "Logged-in Chat Turns per Hour"
 msgid "Login Cache Seconds"
 msgstr "Login Cache Seconds"
 
+#: src/components/settings-form/labels.ts
+msgid "Looking things up on the web and writing up what it found."
+msgstr "Looking things up on the web and writing up what it found."
+
 #: src/features/chats/labels.ts
 msgid "Looking through the stream archive…"
 msgstr "Looking through the stream archive…"
@@ -2603,9 +2741,21 @@ msgstr "MCP Anonymous Calls per Window"
 msgid "MCP Logged-in Calls per Window"
 msgstr "MCP Logged-in Calls per Window"
 
+#: src/features/settings/mcp-card.tsx
+msgid "MCP Servers"
+msgstr "MCP Servers"
+
 #: src/components/settings-form/labels.ts
 msgid "MCP Window Seconds"
 msgstr "MCP Window Seconds"
+
+#: src/lib/labels.ts
+msgid "mcp.json doesn't parse, so nothing can be saved in it until it's fixed."
+msgstr "mcp.json doesn't parse, so nothing can be saved in it until it's fixed."
+
+#: src/lib/labels.ts
+msgid "mcp.json has no server by that name."
+msgstr "mcp.json has no server by that name."
 
 #: src/components/settings-form/labels.ts
 msgid "Mem0 Agent ID"
@@ -2716,6 +2866,10 @@ msgstr "Model"
 msgid "Models"
 msgstr "Models"
 
+#: src/features/settings/route.tsx
+msgid "Models by Kind"
+msgstr "Models by Kind"
+
 #: src/features/usage/spend-chart.tsx
 msgid "Month"
 msgstr "Month"
@@ -2745,6 +2899,10 @@ msgstr "Names and terms Soniox should hear right when it transcribes this person
 #: src/features/setup/persona-fields.tsx
 msgid "Names her folder: lowercase letters, digits, - and _. It can't change later."
 msgstr "Names her folder: lowercase letters, digits, - and _. It can't change later."
+
+#: src/features/settings/mcp-card.tsx
+msgid "Needs {name}: set it in credentials.json's mcpSecrets or the environment"
+msgstr "Needs {name}: set it in credentials.json's mcpSecrets or the environment"
 
 #: src/lib/labels.ts
 msgid "Needs API credit, which is separate from a fish.audio membership; new accounts start at $0."
@@ -2829,6 +2987,10 @@ msgstr "No key"
 msgid "No key: calls need one"
 msgstr "No key: calls need one"
 
+#: src/features/settings/mcp-card.tsx
+msgid "No MCP server starts until mcp.json is fixed"
+msgstr "No MCP server starts until mcp.json is fixed"
+
 #: src/features/home/memory-panel.tsx
 msgid "No memories yet"
 msgstr "No memories yet"
@@ -2873,6 +3035,10 @@ msgstr "No result"
 #: src/components/voice-picker/index.tsx
 msgid "No sample"
 msgstr "No sample"
+
+#: src/features/settings/mcp-card.tsx
+msgid "No servers yet. Add them to {path}, in the mcpServers shape other MCP clients use."
+msgstr "No servers yet. Add them to {path}, in the mcpServers shape other MCP clients use."
 
 #: src/features/studio/video-table.tsx
 msgid "No speech"
@@ -2937,6 +3103,10 @@ msgstr "No words could be heard in it."
 #: src/components/settings-form/labels.ts
 msgid "None"
 msgstr "None"
+
+#: src/features/settings/commands-card.tsx
+msgid "None yet."
+msgstr "None yet."
 
 #: src/features/chats/labels.ts
 msgctxt "chat display"
@@ -3042,6 +3212,10 @@ msgstr "Off, she can't start tasks, the running ones stop, and the Tasks list is
 msgid "Off: No Tasks"
 msgstr "Off: No Tasks"
 
+#: src/components/settings-form/labels.ts
+msgid "Off: No Web Search"
+msgstr "Off: No Web Search"
+
 #: src/features/home/readiness-labels.ts
 msgid "Off: she won't remember you between calls."
 msgstr "Off: she won't remember you between calls."
@@ -3054,6 +3228,10 @@ msgstr "Off: Three Models"
 #: src/components/settings-form/labels.ts
 msgid "On"
 msgstr "On"
+
+#: src/components/settings-form/labels.ts
+msgid "On, a task may ask to run commands on this computer, each waiting for your OK on its card unless you allowed that exact command in its folder for good. Off, no task starts one. macOS and Linux only."
+msgstr "On, a task may ask to run commands on this computer, each waiting for your OK on its card unless you allowed that exact command in its folder for good. Off, no task starts one. macOS and Linux only."
 
 #: src/features/home/readiness-labels.ts
 msgid "On: she remembers you from one call to the next."
@@ -3094,6 +3272,10 @@ msgstr "One per line, relative to her folder."
 #: src/features/home/readiness-labels.ts
 msgid "Only {free} free on the data home's disk. Downloaded audio takes a lot of space."
 msgstr "Only {free} free on the data home's disk. Downloaded audio takes a lot of space."
+
+#: src/features/settings/mcp-card.tsx
+msgid "Only Add Programs You Trust"
+msgstr "Only Add Programs You Trust"
 
 #: src/components/locked-screen.tsx
 msgid "Open"
@@ -3372,6 +3554,10 @@ msgstr "Playback Position"
 msgid "Profile"
 msgstr "Profile"
 
+#: src/features/settings/mcp-card.tsx
+msgid "Programs that give tasks more tools, from {path}. A task asks you before each call it makes to one, unless you chose Always for that tool."
+msgstr "Programs that give tasks more tools, from {path}. A task asks you before each call it makes to one, unless you chose Always for that tool."
+
 #: src/features/jobs/detail.tsx
 msgid "Progress"
 msgstr "Progress"
@@ -3439,6 +3625,27 @@ msgstr "Qdrant isn't answering, so she can't remember or recall anything for now
 #: src/features/setup/memory-step.tsx
 msgid "Qdrant Port"
 msgstr "Qdrant Port"
+
+#: src/features/tasks/labels.ts
+msgctxt "task kind"
+msgid "Quick"
+msgstr "Quick"
+
+#: src/components/settings-form/labels.ts
+msgid "Quick Task Model"
+msgstr "Quick Task Model"
+
+#: src/components/settings-form/labels.ts
+msgid "Quick Task Provider"
+msgstr "Quick Task Provider"
+
+#: src/lib/labels.ts
+msgid "Quick Tasks"
+msgstr "Quick Tasks"
+
+#: src/features/settings/assistant.tsx
+msgid "Quick tasks run on Assistant Mode's model for now"
+msgstr "Quick tasks run on Assistant Mode's model for now"
 
 #: src/features/usage/route.tsx
 msgid "Range"
@@ -3545,6 +3752,7 @@ msgstr "Refresh"
 msgid "Relative to her folder. Default prompt.md."
 msgstr "Relative to her folder. Default prompt.md."
 
+#: src/features/settings/commands-card.tsx
 #: src/features/setup/avatar-picker.tsx
 #: src/features/studio/identity-section.tsx
 #: src/features/studio/voice-styles-card.tsx
@@ -3663,6 +3871,27 @@ msgstr "Reranking costs about $0.002 per search."
 msgid "Reruns an earlier job"
 msgstr "Reruns an earlier job"
 
+#: src/features/tasks/labels.ts
+msgctxt "task kind"
+msgid "Research"
+msgstr "Research"
+
+#: src/components/settings-form/labels.ts
+msgid "Research Task Model"
+msgstr "Research Task Model"
+
+#: src/components/settings-form/labels.ts
+msgid "Research Task Provider"
+msgstr "Research Task Provider"
+
+#: src/lib/labels.ts
+msgid "Research Tasks"
+msgstr "Research Tasks"
+
+#: src/features/settings/assistant.tsx
+msgid "Research tasks run on Assistant Mode's model for now"
+msgstr "Research tasks run on Assistant Mode's model for now"
+
 #: src/components/settings-form/field.tsx
 msgid "Reset"
 msgstr "Reset"
@@ -3738,6 +3967,14 @@ msgstr "Rows"
 msgid "Run"
 msgstr "Run"
 
+#: src/features/tasks/cards.tsx
+msgid "Run Once"
+msgstr "Run Once"
+
+#: src/features/tasks/cards.tsx
+msgid "Run Once runs it this time only. Always in This Folder also runs exactly this command in this folder from now on without asking, whatever the folder's files then say, in later tasks too; Settings lists it, where you can remove it. Deny tells it it can't."
+msgstr "Run Once runs it this time only. Always in This Folder also runs exactly this command in this folder from now on without asking, whatever the folder's files then say, in later tasks too; Settings lists it, where you can remove it. Deny tells it it can't."
+
 #: src/features/setup/memory-step.tsx
 msgid "Run this once in a terminal:"
 msgstr "Run this once in a terminal:"
@@ -3772,6 +4009,10 @@ msgstr "s2.1-pro-free (Free, under Fair Use)"
 #: src/components/settings-form/field.tsx
 msgid "Same as {role} ({value})"
 msgstr "Same as {role} ({value})"
+
+#: src/components/settings-form/labels.ts
+msgid "Same as Assistant Tasks"
+msgstr "Same as Assistant Tasks"
 
 #: src/components/settings-form/settings-card.tsx
 #: src/features/chats/chat-menu.tsx
@@ -4023,6 +4264,10 @@ msgstr "She has no voice yet, so calls can't start."
 msgid "She inherits a voice from the environment ({id}), which hasn't been checked with Fish Audio yet."
 msgstr "She inherits a voice from the environment ({id}), which hasn't been checked with Fish Audio yet."
 
+#: src/features/settings/route.tsx
+msgid "She marks each task she starts as quick, coding or research. A kind runs on the account and model chosen for it here, and on Assistant Mode's own while none is chosen; anything else runs on Assistant Mode's own."
+msgstr "She marks each task she starts as quick, coding or research. A kind runs on the account and model chosen for it here, and on Assistant Mode's own while none is chosen; anything else runs on Assistant Mode's own."
+
 #: src/features/studio/identity-section.tsx
 msgid "She needs a name and a short name."
 msgstr "She needs a name and a short name."
@@ -4072,6 +4317,10 @@ msgstr "Show"
 msgid "Show {count} More"
 msgstr "Show {count} More"
 
+#: src/features/tasks/cards.tsx
+msgid "Show All"
+msgstr "Show All"
+
 #: src/features/home/memory-panel.tsx
 msgid "Show All {count}"
 msgstr "Show All {count}"
@@ -4083,6 +4332,10 @@ msgstr "Show Chats"
 #: src/features/studio/video-table.tsx
 msgid "Show Finished"
 msgstr "Show Finished"
+
+#: src/features/tasks/cards.tsx
+msgid "Show Less"
+msgstr "Show Less"
 
 #: src/components/voice-picker/index.tsx
 msgid "Show More"
@@ -4313,6 +4566,10 @@ msgstr "Still waiting for {name}. If nothing comes, say it again."
 msgid "Stop"
 msgstr "Stop"
 
+#: src/features/settings/mcp-card.tsx
+msgid "Stop Always Allowing {tool}"
+msgstr "Stop Always Allowing {tool}"
+
 #: src/features/tasks/task-card.tsx
 msgid "Stop Task"
 msgstr "Stop Task"
@@ -4350,6 +4607,11 @@ msgstr "Stopping the task…"
 #: src/features/jobs/parts.tsx
 msgid "Stopping…"
 msgstr "Stopping…"
+
+#: src/features/tasks/cards.tsx
+#: src/features/tasks/task-card.tsx
+msgid "Stops at {time}"
+msgstr "Stops at {time}"
 
 #: src/features/settings/route.tsx
 msgid "Storage"
@@ -4491,6 +4753,10 @@ msgid "That action isn't supported here."
 msgstr "That action isn't supported here."
 
 #: src/lib/labels.ts
+msgid "That command doesn't exist."
+msgstr "That command doesn't exist."
+
+#: src/lib/labels.ts
 msgid "That conflicts with what changed meanwhile. Reload and try again."
 msgstr "That conflicts with what changed meanwhile. Reload and try again."
 
@@ -4517,10 +4783,6 @@ msgstr "That isn't an Eidolon link."
 #: src/lib/labels.ts
 msgid "That job can't be resumed."
 msgstr "That job can't be resumed."
-
-#: src/lib/labels.ts
-msgid "That job doesn't exist."
-msgstr "That job doesn't exist."
 
 #: src/lib/labels.ts
 msgid "That job isn't running."
@@ -4562,6 +4824,10 @@ msgstr "That task isn't waiting for an answer."
 msgid "That value isn't valid for this setting."
 msgstr "That value isn't valid for this setting."
 
+#: src/features/tasks/cards.tsx
+msgid "That's the server's own claim."
+msgstr "That's the server's own claim."
+
 #: src/features/studio/voice-styles-card.tsx
 msgid "The {name} style is removed."
 msgstr "The {name} style is removed."
@@ -4581,6 +4847,10 @@ msgstr "The account couldn't be removed."
 #: src/components/settings-form/check-labels.ts
 msgid "The account has no credit left."
 msgstr "The account has no credit left."
+
+#: src/components/settings-form/labels.ts
+msgid "The account tasks search the web with. Off, they can still read the pages you allow, but can't search."
+msgstr "The account tasks search the web with. Off, they can still read the pages you allow, but can't search."
 
 #: src/features/settings/accounts-card.tsx
 msgid "The accounts Eidolon calls, each with its own key and API base. Add as many of one provider as you have; a persona picks which account does each part of her work in her studio."
@@ -4812,6 +5082,14 @@ msgstr "The request wasn't valid."
 msgid "The same steps came three turns running, so it paused. Continue lets it try again."
 msgstr "The same steps came three turns running, so it paused. Continue lets it try again."
 
+#: src/features/tasks/labels.ts
+msgid "The server says this tool can change or delete things."
+msgstr "The server says this tool can change or delete things."
+
+#: src/features/tasks/labels.ts
+msgid "The server says this tool only reads."
+msgstr "The server says this tool only reads."
+
 #: src/features/jobs/labels.ts
 msgid "The site refused yt-dlp, usually because it is out of date."
 msgstr "The site refused yt-dlp, usually because it is out of date."
@@ -5009,9 +5287,21 @@ msgstr "This Qdrant's version is more than one minor release away from the one E
 msgid "This setting can't be changed here."
 msgstr "This setting can't be changed here."
 
+#: src/features/tasks/cards.tsx
+msgid "This task has no web access, so tools you always allow ask again."
+msgstr "This task has no web access, so tools you always allow ask again."
+
+#: src/features/tasks/cards.tsx
+msgid "This task has read the web or an MCP server, so tools you always allow ask again."
+msgstr "This task has read the web or an MCP server, so tools you always allow ask again."
+
 #: src/lib/labels.ts
 msgid "This task is running elsewhere, such as in a terminal. Try again once it stops."
 msgstr "This task is running elsewhere, such as in a terminal. Try again once it stops."
+
+#: src/features/tasks/task-card.tsx
+msgid "This task works without MCP servers: {error}"
+msgstr "This task works without MCP servers: {error}"
 
 #: src/features/jobs/labels.ts
 msgid "This video has no upload date, so it can't be placed among the streams."
@@ -5419,6 +5709,14 @@ msgid "Waiting for your OK to read everything in {folder}"
 msgstr "Waiting for your OK to read everything in {folder}"
 
 #: src/features/tasks/cards.tsx
+msgid "Waiting for your OK to run {tool} on {server}"
+msgstr "Waiting for your OK to run {tool} on {server}"
+
+#: src/features/tasks/cards.tsx
+msgid "Waiting for your OK to run a command in {folder}"
+msgstr "Waiting for your OK to run a command in {folder}"
+
+#: src/features/tasks/cards.tsx
 msgid "Waiting for your OK to spend more than {spent}"
 msgstr "Waiting for your OK to spend more than {spent}"
 
@@ -5429,6 +5727,22 @@ msgstr "Waiting for your OK to work in {folder}"
 #: src/features/tasks/parts.tsx
 msgid "Web Access"
 msgstr "Web Access"
+
+#: src/lib/labels.ts
+msgid "Web Search"
+msgstr "Web Search"
+
+#: src/components/settings-form/labels.ts
+msgid "Web Search Engine"
+msgstr "Web Search Engine"
+
+#: src/features/settings/assistant.tsx
+msgid "Web search is off: {problem}"
+msgstr "Web search is off: {problem}"
+
+#: src/components/settings-form/labels.ts
+msgid "Web Search Provider"
+msgstr "Web Search Provider"
 
 #: src/features/home/memory-panel.tsx
 msgid "What {name} Remembers"
@@ -5534,6 +5848,10 @@ msgstr "Where each video stands by the latest plan, and what the running job is 
 msgid "Whether she answers in text or with a voice message. Auto lets the director choose voice when a line suits it, more often after a voice message of yours. A chat's own reply mode overrides hers, and without a key for her voice she answers in text."
 msgstr "Whether she answers in text or with a voice message. Auto lets the director choose voice when a line suits it, more often after a voice message of yours. A chat's own reply mode overrides hers, and without a key for her voice she answers in text."
 
+#: src/components/settings-form/labels.ts
+msgid "Which index the account searches. Each search costs under a cent."
+msgstr "Which index the account searches. Each search costs under a cent."
+
 #: src/features/studio/voice-section.tsx
 msgid "Which provider and model read her lines."
 msgstr "Which provider and model read her lines."
@@ -5600,6 +5918,10 @@ msgstr "You"
 msgctxt "chat speaker"
 msgid "You"
 msgstr "You"
+
+#: src/features/tasks/cards.tsx
+msgid "You allowed this command for good in this folder, but this task has read the web or an MCP server, so it asks again."
+msgstr "You allowed this command for good in this folder, but this task has read the web or an MCP server, so it asks again."
 
 #: src/features/chats/chat-settings.tsx
 msgid "You can also type /focus, /normal or /verbose in the message box."

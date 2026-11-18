@@ -3,10 +3,16 @@
 // answers its approvals from its card, and its end is reported back to the chat. laplace-task's
 // tasks have no chat and are never touched: that command may be running one.
 import { statSync } from "node:fs";
-import { mkdir, readdir, realpath, stat } from "node:fs/promises";
+import { mkdir, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import {
+  BASH,
+  BashJobs,
+  type BashJobsOptions,
+  bashCommand,
+  bashOffered,
+  bashTimeoutSeconds,
   buildTaskPrompt,
   COMPACTION_INSTRUCTIONS,
   COMPACTION_SYSTEM,
@@ -17,19 +23,35 @@ import {
   GrantRefused,
   grantRefusal,
   loadContextFiles,
+  loadSkills,
+  type McpArgument,
+  type McpFailure,
+  type McpLeftOut,
+  McpSession,
+  type McpToolRef,
+  mcpArgumentList,
+  mcpCallKey,
+  mcpStanding,
   newTaskId,
   openTaskStore,
   PathRefused,
+  readMcpConfig,
+  readMcpSecrets,
   readSnapshot,
+  type SkillCatalog,
+  sliceHead,
   TASK_WEB_MODES,
   type TaskChat,
   type TaskInboxLines,
   type TaskPending,
+  type TaskProfile,
   type TaskSnapshot,
   type TaskStatus,
   type TaskWebAccess,
   type TodoDetails,
   WEB_FETCH,
+  WEB_SEARCH,
+  type WebSearcher,
   webFetchHost,
   writeSnapshot,
 } from "@eidolon/assistant";
@@ -58,9 +80,21 @@ import {
   type TaskStore,
   UsageMeter,
 } from "@eidolon/engine";
-import { accountOf, ProviderConfigError, selectRequired } from "@eidolon/providers";
 import {
+  accountOf,
+  hasKey,
+  openRouterSearcher,
+  ProviderConfigError,
+  selectTask,
+  trySelect,
+  type UsageSink,
+} from "@eidolon/providers";
+import manifest from "../../../package.json" with { type: "json" };
+import {
+  type AllowedCommand,
   type ErrorCode,
+  type McpServerChange,
+  type McpServersResponse,
   STEER_PREFIX,
   type TaskApproveRequest,
   type TaskContinueRequest,
@@ -68,7 +102,10 @@ import {
   type TasksQuery,
 } from "../api.ts";
 import { readLines } from "../jobs/events.ts";
+import { ALLOWED_COMMANDS_FILE, AllowedCommands } from "./commands.ts";
+import { MCP_FOLDER, McpFile, mcpServersView } from "./mcp.ts";
 import { doneOf } from "./milestones.ts";
+import { insideAny, isInside, placeOf } from "./places.ts";
 import { SnapshotFile } from "./snapshot-file.ts";
 
 /** newTaskId's UUIDv7: an id a route may look up. */
@@ -82,6 +119,8 @@ export interface TaskBriefInput {
   /** Absolute, or under ~. */
   readonly folder: string;
   readonly check?: string;
+  /** The kind of task she says it is, whose model it runs on; Assistant Mode's own when absent. */
+  readonly profile?: TaskProfile;
 }
 
 export interface TaskManagerOptions {
@@ -113,6 +152,13 @@ export interface TaskManagerOptions {
    * never for one a resume reads back. A throw is logged.
    */
   readonly progress?: (snapshot: TaskSnapshot) => void;
+  /**
+   * How a run's web_search searches, billing each search through `charge`; undefined when the
+   * search role can't search. Default: the search role's account, as it stands at the run's start.
+   */
+  readonly searcher?: (charge: UsageSink) => WebSearcher | undefined;
+  /** How each task's commands run: tests shorten the yield. Default: BashJobs' own. */
+  readonly bash?: Omit<BashJobsOptions, "onChange">;
 }
 
 type RefusalStatus = 400 | 404 | 409 | 416;
@@ -131,6 +177,9 @@ type RefusalCode = Extract<
   | "unknown-account"
   | "invalid-path"
   | "conflict"
+  | "unknown-command"
+  | "unknown-mcp-server"
+  | "invalid-mcp-config"
 >;
 
 /**
@@ -157,7 +206,17 @@ const STREAM_CHUNK_BYTES = 256 * 1024;
 const STEER_MAX_CHARS = 2000;
 const STEP_HEAD_CHARS = 120;
 /** What names a call's step, in this order, before the JSON of all its arguments. */
-const STEP_KEYS = ["path", "url", "pattern", "glob", "query"] as const;
+const STEP_KEYS = ["path", "url", "pattern", "glob", "query", "command", "name"] as const;
+const COMMANDS_OFF = "The owner turned commands off, so bash can't run anything now.";
+const COMMAND_DENIED = "The owner refused to run this command in this task; don't run it again.";
+const MCP_CROWDED =
+  "This call has too many arguments, or names too long, to show the owner on the task's card. " +
+  "Make it with fewer.";
+/**
+ * The most an MCP call's arguments may take as JSON on its card: an answer sends them back, to a
+ * route that takes 16 KB.
+ */
+const CARD_ARGUMENTS_BYTES = 12 * 1024;
 
 const LIVE: ReadonlySet<TaskStatus> = new Set([
   "running",
@@ -192,14 +251,16 @@ interface Run extends Omit<Equipped, "mind"> {
   /** The server stopping: the manager stops reading, and nothing more is stored. */
   readonly leave: AbortController;
   settled: Promise<void>;
-  /** The site the gate paused for. */
-  asked: string | null;
+  /** What the gate paused to ask: a site, a command, or an MCP call. */
+  asked: Extract<TaskPending, { readonly kind: "fetch" | "command" | "mcp" }> | null;
   /** The first path refused in the latest batch. */
   refused: { readonly path: string; readonly access: "read" | "write" } | null;
   /** How the run ended or paused, once its transcript says so. */
   last: TaskOutcome | null;
   /** The calls of the latest reply: stored before the run, or made in it. */
   calls: readonly MindToolCall[];
+  /** The MCP calls the run started: whatever each returns came from outside. */
+  served: Set<string>;
 }
 
 interface Task {
@@ -211,34 +272,24 @@ interface Task {
   run: Run | null;
   /** Kept while the server runs, unless the model changes: a new one forgets an uncounted request. */
   meter: UsageMeter | null;
+  /** Its commands, across its runs: opened by its first run with bash, or at the server's start. */
+  jobs: BashJobs | null;
+  /**
+   * The commands the owner's Run Once let through, each for the call that asked. In memory, and
+   * only until the worker's next reply or the run's end: a call a steering line skipped must not
+   * leave one for a later call that reuses its id.
+   */
+  once: { readonly call: string; readonly command: string }[];
+  /** Its MCP servers: started by its first run, kept through its pauses, closed when it ends. */
+  mcp: McpSession | null;
+  /**
+   * The MCP calls the owner's Run Once let through, each by its call and key. In memory, and only
+   * until the worker's next reply or the task's end. Unlike `once`, kept through a pause: MCP calls
+   * run together, and a pause on a later call of the same reply gates every one of them again.
+   */
+  mcpOnce: { readonly call: string; readonly key: string }[];
   /** Wakes each events stream following the task. */
   readonly readers: Set<() => void>;
-}
-
-// APFS and NTFS match names in any case.
-const fold =
-  process.platform === "darwin" || process.platform === "win32"
-    ? (path: string) => path.toLowerCase()
-    : (path: string) => path;
-
-function isInside(path: string, root: string): boolean {
-  const rel = relative(fold(root), fold(path));
-  return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
-}
-
-/** Where `path` lies on disk: its realpath, or its deepest existing folder's plus the rest. */
-async function placeOf(path: string): Promise<string> {
-  try {
-    return await realpath(path);
-  } catch {
-    const parent = dirname(path);
-    return parent === path ? path : join(await placeOf(parent), basename(path));
-  }
-}
-
-async function insideAny(place: string, folders: readonly string[]): Promise<boolean> {
-  for (const folder of folders) if (isInside(place, await placeOf(folder))) return true;
-  return false;
 }
 
 function withChanges(snapshot: TaskSnapshot, changes: Changes): TaskSnapshot {
@@ -314,7 +365,7 @@ function settledChanges(run: Run, outcome: TaskOutcome | null, endedAt: number):
   }
   let pending: TaskPending | undefined;
   if (outcome.reason === "approval") {
-    if (run.asked !== null) pending = { kind: "fetch", host: run.asked };
+    if (run.asked !== null) pending = run.asked;
     else if (run.refused !== null) pending = { kind: "path", ...run.refused };
   }
   return { status: "paused", pause: { reason: outcome.reason, detail: outcome.detail }, pending };
@@ -329,8 +380,11 @@ function untilLeft(store: TaskStore, left: AbortSignal): TaskStore {
   };
 }
 
-/** `store`, keeping on `run` the calls of the last reply it holds: a resume runs them. */
-function noting(store: TaskStore, run: Run): TaskStore {
+/**
+ * `store`, keeping on `run` the calls of the last reply it holds: a resume runs them. `replied` is
+ * told of each new reply as it is stored, before the run gates its calls.
+ */
+function noting(store: TaskStore, run: Run, replied: () => void): TaskStore {
   return {
     entries: async () => {
       const entries = await store.entries();
@@ -338,7 +392,39 @@ function noting(store: TaskStore, run: Run): TaskStore {
       if (last?.type === "assistant") run.calls = last.calls;
       return entries;
     },
-    append: (draft) => store.append(draft),
+    append: (draft) => {
+      if (draft.type === "assistant") replied();
+      return store.append(draft);
+    },
+  };
+}
+
+/**
+ * Every argument of an MCP call for its card, each head cut shorter until they fit; null when
+ * their names and sizes alone don't.
+ */
+function cardArguments(args: Readonly<Record<string, unknown>>): McpArgument[] | null {
+  let list = mcpArgumentList(args);
+  let head = list.reduce((most, arg) => Math.max(most, arg.head.length), 0);
+  while (Buffer.byteLength(JSON.stringify(list)) > CARD_ARGUMENTS_BYTES) {
+    if (head === 0) return null;
+    head = Math.floor(head / 2);
+    list = list.map((arg) => ({ ...arg, head: sliceHead(arg.head, head) }));
+  }
+  return list;
+}
+
+/** What the task's card says of its MCP servers; undefined while there is nothing. */
+function mcpNotes(
+  denied: readonly string[],
+  failed: readonly McpFailure[],
+  left: readonly McpLeftOut[],
+): TaskSnapshot["mcp"] {
+  if (denied.length === 0 && failed.length === 0 && left.length === 0) return undefined;
+  return {
+    denied,
+    ...(failed.length === 0 ? {} : { failed }),
+    ...(left.length === 0 ? {} : { left }),
   };
 }
 
@@ -357,6 +443,37 @@ function asks(pending: TaskPending, asked: unknown): boolean {
       );
     case "fetch":
       return asked.host === pending.host;
+    case "command":
+      return asked.call === pending.call && asked.command === pending.command;
+    case "mcp":
+      return asked.call === pending.call && asked.key === pending.key;
+  }
+}
+
+/**
+ * Whether a tool's result brought outside content into the task: a page's answer to web_fetch, an
+ * error page's included, or a web search's results.
+ */
+function readsOutside(name: string, isError: boolean, details: unknown): boolean {
+  if (name === WEB_FETCH) return details !== undefined;
+  return name === WEB_SEARCH && !isError;
+}
+
+/** The search role's searcher, as its settings stand: none until it has an account and its key. */
+function roleSearcher(charge: UsageSink): WebSearcher | undefined {
+  const selection = trySelect("search");
+  return selection !== null && hasKey(selection)
+    ? openRouterSearcher(selection, { tap: charge })
+    : undefined;
+}
+
+/** What a run's skills catalog left out, and why: the owner learns of it only from the log. */
+function logSkills(id: string, { problems, unlisted }: SkillCatalog): void {
+  for (const { path, message, skipped } of problems) {
+    logger.warning(`Task ${id}: ${skipped ? "skipping " : ""}skill ${path}: ${message}`);
+  }
+  if (unlisted > 0) {
+    logger.warning(`Task ${id}: ${unlisted} more skills aren't listed: its catalog is full`);
   }
 }
 
@@ -398,6 +515,12 @@ export class TaskManager {
   readonly #report: (snapshot: TaskSnapshot) => Promise<void>;
   readonly #waiting: ((snapshot: TaskSnapshot) => void) | undefined;
   readonly #progress: ((snapshot: TaskSnapshot) => void) | undefined;
+  readonly #searcher: (charge: UsageSink) => WebSearcher | undefined;
+  readonly #bash: Omit<BashJobsOptions, "onChange">;
+  /** The commands the owner allowed for good. */
+  readonly #allowed: AllowedCommands;
+  /** mcp.json, where Always Allow This Tool goes. */
+  readonly #mcpFile: McpFile;
   readonly #tasks = new Map<string, Task>();
   readonly #streams = new Set<() => void>();
   #loaded: Promise<void> | null = null;
@@ -416,6 +539,10 @@ export class TaskManager {
     this.#report = options.report;
     this.#waiting = options.waiting;
     this.#progress = options.progress;
+    this.#searcher = options.searcher ?? roleSearcher;
+    this.#bash = options.bash ?? {};
+    this.#allowed = new AllowedCommands(join(this.#root, ALLOWED_COMMANDS_FILE), this.#now);
+    this.#mcpFile = new McpFile(options.dataHome);
   }
 
   /**
@@ -442,7 +569,10 @@ export class TaskManager {
     })();
   }
 
-  /** The server's stop: every run is left, interrupted, for the next start to resume. */
+  /**
+   * The server's stop: every run is left, interrupted, for the next start to resume, every command
+   * killed, which that run then hears of, and every MCP server closed.
+   */
   async stop(): Promise<void> {
     this.#stopped = true;
     for (const close of [...this.#streams]) close();
@@ -452,12 +582,66 @@ export class TaskManager {
     await Promise.all(tasks.map((task) => task.queue));
     // A run launched meanwhile was left as it launched.
     await Promise.all(tasks.map((task) => task.run?.settled));
+    // After the runs are left: a run still reading would take the ends as told, storing nothing.
+    await Promise.all(tasks.map((task) => task.jobs?.killAll("shutdown")));
+    // After too, so that servers a run was still starting are closed with the rest.
+    await Promise.all(tasks.map((task) => this.#closeMcp(task)));
     await Promise.all(tasks.map((task) => task.file.flush()));
   }
 
   /** Assistant Mode is on, and a task's mind can be made. */
   ready(): boolean {
     return this.#settings().enabled && this.#problem() === null;
+  }
+
+  /** Tasks may ask to run commands: assistant.bash is on, on macOS or Linux. */
+  offersCommands(): boolean {
+    return this.#settings().bash && bashOffered();
+  }
+
+  /** The commands the owner allowed for good, newest first. */
+  allowedCommands(): Promise<AllowedCommand[]> {
+    return this.#allowed.list();
+  }
+
+  /** Takes back the command allowed for good as `id`, answering with the rest. */
+  async disallowCommand(id: string): Promise<AllowedCommand[]> {
+    if (!(await this.#allowed.remove(id))) {
+      throw new TaskRefused(404, "unknown-command", "No allowed command has that id");
+    }
+    return this.#allowed.list();
+  }
+
+  /** The MCP servers mcp.json gives tasks, as the file stands now. */
+  async mcpServers(): Promise<McpServersResponse> {
+    return mcpServersView(
+      await readMcpConfig(this.#dataHome),
+      await readMcpSecrets(this.#dataHome),
+    );
+  }
+
+  /**
+   * The owner's switch for MCP server `name`, or a tool's Always taken back, answering with the
+   * servers. A task's next call to a server turned off is refused, and one Always no longer
+   * covers asks.
+   */
+  async changeMcpServer(name: string, change: McpServerChange): Promise<McpServersResponse> {
+    const { enabled, revoke } = change;
+    const result = await this.#mcpFile.change(name, {
+      ...(enabled === undefined ? {} : { enabled }),
+      ...(revoke === undefined ? {} : { revoke }),
+    });
+    if (result === "unknown-server") {
+      throw new TaskRefused(404, "unknown-mcp-server", "mcp.json has no server by that name");
+    }
+    if (result === "invalid-config") {
+      throw new TaskRefused(
+        409,
+        "invalid-mcp-config",
+        "mcp.json doesn't parse, so it isn't changed: fix it, then try again",
+      );
+    }
+    return this.mcpServers();
   }
 
   /** The app's tasks whose status is `running`. */
@@ -648,6 +832,8 @@ export class TaskManager {
         if (snapshot.id !== name) throw new Error(`its task.json is task ${snapshot.id}'s`);
         const task = this.#track(dir, snapshot);
         if (snapshot.status === "running") await this.#crashed(task);
+        // Unless another holder still runs it.
+        if (task.snapshot.status !== "running") await this.#reopenCommands(task);
       } catch (error) {
         logger.warning(`Skipping task ${name}: ${errorText(error)}`);
       }
@@ -662,10 +848,45 @@ export class TaskManager {
       queue: Promise.resolve(),
       run: null,
       meter: null,
+      jobs: null,
+      once: [],
+      mcp: null,
+      mcpOnce: [],
       readers: new Set(),
     };
     this.#tasks.set(snapshot.id, task);
     return task;
+  }
+
+  /**
+   * A task's commands as the server starts, when it ran any: none still runs for this server, so a
+   * crash's are ended `lost`, which its next run hears of, and its card stops listing them.
+   */
+  async #reopenCommands(task: Task): Promise<void> {
+    const ran = await stat(join(task.dir, "bash")).then(
+      () => true,
+      () => false,
+    );
+    if (ran) {
+      try {
+        task.jobs = await this.#openCommands(task);
+      } catch (error) {
+        logger.warning(`Task ${task.snapshot.id}'s commands weren't read: ${errorText(error)}`);
+      }
+    }
+    if (task.snapshot.background !== undefined) {
+      await this.#change(task, { background: undefined }, true);
+    }
+  }
+
+  /** The task's registry of commands, which keeps task.json's list of those in the background. */
+  #openCommands(task: Task): Promise<BashJobs> {
+    return BashJobs.open(task.dir, {
+      ...this.#bash,
+      onChange: (background) => {
+        void this.#change(task, { background: background.length === 0 ? undefined : background });
+      },
+    });
   }
 
   /** A task task.json calls running, at load: a crash left it so, unless laplace-task runs it. */
@@ -817,9 +1038,13 @@ export class TaskManager {
       }
     }
     const runs = await insideAny(place, settings.folders);
+    const { profile } = input;
     let model: TaskModel;
     try {
-      const selection = selectRequired("assistant");
+      const { selection, fallback } = selectTask(profile);
+      if (fallback !== null) {
+        logger.warning(`A ${profile} task runs on the assistant's model: ${fallback}`);
+      }
       model = { account: selection.account.id, model: selection.model };
     } catch (error) {
       if (error instanceof ProviderConfigError) {
@@ -842,6 +1067,7 @@ export class TaskManager {
       spentUsd: 0,
       files: { read: [], written: [] },
       web: ASK_EACH_SITE,
+      ...(profile === undefined ? {} : { profile }),
       ...(runs ? {} : { pending: { kind: "start" } }),
     };
     const equipped = runs ? this.#equip(id, model, new UsageMeter(model)) : null;
@@ -887,15 +1113,69 @@ export class TaskManager {
     const { id, model } = task.snapshot;
     const equipped = this.#equip(id, model, this.#meter(task, model));
     try {
-      const changes =
-        pending.kind === "path"
-          ? await this.#answerPath(task, pending, answer)
-          : this.#answerSite(task, pending.host, answer);
+      let changes: Changes;
+      if (pending.kind === "path") changes = await this.#answerPath(task, pending, answer);
+      else if (pending.kind === "fetch") changes = this.#answerSite(task, pending.host, answer);
+      else if (pending.kind === "command")
+        changes = await this.#answerCommand(task, pending, answer);
+      else changes = await this.#answerMcp(task, pending, answer);
       return await this.#run(task, equipped, changes);
     } catch (error) {
       equipped.release();
       throw error;
     }
+  }
+
+  /**
+   * A command's answer, which reaches the worker as its call's result once the run gates the call
+   * again: what the command printed, or the refusal.
+   */
+  async #answerCommand(
+    task: Task,
+    { call, command }: Extract<TaskPending, { readonly kind: "command" }>,
+    answer: Answer,
+  ): Promise<Changes> {
+    if (answer === "deny") {
+      const denied = task.snapshot.bash?.denied ?? [];
+      return { bash: { denied: denied.includes(command) ? denied : [...denied, command] } };
+    }
+    if (answer === "always") {
+      const folder = await placeOf(task.snapshot.brief.folder);
+      await this.#allowed.add(folder, command, task.snapshot.id);
+    }
+    // Always too: a task that has read outside content asks even for a command allowed for good.
+    task.once.push({ call, command });
+    return {};
+  }
+
+  /**
+   * An MCP call's answer, which reaches the worker as its call's result once the run gates the
+   * call again: what the server answered, or the refusal. Always joins the tool to its server's
+   * alwaysAllow in mcp.json.
+   */
+  async #answerMcp(
+    task: Task,
+    { server, tool, call, key }: Extract<TaskPending, { readonly kind: "mcp" }>,
+    answer: Answer,
+  ): Promise<Changes> {
+    if (answer === "deny") {
+      const { mcp } = task.snapshot;
+      const denied = mcp?.denied ?? [];
+      return { mcp: { ...mcp, denied: denied.includes(key) ? denied : [...denied, key] } };
+    }
+    if (
+      answer === "always" &&
+      (await this.#mcpFile.change(server, { allow: tool })) === "invalid-config"
+    ) {
+      throw new TaskRefused(
+        409,
+        "invalid-mcp-config",
+        "mcp.json doesn't parse, so Always can't be saved in it: fix it, or answer Run Once",
+      );
+    }
+    // Always too: under No Web, or in a task that has read outside content, the grant doesn't apply.
+    task.mcpOnce.push({ call, key });
+    return {};
   }
 
   /**
@@ -973,6 +1253,9 @@ export class TaskManager {
   /** Ends a task no run of this server holds as cancelled: Stop, or a Deny at its start. */
   async #end(task: Task, changes: Changes): Promise<TaskSnapshot> {
     const release = this.#lock(task.snapshot.id);
+    // A paused task's commands in the background, and its MCP servers, end with it.
+    void task.jobs?.killAll("stopped");
+    void this.#closeMcp(task);
     try {
       const outcome: TaskOutcome = { status: "cancelled" };
       // Stop works on a damaged transcript too: task.json is what says the task is over.
@@ -1027,6 +1310,7 @@ export class TaskManager {
       refused: null,
       last: null,
       calls: [],
+      served: new Set(),
     };
     task.meter = meter;
     task.run = run;
@@ -1054,9 +1338,26 @@ export class TaskManager {
     const { id, brief, grants, spendPauseUsd } = task.snapshot;
     const policy = this.#policy(brief.folder, this.#grants(grants));
     await mkdir(await policy.resolve(brief.folder, "write"), { recursive: true });
+    const web = webOf(task.snapshot).mode !== "off";
     // Asked at each call and redirect, so an approval reaches the tools without making them again.
     const site = { allows: (host: string) => allows(webOf(task.snapshot), host) };
-    const tools = createTaskTools(policy, webOf(task.snapshot).mode === "off" ? {} : { web: site });
+    const search = web ? this.#searcher(run.meter.charge) : undefined;
+    const commands = this.offersCommands();
+    if (commands) task.jobs ??= await this.#openCommands(task);
+    // Read at each run, so a resumed task finds a skill added since.
+    const skills = await loadSkills({ dataHome: this.#dataHome, folder: brief.folder });
+    logSkills(id, skills);
+    const mcp = await this.#mcpOf(task, run, policy);
+    const tools = [
+      ...createTaskTools(policy, {
+        ...(web ? { web: site } : {}),
+        ...(search === undefined ? {} : { search }),
+        ...(commands && task.jobs !== null ? { bash: task.jobs } : {}),
+        skills: skills.skills,
+      }),
+      // Last, so the built-ins keep their place in the provider's prompt cache.
+      ...(mcp?.tools ?? []),
+    ];
     const contextFiles = await loadContextFiles(brief.folder, this.#home, policy);
     const left = run.leave.signal;
     return {
@@ -1070,32 +1371,162 @@ export class TaskManager {
         brief,
         tools,
         contextFiles,
+        skills: skills.skills,
         date: today(new Date(this.#now())),
         folder: brief.folder,
       }),
       tools,
-      store: untilLeft(noting(openTaskStore(task.dir), run), left),
+      // A Run Once is for the call the run resumes with: some providers reuse call ids.
+      store: untilLeft(
+        noting(openTaskStore(task.dir), run, () => {
+          task.once = [];
+          task.mcpOnce = [];
+        }),
+        left,
+      ),
       inbox: this.#inbox(task, run),
       meter: run.meter,
       gate: async (call) => this.#gate(task, run, call),
       limits: { contextTokens: this.#settings().contextTokens, spendPauseUsd },
       compaction: { system: COMPACTION_SYSTEM, instructions: COMPACTION_INSTRUCTIONS },
       pauseOnRefused: true,
+      // A run that was left takes no ends: they wait in runs.json for the run that resumes it.
+      ...(task.jobs === null ? {} : { background: task.jobs.forRun(left) }),
       signal: run.cancel.signal,
     };
   }
 
-  /** web_fetch asks the owner for each site the task may not reach yet, before the call starts. */
-  #gate(task: Task, run: Run, call: MindToolCall): TaskGateDecision {
-    if (call.name !== WEB_FETCH) return null;
+  /**
+   * The task's MCP servers, started by its first run; null when the run was stopped or left as
+   * they started, or they couldn't be, and it goes on without them.
+   */
+  async #mcpOf(task: Task, run: Run, guard: FolderPolicy): Promise<McpSession | null> {
+    if (task.mcp !== null) return task.mcp;
+    const { id } = task.snapshot;
+    // A server stuck starting, or an npx download, must not hold up a Stop or the server's stop.
+    const signal = AbortSignal.any([run.cancel.signal, run.leave.signal]);
+    let failed: readonly McpFailure[];
+    try {
+      task.mcp = await McpSession.open({
+        config: await readMcpConfig(this.#dataHome),
+        secrets: await readMcpSecrets(this.#dataHome),
+        cwd: join(this.#dataHome, MCP_FOLDER),
+        guard,
+        version: manifest.version,
+        signal,
+      });
+      failed = task.mcp.failed;
+    } catch (error) {
+      // The run then ends as the Stop or the server's stop says.
+      if (signal.aborted) return null;
+      failed = [{ error: errorText(error) }];
+    }
+    for (const { server, error } of failed) {
+      logger.warning(`Task ${id} works without ${server ?? "its MCP servers"}: ${error}`);
+    }
+    const notes = mcpNotes(task.snapshot.mcp?.denied ?? [], failed, task.mcp?.left ?? []);
+    await this.#change(task, { mcp: notes });
+    return task.mcp;
+  }
+
+  /** Closes the task's MCP servers, process groups and all; resolves once they are gone. */
+  #closeMcp(task: Task): Promise<void> {
+    const session = task.mcp;
+    task.mcp = null;
+    task.mcpOnce = [];
+    return session?.close() ?? Promise.resolve();
+  }
+
+  /**
+   * Asks the owner, before a call starts, for each site, command and MCP call the task may not
+   * make yet.
+   */
+  async #gate(task: Task, run: Run, call: MindToolCall): Promise<TaskGateDecision> {
+    const mcp = task.mcp?.toolOf(call.name);
+    if (mcp !== undefined) return this.#gateMcp(task, run, call, mcp);
+    if (call.name === WEB_FETCH) return this.#gateSite(task, run, call);
+    if (call.name === BASH) return this.#gateCommand(task, run, call);
+    return null;
+  }
+
+  /**
+   * Each call to an MCP server's tool waits on the task's card, unless the owner always allows that
+   * tool: not under No Web, nor in a task that has read outside content, which could have talked
+   * the worker into the call. mcp.json is read at each call, so a server turned off since the task
+   * started gets no more.
+   */
+  async #gateMcp(
+    task: Task,
+    run: Run,
+    call: MindToolCall,
+    { server, tool, hint }: McpToolRef,
+  ): Promise<TaskGateDecision> {
+    const standing = mcpStanding(await readMcpConfig(this.#dataHome), server, tool);
+    if (standing === "off") {
+      return {
+        block: `The owner turned off the MCP server ${server}; don't call its tools again.`,
+      };
+    }
+    const key = mcpCallKey(call.name, call.arguments);
+    const { snapshot } = task;
+    if (snapshot.mcp?.denied.includes(key)) {
+      return {
+        block: `The owner refused this call to ${tool} on the MCP server ${server}; don't make it again with the same arguments.`,
+      };
+    }
+    if (task.mcpOnce.some((each) => each.call === call.id && each.key === key)) return null;
+    if (standing === "always" && webOf(snapshot).mode !== "off" && snapshot.external !== true) {
+      return null;
+    }
+    const args = cardArguments(call.arguments);
+    if (args === null) return { block: MCP_CROWDED };
+    run.asked = {
+      kind: "mcp",
+      server,
+      tool,
+      call: call.id,
+      key,
+      args,
+      ...(hint === undefined ? {} : { hint }),
+    };
+    return { pause: `run ${tool} on the MCP server ${server}` };
+  }
+
+  #gateSite(task: Task, run: Run, call: MindToolCall): TaskGateDecision {
     // Null: the tool refuses the call whatever the owner says.
     const host = webFetchHost(call.arguments);
     if (host === null) return null;
     const web = webOf(task.snapshot);
     if (web.denied.includes(host)) return { block: `The owner refused fetching from ${host}.` };
     if (allows(web, host)) return null;
-    run.asked = host;
+    run.asked = { kind: "fetch", host };
     return { pause: `fetch from ${host}` };
+  }
+
+  /**
+   * A command runs once the owner allows it on the task's card: this call alone, or for good in the
+   * task's folder. A command allowed for good asks again in a task that has read outside content,
+   * which could have talked the worker into changing what that command runs.
+   */
+  async #gateCommand(task: Task, run: Run, call: MindToolCall): Promise<TaskGateDecision> {
+    // Null: the tool refuses the call whatever the owner says.
+    const command = bashCommand(call.arguments);
+    if (command === null) return null;
+    // A run made before the owner turned commands off still has bash.
+    if (!this.#settings().bash) return { block: COMMANDS_OFF };
+    const { snapshot } = task;
+    if (snapshot.bash?.denied.includes(command)) return { block: COMMAND_DENIED };
+    if (task.once.some((each) => each.call === call.id && each.command === command)) return null;
+    const granted = await this.#allowed.allows(await placeOf(snapshot.brief.folder), command);
+    if (granted && snapshot.external !== true) return null;
+    run.asked = {
+      kind: "command",
+      call: call.id,
+      command,
+      timeout: bashTimeoutSeconds(call.arguments),
+      ...(granted ? { granted: true } : {}),
+    };
+    return { pause: "run a command" };
   }
 
   /**
@@ -1161,6 +1592,7 @@ export class TaskManager {
     if (entry.type === "tool-start") {
       const made = run.calls.find((each) => each.id === entry.callId);
       changes.step = { tool: entry.name, head: made === undefined ? "" : stepHead(made.arguments) };
+      if (task.mcp?.toolOf(entry.name) !== undefined) run.served.add(entry.callId);
     }
     if (entry.type === "tool-result") {
       const { files } = task.snapshot;
@@ -1171,6 +1603,10 @@ export class TaskManager {
       if (entry.refused !== undefined) run.refused ??= entry.refused;
       if (entry.name === "todo" && !entry.isError && entry.details !== undefined) {
         changes.todo = (entry.details as TodoDetails).items;
+      }
+      // An MCP server's every answer, its errors included: what it says is its own.
+      if (readsOutside(entry.name, entry.isError, entry.details) || run.served.has(entry.callId)) {
+        changes.external = true;
       }
     }
     if (entry.type === "pause") {
@@ -1190,6 +1626,13 @@ export class TaskManager {
     if (pending?.kind === "path") {
       const folder = this.#folderFor(pending.path);
       if (folder !== undefined) changes.pending = { ...pending, folder };
+    }
+    task.once = [];
+    // Not awaited: the ends are recorded after the task's own, and a paused task keeps them
+    // running, as it keeps its MCP servers.
+    if (outcome !== null && outcome.status !== "paused") {
+      void task.jobs?.killAll("stopped");
+      void this.#closeMcp(task);
     }
     // Released first: an answer the new status lets in may start the next run at once. Nothing may
     // await from here to the write: a Stop that ended the task in between would be undone by it.

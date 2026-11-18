@@ -4,6 +4,7 @@
 export type { ContextProvider, LlmTool, ToolEffects } from "@eidolon/core";
 export { ASYNC_TOOL_INSTRUCTIONS, callInstruction, isAsyncTool } from "./async_tool.ts";
 export { callLine, callPhotos, callSeed } from "./call.ts";
+export { canonical } from "./canonical.ts";
 export {
   type CallChatOutput,
   type CallChatRequest,
@@ -16,8 +17,10 @@ export {
 export { defaultEngineDeps } from "./deps.ts";
 export { groupMemory } from "./group.ts";
 export { createMind } from "./mind/index.ts";
+export { estimateTokens } from "./task/context.ts";
 export {
   runTask,
+  type TaskBackground,
   type TaskBrief,
   type TaskEntry,
   type TaskEntryDraft,

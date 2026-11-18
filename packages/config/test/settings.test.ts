@@ -281,6 +281,16 @@ describe("credentials", () => {
     expect(warnings).toEqual([]);
   });
 
+  test("mcpSecrets is no unknown credential, and none of its names becomes a setting", () => {
+    const file = '{"mcpSecrets": {"GITHUB_TOKEN": "ghp-file", "OPENROUTER_API_KEY": "sk-mcp"}}';
+    chmodSync(write("credentials.json", file), 0o600);
+    const loaded = loadSettings();
+    expect(loaded.values.get("mcpSecrets")).toBeUndefined();
+    expect(loaded.values.get("GITHUB_TOKEN")).toBeUndefined();
+    expect(loaded.values.get("OPENROUTER_API_KEY")).toBeUndefined();
+    expect(warnings).toEqual([]);
+  });
+
   test("a non-credential is refused, and a file others can read is flagged", () => {
     const path = write("credentials.json", '{"FISH_MODEL": "s2", "FISH_API_KEY": "k"}');
     chmodSync(path, 0o644);
@@ -530,10 +540,11 @@ describe("chat settings", () => {
 });
 
 describe("assistant settings", () => {
-  test("unset: on, no folders of its own, a $1 spend pause and a 128,000-token context", () => {
+  test("unset: on, no folders of its own, commands on, a $1 spend pause and a 128,000-token context", () => {
     expect(assistantSettings()).toEqual({
       enabled: true,
       folders: [],
+      bash: true,
       spendPauseUsd: 1,
       contextTokens: 128_000,
     });
@@ -546,6 +557,7 @@ describe("assistant settings", () => {
         "assistant:",
         "  enabled: false",
         "  folders: [~/Projects, notes]",
+        "  bash: false",
         "  spendPauseUsd: 2.5",
         "  contextTokens: 64000",
         "",
@@ -555,14 +567,17 @@ describe("assistant settings", () => {
     expect(assistantSettings()).toEqual({
       enabled: false,
       folders: [join(homedir(), "Projects"), join(dataHome(), "notes")],
+      bash: false,
       spendPauseUsd: 2.5,
       contextTokens: 64_000,
     });
     setEnv("ASSISTANT_ENABLED", "on");
     setEnv("ASSISTANT_FOLDERS", " ~/a, /b ,,");
+    setEnv("ASSISTANT_BASH", "yes");
     expect(assistantSettings()).toMatchObject({
       enabled: true,
       folders: [join(homedir(), "a"), "/b"],
+      bash: true,
     });
     expect(warnings).toEqual([]);
   });
@@ -605,4 +620,16 @@ test("docs/personas.md documents every setting, under its own scope", async () =
     expect(at, row).toBeGreaterThan(-1);
     expect(setting.scope === "persona" ? at > persona && at < app : at > app, row).toBe(true);
   }
+});
+
+test(".env.example declares every setting and key exactly once", async () => {
+  const example = await Bun.file(join(PROJECT_ROOT, ".env.example")).text();
+  const declared = example
+    .split("\n")
+    .flatMap((line) => /^([A-Z][A-Z\d_]*)=/.exec(line)?.[1] ?? []);
+  // dotenv keeps a variable's last line, so a blank one further down would undo the first.
+  const notOnce = [...SETTINGS.map((setting) => setting.env), ...CREDENTIALS].filter(
+    (name) => declared.filter((each) => each === name).length !== 1,
+  );
+  expect(notOnce).toEqual([]);
 });

@@ -3,6 +3,7 @@ import type { ChatDisplay } from "@eidolon/chat";
 import type { TaskPending, TaskSnapshot, TaskStatus } from "@/lib/api";
 import { STEER_PREFIX } from "../../../../bot/src/local/api.ts";
 import {
+  alwaysSuspended,
   barChoice,
   ended,
   endedSince,
@@ -37,6 +38,15 @@ const STATUSES: readonly TaskStatus[] = [
 ];
 
 const path: TaskPending = { kind: "path", path: "/x/notes.txt", access: "read" };
+const command: TaskPending = { kind: "command", call: "c7", command: "npm test", timeout: 120 };
+const mcp: TaskPending = {
+  kind: "mcp",
+  server: "github",
+  tool: "create_issue",
+  call: "c8",
+  key: "0123456789abcdef0123456789abcdef",
+  args: [{ name: "title", head: "Bug", chars: 3, lines: 1 }],
+};
 
 /** A snapshot with what a test names, the rest as a fresh task's. */
 function task(id: string, status: TaskStatus, more: Partial<TaskSnapshot> = {}): TaskSnapshot {
@@ -114,6 +124,26 @@ describe("waiting on the owner", () => {
     expect(at({}, "interrupted")).toEqual({ kind: "interrupted" });
     expect(at({ pending: { kind: "start" } }, "running")).toBeNull();
     expect(at({}, "succeeded")).toBeNull();
+  });
+
+  test("a command waits on its folder's OK, and a tool call on its server's tool", () => {
+    const at = (pending: TaskPending) => waitingFor(task("1", "paused", { pending }));
+    expect(needsAnswer({ status: "paused", pending: command })).toBe(true);
+    expect(needsAnswer({ status: "paused", pending: mcp })).toBe(true);
+    // The command itself shows in a box of its own, never in a line that could cut it off.
+    expect(at(command)).toEqual({ kind: "command", folder: "/Users/me/todo" });
+    expect(at(mcp)).toEqual({ kind: "mcp", server: "github", tool: "create_issue" });
+    expect(waitingFor(task("1", "running", { pending: command }))).toBeNull();
+  });
+
+  test("an MCP tool always allowed asks anyway under No Web, or once the task read outside content", () => {
+    const off = { mode: "off", hosts: [], denied: [] } as const;
+    const any = { mode: "any", hosts: [], denied: [] } as const;
+    expect(alwaysSuspended({})).toBeNull();
+    expect(alwaysSuspended({ web: any })).toBeNull();
+    expect(alwaysSuspended({ external: true })).toBe("read");
+    expect(alwaysSuspended({ web: off })).toBe("no-web");
+    expect(alwaysSuspended({ web: off, external: true })).toBe("no-web");
   });
 });
 

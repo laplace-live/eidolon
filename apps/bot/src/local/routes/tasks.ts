@@ -1,5 +1,6 @@
 // /api/local/tasks: the app's tasks, which she starts in a chat with start_task, and the answers
-// the owner gives from each one's card. No route starts, steers or deletes a task.
+// the owner gives from each one's card. No route starts, steers or deletes a task. Beside them,
+// /api/local/assistant/commands: the commands those answers allowed for good.
 import { resolve } from "node:path";
 import { isChatId } from "@eidolon/chat";
 import { dataHome, expandUser, isPlainObject, pyStrip } from "@eidolon/config";
@@ -131,6 +132,21 @@ export function tasksRoutes(tasks: TaskManager): LocalRouteSpec[] {
       handler(_request, { params }) {
         const id = params.id as string;
         return idRefusal(id) ?? answer(() => tasks.cancel(id));
+      },
+    },
+    {
+      route: "GET /api/local/assistant/commands",
+      handler: () => answer(async () => ({ commands: await tasks.allowedCommands() })),
+    },
+    {
+      route: "DELETE /api/local/assistant/commands/:id",
+      handler(_request, { params }) {
+        const id = params.id as string;
+        // Its id is a UUIDv7, as a task's is.
+        if (!TASK_ID.test(id)) {
+          return localError(400, "bad-request", "That is not an allowed command's id");
+        }
+        return answer(async () => ({ commands: await tasks.disallowCommand(id) }));
       },
     },
   ];

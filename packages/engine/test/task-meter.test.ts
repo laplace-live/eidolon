@@ -152,6 +152,42 @@ describe("UsageMeter", () => {
     expect(counted.spentUsd()).toBeCloseTo(0.03, 10);
     expect(warnings()).toEqual([]);
   });
+
+  /** A web search's record, as its searcher hands it to the meter's charge. */
+  const search = (costUsd: number | null): UsageRecord => ({
+    ...record(costUsd, { inputTokens: 1668, outputTokens: 186, searches: 1 }),
+    role: "search",
+    category: "search",
+    model: "exa",
+  });
+
+  test("a charge adds to the spend and leaves the context's size alone", () => {
+    const counted = meter(0.5);
+    counted.tap(record(0.25, { inputTokens: 40_000 }));
+    counted.charge(search(0.0073));
+    expect(counted.spentUsd()).toBeCloseTo(0.7573, 10);
+    expect(counted.lastInputTokens()).toBe(40_000);
+    expect(counted.unpriced()).toBeNull();
+  });
+
+  test("a charge with no cost makes the task's spend uncountable, naming what it couldn't price", () => {
+    const counted = meter();
+    counted.charge(search(null));
+    expect(counted.unpriced()).toBe("No price is known for exa at openrouter");
+    expect(counted.spentUsd()).toBe(0);
+  });
+
+  test("a charge between requests doesn't stand for a request that reported no usage", () => {
+    const counted = meter();
+    counted.tap(record(0.01, { inputTokens: 900 }));
+    counted.requestEnded();
+    // A search runs among the reply's calls, then the next request reports nothing.
+    counted.charge(search(0.0073));
+    counted.requestEnded();
+    expect(counted.unpriced()).toBe(UNREPORTED);
+    expect(counted.lastInputTokens()).toBeNull();
+    expect(counted.spentUsd()).toBeCloseTo(0.0173, 10);
+  });
 });
 
 describe("runTask's unpriced pause", () => {

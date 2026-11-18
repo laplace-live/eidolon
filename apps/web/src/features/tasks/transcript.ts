@@ -19,8 +19,12 @@ export interface ToolRow {
   readonly key: string;
   readonly callId: string;
   readonly name: string;
+  /** What the row calls the tool: an MCP server's tool as `server · tool`, else its name. */
+  readonly label: string;
   /** Its arguments, cut to the part that names what it works on. */
   readonly head: string;
+  /** Its arguments whole, as the worker sent them. */
+  readonly arguments: Readonly<Record<string, unknown>>;
   /** The text a call sent whose arguments couldn't be read, which never ran. */
   readonly unparsed: string | null;
   /** A `tool-start` came: it ran, or runs. */
@@ -40,7 +44,8 @@ export type TranscriptRow =
     }
   | ToolRow
   | {
-      readonly kind: "steer" | "follow-up";
+      /** A notice is the runtime's, such as a command in the background ending. */
+      readonly kind: "steer" | "follow-up" | "notice";
       readonly key: string;
       readonly at: number;
       readonly text: string;
@@ -92,10 +97,31 @@ function clip(text: string): string {
   return text.length <= HEAD_CHARS ? text : `${text.slice(0, HEAD_CHARS - 1)}…`;
 }
 
+type Args = Readonly<Record<string, unknown>>;
+
+const texts = (...values: readonly unknown[]): string[] =>
+  values.flatMap((value) =>
+    typeof value === "string" && value.trim() !== "" ? [oneLine(value)] : [],
+  );
+
+/** A command by the id its bash call gave it, as the worker refers to it. */
+const commandRef = (args: Args): string | null =>
+  typeof args.id === "number" ? `#${args.id}` : null;
+
+/** Heads for the tools whose arguments the general rule below reads poorly. */
+const HEADS: Readonly<Record<string, (args: Args) => string | null>> = {
+  bash_output: commandRef,
+  bash_kill: commandRef,
+  // The skill, then the file of its folder it reads.
+  skill: (args) => texts(args.name, args.path).join(" · ") || null,
+};
+
 /** What a call works on, in one short line: "src/a.ts", "TODO · src". */
 export function argumentHead(call: TaskToolCall): string {
   if (call.unparsed !== undefined) return clip(oneLine(call.unparsed));
   const args = call.arguments;
+  const own = HEADS[call.name]?.(args);
+  if (own) return clip(own);
   const named = HEAD_KEYS.flatMap((key) => {
     const value = args[key];
     return typeof value === "string" && value.trim() !== "" ? [oneLine(value)] : [];
@@ -126,6 +152,30 @@ function diffOf(details: unknown): string | null {
   if (typeof details !== "object" || details === null) return null;
   const { diff } = details as { readonly diff?: unknown };
   return typeof diff === "string" ? diff : null;
+}
+
+/** An MCP tool's name: `mcp__<server>__<tool>`, each part as the session made it safe. */
+const MCP_NAME = /^mcp__(.+?)__(.+)$/;
+
+/**
+ * What a row calls tool `name`: an MCP server's tool as `server · tool`, by the names its result's
+ * details give once it has one, else by the parts of its own name; any other tool by its name.
+ */
+export function toolLabel(name: string, details?: unknown): string {
+  const match = MCP_NAME.exec(name);
+  if (match === null) return name;
+  if (typeof details === "object" && details !== null) {
+    const { server, tool } = details as { readonly server?: unknown; readonly tool?: unknown };
+    if (typeof server === "string" && typeof tool === "string") return `${server} · ${tool}`;
+  }
+  return `${match[1]} · ${match[2]}`;
+}
+
+/** A bash call's command id, which its result's details give: the id bash_output reads it by. */
+function commandIdOf(name: string, details: unknown): number | null {
+  if (name !== "bash" || typeof details !== "object" || details === null) return null;
+  const { id } = details as { readonly id?: unknown };
+  return typeof id === "number" ? id : null;
 }
 
 /** `view` with `entries` applied, in order; `view` itself is left as it was. */
@@ -170,7 +220,9 @@ export function reduceTranscript(
             key: `${key}:${index}`,
             callId: call.id,
             name: call.name,
+            label: toolLabel(call.name),
             head: argumentHead(call),
+            arguments: call.arguments,
             unparsed: call.unparsed ?? null,
             started: false,
             result: null,
@@ -187,25 +239,32 @@ export function reduceTranscript(
           diff: diffOf(entry.details),
           refused: entry.refused ?? null,
         };
-        if (toolAt(entry.callId) === null) {
+        const label = toolLabel(entry.name, entry.details);
+        const command = commandIdOf(entry.name, entry.details);
+        const row = toolAt(entry.callId);
+        if (row === null) {
           calls.set(entry.callId, rows.length);
           rows.push({
             kind: "tool",
             key,
             callId: entry.callId,
             name: entry.name,
-            head: "",
+            label,
+            head: command === null ? "" : `#${command}`,
+            arguments: {},
             unparsed: null,
             started: true,
             result,
           });
         } else {
-          update(entry.callId, { result });
+          const head = command === null ? row.head : clip(`#${command} · ${row.head}`);
+          update(entry.callId, { result, label, head });
         }
         break;
       }
       case "steer":
       case "follow-up":
+      case "notice":
         rows.push({ kind: entry.type, key, at: entry.at, text: entry.text });
         break;
       case "compaction":
@@ -229,6 +288,13 @@ export function reduceTranscript(
     }
   }
   return { rows, calls };
+}
+
+/** The latest call with id `callId`, as its reply sent it; null until that reply is read. */
+export function callOf(view: TranscriptView, callId: string): ToolRow | null {
+  const at = view.calls.get(callId);
+  const row = at === undefined ? undefined : view.rows[at];
+  return row?.kind === "tool" ? row : null;
 }
 
 /** The newest tool call: what the card says the task is on. */

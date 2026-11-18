@@ -22,6 +22,7 @@ import { accountsRoutes } from "./routes/accounts.ts";
 import { chatRunner, chatsRoutes } from "./routes/chats.ts";
 import { credentialsRoutes } from "./routes/credentials.ts";
 import { jobsRoutes } from "./routes/jobs.ts";
+import { mcpRoutes } from "./routes/mcp.ts";
 import { memoriesRoutes } from "./routes/memories.ts";
 import { personasRoutes } from "./routes/personas.ts";
 import { settingsRoutes } from "./routes/settings.ts";
@@ -53,6 +54,7 @@ export function localRouteModules(
     ...usageRoutes(),
     ...chatsRoutes(chats),
     ...tasksRoutes(tasks),
+    ...mcpRoutes(tasks),
   ];
 }
 

@@ -78,6 +78,10 @@ export const LOCAL_ROUTES = [
   "POST /api/local/tasks/:id/approve",
   "POST /api/local/tasks/:id/continue",
   "DELETE /api/local/tasks/:id",
+  "GET /api/local/assistant/commands",
+  "DELETE /api/local/assistant/commands/:id",
+  "GET /api/local/mcp",
+  "PUT /api/local/mcp/servers/:name",
 ] as const satisfies readonly (keyof LocalApi)[];
 
 export type LocalRoute = (typeof LOCAL_ROUTES)[number];
@@ -134,6 +138,8 @@ export const ERROR_CODES = [
   "not-paused",
   "pending",
   "range-not-satisfiable",
+  "unknown-mcp-server",
+  "invalid-mcp-config",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -351,6 +357,17 @@ export interface AssistantStatus {
   readonly problem: string | null;
   /** Tasks whose status is `running`. */
   readonly running: number;
+  /**
+   * Tasks' web_search: on once the search role's account is chosen and has its key. `problem`,
+   * in English, says why a chosen one can't search; null when none is chosen, or it can.
+   */
+  readonly search: { readonly on: boolean; readonly problem: string | null };
+  /**
+   * For each kind whose own account or model is set but can't run, why, in English: its tasks run
+   * on Assistant Mode's own until it can. Null for a kind that runs, or follows Assistant Mode's;
+   * all null while tasks aren't ready.
+   */
+  readonly kinds: Readonly<Record<TaskProfile, string | null>>;
 }
 
 /**
@@ -1037,6 +1054,21 @@ export interface LocalApi {
    * an ended one as it is. No route deletes a task: its record says what was done on the computer.
    */
   "DELETE /api/local/tasks/:id": Endpoint<undefined, TaskSnapshot>;
+  /** The commands Always in This Folder allowed on tasks' cards. */
+  "GET /api/local/assistant/commands": Endpoint<undefined, AllowedCommandsResponse>;
+  /**
+   * Takes one back, answering with the rest: that command asks again. 400 bad-request for a
+   * malformed id; 404 unknown-command.
+   */
+  "DELETE /api/local/assistant/commands/:id": Endpoint<undefined, AllowedCommandsResponse>;
+  /** The MCP servers mcp.json gives tasks, as the file stands now. */
+  "GET /api/local/mcp": Endpoint<undefined, McpServersResponse>;
+  /**
+   * Turns one on or off, or takes back one tool's Always, answering as GET does. 400 bad-request
+   * for anything else; 404 unknown-mcp-server; 409 invalid-mcp-config while mcp.json doesn't
+   * parse, which is never written over.
+   */
+  "PUT /api/local/mcp/servers/:name": Endpoint<McpServerChange, McpServersResponse>;
 }
 
 /**
@@ -1180,6 +1212,8 @@ export interface UsageRow {
   readonly outputTokens: number;
   readonly characters: number;
   readonly audioSeconds: number;
+  /** Web searches, as each provider billed them. */
+  readonly searches: number;
   readonly images: number;
 }
 
@@ -1257,7 +1291,10 @@ export type TaskOutcome =
   | { readonly status: "cancelled" }
   | { readonly status: "paused"; readonly reason: TaskPauseReason; readonly detail: string };
 
-/** What a task waits on the owner for: to start, a path outside its grants, or a site. */
+/**
+ * What a task waits on the owner for: to start, a path outside its grants, a site, a command, or
+ * a call to an MCP server's tool.
+ */
 export type TaskPending =
   | { readonly kind: "start" }
   | {
@@ -1270,7 +1307,80 @@ export type TaskPending =
        */
       readonly folder?: string;
     }
-  | { readonly kind: "fetch"; readonly host: string };
+  | { readonly kind: "fetch"; readonly host: string }
+  | {
+      readonly kind: "command";
+      /** The worker's call that asks, which an answer names with the command. */
+      readonly call: string;
+      /**
+       * As it would run in the task's folder, whole: worker-written text, whose control and
+       * invisible characters a page shows escaped.
+       */
+      readonly command: string;
+      /** The seconds it may run once started, its time in the background included. */
+      readonly timeout: number;
+      /**
+       * Always in This Folder allows it, but the task has read outside content (`external`), so it
+       * asks anyway.
+       */
+      readonly granted?: true;
+    }
+  | {
+      readonly kind: "mcp";
+      /** The server, as mcp.json names it. */
+      readonly server: string;
+      /** The tool, as the server lists it. */
+      readonly tool: string;
+      /** The worker's call that asks, which an answer names with `key`. */
+      readonly call: string;
+      /** A hash of the call's tool and arguments, which Run Once and Deny hold. */
+      readonly key: string;
+      /**
+       * Every argument the call sends, the shortest first. The whole call is the transcript's
+       * `assistant` entry that holds `call`.
+       */
+      readonly args: readonly McpArgument[];
+      /** What the server claims of the tool: shown as its claim, and never deciding anything. */
+      readonly hint?: "read-only" | "destructive";
+    };
+
+/** One argument of an MCP call, as its card shows it. */
+export interface McpArgument {
+  /** Worker-written, as the value is. */
+  readonly name: string;
+  /**
+   * A string as it is, anything else as JSON, cut at 300 characters, or shorter when the call
+   * sends many.
+   */
+  readonly head: string;
+  /** The whole value's length, in UTF-16 units as `head`'s. */
+  readonly chars: number;
+  readonly lines: number;
+}
+
+/** A task's MCP servers, as its card tells of them. */
+export interface TaskMcp {
+  /** The calls the owner refused it, by their key: it may not make them again. */
+  readonly denied: readonly string[];
+  /** The servers it works without, or mcp.json itself (no `server`), and why, in English. */
+  readonly failed?: readonly { readonly server?: string; readonly error: string }[];
+  /** How many of a server's tools the limits left out of it. */
+  readonly left?: readonly { readonly server: string; readonly count: number }[];
+}
+
+/** The kinds of task with an account and model of their own, which she names at its start. */
+export type TaskProfile = "quick" | "coding" | "research";
+
+/** A task's command running in the background. */
+export interface BackgroundCommand {
+  /** Its number in the task, from 1. */
+  readonly id: number;
+  readonly command: string;
+  /** ms since the epoch, as `endsAt`. */
+  readonly startedAt: number;
+  /** When its timeout kills it. */
+  readonly endsAt: number;
+}
 
 export interface TaskPause {
   readonly reason: TaskPauseReason;
@@ -1348,6 +1458,23 @@ export interface TaskSnapshot {
   readonly inbox?: TaskInboxLines;
   /** `ask` with no sites when absent. */
   readonly web?: TaskWebAccess;
+  /**
+   * The kind of task she said it is, whose account and model it started on; absent when she
+   * called it anything else, which runs on Assistant Mode's own.
+   */
+  readonly profile?: TaskProfile;
+  /** The commands the owner refused it on its card: it may not run them again. */
+  readonly bash?: { readonly denied: readonly string[] };
+  /** Its commands running in the background, oldest first; the card's Stop ends them too. */
+  readonly background?: readonly BackgroundCommand[];
+  /**
+   * It has read outside content: a page web_fetch got, a web search's results, or an MCP server's
+   * answer. Commands allowed for good in its folder, and tools always allowed, ask again from then
+   * on.
+   */
+  readonly external?: true;
+  /** Absent while it has nothing to say. */
+  readonly mcp?: TaskMcp;
   /** Cancelled by the owner's Deny at its start. */
   readonly denied?: true;
   /** Its `final` is stored in its chat. */
@@ -1398,6 +1525,8 @@ export type TaskEntry = { readonly seq: number; readonly at: number } & (
     }
   | { readonly type: "steer"; readonly text: string }
   | { readonly type: "follow-up"; readonly text: string }
+  /** A runtime fact from the task's background work, such as a command ending. */
+  | { readonly type: "notice"; readonly text: string }
   | {
       readonly type: "compaction";
       readonly summary: string;
@@ -1429,10 +1558,13 @@ export interface TaskEventsQuery {
 /** POST tasks/:id/approve: the owner's answer to its `pending`. */
 export interface TaskApproveRequest {
   /**
-   * `once`: for this task alone. `always`: a start's folder, or the `folder` a write's question
-   * names, joins `assistant.folders` (on any other path question it is `once`), and a site's answer
-   * turns the task's web mode to `any`. `deny`: a start ends `cancelled` and `denied`; a path or a
-   * site is refused, and the run goes on.
+   * `once`: for this task alone, and a command or an MCP call for its call alone. `always`: a
+   * start's folder, or the `folder` a write's question names, joins `assistant.folders` (on any
+   * other path question it is `once`); a site's answer turns the task's web mode to `any`; a
+   * command runs, and is allowed in the task's folder for good (GET assistant/commands); an MCP
+   * call runs, and its tool joins its server's `alwaysAllow` in mcp.json (409 invalid-mcp-config
+   * while that file doesn't parse). `deny`: a start ends `cancelled` and `denied`; a path, a site,
+   * a command or an MCP call with these arguments is refused, and the run goes on.
    */
   readonly answer: "once" | "always" | "deny";
   /**
@@ -1453,6 +1585,71 @@ export interface TaskApproveRequest {
 export interface TaskContinueRequest {
   /** Replaces the task's own; continuing an `unpriced` pause sets it to 0. */
   readonly spendPauseUsd?: number;
+}
+
+/**
+ * A command the owner allowed for good from a task's card: every task in `folder` runs exactly
+ * this command there without asking, until one has read outside content.
+ */
+export interface AllowedCommand {
+  /** A UUIDv7. */
+  readonly id: string;
+  /** Absolute, as the folder lies on disk: no subfolder is allowed with it. */
+  readonly folder: string;
+  /** Exactly as it runs: a command that differs by a character asks. */
+  readonly command: string;
+  /** ms since the epoch. */
+  readonly addedAt: number;
+  /** The task whose card allowed it. */
+  readonly task: string;
+}
+
+/** GET assistant/commands, and what a DELETE leaves. */
+export interface AllowedCommandsResponse {
+  /** Newest first. */
+  readonly commands: readonly AllowedCommand[];
+}
+
+/**
+ * One server mcp.json declares, never with an `env` value or what a `${NAME}` resolves to: an
+ * entry that doesn't check out has only its name, its switch and its problem.
+ */
+export interface McpServerView {
+  readonly name: string;
+  /** As mcp.json writes it, `~` and `${NAME}` unexpanded. */
+  readonly command?: string;
+  readonly args?: readonly string[];
+  /** Neither `enabled: false` nor `disabled: true`. */
+  readonly enabled: boolean;
+  /** The owner's words for it. */
+  readonly description?: string;
+  /** The tools a task calls without asking. */
+  readonly alwaysAllow: readonly string[];
+  /** Each `${NAME}` it references, and whether the environment or mcpSecrets sets it. */
+  readonly needs: readonly { readonly name: string; readonly set: boolean }[];
+  /** Why the entry can't start, in English; null when it checks out. */
+  readonly problem: string | null;
+}
+
+/** GET mcp, and what a PUT leaves. */
+export interface McpServersResponse {
+  /** mcp.json's path. */
+  readonly path: string;
+  /** In mcp.json's order, an entry that doesn't check out after those that do. */
+  readonly servers: readonly McpServerView[];
+  /** Why mcp.json as a whole starts no server: it doesn't parse, or isn't the mcpServers shape. */
+  readonly errors: readonly string[];
+}
+
+/**
+ * PUT mcp/servers/:name: its switch, or one tool's Always taken back, or both. Always is only ever
+ * added from a task's card.
+ */
+export interface McpServerChange {
+  /** On deletes `enabled` and `disabled`; off writes `enabled: false`. */
+  readonly enabled?: boolean;
+  /** A tool to take out of `alwaysAllow`: its calls ask again. */
+  readonly revoke?: string;
 }
 
 /** The name of her tool that starts a task, as her `tool-call` events carry it. */

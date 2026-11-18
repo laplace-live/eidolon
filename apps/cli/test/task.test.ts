@@ -766,6 +766,72 @@ describe("laplace-task", () => {
     expect((await readSnapshot(dir))?.web).toEqual(off);
   });
 
+  test("--web any offers web_search once the search role has an account and its key, --web off doesn't", async () => {
+    const run = (argv: readonly string[], mind: ReturnType<typeof scripted>) =>
+      taskMain(argv, { ...captureIo().io, createMind: mind.createMind, confirm: null });
+    const offered = (mind: ReturnType<typeof scripted>) =>
+      mind.requests[0]?.tools.map((tool) => tool.name) ?? [];
+    const unset = scripted([says("Done.")]);
+    expect(await run(["--web", "any", "--folder", folder, "Look it up"], unset)).toBe(0);
+    expect(offered(unset)).not.toContain("web_search");
+
+    const restore = setEnv({
+      ASSISTANT_SEARCH_PROVIDER: "openrouter",
+      ASSISTANT_SEARCH_MODEL: undefined,
+      OPENROUTER_API_KEY: "or-test",
+    });
+    try {
+      const searching = scripted([says("Done.")]);
+      const second = join(work, "second");
+      expect(await run(["--web", "any", "--folder", second, "Look it up"], searching)).toBe(0);
+      expect(offered(searching).slice(-3)).toEqual(["web_fetch", "web_search", "todo"]);
+      expect(searching.requests[0]?.system).toContain("\n- web_search: ");
+
+      const off = scripted([says("Done.")]);
+      const third = join(work, "third");
+      expect(await run(["--web", "off", "--folder", third, "Look it up"], off)).toBe(0);
+      expect(offered(off)).not.toContain("web_fetch");
+      expect(offered(off)).not.toContain("web_search");
+    } finally {
+      restore();
+    }
+  });
+
+  test("laplace-task lists the data home's and the folder's skills, and offers skill after grep", async () => {
+    const skill = (dir: string, name: string, description: string) => {
+      mkdirSync(join(dir, name), { recursive: true });
+      writeFileSync(
+        join(dir, name, "SKILL.md"),
+        `---\nname: ${name}\ndescription: ${description}\n---\nSteps.\n`,
+      );
+    };
+    const owner = join(dataHome(), "skills");
+    skill(owner, "owner-style", "How the owner likes pages laid out");
+    skill(join(folder, ".agents", "skills"), "repo-build", "How this folder builds");
+    try {
+      const mind = scripted([says("Done.")]);
+      const io = captureIo();
+      expect(
+        await taskMain(["--folder", folder, "Make a page"], {
+          ...io.io,
+          createMind: mind.createMind,
+          confirm: null,
+        }),
+      ).toBe(0);
+      const tools = mind.requests[0]?.tools.map((tool) => tool.name) ?? [];
+      expect(tools.slice(5, 7)).toEqual(["grep", "skill"]);
+      const system = mind.requests[0]?.system ?? "";
+      expect(system).toContain(
+        '<skill name="owner-style" from="owner">How the owner likes pages laid out</skill>',
+      );
+      expect(system).toContain(
+        '<skill name="repo-build" from="folder">How this folder builds</skill>',
+      );
+    } finally {
+      rmSync(owner, { recursive: true, force: true });
+    }
+  });
+
   test("a task of the local app's, one with a chat, isn't resumed: its card there goes on with it", async () => {
     const first = scripted([
       // biome-ignore lint/correctness/useYield: it fails before its first chunk.
@@ -1240,8 +1306,9 @@ describe("parseTaskArgs", () => {
       "usage: laplace-task [-h] [--folder FOLDER] [--allow PATH] [--web {any,off}]\n",
     );
     expect(help).toContain(
-      "  --web {any,off}       Whether the task may fetch web pages, from any site\n" +
-        "                        (default: off; with --resume, the task's own)\n",
+      "  --web {any,off}       Whether the task may fetch web pages, from any site,\n" +
+        "                        and search the web once assistant.search.provider\n" +
+        "                        is set (default: off; with --resume, the task's own)\n",
     );
     expect(help).toContain("Assistant Mode (assistant.enabled) governs the local app");
     expect(help).toContain("It exits 0 when the task succeeded, 1 when it failed, 3 when it");

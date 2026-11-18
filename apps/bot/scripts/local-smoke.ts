@@ -3,10 +3,13 @@
 // prompt, a voice style added and removed, a facts index built through the studio, a text chat
 // from greeting to delete, a group chat with a second persona, voice messages both ways, a call
 // inside a chat, a task she starts, checks, steers and reports in a chat, a second she stops, a
-// third shown in each of the chat's displays and stopped with /stop, and a fourth she starts by
-// voice on a call there. The keys are fake, so the providers refuse them for free, and the
-// embeddings, the chats' replies, the director's decisions, the voice messages' speech, the calls'
-// hearing, mind and voice and the tasks' worker come from a fake server, so nothing is billed.
+// third shown in each of the chat's displays and stopped with /stop, a fourth she starts by voice
+// on a call there, a coding task on the kind's own model that reads the owner's skill and runs
+// commands its card allows once, denies and allows for good, one moving to the background, and two
+// whose workers call a fake MCP server's tool. The keys are fake, so the providers refuse them for
+// free, and the embeddings, the chats' replies, the director's decisions, the voice messages'
+// speech, the calls' hearing, mind and voice and the tasks' workers come from a fake server, so
+// nothing is billed. Online, one task's worker fetches example.com.
 // --call instead places a real call from the call page with the .env's keys, which bills them.
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import {
@@ -35,11 +38,14 @@ import {
 import {
   type AccountsResponse,
   type AccountView,
+  type AllowedCommandsResponse,
   type ChatContents,
   type JobSnapshot,
   type PersonasResponse,
   STEER_PREFIX,
   type Status,
+  type TaskApproveRequest,
+  type TaskPending,
   type TaskSnapshot,
   type UsageSummary,
 } from "../src/local/api.ts";
@@ -82,7 +88,8 @@ Boots the local web app on a temporary data home, walks it in Chrome, then delet
 
 Without --call it runs without the .env or any provider key, so nothing is billed:
   --headful   show the browser (headless Chrome is killed on some Macs)
-  --offline   skip the wizard's key checks, which send fake keys to Soniox, OpenRouter and Fish
+  --offline   skip the wizard's key checks, which send fake keys to Soniox, OpenRouter and Fish,
+              and the tools task's fetch of example.com
 
   --call      call the active persona from the call page with the real keys in the .env, which
               bills them: the greeting, a typed question and its reply, then hang up. The browser
@@ -349,6 +356,69 @@ const CALL_WORKER_REPORT =
   "Wrote index.html in the new folder, listing the two items in notes.txt.";
 /** How long the walk waits for a turn that nothing should start. */
 const QUIET_MS = 5000;
+/** The coding kind's own model, on the assistant's account, which the tools walk's task runs on. */
+const CODING_MODEL = "fake-coder";
+/** Every model the fake server answers as a task's worker. */
+const WORKER_MODELS: ReadonlySet<string> = new Set([WORKER_MODEL, CODING_MODEL]);
+/**
+ * A coding task she starts, whose worker reads an owner's skill, then runs commands: one the card
+ * runs once, then denies; one allowed for good, which runs unasked until the task reads a page; and
+ * one that moves to the background, whose end wakes the task.
+ */
+const TOOLS_LINE = "帮我在电脑上跑几条命令，按我的笔记习惯记下来";
+const TOOLS_GOAL = "在文件夹里跑几条命令，按 smoke-style 技能把结果记进 ran.txt";
+const START_CALL_TOOLS = "call_tools_task";
+const TOOLS_ACK = "交给电脑啦，你在卡片上点一下允许它就开始跑命令。";
+const TOOLS_REPORT = "命令都跑完啦，结果记在 ran.txt 里。";
+const TOOLS_WORKER_REPORT = "Ran the commands; ran.txt holds what they printed.";
+/** The owner's skill in the data home, which the task's worker loads before its commands. */
+const SKILL_NAME = "smoke-style";
+const SKILL_DESCRIPTION = "How the smoke's tasks keep their notes";
+const SKILL_BODY = "Write what each command printed into ran.txt, one line each.";
+/** Each appends a line to ran.txt in the task's folder, so the file tells which of them ran. */
+const ONCE_COMMAND = "printf 'once\\n' >> ran.txt";
+const ALWAYS_COMMAND = "printf 'always\\n' >> ran.txt";
+/** Past the 10 s after which a command moves to the background, with time to see it there. */
+const LATE_COMMAND = "sleep 20; printf 'late\\n' >> ran.txt";
+/** The page the worker fetches before Always is tried again; offline, it fetches none. */
+const FETCH_URL = "https://example.com/";
+/** The block's word on a task whose card asks to run a command, and on one in the background. */
+const ASKS_TO_RUN = "停着，任务卡片在问对方能不能运行一条命令，对方答了才接着做";
+const IN_BACKGROUND = "后台有 1 条命令在跑";
+/** The viewer asking after the task at its first command, then while one runs in the background. */
+const COMMAND_LINE = "它现在卡在哪了？";
+const COMMAND_ACK = "它在等你点头运行一条命令。";
+const BACKGROUND_LINE = "那条慢命令跑完了吗？";
+const BACKGROUND_ACK = "还在后台跑，跑完它会接着做。";
+/** How a runtime notice that a command ended starts, as the worker reads it. */
+const COMMAND_ENDED = /\[Command (\d+) ended with code 0/;
+/**
+ * The fake MCP server, the test fixture run on this Bun, as mcp.json names it, with echo its one
+ * tool tasks get; the tool's name as the worker calls it.
+ */
+const MCP_SERVER = "smoke";
+const MCP_FIXTURE = "packages/assistant/test/fixtures/mcp-server.mjs";
+const MCP_TOOL = "echo";
+const MCP_CALL_NAME = `mcp__${MCP_SERVER}__${MCP_TOOL}`;
+/** Two tasks whose workers call it: the first twice, for Run Once then Always; the second once. */
+const MCP_LINE = "用外接的工具帮我回个声吧";
+const MCP_GOAL = "用 smoke 服务器的 echo 工具回声两次";
+const START_CALL_MCP = "call_mcp_task";
+const MCP_ACK = "好，用外接的工具回声，卡片上点一下允许就开始。";
+const MCP_REPORT = "外接的工具回声了两次。";
+const MCP2_LINE = "再用那个工具回一次声";
+const MCP2_GOAL = "再用 smoke 服务器的 echo 工具回声一次";
+const START_CALL_MCP2 = "call_mcp_again";
+const MCP2_ACK = "再回一次声，这次也要你在卡片上点允许。";
+const MCP2_REPORT = "这次工具没问你就回声了。";
+/** What the workers have the tool echo, in order. */
+const ECHOES = ["你好", "再来一次"] as const;
+/** Her word once each of these tasks ends, by her start_task call. */
+const REPORTS: Readonly<Record<string, string>> = {
+  [START_CALL_TOOLS]: TOOLS_REPORT,
+  [START_CALL_MCP]: MCP_REPORT,
+  [START_CALL_MCP2]: MCP2_REPORT,
+};
 
 /** Her line on the result of each of her calls the fake mind makes, by its id. */
 const AFTER_RESULT: Readonly<Record<string, string>> = {
@@ -359,6 +429,9 @@ const AFTER_RESULT: Readonly<Record<string, string>> = {
   [STOP_CALL]: STOP_ACK,
   [START_CALL_3]: TASK3_ACK,
   [CALL_TASK_CALL]: CALL_TASK_ACK,
+  [START_CALL_TOOLS]: TOOLS_ACK,
+  [START_CALL_MCP]: MCP_ACK,
+  [START_CALL_MCP2]: MCP2_ACK,
 };
 
 /** The runner's word that her start_task call `callId` ended, which her report answers. */
@@ -444,7 +517,12 @@ interface ChatRequest {
   readonly model?: unknown;
   readonly stream?: unknown;
   readonly stop?: unknown;
-  readonly tools?: readonly { readonly function?: { readonly name?: unknown } }[];
+  readonly tools?: readonly {
+    readonly function?: {
+      readonly name?: unknown;
+      readonly parameters?: { readonly required?: unknown };
+    };
+  }[];
   readonly messages?: readonly {
     readonly role?: unknown;
     readonly content?: unknown;
@@ -456,7 +534,10 @@ interface ChatRequest {
   }[];
 }
 
-/** The task walk's folders: the task's own, a file in one outside it, and the later tasks' own. */
+/**
+ * The task walk's folders: the task's own, a file in one outside it, and the later tasks' own; and
+ * the page the tools task fetches.
+ */
 interface TaskPlaces {
   readonly site: string;
   readonly notes: string;
@@ -466,6 +547,13 @@ interface TaskPlaces {
   readonly third: string;
   /** The task she starts on a call. */
   readonly call: string;
+  /** The coding task's, which runs commands. */
+  readonly commands: string;
+  /** The MCP tasks'. */
+  readonly mcp: string;
+  readonly mcp2: string;
+  /** Null offline, where the tools task's worker fetches nothing. */
+  readonly fetch: string | null;
 }
 
 /** One Decisions request the fake server took, as far as the walk reads it. */
@@ -630,6 +718,9 @@ function herTaskAnswer(body: ChatRequest, places: TaskPlaces): Response | null {
   const nudge = nudgeOf(body);
   if (nudge?.callId === START_CALL && nudge.ended) return say(TASK_REPORT);
   if (nudge?.callId === CALL_TASK_CALL) return say(nudge.ended ? CALL_REPORT_LINE : CALL_WAIT_LINE);
+  if (nudge?.ended === true && Object.hasOwn(REPORTS, nudge.callId)) {
+    return say(REPORTS[nudge.callId] as string);
+  }
   if (last?.role !== "user") return null;
   const content = String(last.content ?? "");
   switch (content) {
@@ -660,6 +751,28 @@ function herTaskAnswer(body: ChatRequest, places: TaskPlaces): Response | null {
       return say(FOCUS_ACK);
     case CALL_TASK_LINE:
       return call(CALL_TASK_CALL, "start_task", { goal: CALL_TASK_GOAL, folder: places.call });
+    case TOOLS_LINE:
+      return call(START_CALL_TOOLS, "start_task", {
+        goal: TOOLS_GOAL,
+        folder: places.commands,
+        profile: "coding",
+      });
+    case COMMAND_LINE:
+      return say(COMMAND_ACK);
+    case BACKGROUND_LINE:
+      return say(BACKGROUND_ACK);
+    case MCP_LINE:
+      return call(START_CALL_MCP, "start_task", {
+        goal: MCP_GOAL,
+        folder: places.mcp,
+        profile: "quick",
+      });
+    case MCP2_LINE:
+      return call(START_CALL_MCP2, "start_task", {
+        goal: MCP2_GOAL,
+        folder: places.mcp2,
+        profile: "other",
+      });
   }
   // Only the call in the task's chat greets with that chat's lines in her view.
   if (content.startsWith(GREETING_KICKOFF) && heard(body, TASK_LINE)) {
@@ -690,10 +803,14 @@ function asksForReport(request: ChatRequest | undefined, callId: string): boolea
 /**
  * A task's worker, turn by turn: a write of index.html in the task's folder, a read of notes.txt
  * outside it, the read again once the owner allowed it, then its report. The task she starts on a
- * call works in its own folder.
+ * call works in its own folder; the tools and MCP tasks follow scripts of their own.
  */
 function workerAnswer(body: ChatRequest, places: TaskPlaces): Response {
   const messages = body.messages ?? [];
+  const about = (goal: string) => messages.some((m) => String(m.content ?? "").includes(goal));
+  if (about(TOOLS_GOAL)) return toolsWorker(body, places);
+  if (about(MCP_GOAL)) return mcpWorker(body, 2);
+  if (about(MCP2_GOAL)) return mcpWorker(body, 1);
   const onCall = messages.some((m) => String(m.content ?? "").includes(CALL_TASK_GOAL));
   const [folder, report] = onCall
     ? [places.call, CALL_WORKER_REPORT]
@@ -720,6 +837,68 @@ function workerAnswer(body: ChatRequest, places: TaskPlaces): Response {
     "stop",
     WORKER_USAGE,
   );
+}
+
+/** A worker's tool call, one step of its script. */
+interface WorkerCall {
+  readonly name: string;
+  readonly args: Readonly<Record<string, unknown>>;
+}
+
+/** The tools task's calls in order, each made once the one before has its result. */
+function toolsCalls(places: TaskPlaces): readonly WorkerCall[] {
+  return [
+    { name: "skill", args: { name: SKILL_NAME } },
+    // Run Once, then the same command again, which asks again and is denied.
+    { name: "bash", args: { command: ONCE_COMMAND } },
+    { name: "bash", args: { command: ONCE_COMMAND } },
+    // Always in This Folder, then the same command, which runs unasked.
+    { name: "bash", args: { command: ALWAYS_COMMAND } },
+    { name: "bash", args: { command: ALWAYS_COMMAND } },
+    // A page read, after which the command allowed for good asks again.
+    ...(places.fetch === null
+      ? []
+      : [
+          { name: "web_fetch", args: { url: places.fetch } },
+          { name: "bash", args: { command: ALWAYS_COMMAND } },
+        ]),
+    { name: "bash", args: { command: LATE_COMMAND } },
+  ];
+}
+
+/**
+ * The tools task's worker, on whichever model the task runs: its script's next call; once the long
+ * command has moved to the background, a reply with no calls, which leaves the run waiting for it;
+ * bash_output once the notice of its end comes; then its report.
+ */
+function toolsWorker(body: ChatRequest, places: TaskPlaces): Response {
+  const messages = body.messages ?? [];
+  const model = String(body.model);
+  const results = messages.filter((m) => m.role === "tool").length;
+  const calls = toolsCalls(places);
+  const call = (name: string, args: object) =>
+    toolCallStream(model, `call_tools_${results + 1}`, name, args, WORKER_USAGE);
+  const next = calls[results];
+  if (next !== undefined) return call(next.name, next.args);
+  if (results === calls.length) {
+    const ended = COMMAND_ENDED.exec(String(messages.at(-1)?.content ?? ""));
+    return ended === null
+      ? scriptedStream(model, { content: "Waiting for the long command." }, "stop", WORKER_USAGE)
+      : call("bash_output", { id: Number(ended[1]) });
+  }
+  return scriptedStream(model, { content: TOOLS_WORKER_REPORT }, "stop", WORKER_USAGE);
+}
+
+/** An MCP task's worker: the fake server's tool `count` times, an echo each, then its report. */
+function mcpWorker(body: ChatRequest, count: number): Response {
+  const results = (body.messages ?? []).filter((m) => m.role === "tool").length;
+  const echo = ECHOES[results];
+  if (results < count && echo !== undefined) {
+    const id = `call_echo_${results + 1}`;
+    return toolCallStream(WORKER_MODEL, id, MCP_CALL_NAME, { text: echo }, WORKER_USAGE);
+  }
+  const report = { content: `Echoed ${count} time(s).` };
+  return scriptedStream(WORKER_MODEL, report, "stop", WORKER_USAGE);
 }
 
 /** `seconds` of silent MPEG-1 Layer III frames, mono, 44.1 kHz at 128 kbps: the fake voice. */
@@ -778,7 +957,7 @@ function fakeEmbeddings(key: string, places: TaskPlaces) {
       }
       if (route === "POST /v1/chat/completions") {
         const body = (await request.json()) as ChatRequest;
-        if (body.model === WORKER_MODEL) {
+        if (WORKER_MODELS.has(String(body.model))) {
           seen.workers.push(body);
           if (held !== null) await held;
           return workerAnswer(body, places);
@@ -4006,6 +4185,649 @@ async function callTaskWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
   );
 }
 
+/** The fields her start_task's schema requires in `request`, as JSON. */
+function startRequires(request: ChatRequest | undefined): string {
+  const tool = (request?.tools ?? []).find((each) => each.function?.name === "start_task");
+  return JSON.stringify(tool?.function?.parameters?.required ?? null);
+}
+
+/** The tool results `requests` carried, each once, in the order they came. */
+function toolResults(requests: readonly ChatRequest[]): string[] {
+  const seen = new Set<string>();
+  const results: string[] = [];
+  for (const request of requests) {
+    for (const message of request.messages ?? []) {
+      const id = String(message.tool_call_id ?? "");
+      if (message.role !== "tool" || seen.has(id)) continue;
+      seen.add(id);
+      results.push(String(message.content ?? ""));
+    }
+  }
+  return results;
+}
+
+function textOf(path: string): string {
+  return existsSync(path) ? readFileSync(path, "utf8") : "";
+}
+
+/** Whether process `pid` still runs. */
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The pid the fake MCP server last wrote to `path`; null before it started. */
+function serverPid(path: string): number | null {
+  try {
+    const [pid] = JSON.parse(readFileSync(path, "utf8")) as unknown[];
+    return typeof pid === "number" ? pid : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Answers what task `task` asks, once its pending is one `asks` takes, with its card's `answer`:
+ * the approve's status, and the question answered. The card can still show the question before
+ * for a poll's length, and an answer to that one is refused 409 and changes nothing, so the click
+ * is made again.
+ */
+async function answerCard(
+  walk: Walk,
+  card: Locator,
+  task: string,
+  answer: TaskApproveRequest["answer"],
+  asks: (pending: TaskPending) => boolean,
+): Promise<{ readonly status: number; readonly pending: TaskPending | null }> {
+  const asking = await poll(
+    () => taskOf(walk, task),
+    (snapshot) => snapshot?.pending !== undefined && asks(snapshot.pending),
+    60_000,
+  );
+  const pending = asking?.pending !== undefined && asks(asking.pending) ? asking.pending : null;
+  if (pending === null) return { status: 0, pending };
+  const url = `${walk.origin}/api/local/tasks/${task}/approve`;
+  let status = 0;
+  for (let attempt = 0; attempt < 5 && status !== 200; attempt++) {
+    if (attempt > 0) await Bun.sleep(1000);
+    const answered = walk.page.waitForResponse(
+      (response) => response.request().method() === "POST" && response.url() === url,
+    );
+    await card.locator(`[data-answer="${answer}"]`).click();
+    status = (await answered).status();
+  }
+  return { status, pending };
+}
+
+/**
+ * Settings' Models by Kind: a model for coding tasks alone, on the assistant's account, which the
+ * provider beside it follows.
+ */
+async function kindsWalk(walk: Walk): Promise<void> {
+  const { page, checks, origin } = walk;
+  await page.goto(`${origin}/settings?tab=assistant`);
+  const label = t("en", "Coding Task Model");
+  // As the assistant's model field: plain text until the account's list arrives.
+  const picker = page.getByRole("combobox", { name: label, exact: true });
+  const listed = await shows(picker, 15_000);
+  const field = listed ? picker : page.getByLabel(label, { exact: true });
+  if (listed) {
+    await picker.click();
+    await page.getByPlaceholder(t("en", "Search models")).fill(CODING_MODEL);
+    await page
+      .getByRole("option", { name: t("en", "Use “{model}”", { model: CODING_MODEL }), exact: true })
+      .click();
+  } else {
+    await field.fill(CODING_MODEL);
+  }
+  const saved = page.waitForResponse(isPut(`${origin}/api/local/settings`));
+  await page
+    .locator("form", { has: field })
+    .getByRole("button", { name: t("en", "Save"), exact: true })
+    .click();
+  const status = (await saved).status();
+  const yaml = Bun.YAML.parse(readFileSync(join(walk.home, "settings.yaml"), "utf8")) as {
+    assistant?: { coding?: { provider?: unknown; model?: unknown } };
+  };
+  const coding = yaml.assistant?.coding;
+  const { assistant } = (await (await walk.api("GET", "/api/local/status")).json()) as Status;
+  checks.add(
+    "task kinds",
+    status === 200 &&
+      coding?.model === CODING_MODEL &&
+      coding.provider === undefined &&
+      assistant.kinds.coding === null,
+    `Models by Kind saved ${status}; settings.yaml runs coding tasks on ` +
+      `${String(coding?.model)}, ${coding?.provider === undefined ? "on the assistant's account" : `on ${String(coding.provider)}`}; ` +
+      `status says ${assistant.kinds.coding === null ? "they can" : `they fall back: ${assistant.kinds.coding}`}`,
+  );
+}
+
+/**
+ * A coding task she starts in the task's chat: its card names the kind, and it runs on the kind's
+ * model. Its worker reads the owner's skill, then runs commands: the first asks on the card, where
+ * Run Once runs it; the same command asks again and is denied; the next is allowed for good and
+ * then runs unasked, until the worker reads a page, after which it asks again, saying why; the last
+ * moves to the background, which the card lists, and its end wakes the task. Then Settings' Allowed
+ * Commands lists the one allowed for good, and Remove takes it back.
+ */
+async function toolsWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
+  const { page, checks, origin, home } = walk;
+  const { workers } = walk.embeddings.seen;
+  const { commands: folder, fetch: site } = walk.embeddings.places;
+  const skill = join(home, "skills", SKILL_NAME);
+  mkdirSync(skill, { recursive: true });
+  writeFileSync(
+    join(skill, "SKILL.md"),
+    `---\nname: ${SKILL_NAME}\ndescription: ${SKILL_DESCRIPTION}\n---\n${SKILL_BODY}\n`,
+  );
+  if (new URL(page.url()).pathname !== `/chats/${chat.id}`) {
+    await page.goto(`${origin}/chats/${chat.id}`);
+  }
+  const worked = workers.length;
+  const asked = await askHer(walk, chat, TOOLS_LINE, TOOLS_ACK);
+  const line = asked.find((request) => lastContent(request) === TOOLS_LINE);
+  const task = startedTask(await chatLog(walk, chat.id), START_CALL_TOOLS);
+  if (task === null) throw new Error("her start_task call for the commands started no task");
+  const card = chat.log.locator(`article[data-task="${task}"]`);
+  const kind = card.locator('[data-profile="coding"]');
+  const kindShown = await shows(kind, 20_000);
+  const kindText = kindShown ? await visibleText(kind) : "";
+  const modelShown = await shows(card.getByText(CODING_MODEL), 5_000);
+  const waiting = await taskOf(walk, task);
+  const start = await answerCard(walk, card, task, "once", (pending) => pending.kind === "start");
+  const isCommand = (command: string) => (pending: TaskPending) =>
+    pending.kind === "command" && pending.command === command;
+  const first = await poll(
+    () => taskOf(walk, task),
+    (snapshot) => snapshot?.pending !== undefined && isCommand(ONCE_COMMAND)(snapshot.pending),
+    30_000,
+  );
+  const mine = () => workers.slice(worked);
+  const models = [...new Set(mine().map((request) => String(request.model)))];
+  checks.add(
+    "task profile",
+    startRequires(line) === '["goal","folder","profile"]' &&
+      waiting?.profile === "coding" &&
+      waiting.model.model === CODING_MODEL &&
+      kindShown &&
+      kindText === t("en", "Coding", {}, "task kind") &&
+      modelShown &&
+      start.status === 200 &&
+      JSON.stringify(models) === JSON.stringify([CODING_MODEL]),
+    `her start_task required ${startRequires(line)}; the task stores kind ` +
+      `${String(waiting?.profile)} on ${String(waiting?.model.model)}, the card shows ` +
+      `${kindShown ? quote(kindText) : "no kind"} and ${modelShown ? "the kind's model" : "another model"}; ` +
+      `Allow Once answered ${start.status}; its worker was asked on ${JSON.stringify(models)}`,
+  );
+
+  const [loading, loaded] = mine();
+  const entry = `<skill name="${SKILL_NAME}" from="owner">${SKILL_DESCRIPTION}</skill>`;
+  const catalog = systemOf(loading).includes(entry);
+  const read = toolResults(mine())[0] ?? "";
+  checks.add(
+    "skill read",
+    offers(loading, "skill") &&
+      catalog &&
+      read.includes(SKILL_BODY) &&
+      lastContent(loaded).includes(SKILL_BODY),
+    `the worker's first request ${offers(loading, "skill") ? "offered" : "didn't offer"} skill, ` +
+      `its prompt ${catalog ? "listing" : "not listing"} the owner's ${SKILL_NAME}; the skill's ` +
+      `load read it ${quote(read, 160)}, with no question on the card`,
+  );
+
+  const once = first?.pending !== undefined && isCommand(ONCE_COMMAND)(first.pending);
+  const pending = first?.pending?.kind === "command" ? first.pending : null;
+  const question = await shows(
+    card.getByText(t("en", "Let it run this command?"), { exact: true }),
+    15_000,
+  );
+  const boxed = await shows(
+    card.locator("[data-command]").filter({ hasText: ONCE_COMMAND }),
+    5_000,
+  );
+  const where = await shows(card.getByText(folder, { exact: true }), 5_000);
+  const stopsAt = t("en", "Stops at {time}", { time: "" });
+  const stops = await shows(card.getByText(new RegExp(`^${escapeRegExp(stopsAt)}`)), 5_000);
+  const bar = page.locator(`section[data-waiting="${task}"]`);
+  const barLine = await shows(
+    bar.getByText(t("en", "Waiting for your OK to run a command in {folder}", { folder }), {
+      exact: true,
+    }),
+    10_000,
+  );
+  const answers = await card
+    .locator("[data-answer]")
+    .evaluateAll((buttons) => buttons.map((button) => button.getAttribute("data-answer")));
+  const toldAt = (await askHer(walk, chat, COMMAND_LINE, COMMAND_ACK)).find(
+    (request) => lastContent(request) === COMMAND_LINE,
+  );
+  const block = statusBlock(toldAt);
+  const ran = join(folder, "ran.txt");
+  const notYet = textOf(ran);
+  const runOnce = await answerCard(walk, card, task, "once", isCommand(ONCE_COMMAND));
+  const afterOnce = await poll(
+    async () => textOf(ran),
+    (text) => text === "once\n",
+    15_000,
+  );
+  checks.add(
+    "command card",
+    once &&
+      pending?.timeout === 120 &&
+      question &&
+      boxed &&
+      where &&
+      stops &&
+      barLine &&
+      JSON.stringify(answers) === '["deny","always","once"]' &&
+      block.includes(ASKS_TO_RUN) &&
+      notYet === "" &&
+      runOnce.status === 200 &&
+      afterOnce === "once\n",
+    `the task paused on ${pending === null ? "no command" : `${quote(pending.command)} for ${pending.timeout} s`}; ` +
+      `the card ${question ? "asks" : "doesn't ask"} to run it, ${boxed ? "showing" : "not showing"} ` +
+      `it, ${where ? "naming" : "not naming"} the folder, ${stops ? "with" : "without"} when it ` +
+      `stops, and answers ${JSON.stringify(answers)}; the waiting bar ${barLine ? "names the folder" : "doesn't"}; ` +
+      `her answer came after ${block === "" ? "no status block" : quote(block, 300)}; ran.txt held ` +
+      `${quote(notYet)} before Run Once (${runOnce.status}) and ${quote(afterOnce)} after`,
+  );
+
+  const deny = await answerCard(
+    walk,
+    card,
+    task,
+    "deny",
+    (asking) =>
+      isCommand(ONCE_COMMAND)(asking) && asking.kind === "command" && asking.call !== pending?.call,
+  );
+  const next = await poll(
+    () => taskOf(walk, task),
+    (snapshot) => snapshot?.pending !== undefined && isCommand(ALWAYS_COMMAND)(snapshot.pending),
+    30_000,
+  );
+  const refused = toolResults(mine()).includes(
+    "The owner refused to run this command in this task; don't run it again.",
+  );
+  checks.add(
+    "command deny",
+    deny.pending !== null &&
+      deny.status === 200 &&
+      refused &&
+      JSON.stringify(next?.bash?.denied) === JSON.stringify([ONCE_COMMAND]) &&
+      textOf(ran) === "once\n",
+    `the same command ${deny.pending === null ? "never asked again" : "asked again under a new call"}; ` +
+      `Deny answered ${deny.status}; the worker ${refused ? "read" : "never read"} the refusal; ` +
+      `task.json denies ${JSON.stringify(next?.bash?.denied ?? [])}; ran.txt holds ${quote(textOf(ran))}`,
+  );
+
+  const always = await answerCard(walk, card, task, "always", isCommand(ALWAYS_COMMAND));
+  const afterAlways = (asking: TaskPending) =>
+    site === null ? isCommand(LATE_COMMAND)(asking) : asking.kind === "fetch";
+  const beyond = await poll(
+    () => taskOf(walk, task),
+    (snapshot) => snapshot?.pending !== undefined && afterAlways(snapshot.pending),
+    30_000,
+  );
+  const allowed = (
+    (await (
+      await walk.api("GET", "/api/local/assistant/commands")
+    ).json()) as AllowedCommandsResponse
+  ).commands;
+  const grant = allowed.find((each) => each.command === ALWAYS_COMMAND);
+  checks.add(
+    "command always",
+    always.status === 200 &&
+      grant?.folder === realpathSync(folder) &&
+      grant.task === task &&
+      textOf(ran) === "once\nalways\nalways\n" &&
+      beyond?.pending !== undefined &&
+      afterAlways(beyond.pending),
+    `Always in This Folder answered ${always.status}; GET assistant/commands lists ` +
+      `${grant === undefined ? "nothing for it" : `it in ${grant.folder}`}; ran.txt holds ` +
+      `${quote(textOf(ran))}, the same command run again unasked; the task then asked ` +
+      `${beyond?.pending?.kind ?? "nothing"}`,
+  );
+
+  if (site === null) {
+    checks.add("command after a page", true, "offline: the worker fetched no page");
+  } else {
+    const fetched = await answerCard(walk, card, task, "once", (asking) => asking.kind === "fetch");
+    const again = await poll(
+      () => taskOf(walk, task),
+      (snapshot) => snapshot?.pending !== undefined && isCommand(ALWAYS_COMMAND)(snapshot.pending),
+      60_000,
+    );
+    const regranted =
+      again?.pending?.kind === "command" && again.pending.command === ALWAYS_COMMAND
+        ? again.pending
+        : null;
+    const note = await shows(card.locator("[data-granted]"), 15_000);
+    const rerun = await answerCard(walk, card, task, "once", isCommand(ALWAYS_COMMAND));
+    const fetchedText = toolResults(mine()).find((each) => each.includes("Example Domain")) ?? "";
+    checks.add(
+      "command after a page",
+      fetched.status === 200 &&
+        again?.external === true &&
+        regranted?.granted === true &&
+        note &&
+        rerun.status === 200 &&
+        (await poll(
+          async () => textOf(ran),
+          (text) => text === "once\nalways\nalways\nalways\n",
+          15_000,
+        )) === "once\nalways\nalways\nalways\n",
+      `Allow Once on ${FETCH_URL}'s site answered ${fetched.status}, the worker reading ` +
+        `${fetchedText === "" ? "no page" : quote(fetchedText, 80)}; the task ${again?.external === true ? "has" : "hasn't"} ` +
+        `read outside content, and the command allowed for good ` +
+        `${regranted === null ? "never asked again" : `asked again${regranted.granted === true ? ", granted" : " without granted"}`}, ` +
+        `the card ${note ? "saying" : "not saying"} why; Run Once answered ${rerun.status}; ran.txt holds ` +
+        `${quote(textOf(ran))}`,
+    );
+  }
+
+  const late = await answerCard(walk, card, task, "once", isCommand(LATE_COMMAND));
+  const listed = await shows(card.locator("[data-background]").getByText(LATE_COMMAND), 20_000);
+  const background = (await taskOf(walk, task))?.background ?? [];
+  const meanwhile = (await askHer(walk, chat, BACKGROUND_LINE, BACKGROUND_ACK)).find(
+    (request) => lastContent(request) === BACKGROUND_LINE,
+  );
+  const runningBlock = statusBlock(meanwhile);
+  const ended = await poll(
+    () => taskOf(walk, task),
+    (snapshot) => snapshot !== null && ENDED_TASK.has(snapshot.status),
+    60_000,
+  );
+  const woken = mine().find((request) => COMMAND_ENDED.test(lastContent(request)));
+  const output = toolResults(mine()).at(-1) ?? "";
+  checks.add(
+    "command background",
+    late.status === 200 &&
+      listed &&
+      background.length === 1 &&
+      background[0]?.command === LATE_COMMAND &&
+      runningBlock.includes(IN_BACKGROUND) &&
+      woken !== undefined &&
+      ended?.status === "succeeded" &&
+      ended.background === undefined &&
+      textOf(ran).endsWith("always\nlate\n"),
+    `Run Once answered ${late.status}; the card ${listed ? "listed" : "never listed"} it in the ` +
+      `background, task.json ${JSON.stringify(background.map((each) => each.command))}; her answer ` +
+      `meanwhile came after ${runningBlock === "" ? "no status block" : quote(runningBlock, 300)}; ` +
+      `the worker ${woken === undefined ? "was never told" : `was told ${quote(lastContent(woken), 120)}`}, ` +
+      `then read ${quote(output, 120)}; the task ${String(ended?.status)}` +
+      `${ended?.outcome?.status === "failed" ? ` (${ended.outcome.error})` : ""}; ran.txt holds ` +
+      `${quote(textOf(ran))}`,
+  );
+
+  await card.locator('[data-action="steps"]').click();
+  const steps = card.getByRole("log", { name: t("en", "Steps"), exact: true });
+  const done = t("en", "Done", {}, "tool call");
+  const step = (state: string, tool: string) =>
+    steps
+      .getByRole("button", { name: new RegExp(`^${escapeRegExp(state)}: ${tool}(?!_)`) })
+      .count();
+  const rows = await Promise.all([
+    step(done, "skill"),
+    step(done, "bash"),
+    step(t("en", "Failed"), "bash"),
+    step(done, "bash_output"),
+  ]);
+  const notice = await shows(steps.getByText(COMMAND_ENDED), 10_000);
+  const reported = await poll(
+    () => chatLog(walk, chat.id),
+    (events) => said(events, "persona", TOOLS_REPORT),
+    30_000,
+  );
+  const ranCount = site === null ? 4 : 5;
+  checks.add(
+    "command steps",
+    JSON.stringify(rows) === JSON.stringify([1, ranCount, 1, 1]) &&
+      notice &&
+      said(reported, "persona", TOOLS_REPORT),
+    `Show Steps lists skill, bash done, bash failed and bash_output ${JSON.stringify(rows)} ` +
+      `times, ${notice ? "with" : "without"} the notice of the long command's end; her report ` +
+      `${said(reported, "persona", TOOLS_REPORT) ? "is" : "isn't"} in the chat`,
+  );
+
+  await page.goto(`${origin}/settings?tab=assistant`);
+  const entryRow = page.locator("[data-allowed-command]").filter({ hasText: ALWAYS_COMMAND });
+  const shown = await shows(entryRow, 15_000);
+  const shownFolder =
+    shown && (await shows(entryRow.getByText(realpathSync(folder), { exact: true }), 5_000));
+  const removing = page.waitForResponse(
+    (response) =>
+      response.request().method() === "DELETE" &&
+      response.url().startsWith(`${origin}/api/local/assistant/commands/`),
+  );
+  await entryRow.getByRole("button", { name: t("en", "Remove"), exact: true }).click();
+  const removed = (await removing).status();
+  const gone = await entryRow
+    .waitFor({ state: "detached", timeout: 10_000 })
+    .then(() => true)
+    .catch(() => false);
+  const store = join(home, "tasks", "allowed-commands.json");
+  const stored = JSON.parse(textOf(store) || "{}") as { commands?: unknown[] };
+  checks.add(
+    "allowed commands",
+    shown &&
+      shownFolder &&
+      removed === 200 &&
+      gone &&
+      stored.commands?.length === 0 &&
+      modeOf(store) === "0600",
+    `Settings ${shown ? "lists" : "doesn't list"} the command allowed for good, ` +
+      `${shownFolder ? "with" : "without"} its folder; Remove answered ${removed} and the row ` +
+      `${gone ? "went" : "stayed"}; allowed-commands.json (${modeOf(store)}) holds ` +
+      `${stored.commands?.length ?? "no list of"} command(s)`,
+  );
+}
+
+/**
+ * Two tasks whose workers call the fake MCP server's tool, mcp.json naming the test fixture run on
+ * this Bun. The first's card asks for each call, every argument with its size and the server's
+ * hint: Run Once, then Always Allow This Tool, which mcp.json then holds; its server is gone once
+ * it ends. The second's call runs unasked. Then Settings' MCP Servers takes the Always back.
+ */
+async function mcpWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
+  const { page, checks, origin, home } = walk;
+  const { workers } = walk.embeddings.seen;
+  const { mcp: folder } = walk.embeddings.places;
+  const pids = join(dirname(folder), "mcp-pids.json");
+  const config = join(home, "mcp.json");
+  const entry = {
+    command: process.execPath,
+    args: ["--no-env-file", join(ROOT, MCP_FIXTURE), "--pidfile", pids],
+    tools: [MCP_TOOL],
+  };
+  writeFileSync(config, `${JSON.stringify({ mcpServers: { [MCP_SERVER]: entry } }, null, 2)}\n`, {
+    mode: 0o600,
+  });
+  if (new URL(page.url()).pathname !== `/chats/${chat.id}`) {
+    await page.goto(`${origin}/chats/${chat.id}`);
+  }
+  const worked = workers.length;
+  await askHer(walk, chat, MCP_LINE, MCP_ACK);
+  const task = startedTask(await chatLog(walk, chat.id), START_CALL_MCP);
+  if (task === null) throw new Error("her start_task call for the MCP server started no task");
+  const card = chat.log.locator(`article[data-task="${task}"]`);
+  const start = await answerCard(walk, card, task, "once", (pending) => pending.kind === "start");
+  const isMcp = (pending: TaskPending) => pending.kind === "mcp";
+  const asking = await poll(
+    () => taskOf(walk, task),
+    (snapshot) => snapshot?.pending !== undefined && isMcp(snapshot.pending),
+    30_000,
+  );
+  const pending = asking?.pending?.kind === "mcp" ? asking.pending : null;
+  const sent = pending?.args[0];
+  const pid = serverPid(pids);
+  const offered = workers.slice(worked).some((request) => offers(request, MCP_CALL_NAME));
+  const question = await shows(
+    card.getByText(
+      t("en", "Let it run {tool} on {server}?", { tool: MCP_TOOL, server: MCP_SERVER }),
+      { exact: true },
+    ),
+    15_000,
+  );
+  // The hint's line goes on to say it is the server's own claim.
+  const claim = t("en", "The server says this tool only reads.");
+  const hint = await shows(card.getByText(new RegExp(`^${escapeRegExp(claim)} `)), 5_000);
+  const argument = await shows(
+    card.locator('[data-argument="text"]').getByText(ECHOES[0], { exact: true }),
+    5_000,
+  );
+  const bar = page.locator(`section[data-waiting="${task}"]`);
+  const barLine = await shows(
+    bar.getByText(
+      t("en", "Waiting for your OK to run {tool} on {server}", {
+        tool: MCP_TOOL,
+        server: MCP_SERVER,
+      }),
+      { exact: true },
+    ),
+    10_000,
+  );
+  const once = await answerCard(walk, card, task, "once", isMcp);
+  const always = await answerCard(
+    walk,
+    card,
+    task,
+    "always",
+    (asked) => asked.kind === "mcp" && asked.call !== pending?.call,
+  );
+  const ended = await poll(
+    () => taskOf(walk, task),
+    (snapshot) => snapshot !== null && ENDED_TASK.has(snapshot.status),
+    30_000,
+  );
+  const echoed = toolResults(workers.slice(worked));
+  const saved = JSON.parse(textOf(config)) as {
+    mcpServers?: Record<string, { alwaysAllow?: unknown }>;
+  };
+  const kept = saved.mcpServers?.[MCP_SERVER]?.alwaysAllow;
+  const stopped = pid !== null && (await waitFor(() => !alive(pid), 10_000)) !== null;
+  checks.add(
+    "mcp card",
+    start.status === 200 &&
+      offered &&
+      pending?.server === MCP_SERVER &&
+      pending.tool === MCP_TOOL &&
+      pending.hint === "read-only" &&
+      pending.args.length === 1 &&
+      sent?.name === "text" &&
+      sent.head === ECHOES[0] &&
+      sent.chars === ECHOES[0].length &&
+      sent.lines === 1 &&
+      question &&
+      hint &&
+      argument &&
+      barLine &&
+      once.status === 200 &&
+      echoed[0] === ECHOES[0] &&
+      modeOf(join(home, "mcp")) === "0700",
+    `the worker was ${offered ? "offered" : "never offered"} ${MCP_CALL_NAME}; its call paused on ` +
+      `${pending === null ? "nothing" : JSON.stringify({ server: pending.server, tool: pending.tool, hint: pending.hint, args: pending.args })}; ` +
+      `the card ${question ? "asks" : "doesn't ask"} to run it, ${hint ? "with" : "without"} the ` +
+      `server's hint, ${argument ? "showing" : "not showing"} its argument; the waiting bar ` +
+      `${barLine ? "names the tool" : "doesn't"}; Run Once answered ${once.status} and the worker ` +
+      `read ${quote(echoed[0] ?? "nothing")}; the servers' folder is ${modeOf(join(home, "mcp"))}`,
+  );
+  checks.add(
+    "mcp always",
+    always.pending !== null &&
+      always.status === 200 &&
+      echoed[1] === ECHOES[1] &&
+      JSON.stringify(kept) === JSON.stringify([MCP_TOOL]) &&
+      modeOf(config) === "0600" &&
+      ended?.status === "succeeded" &&
+      stopped,
+    `the second call ${always.pending === null ? "never asked" : "asked again"}; Always Allow This ` +
+      `Tool answered ${always.status}, the worker reading ${quote(echoed[1] ?? "nothing")}, and ` +
+      `mcp.json (${modeOf(config)}) always allows ${JSON.stringify(kept ?? [])}; the task ` +
+      `${String(ended?.status)}; its server ${pid === null ? "never wrote its pid" : stopped ? "is gone" : `still runs as ${pid}`}`,
+  );
+  await poll(
+    () => chatLog(walk, chat.id),
+    (events) => said(events, "persona", MCP_REPORT),
+    30_000,
+  );
+
+  const worked2 = workers.length;
+  await askHer(walk, chat, MCP2_LINE, MCP2_ACK);
+  const task2 = startedTask(await chatLog(walk, chat.id), START_CALL_MCP2);
+  if (task2 === null)
+    throw new Error("her second start_task call for the MCP server started no task");
+  const card2 = chat.log.locator(`article[data-task="${task2}"]`);
+  await shows(card2.getByText(t("en", "Start this task?"), { exact: true }), 20_000);
+  const kinds = await card2.locator("[data-profile]").count();
+  const start2 = await answerCard(walk, card2, task2, "once", (asked) => asked.kind === "start");
+  const ended2 = await poll(
+    () => taskOf(walk, task2),
+    (snapshot) => snapshot !== null && ENDED_TASK.has(snapshot.status),
+    30_000,
+  );
+  const echoed2 = toolResults(workers.slice(worked2));
+  const pid2 = serverPid(pids);
+  const stopped2 =
+    pid2 !== null && pid2 !== pid && (await waitFor(() => !alive(pid2), 10_000)) !== null;
+  checks.add(
+    "mcp unasked",
+    kinds === 0 &&
+      ended2?.profile === undefined &&
+      start2.status === 200 &&
+      ended2?.status === "succeeded" &&
+      ended2.pause === undefined &&
+      JSON.stringify(echoed2) === JSON.stringify([ECHOES[0]]) &&
+      stopped2,
+    `a task she called other has ${kinds} kind row(s) and stores ${String(ended2?.profile ?? "no kind")}; ` +
+      `Allow Once answered ${start2.status}; it ${String(ended2?.status)}` +
+      `${ended2?.pause === undefined ? " without a pause" : `, pausing for ${ended2.pause.reason}`}, ` +
+      `its worker reading ${JSON.stringify(echoed2)}; a new server ` +
+      `${pid2 === null || pid2 === pid ? "never started" : stopped2 ? "ran it and is gone" : `still runs as ${pid2}`}`,
+  );
+  await poll(
+    () => chatLog(walk, chat.id),
+    (events) => said(events, "persona", MCP2_REPORT),
+    30_000,
+  );
+
+  await page.goto(`${origin}/settings?tab=assistant`);
+  const server = page.locator(`[data-mcp-server="${MCP_SERVER}"]`);
+  const listed = await shows(server, 15_000);
+  const chip = server.getByRole("button", {
+    name: t("en", "Stop Always Allowing {tool}", { tool: MCP_TOOL }),
+    exact: true,
+  });
+  const put = page.waitForResponse(isPut(`${origin}/api/local/mcp/servers/${MCP_SERVER}`));
+  await chip.click();
+  const status = (await put).status();
+  const chipGone = await chip
+    .waitFor({ state: "detached", timeout: 10_000 })
+    .then(() => true)
+    .catch(() => false);
+  const after = JSON.parse(textOf(config)) as {
+    mcpServers?: Record<string, { alwaysAllow?: unknown; tools?: unknown }>;
+  };
+  const left = after.mcpServers?.[MCP_SERVER];
+  checks.add(
+    "mcp settings",
+    listed &&
+      status === 200 &&
+      chipGone &&
+      left?.alwaysAllow === undefined &&
+      JSON.stringify(left?.tools) === JSON.stringify([MCP_TOOL]) &&
+      modeOf(config) === "0600",
+    `MCP Servers ${listed ? "lists" : "doesn't list"} ${MCP_SERVER}; its Always chip's remove ` +
+      `answered ${status} and the chip ${chipGone ? "went" : "stayed"}; mcp.json (${modeOf(config)}) ` +
+      `now always allows ${JSON.stringify(left?.alwaysAllow ?? [])}, keeping its tools ` +
+      `${JSON.stringify(left?.tools)}`,
+  );
+}
+
 /**
  * Settles the bodies read so far, each on its own: null for one the browser couldn't give, or one
  * still streaming after 10 s.
@@ -4035,6 +4857,10 @@ async function smoke(options: Options): Promise<Checks> {
     second: join(run.temp, "task-second"),
     third: join(run.temp, "task-third"),
     call: join(run.temp, "task-call"),
+    commands: join(run.temp, "task-commands"),
+    mcp: join(run.temp, "task-mcp"),
+    mcp2: join(run.temp, "task-mcp-again"),
+    fetch: options.offline ? null : FETCH_URL,
   });
   run.defer(embeddings.stop);
   const env = childEnv(home);
@@ -4146,6 +4972,13 @@ async function smoke(options: Options): Promise<Checks> {
           await checks.step("display reveal", () => revealWalk(walk, chat));
           // In the task's chat, whose stored status block the call must leave out.
           if (called) await checks.step("task call", () => callTaskWalk(walk, chat));
+        }
+        // Last, in the task's chat: kinds, skills, commands and MCP servers' tools.
+        if (chat !== undefined) {
+          if (await checks.step("task kinds", () => kindsWalk(walk))) {
+            await checks.step("task tools", () => toolsWalk(walk, chat));
+          }
+          await checks.step("task mcp", () => mcpWalk(walk, chat));
         }
       }
     }

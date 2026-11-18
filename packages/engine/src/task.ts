@@ -16,6 +16,8 @@ export interface TaskToolContext {
   readonly signal: AbortSignal;
   /** Progress while it runs, for the UI; never stored. */
   onUpdate(text: string): void;
+  /** Whether a steering line waits for the run: a call that would wait long can return early. */
+  steered?(): boolean;
 }
 
 export interface TaskFiles {
@@ -44,6 +46,11 @@ export interface TaskTool {
   readonly executionMode?: "parallel" | "sequential";
   /** pi's prepareArguments: a call's arguments reshaped before they are validated. */
   prepareArguments?(args: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>>;
+  /**
+   * What stands in for an old result of this tool, `characters` long, once the context masks it,
+   * from its `details`; undefined for the stub that says to call it again.
+   */
+  elided?(details: unknown, characters: number): string | undefined;
   execute(
     args: Readonly<Record<string, unknown>>,
     context: TaskToolContext,
@@ -85,6 +92,8 @@ export type TaskEntryDraft =
     }
   | { readonly type: "steer"; readonly text: string }
   | { readonly type: "follow-up"; readonly text: string }
+  /** A runtime fact from the task's background work, such as a command ending: never its output. */
+  | { readonly type: "notice"; readonly text: string }
   | {
       readonly type: "compaction";
       readonly summary: string;
@@ -135,6 +144,14 @@ export type TaskGateDecision =
   | { readonly block: string; readonly terminate?: boolean }
   | { readonly pause: string };
 
+/** Work a task's tools left running past their calls, such as commands moved to the background. */
+export interface TaskBackground {
+  /** Whether any of it still runs: a run that would end waits for it instead. */
+  running(): boolean;
+  /** Runtime lines about work that ended unseen since the last take, each given once. */
+  takeEnded(): readonly string[];
+}
+
 export interface TaskRequest {
   readonly id: string;
   readonly mind: Mind;
@@ -166,9 +183,11 @@ export interface TaskRequest {
   readonly compaction: { readonly system: string; readonly instructions: string };
   /** A refused path pauses the task (reason "approval") rather than only telling the model. */
   readonly pauseOnRefused?: boolean;
+  /** Its tools' work past their calls: a run doesn't end while it runs, and hears when it ends. */
+  readonly background?: TaskBackground;
   /** Cancels the task: its manager's, never a chat turn's. */
   readonly signal: AbortSignal;
-  /** Tests stand in for the retry backoff's waits. */
+  /** Tests stand in for the retry backoff's waits, and the background wait's. */
   readonly sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
 }
 
@@ -183,6 +202,8 @@ export type TaskEvent =
       readonly retryInMs?: number;
     }
   | { readonly type: "delta"; readonly text: string }
+  /** Once a second while the run waits on its background work, so a reader that leaves stops it. */
+  | { readonly type: "wait" }
   | {
       readonly type: "tool";
       readonly state: "start" | "update" | "end";

@@ -58,12 +58,19 @@ const TASK: TaskSnapshot = {
   },
 };
 
-function render(node: ReactNode): string {
+function render(node: ReactNode, tasks: readonly TaskSnapshot[] = [TASK]): string {
   const client = new QueryClient();
   client.setQueryData(statusQuery.queryKey, {
-    assistant: { enabled: true, ready: true, problem: null, running: 0 },
+    assistant: {
+      enabled: true,
+      ready: true,
+      problem: null,
+      running: 0,
+      search: { on: false, problem: null },
+      kinds: { quick: null, coding: null, research: null },
+    },
   } as never);
-  client.setQueryData(chatTasksQuery(CHAT).queryKey, { tasks: [TASK] });
+  client.setQueryData(chatTasksQuery(CHAT).queryKey, { tasks });
   const i18n = setupI18n({ locale: "en", messages: { en: {} } });
   return renderToStaticMarkup(
     createElement(
@@ -122,4 +129,73 @@ test("so does the task's card", () => {
   expect(card.indexOf(ESCAPED)).toBeLessThan(card.indexOf('data-answer="once"'));
   // The card sits in the scrolling log, which shows its lines whole.
   expect(queuedClasses(card)).toEqual(["flex", "flex-col", "gap-1.5"]);
+});
+
+/** The classes of the element marked `attribute` in `markup`. */
+const classesOf = (markup: string, attribute: string): string[] =>
+  new RegExp(`<\\w+ ${attribute}="?[^"]*"? class="([^"]*)"`).exec(markup)?.[1]?.split(" ") ??
+  new RegExp(`<\\w+ class="([^"]*)" ${attribute}`).exec(markup)?.[1]?.split(" ") ??
+  [];
+
+const COMMAND: TaskSnapshot = {
+  ...TASK,
+  id: "0190f5c8-0000-7000-8000-00000000a002",
+  status: "paused",
+  pending: { kind: "command", call: "c9", command: "echo ok\u202E; rm -rf ~/x", timeout: 120 },
+  inbox: undefined,
+};
+
+test("a command's bar shows it whole and escaped, in a box that scrolls, with its three answers", () => {
+  const bar = render(createElement(WaitingBar, { task: COMMAND, others: 0, onShow: () => {} }), [
+    COMMAND,
+  ]);
+  expect(bar).toContain("Waiting for your OK to run a command in /Users/me/site");
+  // The bidi control would turn the rest around on screen: it shows spelled out instead.
+  expect(bar).toContain("echo ok");
+  expect(bar).toContain("\\u{202E}</mark>");
+  expect(bar).not.toContain("\u202E");
+  expect(bar).toContain("; rm -rf ~/x");
+  // Never cut off: the box wraps and scrolls within the bar's height.
+  const box = classesOf(bar, "data-command");
+  expect(box).toContain("overflow-y-auto");
+  expect(box).toContain("whitespace-pre-wrap");
+  expect(box.some((name) => name.startsWith("max-h-"))).toBe(true);
+  const answers = [...bar.matchAll(/data-answer="(\w+)"[^>]*>(?:<[^>]+>)*([^<]+)</g)].map(
+    ([, answer, label]) => [answer, label],
+  );
+  expect(answers).toEqual([
+    ["deny", "Deny"],
+    ["always", "Always in This Folder"],
+    ["once", "Run Once"],
+  ]);
+});
+
+const MCP: TaskSnapshot = {
+  ...COMMAND,
+  id: "0190f5c8-0000-7000-8000-00000000a003",
+  pending: {
+    kind: "mcp",
+    server: "fs",
+    tool: "write_file",
+    call: "c10",
+    key: "0123456789abcdef0123456789abcdef",
+    args: [
+      { name: "path", head: "~/.zshrc", chars: 8, lines: 1 },
+      { name: "content", head: "x".repeat(300), chars: 3000, lines: 40 },
+    ],
+    hint: "destructive",
+  },
+};
+
+test("a tool call's bar names its server's tool and every argument with its size", () => {
+  const bar = render(createElement(WaitingBar, { task: MCP, others: 0, onShow: () => {} }), [MCP]);
+  expect(bar).toContain("Waiting for your OK to run write_file on fs");
+  expect(bar).toContain("path");
+  expect(bar).toContain("8 characters");
+  expect(bar).toContain("content");
+  expect(bar).toContain("3,000 characters · 40 lines");
+  const answers = [...bar.matchAll(/data-answer="(\w+)"/g)].map(([, answer]) => answer);
+  expect(answers).toEqual(["deny", "always", "once"]);
+  expect(bar).toContain("Always Allow This Tool");
+  expect(bar).toContain("Run Once");
 });

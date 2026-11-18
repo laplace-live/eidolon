@@ -33,7 +33,11 @@ const ACTIONS: Readonly<Record<string, string>> = {
   ls: "看文件夹",
   find: "找文件",
   grep: "在文件里搜",
+  bash: "运行命令",
+  bash_output: "看命令的输出",
+  bash_kill: "停掉命令",
   web_fetch: "上网看网页",
+  web_search: "上网搜索",
   todo: "排计划",
 };
 
@@ -77,7 +81,7 @@ function homed(folder: string, home: string): string {
   return folder.startsWith(`${home}${sep}`) ? `~${folder.slice(home.length)}` : folder;
 }
 
-function progress({ todo, files, step, spentUsd }: TaskSnapshot): string {
+function progress({ todo, files, step, background, spentUsd }: TaskSnapshot): string {
   const parts: string[] = [];
   if (todo !== undefined && todo.length > 0) {
     const done = todo.filter((item) => item.status === "done").length;
@@ -86,6 +90,9 @@ function progress({ todo, files, step, spentUsd }: TaskSnapshot): string {
   if (files.written.length > 0) parts.push(`写了 ${files.written.length} 个文件`);
   if (step !== undefined) {
     parts.push(`刚才在${Object.hasOwn(ACTIONS, step.tool) ? ACTIONS[step.tool] : "用工具"}`);
+  }
+  if (background !== undefined && background.length > 0) {
+    parts.push(`后台有 ${background.length} 条命令在跑`);
   }
   if (spentUsd > 0) parts.push(`花了 ${usd(spentUsd)}`);
   return parts.map((part) => `，${part}`).join("");
@@ -98,6 +105,12 @@ function pausedPhrase({ pending, pause, spentUsd }: TaskSnapshot): string {
   }
   if (pending?.kind === "fetch") {
     return "停着，任务卡片在问对方能不能上一个网站看看，对方答了才接着做";
+  }
+  if (pending?.kind === "command") {
+    return "停着，任务卡片在问对方能不能运行一条命令，对方答了才接着做";
+  }
+  if (pending?.kind === "mcp") {
+    return "停着，任务卡片在问对方能不能用一个外接的工具，对方答了才接着做";
   }
   switch (pause?.reason) {
     case "spend":

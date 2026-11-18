@@ -23,6 +23,8 @@ export interface UsageRow {
   readonly outputTokens: number;
   readonly characters: number;
   readonly audioSeconds: number;
+  /** Web searches, as each provider billed them. */
+  readonly searches: number;
   readonly images: number;
 }
 

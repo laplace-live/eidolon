@@ -108,6 +108,7 @@ export interface Totals {
   readonly outputTokens: number;
   readonly characters: number;
   readonly audioSeconds: number;
+  readonly searches: number;
   readonly images: number;
 }
 
@@ -121,6 +122,7 @@ const SUMMED = [
   "outputTokens",
   "characters",
   "audioSeconds",
+  "searches",
   "images",
 ] as const satisfies readonly (keyof Totals)[];
 

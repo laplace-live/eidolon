@@ -15,7 +15,7 @@ nothing.
 | --- | --- |
 | `packages/core` | the extension contracts: `ContextProvider`, `LlmTool`, `ConversationContext`, `TurnGate` |
 | `packages/config` | `.env` loading (python-dotenv rules), env readers, settings and the data home, the logger, Python-compatible helpers, the OpenAI-compatible HTTP client, the persona clock |
-| `packages/providers` | the provider catalog and the roles a persona fills with it, resolving a role's provider, model and key, the fetch clients that stand in for vendor SDKs, prices and usage reports ([providers.md](providers.md)) |
+| `packages/providers` | the provider catalog and the roles a persona fills with it, resolving a role's provider, model and key, the fetch clients that stand in for vendor SDKs, prices and usage reports, and tasks' web search ([providers.md](providers.md)) |
 | `packages/usage` | the usage ledger: SQLite records of what each request cost, and their sums |
 | `packages/access` | `loginSyncToken` validation, quotas, client IP, CORS, the `/api/offer` guard, audio quality |
 | `packages/turn` | Cloudflare TURN credentials, ICE plans, relay-only candidate rules |
@@ -25,7 +25,7 @@ nothing.
 | `packages/tools`, `packages/imagegen` | `change_voice_style`, `take_selfie`, the selfie store |
 | `packages/chat` | the chat log's format, browser-safe: its events, `viewOf`, `parseMentions`, the `ChatStore` interface and its contract suite; `@eidolon/chat/jsonl` is the local store ([chat.md](chat.md)) |
 | `packages/engine` | the turn engine: one persona's turn, her mind per provider, the tool loop and her context providers ([chat.md](chat.md#a-turn-runturn)); `runChat`, a chat's turns in the order the director chooses ([chat.md](chat.md#the-chain)); `runTask`, an assistant task's loop ([assistant.md](assistant.md#the-loop)) |
-| `packages/assistant` | an assistant task's tools, `FolderPolicy`, the worker's prompt and the task's files, ported in part from pi-mono ([assistant.md](assistant.md)); only `apps/bot/src/local` and `apps/cli` import it (Biome) |
+| `packages/assistant` | an assistant task's tools, its commands and their registry, Agent Skills, the MCP client and a task's servers, `FolderPolicy`, the worker's prompt and the task's files, ported in part from pi-mono ([assistant.md](assistant.md)); only `apps/bot/src/local` and `apps/cli` import it (Biome) |
 | `packages/ingest` | the offline chain: download, transcribe, refine, both ingests, the stream catalog and the pipeline ([below](#the-offline-chain)) |
 | `packages/voice` | the voice engine: a call's loop around the turn engine, the Ear (Silero VAD, Smart Turn, the turn detector), the sentence segmenter, the Mouth and the Speaker, the vendored resampler, the RTVI codec and emitter, and the two ONNX models (`models/`) ([voice-engine.md](voice-engine.md)). Its live recognizers and speech clients are `@eidolon/providers/stt` and `/speech-stream`; only `packages/runtime` imports it (Biome) |
 | `packages/webrtc` | a call's WebRTC on werift and libopus-wasm: the signalling server, the peer, the data channel, the caller's audio in and hers out, and the werift patches ([voice-engine.md](voice-engine.md#the-transport)); only `packages/runtime` imports it (Biome) |

@@ -29,7 +29,7 @@ export function waitsOnOwner(task: Pick<TaskSnapshot, "status">): boolean {
   return WAITING.has(task.status);
 }
 
-/** It waits for the owner's answer: to start, or to a path or a site it asked for. */
+/** It waits for the owner's answer: to start, or to a path, a site, a command or a tool call. */
 export function needsAnswer(task: Pick<TaskSnapshot, "status" | "pending">): boolean {
   if (task.pending === undefined) return false;
   return task.status === "awaiting-approval" || task.status === "paused";
@@ -63,6 +63,17 @@ export function modeRefuses(
 ): boolean {
   if (assistant === undefined || (assistant.enabled && assistant.ready)) return false;
   return !(pending === "start" && answer === "deny");
+}
+
+/**
+ * Why an MCP tool the owner always allows asks anyway in this task: it may not use the web, or it
+ * has read a web page, a search or an MCP server's answer. Null while Always applies.
+ */
+export function alwaysSuspended(
+  task: Pick<TaskSnapshot, "external" | "web">,
+): "no-web" | "read" | null {
+  if (task.web?.mode === "off") return "no-web";
+  return task.external === true ? "read" : null;
 }
 
 /**
@@ -104,6 +115,8 @@ export type Waiting =
   | { readonly kind: "start"; readonly folder: string }
   | Extract<TaskPending, { readonly kind: "path" }>
   | { readonly kind: "fetch"; readonly host: string }
+  | { readonly kind: "command"; readonly folder: string }
+  | { readonly kind: "mcp"; readonly server: string; readonly tool: string }
   | { readonly kind: "spend"; readonly spentUsd: number }
   | { readonly kind: "stall" | "unpriced" | "paused" | "interrupted" };
 
@@ -117,6 +130,11 @@ export function waitingFor(task: TaskSnapshot): Waiting | null {
         return pending;
       case "fetch":
         return { kind: "fetch", host: pending.host };
+      // A command runs in the task's folder; its card and the bar show the command itself.
+      case "command":
+        return { kind: "command", folder: task.brief.folder };
+      case "mcp":
+        return { kind: "mcp", server: pending.server, tool: pending.tool };
     }
   }
   switch (pauseKind(task)) {

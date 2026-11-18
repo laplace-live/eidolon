@@ -3,7 +3,7 @@
 // booted server's guard, boot and stop are in tasks-server.test.ts.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -27,7 +27,7 @@ import { acquireLock } from "@eidolon/config/lock";
 import type { createMind, MindChunk, MindRequest, MindToolCall } from "@eidolon/engine";
 import { ProviderConfigError, reportUsage } from "@eidolon/providers";
 import type { RouteHandler } from "../../src/app.ts";
-import type { ErrorBody, TasksResponse } from "../../src/local/api.ts";
+import type { AllowedCommandsResponse, ErrorBody, TasksResponse } from "../../src/local/api.ts";
 import { createLocalRouter, type LocalApp } from "../../src/local/router.ts";
 import { settingsRoutes } from "../../src/local/routes/settings.ts";
 import { addAssistantFolder, tasksRoutes } from "../../src/local/routes/tasks.ts";
@@ -159,7 +159,7 @@ beforeEach(() => {
   installSettings();
   work = mkdtempSync(join(tmpdir(), "eidolon-task-routes-"));
   clock = 1_700_000_000_000;
-  settings = { enabled: true, folders: [], spendPauseUsd: 1, contextTokens: 128_000 };
+  settings = { enabled: true, folders: [], bash: true, spendPauseUsd: 1, contextTokens: 128_000 };
   readSettings = () => settings;
   problem = null;
   minds = new Minds();
@@ -612,6 +612,88 @@ describe("POST :id/approve", () => {
     expect(readFileSync(join(dataHome(), "settings.yaml"), "utf8")).toBe(broken);
     expect(minds.requests).toEqual([]);
   });
+
+  test("a command's question is answered by its call and command, and the longest command a card shows fits the body", async () => {
+    settings = { ...settings, folders: [work] };
+    // The longest a card shows: its JSON is just under 12 KB, three bytes to each CJK character.
+    const command = `echo ${"好".repeat(4093)}`;
+    minds.script("Long", [
+      calls([{ id: "b1", name: "bash", arguments: { command } }]),
+      says("Printed it."),
+    ]);
+    const { call, tasks } = serve(manager());
+    const { id } = await tasks.start({ goal: "Long", folder: join(work, "long") }, ORIGIN);
+    const asked = (await reach(tasks, id, "paused")).pending;
+    expect(asked).toEqual({ kind: "command", call: "b1", command, timeout: 120 });
+
+    const other = await call("POST", `/api/local/tasks/${id}/approve`, {
+      body: { answer: "once", pending: { ...asked, call: "b2" } },
+    });
+    expect(await refusal(other)).toEqual([409, "nothing-pending"]);
+    const body = { answer: "always", pending: asked };
+    expect(Buffer.byteLength(JSON.stringify(body))).toBeLessThan(16 * 1024);
+    const allowed = await call("POST", `/api/local/tasks/${id}/approve`, { body });
+    expect(await json(allowed)).toEqual([200, expect.objectContaining({ status: "running" })]);
+    await reach(tasks, id, "succeeded");
+    expect((await tasks.allowedCommands()).map((each) => each.command)).toEqual([command]);
+  });
+});
+
+describe("assistant/commands", () => {
+  /** Allows `command` for good in `folder`, as Always on a task's card does. */
+  async function allow(tasks: TaskManager, goal: string, folder: string, command: string) {
+    minds.script(goal, [calls([{ id: "b1", name: "bash", arguments: { command } }]), says("Ran.")]);
+    const { id } = await tasks.start({ goal, folder }, ORIGIN);
+    await reach(tasks, id, "paused");
+    await tasks.approve(id, { answer: "always" });
+    await reach(tasks, id, "succeeded");
+    return id;
+  }
+
+  test("GET lists the commands allowed for good, newest first; DELETE takes one back, answering with the rest", async () => {
+    settings = { ...settings, folders: [work] };
+    const { call, tasks } = serve(manager());
+    expect(await json(await call("GET", "/api/local/assistant/commands"))).toEqual([
+      200,
+      { commands: [] },
+    ]);
+    const first = await allow(tasks, "First", join(work, "one"), "echo one");
+    clock += 1000;
+    const second = await allow(tasks, "Second", join(work, "two"), "echo two");
+
+    const [status, listed] = await json<AllowedCommandsResponse>(
+      await call("GET", "/api/local/assistant/commands"),
+    );
+    expect(status).toBe(200);
+    expect(listed.commands.map(({ command, task, folder }) => [command, task, folder])).toEqual([
+      ["echo two", second, realpathSync(join(work, "two"))],
+      ["echo one", first, realpathSync(join(work, "one"))],
+    ]);
+    const [newest, oldest] = listed.commands;
+    const removed = await call("DELETE", `/api/local/assistant/commands/${newest?.id}`);
+    expect(await json(removed)).toEqual([200, { commands: [oldest] }]);
+    expect(await json(await call("GET", "/api/local/assistant/commands"))).toEqual([
+      200,
+      { commands: [oldest] },
+    ]);
+  });
+
+  test("DELETE answers 400 for an id that is none, 404 for one no command has; both need the session", async () => {
+    const { call } = serve(manager());
+    for (const id of ["x", "commands", `${Bun.randomUUIDv7()}`.toUpperCase()]) {
+      const malformed = await call("DELETE", `/api/local/assistant/commands/${id}`);
+      expect([id, await refusal(malformed)]).toEqual([id, [400, "bad-request"]]);
+    }
+    const unknown = await call("DELETE", `/api/local/assistant/commands/${Bun.randomUUIDv7()}`);
+    expect(await refusal(unknown)).toEqual([404, "unknown-command"]);
+    for (const [method, path] of [
+      ["GET", "/api/local/assistant/commands"],
+      ["DELETE", `/api/local/assistant/commands/${Bun.randomUUIDv7()}`],
+    ] as const) {
+      const response = await call(method, path, { auth: false });
+      expect([method, await refusal(response)]).toEqual([method, [401, "unauthorized"]]);
+    }
+  });
 });
 
 describe("POST :id/continue", () => {
@@ -779,6 +861,8 @@ describe("GET status", () => {
       ready: true,
       problem: null,
       running: 1,
+      search: { on: false, problem: null },
+      kinds: { quick: null, coding: null, research: null },
     });
     open.resolve();
     await reach(tasks, id, "succeeded");

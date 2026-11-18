@@ -63,6 +63,10 @@ msgstr "{count, plural, other {{amount} token}}"
 msgid "{count, plural, one {# batch is waiting; this downloads it.} other {# batches are waiting; this downloads the oldest first.}}"
 msgstr "{count, plural, other {有 # 个批次在等待；会先下载最早的那个。}}"
 
+#: src/features/tasks/cards.tsx
+msgid "{count, plural, one {# character} other {# characters}}"
+msgstr "{count, plural, other {# 个字符}}"
+
 #: src/features/studio/videos-section.tsx
 msgid "{count, plural, one {# downloaded video has no upload date, so it waits until you give one in the table below.} other {# downloaded videos have no upload date, so they wait until you give one in the table below.}}"
 msgstr "{count, plural, other {有 # 个已下载的视频没有上传日期，会一直等到你在下面的表格里填上日期。}}"
@@ -83,13 +87,25 @@ msgstr "{count, plural, other {上次索引后有 # 个文件被移除。}}"
 msgid "{count, plural, one {# image} other {# images}}"
 msgstr "{count, plural, other {# 张图片}}"
 
+#: src/features/tasks/cards.tsx
+msgid "{count, plural, one {# line} other {# lines}}"
+msgstr "{count, plural, other {# 行}}"
+
 #: src/features/studio/add-videos.tsx
 msgid "{count, plural, one {# new video ({known} already added)} other {# new videos ({known} already added)}}"
 msgstr "{count, plural, other {# 个新视频（{known} 个已添加过）}}"
 
+#: src/features/tasks/task-card.tsx
+msgid "{count, plural, one {# of {server}'s tools was left out: list the ones tasks need in its tools in mcp.json.} other {# of {server}'s tools were left out: list the ones tasks need in its tools in mcp.json.}}"
+msgstr "{count, plural, other {{server} 有 # 个工具没有交给任务：在 mcp.json 里它的 tools 中列出任务需要的那些。}}"
+
 #: src/features/usage/route.tsx
 msgid "{count, plural, one {# request has no price, so it isn't counted.} other {# requests have no price, so they aren't counted.}}"
 msgstr "{count, plural, other {# 个请求没有价格，未计入花费。}}"
+
+#: src/features/usage/tables.tsx
+msgid "{count, plural, one {# search} other {# searches}}"
+msgstr "{count, plural, other {# 次网页搜索}}"
 
 #: src/features/settings/assistant.tsx
 msgid "{count, plural, one {# task is running or waiting for you. Turning Assistant Mode off stops it.} other {# tasks are running or waiting for you. Turning Assistant Mode off stops them.}}"
@@ -360,6 +376,10 @@ msgstr "已索引 {rows} 条，构建于 {date}。"
 #: src/features/home/readiness-labels.ts
 msgid "{rows} passages, built {date}."
 msgstr "{rows} 段，构建于 {date}。"
+
+#: src/features/tasks/task-card.tsx
+msgid "{server} didn't start, so this task works without it: {error}"
+msgstr "{server} 没能启动，这个任务不用它：{error}"
 
 #: src/features/studio/videos-section.tsx
 msgid "{size} free on the data home's disk."
@@ -725,6 +745,10 @@ msgstr "「允许一次」让这个任务在结束前可以读取 {folder} 里�
 msgid "Allowed Browser Origins"
 msgstr "允许的浏览器来源"
 
+#: src/features/settings/commands-card.tsx
+msgid "Allowed Commands"
+msgstr "已允许的命令"
+
 #: src/features/studio/add-videos.tsx
 msgid "Already added"
 msgstr "已添加"
@@ -740,6 +764,18 @@ msgstr "选择「始终允许这个文件夹」会把 {folder} 加入助手模�
 #: src/features/tasks/cards.tsx
 msgid "Always Allow This Folder adds it to Assistant Mode's folders, where tasks start without asking."
 msgstr "选择「始终允许这个文件夹」会把它加入助手模式的文件夹，以后在这里的任务无需询问即可开始。"
+
+#: src/features/tasks/cards.tsx
+msgid "Always Allow This Tool"
+msgstr "始终允许这个工具"
+
+#: src/features/settings/mcp-card.tsx
+msgid "Always Allowed"
+msgstr "始终允许"
+
+#: src/features/tasks/cards.tsx
+msgid "Always in This Folder"
+msgstr "在这个文件夹里始终允许"
 
 #: src/lib/labels.ts
 msgid "An account a persona uses can't be removed: pick another for her first."
@@ -757,6 +793,10 @@ msgstr "头像不是必需的，但建议设置一个。"
 #: src/features/jobs/parts.tsx
 msgid "An earlier run of Eidolon started this job, so this one can't stop it. It will finish on its own, or be marked interrupted."
 msgstr "这个作业是之前运行的 Eidolon 启动的，现在的 Eidolon 无法停止它。它会自行完成，或被标记为已中断。"
+
+#: src/features/settings/mcp-card.tsx
+msgid "An MCP server is a program on this computer. Eidolon starts it with the command in mcp.json whenever a task begins, with your permissions and outside the task's folders. Each call asks you first, unless you chose Always for that tool."
+msgstr "MCP 服务器是这台电脑上的程序。每当有任务开始，Eidolon 就用 mcp.json 里的命令启动它，它以你的权限运行，不受任务文件夹的限制。每次调用都会先问你，除非你为那个工具选了「始终允许这个工具」。"
 
 #: src/features/jobs/parts.tsx
 msgid "and {count} more"
@@ -827,8 +867,8 @@ msgid "Ask for Each Site"
 msgstr "每个网站都询问"
 
 #: src/features/settings/route.tsx
-msgid "Ask her in a chat to do real work on this computer, such as writing and editing files or looking things up, and she starts a task for it. Tasks run on the account and model chosen here, never on her chat model, and one that needs a folder outside the folders below asks you in the chat first."
-msgstr "在聊天里请她在这台电脑上真正动手，比如写入和编辑文件、查找资料，她就会为此开始一个任务。任务使用这里选择的账号和模型，从不使用她的聊天模型；需要用到下面这些文件夹以外的文件夹时，会先在聊天里问你。"
+msgid "Ask her in a chat to do real work on this computer, such as writing and editing files or looking things up, and she starts a task for it. Tasks run on the account and model chosen here, or a kind's below, never on her chat model, and one that needs a folder outside the folders below asks you in the chat first."
+msgstr "在聊天里请她在这台电脑上真正动手，比如写入和编辑文件、查找资料，她就会为此开始一个任务。任务使用这里选择的账号和模型，或下面为某一类任务选的，从不使用她的聊天模型；需要用到下面这些文件夹以外的文件夹时，会先在聊天里问你。"
 
 #: src/features/tasks/list.tsx
 msgid "Ask her in a chat to do something on this computer, and the task shows here while she works on it."
@@ -837,6 +877,10 @@ msgstr "在聊天里请她在这台电脑上做点什么，她处理时任务会
 #: src/components/settings-form/model-picker.tsx
 msgid "Asking the provider for its models…"
 msgstr "正在向服务商获取模型列表…"
+
+#: src/components/settings-form/labels.ts
+msgid "Assistant Commands"
+msgstr "助手命令"
 
 #: src/components/settings-form/labels.ts
 msgid "Assistant Context"
@@ -1266,6 +1310,39 @@ msgstr "关闭"
 msgid "Cloudflare TURN Key ID"
 msgstr "Cloudflare TURN 密钥 ID"
 
+#: src/components/settings-form/labels.ts
+msgid "Code, web pages and small programs."
+msgstr "写代码、做网页和小程序。"
+
+#: src/features/tasks/labels.ts
+msgctxt "task kind"
+msgid "Coding"
+msgstr "编程"
+
+#: src/components/settings-form/labels.ts
+msgid "Coding Task Model"
+msgstr "编程任务模型"
+
+#: src/components/settings-form/labels.ts
+msgid "Coding Task Provider"
+msgstr "编程任务服务商"
+
+#: src/lib/labels.ts
+msgid "Coding Tasks"
+msgstr "编程任务"
+
+#: src/features/settings/assistant.tsx
+msgid "Coding tasks run on Assistant Mode's model for now"
+msgstr "编程任务暂时使用助手模式的模型"
+
+#: src/features/settings/commands-card.tsx
+msgid "Commands a task runs without asking, each only in its folder and only exactly as written, unless the task has read the web or an MCP server. Always in This Folder on a task's card adds one."
+msgstr "任务无需询问就能运行的命令，每条只在它的文件夹里、只按原样生效；任务读过网页或 MCP 服务器的内容后仍会询问。在任务卡片上选择「在这个文件夹里始终允许」就会加到这里。"
+
+#: src/features/tasks/cards.tsx
+msgid "Commands run as you, with no sandbox: this one can read, change or delete any of your files, not only this folder's, and reach the network."
+msgstr "命令以你的身份运行，没有沙盒：这条命令能读取、修改或删除你的任何文件，不只是这个文件夹里的，还能联网。"
+
 #: src/features/call/call-notices.tsx
 msgid "Connect a microphone, then call again."
 msgstr "请连接麦克风，然后再次呼叫。"
@@ -1531,6 +1608,10 @@ msgstr "例如 A Chinese VTuber who streams on Bilibili and loves cats"
 msgid "e.g. 明前奶绿"
 msgstr "例如 明前奶绿"
 
+#: src/features/tasks/cards.tsx
+msgid "Each call to an MCP server waits for you, with what it sends. Run Once runs this call; Always Allow This Tool lets tasks call {tool} on {server} without asking, even when something they read asks them to, until you take it back in Settings; Deny refuses these inputs for the rest of the task."
+msgstr "每次调用 MCP 服务器都会等你同意，并列出它要发送的内容。「运行一次」只运行这一次调用；「始终允许这个工具」让任务以后调用 {server} 的 {tool} 时不再询问，即使是它读到的内容让它调用的，直到你在设置里收回；「拒绝」会在这个任务剩下的时间里拒绝这些输入。"
+
 #: src/lib/labels.ts
 msgid "Each link must be a full http or https URL."
 msgstr "每个链接都必须是完整的 http 或 https 网址。"
@@ -1675,6 +1756,10 @@ msgstr "留空时每个人设用自己的 ID 分开保存对你的记忆。"
 #: src/features/setup/persona-fields.tsx
 msgid "Empty uses 观众."
 msgstr "留空则使用「观众」。"
+
+#: src/features/settings/mcp-card.tsx
+msgid "Enabled"
+msgstr "启用"
 
 #: src/features/home/readiness-labels.ts
 msgid "Ended with an error ({when})."
@@ -2164,6 +2249,10 @@ msgstr "进行中"
 msgid "In progress: {count}."
 msgstr "进行中：{count}。"
 
+#: src/features/tasks/task-card.tsx
+msgid "In the Background"
+msgstr "后台运行中"
+
 #: src/features/usage/route.tsx
 msgid "in the last 12 months"
 msgstr "近 12 个月"
@@ -2294,8 +2383,12 @@ msgid "It asks you before it fetches from a site for the first time."
 msgstr "第一次从某个网站获取内容前，它会先问你。"
 
 #: src/features/tasks/labels.ts
-msgid "It can't fetch anything from the web."
-msgstr "它不能从网上获取任何内容。"
+msgid "It can't fetch anything from the web, and each call to an MCP server asks you first."
+msgstr "它不能从网上获取任何内容，每次调用 MCP 服务器也都会先问你。"
+
+#: src/features/tasks/labels.ts
+msgid "It can't search or fetch from the web, and each call to an MCP server asks you first."
+msgstr "它不能搜索网页，也不能从网上获取内容，每次调用 MCP 服务器也都会先问你。"
 
 #: src/features/jobs/detail.tsx
 msgid "It ended before reporting a result. The end of its technical log usually says why."
@@ -2317,6 +2410,14 @@ msgstr "它可以不经询问从任何公开网站获取内容。"
 msgid "It may have been deleted. Pick another, or start a new one."
 msgstr "它可能已被删除。请选择其他聊天，或开始新的聊天。"
 
+#: src/features/tasks/labels.ts
+msgid "It may search the web and fetch from any public site without asking."
+msgstr "它可以不经询问搜索网页，并从任何公开网站获取内容。"
+
+#: src/features/tasks/labels.ts
+msgid "It may search the web without asking, and asks you before it fetches from a site for the first time."
+msgstr "它可以不经询问搜索网页；第一次从某个网站获取内容前，它会先问你。"
+
 #: src/features/tasks/cards.tsx
 msgid "It paused, and waits for you to let it go on."
 msgstr "它暂停了，等你让它继续。"
@@ -2336,6 +2437,18 @@ msgstr "它连续三轮重复了相同的步骤。"
 #: src/features/studio/voice-styles-card.tsx
 msgid "It replaces the environment's style by this name, which <0>{replacing}</0> sets."
 msgstr "它会替换环境变量 <0>{replacing}</0> 设置的同名风格。"
+
+#: src/features/tasks/cards.tsx
+msgid "It runs in this folder:"
+msgstr "它在这个文件夹里运行："
+
+#: src/features/tasks/cards.tsx
+msgid "It sends no arguments."
+msgstr "它不发送任何参数。"
+
+#: src/features/tasks/cards.tsx
+msgid "It sends these:"
+msgstr "它会发送这些："
 
 #: src/features/jobs/parts.tsx
 msgid "It still hasn't stopped since you cancelled it. Force Stop ends it at once, without letting it finish what it is writing: an index it was building can be left half built, so run that job again afterwards."
@@ -2403,6 +2516,10 @@ msgstr "日文"
 msgid "Jobs"
 msgstr "作业"
 
+#: src/components/settings-form/labels.ts
+msgid "Jobs of a few minutes, such as a list or a few edits to a file. A cheaper model suits them, though a task still uses tools, and a weaker model is easier to mislead with what it reads."
+msgstr "几分钟就能做完的小活，比如写个清单、改几处文字。便宜的模型就够用，不过任务照样会用工具，越弱的模型越容易被读到的内容带偏。"
+
 #: src/features/studio/text-editor.tsx
 msgid "Keep Editing"
 msgstr "继续编辑"
@@ -2420,6 +2537,10 @@ msgstr "保留"
 #: src/features/settings/assistant.tsx
 msgid "Keep It On"
 msgstr "保持开启"
+
+#: src/features/settings/mcp-card.tsx
+msgid "Keep keys out of mcp.json: write {reference} where one goes, and set NAME in credentials.json's mcpSecrets or in the environment."
+msgstr "别把密钥写进 mcp.json：在要填密钥的地方写 {reference}，再在 credentials.json 的 mcpSecrets 或环境变量里设置 NAME。"
 
 #: src/features/jobs/parts.tsx
 msgid "Keep Running"
@@ -2460,6 +2581,11 @@ msgstr "密钥保存在 credentials.json 中，只有你能读取，保存后不
 #: src/features/setup/keys-step.tsx
 msgid "Keys stay on this machine, readable only by you."
 msgstr "密钥只保存在这台电脑上，只有你能读取。"
+
+#: src/features/tasks/list.tsx
+#: src/features/tasks/task-card.tsx
+msgid "Kind"
+msgstr "类型"
 
 #: src/components/settings-form/labels.ts
 #: src/features/studio/route.tsx
@@ -2516,6 +2642,14 @@ msgid "Let it read outside its folders?"
 msgstr "让它读取文件夹以外的内容？"
 
 #: src/features/tasks/cards.tsx
+msgid "Let it run {tool} on {server}?"
+msgstr "让它运行 {server} 的 {tool}？"
+
+#: src/features/tasks/cards.tsx
+msgid "Let it run this command?"
+msgstr "让它运行这条命令？"
+
+#: src/features/tasks/cards.tsx
 msgid "Let it write outside its folders?"
 msgstr "让它写入文件夹以外的位置？"
 
@@ -2566,6 +2700,10 @@ msgstr "登录用户每小时的聊天轮数"
 msgid "Login Cache Seconds"
 msgstr "登录缓存秒数"
 
+#: src/components/settings-form/labels.ts
+msgid "Looking things up on the web and writing up what it found."
+msgstr "上网查资料，再把查到的整理成文。"
+
 #: src/features/chats/labels.ts
 msgid "Looking through the stream archive…"
 msgstr "正在翻看直播回放…"
@@ -2603,9 +2741,21 @@ msgstr "MCP 匿名用户每个窗口的调用次数"
 msgid "MCP Logged-in Calls per Window"
 msgstr "MCP 登录用户每个窗口的调用次数"
 
+#: src/features/settings/mcp-card.tsx
+msgid "MCP Servers"
+msgstr "MCP 服务器"
+
 #: src/components/settings-form/labels.ts
 msgid "MCP Window Seconds"
 msgstr "MCP 限额窗口秒数"
+
+#: src/lib/labels.ts
+msgid "mcp.json doesn't parse, so nothing can be saved in it until it's fixed."
+msgstr "mcp.json 无法解析，修好之前什么都存不进去。"
+
+#: src/lib/labels.ts
+msgid "mcp.json has no server by that name."
+msgstr "mcp.json 里没有这个名字的服务器。"
 
 #: src/components/settings-form/labels.ts
 msgid "Mem0 Agent ID"
@@ -2716,6 +2866,10 @@ msgstr "模型"
 msgid "Models"
 msgstr "模型"
 
+#: src/features/settings/route.tsx
+msgid "Models by Kind"
+msgstr "按类型选模型"
+
 #: src/features/usage/spend-chart.tsx
 msgid "Month"
 msgstr "月份"
@@ -2745,6 +2899,10 @@ msgstr "Soniox 转写这个人设的视频时应当听准的名字和词：她�
 #: src/features/setup/persona-fields.tsx
 msgid "Names her folder: lowercase letters, digits, - and _. It can't change later."
 msgstr "用作她的文件夹名：小写字母、数字、- 和 _。创建后不能修改。"
+
+#: src/features/settings/mcp-card.tsx
+msgid "Needs {name}: set it in credentials.json's mcpSecrets or the environment"
+msgstr "需要 {name}：在 credentials.json 的 mcpSecrets 或环境变量里设置它"
 
 #: src/lib/labels.ts
 msgid "Needs API credit, which is separate from a fish.audio membership; new accounts start at $0."
@@ -2829,6 +2987,10 @@ msgstr "没有密钥"
 msgid "No key: calls need one"
 msgstr "没有密钥：通话需要"
 
+#: src/features/settings/mcp-card.tsx
+msgid "No MCP server starts until mcp.json is fixed"
+msgstr "mcp.json 修好之前，不会启动任何 MCP 服务器"
+
 #: src/features/home/memory-panel.tsx
 msgid "No memories yet"
 msgstr "还没有记忆"
@@ -2873,6 +3035,10 @@ msgstr "没有结果"
 #: src/components/voice-picker/index.tsx
 msgid "No sample"
 msgstr "无样本"
+
+#: src/features/settings/mcp-card.tsx
+msgid "No servers yet. Add them to {path}, in the mcpServers shape other MCP clients use."
+msgstr "还没有服务器。把它们加到 {path}，格式和其他 MCP 客户端用的 mcpServers 一样。"
 
 #: src/features/studio/video-table.tsx
 msgid "No speech"
@@ -2937,6 +3103,10 @@ msgstr "没有听清说了什么。"
 #: src/components/settings-form/labels.ts
 msgid "None"
 msgstr "不使用"
+
+#: src/features/settings/commands-card.tsx
+msgid "None yet."
+msgstr "还没有。"
 
 #: src/features/chats/labels.ts
 msgctxt "chat display"
@@ -3042,6 +3212,10 @@ msgstr "关闭后，她不能开始任务，正在运行的任务会停止，「
 msgid "Off: No Tasks"
 msgstr "关闭：不运行任务"
 
+#: src/components/settings-form/labels.ts
+msgid "Off: No Web Search"
+msgstr "关闭：不搜索网页"
+
 #: src/features/home/readiness-labels.ts
 msgid "Off: she won't remember you between calls."
 msgstr "已关闭：她不会在多次通话之间记得你。"
@@ -3054,6 +3228,10 @@ msgstr "关闭：使用三个模型"
 #: src/components/settings-form/labels.ts
 msgid "On"
 msgstr "开"
+
+#: src/components/settings-form/labels.ts
+msgid "On, a task may ask to run commands on this computer, each waiting for your OK on its card unless you allowed that exact command in its folder for good. Off, no task starts one. macOS and Linux only."
+msgstr "开启后，任务可以请求在这台电脑上运行命令，每条都要你在任务卡片上同意，除非你在它的文件夹里始终允许过这条命令。关闭后，任务不会再开始运行命令。仅限 macOS 和 Linux。"
 
 #: src/features/home/readiness-labels.ts
 msgid "On: she remembers you from one call to the next."
@@ -3094,6 +3272,10 @@ msgstr "每行一个，相对于她的文件夹。"
 #: src/features/home/readiness-labels.ts
 msgid "Only {free} free on the data home's disk. Downloaded audio takes a lot of space."
 msgstr "数据目录所在磁盘只剩 {free}。下载的音频会占用大量空间。"
+
+#: src/features/settings/mcp-card.tsx
+msgid "Only Add Programs You Trust"
+msgstr "只添加你信任的程序"
 
 #: src/components/locked-screen.tsx
 msgid "Open"
@@ -3372,6 +3554,10 @@ msgstr "播放进度"
 msgid "Profile"
 msgstr "基本信息"
 
+#: src/features/settings/mcp-card.tsx
+msgid "Programs that give tasks more tools, from {path}. A task asks you before each call it makes to one, unless you chose Always for that tool."
+msgstr "给任务提供更多工具的程序，来自 {path}。任务每次调用它们之前都会先问你，除非你为那个工具选了始终允许。"
+
 #: src/features/jobs/detail.tsx
 msgid "Progress"
 msgstr "进度"
@@ -3439,6 +3625,27 @@ msgstr "Qdrant 没有应答，她暂时既记不住也想不起任何事。请�
 #: src/features/setup/memory-step.tsx
 msgid "Qdrant Port"
 msgstr "Qdrant 端口"
+
+#: src/features/tasks/labels.ts
+msgctxt "task kind"
+msgid "Quick"
+msgstr "快速"
+
+#: src/components/settings-form/labels.ts
+msgid "Quick Task Model"
+msgstr "快速任务模型"
+
+#: src/components/settings-form/labels.ts
+msgid "Quick Task Provider"
+msgstr "快速任务服务商"
+
+#: src/lib/labels.ts
+msgid "Quick Tasks"
+msgstr "快速任务"
+
+#: src/features/settings/assistant.tsx
+msgid "Quick tasks run on Assistant Mode's model for now"
+msgstr "快速任务暂时使用助手模式的模型"
 
 #: src/features/usage/route.tsx
 msgid "Range"
@@ -3545,6 +3752,7 @@ msgstr "刷新"
 msgid "Relative to her folder. Default prompt.md."
 msgstr "相对于她的文件夹。默认 prompt.md。"
 
+#: src/features/settings/commands-card.tsx
 #: src/features/setup/avatar-picker.tsx
 #: src/features/studio/identity-section.tsx
 #: src/features/studio/voice-styles-card.tsx
@@ -3663,6 +3871,27 @@ msgstr "每次检索重排序约花费 $0.002。"
 msgid "Reruns an earlier job"
 msgstr "重新运行了之前的作业"
 
+#: src/features/tasks/labels.ts
+msgctxt "task kind"
+msgid "Research"
+msgstr "调研"
+
+#: src/components/settings-form/labels.ts
+msgid "Research Task Model"
+msgstr "调研任务模型"
+
+#: src/components/settings-form/labels.ts
+msgid "Research Task Provider"
+msgstr "调研任务服务商"
+
+#: src/lib/labels.ts
+msgid "Research Tasks"
+msgstr "调研任务"
+
+#: src/features/settings/assistant.tsx
+msgid "Research tasks run on Assistant Mode's model for now"
+msgstr "调研任务暂时使用助手模式的模型"
+
 #: src/components/settings-form/field.tsx
 msgid "Reset"
 msgstr "重置"
@@ -3738,6 +3967,14 @@ msgstr "行数"
 msgid "Run"
 msgstr "运行"
 
+#: src/features/tasks/cards.tsx
+msgid "Run Once"
+msgstr "运行一次"
+
+#: src/features/tasks/cards.tsx
+msgid "Run Once runs it this time only. Always in This Folder also runs exactly this command in this folder from now on without asking, whatever the folder's files then say, in later tasks too; Settings lists it, where you can remove it. Deny tells it it can't."
+msgstr "「运行一次」只运行这一次。「在这个文件夹里始终允许」会让以后在这个文件夹里原样运行这条命令时不再询问，之后的任务也一样，不管那时文件夹里的文件写了什么；它会列在设置里，可以在那里移除。「拒绝」会告诉它不能运行。"
+
 #: src/features/setup/memory-step.tsx
 msgid "Run this once in a terminal:"
 msgstr "在终端里运行一次这条命令："
@@ -3772,6 +4009,10 @@ msgstr "s2.1-pro-free（免费，限合理使用）"
 #: src/components/settings-form/field.tsx
 msgid "Same as {role} ({value})"
 msgstr "与{role}相同（{value}）"
+
+#: src/components/settings-form/labels.ts
+msgid "Same as Assistant Tasks"
+msgstr "与助手任务相同"
 
 #: src/components/settings-form/settings-card.tsx
 #: src/features/chats/chat-menu.tsx
@@ -4023,6 +4264,10 @@ msgstr "她还没有声音，所以无法开始通话。"
 msgid "She inherits a voice from the environment ({id}), which hasn't been checked with Fish Audio yet."
 msgstr "她从环境变量继承了声音（{id}），还没有用 Fish Audio 检查过。"
 
+#: src/features/settings/route.tsx
+msgid "She marks each task she starts as quick, coding or research. A kind runs on the account and model chosen for it here, and on Assistant Mode's own while none is chosen; anything else runs on Assistant Mode's own."
+msgstr "她开始任务时会标上快速、编程或调研。某一类在这里选了账号和模型就用它，没选就用助手模式本身的；其他任务都用助手模式本身的。"
+
 #: src/features/studio/identity-section.tsx
 msgid "She needs a name and a short name."
 msgstr "她需要名字和简称。"
@@ -4072,6 +4317,10 @@ msgstr "显示"
 msgid "Show {count} More"
 msgstr "再显示 {count} 个"
 
+#: src/features/tasks/cards.tsx
+msgid "Show All"
+msgstr "显示全部"
+
 #: src/features/home/memory-panel.tsx
 msgid "Show All {count}"
 msgstr "显示全部 {count} 条"
@@ -4083,6 +4332,10 @@ msgstr "显示聊天列表"
 #: src/features/studio/video-table.tsx
 msgid "Show Finished"
 msgstr "显示已完成的"
+
+#: src/features/tasks/cards.tsx
+msgid "Show Less"
+msgstr "收起"
 
 #: src/components/voice-picker/index.tsx
 msgid "Show More"
@@ -4313,6 +4566,10 @@ msgstr "还在等{name}回应。如果一直没有回应，请再说一遍。"
 msgid "Stop"
 msgstr "停止"
 
+#: src/features/settings/mcp-card.tsx
+msgid "Stop Always Allowing {tool}"
+msgstr "不再始终允许 {tool}"
+
 #: src/features/tasks/task-card.tsx
 msgid "Stop Task"
 msgstr "停止任务"
@@ -4350,6 +4607,11 @@ msgstr "正在停止任务…"
 #: src/features/jobs/parts.tsx
 msgid "Stopping…"
 msgstr "正在停止…"
+
+#: src/features/tasks/cards.tsx
+#: src/features/tasks/task-card.tsx
+msgid "Stops at {time}"
+msgstr "{time} 自动停止"
 
 #: src/features/settings/route.tsx
 msgid "Storage"
@@ -4491,6 +4753,10 @@ msgid "That action isn't supported here."
 msgstr "此处不支持该操作。"
 
 #: src/lib/labels.ts
+msgid "That command doesn't exist."
+msgstr "没有这条命令。"
+
+#: src/lib/labels.ts
 msgid "That conflicts with what changed meanwhile. Reload and try again."
 msgstr "内容已发生变化，请刷新后重试。"
 
@@ -4517,10 +4783,6 @@ msgstr "这不是 Eidolon 的链接。"
 #: src/lib/labels.ts
 msgid "That job can't be resumed."
 msgstr "该作业无法继续执行。"
-
-#: src/lib/labels.ts
-msgid "That job doesn't exist."
-msgstr "没有这种作业。"
 
 #: src/lib/labels.ts
 msgid "That job isn't running."
@@ -4562,6 +4824,10 @@ msgstr "该任务没有在等待答复。"
 msgid "That value isn't valid for this setting."
 msgstr "这项设置的值无效。"
 
+#: src/features/tasks/cards.tsx
+msgid "That's the server's own claim."
+msgstr "这只是服务器自己的说法。"
+
 #: src/features/studio/voice-styles-card.tsx
 msgid "The {name} style is removed."
 msgstr "已移除风格 {name}。"
@@ -4581,6 +4847,10 @@ msgstr "无法删除这个账号。"
 #: src/components/settings-form/check-labels.ts
 msgid "The account has no credit left."
 msgstr "账户余额已用完。"
+
+#: src/components/settings-form/labels.ts
+msgid "The account tasks search the web with. Off, they can still read the pages you allow, but can't search."
+msgstr "任务搜索网页用的账号。关闭时任务仍能读取你允许的网页，但不能搜索。"
 
 #: src/features/settings/accounts-card.tsx
 msgid "The accounts Eidolon calls, each with its own key and API base. Add as many of one provider as you have; a persona picks which account does each part of her work in her studio."
@@ -4812,6 +5082,14 @@ msgstr "请求无效。"
 msgid "The same steps came three turns running, so it paused. Continue lets it try again."
 msgstr "它连续三轮重复了相同的步骤，所以暂停了。继续会让它再试一次。"
 
+#: src/features/tasks/labels.ts
+msgid "The server says this tool can change or delete things."
+msgstr "服务器说这个工具会修改或删除东西。"
+
+#: src/features/tasks/labels.ts
+msgid "The server says this tool only reads."
+msgstr "服务器说这个工具只读取。"
+
 #: src/features/jobs/labels.ts
 msgid "The site refused yt-dlp, usually because it is out of date."
 msgstr "网站拒绝了 yt-dlp 的请求，通常是因为 yt-dlp 版本过旧。"
@@ -5009,9 +5287,21 @@ msgstr "这个 Qdrant 的版本与 Eidolon 使用的版本相差超过一个次�
 msgid "This setting can't be changed here."
 msgstr "这项设置无法在此修改。"
 
+#: src/features/tasks/cards.tsx
+msgid "This task has no web access, so tools you always allow ask again."
+msgstr "这个任务不能上网，所以你始终允许的工具也会再问你。"
+
+#: src/features/tasks/cards.tsx
+msgid "This task has read the web or an MCP server, so tools you always allow ask again."
+msgstr "这个任务读过网页或 MCP 服务器的内容，所以你始终允许的工具也会再问你。"
+
 #: src/lib/labels.ts
 msgid "This task is running elsewhere, such as in a terminal. Try again once it stops."
 msgstr "这个任务正在别处运行（比如终端里），请等它停止后再试。"
+
+#: src/features/tasks/task-card.tsx
+msgid "This task works without MCP servers: {error}"
+msgstr "这个任务不使用 MCP 服务器：{error}"
 
 #: src/features/jobs/labels.ts
 msgid "This video has no upload date, so it can't be placed among the streams."
@@ -5419,6 +5709,14 @@ msgid "Waiting for your OK to read everything in {folder}"
 msgstr "等你同意它读取 {folder} 里的所有内容"
 
 #: src/features/tasks/cards.tsx
+msgid "Waiting for your OK to run {tool} on {server}"
+msgstr "等你同意它运行 {server} 的 {tool}"
+
+#: src/features/tasks/cards.tsx
+msgid "Waiting for your OK to run a command in {folder}"
+msgstr "等你同意它在 {folder} 里运行一条命令"
+
+#: src/features/tasks/cards.tsx
 msgid "Waiting for your OK to spend more than {spent}"
 msgstr "等你同意它花费超过 {spent}"
 
@@ -5429,6 +5727,22 @@ msgstr "等你同意它在 {folder} 里工作"
 #: src/features/tasks/parts.tsx
 msgid "Web Access"
 msgstr "联网权限"
+
+#: src/lib/labels.ts
+msgid "Web Search"
+msgstr "网页搜索"
+
+#: src/components/settings-form/labels.ts
+msgid "Web Search Engine"
+msgstr "网页搜索引擎"
+
+#: src/features/settings/assistant.tsx
+msgid "Web search is off: {problem}"
+msgstr "网页搜索没开：{problem}"
+
+#: src/components/settings-form/labels.ts
+msgid "Web Search Provider"
+msgstr "网页搜索服务商"
 
 #: src/features/home/memory-panel.tsx
 msgid "What {name} Remembers"
@@ -5534,6 +5848,10 @@ msgstr "按最近一次规划显示每个视频的进度，以及正在运行的
 msgid "Whether she answers in text or with a voice message. Auto lets the director choose voice when a line suits it, more often after a voice message of yours. A chat's own reply mode overrides hers, and without a key for her voice she answers in text."
 msgstr "她用文字还是语音消息回复。选「自动」时由调度器判断哪句话适合用语音，你发过语音后更常这样。聊天自己的回复方式优先于她的设置；她的声音没有密钥时，她会用文字回复。"
 
+#: src/components/settings-form/labels.ts
+msgid "Which index the account searches. Each search costs under a cent."
+msgstr "这个账号用哪个索引搜索。每次搜索不到一美分。"
+
 #: src/features/studio/voice-section.tsx
 msgid "Which provider and model read her lines."
 msgstr "由哪个服务商的哪个模型朗读她的台词。"
@@ -5600,6 +5918,10 @@ msgstr "我"
 msgctxt "chat speaker"
 msgid "You"
 msgstr "我"
+
+#: src/features/tasks/cards.tsx
+msgid "You allowed this command for good in this folder, but this task has read the web or an MCP server, so it asks again."
+msgstr "你在这个文件夹里始终允许过这条命令，但这个任务读过网页或 MCP 服务器的内容，所以它会再问你。"
 
 #: src/features/chats/chat-settings.tsx
 msgid "You can also type /focus, /normal or /verbose in the message box."

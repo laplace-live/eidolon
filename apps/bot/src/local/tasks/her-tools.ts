@@ -104,6 +104,10 @@ function cardOf({ status, pending, pause }: TaskSnapshot, max: number): ToolResu
     };
   }
   if (pending?.kind === "fetch") return { asks: "site", host: cut(pending.host, max) };
+  if (pending?.kind === "command") return { asks: "command", command: cut(pending.command, max) };
+  if (pending?.kind === "mcp") {
+    return { asks: "tool", server: cut(pending.server, max), tool: cut(pending.tool, max) };
+  }
   return {
     asks: "continue",
     ...(pause === undefined ? {} : { reason: pause.reason, detail: cut(pause.detail, max) }),

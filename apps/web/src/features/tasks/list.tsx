@@ -22,6 +22,7 @@ import { errorMessage } from "@/lib/labels";
 import { useNow } from "@/lib/use-now";
 import { useLang } from "@/locales/i18n";
 import { useWaitingText } from "./cards";
+import { PROFILE_LABELS } from "./labels";
 import { ASSISTANT_SETTINGS, ModelText, StatusBadge } from "./parts";
 import { tasksQuery } from "./queries";
 import { listOrder, RUNNING_POLL_MS } from "./state";
@@ -119,6 +120,13 @@ function TaskRow({
             <span className="sr-only">{t`Folder`} </span>
             <span className="wrap-anywhere font-mono">{task.brief.folder}</span>
             <Dot />
+            {task.profile !== undefined && (
+              <>
+                <span className="sr-only">{t`Kind`} </span>
+                <span data-profile={task.profile}>{t(PROFILE_LABELS[task.profile])}</span>
+                <Dot />
+              </>
+            )}
             <span className="sr-only">{t`Model`} </span>
             <ModelText model={task.model} />
           </span>

@@ -232,6 +232,75 @@ describe("task.json", () => {
     }
   });
 
+  test("its kind, its command question, the commands it was refused or runs in the background, and its outside reading read back", async () => {
+    const dir = taskDir();
+    const background = [{ id: 2, command: "npm run dev", startedAt: 1_000, endsAt: 121_000 }];
+    const snapshots: TaskSnapshot[] = [
+      {
+        ...snapshot("t1"),
+        status: "paused",
+        profile: "coding",
+        pending: { kind: "command", call: "call_9", command: "npm test", timeout: 120 },
+        bash: { denied: ["rm -rf build"] },
+        background,
+      },
+      {
+        ...snapshot("t1"),
+        status: "paused",
+        profile: "research",
+        pending: {
+          kind: "command",
+          call: "call_9",
+          command: "npm test",
+          timeout: 1800,
+          granted: true,
+        },
+        external: true,
+      },
+    ];
+    for (const value of snapshots) {
+      await writeSnapshot(dir, value);
+      expect(await readSnapshot(dir)).toEqual(value);
+    }
+  });
+
+  test("its MCP question, the calls it was refused, and the servers and tools it works without read back", async () => {
+    const dir = taskDir();
+    const asked = {
+      kind: "mcp",
+      server: "fs",
+      tool: "write_file",
+      call: "call_3",
+      key: "0123456789abcdef0123456789abcdef",
+      args: [
+        { name: "path", head: "~/.zshrc", chars: 8, lines: 1 },
+        { name: "content", head: "x".repeat(300), chars: 3000, lines: 40 },
+      ],
+    } as const;
+    const snapshots: TaskSnapshot[] = [
+      {
+        ...snapshot("t1"),
+        status: "paused",
+        pending: { ...asked, hint: "destructive" },
+        mcp: { denied: ["fedcba9876543210fedcba9876543210"] },
+      },
+      {
+        ...snapshot("t1"),
+        status: "paused",
+        pending: { ...asked, args: [] },
+        mcp: {
+          denied: [],
+          failed: [{ server: "github", error: "github needs GITHUB_TOKEN" }, { error: "bad file" }],
+          left: [{ server: "big", count: 12 }],
+        },
+      },
+    ];
+    for (const value of snapshots) {
+      await writeSnapshot(dir, value);
+      expect(await readSnapshot(dir)).toEqual(value);
+    }
+  });
+
   test("the chat she started it from, and its report stored there, read back", async () => {
     const dir = taskDir();
     const snapshots: TaskSnapshot[] = [
@@ -281,6 +350,53 @@ describe("task.json", () => {
       { ...snapshot("t1"), chat: { id: chat.id, persona: chat.persona } },
       { ...snapshot("t1"), chat: { ...chat, persona: 7 } },
       { ...snapshot("t1"), reported: false },
+      { ...snapshot("t1"), profile: "other" },
+      { ...snapshot("t1"), profile: "Coding" },
+      { ...snapshot("t1"), pending: { kind: "command", call: "c", command: "ls" } },
+      { ...snapshot("t1"), pending: { kind: "command", command: "ls", timeout: 120 } },
+      {
+        ...snapshot("t1"),
+        pending: { kind: "command", call: "c", command: "ls", timeout: 120, granted: false },
+      },
+      { ...snapshot("t1"), bash: { denied: "ls" } },
+      { ...snapshot("t1"), bash: {} },
+      { ...snapshot("t1"), background: [{ id: 1, command: "ls", startedAt: 1 }] },
+      { ...snapshot("t1"), background: [{ id: "1", command: "ls", startedAt: 1, endsAt: 2 }] },
+      { ...snapshot("t1"), external: false },
+      {
+        ...snapshot("t1"),
+        pending: { kind: "mcp", server: "fs", tool: "read", call: "c", args: [] },
+      },
+      {
+        ...snapshot("t1"),
+        pending: { kind: "mcp", server: "fs", tool: "read", call: "c", key: "k", args: "path" },
+      },
+      {
+        ...snapshot("t1"),
+        pending: {
+          kind: "mcp",
+          server: "fs",
+          tool: "read",
+          call: "c",
+          key: "k",
+          args: [{ name: "path", head: "a", chars: "1", lines: 1 }],
+        },
+      },
+      {
+        ...snapshot("t1"),
+        pending: {
+          kind: "mcp",
+          server: "fs",
+          tool: "read",
+          call: "c",
+          key: "k",
+          args: [],
+          hint: "safe",
+        },
+      },
+      { ...snapshot("t1"), mcp: {} },
+      { ...snapshot("t1"), mcp: { denied: [], failed: [{ server: "fs" }] } },
+      { ...snapshot("t1"), mcp: { denied: [], left: [{ server: "fs", count: 1.5 }] } },
     ];
     for (const value of wrong) {
       await Bun.write(path, JSON.stringify(value));

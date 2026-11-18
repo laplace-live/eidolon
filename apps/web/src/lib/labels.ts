@@ -17,6 +17,10 @@ export const ROLE_LABELS: Readonly<Record<RoleId, MessageDescriptor>> = {
   refine: msg`Transcript Refinement`,
   embeddings: msg`Embeddings`,
   assistant: msg`Assistant Tasks`,
+  "assistant-quick": msg`Quick Tasks`,
+  "assistant-coding": msg`Coding Tasks`,
+  "assistant-research": msg`Research Tasks`,
+  search: msg`Web Search`,
 };
 
 /** The kinds of model a provider offers. */
@@ -30,6 +34,7 @@ export const CATEGORY_LABELS: Readonly<Record<Category, MessageDescriptor>> = {
   decision: msg`Decision Models`,
   image: msg`Images`,
   transcription: msg`Transcription`,
+  search: msg`Web Search`,
 };
 
 /** A provider's own account settings, by field key. */
@@ -78,7 +83,8 @@ const ERRORS: Readonly<Record<ErrorCode | ClientErrorCode | "unknown", MessageDe
   "template-file": msg`This file ships with Eidolon and can't be changed or deleted.`,
   "invalid-toml": msg`The glossary isn't valid TOML.`,
   "invalid-url": msg`Each link must be a full http or https URL.`,
-  "unknown-command": msg`That job doesn't exist.`,
+  // A job's command, or a command allowed for good that was taken back meanwhile.
+  "unknown-command": msg`That command doesn't exist.`,
   "invalid-option": msg`A job option isn't valid.`,
   "unknown-job": msg`There is no such job.`,
   "job-not-running": msg`That job isn't running.`,
@@ -95,6 +101,9 @@ const ERRORS: Readonly<Record<ErrorCode | ClientErrorCode | "unknown", MessageDe
   "not-paused": msg`That task isn't paused.`,
   pending: msg`That task is waiting for an approval. Answer it first.`,
   "range-not-satisfiable": msg`That part of the file doesn't exist.`,
+  "unknown-mcp-server": msg`mcp.json has no server by that name.`,
+  // From Settings' switches and chips, and from Always on an MCP call's card.
+  "invalid-mcp-config": msg`mcp.json doesn't parse, so nothing can be saved in it until it's fixed.`,
 };
 
 /** What an error says to the viewer: its code's sentence, else a general one. */

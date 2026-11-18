@@ -98,6 +98,29 @@ describe("the block", () => {
       [
         {
           status: "paused",
+          pending: { kind: "command", call: "b1", command: "npm test", timeout: 120 },
+          pause: { reason: "approval", detail: "run a command" },
+        },
+        "停着，任务卡片在问对方能不能运行一条命令，对方答了才接着做",
+      ],
+      [
+        {
+          status: "paused",
+          pending: {
+            kind: "mcp",
+            server: "github",
+            tool: "create_issue",
+            call: "m1",
+            key: "0123456789abcdef0123456789abcdef",
+            args: [{ name: "title", head: "Bug", chars: 3, lines: 1 }],
+          },
+          pause: { reason: "approval", detail: "run create_issue on the MCP server github" },
+        },
+        "停着，任务卡片在问对方能不能用一个外接的工具，对方答了才接着做",
+      ],
+      [
+        {
+          status: "paused",
           spentUsd: 1.2,
           pause: { reason: "spend", detail: "Spent $1.20; it pauses at every $1.00." },
         },
@@ -151,12 +174,31 @@ describe("the block", () => {
       ls: "看文件夹",
       find: "找文件",
       grep: "在文件里搜",
+      bash: "运行命令",
+      bash_output: "看命令的输出",
+      bash_kill: "停掉命令",
       web_fetch: "上网看网页",
+      web_search: "上网搜索",
       todo: "排计划",
     };
     for (const [tool, action] of Object.entries(actions)) {
       expect(only({ step: { tool, head: "x" } })).toContain(`：正在做，刚才在${action}。`);
     }
+    // Any other, a skill or a tool of an MCP server, by no name of its own.
+    for (const tool of ["skill", "mcp__github__create_issue"]) {
+      expect(only({ step: { tool, head: "x" } })).toContain("：正在做，刚才在用工具。");
+    }
+  });
+
+  test("how many of a running task's commands run in the background, never which", () => {
+    const background = [
+      { id: 1, command: "npm run dev", startedAt: 1, endsAt: 2 },
+      { id: 3, command: "npm test -- --watch", startedAt: 1, endsAt: 2 },
+    ];
+    expect(only({ background, step: { tool: "bash", head: "npm test" }, spentUsd: 0.2 })).toBe(
+      `${HEADER}\n${line("正在做，刚才在运行命令，后台有 2 条命令在跑，花了 $0.20")}\n${PLAIN_TAIL}`,
+    );
+    expect(only({ background: [] })).toContain("：正在做。");
   });
 
   test("how many of her lines a live task hasn't read yet, the owner's answers not counted", () => {
@@ -281,6 +323,8 @@ describe("the block", () => {
       files: { read: [`/Users/me/site/${S}.md`], written: [`/Users/me/site/${S}.html`] },
       brief: { ...BRIEF, deliverable: `${S} page`, check: `${S} check` },
       inbox: { steer: [`${STEER_PREFIX}${S}`, `The owner allowed ${S}`], followUp: [`${S}`] },
+      background: [{ id: 1, command: `${S} --watch`, startedAt: 1, endsAt: 2 }],
+      bash: { denied: [`rm ${S}`] },
     };
     const snapshots: Partial<TaskSnapshot>[] = [
       { status: "running", spentUsd: 0.3 },
@@ -294,6 +338,25 @@ describe("the block", () => {
         status: "paused",
         pending: { kind: "fetch", host: `${S}.example.com` },
         pause: { reason: "approval", detail: `fetch from ${S}.example.com` },
+      },
+      {
+        status: "paused",
+        pending: { kind: "command", call: "b1", command: `curl ${S}`, timeout: 60, granted: true },
+        pause: { reason: "approval", detail: "run a command" },
+      },
+      {
+        status: "paused",
+        pending: {
+          kind: "mcp",
+          server: `${S}-server`,
+          tool: `${S}_tool`,
+          call: "m1",
+          key: "0123456789abcdef0123456789abcdef",
+          args: [{ name: `${S}_arg`, head: `${S} value`, chars: 14, lines: 1 }],
+          hint: "read-only",
+        },
+        pause: { reason: "approval", detail: `run ${S}_tool on the MCP server ${S}-server` },
+        mcp: { denied: [], failed: [{ server: `${S}-down`, error: `${S} failed` }] },
       },
       { status: "paused", pause: { reason: "stall", detail: `The same calls: read ${S}` } },
       { status: "paused", pause: { reason: "spend", detail: `Spent ${S}` } },

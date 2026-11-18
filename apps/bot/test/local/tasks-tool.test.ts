@@ -14,35 +14,88 @@ import {
   taskProgressNudge,
   taskWaitingNudge,
 } from "../../src/local/tasks/tool.ts";
+import { captureLogs } from "../fakes.ts";
 
 const effects = {} as Parameters<BackgroundTool["run"]>[1];
 
+const COMMANDS = { commands: true };
+const NO_COMMANDS = { commands: false };
+
+const STATUS_TAIL =
+  "调用后马上返回：status 是 running 就是开始做了，awaiting-approval " +
+  "是要等对方在聊天里的任务卡片上点允许才开始。活在后台做，做完结果会自己回来。" +
+  "后台干活时看不到这段聊天，只看得到这几个参数，所以要把要求写完整。";
+
+const HINT_TAIL =
+  "别为这些调用 start_task。调用后看返回的 status：running 是已经开始了，说一句交给你了就行；" +
+  "awaiting-approval 是还没开始，得对方在聊天里的任务卡片上点了允许才开始，要跟对方说一声。" +
+  "交出去的事别再调用一次，做完了结果会自己回来。";
+
 describe("her text for start_task", () => {
   test("the hint keys her line on the status it returns, and says what she can't do yet", () => {
-    expect(assistantPromptHint()).toBe(
+    expect(assistantPromptHint(NO_COMMANDS)).toBe(
       "你能直接用这台电脑做事：写代码、做网页、写和改文件、上网查资料，都是你自己动手。" +
         "要用电脑就调用 start_task 工具，这是你碰电脑的唯一方式，不要说自己用不了电脑。" +
         "不过现在你在电脑上只会读写文件、上网看网页：打开文件、网页或软件给对方看，运行程序，" +
         "删除或移动文件，看图片，这些还做不到，对方要的话就直说，告诉对方文件在哪，" +
-        "别为这些调用 start_task。调用后看返回的 status：running 是已经开始了，说一句交给你了就行；" +
-        "awaiting-approval 是还没开始，得对方在聊天里的任务卡片上点了允许才开始，要跟对方说一声。" +
-        "交出去的事别再调用一次，做完了结果会自己回来。",
+        HINT_TAIL,
+    );
+  });
+
+  test("with commands, the hint says her tasks run them after the owner's OK on the card, Always aside, and still can't open things for the owner", () => {
+    expect(assistantPromptHint(COMMANDS)).toBe(
+      "你能直接用这台电脑做事：写代码、做网页、写和改文件、上网查资料，" +
+        "还能运行命令和程序（跑测试、装依赖、用 git、删除或移动文件），都是你自己动手。" +
+        "要用电脑就调用 start_task 工具，这是你碰电脑的唯一方式，不要说自己用不了电脑。" +
+        "每条命令运行前都要对方在聊天里的任务卡片上点允许（对方选过始终允许的除外）。" +
+        "不过现在你还不能打开文件、网页或软件给对方看，也看不了图片，对方要的话就直说，告诉对方文件在哪，" +
+        HINT_TAIL,
     );
   });
 
   test("its description says what it can't do and what each status means", () => {
-    const { schema } = startTaskTool(async () => ({ id: "t", status: "running" }));
+    const { schema } = startTaskTool(async () => ({ id: "t", status: "running" }), NO_COMMANDS);
     expect(schema.name).toBe(START_TASK);
     expect(schema.description).toBe(
       "在这台电脑上动手做一件事：写代码、做网页、写或修改文件、在文件夹里找东西、上网看网页查资料。" +
         "对方要你在电脑上做这些时调用。打开文件、网页或软件给对方看，运行程序或命令，" +
         "删除、移动或重命名文件，看图片，这些都做不到，别调用，直接跟对方说现在还做不到。" +
-        "调用后马上返回：status 是 running 就是开始做了，awaiting-approval " +
-        "是要等对方在聊天里的任务卡片上点允许才开始。活在后台做，做完结果会自己回来。" +
-        "后台干活时看不到这段聊天，只看得到这几个参数，所以要把要求写完整。",
+        STATUS_TAIL,
     );
-    expect(schema.required).toEqual(["goal", "folder"]);
-    expect(Object.keys(schema.properties)).toEqual(["goal", "deliverable", "folder", "check"]);
+  });
+
+  test("with commands, its description offers them, each after the owner's OK on the card, Always aside", () => {
+    const { schema } = startTaskTool(async () => ({ id: "t", status: "running" }), COMMANDS);
+    expect(schema.description).toBe(
+      "在这台电脑上动手做一件事：写代码、做网页、写或修改文件、在文件夹里找东西、上网看网页查资料，" +
+        "还能运行命令和程序，比如跑测试、装依赖、用 git、删除或移动文件；" +
+        "每条命令都要对方在聊天里的任务卡片上点允许才会运行（对方选过始终允许的除外）。" +
+        "对方要你在电脑上做这些时调用。打开文件、网页或软件给对方看，看图片，" +
+        "这些都做不到，别调用，直接跟对方说现在还做不到。" +
+        STATUS_TAIL,
+    );
+  });
+
+  test("she names each task's kind, in words of the work alone: never a model or a cost", () => {
+    for (const abilities of [COMMANDS, NO_COMMANDS]) {
+      const { schema } = startTaskTool(async () => ({ id: "t", status: "running" }), abilities);
+      expect(schema.required).toEqual(["goal", "folder", "profile"]);
+      expect(Object.keys(schema.properties)).toEqual([
+        "goal",
+        "deliverable",
+        "folder",
+        "check",
+        "profile",
+      ]);
+      expect(schema.properties.profile).toEqual({
+        type: "string",
+        enum: ["quick", "coding", "research", "other"],
+        description:
+          "这是哪一类活：coding 是写代码、做网页或小程序、改代码；research 是上网查资料、比较、整理成报告；" +
+          "quick 是几分钟就能做完的小活，比如写个清单、改几处文字、在文件夹里找东西；" +
+          "三类都不像就选 other。拿不准就选最接近的",
+      });
+    }
   });
 });
 
@@ -89,8 +142,14 @@ describe("start_task", () => {
     const tool = startTaskTool(async (...args) => {
       seen.push(args);
       return { id: "t1", status: "awaiting-approval" };
-    });
-    const args = { goal: "写一个网页", folder: "~/site", deliverable: null, extra: 1 };
+    }, COMMANDS);
+    const args = {
+      goal: "写一个网页",
+      folder: "~/site",
+      deliverable: null,
+      profile: "coding",
+      extra: 1,
+    };
     const result = await tool.run(
       {
         arguments: args,
@@ -101,7 +160,49 @@ describe("start_task", () => {
       effects,
     );
     expect(result).toEqual({ task: "t1", status: "awaiting-approval" });
-    expect(seen).toEqual([[{ goal: "写一个网页", folder: "~/site" }, "call_1", args]]);
+    expect(seen).toEqual([
+      [{ goal: "写一个网页", folder: "~/site", profile: "coding" }, "call_1", args],
+    ]);
+  });
+
+  test("a profile is lowercased; other, one that is no kind, or none starts the task on the default, the last two with a warning", async () => {
+    const logs = captureLogs();
+    try {
+      const profiles: unknown[] = [];
+      const tool = startTaskTool(async (input) => {
+        profiles.push(input.profile);
+        return { id: "t1", status: "running" };
+      }, COMMANDS);
+      for (const profile of [" Research ", "quick", "other", "OTHER", "编程", 3, null, undefined]) {
+        await tool.run(
+          {
+            arguments: { goal: "写一个网页", folder: "~/site", profile },
+            callId: "call_1",
+            context: {} as never,
+            signal: new AbortController().signal,
+          },
+          effects,
+        );
+      }
+      expect(profiles).toEqual([
+        "research",
+        "quick",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      ]);
+      expect(logs.lines()).toEqual([
+        `WARNING start_task's profile "编程" is no kind of task: it runs on Assistant Mode's own model`,
+        "WARNING start_task's profile 3 is no kind of task: it runs on Assistant Mode's own model",
+        "WARNING start_task came without a profile: the task runs on Assistant Mode's own model",
+        "WARNING start_task came without a profile: the task runs on Assistant Mode's own model",
+      ]);
+    } finally {
+      logs.restore();
+    }
   });
 
   test("startedOf: what a start returns, from the task as the manager answered it", () => {

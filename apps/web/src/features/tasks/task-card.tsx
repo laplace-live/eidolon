@@ -1,12 +1,13 @@
 // A task's card in the chat log, at her start_task call: what it works on and where, its state,
-// what she passed on that it hasn't read, what it asks the owner, its plan, its latest step and the
-// files it wrote, its steps on demand or as the chat's display opens them, and Stop. Every button a
-// task has is here or on the waiting bar.
+// the commands it runs in the background, what she passed on that it hasn't read, what it asks the
+// owner, its plan, its latest step and the files it wrote, its steps on demand or as the chat's
+// display opens them, and Stop. Every button a task has is here or on the waiting bar.
 
 import type { ChatDisplay } from "@eidolon/chat";
+import { ph, plural } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRightIcon, ListTodoIcon, SquareIcon } from "lucide-react";
+import { ChevronRightIcon, ListTodoIcon, SquareIcon, TerminalIcon } from "lucide-react";
 import { type ReactNode, useCallback, useId, useState } from "react";
 import {
   AlertDialog,
@@ -22,12 +23,24 @@ import {
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import type { TaskItem } from "@/features/chats/items";
-import type { TaskSnapshot, TasksResponse } from "@/lib/api";
+import type { BackgroundCommand, TaskSnapshot, TasksResponse } from "@/lib/api";
+import { formatClock, formatDuration } from "@/lib/format";
+import { useNow } from "@/lib/use-now";
 import { cn } from "@/lib/utils";
+import { useLang } from "@/locales/i18n";
 import { TaskPrompt } from "./cards";
-import { FileList, ModelText, QueuedLines, SpendText, StatusBadge, TodoList } from "./parts";
+import { PROFILE_LABELS } from "./labels";
+import {
+  CommandLine,
+  FileList,
+  ModelText,
+  QueuedLines,
+  SpendText,
+  StatusBadge,
+  TodoList,
+} from "./parts";
 import { chatTasksQuery, useAnswering, useChatTask, useStopTask } from "./queries";
-import { followsSteps, keepsLiveSteps, offers, stepsShown } from "./state";
+import { ended, followsSteps, keepsLiveSteps, offers, stepsShown } from "./state";
 import { latestStep, toolState } from "./transcript";
 import { TranscriptLog } from "./transcript-view";
 import { useTaskEvents } from "./use-task-events";
@@ -44,6 +57,58 @@ function Meta({ label, children }: { readonly label: string; readonly children: 
       <dt className="text-muted-foreground">{label}</dt>
       <dd className="min-w-0">{children}</dd>
     </>
+  );
+}
+
+/**
+ * The commands it left running past their calls: each one, how long it has run, and when its
+ * timeout stops it. Its own clock, so the rest of the card doesn't render each second.
+ */
+function BackgroundCommands({ commands }: { readonly commands: readonly BackgroundCommand[] }) {
+  const { t } = useLingui();
+  const lang = useLang();
+  const now = useNow(true);
+  return (
+    <section className="flex flex-col gap-1.5" data-background>
+      <h3 className="font-medium text-muted-foreground text-xs">{t`In the Background`}</h3>
+      <ul className="flex flex-col gap-1">
+        {commands.map((command) => (
+          <li key={command.id} className="flex min-w-0 items-center gap-2 text-xs">
+            <TerminalIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+            <CommandLine command={command.command} />
+            <span className="ml-auto shrink-0 text-muted-foreground tabular-nums">
+              {formatDuration((now - command.startedAt) / 1000)}
+              {" · "}
+              {t`Stops at ${ph({ time: formatClock(command.endsAt, lang) })}`}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** Its MCP servers that didn't start, and the tools of theirs it was given none of. */
+function McpNotes({ mcp }: { readonly mcp: NonNullable<TaskSnapshot["mcp"]> }) {
+  const { t } = useLingui();
+  const failed = mcp.failed ?? [];
+  const left = mcp.left ?? [];
+  if (failed.length === 0 && left.length === 0) return null;
+  return (
+    <ul className="flex flex-col gap-1 text-muted-foreground text-xs" data-mcp-notes>
+      {failed.map(({ server, error }) => (
+        <li key={`failed:${server ?? ""}:${error}`} className="wrap-anywhere">
+          {server === undefined
+            ? t`This task works without MCP servers: ${ph({ error })}`
+            : t`${ph({ server })} didn't start, so this task works without it: ${ph({ error })}`}
+        </li>
+      ))}
+      {left.map(({ server, count }) => (
+        <li key={`left:${server}`} className="wrap-anywhere">
+          {t`${plural(ph({ count }), { one: `# of ${ph({ server })}'s tools was left out: list the ones tasks need in its tools in mcp.json.`, other: `# of ${ph({ server })}'s tools were left out: list the ones tasks need in its tools in mcp.json.` })}`}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -142,6 +207,11 @@ export function TaskCard({
               <span className="wrap-anywhere font-mono">{folder}</span>
             </Meta>
           )}
+          {task?.profile !== undefined && (
+            <Meta label={t`Kind`}>
+              <span data-profile={task.profile}>{t(PROFILE_LABELS[task.profile])}</span>
+            </Meta>
+          )}
           {task !== undefined && (
             <>
               <Meta label={t`Model`}>
@@ -156,12 +226,16 @@ export function TaskCard({
             <Meta label={t`Latest Step`}>
               <span className="flex min-w-0 items-center gap-1.5" data-step={step.name}>
                 {toolState(step, true) === "running" && <Spinner className="size-3 shrink-0" />}
-                <span className="shrink-0 font-medium font-mono">{step.name}</span>
+                <span className="shrink-0 font-medium font-mono">{step.label}</span>
                 <span className="truncate font-mono text-muted-foreground">{step.head}</span>
               </span>
             </Meta>
           )}
         </dl>
+        {task !== undefined && !ended(task.status) && (task.background?.length ?? 0) > 0 && (
+          <BackgroundCommands commands={task.background ?? []} />
+        )}
+        {task?.mcp !== undefined && <McpNotes mcp={task.mcp} />}
         {failure !== null && <p className="break-words text-destructive text-xs">{failure}</p>}
         {task?.denied && (
           <p className="text-muted-foreground text-xs">{t`You denied it when it asked to start.`}</p>

@@ -69,6 +69,31 @@ describe("approveBody", () => {
     });
   });
 
+  test("a command's or a tool call's answer names its call, so it can't allow a later one", () => {
+    const command = {
+      ...start,
+      pending: { kind: "command", call: "c7", command: "npm test", timeout: 120 } as const,
+    };
+    for (const answer of ["once", "always", "deny"] as const) {
+      expect(approveBody(answer, command, { account: "openai", model: "gpt-6" }, "off")).toEqual({
+        answer,
+        pending: { kind: "command", call: "c7", command: "npm test", timeout: 120 },
+      });
+    }
+    const mcp: TaskPending = {
+      kind: "mcp",
+      server: "github",
+      tool: "create_issue",
+      call: "c8",
+      key: "0123456789abcdef0123456789abcdef",
+      args: [{ name: "title", head: "Bug", chars: 3, lines: 1 }],
+    };
+    expect(approveBody("always", { ...start, pending: mcp }, unchanged, "ask")).toEqual({
+      answer: "always",
+      pending: mcp,
+    });
+  });
+
   test("no answer allows a start on an account with no model named", () => {
     expect(approveBody("once", start, { account: "openai", model: "" }, "ask")).toBeNull();
     expect(approveBody("deny", start, { account: "openai", model: "" }, "ask")).toEqual({

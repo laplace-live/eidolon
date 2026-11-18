@@ -2,7 +2,9 @@
 
 `@eidolon/assistant` ports parts of pi-mono, Mario Zechner's coding agent, under the MIT License in
 `LICENSE-pi`. Each file whose header names pi-mono is ported from it, at the commit the header
-names. It runs on diff (BSD-3-Clause) and ignore (MIT), installed as packages with their own
+names. Its MCP client (`src/mcp/`) ports pi's `packages/mcp` and its coding agent's MCP
+extension, with the stdio transport alone: pi's OAuth, which adapts the MCP TypeScript SDK, isn't
+ported. It runs on diff (BSD-3-Clause) and ignore (MIT), installed as packages with their own
 notices.
 
 ## pi-mono

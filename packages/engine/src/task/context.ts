@@ -5,7 +5,7 @@
 //
 // A task's context, rebuilt from its transcript for each request: the latest summary, then what
 // came after it, each assistant entry followed by its calls' results in the order it made them.
-import type { TaskBrief, TaskEntry } from "../task.ts";
+import type { TaskBrief, TaskEntry, TaskTool } from "../task.ts";
 import type { MindToolCall } from "../types.ts";
 
 type EntryOf<T extends TaskEntry["type"]> = Extract<TaskEntry, { readonly type: T }>;
@@ -146,6 +146,7 @@ export function taskContext(entries: readonly TaskEntry[]): TaskContext {
         break;
       case "steer":
       case "follow-up":
+      case "notice":
         blocks.push({ kind: "line", seq: entry.seq, text: entry.text });
         break;
       case "assistant": {
@@ -208,8 +209,18 @@ export function argumentsHead(json: string): string {
   return json.length > ARGUMENTS_CHARS ? `${json.slice(0, ARGUMENTS_CHARS)}…` : json;
 }
 
-/** A masked result: the call, so the model can run it again, and what it would get back. */
-function stub(call: MindToolCall, content: string): string {
+/**
+ * A masked result: the call, so the model can run it again, and what it would get back; or what
+ * the call's tool says instead, for one that mustn't be run again to be seen.
+ */
+function stub(
+  call: MindToolCall,
+  content: string,
+  details: unknown,
+  tool: TaskTool | undefined,
+): string {
+  const own = tool?.elided?.(details, content.length);
+  if (own !== undefined) return own;
   const args = argumentsHead(JSON.stringify(call.arguments));
   return (
     `[Result elided to save context: ${call.name} ${args} returned ${content.length} ` +
@@ -242,7 +253,11 @@ export function fileLists(files: {
  * prompt cache. It rounds up, keeping half of `maskAfterTokens` to all of it whole and never more:
  * rounded down, a window that fits the newest `maskAfterTokens` would compact before masking.
  */
-export function contextMessages(context: TaskContext, maskAfterTokens: number): ContextMessage[] {
+export function contextMessages(
+  context: TaskContext,
+  maskAfterTokens: number,
+  tools: readonly TaskTool[] = [],
+): ContextMessage[] {
   const chunks = context.blocks.map(blockMessages);
   let total = 0;
   for (const message of chunks.flat()) total += messageTokens(message);
@@ -255,8 +270,17 @@ export function contextMessages(context: TaskContext, maskAfterTokens: number): 
     for (const [m, message] of messages.entries()) {
       end += messageTokens(message);
       if (message.role !== "tool" || block.kind !== "assistant" || end > boundary) continue;
-      const call = block.entry.calls.find(({ id }) => id === message.tool_call_id);
-      const masked = call === undefined ? null : stub(call, message.content);
+      const at = block.entry.calls.findIndex(({ id }) => id === message.tool_call_id);
+      const call = block.entry.calls[at];
+      const masked =
+        call === undefined
+          ? null
+          : stub(
+              call,
+              message.content,
+              block.results[at]?.details,
+              tools.find((tool) => tool.schema.name === call.name),
+            );
       if (masked !== null && masked.length < message.content.length) {
         messages[m] = { ...message, content: masked };
       }

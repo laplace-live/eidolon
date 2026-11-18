@@ -42,6 +42,9 @@ function fakeApp(): FakeApp {
   return app;
 }
 
+const NO_SEARCH = { on: false, problem: null };
+const NO_KINDS = { quick: null, coding: null, research: null };
+
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
@@ -257,6 +260,8 @@ describe("GET status", () => {
       ready: false,
       problem: "No provider fills ASSISTANT_PROVIDER",
       running: 0,
+      search: NO_SEARCH,
+      kinds: NO_KINDS,
     });
     write("settings.yaml", "assistant:\n  provider: openrouter\n");
     reinstallSettings(app);
@@ -277,10 +282,60 @@ describe("GET status", () => {
       ready: true,
       problem: null,
       running: 0,
+      search: NO_SEARCH,
+      kinds: NO_KINDS,
     });
     write("settings.yaml", "assistant:\n  enabled: false\n  provider: openrouter\n  model: m\n");
     reinstallSettings(app);
     expect(buildStatus(app, deps).assistant).toMatchObject({ enabled: false, ready: true });
+  });
+
+  test("web search is off until its account is chosen, and says why a chosen one can't search", () => {
+    const { deps } = fakeDeps({});
+    expect(buildStatus(app, deps).assistant.search).toEqual({ on: false, problem: null });
+    write("settings.yaml", "assistant:\n  search:\n    provider: openrouter\n");
+    reinstallSettings(app);
+    expect(buildStatus(app, deps).assistant.search).toEqual({
+      on: false,
+      problem:
+        "OpenRouter needs an API key: set OPENROUTER_API_KEY in credentials.json or the environment",
+    });
+    setEnv("OPENROUTER_API_KEY", "k");
+    expect(buildStatus(app, deps).assistant.search).toEqual({ on: true, problem: null });
+    write("settings.yaml", "assistant:\n  search:\n    provider: anthropic\n");
+    reinstallSettings(app);
+    expect(buildStatus(app, deps).assistant.search).toEqual({
+      on: false,
+      problem: "Anthropic offers no web search (ASSISTANT_SEARCH_PROVIDER)",
+    });
+  });
+
+  test("a kind whose own account or model can't run says why, while tasks are ready; one that follows Assistant Mode's says nothing", () => {
+    const { deps } = fakeDeps({});
+    setEnv("OPENROUTER_API_KEY", "k");
+    write(
+      "settings.yaml",
+      [
+        "assistant:",
+        "  provider: openrouter",
+        "  model: z-ai/glm-5",
+        "  quick:",
+        "    model: openai/gpt-6-luna",
+        "  coding:",
+        "    provider: anthropic",
+        "",
+      ].join("\n"),
+    );
+    reinstallSettings(app);
+    expect(buildStatus(app, deps).assistant.kinds).toEqual({
+      quick: null,
+      coding: "Anthropic needs a model: set ASSISTANT_CODING_MODEL",
+      research: null,
+    });
+    // Assistant Mode's own problem is the one to tell.
+    write("settings.yaml", "assistant:\n  coding:\n    provider: anthropic\n");
+    reinstallSettings(app);
+    expect(buildStatus(app, deps).assistant).toMatchObject({ ready: false, kinds: NO_KINDS });
   });
 
   test("an assistant folder that is or holds the home folder keeps Assistant Mode from being ready", () => {
@@ -294,6 +349,8 @@ describe("GET status", () => {
       ready: false,
       problem: `No task may be granted ${homedir()}: it is or holds the home folder`,
       running: 0,
+      search: NO_SEARCH,
+      kinds: NO_KINDS,
     });
     write("settings.yaml", ready);
     setEnv("ASSISTANT_FOLDERS", dirname(homedir()));

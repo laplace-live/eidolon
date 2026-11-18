@@ -13,7 +13,7 @@ export const SECTIONS = [
 ] as const;
 export type SectionId = (typeof SECTIONS)[number];
 
-export type CardId = "you" | "storage" | "embeddings" | "ytDlp" | "assistant";
+export type CardId = "you" | "storage" | "embeddings" | "ytDlp" | "assistant" | "kinds";
 
 export interface CardSpec {
   /** Picks its title and description. */
@@ -56,9 +56,20 @@ export const CARDS: Readonly<Record<Named, readonly CardSpec[]>> = {
       paths: [
         "assistant.enabled",
         ["assistant.provider", "assistant.model"],
+        ["assistant.search.provider", "assistant.search.model"],
         "assistant.folders",
+        "assistant.bash",
         ["assistant.spendPauseUsd", "assistant.contextTokens"],
         "chats.display",
+      ],
+    },
+    // The kinds' own accounts and models, which tasks she marks so run on.
+    {
+      id: "kinds",
+      paths: [
+        ["assistant.quick.provider", "assistant.quick.model"],
+        ["assistant.coding.provider", "assistant.coding.model"],
+        ["assistant.research.provider", "assistant.research.model"],
       ],
     },
   ],

@@ -46,6 +46,10 @@ set `EIDOLON_HOME=/data`.
   bin/yt-dlp            the yt-dlp the offline tools install and keep current, with its stamp
   locks/                the offline tools' locks, released when their process exits
   chats/<id>/           the local web app's text chats, 0700: chat.jsonl, meta.json, files/ (chat.md)
+  tasks/<id>/           assistant tasks' records; tasks/allowed-commands.json, the commands
+                        allowed for good from their cards (assistant.md)
+  skills/<name>/        the owner's Agent Skills, each a SKILL.md, which tasks may load
+  mcp.json              the MCP servers tasks may call; mcp/ (0700) is where they run
   mem0/history.db       Mem0's change log (the TypeScript bot's default)
 ```
 
@@ -126,6 +130,10 @@ moves it into the entry when it saves a new one. The names it accepts: each prov
 `ELEVENLABS_API_KEY`, `DEEPGRAM_API_KEY`, `CARTESIA_API_KEY`, `MINIMAX_API_KEY`, `COHERE_API_KEY`),
 a role's own (`RERANK_API_KEY`, `EMBED_API_KEY`, `REFINE_API_KEY`), and production's
 (`CLOUDFLARE_TURN_KEY_API_TOKEN`, `WEBRTC_TURN_CREDENTIAL`, `CF_WAF_BYPASS_TOKEN`).
+
+`mcpSecrets`, an object of names and values, holds what an `mcp.json` entry's `${NAME}` stands for
+when the environment doesn't set `NAME` (a blank variable counts as unset); none of its names is a
+setting, and no route sends a value ([assistant.md](assistant.md#mcp-servers)).
 
 `EIDOLON_CHAT_SECRET`, the key the production chat endpoint signs with, comes from the environment
 alone: `credentials.json` ignores it with a warning, and no YAML file has a setting for it. While
@@ -322,9 +330,18 @@ The install's settings, for every persona. Paths resolve in the data home.
 | `assistant.enabled` | `ASSISTANT_ENABLED` | flag | Assistant Mode |
 | `assistant.provider` | `ASSISTANT_PROVIDER` | string | Assistant provider |
 | `assistant.model` | `ASSISTANT_MODEL` | string | Assistant model |
+| `assistant.quick.provider` | `ASSISTANT_QUICK_PROVIDER` | string | Quick task provider |
+| `assistant.quick.model` | `ASSISTANT_QUICK_MODEL` | string | Quick task model |
+| `assistant.coding.provider` | `ASSISTANT_CODING_PROVIDER` | string | Coding task provider |
+| `assistant.coding.model` | `ASSISTANT_CODING_MODEL` | string | Coding task model |
+| `assistant.research.provider` | `ASSISTANT_RESEARCH_PROVIDER` | string | Research task provider |
+| `assistant.research.model` | `ASSISTANT_RESEARCH_MODEL` | string | Research task model |
 | `assistant.folders` | `ASSISTANT_FOLDERS` | paths | Assistant folders |
+| `assistant.bash` | `ASSISTANT_BASH` | flag | Assistant commands |
 | `assistant.spendPauseUsd` | `ASSISTANT_SPEND_PAUSE_USD` | float | Assistant spend pause |
 | `assistant.contextTokens` | `ASSISTANT_CONTEXT_TOKENS` | int | Assistant context |
+| `assistant.search.provider` | `ASSISTANT_SEARCH_PROVIDER` | string | Web search provider |
+| `assistant.search.model` | `ASSISTANT_SEARCH_MODEL` | string | Web search engine |
 | `chats.display` | `CHAT_DISPLAY` | string | Task display |
 
 `local.viewerName` is what the persona calls you in the local web app's calls; the bot that
@@ -349,10 +366,20 @@ in one of the local app's chats, or `laplace-task` runs; production never has th
 `assistant.provider` and `assistant.model` name an account and a model: the role has no default
 for either, and her chat model is never the fallback. `assistant.folders` lists folders every
 task may read and write besides its own, where a task she starts runs without asking first
-([assistant.md](assistant.md)). A task pauses to ask before going on each time its
+([assistant.md](assistant.md)). `assistant.bash` (default on) lets a task ask to run commands on
+macOS and Linux, each waiting for your OK on its card unless you allowed that exact command in its
+folder for good; off, no task runs any. A task pauses to ask before going on each time its
 spend crosses a multiple of `assistant.spendPauseUsd` (default 1, in US dollars; 0 never
 pauses), or after its first request on a model with no known price, whose spend can't be
 counted, and keeps its requests within `assistant.contextTokens` tokens (default 128000).
+
+`assistant.quick`, `assistant.coding` and `assistant.research` name the account and model for the
+tasks she marks quick, coding or research. Unset, they follow `assistant.provider` and
+`assistant.model`; a model alone runs on the assistant's account, and another account needs its
+model too. A kind whose own can't run (no model, no key) runs on the assistant's, and so does a
+task she marks as anything else. `assistant.search.provider` names the OpenRouter account tasks
+search the web with, at about $0.007 a search, and `assistant.search.model` its engine, `exa`, the
+one offered. Unset, tasks can't search, though they can still read the pages you allow.
 
 `chats.display` is how much of her tasks a chat in the local app shows, until the chat picks its
 own with `/focus`, `/normal` or `/verbose` ([assistant.md](assistant.md#display)). `normal`, the

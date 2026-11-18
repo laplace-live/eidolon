@@ -3,7 +3,7 @@
 // task's model requests go to a local server that holds each one until its client gives up.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
@@ -174,6 +174,9 @@ async function until(check: () => boolean | Promise<boolean>, ms = 5000): Promis
 describe("the task routes", () => {
   test("answer only the app's own pages: a listed origin gets 403, a request without the session 401", async () => {
     const task = await seed({ status: "interrupted" });
+    // What a PUT below would turn off.
+    const mcp = '{"mcpServers": {"fake": {"command": "x"}}}';
+    writeFileSync(join(dirname(tasksDir()), "mcp.json"), mcp);
     setEnv("EIDOLON_LOCAL_ALLOWED_ORIGINS", SITE);
     booted = await bootFixture();
     const id = task.id;
@@ -184,6 +187,10 @@ describe("the task routes", () => {
       ["POST", `/api/local/tasks/${id}/approve`, '{"answer":"deny"}'],
       ["POST", `/api/local/tasks/${id}/continue`, "{}"],
       ["DELETE", `/api/local/tasks/${id}`, undefined],
+      ["GET", "/api/local/assistant/commands", undefined],
+      ["DELETE", `/api/local/assistant/commands/${Bun.randomUUIDv7()}`, undefined],
+      ["GET", "/api/local/mcp", undefined],
+      ["PUT", "/api/local/mcp/servers/fake", '{"enabled":false}'],
     ] as const) {
       // A listed site's page gets Eidolon's cookie too, since cookies ignore ports.
       const listed = await fetch(`${booted.base}${path}`, {
@@ -202,6 +209,7 @@ describe("the task routes", () => {
       expect([method, path, anonymous.status]).toEqual([method, path, 401]);
     }
     expect(await onDisk(id)).toEqual(task);
+    expect(readFileSync(join(dirname(tasksDir()), "mcp.json"), "utf8")).toBe(mcp);
   });
 });
 
@@ -225,6 +233,8 @@ describe("the manager", () => {
       ready: false,
       problem: "No provider fills ASSISTANT_PROVIDER",
       running: 0,
+      search: { on: false, problem: null },
+      kinds: { quick: null, coding: null, research: null },
     });
   });
 
@@ -242,6 +252,8 @@ describe("the manager", () => {
       ready: true,
       problem: null,
       running: 1,
+      search: { on: false, problem: null },
+      kinds: { quick: null, coding: null, research: null },
     });
 
     const put = await api("PUT", "/api/local/settings", {
@@ -259,6 +271,8 @@ describe("the manager", () => {
       ready: true,
       problem: null,
       running: 0,
+      search: { on: false, problem: null },
+      kinds: { quick: null, coding: null, research: null },
     });
   });
 

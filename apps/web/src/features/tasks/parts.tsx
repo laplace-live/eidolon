@@ -1,6 +1,6 @@
 // Pieces the task card, the waiting bar and the Tasks list share: a task's status, model, spend,
-// her lines it waits to read, its plan and files, and the fields a start's approval changes its
-// model and web access with.
+// her lines it waits to read, its plan and files, a command as it runs, and the fields a start's
+// approval changes its model and web access with.
 
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
@@ -34,7 +34,13 @@ import { providerById, providerName, providerOfAccount, roleById } from "@/lib/p
 import { cn } from "@/lib/utils";
 import { useLang } from "@/locales/i18n";
 import { type ModelChoice, WEB_MODES } from "./choice";
-import { STATUS_LABELS, TODO_STATUS_LABELS, WEB_MODE_HELP, WEB_MODE_LABELS } from "./labels";
+import {
+  STATUS_LABELS,
+  TODO_STATUS_LABELS,
+  visibleCommand,
+  WEB_MODE_LABELS,
+  webModeHelp,
+} from "./labels";
 import { nextPauseAt, pathIn, queuedLines } from "./state";
 
 /** Where Settings sets Assistant Mode up. */
@@ -193,6 +199,53 @@ export function TodoList({ items }: { readonly items: readonly TaskTodoItem[] })
   );
 }
 
+/** Worker-written text inline, its hidden characters spelled out as visibleCommand does. */
+export function Escaped({ text }: { readonly text: string }) {
+  return visibleCommand(text).map((part) =>
+    part.escaped ? (
+      <mark key={part.at} className="rounded-sm bg-warning/15 px-0.5 text-warning">
+        {part.text}
+      </mark>
+    ) : (
+      <span key={part.at}>{part.text}</span>
+    ),
+  );
+}
+
+/**
+ * A command whole, its hidden characters spelled out, wrapped in a box that scrolls once it is
+ * taller than its bound: nothing of it is ever cut off where the owner allows it.
+ */
+export function CommandText({
+  command,
+  className,
+}: {
+  readonly command: string;
+  /** A max-height of its own, such as the waiting bar's lower one. */
+  readonly className?: string;
+}) {
+  return (
+    <pre
+      data-command
+      className={cn(
+        "max-h-48 overflow-y-auto whitespace-pre-wrap wrap-anywhere rounded-md border bg-card px-2.5 py-1.5 font-mono text-xs leading-relaxed",
+        className,
+      )}
+    >
+      <Escaped text={command} />
+    </pre>
+  );
+}
+
+/** A command on one line, cut at its end where it doesn't fit, its hidden characters spelled out. */
+export function CommandLine({ command }: { readonly command: string }) {
+  return (
+    <span className="min-w-0 truncate font-mono" title={command}>
+      <Escaped text={command} />
+    </span>
+  );
+}
+
 /** The files it wrote, each from its folder when it lies there. */
 export function FileList({
   folder,
@@ -287,10 +340,13 @@ export function ModelChoiceFields({
 /** Which sites a task may fetch from, with what the choice means. */
 export function WebAccessField({
   value,
+  search,
   disabled,
   onChange,
 }: {
   readonly value: TaskWebMode;
+  /** Tasks may search the web: the search role has an account. */
+  readonly search: boolean;
   readonly disabled: boolean;
   readonly onChange: (mode: TaskWebMode) => void;
 }) {
@@ -319,7 +375,7 @@ export function WebAccessField({
           </ToggleGroupItem>
         ))}
       </ToggleGroup>
-      <FieldDescription>{t(WEB_MODE_HELP[value])}</FieldDescription>
+      <FieldDescription>{t(webModeHelp(value, search))}</FieldDescription>
     </Field>
   );
 }

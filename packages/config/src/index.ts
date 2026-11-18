@@ -11,6 +11,8 @@ export {
   assistantSettings,
   DEFAULT_ASSISTANT_CONTEXT_TOKENS,
   DEFAULT_ASSISTANT_SPEND_PAUSE_USD,
+  TASK_KINDS,
+  type TaskKind,
 } from "./assistant.ts";
 export { daysInMonth, isLeap, ordinalToYmd, ymdToOrdinal } from "./calendar.ts";
 export {

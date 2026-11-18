@@ -1,6 +1,6 @@
 // Which account, provider and model fill a role, with which key and API base, as the settings say
 // now. Every caller that spends money resolves its role here, so a persona's choices reach each one.
-import { withPersona } from "@eidolon/config";
+import { type TaskKind, withPersona } from "@eidolon/config";
 import { type Account, accountOf, clean, type Read, type Sources, sourcesOf } from "./accounts.ts";
 import {
   CALL_ROLES,
@@ -48,6 +48,7 @@ const CATEGORY_NAMES: Readonly<Record<Category, string>> = {
   decision: "decision model",
   image: "image model",
   transcription: "transcription",
+  search: "web search",
 };
 
 /** The account filling `role`, or null for an optional role nobody turned on. */
@@ -161,6 +162,49 @@ export function trySelect(
     onError?.(error);
     return null;
   }
+}
+
+const TASK_ROLES: Readonly<Record<TaskKind, RoleId>> = {
+  quick: "assistant-quick",
+  coding: "assistant-coding",
+  research: "assistant-research",
+  other: "assistant",
+};
+
+/** The role a task of `kind` runs on: its kind's own, or the assistant's for `other`. */
+export function taskRoleId(kind: TaskKind): RoleId {
+  return TASK_ROLES[kind];
+}
+
+export interface TaskSelection {
+  readonly selection: Selection;
+  /** Why the kind's own settings can't run, so the assistant's run in their place; else null. */
+  readonly fallback: string | null;
+}
+
+/**
+ * What a task of `kind` runs on: its kind's account and model when its settings name either and
+ * they can run (an account that fills the role, a model, a key), else the assistant's, with why.
+ * Throws as selectRequired("assistant") does when the assistant's can't fill it either.
+ */
+export function selectTask(kind?: TaskKind, read?: Read | Sources): TaskSelection {
+  const sources = sourcesOf(read);
+  const role = roleById(taskRoleId(kind ?? "other"));
+  let fallback: string | null = null;
+  const named = [role.providerEnv, role.modelEnv].some(
+    (name) => clean(sources.read(name)) !== undefined,
+  );
+  if (role.id !== "assistant" && named) {
+    try {
+      const own = select(role.id, sources);
+      if (own !== null && hasKey(own)) return { selection: own, fallback: null };
+      if (own !== null) fallback = missingKey(own).message;
+    } catch (error) {
+      if (!(error instanceof ProviderConfigError)) throw error;
+      fallback = error.message;
+    }
+  }
+  return { selection: selectRequired("assistant", sources), fallback };
 }
 
 /** Whether a provider asks every request for a key. */

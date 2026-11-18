@@ -86,6 +86,7 @@ const BY_PATH: Readonly<Record<string, Control>> = {
   "chat.maxRounds": { type: "integer", min: 1 },
   "assistant.enabled": { type: "flag", fallback: "on" },
   "assistant.folders": { type: "paths", inPersona: false, folders: true },
+  "assistant.bash": { type: "flag", fallback: "on" },
   "chats.display": { type: "select", options: CHAT_DISPLAYS, fallback: DEFAULT_DISPLAY },
 };
 

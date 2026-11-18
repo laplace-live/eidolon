@@ -186,7 +186,7 @@ terminal's log line that holds what went wrong, and the app shows it beside the 
 | Area | Routes | What |
 | --- | --- | --- |
 | Session | `POST session`, `GET session` | Trades a link code for the cookie and the proof; GET says whether the caller is signed in, or with `?probe=` proves this server holds the secret, for a second start |
-| Status | `GET status`, `POST restart` | Readiness, polled by the home page and never waiting on a remote probe: the keys her call roles need, each role's provider and model or what is wrong with them, her voice, and `assistant: { enabled, ready, problem, running }`, Assistant Mode's state, why it isn't ready, and how many tasks run; restart is refused during a call, or while one is connecting |
+| Status | `GET status`, `POST restart` | Readiness, polled by the home page and never waiting on a remote probe: the keys her call roles need, each role's provider and model or what is wrong with them, her voice, and `assistant: { enabled, ready, problem, running, search, kinds }`, Assistant Mode's state, why it isn't ready, how many tasks run, whether tasks can search the web (`{ on, problem }`), and why each kind of task runs on Assistant Mode's own model, if it does; restart is refused during a call, or while one is connecting |
 | Settings | `GET settings?persona=`, `PUT settings` | Every `SETTINGS` row: the value the files give it and which file, the environment's value and the variable it comes from, and whether that overrides the file's, as only an app row's does (a persona's own value wins, and without one she inherits the environment's, a model or voice only while the environment's provider is hers); and her voice styles, with each one the environment sets and whether she inherits it, replaces it with one of hers, or ignores it while her voice isn't the environment's; PUT `{scope, persona?, values}` is checked by kind, a provider against the catalog, the time zone as an IANA zone, and written to `settings.yaml` or her `persona.yaml`; one that turns Assistant Mode off, as the environment and the file decide it, answers once every live task is cancelled |
 | Accounts | `GET`, `POST accounts`, `PUT`, `DELETE accounts/:id`, `POST accounts/check`, `GET accounts/:id/models?category=` | Every provider account: `credentials.json`'s, and each provider's default that the environment configures or her calls need, with where its key comes from and never the key, its API base and settings, and which settings name it; a new one takes its provider's id while that is free, else `<provider>-2` and on; an API base is refused for a provider without a base variable; DELETE is refused while a settings file names it; the check asks the provider about a typed or the saved key, where the catalog says how: a free listing, never a model call; models lists what the provider's API offers now ([providers.md](providers.md#model-lists)) |
 | Credentials | `GET`, `PUT credentials`, `POST credentials/check` | The secrets `credentials.json` keeps under variable names, `{NAME: {set, source}}`, never a value; the check is Qdrant's for the memory step and home |
@@ -202,6 +202,7 @@ terminal's log line that holds what went wrong, and the app shows it beside the 
 | Usage | `GET usage?from=&to=&persona=` | The usage ledger's spend summed by day, persona, provider, task and model, every persona and provider it knows, and whether it records at all ([providers.md](providers.md#usage-and-cost)) |
 | Chats | `GET`, `POST chats`, `GET`, `PATCH`, `DELETE chats/:id`, `POST chats/:id/messages`, `GET chats/:id/live`, `POST chats/:id/stop`, `POST chats/:id/participants`, `GET chats/:id/files/:name` | [Chats](#chats) |
 | Tasks | `GET tasks?chat=`, `GET tasks/:id`, `GET tasks/:id/events?after=`, `POST tasks/:id/approve`, `POST tasks/:id/continue`, `DELETE tasks/:id` | The app's tasks, which she starts in a chat with `start_task`, and the answers and Stop of each one's card; no route starts, steers or deletes a task ([assistant.md](assistant.md#the-routes)) |
+| Commands and MCP | `GET assistant/commands`, `DELETE assistant/commands/:id`, `GET mcp`, `PUT mcp/servers/:name` | The commands tasks run without asking, and taking one back; the MCP servers `mcp.json` gives tasks, never an `env` value or a secret, and turning one on or off or taking back a tool's Always, which only a card adds ([assistant.md](assistant.md#the-routes)) |
 
 The bot's own routes stay, behind the guard: `POST /api/offer` and `/api/offer/preflight` take
 the session and call as [the local viewer](#the-local-viewer-and-memory), with no quota;
@@ -246,7 +247,7 @@ whether or not she is the active persona ([chat.md](chat.md#calls)).
 | `template-file` | 409 | Deleting a picture the template ships |
 | `invalid-toml` | 400 | A glossary that doesn't parse |
 | `invalid-url` | 400 | A link that isn't http(s), holds whitespace or a control character, or is over 2048 characters |
-| `unknown-command` | 400 | A job command outside `JOB_COMMANDS` |
+| `unknown-command` | 400, 404 | A job command outside `JOB_COMMANDS`; 404 for taking back a command no longer allowed for good |
 | `invalid-option` | 400 | A job option the command doesn't take, of the wrong type, starting with `-`, or naming an unknown batch or video |
 | `unknown-job` | 404 | No job has that id |
 | `job-not-running` | 409 | Cancelling a job that ended |
@@ -255,13 +256,15 @@ whether or not she is the active persona ([chat.md](chat.md#calls)).
 | `missing-key` | 409 | Starting a chat, or sending in one, while her mind's provider takes a key and has none |
 | `chat-in-call` | 409 | Sending a message or a voice message, deleting the chat, or calling into it while it is in a call |
 | `assistant-off` | 409 | Answering a task's card while Assistant Mode is off; Stop and a Deny at its start still work |
-| `assistant-not-ready` | 409 | Allowing a start, answering a path or a site, or Continue while the assistant role lacks an account, a model or a key, or an assistant folder is or holds the home folder; the message is status' `assistant.problem` |
+| `assistant-not-ready` | 409 | Allowing a start, answering a path, a site, a command or an MCP call, or Continue while the assistant role lacks an account, a model or a key, or an assistant folder is or holds the home folder; the message is status' `assistant.problem` |
 | `unknown-task` | 404 | No app task has that id, a `laplace-task` task's included |
 | `task-locked` | 409 | Another process, such as `laplace-task`, holds the task |
 | `nothing-pending` | 409 | Approving a task that waits for no answer, runs, or asks something other than the question the answer names |
 | `not-paused` | 409 | Continuing a task that isn't paused or interrupted |
 | `pending` | 409 | Continuing a task that waits for an answer |
 | `range-not-satisfiable` | 416 | A task's events asked for from past the transcript's end |
+| `unknown-mcp-server` | 404 | Changing a server `mcp.json` doesn't hold; the message never names what was sent |
+| `invalid-mcp-config` | 409 | Changing `mcp.json` from Settings, or answering Always on an MCP call's card, while it doesn't parse |
 
 ## The local viewer and memory
 
@@ -436,8 +439,8 @@ tools.
 
 - **The task card** (`features/tasks/task-card.tsx`) sits in the chat's log at her `start_task`
   call, found by the call's `started` result:
-  - the goal, a status badge, the folder, the model and its account, and the spend against the
-    next pause;
+  - the goal, a status badge, the folder, its kind (**Kind**: Quick, Coding or Research, absent
+    for any other), the model and its account, and the spend against the next pause;
   - while it waits on the owner, its question, **Start this task?**, whether it may read or write
     outside its folders, or whether it may fetch from a site, with **Deny**, **Always Allow This
     Folder** (**Allow Any Site** for a site) and **Allow Once**. A path's question shows the path
@@ -449,6 +452,18 @@ tools.
     naming that folder. Each answer names the question it answers. At a start the account and model (the role's
     picker, with a live listing) and the web access (**Ask for Each Site**, **Any Site**, **No
     Web**) can be changed first;
+  - for a command, **Let it run this command?**: the command whole, in one bounded box that
+    scrolls rather than cuts, its hidden and control characters spelled out (`\u{202E}`,
+    `visibleCommand`, `labels.ts`); the folder it runs in; that a command runs as the owner with
+    no sandbox; **Stops at** the time its timeout would stop it, counted from now; and what each
+    answer grants. **Deny**, **Always in This Folder** and **Run Once**. When the owner allowed it
+    for good but the task has read outside content (`granted`), the card says why it asks again;
+  - for an MCP call, **Let it run <tool> on <server>?**: the server's hint, as the server's own
+    claim; every argument, shortest first, with its size ("3,000 characters · 40 lines") and its
+    head in a box, a cut head marked "…", and **Show All**, which reads the call from the task's
+    transcript and shows each argument whole, escaped all the same; what each answer does, and,
+    under No Web or once the task has read outside content, that tools always allowed ask again.
+    **Deny**, **Always Allow This Tool** and **Run Once**;
   - for a spend, stall or unpriced pause, or an interrupted task, **Continue**, with the spend
     pause's amount at a spend pause;
   - while it waits on the owner (awaiting approval, paused or interrupted), the lines she passed
@@ -460,9 +475,15 @@ tools.
     and a running task, which reads hers before its next request, lists none;
   - the plan, the latest step (the tool and the head of its argument) on the card of the chat's
     newest running task, and the files it wrote;
+  - **In the Background**, while the task is live: each command running in the background on one
+    line, how long it has run, and when its timeout stops it;
+  - notes on MCP servers the task works without, and why, and on tools the limits left out;
   - **Show Steps**, the transcript, followed live while it runs and read once otherwise: the
     worker's words in Markdown-light, a row per tool call whose result folds out, errors marked,
-    the lines it was told (hers with their prefix), pauses, compaction as a divider, and its end.
+    the lines it was told (hers with their prefix) and the runtime's notices (a command's end, with
+    a terminal icon), pauses, compaction as a divider, and its end. A `bash` row's head starts
+    with the command's `#id`, as `bash_output` and `bash_kill` name it; an MCP row reads
+    `server · tool`, and a `skill` row `name · path`.
     Only the newest running task's card, and a card whose steps are open, follows
     `GET tasks/:id/events`: a follow holds one of the browser's six connections to the app while
     its task runs;
@@ -490,8 +511,10 @@ tools.
 - **The waiting bar** sits above the composer, in every display, while a task of the open chat
   waits on the owner: awaiting approval, paused or interrupted. It says what the oldest one waits
   for ("Waiting for your OK to work in ~/Git/x"; for a path, what an Allow grants: "Waiting for
-  your OK to read everything in ~/Documents", "read and write" for a write, or the path alone) and
-  how many more wait, with the card's buttons, which share the card's model, web access and
+  your OK to read everything in ~/Documents", "read and write" for a write, or the path alone;
+  "Waiting for your OK to run a command in ~/Git/x", with the command in the card's box, shorter;
+  "Waiting for your OK to run <tool> on <server>", with each argument's name and size) and how
+  many more wait, with the card's buttons, which share the card's model, web access and
   spend-pause field, and **Show Task**, which scrolls to the card. Above its buttons it lists her
   queued lines as the card does, since its Allow or Continue lets the task read them too. During a
   call it sits above the dock. The Tasks list's waiting row says the same line.
@@ -511,22 +534,37 @@ tools.
 - **The Tasks list** (`/tasks`) is read-only: what she is working on and has done. A **Tasks** nav
   entry before Jobs, shown while Assistant Mode is on, counts the tasks waiting on the owner.
   - Live tasks come first, then ended ones, each newest first. A row has the goal, the status, her
-    name and the chat's title (an untitled chat's day), the folder, the model, the spend and the
-    age, and a waiting row says what it waits for.
+    name and the chat's title (an untitled chat's day), the folder, its kind and the model, the
+    spend and the age, and a waiting row says what it waits for.
   - A row opens `/chats/<id>?task=<task>`, which scrolls the card into view and rings it. A
     deleted chat's row reads **Chat deleted** and opens nothing.
   - There is no New Task, no button and no steps. While the mode is on but not ready, the problem
     shows above the rows, with **Open Settings**; while it is off, `/tasks` leads home.
   - The nav polls the list, every 2 s while a task runs, 5 s while one waits and 30 s otherwise.
-- **Settings → Assistant Mode** holds the switch, the account and model (the role's picker), the
-  folders (full paths, never `/` or `~`; PUT settings also refuses, 400 `invalid-setting` with
+- **Settings → Assistant Mode** holds the switch, the account and model (the role's picker),
+  **Web Search Provider** and **Web Search Engine** ("Off: No Web Search" until an OpenRouter
+  account is picked, then `exa`, with "Web search is off: …" while the chosen one can't search),
+  the folders (full paths, never `/` or `~`; PUT settings also refuses, 400 `invalid-setting` with
   `GrantRefused`'s reason, any folder that is or holds home on disk, such as `/Users/<you>`,
-  `/Users`, `~/.` or `~/..`), the spend pause, the context and **Task Display**, the display each
-  chat shows until it picks its own, says she starts tasks when asked in a chat, shows the problem
-  while the mode isn't ready, and links to the Tasks list while it is on. Saving the switch off
-  asks first while any task hasn't ended, counted from a fresh `GET tasks` ("2 tasks are running or
-  waiting for you. Turning Assistant Mode off stops them."), and asks anyway when the list can't be
-  read.
+  `/Users`, `~/.` or `~/..`), **Assistant Commands** (`assistant.bash`), the spend pause, the
+  context and **Task Display**, the display each chat shows until it picks its own, says she starts
+  tasks when asked in a chat, shows the problem while the mode isn't ready, and links to the Tasks
+  list while it is on. Saving the switch off asks first while any task hasn't ended, counted from a
+  fresh `GET tasks` ("2 tasks are running or waiting for you. Turning Assistant Mode off stops
+  them."), and asks anyway when the list can't be read. Web Access's help on a start's card says a
+  task may search without asking while search is on, and No Web's that each MCP call asks. Three
+  cards follow it, whose buttons act at once:
+  - **Models by Kind**: an account and model for quick, coding and research tasks, each "Same as
+    Assistant Tasks" until set, and for a kind that falls back, why
+    (`features/settings/assistant.tsx`);
+  - **Allowed Commands**: each command allowed for good, escaped in its box, with its folder and
+    **Remove** (`commands-card.tsx`);
+  - **MCP Servers**: "Only Add Programs You Trust"; each server with its description and command
+    line as `mcp.json` writes it, an **Enabled** switch, its **Always Allowed** tools as chips whose
+    × takes one back ("Stop Always Allowing <tool>"), each `${NAME}` it needs that isn't set, and
+    its problem; a file that doesn't parse says no server starts until it is fixed; with none, where
+    `mcp.json` goes and an example with `npx` and `docker run -i --rm --init` (`mcp-card.tsx`).
+    The list is read again on focus, since the file is edited by hand.
 - **Spend:** a task's requests are recorded with `source: "task"` and the task's id.
 
 ## Jobs
@@ -646,7 +684,10 @@ that every Chinese one has the English one's placeholders and tags.
 
 In Chinese a task is 任务, a job is 作业, and Assistant Mode is 助手模式. A task's statuses come
 from `STATUS_LABELS` in `features/tasks/labels.ts`, and its plan's **Plan** carries the context
-`task plan`, apart from the jobs' Plan command. The task card's copy of the bot's `STEER_PREFIX`
+`task plan`, apart from the jobs' Plan command. A task's kind is 类型 (**Kind**, its labels with the
+context `task kind`), **Run Once** 运行一次, **Always in This Folder** 在这个文件夹里始终允许,
+**Always Allow This Tool** 始终允许这个工具, **In the Background** 后台运行中, and "Stops at
+{time}" reads "{time} 自动停止". The task card's copy of the bot's `STEER_PREFIX`
 (`features/tasks/state.ts`) is typed by the bot's constant, so changing one fails typecheck until
 the other follows.
 
@@ -753,6 +794,26 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
     with the worker's report only in her call's `tool` message; and after **Hang Up**, the call's
     lines and her call's events in order, no turn telling it again, the page on disk, and the
     Tasks list showing it done;
+  - Models by Kind's Coding Task Model set to a second model at that server; a coding task she
+    starts, her `start_task` schema requiring `profile`, whose card shows **Coding** and runs it on
+    that model; its worker loading the owner's skill, written into the temporary home, from its
+    prompt's catalog; then commands, each appending to a file in the task's folder: the first's
+    card (the command in its box, the folder, **Stops at**, **Deny**, **Always in This Folder**
+    and **Run Once**, the waiting bar naming the folder, and her answer meanwhile after a block
+    saying it asks to run a command) answered **Run Once**; the same command asking again,
+    answered **Deny**, which `task.json` keeps; the next answered **Always in This Folder**, which
+    `GET assistant/commands` lists, and run again unasked; online, a fetch of example.com allowed
+    once, after which that command asks again with `granted` and the card says why; and a
+    `sleep 20` that moves to the background, listed under **In the Background** and in her block
+    while it runs, whose end's notice wakes the worker, who reads it with `bash_output`. **Show
+    Steps** lists the skill, the commands and the notice; Settings' **Allowed Commands** lists the
+    one allowed for good, whose **Remove** empties `allowed-commands.json`;
+  - an `mcp.json` naming `packages/assistant/test/fixtures/mcp-server.mjs`, run on this Bun with
+    `echo` its one tool: a task whose worker calls it twice, its card naming the tool, the server,
+    the server's read-only hint and the argument with its size, answered **Run Once**, then
+    **Always Allow This Tool**, which `mcp.json` keeps at 0600, the server's process gone once the
+    task ends; a second task, called `other` and showing no kind, whose call runs unasked; then
+    Settings' **MCP Servers** taking the Always back;
 
 then stops the server and deletes the home. It refuses to start when either `load-env.ts` would
 apply a `.env` or use another data home, and exits 0 when every check passes, else 1, after the

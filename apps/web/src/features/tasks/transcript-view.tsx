@@ -11,6 +11,8 @@ import {
   ClockIcon,
   CornerDownRightIcon,
   LoaderCircleIcon,
+  type LucideIcon,
+  TerminalIcon,
 } from "lucide-react";
 import { memo, type ReactNode, useLayoutEffect, useRef } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -169,7 +171,9 @@ const ToolCall = memo(function ToolCall({
       >
         <Icon aria-hidden className={cn("size-3.5 shrink-0", STATE_CLASS[state])} />
         <span className="sr-only">{t(TOOL_STATE_TEXT[state])}: </span>
-        <span className="shrink-0 font-medium font-mono text-[0.8125rem]">{row.name}</span>
+        <span className="shrink-0 font-medium font-mono text-[0.8125rem]" title={row.name}>
+          {row.label}
+        </span>
         <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground text-xs">
           {row.head}
         </span>
@@ -211,11 +215,17 @@ function Divider({ children }: { readonly children: ReactNode }) {
   );
 }
 
-/** A line it was told mid-run, such as what the owner answered it. */
-function ToldLine({ text }: { readonly text: string }) {
+/** A line it was told mid-run, such as what the owner answered it, or a command's end. */
+function ToldLine({
+  text,
+  icon: Icon = CornerDownRightIcon,
+}: {
+  readonly text: string;
+  readonly icon?: LucideIcon;
+}) {
   return (
     <p className="flex gap-2 text-muted-foreground text-xs">
-      <CornerDownRightIcon aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+      <Icon aria-hidden className="mt-0.5 size-3.5 shrink-0" />
       <span className="min-w-0 whitespace-pre-wrap break-words">{text}</span>
     </p>
   );
@@ -283,6 +293,8 @@ const Row = memo(function Row({
     case "steer":
     case "follow-up":
       return <ToldLine text={row.text} />;
+    case "notice":
+      return <ToldLine text={row.text} icon={TerminalIcon} />;
     case "compaction":
       return (
         <Collapsible className="flex flex-col gap-2">

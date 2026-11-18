@@ -1,14 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { CREDENTIALS, SETTINGS } from "@eidolon/config";
+import { CREDENTIALS, SETTINGS, TASK_KINDS } from "@eidolon/config";
 import {
   CATEGORIES,
   PROVIDER_IDS,
   PROVIDERS,
+  providerById,
   providersFor,
   ROLE_IDS,
   ROLES,
+  roleById,
 } from "../src/catalog.ts";
+import { taskRoleId } from "../src/resolve.ts";
 
 describe("the catalog", () => {
   test("imports nothing, so the web app's bundle can carry it", () => {
@@ -73,5 +76,38 @@ describe("the catalog", () => {
         expect(providersFor(role.category).map((p) => p.id)).toContain(role.defaultProvider);
       }
     }
+  });
+
+  test("web search is an app role, off until an account is picked, and OpenRouter's one engine is Exa, priced per 1,000 searches", () => {
+    expect(roleById("search")).toMatchObject({
+      category: "search",
+      scope: "app",
+      path: "assistant.search",
+      defaultProvider: null,
+    });
+    expect(providersFor("search").map((provider) => provider.id)).toEqual(["openrouter"]);
+    const offer = providerById("openrouter")?.offers.search;
+    expect(offer).toMatchObject({ defaultModel: "exa", openModels: false });
+    expect(offer?.models.map((model) => [model.id, model.price])).toEqual([
+      ["exa", { unit: "searches", usd: 7 }],
+    ]);
+  });
+
+  test("each task kind but other has an app role of its own, following the assistant's, and no other role does", () => {
+    const kinds = TASK_KINDS.filter((kind) => kind !== "other");
+    expect(taskRoleId("other")).toBe("assistant");
+    for (const kind of kinds) {
+      expect(roleById(taskRoleId(kind))).toMatchObject({
+        id: `assistant-${kind}`,
+        category: "llm",
+        scope: "app",
+        path: `assistant.${kind}`,
+        defaultProvider: null,
+        defaultModels: null,
+        follows: "assistant",
+      });
+    }
+    const following = ROLES.filter((role) => role.follows === "assistant").map((role) => role.id);
+    expect(following).toEqual(kinds.map(taskRoleId));
   });
 });

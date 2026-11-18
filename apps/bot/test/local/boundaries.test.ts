@@ -241,7 +241,13 @@ describe("the route table", () => {
     // Never booted: building the routes reads nothing of it.
     const tasks = new TaskManager({
       dataHome: "/nowhere",
-      settings: () => ({ enabled: false, folders: [], spendPauseUsd: 1, contextTokens: 1 }),
+      settings: () => ({
+        enabled: false,
+        folders: [],
+        bash: true,
+        spendPauseUsd: 1,
+        contextTokens: 1,
+      }),
       addFolder: () => {},
       problem: () => null,
       report: async () => {},

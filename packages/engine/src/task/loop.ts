@@ -47,6 +47,8 @@ const KEEP_TOKENS = 20_000;
 const MASK_AFTER_TOKENS = 40_000;
 /** Turns making the same calls before the task pauses as stalled. */
 const STALL_TURNS = 3;
+/** How often a run waiting on its background work looks at it and at its inbox. */
+const WAIT_MS = 1000;
 
 const INTERRUPTED =
   "Interrupted by a restart before its result was recorded; check the files before trying again.";
@@ -235,14 +237,16 @@ class TaskRun {
       return await this.#loop({ assistant: last, pending });
     }
     // pi's continue() from an assistant tail: a request now would answer her own reply, so only
-    // queued lines carry the run on, unless that reply can't be the report.
+    // queued lines and the background's ends carry the run on, unless that reply can't be the
+    // report.
     const tail = taskContext(this.#entries).blocks.at(-1);
     if (
       tail?.kind === "assistant" &&
       tail.entry.calls.length === 0 &&
       unfinished(tail.entry.finishReason) === null &&
       !this.#request.inbox.hasSteering() &&
-      (await this.#takeFollowUps()) === 0
+      (await this.#takeFollowUps()) === 0 &&
+      !(await this.#waitBackground())
     ) {
       return { status: "succeeded", report: tail.entry.text };
     }
@@ -278,8 +282,41 @@ class TaskRun {
       if ((await this.#takeFollowUps()) > 0) continue;
       const why = turn.batch === null ? unfinished(turn.assistant.finishReason) : null;
       if (why !== null) return { status: "failed", error: why.error };
+      if (await this.#waitBackground()) continue;
       return { status: "succeeded", report: turn.assistant.text };
     }
+  }
+
+  /**
+   * While the tools' background work runs, a run that would end waits for it, sending no request:
+   * true once one of its ends, a steering line or a follow-up gives the worker more to do, false
+   * once nothing runs.
+   */
+  async #waitBackground(): Promise<boolean> {
+    const background = this.#request.background;
+    if (background === undefined) return false;
+    for (;;) {
+      // Asked first: work that ends after this is either taken now or waited for.
+      const running = background.running();
+      if ((await this.#takeNotices()) > 0) return true;
+      if (!running) return false;
+      // runTask's reader stops it only at an event (its generator's return() waits behind next()).
+      this.#emit({ type: "wait" });
+      await (this.#request.sleep ?? abortableSleep)(WAIT_MS, this.#signal);
+      this.#signal.throwIfAborted();
+      if (this.#request.inbox.hasSteering()) return true;
+      if ((await this.#takeFollowUps()) > 0) return true;
+    }
+  }
+
+  /** Stores each line the background gives about work that ended since, as a notice. */
+  async #takeNotices(): Promise<number> {
+    const background = this.#request.background;
+    if (background === undefined) return 0;
+    this.#signal.throwIfAborted();
+    const lines = background.takeEnded();
+    for (const text of lines) await this.#append({ type: "notice", text });
+    return lines.length;
   }
 
   async #turn(): Promise<Turn | TaskOutcome> {
@@ -290,6 +327,7 @@ class TaskRun {
     for (const text of this.#request.inbox.takeSteering(all)) {
       await this.#append({ type: "steer", text });
     }
+    await this.#takeNotices();
     const turn = ++this.#turns;
     this.#emit({ type: "turn", state: "start", turn });
     try {
@@ -402,7 +440,7 @@ class TaskRun {
     readonly sized: number;
   } {
     const maskAfter = this.#request.limits.maskAfterTokens ?? MASK_AFTER_TOKENS;
-    const messages = contextMessages(taskContext(this.#entries), maskAfter);
+    const messages = contextMessages(taskContext(this.#entries), maskAfter, this.#request.tools);
     const tokens =
       estimateTokens(this.#request.system) +
       this.#schemaTokens +
@@ -700,6 +738,7 @@ class TaskRun {
         if (open)
           this.#emit({ type: "tool", state: "update", callId: call.id, name: call.name, text });
       },
+      steered: () => this.#request.inbox.hasSteering(),
     };
     let result: TaskToolResult;
     try {

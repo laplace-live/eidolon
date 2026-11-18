@@ -31,6 +31,7 @@ function row(fields: Partial<UsageRow>): UsageRow {
     outputTokens: 0,
     characters: 0,
     audioSeconds: 0,
+    searches: 0,
     images: 0,
     ...fields,
   };

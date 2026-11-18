@@ -1,7 +1,9 @@
-// Settings' Assistant Mode card: its rows, what keeps tasks from starting, a way to the Tasks list,
-// and the question a save asks before turning the mode off, which stops every task not yet ended.
+// Settings' Assistant Mode cards: its rows, what keeps tasks from starting or searching, a way to the
+// Tasks list, and the question a save asks before turning the mode off, which stops every task not
+// yet ended; and Models by Kind, with each kind that runs on Assistant Mode's model for now.
 
-import { ph, plural } from "@lingui/core/macro";
+import type { MessageDescriptor } from "@lingui/core";
+import { msg, ph, plural } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ListTodoIcon, TriangleAlertIcon } from "lucide-react";
@@ -11,20 +13,20 @@ import { type SaveQuestion, SettingsCard } from "@/components/settings-form/sett
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { stoppedByTurningOff } from "@/features/tasks/queries";
+import type { TaskProfile } from "@/lib/api";
 import { statusQuery } from "@/lib/query";
 
-export function AssistantCard({
-  paths,
-  title,
-  description,
-}: {
+interface CardProps {
   readonly paths: readonly CardPath[];
   readonly title: string;
   readonly description: string;
-}) {
+}
+
+export function AssistantCard({ paths, title, description }: CardProps) {
   const { t } = useLingui();
   const queryClient = useQueryClient();
   const assistant = useQuery(statusQuery).data?.assistant;
+  const searchProblem = assistant?.search.problem ?? null;
 
   async function confirm(values: Readonly<Record<string, unknown>>): Promise<SaveQuestion | null> {
     if (values["assistant.enabled"] !== false) return null;
@@ -71,6 +73,41 @@ export function AssistantCard({
           </AlertDescription>
         </Alert>
       )}
+      {assistant?.enabled && searchProblem !== null && (
+        <Alert data-search-problem>
+          <TriangleAlertIcon />
+          <AlertDescription className="wrap-anywhere">
+            {t`Web search is off: ${ph({ problem: searchProblem })}`}
+          </AlertDescription>
+        </Alert>
+      )}
+    </SettingsCard>
+  );
+}
+
+/** A kind whose own account or model can't run, so its tasks take Assistant Mode's. */
+const KIND_FALLBACKS: Readonly<Record<TaskProfile, MessageDescriptor>> = {
+  quick: msg`Quick tasks run on Assistant Mode's model for now`,
+  coding: msg`Coding tasks run on Assistant Mode's model for now`,
+  research: msg`Research tasks run on Assistant Mode's model for now`,
+};
+
+export function KindsCard({ paths, title, description }: CardProps) {
+  const { t } = useLingui();
+  const kinds = useQuery(statusQuery).data?.assistant.kinds;
+  const fallbacks = (Object.keys(KIND_FALLBACKS) as TaskProfile[]).flatMap((kind) => {
+    const reason = kinds?.[kind] ?? null;
+    return reason === null ? [] : [{ kind, reason }];
+  });
+  return (
+    <SettingsCard scope="app" paths={paths} title={title} description={description}>
+      {fallbacks.map(({ kind, reason }) => (
+        <Alert key={kind} data-kind-fallback={kind}>
+          <TriangleAlertIcon />
+          <AlertTitle>{t(KIND_FALLBACKS[kind])}</AlertTitle>
+          <AlertDescription className="wrap-anywhere">{reason}</AlertDescription>
+        </Alert>
+      ))}
     </SettingsCard>
   );
 }

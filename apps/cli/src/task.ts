@@ -14,6 +14,7 @@ import {
   FolderPolicy,
   GrantRefused,
   loadContextFiles,
+  loadSkills,
   newTaskId,
   openTaskStore,
   PathRefused,
@@ -22,6 +23,7 @@ import {
   type TaskStatus,
   tasksDir,
   type WebAccess,
+  type WebSearcher,
   writeSnapshot,
 } from "@eidolon/assistant";
 import {
@@ -50,7 +52,14 @@ import {
   type TaskRequest,
   UsageMeter,
 } from "@eidolon/engine";
-import { ProviderConfigError, roleById } from "@eidolon/providers";
+import {
+  hasKey,
+  openRouterSearcher,
+  ProviderConfigError,
+  roleById,
+  trySelect,
+  type UsageSink,
+} from "@eidolon/providers";
 import { ArgparseExit, type ParserSpec, parseArgs, parserError } from "./argparse.ts";
 import { type CliIo, type CommandDeps, reportExit, resolveIo } from "./io.ts";
 
@@ -78,8 +87,9 @@ options:
                         if missing
   --allow PATH          Another folder the task may read and write; repeat
                         for more. assistant.folders are allowed too
-  --web {any,off}       Whether the task may fetch web pages, from any site
-                        (default: off; with --resume, the task's own)
+  --web {any,off}       Whether the task may fetch web pages, from any site,
+                        and search the web once assistant.search.provider
+                        is set (default: off; with --resume, the task's own)
   --model ACCOUNT/MODEL
                         The account and model to run on, as in
                         openrouter/anthropic/claude-sonnet-5.5 (default:
@@ -240,6 +250,14 @@ function settingsModel(): ModelChoice | null {
 /** `--web any`. web_fetch still refuses this computer and its network. */
 const ANY_SITE: WebAccess = { allows: () => true };
 
+/** The search role's searcher, as its settings stand: none until it has an account and its key. */
+function roleSearcher(charge: UsageSink): WebSearcher | undefined {
+  const selection = trySelect("search");
+  return selection !== null && hasKey(selection)
+    ? openRouterSearcher(selection, { tap: charge })
+    : undefined;
+}
+
 /** The command line steers nothing: a task runs on its brief alone. */
 const NO_LINES: TaskInbox = {
   hasSteering: () => false,
@@ -370,11 +388,24 @@ async function equip(
   } catch (error) {
     throw parserError(PARSER, `${brief.folder} can't be the task's folder: ${errorText(error)}`);
   }
-  const tools = createTaskTools(policy, web === "any" ? { web: ANY_SITE } : {});
+  const search = web === "any" ? roleSearcher(meter.charge) : undefined;
+  const skills = await loadSkills({ dataHome: dataHome(), folder: brief.folder });
+  for (const { path, message, skipped } of skills.problems) {
+    logger.warning(`${skipped ? "Skipping " : ""}skill ${path}: ${message}`);
+  }
+  if (skills.unlisted > 0) {
+    logger.warning(`${skills.unlisted} more skills aren't listed: the catalog is full`);
+  }
+  const tools = createTaskTools(policy, {
+    ...(web === "any" ? { web: ANY_SITE } : {}),
+    ...(search === undefined ? {} : { search }),
+    skills: skills.skills,
+  });
   const system = buildTaskPrompt({
     brief,
     tools,
     contextFiles: await loadContextFiles(brief.folder, home, policy),
+    skills: skills.skills,
     date: today(),
     folder: brief.folder,
   });

@@ -161,7 +161,14 @@ export interface ChatRunnerOptions {
    */
   readonly tasks?: Pick<
     TaskManager,
-    "ready" | "start" | "cancelChat" | "list" | "steer" | "cancel" | "snapshotsOf"
+    | "ready"
+    | "offersCommands"
+    | "start"
+    | "cancelChat"
+    | "list"
+    | "steer"
+    | "cancel"
+    | "snapshotsOf"
   >;
   /** ms since the epoch, which spaces a call's milestones. Default: Date.now. */
   readonly now?: () => number;
@@ -1122,8 +1129,12 @@ export class ChatRunner {
     const live = herTasks(tasks.snapshotsOf(id), id, persona).some(({ snapshot }) =>
       isLive(snapshot.status),
     );
+    const abilities = { commands: tasks.offersCommands() };
     return {
-      background: { tools: [startTaskTool(start)], hint: assistantPromptHint() },
+      background: {
+        tools: [startTaskTool(start, abilities)],
+        hint: assistantPromptHint(abilities),
+      },
       ...(live ? { tools: herTaskTools({ chat: id, persona, tasks }) } : {}),
       providers: [tasksStatusProvider(tasks, id, { tools: live })],
     };

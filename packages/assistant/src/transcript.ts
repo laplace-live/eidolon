@@ -3,9 +3,12 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { dataHome, isPlainObject } from "@eidolon/config";
+import { dataHome, isPlainObject, type TaskKind } from "@eidolon/config";
 import type { TaskBrief, TaskEntry, TaskEntryDraft, TaskOutcome, TaskStore } from "@eidolon/engine";
+import type { McpFailure } from "./mcp/session.ts";
+import type { McpArgument, McpLeftOut } from "./mcp/tools.ts";
 import type { FolderGrant } from "./policy.ts";
+import type { BackgroundCommand } from "./tools/jobs.ts";
 import { TODO_STATUSES, type TodoItem } from "./tools/todo.ts";
 
 const TRANSCRIPT = "transcript.jsonl";
@@ -32,7 +35,15 @@ export const TASK_STATUSES = [
 
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
-/** What a task waits on the owner for: to start, a path outside its grants, or a site. */
+/** The kinds of task with an account and model of their own; she may also call one `other`. */
+export const TASK_PROFILES = ["quick", "coding", "research"] as const satisfies readonly TaskKind[];
+
+export type TaskProfile = (typeof TASK_PROFILES)[number];
+
+/**
+ * What a task waits on the owner for: to start, a path outside its grants, a site, a command, or
+ * a call to an MCP server's tool.
+ */
 export type TaskPending =
   | { readonly kind: "start" }
   | {
@@ -45,7 +56,43 @@ export type TaskPending =
        */
       readonly folder?: string;
     }
-  | { readonly kind: "fetch"; readonly host: string };
+  | { readonly kind: "fetch"; readonly host: string }
+  | {
+      readonly kind: "command";
+      /** The worker's call that asks: an answer naming another call's can't allow this one. */
+      readonly call: string;
+      /** As it would run: trimmed, and otherwise as the worker wrote it. */
+      readonly command: string;
+      /** The seconds it may run once started, its time in the background included. */
+      readonly timeout: number;
+      /** Always in This Folder allows it, but not in a task that has read outside content. */
+      readonly granted?: true;
+    }
+  | {
+      readonly kind: "mcp";
+      /** The server, as mcp.json names it. */
+      readonly server: string;
+      /** The tool, as the server lists it. */
+      readonly tool: string;
+      /** The worker's call that asks: an answer naming another call's can't allow this one. */
+      readonly call: string;
+      /** mcpCallKey of the call's tool and arguments, which Run Once and Deny hold. */
+      readonly key: string;
+      /** Every argument the call sends, the shortest first, each with its size. */
+      readonly args: readonly McpArgument[];
+      /** What the server claims of the tool, which never decides anything. */
+      readonly hint?: "read-only" | "destructive";
+    };
+
+/** A task's MCP servers, as its card tells of them. */
+export interface TaskMcp {
+  /** The calls the owner refused it, by mcpCallKey: it may not make them again. */
+  readonly denied: readonly string[];
+  /** The servers it works without, or mcp.json itself, and why. */
+  readonly failed?: readonly McpFailure[];
+  /** How many of a server's tools the limits left out of it. */
+  readonly left?: readonly McpLeftOut[];
+}
 
 export type TaskPause = Pick<Extract<TaskOutcome, { status: "paused" }>, "reason" | "detail">;
 
@@ -105,6 +152,20 @@ export interface TaskSnapshot {
   readonly inbox?: TaskInboxLines;
   /** `ask` with no sites when absent. */
   readonly web?: TaskWebAccess;
+  /** The kind of task she said it is, whose account and model it runs on; absent for any other. */
+  readonly profile?: TaskProfile;
+  /** The commands the owner refused it, which it may not run again. */
+  readonly bash?: { readonly denied: readonly string[] };
+  /** Its commands running in the background. */
+  readonly background?: readonly BackgroundCommand[];
+  /**
+   * It has read outside content, such as a page web_fetch got, a web search's results or an MCP
+   * server's answer: from then on a command the owner allowed for good in its folder asks again,
+   * and so does a tool the owner always allows.
+   */
+  readonly external?: true;
+  /** Absent while it has nothing to say. */
+  readonly mcp?: TaskMcp;
   /** Cancelled by the owner's Deny at its start. */
   readonly denied?: true;
   /** Its `final` is stored in its chat; until then the app's next start reports it again. */
@@ -142,10 +203,48 @@ function isPending(value: unknown): boolean {
       );
     case "fetch":
       return isString(value.host);
+    case "command":
+      return (
+        isString(value.call) &&
+        isString(value.command) &&
+        isNumber(value.timeout) &&
+        (value.granted === undefined || value.granted === true)
+      );
+    case "mcp":
+      return (
+        [value.server, value.tool, value.call, value.key].every(isString) &&
+        Array.isArray(value.args) &&
+        value.args.every(
+          (arg) =>
+            isPlainObject(arg) &&
+            isString(arg.name) &&
+            isString(arg.head) &&
+            Number.isInteger(arg.chars) &&
+            Number.isInteger(arg.lines),
+        ) &&
+        (value.hint === undefined || value.hint === "read-only" || value.hint === "destructive")
+      );
     default:
       return false;
   }
 }
+
+const isMcp = (value: unknown): boolean =>
+  isPlainObject(value) &&
+  isStrings(value.denied) &&
+  (value.failed === undefined ||
+    (Array.isArray(value.failed) &&
+      value.failed.every(
+        (failure) =>
+          isPlainObject(failure) &&
+          isString(failure.error) &&
+          (failure.server === undefined || isString(failure.server)),
+      ))) &&
+  (value.left === undefined ||
+    (Array.isArray(value.left) &&
+      value.left.every(
+        (left) => isPlainObject(left) && isString(left.server) && Number.isInteger(left.count),
+      )));
 
 const isPause = (value: unknown): boolean =>
   isPlainObject(value) &&
@@ -172,6 +271,17 @@ const isWebAccess = (value: unknown): boolean =>
 
 const isChat = (value: unknown): boolean =>
   isPlainObject(value) && [value.id, value.persona, value.call].every(isString);
+
+const isBackground = (value: unknown): boolean =>
+  Array.isArray(value) &&
+  value.every(
+    (command) =>
+      isPlainObject(command) &&
+      Number.isInteger(command.id) &&
+      isString(command.command) &&
+      isNumber(command.startedAt) &&
+      isNumber(command.endsAt),
+  );
 
 function isSnapshot(value: unknown): value is TaskSnapshot {
   if (!isPlainObject(value)) return false;
@@ -208,6 +318,11 @@ function isSnapshot(value: unknown): value is TaskSnapshot {
     (value.step === undefined || isStep(value.step)) &&
     (value.inbox === undefined || isInbox(value.inbox)) &&
     (value.web === undefined || isWebAccess(value.web)) &&
+    (value.profile === undefined || isOneOf(TASK_PROFILES, value.profile)) &&
+    (value.bash === undefined || (isPlainObject(value.bash) && isStrings(value.bash.denied))) &&
+    (value.background === undefined || isBackground(value.background)) &&
+    (value.external === undefined || value.external === true) &&
+    (value.mcp === undefined || isMcp(value.mcp)) &&
     (value.denied === undefined || value.denied === true) &&
     (value.reported === undefined || value.reported === true)
   );

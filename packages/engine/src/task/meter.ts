@@ -37,6 +37,16 @@ export class UsageMeter implements TaskMeter {
     this.#input = counted.length === 0 ? null : counted.reduce((sum, n) => sum + n, 0);
   };
 
+  /**
+   * A record of the task's that isn't one of its mind's requests, such as a web search: it adds to
+   * the spend, but it is neither the context's size nor what the next request reported, so a
+   * request that reports no usage still counts as one that couldn't be counted.
+   */
+  readonly charge = (record: UsageRecord): void => {
+    if (record.costUsd !== null) this.#spent += record.costUsd;
+    else this.#cannotCount(`No price is known for ${record.model} at ${record.provider}`);
+  };
+
   requestEnded(): void {
     // A server may ignore the request for usage (stream_options.include_usage).
     if (this.#records === 0) {

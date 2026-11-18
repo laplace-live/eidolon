@@ -24,11 +24,19 @@ import {
   type Selection,
   select,
   selectRequired,
+  selectTask,
   trySelect,
   voiceOf,
 } from "@eidolon/providers";
 import manifest from "../../package.json" with { type: "json" };
-import type { CallRole, Status, VoiceStatus, YtDlpStatus } from "./api.ts";
+import type {
+  AssistantStatus,
+  CallRole,
+  Status,
+  TaskProfile,
+  VoiceStatus,
+  YtDlpStatus,
+} from "./api.ts";
 import { checkFishVoice, checkQdrant, configuredQdrant, voiceOk } from "./checks.ts";
 import { findAvatar, indexStatus } from "./personas.ts";
 import { restartTracker } from "./restart.ts";
@@ -303,6 +311,29 @@ export function assistantProblem(): string | null {
   return foldersProblem(assistantSettings().folders);
 }
 
+/**
+ * Whether tasks may search the web: the search role has an account and its key. `problem` says why
+ * an account named can't; null when none is named, the owner's choice.
+ */
+export function searchStatus(): AssistantStatus["search"] {
+  let problem: string | null = null;
+  const selection = trySelect("search", undefined, (error) => {
+    problem = error.message;
+  });
+  if (selection === null) return { on: false, problem };
+  if (!hasKey(selection)) return { on: false, problem: missingKey(selection).message };
+  return { on: true, problem: null };
+}
+
+/**
+ * Why each kind of task runs on Assistant Mode's own account and model though its own are set; all
+ * null unless `ready`, as Assistant Mode's own problem is the one to tell.
+ */
+export function kindsStatus(ready: boolean): AssistantStatus["kinds"] {
+  const fallback = (kind: TaskProfile) => (ready ? selectTask(kind).fallback : null);
+  return { quick: fallback("quick"), coding: fallback("coding"), research: fallback("research") };
+}
+
 /** The roles her calls run on; a realtime setting Eidolon can't use is the problem to report. */
 function statusRoles(): readonly RoleId[] {
   try {
@@ -401,6 +432,8 @@ export function buildStatus(
       ready: notReady === null,
       problem: notReady,
       running: tasks?.running() ?? 0,
+      search: searchStatus(),
+      kinds: kindsStatus(notReady === null),
     },
   };
 }
