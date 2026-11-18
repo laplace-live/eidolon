@@ -7,7 +7,7 @@ import { cliEntry, dataHome, errorText, logger } from "@eidolon/config";
 import type { Subprocess } from "bun";
 import type { JobSnapshot } from "../api.ts";
 import { EPHEMERAL_COMMANDS, type JobSpec } from "./argv.ts";
-import { endedStatus, JobEvents, readLines, tailOf } from "./events.ts";
+import { endedStatus, followLines, JobEvents, tailOf } from "./events.ts";
 import {
   createOutputs,
   jobFiles,
@@ -48,7 +48,6 @@ export type CancelOutcome = "stopping" | "ended" | "not-ours";
 
 /** How long stopping the server waits for its jobs to exit, so their records say how they ended. */
 const STOP_WAIT_MS = 2000;
-const STREAM_CHUNK_BYTES = 256 * 1024;
 
 function alive(pid: number): boolean {
   try {
@@ -239,44 +238,14 @@ export class JobRunner {
    * or the client goes away.
    */
   eventsStream(job: Job, after: number): ReadableStream<Uint8Array> {
-    const path = jobFiles(job.record.id).events;
-    let offset = after;
-    let open = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let wake: (() => void) | undefined;
-    const close = (): void => {
-      open = false;
-      clearTimeout(timer);
-      wake?.();
-      this.streams.delete(close);
-    };
-    this.streams.add(close);
-    return new ReadableStream<Uint8Array>({
-      pull: async (controller) => {
-        while (open) {
-          // Checked before the read: a job that ends in between still has its last lines read.
-          const running = job.record.status === "running";
-          const chunk = readLines(path, offset, STREAM_CHUNK_BYTES);
-          if (chunk.length > 0) {
-            offset += chunk.length;
-            controller.enqueue(chunk);
-            return;
-          }
-          if (!running) break;
-          await new Promise<void>((resolve) => {
-            wake = resolve;
-            timer = setTimeout(resolve, this.pollMs);
-          });
-        }
-        close();
-        try {
-          controller.close();
-        } catch {
-          // The client cancelled it.
-        }
-      },
-      cancel: close,
-    });
+    const follow = followLines(
+      jobFiles(job.record.id).events,
+      after,
+      () => job.record.status === "running",
+      { pollMs: this.pollMs, onClose: () => this.streams.delete(follow.close) },
+    );
+    this.streams.add(follow.close);
+    return follow.stream;
   }
 
   /**

@@ -133,7 +133,6 @@ describe("a task's bash tools", () => {
       tools,
       contextFiles: [],
       date: "2026-11-17",
-      folder: "/tmp/task",
     });
     expect(prompt).toContain(
       "- bash: Run commands with bash: tests, builds, git, package managers",

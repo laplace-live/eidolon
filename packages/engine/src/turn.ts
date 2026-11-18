@@ -393,9 +393,9 @@ class Turn {
       this.#call = null;
       this.#late = request.late;
     }
-    this.#background = realtime ? null : (request.background ?? null);
-    this.#tools = realtime ? [] : (request.tools ?? []);
-    this.#providers = realtime ? [] : (request.providers ?? []);
+    this.#background = request.background ?? null;
+    this.#tools = request.tools ?? [];
+    this.#providers = request.providers ?? [];
     this.#realtime = realtime;
     this.#mayBeVoice = request.mode !== undefined && request.mode !== "text";
   }

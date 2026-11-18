@@ -7,7 +7,7 @@
 // counted in server_tool_use_details, while the request was billed for one.
 import { extractCostUsd, isPlainObject, openrouterHeaders } from "@eidolon/config";
 import { OpenAIChatClient, openaiUnits } from "./http/chat.ts";
-import type { Selection } from "./resolve.ts";
+import { hasKey, type Selection, trySelect } from "./resolve.ts";
 import { reportUsage, type UsageSink } from "./usage.ts";
 
 export interface SearchRequest {
@@ -146,4 +146,12 @@ export function openRouterSearcher(selection: Selection, options: SearcherOption
     if (searches === 0) throw new Error("The search didn't run");
     return { results: resultsOf(body), engine, searches };
   };
+}
+
+/** The search role's searcher, as its settings stand: none until it has an account and its key. */
+export function roleSearcher(tap: UsageSink): Searcher | undefined {
+  const selection = trySelect("search");
+  return selection !== null && hasKey(selection)
+    ? openRouterSearcher(selection, { tap })
+    : undefined;
 }

@@ -1,17 +1,7 @@
 // Where a task's paths lie on disk, and how two of them compare there.
 import { realpath } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
-
-// APFS and NTFS match names in any case.
-const fold =
-  process.platform === "darwin" || process.platform === "win32"
-    ? (path: string) => path.toLowerCase()
-    : (path: string) => path;
-
-export function isInside(path: string, root: string): boolean {
-  const rel = relative(fold(root), fold(path));
-  return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
-}
+import { basename, dirname, join } from "node:path";
+import { isInside } from "@eidolon/assistant";
 
 /** Where `path` lies on disk: its realpath, or its deepest existing folder's plus the rest. */
 export async function placeOf(path: string): Promise<string> {

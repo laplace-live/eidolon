@@ -1,7 +1,8 @@
 // start_task, her one way to use the owner's computer, the line her persona prefix gives it, and the
 // nudges her turns answer about a task. It hands her brief to the task manager and answers at once;
 // the task's end reaches the chat later, as her call's `final`.
-import { logger } from "@eidolon/config";
+import { isEnded } from "@eidolon/assistant";
+import { logger, TASK_KINDS } from "@eidolon/config";
 import type { BackgroundTool } from "@eidolon/engine";
 import type {
   CheckTaskToolName,
@@ -45,9 +46,6 @@ export interface TaskAbilities {
   readonly commands: boolean;
 }
 
-/** The kinds of task she may name; each but `other` may have an account and model of its own. */
-const PROFILES = ["quick", "coding", "research", "other"] as const;
-
 function startTaskSchema({ commands }: TaskAbilities): BackgroundTool["schema"] {
   const what = commands
     ? "在这台电脑上动手做一件事：写代码、做网页、写或修改文件、在文件夹里找东西、上网看网页查资料，" +
@@ -86,7 +84,7 @@ function startTaskSchema({ commands }: TaskAbilities): BackgroundTool["schema"] 
       },
       profile: {
         type: "string",
-        enum: [...PROFILES],
+        enum: [...TASK_KINDS],
         description:
           "这是哪一类活：coding 是写代码、做网页或小程序、改代码；research 是上网查资料、比较、整理成报告；" +
           "quick 是几分钟就能做完的小活，比如写个清单、改几处文字、在文件夹里找东西；" +
@@ -105,7 +103,7 @@ function startTaskSchema({ commands }: TaskAbilities): BackgroundTool["schema"] 
 function profileOf(given: unknown): TaskProfile | undefined {
   const value = typeof given === "string" ? given.trim().toLowerCase() : given;
   if (value === "other") return undefined;
-  const kind = PROFILES.find((each) => each === value);
+  const kind = TASK_KINDS.find((each) => each === value);
   if (kind !== undefined) return kind as TaskProfile;
   logger.warning(
     given === undefined || given === null
@@ -229,7 +227,7 @@ function cut(text: string): string {
  */
 export function taskFinal(snapshot: TaskSnapshot): StartTaskFinal | null {
   const { status, outcome } = snapshot;
-  if (status !== "succeeded" && status !== "failed" && status !== "cancelled") return null;
+  if (!isEnded(status)) return null;
   let report = "";
   if (outcome?.status === "succeeded") report = outcome.report;
   else if (outcome?.status === "failed") report = outcome.error;

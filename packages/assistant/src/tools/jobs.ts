@@ -1,10 +1,11 @@
 // A task's commands, kept across its runs in <task>/bash/: each one's output in <n>.log, and
 // runs.json saying how each ended and whether the worker was told. One still running at the yield
 // goes on in the background, and the task's runs wait for it and hear how it ended.
-import { type FileHandle, mkdir, open, readdir, readFile, rename, rm } from "node:fs/promises";
+import { type FileHandle, mkdir, open, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { errorText, isPlainObject } from "@eidolon/config";
 import type { TaskBackground, TaskToolResult } from "@eidolon/engine";
+import { replaceJsonFile } from "../transcript.ts";
 import type { PathGuard } from "../types.ts";
 import {
   BASH_KILL,
@@ -189,24 +190,6 @@ async function readRuns(path: string): Promise<BashRun[]> {
     return value.runs.filter(isRun);
   } catch {
     return [];
-  }
-}
-
-/** Replaces runs.json whole, as writeSnapshot replaces task.json. */
-async function writeRuns(path: string, runs: readonly BashRun[]): Promise<void> {
-  const temp = `${path}.${Bun.randomUUIDv7()}.tmp`;
-  try {
-    const handle = await open(temp, "wx", 0o600);
-    try {
-      await handle.writeFile(`${JSON.stringify({ v: 1, runs }, null, 2)}\n`);
-      await handle.datasync();
-    } finally {
-      await handle.close();
-    }
-    await rename(temp, path);
-  } catch (error) {
-    await rm(temp, { force: true });
-    throw error;
   }
 }
 
@@ -724,7 +707,7 @@ export class BashJobs implements TaskBackground {
   /** Writes runs.json after the writes before it, as the runs then stand; never rejects. */
   #save(): Promise<void> {
     this.#saving = this.#saving
-      .then(() => writeRuns(join(this.#dir, RUNS), this.#runs))
+      .then(() => replaceJsonFile(join(this.#dir, RUNS), { v: 1, runs: this.#runs }))
       .catch(() => {});
     return this.#saving;
   }

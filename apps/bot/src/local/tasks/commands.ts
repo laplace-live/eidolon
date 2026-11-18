@@ -1,9 +1,9 @@
 // The commands the owner allowed for good from tasks' cards, each in one folder: Always in This
 // Folder adds one, Settings takes one back. They are approvals rather than settings, kept in the
 // data home's tasks/allowed-commands.json, which this process alone writes.
-import { randomBytes } from "node:crypto";
-import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { replaceJsonFile } from "@eidolon/assistant";
 import { errorText, isPlainObject, logger } from "@eidolon/config";
 import type { AllowedCommand } from "../api.ts";
 
@@ -95,20 +95,7 @@ export class AllowedCommands {
   /** Replaces the file whole, 0600: a reader sees the old list or the new one. */
   async #write(commands: readonly AllowedCommand[]): Promise<void> {
     await mkdir(dirname(this.#path), { recursive: true, mode: 0o700 });
-    const temp = `${this.#path}.${randomBytes(6).toString("hex")}.tmp`;
-    try {
-      const handle = await open(temp, "wx", 0o600);
-      try {
-        await handle.writeFile(`${JSON.stringify({ v: 1, commands }, null, 2)}\n`);
-        await handle.datasync();
-      } finally {
-        await handle.close();
-      }
-      await rename(temp, this.#path);
-    } catch (error) {
-      await rm(temp, { force: true });
-      throw error;
-    }
+    await replaceJsonFile(this.#path, { v: 1, commands });
     this.#commands = commands;
   }
 }

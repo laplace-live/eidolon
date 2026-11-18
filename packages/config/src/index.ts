@@ -150,6 +150,7 @@ export {
   type LoadedSettings,
   layeredValue,
   loadSettings,
+  MCP_SECRETS_KEY,
   type PersonaIdentity,
   type PersonaSettings,
   personaFolders,

@@ -13,14 +13,29 @@ import { TODO_STATUSES, type TodoItem } from "./tools/todo.ts";
 
 const TRANSCRIPT = "transcript.jsonl";
 const SNAPSHOT = "task.json";
+const TASK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-export function tasksDir(): string {
-  return join(dataHome(), "tasks");
+export function tasksDir(home: string = dataHome()): string {
+  return join(home, "tasks");
 }
 
 /** Time-ordered, so a listing sorted by id is sorted by creation. */
 export function newTaskId(): string {
   return Bun.randomUUIDv7();
+}
+
+/** An id newTaskId makes, so naming a task never names a folder outside the tasks folder. */
+export function isTaskId(text: string): boolean {
+  return TASK_ID.test(text);
+}
+
+/** The lock a task's run holds, in the app and in laplace-task alike. */
+export function taskLockKey(id: string): string {
+  return `task:${id}`;
+}
+
+export function transcriptPath(dir: string): string {
+  return join(dir, TRANSCRIPT);
 }
 
 export const TASK_STATUSES = [
@@ -34,6 +49,16 @@ export const TASK_STATUSES = [
 ] as const;
 
 export type TaskStatus = (typeof TASK_STATUSES)[number];
+
+/** It will never run again. */
+export function isEnded(status: TaskStatus): status is "succeeded" | "failed" | "cancelled" {
+  return status === "succeeded" || status === "failed" || status === "cancelled";
+}
+
+/** It runs, or waits to. */
+export function isLive(status: TaskStatus): boolean {
+  return !isEnded(status);
+}
 
 /** The kinds of task with an account and model of their own; she may also call one `other`. */
 export const TASK_PROFILES = ["quick", "coding", "research"] as const satisfies readonly TaskKind[];
@@ -348,15 +373,13 @@ export async function readSnapshot(dir: string): Promise<TaskSnapshot | null> {
   return value;
 }
 
-/** Replaces the task's task.json whole: a reader sees the old snapshot or the new one. */
-export async function writeSnapshot(dir: string, snapshot: TaskSnapshot): Promise<void> {
-  await mkdir(dir, { recursive: true, mode: 0o700 });
-  const path = join(dir, SNAPSHOT);
+/** Replaces the file at `path` whole with `value` as JSON, 0600: a reader sees the old or the new. */
+export async function replaceJsonFile(path: string, value: unknown): Promise<void> {
   const temp = `${path}.${randomBytes(6).toString("hex")}.tmp`;
   try {
     const handle = await open(temp, "wx", 0o600);
     try {
-      await handle.writeFile(`${JSON.stringify(snapshot, null, 2)}\n`);
+      await handle.writeFile(`${JSON.stringify(value, null, 2)}\n`);
       await handle.datasync();
     } finally {
       await handle.close();
@@ -366,6 +389,12 @@ export async function writeSnapshot(dir: string, snapshot: TaskSnapshot): Promis
     await rm(temp, { force: true });
     throw error;
   }
+}
+
+/** Replaces the task's task.json whole: a reader sees the old snapshot or the new one. */
+export async function writeSnapshot(dir: string, snapshot: TaskSnapshot): Promise<void> {
+  await mkdir(dir, { recursive: true, mode: 0o700 });
+  await replaceJsonFile(join(dir, SNAPSHOT), snapshot);
 }
 
 /** The transcript as last read or written: its length, that of its whole lines, its last seq. */
@@ -400,7 +429,7 @@ function parseTranscript(bytes: Buffer, path: string): { entries: TaskEntry[]; s
  * one at a time, so entries stored together get their seqs in the order they were appended.
  */
 export function openTaskStore(dir: string): TaskStore {
-  const path = join(dir, TRANSCRIPT);
+  const path = transcriptPath(dir);
   let known: Known | null = null;
   let queue: Promise<unknown> = Promise.resolve();
 

@@ -2,6 +2,7 @@
 // the owner gives from each one's card. No route starts, steers or deletes a task. Beside them,
 // /api/local/assistant/commands: the commands those answers allowed for good.
 import { resolve } from "node:path";
+import { isTaskId } from "@eidolon/assistant";
 import { isChatId } from "@eidolon/chat";
 import { dataHome, expandUser, isPlainObject, pyStrip } from "@eidolon/config";
 import type { TaskApproveRequest, TaskContinueRequest } from "../api.ts";
@@ -9,7 +10,7 @@ import { editSettingsYaml, setDotted, type Tree, writeFailure } from "../persona
 import { localError, localJson, ndjsonResponse, readJson } from "../responses.ts";
 import { reinstallSettings } from "../restart.ts";
 import type { LocalApp, LocalRouteSpec } from "../router.ts";
-import { TASK_ID, type TaskManager, TaskRefused } from "../tasks/manager.ts";
+import { type TaskManager, TaskRefused } from "../tasks/manager.ts";
 
 const TASK_BODY_LIMIT = 16 * 1024;
 
@@ -29,7 +30,7 @@ async function answer(work: () => Promise<unknown>): Promise<Response> {
 
 /** The 400 for a path's `:id` that is no task id; ids are only ever looked up. */
 function idRefusal(id: string): Response | null {
-  return TASK_ID.test(id) ? null : localError(400, "bad-request", "That is not a task id");
+  return isTaskId(id) ? null : localError(400, "bad-request", "That is not a task id");
 }
 
 /** settings.yaml's assistant.folders: a list, or one string of comma-separated folders. */
@@ -143,7 +144,7 @@ export function tasksRoutes(tasks: TaskManager): LocalRouteSpec[] {
       handler(_request, { params }) {
         const id = params.id as string;
         // Its id is a UUIDv7, as a task's is.
-        if (!TASK_ID.test(id)) {
+        if (!isTaskId(id)) {
           return localError(400, "bad-request", "That is not an allowed command's id");
         }
         return answer(async () => ({ commands: await tasks.disallowCommand(id) }));

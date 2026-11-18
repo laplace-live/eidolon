@@ -4,6 +4,7 @@
 // Ported from pi-mono packages/coding-agent/src/core/tools/ls.ts@ac78a60
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { errorText } from "@eidolon/config";
 import type { AssistantTool, PathGuard } from "../types.ts";
 import {
   ABORTED,
@@ -62,9 +63,7 @@ export function createLsTool(guard: PathGuard): AssistantTool {
       try {
         entries = await readdir(dirPath);
       } catch (error) {
-        return errorResult(
-          `Cannot read directory: ${error instanceof Error ? error.message : String(error)}`,
-        );
+        return errorResult(`Cannot read directory: ${errorText(error)}`);
       }
       entries.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
 

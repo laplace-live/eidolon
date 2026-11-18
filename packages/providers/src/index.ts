@@ -55,6 +55,7 @@ export {
 } from "./resolve.ts";
 export {
   openRouterSearcher,
+  roleSearcher,
   type Searcher,
   type SearcherOptions,
   type SearchOutcome,

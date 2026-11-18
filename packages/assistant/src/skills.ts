@@ -9,9 +9,9 @@
 import type { Dirent } from "node:fs";
 import { open, readdir, realpath, stat } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { isPlainObject } from "@eidolon/config";
+import { errorText, isPlainObject } from "@eidolon/config";
 import { estimateTokens } from "@eidolon/engine";
-import { fold } from "./policy.ts";
+import { fold, isMissing } from "./policy.ts";
 import { formatSize, sliceHead } from "./tools/truncate.ts";
 
 export const SKILL_FILE = "SKILL.md";
@@ -63,15 +63,6 @@ export function skillsDir(dataHome: string): string {
 export function isInside(path: string, root: string): boolean {
   const rel = relative(fold(root), fold(path));
   return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
-}
-
-export function isMissing(error: unknown): boolean {
-  const code = (error as { code?: unknown } | null)?.code;
-  return code === "ENOENT" || code === "ENOTDIR";
-}
-
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function unreadable(path: string, error: unknown): SkillProblem {

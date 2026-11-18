@@ -1,5 +1,6 @@
 // web_search: the web's top results for a query, each a title, a URL and an excerpt of the page,
 // from the search role's provider. The worker reads the pages it relies on with web_fetch.
+import { errorText } from "@eidolon/config";
 import type { AssistantTool } from "../types.ts";
 import {
   ABORTED,
@@ -183,7 +184,7 @@ export function createWebSearchTool(options: WebSearchOptions): AssistantTool {
             `Timed out after ${timeoutMs / 1000} s searching for ${JSON.stringify(query)}`,
           );
         }
-        const why = error instanceof Error ? error.message : String(error);
+        const why = errorText(error);
         return errorResult(`Couldn't search for ${JSON.stringify(query)}: ${why}`);
       }
     },

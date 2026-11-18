@@ -22,8 +22,13 @@ import {
   type FolderPolicyOptions,
   GrantRefused,
   grantRefusal,
+  isEnded,
+  isInside,
+  isLive,
+  isTaskId,
   loadContextFiles,
   loadSkills,
+  MCP_TOOL_PREFIX,
   type McpArgument,
   type McpFailure,
   type McpLeftOut,
@@ -46,9 +51,12 @@ import {
   type TaskPending,
   type TaskProfile,
   type TaskSnapshot,
-  type TaskStatus,
   type TaskWebAccess,
   type TodoDetails,
+  taskDate,
+  taskLockKey,
+  tasksDir,
+  transcriptPath,
   WEB_FETCH,
   WEB_SEARCH,
   type WebSearcher,
@@ -63,6 +71,7 @@ import {
   isPlainObject,
   logger,
   pyStrip,
+  raceAbort,
   shippedPath,
 } from "@eidolon/config";
 import { acquireLock, LockedError } from "@eidolon/config/lock";
@@ -83,11 +92,9 @@ import {
 } from "@eidolon/engine";
 import {
   accountOf,
-  hasKey,
-  openRouterSearcher,
   ProviderConfigError,
+  roleSearcher,
   selectTask,
-  trySelect,
   type UsageSink,
 } from "@eidolon/providers";
 import manifest from "../../../package.json" with { type: "json" };
@@ -102,15 +109,12 @@ import {
   type TaskModel,
   type TasksQuery,
 } from "../api.ts";
-import { readLines } from "../jobs/events.ts";
+import { followLines } from "../jobs/events.ts";
 import { ALLOWED_COMMANDS_FILE, AllowedCommands } from "./commands.ts";
 import { MCP_FOLDER, McpFile, mcpServersView } from "./mcp.ts";
 import { doneOf } from "./milestones.ts";
-import { insideAny, isInside, placeOf } from "./places.ts";
+import { insideAny, placeOf } from "./places.ts";
 import { SnapshotFile } from "./snapshot-file.ts";
-
-/** newTaskId's UUIDv7: an id a route may look up. */
-export const TASK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /** start_task's arguments: OpenClaw's objective, output, write scope and verification. */
 export interface TaskBriefInput {
@@ -202,9 +206,7 @@ export class TaskRefused extends Error {
 
 /** The holder laplace-task's LockedError names. */
 const LOCK_HOLDER = "eidolon";
-const TRANSCRIPT = "transcript.jsonl";
 const DEFAULT_CHECK = "Check the deliverable against the goal";
-const STREAM_CHUNK_BYTES = 256 * 1024;
 const STEER_MAX_CHARS = 2000;
 const STEP_HEAD_CHARS = 120;
 /** What names a call's step, in this order, before the JSON of all its arguments. */
@@ -219,16 +221,7 @@ const MCP_CROWDED =
  * route that takes 16 KB.
  */
 const CARD_ARGUMENTS_BYTES = 12 * 1024;
-/** How every MCP tool's name starts, whichever server's (createMcpToolName). */
-const MCP_TOOL_PREFIX = "mcp__";
 
-const LIVE: ReadonlySet<TaskStatus> = new Set([
-  "running",
-  "paused",
-  "awaiting-approval",
-  "interrupted",
-]);
-const ENDED: ReadonlySet<TaskStatus> = new Set(["succeeded", "failed", "cancelled"]);
 const ANSWERS: ReadonlySet<unknown> = new Set(["once", "always", "deny"]);
 const ASK_EACH_SITE: TaskWebAccess = { mode: "ask", hosts: [], denied: [] };
 
@@ -319,13 +312,6 @@ function folderOf(text: string): string {
     );
   }
   return resolve(path);
-}
-
-/** The owner's date, as their computer keeps it. */
-function today(at: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const weekday = at.toLocaleDateString("en-US", { weekday: "long" });
-  return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}, ${weekday}`;
 }
 
 const webOf = (snapshot: TaskSnapshot): TaskWebAccess => snapshot.web ?? ASK_EACH_SITE;
@@ -485,14 +471,6 @@ function heldOutside(entries: readonly TaskEntry[]): boolean {
   );
 }
 
-/** The search role's searcher, as its settings stand: none until it has an account and its key. */
-function roleSearcher(charge: UsageSink): WebSearcher | undefined {
-  const selection = trySelect("search");
-  return selection !== null && hasKey(selection)
-    ? openRouterSearcher(selection, { tap: charge })
-    : undefined;
-}
-
 /** What a run's skills catalog left out, and why: the owner learns of it only from the log. */
 function logSkills(id: string, { problems, unlisted }: SkillCatalog): void {
   for (const { path, message, skipped } of problems) {
@@ -556,7 +534,7 @@ export class TaskManager {
 
   constructor(options: TaskManagerOptions) {
     this.#dataHome = options.dataHome;
-    this.#root = join(options.dataHome, "tasks");
+    this.#root = tasksDir(options.dataHome);
     this.#settings = options.settings;
     this.#addFolder = options.addFolder;
     this.#problem = options.problem;
@@ -588,7 +566,7 @@ export class TaskManager {
       }
     }
     const unreported = this.#oldestFirst().filter(
-      ({ snapshot }) => ENDED.has(snapshot.status) && snapshot.reported !== true,
+      ({ snapshot }) => isEnded(snapshot.status) && snapshot.reported !== true,
     );
     void (async () => {
       for (const task of unreported) if (!this.#stopped) await this.#reportEnd(task);
@@ -718,7 +696,7 @@ export class TaskManager {
     if (!Number.isSafeInteger(after) || after < 0) {
       throw new TaskRefused(400, "bad-request", "`after` is a byte offset into the transcript");
     }
-    const size = await stat(join(task.dir, TRANSCRIPT)).then(
+    const size = await stat(transcriptPath(task.dir)).then(
       (found) => found.size,
       () => 0,
     );
@@ -803,7 +781,7 @@ export class TaskManager {
         throw new TaskRefused(400, "bad-request", "The text to pass on is over 2,000 characters.");
       }
       const { status, inbox } = task.snapshot;
-      if (!LIVE.has(status)) {
+      if (!isLive(status)) {
         throw new TaskRefused(409, "conflict", `The task has ended (${status})`);
       }
       await this.#change(task, { inbox: steering(inbox, `${STEER_PREFIX}${line}`) }, true);
@@ -816,7 +794,7 @@ export class TaskManager {
     await this.#load();
     const task = this.#find(id);
     const run = await this.#exclusive(task, async () => {
-      if (!LIVE.has(task.snapshot.status)) return null;
+      if (!isLive(task.snapshot.status)) return null;
       if (task.run === null) {
         await this.#end(task, {});
         return null;
@@ -826,7 +804,7 @@ export class TaskManager {
     });
     await run?.settled;
     // A run past its last check for the cancel stores its pause anyway, leaving the task live.
-    if (run !== null && LIVE.has(task.snapshot.status)) return this.cancel(id);
+    if (run !== null && isLive(task.snapshot.status)) return this.cancel(id);
     return task.snapshot;
   }
 
@@ -857,7 +835,7 @@ export class TaskManager {
     } catch {
       return;
     }
-    for (const name of names.filter((each) => TASK_ID.test(each))) {
+    for (const name of names.filter(isTaskId)) {
       const dir = join(this.#root, name);
       try {
         const snapshot = await readSnapshot(dir);
@@ -926,7 +904,7 @@ export class TaskManager {
   async #crashed(task: Task): Promise<void> {
     let release: () => void;
     try {
-      release = acquireLock(`task:${task.snapshot.id}`, LOCK_HOLDER);
+      release = acquireLock(taskLockKey(task.snapshot.id), LOCK_HOLDER);
     } catch (error) {
       if (error instanceof LockedError) return;
       throw error;
@@ -1011,7 +989,7 @@ export class TaskManager {
 
   #lock(id: string): () => void {
     try {
-      return acquireLock(`task:${id}`, LOCK_HOLDER);
+      return acquireLock(taskLockKey(id), LOCK_HOLDER);
     } catch (error) {
       if (error instanceof LockedError) throw new TaskRefused(409, "task-locked", error.message);
       throw error;
@@ -1059,7 +1037,7 @@ export class TaskManager {
       );
     }
     for (const { snapshot } of this.#tasks.values()) {
-      if (!LIVE.has(snapshot.status)) continue;
+      if (!isLive(snapshot.status)) continue;
       const there = await placeOf(snapshot.brief.folder);
       // Two tasks writing one folder undo each other's edits.
       if (isInside(place, there) || isInside(there, place)) {
@@ -1324,7 +1302,7 @@ export class TaskManager {
 
   async #cancelWhere(which: (snapshot: TaskSnapshot) => boolean): Promise<void> {
     const live = [...this.#tasks.values()].filter(
-      ({ snapshot }) => LIVE.has(snapshot.status) && which(snapshot),
+      ({ snapshot }) => isLive(snapshot.status) && which(snapshot),
     );
     await Promise.all(
       live.map(async ({ snapshot }) => {
@@ -1410,8 +1388,7 @@ export class TaskManager {
         tools,
         contextFiles,
         skills: skills.skills,
-        date: today(new Date(this.#now())),
-        folder: brief.folder,
+        date: taskDate(new Date(this.#now())),
       }),
       tools,
       store: untilLeft(
@@ -1601,13 +1578,14 @@ export class TaskManager {
     run: Run,
     reader: AsyncGenerator<TaskEvent, TaskOutcome>,
   ): Promise<TaskOutcome | null> {
-    const left = new Promise<null>((resolve) => {
-      run.leave.signal.addEventListener("abort", () => resolve(null), { once: true });
-    });
+    const left = run.leave.signal;
     let done = false;
     try {
       for (;;) {
-        const next = await Promise.race([reader.next(), left]);
+        const next = await raceAbort(reader.next(), left).catch((error: unknown) => {
+          if (left.aborted) return null;
+          throw error;
+        });
         if (next === null) return null;
         if (next.done) {
           done = true;
@@ -1714,44 +1692,14 @@ export class TaskManager {
   }
 
   #stream(task: Task, after: number): ReadableStream<Uint8Array> {
-    const path = join(task.dir, TRANSCRIPT);
-    let offset = after;
-    let open = true;
-    let wake: (() => void) | null = null;
-    const nudge = (): void => wake?.();
-    const close = (): void => {
-      open = false;
-      nudge();
-      task.readers.delete(nudge);
-      this.#streams.delete(close);
-    };
-    task.readers.add(nudge);
-    this.#streams.add(close);
-    return new ReadableStream<Uint8Array>({
-      pull: async (controller) => {
-        while (open) {
-          // Before the read: a run that ends in between still has its last lines read.
-          const running = task.run !== null;
-          const chunk = readLines(path, offset, STREAM_CHUNK_BYTES);
-          if (chunk.length > 0) {
-            offset += chunk.length;
-            controller.enqueue(chunk);
-            return;
-          }
-          if (!running) break;
-          await new Promise<void>((resolve) => {
-            wake = resolve;
-          });
-          wake = null;
-        }
-        close();
-        try {
-          controller.close();
-        } catch {
-          // The client cancelled it.
-        }
+    const follow = followLines(transcriptPath(task.dir), after, () => task.run !== null, {
+      onClose: () => {
+        task.readers.delete(follow.wake);
+        this.#streams.delete(follow.close);
       },
-      cancel: close,
     });
+    task.readers.add(follow.wake);
+    this.#streams.add(follow.close);
+    return follow.stream;
   }
 }

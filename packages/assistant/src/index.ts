@@ -2,6 +2,7 @@
 // inside its folders, the worker's prompt and the task's files. Only the local app and the CLI
 // import it; production never has the assistant.
 export { COMPACTION_INSTRUCTIONS, COMPACTION_SYSTEM } from "./compaction.ts";
+export { MCP_TOOL_PREFIX } from "./mcp/naming.ts";
 export {
   type McpConfig,
   type McpPatchResult,
@@ -43,8 +44,10 @@ export {
   type ContextFile,
   loadContextFiles,
   type TaskPromptInput,
+  taskDate,
 } from "./prompt.ts";
 export {
+  isInside,
   loadSkills,
   type Skill,
   type SkillCatalog,
@@ -111,9 +114,13 @@ export {
   type WebSearchResult,
 } from "./tools/web-search.ts";
 export {
+  isEnded,
+  isLive,
+  isTaskId,
   newTaskId,
   openTaskStore,
   readSnapshot,
+  replaceJsonFile,
   TASK_PROFILES,
   TASK_STATUSES,
   TASK_WEB_MODES,
@@ -126,7 +133,9 @@ export {
   type TaskStatus,
   type TaskWebAccess,
   type TaskWebMode,
+  taskLockKey,
   tasksDir,
+  transcriptPath,
   writeSnapshot,
 } from "./transcript.ts";
 export { type AssistantTool, type PathGuard, PathRefused } from "./types.ts";

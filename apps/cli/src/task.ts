@@ -13,6 +13,8 @@ import {
   type FolderGrant,
   FolderPolicy,
   GrantRefused,
+  isEnded,
+  isTaskId,
   loadContextFiles,
   loadSkills,
   newTaskId,
@@ -21,9 +23,10 @@ import {
   readSnapshot,
   type TaskSnapshot,
   type TaskStatus,
+  taskDate,
+  taskLockKey,
   tasksDir,
   type WebAccess,
-  type WebSearcher,
   writeSnapshot,
 } from "@eidolon/assistant";
 import {
@@ -52,14 +55,7 @@ import {
   type TaskRequest,
   UsageMeter,
 } from "@eidolon/engine";
-import {
-  hasKey,
-  openRouterSearcher,
-  ProviderConfigError,
-  roleById,
-  trySelect,
-  type UsageSink,
-} from "@eidolon/providers";
+import { ProviderConfigError, roleById, roleSearcher } from "@eidolon/providers";
 import { ArgparseExit, type ParserSpec, parseArgs, parserError } from "./argparse.ts";
 import { type CliIo, type CommandDeps, reportExit, resolveIo } from "./io.ts";
 
@@ -134,9 +130,6 @@ const NO_MODEL =
   "and model under Assistant Mode in the app's Settings (assistant.provider and " +
   "assistant.model in settings.yaml, or ASSISTANT_PROVIDER and ASSISTANT_MODEL)";
 
-/** newTaskId's UUIDv7, so --resume never names a folder outside the tasks folder. */
-const TASK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 const EXIT_CODES: Readonly<Record<TaskOutcome["status"], number>> = {
   succeeded: 0,
   failed: 1,
@@ -209,7 +202,7 @@ export function parseTaskArgs(argv: readonly string[]): TaskArgs {
     if (given !== undefined) {
       throw parserError(PARSER, `argument --resume: not allowed with argument ${given[0]}`);
     }
-    if (!TASK_ID.test(resume)) {
+    if (!isTaskId(resume.toLowerCase())) {
       throw parserError(PARSER, `argument --resume: no task ${pyRepr(resume)}`);
     }
     return { kind: "resume", id: resume.toLowerCase(), model, web, json };
@@ -250,22 +243,12 @@ function settingsModel(): ModelChoice | null {
 /** `--web any`. web_fetch still refuses this computer and its network. */
 const ANY_SITE: WebAccess = { allows: () => true };
 
-/** The search role's searcher, as its settings stand: none until it has an account and its key. */
-function roleSearcher(charge: UsageSink): WebSearcher | undefined {
-  const selection = trySelect("search");
-  return selection !== null && hasKey(selection)
-    ? openRouterSearcher(selection, { tap: charge })
-    : undefined;
-}
-
 /** The command line steers nothing: a task runs on its brief alone. */
 const NO_LINES: TaskInbox = {
   hasSteering: () => false,
   takeSteering: () => [],
   takeFollowUps: () => [],
 };
-
-const ENDED: ReadonlySet<TaskStatus> = new Set(["succeeded", "failed", "cancelled"]);
 
 /** task.json, kept current: written again whenever what it says changes. */
 class Snapshots {
@@ -304,7 +287,7 @@ class Snapshots {
       status,
       spentUsd: this.#meter.spentUsd(),
       files: { read: [...this.#read], written: [...this.#written] },
-      ...(ENDED.has(status) ? { endedAt: Date.now() } : {}),
+      ...(isEnded(status) ? { endedAt: Date.now() } : {}),
       ...(outcome === undefined ? {} : { outcome }),
     };
     const text = JSON.stringify(next);
@@ -334,13 +317,6 @@ interface Prepared {
   readonly request: TaskRequest;
   readonly snapshots: Snapshots;
   readonly release: () => void;
-}
-
-/** The owner's date, as their computer keeps it. */
-function today(now: Date = new Date()): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const weekday = now.toLocaleDateString("en-US", { weekday: "long" });
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}, ${weekday}`;
 }
 
 /**
@@ -406,8 +382,7 @@ async function equip(
     tools,
     contextFiles: await loadContextFiles(brief.folder, home, policy),
     skills: skills.skills,
-    date: today(),
-    folder: brief.folder,
+    date: taskDate(),
   });
   return {
     id,
@@ -441,7 +416,7 @@ async function newTask(
   const meter = new UsageMeter(model);
   const equipped = await equip(id, brief, grants, model, meter, args.web, deps);
   const dir = join(tasksDir(), id);
-  const release = acquireLock(`task:${id}`, PROG);
+  const release = acquireLock(taskLockKey(id), PROG);
   try {
     const store = openTaskStore(dir);
     await store.append({ type: "brief", brief });
@@ -485,7 +460,7 @@ async function resumedTask(
       `argument --resume: task ${id} belongs to a chat in the local app, and goes on from its card there`,
     );
   }
-  const release = acquireLock(`task:${id}`, PROG);
+  const release = acquireLock(taskLockKey(id), PROG);
   try {
     // A transcript gone or damaged since can't be resumed; its task stays as it was.
     const store = openTaskStore(dir);

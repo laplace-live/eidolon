@@ -795,7 +795,6 @@ describe("what the worker and the gate see", () => {
       tools: session.tools,
       contextFiles: [],
       date: "2026-11-17",
-      folder,
     });
     expect(prompt).toContain("<tools>\n(none)\n</tools>");
     expect(prompt.split(MCP_GUIDELINE)).toHaveLength(2);

@@ -50,7 +50,6 @@ function prompt(input: Partial<TaskPromptInput> = {}): string {
     tools: [],
     contextFiles: [],
     date: "2026-11-16",
-    folder: "/tmp/todo",
     ...input,
   });
 }

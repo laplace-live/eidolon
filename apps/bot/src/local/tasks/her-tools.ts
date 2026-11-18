@@ -3,12 +3,13 @@
 // tasks in that chat, which she names by their number there.
 import { realpath } from "node:fs/promises";
 import { isAbsolute, relative, sep } from "node:path";
+import { isLive } from "@eidolon/assistant";
 import { type ParticipantId, toolCallMessages } from "@eidolon/chat";
 import { pyStrip } from "@eidolon/config";
 import type { PersonaParts } from "@eidolon/engine";
 import type { TaskSnapshot } from "../api.ts";
 import { type TaskManager, TaskRefused } from "./manager.ts";
-import { herTasks, isLive, type NumberedTask, TASKS_BLOCK_NAME, unreadOf } from "./status.ts";
+import { cut, herTasks, type NumberedTask, TASKS_BLOCK_NAME, unreadOf } from "./status.ts";
 import { CHECK_TASK, START_TASK, STEER_TASK, STOP_TASK } from "./tool.ts";
 
 type LlmTool = PersonaParts["tools"][number];
@@ -32,12 +33,6 @@ export interface HerTaskToolsOptions {
   readonly chat: string;
   readonly persona: ParticipantId;
   readonly tasks: Pick<TaskManager, "list" | "steer" | "cancel">;
-}
-
-/** `text` cut at `max` characters. */
-function cut(text: string, max: number): string {
-  const chars = [...text];
-  return chars.length > max ? `${chars.slice(0, max).join("")}…` : text;
 }
 
 /** A task's number as she gave it: an integer, or one written as text. */

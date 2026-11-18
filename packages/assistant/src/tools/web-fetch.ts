@@ -5,6 +5,7 @@
 import { lookup as dnsLookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { networkInterfaces } from "node:os";
+import { errorText, raceAbort } from "@eidolon/config";
 import type { TaskToolResult } from "@eidolon/engine";
 import type { AssistantTool } from "../types.ts";
 import { ABORTED, errorResult, invalidArguments, stringArgument } from "./results.ts";
@@ -210,16 +211,6 @@ export function webFetchHost(
   return url === null || refusal(url, interfaces) !== null ? null : siteOf(url);
 }
 
-/** `work`, or the signal's reason once it aborts first: a DNS lookup can't be cancelled. */
-function untilAborted<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const abort = () => reject(signal.reason);
-    if (signal.aborted) return abort();
-    signal.addEventListener("abort", abort, { once: true });
-    work.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
-  });
-}
-
 // By address, over HTTPS: a fake-IP proxy answers the system's DNS, but carries this as it is.
 const DOH_URL = "https://1.1.1.1/dns-query";
 const BEHIND_FAKE_IP = "this computer's DNS answers through a fake-IP proxy";
@@ -261,7 +252,7 @@ async function realAddresses(
           `${BEHIND_FAKE_IP}, and ${RESOLVER}, asked for ${host}'s real address, hadn't answered.`,
         );
       }
-      return `failed: ${error instanceof Error ? error.message : String(error)}`;
+      return `failed: ${errorText(error)}`;
     }
   };
   const addresses: string[] = [];
@@ -296,7 +287,7 @@ async function addressesOf(
   const host = siteOf(url);
   let found: string[];
   try {
-    found = (await untilAborted(reach.lookup(host), signal)).map(({ address }) => address);
+    found = (await raceAbort(reach.lookup(host), signal)).map(({ address }) => address);
   } catch (error) {
     if (signal.aborted) throw error;
     const code = (error as { code?: unknown } | null)?.code;
@@ -352,7 +343,7 @@ async function connect(
       failure ??= error;
     }
   }
-  const why = failure instanceof Error ? failure.message : String(failure);
+  const why = errorText(failure);
   const at = real
     ? ` at the addresses ${RESOLVER} gave, which web_fetch dials in place of the ones this computer's fake-IP proxy hands out`
     : "";
@@ -626,8 +617,7 @@ export function createWebFetchTool(options: WebFetchOptions): AssistantTool {
           return failed(`Timed out after ${timeoutMs / 1000} s fetching ${url.href}${waiting}`);
         }
         if (error instanceof Stopped) return failed(error.message);
-        const why = error instanceof Error ? error.message : String(error);
-        return failed(`Couldn't fetch ${url.href}: ${why}`);
+        return failed(`Couldn't fetch ${url.href}: ${errorText(error)}`);
       }
     },
   };
@@ -775,8 +765,12 @@ function linkUrl(href: string | null, base: URL | string): string | null {
  */
 export function htmlToText(html: string, base: URL | string): string {
   let out = "";
-  // The block being built, its whitespace collapsed; a `br` is a newline in it.
-  let line = "";
+  // The block being built, its whitespace collapsed; a `br` is a newline in it. Kept in pieces so a
+  // link or a cell works on its end alone: rebuilt whole at each, 13,000 links took 1.3 s, not 20 ms.
+  let parts: string[] = [];
+  // Its last character, "" while it is empty, and whether it holds more than whitespace.
+  let last = "";
+  let hasText = false;
   let prefix = "";
   let item = false;
   let lastItem = false;
@@ -790,15 +784,35 @@ export function htmlToText(html: string, base: URL | string): string {
     out += text;
     lastItem = isItem;
   };
+  const append = (piece: string) => {
+    if (piece === "") return;
+    parts.push(piece);
+    last = piece.at(-1) as string;
+    if (/\S/.test(piece)) hasText = true;
+  };
+  const trimEndSpaces = () => {
+    while (parts.length > 0) {
+      const kept = (parts.at(-1) as string).replace(/ +$/, "");
+      if (kept !== "") {
+        parts[parts.length - 1] = kept;
+        break;
+      }
+      parts.pop();
+    }
+    last = parts.at(-1)?.at(-1) ?? "";
+  };
   // A block that turns out empty leaves its prefix to the first block inside it with text.
   const flush = () => {
-    const text = line
+    const text = parts
+      .join("")
       .split("\n")
       .map((part) => part.trim())
       .join("\n")
       .replace(/\n{3,}/g, "\n\n")
       .trim();
-    line = "";
+    parts = [];
+    last = "";
+    hasText = false;
     if (text === "") return;
     push(prefix + text, item);
     prefix = "";
@@ -824,10 +838,10 @@ export function htmlToText(html: string, base: URL | string): string {
       return;
     }
     let collapsed = text.replace(/[ \t\n\r\f\u00a0]+/g, " ");
-    if (line === "" || line.endsWith(" ") || line.endsWith("\n")) {
+    if (last === "" || last === " " || last === "\n") {
       collapsed = collapsed.replace(/^ /, "");
     }
-    line += collapsed;
+    append(collapsed);
     for (const link of links) link.text += collapsed;
   };
   const endLink = (link: { url: string; text: string }) => {
@@ -835,8 +849,12 @@ export function htmlToText(html: string, base: URL | string): string {
     const text = link.text.trim();
     if (text === "" || text === link.url) return;
     // After the link's last words: in the block being built, or the one before when it has ended.
-    if (line.trim() !== "") line = `${line.replace(/ +$/, "")} (${link.url})`;
-    else out += ` (${link.url})`;
+    if (hasText) {
+      trimEndSpaces();
+      append(` (${link.url})`);
+    } else {
+      out += ` (${link.url})`;
+    }
   };
 
   new HTMLRewriter()
@@ -858,7 +876,7 @@ export function htmlToText(html: string, base: URL | string): string {
           return;
         }
         if (tag === "br") {
-          line += "\n";
+          append("\n");
         } else if (tag === "pre") {
           flush();
           pre = "";
@@ -873,12 +891,15 @@ export function htmlToText(html: string, base: URL | string): string {
           // lol-html calls this for an end tag the page left out once an enclosing one closes.
           if (element.canHaveContent) element.onEndTag(() => endBlock(tag));
         } else if (tag === "td" || tag === "th") {
-          if (line.trim() !== "") line = `${line.replace(/ +$/, "")} | `;
+          if (hasText) {
+            trimEndSpaces();
+            append(" | ");
+          }
         } else if (tag === "code") {
-          line += "`";
+          append("`");
           if (element.canHaveContent) {
             element.onEndTag(() => {
-              line += "`";
+              append("`");
             });
           }
         } else if (tag === "a" && element.canHaveContent) {

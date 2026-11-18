@@ -8,6 +8,7 @@
 import type { Stats } from "node:fs";
 import { open, stat } from "node:fs/promises";
 import { basename, parse } from "node:path";
+import { errorText } from "@eidolon/config";
 import type { TaskToolResult } from "@eidolon/engine";
 import type { AssistantTool, PathGuard } from "../types.ts";
 import { globMatcher, walkFolder } from "./find.ts";
@@ -401,7 +402,7 @@ function compile(pattern: string, literal: boolean, ignoreCase: boolean): RegExp
     return new RegExp(source, ignoreCase ? "ui" : "u");
   } catch (error) {
     // Without Unicode mode, \p{Han} would be the text p{Han} and \A the letter A.
-    return `${error instanceof Error ? error.message : String(error)}. ${UNICODE_MODE}`;
+    return `${errorText(error)}. ${UNICODE_MODE}`;
   }
 }
 

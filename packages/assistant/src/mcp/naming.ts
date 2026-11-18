@@ -7,6 +7,9 @@ import { createHash } from "node:crypto";
 /** Provider tool names are limited to 64 characters of `[A-Za-z0-9_-]`. */
 const MAX_TOOL_NAME_LENGTH = 64;
 
+/** How every MCP tool's name starts, whichever server's. */
+export const MCP_TOOL_PREFIX = "mcp__";
+
 /**
  * `mcp__<server>__<tool>`, sanitized and shortened with a hash suffix when too long. Like Codex,
  * everything but `[A-Za-z0-9_]` becomes `_`. `isTaken` reports names used by a different MCP tool:
@@ -17,7 +20,7 @@ export function createMcpToolName(
   tool: string,
   isTaken: (name: string) => boolean = () => false,
 ): string {
-  const name = `mcp__${server}__${tool}`.replace(/[^A-Za-z0-9_]/g, "_");
+  const name = `${MCP_TOOL_PREFIX}${server}__${tool}`.replace(/[^A-Za-z0-9_]/g, "_");
   if (name.length <= MAX_TOOL_NAME_LENGTH && !isTaken(name)) return name;
   const hash = createHash("sha256").update(`${server}\0${tool}`).digest("hex").slice(0, 8);
   return `${name.slice(0, MAX_TOOL_NAME_LENGTH - hash.length - 1)}_${hash}`;
@@ -29,5 +32,5 @@ export function createMcpToolName(
  * both.
  */
 export function mcpNamespace(server: string): string {
-  return `mcp__${server.replace(/-/g, "_")}`;
+  return `${MCP_TOOL_PREFIX}${server.replace(/-/g, "_")}`;
 }

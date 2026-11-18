@@ -171,7 +171,8 @@ class TaskRun {
   readonly #left: AbortSignal;
   readonly #signal: AbortSignal;
   readonly #entries: TaskEntry[] = [];
-  readonly #schemaTokens: number;
+  /** What every request sends besides its messages: the system prompt and the tools' schemas. */
+  readonly #fixedTokens: number;
   #writes: Promise<unknown> = Promise.resolve();
   /** The run has stored its last entry, or its reader left. */
   #closed = false;
@@ -188,7 +189,9 @@ class TaskRun {
     this.#emit = emit;
     this.#left = left;
     this.#signal = AbortSignal.any([request.signal, left]);
-    this.#schemaTokens = estimateTokens(JSON.stringify(request.tools.map((tool) => tool.schema)));
+    this.#fixedTokens =
+      estimateTokens(request.system) +
+      estimateTokens(JSON.stringify(request.tools.map((tool) => tool.schema)));
     left.addEventListener(
       "abort",
       () => {
@@ -442,9 +445,7 @@ class TaskRun {
     const maskAfter = this.#request.limits.maskAfterTokens ?? MASK_AFTER_TOKENS;
     const messages = contextMessages(taskContext(this.#entries), maskAfter, this.#request.tools);
     const tokens =
-      estimateTokens(this.#request.system) +
-      this.#schemaTokens +
-      messages.reduce((sum, message) => sum + messageTokens(message), 0);
+      this.#fixedTokens + messages.reduce((sum, message) => sum + messageTokens(message), 0);
     const counted = this.#counted;
     const sized = counted === null ? tokens : counted.reported + tokens - counted.estimated;
     return { messages, tokens, sized };
@@ -452,15 +453,16 @@ class TaskRun {
 
   /** The turn's request, compacted first when the context calls for it; a summary may pause it. */
   async #ask(): Promise<Reply | TaskOutcome> {
-    if (this.#view().sized > compactAbove(this.#request.limits.contextTokens)) {
-      if (await this.#compact()) {
+    let view = this.#view();
+    if (view.sized > compactAbove(this.#request.limits.contextTokens)) {
+      if (await this.#compact(view.sized)) {
         const held = this.#held();
         if (held !== null) return held;
+        view = this.#view();
       }
     }
     let compacted = false;
     for (;;) {
-      const view = this.#view();
       try {
         const reply = await this.#send(
           this.#request.system,
@@ -474,9 +476,10 @@ class TaskRun {
       } catch (error) {
         if (this.#signal.aborted || compacted || !isContextOverflow(error)) throw error;
         compacted = true;
-        if (!(await this.#compact())) throw error;
+        if (!(await this.#compact(view.sized))) throw error;
         const held = this.#held();
         if (held !== null) return held;
+        view = this.#view();
       }
     }
   }
@@ -550,8 +553,7 @@ class TaskRun {
    * Summarizes what came before the newest blocks, through the task's mind with no tools, and
    * stores it. False when the newest blocks are all there is.
    */
-  async #compact(): Promise<boolean> {
-    const tokensBefore = this.#view().sized;
+  async #compact(tokensBefore: number): Promise<boolean> {
     const context = taskContext(this.#entries);
     const first = firstKept(context.blocks, keepTokens(this.#request.limits.contextTokens));
     const kept = context.blocks[first];

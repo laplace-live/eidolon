@@ -3,11 +3,13 @@
 // a page it read, so her view holds it only as tool output (check_task, her start_task's final).
 import { homedir } from "node:os";
 import { sep } from "node:path";
+import { isLive } from "@eidolon/assistant";
 import type { ParticipantId } from "@eidolon/chat";
 import { activePersona, errorText, isPlainObject, raceAbort } from "@eidolon/config";
 import type { PersonaParts } from "@eidolon/engine";
-import { STEER_PREFIX, type TaskSnapshot, type TaskStatus } from "../api.ts";
+import { STEER_PREFIX, type TaskSnapshot } from "../api.ts";
 import type { TaskManager } from "./manager.ts";
+import { doneOf } from "./milestones.ts";
 import { CHECK_TASK, START_TASK, STEER_TASK, STOP_TASK } from "./tool.ts";
 
 export const TASKS_BLOCK_NAME = "后台的活";
@@ -17,13 +19,6 @@ export const TASKS_BLOCK_PREFIX = `${TASKS_BLOCK_NAME}：`;
 const LINES_MAX = 5;
 const GOAL_CHARS = 30;
 const FOLDER_CHARS = 60;
-
-const LIVE: ReadonlySet<TaskStatus> = new Set([
-  "running",
-  "awaiting-approval",
-  "paused",
-  "interrupted",
-]);
 
 /** The worker's tools, as she would say what it was doing. */
 const ACTIONS: Readonly<Record<string, string>> = {
@@ -47,10 +42,6 @@ export interface NumberedTask {
   readonly snapshot: TaskSnapshot;
 }
 
-export function isLive(status: TaskStatus): boolean {
-  return LIVE.has(status);
-}
-
 /** Persona `persona`'s tasks in chat `chatId`, ended ones too, numbered from 1 as they started. */
 export function herTasks(
   snapshots: readonly TaskSnapshot[],
@@ -70,10 +61,15 @@ export function unreadOf(snapshot: TaskSnapshot): number {
 
 const usd = (amount: number): string => `$${amount.toFixed(2)}`;
 
+/** `text` cut at `max` characters. */
+export function cut(text: string, max: number): string {
+  const chars = [...text];
+  return chars.length > max ? `${chars.slice(0, max).join("")}…` : text;
+}
+
 /** `text` on one line, cut at `max` characters. */
 function clip(text: string, max: number): string {
-  const chars = [...text.replace(/\s+/g, " ").trim()];
-  return chars.length > max ? `${chars.slice(0, max).join("")}…` : chars.join("");
+  return cut(text.replace(/\s+/g, " ").trim(), max);
 }
 
 function homed(folder: string, home: string): string {
@@ -84,8 +80,7 @@ function homed(folder: string, home: string): string {
 function progress({ todo, files, step, background, spentUsd }: TaskSnapshot): string {
   const parts: string[] = [];
   if (todo !== undefined && todo.length > 0) {
-    const done = todo.filter((item) => item.status === "done").length;
-    parts.push(`计划 ${todo.length} 步做完 ${done} 步`);
+    parts.push(`计划 ${todo.length} 步做完 ${doneOf(todo)} 步`);
   }
   if (files.written.length > 0) parts.push(`写了 ${files.written.length} 个文件`);
   if (step !== undefined) {

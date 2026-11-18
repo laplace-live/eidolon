@@ -138,8 +138,13 @@ export interface TaskPromptInput {
   readonly skills?: readonly Skill[];
   /** The owner's date, as the worker should read it. */
   readonly date: string;
-  /** The task's folder, absolute. */
-  readonly folder: string;
+}
+
+/** The owner's date, as their computer keeps it. */
+export function taskDate(at: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const weekday = at.toLocaleDateString("en-US", { weekday: "long" });
+  return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}, ${weekday}`;
 }
 
 const PREAMBLE =
@@ -192,7 +197,7 @@ function attribute(value: string): string {
 
 export function buildTaskPrompt(input: TaskPromptInput): string {
   const listed = input.tools.filter((tool) => tool.snippet.trim() !== "");
-  const { goal, deliverable, check } = input.brief;
+  const { goal, deliverable, check, folder } = input.brief;
   const sections: [string, string][] = [
     [
       "tools",
@@ -215,7 +220,7 @@ export function buildTaskPrompt(input: TaskPromptInput): string {
       : SKILLS_INTRO;
     sections.push(["skills", `${intro}\n\n${skills.map(skillEntry).join("\n")}`]);
   }
-  sections.push(["date", input.date], ["folder", input.folder]);
+  sections.push(["date", input.date], ["folder", folder]);
   return [PREAMBLE, ...sections.map(([name, text]) => `<${name}>\n${text}\n</${name}>`)].join(
     "\n\n",
   );

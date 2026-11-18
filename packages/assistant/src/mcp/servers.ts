@@ -9,14 +9,12 @@
 // A file that doesn't parse starts nothing and decides nothing.
 import { readFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
-import { envVariable, expandUser, isPlainObject } from "@eidolon/config";
+import { envVariable, expandUser, isPlainObject, MCP_SECRETS_KEY } from "@eidolon/config";
 import { type McpStdioServerConfig, validateMcpServerConfig } from "./config.ts";
 import { mcpNamespace } from "./naming.ts";
 
 const CONFIG_FILE = "mcp.json";
 const CREDENTIALS_FILE = "credentials.json";
-/** credentials.json's map of the values `${NAME}` references take when the environment has none. */
-const MCP_SECRETS_KEY = "mcpSecrets";
 /** pi's coding agent's default. */
 const DEFAULT_TIMEOUT_SECONDS = 60;
 const REFERENCE = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g;

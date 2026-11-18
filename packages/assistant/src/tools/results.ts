@@ -5,6 +5,7 @@
 //
 // How the file tools answer what they can't do (bad arguments, a refused path, a failure): as a
 // result with isError, which the task's loop hands the model, never as a throw.
+import { errorText } from "@eidolon/config";
 import type { TaskToolResult } from "@eidolon/engine";
 import { type PathGuard, PathRefused } from "../types.ts";
 import { sliceHead } from "./truncate.ts";
@@ -24,7 +25,7 @@ export function errorResult(message: string): TaskToolResult {
 
 /** A thrown error as its message. */
 export function failure(error: unknown): TaskToolResult {
-  return errorResult(error instanceof Error ? error.message : String(error));
+  return errorResult(errorText(error));
 }
 
 /**

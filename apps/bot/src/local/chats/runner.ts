@@ -5,6 +5,7 @@
 // it is on: it opens on her view, and stores its lines and her task starts; her tasks' ends and
 // pauses reach her on it, and in a verbose chat their plans' progress.
 import { join } from "node:path";
+import { isLive } from "@eidolon/assistant";
 import {
   CHAT_FORMAT,
   type ChatDisplay,
@@ -57,7 +58,7 @@ import { herStart, staleTaskContext, untoldEnds, withoutTaskContext } from "../t
 import { herTaskTools } from "../tasks/her-tools.ts";
 import type { TaskManager } from "../tasks/manager.ts";
 import { gapPassed, milestoneOf } from "../tasks/milestones.ts";
-import { herTasks, isLive, tasksStatusProvider } from "../tasks/status.ts";
+import { herTasks, tasksStatusProvider } from "../tasks/status.ts";
 import {
   assistantPromptHint,
   START_TASK,
@@ -422,7 +423,7 @@ export class ChatRunner {
       if (call === null) {
         if (told) await this.#tell(chat, origin);
       } else if (this.#takesTasks(call, origin.persona)) {
-        const drafts = call.known.has(origin.call) ? stored.drafts.slice(-1) : stored.drafts;
+        const drafts = call.known.has(origin.call) ? stored.slice(-1) : stored;
         call.known.add(origin.call);
         call.outside.push({ drafts, ...(told ? { nudge: taskEndedNudge(origin.call) } : {}) });
         if (told) call.ends.push({ origin, state: "handed" });
@@ -1263,14 +1264,14 @@ export class ChatRunner {
   /**
    * Stores `final` for her call `origin.call`, after the latest call of hers with that id, unless
    * that call is settled already, once every start being answered or stored is: a start on a call
-   * reaches the chat only then. Resolves with its seq and her call as drafts, the final last; null
-   * when it wasn't stored.
+   * reaches the chat only then. Resolves with her call as drafts, the final last; null when it
+   * wasn't stored.
    */
   async #storeFinal(
     chat: Chat,
     origin: TaskChat,
     final: StartTaskFinal,
-  ): Promise<{ readonly seq: number; readonly drafts: readonly ChatEventDraft[] } | null> {
+  ): Promise<readonly ChatEventDraft[] | null> {
     await Promise.allSettled([...chat.starts]);
     await chat.appends;
     const { id, persona, call } = origin;
@@ -1303,8 +1304,8 @@ export class ChatRunner {
       result: final,
       stage: "final",
     };
-    const [stored] = await this.#append(id, chat, [draft]);
-    return { seq: (stored as ChatEvent).seq, drafts: [...herStart(events, persona, call), draft] };
+    await this.#append(id, chat, [draft]);
+    return [...herStart(events, persona, call), draft];
   }
 
   /** Her turn telling of a task's end: none during a call, or once the chat isn't hers alone. */

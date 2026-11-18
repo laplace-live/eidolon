@@ -734,7 +734,7 @@ export interface SettingsLayers {
 
 const UNSET: LayeredSetting = Object.freeze({ source: "default", value: null, raw: null });
 /** credentials.json's values for mcp.json's `${NAME}`s, which @eidolon/assistant reads. */
-const MCP_SECRETS_KEY = "mcpSecrets";
+export const MCP_SECRETS_KEY = "mcpSecrets";
 
 interface ReadLayers {
   readonly id: string;

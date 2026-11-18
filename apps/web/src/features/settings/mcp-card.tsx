@@ -13,11 +13,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { call, type Input, type LocalApi } from "@/lib/api";
+import { call, type McpServerChange, type McpServerView } from "@/lib/api";
 import { toastError } from "@/lib/feedback";
-
-type McpServerView = LocalApi["GET /api/local/mcp"]["response"]["servers"][number];
-type McpServerChange = NonNullable<Input<"PUT /api/local/mcp/servers/:name">["body"]>;
 
 /** A secret's reference as mcp.json writes one. */
 const REFERENCE = `\${NAME}`;

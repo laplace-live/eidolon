@@ -259,8 +259,9 @@ export function contextMessages(
   tools: readonly TaskTool[] = [],
 ): ContextMessage[] {
   const chunks = context.blocks.map(blockMessages);
+  const sizes = chunks.map((messages) => messages.map(messageTokens));
   let total = 0;
-  for (const message of chunks.flat()) total += messageTokens(message);
+  for (const size of sizes.flat()) total += size;
   const over = total - maskAfterTokens;
   const step = Math.max(1, Math.floor(maskAfterTokens / 2));
   const boundary = over > 0 ? Math.ceil(over / step) * step : 0;
@@ -268,7 +269,7 @@ export function contextMessages(
   for (const [i, messages] of chunks.entries()) {
     const block = context.blocks[i] as Block;
     for (const [m, message] of messages.entries()) {
-      end += messageTokens(message);
+      end += sizes[i][m];
       if (message.role !== "tool" || block.kind !== "assistant" || end > boundary) continue;
       const at = block.entry.calls.findIndex(({ id }) => id === message.tool_call_id);
       const call = block.entry.calls[at];

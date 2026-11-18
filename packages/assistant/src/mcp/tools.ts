@@ -7,7 +7,7 @@
 // text. A task's worker can't view images or hear audio, so those become a line saying what was
 // left out.
 import { createHash } from "node:crypto";
-import { isPlainObject } from "@eidolon/config";
+import { errorText, isPlainObject } from "@eidolon/config";
 import type { ToolSchema } from "@eidolon/core";
 import { canonical, type TaskToolResult } from "@eidolon/engine";
 import { ABORTED, errorResult } from "../tools/results.ts";
@@ -229,7 +229,7 @@ export function createMcpTool(options: McpToolOptions): AssistantTool {
         return convertMcpResult(server, tool.name, result, redact);
       } catch (error) {
         if (signal.aborted) return errorResult(ABORTED);
-        const message = error instanceof Error ? error.message : String(error);
+        const message = errorText(error);
         // The server has exited: what it said last is why, hidden before it is cut so that no
         // cut splits a secret.
         const tail =

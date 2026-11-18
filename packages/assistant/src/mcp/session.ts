@@ -9,6 +9,7 @@
 import { mkdir } from "node:fs/promises";
 import { basename } from "node:path";
 import { pathToFileURL } from "node:url";
+import { errorText } from "@eidolon/config";
 import { shellEnv } from "../tools/shell.ts";
 import { sliceTail } from "../tools/truncate.ts";
 import type { AssistantTool, PathGuard } from "../types.ts";
@@ -76,10 +77,6 @@ interface Started {
   readonly redact: (text: string) => string;
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 /**
  * Each resolved value in `text` replaced by the `${NAME}` it came from, the longest first. Only
  * the server's own: a reference can hold what isn't a secret, such as a folder.
@@ -140,7 +137,7 @@ async function start(
   } catch (error) {
     await close();
     const why = redact(
-      timedOut ? `didn't answer within ${server.timeoutMs / 1000} s` : errorMessage(error),
+      timedOut ? `didn't answer within ${server.timeoutMs / 1000} s` : errorText(error),
     );
     // Hidden before it is cut, so no cut splits a secret.
     const stderr = sliceTail(redact(transport.stderr.trim()), STDERR_TAIL_CHARS);
